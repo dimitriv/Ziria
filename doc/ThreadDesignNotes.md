@@ -1,6 +1,8 @@
 # Thread Design Notes
 
-The purpose of these notes is to outline how pipeline parallelism is introduced in Blink, via the use of the `|>>>|` combinator. The goal is that the programmer should be able to replace any use of `>>>` with `|>>>|` and get pipeline parallelism. First of all it is relatively easy to see how to do that for a pipeline
+WARNING: these notes are just an internal design doc.
+
+The purpose of these notes is to outline how pipeline parallelism can introduced in Blink via the use of the `|>>>|` combinator. The ideal goal is that the programmer should be able to replace any use of `>>>` with `|>>>|` and get pipeline parallelism. First of all it is relatively easy to see how to do that for a pipeline
 of the form:
 ```
 read >>> c1 |>>>| c2 >>> c3 |>>>| c4 >>> c5 >>> write
@@ -197,6 +199,8 @@ particular behaviour. Then `c2` can be activated and take over the rest of the i
 
 
 
-## Restricted parallelization transformation (i.e. what is currentl
+## Restricted parallelization transformation (i.e. what is currently implemented)
 
-What we will describe below is basically the naive -- restricted -- class of pipeline parallization that we support, which is basically only top-level.
+What we will describe below is basically the naive -- restricted --
+class of pipeline parallization that we support, which is basically
+only top-level (and last-in-a-sequence). 
