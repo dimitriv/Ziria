@@ -1,0 +1,64 @@
+\chapter{\LANG language}
+\label{chap:lang}
+
+\section{Overview}
+\label{sec:lang:overview}
+
+\LANG is designed as a 2-layer language. The lower level is called an \emph{expression} language. It is an imperative language, similar to C and Matlab, for manipulating basic data types (bits, bytes, arrays, etc), described in \ref{sec:lang:expression} The higher level is
+called a \emph{computational} language. It is a monadic\footnote{A monad is a structure that represents computations defined as sequences of steps} language for specifying and staging stream processor. It is described in \ref{sec:lang:computation}.
+
+We start by giving a simple example of the scrambler in WiFi 802.11 a/g transmitter. The goal of the scrambler is to xor an input sequence with a predefined pseudo-random sequence (to make the transmitter input look random). \LANG code for the scrambler is given below:
+\begin{lstlisting}[caption=Scrambler function of WiFi 802.11a/g transmitter in \LANG,
+xleftmargin=15pt,
+label=lst:wifi:tx:scrambler]
+let scrambler() =
+  @\label{scrambler:letref}@var scrmbl_st: arr[7] bit := {1,1,1,1,1,1,1}; 
+  @\label{scrambler:letref2}@var tmp: bit; 
+  @\label{scrambler:letref3}@var y: bit; 
+@\label{scrambler:repeat}@  in repeat (
+@\label{scrambler:take}@    x <- take;
+@\label{scrambler:ret_start}@    execute (
+      tmp := (scrmbl_st[3] ^ scrmbl_st[0]);
+@\label{scrambler:shift}@      scrmbl_st[0:5] := scrmbl_st[1:6];
+@\label{scrambler:feed}@      scrmbl_st[6] := tmp;
+@\label{scrambler:ret_end}@      y := x ^ tmp); 
+@\label{scrambler:emit}@    emit (y))
+\end{lstlisting}
+The scrambler is written as a sequence of operations in the
+computational language. The scrambler's body declares three local
+variables in lines~\ref{scrambler:letref} through
+\ref{scrambler:letref2}: \lstinline|scrmbl_st|, an array of $7$ bits
+that gives the current state of the shift register, and two one-bit
+references: \lstinline|tmp| and \lstinline|y|.  The scrambler
+\lstinline|take|s a value from the input stream
+(line~\ref{scrambler:take}), then performs an imperative computation
+that assigns \lstinline|tmp| the XOR of taps $3$ and $0$ in the shift
+register, shifts the register state left by one, feeds \lstinline|tmp|
+into position $6$ of the register, and finally returns the XOR of
+\lstinline|tmp| and the input bit \lstinline|x|.
+
+The sequence of operations inside \lstinline|execute()| primitive is written in the \LANG expression language. \LANG\ allows for arbitrary composition of the stream 
+computer primitives and imperative code to create complex programs.
+In the subsequent section we will describe in more detail the expression and the computation languages.
+
+
+
+\section{Expression language}
+\label{sec:lang:expression}
+
+The low level imperative language for \LANG is used to express the basic imperative
+calculation. This language is a mix of Matlab and C designed to make
+the right trade-off between programmability and efficiency. It is a
+strongly typed language, which allows us to simplify memory
+management. It also supports array operations, like Matlab, which
+allows for efficient mapping to SSE vector instructions.  
+
+
+
+
+
+
+\section{Computational language}
+\label{sec:lang:computation}
+
+asdada

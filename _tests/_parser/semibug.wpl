@@ -1,0 +1,13 @@
+
+let comp init() = 
+  var params : int;
+  do {
+    for ii in [0,64] {
+      params := ii
+    }
+  }
+  return params
+in
+
+
+read[int] >>> init() >>> write[int]

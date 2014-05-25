@@ -1,0 +1,175 @@
+Vectorization plan
+~~~~~~~~~~~~~~~~~~
+
+1) For each computer (ST (C v) a b) compute its 
+     a) input arity (#takes) and 
+     b) output arity (#emits)
+
+2) Characterize every computer as a 'simple' 
+   computer if we know this information statically. 
+   We call this a 'SimpleCardinality'. The implementation of 
+   this cardinality analysis is in CardinalityAnalysis module.
+
+3) Actual vectorization plan (sketch of the main ideas)
+  
+   A) A *standalone* computer ST (C v) a b of cardinality (cin,cout)
+      can be vectorized to ST (C v) a^k b^j for any divisors (k,j) of
+      (cin,cout) respectively.
+
+      This will be useful when (cin,cout) are quite big, for instance
+      (24,64) in which case we don't really want to have to force
+      input array sizes of 24 and 64. Rather, any divisor of 24 is
+      good and 64.
+
+
+      If we can't vectorize a computer that consists of compositions
+      of other computers we try to vectorize the individual
+      sub-components and make sure that the resulting cardinalities
+      match.
+
+  B) A transformer can be created in the following three ways:
+
+      (i) A map can be vectorized to any (min,mout) multiples where
+          mout divides min. This last condition is important so that
+          we do not risk the situation where we have a big input
+          vector but might not align perfectly with the output vector
+          so if we place this transformer vertically composed after a
+          consumer, the very moment the consumer may say 'Done' we
+          will be left with intermediate un-emmitted data in our
+          buffers. If we ensure that min `mod` mout == 0 then this
+          can't happen.
+
+      (ii) A (m1 >>> m2) can be vectorized such that from all the
+           vectorizations of m1 and m2 we pick those where the output
+           array sizes of m1 are equal to the input array sizes of m2.
+
+
+      (iii) A (repeat c) can be vectorized as follows. Assume that c
+            is a simple computer of cardinality cin and cout. We can
+            vectorize him either with divisors of cin and cout if cin
+            and cout are very large or with:
+
+                  min * cin    and  mout * cout 
+
+           Where, as in the case for map() and exactly for the same
+           reasons, it has to be the case that mout divides min.
+
+
+4) Control flow and complications.
+
+Imagine the code (abstracting some real code from wifi):
+
+      if e then (repeat c23) else (repeat c34)
+
+We would like to vectorize according to this strategy the first branch
+to
+
+         k1*j1*2  and k1*3
+
+and the second:
+
+         k2*j2*3  and k2*4
+
+but the smaller numbers that make this work result in input and output
+array sizes of 72 and 12 respectively. These numbers are very large
+and very constrained.  E.g. the person upstream may simply not have 72
+bits to vectorize and send downstream.
+
+
+But, the observation is that in the case of Wifi at least, the whole
+continuation of the pipeline after the if branch could be pushed
+inside the if. In the folowing way:
+
+      if e then (repeat c23)>>>t else (repeat c34)>>>t 
+
+Now, that exposes more opportunities for independently vectorizing the
+two parts of the branch, since we have two 'copies' in effect of the
+dataflow graph of t.
+
+This means that we could vectorize the two branches in a way such that
+the input arrays agree. E.g. in this case to input array ariti of
+lcm(2,3) = 6. The problem is that the *output* queues of the two
+branches have different types so the vectorization is not well-typed.
+
+However, 'morally' we know how to compile this code: we simply have to
+use different
+
+    buf_putc() 
+
+functions in the two dataflow components, depending on what is the
+array size in which they write the output. But currently we cannot do
+that.
+
+Here is a proposed solution to this problem that (i) could make such
+control flow well-typed, and (ii) could provide an easy compilation
+strategy.
+
+      Step 1:
+      Introduce primitives:   
+
+                  source :: forall a. ST T IOF a 
+                  sink   :: forall a. ST T a EOF
+      Step 2: 
+
+      These primitives vectorize *ONLY* on their input (sink) and output
+      (source) types respectively.  I.e. the vectorized form of IOF is IOF
+      and the vectorized form of EOF is EOF for *any* vectorization arity.
+
+
+      Step 3: 
+      'source' compiles so that it uses the buf_readc() of the appropriate
+      type as the type of the output queue of 'source' at it's instantiation
+      in the program. Similarly, 'sink' compiles such that it calls the
+      buf_putc() function of the appropriate type as the type of its
+      instantiation in the program.
+
+      Step 4:
+      We make sure that the user top-level function is ST T FILE FILE
+
+So for the wifi example, the user can write:
+
+      if e then 
+         (repeat c23)>>>t>>>sink 
+      else 
+         (repeat c34)>>>t>>>sink
+
+And now this program /is/ well-typed but each data flow will use
+different buf_putc to write to the output buffer!
+
+Incidentally this should allow for components in *vertical* composition to 
+read in different granularities. For instance, consider:
+
+ repeat (
+    x <- doheader
+    dorest(y)
+ )
+
+where do_header :: ST (C HeaderInfo) FILE TxComplex 
+and   do_rest   :: ST (C ()) FILE TxComplex
+
+one could imagine both these components being vectorized with
+potentially different vectorizations in reading from the input
+file. But that is simply OK!
+
+
+DV: To implement these I need to:
+
+   i) introduce the constants and give them the right types
+
+  ii) modify (very slightly) the type checker to ensure that the
+      top-level program is INFILE to OUTFILE. And potentially certain
+      compositions are prohibited. We shouldn't have:
+
+         read >>> write
+
+      I suppose. (Although this might become relevant for the
+      cross-core case). Maybe we can have:
+
+         readsynchqueue "name" :: ST "name" foo
+         readsynchqueue "name" :: ST foo "name"
+
+
+ iii) revisit the compilation of source/sink to use the correct
+      putc/getc functions.
+
+

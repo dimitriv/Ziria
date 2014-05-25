@@ -1,0 +1,46 @@
+Bozidar:
+
++ Add return types to external functions
++ Add subarrays: v = a[2:5];
+- Add subarrays with flexible starting point but constant length v = a[j:j+2]. 
+  We can now do it with v = a[j,2] but this is not very elegant
++ Add more unit tests for return and take, and make sure they memcpy
++ Implement arrayWrite on an Interval 
++ Solve ppBug using extra variables
+- Add functions needed to make WiFi TX code look neat
+- Add polymorphic array sizes - added partially, but make sure that:
+      1) Function declaration with polymorphic array sizes (add NPolym to NumExpr)
+      2) len a keyword
+      3) No LUTing of functions with polymorphic arrays
+      4) Add user-friendly error messages
+      5) Make sure NVar stays polymorphic within a function 
+		 In particular, this means that ALenEnv state in TcMonad should be passed around explicitly
+		 much like Env, and not like TyEnv
+- Change variable names when inlining, to make sure they don't overlap. See returnTest2.wpl
+  (BR: fixed by Dimitrios? Check)
+- Implement folding:
+  x <- return (s:=s+1; 42);	===>  let x = (s:=s+1; 42);
+  emit x      	       		      emit x
+  Also, in case of emit (x+x) make sure that s:=s+1 does not execute twice!
+- Transform times/returns into for loop:
+  times i <= e (return (e1))    ===> for (i=0; i<e; i++) {e1}
+- Fix typechecking of functions:
+  let f (p) e1 in c1
+  First type-check p, then e1, then c1, and then (*this is missing now*) replace 
+  all types resolved during typechecking of c1 into e1
++ Make consistent representation for bit arrays
+
+
+Mahanth:
+- Make sure WiFi works with new read/write drivers
+- Write slides
+- Write performance test suite (compile with NMake and write performance-testing drivers)
+- Modify RX code to do SIMD vectorization
+
+Dimitrios:
+- Finish vectorization
+- Lookup related work on static analyses or types for precision
+
+
+Perf eval:
+- Inline as much of libraries and code as possible

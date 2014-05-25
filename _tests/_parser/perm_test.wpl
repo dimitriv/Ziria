@@ -1,0 +1,23 @@
+let perm(data:arr bit, index:arr int) = 
+  var out:arr[length(data)] bit;
+
+  for i in [0, length(index)] {
+    out[i] := data[index[i]]
+  };
+
+  return out
+in
+
+
+let comp test () = 
+  var a : arr[4] int;
+  var ind : arr[4] int := {3, 2, 4, 1};
+
+  seq{
+    x <- takes 4;
+    emits perm(x, ind)
+  }
+in 
+
+read [bit] >>> test() >>> write[bit]
+

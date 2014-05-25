@@ -1,0 +1,19 @@
+
+
+let foo(x : unit) = 
+  var x : arr[3] bit;
+  var c : int;
+
+  return (for c,v in x {
+            x[c] := '0
+            });
+
+  (z:bit) <- take1;
+  emit z;
+  emits x
+
+in 
+
+read[bit]>>>repeat(foo(tt)) >>> write[bit]
+
+  

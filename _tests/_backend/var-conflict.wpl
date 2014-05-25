@@ -1,0 +1,9 @@
+let comp proc() = 
+   let f(i : int) = return i+1 in
+   repeat seq{
+      x <- take;
+      emit f(x)
+   }
+in
+
+read >>> proc () >>> proc () >>> write

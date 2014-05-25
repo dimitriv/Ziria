@@ -1,0 +1,229 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+
+let comp DeinterleaveQAM16() =
+
+  var output:arr[192] int8;
+
+  repeat {
+    
+     (symbol:arr[192] int8) <- takes 192;
+    
+     do {
+    
+        output[0] := symbol[0];
+        output[1] := symbol[13];
+        output[2] := symbol[24];
+        output[3] := symbol[37];
+        output[4] := symbol[48];
+        output[5] := symbol[61];
+        output[6] := symbol[72];
+        output[7] := symbol[85];
+        output[8] := symbol[96];
+        output[9] := symbol[109];
+        output[10] := symbol[120];
+        output[11] := symbol[133];
+        output[12] := symbol[144];
+        output[13] := symbol[157];
+        output[14] := symbol[168];
+        output[15] := symbol[181];
+        output[16] := symbol[1];
+        output[17] := symbol[12];
+        output[18] := symbol[25];
+        output[19] := symbol[36];
+        output[20] := symbol[49];
+        output[21] := symbol[60];
+        output[22] := symbol[73];
+        output[23] := symbol[84];
+        output[24] := symbol[97];
+        output[25] := symbol[108];
+        output[26] := symbol[121];
+        output[27] := symbol[132];
+        output[28] := symbol[145];
+        output[29] := symbol[156];
+        output[30] := symbol[169];
+        output[31] := symbol[180];
+        output[32] := symbol[2];
+        output[33] := symbol[15];
+        output[34] := symbol[26];
+        output[35] := symbol[39];
+        output[36] := symbol[50];
+        output[37] := symbol[63];
+        output[38] := symbol[74];
+        output[39] := symbol[87];
+        output[40] := symbol[98];
+        output[41] := symbol[111];
+        output[42] := symbol[122];
+        output[43] := symbol[135];
+        output[44] := symbol[146];
+        output[45] := symbol[159];
+        output[46] := symbol[170];
+        output[47] := symbol[183];
+        output[48] := symbol[3];
+        output[49] := symbol[14];
+        output[50] := symbol[27];
+        output[51] := symbol[38];
+        output[52] := symbol[51];
+        output[53] := symbol[62];
+        output[54] := symbol[75];
+        output[55] := symbol[86];
+        output[56] := symbol[99];
+        output[57] := symbol[110];
+        output[58] := symbol[123];
+        output[59] := symbol[134];
+        output[60] := symbol[147];
+        output[61] := symbol[158];
+        output[62] := symbol[171];
+        output[63] := symbol[182];
+        output[64] := symbol[4];
+        output[65] := symbol[17];
+        output[66] := symbol[28];
+        output[67] := symbol[41];
+        output[68] := symbol[52];
+        output[69] := symbol[65];
+        output[70] := symbol[76];
+        output[71] := symbol[89];
+        output[72] := symbol[100];
+        output[73] := symbol[113];
+        output[74] := symbol[124];
+        output[75] := symbol[137];
+        output[76] := symbol[148];
+        output[77] := symbol[161];
+        output[78] := symbol[172];
+        output[79] := symbol[185];
+        output[80] := symbol[5];
+        output[81] := symbol[16];
+        output[82] := symbol[29];
+        output[83] := symbol[40];
+        output[84] := symbol[53];
+        output[85] := symbol[64];
+        output[86] := symbol[77];
+        output[87] := symbol[88];
+        output[88] := symbol[101];
+        output[89] := symbol[112];
+        output[90] := symbol[125];
+        output[91] := symbol[136];
+        output[92] := symbol[149];
+        output[93] := symbol[160];
+        output[94] := symbol[173];
+        output[95] := symbol[184];
+        output[96] := symbol[6];
+        output[97] := symbol[19];
+        output[98] := symbol[30];
+        output[99] := symbol[43];
+        output[100] := symbol[54];
+        output[101] := symbol[67];
+        output[102] := symbol[78];
+        output[103] := symbol[91];
+        output[104] := symbol[102];
+        output[105] := symbol[115];
+        output[106] := symbol[126];
+        output[107] := symbol[139];
+        output[108] := symbol[150];
+        output[109] := symbol[163];
+        output[110] := symbol[174];
+        output[111] := symbol[187];
+        output[112] := symbol[7];
+        output[113] := symbol[18];
+        output[114] := symbol[31];
+        output[115] := symbol[42];
+        output[116] := symbol[55];
+        output[117] := symbol[66];
+        output[118] := symbol[79];
+        output[119] := symbol[90];
+        output[120] := symbol[103];
+        output[121] := symbol[114];
+        output[122] := symbol[127];
+        output[123] := symbol[138];
+        output[124] := symbol[151];
+        output[125] := symbol[162];
+        output[126] := symbol[175];
+        output[127] := symbol[186];
+        output[128] := symbol[8];
+        output[129] := symbol[21];
+        output[130] := symbol[32];
+        output[131] := symbol[45];
+        output[132] := symbol[56];
+        output[133] := symbol[69];
+        output[134] := symbol[80];
+        output[135] := symbol[93];
+        output[136] := symbol[104];
+        output[137] := symbol[117];
+        output[138] := symbol[128];
+        output[139] := symbol[141];
+        output[140] := symbol[152];
+        output[141] := symbol[165];
+        output[142] := symbol[176];
+        output[143] := symbol[189];
+        output[144] := symbol[9];
+        output[145] := symbol[20];
+        output[146] := symbol[33];
+        output[147] := symbol[44];
+        output[148] := symbol[57];
+        output[149] := symbol[68];
+        output[150] := symbol[81];
+        output[151] := symbol[92];
+        output[152] := symbol[105];
+        output[153] := symbol[116];
+        output[154] := symbol[129];
+        output[155] := symbol[140];
+        output[156] := symbol[153];
+        output[157] := symbol[164];
+        output[158] := symbol[177];
+        output[159] := symbol[188];
+        output[160] := symbol[10];
+        output[161] := symbol[23];
+        output[162] := symbol[34];
+        output[163] := symbol[47];
+        output[164] := symbol[58];
+        output[165] := symbol[71];
+        output[166] := symbol[82];
+        output[167] := symbol[95];
+        output[168] := symbol[106];
+        output[169] := symbol[119];
+        output[170] := symbol[130];
+        output[171] := symbol[143];
+        output[172] := symbol[154];
+        output[173] := symbol[167];
+        output[174] := symbol[178];
+        output[175] := symbol[191];
+        output[176] := symbol[11];
+        output[177] := symbol[22];
+        output[178] := symbol[35];
+        output[179] := symbol[46];
+        output[180] := symbol[59];
+        output[181] := symbol[70];
+        output[182] := symbol[83];
+        output[183] := symbol[94];
+        output[184] := symbol[107];
+        output[185] := symbol[118];
+        output[186] := symbol[131];
+        output[187] := symbol[142];
+        output[188] := symbol[155];
+        output[189] := symbol[166];
+        output[190] := symbol[179];
+        output[191] := symbol[190]
+     };
+
+     emits output
+    
+  }
+
+in

@@ -1,0 +1,7 @@
+let comp f() = 
+  seq { x <- take
+      ; return 42
+      }
+in
+
+read[int] >>> f() >>> write[int]

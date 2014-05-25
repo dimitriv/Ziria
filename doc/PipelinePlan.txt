@@ -1,0 +1,50 @@
+10/14/13
+========
+
+Here's the proposed pipelining plan (by DV w/ some input from GS):
+ 
+(a) Add a primitive:   standalone :: ST T a b -> ST T a b
+
+(b) So, programmers can write:    foo >>> standalone(hoo) >>> bop
+
+(c) Check statically that the component inside the standalone block is
+the only component that reads/writes from its input/output queues.
+Otherwise, report a failure.
+
+(d) Code generation: We first convert this program to:
+
+foo >>> write q1 >>> read q1 >>> hoo >>> write q2 >>> read q2 >>> bop
+
+where q1 and q2 are fresh FIFO queues. Then we independently compile the program:
+                (read q1 >>> hoo >>> write q2) 
+And we compile the context:
+                foo >>> write q1 >>> read q2 >>> bop
+
+Then we generate two go() functions, and we simply spawn two threads
+running the go_1() and go_2(). Done.
+ 
+Later, as an analysis phase we'd like to figure out the uses of
+[standalone] but that can be even after PLDI and maybe actually it's
+good to simply let the programmer choose it.
+
+
+Some Complications:
+-------------------
+
+Currently, read and write have types
+
+  read  :: forall b. ST T (TBuff bufId) b
+  write :: forall a. ST T a (TBuff bufId)
+
+Because the context of the [standalone] code will be compiled to:
+
+  foo >>> write q1 >>> read q2 >>> bop
+
+the composition [write q1 >>> read q2] needs to typecheck. 
+It doesn't now because the buffer id's are exposed in [TBuff] types. 
+
+To fix this, we can either:
+  (a) make the buffer id an argument of read/write, instead of exposing 
+  it in types; or 
+  (b) have type unification just ignore the buf id. 
+Option (a) might take a bit longer but is better than (b) in the long run. 

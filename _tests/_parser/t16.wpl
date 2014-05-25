@@ -1,0 +1,7 @@
+let comp f() = 
+   seq { x <- take
+       ; emit x 
+       }
+in
+
+read[int] >>> repeat f() >>> write

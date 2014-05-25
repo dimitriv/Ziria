@@ -1,0 +1,423 @@
+CHANGES
+=======
+
+Purpose: this file documents changes to the WPL compiler.
+Scope: primarily, changes to the code generation strategy (including 
+any optimizations).  Bug fixes, unless major, don't need to be 
+reported here.
+
+---------------------------------------------------------
+|  8/19?-23/2013 (revision 1301): Optimizations!        |
+---------------------------------------------------------
+
+I've implemented a bunch of optimizations in the last few days, focused
+primarily on automatic vectorization.  Optimization passes are all 
+in files "Pass..." and have inline comments, but here's a summary of the
+optimizations all together.
+
+Outline of optimization passes as they currently stand (still EXPERIMENTAL!):
+  (1) Inlining
+  (2) Return/Emit Folding
+  (3) Vectorization 
+  (4) Pipelining (currently, only a skeleton frontend)
+
+In order to facilitate further optimizations, the first thing we do 
+is inline lets everywhere.  (NOTE: so much inlining might be overly 
+aggressive, but we can worry about that later.)  We currently 
+use variable capture-avoiding substitutions to do the inlining, 
+but (as suggested by DV) it may make sense in the future to `uniq'-ify 
+variables in a separate renaming pass at the top of the compilation stack.
+Names already have a uniqId field, so this shouldn't be too hard or
+time consuming.
+
+After inlining, we do folding of return-return and return-emit code blocks.
+The goal of this transformation is to put code blocks that initially look like:
+
+   repeat[n] (
+     x <- take1;
+     return (...);
+     ...
+     return (...);
+     ...
+     emit e1;
+     emit e2;
+     ...
+     emit em
+   )
+     
+into the form:
+
+[pre-vectorization]
+   repeat[n] (       
+     x <- take1;
+     emit e1';
+     emit e2;
+     ...
+     emit em
+   )
+[/pre-vectorization]
+
+This transformation works by iteratively applying rewrite rules of the form
+   (1) ...; return e1; return e2; ...  -->    ...; return (e1, e2); ...
+   (2) ...; return e1; emit e2; ...    -->    ...; emit (e1, e2); ...
+where "," is the semicolon operator of the embedded imperative language.
+
+In stage (3), we do the actual vectorization.  Right now, we only vectorize 
+code blocks of the form described above as the target of the folding pass.
+That is, only repeat[n] blocks are vectorized, where "n" is an annotated 
+vectorization width (to be filled in later by another pass or by hand), 
+and only if the begin with the command "take1" followed by a series of 
+emits.  The vectorization pass transforms code blocks as in [pre-vectorization]
+above to code that looks like: 
+
+[post-vectorization]
+   let fresh(u: unit) =
+     var ya: arr[n] ty;
+     xa <- take1;
+     times m do (
+       return (ya[0] := e(0%m)[xa[0]/x];
+               ya[1] := e(1%m)[xa[1]/x];
+               ...
+               ya[n-1] := e(n-1%m)[xa[1]/x]);
+       emit ya;
+     )
+   in repeat fresh(tt)
+[/post-vectorization]
+
+Note that this transformation changes the type of the code block from 
+"ST t a b" to "ST t (arr[n] a) (arr[n] b)".  When a/b = "bit" and "n" = 8, 
+we represent "arr[n] a/b" as "char".  TODO: more general bit-packing. 
+
+Also, note that the vectorization optimization currently operates only
+one "repeat" block at a time.  We'll need to do a further pass, after 
+vectorization, to ensure that the program we're emitting is still 
+well-typed.  This may require the insertion of conversion blocks between,
+e.g., a code block that has been vectorized to operate 8 bits at a time 
+and a code block that has been vectorized to operate 16 bits at a time.
+We should also look into whether the whole optimization can be made a bit 
+more general by allowing the input vectorzation width to differ from the 
+output vectorization width, as in "repeat[8,16] ...".
+
+
+---------------------------------------------------------
+|  8/13/2013 (revision 1218): Remove unnecessary ticks  |
+---------------------------------------------------------
+
+This optimization added a [canTick] flag to the [CompInfo] record returned
+by [codeGenComp].  The flag is used to determine, in the main loop, whether 
+to tick a computation at all, and in, e.g., the code
+
+    c1 >>> c2 
+
+to determine whether c2's consume continuation ticks c1, or executes whatever
+consume continuation was passed to compilation of (c1 >>> c2).
+
+NB: We don't yet remove unnecessary tick code (this should be done but is 
+complicated by situations in which one component of, say, a bind can tick while 
+the second cannot). 
+
+
+w/ gcc -O3
+$ ./runTests
+==============================
+map.wpl (unoptimized)
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=0.288000 s
+
+------------------------------
+map.wpl
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=0.565000 s
+
+==============================
+takeEmit.wpl (unoptimized)
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=1.727000 s
+
+------------------------------
+takeEmit.wpl
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=0.900000 s
+
+==============================
+times.wpl (unoptimized)
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=2.574000 s
+
+------------------------------
+times.wpl
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=1.000000 s
+
+
+
+w/ gcc
+$ ./runTests
+==============================
+map.wpl (unoptimized)
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=1.216000 s
+
+------------------------------
+map.wpl
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=1.130000 s
+
+==============================
+takeEmit.wpl (unoptimized)
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=4.114000 s
+
+------------------------------
+takeEmit.wpl
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=2.527000 s
+
+==============================
+times.wpl (unoptimized)
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=6.534000 s
+
+------------------------------
+times.wpl
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=2.637000 s
+
+
+
+
+---------------------------------------------------------
+|        8/13/2013 (revision 1218): GOTO's              |
+---------------------------------------------------------
+
+Previously, tick and process for each block were implemented as functions.
+Done, consume, and yield continuations called these functions directly.
+
+The GOTO optimization took advantage of the fact that the continuations always
+occurred in tail positions, in order to convert function calls into direct 
+jumps to labels.  This is straightforward except in the BindMany and
+Branch cases.  To compile, e.g., 
+
+    if e then c1 else c2
+
+we previously created a new Branch block with tick and process function pointers.
+Initialization of the block set these function pointers to the tick and 
+process functions of [c1] or [c2], depending on the value of [e].  The tick 
+and process functions of the branch simply called *(tick_branch_funptr) and 
+*(process_branch_funptr), i.e., whichever functions were stored in the 
+pointers.
+
+After the GOTO optimization, we still emit code for branch tick and branch
+process, but instead of doing an indirect call to the functions stored in the 
+pointers, we switch on an index, called [branch_var], that tells 
+us whether to jump to [c1] or [c2].  For example, the code generated for 
+branch tick is:
+
+  branch_tick:
+    if (branch_var == 0) {
+      goto c1_tick_label;
+    } else {
+      goto c2_tick_label;
+    }
+
+and similarly for branch process.  A branch's ininitialization function sets 
+branch_var to 0 or 1, depending on the value of [e]:
+
+  void branch_init() {
+    if ([[e]]) {
+      branch_var = 0;
+      c1_init();
+    } else {
+      branch_var = 1;
+      c2_init();
+    }
+
+BindMany is analogous to Branch, except that we have an n-way instead of a 
+2-way switch.  In BindMany, [branch_var] is initially set to 0.  When each 
+subcomputation in (x1 <- c1; x2 <- c2; ...; cn) is DONE, it increments 
+[branch_var] and initializes the next subcomputation in the BindMany chain.
+   
+
+$ ./runTests
+==============================
+map.wpl (unoptimized)
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=1.454000 s
+
+------------------------------
+map.wpl
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=1.138000 s
+
+==============================
+takeEmit.wpl (unoptimized)
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=4.401000 s
+
+------------------------------
+takeEmit.wpl
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=2.350000 s
+
+==============================
+times.wpl (unoptimized)
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=6.267000 s
+
+------------------------------
+times.wpl
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=2.677000 s
+
+
+
+
+----------------------------------------------------------
+| 8/12/2013 (revision 1202): optimize repeat/times/until |
+----------------------------------------------------------
+
+Optimize code generation for combinators repeat/times/until.  Previously, repeat
+was implemented as follows:
+
+  [[ repeat c ]]_funEnv k = 
+       [[ c; fresh() ]]_{funEnv; (fresh,\_ -> return cId)} k
+
+where funEnv is a compilation environment mapping parameterized ST-function 
+arguments to code generation actions (funEnv : [Exp Ty] -> CGM CompInfo).
+
+This encoding generated two unnecessary indirections: one to wrap [c] in 
+tick/process/init functions with prefix [cId], and a second for the [bind] 
+introduced between [c] and the call to [fresh].  
+
+The encoding has been optimized to:
+
+  [[ repeat c ]]_... k =
+       let mkRepeat cinfo = [[ c ]]_... ((initHdl cinfo)(c); whatIs = SKIP)
+       cinfo <- withClonedState $ mkRepeat (mkInfo "dummy")
+       mkRepeat cinfo
+
+That is, we generate code for [c] with DONE continuation "initialize [c] and 
+set [whatIs] to [SKIP]".  The [withClonedState] business is a hack necessary to 
+determine [c]'s init/tick/process identifiers in advance.
+
+We did similar optimizations to speed up the code generated for 
+the [until] and [times] combinators, resulting in the following microbenchmarks
+(found in compiler/performance):
+       
+
+==============================
+
+let proc(x : int) = x+1
+in
+
+let t(u: unit) = map proc
+in
+
+t(tt)
+
+map.wpl (unoptimized)
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=1.520000 s
+
+------------------------------
+map.wpl 
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=1.438000 s
+
+==============================
+
+let t1(u: unit) =
+  repeat(
+    x <- take1;
+    emit (x+1)
+  )
+in
+
+t1(tt) 
+
+takeEmit.wpl (unoptimized)
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=4.845000 s
+
+------------------------------
+takeEmit.wpl
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=3.310000 s
+
+==============================
+
+repeat (
+  times 1 do (
+    x <- take1;
+    emit (x+1)
+  )
+)
+
+times.wpl (unoptimized)
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=6.225000 s
+
+------------------------------
+times.wpl
+Dummy input from memory, 100000000 items:
+n=100000000 large, silent output
+n=100000000, time=3.554000 s
+
+
+
+----------------------------------------------------------
+| 8/12/2013 (revision 1194): Fixed-point complex numbers |
+----------------------------------------------------------
+
+Add support for fixed-point complex numbers.  Complex literals are defined using 
+the syntax:
+
+  {complex| n, m }
+
+where n is the real part, and m the imaginary part.
+
+Complex numbers support the operations:
+  
+  +,-,*,/, creal: complex -> int, cimag: complex -> int
+
+For examples, see tests/complex.wpl and tests/backend/complex.wpl.
+
+
+
+----------------------------------------------------------
+| 8/9/2013: Bind optimization: tick right away           |
+----------------------------------------------------------
+
+8/9/2013:
+In code generation for [Bind c1 c2], [c1] previously updated the bind
+tick and process pointers, set whatIs to SKIP, and returned to the 
+outer main loop. [c2]'s tick function was then called by the outer loop, 
+potentially via a chain of pointer dereferences.  
+
+Now, when c1 is DONE, c1 sets bind's tick and process pointers, 
+initializes c2, sets whatIs to SKIP, and calls [c2]'s tick function directly, 
+avoiding the return all the way out to the main loop.
+

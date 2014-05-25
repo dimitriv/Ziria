@@ -1,0 +1,17 @@
+let PSS_threshold = 500 in 
+
+let comp test(printDetect : bool, corr : int) = 
+  repeat seq{
+    x <- take;
+    if (printDetect) then 
+      if (x > PSS_threshold) then 
+        emit 1
+      else
+        emit 0
+    else
+      emit corr
+  }
+in
+
+
+read[int] >>> test(true, 700) >>> write

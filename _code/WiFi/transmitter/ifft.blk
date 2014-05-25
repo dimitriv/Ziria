@@ -1,0 +1,38 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+
+let comp ifft() =
+   var symbol:arr[128] complex16;
+   var fftdata:arr[128+32] complex16;
+
+   repeat seq{
+     (s:arr[64] complex16) <- takes 64;
+     do {
+        symbol[96,32] := s[0,32];
+        symbol[0,32] := s[32,32];
+        sora_ifft(128, symbol,fftdata[32,128]);
+        -- Add CP
+        fftdata[0,32] := fftdata[128,32];
+     };
+     emits fftdata
+   }
+  
+in
+

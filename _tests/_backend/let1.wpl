@@ -1,0 +1,11 @@
+let comp test() =
+   var i : int;
+
+   let A = 1;
+   do{ i:=0 };
+   let B = A+1;
+   emit B;
+
+in
+
+read[int] >>> test() >>> write[int]

@@ -1,0 +1,129 @@
+let encode34(u : unit) =
+ var s:arr[6] bit := {'0, '0, '0, '0, '0, '0};
+ var r:arr[2] bit;
+ var x:bit;
+ var oA:bit;
+ var oB:bit;
+ 
+ let enc_state_machine(b:bit) = 
+   var r:arr[2] bit;
+   r[0] := b ^ s[1] ^ s[2] ^ s[4] ^ s[5];
+   r[1] := b ^ s[0] ^ s[1] ^ s[2] ^ s[5];
+       
+   s[1:5] := s[0:4];
+   s[0] := b;
+   r
+ in 
+   
+ repeat (
+   dvm1 <- take1;
+   dvm2 <- take1;
+   dvm3 <- take1;
+
+   return (r:=enc_state_machine(dvm1));
+   emits r;
+
+   return (r:=enc_state_machine(dvm2));
+   emit r[0];
+
+   return (r:=enc_state_machine(dvm3));
+   emit r[1]
+ )
+
+
+in
+
+let encode23(u : unit) =
+ var s:arr[6] bit := {'0, '0, '0, '0, '0, '0};
+ var r:arr[2] bit;
+ var x:bit;
+ var oA:bit;
+ var oB:bit;
+ 
+ let enc_state_machine(b:bit) = 
+   var r:arr[2] bit;
+   r[0] := b ^ s[1] ^ s[2] ^ s[4] ^ s[5];
+   r[1] := b ^ s[0] ^ s[1] ^ s[2] ^ s[5];
+       
+   s[1:5] := s[0:4];
+   s[0] := b;
+   r
+ in 
+
+ repeat (
+   dvm1 <- take1;
+   dvm2 <- take1;
+
+   return (r:=enc_state_machine(dvm1));
+   emits r;
+
+   return (r:=enc_state_machine(dvm2));
+   emit r[0]
+ )
+
+
+in
+
+let encode12(u : unit) =
+ var s:arr[6] bit := {'0, '0, '0, '0, '0, '0};
+ var r:arr[2] bit;
+ var x:bit;
+ var oA:bit;
+ var oB:bit;
+ 
+ let enc_state_machine(b:bit) = 
+   var r:arr[2] bit;
+   r[0] := b ^ s[1] ^ s[2] ^ s[4] ^ s[5];
+   r[1] := b ^ s[0] ^ s[1] ^ s[2] ^ s[5];
+       
+   s[1:5] := s[0:4];
+   s[0] := b;
+   r
+ in 
+
+ repeat [4,8] (
+   dvm1 <- take1;
+   return (r:=enc_state_machine(dvm1));
+   emits r
+ )
+
+in
+
+let encode(coding: int) =
+ if coding == 34 then {
+   encode34(tt)
+ }
+ else { 
+   if coding == 23 then {
+      encode23(tt)
+   }
+   else { encode12(tt) } 
+ }
+
+in
+
+let bitToInt(u:unit) =
+
+  var s:arr[2] bit;
+  var x:int;
+
+     repeat (
+       -- TOFIX: this kind of takes
+       -- s[0] <- take1;
+       y <- take1;
+       return (s[0] := y );
+       y <- take1;
+       return (s[1] := y );
+
+       return (
+
+         x := int(s[0]) + 48 + int(s[1])*256 + 48*256
+         -- x := int(s[0]) + int(s[1])*256
+
+       );
+       emit x
+     )
+
+in
+
+read >>> encode(12) >>> write

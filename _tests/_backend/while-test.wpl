@@ -1,0 +1,14 @@
+
+
+let comp f() = 
+   var x : int := 5;
+   while (x >= 0) 
+     seq { (z : int) <- take
+         ; do { x := x-1 }
+         ; emit (z+1) 
+         }
+
+in
+
+read[int] >>> times 2 (f()) >>> write[int]
+

@@ -1,0 +1,180 @@
+let map_ofdm(u : unit) = 
+  var state : arr[7] int;
+  var counter : int := 0;
+  var x : arr[48] complex;
+
+  -- TODO: Get rid of this function
+  return(
+    for i,v in state {
+      state[i] := 1
+    }
+  );
+
+  let emitZeros(n : int) = 
+    times n do (
+      emit (complex { re = 0; im = 0 })
+    )
+  in
+
+  let getNextPilot(u : unit) = 
+    var out : complex;
+    var bpilot : int;
+
+    bpilot := state[3] ^ state[0];
+    if (bpilot == 1){
+      out := complex { re = -1; im = 0 }
+    } else {
+      out := complex { re = 1; im = 0 }
+    };
+    if (counter == 126) {
+        for i,v in state {
+          state[i] := 1
+        }
+    } else {
+       state[0:5] := state[1:6];
+       state[6] := bpilot
+    };
+    counter := (counter + 1) % 127;
+    out
+  in 
+
+  repeat(
+    x <- take 48;
+
+    emit (complex { re = 0; im = 0}); 
+    emit (complex { re = 0; im = 0});     
+    emit (complex { re = 0; im = 0}); 
+    emit (complex { re = 0; im = 0}); 
+    emit (complex { re = 0; im = 0});     
+    emit (complex { re = 0; im = 0}); 
+
+    emits x[0:4];
+
+
+    emit getNextPilot(tt);
+    emits x[5:17];
+    emit getNextPilot(tt);
+    emits x[18:23];
+    emit (complex { re = 0; im = 0 });
+    emits x[24:29];
+    emit getNextPilot(tt);
+    emits x[30:42];
+    emit getNextPilot(tt);
+    emits x[43:47];
+
+    emit (complex { re = 0; im = 0}); 
+    emit (complex { re = 0; im = 0});     
+    emit (complex { re = 0; im = 0}); 
+    emit (complex { re = 0; im = 0}); 
+    emit (complex { re = 0; im = 0})
+
+  )
+
+in
+
+let intToBit(u:unit) =
+
+  var s:arr[2] bit;
+  var x:int;
+
+     repeat (
+       x <- take1; 
+       return (
+
+         s[0] := bit (x/256-48);
+         s[1] := bit (x%256-48)
+
+       );
+       emit s[1];
+       emit s[0]
+     )
+
+in
+
+let bitToInt(u:unit) =
+
+  var s:arr[2] bit;
+  var x:int;
+
+     repeat (
+       -- TOFIX: this kind of takes
+       -- s[0] <- take1;
+       y <- take1;
+       return (s[0] := y );
+       y <- take1;
+       return (s[1] := y );
+
+       return (
+
+         x := int(s[0]) + 48 + int(s[1])*256 + 48*256
+         -- x := int(s[0]) + int(s[1])*256
+
+       );
+       emit x
+     )
+
+in
+
+let int_to_actualint(u:unit) = 
+  repeat(
+    y <- take1;
+    emit y - 48 - 12288
+  )
+in
+
+let int_to_visibleint(u:unit) = 
+   repeat (
+
+      x <- take1;
+      
+      if x < 0 then {
+        emit 78;
+        emit -x + 48 +256*48
+      }
+      else
+      {
+        emit x + 48 + 256*48
+      }
+   )
+
+in
+
+let convertToComplex = 
+
+  repeat (
+    c1 <- take1;
+    c2 <- take1;
+    emit (complex { re = c1; im = c2 })
+  )
+in
+
+let complex_to_int(u:unit) = 
+
+  repeat (
+    (c : complex) <- take1;
+    emit c.re;
+    emit c.im
+  )
+  
+
+in
+
+let int_to_complex(u:unit) = 
+  repeat(
+    y <- take1;
+    emit (complex { re = y; im = 0 })
+  )
+in 
+
+let complex_to_int(u : unit) = 
+
+  repeat(
+    (y : complex) <- take1;
+    emit y.re
+  )
+in
+
+
+read >>> int_to_complex(tt) >>> map_ofdm(tt) >>> complex_to_int(tt) >>> write
+
+-}

@@ -1,0 +1,12 @@
+let f1(x:int) = 
+   var y : int := 0;
+   for i in [0, 20000] {
+       y := x * i;
+       y := x * y;
+       y := y * x;
+       y := x + y 
+   };
+   return y
+in
+
+read[int] >>> map f1 |>>>| map f1 >>> write[int]

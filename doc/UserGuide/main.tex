@@ -1,0 +1,266 @@
+\documentclass{report}
+
+%\usepackage{fancyhdr}
+%\pagestyle{fancy}
+
+\usepackage{algorithm2e}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{balance}
+\usepackage{color}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{latexsym}
+\usepackage{listings}
+\usepackage{mathabx}
+\usepackage{verbatim}
+\usepackage{proof}
+\usepackage{subfigure}
+%\usepackage[countmax]{subfloat}
+%\usepackage{cns-proof}
+\usepackage{multirow}
+\usepackage{enumitem}
+\usepackage{xspace}
+
+\usepackage{float}
+
+
+
+\textwidth = 6.8 in
+\textheight = 9.3 in
+\oddsidemargin = -0.25 in
+\evensidemargin = -0.1 in
+\leftmargin= -0.3 in
+\topmargin = -0.8 in
+
+
+\usepackage{ifxetex}
+\ifxetex
+    % XeLaTeX
+    \usepackage{polyglossia}
+    \usepackage{fontspec}
+    \usepackage[]{unicode-math}
+\else
+    % default: pdfLaTeX
+    \usepackage[english]{babel}
+    \usepackage[T1]{fontenc}
+    \usepackage[utf8]{inputenc}
+    \usepackage[babel=true,activate={true,nocompatibility},final,tracking=true,kerning=true,spacing=true]{microtype}
+\fi
+
+%%
+%% hyperref options
+%%
+\newif\ifhidelinks
+\hidelinksfalse
+\ifhidelinks
+  \usepackage[hidelinks,bookmarks]{hyperref}
+\else
+  \usepackage[bookmarks]{hyperref}
+\fi
+
+%% Listings-related stuff
+\usepackage[scaled]{beramono}
+\newcommand\Small{\fontsize{8}{8.2}\selectfont}
+\newcommand*\LSTfont{\Small\ttfamily\SetTracking{encoding=*}{-60}\lsstyle}
+
+\lstset{language=C}
+\lstset{
+  morekeywords={take,emit,repeat,return,map,if,then,else,let,in,letref,letfun,letfunc,
+                times,for,neg,
+                arr,bit,int}
+}
+\lstset{
+  escapeinside={@}{@},
+  boxpos=c,
+  basicstyle=\LSTfont,
+  captionpos=b,
+  numbers=left,
+  numbersep=10pt,
+  literate={<-}{{$\leftarrow$}}2 
+           {>>>}{{$\parc$}}3
+           {tt}{{$()$}}2
+}
+
+\newenvironment{pseudocode}[1][htb]
+  {\renewcommand{\algorithmcfname}{Listing}%
+   \begin{algorithm}[#1]%
+  }{\end{algorithm}}  
+
+\newcommand{\edmargincomment}[1]{\-\marginpar{\raggedright\footnotesize {\color{red}#1}}}
+
+
+\setlength{\parskip}{0.12\baselineskip plus 0.1\baselineskip minus 0.1\baselineskip}
+\setlength{\parsep}{\parskip}
+\setlength{\topsep}{0cm}
+\setlength{\parindent}{0cm}
+
+\renewcommand{\textfraction}{0.1}
+\renewcommand{\topfraction}{0.95}
+\renewcommand{\dbltopfraction}{0.95}
+\renewcommand{\floatpagefraction}{0.9}
+\renewcommand{\dblfloatpagefraction}{0.9}
+
+\setlength{\floatsep}{16pt plus 4pt minus 4pt}
+%% \setlength{\textfloatsep}{14pt plus 4pt minus 4pt}
+
+
+
+\newcommand{\edcomment}[2]{{\color{red}\textbf{#1:} #2}}
+%% \newcommand{\edcomment}[2]{}
+\newcommand{\BR}[1]{\edcomment{BR}{#1}}
+\newcommand{\DV}[1]{\edcomment{DV}{#1}}
+\newcommand{\GM}[1]{\edcomment{GM}{#1}}
+\newcommand{\GS}[1]{\edcomment{GS}{#1}}
+\newcommand{\MG}[1]{\edcomment{MG}{#1}}
+
+%% Theorem and definition types
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{definition}{Definition}
+
+%% List-related stuff
+\setlist{nolistsep}
+
+%% =============== Macros ====================
+\def\LANG {{$\mathsf{Blink}$}\xspace}
+\def\CORE {{$\lambda_{\mathsf{Blink}}$}\xspace}
+\def\LANGIL {{$\mathsf{Blink}_{\mathsf{IL}}$}\xspace}
+\def\WPL {{PL$\circ$W}\xspace}
+
+\newcommand{\keyw}[1]{\ensuremath{\textsf{#1}}}
+
+\def\take {{\lstinline|take| }}
+\def\emit {{\lstinline|emit| }}
+
+\newcommand{\parc}{\keyw{>\!\!>\!\!>}}
+\newcommand{\pipelineparc}{\keyw{|>\!\!>\!\!>|}}
+\newcommand{\ST}[3]{\keyw{ST}\ #1\ #2\ #3}
+\newcommand{\STC}[3]{\keyw{ST}\ (\keyw{C}\ #1)\ #2\ #3}
+
+
+
+
+\newcommand{\STT}[2]{\keyw{ST}\ \keyw{T}\ #1\ #2}
+\newcommand{\bindc}{\keyw{>\!\!>\!=}}
+
+\newcommand{\step}[3]{#1 \overset{#2}{\longrightarrow} #3}
+\newcommand{\stepstar}[3]{#1 \overset{#2}{\longrightarrow}^{*} #3}
+\newcommand{\twostep}[3]{\begin{array}{rc}& #1 \\ 
+  \overset{#2}{\longrightarrow} & #3\end{array}}
+\newcommand{\bigstep}[2]{#1\ \Downarrow\ #2}
+\newcommand{\bigsteptwoline}[2]{\begin{array}{c} #1\ \ \Downarrow \\ #2\end{array}}
+\newcommand{\procstep}[3]{#1\ \ \Downarrow\!\![#2]\ \ #3}
+\newcommand{\twoconfig}[2]{\langle #2,\ #1 \rangle}
+%% #1 = command
+%% #2 = state
+\newcommand{\threeconfig}[3]{\langle #3,\ #1,\ #2 \rangle}
+%% #1 = command
+%% #2 = result/result kind
+%% #3 = state
+\newcommand{\M}[5]{(#4\ |\ #2\ |\ #3\ |\ #5\ |\ #1)}
+%% #1 = result/result kind
+%% #2 = input stream
+%% #3 = output stream
+%% #4 = state
+%% #5 = computation
+\newcommand{\PM}[8]{(#1\ |\ #2\ |\ #3\ |\ #4\ |\ #5\ |\ #6\ |\ #7\ |\ #8)}
+%% #1 = state
+%% #2 = input stream
+%% #3 = thread buffer
+%% #4 = output stream
+%% #5 = computation1
+%% #6 = computation2
+%% #7 = result/result kind1
+%% #8 = result/result kind2
+\newcommand{\interpTy}[1]{\mathcal{T}(#1)}
+\newcommand{\interpExpr}[1]{\mathcal{E}(#1)}
+\newcommand{\myvector}[1]{\overrightarrow{#1}}
+\newcommand{\Sinit}[1]{S_{\mathsf{init}}(#1)}
+\newcommand{\Sdecl}[1]{S_{\mathsf{decl}}(#1)}
+\newcommand\Sctx[2]{S#1[#2]}
+
+
+\newcommand\rimm[1]{{\tt imm}(#1)\xspace}
+\newcommand\rcons{{\tt cons}\xspace}
+\newcommand{\rskip}{{\tt skip}\xspace}
+\newcommand{\ryield}[1]{{\tt yield}(#1)\xspace}
+\newcommand{\rdone}[1]{{\tt done}(#1)\xspace}
+
+\newcommand{\ebrack}[1]{{\{\!\mid}#1{\mid\!\}}}
+
+%% \newcommand{\evalinit}{\vdash^{\hspace{-5pt}{\footnotesize{\tt init}}}}
+%% \newcommand{\evaltick}{\vdash^{\hspace{-5pt}{\footnotesize{\tt tick}}}}
+%% \newcommand{\evalproc}{\vdash^{\hspace{-5pt}{\footnotesize{\tt proc}}}}
+\newcommand{\evalinit}{} %% \vdash^{\hspace{-5pt}{\footnotesize{\tt init}}}}
+\newcommand{\evaltick}{} %% \vdash^{\hspace{-5pt}{\footnotesize{\tt tick}}}}
+\newcommand{\evalproc}{} %% \vdash^{\hspace{-5pt}{\footnotesize{\tt proc}}}}
+%% \newcommand{\evalinit}{\vdash^{\hspace{-5pt}{\tt init}}}
+%% \newcommand{\evaltick}{\vdash^{\hspace{-5pt}{\tt tick}}}
+%% \newcommand{\evalproc}{\vdash^{\hspace{-5pt}{\tt proc}}}
+\newcommand{\In}{I}
+\newcommand{\Out}{O}
+
+\newcommand{\ol}[1]{\overline{#1}}
+
+\newcommand{\tunit}{\keyw{unit}}
+\newcommand{\vunit}{{\tt{()}}}
+
+\newcommand{\stepsto}{\hookrightarrow}
+
+\newcommand\dv[1]{\begin{color}{red}#1\end{color}}
+%% ============= End Macros ==================
+
+\begin{document}
+
+\special{papersize=8.5in,11in}
+\setlength{\pdfpageheight}{\paperheight}
+\setlength{\pdfpagewidth}{\paperwidth}
+
+%% \conferenceinfo{CONF 'yy}{Month d--d, 20yy, City, ST, Country} 
+%% \copyrightyear{20yy} 
+%% \copyrightdata{978-1-nnnn-nnnn-n/yy/mm} 
+%% \doi{nnnnnnn.nnnnnnn}
+
+% Uncomment one of the following two, if you are not going for the 
+% traditional copyright transfer agreement.
+
+%\exclusivelicense                % ACM gets excblusive license to publish, 
+                                  % you retain copyright
+
+%\permissiontopublish             % ACM gets nonexclusive license to publish
+                                  % (paid open-access papers, 
+                                  % short abstracts)
+
+%% \titlebanner{banner above paper title}        % These are ignored unless
+%% \preprintfooter{short description of paper}   % 'preprint' option specified.
+
+\title{\LANG: User Guide}
+%% \subtitle{Subtitle Text, if any}
+
+% Include author msg. just to stop latex from complaining
+%\authorinfo{Authors removed for double-blind review}
+%           {}
+%           {}
+%% \authorinfo{Name2\and Name3}
+%%            {Affiliation2/3}
+%%            {Email2/3}
+
+\maketitle
+
+\input{intro}
+
+\input{language}
+
+
+
+\input{reference}
+
+
+%\balance
+%\bibliographystyle{abbrvnat}
+%\bibliography{wpl,mainland}
+
+
+\end{document}
+

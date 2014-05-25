@@ -1,0 +1,49 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#include <v_conj_mul.blk>
+
+-- c = sum(a1 * conj(a2))
+-- All vectors have to be 16-bit aligned
+let v_correlate(a1 : arr complex16, a2 : arr complex16) = 
+  var re : arr[4] int32;
+  var im : arr[4] int32;
+  var sum_re : arr[4] int32 := {0,0,0,0};
+  var sum_im : arr[4] int32 := {0,0,0,0};
+
+  let vlen = (length(a1) / 4) in
+  let rlen = (length(a1) - vlen*4) in 
+
+  for i in [0, vlen] {
+    v_conj_mul_complex16_int32(re,im,a1[4*i,4],a2[4*i,4]);
+    v_add_int32(re, sum_re, sum_re);
+    v_add_int32(im, sum_im, sum_im)
+  };
+
+  sum_re[0] := v_sum_int32(sum_re);
+  sum_im[0] := v_sum_int32(sum_im);
+
+  -- Sum the rest one by one, if length is not modulo 4
+  for i in [vlen*4,rlen] {
+    sum_re[0] := sum_re[0] + (int(a1[i].re)*int(a1[i].re) + int(a1[i].im)*int(a1[i].im ));
+    sum_im[0] := sum_im[0] + (int(a1[i].im)*int(a2[i].re) - int(a1[i].re)*int(a1[i].im ));
+  };
+
+  return complex{re=sum_re[0]; im=sum_im[0]};
+in 

@@ -1,0 +1,28 @@
+let comp test() = 
+  var r : int;
+
+  for nType in [0:3] 
+  seq { 
+    do{
+--      print nType;
+      r := 2
+    };
+--    do{print r};
+    times r
+      emit 0;
+
+    do{
+      r := 2
+    };
+--    do {println r};
+
+    times r
+    seq{
+--      do{println i};
+      emit 0
+    }
+  }
+in 
+
+read[int] >>> test() >>> write[int]
+

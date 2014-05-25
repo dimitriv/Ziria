@@ -1,0 +1,15 @@
+let comp f() = 
+seq{
+  (a : int) <- take;
+  emit a
+}
+in
+
+let comp g() = 
+seq{
+  (a : arr[9] int) <- takes 9;
+  emit (-1)
+}
+in
+
+read >>> repeat seq{f() ; g()} >>> write

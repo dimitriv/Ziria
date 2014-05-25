@@ -1,0 +1,25 @@
+
+
+let f( y : int) = 
+  var x : int;
+  x := y;
+  for i in [0:5] {
+    x := x + 1;
+  };
+  return x;
+in
+
+let comp fc() = 
+   var x : int; 
+   seq { for i in [0:5] 
+           seq { x <- take
+               ; emit x
+               }
+       ; times 10 
+            seq { x <- take
+                ; emit 0 
+                }
+       }
+in
+
+read [int] >>> map f >>> fc() >>> write [int]

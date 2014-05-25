@@ -1,0 +1,132 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+
+#include "../const.blk"
+#include <permutation.blk>
+
+
+-- number of encoded bits per subcarrier
+let nBPSC(mod: int) = 
+  if mod == M_BPSK then { return 1 } else { 
+  if mod == M_QPSK then { return 2 } else {
+  if mod == M_16QAM then { return 4 } else {
+  if mod == M_64QAM then { return 6 } else { return -1 }
+  }}}
+in
+
+let nCBPS(mod: int) = return nBPSC(mod) * 48 in
+
+
+let intlv_perm1(mod : int) =
+  var perm : arr[288] int;
+  for k in [0,288] {
+    perm[k] := nCBPS(mod)/16 * (k%16) + k/16
+  }; 
+  return perm
+in
+
+let intlv_perm2(mod: int) = 
+  var perm: arr[288] int; 
+  let s = if (mod == M_BPSK) then 1 else nBPSC(mod)/2 in 
+
+  for k in [0,288] {
+    perm[k] := s * k/s + (k+nCBPS(mod) - 16*k/nCBPS(mod)) % s
+  };
+  return perm
+in
+
+let comp interleaver_bpsk() =
+  var y : arr[48] bit; 
+  let nCBPSMod = 48 in 
+  let ids1 = intlv_perm1(M_BPSK) in 
+  let ids2 = intlv_perm2(M_BPSK) in
+
+  repeat [48, 48] {
+    (x : arr[48] bit) <- takes 48;
+-- We break it in two because heavy inlining done by the compiler
+-- will miss the LUTing opportunity
+--    emits perm(ids2[0,48], perm(ids1[0,48], x));
+    do { y := perm(ids1[0,48], x) };
+    emits perm(ids2[0,48], y);
+  }
+in
+
+let comp interleaver_qpsk() = 
+  var y : arr[2*48] bit; 
+  let nCBPSMod = 2*48 in 
+  let ids1 = intlv_perm1(M_QPSK) in 
+  let ids2 = intlv_perm2(M_QPSK) in
+  
+  repeat {
+    (x : arr[96] bit) <- takes 96;
+-- We break it in two because heavy inlining done by the compiler
+-- will miss the LUTing opportunity
+--    emits perm(ids2[0,96], perm(ids1[0,96], x));
+    do { y := perm(ids1[0,96], x) };
+    emits perm(ids2[0,96], y);
+  }
+in 
+
+let comp interleaver_m16qam() = 
+  var y : arr[4*48] bit; 
+  let nCBPSMod = 4*48 in 
+  let ids1 = intlv_perm1(M_16QAM) in 
+  let ids2 = intlv_perm2(M_16QAM) in
+  
+  repeat {
+    (x : arr[192] bit) <- takes 192;
+-- We break it in two because heavy inlining done by the compiler
+-- will miss the LUTing opportunity
+--    emits perm(ids2[0,192], perm(ids1[0,192], x));
+    do { y := perm(ids1[0,192], x) };
+    emits perm(ids2[0,192], y);
+  }
+in 
+
+let comp interleaver_m64qam() =
+  var y : arr[6*48] bit; 
+  let nCBPSMod = 6*48 in 
+  let ids1 = intlv_perm1(M_64QAM) in 
+  let ids2 = intlv_perm2(M_64QAM) in
+
+  repeat {
+    (x : arr[288] bit) <- takes 288;
+-- We break it in two because heavy inlining done by the compiler
+-- will miss the LUTing opportunity
+--    emits perm(ids2[0,288], perm(ids1[0,288], x));
+    do { y := perm(ids1[0,288], x) };
+    emits perm(ids2[0,288], y);
+  }
+in
+
+let comp interleaver(mod: int) =
+  if (mod == M_BPSK) then {
+     interleaver_bpsk()
+  } else { 
+      if (mod == M_QPSK) then { 
+          interleaver_qpsk()
+      } else {  
+          if (mod == M_16QAM) then {
+             interleaver_m16qam()
+          } else { interleaver_m64qam() }
+      }
+  }
+in
+

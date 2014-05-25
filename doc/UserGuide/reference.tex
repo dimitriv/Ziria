@@ -1,0 +1,80 @@
+\chapter{Reference}
+
+
+\section{Data Types}
+
+\LANG supports the following simple data types:
+\begin{description}
+\item[bit] - binary type.
+\item[bool] - logic type.
+\item[double] - floating-point numbers.
+\item[int] - 32 bits by default.
+\item[int16]
+\item[int32]
+\item[complex] - both real and imaginary are 32 bits by default.
+\item[complex16]
+\item[complex32]
+\end{description}
+
+Also, arrays and structs.
+
+
+
+\section{Expression Language}
+
+\subsection{Unary operators}
+
+\LANG expression language supports the following unary operators:
+\begin{description}
+\item[Negative number] (\lstinline|-a|): Negation of an integer expression.
+\item[Logical not] (\lstinline|not a|): Negation of a boolean expression.
+\item[Binary not] (\lstinline|~ a|): Negation of a binary expression.
+\item[Array length] (\lstinline| length(a)|): Gives the length of an array.
+\item[Cast] (\lstinline| type(a) |): Casts variable \lstinline|a| into type \lstinline|type|.
+\end{description}
+
+
+
+
+\subsection{Binary operators}
+
+\LANG expression language supports the following unary operators:
+\begin{description}
+\item[Addition] (\lstinline|a+b|).
+\item[Subtraction] (\lstinline|a-b|).
+\item[Multiplication] (\lstinline|a*b|).
+\item[Division] (\lstinline|a..b|).
+\item[Exponentiation] (\lstinline|a**b| $= a^b$).
+\item[Reminder] (\lstinline|a \% b|) is the reminder when dividing a by b.
+\item[Binary shift left] (\lstinline|a << n|).
+\item[Binary shift right] (\lstinline|a >> n|).
+\item[Binary XOR] (\lstinline|a ^ b|).
+\item[Binary AND] (\lstinline|a & n|).
+\item[Binary OR] (\lstinline!a | n!).
+\item[Logical AND] (\lstinline|a && n|).
+\item[Logical OR] (\lstinline!a || n!).
+\item[Equality relation] (\lstinline|a == b|).
+\item[Inequality relation] (\lstinline|a != b|).
+\item[Order relation] (\lstinline|a >= b, a ,< b, a < b, a > b|).
+\end{description}
+
+
+
+
+\subsection{Arrays}
+
+
+
+
+\subsection{Control flow}
+
+
+
+
+\subsection{I/O functions}
+
+\LANG expression language supports the following I/O functions:
+\begin{description}
+\item[print]
+\item[error]
+\end{description}

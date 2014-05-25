@@ -1,0 +1,23 @@
+
+let comp f() = 
+
+  -- Shows Blink compuitations as commands 
+  var p : int;
+
+  struct far = { w : int; z : int }
+  in 
+
+  seq { struct foo = { x : int; y : int }
+      ; emit 4
+      ; if true then emit 4
+      ; if false then emit 3 else emit 4
+      ; let x = 3 
+      ; return ()
+      ; do { p := 3 }
+      }
+
+
+in 
+
+
+read[int] >>> f() >>> write[int]

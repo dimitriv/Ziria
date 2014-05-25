@@ -1,0 +1,99 @@
+## Copyright (c) Microsoft Corporation
+## All rights reserved. 
+## 
+## Licensed under the Apache License, Version 2.0 (the ""License""); you
+## may not use this file except in compliance with the License. You may
+## obtain a copy of the License at
+## 
+## http://www.apache.org/licenses/LICENSE-2.0
+## 
+## THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+## CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+## LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+## A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+## 
+## See the Apache Version 2.0 License for specific language governing
+## permissions and limitations under the License.
+
+!include "$(SORA_ROOT)\build\sources_ke.inc"
+
+TARGETNAME  = CompilerDDK
+TARGETTYPE  = PROGRAM
+UMTYPE      = console
+
+TARGETPATH=Target
+    
+USE_MSVCRT  = 1
+
+##INCLUDES        = $(INCLUDES) \
+##                  ..\..\bb\dot11a; \
+##                  ..\..\bb\dot11a\inc; \
+##                  ..\..\bb\brick11\src; \
+##                  ..\..\util\src;	\
+##		  ..\..\inc; \
+##                  ..\..\inc\brick; \
+
+INCLUDES        = $(INCLUDES) \
+                  $(SORA_ROOT)\src\bb\dot11a; \
+                  $(SORA_ROOT)\src\bb\dot11a\inc; \
+                  $(SORA_ROOT)\src\bb\brick11\src; \
+                  $(SORA_ROOT)\src\util\src;	\
+                  $(SORA_ROOT)\inc\brick; \
+				  $(SORA_ROOT)\inc; \
+		          $(SORA_ROOT)\src\inc; \
+                  \inc\brick; \
+## 		  ..;
+
+TARGETLIBS      = $(TARGETLIBS) \
+                  $(DDK_LIB_PATH)\Ws2_32.lib \
+		  $(SORA_ROOT)\target\$(BUILD_ALT_DIR)\*\dot11bbbu.lib \
+		  $(SORA_ROOT)\target\$(BUILD_ALT_DIR)\*\dot11bbau.lib \
+		  $(SORA_ROOT)\target\$(BUILD_ALT_DIR)\*\libbba_lutstu.lib \
+		  $(SORA_ROOT)\target\$(BUILD_ALT_DIR)\*\libbba_modu.lib \
+                  $(SORA_ROOT)\lib\$(BUILD_ALT_DIR)\*\usora.lib\
+		  $(SORA_ROOT)\target\$(BUILD_ALT_DIR)\*\sora_utility.lib \
+!if "$(_BUILDARCH)" == "x86"
+                  $(SORA_ROOT)\lib\$(BUILD_ALT_DIR)\*\DebugPlotU.lib 
+!endif
+
+                  
+##TARGETLIBS      = $(TARGETLIBS) \
+##				  ..\..\..\..\..\samples\target_SORA1.8\$(BUILD_ALT_DIR)\*\dot11bbau.lib \
+##				  ..\..\..\..\..\samples\target_SORA1.8\$(BUILD_ALT_DIR)\*\libbba_lutstu.lib \
+##				  ..\..\..\..\..\samples\target_SORA1.8\$(BUILD_ALT_DIR)\*\libbba_modu.lib \
+##                  ..\..\..\..\..\samples\target_SORA1.8\$(BUILD_ALT_DIR)\*\sora_utility.lib	\
+##                  ..\..\..\..\..\samples\lib_SORA1.8\lib\$(BUILD_ALT_DIR)\*\usora.lib \
+##!if "$(_BUILDARCH)" == "x86"
+##                  ..\..\..\..\..\samples\lib_SORA1.8\lib\$(BUILD_ALT_DIR)\*\DebugPlotU.lib 
+##!endif
+                  
+!if "$(_BUILDARCH)" == "x86"
+C_DEFINES       = $(C_DEFINES) \
+                  -DUSER_MODE -DBUILDARCHX86 -DSORA_PLATFORM
+!else
+C_DEFINES       = $(C_DEFINES) \
+                  -DUSER_MODE -DBUILDARCHX64 -DSORA_PLATFORM
+!endif
+
+
+## Deliberately disabled most of the warnings
+## USER_C_FLAGS = $(USER_C_FLAGS) /TP /FAs /W1
+USER_C_FLAGS = $(USER_C_FLAGS) /TP /W1 /GR /GL
+
+## To generate post-processed code with expanded header files, add options /C /P
+## Note that this will prevent generation of obj files, so compilation will fail
+
+
+## Set code optimization option "MSC_OPTIMIZATION" to /O2 (maximize speed)
+## in the sources file, which is necessary for DSP related inline functions.
+## Otherwise inline functions will not inline expanded. The default value
+## is /Oxs (minimize size) in free build, and /Od /Oi in check build.
+## ref: http://msdn.microsoft.com/en-us/library/ff549305%28VS.85%29.aspx
+!if "$(DDKBUILDENV)" == "fre"
+MSC_OPTIMIZATION=/O2
+!endif
+
+## Build cannot build source files from multiple directories!
+## Thus we create a wrapper that just includes them all
+SOURCES     = Wrapper.cpp
+

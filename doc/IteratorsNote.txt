@@ -1,0 +1,70 @@
+
+c ::= 
+      (x:ety) <- c1; c2
+    | let (x:ety) = e in c
+    | let fun f(p1..pn) : ety { ebody } in c
+    | let fun f(p1..pn) : cty { cbody } in c
+    | if e then c1 else c2
+    | f(e)
+    | primc
+
+p ::= (x:ety)
+
+primc ::= return e;
+        | emit e;
+        | take e; 
+        | c1 >>> c2 
+        | iterUntil(s,f_term,f_action)
+        | iterForEver(s,f_action) -- If state = () we will optimize this to "forever"
+
+
+I think the only repeat combinators we need as primitives are:
+
+
+  iterUntil   :: s -> (s -> Bool) -> (s -> ST (C s) a b) -> ST (C s) a b
+  iterForEver :: ST (C s) a b -> ST T a b
+
+
+-- Compiled using "tail_call" compilation:
+
+[[ iter_forever(c) ]] 
+    cid,ccode <- codeGencomp c
+    new_id <- genSym ("iter" ++ cid)
+    let pushed_id = new_id
+    [[ c ; f_fresh_iter_forever() ]]_{rho}  @ pushed_id
+       where rho := (f_fresh_iter_forever,\[] -> empty-code-segment)
+
+[[ iter_until(s,fpred,fcomp) ]]
+    new_id <- gensym ("iter_until" ++ cid)
+    
+    [[ new var iter_until_state_var_new_id = s ]]
+    [[ init_new_id() { } ]]
+
+    [[ if fpred(s) then return s else do { s' <- fpred(s); f_fresh_iter_until(.... ]] @ new_id (this is the "pushed id")
+
+    where the extended environment for f_fresh_iter_until is:
+       \(exp',_,_) -> init'() { iter_until_state_var_new_id = exp'; init()}
+                      process() { wrap existing process }
+                      tick() { wrap existing process } 
+
+So we simply have to create extended environments for "iter_forever/f_fresh" such that the code gen for f_fresh does the right thing!
+Similarly for iter_until.
+
+The only small nuisance is that we have to generate first the new id and pass it down, instead of using whatever we generate.
+ 
+
+
+Derived forms (if we want we can have them as primitives or implementations):
+
+   repeat c = let faux (_x) = c 
+               in iterForEver ((),faux) 
+
+   filter(p)  = repeat $ { x <- take 1
+                         ; if p x emit x else return () }
+
+   map(f) = repeat $ { x <- take 1; emit (f(x)); }
+
+
+
+
+  

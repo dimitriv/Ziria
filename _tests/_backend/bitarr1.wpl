@@ -1,0 +1,22 @@
+let comp f() = 
+  var bar : arr[8] bit;
+
+  var baz : arr[3] bit := {'0, '0, '0 };
+  var baf : arr[3] bit := {'1, '1, '1 };
+
+  seq{
+  do {bar[0]   := '1};
+  do {bar[7]   := '1};
+  do {baf      := baz[0,3]};
+  do {bar[1,3] := baz};
+  do {bar[4,3] := baf};
+
+  (x : arr[8] bit) <- take;
+
+  emit bar;
+  emit x
+  }
+in 
+
+read >>> repeat (f()) >>> write
+  

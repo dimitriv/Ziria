@@ -1,0 +1,12 @@
+
+
+
+let f(x : arr[48] bit) = 
+  var y : arr[length(x)] bit;
+  for i in [0,length(y)] print i;
+  for i in [0,length(x)] print i;
+  return x;
+
+in 
+
+read >>> map f >>> write

@@ -1,0 +1,239 @@
+
+
+
+f :: tau1 -> taun -> ST t a b 
+f x = cbody
+
+new struct __fimpl {
+     _local1 : tau1
+     _local2 : tau2
+     [[s]]
+     init(tau1 x1, tau2 x2) { .... } 
+     
+
+      
+new struct __fimpl { 
+      _locals : tau 
+      ... init_state;
+      init(locals) 
+
+
+[[ f(e) ]] =  __fimpl.init(e, __fimpl.init_state.2) 
+           when f :: tau -> ST t a b 
+
+
+init((e,__fimpl.init()
+
+
+
+[[ tau1 -> ... taun -> ST t s a b ]] = 
+
+     struct { 
+
+      [[tau1]] _local1; 
+      ...
+      [[taun]] _localn;
+
+      void init([[tau1]] x1, ..., [[taun]] xn);    // Sets the initial state
+
+      [[s]] init_state;
+
+      [[s]] state;     // To hide what it really is we could have a void *  here
+      [[b]] * yldVal;  // We use pointers to avoid copying
+      [[v]] * doneVal; // for yldVal and doneVal
+
+      char whatIs; 
+
+      bool tick();    // could update the state or set the appropriate flags and values below
+                      // 00 = skip, 01 = yield, 10 = done
+
+      void process([[a]] in)
+
+      // The very first thing we can do is call tick() then obtain either a:
+      //    True => It's an Immediate, in which case we can check the whatIs flag
+                    to determine whether we skipped (00) or yielded (01) or are done (10). The case where
+                    we skipped is unusual (might be unused actually in our combinator implementation) but
+                    let's allow it for now.
+      //    False => Then it's a "Consume". Someone has to call us with an argument and then it's the whatIs
+                     flag that will determine the type of the result.
+     }
+
+
+
+[[ map f :: ST T a b]]_{rho} = 
+
+     (1) Introduces static variable declaration for this block
+     
+     // static ([[ST T a b]]_{rho} UnitState map_328_block;
+
+     static [[b]] * map_328_yldVal;
+     static char * map_328_whatis; 
+
+     (2) Introduces functions for yield and process
+     bool map_328_tick() {
+        return false;
+     }
+
+     void map_328_process([[a]] x) { 
+        b = [[f]]_{rho} (x);
+        map_328_yldVal = b;
+        map_328_block->whatIs = YIELD;
+     }
+
+     (3) Adds this code to the __global_init() function:
+
+     map_328_yldVal = malloc(sizeof[[b]]);
+     map_328_whatis = malloc(sizeof(char);
+
+
+(>>=) :: ST (C v) a b -> (v -> ST t a b) -> ST t a b
+    
+[[ x <- e1; e2 ]]_{rho} = 
+
+   [[e1]]_rho            :: [[ST (C v) a b ]]_{rho}
+       ~~~> this guy will create a (1) bunch of static vars blk1_*
+                                   (2) will define tick and process, and add necessary initialization code in __global_init()
+
+   [[e2]]_{x:[[v]],rho}  :: [[ST t a b]]_{rho,(x:[[v]])}
+      ~~~> this guy will create a (1) bunch of static blk2_* vars
+                                   (2) will define tick and process, and add necessary initialization code in __global_init()
+
+   Then we generate:
+      
+      (1) 
+      static [[b]] * bnd32_yldVal;
+      static [[v]] * bnd32_doneVal;
+      static char *  bnd32_whatIs;
+
+      static (void * tick()) bnd32_tick_ptr;
+      static (void * process([[a]] *x)) bnd32_tick_ptr;
+     
+      // and the rest (all of them, initial state and also current state). state variables need not be pointers.
+
+      (2) 
+      init([[rho]]...) { 
+        bnd32_x1 = rho1
+        bnd32_x2 = rho2
+        ....
+        blk1_init([[rho]]);
+        // unsure if we should set the yldval/doneval/what is
+        bnd32_yldval      = blk1_yldval;
+        bnd32_whatis      = blk1_whatis;
+        bnd32_tick_ptr    = bnd32_tick_left;
+        bnd32_process_ptr = bnd32_process_left;
+      }
+
+      (2) 
+      bool bnd32_tick_left() { // invariant: it's called only when the first component runs
+            x = (*blk1_tick)();
+            if x == IMMEDIATE {
+              switch blk1_whatIs {
+                DONE: 
+                   blk2_init(* blk1_doneVal);
+                   bnd32_yldval  = blk2_yldval;
+                   bnd32_doneval = blk2_doneval; // means we always declare donevals which might be ok.
+                   bnd32_whatis  = blk2_whatis;
+                   bnd32_block_state = False;
+                   bnd_32_tick_ptr = blk2_tick; 
+                   bnd_32_process_ptr = blk2_process;
+                   break;
+                YIELD:
+                   return IMMEDIATE;
+                SKIP:
+                   return IMMEDIATE;
+            }
+            else { // x == CONSUME 
+              return CONSUME
+           }
+      }
+
+      (3) 
+      void bnd32_process_left([[a]] *x) { // invariant: it's called only when the first component runs
+         blk1_process(x);
+         switch *blk1_whatIs {
+           DONE:
+                   blk2_init(* blk1_doneVal);
+                   bnd32_yldval  = blk2_yldval;
+                   bnd32_doneval = blk2_doneval; // means we always declare donevals which might be ok.
+                   bnd32_whatis  = blk2_whatis;
+                   bnd32_block_state = False;
+                   bnd_32_tick_ptr = blk2_tick; 
+                   bnd_32_process_ptr = blk2_process;
+                   break;
+
+           YIELD:
+                   return;
+           SKIP:
+                   return;  
+        }
+      }
+
+
+(>>>) :: ST T a b -> ST T b c -> ST T a c
+[[ e1 >>> e2 ]]]_{rho}
+      [[e1]]_{rho}   prefix is:  blk1 
+      [[e2]]_{rho}   prefix is:  blk2
+
+  
+      (1) boilerplate static pointer definitions
+      (2) no state
+      
+      arr54_init([[rho]]) { 
+        // intializes locals;
+        blk1_init([[rho]]);
+        blk2_init([[rho]]);
+        arr54_whatis = blk2_whatis;
+        arr54_yldval = blk2_yldval;
+        arr55_tick    = arr55_tick_impl;
+        arr55_process = arr55_process_impl;
+      }
+
+      bool arr55_tick_impl() { 
+         x = *blk2_tick();
+         if x == IMMEDIATE
+            return IMMEDIATE;
+         else // x == CONSUME
+         {
+           y = *blk1_tick();
+           if y == IMMEDIATE {
+              blk2_process(blk1_yldval)
+              return IMMEDIATE
+           }
+           else 
+              CONSUME;
+         }
+     void arr55_process_impl([[a]] *x) { 
+         blk1_process(x);
+         switch blk1_whatis {
+           SKIP:
+             arr54_whatis = blk1_whatis;
+             return;
+           YLD:
+             arr54_whatis = blk2_whatis;
+             blk2_process(blk1_yldval);
+           
+     }
+        
+
+         
+
+
+
+
+   
+     
+     
+      
+
+
+
+
+
+
+
+
+
+
+
+
+      

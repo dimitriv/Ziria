@@ -1,0 +1,143 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+
+#include <externals.blk>
+#include <v_mul.blk>
+
+
+
+let build_coeff(pcoeffs:arr[64] complex16, ave:int16, delta:int16) = 
+  var th:int16;
+
+  th := ave - delta * 26;
+
+  for i in [64-26, 26]
+  {
+     pcoeffs[i] := complex16{re=cos_int16(th);im=-sin_int16(th)};
+     th := th + delta
+  };
+        
+  th := th + delta; -- 0 subcarrier, dc
+        
+  -- subcarrier 1 - 26
+  for i in [1,26]
+  {
+     pcoeffs[i] := complex16{re=cos_int16(th);im=-sin_int16(th)};
+     th := th + delta
+  }
+in
+
+
+
+let comp PilotTrack() = 
+
+  var th1:arr[1] int16;
+  var th2:arr[1] int16;
+  var th3:arr[1] int16;
+  var th4:arr[1] int16;
+  var symbol_count:int := 127;
+  var avgTheta:int16;
+  var delTheta:int16;
+  var symbol:arr[64] complex16;
+  var symbol_out:arr[64] complex16;
+  var re32:arr[64] int;
+  var im32:arr[64] int;
+
+  var compCoeffs:arr[64] complex16;
+  var sCFO_tracker:int16 := 0;
+  var sSFO_tracker:int16 := 0;
+  var sCFO_comp:int16 := 0;
+  var sSFO_comp:int16 := 0;
+
+
+  var pilotSgn:arr[128] int := {0,  0,  0, -1, -1, -1,  0, -1, -1, -1, -1,  0,  0, -1,  0, -1, 
+                               -1,  0,  0, -1,  0,  0, -1,  0, 0,  0,  0,  0,  0, -1,  0,  0, 
+                               0, -1,  0,  0, -1, -1,  0,  0, 0, -1,  0, -1, -1, -1,  0, -1, 
+                               0, -1, -1,  0, 1, -1,  0,  0, 0,  0,  0, -1, -1,  0,  0, -1, 
+                               -1,  0, -1,  0, -1,  0,  0, -1, -1, -1,  0,  0, -1, -1, -1, 
+                               -1, 0, -1, -1,  0, -1,  0,  0,  0, 0, -1,  0, -1,  0, -1,  0, 
+                               -1, -1, -1, -1, -1,  0, -1,  0,  0, -1,  0, -1,  0,  0,  0, -1, 
+                               -1, 0, -1, -1, -1,  0,  0,  0, -1, -1, -1, -1, -1, -1, -1,  0,  0};
+
+  var rotate_coeffs:arr[64] complex16;
+
+
+  -- Init
+  do {
+    for i in [0,64] {
+       compCoeffs[i] := complex16{re=32500;im=0}
+    }
+  };
+
+
+
+  repeat seq{
+
+    (symbol_in:arr[64] complex16) <- takes 64;
+
+    -- Compensate phase shift
+     do {
+        v_mul_complex16(symbol,symbol_in,compCoeffs,15);
+     };
+
+
+     -- Calculate the subsequent phase shift
+     do {
+       th1[0] := atan2_int16( symbol[64-21].im , symbol[64-21].re);
+       th2[0] := atan2_int16( symbol[64-7].im , symbol[64-7].re);
+       th3[0] := atan2_int16( symbol[7].im , symbol[7].re);
+       th4[0] := atan2_int16( -(symbol[21].im) , -(symbol[21].re));
+ 
+       if (pilotSgn[symbol_count] == -1) then {
+          -- PI = 32768
+          th1[0] := th1[0] + 32768; -- equivalent of 0x80000 from Sora code
+          th2[0] := th2[0] + 32768;
+          th3[0] := th3[0] + 32768;
+          th4[0] := th4[0] + 32768
+       };
+
+       symbol_count := symbol_count + 1;
+       if (symbol_count >= 127) then {
+          symbol_count := 0
+       };
+
+       avgTheta := (th1[0] + th2[0] + th3[0] + th4[0])/4;
+       delTheta := ((th3[0] - th1[0]) / (21 + 7) + (th4[0] - th2[0]) / (21 + 7)) >> 1;
+
+
+       build_coeff(rotate_coeffs, avgTheta, delTheta);
+       
+       -- Compensate pilots
+       v_mul_complex16(symbol_out[0,28], symbol[0,28], rotate_coeffs[0,28],15);
+       v_mul_complex16(symbol_out[36,28],symbol[36,28],rotate_coeffs[36,28],15);
+
+
+       sCFO_tracker := sCFO_tracker + avgTheta >> 2;
+       sSFO_tracker := sSFO_tracker + delTheta >> 2;
+       sCFO_comp := sCFO_comp + avgTheta + sCFO_tracker;
+       sSFO_comp := sSFO_comp + delTheta + sSFO_tracker;
+
+       build_coeff (compCoeffs, sCFO_comp, sSFO_comp )
+     };
+
+     emits symbol_out
+   }
+
+in

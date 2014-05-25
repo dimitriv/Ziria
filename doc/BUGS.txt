@@ -1,0 +1,141 @@
+List of currently known bugs (files are in bugs directory):
+
+- C compilation fails (bug1.wpl): 
+  Code 
+    var ge : complex := {complex | 0,0}; 
+  will produce a wrong initialization in C
+    struct complex32 ge = __complex32_1;
+  where __complex32_1 is not initiallized
+
+- C compilation fails (bug2.wpl): 
+  Top-level ST has to have the same input and output values. For example
+    let test(u : unit) = 
+      x <- take1;
+      emit {complex| x+1, x+1}
+    in
+    test(tt)
+  will fail because it will try to assign complex to int. I think this is because inValOf and yldValOf in CgHeader 
+  are assigned to the same variable.
+
+- Binary vector assignments are incorrect throughout. Consider expression:
+    [[cstm|$(ce1) ^= ((($(ce1)) >> $(ce2)) & 1 == $(ce3))?0:(1<<($(ce2)));|]]
+  where $(ce1) = s, $(ce2) = i and $(ce3) = (s >> i & 1 ^ 0). It should compile into the following C code 
+    ((s >> i & 1) == (s >> i & 1 ^ 0)) ? 0 : (1 << i)
+  Instead, we get
+    s >> i & 1 == (s >> i & 1 ^ 0) ? 0 : 1 << i
+  In other words, it got read of all the brackets. But the code is not the same, and it becomes incorrect!! 
+
+- C Compilation fails (bug3.wpl)
+  
+  Following code 
+    x[0]
+
+  should compile to something like
+    (x >> 0) & 1
+
+  but instead compiles as
+   x[0]
+
+- Petty Printer strips out brackets (ppBug.wpl)
+
+  Following code 
+      x[0] := bit(y/256 - 48);
+
+  should compile to something like
+      x ^= (x >> 0 & 1) == (__dv_tmp_ln4_4_doneVal / 256 - 48 ? 0) : 1 << 0;
+
+  instead it compiles to
+      x ^= (x >> 0 & 1) == __dv_tmp_ln4_4_doneVal / 256 - 48 ? 0 : 1 << 0;
+
+  Please note the missing braces among the intended and actual output. Earlier, the compiler was stripping out the braces in the first operand of the == operator also, somehow that works now. Relevant part of compiler code should be 
+
+   TArr n TBit | n <= 32 -> [cexp|((($(ce1)) >> ($(ce2))) & 1)|]
+                _                     -> [cexp|$(ce1)[$(ce2)]|] 
+
+   in CgExpr.hs 144 and 155
+
+  There is another Pretty Printer bug in ppBug2.wpl, due to emits:
+  Expression: $id:(yldValOf yh) |= ( $id:expVar & 1 ) << (($int:n)-($id:stateVar)); 
+  becomes: $id:(yldValOf yh) |= ( $id:expVar & 1 ) << ($int:n)-($id:stateVar);
+
+
+- done value never gets assigned to a global variable (donebug.wpl)
+
+   The expected output of the wpl file should be equal to the input file, whereas it is always 0.
+x <- take1 doesn't have any effect here. Had to do something like y <- take1;return ( x := y)
+
+
+- Take n and emits (takenemitsbug.wpl)
+    The code does mot compile because type-inference does not identify the done type of take n. 
+    Relevant part of compiler code - CgOpt.hs 
+      ;let takeCodeGen =
+             case ((inTyOfCTy cty0), (doneTyOfCTy cty0)) of 
+                  ((TArr iw TBit), (Just (TArr ow TBit))) -> 
+                         if (iw == ow) && (n <= 32) then doStdCodeGen prefix cty0 (genCodeAB iw)
+                         else error $ "TakeN not supported for these types yet: "
+                  ((TArr iw ity), (Just (TArr ow oty))) -> 
+                         if (iw == ow) && (ity == oty) then doStdCodeGen prefix cty0 (genCodeA iw ity)
+                         else error $ "TakeN not supported for these types yet: "
+                  ((TComplex), (Just (TArr _ TComplex))) -> doStdCodeGen prefix cty0 genCodeC
+                  ((TInt), (Just (TArr _ TInt))) -> doStdCodeGen prefix cty0 genCodeI
+                  ((TBit), (Just (TArr _ TBit))) -> doStdCodeGen prefix cty0 genCodeB
+                  _ -> error $ "TakeN not supported for these types yet: " ++ (show (inTyOfCTy cty0)) ++ " " ++ (show (doneTyOfCTy cty0))
+
+
+- Returning arrays as control values (arrayDoneBug.wpl)
+    The generated c code doesn't compile
+
+    The following line in the c-code triggers an error
+      __dv_tmp_ln14_4_doneVal = __bnd_fst_ln14_1x , where both __dv_tmp_ln14_4_doneVal,  __bnd_fst_ln14_1x are int[2]
+  BOZIDAR: Fixed it, but I still need to add test case
+
+- bindannotation.wpl
+
+     memcpy is being used to copy bit arrays, generating a segmentation fault. The associated code in CgExpr.hs and CgOpt.hs seems to be handling it well, which means that this could be a type inference issue
+
+- inLiningBug.wpl
+
+    Looks like function nBPSC is not expanded inline somehow
+
+- cardinalityBug.wpl
+
+    take N, throws an error when N is not a constant. Error raised in cardinalityanalysis.hs
+
+- forIssue.wpl
+
+    variable already declared like ii, in line 4 should not be allowed to be used as indicator variables for for loops. For example, in line 7. This wpl code compiles, the c code compiles, but the code doesn't have any effect
+
+- unusedbug.wpl
+ 
+     Looks like an issue with polymorphic functions, the same variable is used to hold lengths of multiple input array parametes in the same function. This throws redefinition error
+
+- arrayassignment.wpl
+
+     array element assignment with another variable is throwing an unkonw error
+
+- letbug.wpl
+
+    let bindings not appropriately applied in the c-code. The c-code refuses to compile
+- returnbug.wpl
+
+   As commented in line 28, uncommenting the of block will resulting in emitting of complex number 5+5i, whereas having it does not
+
++ nonUnitReturnBug.wpl
+
+    The global variable used for copying the result of the return is not declared. The c program does not compile
+
+- The following compiles:
+    times v39 = 4 do (
+  but the following doesn't:
+    times v39=4 do (
+
+- The following compiles
+    let serialize(u:unit) =
+  but the following doesn't:
+    let serialize(u:unit)=
+
+- Compiler should return 0 if code compiled or 1 otherwise (which is sometimes used in the scripts)
+
+- Static array initialization (staticArrayBug.wpl)
+
+   wpl compilation fails when array is initialized with negative numbers

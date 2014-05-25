@@ -1,0 +1,23 @@
+-- BOZIDAR: Quick port of Mahanth's initial code - to be tested again
+
+let update_crc(x:bit, crc_state:arr[4] bit) =
+  let base = {'1, '0, '1, '1} in 
+  if crc_state[0] == '1 then {
+    for i in [0,length(crc_state)] {
+      crc_state[i] := crc_state[i]^base[i];
+    }
+  }
+  crc_state[0,3] := crc_state[1,3];
+  crc_state[3] := x
+in
+
+let comp crc () =  
+    var crc_state: arr[4] bit;
+    repeat { 
+      x <- take;
+      do update_crc(x, crc_state);
+      emits crc_state 
+    }
+in
+
+read [bit] >>> crc() >>> write[bit]
