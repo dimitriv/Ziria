@@ -81,8 +81,8 @@ struct BlinkGlobals {
 	Repetitions dummySamples;   // #dummy samples (if inType == TY_DUMMY)
 	unsigned int outBufSize;    // size of buffer we serve output from
     unsigned int heapSize;      // heap size for blink/wpl program
-	ulong latencySampling;		// space between latency sampling in #writes (0 - no latency measurements)
-	ulong latencyCDFSize;		// How many latency samples to be stored in the CDF table
+	unsigned long latencySampling;		// space between latency sampling in #writes (0 - no latency measurements)
+	unsigned long latencyCDFSize;		// How many latency samples to be stored in the CDF table
 
 #ifdef SORA_PLATFORM
 	SoraParameters radioParams;
