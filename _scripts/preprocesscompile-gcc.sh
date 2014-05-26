@@ -1,3 +1,4 @@
+#!/bin/bash
 # 
 # Copyright (c) Microsoft Corporation
 # All rights reserved. 
@@ -18,7 +19,6 @@
 #
 #
 
-#!/bin/bash
 
 set -e
 
