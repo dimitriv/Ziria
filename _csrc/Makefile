@@ -37,10 +37,10 @@ LUT_EXECUTABLE = lutexec
 all : driver
 
 driver : $(OBJ_INT) $(OBJ_IO) $(OBJ_LIB) $(OBJ_EXT)
-	$(CC) $(EXTRACOPTS) -o $(EXECUTABLE) $+
+	$(CC) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
 
 lutexec: $(OBJ_LUT_ONLY) $(OBJ_LIB) $(OBJ_EXT)
-	$(CC) $(EXTRACOPTS) -o $(LUT_EXECUTABLE) $+
+	$(CC) $(EXTRACOPTS) -o $(LUT_EXECUTABLE) $+ $(LIBS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
