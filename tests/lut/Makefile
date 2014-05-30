@@ -27,11 +27,10 @@
 #
 # COMPILER?=winddk
 #
-COMPILER?=winddk
+COMPILER?=gcc
 
 
-
-PP   = ../../_scripts/preprocesscompile-$(COMPILER).sh
+PP   = ../../scripts/preprocesscompile-$(COMPILER).sh
 DIFF = ../../tools/BlinkDiff
 
 # Targets
@@ -40,21 +39,14 @@ TGTS = $(patsubst %.wpl, %.test, $(wildcard *.wpl))
 all: $(TGTS)
 
 %.out : %.wpl
-	EXTRAOPTS='$(EXTRAOPTS) --new-src-format --pipeline --affinity-mask=5' $(PP) $< $@
+	EXTRAOPTS=--autolut $(PP) $< $@
 
-# %.outfile: %.out %.infile
-# 	./$< --input=file \
-#              --input-file-name=$*.infile \
-#              --input-file-mode=dbg \
-#              --output-file-name=$@ \
-#              --output-file-mode=dbg
-
-%.outfile: %.out 
-	./$< --input=dummy \
-             --dummy-samples=100000 \
+%.outfile: %.out %.infile
+	./$< --input=file \
+             --input-file-name=$*.infile \
+             --input-file-mode=dbg \
              --output-file-name=$@ \
              --output-file-mode=dbg
-
 
 %.test: %.outfile
 	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p

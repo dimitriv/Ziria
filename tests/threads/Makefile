@@ -27,29 +27,34 @@
 #
 # COMPILER?=winddk
 #
-COMPILER?=gcc
+COMPILER?=winddk
 
-PP   = ../../_scripts/preprocesscompile-$(COMPILER).sh
 
-# Uncomment the following if you want to just run wplc
-#PP   = ../../_scripts/compile.sh
 
+PP   = ../../scripts/preprocesscompile-$(COMPILER).sh
 DIFF = ../../tools/BlinkDiff
 
 # Targets
-TGTS = $(patsubst %.wpl, %.out, $(wildcard *.wpl))
+TGTS = $(patsubst %.wpl, %.test, $(wildcard *.wpl))
 
 all: $(TGTS)
 
 %.out : %.wpl
-	EXTRAOPTS='$(EXTRAOPTS) --new-src-format' $(PP) $< $@
+	EXTRAOPTS='$(EXTRAOPTS) --new-src-format --pipeline --affinity-mask=5' $(PP) $< $@
 
-%.outfile: %.out %.infile
-	./$< --input=file \
-             --input-file-name=$*.infile \
-             --input-file-mode=dbg \
+# %.outfile: %.out %.infile
+# 	./$< --input=file \
+#              --input-file-name=$*.infile \
+#              --input-file-mode=dbg \
+#              --output-file-name=$@ \
+#              --output-file-mode=dbg
+
+%.outfile: %.out 
+	./$< --input=dummy \
+             --dummy-samples=100000 \
              --output-file-name=$@ \
              --output-file-mode=dbg
+
 
 %.test: %.outfile
 	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p

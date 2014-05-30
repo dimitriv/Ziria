@@ -18,31 +18,35 @@
 #
 #
 
-#!/bin/bash
+export UNAME=$(uname -s)
+export WPLC="$TOP/wplc"
 
-set -e
-
-export TOP=$(cd $(dirname $0)/.. && pwd -P)
-source $TOP/_scripts/common.sh
-
-echo $1
-#echo "Preprocessing..."
-#gcc -x c -P -E $1 >$1.expanded
-gcc -I $TOP/lib -w -x c -E $1 >$1.expanded
-
-
-#echo "Running WPL compiler..."
-$WPLC $WPLCFLAGS $EXTRAOPTS -i $1.expanded -o $1.c
-cp $1.c $TOP/_csrc/test.c
-
-
-#echo "Compiling C code (WinDDK) ..."
-pushd . && cd $TOP/_csrc/CompilerDDK && ./bczcompile.bat && popd
-
-
-if [[ $# -ge 2 ]]
-then
-    cp -f $DDKDIR/target/amd64/compilerddk.exe $2
+if [ "$UNAME" = "Linux" ]
+then 
+   export CSRC_NATIVE=${TOP}/csrc
+   export CSRC_POSIX=${TOP}/csrc
+else
+   export CSRC_NATIVE=`cygpath ${TOP}/csrc -w`
+   export CSRC_POSIX=${TOP}/csrc
 fi
 
+export WPLCFLAGS="-x -v --csrc-native=${CSRC_NATIVE} --csrc-posix=${CSRC_POSIX}"
 
+export CC="gcc"
+export CFLAGS="-std=c99 -msse3"
+
+if [ "$UNAME" = "Linux" ]
+then
+    export LIBS="-lm"
+fi
+
+export SILENT=0
+export PERF=0
+export VECT=0
+
+# Initialize the compout log file
+echo "Testing... " > compout
+# Initialize the perfout log file
+echo "Perf results " > perfout
+
+export DDKDIR="$TOP/csrc/CompilerDDK"

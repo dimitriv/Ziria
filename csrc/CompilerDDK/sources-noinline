@@ -25,14 +25,6 @@ TARGETPATH=Target
     
 USE_MSVCRT  = 1
 
-##INCLUDES        = $(INCLUDES) \
-##                  ..\..\bb\dot11a; \
-##                  ..\..\bb\dot11a\inc; \
-##                  ..\..\bb\brick11\src; \
-##                  ..\..\util\src;	\
-##		  ..\..\inc; \
-##                  ..\..\inc\brick; \
-
 INCLUDES        = $(INCLUDES) \
                   $(SORA_ROOT)\src\bb\dot11a; \
                   $(SORA_ROOT)\src\bb\dot11a\inc; \
@@ -42,7 +34,6 @@ INCLUDES        = $(INCLUDES) \
 				  $(SORA_ROOT)\inc; \
 		          $(SORA_ROOT)\src\inc; \
                   \inc\brick; \
-## 		  ..;
 
 TARGETLIBS      = $(TARGETLIBS) \
                   $(DDK_LIB_PATH)\Ws2_32.lib \
@@ -57,15 +48,6 @@ TARGETLIBS      = $(TARGETLIBS) \
 !endif
 
                   
-##TARGETLIBS      = $(TARGETLIBS) \
-##				  ..\..\..\..\..\samples\target_SORA1.8\$(BUILD_ALT_DIR)\*\dot11bbau.lib \
-##				  ..\..\..\..\..\samples\target_SORA1.8\$(BUILD_ALT_DIR)\*\libbba_lutstu.lib \
-##				  ..\..\..\..\..\samples\target_SORA1.8\$(BUILD_ALT_DIR)\*\libbba_modu.lib \
-##                  ..\..\..\..\..\samples\target_SORA1.8\$(BUILD_ALT_DIR)\*\sora_utility.lib	\
-##                  ..\..\..\..\..\samples\lib_SORA1.8\lib\$(BUILD_ALT_DIR)\*\usora.lib \
-##!if "$(_BUILDARCH)" == "x86"
-##                  ..\..\..\..\..\samples\lib_SORA1.8\lib\$(BUILD_ALT_DIR)\*\DebugPlotU.lib 
-##!endif
                   
 !if "$(_BUILDARCH)" == "x86"
 C_DEFINES       = $(C_DEFINES) \
@@ -78,7 +60,7 @@ C_DEFINES       = $(C_DEFINES) \
 
 ## Deliberately disabled most of the warnings
 ## USER_C_FLAGS = $(USER_C_FLAGS) /TP /FAs /W1
-USER_C_FLAGS = $(USER_C_FLAGS) /TP /W1 /GR /GL
+USER_C_FLAGS = $(USER_C_FLAGS) /TP /W1 /GR 
 
 ## To generate post-processed code with expanded header files, add options /C /P
 ## Note that this will prevent generation of obj files, so compilation will fail
@@ -94,6 +76,24 @@ MSC_OPTIMIZATION=/O2
 !endif
 
 ## Build cannot build source files from multiple directories!
-## Thus we create a wrapper that just includes them all
-SOURCES     = Wrapper.cpp
+## This is a fast build script with no inlining
+SOURCES     = \
+	     ..\sora_ext_lib.c \
+         ..\params.c \
+	     ..\driver.c \
+	     ..\bit.c \
+         ..\wpl_alloc.c \
+         ..\utils.c \
+	     ..\numerics.c \
+	     ..\buf_bit.c \
+	     ..\buf_numerics16.c \
+	     ..\buf_numerics32.c \
+	     ..\ext_arr.c \
+	     ..\ext_math.c \
+	     ..\sora_threads.c \
+	     ..\sora_thread_queues.c \
+	     ..\sora_ext_visual.c \
+	     ..\sora_radio.c \
+	     ..\sora_ip.c \
+	     ..\test.c
 

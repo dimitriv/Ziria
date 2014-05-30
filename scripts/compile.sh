@@ -1,4 +1,3 @@
-#!/bin/bash
 # 
 # Copyright (c) Microsoft Corporation
 # All rights reserved. 
@@ -19,28 +18,14 @@
 #
 #
 
+#!/bin/bash
 
 set -e
 
 export TOP=$(cd $(dirname $0)/.. && pwd -P)
-source $TOP/_scripts/common.sh
+source $TOP/scripts/common.sh
 
 echo $1
-# echo "Preprocessing..."
-#gcc -x c -P -E $1 >$1.expanded
-gcc -I $TOP/lib -w -x c -E $1 >$1.expanded
 
-
-echo "Running WPL compiler..."
-$WPLC $WPLCFLAGS $EXTRAOPTS -i $1.expanded -o $1.c
-cp $1.c $TOP/_csrc/test.c
-
-echo "Compiling C code (GCC) "
-pushd . && cd $TOP/_csrc && make && popd 
-
-
-if [[ $# -ge 2 ]] 
-then
-    cp -f $TOP/_csrc/driver $2
-fi
-
+echo "Only running WPL compiler..."
+$WPLC $WPLCFLAGS $EXTRAOPTS -i $1 -o $1.c

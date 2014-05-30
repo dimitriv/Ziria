@@ -30,21 +30,31 @@
 #
 COMPILER?=winddk
 
-PP   = ../../../../_scripts/preprocesscompile-$(COMPILER)-inline.sh
+PP   = ../../../../scripts/preprocesscompile-$(COMPILER).sh
 DIFF = ../../../../tools/BlinkDiff
 
 # Targets
-TGTS = $(patsubst %.blk, %.perf, $(wildcard *.blk))
+TGTS = $(patsubst %.blk, %.test, $(wildcard *.blk))
 
 all: $(TGTS)
 
 %.out : %.blk
-	EXTRAOPTS='--new-src-format $(EXTRAOPTS)' $(PP) $< $@
+	EXTRAOPTS='--new-src-format --bounds-check $(EXTRAOPTS)' $(PP) $< $@
 
-%.perf: %.out 
-	./$< --input=dummy \
-	     --dummy-samples=20000000 \
-             --output=dummy
+%.outfile: %.out %.infile
+	./$< --input=file \
+             --input-file-name=$*.infile \
+             --input-file-mode=dbg \
+             --output-file-name=$@ \
+             --output-file-mode=dbg
+
+%.test: %.outfile
+	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
+
+
+%.accept : %.outfile
+	cp $< $<.ground
+
 
 clean:
 	rm -f ./*expanded

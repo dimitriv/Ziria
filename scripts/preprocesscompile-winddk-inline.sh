@@ -23,9 +23,26 @@
 set -e
 
 export TOP=$(cd $(dirname $0)/.. && pwd -P)
-source $TOP/_scripts/common.sh
+source $TOP/scripts/common.sh
 
 echo $1
+#echo "Preprocessing..."
+#gcc -x c -P -E $1 >$1.expanded
+gcc -I $TOP/lib -w -x c -E $1 >$1.expanded
 
-echo "Only running WPL compiler..."
-$WPLC $WPLCFLAGS $EXTRAOPTS -i $1 -o $1.c
+
+#echo "Running WPL compiler..."
+$WPLC $WPLCFLAGS $EXTRAOPTS -i $1.expanded -o $1.c
+cp $1.c $TOP/csrc/test.c
+
+
+#echo "Compiling C code (WinDDK) ..."
+pushd . && cd $TOP/csrc/CompilerDDK && ./bczcompile-inline.bat && popd
+
+
+if [[ $# -ge 2 ]]
+then
+    cp -f $DDKDIR/target/amd64/compilerddk.exe $2
+fi
+
+

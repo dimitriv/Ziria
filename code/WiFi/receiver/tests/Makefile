@@ -25,21 +25,21 @@
 # NB: you can override this from the command line, e.g: 
 # prompt> COMPILER=gcc make
 #
+# COMPILER?=gcc
 # COMPILER?=winddk
 #
-COMPILER?=gcc
+COMPILER?=winddk
 
-PP   = ../../_scripts/preprocesscompile-$(COMPILER).sh
-DIFF = ../../tools/BlinkDiff
+PP   = ../../../../scripts/preprocesscompile-$(COMPILER).sh
+DIFF = ../../../../tools/BlinkDiff
 
 # Targets
-TGTS = $(patsubst %.wpl, %.test, $(wildcard *.wpl))
+TGTS = $(patsubst %.blk, %.test, $(wildcard *.blk))
 
 all: $(TGTS)
 
-%.out : %.wpl
-	EXTRAOPTS='$(EXTRAOPTS) --new-src-format' $(PP) $< $@
-#	$(PP) $< $@
+%.out : %.blk
+	EXTRAOPTS='--new-src-format --bounds-check --no-exp-fold $(EXTRAOPTS)' $(PP) $< $@
 
 %.outfile: %.out %.infile
 	./$< --input=file \
@@ -49,6 +49,7 @@ all: $(TGTS)
              --output-file-mode=dbg
 
 %.test: %.outfile
+# -p prefix disabled
 	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
 
 

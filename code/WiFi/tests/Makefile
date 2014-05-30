@@ -30,8 +30,8 @@
 #
 COMPILER?=winddk
 
-PP   = ../../../../_scripts/preprocesscompile-$(COMPILER).sh
-DIFF = ../../../../tools/BlinkDiff
+PP   = ../../../scripts/preprocesscompile-$(COMPILER).sh
+DIFF = ../../../tools/BlinkDiff
 
 # Targets
 TGTS = $(patsubst %.blk, %.test, $(wildcard *.blk))
@@ -39,7 +39,7 @@ TGTS = $(patsubst %.blk, %.test, $(wildcard *.blk))
 all: $(TGTS)
 
 %.out : %.blk
-	EXTRAOPTS='--new-src-format --bounds-check --no-exp-fold $(EXTRAOPTS)' $(PP) $< $@
+	EXTRAOPTS='--new-src-format --bounds-check $(EXTRAOPTS)' $(PP) $< $@
 
 %.outfile: %.out %.infile
 	./$< --input=file \
@@ -49,13 +49,11 @@ all: $(TGTS)
              --output-file-mode=dbg
 
 %.test: %.outfile
-# -p prefix disabled
 	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
 
 
 %.accept : %.outfile
 	cp $< $<.ground
-
 
 clean:
 	rm -f ./*expanded

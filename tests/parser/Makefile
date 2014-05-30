@@ -29,17 +29,20 @@
 #
 COMPILER?=gcc
 
+PP   = ../../scripts/preprocesscompile-$(COMPILER).sh
 
-PP   = ../../_scripts/preprocesscompile-$(COMPILER).sh
+# Uncomment the following if you want to just run wplc
+#PP   = ../../scripts/compile.sh
+
 DIFF = ../../tools/BlinkDiff
 
 # Targets
-TGTS = $(patsubst %.wpl, %.test, $(wildcard *.wpl))
+TGTS = $(patsubst %.wpl, %.out, $(wildcard *.wpl))
 
 all: $(TGTS)
 
 %.out : %.wpl
-	EXTRAOPTS=--autolut $(PP) $< $@
+	EXTRAOPTS='$(EXTRAOPTS) --new-src-format' $(PP) $< $@
 
 %.outfile: %.out %.infile
 	./$< --input=file \
