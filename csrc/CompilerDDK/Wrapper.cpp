@@ -19,8 +19,6 @@
 
 #include "..\sora_ext_lib.c"
 #include "..\params.c"
-#include "..\driver.c"
-#include "..\test.c"
 #include "..\bit.c"
 #include "..\wpl_alloc.c"
 #include "..\numerics.c"
@@ -33,7 +31,9 @@
 #include "..\ext_math.c"
 #include "..\sora_ext_visual.c"
 #include "..\sora_radio.c"
-#include "..\sora_ip.h"
+#include "..\sora_ip.c"
 #include "..\utils.c"
+#include "..\driver.c"
+#include "..\test.c"
 
 

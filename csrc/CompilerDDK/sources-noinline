@@ -79,11 +79,11 @@ MSC_OPTIMIZATION=/O2
 ## This is a fast build script with no inlining
 SOURCES     = \
 	     ..\sora_ext_lib.c \
-         ..\params.c \
+             ..\params.c \
 	     ..\driver.c \
 	     ..\bit.c \
-         ..\wpl_alloc.c \
-         ..\utils.c \
+             ..\wpl_alloc.c \
+             ..\utils.c \
 	     ..\numerics.c \
 	     ..\buf_bit.c \
 	     ..\buf_numerics16.c \
@@ -96,4 +96,3 @@ SOURCES     = \
 	     ..\sora_radio.c \
 	     ..\sora_ip.c \
 	     ..\test.c
-

@@ -39,11 +39,11 @@ TGTS = $(patsubst %.blk, %.perf, $(wildcard *.blk))
 all: $(TGTS)
 
 %.out : %.blk
-	EXTRAOPTS='--new-src-format $(EXTRAOPTS)' $(PP) $< $@
+	EXTRAOPTS='--new-src-format --vectorize --autolut --optimize $(EXTRAOPTS)' $(PP) $< $@
 
 %.perf: %.out 
 	./$< --input=dummy \
-	     --dummy-samples=20000000 \
+	     --dummy-samples=100000000 \
              --output=dummy
 
 clean:
