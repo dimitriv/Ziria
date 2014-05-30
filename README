@@ -7,11 +7,11 @@ Some useful information:
      src/    Haskell source code
    tools/    A few useful tools 
      lib/    Some simple Blink libraries
-   _csrc/    C code and C libraries
-  _tests/    Testsuite 
-   _code/    WiFi implementation code
+    csrc/    C code and C libraries
+   tests/    Testsuite 
+    code/    WiFi implementation code
      doc/    Various documentation and design notes
-_scripts/    Various scripts for building in different environments
+ scripts/    Various scripts for building in different environments
 
 * Building the compiler:
 
