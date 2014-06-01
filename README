@@ -1,4 +1,4 @@
-Blink is a programming language and compiler for low-level bitstream processing. 
+Blink is a programming language and compiler for low-level bitstream processing.
 
 Some useful information:
 
@@ -13,20 +13,14 @@ Some useful information:
      doc/    Various documentation and design notes
  scripts/    Various scripts for building in different environments
 
-* Building the compiler:
-
-  Pre-requisites: recent version of GHC and Cabal. You will be 
-  prompted for extra Haskell packages you may need to install.
-
-  To build: go to src and type 'make'. You will be left with a 'wplc'
-  binary. Install extra packages you may need with Cabal install.
+* Building the compiler: see BUILD
 
 * Running the tests:
 
-  Pre-requisites: You must have gcc installed. If you have gcc
-  installed go to _tests/_backend or _tests/_parser and type 'make'.
+  Pre-requisites: You must have gcc installed in your Linux or Cygwin 
+  environment. Go to tests/backend or tests/parser and type 'make'.
 
-  To compile and run performance tests and the WiFi testsuite you must
-  have SORA installed. More documentation can be found in doc/
+  To compile and run performance tests and the WiFi testsuite you 
+  must have SORA installed. More documentation can be found in doc/
 
 
