@@ -24,20 +24,54 @@ let comp modulate_bpsk () =
 var outa : arr[2] complex16;
 var outi : arr[8] int16;
 
+
+{-
 seq{
   do{
     outa[0] := complex16{re=-bpsk_mod_11a; im=0};
     outa[1] := complex16{re=bpsk_mod_11a; im=0}
   }; 
 
-  repeat seq { 
+  repeat [8,8] seq { 
     (x : bit) <- take;
 
     emit outa[int32(x)];
   }
 
 }
+-}
+
+
+let map_bpsk(b:bit) = 
+  var ret : complex16;
+  if (b == '0) then
+  {
+    ret := complex16{re=-bpsk_mod_11a; im=0};
+  }
+  else 
+  {
+    ret := complex16{re=bpsk_mod_11a; im=0};
+  }
+  return ret;
+in 
+
+seq{
+
+  repeat [8,8] seq { 
+    (x : bit) <- take;
+    -- emit map_bpsk(b);
+    emit if (x == '0) then complex16{re=-bpsk_mod_11a; im=0}
+                      else complex16{re=bpsk_mod_11a; im=0};
+  }
+
+}
+
+
 in
+
+
+
+
 
 
 

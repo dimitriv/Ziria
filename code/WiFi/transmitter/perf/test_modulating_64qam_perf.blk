@@ -20,4 +20,4 @@
 
 #include "../modulating.blk"
 
-read[bit] >>> modulate(m64qam) >>> write[complex16]
+read[bit] >>> modulate(M_64QAM) >>> write[complex16]

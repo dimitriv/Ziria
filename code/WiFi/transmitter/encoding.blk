@@ -38,7 +38,10 @@ let comp encode34() =
  in 
    
 #ifdef MANUAL_VECT
- repeat [12,8] seq{
+-- This is too big for LUTter as we take three times
+-- and it gets inlined
+-- repeat [12,8] seq{
+ repeat [6,4] seq{
 #else
  repeat seq{
 #endif
@@ -73,7 +76,10 @@ let comp encode23() =
  in 
 
 #ifdef MANUAL_VECT
- repeat [8,12] seq{
+-- This is too big for LUTter as we take twice
+-- and it gets inlined, so this becomes [16,24]
+-- repeat [8,12] seq{
+ repeat [4,6] seq{
 #else
  repeat seq{
 #endif

@@ -20,4 +20,4 @@
 
 #include "../modulating.blk"
 
-read[bit] >>> modulate(bpsk) >>> write[complex16]
+read[bit] >>> modulate(M_BPSK) >>> write[complex16]

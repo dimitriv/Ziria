@@ -20,4 +20,4 @@
 
 #include "../modulating.blk"
 
-read[bit] >>> modulate(qpsk) >>> write[complex16]
+read[bit] >>> modulate(M_QPSK) >>> write[complex16]
