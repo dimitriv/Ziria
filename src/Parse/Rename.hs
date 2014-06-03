@@ -365,6 +365,10 @@ renameComp c =
       do { c'' <- renameComp c'
          ; return $ cRepeat cloc cnfo wdth c''
          }
+    VectComp wdth c' -> 
+      do { c'' <- renameComp c'
+         ; return $ cVectComp cloc cnfo wdth c''
+         }
     Map wdth e ->
       do { e' <- renameExpr e
          ; return $ cMap cloc cnfo wdth e'

@@ -255,11 +255,15 @@ doVectorizeCompDn comp cin cout (din,dout)
                 (Return e) -> return $ MkComp (Return $ eraseExp e) loc ()
 
 
-                (LetExternal n fn c) -> do {  c' <- go c 
-                                           ; return $ MkComp (LetExternal n (eraseFun fn) c') loc () 
+                (LetExternal n fn c) -> do { c' <- go c 
+                                           ; return $ MkComp (LetExternal n (eraseFun fn) c') loc () }
                                            -- NB: Don't worry, 
                                            -- even after erasure an external function has enough type info.
-                                           }
+
+                (LetStruct sdef c) -> do { c' <- go c 
+                                         ; return $ MkComp (LetStruct sdef c') loc ()
+                                         }
+
                 (Seq c1 c2) -> do { c1' <- go c1 
                                   ; c2' <- go c2 
                                   ; return $ MkComp (Seq c1' c2') loc () }
@@ -293,6 +297,8 @@ doVectorizeCompDn comp cin cout (din,dout)
                         ; let idx = mkexp $ EVal (VInt tcnt)
                               xa_read = mkexp $ EArrRead (eraseExp xa_exp) idx (LILength n) 
                         ; return $ mkcomp (Return xa_read) }
+                  | otherwise
+                  -> vecMFail "BUG: takes with unknown array size! Can't be simple computer."
 
                 (Emits e)
                   | arityout == 1 -- NB: This now covers the case where we vectorize on the input only!
@@ -304,7 +310,14 @@ doVectorizeCompDn comp cin cout (din,dout)
                               ya_write = EArrWrite (eraseExp ya_exp) idx (LILength n) (eraseExp e)
                         ; return $ mkcomp (Return $ mkexp ya_write) 
                         }
+                  | otherwise
+                  -> vecMFail "BUG: emits with unknown array size! Can't be simple computer."
 
-                _otherwise
-                   -> vecMFail "BUG: emits with non known array size! Can't be simple computer!"
+                (Standalone c) -> do { c' <- go c 
+                                     ; return $ cStandalone loc () c' }
+
+                (VectComp hint c) -> vecMFail "BUG: VectComp is not a simple computer!" 
+
+                -- _otherwise
+                --    -> vecMFail "BUG: emits with non known array size! Can't be simple computer!"
 

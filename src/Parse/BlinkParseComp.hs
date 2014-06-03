@@ -395,9 +395,24 @@ parseBindings :: BlinkParser (Either SrcComp CommandCont)
                 , parseExternal p ] 
        }
 
+parseCompOptional :: BlinkParser (Maybe (Maybe (Int,Int)))
+-- Nothing -> no 'comp'
+-- Just h  -> a 'comp' with an optional hint 
+  = do { is_comp <- optionMaybe (reserved "comp")
+       ; case is_comp of
+           Nothing -> return Nothing
+           Just {} -> do { r <- optionMaybe parseVectAnn
+                         ; return $ Just r
+                         }
+       }
+
+mkVectComp :: SrcComp -> Maybe (Int,Int) -> SrcComp
+mkVectComp sc Nothing  = sc
+mkVectComp sc (Just h) = cVectComp (compLoc sc) (compInfo sc) h sc
+
 parseBinding :: SourcePos -> BlinkParser (Either SrcComp CommandCont)
 parseBinding p
-  = do { is_comp <- optionMaybe (reserved "comp")
+  = do { is_comp <- parseCompOptional
        ; x <- parseVarBind
        ; choice [ notFollowedBy (symbol "(") >> parseSimplBind is_comp x p
                 , parseFunBind is_comp x p 
@@ -408,8 +423,9 @@ parseSimplBind is_comp x p
   = do { symbol "="
        ; case is_comp of
            Nothing -> parseExpr     >>= \e -> optInCont (cLetE (Just p) () x e)
-           Just _  -> parseCommands >>= \c -> optInCont (cLet  (Just p) () x c)
+           Just h  -> parseCommands >>= \c -> optInCont (cLet  (Just p) () x (mkVectComp c h))
        }
+
 parseFunBind is_comp x p
   = case is_comp of
       Nothing 
@@ -420,16 +436,15 @@ parseFunBind is_comp x p
               ; let fun = MkFun (MkFunDefined x params locls e) (Just p) ()
               ; optInCont (cLetFun (Just p) () x fun) 
               }
-      Just _
+      Just h
         -> do { params <- parens compParamsParser
               ; symbol "="
               ; locls <- declsParser
               ; c <- parseCommands -- c <- parseComp
               ; extendParseEnv [(x,params)] $
-                optInCont (cLetFunC (Just p) () x params locls c) 
+                optInCont (cLetFunC (Just p) () x params locls (mkVectComp c h)) 
               }
-    
-     
+
 optInCont :: (SrcComp -> SrcComp) -> BlinkParser (Either SrcComp CommandCont)
 optInCont cont 
   = choice [ do { updateState (\x -> x - 1) -- still this is like popping

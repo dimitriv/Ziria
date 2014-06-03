@@ -1,0 +1,34 @@
+
+-- Very silly proof of concept update
+let update_crc(x : bit, st : arr[4] bit) = 
+  st[3] := x;
+in
+
+let comp [8,24] crc_24 (len : int) = 
+  var crc_state: arr[4] bit := {'0,'0,'0,'0};
+
+  times len seq {
+    (x:arr[8] bit) <- takes 8;
+    do {
+      for i in [0, 8] {
+        update_crc(x[i], crc_state)
+      }
+    }
+    emits x;
+  };
+  emits crc_state;
+  emits {'0,'0,'0,'0};
+
+  -- Add padding so that the length of output is a multiple of 24 in bits
+  let len_so_far = (len+1) * 8 in 
+  let len_mod = if len_so_far % 24 > 0 then 1 else 0 in 
+  let final_len = ((len_so_far / 24) + len_mod) * 24 in
+  times (final_len - len_so_far) emits {'0,'0,'0,'0,'0,'0,'0,'0};
+
+  return crc_state;
+in
+
+let comp [8,8] test = crc_24(32)
+in
+
+read >>> seq { test; crc_24(4) } >>> write
