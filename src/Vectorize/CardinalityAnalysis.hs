@@ -306,6 +306,12 @@ computeCardTop verbose ct = computeCard ct
                      card  = mkIterCard Nothing card1
                ; return $ MkComp (Repeat hint c1') loc (cty,card) }
 
+        computeCard0 (VectComp hint c1)
+          = do { c1' <- computeCard c1
+               ; return $ MkComp (VectComp hint c1') loc (cty, mkDynamicCard)
+                 -- It's ok to make a dynamic cardinality as we will not use this information directly
+               }
+
         computeCard0 (Map w e)
           = return $ MkComp (Map w e) loc (cty, mkIterCard Nothing $ mkSimplCard 1 1)
 
