@@ -17,9 +17,7 @@
 -- permissions and limitations under the License.
 --
 --
-#include <externals.blk>
-#include "../cca/cca.blk"
-#include "../removeDC.blk"
-#include "../downSample.blk"
+#include "../../const.blk"
+#include "../ifft.blk"
 
-read >>> downSample() >>> removeDC() >>> cca() >>> write[int]
+read >>> ifft() >>> write
