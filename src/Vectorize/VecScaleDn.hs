@@ -83,12 +83,18 @@ doVectorizeCompDn comp cin cout (din,dout)
        ; let wrap_fun_prms = []
 
          -- Create names for the local arrays 
-       ; xa_name <- newVectName "vect_xa" loc 
-       ; ya_name <- newVectName "vect_ya" loc 
+       ; xa_name' <- newVectName "vect_xa" loc 
+       ; ya_name' <- newVectName "vect_ya" loc 
 
+       ; let xa_name = xa_name' { mbtype = Just $ TArr (Literal cin) inty }
+       ; let ya_name = ya_name' { mbtype = Just $ TArr (Literal cout) outty }
+
+         -- avoid copying 
+       ; let just_one_take = (cin == din)
+       
          -- Declare them to be arrays of size cin and cout respectively
        ; let wrap_fun_lcls = 
-                  [ (xa_name, TArr (Literal cin) inty,  Nothing) | arityin > 1  ] ++ 
+                  [ (xa_name, TArr (Literal cin) inty,  Nothing) | arityin > 1  && (not just_one_take) ] ++ 
                   [ (ya_name, TArr (Literal cout) outty, Nothing) | arityout > 1 ]
 
        ; icnt_name <- newVectName "vect_i" loc 
@@ -103,10 +109,15 @@ doVectorizeCompDn comp cin cout (din,dout)
              xtmp_exp = mkexp $ EVar xtmp_name
              iexp n   = mkexp $ EBinOp Mult (mkexp $ EVar icnt_name) (mkexp $ EVal (VInt n))
           
-             init_arr_in = mkTimes (mkexp $ (EVal (VInt $ cin `div` din))) icnt_name $ 
-                           mkcomp $ 
-                           BindMany (mkcomp Take1) $ 
-                           [(xtmp_name, mkcomp (Return (mkexp $ EArrWrite xa_exp (iexp din) (LILength din) xtmp_exp)))]
+             init_arr_in crest
+               | just_one_take
+               = cBindMany loc () (cTake1 loc ()) [(xa_name, crest)]
+               | otherwise
+               = cSeq loc () ( mkTimes (mkexp $ (EVal (VInt $ cin `div` din))) icnt_name $ 
+                               mkcomp $ 
+                               BindMany (mkcomp Take1) $ 
+                               [(xtmp_name, mkcomp (Return (mkexp $ EArrWrite xa_exp (iexp din) (LILength din) xtmp_exp)))]
+                             ) crest
 
              emit_arr_out = mkTimes (mkexp $ (EVal (VInt $ cout `div` dout))) icnt_name $
                             mkcomp $ 
@@ -128,8 +139,7 @@ doVectorizeCompDn comp cin cout (din,dout)
          -- code for arrays or not really
 
        ; let body = if (arityin > 1) then 
-                       mkcomp $ 
-                       Seq init_arr_in $ 
+                       init_arr_in $ 
                        if (arityout > 1) then 
                           mkcomp $ 
                           BindMany comp_rewritten $ 
