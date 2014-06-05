@@ -17,7 +17,6 @@
 -- permissions and limitations under the License.
 --
 --
-#include "../decoding/perf/ViterbiInfinite.blk"
+#include "../receiver/decoding/perf/ReceiverInfinite.blk"
 
-
-read >>> ViterbiInfinite(CR_12) >>> write
+read >>> ReceiverInfinite(HeaderInfo{coding = CR_12; modulation = M_16QAM; len = 0}) >>> write
