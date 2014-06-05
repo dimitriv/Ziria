@@ -39,7 +39,7 @@ TGTS = $(patsubst %.blk, %.perf, $(wildcard *.blk))
 all: $(TGTS)
 
 %.out : %.blk
-	EXTRAOPTS='--new-src-format --autolut --optimize $(EXTRAOPTS)' $(PP) $< $@
+	EXTRAOPTS='--new-src-format --vectorize --autolut --optimize $(EXTRAOPTS)' $(PP) $< $@
 
 %.perf: %.out 
 	./$< --input=dummy \

@@ -25,33 +25,6 @@
 -- Viterbi decoder works with finite buffer sizes (i.e. 96000 bits)
 -- But we want to test it with very large data inputs
 -- So we make a special version that reinits after 1500B
-{-
-let comp ViterbiInfinite(rate:int) = 
-  var nOutput:int16;
-  var outViterbi:arr[96000] bit; 
-
-
- repeat {
-
-    do {viterbi_brick_init(12000, int16(rate))};
-    (svalue:arr[12000] int8) <- takes 12000;
-   
-    for i in [0, 250] { 
-       do{
-         nOutput := viterbi_brick_decode(svalue[i*48,48], outViterbi);
-       };
-
-       for i in [0, nOutput] {
-         emit outViterbi[i];
-       }
-    }
-
-   }
-
-in
--}
-
-
 let comp ViterbiInfinite(rate:int) = 
   var nOutput:int16;
   var outViterbi:arr[96000] bit; 
@@ -77,13 +50,10 @@ let comp ViterbiInfinite(rate:int) =
      for i in [0, nOutput] {
        emit outViterbi[i];
      }
-
    }
 
 in
 
 
 
-
-
-read >>> ViterbiInfinite(CR_12) >>> write[int]
+read >>> ViterbiInfinite(CR_12) >>> write
