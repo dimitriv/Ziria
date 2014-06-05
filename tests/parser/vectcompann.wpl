@@ -28,7 +28,7 @@ let comp [8,24] crc_24 (len : int) =
   return crc_state;
 in
 
-let comp [8,8] test = crc_24(32)
-in
+-- let comp [8,8] test = crc_24(32)
+-- in
 
-read >>> seq { test; crc_24(4) } >>> write
+read >>> crc_24(4) >>> write

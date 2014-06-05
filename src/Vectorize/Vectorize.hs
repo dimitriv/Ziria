@@ -481,8 +481,10 @@ computeVectTop verbose c =
                    }
 
              | otherwise
-             -> return [(eraseComp comp,NoVect)]
-
+             -> do { vcs <- go c
+                   ; let rep_vects = map (\(vc,vres) -> (cRepeat loc () Nothing vc, vres)) vcs
+                   ; return rep_vects
+                   }
 
           (Filter e) -> return [(MkComp (Filter (eraseExp e)) loc (), NoVect)]
 
