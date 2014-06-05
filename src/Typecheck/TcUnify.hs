@@ -223,6 +223,27 @@ unifyALen p orig_ty1 orig_ty2 nm1 nm2 = go nm1 nm2
       = error "goNVar: assertion failure!"
 
 
+defaultExpr = mapExpM_aux zonkTy zonk_exp
+  where zonk_exp :: Exp Ty -> TcM (Exp Ty)
+        zonk_exp e 
+          | EError {} <- unExp e
+          = do { zty <- zonkTy (info e)
+               ; zty' <- 
+                   case zty of 
+                    TVar {} 
+                      -> do { unify (expLoc e) zty TUnit
+                           ; return TUnit }
+                    _ -> return zty
+               ; return $ e { info = zty' }
+               }
+          | otherwise
+          = return e
+
+defaultComp :: Comp CTy Ty -> TcM (Comp CTy Ty)
+defaultComp = mapCompM_aux zonkTy defaultExpr zonkCTy zonkComp
+
+
+
 
 solveCts :: TcM ()
 solveCts = do getStEnv tcm_in_cts  >>= \cs -> pushErrCtx SolvingInCts  (solve_cts "in"  cs)

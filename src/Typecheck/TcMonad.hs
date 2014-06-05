@@ -515,7 +515,20 @@ zonkCTy cty
            }
 
 zonkExpr :: Exp Ty -> TcM (Exp Ty)
+-- Zonking
 zonkExpr = mapExpM_aux zonkTy return
+
+  where zonk_exp :: Exp Ty -> TcM (Exp Ty)
+        zonk_exp e 
+          | EError {} <- unExp e
+          = do { zty <- zonkTy (info e)
+               ; let zty' = case zty of TVar {} -> TUnit
+                                        _ -> zty
+               ; return $ e { info = zty' }
+               }
+          | otherwise
+          = return e
+
 
 zonkComp :: Comp CTy Ty -> TcM (Comp CTy Ty)
 zonkComp = mapCompM_aux zonkTy zonkExpr zonkCTy zonk_comp
