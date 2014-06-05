@@ -17,6 +17,6 @@
 -- permissions and limitations under the License.
 --
 --
-#include "../receiver/decoding/perf/ReceiverInfinite.blk"
+#include "blocks/ReceiverInfinite.blk"
 
 read >>> ReceiverInfinite(HeaderInfo{coding = CR_12; modulation = M_64QAM; len = 0}) >>> write

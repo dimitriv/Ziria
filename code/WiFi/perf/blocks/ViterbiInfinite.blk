@@ -17,7 +17,7 @@
 -- permissions and limitations under the License.
 --
 --
-#include "../../../const.blk"
+#include "../../const.blk"
 #include <externals.blk>
 
 -- Viterbi decoder works with finite buffer sizes (i.e. 96000 bits)

@@ -18,17 +18,17 @@
 --
 --
 
-#include "../../../const.blk"
-#include "../../../transmitter/scramble.blk"
-#include "../DemapLimit.blk"
-#include "../DemapBPSK.blk"
-#include "../DemapQPSK.blk"
-#include "../DemapQAM16.blk"
-#include "../DemapQAM64.blk"
-#include "../DeinterleaveBPSK.blk"
-#include "../DeinterleaveQPSK.blk"
-#include "../DeinterleaveQAM16.blk"
-#include "../DeinterleaveQAM64.blk"
+#include "../../const.blk"
+#include "../../transmitter/scramble.blk"
+#include "../../receiver/decoding/DemapLimit.blk"
+#include "../../receiver/decoding/DemapBPSK.blk"
+#include "../../receiver/decoding/DemapQPSK.blk"
+#include "../../receiver/decoding/DemapQAM16.blk"
+#include "../../receiver/decoding/DemapQAM64.blk"
+#include "../../receiver/decoding/DeinterleaveBPSK.blk"
+#include "../../receiver/decoding/DeinterleaveQPSK.blk"
+#include "../../receiver/decoding/DeinterleaveQAM16.blk"
+#include "../../receiver/decoding/DeinterleaveQAM64.blk"
 #include "viterbiInfinite.blk"
 
 -- Viterbi decoder works with finite buffer sizes (i.e. 96000 bits)

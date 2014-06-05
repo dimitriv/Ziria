@@ -19,18 +19,18 @@
 --
 
 #include <externals.blk>
-#include "../../cca/cca.blk"
-#include "../../OFDM/LTS.blk"
-#include "../../removeDC.blk"
-#include "../../downSample.blk"
-#include "../../OFDM/DataSymbol.blk"
-#include "../../OFDM/FreqCompensation.blk"
-#include "../../OFDM/FFT.blk"
-#include "../../OFDM/ChannelEqualization.blk"
-#include "../../OFDM/PilotTrack.blk"
-#include "../../OFDM/GetData.blk"
-#include "../../decoding/perf/DecodeInfinite.blk"
-#include "../../../transmitter/crc.blk"
+#include "../../receiver/cca/cca.blk"
+#include "../../receiver/OFDM/LTS.blk"
+#include "../../receiver/removeDC.blk"
+#include "../../receiver/downSample.blk"
+#include "../../receiver/OFDM/DataSymbol.blk"
+#include "../../receiver/OFDM/FreqCompensation.blk"
+#include "../../receiver/OFDM/FFT.blk"
+#include "../../receiver/OFDM/ChannelEqualization.blk"
+#include "../../receiver/OFDM/PilotTrack.blk"
+#include "../../receiver/OFDM/GetData.blk"
+#include "DecodeInfinite.blk"
+#include "../../transmitter/crc.blk"
 
 
 

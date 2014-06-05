@@ -17,6 +17,7 @@
 -- permissions and limitations under the License.
 --
 --
-#include "blocks/ReceiverInfinite.blk"
+#include "../const.blk"
+#include "blocks/TransmitterInfinite.blk"
 
-read >>> ReceiverInfinite(HeaderInfo{coding = CR_12; modulation = M_QPSK; len = 0}) >>> write
+read >>> TransmitterInfinite(HeaderInfo{coding=CR_12;modulation=M_16QAM;len=0}) >>> write
