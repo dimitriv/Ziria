@@ -34,8 +34,10 @@ import Data.List as M
 import CardinalityAnalysis
 
 import VecMonad -- Import the vectorization monad
-import VecScaleUp 
-import VecScaleDn
+
+import VecScaleUp    -- Up-vectorization
+import VecScaleDn    -- Down-vectorization
+import VecScaleForce -- Force vectorization
 
 import TcMonad
 import TcComp 
@@ -118,15 +120,6 @@ compVectScaleFactDn cin cout
                                      | x <- someDivisors cin
                                      , y <- someDivisors cout ]
                 }
-
-{- 
-compVectScaleFact :: Int -> Int -> VectScaleFact
-compVectScaleFact cin cout
-  | not (null $ allVectMults cin cout)
-  = compVectScaleFactUp cin cout
-  | otherwise
-  = compVectScaleFactDn cin cout
--}
 
 compVectScaleFacts :: Int -> Int -> [VectScaleFact]
 compVectScaleFacts cin cout
@@ -423,42 +416,23 @@ computeVectTop verbose c =
                              | ([vc1,vc2],vres) <- vcss ] 
                   }
 
-          (Repeat (Just (finalin, finalout)) c)
+          (Repeat (Just (finalin, finalout)) c1)
+            -> do { vc <- vectorizeWithHint (finalin,finalout) c1
+                  ; let self = MkComp (Repeat Nothing (eraseComp c1)) loc ()
+                  ; return [ (self, NoVect)
+                           , (MkComp (Repeat Nothing vc) loc (), 
+                                       DidVect finalin finalout minUtil) ]
+                  }
 
-               -- Scale up!
-             | SimplCard (Just cin) (Just cout) <- snd (compInfo c)
-             , finalin  `mod` cin == 0      -- cin divides finalin
-             , finalout `mod` cout == 0     -- cout divides finalout
-             , let min  = finalin `div` cin
-             , let mout = finalout `div` cout
-             , min `mod` mout == 0          -- mout divides min
-             , isVectorizable tyin || cin == 0
-             , isVectorizable tyout || cout == 0
-             -> do { vecMIO (putStrLn "Repeat (just: scaling up)")
-                   ; vc <- doVectorizeCompUp c cin cout (min,mout)
-                   ; let self = MkComp (Repeat Nothing (eraseComp c)) loc ()
-                   ; return [ (self, mkNoVect cin cout)
-                            , (MkComp (Repeat Nothing vc) loc (), 
-                                     DidVect finalin finalout minUtil)] 
-                   }
+          (VectComp (finalin,finalout) c1)
+            -> do { vc <- vectorizeWithHint (finalin,finalout) c1
+                  ; let self = eraseComp c1
+                  ; return [ (self, NoVect), (vc, DidVect finalin finalout minUtil) ]
+                  }
 
-               -- or Scale down!
-             | SimplCard (Just cin) (Just cout) <- snd (compInfo c)
-             , cin `mod` finalin == 0
-             , cout `mod` finalout == 0
-             , isVectorizable tyin || cin == 0
-             , isVectorizable tyout || cout == 0
-             -> do { vecMIO (putStrLn "Repeat (just: scaling down)")
-                   ; vc <- doVectorizeCompDn c cin cout (finalin,finalout)
-                   ; let self = MkComp (Repeat Nothing (eraseComp c)) loc ()
-                   ; return [ (self, mkNoVect cin cout)
-                            , (MkComp (Repeat Nothing vc) loc (), 
-                                          DidVect finalin finalout minUtil) ] 
-                   }
-
-             | otherwise
-             -> vecMFail "Vectorization failure, bogus repeat annotation!"
-
+          -- Treat nested annotations exactly the same as repeat
+          (Repeat Nothing (MkComp (VectComp hint c1) _ _))
+            -> go (cRepeat loc (cty,card) (Just hint) c1)
 
           (Repeat Nothing c) -- NB: Vectorizing in anything we wish!
              | SimplCard (Just cin) (Just cout) <- snd $ compInfo c 
@@ -574,7 +548,6 @@ computeVectTop verbose c =
                                     | (vc,vres) <- vss
                                     ]
 
-
                   --   -- Moreover, if 'elen' is a constant expression then we can also scale up!
                   ; let sf_ups
                          | MkExp (EVal (VInt n)) _ _ <- elen
@@ -661,6 +634,51 @@ computeVectTop verbose c =
                    ; vecMIO $ print (ppComp (eraseComp comp))
                     
                    ; return $ [(eraseComp comp, NoVect)] }
+
+
+
+vectorizeWithHint (finalin,finalout) c
+  -- Scale up!
+  | SimplCard (Just cin) (Just cout) <- card
+  , finalin  `mod` cin == 0      -- cin divides finalin
+  , finalout `mod` cout == 0     -- cout divides finalout
+  , let min  = finalin `div` cin
+  , let mout = finalout `div` cout
+  , min `mod` mout == 0          -- mout divides min
+  , isVectorizable tyin || cin == 0
+  , isVectorizable tyout || cout == 0
+  = do { vecMIO (putStrLn "Repeat (just: scaling up)")
+       ; doVectorizeCompUp c cin cout (min,mout)
+       }
+
+  -- or Scale down!
+  | SimplCard (Just cin) (Just cout) <- card
+  , cin `mod` finalin == 0
+  , cout `mod` finalout == 0
+  , isVectorizable tyin || cin == 0
+  , isVectorizable tyout || cout == 0
+  = do { vecMIO (putStrLn "Repeat (just: scaling down)")
+       ; doVectorizeCompDn c cin cout (finalin,finalout)
+       }
+
+  -- If it is not a simple cardinality then we will just trust the annotation.
+  | not (isSimplCard card)
+  , isVectorizable tyin
+  , isVectorizable tyout
+  = do { vecMIO $ 
+         putStrLn "Repeat (just: scaling to programmer-supplied annotation)"
+       ; doVectorizeCompForce c (finalin, finalout)
+       }
+
+  | otherwise 
+  = vecMFail $ 
+    "Vectorization failure, (annotation/analysis mismatch) for computer:" ++ 
+    show c
+
+  where (cty,card) = compInfo c
+        tyin       = inTyOfCTyBase cty
+        tyout      = yldTyOfCTyBase cty
+
 
 
 -- Vectorize a top-level computer and print all possible vectorizations

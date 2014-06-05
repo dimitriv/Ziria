@@ -31,6 +31,7 @@ import Text.PrettyPrint.Mainland
 import Data.Functor.Identity ( Identity (..) )
 import Control.Monad.State 
 
+
 data Precision 
      = Full
      | Fixed Int
