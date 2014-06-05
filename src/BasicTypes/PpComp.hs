@@ -161,11 +161,6 @@ ppComp0 ppComp printtypes ignorelet c =
     While e c ->
       text "while" <+> parens (ppExp e) <+> ppComp c
 
-{- 
-    Times e x c ->
-      text "times" <+> ppExp e <+> parens (text "\\" <> text (name x) <> (text ".") <+> ppComp c)
--}
-
     Times estart elen ix c ->
       text "for" <+>
         ppIx ix <+> text "in" <+> brackets (ppExp estart <> comma <+> ppExp elen) $$ 
@@ -174,20 +169,20 @@ ppComp0 ppComp printtypes ignorelet c =
     Repeat wdth c ->
       text "repeat" <> myFromMaybe (\n -> brackets (int (fst n) <> text "," <> int (snd n))) empty wdth <+> 
                       ppComp c
+
+    VectComp (n1,n2) c ->
+      text "repeat" <> brackets (int n1 <> text "," <> int n2) <+> 
+                       ppComp c
+
     Map wdth e ->
       text "map" <> myFromMaybe (\n -> brackets (int (fst n) <> text "," <> int (snd n))) empty wdth <+> ppExp e 
     Filter e ->
       text "filter" <+> ppExp e
 
     ReadSrc {} ->
-      text "read"  -- <> parens (text bid)
+      text "read"
     WriteSnk {} -> 
-      text "write" -- <> parens (text bid)
-
-    -- ReadSrc (ExternalBufId bid) ->
-    --   text "read[sq]" <> parens (text bid)
-    -- WriteSnk (ExternalBufId bid) -> 
-    --   text "write[sq]" <> parens (text bid)
+      text "write"
 
     ReadInternal bid _typ ->
       text "read_internal[sq]" <> parens (text bid)
