@@ -32,11 +32,16 @@ let v_mul_complex16_int32(re:arr int, im:arr int, a:arr complex16, b:arr complex
   let rlen = (length(a) - vlen*4) in 
 
   for i in [0, vlen] {
-    vs1 := conj0w(b[4*i,4]);
+    -- Return by reference for performance
+    --vs1 := conj0w(b[4*i,4]);
+    conj0w(vs1, b[4*i,4]);
     permutate_low1032w(b[4*i,4], vs2);
     permutate_high1032w (vs2,vs2);
-    re[4*i,4] := muladdw(a[4*i,4],vs1);
-    im[4*i,4] := muladdw(a[4*i,4],vs2)
+    -- Return by reference for performance
+    --re[4*i,4] := muladdw(a[4*i,4],vs1);
+    --im[4*i,4] := muladdw(a[4*i,4],vs2)
+    muladdw(re[4*i,4], a[4*i,4],vs1);
+    muladdw(im[4*i,4], a[4*i,4],vs2)
   }
 
   -- Sum the rest one by one, if length is not modulo 4
