@@ -4,7 +4,7 @@ DownSample		416 Md/s
 RemoveDC		694
 CCA			92
 * LTS			83
-DataSymbol		970
+* DataSymbol		1030
 FreqCompensation	(removed)
 FFT			262
 * ChannelEqualization	228
