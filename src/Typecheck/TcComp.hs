@@ -586,10 +586,16 @@ tyCheckTopComp c
        ; c_typed <- tyCheckComp c_no_seq
        ; solveCts 
        ; c_zonked <- zonkComp c_typed
+ 
+         -- default
+       ; c_defaulted <- defaultComp c_zonked
 
-       ; checkUnresolved c_zonked
+         -- zonk out again
+       ; c_final_zonked <- zonkComp c_defaulted
 
-       ; return c_zonked 
+       ; checkUnresolved c_final_zonked
+
+       ; return c_final_zonked
        }
 
 tyCheckTopDecls decls 
