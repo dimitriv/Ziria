@@ -16,7 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE GADTs, RankNTypes #-}
+{-# LANGUAGE GADTs, RankNTypes, DataKinds #-}
 
 module AstComp where
 
@@ -110,6 +110,13 @@ data Comp0 a b where
 
   Repeat :: Maybe (Int,Int) -- optional vectorization width annotation
          -> Comp a b -> Comp0 a b
+
+  -- A computer annotated with vectorization width 
+  -- information. 
+  -- NB: it must be a computer -- not transformer
+  VectComp :: (Int,Int) -> Comp a b -> Comp0 a b
+
+
   Map    :: Maybe (Int,Int) -- optional vectorization width annotation
          -> Exp b -> Comp0 a b  
 
@@ -126,6 +133,7 @@ data Comp0 a b where
 
   -- Pipelining primitives
   Standalone :: Comp a b -> Comp0 a b
+
 
 
 
@@ -201,6 +209,9 @@ cTimes loc a es elen x c = MkComp (Times es elen x c) loc a
 
 cRepeat :: Maybe SourcePos -> a -> Maybe (Int,Int) -> Comp a b -> Comp a b
 cRepeat loc a ann c = MkComp (Repeat ann c) loc a
+
+cVectComp :: Maybe SourcePos -> a -> (Int,Int) -> Comp a b -> Comp a b
+cVectComp loc a ann c = MkComp (VectComp ann c) loc a 
 
 cMap :: Maybe SourcePos -> a -> Maybe (Int,Int) -> Exp b -> Comp a b 
 cMap loc a ann e = MkComp (Map ann e) loc a
@@ -302,7 +313,8 @@ compShortName c = go (unComp c)
         go (  Until       {} ) = "Until"     
         go (  While       {} ) = "While"     
         go (  Times       {} ) = "Times"     
-        go (  Repeat      {} ) = "Repeat"    
+        go (  Repeat      {} ) = "Repeat"
+        go (  VectComp    {} ) = "VectComp"
         go (  Map         {} ) = "Map"       
         go (  Filter      {} ) = "Filter"    
 
@@ -475,6 +487,7 @@ compFVs c = case unComp c of
   Times es elen nm c1   
      -> exprFVs es `S.union` exprFVs elen `S.union` compFVs c1 S.\\ (S.singleton nm) 
   Repeat _ c1     -> compFVs c1  
+  VectComp _ c1   -> compFVs c1 
   Map _ e         -> exprFVs e
   Filter e        -> exprFVs e
   Interleave c1 c2 -> compFVs c1 `S.union` compFVs c2
@@ -519,6 +532,7 @@ compSize c = case unComp c of
   While e c1        -> 1 + compSize c1
   Times e1 e2 nm c1 -> 1 + compSize c1 
   Repeat _ c1    -> compSize c1  
+  VectComp _ c1  -> compSize c1
   Map _ e        -> 1
   Filter e       -> 1
   Interleave c1 c2 -> compSize c1 + compSize c2
@@ -630,6 +644,10 @@ mapCompM_aux on_ty on_exp on_cty g c = go c
                  Repeat wdth c1 ->
                    do { c1' <- go c1
                       ; g (cRepeat cloc cnfo wdth c1') }
+                 VectComp wdth c1 ->
+                   do { c1' <- go c1
+                      ; g (cVectComp cloc cnfo wdth c1') }
+
                  Map wdth e ->
                    do { e' <- on_exp e
                       ; g (cMap cloc cnfo wdth e') }

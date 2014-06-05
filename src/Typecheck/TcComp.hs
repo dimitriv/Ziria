@@ -479,6 +479,19 @@ tyCheckComp c
                       raiseErrNoVarCtx cloc $ nonFullAppErr c1'
                 }
 
+           VectComp wdth c1 ->
+             do { c1' <- tyCheckComp c1
+                ; case compInfo c1' of
+                    t@(CTBase (TComp {})) ->
+                      return $ cVectComp cloc t wdth c1'
+                    CTBase (TTrans a b) ->
+                      raiseErrNoVarCtx cloc $ 
+                      expectedButFound "computer" "transformer" c1
+                    CTArrow _ _ -> 
+                      raiseErrNoVarCtx cloc $ nonFullAppErr c1'
+                }
+
+
            Map wdth e ->
              do { e' <- tyCheckExpr e 
                 ; let t = info e'

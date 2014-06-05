@@ -135,6 +135,7 @@ import Text.PrettyPrint.HughesPJ hiding ( (<>) )
 import Data.Maybe
 import qualified Text.Parsec as PS
 
+import Rebindables
 import AstExpr
 import AstComp
 import PpComp
@@ -142,9 +143,6 @@ import PpExpr
 import qualified GenSym as GS
 import CgHeader
 
--- | A class that defines 'ifThenElse' so we can use rebindable syntax.
-class IfThenElse a b where
-    ifThenElse :: a -> b -> b -> b
 
 instance IfThenElse Bool a where
     ifThenElse True  th _  = th

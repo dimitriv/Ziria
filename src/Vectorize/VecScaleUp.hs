@@ -213,6 +213,10 @@ doVectorizeCompUp comp cin cout (min,mout)
                     vecMFail "BUG: Interleave is not a simple computer!"
                 (Repeat {}) -> 
                     vecMFail "BUG: Repeat is not a simple computer!" 
+
+                (VectComp {}) -> 
+                    vecMFail "BUG: VectComp is not a simple computer!" 
+
                 (Filter {}) -> 
                     vecMFail "BUG: Filter is not a simple computer!" 
                 (Map {}) -> 

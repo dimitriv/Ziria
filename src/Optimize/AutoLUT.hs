@@ -111,6 +111,9 @@ runAutoLUT dflags _ c = autolutC c
         go (Repeat n c) =
             Repeat n <$> autolutC c
 
+        go (VectComp n c) =
+            VectComp n <$> autolutC c
+
         go (Map p e) =
             Map p <$> autolutE e
 

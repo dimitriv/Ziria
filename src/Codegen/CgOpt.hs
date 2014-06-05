@@ -25,6 +25,7 @@ module CgOpt where
 
 import Prelude
 
+import Rebindables 
 import Opts
 import AstExpr
 import AstComp
@@ -988,6 +989,8 @@ codeGenComp dflags comp k =
         codeGenFixpoint (mkUntil dflags (codeGenExp dflags e) (return ()) c1) k
 
 
+    go (MkComp (VectComp _ c) _ _) = go c  -- Just ignore vectorization annotation if it has survived so far.
+
     go (MkComp (While e c1) csp (CTBase cty0)) =
         let emptyStm = [cstm|UNIT;|]
         in codeGenFixpoint (mkWhile dflags emptyStm e c1 emptyStm) k
@@ -1022,7 +1025,7 @@ codeGenComp dflags comp k =
        codeGenCompTop dflags c1 k
 
     go (MkComp c _ _) =
-       fail $ "CodeGen error, unimplemented: " ++ show c
+        fail $ "CodeGen error, unimplemented: " ++ show c
 
 
 
