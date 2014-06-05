@@ -147,7 +147,8 @@ tyCheckExpr e
                let msg = text "Binary operator type mismatch:" <+> ppBinOp bop
                case bop of
                  x | isArithBinOp x -- Add / Sub / Mult / Div / Rem / Expon
-                   -> do { checkWith loc (supportsArithTy t1) msg
+                   -> do { -- liftIO $ putStrLn $ "t1 = " ++ show t1
+                         ; checkWith loc (supportsArithTy t1) msg
                          ; unify loc t1 t2
                          ; return $ eBinOp loc t1 bop e1' e2'
                          }

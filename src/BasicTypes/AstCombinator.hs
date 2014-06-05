@@ -174,7 +174,7 @@ data BindLikeT where
 xSeq :: [BindLikeT] -> XComp
 xSeq as = xSeq_ (ast_binds as)
   where ast_binds [] = []
-        ast_binds ((CMD a):xs) = (toASTBind a : ast_binds as)
+        ast_binds ((CMD a):xs) = (toASTBind a : ast_binds xs)
 
 
 class BindLike a where
