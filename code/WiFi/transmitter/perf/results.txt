@@ -14,3 +14,22 @@ ConvEncode 12		820
 ConvEncode 23		471
 ConvEncode 34		286
 Scrambler		775
+
+
+
+# DESKTOP, --no-exp-inline
+
+test_ifft			168.086
+test_map_ofdm_perf 		762.864
+test_modulating_bpsk_perf 	144.58
+test_modulating_qpsk_perf 	454.223
+test_modulating_16qam_perf 	440.292
+test_modulating_64qam_perf 	631.21
+test_interleaving_bpsk_perf 	8.55842
+test_interleaving_qpsk_perf 	4.27358
+test_interleaving_16qam_perf 	2.21436
+test_interleaving_64qam_perf 	1.53651
+test_encoding_12_perf 		152.968
+test_encoding_23_perf 		549.952
+test_encoding_34_perf 		384.376
+test_scramble_perf 		953.689
