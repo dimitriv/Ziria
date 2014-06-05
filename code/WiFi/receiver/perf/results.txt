@@ -20,3 +20,25 @@ DeinterleaveQPSK 	1100
 DeinterleaveQAM16 	1180
 * DemapQAM64 		35
 DeinterleaveQAM64	1291
+
+
+
+# DESKTOP, --no-exp-inline
+
+DownSample		490.422
+RemoveDC 		1005.86
+CCA 			112.371
+LTS 			104.71
+DataSymbol 		1491.4
+FFT 			353.761
+ChannelEqualization 	538.329
+PilotTrack 		87.7587
+Viterbi 		57.1109
+DemapBPSK 		478.137
+DeinterleaveBPSK 	1140.81
+DemapQPSK 		290.785
+DeinterleaveQPSK 	1360.71
+DemapQAM16 		162.024
+DeinterleaveQAM16 	1354.44
+DemapQAM64 		44.4919
+DeinterleaveQAM64 	1481.44
