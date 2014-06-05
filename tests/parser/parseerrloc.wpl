@@ -1,6 +1,6 @@
 -- 1
 -- 2
-#include "parserrlib.wplib"
+-- #include "parserrlib.wplib"
 -- 4
 -- 5
 let comp foo() =  -- 6

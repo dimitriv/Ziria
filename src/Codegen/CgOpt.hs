@@ -25,6 +25,7 @@ module CgOpt where
 
 import Prelude
 
+import Rebindables 
 import Opts
 import AstExpr
 import AstComp

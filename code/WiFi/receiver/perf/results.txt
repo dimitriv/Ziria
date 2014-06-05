@@ -1,0 +1,22 @@
+# LAPTOP:
+
+DownSample		416 Md/s
+RemoveDC		694
+CCA			92
+* LTS			83
+* DataSymbol		1030
+FreqCompensation	(removed)
+FFT			262
+* ChannelEqualization	228
+PhaseCompensate		(removed)
+* PilotTrack		58
+* Viterbi 1/2 		37
+Descrambler		(removed = same as scrambler)
+DemapBPSK 		418
+DeinterleaveBPSK 	1063
+* DemapQPSK 		231
+DeinterleaveQPSK 	1100
+* DemapQAM16 		118
+DeinterleaveQAM16 	1180
+* DemapQAM64 		35
+DeinterleaveQAM64	1291

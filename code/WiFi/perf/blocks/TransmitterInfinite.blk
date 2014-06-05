@@ -17,22 +17,30 @@
 -- permissions and limitations under the License.
 --
 --
-#include <externals.blk>
-let comp ifft() =
-   var symbol:arr[128] complex16;
-   var fftdata:arr[128+32] complex16;
 
-   repeat seq{
-     (s:arr[64] complex16) <- takes 64;
-     do {
-        symbol[96,32] := s[0,32];
-        symbol[0,32] := s[32,32];
-        sora_ifft(128, symbol,fftdata[32,128]);
-        -- Add CP
-        fftdata[0,32] := fftdata[128,32];
-     };
-     emits fftdata
+#include "../../const.blk"
+#include <externals.blk>
+#include "../../transmitter/scramble.blk"
+#include "../../transmitter/encoding.blk"
+#include "../../transmitter/interleaving.blk"
+#include "../../transmitter/modulating.blk"
+#include "../../transmitter/crc.blk"
+#include "../../transmitter/map_ofdm.blk"
+#include "../../transmitter/parsePLCPHeader.blk"
+#include "../../transmitter/createPreamble.blk"
+#include "../../transmitter/ifft.blk"
+
+
+
+let comp TransmitterInfinite(hInfo : struct HeaderInfo) = 
+seq{ emits createSTSinTime()
+   ; emits createLTSinTime()
+   ; (scrambler() >>> 
+      encode(hInfo.coding) >>> 
+      interleaver(hInfo.modulation) >>> 
+      modulate(hInfo.modulation) >>>
+      map_ofdm() >>> ifft())
    }
-  
 in
+
 

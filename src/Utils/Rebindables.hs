@@ -1,4 +1,4 @@
-/* 
+{- 
    Copyright (c) Microsoft Corporation
    All rights reserved. 
 
@@ -15,26 +15,13 @@
 
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
-*/
+-}
 
-#include "..\sora_ext_lib.c"
-#include "..\params.c"
-#include "..\bit.c"
-#include "..\wpl_alloc.c"
-#include "..\numerics.c"
-#include "..\buf_bit.c"
-#include "..\buf_numerics8.c"
-#include "..\buf_numerics16.c"
-#include "..\buf_numerics32.c"
-#include "..\sora_threads.c"
-#include "..\sora_thread_queues.c"
-#include "..\ext_arr.c"
-#include "..\ext_math.c"
-#include "..\sora_ext_visual.c"
-#include "..\sora_radio.c"
-#include "..\sora_ip.c"
-#include "..\utils.c"
-#include "..\driver.c"
-#include "..\test.c"
+{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, ConstraintKinds #-}
+
+module Rebindables where 
 
 
+-- | A class that defines 'ifThenElse' so we can use rebindable syntax.
+class IfThenElse a b where
+    ifThenElse :: a -> b -> b -> b

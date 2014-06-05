@@ -681,6 +681,19 @@ subarr_inline_step fgs e
   , EVal (VInt s) <- unExp estart 
   = rewrite $ eValArr (expLoc e) (info e) (take n $ drop s vals)
 
+    -- x[0,length(x)] == x
+  | EArrRead evals estart (LILength n) <- unExp e
+  , EVal (VInt 0) <- unExp estart
+  , TArr (Literal m) _ <- info e 
+  , n == m
+  = rewrite evals
+
+  | EArrWrite eval_tgt estart (LILength n) erhs <- unExp e
+  , EVal (VInt 0) <- unExp estart
+  , TArr (Literal m) _ <- info erhs
+  , n == m
+  = rewrite $ eAssign (expLoc e) TUnit eval_tgt erhs
+
   | otherwise
   = return e
   

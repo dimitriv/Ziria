@@ -17,22 +17,37 @@
 -- permissions and limitations under the License.
 --
 --
+#include "../../const.blk"
 #include <externals.blk>
-let comp ifft() =
-   var symbol:arr[128] complex16;
-   var fftdata:arr[128+32] complex16;
 
-   repeat seq{
-     (s:arr[64] complex16) <- takes 64;
-     do {
-        symbol[96,32] := s[0,32];
-        symbol[0,32] := s[32,32];
-        sora_ifft(128, symbol,fftdata[32,128]);
-        -- Add CP
-        fftdata[0,32] := fftdata[128,32];
+-- Viterbi decoder works with finite buffer sizes (i.e. 96000 bits)
+-- But we want to test it with very large data inputs
+-- So we make a special version that reinits after 1500B
+let comp ViterbiInfinite(rate:int) = 
+  var nOutput:int16;
+  var outViterbi:arr[96000] bit; 
+  var itercnt:int := 0;
+
+
+ do {viterbi_brick_init(24000, int16(rate))};
+ repeat {
+
+    (svalue:arr[48] int8) <- takes 48;
+   
+     do{
+       nOutput := viterbi_brick_decode(svalue, outViterbi);
+
+       itercnt := itercnt+1;
+       if (itercnt > 1500) then {
+         viterbi_brick_init(24000, int16(rate));
+	 itercnt := 0
+       }
+
      };
-     emits fftdata
-   }
-  
-in
 
+     for i in [0, nOutput] {
+       emit outViterbi[i];
+     }
+   }
+
+in

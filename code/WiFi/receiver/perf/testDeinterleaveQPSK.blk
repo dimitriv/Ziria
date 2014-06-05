@@ -17,29 +17,7 @@
 -- permissions and limitations under the License.
 --
 --
+#include "../../const.blk"
+#include "../decoding/DeinterleaveQPSK.blk"
 
-#include "../cca/cca.blk"
-#include "../OFDM/LTS.blk"
-#include "../removeDC.blk"
-#include "../downSample.blk"
-#include "../OFDM/DataSymbol.blk"
-#include "../OFDM/FreqCompensation.blk"
-#include "../OFDM/FFT.blk"
-#include "../OFDM/ChannelEqualization.blk"
-#include "../OFDM/PilotTrack.blk"
-#include "../OFDM/GetData.blk"
-
-
-
-let comp detectPreamble() = 
-  (removeDC() >>> cca())
-in 
-
-read >>> downSample() >>> 
-  seq{ detectPreamble(); params <- LTS(); 
-       DataSymbol() >>> FreqCompensation(params) >>> FFT() >>> ChannelEqualization(params)
-       >>> PilotTrack() >>> GetData()
-  }
->>> write 
-
-
+read >>> DeinterleaveQPSK() >>> write

@@ -1,0 +1,16 @@
+# LAPTOP
+
+IFFTx			108
+* AddPilot 		485
+* Map11aBPSK 		133
+* Map11aQPSK 		348
+* Map11aQAM16		328
+* Map11aQAM64		495
+InterleaveBPSK		285
+* InterleaveQPSK	4
+* InterleaveQAM16	***
+* InterleaveQAM64	***
+ConvEncode 12		820
+ConvEncode 23		471
+ConvEncode 34		286
+Scrambler		775

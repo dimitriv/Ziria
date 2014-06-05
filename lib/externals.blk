@@ -34,11 +34,16 @@ let external atan2_int32(y:int32, x:int32) : int32 in
 let external permutate_low1032w (x:arr[4] complex16, y:arr[4] complex16): () in
 let external permutate_high1032w (x:arr[4] complex16, y:arr[4] complex16): () in
 let external pairwise_muladdw (x:arr[4] complex16, y:arr[4] complex16, z:arr[4] int): () in
-let external muladdw (a:arr[4] complex16, b:arr[4] complex16): arr[4] int in
 let external conjrew (x:arr[4] complex16, y:arr[4] complex16): () in
-let external conj0w (x:arr[4] complex16): arr[4] complex16 in
-let external conj_mulw (x:arr[4] complex16, y:arr[4] complex16): arr[4] complex16 in
 let external sum_conj_mulw32 (x:arr[4] complex16, y:arr[4] complex16): complex in
+
+-- Return by reference for performance
+--let external conj0w (x:arr[4] complex16): arr[4] complex16 in
+--let external muladdw (a:arr[4] complex16, b:arr[4] complex16): arr[4] int in
+--let external conj_mulw (x:arr[4] complex16, y:arr[4] complex16): arr[4] complex16 in
+let external conj0w (ret:arr[4] complex16, x:arr[4] complex16): () in
+let external muladdw (ret:arr[4] int, a:arr[4] complex16, b:arr[4] complex16): () in
+let external conj_mulw (ret:arr[4] complex16, x:arr[4] complex16, y:arr[4] complex16): () in
 
 
 -- CHECK, unify, and make inputs polymorphic

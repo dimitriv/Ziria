@@ -147,7 +147,8 @@ tyCheckExpr e
                let msg = text "Binary operator type mismatch:" <+> ppBinOp bop
                case bop of
                  x | isArithBinOp x -- Add / Sub / Mult / Div / Rem / Expon
-                   -> do { checkWith loc (supportsArithTy t1) msg
+                   -> do { -- liftIO $ putStrLn $ "t1 = " ++ show t1
+                         ; checkWith loc (supportsArithTy t1) msg
                          ; unify loc t1 t2
                          ; return $ eBinOp loc t1 bop e1' e2'
                          }
@@ -413,7 +414,15 @@ envOfDecls :: [(Name,Ty,Maybe (Exp a))] -> Env
 envOfDecls = mkTyEnv . tyBindingsOfDecls
 
 tyBindingsOfParams :: [(Name,Ty)] -> [(String,Ty)]
-tyBindingsOfParams = map (\(nm,ty) -> (name nm, ty))
+-- Make sure that parameters with polymorphic array sizes 
+-- introduce the length variables too! 
+tyBindingsOfParams prms
+  = L.nub $ concat $ map param_binds prms
+  where param_binds (nm, ty@(TArr (NVar nm' _) _)) 
+          = [(name nm,ty),(name nm',tint)]
+        param_binds (nm, ty) 
+          = [(name nm, ty)]
+         
 
 tyEnvOfParams :: [(Name,Ty)] -> TyEnv
 tyEnvOfParams = mkTyEnv . tyBindingsOfParams
