@@ -72,6 +72,9 @@
     <ClCompile Include="..\sora_ext_lib.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\buf_numerics8.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\bit.h">
