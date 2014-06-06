@@ -684,7 +684,7 @@ subarr_inline_step fgs e
     -- x[0,length(x)] == x
   | EArrRead evals estart (LILength n) <- unExp e
   , EVal (VInt 0) <- unExp estart
-  , TArr (Literal m) _ <- info e 
+  , TArr (Literal m) _ <- info evals 
   , n == m
   = rewrite evals
 
