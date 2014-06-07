@@ -690,7 +690,7 @@ subarr_inline_step fgs e
 
   | EArrWrite eval_tgt estart (LILength n) erhs <- unExp e
   , EVal (VInt 0) <- unExp estart
-  , TArr (Literal m) _ <- info erhs
+  , TArr (Literal m) _ <- info eval_tgt
   , n == m
   = rewrite $ eAssign (expLoc e) TUnit eval_tgt erhs
 
