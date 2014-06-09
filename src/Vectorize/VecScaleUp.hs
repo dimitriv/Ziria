@@ -342,10 +342,13 @@ doVectorizeCompUp comp cin cout (min,mout)
                                 | arityout == 1 
                                 = mkexp $ EAssign ya_exp (mkexp (EArrRead (eraseExp e) (mkexp (EVal $ VInt 0)) LISingleton))
                                 | otherwise
-                                = mkexp $ EArrWrite ya_exp (eraseExp write_index) (LILength n) xexp
+                                = -- DV: used to be ... mkexp $ EArrWrite ya_exp (eraseExp write_index) (LILength n) xexp
+                                  mkexp $ EArrWrite ya_exp (eraseExp write_index) (LILength n) (eraseExp e)
 
-                        ; let let_exp   = mkexp $ ELet xvar (eraseExp e) asgn_expr
-                        
+                        -- DV: changing this! 
+                        -- ; let let_exp   = mkexp $ ELet xvar (eraseExp e) asgn_expr
+                        ; let let_exp = asgn_expr
+
                         ; mapM (\_ -> incEmitCount) [1..n]
 
                         ; return (MkComp (Return let_exp) loc ())
