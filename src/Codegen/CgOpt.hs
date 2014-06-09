@@ -1116,10 +1116,14 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
         newNm <- freshName ((name f) ++ "_" ++ (getLnNumInStr csp))
  
         is_ret_ptr <- isStructPtrType (info body)
-        let body'   = transBody   is_ret_ptr body (info body)
+        let (ret_var_opt, body') = transBody is_ret_ptr body (info body)
         let params' = transParams is_ret_ptr params (info body)
 
         cparams <- codeGenParams params'
+
+        let locals_no_ret = transLocals is_ret_ptr ret_var_opt locals (info body)
+        -- Smaller set of 'real' locals 
+
 
         -- It does not suffice to take the free variables based on the
         -- definition, we have to take into account the function calls
@@ -1155,18 +1159,40 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
         let closureParams = map (\(nm,(ty,_)) -> (nm,ty)) closureEnv 
 
         let paramsEnv  = map (\(pn,ty) -> (pn,(ty,[cexp|$id:(getNameWithUniq pn)|]))) params'
-        let localsEnv  = map (\(ln,ty,_) -> (ln,(ty,[cexp|$id:(getNameWithUniq ln)|]))) locals
 
-        -- Create an init group of all locals 
-        clocals_decls <- mapM (\(nm, ty, _) -> codeGenDeclGroup (getNameWithUniq nm) ty) locals
+        -- Make sure the local environment maps the special return param to 'retN'
+        let localsEnv  = map mk_local_env locals
+            mk_local_env (ln,ty,_) 
+              | Just rv <- ret_var_opt
+              , rv == ln 
+              = (ln,(ty,[cexp|$id:(getNameWithUniq retN)|]))
+              | otherwise 
+              = (ln,(ty,[cexp|$id:(getNameWithUniq ln)|]))
+
+        -- Just the locals with the potential return variable renamed to retN
+        let locals' = map mk_new_locals locals
+            mk_new_locals (ln,ty,me) 
+              | Just rv <- ret_var_opt
+              , rv == ln 
+              = (retN,ty,me)
+              | otherwise 
+              = (ln,ty,me)
+
+        -- Create an init group of all locals (just declarations)
+        let decl_local (nm, ty, _) = codeGenDeclGroup (getNameWithUniq nm) ty
+        clocals_decls <- mapM decl_local locals_no_ret
+
 
         -- Create actual initialization code for all locals 
+        -- NB: use the 'localsEnv' for RHS occurrences of the special return variable
+        --     use locals' for initializing the 'retN' value!
+
         (c_decls', c_stmts') <- inNewBlock_ $
                                 extendVarEnv paramsEnv  $
                                 extendVarEnv closureEnv $
                                 extendVarEnv localsEnv  $ 
                                 codeGenGlobalInitsOnly dflags $ 
-                                map (\(nm,t,e) -> (nm { name = getNameWithUniq nm } ,t,e)) locals
+                                map (\(nm,t,e) -> (nm { name = getNameWithUniq nm } ,t,e)) locals'
 
         (cdecls, cstmts, cbody) <-
             inNewBlock $
@@ -1211,29 +1237,40 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
  
       where
 
-        transBody :: Bool -> Exp Ty -> Ty -> Exp Ty
+        transBody :: Bool -> Exp Ty -> Ty -> (Maybe Name, Exp Ty)
         transBody is_ret_ptr e retTy 
           | (isArrTy retTy || is_ret_ptr)
           = case unExp e of
-              ESeq e1 e2-> let e2' = transBody is_ret_ptr e2 (info e2)
-                           in MkExp (ESeq e1 e2') (expLoc e) (info e2')
-              _ -> MkExp (EAssign retE e) (expLoc e) TUnit
+              ESeq e1 e2-> let (rv,e2') = transBody is_ret_ptr e2 (info e2)
+                           in (rv, MkExp (ESeq e1 e2') (expLoc e) (info e2'))
+              EVar ret_var -> (Just ret_var, eVal (expLoc e) TUnit VUnit) 
+                   -- Variable!
+              _ -> (Nothing, MkExp (EAssign retE e) (expLoc e) TUnit)
           where
             retN = toName ("__retf_" ++ (name f)) Nothing Nothing
             retE = MkExp (EVar retN) (expLoc body) (info body)
 
-        transBody _ e _ = e 
+        transBody _ e _ = (Nothing, e) 
 
         transParams :: Bool -> [(Name, Ty)] -> Ty -> [(Name, Ty)]
         transParams is_ret_ptr params retTy 
           | (is_ret_ptr || isArrTy retTy)
           = (retN, retTy) : params
-          where
-            retN = toName ("__retf_" ++ (name f)) Nothing Nothing
-            retE = MkExp (EVar retN) (expLoc body) (info body)
+        transParams _ params _ = params
+          
+        retN = toName ("__retf_" ++ (name f)) Nothing Nothing
+        retE = MkExp (EVar retN) (expLoc body) (info body)
             -- Params have uniq names see codeGenParam (CgExpr)
 
-        transParams _ params _ = params
+
+        transLocals :: Bool -> Maybe Name -> [(Name,Ty, Maybe (Exp Ty))] -> Ty -> [(Name,Ty,Maybe (Exp Ty))]
+        transLocals is_ret_ptr opt_ret_var locals retTy
+          | (is_ret_ptr || isArrTy retTy)
+          , Just ret_var <- opt_ret_var
+          = filter (\(nm,_,_) -> not (nm == ret_var)) locals 
+            -- all locals except the return var
+          | otherwise
+          = locals
 
         to_uniq (nm,ty) = (getNameWithUniq nm, ty)
 
