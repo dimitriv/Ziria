@@ -233,16 +233,18 @@ computeCardTop verbose ct = computeCard ct
                }
 
         computeCard0  (Call f es) 
+{-  
           = do { es' <- mapM computeCallArgCard es
-               ; return $ MkComp (Call f es') loc (cty,mkDynamicCard)  -- Unknown, for now
+               ; return $ MkComp (Call f es') loc (cty, mkDynamicCard)  -- Unknown, for now
                }
-{-
-            do { cenv <- getCardEnv
-               ; case M.lookup (CDomFun $ name f) cenv of
-                   Just card -> return $ MkComp (Call f es) loc (cty,card)
-                   Nothing   -> return $ MkComp (Call f es) loc (cty,mkDynamicCard) -- Or fail? 
-              }
 -}
+          =  do { cenv <- getCardEnv
+                ; es' <- mapM computeCallArgCard es
+                ; case M.lookup (CDomFun $ name f) cenv of
+                   Just card -> return $ MkComp (Call f es') loc (cty,card)
+                   Nothing   -> return $ MkComp (Call f es') loc (cty,mkDynamicCard) -- Or fail? 
+                }
+
 
         computeCard0  (Emit e)
           = return $ (MkComp (Emit e) loc (cty, mkSimplCard 0 1))
