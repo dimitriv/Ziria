@@ -448,7 +448,19 @@ assignByVal t t' ce1 ce2 =
          -- If represented as pointers then do a memcopy
          appendStmt [cstm|blink_copy($ce1, $ce2, sizeof($ty:(codeGenTy t)));|]
          -- Else just do assignment
-       else appendStmt [cstm|$ce1 = $ce2;|] }
+       else just_assign ce1 ce2 }
+  where just_assign ce1 ce2 
+            -- just an optimization for expensive complex assignments
+          | isComplexTy t && is_c_var ce2
+          = do appendStmt [cstm|$ce1.re = $ce2.re;|]
+               appendStmt [cstm|$ce1.im = $ce2.im;|]
+
+          | otherwise
+          = appendStmt [cstm|$ce1 = $ce2;|]
+
+        is_c_var (C.Var (C.Id {}) _) = True
+        is_c_var _                   = False 
+
 
 -- NB: Only assigns by ref for arrays
 assignByRef :: Ty -> C.Exp -> C.Exp -> C.Stm
