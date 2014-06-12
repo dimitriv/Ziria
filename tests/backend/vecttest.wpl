@@ -1,0 +1,15 @@
+
+let comp f() = 
+   var ret : arr[4] int;
+
+   (x : arr[4] int) <- takes 4;
+   do { ret[0] := x[1] 
+      ; ret[1] := x[1]
+      ; ret[2] := x[2]
+      ; ret[3] := x[0]
+      };
+   emits ret;
+in
+
+
+read >>> (repeat [8,8] f()) >>> write
