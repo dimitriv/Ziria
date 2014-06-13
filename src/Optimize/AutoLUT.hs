@@ -155,10 +155,7 @@ runAutoLUT dflags _ c = autolutC c
             pure $ MkExp (ELUT ranges e0) loc inf
 
         autoE e0@(MkExp e loc inf) 
-           = do { let (Left err) = shouldLUT dflags [] ranges e0
-                ; putStrLn $ "Expression did not autolut due to output of 'shouldLUT'" ++ show err
-                ; MkExp <$> go e <*> pure loc <*> pure inf
-                }
+           = MkExp <$> go e <*> pure loc <*> pure inf
           where
             go :: Exp0 Ty -> IO (Exp0 Ty)
             go e@(EVal {})    = pure e
