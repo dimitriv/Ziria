@@ -418,6 +418,8 @@ computeVectTop verbose c =
 
           (Repeat (Just (finalin, finalout)) c1)
             -> do { vc <- vectorizeWithHint (finalin,finalout) c1
+                  ; vecMIO $ putStrLn $ "FOOOOOOOOOOOOOOOOOOO, c1 = " ++ show c1
+
                   ; let self = MkComp (Repeat Nothing (eraseComp c1)) loc ()
                   ; return [ (self, NoVect)
                            , (MkComp (Repeat Nothing vc) loc (), 
@@ -668,7 +670,9 @@ vectorizeWithHint (finalin,finalout) c
   , isVectorizable tyin
   , isVectorizable tyout
   = do { vecMIO $ 
-         putStrLn "Repeat (just: scaling to programmer-supplied annotation)"
+         do { putStrLn "Repeat (just: scaling to programmer-supplied annotation)"
+            ; putStrLn $ "Cardinality was: " ++ show card 
+            }
        ; doVectorizeCompForce c (finalin, finalout)
        }
 
