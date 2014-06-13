@@ -299,5 +299,8 @@ shouldLUT dflags locals ranges e = flip evalLM s0 $ do
        modify $ \s -> s { lmHasBPerm = True }
        should e1 >> should e2
 
-    go (EStruct tn tfs) = return () -- TODO: For the moment!
-    go (EProj e fn)     = return () -- TODO: for the moment. Don't LUT structs
+    go (EStruct tn tfs) 
+       = mapM_ (\(fn,fe) -> should fe) tfs
+
+    go (EProj e fn)     
+       = should e

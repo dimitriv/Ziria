@@ -29,7 +29,6 @@
 #
 COMPILER?=gcc
 
-
 PP   = ../../scripts/preprocesscompile-$(COMPILER).sh
 DIFF = ../../tools/BlinkDiff
 
@@ -39,7 +38,8 @@ TGTS = $(patsubst %.wpl, %.test, $(wildcard *.wpl))
 all: $(TGTS)
 
 %.out : %.wpl
-	EXTRAOPTS=--autolut $(PP) $< $@
+	EXTRAOPTS='$(EXTRAOPTS) --new-src-format' $(PP) $< $@
+#	$(PP) $< $@
 
 %.outfile: %.out %.infile
 	./$< --input=file \

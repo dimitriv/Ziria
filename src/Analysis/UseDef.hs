@@ -279,12 +279,13 @@ varUseDefs ranges e =
     go (MkExp (ELUT {}) _ _) =
         fail "Cannot handle a recursive LUT"
 
-    -- TODO: Fix those at some point! 
-    go (MkExp (EStruct fn tfs) _ _) = 
-        fail "Cannot handle structures (constructors) for the moment..."
-    go (MkExp (EProj e fn)_ _) = 
-        fail "Cannot handle structures (projections) for the moment..."
-
+    go (MkExp (EStruct fn tfs) _ _) = do
+        us <- mapM (\(fn,e) -> go e) tfs
+        let comb [u]     = u
+            comb (u1:us) = u1 <> comb us
+            comb []      = error "Can't happen!"
+        return $ comb us
+    go (MkExp (EProj e fn)_ _) = go e 
 
 
 inOutVars :: Monad m
