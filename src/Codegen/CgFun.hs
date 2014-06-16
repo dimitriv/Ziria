@@ -137,14 +137,19 @@ cgFunDefined :: DynFlags
              -> Cg a    -- action for the body
              -> Cg a 
 cgFunDefined dflags csp f 
-             fdef@(MkFun (MkFunDefined nm params locals orig_body) _ fTy) 
+             fdef@(MkFun (MkFunDefined nm params fun_locals orig_body) _ fTy) 
              action
   = do { -- make up a new name for the function
          newNm <- freshName $ name f ++ "_" ++ getLnNumInStr csp
       
        ; let retTy = info orig_body
          -- transform the body if by-ref return
-       ; ret_by_ref <- retByRef f (map (\(x,_,_) -> x) locals) orig_body
+
+         -- get the 'letref' bound locals 
+       ; let (extra_locals, stripped_body) = stripLetRefs orig_body 
+       ; let locals = fun_locals ++ extra_locals 
+
+       ; ret_by_ref <- retByRef f (map (\(x,_,_) -> x) locals) stripped_body
        
          -- get the closure variables
        ; closureEnv <- getClosureVars fdef 
@@ -217,3 +222,14 @@ cgFunDefined _ _ _ _ _ = error "cgFunDefined: not a FunDefined function!"
 
 
 
+stripLetRefs :: Exp Ty -> ([ (Name,Ty,Maybe (Exp Ty)) ], Exp Ty)
+-- Strip top-level letrefs 
+stripLetRefs e = go [] e
+  where go defs e  
+          = go0 defs (unExp e)
+          where 
+             go0 defs (ELetRef nm (Left ty) e') 
+               = go ((nm,ty,Nothing):defs) e'
+             go0 defs (ELetRef nm (Right einit) e')
+               = go ((nm, info einit, Just einit):defs) e'
+             go0 defs _other = (reverse defs, e)
