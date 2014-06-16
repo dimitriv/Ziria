@@ -213,7 +213,7 @@ take_emit_step fgs comp
   | otherwise
   = return comp
 
-
+{- Not wrong, by evil, we lose the letref-structure and LUT can't do a very good job!
 float_top_letref_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
 float_top_letref_step fgs comp 
   | LetFun nm f c <- unComp comp
@@ -236,6 +236,7 @@ float_top_letref_step fgs comp
              go0 defs (ELetRef nm (Right einit) e')
                = go ((nm, info einit, Just einit):defs) e'
              go0 defs _other = (reverse defs, e)
+-}
  
 
 inline_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
@@ -878,9 +879,14 @@ foldCompPasses flags
 
     -- More aggressive optimizations
     , ("push-comp-locals"   , push_comp_locals_step flags   )
-    , ("float-top-letref"   , float_top_letref_step flags   )
+
+-- Don't use: not wrong but does not play nicely with LUT
+--  , ("float-top-letref"   , float_top_letref_step flags   )
+
     , ("take-emit"          , take_emit_step flags          )
+
     , ("float-letfun-repeat", float_letfun_repeat_step flags)
+
     , ("ifpar-left"         , ifpar_step_left flags         )        
     , ("ifpar-right"        , ifpar_step_right flags        )        
     , ("ifdead"             , ifdead_step flags             )       
