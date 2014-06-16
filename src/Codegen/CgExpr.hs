@@ -462,7 +462,7 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
       codeGenExp dflags e1
 
     go t (ELUT r e1) =
-      codeGenLUTExp dflags [] r e1
+      codeGenLUTExp dflags [] r e1 Nothing
 
     -- TODO: Re-enable permuations, or treat as library function?
     go t (EBPerm e1 e2) =
