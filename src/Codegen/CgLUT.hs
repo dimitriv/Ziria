@@ -256,8 +256,9 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars locals e = do
     cidx <- genSym "idx"
 
     
-    (decls, stms, outBitWidth) 
-        <- inNewBlock $ 
+    (defs, (decls, stms, outBitWidth))
+        <- collectDefinitions $ 
+           inNewBlock $ 
            -- Just use identity code generation environment
            extendVarEnv [(v, (ty, [cexp|$id:(name v)|])) | (v,ty) <- allVars] $
            -- Generate local declarations for all input and output variables
@@ -306,6 +307,8 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars locals e = do
                                    $esc:("#include \"types.h\"")
                                    $esc:("#include \"wpl_alloc.h\"")
                                    $esc:("#include \"utils.h\"")
+                                 
+                                   $edecls:defs
 
                                    int main(int argc, char** argv)
                                    {
