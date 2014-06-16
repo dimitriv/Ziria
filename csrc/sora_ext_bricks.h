@@ -18,6 +18,7 @@
 */
 #pragma once
 #include <brick.h>
+#include "viterbi.hpp"
 
 
 
@@ -75,7 +76,8 @@ public:
 			ViterbiContext *c = ctx;
 			C_TYPE* output = opin().append();
 
-			memcpy((void *)output, (void *)c->inVal, N_LEN * sizeof(C_TYPE));
+			// DEBUG
+			//memcpy((void *)output, (void *)c->inVal, N_LEN * sizeof(C_TYPE));
 
 			Next()->Process(opin());
 			return true;
@@ -242,13 +244,15 @@ FINL void initViterbiSig11a(ViterbiContext *ctx, int frame_len, ushort code_rate
 FINL int16 processViterbi(ViterbiContext *ctx, char *inVal, uchar *outVal)
 {
 	int rets;
-	memcpy((void *)ctx->inVal, (void *)inVal, sizeof(uchar)* 48);
+	// DEBUG
+	//memcpy((void *)ctx->inVal, (void *)inVal, sizeof(uchar)* 48);
 	ctx->inSize = 48;
 	bool bRet = ctx->aSsrc[0]->Process();
 	rets = ctx->retSize;
 	if (ctx->retSize > 0)
 	{
-		memcpy((void *)outVal, (void *)ctx->retVal, sizeof(uchar)*ctx->retSize);
+		// DEBUG
+		//memcpy((void *)outVal, (void *)ctx->retVal, sizeof(uchar)*ctx->retSize);
 		ctx->retSize = 0;
 	}
 	return rets*8;		// in bits

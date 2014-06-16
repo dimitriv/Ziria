@@ -17,19 +17,48 @@ Scrambler		775
 
 
 
-# DESKTOP, --no-exp-inline
+# DESKTOP, --no-exp-inline, OLD
 
 test_ifft			168.086
 test_map_ofdm_perf 		762.864
+
 test_modulating_bpsk_perf 	144.58
 test_modulating_qpsk_perf 	454.223
 test_modulating_16qam_perf 	440.292
 test_modulating_64qam_perf 	631.21
-test_interleaving_bpsk_perf 	8.55842
-test_interleaving_qpsk_perf 	4.27358
-test_interleaving_16qam_perf 	2.21436
-test_interleaving_64qam_perf 	1.53651
-test_encoding_12_perf 		152.968
-test_encoding_23_perf 		549.952
-test_encoding_34_perf 		384.376
-test_scramble_perf 		953.689
+
+test_interleaving_bpsk_perf 	408.16
+* test_interleaving_qpsk_perf 	4.27358
+* test_interleaving_16qam_perf 	2.21436
+* test_interleaving_64qam_perf 	1.53651
+
+test_encoding_12_perf 		1230
+test_encoding_23_perf 		657
+test_encoding_34_perf 		411
+
+test_scramble_perf 		1300
+
+
+
+
+# DESKTOP
+
+test_ifft 182.326
+test_map_ofdm_perf 968.579
+
+* test_modulating_bpsk_perf 805.964
+test_modulating_qpsk_perf 452.669
+test_modulating_16qam_perf 477.644
+test_modulating_64qam_perf 569.152
+
+test_interleaving_bpsk_perf 389.63
+* test_interleaving_qpsk_perf 4.4843
+* test_interleaving_16qam_perf 2.07674
+* test_interleaving_64qam_perf 1.39764
+
+test_encoding_12_perf 1112.35
+test_encoding_23_perf 544.461
+test_encoding_34_perf 359.028
+
+test_scramble_perf 1236.54
+

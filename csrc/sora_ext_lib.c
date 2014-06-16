@@ -37,7 +37,6 @@
 #include "depuncturer.hpp"
 #include "PHY_11a.hpp"
 #include "PHY_11b.hpp"
-#include "viterbi.hpp"
 #include "pilot.hpp"
 #include "channel_11a.hpp"
 #include "cca.hpp"
