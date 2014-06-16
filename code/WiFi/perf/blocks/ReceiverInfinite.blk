@@ -54,7 +54,6 @@ let comp ReceiverInfinite(hinfo : struct HeaderInfo) =
        >>> receiveBits(hinfo))
 in
 
-read >>> ReceiverInfinite(HeaderInfo{coding = CR_12; modulation = M_BPSK; len = 0}) >>> write
 
 
 

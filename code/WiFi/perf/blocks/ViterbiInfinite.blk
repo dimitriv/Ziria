@@ -30,7 +30,7 @@ let comp ViterbiInfinite(rate:int) =
 
 
  do {viterbi_brick_init(24000, int16(rate))};
- repeat {
+ repeat [48, 8] {
 
     (svalue:arr[48] int8) <- takes 48;
    
@@ -45,9 +45,18 @@ let comp ViterbiInfinite(rate:int) =
 
      };
 
+{-
      for i in [0, nOutput] {
        emit outViterbi[i];
      }
+
+     for i in [0, nOutput/8] {
+       emits outViterbi[i*8,8];
+     }
+-}
+
+     emits {'0, '0, '0, '0, '0, '0, '0, '0};
+
    }
 
 in
