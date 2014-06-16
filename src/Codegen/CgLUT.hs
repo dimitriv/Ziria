@@ -95,14 +95,16 @@ packIdx ranges vs tgt tgt_ty = go vs 0
         go ((v,ty):vs) pos
          | isArrTy ty 
          = do { w <- varBitWidth ranges v ty
+              ; let mask = 2^w - 1
               ; (_,varexp) <- lookupVarEnv v
-              ; appendStmt $ [cstm| $tgt |= (($ty:tgt_ty) (*$varexp)) << $int:pos; |]
+              ; appendStmt $ [cstm| $tgt |= (($ty:tgt_ty) (*$varexp)) & $int:mask << $int:pos; |]
               -- ; appendStmt $ [cstm| bitArrWrite((typename BitArrPtr) $varexp, $int:pos, $int:w, $tgt); |]
               ; go vs (pos+w) }
          | otherwise
          = do { w <- varBitWidth ranges v ty
+              ; let mask = 2^w - 1
               ; (_,varexp) <- lookupVarEnv v
-              ; appendStmt $ [cstm| $tgt |= (($ty:tgt_ty) $varexp) << $int:pos; |]
+              ; appendStmt $ [cstm| $tgt |= (($ty:tgt_ty) $varexp) & $int:mask << $int:pos; |]
               -- ; appendStmt $ [cstm| bitArrWrite((typename BitArrPtr) & $varexp, $int:pos, $int:w, $tgt); |]
               ; go vs (pos+w) }
 

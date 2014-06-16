@@ -133,7 +133,8 @@ float_letfun_repeat_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
 float_letfun_repeat_step fgs comp
  | Repeat wdth rcomp <- unComp comp
  , LetFunC nm params locals cbody ccont <- unComp rcomp
- , all (\(_,_,me) -> isNothing me) locals -- I.e. they are not re-initialized upon every invocation. Important!
+ , null locals
+--  , all (\(_,_,me) -> isNothing me) locals -- I.e. they are not re-initialized upon every invocation. Important!
  , Call nm' args <- unComp ccont 
  , nm' == nm
  , all is_simpl_call_arg args  -- Not sure this is necessary 
@@ -149,6 +150,37 @@ is_simpl_call_arg _         = False
 is_simpl_call_param (CAExp _) = True
 is_simpl_call_param _         = False
 
+
+
+push_comp_locals_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
+-- let comp f(x) = var ... x <- take ; emit e
+-- ~~~>
+-- let comp f(x) = x <- take; emit (letref locals in e)
+push_comp_locals_step fgs comp
+  | LetFunC nm params locals cbody ccont <- unComp comp
+  , not (null locals)
+  , BindMany tk [(x,emt)] <- unComp cbody
+  , Take1 <- unComp tk
+  , Emit e <- unComp emt
+  , let loc = compLoc comp
+  , let cty = compInfo comp 
+  = do { let comp'  = cLetFunC loc cty nm params [] cbody' ccont
+             cbody' = cBindMany loc (compInfo cbody) tk [(x,emt')]
+             emt'   = cEmit loc (compInfo emt) e'
+             e'     = mk_letrefs (expLoc e) (info e) locals e
+       ; liftIO $ do { putStrLn $ "push_comp_locals_step, function = " ++ show nm
+                     ; putStrLn $ "locas = " ++ show locals
+                     }
+       ; rewrite comp'
+       }
+  | otherwise 
+  = return comp
+  where mk_letrefs eloc ety lcls e = go lcls e 
+          where go [] e = e 
+                go ((lcl,ty,Nothing):lcls) e 
+                  = eLetRef eloc ety lcl (Left ty) (go lcls e)
+                go ((lcl,ty,Just einit):lcls) e
+                  = eLetRef eloc ety lcl (Right einit) (go lcls e)
 
 
 take_emit_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
@@ -181,6 +213,30 @@ take_emit_step fgs comp
   | otherwise
   = return comp
 
+
+float_top_letref_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
+float_top_letref_step fgs comp 
+  | LetFun nm f c <- unComp comp
+  , MkFunDefined nm params locals body <- unFun f
+  , let (extra_locals,rem_body) = strip_letrefs body
+  , not (null extra_locals)
+  = do { let f' = f { unFun = fdef' }
+             fdef' = MkFunDefined nm params (locals ++ extra_locals) rem_body
+       ; rewrite $ 
+         cLetFun (compLoc comp) (compInfo comp) nm f' c 
+       }
+  | otherwise
+  = return comp
+  where strip_letrefs e = go [] e 
+        go defs e  
+          = go0 defs (unExp e)
+          where 
+             go0 defs (ELetRef nm (Left ty) e') 
+               = go ((nm,ty,Nothing):defs) e'
+             go0 defs (ELetRef nm (Right einit) e')
+               = go ((nm, info einit, Just einit):defs) e'
+             go0 defs _other = (reverse defs, e)
+ 
 
 inline_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
 inline_step fgs comp
@@ -690,7 +746,7 @@ subarr_inline_step fgs e
 
   | EArrWrite eval_tgt estart (LILength n) erhs <- unExp e
   , EVal (VInt 0) <- unExp estart
-  , TArr (Literal m) _ <- info erhs
+  , TArr (Literal m) _ <- info eval_tgt
   , n == m
   = rewrite $ eAssign (expLoc e) TUnit eval_tgt erhs
 
@@ -821,12 +877,14 @@ foldCompPasses flags
     , ("inline", inline_step flags) 
 
     -- More aggressive optimizations
-    , ("take-emit"          , take_emit_step flags   )
+    , ("push-comp-locals"   , push_comp_locals_step flags   )
+    , ("float-top-letref"   , float_top_letref_step flags   )
+    , ("take-emit"          , take_emit_step flags          )
     , ("float-letfun-repeat", float_letfun_repeat_step flags)
-    , ("ifpar-left"         , ifpar_step_left flags  ) 
-    , ("ifpar-right"        , ifpar_step_right flags ) 
-    , ("ifdead"             , ifdead_step flags      ) 
-
+    , ("ifpar-left"         , ifpar_step_left flags         )        
+    , ("ifpar-right"        , ifpar_step_right flags        )        
+    , ("ifdead"             , ifdead_step flags             )       
+   
     -- The following cause the DDK compiler to explode for no obvious reason,
     -- so I keep them commented for now (although they are actually important)
     --  , ("bmpar-left"  , bm_par_step_left )

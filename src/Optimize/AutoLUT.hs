@@ -140,8 +140,9 @@ runAutoLUT dflags _ c = autolutC c
     autolutCallArg (CAComp c) = autolutC c >>= \c' -> return (CAComp c')
    
     autolutE :: Exp Ty -> IO (Exp Ty)
-    autolutE e_ = 
-        autoE e_
+    autolutE e_ = do { putStrLn $ "Trying to autolutE expression: " ++ show e_
+                     ; autoE e_
+                     }
       where
         ranges :: Map Name Range
         ranges = maybe Map.empty id (varRanges e_)
@@ -153,8 +154,8 @@ runAutoLUT dflags _ c = autolutC c
                                Just doc -> doc
             pure $ MkExp (ELUT ranges e0) loc inf
 
-        autoE e0@(MkExp e loc inf) =
-            MkExp <$> go e <*> pure loc <*> pure inf
+        autoE e0@(MkExp e loc inf) 
+           = MkExp <$> go e <*> pure loc <*> pure inf
           where
             go :: Exp0 Ty -> IO (Exp0 Ty)
             go e@(EVal {})    = pure e

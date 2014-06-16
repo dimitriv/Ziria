@@ -60,6 +60,8 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Data.List ( nub )
 
 
+import CgFun 
+
 ------------------------------------------------------------------------------
 -- | Computation Code Generation
 ------------------------------------------------------------------------------
@@ -80,7 +82,8 @@ compGenBind dflags f params locals c1 args k = do
                         , let nm_fresh = nm { name = appId ++ name nm }]
 
     -- A freshened version of locals that uses the new ids! 
-    let locals' = [(nm { name = appId ++ name nm },ty,me) | (nm,ty,me) <- locals]
+    let locals' 
+          = [(nm { name = appId ++ name nm },ty,me) | (nm,ty,me) <- locals]
 
 
 
@@ -1112,134 +1115,12 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
                                            $id:(extNm)($params:cparams);|] ]
             extendExpFunEnv f (extF,[]) $ go ctxt action 
    
-    go (CLetFun csp f fdef@(MkFun (MkFunDefined nm params locals body) _ fTy) ctxt) action = do
-        newNm <- freshName ((name f) ++ "_" ++ (getLnNumInStr csp))
- 
-        is_ret_ptr <- isStructPtrType (info body)
-        let body'   = transBody   is_ret_ptr body (info body)
-        let params' = transParams is_ret_ptr params (info body)
+    go (CLetFun csp f fdef@(MkFun (MkFunDefined {}) _ _) ctxt) action = 
+        -- defined CgFun
+        cgFunDefined dflags csp f fdef $ go ctxt action
 
-        cparams <- codeGenParams params'
-
-        -- It does not suffice to take the free variables based on the
-        -- definition, we have to take into account the function calls
-        -- too! But for those we have to lookup the functions in the
-        -- body already.
-        let closure_vars_def = S.toList $ funFVsClos fdef
-
-        -- Now, try to compute extra closure variables for functions
-        -- /called/ from this function
-
-        -- All variables 
-        let allVars = S.toList $ funFVs fdef 
-        call_fun_infos <- mapM lookupExpFunEnv_maybe allVars 
-
-            -- Bound function calls
-        let call_funs = filter isJust call_fun_infos                                 
-            -- /their/ closure parameters 
-            call_funs_clos_params = map fst (concat (map (snd . fromJust) call_funs))
-
-        -- Finally we sum all those up 
-        let closureVars = nub (closure_vars_def ++ call_funs_clos_params)
-
-
-        let mkClosureVar nm = do { (ty,_ce) <- lookupVarEnv nm
-                                 ; b <- isStructPtrType ty 
-                                 ; if isArrTy ty || b then 
-                                       return (nm, (ty, [cexp| $id:(name nm) |]))
-                                   else
-                                       return (nm, (ty, [cexp| *$id:(name nm)|])) }
-
-
-        closureEnv <- mapM mkClosureVar closureVars
-        let closureParams = map (\(nm,(ty,_)) -> (nm,ty)) closureEnv 
-
-        let paramsEnv  = map (\(pn,ty) -> (pn,(ty,[cexp|$id:(getNameWithUniq pn)|]))) params'
-        let localsEnv  = map (\(ln,ty,_) -> (ln,(ty,[cexp|$id:(getNameWithUniq ln)|]))) locals
-
-        -- Create an init group of all locals 
-        clocals_decls <- mapM (\(nm, ty, _) -> codeGenDeclGroup (getNameWithUniq nm) ty) locals
-
-        -- Create actual initialization code for all locals 
-        (c_decls', c_stmts') <- inNewBlock_ $
-                                extendVarEnv paramsEnv  $
-                                extendVarEnv closureEnv $
-                                extendVarEnv localsEnv  $ 
-                                codeGenGlobalInitsOnly dflags $ 
-                                map (\(nm,t,e) -> (nm { name = getNameWithUniq nm } ,t,e)) locals
-
-        (cdecls, cstmts, cbody) <-
-            inNewBlock $
-            extendVarEnv paramsEnv  $
-            extendVarEnv closureEnv $
-            extendVarEnv localsEnv  $
-            case body' of
-              MkExp (ELUT r body'') _ _
-                  | not (isDynFlagSet dflags NoLUT) 
-                  -> codeGenLUTExp dflags locals r body''
-
-              _ -> codeGenExp dflags body'
-
-        closure_params <- codeGenParamsByRef closureParams
-
-
-        -- MUST be global!
-        if (isArrTy (info body) || is_ret_ptr)
-          then do appendTopDecl [cdecl|void $id:(name newNm)($params:(cparams ++ closure_params));|]
-                  appendTopDef [cedecl|void $id:(name newNm)($params:(cparams ++ closure_params)) {
-                                         $decls:c_decls'         // Define things needed for locals
-                                         $decls:clocals_decls    // Define locals 
-                                         $decls:cdecls           // Define things needed for body
-
-                                         $stms:c_stmts'          // Emit initialization of locals 
-                                         $stms:cstmts            // Emit rest of body               
-                                         return;
-                                       }|]
-          else do appendTopDecl [cdecl|$ty:(codeGenTy (info body)) 
-                                               $id:(name newNm)($params:(cparams ++ closure_params));|]
-                  appendTopDef [cedecl|$ty:(codeGenTy (info body)) 
-                                               $id:(name newNm)($params:(cparams ++ closure_params)) {
-                                         $decls:c_decls'         // Define things needed for locals
-                                         $decls:clocals_decls    // Define locals 
-                                         $decls:cdecls           // Define things needed for body
-
-                                         $stms:c_stmts'          // Emit initialization of locals 
-                                         $stms:cstmts            // Emit rest of body               
-                                         return $(cbody);
-                                       }|]
-        extendExpFunEnv f (newNm, closureParams) $ go ctxt action 
- 
-      where
-
-        transBody :: Bool -> Exp Ty -> Ty -> Exp Ty
-        transBody is_ret_ptr e retTy 
-          | (isArrTy retTy || is_ret_ptr)
-          = case unExp e of
-              ESeq e1 e2-> let e2' = transBody is_ret_ptr e2 (info e2)
-                           in MkExp (ESeq e1 e2') (expLoc e) (info e2')
-              _ -> MkExp (EAssign retE e) (expLoc e) TUnit
-          where
-            retN = toName ("__retf_" ++ (name f)) Nothing Nothing
-            retE = MkExp (EVar retN) (expLoc body) (info body)
-
-        transBody _ e _ = e 
-
-        transParams :: Bool -> [(Name, Ty)] -> Ty -> [(Name, Ty)]
-        transParams is_ret_ptr params retTy 
-          | (is_ret_ptr || isArrTy retTy)
-          = (retN, retTy) : params
-          where
-            retN = toName ("__retf_" ++ (name f)) Nothing Nothing
-            retE = MkExp (EVar retN) (expLoc body) (info body)
-            -- Params have uniq names see codeGenParam (CgExpr)
-
-        transParams _ params _ = params
-
-        to_uniq (nm,ty) = (getNameWithUniq nm, ty)
-
-    go _other_ctxt action = fail "codeGenSharedCxt_: Unknown context!" 
-
-
+    go (CLetFun {}) _      = error "BUG: All function kinds covered!"
+    go (CLetExternal {}) _ = error "BUG: All function kinds covered!"
 
 codeGenSharedCtxt_ :: DynFlags -> Bool -> CompCtxt -> Cg a -> Cg a
 -- For contexts that we know by construction contain no statements
