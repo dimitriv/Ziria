@@ -62,6 +62,7 @@ import Data.List ( nub )
 data RetBody 
   = DoReuseLcl (Name, Exp Ty) -- name is just a local
   | NoReuseLcl (Name, Exp Ty) -- name is new
+  | DoReuseLUT (Name, Exp Ty) -- reuse the result of LUT unpacking 
 
 data RetType 
   = RetByVal (Exp Ty)
@@ -83,12 +84,14 @@ retByRef f locals body
  where 
    lift_ret f (DoReuseLcl (n,e)) = DoReuseLcl (n, f e)
    lift_ret f (NoReuseLcl (n,e)) = NoReuseLcl (n, f e)
+   lift_ret f (DoReuseLUT (n,e)) = DoReuseLUT (n, f e)
 
    body_ty = info body
    loc     = expLoc body
    retN    = toName ("__retf_" ++ (name f)) Nothing Nothing
    retE    = MkExp (EVar retN) (expLoc body) (info body)
 
+   -- precondition: 'e' returns an array type 
    trans_body xs e 
      = case unExp e of
          ESeq e1 e2 
@@ -101,6 +104,8 @@ retByRef f locals body
            | not (x `elem` xs)
            , x `elem` locals 
            -> DoReuseLcl (x, eVal loc TUnit VUnit)
+         ELUT {} 
+           -> DoReuseLUT (retN, e) -- don't rewrite the body
          _otherwise
            -> NoReuseLcl (retN, eAssign loc TUnit retE e)
 
@@ -168,12 +173,16 @@ cgFunDefined dflags csp f
                               locals' = filter (\(n,_,_) -> not (n == ret_lcl)) locals
                               locals_inits = locals
                           in (params', locals', locals_inits, ret_body)
+                     RetByRef (DoReuseLUT (ret_n, ret_body))
+                       -> let params' = (ret_n, retTy) : params
+                              body'   = ret_body
+                          in (params', locals, locals , body')
   
        ; let name_uniq pn ty = (pn,(ty,[cexp|$id:(getNameWithUniq pn)|]))
              paramsEnv = map (\(pn,ty)   -> name_uniq pn ty) params'
              localsEnv = map (\(ln,ty,_) -> name_uniq ln ty) locals_defs'
 
-        -- Create an init group of all locals (just declarations)
+         -- Create an init group of all locals (just declarations)
        ; let decl_local (nm, ty, _) = codeGenDeclGroup (getNameWithUniq nm) ty
        ; clocals_decls <- mapM decl_local locals_defs'
          -- Create initialization code for locals (just inits)
@@ -193,8 +202,11 @@ cgFunDefined dflags csp f
             extendVarEnv localsEnv  $
             case body' of
               MkExp (ELUT r body'') _ _
-                  | not (isDynFlagSet dflags NoLUT) 
-                  -> codeGenLUTExp dflags locals r body''
+                  | not (isDynFlagSet dflags NoLUT)               -- if it's a body that is lutted
+                  , RetByRef (DoReuseLUT (ret_n,_)) <- ret_by_ref -- and here's the return name 
+                  -> codeGenLUTExp dflags locals r body'' (Just ret_n { name = getNameWithUniq ret_n })
+                  | not (isDynFlagSet dflags NoLUT)
+                  -> codeGenLUTExp dflags locals r body'' Nothing -- the usual thing
 
               _ -> codeGenExp dflags body'
 
