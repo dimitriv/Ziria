@@ -1,0 +1,16 @@
+let f(x : arr[2] bit) = 
+  var ret : complex16;
+
+  if (x[0] == '1 && x[1] == '0)
+  then 
+    ret := complex16 { re = 2; im=0 }
+  else 
+    ret := complex16 { re = 3; im=0 };
+
+  return ret;
+
+in
+
+read >>> map f >>> write
+
+

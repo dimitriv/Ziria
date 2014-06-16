@@ -135,12 +135,21 @@ tyBitWidth (TArr (Literal n) ty)
   = do { w <- tyBitWidth ty
        ; return (n*w) 
        }
+tyBitWidth t@(TStruct tn)
+  | tn == complexTyName
+  = return 64
+  | tn == complex8TyName
+  = return 16
+  | tn == complex16TyName
+  = return 32
+  | tn == complex32TyName
+  = return 64
 
--- For the moment let's say that we can't calculate bit width of structs. 
--- This means that expressions that manipulated structs will not be lutted.
--- TODO: This includes complex numbers, so probably should be revisited.
-
+-- For the moment let's say that we can't calculate bit width of
+-- arbitrary structs.  This means that expressions that manipulated
+-- structs will not be lutted.
 tyBitWidth ty 
+  -- = error $ "Cannot calculate bit width of type: " ++ show ty
   = fail $ "Cannot calculate bit width of type " ++ show ty
 
 tyBitWidth_ByteAlign :: Monad m => Ty -> m Int
@@ -155,9 +164,19 @@ tyBitWidth_ByteAlign (TArr (Literal n) ty)
   = do { w <- tyBitWidth ty
        ; return $ (((n*w) + 7) `div` 8) * 8
        }
-tyBitWidth_ByteAlign ty 
-  = fail $ "Cannot calculate bit width of type " ++ show ty 
 
+tyBitWidth_ByteAlign t@(TStruct tn)
+  | tn == complexTyName
+  = return 64
+  | tn == complex8TyName
+  = return 16
+  | tn == complex16TyName
+  = return 32
+  | tn == complex32TyName
+  = return 64
+
+tyBitWidth_ByteAlign ty 
+  = fail $ "Cannot calculate bit width of type " ++ show ty
 
 -- Returns the representation of the type in bytes
 tySizeOf :: Ty -> Cg (Maybe Int)
@@ -448,7 +467,19 @@ assignByVal t t' ce1 ce2 =
          -- If represented as pointers then do a memcopy
          appendStmt [cstm|blink_copy($ce1, $ce2, sizeof($ty:(codeGenTy t)));|]
          -- Else just do assignment
-       else appendStmt [cstm|$ce1 = $ce2;|] }
+       else just_assign ce1 ce2 }
+  where just_assign ce1 ce2 
+            -- just an optimization for expensive complex assignments
+          | isComplexTy t && is_c_var ce2
+          = do appendStmt [cstm|$ce1.re = $ce2.re;|]
+               appendStmt [cstm|$ce1.im = $ce2.im;|]
+
+          | otherwise
+          = appendStmt [cstm|$ce1 = $ce2;|]
+
+        is_c_var (C.Var (C.Id {}) _) = True
+        is_c_var _                   = False 
+
 
 -- NB: Only assigns by ref for arrays
 assignByRef :: Ty -> C.Exp -> C.Exp -> C.Stm

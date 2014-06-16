@@ -177,7 +177,11 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
       
     go t (EValArr v) = do
         newName <- genSym ("__local_arr_" ++ getLnNumInStr (expLoc e0))
-        appendDecl =<< codeGenArrVal newName (info e0) v
+        -- To avoid stacks being pushed and popped 
+        -- we make these guys global ... 
+        -- Used to be:
+        -- appendDecl =<< codeGenArrVal newName (info e0) v
+        appendTopDecl =<< codeGenArrVal newName (info e0) v
         return [cexp| $id:newName |]
 
     go t (EVar x) 
@@ -458,7 +462,7 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
       codeGenExp dflags e1
 
     go t (ELUT r e1) =
-      codeGenLUTExp dflags [] r e1
+      codeGenLUTExp dflags [] r e1 Nothing
 
     -- TODO: Re-enable permuations, or treat as library function?
     go t (EBPerm e1 e2) =
