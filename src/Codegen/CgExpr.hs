@@ -177,7 +177,11 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
       
     go t (EValArr v) = do
         newName <- genSym ("__local_arr_" ++ getLnNumInStr (expLoc e0))
-        appendDecl =<< codeGenArrVal newName (info e0) v
+        -- To avoid stacks being pushed and popped 
+        -- we make these guys global ... 
+        -- Used to be:
+        -- appendDecl =<< codeGenArrVal newName (info e0) v
+        appendTopDecl =<< codeGenArrVal newName (info e0) v
         return [cexp| $id:newName |]
 
     go t (EVar x) 
