@@ -1,49 +1,3 @@
-# LAPTOP:
-
-DownSample		416 Md/s
-RemoveDC		694
-CCA			92
-* LTS			83
-* DataSymbol		1030
-FreqCompensation	(removed)
-FFT			262
-* ChannelEqualization	228
-PhaseCompensate		(removed)
-* PilotTrack		58
-* Viterbi 1/2 		37
-Descrambler		(removed = same as scrambler)
-DemapBPSK 		418
-DeinterleaveBPSK 	1063
-* DemapQPSK 		231
-DeinterleaveQPSK 	1100
-* DemapQAM16 		118
-DeinterleaveQAM16 	1180
-* DemapQAM64 		35
-DeinterleaveQAM64	1291
-
-
-
-# DESKTOP, --no-exp-inline, OLD
-
-DownSample		490.422
-RemoveDC 		1005.86
-CCA 			112.371
-LTS 			104.71
-DataSymbol 		1491.4
-FFT 			353.761
-ChannelEqualization 	538.329
-PilotTrack 		87.7587
-Viterbi 		57.1109
-DemapBPSK 		478.137
-DeinterleaveBPSK 	1140.81
-DemapQPSK 		290.785
-DeinterleaveQPSK 	1360.71
-DemapQAM16 		162.024
-DeinterleaveQAM16 	1354.44
-DemapQAM64 		44.4919
-DeinterleaveQAM64 	1481.44
-
-
 # DESKTOP
 
 DownSample		2781.25
@@ -54,7 +8,7 @@ DataSymbol 		1670.03
 FFT 			377.81
 ChannelEqualization 	1204.8
 PilotTrack 		240.732
-* Viterbi 		76.2054
+Viterbi 		127.079
 DemapBPSK 		1137.13
 DeinterleaveBPSK 	1468.43
 DemapQPSK 		798.346

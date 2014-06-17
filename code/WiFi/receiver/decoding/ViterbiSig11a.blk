@@ -17,19 +17,22 @@
 -- permissions and limitations under the License.
 --
 --
+#include "../../const.blk"
+#include <externals.blk>
 
 let comp ViterbiSig11a() = 
   var nOutput:int16;
   var outViterbi:arr[96000] bit; 
 
-  do {viterbiSig11a_brick_init(0, 0)};
+--  do {viterbiSig11a_brick_init(0, 0)};
 
   seq {
 
     (svalue:arr[48] int8) <- takes 48;
    
      do{
-       nOutput := viterbi_brick_decode(svalue, outViterbi);
+--       nOutput := viterbi_brick_decode(svalue, outViterbi);
+       nOutput := viterbiSig11a_brick_decode_fast(svalue, outViterbi);
      };
 
      -- Here we get 32 bits but we are only interested in 24 PLCP bits

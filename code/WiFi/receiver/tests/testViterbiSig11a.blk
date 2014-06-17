@@ -18,8 +18,7 @@
 --
 --
 #include "../../const.blk"
-#include "../decoding/Viterbi.blk"
+#include "../decoding/ViterbiSig11a.blk"
 
 
-read >>> Viterbi(CR_12, 100) >>> write
-
+read >>> ViterbiSig11a() >>> write
