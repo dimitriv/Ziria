@@ -125,16 +125,14 @@ let external sora_fft(nFFTSize : int16, inp : arr complex16, out : arr complex16
 
 
 
+-- Do we still need this?
 -- Viterbi
 -- setting max frame size for now
 let external viterbi_init(frame_length:int): () in 
 -- const1 and const2 are used to distinguish between PLCP and data
 let external viterbi_decode(svalue:arr[48] int16, code_rate:int, 
              bitValue:arr[96000] bit, const1:int16, const2:int16): int16 in 
-
 let external viterbi_decode_old(intInput:arr[48] int16, code_rate:int16, out:arr[12000] int16) : int16 in
-
--- Do we still need this?
 --let external viterbi_decode_sig11a(svalue:arr[48] int, code_rate:int, bitValue:arr[12000] int): int in
 
 -- softBits could be dynamic based nBPSC
@@ -147,5 +145,9 @@ let external qam64_demap(input_sample:complex16, softBits:arr[6] int16) : () in
 let external viterbi_brick_init(frame_length:int, code_rate:int16): () in 
 let external viterbiSig11a_brick_init(frame_length:int, code_rate:int16): () in 
 let external viterbi_brick_decode(svalue:arr[48] int8, bitValue:arr[96000] bit): int16 in 
---let external viterbi_brick_decode(svalue:arr[48] int16, bitValue:arr[12000] int16): int16 in 
+
+-- Fast version which use MSR-LA license
+let external viterbi_brick_init_fast(frame_length:int, code_rate:int16): () in 
+let external viterbi_brick_decode_fast(svalue:arr[48] int8, bitValue:arr[96000] bit): int16 in 
+let external viterbiSig11a_brick_decode_fast(svalue:arr[48] int8, bitValue:arr[96000] bit): int16 in 
 

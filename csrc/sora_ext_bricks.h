@@ -75,9 +75,7 @@ public:
 		{
 			ViterbiContext *c = ctx;
 			C_TYPE* output = opin().append();
-
-			// DEBUG
-			//memcpy((void *)output, (void *)c->inVal, N_LEN * sizeof(C_TYPE));
+			memcpy((void *)output, (void *)c->inVal, N_LEN * sizeof(C_TYPE));
 
 			Next()->Process(opin());
 			return true;
@@ -244,15 +242,13 @@ FINL void initViterbiSig11a(ViterbiContext *ctx, int frame_len, ushort code_rate
 FINL int16 processViterbi(ViterbiContext *ctx, char *inVal, uchar *outVal)
 {
 	int rets;
-	// DEBUG
-	//memcpy((void *)ctx->inVal, (void *)inVal, sizeof(uchar)* 48);
+	memcpy((void *)ctx->inVal, (void *)inVal, sizeof(uchar)* 48);
 	ctx->inSize = 48;
 	bool bRet = ctx->aSsrc[0]->Process();
 	rets = ctx->retSize;
 	if (ctx->retSize > 0)
 	{
-		// DEBUG
-		//memcpy((void *)outVal, (void *)ctx->retVal, sizeof(uchar)*ctx->retSize);
+		memcpy((void *)outVal, (void *)ctx->retVal, sizeof(uchar)*ctx->retSize);
 		ctx->retSize = 0;
 	}
 	return rets*8;		// in bits
