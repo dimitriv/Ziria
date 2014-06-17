@@ -47,7 +47,56 @@ import TcExpr ( tyOfParams )
 
 
 
+evalArith :: Exp a -> Maybe Val
+evalArith e = go (unExp e)
+  where go (EVal val) = return val
+        go (EBinOp b e1 e2) 
+          = do { v1 <- evalArith e1
+               ; v2 <- evalArith e2
+               ; val_binop b v1 v2
+               }
+        go (EUnOp (Cast ty) e1)
+          = do { v1 <- evalArith e1
+               ; val_cast ty v1
+               }
+        go (EUnOp u e1)
+          = do { v1 <- evalArith e1
+               ; val_unop u v1
+               }
+        go _other = Nothing
 
+val_binop Add  (VInt i1) (VInt i2) = return (VInt $ i1+i2)
+val_binop Mult (VInt i1) (VInt i2) = return (VInt $ i1*i2)
+val_binop Sub  (VInt i1) (VInt i2) = return (VInt $ i1-i2)
+val_binop Div  (VInt i1) (VInt i2) = return (VInt $ i1 `quot` i2)
+val_binop Rem  (VInt i1) (VInt i2) = return (VInt $ i1 `rem` i2)
+
+val_binop Add  (VDouble p i1) (VDouble p' i2) = return (VDouble p $ i1+i2)
+val_binop Mult (VDouble p i1) (VDouble p' i2) = return (VDouble p $ i1*i2)
+val_binop Sub  (VDouble p i1) (VDouble p' i2) = return (VDouble p $ i1-i2)
+val_binop Div  (VDouble p i1) (VDouble p' i2) = return (VDouble p $ i1 / i2)
+
+val_binop _ _ _ = Nothing 
+
+val_unop Neg (VInt i) = return (VInt (-i))
+val_unop _ _ = Nothing 
+
+val_cast (TInt {})    (VDouble _p d) = return (VInt (floor d))
+val_cast (TInt {})    (VInt i)       = return (VInt i)
+val_cast (TDouble p) (VInt d)        = return (VDouble p (fromIntegral d))
+val_cast (TInt {})    (VBit False)   = return (VInt 0)
+val_cast (TInt {})    (VBit True)    = return (VInt 1)
+
+val_cast _ _ = Nothing 
+
+
+
+evalInt :: Exp a -> Maybe Int
+evalInt e = case evalArith e of 
+              Just (VInt i) -> return i
+              _otherwise    -> Nothing 
+
+{- 
 evalInt :: Exp a -> Maybe Int 
 -- An arithmetic evaluator
 evalInt e = evalInt0 (unExp e)
@@ -73,6 +122,8 @@ evalInt0 (EBinOp Rem e1 e2)
        ; i2 <- evalInt e2
        ; return (i1 `rem` i2) }
 evalInt0 _ = Nothing
+
+-}
 
 
 -- Array initialization code or the form

@@ -727,6 +727,19 @@ exp_inline_step fgs e
   = return e
 
 
+eval_arith :: DynFlags -> TypedExpPass
+eval_arith fgs e
+  | arith_ty e              -- of arithmetic type
+  , not (isEVal e)          -- not already a value 
+  , Just v <- evalArith e   -- evaluate it! 
+  = rewrite $ eVal (expLoc e) (info e) v
+  | otherwise 
+  = return e
+  where arith_ty e = case info e of 
+                       TInt {}    -> True
+                       TDouble {} -> True
+                       _ -> False
+
 subarr_inline_step :: DynFlags -> TypedExpPass
 subarr_inline_step fgs e
   | EArrRead evals estart LISingleton <- unExp e
@@ -910,6 +923,7 @@ foldExpPasses flags
     , ("subarr-inline-step", subarr_inline_step flags)
     , ("elim-unsued-let", elim_unused_let flags)
     , ("elim-alength", alength_elim flags)
+    , ("eval-arith", eval_arith flags)
     ]
  
 runFold :: DynFlags -> GS.Sym -> Comp CTy Ty -> IO (Comp CTy Ty)

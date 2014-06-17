@@ -188,6 +188,13 @@ data Exp0 a where
   EProj   :: Exp a -> String -> Exp0 a
 
 
+isEVal :: Exp a -> Bool
+isEVal e 
+  | EVal {} <- unExp e 
+  = True
+isEVal _ 
+  = False 
+
 -- Convenience constructors
 eVal :: Maybe SourcePos -> a -> Val -> Exp a
 eVal loc a v = MkExp (EVal v) loc a 
