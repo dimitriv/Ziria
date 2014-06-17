@@ -130,7 +130,7 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
          text "in" $$
          ppComp c
     LetFunC f params locls c1 c2 
-      | ignorelet
+      | ignorelet || (ignoreexp && not (nested_letfuns c1))
       -> ppComp c2
       | otherwise
       -> text "let comp" <+> ppName f <+> parens (ppCompParams params) <+> text "=" $$
@@ -256,6 +256,14 @@ isSimplComp (ReadSrc {})  = True
 isSimplComp (WriteSnk {}) = True
 isSimplComp _             = False
 
+
+nested_letfuns c
+  = case mapCompM_ return aux c of 
+      Nothing -> True
+      Just _  -> False
+  where aux c | LetFunC {} <- unComp c = Nothing
+              | Let {}     <- unComp c = Nothing
+              | otherwise              = Just c
 
 
 instance Show CTy0 where
