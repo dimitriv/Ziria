@@ -150,7 +150,7 @@ xDo = xReturn
 
 xTimes :: (XExpy a, XExpy b) => Name -> a -> b -> XComp -> XComp
 xTimes nm xs xl xc loc 
-  = cTimes loc () (toXExp xs loc) (toXExp xl loc) nm (xc loc)
+  = cTimes loc () AutoUnroll (toXExp xs loc) (toXExp xl loc) nm (xc loc)
 
 xError :: String -> XComp
 xError s loc = cReturn loc () (eError loc () s)

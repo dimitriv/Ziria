@@ -266,12 +266,12 @@ tyCheckExpr e
                                expActualErr unknownTArr tarr earr'
               }
 
-          EFor ix estart elen ebody ->
+          EFor ui ix estart elen ebody ->
             do estart' <- tyCheckExpr estart
                elen'   <- tyCheckExpr elen
                ebody'  <- extendEnv [(name ix, maybe tint id (mbtype ix))] (tyCheckExpr ebody)
                unify loc (info ebody') TUnit
-               return $ eFor loc (info ebody') ix estart' elen' ebody'
+               return $ eFor loc (info ebody') ui ix estart' elen' ebody'
 
 
           EWhile econd ebody ->

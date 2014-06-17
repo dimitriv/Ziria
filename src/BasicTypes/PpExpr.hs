@@ -72,6 +72,15 @@ ppBinOp op =
 instance Outputable Val where
   ppr = ppVal 
 
+
+ppUI Unroll     c = text "unroll" <+> c
+ppUI NoUnroll   c = text "nounroll" <+> c
+ppUI AutoUnroll c = c
+
+instance Outputable UnrollInfo where
+  ppr x = ppUI x empty 
+
+
 ppVal v =
   case v of
     VBit b -> text $ if b then "'1" else "'0"
@@ -109,11 +118,13 @@ ppExp0 e =
     EArrWrite earr eix (LILength r) eval ->
       ppExp earr <> assign ":=" (brackets $ (ppExp eix) <> text ":+" <> int r) (ppExp eval)
 
-    EFor ix estart elen ebody ->
-      text "for" <+>
-        ppIx ix <+> text "in" <+> brackets (ppExp estart <> comma <+> ppExp elen) <+> text "{" $$
-          nest nestingDepth (ppExp ebody) $$
-        text "}" 
+    EFor ui ix estart elen ebody ->
+      ppUI ui $ 
+       (text "for" <+>
+         ppIx ix <+> text "in" <+> brackets (ppExp estart <> comma <+> ppExp elen) <+> text "{" $$
+         nest nestingDepth (ppExp ebody) $$
+         text "}"
+       )
 
     EWhile econd ebody ->
       text "while" <+> parens (ppExp econd) <+> text "{" $$

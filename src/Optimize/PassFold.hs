@@ -604,14 +604,14 @@ letfunc_step fgs comp =
 
 letfun_times_step fgs comp = 
   case unComp comp of 
-    Times e elen i (MkComp (LetFun f def cont) cloc cinfo) 
+    Times ui e elen i (MkComp (LetFun f def cont) cloc cinfo) 
      | MkFun (MkFunDefined n params locals body) floc fty <- def
      -> do { let fty' = TArrow (tyOfParams ((i,tint):params)) (fun_ret_ty fty)
                  def' = MkFun (MkFunDefined n ((i,tint):params) locals body) floc fty'
                  iexp = MkExp (EVar i) cloc tint -- The counter variable
            ; cont' <- augment_calls (n,fty') iexp cont
            ; rewrite $ 
-             MkComp (LetFun f def' (MkComp (Times e elen i cont') cloc cinfo)) cloc cinfo }
+             MkComp (LetFun f def' (MkComp (Times ui e elen i cont') cloc cinfo)) cloc cinfo }
     _otherwise -> return comp
 
   where fun_ret_ty (TArrow _ r) = r
@@ -625,10 +625,11 @@ letfun_times_step fgs comp =
 
 times_unroll_step fgs comp 
   = case unComp comp of 
-        Times e elen i c
+        Times ui e elen i c
          | EVal (VInt n) <- unExp elen 
          , EVal (VInt 0) <- unExp e
-         , n <= 2  -- Small unrolling only
+         , (n < 3 && n > 0 && ui == AutoUnroll) || ui == Unroll 
+
          -> let idxs = [0..n-1]
                 comps = replicate n c
                 unrolled = zipWithM (\curr xc -> 
@@ -671,8 +672,8 @@ isMultiLet_maybe comp
 elim_times_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
 elim_times_step fgs comp =
   case unComp comp of
-    Times estart ebound cnt (MkComp (Return ebody) cloc cty) ->
-        do { let efor = EFor cnt estart ebound ebody
+    Times ui estart ebound cnt (MkComp (Return ebody) cloc cty) ->
+        do { let efor = EFor ui cnt estart ebound ebody
            ; rewrite $ MkComp (Return (MkExp efor cloc (info ebody))) (compLoc comp) (compInfo comp)
            }
 
@@ -726,6 +727,19 @@ exp_inline_step fgs e
   = return e
 
 
+eval_arith :: DynFlags -> TypedExpPass
+eval_arith fgs e
+  | arith_ty e              -- of arithmetic type
+  , not (isEVal e)          -- not already a value 
+  , Just v <- evalArith e   -- evaluate it! 
+  = rewrite $ eVal (expLoc e) (info e) v
+  | otherwise 
+  = return e
+  where arith_ty e = case info e of 
+                       TInt {}    -> True
+                       TDouble {} -> True
+                       _ -> False
+
 subarr_inline_step :: DynFlags -> TypedExpPass
 subarr_inline_step fgs e
   | EArrRead evals estart LISingleton <- unExp e
@@ -758,10 +772,10 @@ subarr_inline_step fgs e
 
 for_unroll_step :: DynFlags -> TypedExpPass
 for_unroll_step fgs e 
-  | EFor nm estart elen ebody  <- unExp e
+  | EFor ui nm estart elen ebody  <- unExp e
   , EVal (VInt 0) <- unExp estart
   , EVal (VInt n) <- unExp elen
-  , n < 8 && n > 0
+  , (n < 8 && n > 0 && ui == AutoUnroll) || ui == Unroll 
   = -- liftIO (putStrLn "for_unroll_step, trying ...") >> 
     let idxs = [0..n-1]
         exps = replicate n ebody
@@ -909,6 +923,7 @@ foldExpPasses flags
     , ("subarr-inline-step", subarr_inline_step flags)
     , ("elim-unsued-let", elim_unused_let flags)
     , ("elim-alength", alength_elim flags)
+    , ("eval-arith", eval_arith flags)
     ]
  
 runFold :: DynFlags -> GS.Sym -> Comp CTy Ty -> IO (Comp CTy Ty)

@@ -126,6 +126,12 @@ data LengthInfo
      | LILength Int -- Invariant: > 0
   deriving Eq
 
+data UnrollInfo 
+  = Unroll        -- force unroll
+  | NoUnroll      -- force no-unroll
+  | AutoUnroll    -- do whatever the compiler would do (no annotation)
+  deriving Eq
+
 data Exp0 a where
   EVal :: Val -> Exp0 a
   EValArr :: [Val] -> Exp0 a
@@ -145,7 +151,10 @@ data Exp0 a where
   EArrWrite :: Exp a -> Exp a -> LengthInfo -> Exp a -> Exp0 a
 
   EIter :: Name -> Name -> Exp a -> Exp a -> Exp0 a
-  EFor :: Name -> Exp a -> Exp a -> Exp a -> Exp0 a
+
+  EFor :: UnrollInfo -> Name -> Exp a -> Exp a -> Exp a -> Exp0 a
+
+
   EWhile :: Exp a -> Exp a -> Exp0 a 
 
 
@@ -179,6 +188,13 @@ data Exp0 a where
   EProj   :: Exp a -> String -> Exp0 a
 
 
+isEVal :: Exp a -> Bool
+isEVal e 
+  | EVal {} <- unExp e 
+  = True
+isEVal _ 
+  = False 
+
 -- Convenience constructors
 eVal :: Maybe SourcePos -> a -> Val -> Exp a
 eVal loc a v = MkExp (EVal v) loc a 
@@ -198,8 +214,8 @@ eArrWrite :: Maybe SourcePos -> a ->  Exp a -> Exp a -> LengthInfo -> Exp a -> E
 eArrWrite loc a x y l e = MkExp (EArrWrite x y l e) loc a 
 eIter :: Maybe SourcePos -> a -> Name -> Name -> Exp a -> Exp a -> Exp a
 eIter loc a x y e1 e2 = MkExp (EIter x y e1 e2) loc a  
-eFor :: Maybe SourcePos -> a -> Name -> Exp a -> Exp a -> Exp a -> Exp a
-eFor loc a n e1 e2 e3 = MkExp (EFor n e1 e2 e3) loc a 
+eFor :: Maybe SourcePos -> a -> UnrollInfo -> Name -> Exp a -> Exp a -> Exp a -> Exp a
+eFor loc a ui n e1 e2 e3 = MkExp (EFor ui n e1 e2 e3) loc a 
 eLet :: Maybe SourcePos -> a ->  Name -> Exp a -> Exp a -> Exp a
 eLet loc a x e1 e2 = MkExp (ELet x e1 e2) loc a 
 eLetRef :: Maybe SourcePos -> a ->  Name -> Either Ty (Exp a) -> Exp a -> Exp a 
@@ -487,10 +503,10 @@ exprFVs' take_funs e
   = snd $ runState (mapExpM_aux return on_exp_action e) S.empty
   where on_exp_action x = on_exp (unExp x) >> return x
         -- NB: We collect the state in a bottom-up fashion
-        on_exp (EVar nm)            = modify (\s -> S.union (S.singleton nm) s)
-        on_exp (EFor x _e1 _e2 _e3) = modify (\s -> s S.\\ S.singleton x)
-        on_exp (ELet x _e1 _e2)     = modify (\s -> s S.\\ S.singleton x)
-        on_exp (ELetRef x _e1 _e2)  = modify (\s -> s S.\\ S.singleton x)
+        on_exp (EVar nm)              = modify (\s -> S.union (S.singleton nm) s)
+        on_exp (EFor _ x _e1 _e2 _e3) = modify (\s -> s S.\\ S.singleton x)
+        on_exp (ELet x _e1 _e2)       = modify (\s -> s S.\\ S.singleton x)
+        on_exp (ELetRef x _e1 _e2)    = modify (\s -> s S.\\ S.singleton x)
         on_exp (EIter x v _e1 _e2) 
           = do { modify (\s -> s S.\\ S.singleton x)
                ; modify (\s -> s S.\\ S.singleton v) }
@@ -606,11 +622,11 @@ mapExpM_aux on_ty f e = go e
                    e2' <- go e2
                    f (eIter loc nfo nm1 nm2 e1' e2')
 
-              EFor nm1 e1 e2 e3 ->
+              EFor ui nm1 e1 e2 e3 ->
                 do e1' <- go e1                        
                    e2' <- go e2
                    e3' <- go e3 
-                   f (eFor loc nfo nm1 e1' e2' e3')
+                   f (eFor loc nfo ui nm1 e1' e2' e3')
 
 
               EWhile e1 e2 ->
@@ -841,7 +857,7 @@ is_side_effecting e = case unExp e of
 
   EArrWrite e1 e2 _r e3 -> True
   EIter _ _ e1 e2       -> any is_side_effecting [e1,e2]
-  EFor _ e1 e2 e3       -> any is_side_effecting [e1,e2,e3]
+  EFor _ _ e1 e2 e3     -> any is_side_effecting [e1,e2,e3]
   EWhile e1 e2          -> any is_side_effecting [e1,e2]
 
   ELet nm e1 e2            -> any is_side_effecting [e1,e2]

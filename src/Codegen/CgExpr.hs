@@ -237,7 +237,7 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
         return [cexp|UNIT|]
 
 
-    go t (EFor k estart elen ebody) = do
+    go t (EFor _ui k estart elen ebody) = do
 
         k_new <- freshName (name k) 
 

@@ -105,8 +105,8 @@ runAutoLUT dflags _ c = autolutC c
         go (While e c) =
             While <$> autolutE e <*> autolutC c
 
-        go (Times e1 e2 v c) =
-            Times <$> autolutE e1 <*> autolutE e2 <*> pure v <*> autolutC c
+        go (Times ui e1 e2 v c) =
+            Times ui <$> autolutE e1 <*> autolutE e2 <*> pure v <*> autolutC c
 
         go (Repeat n c) =
             Repeat n <$> autolutC c
@@ -188,13 +188,13 @@ runAutoLUT dflags _ c = autolutC c
                                    Just doc -> doc
                 EIter i j <$> autoE e1 <*> autoE e2
 
-            go (EFor i e1 e2 e3) = do
+            go (EFor ui i e1 e2 e3) = do
                 verbose dflags $ text "Cannot autolut loop:" </> nest 4 (ppr e0 <> line) </>
                                  nest 4 (text "Variable ranges:" </> pprRanges ranges) </>
                                  case pprLUTStats dflags [] ranges e0 of
                                    Nothing  -> mempty
                                    Just doc -> doc
-                EFor i <$> autoE e1 <*> autoE e2 <*> autoE e3
+                EFor ui i <$> autoE e1 <*> autoE e2 <*> autoE e3
 
             go (EWhile e1 e2) = do
                 verbose dflags $ text "Cannot autolut loop:" </> nest 4 (ppr e0 <> line) </>

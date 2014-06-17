@@ -101,7 +101,7 @@ data Comp0 a b where
   While      :: Exp b -> Comp a b -> Comp0 a b
 
   -- times N count_var computation
-  Times      :: Exp b -> Exp b -> Name -> Comp a b -> Comp0 a b
+  Times      :: UnrollInfo -> Exp b -> Exp b -> Name -> Comp a b -> Comp0 a b
   -- First is starting value, second is length
 
   -- This will replace times eventually
@@ -204,8 +204,8 @@ cUntil loc a e c = MkComp (Until e c) loc a
 cWhile :: Maybe SourcePos -> a -> Exp b -> Comp a b -> Comp a b 
 cWhile loc a e c = MkComp (While e c) loc a
 
-cTimes :: Maybe SourcePos -> a -> Exp b -> Exp b -> Name -> Comp a b -> Comp a b
-cTimes loc a es elen x c = MkComp (Times es elen x c) loc a
+cTimes :: Maybe SourcePos -> a -> UnrollInfo -> Exp b -> Exp b -> Name -> Comp a b -> Comp a b
+cTimes loc a ui es elen x c = MkComp (Times ui es elen x c) loc a
 
 cRepeat :: Maybe SourcePos -> a -> Maybe (Int,Int) -> Comp a b -> Comp a b
 cRepeat loc a ann c = MkComp (Repeat ann c) loc a
@@ -484,7 +484,7 @@ compFVs c = case unComp c of
   Take e          -> exprFVs e
   Until e c1      -> exprFVs e `S.union` compFVs c1
   While e c1      -> exprFVs e `S.union` compFVs c1
-  Times es elen nm c1   
+  Times ui es elen nm c1   
      -> exprFVs es `S.union` exprFVs elen `S.union` compFVs c1 S.\\ (S.singleton nm) 
   Repeat _ c1     -> compFVs c1  
   VectComp _ c1   -> compFVs c1 
@@ -530,7 +530,7 @@ compSize c = case unComp c of
   Take e           -> 1
   Until e c1        -> 1 + compSize c1
   While e c1        -> 1 + compSize c1
-  Times e1 e2 nm c1 -> 1 + compSize c1 
+  Times ui e1 e2 nm c1 -> 1 + compSize c1 
   Repeat _ c1    -> compSize c1  
   VectComp _ c1  -> compSize c1
   Map _ e        -> 1
@@ -635,11 +635,11 @@ mapCompM_aux on_ty on_exp on_cty g c = go c
                    do { e' <- on_exp e
                       ; c1' <- go c1
                       ; g (cWhile cloc cnfo e' c1') }
-                 Times e elen nm c1 -> 
+                 Times ui e elen nm c1 -> 
                    do { e' <- on_exp e
                       ; elen' <- on_exp elen
                       ; c1' <- go c1
-                      ; g (cTimes cloc cnfo e' elen' nm c1') }
+                      ; g (cTimes cloc cnfo ui e' elen' nm c1') }
 
                  Repeat wdth c1 ->
                    do { c1' <- go c1

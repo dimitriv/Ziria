@@ -285,7 +285,7 @@ mkTimes elen@(MkExp (EVal (VInt 1)) eloc einfo) nm comp
     in head $ substExpComp (nm, ezero) comp
 mkTimes elen nm comp 
   = let ezero = MkExp (EVal (VInt 0)) (compLoc comp) (info elen)
-    in MkComp (Times ezero elen nm comp) (compLoc comp) (compInfo comp)
+    in MkComp (Times AutoUnroll ezero elen nm comp) (compLoc comp) (compInfo comp)
 
 
 exp0             = toExp tint (EVal (VInt 0))
@@ -293,7 +293,7 @@ exp1             = toExp tint (EVal (VInt 1))
 expN n           = toExp tint (EVal (VInt n))
 assign e1 e2     = toExp TUnit (EAssign e1 e2)
 eif e1 e2 e3     = toExp (info e2) (EIf e1 e2 e3)
-efor e1 e2 e3 e4 = toExp (info e4) (EFor e1 e2 e3 e4)
+efor e1 e2 e3 e4 = toExp (info e4) (EFor AutoUnroll e1 e2 e3 e4)
 eeq e1 e2        = toExp TBool (EBinOp Eq e1 e2)
 eseq e1 e2       = toExp (info e2) (ESeq e1 e2)
 einc e           = assign e (toExp tint (EBinOp Add e (expN 0)))

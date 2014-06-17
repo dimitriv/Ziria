@@ -253,7 +253,7 @@ shouldLUT dflags locals ranges e = flip evalLM s0 $ do
         -- making sure that we LUT loops more often
         modify $ \s -> s { lmOpCount = max (lmOpCount s) (mIN_OP_COUNT+1) }
 
-    go (EFor _ e1 e2 e3) = do
+    go (EFor _ _ e1 e2 e3) = do
         modify $ \s -> s { lmHasLoop = True }
         should e1 >> should e2 >> should e3
         -- making sure that we LUT loops more often

@@ -62,7 +62,7 @@ blinkReservedNames
     , "until", "seq", "do", "external", "map", "filter", "fun"
 
       -- Expression language keywords
-    , "return", "length", "bperm", "for", "lut", "print"
+    , "return", "length", "bperm", "for", "lut", "print", "unroll", "nounroll"
     , "println", "error", "true", "false", "'0", "'1", "while"
 
       -- Types
@@ -438,6 +438,13 @@ intervalParser
 
 type StmtCont = Maybe SrcExp -> SrcExp 
 
+parseFor :: BlinkParser () -> BlinkParser UnrollInfo
+parseFor for_reserved
+  = choice [ for_reserved >> return AutoUnroll 
+           , reserved "unroll"   >> for_reserved >> return Unroll
+           , reserved "nounroll" >> for_reserved >> return NoUnroll 
+           ]
+
 parseStmt :: BlinkParser StmtCont
 parseStmt
   = do { startPos <- getPosition
@@ -461,7 +468,7 @@ parseStmt
                      in return k
                }
 
-          , do { reserved "for"
+          , do { ui <- parseFor (reserved "for")
                ; k <- parseVarBind
                ; reserved "in"
 
@@ -469,7 +476,7 @@ parseStmt
 
                ; ebody <- parseStmtBlock <?> "for loop body"
                ; return $ 
-                 mkoptseq p (eFor (Just p) () k estart elen ebody)
+                 mkoptseq p (eFor (Just p) () ui k estart elen ebody)
                }
 
           , do { reserved "while"
