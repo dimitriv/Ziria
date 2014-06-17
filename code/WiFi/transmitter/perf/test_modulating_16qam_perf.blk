@@ -17,6 +17,7 @@
 -- permissions and limitations under the License.
 --
 --
+#define MANUAL_VECT
 
 #include "../modulating.blk"
 

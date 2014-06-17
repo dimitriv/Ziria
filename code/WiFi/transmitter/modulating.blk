@@ -24,7 +24,11 @@ let comp modulate_bpsk () =
 var outa : arr[2] complex16;
 var outi : arr[8] int16;
 
+#ifdef MANUAL_VECT
   repeat [8,8] { 
+#else
+  repeat {
+#endif
     (x : bit) <- take;
     emit if (x == '0) then complex16{re=-bpsk_mod_11a; im=0}
                       else complex16{re=bpsk_mod_11a; im=0};
@@ -69,7 +73,11 @@ seq{
     outa[3] := complex16{re=qpsk_mod_11a;im=-qpsk_mod_11a}
   }; 
 
-  repeat [8, 4] seq{
+#ifdef MANUAL_VECT
+  repeat [8, 4] {
+#else
+  repeat {
+#endif
     (x : arr[2] bit) <- takes 2;
     emit outa[int32(modulate_qpsk_lut(x))];
   }
@@ -86,7 +94,11 @@ let comp modulate_16qam () =
   var im:int16;
   var outc : complex16; 
 
+#ifdef MANUAL_VECT
   repeat [8, 2] {
+#else
+  repeat {
+#endif
     x <- takes 4;
     do {
       if (x[0] == '0 && x[1] == '0) then {
@@ -132,8 +144,11 @@ let comp modulate_64qam () =
   var outc : complex16; 
 
 
+#ifdef MANUAL_VECT
   repeat [12, 2] {
-
+#else
+  repeat {
+#endif
     x <- takes 6;
     do {
 

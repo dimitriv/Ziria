@@ -38,10 +38,7 @@ let comp DecodeInfinite(h : struct HeaderInfo) =
   -- +8 is for CRC (4 bits but byte aligned)
   DemapLimit(0) 
   >>> {if (h.modulation == M_BPSK) then 
-       {
-          do{println "BPSK"};
           DemapBPSK() >>> DeinterleaveBPSK() 
-       }
        else 
           if (h.modulation == M_QPSK) then 
              DemapQPSK() >>> DeinterleaveQPSK() 
