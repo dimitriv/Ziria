@@ -69,7 +69,7 @@ ppTypedName nm =
     Just ty -> parens $ ppName nm <+> text ":" <+> ppTy ty
     Nothing -> ppName nm
 
-ppComp0 ppComp printtypes ignorelet c =
+ppComp0 ppComp printtypes ignorelet ignoreexp c =
   case c of
     Var x ->
       ppName x
@@ -103,27 +103,27 @@ ppComp0 ppComp printtypes ignorelet c =
          text "in" $$ ppComp c2
 
     LetStruct sdef c1
-      | ignorelet
+      | ignorelet || ignoreexp
       -> ppComp c1
       | otherwise
       -> text "struct " <+> text (struct_name sdef) <+> text "=" <+> (hsep $ punctuate (text ",") (map (\(f,t) -> text f <> colon <+> ppTy t) (struct_flds sdef))) $$
          text "in" $$ ppComp c1
 
     LetE x e c
-      | ignorelet 
+      | ignorelet || ignoreexp
       -> ppComp c
       | otherwise
       -> text "let" <+> ppTypedName x <+> text "=" <+> ppExp e $$
          text "in" $$ ppComp c
     LetFun _ fn c 
-      | ignorelet 
+      | ignorelet || ignoreexp
       -> ppComp c
       | otherwise 
       -> text "let" <+> ppFun fn $$
          text "in" $$
          ppComp c
-    LetExternal _ fn c
-      | ignorelet
+    LetExternal _ fn c 
+      | ignorelet || ignoreexp
       -> ppComp c
       | otherwise
       -> text "let external" <+> ppFun fn $$
@@ -134,18 +134,21 @@ ppComp0 ppComp printtypes ignorelet c =
       -> ppComp c2
       | otherwise
       -> text "let comp" <+> ppName f <+> parens (ppCompParams params) <+> text "=" $$
-           nest nestingDepth (ppDecls locls) $$
+           (if not ignoreexp then (nest nestingDepth (ppDecls locls)) else empty) $$
            nest nestingDepth (ppComp c1) $$
          text "in" $$
          ppComp c2
     Call f eargs ->
       ppName f <+> parens (ppEs ppCallArg comma eargs)
-    Emit e ->
-      text "emit" <+> ppExp e
-    Emits e ->
-      text "emits" <+> ppExp e 
-    Return e ->
-      text "return" <+> ppExp e
+    Emit e
+      | ignoreexp -> text "emit ..."
+      | otherwise -> text "emit" <+> ppExp e
+    Emits e
+      | ignoreexp -> text "emits ..."
+      | otherwise -> text "emits" <+> ppExp e 
+    Return e
+      | ignoreexp -> text "return ..."
+      | otherwise -> text "return" <+> ppExp e
     Interleave c1 c2 ->
       ppComp c1 <+> text "<|>" <+> ppComp c2
     Branch e c1 c2 ->
@@ -155,7 +158,7 @@ ppComp0 ppComp printtypes ignorelet c =
     Take1 ->
       text "take" 
     Take e ->
-      text "takes"
+      text "takes" <+> ppExp e
     Until e c ->
       text "until" <+> parens (ppExp e) <+> ppComp c
     While e c ->
@@ -197,13 +200,13 @@ ppComp0 ppComp printtypes ignorelet c =
 ppCallArg (CAExp e)  = ppExp e
 ppCallArg (CAComp c) = ppComp c
 
-ppComp = ppComp0 ppComp False False . unComp
+ppComp = ppComp0 ppComp False False False . unComp
 
-ppCompPipeline = ppComp0 ppCompPipeline False True . unComp
+ppCompPipeline = ppComp0 ppCompPipeline False True False . unComp
 
 ppCompAst cmp = 
    brackets (text $ compShortName cmp) <+>
-   ppComp0 (\c -> brackets (text $ compShortName c) <+> ppComp c) False False (unComp cmp)
+   ppComp0 (\c -> brackets (text $ compShortName c) <+> ppComp c) False False False (unComp cmp)
 
 ppCompLoc c =
   (case compLoc c of
@@ -217,7 +220,7 @@ ppProg p =
       ppComp c
 
 ppCompTyped x = 
-  let p1 = ppComp0 ppCompTyped True False $ unComp x
+  let p1 = ppComp0 ppCompTyped True False False $ unComp x
       pty = ppCTy (compInfo x)
   in parens (p1 <+> text "::" <+> pty) 
 
@@ -229,7 +232,7 @@ ppCompParams params =
        ppName x <> text ":" <+> ppCParamTy ty <> comma <+> ppCompParams params'
 
 ppCompTypedVect x =
-  let p1  = ppComp0 ppCompTypedVect False True $ unComp x
+  let p1  = ppComp0 ppCompTypedVect False False True $ unComp x
       cty  = compInfo x
       inty  = inTyOfCTyBase cty
       yldty = yldTyOfCTyBase cty
@@ -262,7 +265,7 @@ instance Show CTy where
   show cty = render $ ppCTy cty
 
 instance Show (Comp0 a b) where
-  show c = render $ ppComp0 ppComp False False c 
+  show c = render $ ppComp0 ppComp False False False c 
 
 instance Show (Comp a b) where
   show = render . ppComp
