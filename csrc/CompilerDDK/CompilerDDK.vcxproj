@@ -42,7 +42,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <NMakeOutput>$(ProjectDir)target\i386\CompilerDDK.exe</NMakeOutput>
     <NMakePreprocessorDefinitions>WIN64;_DEBUG;$(NMakePreprocessorDefinitions);SORA_PLATFORM;USER_MODE</NMakePreprocessorDefinitions>
-    <IncludePath>$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSDK_IncludePath);$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(DDK_INC_PATH)</IncludePath>
+    <IncludePath>$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSDK_IncludePath);C:\SoraSDK2.0\inc\brick;C:\SoraSDK2.0\inc;C:\SoraSDK2.0\src\bb\dot11a;C:\SoraSDK2.0\src\bb\dot11a\inc;C:\SoraSDK2.0\src\bb\brick11\src;C:\SoraSDK2.0\src\util\src;$(DDK_INC_PATH)</IncludePath>
     <NMakeBuildCommandLine>$(SolutionDir)compile.bat $(ProjectDir) /b chk x86 WXP</NMakeBuildCommandLine>
     <NMakeReBuildCommandLine>$(SolutionDir)compile.bat $(ProjectDir) /r chk x86 WXP</NMakeReBuildCommandLine>
     <NMakeCleanCommandLine>echo $(ProjectDir)</NMakeCleanCommandLine>
@@ -52,7 +52,7 @@
     <NMakePreprocessorDefinitions>WIN32;NDEBUG;$(NMakePreprocessorDefinitions);SORA_PLATFORM</NMakePreprocessorDefinitions>
     <NMakeBuildCommandLine>$(SolutionDir)compile.bat $(ProjectDir) /b fre x64 WIN7</NMakeBuildCommandLine>
     <NMakeReBuildCommandLine>$(SolutionDir)compile.bat $(ProjectDir) /r fre x64 WIN7</NMakeReBuildCommandLine>
-    <IncludePath>$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSDK_IncludePath);C:\SoraSDK2.0\inc\brick;C:\SoraSDK2.0\inc;C:\SoraSDK2.0\src\bb\dot11a;C:\SoraSDK2.0\src\bb\dot11a\inc;C:\SoraSDK2.0\src\bb\brick11\src;C:\SoraSDK2.0\src\util\src</IncludePath>
+    <IncludePath>$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSDK_IncludePath);C:\SoraSDK2.0\inc\brick;C:\SoraSDK2.0\inc;C:\SoraSDK2.0\src\bb\dot11a;C:\SoraSDK2.0\src\bb\dot11a\inc;C:\SoraSDK2.0\src\bb\brick11\src;C:\SoraSDK2.0\src\util\src;$(DDK_INC_PATH)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup>
   </ItemDefinitionGroup>
