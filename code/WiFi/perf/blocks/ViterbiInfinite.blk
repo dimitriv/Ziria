@@ -29,17 +29,17 @@ let comp ViterbiInfinite(rate:int) =
   var itercnt:int := 0;
 
 
- do {viterbi_brick_init(24000, int16(rate))};
+ do {viterbi_brick_init_fast(24000, int16(rate))};
  repeat [48, 8] {
 
     (svalue:arr[48] int8) <- takes 48;
    
      do{
-       nOutput := viterbi_brick_decode(svalue, outViterbi);
+       nOutput := viterbi_brick_decode_fast(svalue, outViterbi);
 
        itercnt := itercnt+1;
        if (itercnt > 1500) then {
-         viterbi_brick_init(24000, int16(rate));
+         viterbi_brick_init_fast(24000, int16(rate));
 	 itercnt := 0
        }
 

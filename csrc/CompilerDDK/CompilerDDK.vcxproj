@@ -52,7 +52,7 @@
     <NMakePreprocessorDefinitions>WIN32;NDEBUG;$(NMakePreprocessorDefinitions);SORA_PLATFORM</NMakePreprocessorDefinitions>
     <NMakeBuildCommandLine>$(SolutionDir)compile.bat $(ProjectDir) /b fre x64 WIN7</NMakeBuildCommandLine>
     <NMakeReBuildCommandLine>$(SolutionDir)compile.bat $(ProjectDir) /r fre x64 WIN7</NMakeReBuildCommandLine>
-    <IncludePath>$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSDK_IncludePath);C:\SoraSDK1.8\inc\brick;C:\SoraSDK1.8\inc</IncludePath>
+    <IncludePath>$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSDK_IncludePath);C:\SoraSDK2.0\inc\brick;C:\SoraSDK2.0\inc;C:\SoraSDK2.0\src\bb\dot11a;C:\SoraSDK2.0\src\bb\dot11a\inc;C:\SoraSDK2.0\src\bb\brick11\src;C:\SoraSDK2.0\src\util\src</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup>
   </ItemDefinitionGroup>
@@ -72,6 +72,7 @@
     <ClCompile Include="..\params.c" />
     <ClCompile Include="..\sora_ext_lib.c" />
     <ClCompile Include="..\sora_ext_visual.c" />
+    <ClCompile Include="..\sora_ext_viterbi.c" />
     <ClCompile Include="..\sora_ip.c" />
     <ClCompile Include="..\sora_radio.c" />
     <ClCompile Include="..\sora_threads.c" />

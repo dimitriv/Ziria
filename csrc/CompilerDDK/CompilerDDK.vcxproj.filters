@@ -75,6 +75,9 @@
     <ClCompile Include="..\buf_numerics8.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\sora_ext_viterbi.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\bit.h">
