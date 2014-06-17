@@ -294,11 +294,11 @@ computeCardTop verbose ct = computeCard ct
                ; let card = mkIterCard Nothing (snd $ compInfo c1')
                ; return $ MkComp (While e c1') loc (cty,card) } -- Don't know how many times to iterate
 
-        computeCard0 (Times e elen x c1) 
+        computeCard0 (Times ui e elen x c1) 
           = do { c1' <- computeCard c1
                ; let card1 = snd $ compInfo c1'
                      card  = mkIterCard (getInt_maybe $ unExp e) card1 
-               ; return $ MkComp (Times e elen x c1') loc (cty,card) }
+               ; return $ MkComp (Times ui e elen x c1') loc (cty,card) }
           where getInt_maybe (EVal (VInt n)) = Just n
                 getInt_maybe _ = Nothing
 

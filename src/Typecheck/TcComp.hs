@@ -445,7 +445,7 @@ tyCheckComp c
                 }
 
 
-           Times e elen x c1 ->
+           Times ui e elen x c1 ->
              do { e' <- tyCheckExpr e
                 ; elen' <- tyCheckExpr elen
                 ; let t = info e'
@@ -456,7 +456,7 @@ tyCheckComp c
                          ; unify cloc (info e') ti
                          ; unify cloc (info elen') ti
                          ; let cTy = CTBase (TComp v a b)
-                         ; return $ cTimes cloc cTy e' elen' x c1'
+                         ; return $ cTimes cloc cTy ui e' elen' x c1'
                          }
                     CTBase (TTrans a b) ->
                       raiseErrNoVarCtx cloc $ 

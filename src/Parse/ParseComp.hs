@@ -100,7 +100,8 @@ compParser =
 
                   ; reserved "do"  
                   ; c <- compParser
-                  ; return (toCompPos () startPos $ Times (toExpPos () ePos (EVal (VInt 0))) 
+                  ; return (toCompPos () startPos $ Times AutoUnroll 
+                                                          (toExpPos () ePos (EVal (VInt 0))) 
                                                           (toExpPos () ePos e) (namePos x ePos) c)
                   }
            <|> myfail "times <exp> do <comp>"               

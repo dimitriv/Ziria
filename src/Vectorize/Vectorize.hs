@@ -541,14 +541,14 @@ computeVectTop verbose c =
             -> return [(eraseComp comp, NoVect)] 
 
 
-          (Times e elen x c1)
+          (Times ui e elen x c1)
             | SimplCard (Just cin) (Just cout) <- snd (compInfo c1)
             , isVectorizable tyin || cin == 0
             , isVectorizable tyout || cout == 0
             -> do { -- when verbose $ vecMIO (putStrLn "Times")
                   ; let sf_down = compVectScaleFactDn cin cout 
                   ; vss <- doVectorizeComp c1 sf_down
-                  ; let downvects = [ (MkComp (Times (eraseExp e) (eraseExp elen) x vc) loc (), vres) 
+                  ; let downvects = [ (MkComp (Times ui (eraseExp e) (eraseExp elen) x vc) loc (), vres) 
                                     | (vc,vres) <- vss
                                     ]
 

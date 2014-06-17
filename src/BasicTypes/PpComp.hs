@@ -161,10 +161,11 @@ ppComp0 ppComp printtypes ignorelet c =
     While e c ->
       text "while" <+> parens (ppExp e) <+> ppComp c
 
-    Times estart elen ix c ->
-      text "for" <+>
-        ppIx ix <+> text "in" <+> brackets (ppExp estart <> comma <+> ppExp elen) $$ 
-        nest nestingDepth (ppComp c)
+    Times ui estart elen ix c ->
+      ppUI ui $ 
+       text "for" <+>
+         ppIx ix <+> text "in" <+> brackets (ppExp estart <> comma <+> ppExp elen) $$ 
+         nest nestingDepth (ppComp c)
 
     Repeat wdth c ->
       text "repeat" <> myFromMaybe (\n -> brackets (int (fst n) <> text "," <> int (snd n))) empty wdth <+> 

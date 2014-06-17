@@ -250,9 +250,9 @@ doVectorizeCompDn comp cin cout (din,dout)
                    do { c' <- go c
                       ; return $ MkComp (While (eraseExp e) c') loc () } 
 
-                (Times e elen x c1) -> 
+                (Times ui e elen x c1) -> 
                    do { c1' <- go c1
-                      ; return $ MkComp (Times (eraseExp e) (eraseExp elen) x c1') loc () } 
+                      ; return $ MkComp (Times ui (eraseExp e) (eraseExp elen) x c1') loc () } 
 
 
                 ReadSrc mty  -> return $ MkComp (ReadSrc mty)  loc ()

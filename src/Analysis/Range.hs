@@ -225,7 +225,7 @@ erange (MkExp (EIter ix x earr ebody) _ _) = do
     erange ebody
     return RangeTop
 
-erange (MkExp (EFor ix estart elen ebody) _ _) = do
+erange (MkExp (EFor _ui ix estart elen ebody) _ _) = do
     r1 <- erange estart
     r2 <- erange elen
     setRange ix (r1 `join` (r2-1))

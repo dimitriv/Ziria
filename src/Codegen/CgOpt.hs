@@ -999,7 +999,7 @@ codeGenComp dflags comp k =
         in codeGenFixpoint (mkWhile dflags emptyStm e c1 emptyStm) k
 
 
-    go cb@(MkComp (Times estart elen nm c1@(MkComp { compInfo = CTBase cty_c1})) csp (CTBase cty0)) = do
+    go cb@(MkComp (Times _ui estart elen nm c1@(MkComp { compInfo = CTBase cty_c1})) csp (CTBase cty0)) = do
         -- @nm@ scopes over @e@ and @c1@, so we need to gensym here to make sure
         -- it maps to a unique C identifier and then bring it into scope below
         -- when we generate code for @e@ and @c1@. We also have to make sure we

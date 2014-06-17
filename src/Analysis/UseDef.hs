@@ -216,7 +216,7 @@ varUseDefs ranges e =
         insertUseDefs x  vs_earr
         (Set.delete ix . Set.delete x) <$> go ebody
 
-    go (MkExp (EFor ix estart elen ebody) _ _) =
+    go (MkExp (EFor _ ix estart elen ebody) _ _) =
         extendVars [(ix, tint32)] $ do
         vs_ix <- (<>) <$> go estart <*> go elen
         insertUseDefs ix vs_ix

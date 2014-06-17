@@ -100,22 +100,22 @@ whileKont p e = cWhile (Just p) () e
 
 timesPref 
   = choice [ do { p <- getPosition 
-                ; reserved "times"
+                ; ui <- parseFor (reserved "times")
                 ; e <- parseExpr
                 ; let nm = mkNameFromPos (Just "_tmp_count") p (Just tint)
-                ; return (eVal (Just p) () (VInt 0), e, nm)
+                ; return (eVal (Just p) () (VInt 0), e, nm, ui)
                 }
            , do { p <- getPosition
-                ; reserved "for"
+                ; ui <- parseFor (reserved "for")
                 ; k <- parseVarBind
                 ; reserved "in"
                 ; (estart,elen) <- brackets genIntervalParser
-                ; return (estart,elen,k)
+                ; return (estart,elen,k,ui)
                 }
            ] <?> "times or for"
 
-timesKont p (estart,elen,cntnm) 
-  = cTimes (Just p) () estart elen cntnm
+timesKont p (estart,elen,cntnm,ui) 
+  = cTimes (Just p) () ui estart elen cntnm
 
 
 mkPar parseop pi 

@@ -95,7 +95,7 @@ evalArrInt0 other = return Nothing
 
 evalArrInitLoop :: (Name, IOArray Int Int) -> Exp Ty -> IO (Maybe ())
 evalArrInitLoop (nm,arr) exp 
-  | EFor k elow esize ebody <- unExp exp
+  | EFor _ k elow esize ebody <- unExp exp
   , EVal (VInt low) <- unExp elow
   , EVal (VInt siz) <- unExp esize
   , EArrWrite earr eind LISingleton eval <- unExp ebody

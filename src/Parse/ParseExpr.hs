@@ -464,7 +464,7 @@ parseStmt1 =
          ; return $
              toExpPos
              () startPos
-             (EFor k e1 e2 (compose es2))
+             (EFor AutoUnroll k e1 e2 (compose es2))
          })
   <|> do { startPos <- getPosition
          ; reserved "for"

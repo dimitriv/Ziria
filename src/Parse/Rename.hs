@@ -117,13 +117,13 @@ renameExpr e
                  return $ eIter eloc enfo nm1 { uniqId = u1 } 
                                           nm2 { uniqId = u2 } e1' e2'
          }
-    EFor nm1 e1 e2 e3   ->
+    EFor ui nm1 e1 e2 e3   ->
       do e1' <- renameExpr e1                        
          e2' <- renameExpr e2
          u1 <- newUniq
          extendUniqEnv nm1 u1 $ 
            do { e3' <- renameExpr e3                            
-              ; return $ eFor eloc enfo nm1 { uniqId = u1 } e1' e2' e3'
+              ; return $ eFor eloc enfo ui nm1 { uniqId = u1 } e1' e2' e3'
               }
     EWhile e1 e2 -> 
       do e1' <- renameExpr e1
@@ -354,12 +354,12 @@ renameComp c =
          ; return $ cWhile cloc cnfo e' c''
          }
 
-    Times e elen nm c' ->
+    Times ui e elen nm c' ->
       do { e'  <- renameExpr e
          ; elen' <- renameExpr elen
          ; u <- newUniq
          ; c'' <- extendUniqEnv nm u $ renameComp c' 
-         ; return $ cTimes cloc cnfo e' elen' nm { uniqId = u } c''
+         ; return $ cTimes cloc cnfo ui e' elen' nm { uniqId = u } c''
          }
     Repeat wdth c' ->
       do { c'' <- renameComp c'

@@ -480,10 +480,10 @@ doVectorizeCompForce comp (finalin,finalout)
                     (While e c) -> 
                        do { c' <- go c
                           ; return $ cWhile loc () (eraseExp e) c' } 
-                    (Times e elen x c1) -> 
+                    (Times ui e elen x c1) -> 
                        do { c1' <- go c1
                           ; return $ 
-                            cTimes loc () (eraseExp e) (eraseExp elen) x c1' } 
+                            cTimes loc () ui (eraseExp e) (eraseExp elen) x c1' } 
 
                     (ReadSrc mty)  -> return $ cReadSrc loc () mty
                     (WriteSnk mty) -> return $ cWriteSnk loc () mty

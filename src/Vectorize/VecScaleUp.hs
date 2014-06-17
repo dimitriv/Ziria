@@ -226,7 +226,7 @@ doVectorizeCompUp comp cin cout (min,mout)
                 (While {}) -> 
                     vecMFail "BUG: While is not a simple computer!" 
 
-                (Times _ _ x c1) -> 
+                (Times _ _ _ x c1) -> 
                     vecMFail "BUG: Times is not a simple computer!" 
 
                 (ReadSrc mty)  

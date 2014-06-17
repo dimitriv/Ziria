@@ -32,7 +32,8 @@
            "if" "then" "else" "external" "comp"
            "lut" "var"))
 
-(setq blink-functions '("repeat" "times" "until" "for" "seq" "do" "return"
+(setq blink-functions '("repeat" "times" "until" "unroll" "nounroll"
+                        "for" "seq" "do" "return"
                         "bperm" "read" "write" "emit" "take" "takes" 
                     "while" "emits" "map" "filter" "print" "println" "error"))
 
