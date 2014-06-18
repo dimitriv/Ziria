@@ -169,7 +169,7 @@ int main(int argc, char **argv) {
 
 #ifdef SORA_PLATFORM
 
-BOOLEAN go_thread( void * pParam ) 
+BOOLEAN __stdcall go_thread(void * pParam)
 {
 	thread_info *ti = (thread_info *) pParam;
 
@@ -183,7 +183,7 @@ BOOLEAN go_thread( void * pParam )
 /* Returns the numer of threads */
 int SetUpThreads(PSORA_UTHREAD_PROC * User_Routines)
 {
-	User_Routines[0] = go_thread;
+	User_Routines[0] = (PSORA_UTHREAD_PROC) go_thread;
 	return 1;
 }
 

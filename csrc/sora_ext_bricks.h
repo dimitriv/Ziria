@@ -187,7 +187,7 @@ BrickViterbiContext BrickViterbiSig11aCtx;
 
 
 
-static inline
+static inline int
 CreateViterbiGraph(ViterbiContext *ctx)
 {
 	CREATE_BRICK_SINK  (output, BrickSink, BrickViterbiCtx );
@@ -205,7 +205,7 @@ CreateViterbiGraph(ViterbiContext *ctx)
 
 
 
-static inline
+static inline int 
 CreateViterbiSig11aGraph(ViterbiContext *ctx)
 {
 	CREATE_BRICK_SINK(outputSig11a, BrickSinkSig11a, BrickViterbiSig11aCtx);

@@ -27,6 +27,7 @@ typedef enum __GetStatus {
 } GetStatus;
 
 
+
 void init_getbit();
 GetStatus buf_getbit(Bit *x);
 GetStatus buf_getarrbit(BitArrPtr x, unsigned int vlen);

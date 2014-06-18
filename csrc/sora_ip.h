@@ -17,6 +17,8 @@
    permissions and limitations under the License.
 */
 #pragma once
+
+// BOZIDAR DEBUG
 #include <winsock2.h> // ws2_32.lib required
 #include <ws2tcpip.h>
 

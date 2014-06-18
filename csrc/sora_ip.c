@@ -16,11 +16,11 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 */
-#include "sora.h"
 #include <winsock2.h> // ws2_32.lib required
 #include <ws2tcpip.h>
 #include <conio.h>
 
+#include "sora.h"
 #include "sora_ip.h"
 
 HANDLE hUplinkThread;
@@ -201,7 +201,7 @@ BOOLEAN DownlinkRxProc(void* param)
 	return TRUE;
 }
 
-BOOLEAN UplinkTxProc(void* param)
+BOOLEAN __stdcall UplinkTxProc(void* param)
 {
 	UCHAR buf[ETHERNET_MTU];
 	UINT len = ReadFragment(buf, sizeof(buf));
@@ -213,7 +213,7 @@ BOOLEAN UplinkTxProc(void* param)
     return TRUE;
 }
 
-BOOLEAN UplinkRxProc(void* param)
+BOOLEAN __stdcall UplinkRxProc(void* param)
 {
 	UCHAR buf[ETHERNET_MTU];
 	int len = recvfragment(ConnectSocket, buf);

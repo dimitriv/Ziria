@@ -16,25 +16,19 @@
 @REM permissions and limitations under the License.
 
 SET tempcurdir=%cd%
-REM call C:\WinDDK\7600.16385.1\bin\setenv.bat C:\WinDDK\7600.16385.1\ fre x64 WIN7
-call %WINDDK_ROOT%\bin\setenv.bat %WINDDK_ROOT%\ fre x64 WIN7
-
+call "C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\vcvarsall.bat" x86
 cd %tempcurdir%
-REM build with /c rebuilds everything. But we don't need it anymore so removed
-REM build /c /z /w
-copy sources-noinline sources
 
 REM We need to clear MAKEFLAGS from make (http://www.cygwin.com/ml/cygwin/1999-10/msg00354.html)
 set MAKEFLAGS=
 
-build /z /w
+msbuild 
 
 if %errorlevel% NEQ 0 (
 set errorlev=1
-del target\amd64\compilerddk.exe
+del Debug\CompilerVS13.exe 
 ) else (
 set errorlev=0
 )
 exit /B %errorlev%
 
-REM target\amd64\compilerddk.exe %1 %2 %3 %4 %5 %6 %7 %8

@@ -24,9 +24,10 @@
 #include "params.h"
 #include "types.h"
 #include "buf.h"
+#include "wpl_alloc.h"
 
 /* A buffer of elements, each element of size chunk_siz */
-static void *chunk_input_buffer;
+static char *chunk_input_buffer;
 static unsigned int chunk_input_siz;
 static unsigned int chunk_input_entries;
 static unsigned int chunk_input_idx     = 0;
@@ -39,39 +40,10 @@ static unsigned int chunk_max_dummy_samples;
 static void (* parse_chunk_dbg)(char *buf, void *chunk);
 static void (* print_chunk_dbg)(FILE *f, void *chunk);
 
-void init_getchunk(unsigned int sz)
-{
-        chunk_input_siz = sz;
-
-	if (Globals.inType == TY_DUMMY)
-	{
-		chunk_max_dummy_samples = Globals.dummySamples;
-	}
-
-	if (Globals.inType == TY_FILE)
-	{
-		unsigned int sz; 
-		char *filebuffer;
-		try_read_filebuffer(Globals.inFileName, &filebuffer, &sz);
-
-		// How many bytes the file buffer has * sizeof chunk should be more than enough
-		chunk_input_buffer = try_alloc_bytes(sz * chunk_input_siz);
-
-		if (Globals.inFileMode == MODE_BIN)
-		{ 
-	   	  memcpy(chunk_input_buffer, (void *) filebuffer, sz);
-		  chunk_input_entries = sz / chunk_input_siz;
-                }
- 		else 
-		{
-		  num_input_entries = parse_dbg_int32(filebuffer, num_input_buffer);
-		}
-	}
-}
 
 
 
-unsigned int parse_dbg_chunk(char *dbg_buf, void *target)
+unsigned int parse_dbg_byte(char *dbg_buf, char *target)
 {
 	
   char *s = NULL;
@@ -94,7 +66,7 @@ unsigned int parse_dbg_chunk(char *dbg_buf, void *target)
   }
 
   //  copy a chunk onto target 
-  memcpy(target,&val,chunk_input_siz);
+  memcpy((void*)target,&val,chunk_input_siz * sizeof(char));
   target+= chunk_input_siz; 
   i++;
 
@@ -114,9 +86,41 @@ unsigned int parse_dbg_chunk(char *dbg_buf, void *target)
 }
 
 
+
+void init_getchunk(unsigned int sz)
+{
+	chunk_input_siz = sz;
+
+	if (Globals.inType == TY_DUMMY)
+	{
+		chunk_max_dummy_samples = Globals.dummySamples;
+	}
+
+	if (Globals.inType == TY_FILE)
+	{
+		unsigned int sz;
+		char *filebuffer;
+		try_read_filebuffer(Globals.inFileName, &filebuffer, &sz);
+
+		// How many bytes the file buffer has * sizeof chunk should be more than enough
+		chunk_input_buffer = try_alloc_bytes(sz * chunk_input_siz);
+
+		if (Globals.inFileMode == MODE_BIN)
+		{
+			memcpy(chunk_input_buffer, (void *)filebuffer, sz);
+			chunk_input_entries = sz / chunk_input_siz;
+		}
+		else
+		{
+			chunk_input_entries = parse_dbg_byte(filebuffer, chunk_input_buffer);
+		}
+	}
+}
+
+
 // Get into a buffer that has at least size chunk_sz
 
-GetStatus buf_getchunk(void *x) 
+GetStatus buf_getchunk(char *x) 
 {
 
 	if (Globals.inType == TY_DUMMY)
@@ -131,7 +135,7 @@ GetStatus buf_getchunk(void *x)
         if (chunk_input_idx >= chunk_input_entries)
 	{
 		// If no more repetitions are allowed 
-		if (Globals.inFileRepeats != INF_REPEAT && num_input_repeats >= Globals.inFileRepeats)
+		if (Globals.inFileRepeats != INF_REPEAT && chunk_input_repeats >= Globals.inFileRepeats)
 		{
 			return GS_EOF;
 		}
@@ -140,14 +144,14 @@ GetStatus buf_getchunk(void *x)
 		chunk_input_repeats++;
 	}
 
-        memcpy(x, chunk_input_buffer + chunk_input_idx*chunk_input_siz, chunk_sz);
-        num_input_idx++;
+        memcpy(x, chunk_input_buffer + chunk_input_idx*chunk_input_siz, chunk_input_siz);
+		chunk_input_idx++;
 
 	return GS_SUCCESS;
 }
 
 // Get an array of elements, each of size chunk_input_siz
-GetStatus buf_getarrchunk(void *x, unsigned int vlen)
+GetStatus buf_getarrchunk(char *x, unsigned int vlen)
 {
 
 	if (Globals.inType == TY_DUMMY)
@@ -160,9 +164,9 @@ GetStatus buf_getarrchunk(void *x, unsigned int vlen)
 
 	if (chunk_input_idx + vlen > chunk_input_entries)
 	{
-		if (Globals.inFileRepeats != INF_REPEAT && num_input_repeats >= Globals.inFileRepeats)
+		if (Globals.inFileRepeats != INF_REPEAT && chunk_input_repeats >= Globals.inFileRepeats)
 		{
-		  if (chunk_input_idx != num_input_entries)
+			if (chunk_input_idx != chunk_input_entries)
 				fprintf(stderr, "Warning: Unaligned data in input file, ignoring final get()!\n");
 			return GS_EOF;
 		}
@@ -178,7 +182,27 @@ GetStatus buf_getarrchunk(void *x, unsigned int vlen)
 
 
 
-static void *chunk_output_buffer;
+void fprint_char(FILE *f, char val)
+{
+	static int isfst = 1;
+	if (isfst)
+	{
+		fprintf(f, "%d", val);
+		isfst = 0;
+	}
+	else fprintf(f, ",%d", val);
+}
+void fprint_arrchar(FILE *f, char *val, unsigned int vlen)
+{
+	unsigned int i;
+	for (i = 0; i < vlen; i++)
+	{
+		fprint_char(f, val[i]);
+	}
+}
+
+
+static char *chunk_output_buffer;
 static unsigned int chunk_output_siz;
 static unsigned int chunk_output_entries;
 static unsigned int chunk_output_idx = 0;
@@ -188,7 +212,7 @@ void init_putchunk(unsigned int sz)
 {
 
   chunk_output_siz = sz;
-  chunk_output_buffer = malloc(Globals.outBufSize * chunk_output_siz);
+  chunk_output_buffer = (char*) malloc(Globals.outBufSize * chunk_output_siz);
   chunk_output_entries = Globals.outBufSize;
 
   if (Globals.outType == TY_FILE)
@@ -208,89 +232,66 @@ void buf_putchunk(void *x, void (*fprint)(FILE *f, void *val))
 			fprint(chunk_output_file,x);
 		else 
 		{
-			if (num_output_idx == num_output_entries)
+			if (chunk_output_idx == chunk_output_entries)
 			{
-				fwrite(chunk_output_buffer,chunk_output_entries, chunk_siz,chunk_output_file);
+				fwrite(chunk_output_buffer,chunk_output_entries, chunk_output_siz,chunk_output_file);
 				chunk_output_idx = 0;
 			}
-                        memcpy(chunk_output_buffer+num_output_idx*chunk_siz,x,chunk_siz);
-                        num_output_id++;
+            memcpy(chunk_output_buffer+chunk_output_idx*chunk_output_siz,x,chunk_output_siz);
+            chunk_output_idx++;
 		}
 	}
 }
 
-void buf_putarrchunk(int32 *x, unsigned int vlen)
+void buf_putarrchunk(char *x, unsigned int vlen)
 {
 	if (Globals.outType == TY_DUMMY) return;
 
 	if (Globals.outType == TY_FILE)
 	{
 		if (Globals.outFileMode == MODE_DBG) 
-			fprint_arrint32(num_output_file,x,vlen);
+			fprint_arrchar(chunk_output_file,x,vlen);
 		else
 		{
-			if (num_output_idx + vlen >= num_output_entries)
+			if (chunk_output_idx + vlen >= chunk_output_entries)
 			{
 				// first write the first (num_output_entries - vlen) entries
 				unsigned int i;
-				unsigned int m = num_output_entries - num_output_idx;
+				unsigned int m = chunk_output_entries - chunk_output_idx;
 
 				for (i = 0; i < m; i++)
-					num_output_buffer[num_output_idx + i] = x[i];
+					chunk_output_buffer[chunk_output_idx + i] = x[i];
 
 				// then flush the buffer
-				fwrite(num_output_buffer,num_output_entries,sizeof(int16),num_output_file);
+				fwrite(chunk_output_buffer,chunk_output_entries,sizeof(int16),chunk_output_file);
 
 				// then write the rest
-				for (num_output_idx = 0; num_output_idx < vlen - m; num_output_idx++)
-					num_output_buffer[num_output_idx] = x[num_output_idx + m];
+				for (chunk_output_idx = 0; chunk_output_idx < vlen - m; chunk_output_idx++)
+					chunk_output_buffer[chunk_output_idx] = x[chunk_output_idx + m];
 			}
 		}
 	}
 }
 
-void flush_putint32()
+void flush_putchar()
 {
 	if (Globals.outType == TY_FILE)
 	{
 		if (Globals.outFileMode == MODE_BIN) {
-			fwrite(num_output_buffer,sizeof(int16), num_output_idx,num_output_file);
-			num_output_idx = 0;
+			fwrite(chunk_output_buffer,sizeof(char), chunk_output_idx,chunk_output_file);
+			chunk_output_idx = 0;
 		}
-		fclose(num_output_file);
+		fclose(chunk_output_file);
 	}
 }
 
 
 void init_putchunk()
 {
-	num_output_buffer = (int16 *) malloc(Globals.outBufSize * sizeof(int16));
-	num_output_entries = Globals.outBufSize;
+	chunk_output_buffer = (char *) malloc(Globals.outBufSize * sizeof(char));
+	chunk_output_entries = Globals.outBufSize;
 	if (Globals.outType == TY_FILE)
-		num_output_file = try_open(Globals.outFileName,"w");
+		chunk_output_file = try_open(Globals.outFileName,"w");
 }
 
 
-
-
-void init_putcomplex32() 
-{
-	num_output_buffer = (int16 *) malloc(2*Globals.outBufSize * sizeof(int16));
-	num_output_entries = Globals.outBufSize*2;
-	if (Globals.outType == TY_FILE)
-		num_output_file = try_open(Globals.outFileName,"w");
-
-}
-void buf_putcomplex32(struct complex32 x)
-{
-	buf_putint32(x.re);
-	buf_putint32(x.im);
-}
-void buf_putarrcomplex32(struct complex32 *x, unsigned int vlen)
-{
-	buf_putarrint32((int32 *)x,vlen*2);
-}
-void flush_putcomplex32()
-{
-	flush_putint32();
-}
