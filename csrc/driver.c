@@ -68,7 +68,7 @@ struct BlinkGlobals Globals;
 // tracks bytes copied 
 extern unsigned long bytes_copied; 
 
-int main(int argc, char **argv) {
+int __cdecl main(int argc, char **argv) {
   
   // Initialize the global parameters
   try_parse_args(argc,argv);
@@ -112,7 +112,7 @@ int main(int argc, char **argv) {
   {
 	  printf("Min write latency: %ld, max write latency: %ld\n", (ulong) measurementInfo.minDiff, (ulong) measurementInfo.maxDiff);
 	  printf("CDF: \n   ");
-	  int i = 0;
+	  unsigned int i = 0;
 	  while (i < measurementInfo.aDiffPtr)
 	  {
 		  printf("%ld ", measurementInfo.aDiff[i]);

@@ -827,7 +827,6 @@ int __ext_mul_complex16 (struct complex16* x, int len1,
 struct complex32 __ext_sum_conj_mulw32(struct complex16* x, int __unused_20, struct complex16* y, int __unused_22) {
 	struct complex32 ret;
 	vi r1, r2;
-	vcs *ptr;
 	vcs *vx = (vcs *) x;
 	vcs *vy = (vcs *) y;
 	vcs vs1, vs2, sign;

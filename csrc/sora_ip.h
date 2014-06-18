@@ -18,9 +18,12 @@
 */
 #pragma once
 
-// BOZIDAR DEBUG
+#ifdef WINDDK
+// These need to be included in WinDDK environment but not in VS
+// Not sure why...
 #include <winsock2.h> // ws2_32.lib required
 #include <ws2tcpip.h>
+#endif 
 
 const UINT RADIO_HEADER_LENGTH = 2;
 const UINT ETHERNET_HEADER_LENGTH = 14; // 6 DstMAC, 6 SrcMAC, 2 EtherType/length

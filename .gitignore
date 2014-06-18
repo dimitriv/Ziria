@@ -250,3 +250,7 @@ scripts/local/*
 csrc/local/*
 csrc/local/*/*
 csrc/local/*/*/*
+csrc/CompilerVS/Debug/*
+csrc/CompilerVS/Release/*
+csrc/CompilerVS/x64/*
+

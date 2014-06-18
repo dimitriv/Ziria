@@ -166,7 +166,7 @@ void writeSora(complex16 *ptr, ULONG size)
 
 	// Saturated pack from complex16 (default Blink TX type) to complex8
 	vcs *vPtr = (vcs*)ptr;
-	int index = 0;
+	unsigned int index = 0;
 	for(int i=0; i<size/4; i+=2)
 	{
         vcs s1, s2;

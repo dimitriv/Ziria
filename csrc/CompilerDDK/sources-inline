@@ -78,5 +78,5 @@ MSC_OPTIMIZATION=/O2
 
 ## Build cannot build source files from multiple directories!
 ## Thus we create a wrapper that just includes them all
-SOURCES     = Wrapper.cpp
+SOURCES     = ../Wrapper.cpp
 

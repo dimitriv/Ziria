@@ -15,18 +15,20 @@
 @REM See the Apache Version 2.0 License for specific language governing
 @REM permissions and limitations under the License.
 
-SET tempcurdir=%cd%
-call "C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\vcvarsall.bat" x86
-cd %tempcurdir%
+@SET tempcurdir=%cd%
+@ECHO Set ZIRIA_VS to the version of VS you want to use
+@ECHO e.g. ZIRIA_VS="C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC"
+call %ZIRIA_VS%\vcvarsall.bat x86
+@cd %tempcurdir%
 
 REM We need to clear MAKEFLAGS from make (http://www.cygwin.com/ml/cygwin/1999-10/msg00354.html)
 set MAKEFLAGS=
 
-msbuild 
+msbuild CompilerVS13-inline.vcxproj /target:build /p:Configuration=Release /p:Platform=x64 /m /verbosity:minimal
 
 if %errorlevel% NEQ 0 (
 set errorlev=1
-del Debug\CompilerVS13.exe 
+del x64\Release\CompilerVS13-inline.exe 
 ) else (
 set errorlev=0
 )
