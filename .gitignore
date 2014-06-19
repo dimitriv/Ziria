@@ -253,4 +253,14 @@ csrc/local/*/*/*
 csrc/CompilerVS/Debug/*
 csrc/CompilerVS/Release/*
 csrc/CompilerVS/x64/*
+csrc/CompilerVS/CompilerVS13-inline.vcxproj.user
+csrc/CompilerVS/CompilerVS13-inline/x64/Release/CompilerVS13-inline.exe
+csrc/CompilerVS/CompilerVS13-inline/x64/Release/CompilerVS13-inline.pdb
+csrc/CompilerVS/CompilerVS13.opensdf
+csrc/CompilerVS/CompilerVS13.sdf
+csrc/CompilerVS/CompilerVS13.sln.cache
+csrc/CompilerVS/CompilerVS13.vcxproj.user
+csrc/CompilerVS/CompilerVS13/x64/Release/CompilerVS13.exe
+csrc/CompilerVS/CompilerVS13/x64/Release/CompilerVS13.pdb
+csrc/CompilerVS/CompilerVS13_32.vcxproj
 

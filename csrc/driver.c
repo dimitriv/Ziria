@@ -23,6 +23,10 @@
 #include <string.h>
 
 #ifdef SORA_PLATFORM
+#include <winsock2.h> // ws2_32.lib required
+#include <ws2tcpip.h>
+
+
 #include <sora.h>
 #include <brick.h>
 #include <dspcomm.h>

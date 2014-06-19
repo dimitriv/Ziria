@@ -21,8 +21,10 @@
 #ifdef WINDDK
 // These need to be included in WinDDK environment but not in VS
 // Not sure why...
+/*
 #include <winsock2.h> // ws2_32.lib required
 #include <ws2tcpip.h>
+*/
 #endif 
 
 const UINT RADIO_HEADER_LENGTH = 2;

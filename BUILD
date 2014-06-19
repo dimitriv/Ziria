@@ -1,4 +1,4 @@
-To build the Blink (wplc) compiler (under Linux or Windows/Cygwin) you will need:
+To build the Ziria (wplc) compiler (under Linux or Windows/Cygwin) you will need:
 
 * GHC 7.6 (including a cabal installation)
 * The cabal packages (install them with 'cabal install <package-name>'

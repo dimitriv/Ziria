@@ -1,0 +1,21 @@
+#!/bin/bash
+#Use COMPILER={winddk, vs} to set the compiler
+
+cd transmitter/perf
+make -B 
+if [[ $? -ne 0 ]]
+then
+    exit 1
+fi
+cd ../../receiver/perf
+make -B 
+if [[ $? -ne 0 ]]
+then
+    exit 1
+fi
+cd ../../perf
+if [[ $? -ne 0 ]]
+then
+    exit 1
+fi
+make -B

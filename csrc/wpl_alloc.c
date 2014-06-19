@@ -83,7 +83,7 @@ void * wpl_alloca(unsigned int bytes)
     exit(-1);
   }
 
-  void * ret = (void *)((UINT64) wpl_heap + wpl_free_idx);
+  void * ret = (void *)((unsigned long long) wpl_heap + wpl_free_idx);
 
   wpl_free_idx += allocunit;
 

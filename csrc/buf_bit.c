@@ -21,13 +21,20 @@
 #include <errno.h>
 #include <string.h>
 
+#ifdef WINDDK
+// These need to be included in WinDDK environment but not in VS
+// Not sure why...
+#include <winsock2.h> // ws2_32.lib required
+#include <ws2tcpip.h>
+#endif 
+
 #include "params.h"
 #include "types.h"
 #include "buf.h"
 
 #include "wpl_alloc.h"
 #ifdef SORA_PLATFORM
-  #include "sora_ip.h"
+#include "sora_ip.h"
 #endif
 
 static BitArrPtr input_buffer;
