@@ -628,7 +628,9 @@ times_unroll_step fgs comp
         Times ui e elen i c
          | EVal (VInt n) <- unExp elen 
          , EVal (VInt 0) <- unExp e
-         , ui == Unroll -- || (n < 3 && n > 0 && ui == AutoUnroll)
+         , (n < 3 && n > 0 && ui == AutoUnroll) || ui == Unroll 
+-- BOZIDAR: this will currently fail perf test for TX/test_encoding_34
+--         , ui == Unroll -- || (n < 3 && n > 0 && ui == AutoUnroll)
 
          -> let idxs = [0..n-1]
                 comps = replicate n c
