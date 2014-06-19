@@ -75,9 +75,10 @@ void * wpl_alloca(unsigned int bytes)
 {
   unsigned int allocunit = CALIGN16(bytes);
 
-  /* printf("Allocating: %d bytes\n", bytes); */
-  /* printf("wpl_heap_siz: %d bytes\n", wpl_heap_siz); */
-
+  //printf("Allocating: %d bytes\n", bytes); 
+  //printf("wpl_heap_siz: %d bytes\n", wpl_heap_siz); 
+  //printf("Remaining heap: %d bytes\n", wpl_heap_siz - (wpl_free_idx + allocunit));
+  
   if (wpl_free_idx + allocunit >= wpl_heap_siz) {
     fprintf(stderr, "WPL allocator out of memory, try increasing heap size!\n");
     exit(-1);
