@@ -37,7 +37,6 @@
 #include "depuncturer.hpp"
 #include "PHY_11a.hpp"
 #include "PHY_11b.hpp"
-#include "viterbi.hpp"
 #include "pilot.hpp"
 #include "channel_11a.hpp"
 #include "cca.hpp"
@@ -647,15 +646,16 @@ int __ext_pairwise_muladdw(struct complex16* x, int __unused_15, struct complex1
 }
 
 //FINL 
-void __ext_muladdw(int* __retf_muladdw, int len1, struct complex16* a,
-             int len2, struct complex16* b, int len3)
+//Return by reference for performance
+//void __ext_muladdw(int* __retf_muladdw, int len1, struct complex16* a, int len2, struct complex16* b, int len3)
+int __ext_muladdw(int* __retf_muladdw, int len1, struct complex16* a, int len2, struct complex16* b, int len3)
 {
 	vcs *ap = (vcs *)a;
 	vcs *bp = (vcs *)b;
 	vi output = muladd(*ap,*bp);
 		
 	memcpy((void *)__retf_muladdw,(void *)(&output),sizeof(vi));
-
+	return 0;
 }
 
 int __ext_convertinttocomplex(int* integerinput, int __unused_54,
@@ -678,12 +678,14 @@ int __ext_conjrew(struct complex16* x, int __unused_17, struct complex16* y,
 }
 
 //FINL 
-void __ext_conj0w(struct complex16* __retf_conj0, int __unused_21, struct complex16* x,
-           int __unused_20)
+//Return by reference for performance
+//void __ext_conj0w(struct complex16* __retf_conj0, int __unused_21, struct complex16* x, int __unused_20)
+int __ext_conj0w(struct complex16* __retf_conj0, int __unused_21, struct complex16* x, int __unused_20)
 {
 	vcs *xp = (vcs *)x;
 	vcs output = conj0(*xp);
 	memcpy((void *)__retf_conj0,(void *)(&output),sizeof(vcs));
+	return 0;
 }
 
 
@@ -692,9 +694,11 @@ void __ext_conj0w(struct complex16* __retf_conj0, int __unused_21, struct comple
 //FINL 
 // Multiply the first source vector by the conjugate of the second source vector
 // ie. re + j * im = a * conj(b)
-void __ext_conj_mulw(struct complex16* __retf_conj0, int __unused_21, struct complex16* x,
-           int __unused_20, struct complex16* y,
-           int __unused_22)
+//Return by reference for performance
+//void __ext_conj_mulw(struct complex16* __retf_conj0, int __unused_21, struct complex16* x,
+//           int __unused_20, struct complex16* y, int __unused_22)
+int __ext_conj_mulw(struct complex16* __retf_conj0, int __unused_21, struct complex16* x,
+		   int __unused_20, struct complex16* y, int __unused_22)
 {
 	vi re, im;
 	vcs *pre, *pim;
@@ -739,7 +743,7 @@ void __ext_conj_mulw(struct complex16* __retf_conj0, int __unused_21, struct com
 */
 
 	memcpy((void *)__retf_conj0,(void *)(&vs1),sizeof(vcs));
-	return;
+	return 0;
 }
 
 
@@ -823,7 +827,6 @@ int __ext_mul_complex16 (struct complex16* x, int len1,
 struct complex32 __ext_sum_conj_mulw32(struct complex16* x, int __unused_20, struct complex16* y, int __unused_22) {
 	struct complex32 ret;
 	vi r1, r2;
-	vcs *ptr;
 	vcs *vx = (vcs *) x;
 	vcs *vy = (vcs *) y;
 	vcs vs1, vs2, sign;

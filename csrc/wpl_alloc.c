@@ -28,9 +28,11 @@
 char * try_alloc_bytes(unsigned int siz) 
 {
   char *buf = (char *) malloc(siz);
-  if (buf == NULL) {
-    fprintf(stderr, "Error: could not allocate buffer of size %ul\n", siz);
-    exit(1); }
+  if (buf == NULL) 
+  {
+	fprintf(stderr, "Error: could not allocate buffer of size %ul\n", siz);
+	exit(1); 
+  }
   return buf;
 }
 
@@ -73,16 +75,17 @@ void * wpl_alloca(unsigned int bytes)
 {
   unsigned int allocunit = CALIGN16(bytes);
 
-  /* printf("Allocating: %d bytes\n", bytes); */
-  /* printf("wpl_heap_siz: %d bytes\n", wpl_heap_siz); */
-
+  //printf("Allocating: %d bytes\n", bytes); 
+  //printf("wpl_heap_siz: %d bytes\n", wpl_heap_siz); 
+  //printf("Remaining heap: %d bytes\n", wpl_heap_siz - (wpl_free_idx + allocunit));
+  
   if (wpl_free_idx + allocunit >= wpl_heap_siz) {
     fprintf(stderr, "WPL allocator out of memory, try increasing heap size!\n");
     exit(-1);
   }
 
-  void * ret = (void *) ((unsigned int) wpl_heap + wpl_free_idx);
-  
+  void * ret = (void *)((unsigned long long) wpl_heap + wpl_free_idx);
+
   wpl_free_idx += allocunit;
 
   return ret;

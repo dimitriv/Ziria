@@ -17,7 +17,8 @@
 -- permissions and limitations under the License.
 --
 --
+#define MANUAL_VECT
 
 #include "../modulating.blk"
 
-read[bit] >>> modulate(m16qam) >>> write[complex16]
+read[bit] >>> modulate(M_16QAM) >>> write[complex16]

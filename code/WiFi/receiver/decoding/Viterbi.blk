@@ -17,19 +17,24 @@
 -- permissions and limitations under the License.
 --
 --
+#include "../../const.blk"
+#include <externals.blk>
+
 
 let comp Viterbi(rate:int, len:int) = 
   var nOutput:int16;
   var outViterbi:arr[96000] bit; 
 
-  do {viterbi_brick_init(len, int16(rate))};
+--  do {viterbi_brick_init(len, int16(rate))};
+  do {viterbi_brick_init_fast(len, int16(rate), 256)};
 
  repeat {
 
     (svalue:arr[48] int8) <- takes 48;
    
      do{
-       nOutput := viterbi_brick_decode(svalue, outViterbi);
+--       nOutput := viterbi_brick_decode(svalue, outViterbi);
+       nOutput := viterbi_brick_decode_fast(svalue, outViterbi);
      };
 
      for i in [0, nOutput] {

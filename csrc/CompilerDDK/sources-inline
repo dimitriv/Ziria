@@ -52,10 +52,10 @@ TARGETLIBS      = $(TARGETLIBS) \
                   
 !if "$(_BUILDARCH)" == "x86"
 C_DEFINES       = $(C_DEFINES) \
-                  -DUSER_MODE -DBUILDARCHX86 -DSORA_PLATFORM
+                  -DUSER_MODE -DBUILDARCHX86 -DSORA_PLATFORM -DWINDDK
 !else
 C_DEFINES       = $(C_DEFINES) \
-                  -DUSER_MODE -DBUILDARCHX64 -DSORA_PLATFORM
+                  -DUSER_MODE -DBUILDARCHX64 -DSORA_PLATFORM -DWINDDK
 !endif
 
 
@@ -78,5 +78,5 @@ MSC_OPTIMIZATION=/O2
 
 ## Build cannot build source files from multiple directories!
 ## Thus we create a wrapper that just includes them all
-SOURCES     = Wrapper.cpp
+SOURCES     = ../Wrapper.cpp
 

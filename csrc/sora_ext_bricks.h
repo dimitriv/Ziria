@@ -18,6 +18,7 @@
 */
 #pragma once
 #include <brick.h>
+#include "viterbi.hpp"
 
 
 
@@ -74,7 +75,6 @@ public:
 		{
 			ViterbiContext *c = ctx;
 			C_TYPE* output = opin().append();
-
 			memcpy((void *)output, (void *)c->inVal, N_LEN * sizeof(C_TYPE));
 
 			Next()->Process(opin());
@@ -187,7 +187,7 @@ BrickViterbiContext BrickViterbiSig11aCtx;
 
 
 
-static inline
+static inline int
 CreateViterbiGraph(ViterbiContext *ctx)
 {
 	CREATE_BRICK_SINK  (output, BrickSink, BrickViterbiCtx );
@@ -205,7 +205,7 @@ CreateViterbiGraph(ViterbiContext *ctx)
 
 
 
-static inline
+static inline int 
 CreateViterbiSig11aGraph(ViterbiContext *ctx)
 {
 	CREATE_BRICK_SINK(outputSig11a, BrickSinkSig11a, BrickViterbiSig11aCtx);

@@ -16,6 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 */
+#ifdef WIN32
 #include "sora_ext_visual.h"
 
 
@@ -66,4 +67,4 @@ int32 __ext_dbgplot_dots(complex16 *data, int len, int toPlot)
 	exit(1);
 #endif
 }
-
+#endif

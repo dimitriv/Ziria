@@ -27,6 +27,7 @@ typedef enum __GetStatus {
 } GetStatus;
 
 
+
 void init_getbit();
 GetStatus buf_getbit(Bit *x);
 GetStatus buf_getarrbit(BitArrPtr x, unsigned int vlen);
@@ -70,6 +71,24 @@ void buf_putcomplex16(struct complex16 x);
 void buf_putarrcomplex16(struct complex16 *x, unsigned int vlen);
 void flush_putcomplex16();
 
+
+
+void init_getint8();
+GetStatus buf_getint8(int8 *x);
+GetStatus buf_getarrint8(int8 *x, unsigned int vlen);
+void init_putint8();
+void buf_putint8(int8 x);
+void buf_putarrint8(int8 * x, unsigned int vlen);
+void flush_putint8();
+
+
+void init_getcomplex8();
+GetStatus buf_getcomplex8(struct complex8 *x);
+GetStatus buf_getarrcomplex8(struct complex8 * x, unsigned int vlen);
+void init_putcomplex8();
+void buf_putcomplex8(struct complex8 x);
+void buf_putarrcomplex8(struct complex8 *x, unsigned int vlen);
+void flush_putcomplex8();
 
 
 

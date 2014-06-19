@@ -23,6 +23,10 @@
 #include <string.h>
 
 #ifdef SORA_PLATFORM
+#include <winsock2.h> // ws2_32.lib required
+#include <ws2tcpip.h>
+
+
 #include <sora.h>
 #include <brick.h>
 #include <dspcomm.h>
@@ -68,7 +72,7 @@ struct BlinkGlobals Globals;
 // tracks bytes copied 
 extern unsigned long bytes_copied; 
 
-int main(int argc, char **argv) {
+int __cdecl main(int argc, char **argv) {
   
   // Initialize the global parameters
   try_parse_args(argc,argv);
@@ -112,7 +116,7 @@ int main(int argc, char **argv) {
   {
 	  printf("Min write latency: %ld, max write latency: %ld\n", (ulong) measurementInfo.minDiff, (ulong) measurementInfo.maxDiff);
 	  printf("CDF: \n   ");
-	  int i = 0;
+	  unsigned int i = 0;
 	  while (i < measurementInfo.aDiffPtr)
 	  {
 		  printf("%ld ", measurementInfo.aDiff[i]);
@@ -169,7 +173,7 @@ int main(int argc, char **argv) {
 
 #ifdef SORA_PLATFORM
 
-BOOLEAN go_thread( void * pParam ) 
+BOOLEAN __stdcall go_thread(void * pParam)
 {
 	thread_info *ti = (thread_info *) pParam;
 
@@ -183,7 +187,7 @@ BOOLEAN go_thread( void * pParam )
 /* Returns the numer of threads */
 int SetUpThreads(PSORA_UTHREAD_PROC * User_Routines)
 {
-	User_Routines[0] = go_thread;
+	User_Routines[0] = (PSORA_UTHREAD_PROC) go_thread;
 	return 1;
 }
 

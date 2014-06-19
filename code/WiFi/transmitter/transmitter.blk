@@ -31,24 +31,49 @@
 #include "ifft.blk"
 
 
+-- Here, we have a different CRC function for each rate since 
+-- for each rate we have to provide different padding 
+-- to fill up the last OFDM symbol
 
+--  6 Mbps, 1/2,  BPSK: x -> 2x   -> 2x   = 48, x =  24
+--  9 Mbps, 3/4,  BPSK: x -> 4x/3 -> 4x/3 = 48, x =  36
+-- 12 Mbps, 1/2,  QPSK: x -> 2x   -> x    = 48, x =  48
+-- 18 Mbps, 3/4,  QPSK: x -> 4x/3 -> 2x/3 = 48, x =  72
+-- 24 Mbps, 1/2, 16QAM: x -> 2x   -> x/2  = 48, x =  96
+-- 36 Mbps, 3/4, 16QAM: x -> 4x/3 -> x/3  = 48, x = 144
+-- 48 Mbps, 2/3, 64QAM: x -> 3x/2 -> x/4  = 48, x = 192
+-- 56 Mbps, 3/4, 64QAM: x -> 4x/3 -> 2x/9 = 48, x = 216
 
--- We manually merge different CRC versions with different encoding functions
--- to faciliate vectorization. In future, this will be done automatically by the compiler.
 
 let comp tx_driver(h : struct HeaderInfo) = 
- if h.coding == CR_34 then 
-   (crc36(h.len) >>> scrambler() >>> encode34())
- else 
-   if h.coding == CR_23 then
-      (crc32(h.len) >>> scrambler() >>> encode23())
-   else 
-     -- if h.coding == CR_12 then
-      (crc24(h.len) >>> scrambler() >>> encode12())
--- TODO: Causes C compilation error!
---     else
---       do{error "Unknown coding rate!"}
+ --  6 Mbps
+ if h.coding == CR_12 && h.modulation == M_BPSK then 
+   (crc24(h.len) >>> scrambler() >>> encode12() >>> interleaver_bpsk() >>> modulate_bpsk())
+ --  9 Mbps
+ else if h.coding == CR_34 && h.modulation == M_BPSK then 
+   (crc36(h.len) >>> scrambler() >>> encode34() >>> interleaver_bpsk() >>> modulate_bpsk())
+ -- 12 Mbps
+ else if h.coding == CR_12 && h.modulation == M_QPSK then 
+   (crc48(h.len) >>> scrambler() >>> encode12() >>> interleaver_qpsk() >>> modulate_qpsk())
+ -- 18 Mbps
+ else if h.coding == CR_34 && h.modulation == M_QPSK then 
+   (crc72(h.len) >>> scrambler() >>> encode34() >>> interleaver_qpsk() >>> modulate_qpsk())
+ -- 24 Mbps
+ else if h.coding == CR_12 && h.modulation == M_16QAM then 
+   (crc96(h.len) >>> scrambler() >>> encode12() >>> interleaver_m16qam() >>> modulate_16qam())
+ -- 36 Mbps
+ else if h.coding == CR_34 && h.modulation == M_16QAM then 
+   (crc144(h.len) >>> scrambler() >>> encode34() >>> interleaver_m16qam() >>> modulate_16qam())
+ -- 48 Mbps
+ else if h.coding == CR_23 && h.modulation == M_64QAM then 
+   (crc192(h.len) >>> scrambler() >>> encode23() >>> interleaver_m64qam() >>> modulate_64qam())
+ -- 56 Mbps
+ else if h.coding == CR_34 && h.modulation == M_64QAM then 
+   (crc216(h.len) >>> scrambler() >>> encode34() >>> interleaver_m64qam() >>> modulate_64qam())
+ else
+   do{error "Unknown coding rate!"}
 in
+
 
 
 let comp transform_w_header() = 
@@ -57,12 +82,15 @@ let comp transform_w_header() =
                       encode12() >>> 
                       interleaver_bpsk() >>> 
                       modulate_bpsk() )
-         ; crc <- tx_driver(hInfo) >>> interleaver(hInfo.modulation) >>> modulate(hInfo.modulation)
+         ; crc <- tx_driver(hInfo) 
          }
 in
 
 
-
+let comp test_transform() = 
+   (crc48(1024) >>> scrambler() >>> encode12() >>> interleaver_qpsk() >>> modulate_qpsk())
+--   (crc72(1024) >>> scrambler() >>> encode34() >>> interleaver_qpsk() >>> modulate_qpsk())
+in
 
 
 
@@ -70,6 +98,7 @@ let comp transmitter() =
 seq{ emits createSTSinTime()
    ; emits createLTSinTime()
    ; (transform_w_header() >>> map_ofdm() >>> ifft())
+--   ; (test_transform() >>> map_ofdm() >>> ifft())
    }
 in
 

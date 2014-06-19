@@ -16,7 +16,9 @@
 @REM permissions and limitations under the License.
 
 SET tempcurdir=%cd%
-call C:\WinDDK\7600.16385.1\bin\setenv.bat C:\WinDDK\7600.16385.1\ fre x64 WIN7
+REM call C:\WinDDK\7600.16385.1\bin\setenv.bat C:\WinDDK\7600.16385.1\ fre x64 WIN7
+call %WINDDK_ROOT%\bin\setenv.bat %WINDDK_ROOT%\ fre x64 WIN7
+
 cd %tempcurdir%
 REM build with /c rebuilds everything. But we don't need it anymore so removed
 REM build /c /z /w

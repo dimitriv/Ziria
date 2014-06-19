@@ -18,6 +18,8 @@
 --
 --
 
+#define MANUAL_VECT
+
 #include "../scramble.blk"
 
 read[bit] >>> scrambler() >>> write[bit]

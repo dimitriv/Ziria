@@ -32,11 +32,16 @@ let v_mul_complex16_int32(re:arr int, im:arr int, a:arr complex16, b:arr complex
   let rlen = (length(a) - vlen*4) in 
 
   for i in [0, vlen] {
-    vs1 := conj0w(b[4*i,4]);
+    -- Return by reference for performance
+    --vs1 := conj0w(b[4*i,4]);
+    conj0w(vs1, b[4*i,4]);
     permutate_low1032w(b[4*i,4], vs2);
     permutate_high1032w (vs2,vs2);
-    re[4*i,4] := muladdw(a[4*i,4],vs1);
-    im[4*i,4] := muladdw(a[4*i,4],vs2)
+    -- Return by reference for performance
+    --re[4*i,4] := muladdw(a[4*i,4],vs1);
+    --im[4*i,4] := muladdw(a[4*i,4],vs2)
+    muladdw(re[4*i,4], a[4*i,4],vs1);
+    muladdw(im[4*i,4], a[4*i,4],vs2)
   }
 
   -- Sum the rest one by one, if length is not modulo 4
@@ -48,9 +53,12 @@ in
 
 
 
+-- This was slow because of multiple consecutive loops so we write a specialized
+-- version below
+{-
 -- c = (a * b) << shift
 -- We need to do shift before casting to complex16 to avoid loss of precision
-let v_mul_complex16(c:arr complex16, a:arr complex16, b:arr complex16, shift:int) = 
+let v_mul_complex16_slow(c:arr complex16, a:arr complex16, b:arr complex16, shift:int) = 
   var re32 : arr[length(a)] int32;
   var im32 : arr[length(a)] int32;
 
@@ -60,4 +68,44 @@ let v_mul_complex16(c:arr complex16, a:arr complex16, b:arr complex16, shift:int
     v_shift_right_int32(im32,im32,shift);
   }
   v_pack_int32_complex16(c,re32,im32);
+in
+-}
+
+
+
+-- c = (a * b) << shift
+-- We need to do shift before casting to complex16 to avoid loss of precision
+let v_mul_complex16(c:arr complex16, a:arr complex16, b:arr complex16, shift:int) = 
+  var vs1:arr[4] complex16;
+  var vs2:arr[4] complex16;
+  var re32 : arr[4] int32;
+  var im32 : arr[4] int32;
+
+  let vlen = (length(a) / 4) in
+  let rlen = (length(a) - vlen*4) in 
+
+  for i in [0, vlen] {
+    -- Return by reference for performance
+    --vs1 := conj0w(b[4*i,4]);
+    conj0w(vs1, b[4*i,4]);
+    permutate_low1032w(b[4*i,4], vs2);
+    permutate_high1032w (vs2,vs2);
+    -- Return by reference for performance
+    --re[4*i,4] := muladdw(a[4*i,4],vs1);
+    --im[4*i,4] := muladdw(a[4*i,4],vs2)
+    muladdw(re32, a[4*i,4],vs1);
+    muladdw(im32, a[4*i,4],vs2);
+    v_shift_right_int32(re32,re32,shift);
+    v_shift_right_int32(im32,im32,shift);
+    v_pack_int32_complex16(c[4*i,4],re32,im32);
+  }
+
+
+  -- Sum the rest one by one, if length is not modulo 4
+  for i in [vlen*4,rlen] {
+    re32[i] := (int(a[i].re)*int(b[i].re) - int(a[i].im)*int(b[i].im )) << shift;
+    im32[i] := (int(a[i].im)*int(b[i].re) + int(a[i].re)*int(b[i].im )) << shift;
+    c[i] := complex16{re=int16(re32[i]); im=int16(im32[i])};
+  };
+
 in
