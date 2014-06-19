@@ -152,6 +152,10 @@ xTimes :: (XExpy a, XExpy b) => Name -> a -> b -> XComp -> XComp
 xTimes nm xs xl xc loc 
   = cTimes loc () AutoUnroll (toXExp xs loc) (toXExp xl loc) nm (xc loc)
 
+
+xRepeat :: XComp -> XComp
+xRepeat xc loc = cRepeat loc () Nothing (xc loc)
+
 xError :: String -> XComp
 xError s loc = cReturn loc () (eError loc () s)
 

@@ -70,7 +70,9 @@ newVectUniq = VecM $ \sym _env st -> do { i <- GS.genSym sym
 newVectName :: String -> Maybe SourcePos -> VecM Name
 newVectName nm loc
   = do { u <- newVectUniq
-       ; return $ (toName (nm ++ "_" ++ show u) loc Nothing) { uniqId = "_v" ++ show u } }
+       ; return $ 
+         (toName (nm ++ "_" ++ show u) loc Nothing) {uniqId = "_v" ++ show u} 
+       }
 
 
 extendCVarBind :: Name -> Comp (CTy,Card) Ty -> VecM a -> VecM a
@@ -88,8 +90,13 @@ extendCFunBind nm params locals cbody (VecM action)
           env' = env { cfun_binds = entry:(cfun_binds env) }
       in action sym env' st)
 
+getVecEnv :: VecM (GS.Sym, VecEnv)
+getVecEnv = VecM (\sym env _st -> return ((sym,env),_st))
+
 getCVarBinds :: VecM [(Name,CVarBind)]
 getCVarBinds = VecM (\sym env st -> return (cvar_binds env, st)) 
+
+
 
 getCFunBinds :: VecM [(Name,CFunBind)]
 getCFunBinds = VecM (\sym env st -> return (cfun_binds env, st)) 
@@ -106,6 +113,8 @@ lookupCFunBind nm = do { bnds <- getCFunBinds
                             Just bnd -> return bnd
                             Nothing -> error "Unbound cfun bind!" 
                        }
+
+
  
 incTakeCount :: VecM ()
 incTakeCount = VecM (\_ _env st -> 
@@ -152,6 +161,11 @@ withInitCounts (VecM action)
                   })
 
 
+inCurrentEnv :: (GS.Sym, VecEnv) -> VecM a -> IO a
+inCurrentEnv (sym,venv) (VecM action)
+  = do { (r,_) <- action sym venv (VecState 0 0)
+       ; return r
+       }
 
 -- Vectorization result, a quick way to get 
 -- the result arity of vectorization w.o. re type checking.
@@ -316,5 +330,74 @@ arrWrite wdth x eix eval
 eseqarr (e : [])  = e
 eseqarr (e : es') = toExp (info e) (ESeq e (eseqarr es')) 
 eseqarr _         = error "Empty seq array!" 
+
+
+{- VecMBnd
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   A thin wrapper around VecM that provides facilities for binding
+   generation and binding collection -}
+
+-- Just the vectorization monad with extra binds
+newtype VecMBnd a 
+  = VecMBnd { runVecMBnd :: VecM (a,[(Name,Ty, Maybe (Exp ()))]) }
+
+instance Monad VecMBnd where
+  (>>=) (VecMBnd m) f 
+     = VecMBnd $ do { (a,binds1) <- m
+                    ; case f a of 
+                        VecMBnd m_inside -> 
+                          do { (b,binds2) <- m_inside
+                             ; return (b,binds1++binds2) } }
+  return x = VecMBnd $ return (x,[])
+
+instance MonadIO VecMBnd where
+  liftIO m = VecMBnd $ do { a <- vecMIO m
+                          ; return (a,[])
+                          }
+
+liftVecM :: VecM a -> VecMBnd a
+liftVecM m 
+  = VecMBnd $ do { a <- m
+                 ; return (a,[]) 
+                 }
+
+extendCVarBind' :: Name -> Comp (CTy,Card) Ty -> VecMBnd a -> VecMBnd a
+extendCVarBind' nm comp m
+  = do { let action = runVecMBnd m
+       ; (res,bnds) <- liftVecM $ extendCVarBind nm comp action
+       ; throwBnds bnds
+       ; return res
+       }
+
+extendCFunBind' :: Name -> [(Name,CallArg Ty CTy0)] 
+                        -> [(Name,Ty,Maybe (Exp Ty))] 
+                        -> (Comp (CTy,Card) Ty) -> VecMBnd a -> VecMBnd a
+extendCFunBind' nm params locals cbody m 
+  = do { let action = runVecMBnd m
+       ; (res,bnds) <- liftVecM $ 
+                       extendCFunBind nm params locals cbody action
+       ; throwBnds bnds
+       ; return res
+       }
+
+throwBnds :: [(Name,Ty, Maybe (Exp ()))] -> VecMBnd ()
+throwBnds xs = VecMBnd $ return ((),xs)
+
+newTypedName :: String -> Ty -> Maybe SourcePos -> VecMBnd Name
+-- Generate new name (but don't declare it)
+newTypedName s ty loc 
+  = do { x <- liftVecM $ newVectName s loc
+       ; return x { mbtype = Just ty }
+       }
+
+newDeclTypedName :: String 
+                 -> Ty -> Maybe SourcePos 
+                 -> Maybe (Exp ()) -> VecMBnd Name 
+-- Generate new name (but do declare it)
+newDeclTypedName s ty loc me
+  = do { nm <- newTypedName s ty loc
+       ; throwBnds [(nm,ty, me)]
+       ; return nm
+       }
 
 

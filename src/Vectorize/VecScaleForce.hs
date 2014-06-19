@@ -59,66 +59,6 @@ instance IfThenElse Bool a where
 instance IfThenElse XExp XComp where
  ifThenElse x y z = xIf x y z
 
--- Just the vectorization monad with extra binds
-newtype VecMBnd a 
-  = VecMBnd { runVecMBnd :: VecM (a,[(Name,Ty, Maybe (Exp ()))]) }
-
-instance Monad VecMBnd where
-  (>>=) (VecMBnd m) f 
-     = VecMBnd $ do { (a,binds1) <- m
-                    ; case f a of 
-                        VecMBnd m_inside -> 
-                          do { (b,binds2) <- m_inside
-                             ; return (b,binds1++binds2) } }
-  return x = VecMBnd $ return (x,[])
-
-instance MonadIO VecMBnd where
-  liftIO m = VecMBnd $ do { a <- vecMIO m
-                          ; return (a,[])
-                          }
-
-liftVecM :: VecM a -> VecMBnd a
-liftVecM m 
-  = VecMBnd $ do { a <- m
-                 ; return (a,[]) 
-                 }
-
-extendCVarBind' :: Name -> Comp (CTy,Card) Ty -> VecMBnd a -> VecMBnd a
-extendCVarBind' nm comp m
-  = do { let action = runVecMBnd m
-       ; (res,bnds) <- liftVecM $ extendCVarBind nm comp action
-       ; throwBnds bnds
-       ; return res
-       }
-
-extendCFunBind' :: Name -> [(Name,CallArg Ty CTy0)] 
-                        -> [(Name,Ty,Maybe (Exp Ty))] 
-                        -> (Comp (CTy,Card) Ty) -> VecMBnd a -> VecMBnd a
-extendCFunBind' nm params locals cbody m 
-  = do { let action = runVecMBnd m
-       ; (res,bnds) <- liftVecM $ extendCFunBind nm params locals cbody action
-       ; throwBnds bnds
-       ; return res
-       }
-
-throwBnds :: [(Name,Ty, Maybe (Exp ()))] -> VecMBnd ()
-throwBnds xs = VecMBnd $ return ((),xs)
-
-newTypedName :: String -> Ty -> Maybe SourcePos -> VecMBnd Name
--- Generate new name (but don't declare it)
-newTypedName s ty loc 
-  = do { x <- liftVecM $ newVectName s loc
-       ; return x { mbtype = Just ty }
-       }
-
-newDeclTypedName :: String -> Ty -> Maybe SourcePos -> Maybe (Exp ()) -> VecMBnd Name 
--- Generate new name (but do declare it)
-newDeclTypedName s ty loc me
-  = do { nm <- newTypedName s ty loc
-       ; throwBnds [(nm,ty, me)]
-       ; return nm
-       }
-
 
 force_takes :: (Name,Name,Name) -- (in_buff,is_empty,in_buff_idx)
             -> Int              -- finalin : desired chunk size
@@ -145,7 +85,8 @@ force_takes (in_buff, is_empty, in_buff_idx) finalin cty loc ne
               ; let (TArr _ tbase) = done_ty
               
                 -- declare integer counter and buffer
-              ; cnt <- newDeclTypedName "cnt" tint loc (Just $ eVal loc () (VInt 0))
+              ; cnt <- newDeclTypedName "cnt" tint loc 
+                              (Just $ eVal loc () (VInt 0))
               ; let arrty = TArr (Literal finalin) tbase 
               ; ya_buff <- newDeclTypedName "ya_buff" arrty loc Nothing
 
@@ -216,7 +157,8 @@ force_emits (out_buff, out_buff_idx) e_or_es finalout loc
               ; i <- newTypedName "i" tint loc 
 
                 -- Declare a counter 
-              ; cnt <- newDeclTypedName "cnt" tint loc (Just $ eVal loc () (VInt 0))
+              ; cnt <- newDeclTypedName "cnt" tint loc 
+                          (Just $ eVal loc () (VInt 0))
 
               ; let rest = n `mod` finalout
 
