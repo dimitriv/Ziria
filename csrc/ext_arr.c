@@ -47,7 +47,9 @@ int32 __ext_zero_complex32(complex32* arr, int length)
 int32 __ext_zero_bit(BitArrPtr arr, int length)
 {
 	Bit mask = 0;
+
 	memset((void *)arr, 0, (length/8)*sizeof(Bit));
+
 	if (length % 8 > 0)
 	{
 		mask = ~((1 << (length % 8)) - 1);

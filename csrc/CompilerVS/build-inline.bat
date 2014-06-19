@@ -18,7 +18,7 @@
 @SET tempcurdir=%cd%
 @ECHO Set ZIRIA_VS to the version of VS you want to use
 @ECHO e.g. ZIRIA_VS="C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC"
-call %ZIRIA_VS%\vcvarsall.bat x86
+call %ZIRIA_VS%\vcvarsall.bat x64
 @cd %tempcurdir%
 
 REM We need to clear MAKEFLAGS from make (http://www.cygwin.com/ml/cygwin/1999-10/msg00354.html)
@@ -28,7 +28,7 @@ msbuild CompilerVS13-inline.vcxproj /target:build /p:Configuration=Release /p:Pl
 
 if %errorlevel% NEQ 0 (
 set errorlev=1
-del x64\Release\CompilerVS13-inline.exe 
+del CompilerVS13\x64\Release\CompilerVS13-inline.exe 
 ) else (
 set errorlev=0
 )

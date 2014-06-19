@@ -28,9 +28,11 @@
 char * try_alloc_bytes(unsigned int siz) 
 {
   char *buf = (char *) malloc(siz);
-  if (buf == NULL) {
-    fprintf(stderr, "Error: could not allocate buffer of size %ul\n", siz);
-    exit(1); }
+  if (buf == NULL) 
+  {
+	fprintf(stderr, "Error: could not allocate buffer of size %ul\n", siz);
+	exit(1); 
+  }
   return buf;
 }
 
@@ -81,8 +83,8 @@ void * wpl_alloca(unsigned int bytes)
     exit(-1);
   }
 
-  void * ret = (void *) ((unsigned int) wpl_heap + wpl_free_idx);
-  
+  void * ret = (void *)((UINT64) wpl_heap + wpl_free_idx);
+
   wpl_free_idx += allocunit;
 
   return ret;

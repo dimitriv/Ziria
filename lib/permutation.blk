@@ -39,12 +39,14 @@ let perm(p : arr int, iarr : arr bit) =
   zero_bit(oarr);
   zero_bit(oarrtmp);
 
+
   unroll for j in [0,length(p)/8] {
      let p1 = p[j*8,8];
      iarr1 := iarr[j*8,8];
      perm8(p1,iarr1,oarrtmp)
      oarr := v_or(oarr,oarrtmp);
   }
+
   return oarr;
 in
 

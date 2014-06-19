@@ -71,7 +71,7 @@ void parse_bit(char *token, Bit *val)
   if (x <= 1) 
 	  *val = ((Bit) x) & 1; 
   else {
-      fprintf(stderr,"Debug file does not contain binary data");
+      fprintf(stderr,"Debug file does not contain binary data (%s)\n", token);
       exit(1);
   }
 }
@@ -100,8 +100,8 @@ unsigned int parse_dbg_bit(char *dbg_buf, BitArrPtr target)
 	  val = ((Bit) x) & 1; 
 	else 
 	{
-      fprintf(stderr,"Debug file does not contain binary data");
-      exit(1);
+		fprintf(stderr, "Debug file does not contain binary data (%s)\n", s);
+		exit(1);
 	}
 
 	bitWrite(target, c++, val);
@@ -115,11 +115,13 @@ unsigned int parse_dbg_bit(char *dbg_buf, BitArrPtr target)
 			fprintf(stderr,"Parse error when loading debug file.");
 			exit(1);
 		}
-		if (x <= 1) 
-		  val = ((Bit) x) & 1; 
+		if (x <= 1)
+		{
+			val = ((Bit)x) & 1;
+		}
 		else 
 		{
-			fprintf(stderr,"Debug file does not contain binary data");
+			fprintf(stderr, "Debug file does not contain binary data (%s)\n", s);
 			exit(1);
 		}
 

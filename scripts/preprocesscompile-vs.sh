@@ -42,7 +42,7 @@ pushd . && cd $TOP/csrc/CompilerVS && ./build.bat && popd
 
 if [[ $# -ge 2 ]]
 then
-    cp -f $TOP/csrc/CompilerVS/x64/Release/CompilerVS13.exe $2
+   cp -f $TOP/csrc/CompilerVS/CompilerVS13/x64/Release/CompilerVS13.exe $2
 fi
 
 
