@@ -130,21 +130,22 @@ data DelayedVectRes
          , dvr_orig_tyout :: Ty -- original (pre-vect) out type
          }
 
-
-
-mitigateUp :: Maybe SourcePos 
+mitigateUp :: Maybe SourcePos
            -> Ty -> Int -> Int -> VecMBnd (Comp () ())
 mitigateUp loc ty lo hi 
-  = do { x <- newTypedName "x" (TArr (Literal lo) ty) loc
-       ; i <- newTypedName "i" tint loc 
-       ; ya <- newTypedName "ya" (TArr (Literal hi) ty) loc
+  = do { x  <- newTypedName "x" (if lo == 1 then ty else TArr (Literal lo) ty) loc
+       ; i  <- newTypedName "i" tint loc 
+       ; ya <- newDeclTypedName "mt_ya" (TArr (Literal hi) ty) loc Nothing
        ; let bnd = hi `div` lo
        ; let comp = xRepeat $ 
                     xSeq $ 
                     [ CMD $ 
                       xTimes i (0::Int) bnd $ 
                       xSeq [ CMD $ x <:- xTake
-                           , CMD $ ya .!(i .* lo, lo) .:= x
+                           , if lo == 1 then 
+                                CMD $ ya .!i .:= x
+                             else 
+                                CMD $ ya .!(i .* lo, lo) .:= x
                            ]
                     , CMD $ xEmit ya 
                     ]
@@ -159,8 +160,11 @@ mitigateDn loc ty hi lo
        ; let bnd = hi `div` lo
        ; let comp = xRepeat $ xSeq $
                     [ CMD $ x <:- xTake
-                    , CMD $ xTimes i (0::Int) bnd $ 
-                            xEmit (x .!(i .* lo, lo)) 
+                    , if lo == 1 
+                      then CMD $ xEmits x
+                      else CMD $ 
+                           xTimes i (0::Int) bnd $ 
+                             xEmit (x .!(i .* lo, lo))
                     ]
        ; return (comp loc)
        }
@@ -178,7 +182,7 @@ matchControl :: (GS.Sym, VecEnv)
 -- in the case where all queues match up
 matchControl (sym,venv) bcands 
   = let cands = go [] bcands [] 
-    in mapM mitigate cands 
+    in map mitigate cands 
   where 
     go acc ([]:_) k           
       = error "Can't happen! Empty vectorization result!" 
@@ -281,7 +285,7 @@ matchData :: (GS.Sym, VecEnv)
           -> [ DelayedVectRes ] 
           -> [ DelayedVectRes ] 
           -> [ DelayedVectRes ]
-matchData (sym,venv) p loc = go_left
+matchData (sym,venv) p loc xs ys = go_left xs ys 
   where 
     go_left [vc1] vcs2       = lchoose vc1 vcs2 []
     go_left (vc1:vcs1) vcs2  = lchoose vc1 vcs2 (go_right vcs1 vcs2)
@@ -343,8 +347,43 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
             , dvr_orig_tyin  = dvr_orig_tyin dp1 
             , dvr_orig_tyout = dvr_orig_tyout dp2
             }
-     (NoVect, DidVect {}) -> Nothing
-     (DidVect {}, NoVect) -> Nothing
+
+     -- Treat NoVect as DidVect 1 1 
+     (v1@NoVect, v2@(DidVect cin cout u))
+
+        | dvr_orig_tyout dp1 == if cin > 1 then 
+                                 TArr (Literal cin) (dvr_orig_tyin dp2)
+                                else dvr_orig_tyin dp2
+        -> let u = chooseParUtility (vectResUtil v1) (vectResUtil v2) cin in 
+           Just $ 
+           DVR { dvr_comp = mk_par Nothing dp1 dp2
+               , dvr_vres = DidVect 1 cout u
+               , dvr_orig_tyin  = dvr_orig_tyin dp1
+               , dvr_orig_tyout = dvr_orig_tyout dp2
+               }
+        | otherwise
+          -- TODO: make this more flexible in the future
+        -> Nothing
+
+     (v1@(DidVect cin cout u), v2@NoVect) 
+
+        | dvr_orig_tyin dp2 == if cin > 1 then 
+                                 TArr (Literal cin) (dvr_orig_tyout dp1)
+                                else dvr_orig_tyout dp1
+        -> let u = chooseParUtility (vectResUtil v1) (vectResUtil v2) cout in 
+           Just $ 
+           DVR { dvr_comp = mk_par Nothing dp1 dp2
+               , dvr_vres = DidVect cin 1 u
+               , dvr_orig_tyin  = dvr_orig_tyin dp1
+               , dvr_orig_tyout = dvr_orig_tyout dp2
+               }
+        | otherwise
+          -- TODO: make this more flexible in the future
+        -> Nothing
+
+     -- Used to be
+     -- (NoVect, DidVect {}) -> Nothing 
+     -- (DidVect {}, NoVect) -> Nothing
      
      (DidVect ci co u1, DidVect ci' co' u2)
        | (co == ci' || co == 0 || ci' == 0) 
@@ -363,7 +402,7 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
               u = chooseParUtility u1 u2 middle 
           in
           Just $ 
-          DVR { dvr_comp = mk_par Nothing dp1 dp2
+          DVR { dvr_comp = mk_par (Just (dvr_orig_tyin dp2,co,ci')) dp1 dp2
               , dvr_vres = DidVect ci co' u
               , dvr_orig_tyin  = dvr_orig_tyin dp1
               , dvr_orig_tyout = dvr_orig_tyout dp2
@@ -438,7 +477,11 @@ doVectComp gs venv comp (VectScaleDnInOrOut cinout divs)
 computeVectTop :: Bool -> Comp (CTy, Card) Ty -> VecM [DelayedVectRes]
 computeVectTop verbose = computeVect
   where
-    computeVect = go 
+    computeVect x 
+       = do { vecMIO $ putStrLn $ 
+              "Vectorizer, traversing: " ++ compShortName x
+            ; go x
+            }
     go comp =
         let (cty,card) = compInfo comp
             loc        = compLoc comp 
@@ -471,9 +514,17 @@ computeVectTop verbose = computeVect
                     -- Step 1: vectorize css
                   ; vss <- mapM computeVect css
                     
+                  ; vecMIO $ 
+                    do { putStrLn "(Bind) vss, lengths of each candidate set."
+                       ; mapM (putStrLn . show . length) vss
+                       }
+
                     -- Step 2: form candidates (lazily) 
                   ; env <- getVecEnv 
                   ; let ress = matchControl env vss 
+
+                  ; vecMIO $ 
+                    putStrLn $ "(Bind) Length of ress = " ++ show (length ress)
           
                   ; when (null ress) $ vecMIO $
                     do { putStrLn "WARNING: BindMany empty vectorization:"
@@ -491,8 +542,19 @@ computeVectTop verbose = computeVect
             -> do { vcs1 <- computeVect c1
                   ; vcs2 <- computeVect c2
 
+                  ; let dbgv x xs = 
+                         vecMIO $ 
+                          do { putStrLn $ "(Par) len  = " ++ show (length xs) 
+                             ; putStrLn $ "(Par) comp = " ++ show x 
+}
+                  ; dbgv c1 vcs1
+                  ; dbgv c2 vcs2 
+
                   ; env <- getVecEnv 
                   ; let ress = matchData env p loc vcs1 vcs2
+
+                  ; vecMIO $ 
+                    putStrLn $ "(Par) Length of ress = " ++ show (length ress) 
 
                   ; when (null ress) $ vecMIO $ 
                     do { putStrLn "WARNING: Par empty vectorization:"
@@ -616,7 +678,7 @@ computeVectTop verbose = computeVect
 
           -- Treat nested annotations exactly the same as repeat
           Repeat Nothing (MkComp (VectComp hint c1) _ _)
-            -> go (cRepeat loc (cty,card) (Just hint) c1)
+            -> computeVect (cRepeat loc (cty,card) (Just hint) c1)
 
           Repeat Nothing c -- NB: Vectorizing in anything we wish!
             | SimplCard (Just cin) (Just cout) <- snd $ compInfo c 
@@ -664,7 +726,7 @@ computeVectTop verbose = computeVect
                    }
 
             | otherwise
-            -> do { vcs <- go c
+            -> do { vcs <- computeVect c
                   ; return [ liftDVR (cRepeat loc () Nothing) vc
                            | vc <- vcs
                            ]
@@ -853,6 +915,7 @@ computeVectTop verbose = computeVect
                         ; putStrLn $ "Out-type    = " ++ show tyout
                         ; putStrLn $ "Cardinality = " ++ show card 
                         ; print $ ppComp (eraseComp comp)
+                        ; putStrLn $ "Returning self." 
                         } 
                    ; return $ [self_no_vect] 
                    }
@@ -950,9 +1013,12 @@ runDebugVecM verbose comp tenv env cenv sym unifiers
              <- let vec_action = computeVectTop verbose ccomp
                 in runVecM vec_action sym (VecEnv [] []) (VecState 0 0)
 
+       ; putStrLn "AAAA" 
+       ; putStrLn $ "runDebugM, length of results is: " ++ show (length vss)
          -- Now do the final selection! 
        ; vs_maxi <- filterMaximal vss 
 
+       ; putStrLn $ "runDebugM, maximal elt found: " ++ show (dvr_vres vs_maxi)
 
        ; let do_one (DVR { dvr_comp = io_comp, dvr_vres = _vres })
                 = do { vc <- io_comp
