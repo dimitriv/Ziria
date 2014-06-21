@@ -32,6 +32,8 @@ import Control.Monad.State
 
 import Data.List as M
 
+import Data.Functor.Identity 
+
 
 import CardinalityAnalysis
 
@@ -44,6 +46,8 @@ import TcMonad
 import TcComp 
 import TcErrors ( ErrCtx (..) )
 
+
+import Debug.Trace 
 
 data VectScaleFact 
   = -- Scale up factor 
@@ -73,7 +77,10 @@ compVectScaleFactDn cin cout
                 , vs_cand_divisors 
                     = [ (x,y)
                       | x <- divs_of cin
-                      , y <- divs_of cout 
+                      , y <- [1] 
+                      -- DV: Don't break the output queue further, as it 
+                      -- will already be mitigated 
+                      -- y <- divs_of cout 
                       ] }
   where divs_of n = if n > 0 then someDivisors n else [0]
 
@@ -109,7 +116,8 @@ compVectScaleFactDn_InOrOut mcin mcout
 
 allVectMults :: Ty -> Int -> Int -> [(Int,Int)]
 -- TODO: make this infinite (or at least very large)
-allVectMults ty_in xin xout = [ (x,y) 
+allVectMults ty_in xin xout = [ -- DV: used to be (x,y)
+                                (x,x) -- **  
                               | x <- [1..64]
                               , y <- [1..64]
                               , x `mod` y == 0 && x >= y
@@ -187,11 +195,11 @@ matchControl (sym,venv) bcands
     go acc ([]:_) k           
       = error "Can't happen! Empty vectorization result!" 
     go acc ([c1]:crest) k     
-      = go (acc ++ [c1]) crest k
+      = go (c1:acc) crest k
     go acc ((c1:c1s):crest) k 
-      = go (acc ++ [c1]) (c1s:crest) (go acc (c1s:crest) k)
+      = go (c1:acc) crest (go acc (c1s:crest) k)
     go acc [] k                 
-      = acc : k
+      = (reverse acc) : k
 
     mitigate :: [DelayedVectRes] -> [DelayedVectRes]
     mitigate vcs = 
@@ -221,7 +229,9 @@ matchControl (sym,venv) bcands
 
     gcd_many [a1] = a1
     gcd_many (a1:a2:as) = gcd_many (gcd a1 a2 : as)
-    gcd_many [] = error "gcd_many" 
+    gcd_many [] = 0 
+    -- Could be empty only in the exceptional case where they are all 
+    -- filtered out because they are zero
 
     mitigate_one ain aout 
                  dvr@(DVR { dvr_comp = mk_comp
@@ -231,35 +241,12 @@ matchControl (sym,venv) bcands
                           })
       | NoVect <- vres
       = dvr 
-      | DidVect cin cout util <- vres
-      = let mk_in c 
-              | cin == 0 || ain == cin
-                -- no need for mitigation
-              = return (c,[])
-              | otherwise
-              , let loc = compLoc c
-              = runVecMBnd $
-                do { m <- mitigateUp loc tin ain cin
-                   ; return $ 
-                     cPar loc () (mkParInfo NeverPipeline) m c
-                   }
-        in
-        let mk_out c
-              | cout == 0 || aout == cout
-              = return (c,[])
-              | otherwise
-              , let loc = compLoc c
-              = runVecMBnd $ 
-                do { m <- mitigateDn loc tout cout aout
-                   ; return $ 
-                     cPar loc () (mkParInfo NeverPipeline) c m
-                   }
-        in
-        let mk_comp' = 
+      | DidVect cin cout u <- vres
+      = let mk_comp' = 
                do { comp <- vecMIO $ mk_comp 
                   ; let loc = compLoc comp
-                  ; (c',b1) <- mk_in comp
-                  ; (c'', b2) <- mk_out c'
+                  ; (c',b1) <- mk_in comp cin ain tin
+                  ; (c'', b2) <- mk_out c' cout aout tout
                   ; if null b1 && null b2 then return c''
                     else do { fname <- newVectName "mitigated" loc
                             ; return $ 
@@ -267,16 +254,44 @@ matchControl (sym,venv) bcands
                               cCall loc () fname []
                             }
                   }
+        in 
+-- ******************
+        let mitig_util = util (1 + (if cin > 0 then cin - ain else 0) + 
+                                   (if cout > 0 then cout - aout else 0))
+              
         in dvr { dvr_comp = inCurrentEnv (sym,venv) mk_comp'
-               , dvr_vres 
-                    = case vres of 
-                        NoVect        -> NoVect
-                        DidVect _ _ u -> DidVect ain aout u
+               , dvr_vres = DidVect ain aout (u - mitig_util)
+                    -- = case vres of 
+                    --     NoVect        -> NoVect
+                    --     DidVect _ _ u -> DidVect ain aout u
                }
 
       | otherwise
       = error "mitigate_one: Can't happen!"
 
+
+mk_in c cin ain tin 
+  | cin == 0 || ain == cin
+    -- no need for mitigation
+  = return (c,[])
+  | otherwise
+  , let loc = compLoc c
+  = runVecMBnd $
+    do { m <- mitigateUp loc tin ain cin
+       ; return $ 
+         cPar loc () (mkParInfo NeverPipeline) m c
+       }
+
+mk_out c cout aout tout
+  | cout == 0 || aout == cout
+  = return (c,[])
+  | otherwise
+  , let loc = compLoc c
+  = runVecMBnd $ 
+    do { m <- mitigateDn loc tout cout aout
+       ; return $ 
+         cPar loc () (mkParInfo NeverPipeline) c m
+       }
 
 
 matchData :: (GS.Sym, VecEnv)
@@ -320,6 +335,18 @@ matchData (sym,venv) p loc xs ys = go_left xs ys
 
     rchoose [] _ _ = error "rchoose"
 
+
+pruneMaximal :: [ DelayedVectRes ] -> [ DelayedVectRes ] 
+pruneMaximal xs 
+  = -- first group by VectRes in-out
+    let groups = groupBy (\vr1 vr2 -> 
+                    vectResQueueEq (dvr_vres vr1) (dvr_vres vr2)) xs
+    in
+    -- and for each group pick the maximal
+    map filter_maximal groups
+
+  where filter_maximal xs = runIdentity (filterMaximal xs)
+  
 
 filterMaximal :: Monad m => [ DelayedVectRes ] -> m DelayedVectRes
 filterMaximal cs 
@@ -396,13 +423,15 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
               , dvr_orig_tyin  = dvr_orig_tyin dp1
               , dvr_orig_tyout = dvr_orig_tyout dp2
               }
-       | co `mod` ci' == 0               -- divisible
-       -> let middle = (co + ci') `div` 2 
+
+       | co `mod` ci' == 0                -- divisible
+       -> let middle = (co + ci') `div` 2 -- **
               -- DV: is this a reasonable utility? (i.e the average of both)
               u = chooseParUtility u1 u2 middle 
           in
           Just $ 
-          DVR { dvr_comp = mk_par (Just (dvr_orig_tyin dp2,co,ci')) dp1 dp2
+          DVR { dvr_comp = mk_par (Just (dvr_orig_tyin dp2,co,ci',
+                                         dvr_orig_tyout dp2, co')) dp1 dp2
               , dvr_vres = DidVect ci co' u
               , dvr_orig_tyin  = dvr_orig_tyin dp1
               , dvr_orig_tyout = dvr_orig_tyout dp2
@@ -415,16 +444,35 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
                ; p2 <- dvr_comp dp2 
                ; return $ cPar loc () pnfo p1 p2
                }
-        mk_par (Just (ty,hi,lo)) dp1 dp2
+        mk_par (Just (ty,hi,lo,ty2_out,cout2)) dp1 dp2
           = let vec_action 
                    = do { (m,binds) <- runVecMBnd $ mitigateDn loc ty hi lo
                         ; p1 <- vecMIO (dvr_comp dp1)
                         ; p2 <- vecMIO (dvr_comp dp2)
-                        ; let p1'  = cPar loc () (mkParInfo NeverPipeline) p1 m 
-                              comp = cPar loc () pnfo p1' p2
+
+                        ; let pnever = mkParInfo NeverPipeline 
+                              p1' = cPar loc () pnever p1 m 
+                              k = hi `div` lo
+
+                        ; (comp, binds') <- 
+                           if cout2 == 0 || k == 1 || isArrTy ty2_out then 
+                             return $ (cPar loc () pnfo p1' p2, [])
+                           else 
+                             runVecMBnd $ 
+                             do { m <- mitigateUp loc ty2_out cout2 (k*cout2)
+                                ; liftVecM $ vecMIO $ 
+                                  do { putStrLn "(Par) mitigateUp" 
+                                     ; putStrLn $ "ty2_out = " ++ show ty2_out
+                                     ; putStrLn $ "cout2   = " ++ show cout2
+                                     ; putStrLn $ "mul (k) = " ++ show k
+                                     } 
+                                ; return $ cPar loc () pnfo p1' $  
+                                           cPar loc () pnever p2 m
+                                }
+ 
                         ; fname <- newVectName "mk_par" loc 
                         ; return $ 
-                          cLetFunC loc () fname [] binds comp $ 
+                          cLetFunC loc () fname [] (binds ++ binds') comp $ 
                           cCall loc () fname []
                         }
             in inCurrentEnv (sym,venv) vec_action
@@ -514,23 +562,34 @@ computeVectTop verbose = computeVect
                     -- Step 1: vectorize css
                   ; vss <- mapM computeVect css
                     
-                  ; vecMIO $ 
-                    do { putStrLn "(Bind) vss, lengths of each candidate set."
-                       ; mapM (putStrLn . show . length) vss
-                       }
+                  -- ; vecMIO $ 
+                  --   do { putStrLn "(Bind) vss, lengths of each cand. set."
+                  --      ; mapM (putStrLn . show . length) vss
+                  --      ; putStrLn $ "(Bind) comp = "; 
+                  --      ; putStrLn $ show comp
+                  --      }
 
                     -- Step 2: form candidates (lazily) 
                   ; env <- getVecEnv 
                   ; let ress = matchControl env vss 
 
-                  ; vecMIO $ 
-                    putStrLn $ "(Bind) Length of ress = " ++ show (length ress)
+                  ; let builder = \(c:cs) -> cBindMany loc () c (zip xs cs)
+
+
+                  -- ; vecMIO $ 
+                  --   mapM (\dvr-> putStrLn $ "DVR vres=" ++ 
+                  --                        show (dvr_vres dvr)) 
+                  --        (map (mkBindDelayedVRes builder) ress)
+
+                  -- ; vecMIO $ 
+                  --   putStrLn $ 
+                  --   "(Bind) Length of ress = " ++ show (length ress)
           
                   ; when (null ress) $ vecMIO $
                     do { putStrLn "WARNING: BindMany empty vectorization:"
                        ; print $ ppComp comp }
 
-                  ; let builder = \(c:cs) -> cBindMany loc () c (zip xs cs)
+                  -- ; let builder = \(c:cs) -> cBindMany loc () c (zip xs cs)
 
                     -- Step 3: build for each candidate in ress a BindMany
                   ; return $ 
@@ -544,17 +603,22 @@ computeVectTop verbose = computeVect
 
                   ; let dbgv x xs = 
                          vecMIO $ 
-                          do { putStrLn $ "(Par) len  = " ++ show (length xs) 
-                             ; putStrLn $ "(Par) comp = " ++ show x 
-}
-                  ; dbgv c1 vcs1
-                  ; dbgv c2 vcs2 
+                          do { putStrLn $ "(Par) comp = " ++ show x 
+                             ; putStrLn $ "(Par) len  = " ++ show (length xs) 
+                             ; when (length xs < 40) $ 
+                                 mapM_ (\w -> putStrLn $ show (dvr_vres w)) xs
+                             ; putStrLn "----------------------" 
+                             }
+ 
+--                  ; dbgv c1 vcs1
+--                  ; dbgv c2 vcs2 
 
                   ; env <- getVecEnv 
-                  ; let ress = matchData env p loc vcs1 vcs2
+                  ; let ress_pre = matchData env p loc vcs1 vcs2
+                  ; let ress = pruneMaximal ress_pre
 
-                  ; vecMIO $ 
-                    putStrLn $ "(Par) Length of ress = " ++ show (length ress) 
+--                  ; vecMIO $ 
+--                    putStrLn $ "(Par) Length ress = " ++ show (length ress) 
 
                   ; when (null ress) $ vecMIO $ 
                     do { putStrLn "WARNING: Par empty vectorization:"
@@ -1013,8 +1077,8 @@ runDebugVecM verbose comp tenv env cenv sym unifiers
              <- let vec_action = computeVectTop verbose ccomp
                 in runVecM vec_action sym (VecEnv [] []) (VecState 0 0)
 
-       ; putStrLn "AAAA" 
-       ; putStrLn $ "runDebugM, length of results is: " ++ show (length vss)
+       ; putStrLn "====>" 
+--     ; putStrLn $ "runDebugM, length of results is: " ++ show (length vss)
          -- Now do the final selection! 
        ; vs_maxi <- filterMaximal vss 
 
