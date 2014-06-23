@@ -141,9 +141,9 @@ data DelayedVectRes
 mitigateUp :: Maybe SourcePos
            -> Ty -> Int -> Int -> VecMBnd (Comp () ())
 mitigateUp loc ty lo hi 
-  = do { x  <- newTypedName "x" (if lo == 1 then ty else TArr (Literal lo) ty) loc
+  = do { x  <- newTypedName "x_mt_up" (if lo == 1 then ty else TArr (Literal lo) ty) loc
        ; i  <- newTypedName "i" tint loc 
-       ; ya <- newDeclTypedName "mt_ya" (TArr (Literal hi) ty) loc Nothing
+       ; ya <- newDeclTypedName "mt_ya_up" (TArr (Literal hi) ty) loc Nothing
        ; let bnd = hi `div` lo
        ; let comp = xRepeat $ 
                     xSeq $ 
@@ -161,9 +161,10 @@ mitigateUp loc ty lo hi
        }
 
 mitigateDn :: Maybe SourcePos
+           -> String
            -> Ty -> Int -> Int -> VecMBnd (Comp () ())
-mitigateDn loc ty hi lo 
-  = do { x <- newTypedName "x" (TArr (Literal hi) ty) loc
+mitigateDn loc orig ty hi lo 
+  = do { x <- newTypedName ("x_mt_dn" ++ orig) (TArr (Literal hi) ty) loc
        ; i <- newTypedName "i" tint loc
        ; let bnd = hi `div` lo
        ; let comp = xRepeat $ xSeq $
@@ -244,6 +245,15 @@ matchControl (sym,venv) bcands
       | DidVect cin cout u <- vres
       = let mk_comp' = 
                do { comp <- vecMIO $ mk_comp 
+
+                  ; vecMIO $ do { putStrLn "mitigate_one" 
+                                ; putStrLn $ "ain  = " ++ show ain
+                                ; putStrLn $ "aout = " ++ show aout
+                                ; putStrLn $ "cin  = " ++ show cin
+                                ; putStrLn $ "cout = " ++ show cout 
+                                ; putStrLn $ "comp = " ++ show comp
+                                }
+
                   ; let loc = compLoc comp
                   ; (c',b1) <- mk_in comp cin ain tin
                   ; (c'', b2) <- mk_out c' cout aout tout
@@ -288,7 +298,7 @@ mk_out c cout aout tout
   | otherwise
   , let loc = compLoc c
   = runVecMBnd $ 
-    do { m <- mitigateDn loc tout cout aout
+    do { m <- mitigateDn loc "bnd" tout cout aout
        ; return $ 
          cPar loc () (mkParInfo NeverPipeline) c m
        }
@@ -430,9 +440,9 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
               u = chooseParUtility u1 u2 middle 
           in
           let (mb_k,comp) = mk_par (Just (dvr_orig_tyin dp2,co,ci',
-                                         dvr_orig_tyout dp2, co')) dp1 dp2
+                                            dvr_orig_tyout dp2, co')) dp1 dp2
           in
-          let co'' = case mb_k of { Nothing -> co' ; Just k -> k*co' }
+          let co'' = case mb_k of { Nothing -> co' ; Just k -> k }
           in
           Just $ 
           DVR { dvr_comp = comp
@@ -455,9 +465,19 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
                        then Nothing
                        else Just (k*cout2)
                 vec_action 
-                   = do { (m,binds) <- runVecMBnd $ mitigateDn loc ty hi lo
+                   = do { (m,binds) <- runVecMBnd $ mitigateDn loc "par" ty hi lo
+
                         ; p1 <- vecMIO (dvr_comp dp1)
                         ; p2 <- vecMIO (dvr_comp dp2)
+
+                        ; vecMIO $ do { putStrLn "mitigateDn (par)"
+                                      ; putStrLn $ "ty = " ++ show ty
+                                      ; putStrLn $ "hi = " ++ show hi
+                                      ; putStrLn $ "lo = " ++ show lo
+                                      ; putStrLn $ "p1 = " ++ show p1
+                                      ; putStrLn $ "mitigator = " ++ show m
+                                      }
+
 
                         ; let pnever = mkParInfo NeverPipeline 
                               p1' = cPar loc () pnever p1 m 
@@ -470,9 +490,10 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
                              do { m <- mitigateUp loc ty2_out cout2 (k*cout2)
                                 ; liftVecM $ vecMIO $ 
                                   do { putStrLn "(Par) mitigateUp" 
-                                     ; putStrLn $ "ty2_out = " ++ show ty2_out
-                                     ; putStrLn $ "cout2   = " ++ show cout2
-                                     ; putStrLn $ "mul (k) = " ++ show k
+                                     ; putStrLn $ "ty2_out   = " ++ show ty2_out
+                                     ; putStrLn $ "cout2     = " ++ show cout2
+                                     ; putStrLn $ "mul (k)   = " ++ show k
+                                     ; putStrLn $ "mitigator = " ++ show m
                                      } 
                                 ; return $ (cPar loc () pnfo p1' $  
                                             cPar loc () pnever p2 m)
@@ -720,8 +741,15 @@ computeVectTop verbose = computeVect
                        ; print $ ppComp comp }
 
                   ; let builder = \([x1,x2])-> cBranch loc () (eraseExp e) x1 x2
-                  ; return $ 
-                    map (mkBindDelayedVRes builder) ress
+                        branch_cands = map (mkBindDelayedVRes builder) ress
+
+{- 
+                  ; vecMIO $ do { putStrLn $ "Branch candidates:"
+                                ; mapM (\v -> putStrLn $ "dvr_vres = " ++ show (dvr_vres v)) branch_cands
+                                }
+-}
+
+                  ; return $ branch_cands
                   }
 
 
@@ -1056,14 +1084,28 @@ mkBindDelayedVRes f vs@(mk_v1:mk_v1s)
       = do { x <- sequence (map dvr_comp vs)
            ; return $ f x }
     mk_vres_many 
-      = let dids = filter (did_vect . dvr_vres) vs
-        in case dids of 
-             []          -> NoVect
-             (one_did:_) -> (dvr_vres one_did) { vect_util = u } 
-    did_vect (DidVect {}) = True
-    did_vect NoVect       = False
+      = case assert_all_equal_vres vs of        
+         () -> 
+             let dids = filter (did_vect . dvr_vres) vs
+             in case dids of 
+                  []          -> NoVect
+                  (one_did:_) -> (dvr_vres one_did) { vect_util = u } 
 
 mkBindDelayedVRes _f [] = error "mkBindDelayedVRes: empty list"
+
+assert_all_equal_vres vs = 
+  let tmp = map dvr_vres (filter (did_vect . dvr_vres) vs)
+      ins  = map (\(DidVect i o _) -> i) tmp
+      outs = map (\(DidVect i o _) -> o) tmp
+  in if all_eq ins && all_eq outs then () else error "assert_all_equal_vres FAILURE!" 
+
+did_vect (DidVect {}) = True
+did_vect NoVect       = False
+
+all_eq []     = True
+all_eq (x:[]) = True
+all_eq (x:y:xs) = (x==y) && all_eq (y:xs)
+
 
 
 {- Entry point to the vectorizer
