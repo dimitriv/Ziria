@@ -369,7 +369,7 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
  = case (dvr_vres dp1, dvr_vres dp2) of
      (NoVect,NoVect) -> 
         Just $ 
-        DVR { dvr_comp = mk_par Nothing dp1 dp2 
+        DVR { dvr_comp = snd $ mk_par Nothing dp1 dp2 
             , dvr_vres = NoVect
             , dvr_orig_tyin  = dvr_orig_tyin dp1 
             , dvr_orig_tyout = dvr_orig_tyout dp2
@@ -383,7 +383,7 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
                                 else dvr_orig_tyin dp2
         -> let u = chooseParUtility (vectResUtil v1) (vectResUtil v2) cin in 
            Just $ 
-           DVR { dvr_comp = mk_par Nothing dp1 dp2
+           DVR { dvr_comp = snd $ mk_par Nothing dp1 dp2
                , dvr_vres = DidVect 1 cout u
                , dvr_orig_tyin  = dvr_orig_tyin dp1
                , dvr_orig_tyout = dvr_orig_tyout dp2
@@ -399,7 +399,7 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
                                 else dvr_orig_tyout dp1
         -> let u = chooseParUtility (vectResUtil v1) (vectResUtil v2) cout in 
            Just $ 
-           DVR { dvr_comp = mk_par Nothing dp1 dp2
+           DVR { dvr_comp = snd $ mk_par Nothing dp1 dp2
                , dvr_vres = DidVect cin 1 u
                , dvr_orig_tyin  = dvr_orig_tyin dp1
                , dvr_orig_tyout = dvr_orig_tyout dp2
@@ -418,7 +418,7 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
               u = chooseParUtility u1 u2 middle 
           in
           Just $ 
-          DVR { dvr_comp = mk_par Nothing dp1 dp2
+          DVR { dvr_comp = snd $ mk_par Nothing dp1 dp2
               , dvr_vres = DidVect ci co' u
               , dvr_orig_tyin  = dvr_orig_tyin dp1
               , dvr_orig_tyout = dvr_orig_tyout dp2
@@ -429,10 +429,14 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
               -- DV: is this a reasonable utility? (i.e the average of both)
               u = chooseParUtility u1 u2 middle 
           in
-          Just $ 
-          DVR { dvr_comp = mk_par (Just (dvr_orig_tyin dp2,co,ci',
+          let (mb_k,comp) = mk_par (Just (dvr_orig_tyin dp2,co,ci',
                                          dvr_orig_tyout dp2, co')) dp1 dp2
-              , dvr_vres = DidVect ci co' u
+          in
+          let co'' = case mb_k of { Nothing -> co' ; Just k -> k*co' }
+          in
+          Just $ 
+          DVR { dvr_comp = comp
+              , dvr_vres = DidVect ci co''  u
               , dvr_orig_tyin  = dvr_orig_tyin dp1
               , dvr_orig_tyout = dvr_orig_tyout dp2
               }
@@ -440,19 +444,23 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
        -> Nothing
 
   where mk_par Nothing dp1 dp2 
-          = do { p1 <- dvr_comp dp1
-               ; p2 <- dvr_comp dp2 
-               ; return $ cPar loc () pnfo p1 p2
-               }
+          = ( Nothing, 
+               do { p1 <- dvr_comp dp1
+                  ; p2 <- dvr_comp dp2 
+                  ; return $ cPar loc () pnfo p1 p2
+                  })
         mk_par (Just (ty,hi,lo,ty2_out,cout2)) dp1 dp2
-          = let vec_action 
+          = let k = hi `div` lo
+                mb_k = if cout2 == 0 || k == 1 || isArrTy ty2_out 
+                       then Nothing
+                       else Just (k*cout2)
+                vec_action 
                    = do { (m,binds) <- runVecMBnd $ mitigateDn loc ty hi lo
                         ; p1 <- vecMIO (dvr_comp dp1)
                         ; p2 <- vecMIO (dvr_comp dp2)
 
                         ; let pnever = mkParInfo NeverPipeline 
                               p1' = cPar loc () pnever p1 m 
-                              k = hi `div` lo
 
                         ; (comp, binds') <- 
                            if cout2 == 0 || k == 1 || isArrTy ty2_out then 
@@ -466,16 +474,16 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
                                      ; putStrLn $ "cout2   = " ++ show cout2
                                      ; putStrLn $ "mul (k) = " ++ show k
                                      } 
-                                ; return $ cPar loc () pnfo p1' $  
-                                           cPar loc () pnever p2 m
+                                ; return $ (cPar loc () pnfo p1' $  
+                                            cPar loc () pnever p2 m)
                                 }
  
                         ; fname <- newVectName "mk_par" loc 
-                        ; return $ 
-                          cLetFunC loc () fname [] (binds ++ binds') comp $ 
-                          cCall loc () fname []
+                        ; return $
+                             cLetFunC loc () fname [] (binds ++ binds') comp $ 
+                             cCall loc () fname []
                         }
-            in inCurrentEnv (sym,venv) vec_action
+            in (mb_k, inCurrentEnv (sym,venv) vec_action)
 
 
 
