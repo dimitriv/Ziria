@@ -77,7 +77,7 @@ compVectScaleFactDn cin cout
                 , vs_cand_divisors 
                     = [ (x,y)
                       | x <- divs_of cin
-                      , y <- [1] 
+                      , y <- [cout] 
                       -- DV: Don't break the output queue further, as it 
                       -- will already be mitigated 
                       -- y <- divs_of cout 
@@ -639,15 +639,15 @@ computeVectTop verbose = computeVect
                              ; putStrLn "----------------------" 
                              }
  
---                  ; dbgv c1 vcs1
+--                 ; dbgv c1 vcs1
 --                  ; dbgv c2 vcs2 
 
                   ; env <- getVecEnv 
                   ; let ress_pre = matchData env p loc vcs1 vcs2
                   ; let ress = pruneMaximal ress_pre
 
---                  ; vecMIO $ 
---                    putStrLn $ "(Par) Length ress = " ++ show (length ress) 
+                  -- ; vecMIO $ 
+                  --   putStrLn $ "(Par) Length ress = " ++ show (length ress) 
 
                   ; when (null ress) $ vecMIO $ 
                     do { putStrLn "WARNING: Par empty vectorization:"
