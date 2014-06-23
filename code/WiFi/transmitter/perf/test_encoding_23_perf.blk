@@ -18,7 +18,6 @@
 --
 --
 
-#define MANUAL_VECT
 #include "../../const.blk"
 #include "../encoding.blk"
 

@@ -20,13 +20,6 @@
 
 -- Used with macros to create a simple template structure
 
-{-
-#ifdef MANUAL_VECT
-let comp [8, CRC_VEC] CRC_NAME (len : int) =  
-#else
-let comp CRC_NAME (len : int) =  
-#endif
--}
 let comp [8, CRC_VEC] CRC_NAME (len : int) =  
 var crc_state: arr[4] bit := {'0,'0,'0,'0};
 

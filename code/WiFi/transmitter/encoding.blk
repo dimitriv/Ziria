@@ -37,14 +37,10 @@ let comp encode34() =
    return r
  in 
    
-#ifdef MANUAL_VECT
 -- This is too big for LUTter as we take three times
 -- and it gets inlined
 -- repeat [12,8] seq{
- repeat [6,4] seq{
-#else
- repeat seq{
-#endif
+ repeat [6,8] seq{
    dvm1 <- take;
    dvm2 <- take;
    dvm3 <- take;
@@ -75,14 +71,10 @@ let comp encode23() =
    return r
  in 
 
-#ifdef MANUAL_VECT
 -- This is too big for LUTter as we take twice
 -- and it gets inlined, so this becomes [16,24]
 -- repeat [8,12] seq{
  repeat [4,6] seq{
-#else
- repeat seq{
-#endif
    dvm1 <- take;
    dvm2 <- take;
 
@@ -112,11 +104,7 @@ let comp encode12() =
    return r
  in 
 
-#ifdef MANUAL_VECT
  repeat [8,16] seq {
-#else
- repeat seq {
-#endif
    dvm1 <- take;
    emits (enc_state_machine(dvm1))
  }

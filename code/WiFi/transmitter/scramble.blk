@@ -23,11 +23,7 @@ var scrmbl_st: arr[7] bit := {'1,'1,'1,'1,'1,'1,'1};
 var tmp: bit;
 var y:bit;
   
-#ifdef MANUAL_VECT
   repeat [8,8] seq{
-#else
-  repeat seq{
-#endif
     x <- take;
     
     do{
