@@ -24,6 +24,7 @@
   "Keymap for Blink major mode")
 
 
+(add-to-list 'auto-mode-alist '("\\.zir\\'" . blink-mode))
 (add-to-list 'auto-mode-alist '("\\.blk\\'" . blink-mode))
 (add-to-list 'auto-mode-alist '("\\.wpl\\'" . blink-mode))
 
