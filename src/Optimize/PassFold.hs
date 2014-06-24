@@ -33,6 +33,11 @@ import Control.Monad.State
 import qualified Data.Map as Map
 
 
+import Data.Time 
+import System.CPUTime
+
+import Text.Printf
+
 import CgLUT ( shouldLUT )
 import Analysis.Range ( varRanges )
 import Analysis.UseDef ( inOutVars ) 
@@ -168,9 +173,9 @@ push_comp_locals_step fgs comp
              cbody' = cBindMany loc (compInfo cbody) tk [(x,emt')]
              emt'   = cEmit loc (compInfo emt) e'
              e'     = mk_letrefs (expLoc e) (info e) locals e
-       ; liftIO $ do { putStrLn $ "push_comp_locals_step, function = " ++ show nm
-                     ; putStrLn $ "locas = " ++ show locals
-                     }
+       -- ; liftIO $ do { putStrLn $ "push_comp_locals_step, function = " ++ show nm
+       --             ; putStrLn $ "locals = " ++ show locals
+       --              }
        ; rewrite comp'
        }
   | otherwise 
@@ -694,39 +699,48 @@ arrinit_step _fgs e1
        }
 
 
-alength_elim :: DynFlags -> TypedExpPass
-alength_elim fgs e 
- | EUnOp ALength e0 <- unExp e
- , (TArr nexp _)    <- info e0
- , let loc = expLoc e
- = rewrite $ numexp_to_exp loc nexp
- | otherwise 
- = return e
- where numexp_to_exp loc (Literal i) = eVal loc tint (VInt i)
-       numexp_to_exp loc (NVar nm i) = eVar loc tint nm
-       numexp_to_exp loc (NArr {})   = error "Type checker bug: unresolved NArr!" 
-
-
 
 
 elim_unused_let :: DynFlags -> TypedExpPass
 elim_unused_let fgs e 
  | ELet nm e1 e2 <- unExp e
- , not (nm `S.member` exprFVs e2)
- , not (is_side_effecting e) 
- = rewrite e2
- | otherwise
- = return e
+ , let fvs = exprFVs e2
+ , let b = nm `S.member` fvs
+ = if not b && not (is_side_effecting e) 
+   then rewrite e2 
+   else 
+     if is_simpl_expr e1 && not (isDynFlagSet fgs NoExpFold) 
+     then substExp (nm,e1) e2 >>= rewrite
+     else rest_chain fgs e
+
+ | otherwise 
+ = rest_chain fgs e 
+ where 
+   rest_chain fgs e 
+     = alength_elim fgs e >>= eval_arith fgs >>= const_fold fgs >>= arrinit_step fgs >>= 
+       subarr_inline_step fgs
 
 
-exp_inline_step :: DynFlags -> TypedExpPass
-exp_inline_step fgs e
-  | ELet nm e1 e2 <- unExp e
-  , not (isDynFlagSet fgs NoExpFold)
-  , is_simpl_expr e1
-  = substExp (nm,e1) e2 >>= rewrite 
-  | otherwise
-  = return e
+   exp_inline_step :: DynFlags -> TypedExpPass
+   exp_inline_step fgs e
+     | ELet nm e1 e2 <- unExp e
+     , not (isDynFlagSet fgs NoExpFold)
+     , is_simpl_expr e1
+     = substExp (nm,e1) e2 >>= rewrite 
+     | otherwise
+     = return e
+
+   alength_elim :: DynFlags -> TypedExpPass
+   alength_elim fgs e 
+    | EUnOp ALength e0 <- unExp e
+    , (TArr nexp _)    <- info e0
+    , let loc = expLoc e
+    = rewrite $ numexp_to_exp loc nexp
+    | otherwise 
+    = return e
+    where numexp_to_exp loc (Literal i) = eVal loc tint (VInt i)
+          numexp_to_exp loc (NVar nm i) = eVar loc tint nm
+          numexp_to_exp loc (NArr {})   = error "TC bug: unresolved NArr!" 
 
 
 eval_arith :: DynFlags -> TypedExpPass
@@ -799,63 +813,66 @@ for_unroll_step fgs e
 
 
 const_fold :: DynFlags -> TypedExpPass
-const_fold _ (MkExp e0 loc inf) =
-    MkExp <$> go e0 <*> pure loc <*> pure inf
+const_fold _ e@(MkExp e0 loc inf) 
+  = case go e0 of 
+      Nothing -> return e
+      Just e' -> rewrite $ MkExp e' loc inf
+
   where
-    go :: Exp0 Ty -> RwM (Exp0 Ty)
+    go :: Exp0 Ty -> Maybe (Exp0 Ty)
     go (EBinOp Add e1 e2) | EVal (VInt 0) <- unExp e1 =
-        rewrite $ unExp e2
+        return $ unExp e2
 
     go (EBinOp Add e1 e2) | EVal (VInt 0) <- unExp e2 =
-        rewrite $ unExp e1
+        return $ unExp e1
 
     go (EBinOp Add e1 e2) | EVal (VInt i1) <- unExp e1
                           , EVal (VInt i2) <- unExp e2 =
-        rewrite $ EVal (VInt (i1+i2))
+        return $ EVal (VInt (i1+i2))
 
     go (EBinOp Sub e1 e2) | EVal (VInt i1) <- unExp e1
                           , EVal (VInt i2) <- unExp e2 =
-        rewrite $ EVal (VInt (i1-i2))
+        return $ EVal (VInt (i1-i2))
 
     go (EBinOp Mult e1 e2) | EVal (VInt 1) <- unExp e1 =
-        rewrite $ unExp e2
+        return $ unExp e2
 
     go (EBinOp Mult e1 e2) | EVal (VInt 1) <- unExp e2 =
-        rewrite $ unExp e1
+        return $ unExp e1
 
     go (EBinOp Mult e1 e2) | EVal (VInt i1) <- unExp e1
                            , EVal (VInt i2) <- unExp e2 =
-        rewrite $ EVal (VInt (i1*i2))
+        return $ EVal (VInt (i1*i2))
 
     go (EBinOp Div e1 e2) | EVal (VInt i1) <- unExp e1
                           , EVal (VInt i2) <- unExp e2 =
-        rewrite $ EVal (VInt (i1 `quot` i2))
+        return $ EVal (VInt (i1 `quot` i2))
 
     go (EBinOp Rem e1 e2) | EVal (VInt i1) <- unExp e1
                           , EVal (VInt i2) <- unExp e2 =
-        rewrite $ EVal (VInt (i1 `rem` i2))
+        return $ EVal (VInt (i1 `rem` i2))
 
     go (EBinOp Eq e1 e2) | EVal (VInt i1) <- unExp e1
                          , EVal (VInt i2) <- unExp e2 =
-        rewrite $ if i1 == i2 then EVal (VBool True) else EVal (VBool False)
+        return $ if i1 == i2 then EVal (VBool True) else EVal (VBool False)
 
     go (EBinOp Neq e1 e2) | EVal (VInt i1) <- unExp e1
                           , EVal (VInt i2) <- unExp e2 =
-        rewrite $ if i1 /= i2 then EVal (VBool True) else EVal (VBool False)
+        return $ if i1 /= i2 then EVal (VBool True) else EVal (VBool False)
 
     go (EBinOp Lt e1 e2) | EVal (VInt i1) <- unExp e1
                          , EVal (VInt i2) <- unExp e2 =
-        rewrite $ if i1 < i2 then EVal (VBool True) else EVal (VBool False)
+        return $ if i1 < i2 then EVal (VBool True) else EVal (VBool False)
 
     go (EBinOp Gt e1 e2) | EVal (VInt i1) <- unExp e1
                          , EVal (VInt i2) <- unExp e2 =
-        rewrite $ if i1 > i2 then EVal (VBool True) else EVal (VBool False)
+        return $ if i1 > i2 then EVal (VBool True) else EVal (VBool False)
 
     go (EIf e1 e2 e3) | EVal (VBool flag) <- unExp e1 =
-        rewrite $ if flag then unExp e2 else unExp e3
+        return $ if flag then unExp e2 else unExp e3
 
-    go e0 =
-        pure e0
+    go e0 = Nothing
+        -- pure e0
 
 type TypedCompPass = Comp CTy Ty -> RwM (Comp CTy Ty)
 type TypedExpPass  = Exp Ty -> RwM (Exp Ty)
@@ -865,17 +882,44 @@ liftExpPass epass = mapCompM_ (mapExpM_ epass) return
 
 
 runPasses :: GS.Sym
+          -> Map.Map String (Int,Int,Double)
           -> [(String,TypedCompPass)]
           -> Comp CTy Ty
-          -> IO (Comp CTy Ty)
--- Exhaustively run a sequence of passes
-runPasses sym [] comp      = return comp
-runPasses sym ((pn,p):ps) comp
-  = do { r <- runRwM (p comp) sym
-       ; case r of
-           NotRewritten _c -> runPasses sym ps comp
-           Rewritten comp' -> runPasses sym ((pn,p):ps) comp' 
-       }
+          -> IO (Comp CTy Ty, Map.Map String (Int,Int,Double))
+runPasses sym mp_init passes comp = go mp_init passes comp
+  where 
+    go mp [] comp 
+      = return (comp, mp)
+    go mp ((pn,p):ps) comp
+        = do { st <- getCPUTime 
+--             ; printf "Pass: %10s" pn
+             ; r <- runRwM (p comp) sym
+             ; en <- getCPUTime 
+             ; let diff = (fromIntegral (en - st)) / (10^12)
+             ; let mp' = incInvokes mp diff pn 
+             ; case r of
+                 NotRewritten _c 
+                   -> do { -- printf "... not rewritten :-( \n"
+                           go mp' ps comp
+                         }
+                 Rewritten comp' 
+                   -> do { -- printf "... rewritten     :-) \n"
+                           -- ; printf "comp = %s\n" (show comp)
+                           go (incRewrites mp' pn) ((pn,p):ps) comp' 
+                         }
+
+             }
+
+    incInvokes :: Map.Map String (Int,Int,Double) -> Double -> String -> Map.Map String (Int,Int,Double)
+    incInvokes mp d s = Map.alter aux s mp
+      where aux Nothing         = Just (1,0,d)
+            aux (Just (i,r,d0)) = Just (i+1,r,d0+d)
+
+    incRewrites :: Map.Map String (Int,Int,Double) -> String -> Map.Map String (Int,Int,Double)
+    incRewrites mp s = Map.alter aux s mp
+      where aux Nothing        = Just (1,1,0)
+            aux (Just (i,r,d)) = Just (i,r+1,d)
+
 
 foldCompPasses :: DynFlags -> [(String,TypedCompPass)]
 foldCompPasses flags
@@ -918,21 +962,36 @@ foldExpPasses flags
   | isDynFlagSet flags NoFold || isDynFlagSet flags NoExpFold
   = []
   | otherwise 
-  = [ ("const-fold", const_fold flags) 
-    , ("array-initialization", arrinit_step flags) 
-    , ("exp-inline", exp_inline_step flags)
-    , ("for-unroll", for_unroll_step flags)
-    , ("subarr-inline-step", subarr_inline_step flags)
-    , ("elim-unsued-let", elim_unused_let flags)
-    , ("elim-alength", alength_elim flags)
-    , ("eval-arith", eval_arith flags)
+  = [ -- ("const-fold", const_fold flags) 
+--      ("array-initialization", arrinit_step flags) 
+--    , ("exp-inline", exp_inline_step flags)
+      ("for-unroll", for_unroll_step flags)
+--    , ("subarr-inline-step", subarr_inline_step flags)
+    , ("elim-unused-let", elim_unused_let flags)
+--    , ("elim-alength", alength_elim flags)
+--    , ("eval-arith", eval_arith flags)
     ]
  
 runFold :: DynFlags -> GS.Sym -> Comp CTy Ty -> IO (Comp CTy Ty)
-runFold flags sym comp = go 0 comp
+runFold flags sym comp 
+   = do { (comp',mp') <- go Map.empty 0 comp
+        ; putStrLn "Optimizer statistics:"
+        ; printRwStats mp'
+        ; return comp'
+        }
  where
   passes = map (\(nm,step) -> (nm, mapCompM_ return step))
-               (foldCompPasses flags ++ [(s, liftExpPass f) | (s,f) <- foldExpPasses flags])
-  go depth comp 
-    | depth >= 40  = return comp
-    | otherwise    = runPasses sym passes comp >>= go (depth+1)
+               (foldCompPasses flags ++ [ (s, liftExpPass f) 
+                                        | (s,f) <- foldExpPasses flags])
+  go mp depth comp 
+    | depth >= 40  = return (comp,mp)
+    | otherwise    = do { (comp1,mp1) <- runPasses sym mp passes comp 
+                        ; go mp1 (depth+1) comp1
+                        }
+
+  printRwStats :: Map.Map String (Int,Int,Double) -> IO () 
+  printRwStats mp 
+    = mapM_ print_one (Map.toList mp)
+  print_one (pn,(invs,rws,tm)) 
+    = printf "%20s:%d/%d/%f\n" pn invs rws tm
+

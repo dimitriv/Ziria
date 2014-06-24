@@ -555,9 +555,9 @@ computeVectTop :: Bool -> Comp (CTy, Card) Ty -> VecM [DelayedVectRes]
 computeVectTop verbose = computeVect
   where
     computeVect x 
-       = do { vecMIO $ putStrLn $ 
-              "Vectorizer, traversing: " ++ compShortName x
-            ; go x
+       = do { -- vecMIO $ putStrLn $ 
+              -- "Vectorizer, traversing: " ++ compShortName x
+              go x
             }
     go comp =
         let (cty,card) = compInfo comp
