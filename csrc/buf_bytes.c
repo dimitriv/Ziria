@@ -21,13 +21,41 @@
 #include <errno.h>
 #include <string.h>
 
+#include "wpl_alloc.h"
 #include "params.h"
 #include "types.h"
 #include "buf.h"
-#include "wpl_alloc.h"
 
 
 
+void initBufCtxBlock(BufContextBlock *blk)
+{
+	blk->input_idx = 0;
+	blk->input_repetitions = 1;
+	blk->input_dummy_samples = 0;
+	blk->fst = 1;
+	blk->output_idx = 0;
+	blk->chunk_input_idx = 0;
+	blk->chunk_input_repeats = 1;
+	blk->chunk_input_dummy_samples = 0;
+	blk->chunk_fst = 1;
+	blk->chunk_output_idx = 0;
+	blk->num8_input_idx = 0;
+	blk->num8_input_repeats = 1;
+	blk->num8_input_dummy_samples = 0;
+	blk->num8_fst = 1;
+	blk->num8_output_idx = 0;
+	blk->num16_input_idx = 0;
+	blk->num16_input_repeats = 1;
+	blk->num16_input_dummy_samples = 0;
+	blk->num16_fst = 1;
+	blk->num16_output_idx = 0;
+	blk->num_input_idx = 0;
+	blk->num_input_repeats = 1;
+	blk->num_input_dummy_samples = 0;
+	blk->num_fst = 1;
+	blk->num_output_idx = 0;
+}
 
 
 unsigned int parse_dbg_byte(BufContextBlock *blk, char *dbg_buf, char *target)
@@ -275,12 +303,5 @@ void flush_putchar(BufContextBlock *blk)
 }
 
 
-void init_putchunk(BufContextBlock *blk)
-{
-	blk->chunk_output_buffer = (char *)malloc(Globals.outBufSize * sizeof(char));
-	blk->chunk_output_entries = Globals.outBufSize;
-	if (Globals.outType == TY_FILE)
-		blk->chunk_output_file = try_open(Globals.outFileName, "w");
-}
 
 

@@ -112,9 +112,9 @@ main = failOnException $ do
     --    putStrLn "parsed ..."
     --    putStrLn $ "parsed prog = " ++ show prog
 
-    rensym <- GS.initGenSym 
+    rensym <- GS.initGenSym (getName dflags)
     prog_renamed <- runRenM (renameProg prog) rensym []
-    sym <- GS.initGenSym
+    sym <- GS.initGenSym (getName dflags)
 
     --    putStrLn $ "renamed = " ++ show prog_renamed
 
@@ -183,7 +183,8 @@ main = failOnException $ do
     --    putStrLn "post vectorized ..."
 
     -- Generate code
-    sym <- GS.initGenSym
+    -- Use module name to avoid generating the same name in different modules
+    sym <- GS.initGenSym (getName dflags)
 
     let compile_threads (sc,ctx,tid_cs,bufTys,fn) 
           = do { defs <- failOnError $ 

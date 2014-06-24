@@ -20,12 +20,18 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "params.h"
 #include "types.h"
 #include "wpl_alloc.h"
+#include "params.h"
 
 
-char * try_alloc_bytes(unsigned int siz) 
+void initHeapCtxBlock(HeapContextBlock *hblk)
+{
+	hblk->wpl_heap = NULL;
+}
+
+
+char * try_alloc_bytes(HeapContextBlock *hblk, unsigned int siz)
 {
   char *buf = (char *) malloc(siz);
   if (buf == NULL) 

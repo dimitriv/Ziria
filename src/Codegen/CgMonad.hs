@@ -267,7 +267,7 @@ data CgEnv = CgEnv
       -- The environment mapping function symbols 
       -- to real names and closure params
 
-    , symEnv     :: GS.Sym                
+    , symEnv     :: GS.Sym 
       -- Reference to a symbol, for gensym'ing
 
     , disableBC  :: Bool -- When true, no bound checks are emitted 
@@ -453,9 +453,9 @@ inAllocFrame :: Cg a -> Cg a
 inAllocFrame action
   = do { idx <- freshName "mem_idx"
        ; appendDecl [cdecl| unsigned int $id:(name idx); |]
-       ; appendStmt [cstm| $id:(name idx) = wpl_get_free_idx(); |]
+       ; appendStmt [cstm| $id:(name idx) = wpl_get_free_idx(hblk); |]
        ; x <- action 
-       ; appendStmt [cstm| wpl_restore_free_idx($id:(name idx)); |]
+       ; appendStmt [cstm| wpl_restore_free_idx(hblk, $id:(name idx)); |]
        ; return x }
 
 
@@ -483,9 +483,9 @@ collectStmts_ m = do
 
 genSym :: String -> Cg String
 genSym prefix = do
-    sym  <- asks symEnv
-    i    <- liftIO $ GS.genSym sym
-    return $ prefix ++ show i
+    sym       <- asks symEnv
+    (i, str)  <- liftIO $ GS.genSym sym
+    return $ prefix ++ show i ++ str
 
 getNames :: Cg [Name]
 getNames = gets nameStack

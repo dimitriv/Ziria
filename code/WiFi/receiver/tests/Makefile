@@ -36,6 +36,10 @@ DIFF = ../../../../tools/BlinkDiff
 # Targets
 TGTS = $(patsubst %.blk, %.test, $(wildcard *.blk))
 
+# Do not delete outfiles to allow quick recheck of failed tests
+# use make clean to get rid of them
+.PRECIOUS: %.outfile
+
 all: $(TGTS)
 
 %.out : %.blk

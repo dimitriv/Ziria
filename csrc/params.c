@@ -20,8 +20,8 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "params.h"
 #include "wpl_alloc.h"
+#include "params.h"
 
 
 FILE * try_open(char *filename, char *mode) 

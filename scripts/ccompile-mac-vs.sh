@@ -34,6 +34,6 @@ source $TOP/scripts/common.sh
 #echo "Compiling C code (VS) ..."
 pushd . && cd $TOP/csrc/mac/CompilerVS && ./build.bat && popd
 
-cp -f $TOP/csrc/mac/CompilerVS/CompilerVS13-mac/x64/Release/CompilerVS13.exe mac.out
+cp -f $TOP/csrc/mac/CompilerVS/CompilerVS13-mac/x64/Release/CompilerVS13-mac.exe mac.out
 
 

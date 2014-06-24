@@ -33,6 +33,10 @@ COMPILER?=winddk
 PP   = ../../../scripts/preprocesscompile-$(COMPILER).sh
 DIFF = ../../../tools/BlinkDiff
 
+# Do not delete outfiles to allow quick recheck of failed tests
+# use make clean to get rid of them
+.PRECIOUS: %.outfile
+
 # Targets
 TGTS = $(patsubst %.blk, %.test, $(wildcard *.blk))
 

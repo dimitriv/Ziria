@@ -21,11 +21,11 @@
 #include <errno.h>
 #include <string.h>
 
+#include "wpl_alloc.h"
 #include "params.h"
 #include "types.h"
 #include "buf.h"
 
-#include "wpl_alloc.h"
 
 
 unsigned int parse_dbg_int32(char *dbg_buf, num32 *target)
@@ -218,7 +218,7 @@ void fprint_arrint32(BufContextBlock *blk, FILE *f, int32 *val, unsigned int vle
 }
 
 
-void init_putint32(BufContextBlock *blk)
+void init_putint32(BufContextBlock *blk, HeapContextBlock *hblk)
 {
 	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
 	{
@@ -317,7 +317,7 @@ void flush_putint32(BufContextBlock *blk)
 }
 
 
-void init_putcomplex32(BufContextBlock *blk)
+void init_putcomplex32(BufContextBlock *blk, HeapContextBlock *hblk)
 {
 	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
 	{

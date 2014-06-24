@@ -155,13 +155,13 @@ codeGenProgram dflags globals shared_ctxt
                           ; appendTopDefs [wpl_go_dummy_def]
                         
                             -- emit the appropriate wpl_set_up_threads() definition for SORA code to work
-                          ; appendTopDefs $ ST.thread_setup affinity_mask bufTys tids
+                          ; appendTopDefs $ ST.thread_setup affinity_mask module_name bufTys tids
                           } 
                      else -- In this case we know that wpl_go /is/ going to be the main function 
-                        appendTopDefs $ ST.thread_setup_shim
+                        appendTopDefs $ ST.thread_setup_shim module_name
                    }
                -- Finally emit wpl_global_init()
-             ; codeGenWPLGlobalInit (initstms ++ moreinitstms) (getName dflags)
+             ; codeGenWPLGlobalInit (initstms ++ moreinitstms) module_name
              }    
         }
 
@@ -170,4 +170,5 @@ codeGenProgram dflags globals shared_ctxt
     isMultiThreaded = length tid_cs > 1
     pipeline_flag   = isDynFlagSet dflags Pipeline
     affinity_mask   = getAffinityMask dflags
+    module_name     = getName dflags
 

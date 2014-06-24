@@ -279,3 +279,9 @@ csrc/mac/rx.c
 csrc/mac/tx.c
 tests/mac/*.c
 tests/mac/*.expanded
+csrc/CompilerVS/CompilerVS13/*
+csrc/mac/CompilerVS/*.out
+tests/mac/*.out
+tests/parser/*.exe
+tests/parser/*.dump
+tests/vectorizer/*.expanded

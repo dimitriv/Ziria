@@ -34,15 +34,15 @@ typedef struct _BufContextBlock {
 	// Bit buffers
 	BitArrPtr input_buffer;
 	unsigned int input_entries;
-	unsigned int input_idx = 0;
-	unsigned int input_repetitions = 1;
-	unsigned int input_dummy_samples = 0;
+	unsigned int input_idx;
+	unsigned int input_repetitions;
+	unsigned int input_dummy_samples;
 	unsigned int max_dummy_samples;
 
-	int fst = 1;
+	int fst;
 	unsigned char * output_buffer;
 	unsigned int output_entries;
-	unsigned int output_idx = 0;
+	unsigned int output_idx;
 	FILE *output_file;
 
 
@@ -51,20 +51,20 @@ typedef struct _BufContextBlock {
 	char *chunk_input_buffer;
 	unsigned int chunk_input_siz;
 	unsigned int chunk_input_entries;
-	unsigned int chunk_input_idx = 0;
-	unsigned int chunk_input_repeats = 1;
+	unsigned int chunk_input_idx;
+	unsigned int chunk_input_repeats;
 
-	unsigned int chunk_input_dummy_samples = 0;
+	unsigned int chunk_input_dummy_samples;
 	unsigned int chunk_max_dummy_samples;
 
 	void(*parse_chunk_dbg)(char *buf, void *chunk);
 	void(*print_chunk_dbg)(FILE *f, void *chunk);
 
-	int chunk_fst = 1;
+	int chunk_fst;
 	char *chunk_output_buffer;
 	unsigned int chunk_output_siz;
 	unsigned int chunk_output_entries;
-	unsigned int chunk_output_idx = 0;
+	unsigned int chunk_output_idx;
 	FILE *chunk_output_file;
 
 
@@ -72,16 +72,16 @@ typedef struct _BufContextBlock {
 	// Int8 buffers
 	int8 *num8_input_buffer;
 	unsigned int num8_input_entries;
-	unsigned int num8_input_idx = 0;
-	unsigned int num8_input_repeats = 1;
+	unsigned int num8_input_idx;
+	unsigned int num8_input_repeats;
 
-	unsigned int num8_input_dummy_samples = 0;
+	unsigned int num8_input_dummy_samples;
 	unsigned int num8_max_dummy_samples;
 
-	int num8_fst = 1;
+	int num8_fst;
 	int8 *num8_output_buffer;
 	unsigned int num8_output_entries;
-	unsigned int num8_output_idx = 0;
+	unsigned int num8_output_idx;
 	FILE *num8_output_file;
 
 
@@ -89,16 +89,16 @@ typedef struct _BufContextBlock {
 	// Int16 buffers
 	int16 *num16_input_buffer;
 	unsigned int num16_input_entries;
-	unsigned int num16_input_idx = 0;
-	unsigned int num16_input_repeats = 1;
+	unsigned int num16_input_idx;
+	unsigned int num16_input_repeats;
 
-	unsigned int num16_input_dummy_samples = 0;
+	unsigned int num16_input_dummy_samples;
 	unsigned int num16_max_dummy_samples;
 
-	int num16_fst = 1;
+	int num16_fst;
 	int16 *num16_output_buffer;
 	unsigned int num16_output_entries;
-	unsigned int num16_output_idx = 0;
+	unsigned int num16_output_idx;
 	FILE *num16_output_file;
 
 
@@ -106,21 +106,24 @@ typedef struct _BufContextBlock {
 	// Int32 buffers
 	int32 *num_input_buffer;
 	unsigned int num_input_entries;
-	unsigned int num_input_idx = 0;
-	int num_input_repeats = 1;
+	unsigned int num_input_idx;
+	int num_input_repeats;
 
-	unsigned int num_input_dummy_samples = 0;
+	unsigned int num_input_dummy_samples;
 	unsigned int num_max_dummy_samples;
 
-	int num_fst = 1;
+	int num_fst;
 	int16 *num_output_buffer;
 	unsigned int num_output_entries;
-	unsigned int num_output_idx = 0;
+	unsigned int num_output_idx;
 	FILE *num_output_file;
 
 } BufContextBlock;
 
 
+
+// Defined in buf_bytes.c for lack of better location
+void initBufCtxBlock(BufContextBlock *blk);
 
 
 void init_getbit(BufContextBlock *blk, HeapContextBlock *hblk);

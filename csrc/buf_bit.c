@@ -28,11 +28,11 @@
 #include <ws2tcpip.h>
 #endif 
 
+#include "wpl_alloc.h"
 #include "params.h"
 #include "types.h"
 #include "buf.h"
 
-#include "wpl_alloc.h"
 #ifdef SORA_PLATFORM
 #include "sora_ip.h"
 #endif
@@ -252,7 +252,7 @@ GetStatus buf_getarrbit(BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
 }
 
 
-void init_putbit(BufContextBlock* blk)
+void init_putbit(BufContextBlock* blk, HeapContextBlock *hblk)
 {
 	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
 	{

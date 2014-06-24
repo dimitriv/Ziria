@@ -21,11 +21,11 @@
 #include <errno.h>
 #include <string.h>
 
+#include "wpl_alloc.h"
 #include "params.h"
 #include "types.h"
 #include "buf.h"
 
-#include "wpl_alloc.h"
 
 #ifdef SORA_PLATFORM
 #include "sora_radio.h"
@@ -271,7 +271,7 @@ void fprint_arrint16(BufContextBlock *blk, FILE *f, int16 *val, unsigned int vle
 }
 
 
-void init_putint16(BufContextBlock *blk)
+void init_putint16(BufContextBlock *blk, HeapContextBlock *hblk)
 {
 	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
 	{
@@ -403,7 +403,7 @@ void flush_putint16(BufContextBlock *blk)
 }
 
 
-void init_putcomplex16(BufContextBlock *blk)
+void init_putcomplex16(BufContextBlock *blk, HeapContextBlock *hblk)
 {
 	write_time_stamp();
 

@@ -88,6 +88,7 @@ SOURCES     = \
              ..\utils.c \
 	     ..\numerics.c \
 	     ..\buf_bit.c \
+	     ..\buf_bytes.c \
 	     ..\buf_numerics8.c \
 	     ..\buf_numerics16.c \
 	     ..\buf_numerics32.c \

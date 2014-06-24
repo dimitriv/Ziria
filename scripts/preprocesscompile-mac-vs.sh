@@ -38,6 +38,6 @@ gcc -I $TOP/lib -w -x c -E $1 >$2.expanded
 
 #echo "Running WPL compiler..."
 $WPLC $WPLCFLAGS $EXTRAOPTS -i $2.expanded -o $2.c
-cp $2.c $TOP/csrc/mac/$2.c
+mv $2.c $TOP/csrc/mac/$2.c
 
 

@@ -34,6 +34,7 @@ CP   = ../../scripts/ccompile-mac-$(COMPILER).sh
 DIFF = ../../tools/BlinkDiff
 
 
+vpath %.c ../../csrc/mac
 CSRC = $(patsubst %.zir, %.c, $(wildcard *.zir))
 
 all: mac.test

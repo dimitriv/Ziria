@@ -20,18 +20,20 @@ module GenSym (Sym, initGenSym, genSym, getSym, setSym) where
 
 import Data.IORef
 
-type Sym = IORef Int
+type Sym = IORef (Int, String)
 
-initGenSym :: IO Sym
-initGenSym = newIORef 0
+initGenSym :: String -> IO Sym 
+initGenSym module_name = newIORef (0, module_name)
 
-nextSym r = modifyIORef' r (+1)
+--nextSym r = modifyIORef' r (+1)
+nextSym r = modifyIORef' r (\(c,n) -> (c+1,n))
 
 getSym r = readIORef r
 setSym r n = modifyIORef' r (\_ -> n)
 
-genSym :: Sym -> IO Int
+genSym :: Sym -> IO (Int, String)
 genSym r =
   do nextSym r
      readIORef r
+
 

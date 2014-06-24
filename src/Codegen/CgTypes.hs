@@ -331,9 +331,9 @@ codeGenDeclGroup_qual quals v ty vinit
                       cty_plain = codeGenTy_qual "" ty
                   in do { newHeapAlloc 
                         ; let ig1  = [cdecl| $ty:cty * $id:v = 
-                                         ($ty:cty_plain *) wpl_alloca(sizeof($ty:cty_plain));|] 
+                                         ($ty:cty_plain *) wpl_alloca(hblk, sizeof($ty:cty_plain));|] 
                               ig2  = [cdecl| $ty:cty * $id:v;|]
-                        ; let stmt = [cstm| $id:v = ($ty:cty_plain *) wpl_alloca(sizeof($ty:cty_plain)); |]
+                        ; let stmt = [cstm| $id:v = ($ty:cty_plain *) wpl_alloca(hblk, sizeof($ty:cty_plain)); |]
                         ; return (ig1, (ig2, Just stmt))
                         }
 
@@ -356,9 +356,9 @@ codeGenDeclGroup_qual quals v ty vinit
             in return (ig, (ig, Nothing)) 
           | alloc_as_ptr
           = do { newHeapAlloc
-               ; let ig1  = [cdecl| $ty:decl_t *$id:v = ($ty:t *) wpl_alloca($len * sizeof($ty:t)); |]
+               ; let ig1  = [cdecl| $ty:decl_t *$id:v = ($ty:t *) wpl_alloca(hblk, $len * sizeof($ty:t)); |]
                      ig2  = [cdecl| $ty:decl_t *$id:v; |]
-                     stmt = [cstm| $id:v = ($ty:t *) wpl_alloca($len * sizeof($ty:t)); |]
+                     stmt = [cstm| $id:v = ($ty:t *) wpl_alloca(hblk, $len * sizeof($ty:t)); |]
                ; return (ig1, (ig2, Just stmt))
                }
           | otherwise 

@@ -19,10 +19,13 @@
 #pragma once
 
 typedef struct _HeapContextBlock {
-	void * wpl_heap = NULL;
+	void * wpl_heap;
 	unsigned int wpl_free_idx;
 	int wpl_heap_siz;
 } HeapContextBlock;
+
+
+void initHeapCtxBlock(HeapContextBlock *hblk);
 
 
 /* The bump allocator */
@@ -31,7 +34,7 @@ void wpl_init_heap(HeapContextBlock *blk, unsigned int max_heap_size);
 void * wpl_alloca(HeapContextBlock *blk, unsigned int bytes);
 
 /* Just a generic allocation routine */
-char * try_alloc_bytes(HeapContextBlock *blk, unsigned int siz);
+char * try_alloc_bytes(HeapContextBlock *hblk, unsigned int siz);
 
 unsigned int wpl_get_free_idx(HeapContextBlock *blk);
 // precondition: 16-aligned

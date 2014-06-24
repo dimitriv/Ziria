@@ -21,11 +21,11 @@ permissions and limitations under the License.
 #include <errno.h>
 #include <string.h>
 
+#include "wpl_alloc.h"
 #include "params.h"
 #include "types.h"
 #include "buf.h"
 
-#include "wpl_alloc.h"
 
 #ifdef SORA_PLATFORM
 #include "sora_radio.h"
@@ -264,7 +264,7 @@ void fprint_arrint8(BufContextBlock *blk, FILE *f, int8 *val, unsigned int vlen)
 }
 
 
-void init_putint8(BufContextBlock *blk)
+void init_putint8(BufContextBlock *blk, HeapContextBlock *hblk)
 {
 	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
 	{
@@ -396,7 +396,7 @@ void flush_putint8(BufContextBlock *blk)
 }
 
 
-void init_putcomplex8(BufContextBlock *blk)
+void init_putcomplex8(BufContextBlock *blk, HeapContextBlock *hblk)
 {
 	write_time_stamp();
 

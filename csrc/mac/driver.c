@@ -53,19 +53,24 @@
 
     // set_up_threads is defined in the compiler-generated code
     // and returns the number of threads we set up 
-	extern int wpl_set_up_threads(PSORA_UTHREAD_PROC *User_Routines);
+	extern int wpl_set_up_threads_tx(PSORA_UTHREAD_PROC *User_Routines);
+	extern int wpl_set_up_threads_rx(PSORA_UTHREAD_PROC *User_Routines);
 #endif
 
 
 // Contex blocks
-BufContextBlock buf_ctx_blk;
-HeapContextBlock heap_ctx_blk;
+BufContextBlock tx_buf_ctx_blk, rx_buf_ctx_blk;
+HeapContextBlock tx_heap_ctx_blk, rx_heap_ctx_blk;
 
 // Blink generated functions 
-extern void wpl_input_initialize(BufContextBlock *blk, HeapContextBlock *hblk);
-extern void wpl_output_finalize(BufContextBlock *blk);
-extern void wpl_global_init(HeapContextBlock *hblk, unsigned int heap_size);
-extern int wpl_go(BufContextBlock* blk, HeapContextBlock* hblk);
+extern void wpl_input_initialize_tx(BufContextBlock *blk, HeapContextBlock *hblk);
+extern void wpl_input_initialize_rx(BufContextBlock *blk, HeapContextBlock *hblk);
+extern void wpl_output_finalize_tx(BufContextBlock *blk);
+extern void wpl_output_finalize_rx(BufContextBlock *blk);
+extern void wpl_global_init_tx(HeapContextBlock *hblk, unsigned int heap_size);
+extern void wpl_global_init_rx(HeapContextBlock *hblk, unsigned int heap_size);
+extern int wpl_go_tx(BufContextBlock* blk, HeapContextBlock* hblk);
+extern int wpl_go_rx(BufContextBlock* blk, HeapContextBlock* hblk);
 
 
 // Parameters and parsing
@@ -102,17 +107,22 @@ int __cdecl main(int argc, char **argv) {
 
 
   // Init
-  initBufCtxBlock(&buf_ctx_blk);
-  initHeapCtxBlock(&heap_ctx_blk);
+  initBufCtxBlock(&tx_buf_ctx_blk);
+  initBufCtxBlock(&rx_buf_ctx_blk);
+  initHeapCtxBlock(&tx_heap_ctx_blk);
+  initHeapCtxBlock(&rx_heap_ctx_blk);
 
-  wpl_global_init(&heap_ctx_blk, Globals.heapSize);
-  wpl_input_initialize(&buf_ctx_blk, &heap_ctx_blk);
+  wpl_global_init_tx(&tx_heap_ctx_blk, Globals.heapSize);
+  wpl_global_init_rx(&rx_heap_ctx_blk, Globals.heapSize);
+  wpl_input_initialize_tx(&tx_buf_ctx_blk, &tx_heap_ctx_blk);
+  wpl_input_initialize_rx(&rx_buf_ctx_blk, &rx_heap_ctx_blk);
 
 #ifdef SORA_PLATFORM
   /////////////////////////////////////////////////////////////////////////////  
   // DV: Pass the User_Routines here
 
-  int no_threads = wpl_set_up_threads(User_Routines);
+  // TOFIX
+  int no_threads = wpl_set_up_threads_tx(User_Routines);
 
   printf("Setting up threads...\n");
 
@@ -146,12 +156,13 @@ int __cdecl main(int argc, char **argv) {
   // NB: these are typically allocated in blink_set_up_threads
   ts_free();
 #else
-  wpl_go(&buf_ctx_blk, &heap_ctx_blk);
+  wpl_go();
 #endif
 
   printf("Bytes copied: %ld\n", bytes_copied);
 
-  wpl_output_finalize(&buf_ctx_blk);
+  wpl_output_finalize_tx(&tx_buf_ctx_blk);
+  wpl_output_finalize_rx(&rx_buf_ctx_blk);
 
 #ifdef SORA_PLATFORM
   // Stop Sora HW
@@ -188,7 +199,9 @@ BOOLEAN __stdcall go_thread(void * pParam)
 {
 	thread_info *ti = (thread_info *) pParam;
 
-	wpl_go(&buf_ctx_blk, &heap_ctx_blk);
+	// TOFIX
+	wpl_go_tx(&tx_buf_ctx_blk, &tx_heap_ctx_blk);
+	wpl_go_rx(&rx_buf_ctx_blk, &rx_heap_ctx_blk);
 
 	ti->fRunning = false;
 
