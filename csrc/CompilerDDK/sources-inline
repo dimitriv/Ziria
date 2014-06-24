@@ -33,7 +33,8 @@ INCLUDES        = $(INCLUDES) \
                   $(SORA_ROOT)\inc\brick; \
 				  $(SORA_ROOT)\inc; \
 		          $(SORA_ROOT)\src\inc; \
-                  \inc\brick
+                  \inc\brick\
+		  ..
 
 
 TARGETLIBS      = $(TARGETLIBS) \

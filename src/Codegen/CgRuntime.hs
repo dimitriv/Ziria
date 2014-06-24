@@ -26,6 +26,7 @@ import PpComp
 import qualified GenSym as GS
 import CgHeader
 import CgMonad
+import CgTypes
 
 import qualified Data.Loc
 import qualified Data.Symbol
@@ -42,28 +43,28 @@ callOutBufInitializer = callExtBufInitializer "put"
 
 callExtBufInitializer str (ExtBuf base_ty) = 
   let init_typ_spec = "init_" ++ str ++ (fst $ getTyPutGetInfo base_ty)
-  in [cstm| $id:(init_typ_spec)();|]
+  in [cstm| $id:(init_typ_spec)(blk);|]
 
 callExtBufInitializer _str (IntBuf _) 
   = error "BUG: callExtBufInitializer called with IntBuf!" 
 
-cgExtBufInitsAndFins (TBuff in_bty,TBuff out_bty)
-  = do appendTopDef [cedecl|void $id:(ini_name)() {
+cgExtBufInitsAndFins (TBuff in_bty,TBuff out_bty) mfreshId
+  = do appendTopDef [cedecl|void $id:(ini_name mfreshId)($ty:(namedCType "BufContextBlock") *blk) {
                         $stm:(callInBufInitializer in_bty)
                         $stm:(callOutBufInitializer out_bty)
                         } |]
-       appendTopDef [cedecl|void $id:(fin_name)() {
+       appendTopDef [cedecl|void $id:(fin_name mfreshId)($ty:(namedCType "BufContextBlock") *blk) {
                         $stm:(callOutBufFinalizer out_bty)
                         } |]
-  where ini_name = "wpl_input_initialize"
-        fin_name = "wpl_output_finalize"
+  where ini_name mfreshId = "wpl_input_initialize" ++ mfreshId
+        fin_name mfreshId = "wpl_output_finalize" ++ mfreshId
 
-cgExtBufInitsAndFins (ty1,ty2)
+cgExtBufInitsAndFins (ty1,ty2) mfreshId
   = fail $ "BUG: cgExtBufInitsAndFins called with non-TBuff types!"
 
 callOutBufFinalizer (ExtBuf base_ty) =
   let finalize_typ_spec = "flush_put" ++ (fst $ getTyPutGetInfo base_ty)
-  in [cstm| $id:(finalize_typ_spec)();|]
+  in [cstm| $id:(finalize_typ_spec)(blk);|]
 callOutBufFinalizer (IntBuf _) 
   = error "BUG: callOutBufFinalizer called with IntBuf!" 
 
@@ -83,7 +84,8 @@ mkRuntime mfreshId m = do
         let (_, init_decls, init_stms) = getCode (compGenInit cinfo)
 
         appendTopDef $ 
-          [cedecl|int $id:(go_name mfreshId ++ "_aux")(int initialized) {
+          [cedecl|int $id:(go_name mfreshId ++ "_aux")($ty:(namedCType "BufContextBlock") *blk, 
+                                                       $ty:(namedCType "HeapContextBlock") *hblk, int initialized) {
                        unsigned int loop_counter = 0;
 
                        $decls:init_decls             
@@ -97,8 +99,9 @@ mkRuntime mfreshId m = do
                   } |]
 
         appendTopDef $ 
-          [cedecl|int $id:(go_name mfreshId)() {
-                     return ($id:(go_name mfreshId ++ "_aux")(0));
+          [cedecl|int $id:(go_name mfreshId)($ty:(namedCType "BufContextBlock") *blk, 
+                                             $ty:(namedCType "HeapContextBlock") *hblk) {
+                     return ($id:(go_name mfreshId ++ "_aux")(blk, hblk, 0));
                   }
           |]
 

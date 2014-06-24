@@ -39,7 +39,7 @@ CSRC = $(patsubst %.zir, %.c, $(wildcard *.zir))
 all: mac.test
 
 %.c : %.zir
-	EXTRAOPTS='$(EXTRAOPTS) --new-src-format' $(PP) $< $@
+	EXTRAOPTS='$(EXTRAOPTS) --new-src-format --name=_$(basename $@)' $(PP) $< $(basename $@)
 
 mac.out: $(CSRC)
 	EXTRAOPTS='$(EXTRAOPTS) --new-src-format' $(CP) 

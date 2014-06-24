@@ -61,7 +61,7 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SORA_ROOT)\src\bb\dot11a;$(SORA_ROOT)\src\bb\dot11a\inc;$(SORA_ROOT)\src\bb\brick11\src;$(SORA_ROOT)\src\util\src;$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\inc;$(SORA_ROOT)\inc\brick;$(DDK_INC_PATH)</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SORA_ROOT)\src\bb\dot11a;$(SORA_ROOT)\src\bb\dot11a\inc;$(SORA_ROOT)\src\bb\brick11\src;$(SORA_ROOT)\src\util\src;$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\inc;$(SORA_ROOT)\inc\brick;$(DDK_INC_PATH);$(ProjectDir)\..\..</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);$(DDK_LIB_PATH);$(SORA_ROOT)\target\chk_wxp_x86\i386\;$(SORA_ROOT)\lib\chk_wxp_x86\i386</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -71,7 +71,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SORA_ROOT)\src\bb\dot11a;$(SORA_ROOT)\src\bb\dot11a\inc;$(SORA_ROOT)\src\bb\brick11\src;$(SORA_ROOT)\src\util\src;$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\inc;$(SORA_ROOT)\inc\brick;$(DDK_INC_PATH)</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SORA_ROOT)\src\bb\dot11a;$(SORA_ROOT)\src\bb\dot11a\inc;$(SORA_ROOT)\src\bb\brick11\src;$(SORA_ROOT)\src\util\src;$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\inc;$(SORA_ROOT)\inc\brick;$(DDK_INC_PATH);$(ProjectDir)\..\..</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);$(DDK_LIB_PATH);$(SORA_ROOT)\target\fre_wxp_x86\i386\;$(SORA_ROOT)\lib\fre_wxp_x86\i386</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">

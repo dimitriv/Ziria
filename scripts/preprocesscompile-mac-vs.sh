@@ -33,11 +33,11 @@ source $TOP/scripts/common.sh
 echo $1
 #echo "Preprocessing..."
 #gcc -x c -P -E $1 >$1.expanded
-gcc -I $TOP/lib -w -x c -E $1 >$1.expanded
+gcc -I $TOP/lib -w -x c -E $1 >$2.expanded
 
 
 #echo "Running WPL compiler..."
-$WPLC $WPLCFLAGS $EXTRAOPTS -i $1.expanded -o $1.c
-cp $1.c $TOP/csrc/mac/$1.c
+$WPLC $WPLCFLAGS $EXTRAOPTS -i $2.expanded -o $2.c
+cp $2.c $TOP/csrc/mac/$2.c
 
 

@@ -18,8 +18,10 @@
 */
 #pragma once
 
+#include "types.h"
 #include "params.h"
 #include "utils.h"
+#include "bit.h"
 
 typedef enum __GetStatus {
 	GS_SUCCESS,
@@ -28,67 +30,160 @@ typedef enum __GetStatus {
 
 
 
-void init_getbit();
-GetStatus buf_getbit(Bit *x);
-GetStatus buf_getarrbit(BitArrPtr x, unsigned int vlen);
-void init_putbit();
-void buf_putbit(Bit x);
-void buf_putarrbit(BitArrPtr x, unsigned int vlen);
-void flush_putbit();
+typedef struct _BufContextBlock { 
+	// Bit buffers
+	BitArrPtr input_buffer;
+	unsigned int input_entries;
+	unsigned int input_idx = 0;
+	unsigned int input_repetitions = 1;
+	unsigned int input_dummy_samples = 0;
+	unsigned int max_dummy_samples;
+
+	int fst = 1;
+	unsigned char * output_buffer;
+	unsigned int output_entries;
+	unsigned int output_idx = 0;
+	FILE *output_file;
 
 
-void init_getint32();
-GetStatus buf_getint32(int32 *x);
-GetStatus buf_getarrint32(int32 *x, unsigned int vlen);
-void init_putint32();
-void buf_putint32(int32 x);
-void buf_putarrint32(int32 * x, unsigned int vlen);
-void flush_putint32();
+	// Byte buffer
+	/* A buffer of elements, each element of size chunk_siz */
+	char *chunk_input_buffer;
+	unsigned int chunk_input_siz;
+	unsigned int chunk_input_entries;
+	unsigned int chunk_input_idx = 0;
+	unsigned int chunk_input_repeats = 1;
 
+	unsigned int chunk_input_dummy_samples = 0;
+	unsigned int chunk_max_dummy_samples;
 
-void init_getcomplex32();
-GetStatus buf_getcomplex32(struct complex32 *x);
-GetStatus buf_getarrcomplex32(struct complex32 * x, unsigned int vlen);
-void init_putcomplex32();
-void buf_putcomplex32(struct complex32 x);
-void buf_putarrcomplex32(struct complex32 *x, unsigned int vlen);
-void flush_putcomplex32();
+	void(*parse_chunk_dbg)(char *buf, void *chunk);
+	void(*print_chunk_dbg)(FILE *f, void *chunk);
 
-void init_getint16();
-GetStatus buf_getint16(int16 *x);
-GetStatus buf_getarrint16(int16 *x, unsigned int vlen);
-void init_putint16();
-void buf_putint16(int16 x);
-void buf_putarrint16(int16 * x, unsigned int vlen);
-void flush_putint16();
-
-
-void init_getcomplex16();
-GetStatus buf_getcomplex16(struct complex16 *x);
-GetStatus buf_getarrcomplex16(struct complex16 * x, unsigned int vlen);
-void init_putcomplex16();
-void buf_putcomplex16(struct complex16 x);
-void buf_putarrcomplex16(struct complex16 *x, unsigned int vlen);
-void flush_putcomplex16();
+	int chunk_fst = 1;
+	char *chunk_output_buffer;
+	unsigned int chunk_output_siz;
+	unsigned int chunk_output_entries;
+	unsigned int chunk_output_idx = 0;
+	FILE *chunk_output_file;
 
 
 
-void init_getint8();
-GetStatus buf_getint8(int8 *x);
-GetStatus buf_getarrint8(int8 *x, unsigned int vlen);
-void init_putint8();
-void buf_putint8(int8 x);
-void buf_putarrint8(int8 * x, unsigned int vlen);
-void flush_putint8();
+	// Int8 buffers
+	int8 *num8_input_buffer;
+	unsigned int num8_input_entries;
+	unsigned int num8_input_idx = 0;
+	unsigned int num8_input_repeats = 1;
+
+	unsigned int num8_input_dummy_samples = 0;
+	unsigned int num8_max_dummy_samples;
+
+	int num8_fst = 1;
+	int8 *num8_output_buffer;
+	unsigned int num8_output_entries;
+	unsigned int num8_output_idx = 0;
+	FILE *num8_output_file;
 
 
-void init_getcomplex8();
-GetStatus buf_getcomplex8(struct complex8 *x);
-GetStatus buf_getarrcomplex8(struct complex8 * x, unsigned int vlen);
-void init_putcomplex8();
-void buf_putcomplex8(struct complex8 x);
-void buf_putarrcomplex8(struct complex8 *x, unsigned int vlen);
-void flush_putcomplex8();
+
+	// Int16 buffers
+	int16 *num16_input_buffer;
+	unsigned int num16_input_entries;
+	unsigned int num16_input_idx = 0;
+	unsigned int num16_input_repeats = 1;
+
+	unsigned int num16_input_dummy_samples = 0;
+	unsigned int num16_max_dummy_samples;
+
+	int num16_fst = 1;
+	int16 *num16_output_buffer;
+	unsigned int num16_output_entries;
+	unsigned int num16_output_idx = 0;
+	FILE *num16_output_file;
+
+
+
+	// Int32 buffers
+	int32 *num_input_buffer;
+	unsigned int num_input_entries;
+	unsigned int num_input_idx = 0;
+	int num_input_repeats = 1;
+
+	unsigned int num_input_dummy_samples = 0;
+	unsigned int num_max_dummy_samples;
+
+	int num_fst = 1;
+	int16 *num_output_buffer;
+	unsigned int num_output_entries;
+	unsigned int num_output_idx = 0;
+	FILE *num_output_file;
+
+} BufContextBlock;
+
+
+
+
+void init_getbit(BufContextBlock *blk);
+GetStatus buf_getbit(BufContextBlock *blk, Bit *x);
+GetStatus buf_getarrbit(BufContextBlock *blk, BitArrPtr x, unsigned int vlen);
+void init_putbit(BufContextBlock *blk);
+void buf_putbit(BufContextBlock *blk, Bit x);
+void buf_putarrbit(BufContextBlock *blk, BitArrPtr x, unsigned int vlen);
+void flush_putbit(BufContextBlock *blk);
+
+
+void init_getint32(BufContextBlock *blk);
+GetStatus buf_getint32(BufContextBlock *blk, int32 *x);
+GetStatus buf_getarrint32(BufContextBlock *blk, int32 *x, unsigned int vlen);
+void init_putint32(BufContextBlock *blk);
+void buf_putint32(BufContextBlock *blk, int32 x);
+void buf_putarrint32(BufContextBlock *blk, int32 * x, unsigned int vlen);
+void flush_putint32(BufContextBlock *blk);
+
+
+void init_getcomplex32(BufContextBlock *blk);
+GetStatus buf_getcomplex32(BufContextBlock *blk, struct complex32 *x);
+GetStatus buf_getarrcomplex32(BufContextBlock *blk, struct complex32 * x, unsigned int vlen);
+void init_putcomplex32(BufContextBlock *blk);
+void buf_putcomplex32(BufContextBlock *blk, struct complex32 x);
+void buf_putarrcomplex32(BufContextBlock *blk, struct complex32 *x, unsigned int vlen);
+void flush_putcomplex32(BufContextBlock *blk);
+
+void init_getint16(BufContextBlock *blk);
+GetStatus buf_getint16(BufContextBlock *blk, int16 *x);
+GetStatus buf_getarrint16(BufContextBlock *blk, int16 *x, unsigned int vlen);
+void init_putint16(BufContextBlock *blk);
+void buf_putint16(BufContextBlock *blk, int16 x);
+void buf_putarrint16(BufContextBlock *blk, int16 * x, unsigned int vlen);
+void flush_putint16(BufContextBlock *blk);
+
+
+void init_getcomplex16(BufContextBlock *blk);
+GetStatus buf_getcomplex16(BufContextBlock *blk, struct complex16 *x);
+GetStatus buf_getarrcomplex16(BufContextBlock *blk, struct complex16 * x, unsigned int vlen);
+void init_putcomplex16(BufContextBlock *blk);
+void buf_putcomplex16(BufContextBlock *blk, struct complex16 x);
+void buf_putarrcomplex16(BufContextBlock *blk, struct complex16 *x, unsigned int vlen);
+void flush_putcomplex16(BufContextBlock *blk);
+
+
+
+void init_getint8(BufContextBlock *blk);
+GetStatus buf_getint8(BufContextBlock *blk, int8 *x);
+GetStatus buf_getarrint8(BufContextBlock *blk, int8 *x, unsigned int vlen);
+void init_putint8(BufContextBlock *blk);
+void buf_putint8(BufContextBlock *blk, int8 x);
+void buf_putarrint8(BufContextBlock *blk, int8 * x, unsigned int vlen);
+void flush_putint8(BufContextBlock *blk);
+
+
+void init_getcomplex8(BufContextBlock *blk);
+GetStatus buf_getcomplex8(BufContextBlock *blk, struct complex8 *x);
+GetStatus buf_getarrcomplex8(BufContextBlock *blk, struct complex8 * x, unsigned int vlen);
+void init_putcomplex8(BufContextBlock *blk);
+void buf_putcomplex8(BufContextBlock *blk, struct complex8 x);
+void buf_putarrcomplex8(BufContextBlock *blk, struct complex8 *x, unsigned int vlen);
+void flush_putcomplex8(BufContextBlock *blk);
 
 
 

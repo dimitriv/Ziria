@@ -264,3 +264,18 @@ csrc/CompilerVS/CompilerVS13/x64/Release/CompilerVS13.exe
 csrc/CompilerVS/CompilerVS13/x64/Release/CompilerVS13.pdb
 csrc/CompilerVS/CompilerVS13_32.vcxproj
 
+code/WiFi/perf.txt
+code/WiFi/perf/pref.txt
+csrc/CompilerVS/*.outfile
+csrc/CompilerVS/*.out
+csrc/mac/CompilerVS/CompilerVS13-mac.opensdf
+csrc/mac/CompilerVS/CompilerVS13-mac.sdf
+csrc/mac/CompilerVS/CompilerVS13-mac.v12.suo
+csrc/mac/CompilerVS/CompilerVS13-mac.vcxproj.user
+csrc/mac/CompilerVS/CompilerVS13-mac/*/*
+csrc/mac/CompilerVS/Debug/*
+csrc/mac/CompilerVS/x64/*
+csrc/mac/rx.c
+csrc/mac/tx.c
+tests/mac/*.c
+tests/mac/*.expanded

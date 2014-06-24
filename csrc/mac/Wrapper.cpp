@@ -17,22 +17,27 @@
    permissions and limitations under the License.
 */
 
+#include "../sora_ip.c"
+#include "../sora_ext_lib.c"
+#include "../sora_ext_viterbi.c"
+#include "../params.c"
+#include "../bit.c"
+#include "../wpl_alloc.c"
+#include "../numerics.c"
+#include "../buf_bit.c"
+#include "../buf_numerics8.c"
+#include "../buf_numerics16.c"
+#include "../buf_numerics32.c"
+#include "../sora_threads.c"
+#include "../sora_thread_queues.c"
+#include "../ext_arr.c"
+#include "../ext_math.c"
+//Sora only supports debugPlot lib in WIN32 and this is the fast 64-bit version
+//#include "sora_ext_visual.c"
+#include "../sora_radio.c"
+#include "../utils.c"
+#include "../driver.c"
+#include "tx.c"
+#include "rx.c"
 
-typedef struct _HeapContextBlock {
-	void * wpl_heap = NULL;
-	unsigned int wpl_free_idx;
-	int wpl_heap_siz;
-} HeapContextBlock;
 
-
-/* The bump allocator */
-void wpl_init_heap(HeapContextBlock *blk, unsigned int max_heap_size);
-
-void * wpl_alloca(HeapContextBlock *blk, unsigned int bytes);
-
-/* Just a generic allocation routine */
-char * try_alloc_bytes(HeapContextBlock *blk, unsigned int siz);
-
-unsigned int wpl_get_free_idx(HeapContextBlock *blk);
-// precondition: 16-aligned
-void wpl_restore_free_idx(HeapContextBlock *blk, unsigned int idx);

@@ -39,7 +39,9 @@
 #include "sora_ip.h"
 #endif
 
+#include "buf.h"
 #include "utils.h"
+#include "wpl_alloc.h"
 
 #ifdef SORA_PLATFORM
 	#define DEBUG_PERF
@@ -55,10 +57,17 @@
 #endif
 
 
+// Contex blocks
+BufContextBlock tx_buf_ctx_blk, rx_buf_ctx_blk;
+HeapContextBlock tx_heap_ctx_blk, rx_heap_ctx_blk;
+
 // Blink generated functions 
-extern void wpl_input_initialize(); 
-extern void wpl_output_finalize();
-extern void wpl_global_init(unsigned int heap_size);
+extern void wpl_input_initialize_tx(BufContextBlock *blk);
+extern void wpl_input_initialize_rx(BufContextBlock *blk);
+extern void wpl_output_finalize_tx(BufContextBlock *blk);
+extern void wpl_output_finalize_rx(BufContextBlock *blk);
+extern void wpl_global_init_tx(HeapContextBlock *blk, unsigned int heap_size);
+extern void wpl_global_init_rx(HeapContextBlock *blk, unsigned int heap_size);
 extern int wpl_go();
 
 
@@ -94,8 +103,10 @@ int __cdecl main(int argc, char **argv) {
   initMeasurementInfo(Globals.latencyCDFSize);
 #endif
 
-  wpl_global_init(Globals.heapSize);
-  wpl_input_initialize();
+  wpl_global_init_tx(&tx_heap_ctx_blk, Globals.heapSize);
+  wpl_global_init_rx(&rx_heap_ctx_blk, Globals.heapSize);
+  wpl_input_initialize_tx(&tx_buf_ctx_blk);
+  wpl_input_initialize_rx(&rx_buf_ctx_blk);
 
 #ifdef SORA_PLATFORM
   /////////////////////////////////////////////////////////////////////////////  
@@ -139,8 +150,8 @@ int __cdecl main(int argc, char **argv) {
 
   printf("Bytes copied: %ld\n", bytes_copied);
 
-  wpl_output_finalize();
- 
+  wpl_output_finalize_tx(&tx_buf_ctx_blk);
+  wpl_output_finalize_rx(&rx_buf_ctx_blk);
 
 #ifdef SORA_PLATFORM
   // Stop Sora HW

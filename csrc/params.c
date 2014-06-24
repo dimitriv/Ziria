@@ -36,7 +36,7 @@ FILE * try_open(char *filename, char *mode)
 }
 
 /* Read the file as a null-terminated string */ 
-void try_read_filebuffer(char *filename, char **fb, unsigned int *len)
+void try_read_filebuffer(HeapContextBlock *blk, char *filename, char **fb, unsigned int *len)
 {
 	char *filebuffer;
 	unsigned int sz;
@@ -45,7 +45,7 @@ void try_read_filebuffer(char *filename, char **fb, unsigned int *len)
 	fseek(f, 0L, SEEK_END);
 	sz = ftell(f);
 	fseek(f, 0L, SEEK_SET);
-	filebuffer = try_alloc_bytes(2*(sz+1));
+	filebuffer = try_alloc_bytes(blk, 2*(sz+1));
 	fread(filebuffer, 1, sz, f);
 	fclose(f);
 	filebuffer[sz] = 0;

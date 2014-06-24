@@ -32,13 +32,6 @@
 #endif
 
 
-static int16 *num16_input_buffer;
-static unsigned int num16_input_entries;
-static unsigned int num16_input_idx = 0;
-static unsigned int num16_input_repeats = 1;
-
-static unsigned int num16_input_dummy_samples = 0;
-static unsigned int num16_max_dummy_samples; 
 
 unsigned int parse_dbg_int16(char *dbg_buf, int16 *target)
 {
@@ -78,11 +71,11 @@ unsigned int parse_dbg_int16(char *dbg_buf, int16 *target)
   return i; // total number of entries
 }
 
-void init_getint16()
+void init_getint16(BufContextBlock *blk, HeapContextBlock *hblk)
 {
 	if (Globals.inType == TY_DUMMY)
 	{
-		num16_max_dummy_samples = Globals.dummySamples;
+		blk->num16_max_dummy_samples = Globals.dummySamples;
 	}
 
 	if (Globals.inType == TY_FILE)
@@ -92,7 +85,7 @@ void init_getint16()
 		try_read_filebuffer(Globals.inFileName, &filebuffer, &sz);
 
 		// How many bytes the file buffer has * sizeof should be enough
-		num16_input_buffer = (int16 *) try_alloc_bytes(sz * sizeof(int16));
+		blk->num16_input_buffer = (int16 *)try_alloc_bytes(hblk, sz * sizeof(int16));
 
 		if (Globals.inFileMode == MODE_BIN)
 		{ 
@@ -100,13 +93,13 @@ void init_getint16()
 			int16 *typed_filebuffer = (int16 *) filebuffer;
 			for (i=0; i < sz; i++)
 			{
-				num16_input_buffer[i] =  typed_filebuffer[i];
+				blk->num16_input_buffer[i] = typed_filebuffer[i];
 			}
-			num16_input_entries = i;
+			blk->num16_input_entries = i;
 		}
 		else 
 		{
-			num16_input_entries = parse_dbg_int16(filebuffer, num16_input_buffer);
+			blk->num16_input_entries = parse_dbg_int16(filebuffer, blk->num16_input_buffer);
 		}
 	}
 
@@ -120,13 +113,16 @@ void init_getint16()
 #endif
 	}
 }
-GetStatus buf_getint16(int16 *x)
+GetStatus buf_getint16(BufContextBlock *blk, int16 *x)
 {
 
 	if (Globals.inType == TY_DUMMY)
 	{
-		if (num16_input_dummy_samples >= num16_max_dummy_samples && Globals.dummySamples != INF_REPEAT) return GS_EOF;
-		num16_input_dummy_samples++;
+		if (blk->num16_input_dummy_samples >= blk->num16_max_dummy_samples && Globals.dummySamples != INF_REPEAT)
+		{
+			return GS_EOF;
+		}
+		blk->num16_input_dummy_samples++;
 		*x = 0;
 		return GS_SUCCESS;
 	}
@@ -134,19 +130,19 @@ GetStatus buf_getint16(int16 *x)
 	if (Globals.inType == TY_FILE)
 	{
 		// If we reached the end of the input buffer 
-		if (num16_input_idx >= num16_input_entries)
+		if (blk->num16_input_idx >= blk->num16_input_entries)
 		{
 			// If no more repetitions are allowed 
-			if (Globals.inFileRepeats != INF_REPEAT && num16_input_repeats >= Globals.inFileRepeats)
+			if (Globals.inFileRepeats != INF_REPEAT && blk->num16_input_repeats >= Globals.inFileRepeats)
 			{
 				return GS_EOF;
 			}
 			// Otherwise we set the index to 0 and increase repetition count
-			num16_input_idx = 0;
-			num16_input_repeats++;
+			blk->num16_input_idx = 0;
+			blk->num16_input_repeats++;
 		}
 
-		*x = num16_input_buffer[num16_input_idx++];
+		*x = blk->num16_input_buffer[blk->num16_input_idx++];
 
 		return GS_SUCCESS;
 	}
@@ -161,34 +157,37 @@ GetStatus buf_getint16(int16 *x)
 
 	return GS_EOF;
 }
-GetStatus buf_getarrint16(int16 *x, unsigned int vlen)
+GetStatus buf_getarrint16(BufContextBlock *blk, int16 *x, unsigned int vlen)
 {
 
 	if (Globals.inType == TY_DUMMY)
 	{
-		if (num16_input_dummy_samples >= num16_max_dummy_samples && Globals.dummySamples != INF_REPEAT) return GS_EOF;
-		num16_input_dummy_samples += vlen;
+		if (blk->num16_input_dummy_samples >= blk->num16_max_dummy_samples && Globals.dummySamples != INF_REPEAT)
+		{
+			return GS_EOF;
+		}
+		blk->num16_input_dummy_samples += vlen;
 		memset(x,0,vlen*sizeof(int16));
 		return GS_SUCCESS;
 	}
 
 	if (Globals.inType == TY_FILE)
 	{
-		if (num16_input_idx + vlen > num16_input_entries)
+		if (blk->num16_input_idx + vlen > blk->num16_input_entries)
 		{
-			if (Globals.inFileRepeats != INF_REPEAT && num16_input_repeats >= Globals.inFileRepeats)
+			if (Globals.inFileRepeats != INF_REPEAT && blk->num16_input_repeats >= Globals.inFileRepeats)
 			{
-				if (num16_input_idx != num16_input_entries)
+				if (blk->num16_input_idx != blk->num16_input_entries)
 					fprintf(stderr, "Warning: Unaligned data in input file, ignoring final get()!\n");
 				return GS_EOF;
 			}
 			// Otherwise ignore trailing part of the file, not clear what that part may contain ...
-			num16_input_idx = 0;
-			num16_input_repeats++;
+			blk->num16_input_idx = 0;
+			blk->num16_input_repeats++;
 		}
 	
-		memcpy(x,& num16_input_buffer[num16_input_idx], vlen * sizeof(int16));
-		num16_input_idx += vlen;
+		memcpy(x, &(blk->num16_input_buffer[blk->num16_input_idx]), vlen * sizeof(int16));
+		blk->num16_input_idx += vlen;
 		return GS_SUCCESS;
 	}
 
@@ -203,24 +202,24 @@ GetStatus buf_getarrint16(int16 *x, unsigned int vlen)
 	return GS_EOF;
 }
 
-void init_getcomplex16()
+void init_getcomplex16(BufContextBlock *blk, HeapContextBlock *hblk)
 {
-	init_getint16();                              // we just need to initialize the input buffer in the same way
-	num16_max_dummy_samples = Globals.dummySamples * 2; // since we will be doing this in integer granularity
+	init_getint16(blk, hblk);                                // we just need to initialize the input buffer in the same way
+	blk->num16_max_dummy_samples = Globals.dummySamples * 2; // since we will be doing this in integer granularity
 }
 
-GetStatus buf_getcomplex16(complex16 *x) 
+GetStatus buf_getcomplex16(BufContextBlock *blk, complex16 *x)
 {
 	if (Globals.inType == TY_DUMMY || Globals.inType == TY_FILE)
 	{
-		GetStatus gs1 = buf_getint16(& (x->re));
+		GetStatus gs1 = buf_getint16(blk, & (x->re));
 		if (gs1 == GS_EOF) 
 		{ 
 			return GS_EOF;
 		}
 		else
 		{
-			return (buf_getint16(& (x->im)));
+			return (buf_getint16(blk, & (x->im)));
 		}
 	}
 
@@ -235,11 +234,11 @@ GetStatus buf_getcomplex16(complex16 *x)
 	return GS_EOF;
 }
 
-GetStatus buf_getarrcomplex16(complex16 *x, unsigned int vlen)
+GetStatus buf_getarrcomplex16(BufContextBlock *blk, complex16 *x, unsigned int vlen)
 {
 	if (Globals.inType == TY_DUMMY || Globals.inType == TY_FILE)
 	{
-		return (buf_getarrint16((int16*) x,vlen*2));
+		return (buf_getarrint16(blk, (int16*) x,vlen*2));
 	}
 
 	if (Globals.inType == TY_SORA)
@@ -253,38 +252,33 @@ GetStatus buf_getarrcomplex16(complex16 *x, unsigned int vlen)
 	return GS_EOF;
 }
 
-void fprint_int16(FILE *f, int16 val)
+void fprint_int16(BufContextBlock *blk, FILE *f, int16 val)
 {
-	static int isfst = 1;
-	if (isfst) 
+	if (blk->num16_fst)
 	{
 		fprintf(f,"%d",val);
-		isfst = 0;
+		blk->num16_fst = 0;
 	}
 	else fprintf(f,",%d",val);
 }
-void fprint_arrint16(FILE *f, int16 *val, unsigned int vlen)
+void fprint_arrint16(BufContextBlock *blk, FILE *f, int16 *val, unsigned int vlen)
 {
 	unsigned int i;
 	for (i=0; i < vlen; i++)
 	{
-		fprint_int16(f,val[i]);
+		fprint_int16(blk,f,val[i]);
 	}
 }
 
-static int16 *num16_output_buffer;
-static unsigned int num16_output_entries;
-static unsigned int num16_output_idx = 0;
-static FILE *num16_output_file;
 
-void init_putint16()
+void init_putint16(BufContextBlock *blk)
 {
 	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
 	{
-		num16_output_buffer = (int16 *) malloc(Globals.outBufSize * sizeof(int16));
-		num16_output_entries = Globals.outBufSize;
+		blk->num16_output_buffer = (int16 *)malloc(Globals.outBufSize * sizeof(int16));
+		blk->num16_output_entries = Globals.outBufSize;
 		if (Globals.outType == TY_FILE)
-			num16_output_file = try_open(Globals.outFileName,"w");
+			blk->num16_output_file = try_open(Globals.outFileName, "w");
 	}
 
 	if (Globals.outType == TY_SORA) 
@@ -302,7 +296,7 @@ void init_putint16()
 
 
 FINL
-void _buf_putint16(int16 x)
+void _buf_putint16(BufContextBlock *blk, int16 x)
 {
 	if (Globals.outType == TY_DUMMY)
 	{
@@ -312,15 +306,15 @@ void _buf_putint16(int16 x)
 	if (Globals.outType == TY_FILE)
 	{
 		if (Globals.outFileMode == MODE_DBG)
-			fprint_int16(num16_output_file,x);
+			fprint_int16(blk, blk->num16_output_file, x);
 		else 
 		{
-			if (num16_output_idx == num16_output_entries)
+			if (blk->num16_output_idx == blk->num16_output_entries)
 			{
-				fwrite(num16_output_buffer,num16_output_entries, sizeof(int16),num16_output_file);
-				num16_output_idx = 0;
+				fwrite(blk->num16_output_buffer, blk->num16_output_entries, sizeof(int16), blk->num16_output_file);
+				blk->num16_output_idx = 0;
 			}
-			num16_output_buffer[num16_output_idx++] = (int16) x;
+			blk->num16_output_buffer[blk->num16_output_idx++] = (int16)x;
 		}
 	}
 
@@ -337,15 +331,15 @@ void _buf_putint16(int16 x)
 }
 
 
-void buf_putint16(int16 x)
+void buf_putint16(BufContextBlock *blk, int16 x)
 {
 	write_time_stamp();
-	_buf_putint16(x);
+	_buf_putint16(blk, x);
 }
 
 
 FINL
-void _buf_putarrint16(int16 *x, unsigned int vlen)
+void _buf_putarrint16(BufContextBlock *blk, int16 *x, unsigned int vlen)
 {
 
 	if (Globals.outType == TY_DUMMY) return;
@@ -353,24 +347,24 @@ void _buf_putarrint16(int16 *x, unsigned int vlen)
 	if (Globals.outType == TY_FILE)
 	{
 		if (Globals.outFileMode == MODE_DBG) 
-			fprint_arrint16(num16_output_file,x,vlen);
+			fprint_arrint16(blk, blk->num16_output_file, x, vlen);
 		else
 		{
-			if (num16_output_idx + vlen >= num16_output_entries)
+			if (blk->num16_output_idx + vlen >= blk->num16_output_entries)
 			{
 				// first write the first (num16_output_entries - vlen) entries
 				unsigned int i;
-				unsigned int m = num16_output_entries - num16_output_idx;
+				unsigned int m = blk->num16_output_entries - blk->num16_output_idx;
 
 				for (i = 0; i < m; i++)
-					num16_output_buffer[num16_output_idx + i] = x[i];
+					blk->num16_output_buffer[blk->num16_output_idx + i] = x[i];
 
 				// then flush the buffer
-				fwrite(num16_output_buffer,num16_output_entries,sizeof(int16),num16_output_file);
+				fwrite(blk->num16_output_buffer, blk->num16_output_entries, sizeof(int16), blk->num16_output_file);
 
 				// then write the rest
-				for (num16_output_idx = 0; num16_output_idx < vlen - m; num16_output_idx++)
-					num16_output_buffer[num16_output_idx] = x[num16_output_idx + m];
+				for (blk->num16_output_idx = 0; blk->num16_output_idx < vlen - m; blk->num16_output_idx++)
+					blk->num16_output_buffer[blk->num16_output_idx] = x[blk->num16_output_idx + m];
 			}
 		}
 	}
@@ -389,36 +383,36 @@ void _buf_putarrint16(int16 *x, unsigned int vlen)
 
 
 
-void buf_putarrint16(int16 *x, unsigned int vlen)
+void buf_putarrint16(BufContextBlock *blk, int16 *x, unsigned int vlen)
 {
 	write_time_stamp();
-	_buf_putarrint16(x, vlen);
+	_buf_putarrint16(blk, x, vlen);
 }
 
 
-void flush_putint16()
+void flush_putint16(BufContextBlock *blk)
 {
 	if (Globals.outType == TY_FILE)
 	{
 		if (Globals.outFileMode == MODE_BIN) {
-			fwrite(num16_output_buffer,sizeof(int16), num16_output_idx,num16_output_file);
-			num16_output_idx = 0;
+			fwrite(blk->num16_output_buffer, sizeof(int16), blk->num16_output_idx, blk->num16_output_file);
+			blk->num16_output_idx = 0;
 		}
-		fclose(num16_output_file);
+		fclose(blk->num16_output_file);
 	}
 }
 
 
-void init_putcomplex16() 
+void init_putcomplex16(BufContextBlock *blk)
 {
 	write_time_stamp();
 
 	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
 	{
-		num16_output_buffer = (int16 *) malloc(2*Globals.outBufSize * sizeof(int16));
-		num16_output_entries = Globals.outBufSize*2;
+		blk->num16_output_buffer = (int16 *)malloc(2 * Globals.outBufSize * sizeof(int16));
+		blk->num16_output_entries = Globals.outBufSize * 2;
 		if (Globals.outType == TY_FILE)
-			num16_output_file = try_open(Globals.outFileName,"w");
+			blk->num16_output_file = try_open(Globals.outFileName, "w");
 	}
 
 	if (Globals.outType == TY_SORA)
@@ -432,7 +426,7 @@ void init_putcomplex16()
 	}
 }
 
-void buf_putcomplex16(struct complex16 x)
+void buf_putcomplex16(BufContextBlock *blk, struct complex16 x)
 {
 	write_time_stamp();
 
@@ -440,8 +434,8 @@ void buf_putcomplex16(struct complex16 x)
 
 	if (Globals.outType == TY_FILE)
 	{
-		_buf_putint16(x.re);
-		_buf_putint16(x.im);
+		_buf_putint16(blk, x.re);
+		_buf_putint16(blk, x.im);
 	}
 
 	if (Globals.outType == TY_SORA) 
@@ -455,13 +449,13 @@ void buf_putcomplex16(struct complex16 x)
 	}
 
 }
-void buf_putarrcomplex16(struct complex16 *x, unsigned int vlen)
+void buf_putarrcomplex16(BufContextBlock *blk, struct complex16 *x, unsigned int vlen)
 {
 	write_time_stamp();
 
 	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
 	{
-		_buf_putarrint16((int16 *)x,vlen*2);
+		_buf_putarrint16(blk, (int16 *)x, vlen * 2);
 	}
 
 	if (Globals.outType == TY_SORA) 
@@ -474,7 +468,7 @@ void buf_putarrcomplex16(struct complex16 *x, unsigned int vlen)
 #endif
 	}
 }
-void flush_putcomplex16()
+void flush_putcomplex16(BufContextBlock *blk)
 {
-	flush_putint16();
+	flush_putint16(blk);
 }

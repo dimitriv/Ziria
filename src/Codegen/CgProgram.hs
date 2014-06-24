@@ -20,7 +20,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RebindableSyntax #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+    {-# LANGUAGE ScopedTypeVariables #-}
 
 module CgProgram ( codeGenProgram ) where
 
@@ -76,18 +76,19 @@ codeGenGlobals dflags globals inty outty
       ; appendTopDefs defs
       ; (decls, stms) <- inNewBlock_ $ codeGenGlobalInitsOnly dflags globals
       ; appendTopDecls decls
-      ; cgExtBufInitsAndFins (inty,outty)
+      ; cgExtBufInitsAndFins (inty,outty) (getName dflags)
       ; return (initstms ++ stms) }
 
-codeGenWPLGlobalInit :: [C.Stm] -> Cg ()
-codeGenWPLGlobalInit stms 
+codeGenWPLGlobalInit :: [C.Stm] -> String -> Cg ()
+codeGenWPLGlobalInit stms mfreshId
   = appendTopDef $ 
-    [cedecl|void wpl_global_init(unsigned int max_heap_siz) 
+    [cedecl|void $id:(wpl_global_name mfreshId) ($ty:(namedCType "HeapContextBlock") *blk, unsigned int max_heap_siz) 
             { 
-              wpl_init_heap(max_heap_siz);
+              wpl_init_heap (blk, max_heap_siz);
               $stms:stms
             }
     |]
+  where wpl_global_name mfreshId = "wpl_global_init" ++ mfreshId
 
 
 codeGenCompilerGlobals :: String
@@ -160,7 +161,7 @@ codeGenProgram dflags globals shared_ctxt
                         appendTopDefs $ ST.thread_setup_shim
                    }
                -- Finally emit wpl_global_init()
-             ; codeGenWPLGlobalInit $ initstms ++ moreinitstms
+             ; codeGenWPLGlobalInit (initstms ++ moreinitstms) (getName dflags)
              }    
         }
 

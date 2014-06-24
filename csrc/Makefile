@@ -19,7 +19,7 @@
 #
 
 CC = gcc
-CFLAGS = -std=c99 -msse3
+CFLAGS = -std=c99 -msse3 -I .
 LIBS = -lm
 OBJDIR = .
 

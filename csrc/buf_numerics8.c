@@ -32,18 +32,9 @@ permissions and limitations under the License.
 #endif
 
 
-static int8 *num8_input_buffer;
-static unsigned int num8_input_entries;
-static unsigned int num8_input_idx = 0;
-static unsigned int num8_input_repeats = 1;
-
-static unsigned int num8_input_dummy_samples = 0;
-static unsigned int num8_max_dummy_samples;
 
 unsigned int parse_dbg_int8(char *dbg_buf, int8 *target)
 {
-
-
 	char *s = NULL;
 	unsigned int i = 0;
 	long val;
@@ -78,11 +69,11 @@ unsigned int parse_dbg_int8(char *dbg_buf, int8 *target)
 	return i; // total number of entries
 }
 
-void init_getint8()
+void init_getint8(BufContextBlock *blk, HeapContextBlock *hblk)
 {
 	if (Globals.inType == TY_DUMMY)
 	{
-		num8_max_dummy_samples = Globals.dummySamples;
+		blk->num8_max_dummy_samples = Globals.dummySamples;
 	}
 
 	if (Globals.inType == TY_FILE)
@@ -92,7 +83,7 @@ void init_getint8()
 		try_read_filebuffer(Globals.inFileName, &filebuffer, &sz);
 
 		// How many bytes the file buffer has * sizeof should be enough
-		num8_input_buffer = (int8 *)try_alloc_bytes(sz * sizeof(int8));
+		blk->num8_input_buffer = (int8 *)try_alloc_bytes(hblk, sz * sizeof(int8));
 
 		if (Globals.inFileMode == MODE_BIN)
 		{
@@ -100,13 +91,13 @@ void init_getint8()
 			int8 *typed_filebuffer = (int8 *)filebuffer;
 			for (i = 0; i < sz; i++)
 			{
-				num8_input_buffer[i] = typed_filebuffer[i];
+				blk->num8_input_buffer[i] = typed_filebuffer[i];
 			}
-			num8_input_entries = i;
+			blk->num8_input_entries = i;
 		}
 		else
 		{
-			num8_input_entries = parse_dbg_int8(filebuffer, num8_input_buffer);
+			blk->num8_input_entries = parse_dbg_int8(filebuffer, blk->num8_input_buffer);
 		}
 	}
 
@@ -120,13 +111,13 @@ void init_getint8()
 #endif
 	}
 }
-GetStatus buf_getint8(int8 *x)
+GetStatus buf_getint8(BufContextBlock *blk, int8 *x)
 {
 
 	if (Globals.inType == TY_DUMMY)
 	{
-		if (num8_input_dummy_samples >= num8_max_dummy_samples && Globals.dummySamples != INF_REPEAT) return GS_EOF;
-		num8_input_dummy_samples++;
+		if (blk->num8_input_dummy_samples >= blk->num8_max_dummy_samples && Globals.dummySamples != INF_REPEAT) return GS_EOF;
+		blk->num8_input_dummy_samples++;
 		*x = 0;
 		return GS_SUCCESS;
 	}
@@ -134,19 +125,19 @@ GetStatus buf_getint8(int8 *x)
 	if (Globals.inType == TY_FILE)
 	{
 		// If we reached the end of the input buffer 
-		if (num8_input_idx >= num8_input_entries)
+		if (blk->num8_input_idx >= blk->num8_input_entries)
 		{
 			// If no more repetitions are allowed 
-			if (Globals.inFileRepeats != INF_REPEAT && num8_input_repeats >= Globals.inFileRepeats)
+			if (Globals.inFileRepeats != INF_REPEAT && blk->num8_input_repeats >= Globals.inFileRepeats)
 			{
 				return GS_EOF;
 			}
 			// Otherwise we set the index to 0 and increase repetition count
-			num8_input_idx = 0;
-			num8_input_repeats++;
+			blk->num8_input_idx = 0;
+			blk->num8_input_repeats++;
 		}
 
-		*x = num8_input_buffer[num8_input_idx++];
+		*x = blk->num8_input_buffer[blk->num8_input_idx++];
 
 		return GS_SUCCESS;
 	}
@@ -161,34 +152,35 @@ GetStatus buf_getint8(int8 *x)
 
 	return GS_EOF;
 }
-GetStatus buf_getarrint8(int8 *x, unsigned int vlen)
+
+GetStatus buf_getarrint8(BufContextBlock *blk, int8 *x, unsigned int vlen)
 {
 
 	if (Globals.inType == TY_DUMMY)
 	{
-		if (num8_input_dummy_samples >= num8_max_dummy_samples && Globals.dummySamples != INF_REPEAT) return GS_EOF;
-		num8_input_dummy_samples += vlen;
+		if (blk->num8_input_dummy_samples >= blk->num8_max_dummy_samples && Globals.dummySamples != INF_REPEAT) return GS_EOF;
+		blk->num8_input_dummy_samples += vlen;
 		memset(x, 0, vlen*sizeof(int8));
 		return GS_SUCCESS;
 	}
 
 	if (Globals.inType == TY_FILE)
 	{
-		if (num8_input_idx + vlen > num8_input_entries)
+		if (blk->num8_input_idx + vlen > blk->num8_input_entries)
 		{
-			if (Globals.inFileRepeats != INF_REPEAT && num8_input_repeats >= Globals.inFileRepeats)
+			if (Globals.inFileRepeats != INF_REPEAT && blk->num8_input_repeats >= Globals.inFileRepeats)
 			{
-				if (num8_input_idx != num8_input_entries)
+				if (blk->num8_input_idx != blk->num8_input_entries)
 					fprintf(stderr, "Warning: Unaligned data in input file, ignoring final get()!\n");
 				return GS_EOF;
 			}
 			// Otherwise ignore trailing part of the file, not clear what that part may contain ...
-			num8_input_idx = 0;
-			num8_input_repeats++;
+			blk->num8_input_idx = 0;
+			blk->num8_input_repeats++;
 		}
 
-		memcpy(x, &num8_input_buffer[num8_input_idx], vlen * sizeof(int8));
-		num8_input_idx += vlen;
+		memcpy(x, &(blk->num8_input_buffer[blk->num8_input_idx]), vlen * sizeof(int8));
+		blk->num8_input_idx += vlen;
 		return GS_SUCCESS;
 	}
 
@@ -203,24 +195,26 @@ GetStatus buf_getarrint8(int8 *x, unsigned int vlen)
 	return GS_EOF;
 }
 
-void init_getcomplex8()
+void init_getcomplex8(BufContextBlock *blk, HeapContextBlock *hblk)
 {
-	init_getint8();                              // we just need to initialize the input buffer in the same way
-	num8_max_dummy_samples = Globals.dummySamples * 2; // since we will be doing this in integer granularity
+	// we just need to initialize the input buffer in the same way
+	init_getint8(blk, hblk);                              
+	// since we will be doing this in integer granularity
+	blk->num8_max_dummy_samples = Globals.dummySamples * 2; 
 }
 
-GetStatus buf_getcomplex8(complex8 *x)
+GetStatus buf_getcomplex8(BufContextBlock *blk, complex8 *x)
 {
 	if (Globals.inType == TY_DUMMY || Globals.inType == TY_FILE)
 	{
-		GetStatus gs1 = buf_getint8(&(x->re));
+		GetStatus gs1 = buf_getint8(blk, &(x->re));
 		if (gs1 == GS_EOF)
 		{
 			return GS_EOF;
 		}
 		else
 		{
-			return (buf_getint8(&(x->im)));
+			return (buf_getint8(blk, &(x->im)));
 		}
 	}
 
@@ -233,11 +227,11 @@ GetStatus buf_getcomplex8(complex8 *x)
 	return GS_EOF;
 }
 
-GetStatus buf_getarrcomplex8(complex8 *x, unsigned int vlen)
+GetStatus buf_getarrcomplex8(BufContextBlock *blk, complex8 *x, unsigned int vlen)
 {
 	if (Globals.inType == TY_DUMMY || Globals.inType == TY_FILE)
 	{
-		return (buf_getarrint8((int8*)x, vlen * 2));
+		return (buf_getarrint8(blk, (int8*)x, vlen * 2));
 	}
 
 	if (Globals.inType == TY_SORA)
@@ -249,38 +243,35 @@ GetStatus buf_getarrcomplex8(complex8 *x, unsigned int vlen)
 	return GS_EOF;
 }
 
-void fprint_int8(FILE *f, int8 val)
+void fprint_int8(BufContextBlock *blk, FILE *f, int8 val)
 {
-	static int isfst = 1;
-	if (isfst)
+	// FIX
+	// static int isfst = 1;
+	if (blk->num8_fst)
 	{
 		fprintf(f, "%d", val);
-		isfst = 0;
+		blk->num8_fst = 0;
 	}
 	else fprintf(f, ",%d", val);
 }
-void fprint_arrint8(FILE *f, int8 *val, unsigned int vlen)
+void fprint_arrint8(BufContextBlock *blk, FILE *f, int8 *val, unsigned int vlen)
 {
 	unsigned int i;
 	for (i = 0; i < vlen; i++)
 	{
-		fprint_int8(f, val[i]);
+		fprint_int8(blk, f, val[i]);
 	}
 }
 
-static int8 *num8_output_buffer;
-static unsigned int num8_output_entries;
-static unsigned int num8_output_idx = 0;
-static FILE *num8_output_file;
 
-void init_putint8()
+void init_putint8(BufContextBlock *blk)
 {
 	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
 	{
-		num8_output_buffer = (int8 *)malloc(Globals.outBufSize * sizeof(int8));
-		num8_output_entries = Globals.outBufSize;
+		blk->num8_output_buffer = (int8 *)malloc(Globals.outBufSize * sizeof(int8));
+		blk->num8_output_entries = Globals.outBufSize;
 		if (Globals.outType == TY_FILE)
-			num8_output_file = try_open(Globals.outFileName, "w");
+			blk->num8_output_file = try_open(Globals.outFileName, "w");
 	}
 
 	if (Globals.outType == TY_SORA)
@@ -298,7 +289,7 @@ void init_putint8()
 
 
 FINL
-void _buf_putint8(int8 x)
+void _buf_putint8(BufContextBlock *blk, int8 x)
 {
 	if (Globals.outType == TY_DUMMY)
 	{
@@ -308,15 +299,15 @@ void _buf_putint8(int8 x)
 	if (Globals.outType == TY_FILE)
 	{
 		if (Globals.outFileMode == MODE_DBG)
-			fprint_int8(num8_output_file, x);
+			fprint_int8(blk, blk->num8_output_file, x);
 		else
 		{
-			if (num8_output_idx == num8_output_entries)
+			if (blk->num8_output_idx == blk->num8_output_entries)
 			{
-				fwrite(num8_output_buffer, num8_output_entries, sizeof(int8), num8_output_file);
-				num8_output_idx = 0;
+				fwrite(blk->num8_output_buffer, blk->num8_output_entries, sizeof(int8), blk->num8_output_file);
+				blk->num8_output_idx = 0;
 			}
-			num8_output_buffer[num8_output_idx++] = (int8)x;
+			blk->num8_output_buffer[blk->num8_output_idx++] = (int8)x;
 		}
 	}
 
@@ -333,15 +324,15 @@ void _buf_putint8(int8 x)
 }
 
 
-void buf_putint8(int8 x)
+void buf_putint8(BufContextBlock *blk, int8 x)
 {
 	write_time_stamp();
-	_buf_putint8(x);
+	_buf_putint8(blk, x);
 }
 
 
 FINL
-void _buf_putarrint8(int8 *x, unsigned int vlen)
+void _buf_putarrint8(BufContextBlock *blk, int8 *x, unsigned int vlen)
 {
 
 	if (Globals.outType == TY_DUMMY) return;
@@ -349,24 +340,24 @@ void _buf_putarrint8(int8 *x, unsigned int vlen)
 	if (Globals.outType == TY_FILE)
 	{
 		if (Globals.outFileMode == MODE_DBG)
-			fprint_arrint8(num8_output_file, x, vlen);
+			fprint_arrint8(blk, blk->num8_output_file, x, vlen);
 		else
 		{
-			if (num8_output_idx + vlen >= num8_output_entries)
+			if (blk->num8_output_idx + vlen >= blk->num8_output_entries)
 			{
 				// first write the first (num8_output_entries - vlen) entries
 				unsigned int i;
-				unsigned int m = num8_output_entries - num8_output_idx;
+				unsigned int m = blk->num8_output_entries - blk->num8_output_idx;
 
 				for (i = 0; i < m; i++)
-					num8_output_buffer[num8_output_idx + i] = x[i];
+					blk->num8_output_buffer[blk->num8_output_idx + i] = x[i];
 
 				// then flush the buffer
-				fwrite(num8_output_buffer, num8_output_entries, sizeof(int8), num8_output_file);
+				fwrite(blk->num8_output_buffer, blk->num8_output_entries, sizeof(int8), blk->num8_output_file);
 
 				// then write the rest
-				for (num8_output_idx = 0; num8_output_idx < vlen - m; num8_output_idx++)
-					num8_output_buffer[num8_output_idx] = x[num8_output_idx + m];
+				for (blk->num8_output_idx = 0; blk->num8_output_idx < vlen - m; blk->num8_output_idx++)
+					blk->num8_output_buffer[blk->num8_output_idx] = x[blk->num8_output_idx + m];
 			}
 		}
 	}
@@ -385,36 +376,36 @@ void _buf_putarrint8(int8 *x, unsigned int vlen)
 
 
 
-void buf_putarrint8(int8 *x, unsigned int vlen)
+void buf_putarrint8(BufContextBlock *blk, int8 *x, unsigned int vlen)
 {
 	write_time_stamp();
-	_buf_putarrint8(x, vlen);
+	_buf_putarrint8(blk, x, vlen);
 }
 
 
-void flush_putint8()
+void flush_putint8(BufContextBlock *blk)
 {
 	if (Globals.outType == TY_FILE)
 	{
 		if (Globals.outFileMode == MODE_BIN) {
-			fwrite(num8_output_buffer, sizeof(int8), num8_output_idx, num8_output_file);
-			num8_output_idx = 0;
+			fwrite(blk->num8_output_buffer, sizeof(int8), blk->num8_output_idx, blk->num8_output_file);
+			blk->num8_output_idx = 0;
 		}
-		fclose(num8_output_file);
+		fclose(blk->num8_output_file);
 	}
 }
 
 
-void init_putcomplex8()
+void init_putcomplex8(BufContextBlock *blk)
 {
 	write_time_stamp();
 
 	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
 	{
-		num8_output_buffer = (int8 *)malloc(2 * Globals.outBufSize * sizeof(int8));
-		num8_output_entries = Globals.outBufSize * 2;
+		blk->num8_output_buffer = (int8 *)malloc(2 * Globals.outBufSize * sizeof(int8));
+		blk->num8_output_entries = Globals.outBufSize * 2;
 		if (Globals.outType == TY_FILE)
-			num8_output_file = try_open(Globals.outFileName, "w");
+			blk->num8_output_file = try_open(Globals.outFileName, "w");
 	}
 
 	if (Globals.outType == TY_SORA)
@@ -428,7 +419,7 @@ void init_putcomplex8()
 	}
 }
 
-void buf_putcomplex8(struct complex8 x)
+void buf_putcomplex8(BufContextBlock *blk, struct complex8 x)
 {
 	write_time_stamp();
 
@@ -436,8 +427,8 @@ void buf_putcomplex8(struct complex8 x)
 
 	if (Globals.outType == TY_FILE)
 	{
-		_buf_putint8(x.re);
-		_buf_putint8(x.im);
+		_buf_putint8(blk, x.re);
+		_buf_putint8(blk, x.im);
 	}
 
 	if (Globals.outType == TY_SORA)
@@ -448,13 +439,13 @@ void buf_putcomplex8(struct complex8 x)
 
 
 }
-void buf_putarrcomplex8(struct complex8 *x, unsigned int vlen)
+void buf_putarrcomplex8(BufContextBlock *blk, struct complex8 *x, unsigned int vlen)
 {
 	write_time_stamp();
 
 	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
 	{
-		_buf_putarrint8((int8 *)x, vlen * 2);
+		_buf_putarrint8(blk, (int8 *)x, vlen * 2);
 	}
 
 	if (Globals.outType == TY_SORA)
@@ -463,7 +454,7 @@ void buf_putarrcomplex8(struct complex8 *x, unsigned int vlen)
 		exit(1);
 	}
 }
-void flush_putcomplex8()
+void flush_putcomplex8(BufContextBlock *blk)
 {
-	flush_putint8();
+	flush_putint8(blk);
 }
