@@ -142,7 +142,7 @@ void init_getbit(BufContextBlock* blk, HeapContextBlock *hblk)
 	{
 		unsigned int sz; 
 		char *filebuffer;
-		try_read_filebuffer(Globals.inFileName, &filebuffer, &sz);
+		try_read_filebuffer(hblk, Globals.inFileName, &filebuffer, &sz);
 
 		if (Globals.inFileMode == MODE_BIN)
 		{ 

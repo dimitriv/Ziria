@@ -43,13 +43,14 @@ callOutBufInitializer = callExtBufInitializer "put"
 
 callExtBufInitializer str (ExtBuf base_ty) = 
   let init_typ_spec = "init_" ++ str ++ (fst $ getTyPutGetInfo base_ty)
-  in [cstm| $id:(init_typ_spec)(blk);|]
+  in [cstm| $id:(init_typ_spec)(blk, hblk);|]
 
 callExtBufInitializer _str (IntBuf _) 
   = error "BUG: callExtBufInitializer called with IntBuf!" 
 
 cgExtBufInitsAndFins (TBuff in_bty,TBuff out_bty) mfreshId
-  = do appendTopDef [cedecl|void $id:(ini_name mfreshId)($ty:(namedCType "BufContextBlock") *blk) {
+  = do appendTopDef [cedecl|void $id:(ini_name mfreshId)($ty:(namedCType "BufContextBlock") *blk, 
+                                                         $ty:(namedCType "HeapContextBlock") *hblk) {
                         $stm:(callInBufInitializer in_bty)
                         $stm:(callOutBufInitializer out_bty)
                         } |]

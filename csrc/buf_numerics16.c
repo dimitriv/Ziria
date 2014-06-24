@@ -82,7 +82,7 @@ void init_getint16(BufContextBlock *blk, HeapContextBlock *hblk)
 	{
 		unsigned int sz; 
 		char *filebuffer;
-		try_read_filebuffer(Globals.inFileName, &filebuffer, &sz);
+		try_read_filebuffer(hblk, Globals.inFileName, &filebuffer, &sz);
 
 		// How many bytes the file buffer has * sizeof should be enough
 		blk->num16_input_buffer = (int16 *)try_alloc_bytes(hblk, sz * sizeof(int16));

@@ -123,64 +123,64 @@ typedef struct _BufContextBlock {
 
 
 
-void init_getbit(BufContextBlock *blk);
+void init_getbit(BufContextBlock *blk, HeapContextBlock *hblk);
 GetStatus buf_getbit(BufContextBlock *blk, Bit *x);
 GetStatus buf_getarrbit(BufContextBlock *blk, BitArrPtr x, unsigned int vlen);
-void init_putbit(BufContextBlock *blk);
+void init_putbit(BufContextBlock *blk, HeapContextBlock *hblk);
 void buf_putbit(BufContextBlock *blk, Bit x);
 void buf_putarrbit(BufContextBlock *blk, BitArrPtr x, unsigned int vlen);
 void flush_putbit(BufContextBlock *blk);
 
 
-void init_getint32(BufContextBlock *blk);
+void init_getint32(BufContextBlock *blk, HeapContextBlock *hblk);
 GetStatus buf_getint32(BufContextBlock *blk, int32 *x);
 GetStatus buf_getarrint32(BufContextBlock *blk, int32 *x, unsigned int vlen);
-void init_putint32(BufContextBlock *blk);
+void init_putint32(BufContextBlock *blk, HeapContextBlock *hblk);
 void buf_putint32(BufContextBlock *blk, int32 x);
 void buf_putarrint32(BufContextBlock *blk, int32 * x, unsigned int vlen);
 void flush_putint32(BufContextBlock *blk);
 
 
-void init_getcomplex32(BufContextBlock *blk);
+void init_getcomplex32(BufContextBlock *blk, HeapContextBlock *hblk);
 GetStatus buf_getcomplex32(BufContextBlock *blk, struct complex32 *x);
 GetStatus buf_getarrcomplex32(BufContextBlock *blk, struct complex32 * x, unsigned int vlen);
-void init_putcomplex32(BufContextBlock *blk);
+void init_putcomplex32(BufContextBlock *blk, HeapContextBlock *hblk);
 void buf_putcomplex32(BufContextBlock *blk, struct complex32 x);
 void buf_putarrcomplex32(BufContextBlock *blk, struct complex32 *x, unsigned int vlen);
 void flush_putcomplex32(BufContextBlock *blk);
 
-void init_getint16(BufContextBlock *blk);
+void init_getint16(BufContextBlock *blk, HeapContextBlock *hblk);
 GetStatus buf_getint16(BufContextBlock *blk, int16 *x);
 GetStatus buf_getarrint16(BufContextBlock *blk, int16 *x, unsigned int vlen);
-void init_putint16(BufContextBlock *blk);
+void init_putint16(BufContextBlock *blk, HeapContextBlock *hblk);
 void buf_putint16(BufContextBlock *blk, int16 x);
 void buf_putarrint16(BufContextBlock *blk, int16 * x, unsigned int vlen);
 void flush_putint16(BufContextBlock *blk);
 
 
-void init_getcomplex16(BufContextBlock *blk);
+void init_getcomplex16(BufContextBlock *blk, HeapContextBlock *hblk);
 GetStatus buf_getcomplex16(BufContextBlock *blk, struct complex16 *x);
 GetStatus buf_getarrcomplex16(BufContextBlock *blk, struct complex16 * x, unsigned int vlen);
-void init_putcomplex16(BufContextBlock *blk);
+void init_putcomplex16(BufContextBlock *blk, HeapContextBlock *hblk);
 void buf_putcomplex16(BufContextBlock *blk, struct complex16 x);
 void buf_putarrcomplex16(BufContextBlock *blk, struct complex16 *x, unsigned int vlen);
 void flush_putcomplex16(BufContextBlock *blk);
 
 
 
-void init_getint8(BufContextBlock *blk);
+void init_getint8(BufContextBlock *blk, HeapContextBlock *hblk);
 GetStatus buf_getint8(BufContextBlock *blk, int8 *x);
 GetStatus buf_getarrint8(BufContextBlock *blk, int8 *x, unsigned int vlen);
-void init_putint8(BufContextBlock *blk);
+void init_putint8(BufContextBlock *blk, HeapContextBlock *hblk);
 void buf_putint8(BufContextBlock *blk, int8 x);
 void buf_putarrint8(BufContextBlock *blk, int8 * x, unsigned int vlen);
 void flush_putint8(BufContextBlock *blk);
 
 
-void init_getcomplex8(BufContextBlock *blk);
+void init_getcomplex8(BufContextBlock *blk, HeapContextBlock *hblk);
 GetStatus buf_getcomplex8(BufContextBlock *blk, struct complex8 *x);
 GetStatus buf_getarrcomplex8(BufContextBlock *blk, struct complex8 * x, unsigned int vlen);
-void init_putcomplex8(BufContextBlock *blk);
+void init_putcomplex8(BufContextBlock *blk, HeapContextBlock *hblk);
 void buf_putcomplex8(BufContextBlock *blk, struct complex8 x);
 void buf_putarrcomplex8(BufContextBlock *blk, struct complex8 *x, unsigned int vlen);
 void flush_putcomplex8(BufContextBlock *blk);

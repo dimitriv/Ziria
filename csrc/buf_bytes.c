@@ -87,7 +87,7 @@ void init_getchunk(BufContextBlock *blk, HeapContextBlock *hblk, unsigned int sz
 	{
 		unsigned int sz;
 		char *filebuffer;
-		try_read_filebuffer(Globals.inFileName, &filebuffer, &sz);
+		try_read_filebuffer(hblk, Globals.inFileName, &filebuffer, &sz);
 
 		// How many bytes the file buffer has * sizeof chunk should be more than enough
 		blk->chunk_input_buffer = try_alloc_bytes(hblk, sz * blk->chunk_input_siz);

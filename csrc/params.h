@@ -44,6 +44,7 @@ typedef enum {
 #include <thread_func.h>
 #include <stdlib.h>
 #include <time.h>
+#include "wpl_alloc.h"
 
 
 typedef struct {
@@ -103,7 +104,7 @@ extern struct BlinkGlobals Globals;
 
 FILE * try_open(char *name, char *mode);
 void try_parse_args(int argc, char ** argv);
-void try_read_filebuffer(char *filename, char **fb, unsigned int *len);
+void try_read_filebuffer(HeapContextBlock *hblk, char *filename, char **fb, unsigned int *len);
 
 typedef struct {
   char * param_str;               // Name of param (for parsing)

@@ -46,29 +46,29 @@ char * try_alloc_bytes(unsigned int siz)
 #define CALIGN16(x) (((((x) + 15) >> 4) << 4))
 
 
-void wpl_init_heap(HeapContextBlock *blk, unsigned int max_heap_size)
+void wpl_init_heap(HeapContextBlock *hblk, unsigned int max_heap_size)
 {
   // if (num_of_allocs == 0) return; // we need no heap!
   
-  blk->wpl_heap_siz = max_heap_size;
-  blk->wpl_heap = try_alloc_bytes(max_heap_size);
-  blk->wpl_free_idx = CALIGN16((unsigned int)blk->wpl_heap) - (unsigned int)blk->wpl_heap;
+  hblk->wpl_heap_siz = max_heap_size;
+  hblk->wpl_heap = try_alloc_bytes(hblk, max_heap_size);
+  hblk->wpl_free_idx = CALIGN16((unsigned int)hblk->wpl_heap) - (unsigned int)hblk->wpl_heap;
 }
 
 
-unsigned int wpl_get_free_idx(HeapContextBlock *blk)
+unsigned int wpl_get_free_idx(HeapContextBlock *hblk)
 { 
-	return blk->wpl_free_idx;
+	return hblk->wpl_free_idx;
 }
 
 // precondition: 16-aligned
-void wpl_restore_free_idx(HeapContextBlock *blk, unsigned int idx)
+void wpl_restore_free_idx(HeapContextBlock *hblk, unsigned int idx)
 { 
-	blk->wpl_free_idx = idx;
+	hblk->wpl_free_idx = idx;
 }
 
 
-void * wpl_alloca(HeapContextBlock *blk, unsigned int bytes)
+void * wpl_alloca(HeapContextBlock *hblk, unsigned int bytes)
 {
   unsigned int allocunit = CALIGN16(bytes);
 
@@ -76,14 +76,14 @@ void * wpl_alloca(HeapContextBlock *blk, unsigned int bytes)
   //printf("wpl_heap_siz: %d bytes\n", wpl_heap_siz); 
   //printf("Remaining heap: %d bytes\n", wpl_heap_siz - (wpl_free_idx + allocunit));
   
-  if (blk->wpl_free_idx + allocunit >= blk->wpl_heap_siz) {
+  if (hblk->wpl_free_idx + allocunit >= hblk->wpl_heap_siz) {
     fprintf(stderr, "WPL allocator out of memory, try increasing heap size!\n");
     exit(-1);
   }
 
-  void * ret = (void *)((unsigned long long) blk->wpl_heap + blk->wpl_free_idx);
+  void * ret = (void *)((unsigned long long) hblk->wpl_heap + hblk->wpl_free_idx);
 
-  blk->wpl_free_idx += allocunit;
+  hblk->wpl_free_idx += allocunit;
 
   return ret;
 
