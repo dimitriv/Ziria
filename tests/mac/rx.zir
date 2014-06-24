@@ -1,0 +1,8 @@
+let comp rx() = 
+  repeat {
+    (x:complex16) <- take;
+    emit x
+  }
+in
+
+read  >>> rx() >>> write
