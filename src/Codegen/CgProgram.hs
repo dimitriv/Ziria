@@ -111,7 +111,7 @@ codeGenThread dflags tid c = do
     (maybe_tv, ta, tb) <- checkCompType (compInfo c)
     (bta, btb) <- checkInOutFiles ta tb
     withThreadId tid $ do
-        mkRuntime (Just tid) $ do
+        mkRuntime (Just ((getName dflags) ++ tid)) $ do
         cinfo <- codeGenCompTop dflags c (finalCompKont tid)
 
         codeGenCompilerGlobals tid (tickHdl cinfo) 

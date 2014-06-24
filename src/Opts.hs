@@ -42,6 +42,7 @@ data DynFlag =
   | IncludePath FilePath
   | CSrcPathPosix FilePath
   | CSrcPathNative FilePath
+  | Name String
   | Debug
   | NewSrcFormat
   | StdoutDump
@@ -119,6 +120,8 @@ options =
      , Option ['I']     []              (ReqArg IncludePath "PATH")           "include path PATH"
      , Option []        ["csrc-native"] (ReqArg CSrcPathNative "CSRC_NATIVE") "csrc-native path PATH"
      , Option []        ["csrc-posix"]  (ReqArg CSrcPathPosix  "CSRC_POSIX")  "csrc-posix path PATH"
+     -- Create a unique name for go function to allow multiple functions to be called
+     , Option ['n']     ["name"]        (ReqArg Name  "NAME")                 "go function name NAME"
 
      -- Boolean flags
      , Option ['d']     ["debug"]               (NoArg Debug)         "debug"
@@ -214,3 +217,9 @@ getStkThreshold opts =
     (StackAllocThreshold x : _) -> x
     (_ : opts') -> getStkThreshold opts'
 
+getName :: DynFlags -> String
+getName opts =
+  case opts of
+    [] -> ""
+    (Name name : _) -> name
+    (_ : opts') -> getName opts'
