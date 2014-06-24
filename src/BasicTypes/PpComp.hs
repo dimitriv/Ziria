@@ -171,15 +171,15 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
          nest nestingDepth (ppComp c)
 
     Repeat wdth c ->
-      text "repeat" <> myFromMaybe (\n -> brackets (int (fst n) <> text "," <> int (snd n))) empty wdth <+> 
-                      ppComp c
+      text "repeat" <> myFromMaybe ppVectWidth empty wdth <+> 
+                       ppComp c
 
     VectComp (n1,n2) c ->
-      text "repeat" <> brackets (int n1 <> text "," <> int n2) <+> 
+      text "repeat" <> ppWidth (n1,n2) <+> 
                        ppComp c
 
     Map wdth e ->
-      text "map" <> myFromMaybe (\n -> brackets (int (fst n) <> text "," <> int (snd n))) empty wdth <+> ppExp e 
+      text "map" <> myFromMaybe ppVectWidth empty wdth <+> ppExp e 
     Filter e ->
       text "filter" <+> ppExp e
 
@@ -196,6 +196,11 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
     Standalone c1 ->
       text "standalone" <> braces (ppComp c1)
 
+
+ppVectWidth (Rigid ann) = ppWidth ann
+ppVectWidth (UpTo ann)  = text "<=" <> ppWidth ann
+
+ppWidth (i,j) = brackets $ (int i) <> text "," <> (int j)
 
 ppCallArg (CAExp e)  = ppExp e
 ppCallArg (CAComp c) = ppComp c

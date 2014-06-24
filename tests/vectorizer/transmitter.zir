@@ -89,20 +89,22 @@ in
 
 
 let comp transform_w_header() = 
-      seq{ hInfo <- ( emitHeader() >>> 
+      var htmp : struct HeaderInfo;
+      seq { hInfo <- ( emitHeader() >>> 
                       scrambler() >>> 
                       encode12() >>> 
                       interleaver_bpsk() >>> 
                       modulate_bpsk() )
-         ; crc <- tx_driver(hInfo) 
-         }
+           
+          ; crc <- tx_driver(hInfo);
+          }
 in
 
 
 let comp transmitter() = 
-seq{ emits createSTSinTime()
-   ; emits createLTSinTime()
-   ; (transform_w_header() >>> map_ofdm() >>> ifft())
+seq{ -- emits createSTSinTime()
+     -- ; emits createLTSinTime()
+    (transform_w_header() >>> map_ofdm() >>> ifft())
    }
 in
 

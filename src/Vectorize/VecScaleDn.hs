@@ -75,16 +75,21 @@ doVectorizeCompDn :: Comp (CTy,Card) Ty
 --    in wrap_vect_dn()
 --
 doVectorizeCompDn comp cin cout (din,dout) 
-  = do { -- vecMIO $ putStrLn "doVectorizeCompDn!"
-         -- ; vecMIO $ putStrLn ("arityin  = " ++ show arityin)
-         -- ; vecMIO $ putStrLn ("arityout = " ++ show arityout)
+  = do { 
+         vecMIO $ putStrLn "doVectorizeCompDn!"
+       ; vecMIO $ putStrLn ("arityin  = " ++ show arityin)
+       ; vecMIO $ putStrLn ("arityout = " ++ show arityout)
+       ; vecMIO $ putStrLn ("cin  = " ++ show cin)
+       ; vecMIO $ putStrLn ("cout = " ++ show cout)
+
+
        ; let loc = compLoc comp
        ; wrap_fun_name <- newVectName "vect_dn" loc
        ; let wrap_fun_prms = []
 
          -- Create names for the local arrays 
        ; xa_name' <- newVectName "vect_xa" loc 
-       ; ya_name' <- newVectName "vect_ya" loc 
+       ; ya_name' <- newVectName "vect_ya_dn" loc 
 
        ; let xa_name = xa_name' { mbtype = Just $ TArr (Literal cin) inty }
        ; let ya_name = ya_name' { mbtype = Just $ TArr (Literal cout) outty }

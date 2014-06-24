@@ -310,17 +310,17 @@ doVectorizeCompForce comp (finalin,finalout)
   | let take_ty = inTyOfCTyBase  (fst $ compInfo comp)
   , let emit_ty = yldTyOfCTyBase (fst $ compInfo comp)
   , let loc     = compLoc comp
-  = do { vecMIO $ putStrLn "A"
+  = do { -- vecMIO $ putStrLn "A"
        ; (vect_body,binds) <- runVecMBnd $ create_vectorized take_ty emit_ty loc
-       ; vecMIO $ putStrLn "B"
+         -- ; vecMIO $ putStrLn "B"
        ; fname <- newVectName "forced" loc 
        ; let comp' = cLetFunC loc () fname 
                         []    -- params 
                         binds -- locals
                         vect_body
                         (cCall loc () fname [])
-       ; vecMIO $ putStrLn $ "F" ++ show comp'
-       ; vecMIO $ putStrLn "G" 
+       -- ; vecMIO $ putStrLn $ "F" ++ show comp'
+       -- ; vecMIO $ putStrLn "G" 
        ; return comp'
        }
 

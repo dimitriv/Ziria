@@ -114,7 +114,7 @@ compParser =
                                           ; return (fromIntegral i, fromIntegral j) 
                                           }
                   ; c    <- compParser
-                  ; return (toCompPos () startPos $ Repeat (Just $ wdth) c)
+                  ; return (toCompPos () startPos $ Repeat (Just $ Rigid wdth) c)
                   }
            <|> do { c <- compParser
                   ; return (toCompPos () startPos $ Repeat Nothing c)
@@ -129,7 +129,7 @@ compParser =
                                           ; return (fromIntegral i, fromIntegral j) 
                                           }
                   ; e    <- exprParser
-                  ; return (toComp () $ Map (Just wdth) (toExpPos () ePos e))
+                  ; return (toComp () $ Map (Just $ Rigid wdth) (toExpPos () ePos e))
                   }
            <|> do { e    <- exprParser 
                   ; return (toComp () $ Map Nothing (toExpPos () ePos e))

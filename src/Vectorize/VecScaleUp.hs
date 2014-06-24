@@ -62,7 +62,7 @@ doVectorizeCompUp comp cin cout (min,mout)
 
          -- Create names for the local arrays 
        ; xa_name <- newVectName "vect_xa" loc
-       ; ya_name <- newVectName "vect_ya" loc 
+       ; ya_name <- newVectName "vect_ya_up" loc 
 
        ; let mkcomp c = MkComp c loc ()
              mkexp e  = MkExp e loc ()
@@ -425,7 +425,7 @@ vectMap min mout tin tout loc e
 
          -- Create names for the local arrays 
        ; xa_name <- newVectName "vect_xa" loc 
-       ; ya_name <- newVectName "vect_ya" loc 
+       ; ya_name <- newVectName "vect_ya_map" loc 
        ; let xa_name_typed = xa_name { mbtype = Just $ mkVectTy tin min }
        ; let ya_name_typed = ya_name { mbtype = Just $ mkVectTy tout mout }
              xa_exp = mkexp $ EVar xa_name_typed

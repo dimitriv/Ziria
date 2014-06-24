@@ -108,16 +108,17 @@ data Comp0 a b where
   -- For        :: Name -> Exp b -> Exp b -> Comp a b -> Comp 0 a b
 
 
-  Repeat :: Maybe (Int,Int) -- optional vectorization width annotation
+  Repeat :: Maybe VectAnn -- optional vectorization width annotation
          -> Comp a b -> Comp0 a b
 
   -- A computer annotated with vectorization width 
   -- information. 
   -- NB: it must be a computer -- not transformer
+  -- Also notice we allow only rigid vectorization 
+  -- annotations here, the programmer must know what they are doing.
   VectComp :: (Int,Int) -> Comp a b -> Comp0 a b
 
-
-  Map    :: Maybe (Int,Int) -- optional vectorization width annotation
+  Map    :: Maybe VectAnn -- optional vectorization width annotation
          -> Exp b -> Comp0 a b  
 
   Filter :: Exp b -> Comp0 a b
@@ -134,6 +135,10 @@ data Comp0 a b where
   -- Pipelining primitives
   Standalone :: Comp a b -> Comp0 a b
 
+
+
+data VectAnn = Rigid (Int,Int)
+             | UpTo  (Int,Int)
 
 
 
@@ -207,13 +212,13 @@ cWhile loc a e c = MkComp (While e c) loc a
 cTimes :: Maybe SourcePos -> a -> UnrollInfo -> Exp b -> Exp b -> Name -> Comp a b -> Comp a b
 cTimes loc a ui es elen x c = MkComp (Times ui es elen x c) loc a
 
-cRepeat :: Maybe SourcePos -> a -> Maybe (Int,Int) -> Comp a b -> Comp a b
+cRepeat :: Maybe SourcePos -> a -> Maybe VectAnn -> Comp a b -> Comp a b
 cRepeat loc a ann c = MkComp (Repeat ann c) loc a
 
 cVectComp :: Maybe SourcePos -> a -> (Int,Int) -> Comp a b -> Comp a b
 cVectComp loc a ann c = MkComp (VectComp ann c) loc a 
 
-cMap :: Maybe SourcePos -> a -> Maybe (Int,Int) -> Exp b -> Comp a b 
+cMap :: Maybe SourcePos -> a -> Maybe VectAnn -> Exp b -> Comp a b 
 cMap loc a ann e = MkComp (Map ann e) loc a
 
 cFilter :: Maybe SourcePos -> a -> Exp b -> Comp a b
