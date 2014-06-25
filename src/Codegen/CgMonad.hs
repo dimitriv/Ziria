@@ -484,8 +484,8 @@ collectStmts_ m = do
 genSym :: String -> Cg String
 genSym prefix = do
     sym       <- asks symEnv
-    (i, str)  <- liftIO $ GS.genSym sym
-    return $ prefix ++ show i ++ str
+    str       <- liftIO $ GS.genSymStr sym
+    return $ prefix ++ str
 
 getNames :: Cg [Name]
 getNames = gets nameStack

@@ -58,8 +58,8 @@ get_RenMSym = RenM (\sym _ -> return sym)
 
 newUniq :: RenM String
 newUniq = do { sym <- get_RenMSym 
-             ; (u, str) <- renMIO $ GS.genSym sym
-             ; return ("_r" ++ show u ++ str) 
+             ; str <- renMIO $ GS.genSymStr sym
+             ; return ("_r" ++ str) 
              }
 
 lkupUniqEnv :: Name -> RenM String

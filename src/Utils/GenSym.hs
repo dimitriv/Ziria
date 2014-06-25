@@ -16,7 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-module GenSym (Sym, initGenSym, genSym, getSym, setSym) where
+module GenSym (Sym, initGenSym, genSymStr, getSym, setSym) where
 
 import Data.IORef
 
@@ -25,15 +25,16 @@ type Sym = IORef (Int, String)
 initGenSym :: String -> IO Sym 
 initGenSym module_name = newIORef (0, module_name)
 
---nextSym r = modifyIORef' r (+1)
 nextSym r = modifyIORef' r (\(c,n) -> (c+1,n))
 
 getSym r = readIORef r
 setSym r n = modifyIORef' r (\_ -> n)
 
-genSym :: Sym -> IO (Int, String)
-genSym r =
-  do nextSym r
-     readIORef r
+genSymStr :: Sym -> IO String
+genSymStr r = 
+ do { nextSym r
+    ; (v,x) <- readIORef r
+    ; return $ x ++ show v
+    }
 
 

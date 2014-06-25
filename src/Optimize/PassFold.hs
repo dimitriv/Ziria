@@ -83,8 +83,8 @@ instance MonadIO RwM where
 
 genSym prefix =
   RwM $ \gs ->
-    do { (sym', str') <- GS.genSym gs
-       ; return (NotRewritten $ prefix ++ show sym' ++ str') }
+    do { str' <- GS.genSymStr gs
+       ; return (NotRewritten $ prefix ++ str') }
 
 
 fold_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)

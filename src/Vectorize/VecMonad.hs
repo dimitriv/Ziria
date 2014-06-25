@@ -63,15 +63,15 @@ instance Monad VecM where
          runVecM (m2 res) sym env st'
   return x = VecM $ \sym env st -> return (x,st)
 
-newVectUniq :: VecM (Int, String)
-newVectUniq = VecM $ \sym _env st -> do { i <- GS.genSym sym
-                                        ; return (i,st) }
+newVectUniq :: VecM String
+newVectUniq = VecM $ \sym _env st -> do { str <- GS.genSymStr sym
+                                        ; return (str,st) }
 
 newVectName :: String -> Maybe SourcePos -> VecM Name
 newVectName nm loc
-  = do { (u, str) <- newVectUniq
+  = do { str <- newVectUniq
        ; return $ 
-         (toName (nm ++ "_" ++ show u ++ str) loc Nothing) {uniqId = "_v" ++ show u ++ str} 
+         (toName (nm ++ "_" ++ str) loc Nothing) {uniqId = "_v" ++ str} 
        }
 
 
