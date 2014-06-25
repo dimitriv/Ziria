@@ -582,14 +582,16 @@ codeGenComp dflags comp k =
         appendLabeledBlock (tickNmOf prefix) $
             kontConsume k
 
+        buf_context  <- getBufContext
+
         appendLabeledBlock (processNmOf prefix) $
             if isArrTy (inTyOfCTy cty0) then 
-                appendStmts [cstms|$id:bufPutF(blk, $id:(inValOf ih), $putLen);
+                appendStmts [cstms|$id:bufPutF($id:buf_context, $id:(inValOf ih), $putLen);
                                    $id:globalWhatIs = SKIP;
                                    goto l_IMMEDIATE;                            
                                   |]
             else
-                appendStmts [cstms|$id:bufPutF(blk, $id:(inValOf ih));
+                appendStmts [cstms|$id:bufPutF($id:buf_context, $id:(inValOf ih));
                                    $id:globalWhatIs = SKIP;
                                    goto l_IMMEDIATE;                            
                                   |]
@@ -619,7 +621,8 @@ codeGenComp dflags comp k =
           -- Allocate a new array buffer
           do appendDecl =<< codeGenDeclGroup yldTmpName yldTy
              appendLabeledBlock (tickNmOf prefix) $ do
-                   appendStmts [cstms| if ($id:(bufGetF)(blk, $id:yldTmpName,$(getLen)) == GS_EOF)
+                   buf_context <- getBufContext
+                   appendStmts [cstms| if ($id:(bufGetF)($id:buf_context, $id:yldTmpName,$(getLen)) == GS_EOF)
                                          return $int:(cONTINUE - 1);
                                        $id:(yldValOf yh) = $id:yldTmpName; 
                                            //CONTINUE is a flag checked by the multithread version
@@ -631,7 +634,8 @@ codeGenComp dflags comp k =
                    kontYield k
         else
              appendLabeledBlock (tickNmOf prefix) $ do
-                   appendStmt [cstm| if ($id:(bufGetF)(blk, & $id:(yldValOf yh)) == GS_EOF)
+                   buf_context <- getBufContext
+                   appendStmt [cstm| if ($id:(bufGetF)($id:buf_context, & $id:(yldValOf yh)) == GS_EOF)
                                            return $int:(cONTINUE - 1);
                               |]
                    kontYield k

@@ -109,6 +109,10 @@ module CgMonad
   , withDisabledBC
   , withDisabledBCWhen
   , isDisabledBC
+
+  , withModuleName
+  , getHeapContext
+  , getBufContext
   ) where
 
 import Control.Applicative
@@ -273,6 +277,11 @@ data CgEnv = CgEnv
     , disableBC  :: Bool -- When true, no bound checks are emitted 
                          -- overriding any user preferences. Useful 
                          -- for external functions that are "trust me"
+
+    , moduleName :: String 
+      -- This is to be added to global variables, 
+      -- to allow us to link multiple Ziria modules in the same C project
+
     }
 
 emptyEnv :: GS.Sym -> CgEnv
@@ -284,6 +293,7 @@ emptyEnv sym =
           , funEnv     = M.empty 
           , symEnv     = sym 
           , disableBC  = False 
+          , moduleName = ""
           }
 
 -- Note [CodeGen Invariants]
@@ -452,10 +462,11 @@ inAllocFrame :: Cg a -> Cg a
 -- Execute this action in an allocation frame. Use with moderation!
 inAllocFrame action
   = do { idx <- freshName "mem_idx"
+       ; heap_context <- getHeapContext
        ; appendDecl [cdecl| unsigned int $id:(name idx); |]
-       ; appendStmt [cstm| $id:(name idx) = wpl_get_free_idx(hblk); |]
+       ; appendStmt [cstm| $id:(name idx) = wpl_get_free_idx($id:heap_context); |]
        ; x <- action 
-       ; appendStmt [cstm| wpl_restore_free_idx(hblk, $id:(name idx)); |]
+       ; appendStmt [cstm| wpl_restore_free_idx($id:heap_context, $id:(name idx)); |]
        ; return x }
 
 
@@ -653,6 +664,17 @@ withDisabledBCWhen False x = x
 
 isDisabledBC :: Cg Bool
 isDisabledBC = asks $ \rho -> disableBC rho
+
+
+withModuleName :: String -> Cg a -> Cg a
+withModuleName str = 
+    local $ \rho -> rho { moduleName = str }
+
+getHeapContext :: Cg String
+getHeapContext = asks $ \rho -> "heap_ctx" ++ (moduleName rho)
+
+getBufContext :: Cg String
+getBufContext = asks $ \rho -> "buf_ctx" ++ (moduleName rho)
 
 
 withThreadId :: String -> Cg a -> Cg a

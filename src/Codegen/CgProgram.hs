@@ -65,6 +65,18 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Data.List ( nub )
 
 
+
+
+codeGenContexts :: Cg [C.InitGroup]
+-- Declare external context blocks
+codeGenContexts 
+  = do { buf_context  <- getBufContext
+       ; heap_context <- getHeapContext
+       ; return [ [cdecl| extern $ty:(namedCType "BufContextBlock")* $id:buf_context;|]
+                , [cdecl| extern $ty:(namedCType "HeapContextBlock")* $id:heap_context;|]
+                ]
+       }
+
 codeGenGlobals :: DynFlags
                -> [(Name,Ty,Maybe (Exp Ty))]
                -> Ty -- input type  (must be ext buffer!)
@@ -72,7 +84,9 @@ codeGenGlobals :: DynFlags
                -> Cg [C.Stm]
 -- Returns initialization statements
 codeGenGlobals dflags globals inty outty 
- = do { (defs, initstms) <- codeGenDeclGlobalDefs dflags globals
+ = do { ctx_decls <- codeGenContexts
+      ; appendTopDecls ctx_decls
+      ; (defs, initstms) <- codeGenDeclGlobalDefs dflags globals
       ; appendTopDefs defs
       ; (decls, stms) <- inNewBlock_ $ codeGenGlobalInitsOnly dflags globals
       ; appendTopDecls decls
@@ -81,13 +95,15 @@ codeGenGlobals dflags globals inty outty
 
 codeGenWPLGlobalInit :: [C.Stm] -> String -> Cg ()
 codeGenWPLGlobalInit stms mfreshId
-  = appendTopDef $ 
-    [cedecl|void $id:(wpl_global_name mfreshId) ($ty:(namedCType "HeapContextBlock") *blk, unsigned int max_heap_siz) 
+  = do { buf_context  <- getBufContext
+       ; appendTopDef $ 
+         [cedecl|void $id:(wpl_global_name mfreshId) ($ty:(namedCType "HeapContextBlock") *$id:buf_context, unsigned int max_heap_siz) 
             { 
-              wpl_init_heap (blk, max_heap_siz);
+              wpl_init_heap ($id:buf_context, max_heap_siz);
               $stms:stms
             }
-    |]
+         |]
+       }
   where wpl_global_name mfreshId = "wpl_global_init" ++ mfreshId
 
 
@@ -144,7 +160,8 @@ codeGenProgram :: DynFlags                       -- Flags
                -> Cg ()
 codeGenProgram dflags globals shared_ctxt 
                tid_cs bufTys (in_ty,yld_ty) 
-  = do { initstms <- codeGenGlobals dflags globals in_ty yld_ty             
+  = withModuleName module_name $
+    do { initstms <- codeGenGlobals dflags globals in_ty yld_ty             
        ; extendVarEnv [(nm,(ty,[cexp|$id:(name nm)|])) | (nm,ty,_) <- globals] $ 
          do { (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
                 do { forM tid_cs $ \(tid,c) -> codeGenThread dflags tid c

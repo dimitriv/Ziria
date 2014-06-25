@@ -38,24 +38,26 @@ import Text.PrettyPrint.Mainland
 import Data.Maybe
 
 
-callInBufInitializer  = callExtBufInitializer "get"
-callOutBufInitializer = callExtBufInitializer "put"
+callInBufInitializer  buf_context heap_context = callExtBufInitializer "get" buf_context heap_context
+callOutBufInitializer buf_context heap_context = callExtBufInitializer "put" buf_context heap_context
 
-callExtBufInitializer str (ExtBuf base_ty) = 
+callExtBufInitializer str buf_context heap_context (ExtBuf base_ty) = 
   let init_typ_spec = "init_" ++ str ++ (fst $ getTyPutGetInfo base_ty)
-  in [cstm| $id:(init_typ_spec)(blk, hblk);|]
+  in [cstm| $id:(init_typ_spec)($id:buf_context, $id:heap_context);|]
 
-callExtBufInitializer _str (IntBuf _) 
+callExtBufInitializer _str _buf_context _heap_context (IntBuf _) 
   = error "BUG: callExtBufInitializer called with IntBuf!" 
 
 cgExtBufInitsAndFins (TBuff in_bty,TBuff out_bty) mfreshId
-  = do appendTopDef [cedecl|void $id:(ini_name mfreshId)($ty:(namedCType "BufContextBlock") *blk, 
-                                                         $ty:(namedCType "HeapContextBlock") *hblk) {
-                        $stm:(callInBufInitializer in_bty)
-                        $stm:(callOutBufInitializer out_bty)
+  = do buf_context  <- getBufContext
+       heap_context <- getHeapContext
+       appendTopDef [cedecl|void $id:(ini_name mfreshId)($ty:(namedCType "BufContextBlock") *$id:buf_context, 
+                                                         $ty:(namedCType "HeapContextBlock") *$id:heap_context) {
+                        $stm:(callInBufInitializer buf_context heap_context in_bty)
+                        $stm:(callOutBufInitializer buf_context heap_context out_bty)
                         } |]
-       appendTopDef [cedecl|void $id:(fin_name mfreshId)($ty:(namedCType "BufContextBlock") *blk) {
-                        $stm:(callOutBufFinalizer out_bty)
+       appendTopDef [cedecl|void $id:(fin_name mfreshId)($ty:(namedCType "BufContextBlock") *$id:buf_context) {
+                        $stm:(callOutBufFinalizer buf_context out_bty)
                         } |]
   where ini_name mfreshId = "wpl_input_initialize" ++ mfreshId
         fin_name mfreshId = "wpl_output_finalize" ++ mfreshId
@@ -63,10 +65,10 @@ cgExtBufInitsAndFins (TBuff in_bty,TBuff out_bty) mfreshId
 cgExtBufInitsAndFins (ty1,ty2) mfreshId
   = fail $ "BUG: cgExtBufInitsAndFins called with non-TBuff types!"
 
-callOutBufFinalizer (ExtBuf base_ty) =
+callOutBufFinalizer buf_context (ExtBuf base_ty) =
   let finalize_typ_spec = "flush_put" ++ (fst $ getTyPutGetInfo base_ty)
-  in [cstm| $id:(finalize_typ_spec)(blk);|]
-callOutBufFinalizer (IntBuf _) 
+  in [cstm| $id:(finalize_typ_spec)($id:buf_context);|]
+callOutBufFinalizer _buf_context (IntBuf _) 
   = error "BUG: callOutBufFinalizer called with IntBuf!" 
 
    
@@ -84,9 +86,11 @@ mkRuntime mfreshId m = do
     go cinfo local_decls local_stmts = do
         let (_, init_decls, init_stms) = getCode (compGenInit cinfo)
 
+        buf_context  <- getBufContext
+        heap_context <- getHeapContext
+
         appendTopDef $ 
-          [cedecl|int $id:(go_name mfreshId ++ "_aux")($ty:(namedCType "BufContextBlock") *blk, 
-                                                       $ty:(namedCType "HeapContextBlock") *hblk, int initialized) {
+          [cedecl|int $id:(go_name mfreshId ++ "_aux")(int initialized) {
                        unsigned int loop_counter = 0;
 
                        $decls:init_decls             
@@ -100,9 +104,8 @@ mkRuntime mfreshId m = do
                   } |]
 
         appendTopDef $ 
-          [cedecl|int $id:(go_name mfreshId)($ty:(namedCType "BufContextBlock") *blk, 
-                                             $ty:(namedCType "HeapContextBlock") *hblk) {
-                     return ($id:(go_name mfreshId ++ "_aux")(blk, hblk, 0));
+          [cedecl|int $id:(go_name mfreshId)() {
+                     return ($id:(go_name mfreshId ++ "_aux")(0));
                   }
           |]
 

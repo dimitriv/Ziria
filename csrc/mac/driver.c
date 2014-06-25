@@ -59,8 +59,8 @@
 
 
 // Contex blocks
-BufContextBlock tx_buf_ctx_blk, rx_buf_ctx_blk;
-HeapContextBlock tx_heap_ctx_blk, rx_heap_ctx_blk;
+BufContextBlock buf_ctx_tx, buf_ctx_rx;
+HeapContextBlock heap_ctx_tx, heap_ctx_rx;
 
 // Blink generated functions 
 extern void wpl_input_initialize_tx(BufContextBlock *blk, HeapContextBlock *hblk);
@@ -107,15 +107,15 @@ int __cdecl main(int argc, char **argv) {
 
 
   // Init
-  initBufCtxBlock(&tx_buf_ctx_blk);
-  initBufCtxBlock(&rx_buf_ctx_blk);
-  initHeapCtxBlock(&tx_heap_ctx_blk);
-  initHeapCtxBlock(&rx_heap_ctx_blk);
+  initBufCtxBlock(&buf_ctx_tx);
+  initBufCtxBlock(&buf_ctx_rx);
+  initHeapCtxBlock(&heap_ctx_tx);
+  initHeapCtxBlock(&heap_ctx_rx);
 
-  wpl_global_init_tx(&tx_heap_ctx_blk, Globals.heapSize);
-  wpl_global_init_rx(&rx_heap_ctx_blk, Globals.heapSize);
-  wpl_input_initialize_tx(&tx_buf_ctx_blk, &tx_heap_ctx_blk);
-  wpl_input_initialize_rx(&rx_buf_ctx_blk, &rx_heap_ctx_blk);
+  wpl_global_init_tx(&heap_ctx_tx, Globals.heapSize);
+  wpl_global_init_rx(&heap_ctx_rx, Globals.heapSize);
+  wpl_input_initialize_tx(&buf_ctx_tx, &heap_ctx_tx);
+  wpl_input_initialize_rx(&buf_ctx_rx, &heap_ctx_rx);
 
 #ifdef SORA_PLATFORM
   /////////////////////////////////////////////////////////////////////////////  
@@ -161,8 +161,8 @@ int __cdecl main(int argc, char **argv) {
 
   printf("Bytes copied: %ld\n", bytes_copied);
 
-  wpl_output_finalize_tx(&tx_buf_ctx_blk);
-  wpl_output_finalize_rx(&rx_buf_ctx_blk);
+  wpl_output_finalize_tx(&buf_ctx_tx);
+  wpl_output_finalize_rx(&buf_ctx_rx);
 
 #ifdef SORA_PLATFORM
   // Stop Sora HW
@@ -200,8 +200,8 @@ BOOLEAN __stdcall go_thread(void * pParam)
 	thread_info *ti = (thread_info *) pParam;
 
 	// TOFIX
-	wpl_go_tx(&tx_buf_ctx_blk, &tx_heap_ctx_blk);
-	wpl_go_rx(&rx_buf_ctx_blk, &rx_heap_ctx_blk);
+	wpl_go_tx(&buf_ctx_tx, &heap_ctx_tx);
+	wpl_go_rx(&buf_ctx_rx, &heap_ctx_rx);
 
 	ti->fRunning = false;
 
