@@ -48,9 +48,14 @@ import qualified GenSym as GS
 
 import TcExpr ( tyOfParams )
 
+import Data.Functor.Identity 
+
 import Eval 
 
 import Data.Maybe ( fromJust, isJust, isNothing )
+
+{- A Rewritting monad
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -}
 
 data RewriteRes a = NotRewritten a | Rewritten a
 
@@ -58,16 +63,16 @@ newtype RwM a = RwM { runRwM :: GS.Sym -> IO (RewriteRes a) }
 
 instance Monad RwM where
  (RwM m) >>= f = RwM $ \sym -> 
-                       do { r <- m sym
-                          ; case r of 
-                              NotRewritten c -> runRwM (f c) sym
-                              Rewritten c    -> 
-                                do { r' <- runRwM (f c) sym
-                                   ; case r' of 
-                                       NotRewritten c2 -> return (Rewritten c2)
-                                       Rewritten c2    -> return (Rewritten c2)
-                                   }
-                          } 
+        do { r <- m sym
+           ; case r of 
+               NotRewritten c -> runRwM (f c) sym
+               Rewritten c    -> 
+                 do { r' <- runRwM (f c) sym
+                    ; case r' of 
+                        NotRewritten c2 -> return (Rewritten c2)
+                        Rewritten c2    -> return (Rewritten c2)
+                    }
+           } 
 
  return a = RwM (\_sym -> return (NotRewritten a))
 
@@ -92,6 +97,40 @@ genSym prefix =
        ; return (NotRewritten $ prefix ++ show sym') }
 
 
+{- Rewriter statistics
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -}
+
+newtype RwStats = RwStats { getRwStats :: Map.Map String RwStepStats }
+
+data RwStepStats 
+       = RwStepStats { rw_invoked  :: Int
+                     , rw_rewrote  :: Int
+                     , rw_inv_time :: Double
+                     , rw_rew_time :: Double }
+
+
+printRwStats :: RwStats -> IO () 
+printRwStats mp 
+  = mapM_ print_one (Map.toList $ getRwStats mp)
+  where 
+    print_one (pn,(RwStepStats invs rws tm1 tm2))
+      = printf "%20s:%d/%d/%f, %f\n" pn invs rws tm1 tm2
+
+
+incInvokes :: RwStats -> Double -> String -> RwStats 
+incInvokes mp d s = RwStats (Map.alter aux s $ getRwStats mp)
+  where aux Nothing                       = Just (RwStepStats 1 0 d 0) 
+        aux (Just (RwStepStats i r d0 t)) = Just (RwStepStats (i+1) r (d0+d) t)
+
+incRewrites :: RwStats -> Double -> String -> RwStats 
+incRewrites mp d s = RwStats (Map.alter aux s $ getRwStats mp)
+  where aux Nothing                      = Just (RwStepStats 1 1 0 d)
+        aux (Just (RwStepStats i r t f)) = Just (RwStepStats i (r+1) d (f+d))
+
+
+{- The main rewriter individual steps
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -}
+
 fold_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
 -- Just a single step of converting a return to a let
 fold_step fgs comp = 
@@ -99,7 +138,8 @@ fold_step fgs comp =
 
     BindView (MkComp (Return e) rloc rinfo) nm c12 ->
      do { -- rwMIO $ putStrLn ("Found BindView" ++ compShortName comp)
-        ; fold_step fgs c12 >>= \c12' -> rewrite $ MkComp (LetE nm e c12') cloc cinfo
+        ; fold_step fgs c12 >>= \c12' -> 
+                rewrite $ MkComp (LetE nm e c12') cloc cinfo
         }  
 
     BindView (MkComp (LetFun f fun c) floc finfo) nm c12 -> 
@@ -109,16 +149,20 @@ fold_step fgs comp =
 
     -- Don't forget to go inside!
     BindView c nm  c12 -> 
-     fold_step fgs c12 >>= \c12' -> return (MkComp (mkBindMany c [(nm,c12')]) cloc cinfo)
+     fold_step fgs c12 >>= \c12' 
+         -> return (MkComp (mkBindMany c [(nm,c12')]) cloc cinfo)
 
     SeqView (MkComp (Return e) rloc rinfo) c12 -> 
-     do { -- rwMIO $ putStrLn ("Found BindView" ++ compShortName comp)
-        ; let nm = toName ("__fold_unused_" ++ getLnNumInStr cloc) Nothing Nothing
-        ; fold_step fgs c12 >>= \c12' -> rewrite $ MkComp (LetE nm e c12) cloc cinfo
-        }
-    _otherwise -> do { -- rwMIO $ putStrLn "fold_step not kicking in for term = "
-                       -- ; rwMIO $ print (ppCompAst comp) 
-                     ; return comp }
+      do { -- rwMIO $ putStrLn ("Found BindView" ++ compShortName comp)
+         ; let nm = toName ("__fold_unused_" ++ getLnNumInStr cloc) 
+                           Nothing Nothing
+         ; fold_step fgs c12 >>= \c12' -> 
+               rewrite $ MkComp (LetE nm e c12) cloc cinfo }
+    _otherwise -> 
+       do { -- rwMIO $ putStrLn "fold_step not kicking in for term = "
+            -- ; rwMIO $ print (ppCompAst comp) 
+            return comp 
+          }
 
   where cloc   = compLoc comp
         cinfo  = compInfo comp
@@ -139,12 +183,13 @@ float_letfun_repeat_step fgs comp
  | Repeat wdth rcomp <- unComp comp
  , LetFunC nm params locals cbody ccont <- unComp rcomp
  , null locals
---  , all (\(_,_,me) -> isNothing me) locals -- I.e. they are not re-initialized upon every invocation. Important!
  , Call nm' args <- unComp ccont 
  , nm' == nm
  , all is_simpl_call_arg args  -- Not sure this is necessary 
  = rewrite $ 
-   MkComp (LetFunC nm params locals (MkComp (Repeat wdth cbody) (compLoc comp) (compInfo comp)) ccont)
+   MkComp (LetFunC nm params locals (MkComp (Repeat wdth cbody) 
+                                            (compLoc comp) 
+                                            (compInfo comp)) ccont)
           (compLoc comp) (compInfo comp)
  | otherwise
  = return comp
@@ -173,9 +218,6 @@ push_comp_locals_step fgs comp
              cbody' = cBindMany loc (compInfo cbody) tk [(x,emt')]
              emt'   = cEmit loc (compInfo emt) e'
              e'     = mk_letrefs (expLoc e) (info e) locals e
-       -- ; liftIO $ do { putStrLn $ "push_comp_locals_step, function = " ++ show nm
-       --             ; putStrLn $ "locals = " ++ show locals
-       --              }
        ; rewrite comp'
        }
   | otherwise 
@@ -218,7 +260,11 @@ take_emit_step fgs comp
   | otherwise
   = return comp
 
-{- Not wrong, by evil, we lose the letref-structure and LUT can't do a very good job!
+{- 
+
+Not wrong, by evil, we lose the letref-structure and LUT can't do a
+very good job!
+
 float_top_letref_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
 float_top_letref_step fgs comp 
   | LetFun nm f c <- unComp comp
@@ -257,7 +303,7 @@ inline_step_aux fgs comp
   , isDynFlagSet fgs AutoLUT
   , Just rgs <- varRanges e1 
   , Right True <- shouldLUT [] rgs e1    -- and the expression is luttable
-  , Just (_, [], _) <- inOutVars [] Map.empty e1   -- and no output variables are there
+  , Just (_, [], _) <- inOutVars [] Map.empty e1 
   = substExpComp (nm,e1) c2 >>= rewrite 
 -}
 
@@ -371,20 +417,23 @@ inline_exp_fun (nm,params,locals,body) e
                 "Could not deduce param size during inlining of function:" ++ 
                     show nm ++ ", at call location:" ++ show loc
 
-            mk_local_lets subst len_subst locals e = go locals e >>= substAllTyped subst len_subst
+            mk_local_lets subst len_subst locals e 
+              = go locals e >>= substAllTyped subst len_subst
               where go [] e = return e  
                     go ((x,ty,Nothing):xs) e 
                       = do { e' <- go xs e
                            ; ty' <- substAllLengthTy len_subst ty
                            ; let x' = x { mbtype = Just ty } 
-                           ; return $ eLetRef (expLoc e) (info e) x' (Left ty') e' 
+                           ; return $ 
+                             eLetRef (expLoc e) (info e) x' (Left ty') e' 
                            }
                     go ((x,ty,Just xe):xs) e 
                       = do { e' <- go xs e
                            ; xe' <- substAllTyped subst len_subst xe
                            ; ty' <- substAllLengthTy len_subst ty
                            ; let x' = x { mbtype = Just ty' } 
-                           ; return $ eLetRef (expLoc e) (info e) x' (Right xe') e' 
+                           ; return $ 
+                             eLetRef (expLoc e) (info e) x' (Right xe') e' 
                            }
 
         replace_call other = return other
@@ -409,11 +458,14 @@ inline_comp_fun (nm,params,cbody) c
         replace_call other = return other
 
         mk_expr_subst [] [] = []
-        mk_expr_subst ((nm, CAExp _ty):ps1) ((CAExp e1):as1) = (nm,e1): mk_expr_subst ps1 as1
+        mk_expr_subst ((nm, CAExp _ty):ps1) ((CAExp e1):as1) 
+          = (nm,e1): mk_expr_subst ps1 as1
         mk_expr_subst _ _ = error "BUG: inline_comp_fun!"
 
 
-inline_exp_fun_in_comp :: (Name,[(Name,Ty)], [(Name,Ty,Maybe (Exp Ty))],Exp Ty) -> Comp CTy Ty -> RwM (Comp CTy Ty)
+inline_exp_fun_in_comp :: (Name,[(Name,Ty)], 
+                                [(Name,Ty,Maybe (Exp Ty))],Exp Ty) 
+                       -> Comp CTy Ty -> RwM (Comp CTy Ty)
 inline_exp_fun_in_comp finfo comp
   = mapCompM_ (inline_exp_fun finfo) return comp
 
@@ -444,7 +496,8 @@ ifpar_step_left :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
 -- ~~>
 -- (if e then m >>> c1 else m >>> c2)
 -- 
--- NB: This seems only safe if 'e' does not somehow depend on shared state with m (which it shouldn't)
+-- NB: This seems only safe if 'e' does not somehow depend on shared
+-- state with m (which it shouldn't)
 -- 
 ifpar_step_left fgs comp = 
   case unComp comp of 
@@ -463,8 +516,10 @@ ifpar_step_right fgs comp =
   case unComp comp of 
 
     Par _p (MkComp (Branch e c1 c2) bloc binfo) c3
-      -> rewrite $ MkComp (Branch e (MkComp (Par _p c1 c3) (compLoc comp) (compInfo comp))
-                                    (MkComp (Par _p c2 c3) (compLoc comp) (compInfo comp))) bloc (compInfo comp)
+     -> rewrite $ 
+        MkComp (Branch e (MkComp (Par _p c1 c3) (compLoc comp) (compInfo comp))
+                         (MkComp (Par _p c2 c3) (compLoc comp) (compInfo comp)))
+               bloc (compInfo comp)
 
     _otherwise -> return comp
 
@@ -478,7 +533,8 @@ bm_par_step_left fgs comp
   = case unComp comp of
       Par _p m (MkComp (BindMany c1 xs_cs) bloc binfo)
          -> let mc1 = MkComp (Par _p m c1) bloc (upd_inty m (compInfo c1))
-                m_xs_cs = map (\(x,c) -> (x, MkComp (Par _p m c) bloc (upd_inty m (compInfo c)))) xs_cs
+                m_xs_cs = map (\(x,c) -> 
+                 (x, MkComp (Par _p m c) bloc (upd_inty m (compInfo c)))) xs_cs
             in rewrite $ MkComp (BindMany mc1 m_xs_cs) bloc (compInfo comp)
 
       Par _p m (MkComp (Seq c1 c2) bloc binfo)
@@ -508,7 +564,8 @@ bm_par_step_right fgs comp
  
       Par _p (MkComp (BindMany c1 xs_cs) bloc binfo) m 
          -> let mc1     = MkComp (Par _p c1 m) bloc (upd_yldty m (compInfo c1))
-                m_xs_cs = map (\(x,c) -> (x, MkComp (Par _p c m) bloc (upd_yldty m (compInfo c)))) xs_cs
+                m_xs_cs = map (\(x,c) -> 
+                 (x, MkComp (Par _p c m) bloc (upd_yldty m (compInfo c)))) xs_cs
             in rewrite $ MkComp (BindMany mc1 m_xs_cs) bloc (compInfo comp)
 
       Par _p (MkComp (Seq c1 c2) bloc binfo) m 
@@ -660,7 +717,8 @@ times_unroll_step fgs comp
 
 mkMultiLetExp :: [(Name,Exp a)] -> Exp a -> Exp a
 mkMultiLetExp [] e = e
-mkMultiLetExp ((x,e1):bnds) e = MkExp (ELet x e1 (mkMultiLetExp bnds e)) (expLoc e) (info e) 
+mkMultiLetExp ((x,e1):bnds) e 
+  = MkExp (ELet x e1 (mkMultiLetExp bnds e)) (expLoc e) (info e) 
 
 
 isMultiLet_maybe comp
@@ -670,7 +728,8 @@ isMultiLet_maybe comp
         go (Emit e)    []   = Nothing
         go (Emits e)   []   = Nothing 
 
-        go (Return e) acc   = Just (acc, Return e) -- We must have some accumulated bindings!
+        go (Return e) acc   = Just (acc, Return e) 
+              -- We must have some accumulated bindings!
         go (Emit e) acc     = Just (acc, Emit e)
         go (Emits e) acc    = Just (acc, Emits e)
         go _ _ = Nothing
@@ -681,7 +740,9 @@ elim_times_step fgs comp =
   case unComp comp of
     Times ui estart ebound cnt (MkComp (Return ebody) cloc cty) ->
         do { let efor = EFor ui cnt estart ebound ebody
-           ; rewrite $ MkComp (Return (MkExp efor cloc (info ebody))) (compLoc comp) (compInfo comp)
+           ; rewrite $ MkComp (Return (MkExp efor cloc (info ebody))) 
+                              (compLoc comp) 
+                              (compInfo comp)
            }
 
     _ -> return comp
@@ -700,9 +761,8 @@ arrinit_step _fgs e1
 
 
 
-
-elim_unused_let :: DynFlags -> TypedExpPass
-elim_unused_let fgs e 
+exp_inlining_steps :: DynFlags -> TypedExpPass
+exp_inlining_steps fgs e 
  | ELet nm e1 e2 <- unExp e
  , let fvs = exprFVs e2
  , let b = nm `S.member` fvs
@@ -711,36 +771,39 @@ elim_unused_let fgs e
    else 
      if is_simpl_expr e1 && not (isDynFlagSet fgs NoExpFold) 
      then substExp (nm,e1) e2 >>= rewrite
-     else rest_chain fgs e
-
+     else return e 
  | otherwise 
- = rest_chain fgs e 
- where 
-   rest_chain fgs e 
-     = alength_elim fgs e >>= eval_arith fgs >>= const_fold fgs >>= arrinit_step fgs >>= 
+ = return e
+
+rest_chain :: DynFlags -> TypedExpPass
+rest_chain fgs e 
+     = alength_elim fgs e >>= 
+       eval_arith fgs >>= 
+       const_fold fgs >>= 
+       arrinit_step fgs >>= 
        subarr_inline_step fgs
 
 
-   exp_inline_step :: DynFlags -> TypedExpPass
-   exp_inline_step fgs e
-     | ELet nm e1 e2 <- unExp e
-     , not (isDynFlagSet fgs NoExpFold)
-     , is_simpl_expr e1
-     = substExp (nm,e1) e2 >>= rewrite 
-     | otherwise
-     = return e
+exp_inline_step :: DynFlags -> TypedExpPass
+exp_inline_step fgs e
+  | ELet nm e1 e2 <- unExp e
+  , not (isDynFlagSet fgs NoExpFold)
+  , is_simpl_expr e1
+  = substExp (nm,e1) e2 >>= rewrite 
+  | otherwise
+  = return e
 
-   alength_elim :: DynFlags -> TypedExpPass
-   alength_elim fgs e 
-    | EUnOp ALength e0 <- unExp e
-    , (TArr nexp _)    <- info e0
-    , let loc = expLoc e
-    = rewrite $ numexp_to_exp loc nexp
-    | otherwise 
-    = return e
-    where numexp_to_exp loc (Literal i) = eVal loc tint (VInt i)
-          numexp_to_exp loc (NVar nm i) = eVar loc tint nm
-          numexp_to_exp loc (NArr {})   = error "TC bug: unresolved NArr!" 
+alength_elim :: DynFlags -> TypedExpPass
+alength_elim fgs e 
+ | EUnOp ALength e0 <- unExp e
+ , (TArr nexp _)    <- info e0
+ , let loc = expLoc e
+ = rewrite $ numexp_to_exp loc nexp
+ | otherwise 
+ = return e
+ where numexp_to_exp loc (Literal i) = eVal loc tint (VInt i)
+       numexp_to_exp loc (NVar nm i) = eVar loc tint nm
+       numexp_to_exp loc (NArr {})   = error "TC bug: unresolved NArr!" 
 
 
 eval_arith :: DynFlags -> TypedExpPass
@@ -795,11 +858,12 @@ for_unroll_step fgs e
   = -- liftIO (putStrLn "for_unroll_step, trying ...") >> 
     let idxs = [0..n-1]
         exps = replicate n ebody
-        unrolled = zipWithM (\curr xe -> substExp (nm, eVal (expLoc e) tint (VInt curr)) xe) idxs exps
+        unrolled = zipWith (\curr xe -> runIdentity $ 
+                                        substExp (nm, eVal (expLoc e) tint (VInt curr)) xe) idxs exps
     in case unrolled of 
-         Nothing -> return e
-         Just [] -> return $ eVal (expLoc e) TUnit VUnit
-         Just xs -> rewrite $ mk_eseq_many xs
+         [] -> return $ eVal (expLoc e) TUnit VUnit
+         xs -> rewrite $ mk_eseq_many xs
+
   where mk_eseq_many :: [Exp Ty] -> Exp Ty
         mk_eseq_many []  = error "for_unroll_step: can't happen!"
         mk_eseq_many [x] = x 
@@ -809,6 +873,7 @@ for_unroll_step fgs e
 
 for_unroll_step fgs e 
   = return e
+
 
 
 
@@ -877,20 +942,18 @@ const_fold _ e@(MkExp e0 loc inf)
 type TypedCompPass = Comp CTy Ty -> RwM (Comp CTy Ty)
 type TypedExpPass  = Exp Ty -> RwM (Exp Ty)
 
-liftExpPass :: TypedExpPass -> TypedCompPass
-liftExpPass epass = mapCompM_ (mapExpM_ epass) return
-
-
+ 
 runPasses :: GS.Sym
-          -> Map.Map String (Int,Int,Double)
+          -> RwStats
           -> [(String,TypedCompPass)]
           -> Comp CTy Ty
-          -> IO (Comp CTy Ty, Map.Map String (Int,Int,Double))
-runPasses sym mp_init passes comp = go mp_init passes comp
+          -> IO (Bool, Comp CTy Ty, RwStats)
+-- The Boolean value returned indicates that some rewriting happened (if True)
+runPasses sym mp_init passes comp = go False mp_init passes comp
   where 
-    go mp [] comp 
-      = return (comp, mp)
-    go mp ((pn,p):ps) comp
+    go b mp [] comp 
+      = return (b, comp, mp)
+    go b mp ((pn,p):ps) comp
         = do { st <- getCPUTime 
 --             ; printf "Pass: %10s" pn
              ; r <- runRwM (p comp) sym
@@ -900,25 +963,15 @@ runPasses sym mp_init passes comp = go mp_init passes comp
              ; case r of
                  NotRewritten _c 
                    -> do { -- printf "... not rewritten :-( \n"
-                           go mp' ps comp
+                           go b mp' ps comp
                          }
                  Rewritten comp' 
                    -> do { -- printf "... rewritten     :-) \n"
                            -- ; printf "comp = %s\n" (show comp)
-                           go (incRewrites mp' pn) ((pn,p):ps) comp' 
+                           go True (incRewrites mp' diff pn) ((pn,p):ps) comp' 
                          }
 
              }
-
-    incInvokes :: Map.Map String (Int,Int,Double) -> Double -> String -> Map.Map String (Int,Int,Double)
-    incInvokes mp d s = Map.alter aux s mp
-      where aux Nothing         = Just (1,0,d)
-            aux (Just (i,r,d0)) = Just (i+1,r,d0+d)
-
-    incRewrites :: Map.Map String (Int,Int,Double) -> String -> Map.Map String (Int,Int,Double)
-    incRewrites mp s = Map.alter aux s mp
-      where aux Nothing        = Just (1,1,0)
-            aux (Just (i,r,d)) = Just (i,r+1,d)
 
 
 foldCompPasses :: DynFlags -> [(String,TypedCompPass)]
@@ -940,9 +993,6 @@ foldCompPasses flags
     -- More aggressive optimizations
     , ("push-comp-locals"   , push_comp_locals_step flags   )
 
--- Don't use: not wrong but does not play nicely with LUT
---  , ("float-top-letref"   , float_top_letref_step flags   )
-
     , ("take-emit"          , take_emit_step flags          )
 
     , ("float-letfun-repeat", float_letfun_repeat_step flags)
@@ -950,7 +1000,10 @@ foldCompPasses flags
     , ("ifpar-left"         , ifpar_step_left flags         )        
     , ("ifpar-right"        , ifpar_step_right flags        )        
     , ("ifdead"             , ifdead_step flags             )       
-   
+
+    -- Don't use: not wrong but does not play nicely with LUT
+    --  , ("float-top-letref"   , float_top_letref_step flags   )
+    --     
     -- The following cause the DDK compiler to explode for no obvious reason,
     -- so I keep them commented for now (although they are actually important)
     --  , ("bmpar-left"  , bm_par_step_left )
@@ -962,36 +1015,32 @@ foldExpPasses flags
   | isDynFlagSet flags NoFold || isDynFlagSet flags NoExpFold
   = []
   | otherwise 
-  = [ -- ("const-fold", const_fold flags) 
---      ("array-initialization", arrinit_step flags) 
---    , ("exp-inline", exp_inline_step flags)
-      ("for-unroll", for_unroll_step flags)
---    , ("subarr-inline-step", subarr_inline_step flags)
-    , ("elim-unused-let", elim_unused_let flags)
---    , ("elim-alength", alength_elim flags)
---    , ("eval-arith", eval_arith flags)
+  = [ ("for-unroll", for_unroll_step flags)
+    , ("exp-inlining-steps", exp_inlining_steps flags)
+    , ("rest-chain", rest_chain flags)
     ]
  
 runFold :: DynFlags -> GS.Sym -> Comp CTy Ty -> IO (Comp CTy Ty)
 runFold flags sym comp 
-   = do { (comp',mp') <- go Map.empty 0 comp
+   = do { (comp',mp') <- go (RwStats Map.empty) 0 comp
         ; putStrLn "Optimizer statistics:"
         ; printRwStats mp'
         ; return comp'
         }
  where
-  passes = map (\(nm,step) -> (nm, mapCompM_ return step))
-               (foldCompPasses flags ++ [ (s, liftExpPass f) 
-                                        | (s,f) <- foldExpPasses flags])
+  comp_passes 
+    = map (\(nm, step) -> (nm, mapCompM_ return step)) 
+          (foldCompPasses flags)
+  exp_passes 
+    = map (\(nm,step) -> (nm, mapCompM_ (mapExpM_ step) return)) 
+          (foldExpPasses flags)
+  passes = comp_passes ++ exp_passes
   go mp depth comp 
-    | depth >= 40  = return (comp,mp)
-    | otherwise    = do { (comp1,mp1) <- runPasses sym mp passes comp 
-                        ; go mp1 (depth+1) comp1
-                        }
+    | depth >= 10  = return (comp,mp)
+    | otherwise    
+    = do { (rw_happened,comp1,mp1) <- runPasses sym mp passes comp 
+         ; if rw_happened then go mp1 (depth+1) comp1
+                          else return (comp1,mp1)
+         }
 
-  printRwStats :: Map.Map String (Int,Int,Double) -> IO () 
-  printRwStats mp 
-    = mapM_ print_one (Map.toList mp)
-  print_one (pn,(invs,rws,tm)) 
-    = printf "%20s:%d/%d/%f\n" pn invs rws tm
 
