@@ -58,14 +58,17 @@
 
 
 // Contex blocks
-BufContextBlock buf_ctx_blk;
-HeapContextBlock heap_ctx_blk;
+BufContextBlock buf_ctx;
+HeapContextBlock heap_ctx;
+BufContextBlock *pbuf_ctx = &buf_ctx;
+HeapContextBlock *pheap_ctx = &heap_ctx;
+
 
 // Blink generated functions 
-extern void wpl_input_initialize(BufContextBlock *blk, HeapContextBlock *hblk);
-extern void wpl_output_finalize(BufContextBlock *blk);
-extern void wpl_global_init(HeapContextBlock *hblk, unsigned int heap_size);
-extern int wpl_go(BufContextBlock* blk, HeapContextBlock* hblk);
+extern void wpl_input_initialize();
+extern void wpl_output_finalize();
+extern void wpl_global_init(unsigned int heap_size);
+extern int wpl_go();
 
 
 // Parameters and parsing
@@ -102,11 +105,11 @@ int __cdecl main(int argc, char **argv) {
 
 
   // Init
-  initBufCtxBlock(&buf_ctx_blk);
-  initHeapCtxBlock(&heap_ctx_blk);
+  initBufCtxBlock(&buf_ctx);
+  initHeapCtxBlock(&heap_ctx);
 
-  wpl_global_init(&heap_ctx_blk, Globals.heapSize);
-  wpl_input_initialize(&buf_ctx_blk, &heap_ctx_blk);
+  wpl_global_init(Globals.heapSize);
+  wpl_input_initialize();
 
 #ifdef SORA_PLATFORM
   /////////////////////////////////////////////////////////////////////////////  
@@ -146,12 +149,12 @@ int __cdecl main(int argc, char **argv) {
   // NB: these are typically allocated in blink_set_up_threads
   ts_free();
 #else
-  wpl_go(&buf_ctx_blk, &heap_ctx_blk);
+  wpl_go();
 #endif
 
   printf("Bytes copied: %ld\n", bytes_copied);
 
-  wpl_output_finalize(&buf_ctx_blk);
+  wpl_output_finalize();
 
 #ifdef SORA_PLATFORM
   // Stop Sora HW
@@ -188,7 +191,7 @@ BOOLEAN __stdcall go_thread(void * pParam)
 {
 	thread_info *ti = (thread_info *) pParam;
 
-	wpl_go(&buf_ctx_blk, &heap_ctx_blk);
+	wpl_go();
 
 	ti->fRunning = false;
 

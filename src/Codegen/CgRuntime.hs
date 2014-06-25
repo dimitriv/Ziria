@@ -51,12 +51,11 @@ callExtBufInitializer _str _buf_context _heap_context (IntBuf _)
 cgExtBufInitsAndFins (TBuff in_bty,TBuff out_bty) mfreshId
   = do buf_context  <- getBufContext
        heap_context <- getHeapContext
-       appendTopDef [cedecl|void $id:(ini_name mfreshId)($ty:(namedCType "BufContextBlock") *$id:buf_context, 
-                                                         $ty:(namedCType "HeapContextBlock") *$id:heap_context) {
+       appendTopDef [cedecl|void $id:(ini_name mfreshId)() {
                         $stm:(callInBufInitializer buf_context heap_context in_bty)
                         $stm:(callOutBufInitializer buf_context heap_context out_bty)
                         } |]
-       appendTopDef [cedecl|void $id:(fin_name mfreshId)($ty:(namedCType "BufContextBlock") *$id:buf_context) {
+       appendTopDef [cedecl|void $id:(fin_name mfreshId)() {
                         $stm:(callOutBufFinalizer buf_context out_bty)
                         } |]
   where ini_name mfreshId = "wpl_input_initialize" ++ mfreshId

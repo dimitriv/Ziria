@@ -671,10 +671,10 @@ withModuleName str =
     local $ \rho -> rho { moduleName = str }
 
 getHeapContext :: Cg String
-getHeapContext = asks $ \rho -> "heap_ctx" ++ (moduleName rho)
+getHeapContext = asks $ \rho -> "pheap_ctx" ++ (moduleName rho)
 
 getBufContext :: Cg String
-getBufContext = asks $ \rho -> "buf_ctx" ++ (moduleName rho)
+getBufContext = asks $ \rho -> "pbuf_ctx" ++ (moduleName rho)
 
 
 withThreadId :: String -> Cg a -> Cg a

@@ -61,16 +61,21 @@
 // Contex blocks
 BufContextBlock buf_ctx_tx, buf_ctx_rx;
 HeapContextBlock heap_ctx_tx, heap_ctx_rx;
+BufContextBlock *pbuf_ctx_tx = &buf_ctx_tx;
+BufContextBlock *pbuf_ctx_rx = &buf_ctx_rx;
+HeapContextBlock *pheap_ctx_tx = &heap_ctx_tx;
+HeapContextBlock *pheap_ctx_rx = &heap_ctx_rx;
+
 
 // Blink generated functions 
-extern void wpl_input_initialize_tx(BufContextBlock *blk, HeapContextBlock *hblk);
-extern void wpl_input_initialize_rx(BufContextBlock *blk, HeapContextBlock *hblk);
-extern void wpl_output_finalize_tx(BufContextBlock *blk);
-extern void wpl_output_finalize_rx(BufContextBlock *blk);
-extern void wpl_global_init_tx(HeapContextBlock *hblk, unsigned int heap_size);
-extern void wpl_global_init_rx(HeapContextBlock *hblk, unsigned int heap_size);
-extern int wpl_go_tx(BufContextBlock* blk, HeapContextBlock* hblk);
-extern int wpl_go_rx(BufContextBlock* blk, HeapContextBlock* hblk);
+extern void wpl_input_initialize_tx();
+extern void wpl_input_initialize_rx();
+extern void wpl_output_finalize_tx();
+extern void wpl_output_finalize_rx();
+extern void wpl_global_init_tx(unsigned int heap_size);
+extern void wpl_global_init_rx(unsigned int heap_size);
+extern int wpl_go_tx();
+extern int wpl_go_rx();
 
 
 // Parameters and parsing
@@ -112,10 +117,10 @@ int __cdecl main(int argc, char **argv) {
   initHeapCtxBlock(&heap_ctx_tx);
   initHeapCtxBlock(&heap_ctx_rx);
 
-  wpl_global_init_tx(&heap_ctx_tx, Globals.heapSize);
-  wpl_global_init_rx(&heap_ctx_rx, Globals.heapSize);
-  wpl_input_initialize_tx(&buf_ctx_tx, &heap_ctx_tx);
-  wpl_input_initialize_rx(&buf_ctx_rx, &heap_ctx_rx);
+  wpl_global_init_tx(Globals.heapSize);
+  wpl_global_init_rx(Globals.heapSize);
+  wpl_input_initialize_tx();
+  wpl_input_initialize_rx();
 
 #ifdef SORA_PLATFORM
   /////////////////////////////////////////////////////////////////////////////  
@@ -161,8 +166,8 @@ int __cdecl main(int argc, char **argv) {
 
   printf("Bytes copied: %ld\n", bytes_copied);
 
-  wpl_output_finalize_tx(&buf_ctx_tx);
-  wpl_output_finalize_rx(&buf_ctx_rx);
+  wpl_output_finalize_tx();
+  wpl_output_finalize_rx();
 
 #ifdef SORA_PLATFORM
   // Stop Sora HW
@@ -200,8 +205,8 @@ BOOLEAN __stdcall go_thread(void * pParam)
 	thread_info *ti = (thread_info *) pParam;
 
 	// TOFIX
-	wpl_go_tx(&buf_ctx_tx, &heap_ctx_tx);
-	wpl_go_rx(&buf_ctx_rx, &heap_ctx_rx);
+	wpl_go_tx();
+	wpl_go_rx();
 
 	ti->fRunning = false;
 
