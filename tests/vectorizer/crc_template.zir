@@ -21,7 +21,6 @@
 -- Used with macros to create a simple template structure
 
 let comp [8, CRC_VEC] CRC_NAME (len : int) =  
-
   times len seq {
     (x:arr[8] bit) <- takes 8;
     emits x;

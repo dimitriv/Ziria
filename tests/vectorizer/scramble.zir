@@ -19,7 +19,7 @@
 --
 
 let comp scrambler() =
-  repeat [8,8] seq{
+  repeat <= [16,16] {
     x <- take;
     emit (x)
   }

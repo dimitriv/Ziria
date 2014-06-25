@@ -76,8 +76,22 @@ compVectScaleFactDn cin cout
                 , vs_cout = cout
                 , vs_cand_divisors 
                     = [ (x,y)
-                      | x <- divs_of cin
-                      , y <- [cout] 
+                      | x <- divs_of cin                             -- take a divisor of the input
+                      , y <- divs_of cout
+                      , let mul1 = if x > 0 then cin `div` x else 1  -- here is the multiplicity x ~~> cin
+                      , let mul2 = if y > 0 then cout `div` y else 1 -- here is the multiplicity x ~~> cin
+                      , mul1 <= mul2 -- IMPORTANT!!!!!!!! Preserve the 'rate' of the component! 
+
+ --                      , y <- [ cout `div` m1
+ --                             | m1 <- divs_of mul1
+ --                             ]
+
+ --                      , y <- divs_of cout
+ --                      , let mul1 = cin `div` x
+ --                      , let mul2 = cout `div` y
+ --                      , mul1 == mul2 
+ -- c
+                      -- , y <- filter (\c -> (cin `div` x) `mod` (cout `div` c) == 0) (divs_of cout)
                       -- DV: Don't break the output queue further, as it 
                       -- will already be mitigated 
                       -- y <- divs_of cout 
@@ -98,7 +112,7 @@ compVectScaleFactUp :: Ty -> Int -> Int -> VectScaleFact
 compVectScaleFactUp ty_in cin cout
   = VectScaleUp { vs_cin = cin
                 , vs_cout = cout
-                , vs_cand_mults = allVectMults ty_in cin cout
+                , vs_cand_mults = reverse $ allVectMults ty_in cin cout
                 }
 
 compVectScaleFactDn_InOrOut :: Maybe Int -> Maybe Int -> VectScaleFact
@@ -123,9 +137,8 @@ allVectMults ty_in xin xout = [ -- DV: used to be (x,y)
                               , x `mod` y == 0 && x >= y
                               , good_sizes x y 
                               ]
-  where in_vect_bound TBit = 128
-        in_vect_bound _    = 128 
-        out_vect_bound     = 128 
+  where in_vect_bound _ = 128
+        out_vect_bound  = 128 
         good_sizes x y = xin*x  <= in_vect_bound ty_in && 
                          xout*y <= out_vect_bound
 
@@ -251,7 +264,7 @@ matchControl (sym,venv) bcands
                                 ; putStrLn $ "aout = " ++ show aout
                                 ; putStrLn $ "cin  = " ++ show cin
                                 ; putStrLn $ "cout = " ++ show cout 
-                                ; putStrLn $ "comp = " ++ show comp
+                                -- ; putStrLn $ "comp = " ++ show comp
                                 }
 
                   ; let loc = compLoc comp
@@ -349,8 +362,12 @@ matchData (sym,venv) p loc xs ys = go_left xs ys
 pruneMaximal :: [ DelayedVectRes ] -> [ DelayedVectRes ] 
 pruneMaximal xs 
   = -- first group by VectRes in-out
-    let groups = groupBy (\vr1 vr2 -> 
-                    vectResQueueEq (dvr_vres vr1) (dvr_vres vr2)) xs
+    let groups 
+          = groupBy (\vr1 vr2 -> 
+              vectResQueueEq (dvr_vres vr1) (dvr_vres vr2)) $ 
+            sortBy (\vr1 vr2 -> 
+              vectResQueueComp (dvr_vres vr1) (dvr_vres vr2)) $ 
+            xs
     in
     -- and for each group pick the maximal
     map filter_maximal groups
@@ -474,8 +491,8 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
                                       ; putStrLn $ "ty = " ++ show ty
                                       ; putStrLn $ "hi = " ++ show hi
                                       ; putStrLn $ "lo = " ++ show lo
-                                      ; putStrLn $ "p1 = " ++ show p1
-                                      ; putStrLn $ "mitigator = " ++ show m
+                                      -- ; putStrLn $ "p1 = " ++ show p1
+                                      -- ; putStrLn $ "mitigator = " ++ show m
                                       }
 
 
@@ -493,7 +510,7 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
                                      ; putStrLn $ "ty2_out   = " ++ show ty2_out
                                      ; putStrLn $ "cout2     = " ++ show cout2
                                      ; putStrLn $ "mul (k)   = " ++ show k
-                                     ; putStrLn $ "mitigator = " ++ show m
+                                     -- ; putStrLn $ "mitigator = " ++ show m
                                      } 
                                 ; return $ (cPar loc () pnfo p1' $  
                                             cPar loc () pnever p2 m)
@@ -555,9 +572,9 @@ computeVectTop :: Bool -> Comp (CTy, Card) Ty -> VecM [DelayedVectRes]
 computeVectTop verbose = computeVect
   where
     computeVect x 
-       = do { vecMIO $ putStrLn $ 
-              "Vectorizer, traversing: " ++ compShortName x
-            ; go x
+       = do { -- vecMIO $ putStrLn $ 
+              -- "Vectorizer, traversing: " ++ compShortName x
+              go x
             }
     go comp =
         let (cty,card) = compInfo comp
@@ -591,16 +608,16 @@ computeVectTop verbose = computeVect
                     -- Step 1: vectorize css
                   ; vss <- mapM computeVect css
                     
-                  -- ; vecMIO $ 
-                  --   do { putStrLn "(Bind) vss, lengths of each cand. set."
-                  --      ; mapM (putStrLn . show . length) vss
-                  --      ; putStrLn $ "(Bind) comp = "; 
-                  --      ; putStrLn $ show comp
-                  --      }
+                  ; vecMIO $ 
+                    do { putStrLn "(Bind) vss, lengths of each cand. set."
+                       ; mapM (\(c,vs) -> do { -- putStrLn $ "** Computation is = " ++ show c
+                                               putStrLn $ "** Candidates     = " ++ show (length vs)
+                                             }) (zip css vss)
+                       }
 
                     -- Step 2: form candidates (lazily) 
                   ; env <- getVecEnv 
-                  ; let ress = matchControl env vss 
+                  ; let ress = matchControl env (map pruneMaximal vss)
 
                   ; let builder = \(c:cs) -> cBindMany loc () c (zip xs cs)
 
@@ -610,9 +627,9 @@ computeVectTop verbose = computeVect
                   --                        show (dvr_vres dvr)) 
                   --        (map (mkBindDelayedVRes builder) ress)
 
-                  -- ; vecMIO $ 
-                  --   putStrLn $ 
-                  --   "(Bind) Length of ress = " ++ show (length ress)
+                  ; vecMIO $ 
+                    putStrLn $ 
+                    "(Bind) Length of ress = " ++ show (length ress)
           
                   ; when (null ress) $ vecMIO $
                     do { putStrLn "WARNING: BindMany empty vectorization:"
@@ -622,7 +639,7 @@ computeVectTop verbose = computeVect
 
                     -- Step 3: build for each candidate in ress a BindMany
                   ; return $ 
-                    map (mkBindDelayedVRes builder) ress
+                    pruneMaximal $ map (mkBindDelayedVRes builder) ress
 
                   }
 
@@ -634,20 +651,20 @@ computeVectTop verbose = computeVect
                          vecMIO $ 
                           do { putStrLn $ "(Par) comp = " ++ show x 
                              ; putStrLn $ "(Par) len  = " ++ show (length xs) 
-                             ; when (length xs < 40) $ 
+                             ; when (length xs < 400) $ 
                                  mapM_ (\w -> putStrLn $ show (dvr_vres w)) xs
                              ; putStrLn "----------------------" 
                              }
  
---                 ; dbgv c1 vcs1
+--                  ; dbgv c1 vcs1
 --                  ; dbgv c2 vcs2 
 
                   ; env <- getVecEnv 
                   ; let ress_pre = matchData env p loc vcs1 vcs2
                   ; let ress = pruneMaximal ress_pre
 
-                  -- ; vecMIO $ 
-                  --   putStrLn $ "(Par) Length ress = " ++ show (length ress) 
+                  ; vecMIO $ 
+                    putStrLn $ "(Par) Length ress = " ++ show (length ress) 
 
                   ; when (null ress) $ vecMIO $ 
                     do { putStrLn "WARNING: Par empty vectorization:"
@@ -733,27 +750,53 @@ computeVectTop verbose = computeVect
                   ; vcs2 <- computeVect c2
 
                   ; env <- getVecEnv 
-                  ; let ress = matchControl env [vcs1,vcs2]
+                  ; let ress = matchControl env (map pruneMaximal [vcs1,vcs2])
+
+                  ; let builder = \([x1,x2])-> cBranch loc () (eraseExp e) x1 x2
+                        branch_cands = pruneMaximal $ map (mkBindDelayedVRes builder) ress
+
+                  ; vecMIO $ 
+                    do { putStrLn "(Branch) vss, lengths of each cand. set."
+                       -- ; putStrLn $ "Branch itself is: " ++ show comp
+                       ; mapM (\(c,vs) -> do { -- putStrLn $ "** Computation is = " ++ show c
+                                               putStrLn $ "** Candidates     = " ++ show (length vs)
+                                             }) (zip [c1,c2] [vcs1,vcs2])
+                       ; putStrLn $ "Branch candidate length = " ++ show (length ress)
+                       ; putStrLn $ "Branch pruned cands     = " ++ show (length branch_cands)
+                       }
+
 
                   ; when (null ress) $ 
                     vecMIO $
                     do { putStrLn "WARNING: Branch empty vectorization:" 
                        ; print $ ppComp comp }
 
-                  ; let builder = \([x1,x2])-> cBranch loc () (eraseExp e) x1 x2
-                        branch_cands = map (mkBindDelayedVRes builder) ress
+ 
+                  -- ; vecMIO $ do { putStrLn $ "Branch candidates:"
+                  --               ; mapM (\v -> putStrLn $ "dvr_vres = " ++ show (dvr_vres v)) branch_cands
+                  --               }
 
-{- 
-                  ; vecMIO $ do { putStrLn $ "Branch candidates:"
-                                ; mapM (\v -> putStrLn $ "dvr_vres = " ++ show (dvr_vres v)) branch_cands
-                                }
--}
 
                   ; return $ branch_cands
                   }
 
 
-          Repeat (Just (finalin, finalout)) c1
+          VectComp (finalin,finalout) c1
+            -> do { vc <- vectorizeWithHint (finalin,finalout) c1
+                  ; let self = self_no_vect
+                  ; let vect = 
+                         DVR { dvr_comp  = return vc
+                             , dvr_vres  = DidVect finalin finalout minUtil
+                             , dvr_orig_tyin  = tyin
+                             , dvr_orig_tyout = tyout }
+                  ; return $ [vect] -- No self, FORCE this!
+                  }
+
+          -- Treat nested annotations exactly the same as repeat
+          Repeat Nothing (MkComp (VectComp hint c1) _ _)
+            -> computeVect (cRepeat loc (cty,card) (Just (Rigid hint)) c1)
+
+          Repeat (Just (Rigid (finalin, finalout))) c1
             -> do { vc <- vectorizeWithHint (finalin,finalout) c1
                   ; let self = self_no_vect
 
@@ -763,22 +806,17 @@ computeVectTop verbose = computeVect
                              , dvr_vres  = DidVect finalin finalout minUtil
                              , dvr_orig_tyin  = tyin
                              , dvr_orig_tyout = tyout }
-                  ; return $ [self, vect] 
-                  }
-          VectComp (finalin,finalout) c1
-            -> do { vc <- vectorizeWithHint (finalin,finalout) c1
-                  ; let self = self_no_vect
-                  ; let vect = 
-                         DVR { dvr_comp  = return vc
-                             , dvr_vres  = DidVect finalin finalout minUtil
-                             , dvr_orig_tyin  = tyin
-                             , dvr_orig_tyout = tyout }
-                  ; return $ [self, vect] 
+                  ; return $ [vect] -- No self, FORCE this! 
                   }
 
-          -- Treat nested annotations exactly the same as repeat
-          Repeat Nothing (MkComp (VectComp hint c1) _ _)
-            -> computeVect (cRepeat loc (cty,card) (Just hint) c1)
+          Repeat (Just (UpTo (maxin, maxout))) c1
+             -> do { vss <- computeVect $ cRepeat loc (cty,card) Nothing c1
+                   ; let filter_res (dvr@DVR{ dvr_vres = r })
+                           = case r of NoVect -> True
+                                       DidVect i j _ -> i <= maxin && j <= maxout
+                   ; return $ filter filter_res vss
+                   }
+          
 
           Repeat Nothing c -- NB: Vectorizing in anything we wish!
             | SimplCard (Just cin) (Just cout) <- snd $ compInfo c 
@@ -977,9 +1015,26 @@ computeVectTop verbose = computeVect
                   
             in do { env <- getVecEnv 
                   ; let vect_maps = map (mk_vect_map env) mults
-                  ; return $ self_no_vect : vect_maps }
+                  ; return $ self_no_vect : vect_maps } 
 
-          Map (Just (min,mout)) e
+          Map (Just (UpTo (min,mout))) e -> 
+            let mults = filter (\(i,j) -> i <= min && j <= mout) $ 
+                        allVectMults tyin 1 1 
+                mk_vect_map env (min,mout) 
+                  = DVR { dvr_comp 
+                              = inCurrentEnv env $
+                                vectMap min mout tyin tyout loc e
+                        , dvr_vres = DidVect min mout minUtil
+                        , dvr_orig_tyin  = tyin
+                        , dvr_orig_tyout = tyout
+                        }
+                  
+            in do { env <- getVecEnv 
+                  ; let vect_maps = map (mk_vect_map env) mults
+                  ; return $ self_no_vect : vect_maps } 
+
+
+          Map (Just (Rigid (min,mout))) e
             | min `mod` mout == 0          -- mout divides min
             -> let mults = [(min,mout)]  
                    mk_vect_map env (min,mout) 
@@ -993,7 +1048,7 @@ computeVectTop verbose = computeVect
 
                in do { env <- getVecEnv
                      ; let vect_maps = map (mk_vect_map env) mults
-                     ; return $ self_no_vect : vect_maps 
+                     ; return $ vect_maps  -- NO self, FORCE this!
                      }
             | otherwise
             -> vecMFail "Vectorization failure, bogus map annotation!"
@@ -1128,7 +1183,7 @@ runDebugVecM verbose comp tenv env cenv sym unifiers
                 in runVecM vec_action sym (VecEnv [] []) (VecState 0 0)
 
        ; putStrLn "====>" 
---     ; putStrLn $ "runDebugM, length of results is: " ++ show (length vss)
+       ; putStrLn $ "runDebugM, length of results is: " ++ show (length vss)
          -- Now do the final selection! 
        ; vs_maxi <- filterMaximal vss 
 

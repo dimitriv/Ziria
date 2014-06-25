@@ -227,16 +227,21 @@ parseCompBaseType
                      ] <?> "computation type index"
 
 
--- A vectorization annotation is just of the form [literal,literal]
+-- A vectorization annotation is just of the form [literal,literal] or <= [literal, literal] 
 parseVectAnn
+  = choice [ try $ (do { reservedOp "<=" 
+                       ; parse_vect_ann
+                       } >>= (return . UpTo))
+           , parse_vect_ann >>= (return . Rigid)
+           ] 
+-- Parses just the [(i,j)] annotation 
+parse_vect_ann
   = brackets $
-    do { i <- integer
-       ; comma
-       ; j <- integer
-       ; return (fromIntegral i, fromIntegral j) 
-       }
-
-
+       do { i <- integer
+          ; comma
+          ; j <- integer
+          ; return (fromIntegral i, fromIntegral j) 
+          }
 
 parseComp = buildExpressionParser par_op_table (choice [parse_unary_ops, parseCompTerm])
   where parse_unary_ops = choice [ from_pref standalonePref standaloneKont
@@ -401,7 +406,7 @@ parseCompOptional :: BlinkParser (Maybe (Maybe (Int,Int)))
   = do { is_comp <- optionMaybe (reserved "comp")
        ; case is_comp of
            Nothing -> return Nothing
-           Just {} -> do { r <- optionMaybe parseVectAnn
+           Just {} -> do { r <- optionMaybe parse_vect_ann
                          ; return $ Just r
                          }
        }
