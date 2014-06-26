@@ -76,12 +76,14 @@ doVectorizeCompDn :: Comp (CTy,Card) Ty
 --
 doVectorizeCompDn comp cin cout (din,dout) 
   = do { 
+
+{-
          vecMIO $ putStrLn "doVectorizeCompDn!"
        ; vecMIO $ putStrLn ("arityin  = " ++ show arityin)
        ; vecMIO $ putStrLn ("arityout = " ++ show arityout)
        ; vecMIO $ putStrLn ("cin  = " ++ show cin)
        ; vecMIO $ putStrLn ("cout = " ++ show cout)
-
+-}
 
        ; let loc = compLoc comp
        ; wrap_fun_name <- newVectName "vect_dn" loc
@@ -244,6 +246,9 @@ doVectorizeCompDn comp cin cout (din,dout)
                     vecMFail "BUG: Repeat is not a simple computer!"
                 (Par p c1 c2) ->
                    vecMFail "BUG: Par is not a simple computer!"
+
+                (Mitigate {}) -> 
+                   vecMFail "BUG: Mitigate is not a simple computer!"
 
                 -- However, these guys are ok, /provided/ they either take OR emit, in which case we will
                 -- have vectorized only the takes or emits respectively. So this is not an error, instead we

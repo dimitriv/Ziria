@@ -107,19 +107,6 @@ pipeLineBase c
           | otherwise
           = [c]
 
--- Composing transformers and computers 
-parCompose (CTBase (TTrans t1 _))  
-           (CTBase (TTrans _ t3))  = CTBase (TTrans t1 t3)
-parCompose (CTBase (TTrans t1 _))  
-           (CTBase (TComp v _ t3)) = CTBase (TComp v t1 t3)
-parCompose (CTBase (TComp v t1 _)) 
-           (CTBase (TTrans _ t3))  = CTBase (TComp v t1 t3)
-parCompose (CTBase (TComp v t1 _)) 
-           (CTBase (TComp _ _ t3)) = CTBase (TComp v t1 t3)
-parCompose _ct1 _cty2 
-  = error "Type checking bug: revealed in parCompose!" 
-
-
 
 insertBufs :: [Comp CTy Ty] -> [Int] -> ([Ty], [Comp CTy Ty])
 -- Takes the splits and a sequence of buffer 

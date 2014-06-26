@@ -1023,8 +1023,10 @@ foldExpPasses flags
 runFold :: DynFlags -> GS.Sym -> Comp CTy Ty -> IO (Comp CTy Ty)
 runFold flags sym comp 
    = do { (comp',mp') <- go (RwStats Map.empty) 0 comp
+{-
         ; putStrLn "Optimizer statistics:"
         ; printRwStats mp'
+-}
         ; return comp'
         }
  where

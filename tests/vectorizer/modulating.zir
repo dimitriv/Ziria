@@ -20,7 +20,7 @@
 #include "const.zir"
 
 let comp modulate_bpsk () = 
-  repeat [8,8] { 
+  repeat <= [8,8] { 
     (x : bit) <- take;
     emit if (x == '0) then complex16{re=-1; im=0}
                       else complex16{re=1; im=0};
@@ -29,7 +29,7 @@ in
 
 
 let comp modulate_qpsk () = 
-  repeat [8, 4] {
+  repeat <= [8, 4] {
     (x : arr[2] bit) <- takes 2;
     emit complex16{re=1; im=1};
   }
@@ -47,7 +47,7 @@ in
 
 
 let comp modulate_64qam () = 
-  repeat [12, 2] {
+  repeat <= [12, 2] {
     x <- takes 6;
     emit complex16{re=1; im=1};
   }

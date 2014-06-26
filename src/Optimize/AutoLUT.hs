@@ -135,14 +135,16 @@ runAutoLUT dflags _ c = autolutC c
         go (Standalone c) =
             Standalone <$> autolutC c
 
-    autolutCallArg :: CallArg (Exp Ty) (Comp a Ty) -> IO (CallArg (Exp Ty) (Comp a Ty))
+        go c0@(Mitigate {}) = pure c0
+
+    autolutCallArg :: CallArg (Exp Ty) (Comp a Ty) 
+                   -> IO (CallArg (Exp Ty) (Comp a Ty))
     autolutCallArg (CAExp e)  = autolutE e >>= \e' -> return (CAExp e')
     autolutCallArg (CAComp c) = autolutC c >>= \c' -> return (CAComp c')
    
     autolutE :: Exp Ty -> IO (Exp Ty)
-    autolutE e_ = do { putStrLn $ "Trying to autolutE expression: " ++ show e_
-                     ; autoE e_
-                     }
+    autolutE e_ = autoE e_
+
       where
         ranges :: Map Name Range
         ranges = maybe Map.empty id (varRanges e_)

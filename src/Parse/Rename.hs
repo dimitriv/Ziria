@@ -389,6 +389,9 @@ renameComp c =
          ; return $ cStandalone cloc cnfo c''
          }
 
+    Mitigate {} -> return c
+
+
   where cloc = compLoc c
         cnfo = compInfo c
 

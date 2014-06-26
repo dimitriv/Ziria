@@ -93,8 +93,9 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
       ppComp c2
 
     Par parInfo c1 c2 ->
-      ppComp c1 <+> ppParInfo parInfo $$ 
-      ppComp c2
+      parens ( ppComp c1 <+> ppParInfo parInfo $$ 
+               ppComp c2
+             )
     Let x c1 c2
       | ignorelet 
       -> ppComp c2
@@ -196,6 +197,8 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
     Standalone c1 ->
       text "standalone" <> braces (ppComp c1)
 
+    Mitigate t n1 n2 -> 
+      int n1 <> text "-mitigate" <> brackets (ppTy t) <> text "-" <> int n2
 
 ppVectWidth (Rigid ann) = ppWidth ann
 ppVectWidth (UpTo ann)  = text "<=" <> ppWidth ann

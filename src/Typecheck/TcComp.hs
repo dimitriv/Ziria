@@ -559,6 +559,12 @@ tyCheckComp c
                     CTArrow {} -> 
                       raiseErrNoVarCtx cloc $ nonFullAppErr c1'
                 }
+           Mitigate t n1 n2 -> 
+             do { let t1 = if n1 == 1 then t else TArr (Literal n1) t
+                ; let t2 = if n2 == 1 then t else TArr (Literal n2) t
+                ; let cty = CTBase (TTrans t1 t2)
+                ; return $ cMitigate cloc cty t n1 n2
+                }
        }
 
 mk_rw_ty (RWRealTyAnn t) = return t

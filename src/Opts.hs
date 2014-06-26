@@ -80,6 +80,7 @@ verbose :: MonadIO m => DynFlags -> Doc -> m ()
 verbose dflags doc | isDynFlagSet dflags Verbose = liftIO $ putDoc $ doc <> line
                    | otherwise                   = return ()
 
+
 mAX_LUT_SIZE_DEFAULT :: Integer
 mAX_LUT_SIZE_DEFAULT = 128*1024
 
