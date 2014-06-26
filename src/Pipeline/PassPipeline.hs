@@ -58,6 +58,8 @@ stripLetCtxt c = go c
             let (ctx,c0) = go c2 in (CLetFunC cloc nm ps ls c1 ctx, c0)
           LetStruct sdef c2 -> 
             let (ctx,c0) = go c2 in (CLetStruct cloc sdef ctx, c0)
+          LetExternal nm fun c2 -> 
+            let (ctx,c0) = go c2 in (CLetExternal cloc nm fun ctx,c0)
           _other -> (Hole,c)
       where cloc = compLoc c
 
