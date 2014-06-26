@@ -69,7 +69,7 @@ data DynFlag =
   | NoFold
 
   | NoLUT
-  deriving Eq
+  deriving (Eq,Show)
 
 type DynFlags = [DynFlag]
 

@@ -95,6 +95,7 @@ main = failOnException $ do
 
     args <- getArgs
     (dflags, _) <- compilerOpts args
+
     inFile  <- getInFile dflags
     outFile <- getOutFile dflags
     input <- readFile inFile
