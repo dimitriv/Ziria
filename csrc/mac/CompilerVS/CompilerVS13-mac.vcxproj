@@ -170,7 +170,6 @@
     <ClCompile Include="..\..\ext_arr.c" />
     <ClCompile Include="..\..\ext_math.c" />
     <ClCompile Include="..\..\numerics.c" />
-    <ClCompile Include="..\..\params.c" />
     <ClCompile Include="..\..\sora_ext_lib.c" />
     <ClCompile Include="..\..\sora_ext_visual.c" />
     <ClCompile Include="..\..\sora_ext_viterbi.c" />
@@ -181,6 +180,7 @@
     <ClCompile Include="..\..\utils.c" />
     <ClCompile Include="..\..\wpl_alloc.c" />
     <ClCompile Include="..\driver.c" />
+    <ClCompile Include="..\params.c" />
     <ClCompile Include="..\rx.c" />
     <ClCompile Include="..\tx.c" />
   </ItemGroup>

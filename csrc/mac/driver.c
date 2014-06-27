@@ -78,12 +78,15 @@ extern int wpl_go_tx();
 extern int wpl_go_rx();
 
 
+int SetUpThreads(PSORA_UTHREAD_PROC * User_Routines);
+
+
 // Parameters and parsing
 #include "params.h"
 
 /* Global configuration parameters 
 ***************************************************************************/
-struct BlinkGlobals Globals;
+struct BlinkParams Globals;
 
 // tracks bytes copied 
 extern unsigned long bytes_copied; 
@@ -126,8 +129,13 @@ int __cdecl main(int argc, char **argv) {
   /////////////////////////////////////////////////////////////////////////////  
   // DV: Pass the User_Routines here
 
-  // TOFIX
-  int no_threads = wpl_set_up_threads_tx(User_Routines);
+  // Currently we only support one thread per module
+  // If there are multiple threads, the code will not
+  // be initialized correctly!
+  // (see /csrc/driver.c for explanation)
+
+  //SINGLE MODULE CODE: int no_threads = wpl_set_up_threads_tx(User_Routines);
+  int no_threads = SetUpThreads(User_Routines);
 
   printf("Setting up threads...\n");
 
@@ -161,7 +169,9 @@ int __cdecl main(int argc, char **argv) {
   // NB: these are typically allocated in blink_set_up_threads
   ts_free();
 #else
-  wpl_go();
+  printf("Only Sora supported at the moment!\n");
+  exit(1);
+  //wpl_go();
 #endif
 
   printf("Bytes copied: %ld\n", bytes_copied);
@@ -200,12 +210,21 @@ int __cdecl main(int argc, char **argv) {
 
 #ifdef SORA_PLATFORM
 
-BOOLEAN __stdcall go_thread(void * pParam)
+BOOLEAN __stdcall go_thread_tx(void * pParam)
 {
 	thread_info *ti = (thread_info *) pParam;
 
-	// TOFIX
 	wpl_go_tx();
+
+	ti->fRunning = false;
+
+	return false;
+}
+
+BOOLEAN __stdcall go_thread_rx(void * pParam)
+{
+	thread_info *ti = (thread_info *)pParam;
+
 	wpl_go_rx();
 
 	ti->fRunning = false;
@@ -216,8 +235,9 @@ BOOLEAN __stdcall go_thread(void * pParam)
 /* Returns the numer of threads */
 int SetUpThreads(PSORA_UTHREAD_PROC * User_Routines)
 {
-	User_Routines[0] = (PSORA_UTHREAD_PROC) go_thread;
-	return 1;
+	User_Routines[0] = (PSORA_UTHREAD_PROC) go_thread_tx;
+	User_Routines[1] = (PSORA_UTHREAD_PROC) go_thread_rx;
+	return 2;
 }
 
 #else

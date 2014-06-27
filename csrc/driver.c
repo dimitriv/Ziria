@@ -76,7 +76,7 @@ extern int wpl_go();
 
 /* Global configuration parameters 
 ***************************************************************************/
-struct BlinkGlobals Globals;
+struct BlinkParams Globals;
 
 // tracks bytes copied 
 extern unsigned long bytes_copied; 

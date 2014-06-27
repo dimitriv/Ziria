@@ -71,7 +71,7 @@ typedef struct {
 typedef unsigned long Repetitions;
 #define INF_REPEAT 0 
 
-struct BlinkGlobals {
+struct BlinkParams {
 	BlinkFileType inType;       // type of input
 	BlinkFileType outType;      // type of output
 	BlinkFileMode inFileMode;   // input file mode 
@@ -100,7 +100,7 @@ struct BlinkGlobals {
 
 /* Global configuration parameters 
 *************************************************************************/
-extern struct BlinkGlobals Globals;
+extern struct BlinkParams Globals;
 
 FILE * try_open(char *name, char *mode);
 void try_parse_args(int argc, char ** argv);
