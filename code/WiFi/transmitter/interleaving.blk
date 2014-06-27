@@ -58,7 +58,7 @@ let comp interleaver_bpsk() =
   let ids1 = intlv_perm1(M_BPSK) in 
   let ids2 = intlv_perm2(M_BPSK) in
 
-  repeat [48, 48] {
+  repeat {
     (x : arr[48] bit) <- takes 48;
 -- We break it in two because heavy inlining done by the compiler
 -- will miss the LUTing opportunity
@@ -106,7 +106,7 @@ let comp interleaver_m64qam() =
   let ids1 = intlv_perm1(M_64QAM) in 
   let ids2 = intlv_perm2(M_64QAM) in
 
-  repeat {
+  repeat [144, 144]{
     (x : arr[288] bit) <- takes 288;
 -- We break it in two because heavy inlining done by the compiler
 -- will miss the LUTing opportunity

@@ -23,7 +23,7 @@ var scrmbl_st: arr[7] bit := {'1,'1,'1,'1,'1,'1,'1};
 var tmp: bit;
 var y:bit;
   
-  repeat [8,8] seq{
+  repeat <= [8,8] seq{
     x <- take;
     
     do{
