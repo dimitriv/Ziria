@@ -74,12 +74,6 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
     Var x ->
       ppName x
     BindMany c1 xs_cs -> 
---  Just for debugging the structure of the AST
-{- 
-           ppComp c1 <+>
-             (nest 2 $ brackets $ 
-              vcat (map (\(x,cx) -> parens (ppTypedName x <> text "," <+> ppComp cx)) xs_cs))
--}
          
          let go_pp c [] = ppComp c
              go_pp c ((x,c2):rest) =
@@ -100,45 +94,49 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
       | ignorelet 
       -> ppComp c2
       | otherwise
-      -> text "let comp" <+> ppTypedName x <+> text "=" <+> ppComp c1 $$
-         text "in" $$ ppComp c2
+      -> parens (text "let comp" <+> ppTypedName x <+> text "=" <+> ppComp c1 $$
+                 text "in" $$ braces (ppComp c2))
 
     LetStruct sdef c1
       | ignorelet || ignoreexp
       -> ppComp c1
       | otherwise
-      -> text "struct " <+> text (struct_name sdef) <+> text "=" <+> (hsep $ punctuate (text ",") (map (\(f,t) -> text f <> colon <+> ppTy t) (struct_flds sdef))) $$
-         text "in" $$ ppComp c1
+      -> text "struct " <+> text (struct_name sdef) <+> text "=" <+> 
+            (hsep $ punctuate (text ",") (map (\(f,t) -> 
+               text f <> colon <+> ppTy t) (struct_flds sdef))) $$
+         text "in" $$ braces (ppComp c1)
 
     LetE x e c
       | ignorelet || ignoreexp
       -> ppComp c
       | otherwise
       -> text "let" <+> ppTypedName x <+> text "=" <+> ppExp e $$
-         text "in" $$ ppComp c
+         text "in" $$ braces (ppComp c)
     LetFun _ fn c 
       | ignorelet || ignoreexp
       -> ppComp c
       | otherwise 
       -> text "let" <+> ppFun fn $$
          text "in" $$
-         ppComp c
+         braces (ppComp c)
     LetExternal _ fn c 
       | ignorelet || ignoreexp
       -> ppComp c
       | otherwise
       -> text "let external" <+> ppFun fn $$
          text "in" $$
-         ppComp c
+         braces (ppComp c)
     LetFunC f params locls c1 c2 
       | ignorelet || (ignoreexp && not (nested_letfuns c1))
       -> ppComp c2
       | otherwise
-      -> text "let comp" <+> ppName f <+> parens (ppCompParams params) <+> text "=" $$
-           (if not ignoreexp then (nest nestingDepth (ppDecls locls)) else empty) $$
+      -> text "let comp" <+> ppName f <+> 
+                           parens (ppCompParams params) <+> text "=" $$
+           (if not ignoreexp then (nest nestingDepth (ppDecls locls)) 
+            else empty) $$
            nest nestingDepth (ppComp c1) $$
          text "in" $$
-         ppComp c2
+         braces (ppComp c2)
     Call f eargs ->
       ppName f <+> parens (ppEs ppCallArg comma eargs)
     Emit e
@@ -168,7 +166,8 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
     Times ui estart elen ix c ->
       ppUI ui $ 
        text "for" <+>
-         ppIx ix <+> text "in" <+> brackets (ppExp estart <> comma <+> ppExp elen) $$ 
+         ppIx ix <+> text "in" <+> 
+            brackets (ppExp estart <> comma <+> ppExp elen) $$ 
          nest nestingDepth (ppComp c)
 
     Repeat wdth c ->
@@ -200,8 +199,8 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
     Mitigate t n1 n2 -> 
       int n1 <> text "-mitigate" <> brackets (ppTy t) <> text "-" <> int n2
 
-ppVectWidth (Rigid ann) = ppWidth ann
-ppVectWidth (UpTo ann)  = text "<=" <> ppWidth ann
+ppVectWidth (Rigid _r ann) = ppWidth ann
+ppVectWidth (UpTo _r ann)  = text "<=" <> ppWidth ann
 
 ppWidth (i,j) = brackets $ (int i) <> text "," <> (int j)
 
@@ -212,9 +211,13 @@ ppComp = ppComp0 ppComp False False False . unComp
 
 ppCompPipeline = ppComp0 ppCompPipeline False True False . unComp
 
+ppCompShortFold = ppComp0 ppCompShortFold False False True . unComp
+
+
 ppCompAst cmp = 
    brackets (text $ compShortName cmp) <+>
-   ppComp0 (\c -> brackets (text $ compShortName c) <+> ppComp c) False False False (unComp cmp)
+   ppComp0 (\c -> brackets (text $ compShortName c) <+> ppComp c) 
+           False False False (unComp cmp)
 
 ppCompLoc c =
   (case compLoc c of
@@ -249,8 +252,9 @@ ppCompTypedVect x =
       ain   = arity inty
       ayld  = arity yldty
 
-  in if isSimplComp (unComp x) then (text ain <> text "-" <> braces p1 <> text "-" <> text ayld)
-        else p1
+  in if isSimplComp (unComp x) 
+     then text ain <> text "-" <> braces p1 <> text "-" <> text ayld
+     else p1
 
 isSimplComp (Var {})      = True
 isSimplComp (Call {})     = True

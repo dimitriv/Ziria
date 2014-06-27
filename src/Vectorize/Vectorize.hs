@@ -46,6 +46,7 @@ import TcMonad
 import TcComp 
 import TcErrors ( ErrCtx (..) )
 
+import PassFold ( elimMitigsIO )
 
 import Debug.Trace 
 
@@ -131,7 +132,7 @@ compVectScaleFactDn_InOrOut mcin mcout
 allVectMults :: Ty -> Int -> Int -> [(Int,Int)]
 -- TODO: make this infinite (or at least very large)
 allVectMults ty_in xin xout = [ -- DV: used to be (x,y)
-                                (x,x) -- **  
+                                (x,y) -- **  
                               | x <- [1..128]
                               , y <- [1..128]
                               , x `mod` y == 0 && x >= y
@@ -150,7 +151,6 @@ data DelayedVectRes
          , dvr_orig_tyin  :: Ty -- original (pre-vect) in type
          , dvr_orig_tyout :: Ty -- original (pre-vect) out type
          }
-
 
 
 mitigateUp :: Maybe SourcePos -> String
@@ -205,6 +205,23 @@ mitigateDn loc orig ty hi lo
             cLetFunC loc () fname [] binds  comp $ 
             cCall loc () fname []
        }
+
+compileMitigs :: GS.Sym -> Comp () () -> IO (Comp () ())
+-- Compile away mitigators.
+-- TODO: at the moment this is a bit inefficient, 
+-- better to compile directly in terms of tick and process.
+compileMitigs sym comp 
+  = runVecM vec_action sym (VecEnv [] []) (VecState 0 0) >>= (return . fst)
+  where 
+    vec_action = mapCompM_ return compile comp
+    compile c 
+      | MkComp c0 loc _ <- c
+      , Mitigate ty i1 i2 <- c0 
+      = if i1 <= i2 
+        then mitigateUp loc "compiled" ty i1 i2
+        else mitigateDn loc "compiled" ty i1 i2
+      | otherwise
+      = return c
 
 matchControl :: (GS.Sym, VecEnv)
              -> [ [DelayedVectRes] ] -> [ [DelayedVectRes] ]
@@ -303,7 +320,8 @@ mk_in c cin ain tin
   = return c
   | otherwise
   , let loc = compLoc c
-  = do { m <- mitigateUp loc "_bnd" tin ain cin
+  = do { -- m <- mitigateUp loc "_bnd" tin ain cin
+       ; let m = cMitigate loc () tin ain cin 
        ; return $ 
          cPar loc () (mkParInfo NeverPipeline) m c
        }
@@ -313,7 +331,8 @@ mk_out c cout aout tout
   = return c
   | otherwise
   , let loc = compLoc c
-  = do { m <- mitigateDn loc "_bnd" tout cout aout
+  = do { -- m <- mitigateDn loc "_bnd" tout cout aout
+       ; let m = cMitigate loc () tout cout aout
        ; return $ 
          cPar loc () (mkParInfo NeverPipeline) c m
        }
@@ -442,7 +461,6 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
           -- TODO: make this more flexible in the future
         -> []
 
-     
      (DidVect ci co u1, DidVect ci' co' u2)
        | co == ci' || co == 0 || ci' == 0
        -> let m = if co > 0 then co else ci'
@@ -453,9 +471,10 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
                    , dvr_orig_tyout = dvr_orig_tyout dp2
                    }
              ]
+{- NO PAR MITIGATION!
        | co `mod` ci' == 0 -- divisible
        -> mitPars (sym,venv) pnfo loc ci co u1 dp1 ci' co' u2 dp2
-
+-}
        | otherwise
        -> [] 
 
@@ -467,90 +486,58 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
            ; return $ cPar loc () pnfo p1 p2
            }
 
-mitPars :: (GS.Sym, VecEnv)
-        -> ParInfo 
-        -> Maybe SourcePos 
-        -> Int -> Int -> Double -> DelayedVectRes
-        -> Int -> Int -> Double -> DelayedVectRes
-        -> [ DelayedVectRes ]
--- Preconditions 
---  - co1 `mod` ci2 == 0 
---  - co1 =/= ci2
---  - co1 =/= 0, ci2 =/= 0
-mitPars (sym,venv) pnfo loc 
-        ci1 co1 u1 dp1 
-        ci2 co2 u2 dp2
-  = case mb_k of
-      -- No need to up-vect the RHS 
-      [] -> let m = do { m <- mitigateDn loc "_par_middle" (dvr_orig_tyout dp1) co1 ci2
-                       ; p1 <- vecMIO (dvr_comp dp1)
-                       ; p2 <- vecMIO (dvr_comp dp2)
 
-                       -- ; vecMIO $ do { putStrLn "mitigateDn (par)"
-                       --               ; putStrLn $ "ty = " ++ show ty
-                       --               ; putStrLn $ "hi = " ++ show hi
-                       --               ; putStrLn $ "lo = " ++ show lo
-                       --               -- ; putStrLn $ "p1 = " ++ show p1
-                       --               -- ; putStrLn $ "mitigator = " ++ show m
-                       --               }
+mitUpDn :: Maybe SourcePos -> DelayedVectRes -> [ DelayedVectRes ] 
+mitUpDn loc dvr@(DVR { dvr_comp       = mk_c
+                     , dvr_vres       = r
+                     , dvr_orig_tyin  = tin
+                     , dvr_orig_tyout = tout
+                     })
+  = case r of 
+      NoVect 
+        -> [ dvr ] 
+      DidVect ain aout u 
+        | let x1 = if ain == 0 then 1 else ain
+        , let x2 = if aout == 0 then 1 else aout
+        , let avms = allVectMults undefined ain aout
+        -> dvr : [ dvr { dvr_comp = do { c   <- mk_c 
+                                       ; let c'  = mit_dn c (m1*ain) ain tin 
+                                       ; let c'' = mit_up c' aout (m2*aout) tout
+                                       ; return c''
+                                       }
 
-                       ; let p1' = cPar loc () pnever p1 m 
-                       ; let comp = cPar loc () pnfo p1' p2
-                       ; return comp
-                       -- ; fname <- newVectName "mk_par" loc 
-                       -- ; return $
-                       --      cLetFunC loc () fname [] binds comp $ 
-                       --      cCall loc () fname []
+                       
+
+                       , dvr_vres = 
+                            let u' = chooseParUtility 
+                                        (chooseParUtility minUtil u (x1,m1*x1))
+                                        minUtil (x2,m2*x2)
+                            in DidVect (m1*ain) (m2*aout) u' -- u?
                        }
-            in [ DVR { dvr_comp = inCurrentEnv (sym,venv) m
-                     , dvr_vres = DidVect ci1 co2 u
-                     , dvr_orig_tyin  = dvr_orig_tyin dp1
-                     , dvr_orig_tyout = dvr_orig_tyout dp2
-                     }
-               ]
-      -- We do need to create one for every divisor of k
-      _other -> map mk_out_mit mb_k
-   where 
-        k = co1 `div` ci2 -- divisor
-        mb_k = if co2 == 0 || k == 1   || 
-                  isArrTy (dvr_orig_tyout dp2)
-               then []
-               else filter (> 1) $ someDivisors k 
+                 | (m1,m2) <- avms
+                 ]
+        | otherwise
+        -> [ dvr ] 
 
-        u = chooseParUtility u1 u2 (ci2,ci2) 
-                -- NB: IT DOES NOT MATTER HOW high you might have gone, 
-                -- ci2 is the bottleneck here!
-                -- Note: maybe we also want to penalize differences 
-                -- between co1 and ci2
+  where mit_dn c hi lo_c tin 
+           | lo_c == 0 || hi == lo_c
+           = c
+           | otherwise 
+           = cPar loc () pnever (cMitigate loc () tin hi lo_c) c
+        mit_up c lo_c hi tout
+           | lo_c == 0 || hi == lo_c
+           = c
+           | otherwise
+           = cPar loc () pnever c (cMitigate loc () tout lo_c hi)
+
         pnever = mkParInfo NeverPipeline     
 
-        mk_out_mit k = 
-          let m = do { m <- mitigateDn loc "_par_middle" (dvr_orig_tyout dp1) co1 ci2
- 
-                     ; p1 <- vecMIO (dvr_comp dp1)
-                     ; p2 <- vecMIO (dvr_comp dp2)
 
-                     -- ; vecMIO $ do { putStrLn "mitigateDn (par)"
-                     --               ; putStrLn $ "ty = " ++ show ty
-                     --               ; putStrLn $ "hi = " ++ show hi
-                     --               ; putStrLn $ "lo = " ++ show lo
-                     --               -- ; putStrLn $ "p1 = " ++ show p1
-                     --               -- ; putStrLn $ "mitigator = " ++ show m
-                     --               }
-
-                     ; let p1' = cPar loc () pnever p1 m 
-                     ; let comp = cPar loc () pnfo p1' p2
-
-                     ; m' <- mitigateUp loc "_par_out" (dvr_orig_tyout dp2) co2 (k*co2)
-                     ; return $ cPar loc () pnfo p1' $  
-                                cPar loc () pnever p2 m'
-
-                     }
-          in DVR { dvr_comp = inCurrentEnv (sym,venv) m
-                 , dvr_vres = DidVect ci1 (k*co2) u
-                 , dvr_orig_tyin  = dvr_orig_tyin dp1
-                 , dvr_orig_tyout = dvr_orig_tyout dp2
-                 }
+mitUpDn_Maybe :: Bool 
+              -> Maybe SourcePos 
+              -> DelayedVectRes -> [ DelayedVectRes ] 
+mitUpDn_Maybe flexi loc vres 
+  = if flexi then mitUpDn loc vres else [vres]
 
 
 
@@ -672,13 +659,6 @@ computeVectTop verbose = computeVect
 
                   }
   
-          Par p (MkComp (Par p' c11 c12) l1 i1) c2
-              -> let c12cty = fst $ compInfo c12
-                     c2cty  = fst $ compInfo c2
-                     cty'    = parCompose c12cty c2cty
-                     comp' = cPar loc (cty,card) p' c11 $
-                             cPar l1 (cty',mkDynamicCard) p c12 c2
-                 in computeVect comp'
 
           Par p c1 c2 
             -> do { vcs1 <- computeVect c1
@@ -836,9 +816,9 @@ computeVectTop verbose = computeVect
 
           -- Treat nested annotations exactly the same as repeat
           Repeat Nothing (MkComp (VectComp hint c1) _ _)
-            -> computeVect (cRepeat loc (cty,card) (Just (Rigid hint)) c1)
+            -> computeVect (cRepeat loc (cty,card) (Just (Rigid True hint)) c1)
 
-          Repeat (Just (Rigid (finalin, finalout))) c1
+          Repeat (Just (Rigid f (finalin, finalout))) c1
             -> do { vc <- vectorizeWithHint (finalin,finalout) c1
                   ; let self = self_no_vect
 
@@ -848,15 +828,16 @@ computeVectTop verbose = computeVect
                              , dvr_vres  = DidVect finalin finalout minUtil
                              , dvr_orig_tyin  = tyin
                              , dvr_orig_tyout = tyout }
-                  ; return $ [vect] -- No self, FORCE this! 
+                  ; return $ mitUpDn_Maybe f loc vect 
                   }
 
-          Repeat (Just (UpTo (maxin, maxout))) c1
+          Repeat (Just (UpTo f (maxin, maxout))) c1
              -> do { vss <- computeVect $ cRepeat loc (cty,card) Nothing c1
                    ; let filter_res (dvr@DVR{ dvr_vres = r })
                            = case r of NoVect -> True
                                        DidVect i j _ -> i <= maxin && j <= maxout
-                   ; return $ filter filter_res vss
+                   ; return $ concat $ 
+                     map (mitUpDn_Maybe f loc) (filter filter_res vss)
                    }
           
 
@@ -1062,7 +1043,7 @@ computeVectTop verbose = computeVect
                   ; let vect_maps = map (mk_vect_map env) mults
                   ; return $ self_no_vect : vect_maps } 
 
-          Map (Just (UpTo (min,mout))) e -> 
+          Map (Just (UpTo f (min,mout))) e -> 
             let mults = filter (\(i,j) -> i <= min && j <= mout) $ 
                         allVectMults tyin 1 1 
                 mk_vect_map env (min,mout) 
@@ -1076,10 +1057,11 @@ computeVectTop verbose = computeVect
                   
             in do { env <- getVecEnv 
                   ; let vect_maps = map (mk_vect_map env) mults
-                  ; return $ self_no_vect : vect_maps } 
+                  ; return $ concat $ map (mitUpDn_Maybe f loc) $ 
+                             self_no_vect : vect_maps 
+                  }
 
-
-          Map (Just (Rigid (min,mout))) e
+          Map (Just (Rigid f (min,mout))) e
             | min `mod` mout == 0          -- mout divides min
             -> let mults = [(min,mout)]  
                    mk_vect_map env (min,mout) 
@@ -1093,7 +1075,7 @@ computeVectTop verbose = computeVect
 
                in do { env <- getVecEnv
                      ; let vect_maps = map (mk_vect_map env) mults
-                     ; return $ vect_maps  -- NO self, FORCE this!
+                     ; return $ concat $ map (mitUpDn_Maybe f loc) vect_maps  
                      }
             | otherwise
             -> vecMFail "Vectorization failure, bogus map annotation!"
@@ -1233,7 +1215,11 @@ runDebugVecM verbose comp tenv env cenv sym unifiers
        ; vs_maxi <- filterMaximal vss 
 
        ; let do_one (DVR { dvr_comp = io_comp, dvr_vres = _vres })
-                = do { vc <- io_comp
+                = do { vc_mit <- io_comp
+                       -- Fuse mitigators
+                     ; vc_opt_mit <- elimMitigsIO sym vc_mit
+                       -- Compile away remaining mitigators 
+                     ; vc <- compileMitigs sym vc_opt_mit
                      ; res <- runTcM (tyCheckTopComp vc) 
                                   tenv env cenv sym GlobalDefs unifiers
                      ; case res of

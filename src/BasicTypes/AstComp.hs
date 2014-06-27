@@ -140,8 +140,8 @@ data Comp0 a b where
   -- Pre: n1, n2 > 1 
   -- This is a transformer of type:  ST T (arr t n1) (arr t : n2)
 
-data VectAnn = Rigid (Int,Int)
-             | UpTo  (Int,Int)
+data VectAnn = Rigid Bool (Int,Int) -- True == allow mitigations up, False == disallow mitigations up
+             | UpTo  Bool (Int,Int)
 
 
 
@@ -310,8 +310,8 @@ compShortName c = go (unComp c)
         go (  Let         {} ) = "Let"
         go (  LetE        {} ) = "LetE" 
         go (  LetExternal {} ) = "LetExternal"
-        go (  LetFun      {} ) = "LetFun"
-        go (  LetFunC     {} ) = "LetFunC"   
+        go (  LetFun nm _ _  ) = "LetFun(" ++ name nm ++ ")"
+        go (  LetFunC nm _ _ _ _ ) = "LetFunC(" ++ name nm ++ ")"
         go (  LetStruct   {} ) = "Struct"
         go (  Call n _       ) = "Call(" ++ name n ++ ")"
         go (  Emit        {} ) = "Emit"      
