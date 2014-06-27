@@ -198,7 +198,11 @@ BOOLEAN __stdcall go_thread(void * pParam)
 	return false;
 }
 
-/* Returns the numer of threads */
+// Default method. This gets called from test.c when there is only one thread.
+// Otherwise, test.c created its own thread functions 
+// and store them in User_Routines array
+// These get started from the main 
+// Returns the numer of threads 
 int SetUpThreads(PSORA_UTHREAD_PROC * User_Routines)
 {
 	User_Routines[0] = (PSORA_UTHREAD_PROC) go_thread;
