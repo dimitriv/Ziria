@@ -30,7 +30,7 @@ else
    export CSRC_POSIX=${TOP}/csrc
 fi
 
-export WPLCFLAGS="-x -v --csrc-native=${CSRC_NATIVE} --csrc-posix=${CSRC_POSIX}"
+export WPLCFLAGS="-x --csrc-native=${CSRC_NATIVE} --csrc-posix=${CSRC_POSIX}"
 
 export CC="gcc"
 export CFLAGS="-std=c99 -msse3"

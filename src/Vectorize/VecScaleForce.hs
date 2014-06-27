@@ -411,6 +411,8 @@ doVectorizeCompForce comp (finalin,finalout)
                     (Par p c1 c2) ->
                         liftVecM $ vecMFail $ 
                         "Can't force vectorization of non-simple comp: par"
+                    (Mitigate {}) -> 
+                        liftVecM $ vecMFail "Can't force vectorization of non-simple comp: mitigate"
 
                     (VectComp hint c) -> 
                         liftVecM $ 

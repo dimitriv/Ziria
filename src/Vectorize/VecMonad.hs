@@ -232,8 +232,8 @@ chooseBindUtility [] = 0.0
 chooseBindUtility ds = (sum ds :: Double) / (fromIntegral (length ds) :: Double)
 
 -- Utility computation of a Par
-chooseParUtility :: Double -> Double -> Int -> Double
-chooseParUtility d1 d2 middle = d1 + d2 + util middle
+chooseParUtility :: Double -> Double -> (Int,Int) -> Double
+chooseParUtility d1 d2 (middle1,middle2) = d1 + d2 + util middle1 + util middle2
 
 util :: Int -> Double
 util d = if d == 0 then minUtil

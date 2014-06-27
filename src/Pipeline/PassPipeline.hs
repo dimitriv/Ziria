@@ -58,6 +58,8 @@ stripLetCtxt c = go c
             let (ctx,c0) = go c2 in (CLetFunC cloc nm ps ls c1 ctx, c0)
           LetStruct sdef c2 -> 
             let (ctx,c0) = go c2 in (CLetStruct cloc sdef ctx, c0)
+          LetExternal nm fun c2 -> 
+            let (ctx,c0) = go c2 in (CLetExternal cloc nm fun ctx,c0)
           _other -> (Hole,c)
       where cloc = compLoc c
 
@@ -106,19 +108,6 @@ pipeLineBase c
             in c1s ++ c2s
           | otherwise
           = [c]
-
--- Composing transformers and computers 
-parCompose (CTBase (TTrans t1 _))  
-           (CTBase (TTrans _ t3))  = CTBase (TTrans t1 t3)
-parCompose (CTBase (TTrans t1 _))  
-           (CTBase (TComp v _ t3)) = CTBase (TComp v t1 t3)
-parCompose (CTBase (TComp v t1 _)) 
-           (CTBase (TTrans _ t3))  = CTBase (TComp v t1 t3)
-parCompose (CTBase (TComp v t1 _)) 
-           (CTBase (TComp _ _ t3)) = CTBase (TComp v t1 t3)
-parCompose _ct1 _cty2 
-  = error "Type checking bug: revealed in parCompose!" 
-
 
 
 insertBufs :: [Comp CTy Ty] -> [Int] -> ([Ty], [Comp CTy Ty])

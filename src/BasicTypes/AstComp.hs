@@ -135,7 +135,10 @@ data Comp0 a b where
   -- Pipelining primitives
   Standalone :: Comp a b -> Comp0 a b
 
-
+  Mitigate :: Ty -> Int -> Int -> Comp0 a b
+  -- Mitigate t n1 n2
+  -- Pre: n1, n2 > 1 
+  -- This is a transformer of type:  ST T (arr t n1) (arr t : n2)
 
 data VectAnn = Rigid (Int,Int)
              | UpTo  (Int,Int)
@@ -240,6 +243,9 @@ cStandalone :: Maybe SourcePos -> a -> Comp a b -> Comp a b
 cStandalone loc a c = MkComp (Standalone c) loc a
 
 
+cMitigate :: Maybe SourcePos -> a -> Ty -> Int -> Int -> Comp a b 
+cMitigate loc a t n1 n2 = MkComp (Mitigate t n1 n2) loc a 
+
 
 {- Note [RW Annotations]
    ~~~~~~~~~~~~~~~~~~~~~
@@ -328,6 +334,8 @@ compShortName c = go (unComp c)
         go (  ReadInternal    {} ) = "ReadInternal"                
         go (  WriteInternal   {} ) = "WriteInternal"               
         go (  Standalone      {} ) = "Standalone"
+        go (  Mitigate        {} ) = "Mitigate"
+
 
 type CompLoc = Maybe SourcePos 
 
@@ -411,6 +419,19 @@ data CTy where
   CTBase :: CTy0 -> CTy
   -- Invariant: non-empty list and CTy0 is not arrow
   CTArrow :: [CallArg Ty CTy0] -> CTy0 -> CTy
+
+
+-- Composing transformers and computers 
+parCompose (CTBase (TTrans t1 _))  
+           (CTBase (TTrans _ t3))  = CTBase (TTrans t1 t3)
+parCompose (CTBase (TTrans t1 _))  
+           (CTBase (TComp v _ t3)) = CTBase (TComp v t1 t3)
+parCompose (CTBase (TComp v t1 _)) 
+           (CTBase (TTrans _ t3))  = CTBase (TComp v t1 t3)
+parCompose (CTBase (TComp v t1 _)) 
+           (CTBase (TComp _ _ t3)) = CTBase (TComp v t1 t3)
+parCompose _ct1 _cty2 
+  = error "Type checking bug: revealed in parCompose!" 
 
 
 toComp :: a -> Comp0 a b -> Comp a b
@@ -504,6 +525,7 @@ compFVs c = case unComp c of
   WriteInternal {} -> S.empty 
   Standalone c1  -> compFVs c1
 
+  Mitigate {} -> S.empty
 
 callArgFVs :: CallArg (Exp b) (Comp a b) -> S.Set Name
 callArgFVs (CAExp e)  = exprFVs e
@@ -547,6 +569,8 @@ compSize c = case unComp c of
   ReadInternal  {} -> 1
   WriteInternal {} -> 1
   Standalone c1  -> compSize c1
+
+  Mitigate {} -> 1
 
 callArgSize :: CallArg (Exp b) (Comp a b) -> Int
 callArgSize (CAExp x)  = 0
@@ -667,6 +691,8 @@ mapCompM_aux on_ty on_exp on_cty g c = go c
                  Standalone c1 ->
                    do { c1' <- go c1 
                       ; g (cStandalone cloc cnfo c1') }
+
+                 Mitigate t n1 n2 -> g (cMitigate cloc cnfo t n1 n2)
              }
 
 mapCallArgM :: Monad m

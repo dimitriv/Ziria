@@ -20,7 +20,7 @@
 #include "const.zir"
 
 let comp interleaver_bpsk() =
-  repeat [48, 48] {
+  repeat {
     (x : arr[48] bit) <- takes 48;
     emits x
   }

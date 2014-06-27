@@ -229,6 +229,10 @@ doVectorizeCompUp comp cin cout (min,mout)
                 (Times _ _ _ x c1) -> 
                     vecMFail "BUG: Times is not a simple computer!" 
 
+                (Mitigate {}) -> 
+                    vecMFail "BUG: Mitigate is not a simple computer!" 
+
+
                 (ReadSrc mty)  
                    | RWRealTyAnn ty <- mty
                    , not (isArrTy ty)

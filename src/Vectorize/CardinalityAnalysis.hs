@@ -336,6 +336,9 @@ computeCardTop verbose ct = computeCard ct
 
         computeCard0 (Standalone c1)
           = computeCard c1
+ 
+        computeCard0 (Mitigate t n1 n2)
+          = return $ MkComp (Mitigate t n1 n2) loc (cty, mkIterCard Nothing $ mkDynamicCard)
 
 
 runCardinalityAnalysis :: Bool -> Comp CTy Ty -> IO (Comp (CTy,Card) Ty)
