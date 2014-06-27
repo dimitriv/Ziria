@@ -132,7 +132,7 @@ let comp modulate_64qam () =
   var outc : complex16; 
 
 
-  repeat [12, 2] {
+  repeat <= [12, 2] {
     x <- takes 6;
     do {
 

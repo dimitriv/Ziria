@@ -59,7 +59,7 @@ all: $(TGTS)
 
 clean:
 	rm -f ./*expanded
-	rm -f ./*exe ./*exec
+	rm -f ./*exe ./*exec ./*out
 	rm -f ./*.outfile
 	rm -f ./compout ./perfout
 	rm -f ./*.c
