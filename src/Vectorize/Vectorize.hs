@@ -531,7 +531,6 @@ mitUpDn loc dvr@(DVR { dvr_comp       = mk_c
            | otherwise
            = cPar loc () pnever c (cMitigate loc () tout lo_c hi)
 
-        pnever = mkParInfo NeverPipeline     
 
 
 mitUpDn_Maybe :: Bool 
