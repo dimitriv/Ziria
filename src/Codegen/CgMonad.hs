@@ -60,6 +60,9 @@ module CgMonad
   , pushName
   , printNames
     
+  , getLUTHashes
+  , setLUTHashes
+
   , appendTopDef
   , appendTopDefs
   , appendTopDecl
@@ -307,14 +310,19 @@ emptyEnv sym =
 -- see Note [Continuation Invariants]
 
 data CgState = CgState { nameStack :: [Name] 
-                       , numAllocs :: Int           -- # of heap-allocated variables
+                       , numAllocs :: Int -- # of heap-allocated variables
                        , maxStackAlloc :: Int  
+
+                         -- Hashed LUT-ted exprs, 
+                         -- along with the C variable for the LUT
+                       , lutHashes  :: [(Int,C.Exp)]
+
                        , structDefs :: [TyName] -- # already defined structs
                          -- if > than this, then allocate on the heap
                        }
   deriving Show
 
-emptyState = CgState [] 0 cMAX_STACK_ALLOC []
+emptyState = CgState [] 0 cMAX_STACK_ALLOC [] []
 
 cMAX_STACK_ALLOC :: Int
 cMAX_STACK_ALLOC = 32 * 1024
@@ -504,13 +512,17 @@ getNames = gets nameStack
 setNames :: [Name] -> Cg ()
 setNames names' = modify $ \s -> s { nameStack = names' }
 
+
+getLUTHashes :: Cg [(Int,C.Exp)]
+getLUTHashes = gets lutHashes
+
+setLUTHashes :: [(Int,C.Exp)] -> Cg ()
+setLUTHashes hs = modify $ \s -> s { lutHashes = hs }
+
+
 newHeapAlloc :: Cg ()
 newHeapAlloc = modify $ \s -> 
-   CgState { numAllocs = numAllocs s + 1
-           , nameStack = nameStack s 
-           , maxStackAlloc = maxStackAlloc s
-           , structDefs = structDefs s
-           } 
+   s { numAllocs = numAllocs s + 1 }
 
 
 getMaxStackAlloc :: Cg Int

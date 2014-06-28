@@ -57,6 +57,8 @@ import Text.PrettyPrint.Mainland
 
 import LUTAnalysis
 
+import qualified Data.Hashable as H
+
 --  import System.Exit ( exitFailure )
 
 -- XXX TODO
@@ -222,12 +224,29 @@ codeGenLUTExp dflags locals_ ranges e mb_resname
         verbose dflags $ text "Creating LUT for expression:" </> nest 4 (ppr e) </> 
                             nest 4 (text "Variable ranges:" </> pprRanges ranges) </> fromJust (pprLUTStats dflags locals ranges e)
 
+        -- liftIO $ putDoc $ text "Creating LUT" </> 
+        --                     nest 4 (text "Variable ranges:" </> pprRanges ranges) </> fromJust (pprLUTStats dflags locals ranges e)
+
         let resultInOutVars 
              | Just v <- expResultVar e
              , v `elem` map fst outVars = Just v
              | otherwise = Nothing
 
-        clut <- genLUT dflags ranges inVars (outVars,resultInOutVars) allVars locals e
+        let h = H.hash (show e)
+        -- liftIO $ putStrLn $ "Hash = " ++ show (H.hash (show e))
+        hs <- getLUTHashes
+        clut <- 
+          case lookup h hs of 
+             Just clut 
+               -> do { liftIO $ putStrLn $ "Expression to LUT is already lutted!"
+                     ; return clut }
+             Nothing   
+               -> do { liftIO $ putStrLn $ "Invoking genLUT"
+                     ; clut <- genLUT dflags ranges inVars 
+                                        (outVars,resultInOutVars) allVars locals e
+                     ; setLUTHashes $ (h,clut):hs
+                     ; return clut }
+
         genLUTLookup ranges inVars (outVars,resultInOutVars) clut (info e)
                                    mb_resname 
 
@@ -345,8 +364,8 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars locals e = do
 
     -- Compile and run the program. 
     -- Its output is the LUT entries, one entry per line.
-
-
+   
+    
     out  <- liftIO $ 
           compileAndRun (pretty 80 cdoc) "lutexec" 
                         (csrcPathPosix dflags) 

@@ -73,7 +73,7 @@ let comp tx_driver(h : struct HeaderInfo) =
  else if h.coding == CR_34 && h.modulation == M_64QAM then 
    (scrambler() >>> encode34() >>> interleaver_m64qam() >>> modulate_64qam())
  else
-   do{error "Unknown coding rate!"}
+   repeat do { error "Unknown coding rate!" }
 in
 
 
