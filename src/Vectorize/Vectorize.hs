@@ -34,6 +34,7 @@ import Data.List as M
 
 import Data.Functor.Identity 
 
+import Opts
 
 import CardinalityAnalysis
 
@@ -1193,14 +1194,16 @@ all_eq (x:y:xs) = (x==y) && all_eq (y:xs)
 {- Entry point to the vectorizer
  - ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -}
 
-runDebugVecM :: Bool 
+runDebugVecM :: DynFlags 
              -> Comp CTy Ty 
              -> TyDefEnv 
              -> Env 
              -> CEnv 
              -> GS.Sym -> TcMState -> IO [Comp CTy Ty] 
-runDebugVecM verbose comp tenv env cenv sym unifiers
-  = do { -- First run cardinality analysis
+runDebugVecM dflags comp tenv env cenv sym unifiers
+  = let verbose = isDynFlagSet dflags Verbose
+    in
+    do { -- First run cardinality analysis
        ; when verbose $ putStrLn "Vectorization starting ..." 
        ; ccomp <- runCardinalityAnalysis verbose comp
        ; when verbose $ 
@@ -1219,8 +1222,11 @@ runDebugVecM verbose comp tenv env cenv sym unifiers
                        -- Fuse mitigators
                      ; vc_opt_mit <- elimMitigsIO sym vc_mit
                        -- Compile away remaining mitigators
-                     ; vc <- compileMitigs sym vc_opt_mit
-                     -- ; let vc = vc_opt_mit
+                     ; vc <- if isDynFlagSet dflags NativeMitigators 
+                             then return vc_opt_mit
+                             else -- compile them away  
+                                  compileMitigs sym vc_opt_mit
+
                      ; res <- runTcM (tyCheckTopComp vc) 
                                   tenv env cenv sym GlobalDefs unifiers
                      ; case res of

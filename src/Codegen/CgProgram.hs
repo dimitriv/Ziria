@@ -144,24 +144,33 @@ codeGenProgram :: DynFlags                       -- Flags
 codeGenProgram dflags globals shared_ctxt 
                tid_cs bufTys (in_ty,yld_ty) 
   = do { initstms <- codeGenGlobals dflags globals in_ty yld_ty             
-       ; extendVarEnv [(nm,(ty,[cexp|$id:(name nm)|])) | (nm,ty,_) <- globals] $ 
+       ; extendVarEnv [(nm,(ty,[cexp|$id:(name nm)|])) | (nm,ty,_)<- globals] $ 
          do { (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
                 do { forM tid_cs $ \(tid,c) -> codeGenThread dflags tid c
                    ; if pipeline_flag then 
-                       do { -- Just to make the SORA code happy we need to implement a dummy wpl_go
-                            -- In reality the set_up_threads() function uses thread0,thread1,...
-                          ; let wpl_go_dummy_def = [cedecl| int wpl_go() { exit (-1); } |]
+                       do { -- Just to make the SORA code happy we need 
+                            -- to implement a dummy wpl_go
+                            -- In reality the set_up_threads() function uses 
+                            -- thread0,thread1,...
+                          ; let wpl_go_dummy_def 
+                                   = [cedecl| int wpl_go() { exit (-1); } |]
                           ; appendTopDefs [wpl_go_dummy_def]
                         
-                            -- emit the appropriate wpl_set_up_threads() definition for SORA code to work
-                          ; appendTopDefs $ ST.thread_setup affinity_mask bufTys tids
+                            -- Emit the appropriate wpl_set_up_threads() 
+                            -- definition for SORA code to work
+                          ; appendTopDefs $ 
+                            ST.thread_setup affinity_mask bufTys tids
                           } 
-                     else -- In this case we know that wpl_go /is/ going to be the main function 
+                     else 
+                        -- In this case we know that wpl_go /is/ going to be 
+                        -- the main function 
                         appendTopDefs $ ST.thread_setup_shim
                    }
                -- Finally emit wpl_global_init()
-             ; codeGenWPLGlobalInit $ initstms ++ moreinitstms
-             }    
+             ; lut_init_stms <- getLUTHashes >>= 
+                                   (return . map (lgi_lut_gen . snd))
+             ; codeGenWPLGlobalInit $ lut_init_stms ++ initstms ++ moreinitstms 
+             }
         }
 
   where

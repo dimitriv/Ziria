@@ -35,7 +35,7 @@ import AstExpr
 import {-# SOURCE #-} CgExpr
 import CgMonad hiding (State)
 import CgTypes
-import SysTools
+-- import SysTools
 import Analysis.Range
 import Analysis.UseDef
 
@@ -47,12 +47,12 @@ import Data.Maybe ( isJust, fromJust )
 import Data.Word
 import Language.C.Quote.C
 import qualified Language.C.Syntax as C
-import System.Directory(getTemporaryDirectory)
-import System.IO (IOMode(..),
-                  hClose,
-                  hGetContents,
-                  openFile,
-                  openTempFile)
+-- import System.Directory(getTemporaryDirectory)
+-- import System.IO (IOMode(..),
+--                   hClose,
+--                   hGetContents,
+--                   openFile,
+--                   openTempFile)
 import Text.PrettyPrint.Mainland
 
 import LUTAnalysis
@@ -181,11 +181,11 @@ unpackByteAligned xs src = go xs 0
               ; go vs (byte_align (pos+w)) } -- Align for next read!
 
 
-csrcPathPosix :: DynFlags -> FilePath
-csrcPathPosix dflags = head [ path | CSrcPathPosix path <- dflags]
+-- csrcPathPosix :: DynFlags -> FilePath
+-- csrcPathPosix dflags = head [ path | CSrcPathPosix path <- dflags]
 
-csrcPathNative :: DynFlags -> FilePath
-csrcPathNative dflags = head [ path | CSrcPathNative path <- dflags]
+-- csrcPathNative :: DynFlags -> FilePath
+-- csrcPathNative dflags = head [ path | CSrcPathNative path <- dflags]
 
 
 codeGenLUTExp :: DynFlags
@@ -202,14 +202,19 @@ codeGenLUTExp dflags locals_ ranges e mb_resname
            ; codeGenExp dflags e }
       Right True  -> lutIt mb_resname
       Right False -> 
-        do { verbose dflags $ text "Asked to LUT an expression we wouldn't normally LUT:" </> nest 4 (ppr e)
+        do { verbose dflags $ 
+             text "Asked to LUT an expression we wouldn't normally LUT:" </> 
+             nest 4 (ppr e)
            ; lutStats <- calcLUTStats locals ranges e
            ; if lutTableSize lutStats >= aBSOLUTE_MAX_LUT_SIZE
-             then do { verbose dflags $ text "LUT way too big!" </> fromJust (pprLUTStats dflags locals ranges e)
+             then do { verbose dflags $ 
+                       text "LUT way too big!" </> 
+                         fromJust (pprLUTStats dflags locals ranges e)
                      ; codeGenExp dflags e }
              else lutIt mb_resname }
   where
-    -- TODO: Document why this not the standard size but something much bigger? (Reason: alignment)
+    -- TODO: Document why this not the standard size 
+    -- but something much bigger? (Reason: alignment)
     aBSOLUTE_MAX_LUT_SIZE :: Integer
     aBSOLUTE_MAX_LUT_SIZE = 1024*1024
 
@@ -221,11 +226,10 @@ codeGenLUTExp dflags locals_ ranges e mb_resname
     lutIt mb_resname = do
         (inVars, outVars, allVars) <- inOutVars locals ranges e
 
-        verbose dflags $ text "Creating LUT for expression:" </> nest 4 (ppr e) </> 
-                            nest 4 (text "Variable ranges:" </> pprRanges ranges) </> fromJust (pprLUTStats dflags locals ranges e)
-
-        -- liftIO $ putDoc $ text "Creating LUT" </> 
-        --                     nest 4 (text "Variable ranges:" </> pprRanges ranges) </> fromJust (pprLUTStats dflags locals ranges e)
+        verbose dflags $ 
+          text "Creating LUT for expression:" </> nest 4 (ppr e) </> 
+            nest 4 (text "Variable ranges:" </> pprRanges ranges) </> 
+               fromJust (pprLUTStats dflags locals ranges e)
 
         let resultInOutVars 
              | Just v <- expResultVar e
@@ -235,48 +239,54 @@ codeGenLUTExp dflags locals_ ranges e mb_resname
         let h = H.hash (show e)
         -- liftIO $ putStrLn $ "Hash = " ++ show (H.hash (show e))
         hs <- getLUTHashes
+        let gen_lut_action 
+              = genLUT dflags ranges inVars (outVars,resultInOutVars) 
+                       allVars locals e
         clut <- 
-          case lookup h hs of 
-             Just clut 
-               -> do { liftIO $ putStrLn $ "Expression to LUT is already lutted!"
-                     ; return clut }
-             Nothing   
-               -> do { liftIO $ putStrLn $ "Invoking genLUT"
-                     ; clut <- genLUT dflags ranges inVars 
-                                        (outVars,resultInOutVars) allVars locals e
-                     ; setLUTHashes $ (h,clut):hs
-                     ; return clut }
+          if isDynFlagSet dflags NoLUTHashing 
+          then do { lgi <- gen_lut_action
+                  ; setLUTHashes $ (h,lgi):hs
+                  ; return $ lgi_lut_var lgi 
+                  }
+          else 
+             case lookup h hs of 
+                Just clut 
+                  -> do { liftIO $ 
+                          putStrLn $ "Expression to LUT is already lutted!"
+                        ; return $ lgi_lut_var clut 
+                        }
+                Nothing   
+                  -> do { liftIO $ putStrLn $ "Invoking genLUT"
+                        ; clut_gen_info <- gen_lut_action
+                        ; setLUTHashes $ (h,clut_gen_info):hs
+                        ; return $ lgi_lut_var clut_gen_info 
+                        }
 
         genLUTLookup ranges inVars (outVars,resultInOutVars) clut (info e)
                                    mb_resname 
 
--- | Generate a LUT for a function. The LUT maps the values of variables used by
--- the function---its input variables---to the values of variables modified
--- imperatively by the function---its output variables---as well as the
--- function's result. If the result happens to be one of the imperatively
--- modified variables, storing it in the LUT would be redundant, so we don't. We
--- create the LUT by generating code for the expression we're LUTting, adding a
--- bit of C code to print out the value of the LUT entry we want to construct,
--- running the code, and then parsing its output and create a big C static array
--- with the values.
 genLUT :: DynFlags -- ^ Flags
        -> Map Name Range
-       -> [VarTy]              -- ^ Input variables
-       -> ([VarTy],Maybe Name) -- ^ Output variables + result if not in outvars
+       -> [VarTy]               -- ^ Input variables
+       -> ([VarTy], Maybe Name) -- ^ Output variables + result if not in outvars
        -> [VarTy]  -- ^ All used variables
        -> [VarTy]  -- ^ Local variables
        -> Exp Ty   -- ^ Expression to LUT
-       -> Cg C.Exp -- ^ Returns true if the result is in out vars
+       -> Cg LUTGenInfo
 genLUT dflags ranges inVars (outVars, res_in_outvars) allVars locals e = do
     inBitWidth <- varsBitWidth ranges inVars    
     cinBitType <- lutIndexTypeByWidth inBitWidth
                             
     -- 'clut' is the C variable that will hold the LUT.
     clut <- genSym "clut"
+    -- 'clutentry' is the C variable to hold one entry in the lut
+    clutentry <- genSym "clutentry"
 
     -- 'cidx' is the C variable that we use to index into the LUT.
     cidx <- genSym "idx"
 
+    -- 'clutgen' is the generator function for this LUT
+    clutgen <- genSym "clut_gen"
     
     (defs, (decls, stms, outBitWidth))
         <- collectDefinitions $ 
@@ -291,8 +301,10 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars locals e = do
               ; (outBitWidth, outVarsWithRes, result_env) <- 
                   if (isJust res_in_outvars || info e == TUnit) then
                     do { ow <- varsBitWidth_ByteAlign outVars
-                         -- clut declaration and initialization to zeros
-                       ; g <- codeGenArrVal clut (TArr (Literal ow) TBit) [VBit False]
+                         -- clutentry declaration and initialization to zeros
+                         -- clutentry declaration and initialization to zeros
+                       ; let entry_ty = TArr (Literal ow) TBit 
+                       ; g <- codeGenArrVal clutentry entry_ty [VBit False]
                        ; appendDecl g
                        ; return (ow,outVars, []) }
                   else 
@@ -300,8 +312,9 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars locals e = do
                        ; codeGenDeclGroup (name resval) (info e) >>= appendDecl
                        ; let outVarsWithRes = outVars++[(resval,info e)]
                        ; ow <- varsBitWidth_ByteAlign outVarsWithRes
-                         -- clut declaration and initialization to zeros
-                       ; g <- codeGenArrVal clut (TArr (Literal ow) TBit) [VBit False]
+                         -- clutentry declaration and initialization to zeros
+                       ; let entry_ty = TArr (Literal ow) TBit 
+                       ; g <- codeGenArrVal clutentry entry_ty [VBit False]
 
                        ; appendDecl g 
                        ; assignByVal (info e) (info e) 
@@ -311,83 +324,50 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars locals e = do
                               [(resval,(info e, [cexp|$id:(name resval)|]))]
                        ; return (ow, outVarsWithRes, renv) }
               ; extendVarEnv result_env $ 
-                packByteAligned ranges outVarsWithRes [cexp| $id:clut |]
+                packByteAligned ranges outVarsWithRes [cexp| $id:clutentry |]
               ; return outBitWidth
               }
 
     -- make a 2-byte aligned entry.
     let lutEntryByteLen = ((((outBitWidth + 7) `div` 8) + 1) `div` 2) * 2
 
-
-    tempDir        <- liftIO $ getTemporaryDirectory
-    (tablePath, h) <- liftIO $ openTempFile tempDir "table.txt"
-    liftIO $ hClose h
-
-    let cdoc = text cPrelude </>
-                        ppr [cunit|$esc:("#include <assert.h>")
-                                   $esc:("#include <stdio.h>")
-                                   $esc:("#include \"types.h\"")
-                                   $esc:("#include \"wpl_alloc.h\"")
-                                   $esc:("#include \"utils.h\"")
-                                 
-                                   $edecls:defs
-
-                                   int main(int argc, char** argv)
-                                   {
-                                     FILE* f; int b;
-                                     
-                                     f = fopen($string:tablePath, "w");
-                                     assert(f != NULL);
-                                     for(unsigned int $id:cidx = 0; 
-                                              $id:cidx < $int:((1::Word) `shiftL` inBitWidth); 
-                                              ($id:cidx)++)
-                                     {
-
-                                       $decls:decls
-                                       $stms:stms
-
-                                       for (b = 0; b < $int:(lutEntryByteLen); b++) {
-                                             fprintf(f,"%d ", $id:clut[b]);
-                                             printf("%d ", $id:clut[b]);
-                                       }
-                                             fprintf(f,"\n");
-                                             printf("\n");
-                                     }
-
-                                     assert(fclose(f) == 0);
-
-                                   }
-                                  |]
-
-    -- Dump the C source code.
-    dump dflags DumpLUT ("lut_" ++ clut ++ ".c") cdoc
-
-    -- Compile and run the program. 
-    -- Its output is the LUT entries, one entry per line.
-   
-    
-    out  <- liftIO $ 
-          compileAndRun (pretty 80 cdoc) "lutexec" 
-                        (csrcPathPosix dflags) 
-                        (csrcPathNative dflags)
-                        []
-
-    h     <- liftIO $ openFile tablePath ReadMode
-    table <- liftIO $ hGetContents h
-
-    let get_field x = [cinit| $int:((read x) :: Int)|]
-        get_entry x = [cinit| { $inits:(map get_field (words x)) } |]
-        entries     = map get_entry (lines table)
-        idxLen = (1::Word) `shiftL` inBitWidth
+    let idxLen = (1::Word) `shiftL` inBitWidth
         lutbasety = namedCType $ "calign unsigned char"
-        clutDecl = [cdecl| $ty:lutbasety $id:clut[$int:idxLen][$int:lutEntryByteLen] = { $inits:entries } ;|]
+        clutDecl = [cdecl| $ty:lutbasety 
+                                 $id:clut[$int:idxLen][$int:lutEntryByteLen];|]
+   
+    let clutgen_def
+          =
+            [cedecl|void $id:clutgen()
+                     {
+                        for(unsigned int $id:cidx = 0; 
+                                 $id:cidx < $int:idxLen; 
+                                 ($id:cidx)++)
+                        {
 
-    -- Dump the static declaration.
-    dump dflags DumpLUT ("table_" ++ clut ++ ".c") (ppr clutDecl)
+                          $decls:decls
+                          unsigned int b; 
+                          $stms:stms
 
-    appendTopDecls [clutDecl]
+                          for (b = 0; b < $int:(lutEntryByteLen); b++) {
+                                $id:clut[$id:cidx][b] = $id:clutentry[b];
+                          }
+                        }
+                     }
+            |]
 
-    return ([cexp|$id:clut|])
+    appendTopDecl clutDecl
+
+    appendTopDefs defs
+    appendTopDef clutgen_def
+
+
+    let res = LUTGenInfo { lgi_lut_var = [cexp|$id:clut|]
+                         , lgi_lut_gen = [cstm|$id:clutgen();|]
+                         }
+
+    return res
+
   where
     -- Ensure that the given variable is in range
     ensureInRange :: Name -> Cg ()
@@ -434,12 +414,14 @@ genLUTLookup ranges inVars (outVars,res_in_outvars) clut ety mb_resname = do
                do { res <- freshName "resx" 
                   ; codeGenDeclGroup (name res) ety >>= appendDecl
                   ; extendVarEnv [(res,(ety,[cexp|$id:(name res)|]))] $
-                    unpackByteAligned (outVars ++ [(res,ety)]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
+                    unpackByteAligned (outVars ++ 
+                       [(res,ety)]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
                   ; return $ [cexp| $id:(name res) |] 
                   }
              Just res -> 
                do { extendVarEnv [(res,(ety,[cexp|$id:(name res)|]))] $
-                    unpackByteAligned (outVars ++ [(res,ety)]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
+                    unpackByteAligned (outVars ++ 
+                       [(res,ety)]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
                   ; return $ [cexp|UNIT|] 
                   }
     
@@ -449,28 +431,6 @@ genLUTLookup ranges inVars (outVars,res_in_outvars) clut ety mb_resname = do
           = do { assignByVal ety ety [cexp|$id:(name res)|] ce_res
                ; return [cexp|UNIT|]
                }
-
-cPrelude :: String
-cPrelude = unlines ["#include <stdio.h>"
-                   ,"#include <stdlib.h>"
-                   ,"#include <string.h>"
-                   ,"#include <math.h>"
-
-{-
-                   ,"#include <xmmintrin.h>"
-                   ,"#include <emmintrin.h>"
-
-                   ,"#include \"sse.h\""
-                   ,"#include \"driver.h\""
-                   ,"#include \"lut_wrapper.h\""
-                   ,"#include \"externals.h\""
-                   ,"#include \"fft.h\""
-                   ,"#include \"soratypes.h\""
-                   ,"#include \"intalg.h\""
--}
-                   ,"#define FALSE 0"
-                   ,"#define TRUE 1"
-                   ,"#define UNIT 0"]
 
 genLocalVarInits :: DynFlags -> [VarTy] -> Cg ()
 genLocalVarInits dflags vs

@@ -46,6 +46,10 @@ data DynFlag =
   | NewSrcFormat
   | StdoutDump
   | BoundsCheck
+
+  | NativeMitigators 
+  | NoLUTHashing 
+
   | Opt
   | Verbose
   | DumpVect
@@ -133,6 +137,11 @@ options =
      , Option []        ["vectorize"]           (NoArg Vectorize)     "vectorize program"
      , Option []        ["autolut"]             (NoArg AutoLUT)       "automatically convert function to use LUTs"
      , Option []        ["pipeline"]            (NoArg Pipeline)      "pipeline standalone computations"
+
+
+     , Option []        ["native-mitigators"]   (NoArg NativeMitigators) "use native mitigators instead of source-based"
+     , Option []        ["no-lut-hashing"]      (NoArg NoLUTHashing)     "do not hash lut generation"
+
 
      , Option []        ["new-src-format"]      (NoArg NewSrcFormat)  "new source format"
 

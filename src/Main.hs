@@ -239,9 +239,7 @@ main = failOnException $ do
     -- Vectorize Phase
     runVectorizePhase dflags sym tdef_env decl_env cenv st c 
       | isDynFlagSet dflags Vectorize 
-      = runDebugVecM (isDynFlagSet dflags Debug) c tdef_env 
-                                                   decl_env 
-                                                   cenv sym st
+      = runDebugVecM dflags c tdef_env decl_env cenv sym st
       | otherwise
       = return [c] 
 

@@ -1173,8 +1173,7 @@ elimMitigs comp
       , Par p c1 c2 <- c0 
       , Just ((ty1,i1,j1),c1') <- frm_mit c1
       , Mitigate ty2 i2 j2 <- unComp c2
-      = do { liftIO $ putStrLn "B" 
-           ; when (j1 /= i2) $ error "BUG: Mitigation mismatch!"
+      = do { when (j1 /= i2) $ error "BUG: Mitigation mismatch!"
            ; if i1 `mod` j2 == 0 || j2 `mod` i1 == 0 then 
              do { rewrite $ 
                   cPar cloc () p c1' (cMitigate cloc () ty1 i1 j2)
@@ -1186,8 +1185,7 @@ elimMitigs comp
       , Par p c1 c2 <- c0 
       , Just ((ty2,i2,j2),c2') <- flm_mit c2
       , Mitigate ty1 i1 j1 <- unComp c1
-      = do { liftIO $ putStrLn "C" 
-           ; when (j1 /= i2) $ error "BUG: Mitigation mismatch!"
+      = do { when (j1 /= i2) $ error "BUG: Mitigation mismatch!"
            ; if i1 `mod` j2 == 0 || j2 `mod` i1 == 0 then 
              do { rewrite $ 
                   cPar cloc () p (cMitigate cloc () ty1 i1 j2) c2'
