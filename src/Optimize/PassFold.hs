@@ -1046,3 +1046,180 @@ runFold flags sym comp
          }
 
 
+{- Elimination of mitigators
+   ~~~~~~~~~~~~~~~~~~~~~~~~~ -}
+
+elimMitigsIO :: GS.Sym -> Comp () () -> IO (Comp () ())
+elimMitigsIO sym comp = go comp
+  where go comp = do { r <- runRwM (elimMitigs comp) sym
+                     ; case r of NotRewritten {} -> return comp
+                                 Rewritten comp' -> go comp'
+                     }
+
+
+frm_mit :: Comp () () -> Maybe ((Ty,Int,Int), Comp () ())
+-- returns (mitigator,residual-comp)
+frm_mit c 
+
+  | Par p0 c1 c2 <- unComp c
+  , Mitigate ty i1 i2  <- unComp c2
+  = Just ((ty,i1,i2), c1)
+
+  | Par p0 c1 c2 <- unComp c
+  = case frm_mit c2 of 
+      Nothing -> Nothing 
+      Just (mit,c2') -> Just (mit, cPar (compLoc c) () p0 c1 c2')
+
+  | LetFun fn fdef cont <- unComp c -- Needed because of AutoMaps! Yikes!
+  , let loc = compLoc c
+  = case frm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLetFun loc () fn fdef cont')
+
+  -- Special case for code emitted by the vectorizer 
+  | LetFunC fn prms locs body cont <- unComp c
+  , Call fn' args <- unComp cont
+  , fn == fn' 
+  , let loc = compLoc c
+  = case frm_mit body of
+      Nothing -> Nothing
+      Just (mit,body') -> Just (mit, cLetFunC loc () fn prms locs body' cont)
+
+  -- fallthrough general case
+  | LetFunC fn prms locs body cont <- unComp c
+  , let loc = compLoc c
+  = case frm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLetFunC loc () fn prms locs body cont')
+
+  | Let n c1 cont <- unComp c
+  , let loc = compLoc c
+  = case frm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLet loc () n c1 cont')
+
+  | otherwise
+  = Nothing
+
+flm_mit :: Comp () () -> Maybe ((Ty,Int,Int), Comp () ())
+-- returns (mitigator,residual-comp)
+flm_mit c 
+
+  | Par p0 c1 c2 <- unComp c
+  , Mitigate ty i1 i2  <- unComp c1
+  = Just ((ty,i1,i2), c2)
+
+  | Par p0 c1 c2 <- unComp c
+  = case flm_mit c1 of 
+      Nothing -> Nothing 
+      Just (mit,c1') -> Just (mit, cPar (compLoc c) () p0 c1' c2)
+
+  | LetFun fn fdef cont <- unComp c
+  , let loc = compLoc c
+  = case flm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLetFun loc () fn fdef cont')
+
+  -- Special case for code emitted by the vectorizer 
+  | LetFunC fn prms locs body cont <- unComp c
+  , Call fn' args <- unComp cont
+  , fn == fn' 
+  , let loc = compLoc c
+  = case flm_mit body of
+      Nothing -> Nothing
+      Just (mit,body') -> Just (mit, cLetFunC loc () fn prms locs body' cont)
+
+  -- fallthrough general case
+  | LetFunC fn prms locs body cont <- unComp c
+  , let loc = compLoc c
+  = case flm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLetFunC loc () fn prms locs body cont')
+
+
+  | Let n c1 cont <- unComp c
+  , let loc = compLoc c
+  = case flm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLet loc () n c1 cont')
+
+  | otherwise
+  = Nothing
+
+
+
+elimMitigs :: Comp () () -> RwM (Comp () ())
+-- Vectorizer-specific 
+elimMitigs comp  
+  = mapCompM_ return mitig comp
+
+  where 
+   mitig c
+      | MkComp c0 cloc _ <- c
+      , Par p c1 c2 <- c0 
+      , Just (m1@(ty1,i1,j1),c1') <- frm_mit c1
+      , Just (m2@(ty2,i2,j2),c2') <- flm_mit c2
+      = do { when (j1 /= i2) $ error "BUG: Mitigation mismatch!"
+           ; if (i1 `mod` j2 == 0) || (j2 `mod` i1) == 0 then 
+             do { rewrite $ 
+                  cPar cloc () p c1' $
+                  cPar cloc () (mkParInfo NeverPipeline) 
+                               (cMitigate cloc () ty1 i1 j2) c2'
+                }
+             else return c
+           }
+          
+      | MkComp c0 cloc _ <- c
+      , Par p c1 c2 <- c0 
+      , Just ((ty1,i1,j1),c1') <- frm_mit c1
+      , Mitigate ty2 i2 j2 <- unComp c2
+      = do { liftIO $ putStrLn "B" 
+           ; when (j1 /= i2) $ error "BUG: Mitigation mismatch!"
+           ; if i1 `mod` j2 == 0 || j2 `mod` i1 == 0 then 
+             do { rewrite $ 
+                  cPar cloc () p c1' (cMitigate cloc () ty1 i1 j2)
+                }
+             else return c
+           }
+
+      | MkComp c0 cloc _ <- c
+      , Par p c1 c2 <- c0 
+      , Just ((ty2,i2,j2),c2') <- flm_mit c2
+      , Mitigate ty1 i1 j1 <- unComp c1
+      = do { liftIO $ putStrLn "C" 
+           ; when (j1 /= i2) $ error "BUG: Mitigation mismatch!"
+           ; if i1 `mod` j2 == 0 || j2 `mod` i1 == 0 then 
+             do { rewrite $ 
+                  cPar cloc () p (cMitigate cloc () ty1 i1 j2) c2'
+                }
+             else return c
+           }
+
+        -- throw away useless mitigators! 
+      | MkComp c0 cloc _ <- c
+      , Par p c1 c2 <- c0 
+      , Just ((ty1,i1,j1),c1') <- frm_mit c1
+      , WriteSnk {} <- unComp c2
+      = rewrite $ cPar cloc () p c1' c2
+
+      | MkComp c0 cloc _ <- c
+      , Par p c1 c2 <- c0 
+      , Just ((ty1,i1,j1),c1') <- frm_mit c1
+      , WriteInternal {} <- unComp c2
+      = rewrite $ cPar cloc () p c1' c2
+
+      | MkComp c0 cloc _ <- c
+      , Par p c1 c2 <- c0 
+      , Just ((ty2,i2,j2),c2') <- flm_mit c2
+      , ReadSrc {} <- unComp c1
+      = rewrite $ cPar cloc () p c1 c2'
+
+      | MkComp c0 cloc _ <- c
+      , Par p c1 c2 <- c0 
+      , Just ((ty2,i2,j2),c2') <- flm_mit c2
+      , ReadInternal {} <- unComp c1
+      = rewrite $ cPar cloc () p c1 c2'
+
+      | otherwise
+      = return c
+
