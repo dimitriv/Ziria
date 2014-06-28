@@ -466,6 +466,89 @@ codeGenComp dflags comp k =
     go comp
   where
     go :: Comp CTy Ty -> Cg CompInfo
+
+    go (MkComp (Mitigate bty i1 i2) csp (CTBase cty0)) = do
+        -- Assume i1 `mod` i2 = 0
+        mitName <- nextName ("__mit_" ++ (getLnNumInStr csp))
+        let prefix = name mitName
+        let ih = inHdl k
+        let yh = yieldHdl k        
+        let mit_st = prefix ++ "_state"
+        let buf = prefix ++ "_mit_buff"
+
+        appendStmt [cstm|ORIGIN($string:(show csp)); |]        
+
+        if (i1 >= i2)
+          then do { let d = i1 `div` i2
+
+                    -- declare the state of the mitigator
+                  ; appendDecl =<< 
+                       codeGenDeclVolGroup_init mit_st tint [cexp|$int:d|]
+
+                  ; let arrty = TArr (Literal i1) bty 
+                        leninfo = if i2 == 1 then LISingleton else LILength i2
+
+                  ; appendLabeledBlock (tickNmOf prefix) $ do
+                        if [cexp| $id:mit_st >= $int:d |] then kontConsume k
+                        else do 
+                           cres <- codeGenArrRead dflags 
+                                                  arrty 
+                                                  [cexp|$id:(inValOf ih)|]
+                                                  [cexp|$id:mit_st|]
+                                                  leninfo
+                           appendStmt [cstm|$id:mit_st++; |]
+                           appendStmt [cstm|$id:(yldValOf yh) = $cres; |]
+                           kontYield k
+
+                  ; appendLabeledBlock (processNmOf prefix) $ do
+
+                        cres <- codeGenArrRead 
+                                      dflags 
+                                      arrty [cexp|$id:(inValOf ih)|]
+                                            [cexp|0|]
+                                            leninfo
+
+                        appendStmt [cstm|$id:(yldValOf yh) = $cres;|]
+                        appendStmt [cstm|$id:mit_st = 1;|]
+                        kontYield k
+
+                  ; return (mkCompInfo prefix True) -- can tick
+
+                  }
+
+          else do { let d = i2 `div` i1
+
+                    -- declare the state of the mitigator
+                  ; appendDecl =<< 
+                       codeGenDeclVolGroup_init mit_st tint [cexp|0|]
+                  ; appendDecl =<< 
+                       codeGenDeclVolGroup buf (TArr (Literal i2) bty) 
+
+                    -- trivial tick()
+                  ; appendLabeledBlock (tickNmOf prefix) $ do
+                           kontConsume k
+
+                  ; let arrty   = TArr (Literal i2) bty
+                        leninfo = if i1 == 1 then LISingleton else LILength i1 
+
+                  ; appendLabeledBlock (processNmOf prefix) $ do
+                        if [cexp| $id:mit_st < $int:d|] then do
+                           -- buff[mit_st,leninfo] := in_val
+                           codeGenArrWrite dflags arrty [cexp|$id:buf|] 
+                                                        [cexp|$id:mit_st|]
+                                                        leninfo
+                                                        [cexp|$id:(inValOf ih)|]
+                           appendStmt [cstm| $id:mit_st++;|]
+                           kontConsume k
+                        else do 
+                           appendStmt [cstm|$id:(yldValOf yh) = $id:buf;|]
+                           appendStmt [cstm|$id:mit_st = 0;|]
+                           kontYield k
+ 
+                  ; return (mkCompInfo prefix False) -- cannot tick
+
+                  } 
+
     go (MkComp (Map _p e00@(MkExp (EVar f) _ (TArrow ta tb))) csp (CTBase cty0)) = do
 
         mapName <- nextName ("__map_" ++ (getLnNumInStr csp))

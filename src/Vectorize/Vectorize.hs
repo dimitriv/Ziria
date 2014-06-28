@@ -1218,8 +1218,9 @@ runDebugVecM verbose comp tenv env cenv sym unifiers
                 = do { vc_mit <- io_comp
                        -- Fuse mitigators
                      ; vc_opt_mit <- elimMitigsIO sym vc_mit
-                       -- Compile away remaining mitigators 
+                       -- Compile away remaining mitigators
                      ; vc <- compileMitigs sym vc_opt_mit
+                     -- ; let vc = vc_opt_mit
                      ; res <- runTcM (tyCheckTopComp vc) 
                                   tenv env cenv sym GlobalDefs unifiers
                      ; case res of
