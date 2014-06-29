@@ -17,7 +17,6 @@
 -- permissions and limitations under the License.
 --
 --
-#include "../const.blk"
-#include "blocks/TransmitterInfinite.blk"
+#include "blocks/ReceiverInfiniteWThreads.blk"
 
-read >>> TransmitterInfinite(HeaderInfo{coding=CR_34;modulation=M_16QAM;len=0}) >>> write
+read >>> ReceiverInfiniteWThreads(HeaderInfo{coding = CR_12; modulation = M_QPSK; len = 0}) >>> write
