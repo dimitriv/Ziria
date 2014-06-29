@@ -842,14 +842,26 @@ codeGenComp dflags comp k =
         -- [num_branches], in order to divert control to the next block in the
         -- Bind chain.
 
-        let go :: String -> Int -> (Comp CTy Ty, Name) -> [(Name, Comp CTy Ty)] -> Cg [CompInfo]
+        let go :: String -> Int -> (Comp CTy Ty, Name) 
+               -> [(Name, Comp CTy Ty)] -> Cg [CompInfo]
             go branch_var num_branches (c1,c1Name) ((nm,c2):rest) = do
                 let (CTBase cty1) = compInfo c1
                 let (Just vTy) = doneTyOfCTy cty1
+                let is_take (Take1 {}) = True 
+                    is_take _          = False
 
                 new_dh <- freshName ("__dv_tmp_"  ++ (getLnNumInStr csp))
                 let new_dhval = doneValOf $ name new_dh
-                appendDecl =<< codeGenDeclGroup new_dhval vTy
+                appendDecl =<< 
+                    -- Note [Take Optimization]
+                    -- If the component is a Take1 then we can simply make
+                    -- sure that we return the address of the in value, and 
+                    -- hence we don't have to declare storage for doneVal.
+                    if is_take (unComp c1) && isArrTy vTy then 
+                       return [cdecl| $ty:(codeGenTyAlg vTy) $id:new_dhval;|]
+                    else 
+                       codeGenDeclGroup new_dhval vTy
+
 
                 let ce = [cexp|$id:new_dhval |]
                 c2Name <- freshName ("__bnd_rest_" ++ (getLnNumInStr csp))
@@ -995,7 +1007,16 @@ codeGenComp dflags comp k =
             kontConsume k
 
         appendLabeledBlock (processNmOf prefix) $ do
-            assignByVal (inTyOfCTy cty0) (inTyOfCTy cty0) donevalexp invalofexp
+            -- See Note [Take Optimization]
+            if isArrTy (inTyOfCTy cty0) then 
+               appendStmt [cstm|$id:(doneValOf dh) = $id:(inValOf ih);|]
+            else 
+               assignByVal (inTyOfCTy cty0) 
+                           (inTyOfCTy cty0) donevalexp invalofexp
+ 
+            -- New:
+            appendStmt [cstm|$id:(doneValOf dh) = $id:(inValOf ih);|]
+
             appendStmt [cstm|$id:globalWhatIs = DONE;|]
             kontDone k
 

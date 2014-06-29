@@ -166,20 +166,29 @@ codeGenProgram dflags globals shared_ctxt
          do { (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
                 do { forM tid_cs $ \(tid,c) -> codeGenThread dflags tid c
                    ; if pipeline_flag then 
-                       do { -- Just to make the SORA code happy we need to implement a dummy wpl_go
-                            -- In reality the set_up_threads() function uses thread0,thread1,...
-                          ; let wpl_go_dummy_def = [cedecl| int wpl_go() { exit (-1); } |]
+                       do { -- Just to make the SORA code happy we need 
+                            -- to implement a dummy wpl_go
+                            -- In reality the set_up_threads() function uses 
+                            -- thread0,thread1,...
+                          ; let wpl_go_dummy_def 
+                                   = [cedecl| int wpl_go() { exit (-1); } |]
                           ; appendTopDefs [wpl_go_dummy_def]
                         
-                            -- emit the appropriate wpl_set_up_threads() definition for SORA code to work
-                          ; appendTopDefs $ ST.thread_setup affinity_mask module_name bufTys tids
+                            -- Emit the appropriate wpl_set_up_threads() 
+                            -- definition for SORA code to work
+                          ; appendTopDefs $ 
+                            ST.thread_setup affinity_mask module_name bufTys tids
                           } 
-                     else -- In this case we know that wpl_go /is/ going to be the main function 
-                        appendTopDefs $ ST.thread_setup_shim module_name
+                     else 
+                        -- In this case we know that wpl_go /is/ going to be 
+                        -- the main function 
+                        appendTopDefs $ ST.thread_setup_shim module_name 
                    }
                -- Finally emit wpl_global_init()
-             ; codeGenWPLGlobalInit (initstms ++ moreinitstms) module_name
-             }    
+             ; lut_init_stms <- getLUTHashes >>= 
+                                   (return . map (lgi_lut_gen . snd))
+             ; codeGenWPLGlobalInit (lut_init_stms ++ initstms ++ moreinitstms) module_name
+             }
         }
 
   where

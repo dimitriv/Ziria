@@ -26,6 +26,7 @@ module CgMonad
 
   , Cg
   , CgError(..)
+  , LUTGenInfo (..)
   , evalCg
   , emptyEnv
   , emptyState
@@ -309,13 +310,19 @@ emptyEnv sym =
 -- (2) We respect the continuation invariants, 
 -- see Note [Continuation Invariants]
 
+data LUTGenInfo 
+  = LUTGenInfo { lgi_lut_var  :: C.Exp -- the lut table variable
+               , lgi_lut_gen  :: C.Stm -- call to the lut initializer
+               }
+  deriving Show 
+
 data CgState = CgState { nameStack :: [Name] 
                        , numAllocs :: Int -- # of heap-allocated variables
                        , maxStackAlloc :: Int  
 
                          -- Hashed LUT-ted exprs, 
                          -- along with the C variable for the LUT
-                       , lutHashes  :: [(Int,C.Exp)]
+                       , lutHashes  :: [(Int,LUTGenInfo)]
 
                        , structDefs :: [TyName] -- # already defined structs
                          -- if > than this, then allocate on the heap
@@ -513,11 +520,13 @@ setNames :: [Name] -> Cg ()
 setNames names' = modify $ \s -> s { nameStack = names' }
 
 
-getLUTHashes :: Cg [(Int,C.Exp)]
-getLUTHashes = gets lutHashes
+getLUTHashes :: Cg [(Int,LUTGenInfo)]
+getLUTHashes 
+  = gets lutHashes
 
-setLUTHashes :: [(Int,C.Exp)] -> Cg ()
-setLUTHashes hs = modify $ \s -> s { lutHashes = hs }
+setLUTHashes :: [(Int,LUTGenInfo)] -> Cg ()
+setLUTHashes hs 
+  = modify $ \s -> s { lutHashes = hs }
 
 
 newHeapAlloc :: Cg ()

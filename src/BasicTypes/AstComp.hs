@@ -48,6 +48,7 @@ data ParInfo
 
 mkParInfo plInfo = ParInfo plInfo Nothing Nothing               
 
+pnever = mkParInfo NeverPipeline
 
 type CParams  = [(Name, CallArg Ty CTy0)]
 type Locals b = [(Name, Maybe (Exp b))]
