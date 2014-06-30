@@ -997,8 +997,11 @@ foldCompPasses flags
 
     , ("float-letfun-repeat", float_letfun_repeat_step flags)
 
-    , ("ifpar-left"         , ifpar_step_left flags         )        
-    , ("ifpar-right"        , ifpar_step_right flags        )        
+-- Experiment: this gives perf improvement for large pipelines
+-- probably because of less code duplication and LUT sharing.
+--
+--    , ("ifpar-left"         , ifpar_step_left flags         )        
+--    , ("ifpar-right"        , ifpar_step_right flags        )        
     , ("ifdead"             , ifdead_step flags             )       
 
     -- Don't use: not wrong but does not play nicely with LUT
