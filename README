@@ -1,12 +1,12 @@
-Blink is a programming language and compiler for low-level bitstream processing.
+Ziria is a programming language and compiler for low-level bitstream processing.
 
 Some useful information:
 
-* Blink top-level directory structure:
+* Top-level directory structure:
 
      src/    Haskell source code
    tools/    A few useful tools 
-     lib/    Some simple Blink libraries
+     lib/    Some simple libraries
     csrc/    C code and C libraries
    tests/    Testsuite 
     code/    WiFi implementation code
