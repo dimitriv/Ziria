@@ -36,7 +36,6 @@ let comp TransmitterInfiniteWThreads(hInfo : struct HeaderInfo) =
    emits createSTSinTime();
    emits createLTSinTime();
 -}
-   (scrambler() >>> encode12() >>> interleaver_qpsk() >>> modulate_qpsk() 
-       |>>>| map_ofdm() >>> ifft())
+   scrambler() >>> encode12() >>> interleaver_qpsk() |>>>| modulate_qpsk() >>> map_ofdm() >>> ifft()
 in
 

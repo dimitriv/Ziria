@@ -38,23 +38,24 @@ let comp receiveBits(hinfo : struct HeaderInfo) =
     DecodeInfinite(hinfo) 
 in
 
-let comp ReceiverInfinite(hinfo : struct HeaderInfo) = 
-  var params : struct LTECoeffs;
-  do{
-    for i in [0,64] {
+let computeParams() =
+   var params : struct LTECoeffs;
+
+   for i in [0,64] {
       params.freqCoeffs[i] := complex16{re=1000; im=1000};
       params.channelCoeffs[i] := complex16{re=1000; im=1000};
-    }
-  }
+   };
+   return params
 
+in
+
+let comp ReceiverInfiniteWThreads(hinfo : struct HeaderInfo) = 
+
+  let params = computeParams()
+  in 
   (downSample() 
        >>> DataSymbol() >>> FFT() >>> ChannelEqualization(params)
        >>> PilotTrack()
        >>> GetData() 
        >>> receiveBits(hinfo))
 in
-
-
-
-
-
