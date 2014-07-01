@@ -624,7 +624,9 @@ ifdead_step fgs comp
   where evalBool (MkExp (EBinOp Eq (MkExp (EVal (VInt i)) _ _) 
                                    (MkExp (EVal (VInt j)) _ _)) _ _) 
            = Just (i==j) 
+        evalBool (MkExp (EVal (VBool b)) _ _) = Just b
         evalBool _ = Nothing
+
         eneg e = MkExp (EUnOp Neg e) (expLoc e) (info e) 
 
         impliesBool (MkExp (EBinOp Eq e
@@ -798,7 +800,11 @@ rest_chain fgs e
        eval_arith fgs >>= 
        const_fold fgs >>= 
        arrinit_step fgs >>= 
-       subarr_inline_step fgs
+       subarr_inline_step fgs 
+       -- This leads to too much inlining and seems to have 
+       -- unstable effects to performance so I am keeping it 
+       -- commented for now:
+       -- >>= proj_inline_step fgs
 
 
 exp_inline_step :: DynFlags -> TypedExpPass
@@ -864,6 +870,15 @@ subarr_inline_step fgs e
   | otherwise
   = return e
   
+proj_inline_step :: DynFlags -> TypedExpPass
+proj_inline_step fgs e 
+ | EProj e fn <- unExp e
+ , EStruct _s fs_es <- unExp e
+ , all (is_simpl_expr . snd) fs_es -- no side effects
+ , Just ep <- lookup fn fs_es
+ = rewrite ep
+ | otherwise
+ = return e 
 
 
 for_unroll_step :: DynFlags -> TypedExpPass
