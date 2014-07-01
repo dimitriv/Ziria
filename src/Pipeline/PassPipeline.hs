@@ -69,7 +69,7 @@ pipeLineBase :: Comp CTy Ty -> IO ([Ty], [Comp CTy Ty])
 -- Pre: stripLetCtxt gives empty context and the same computation back
 pipeLineBase c
   = do { floated <- mapCompM_ return float_pipe c -- float |>>>| to the top
-       ; putStrLn $ "floated = " ++ show (ppComp floated)
+       -- ; putStrLn $ "floated = " ++ show (ppComp floated)
 
        ; let splits = create_splits floated       -- create splits
        ; return $ insertBufs splits [0..]         -- insert buffers 
@@ -84,8 +84,7 @@ pipeLineBase c
           , let c21cty = compInfo c21
           , let c1cty  = compInfo c1
           , let cty    = c1cty `parCompose` c21cty
-          = do { putStrLn "float_pipe! (A)" 
-               ; return $ cPar cloc cnfo p2 (cPar cloc cty p c1 c21) c22 }
+          = do { return $ cPar cloc cnfo p2 (cPar cloc cty p c1 c21) c22 }
 
             -- (c11 |>>>| c12) >>> c2 ~~> c11 |>>>| (c12 >>> c2)
           | MkComp c0 cloc cnfo <- c
@@ -95,24 +94,8 @@ pipeLineBase c
           , let c12cty = compInfo c12
           , let c2cty  = compInfo c2
           , let cty    = c12cty `parCompose` c2cty
-          = do { putStrLn "float_pipe! (B)"
-               ; return $ cPar cloc cnfo p1 c11 (cPar  cloc cty p c12 c2) }
+          = do { return $ cPar cloc cnfo p1 c11 (cPar  cloc cty p c12 c2) }
 
-          
-          -- | MkComp c0 cloc cnfo <- c
-          -- , Par p c1 c2 <- c0
-          -- = do { putStrLn $ "float_pipe (not matching): " ++ show (ppParInfo p)
-          --      ; case plInfo p of 
-          --           AlwaysPipeline {}
-          --              -> do { putStrLn "Unmatched AlwaysPipeline!"
-          --                    ; putStrLn "LeftComp is: " 
-          --                    ; putStrLn (show (ppCompShortFold c1))
-          --                    ; putStrLn "RightComp is: " 
-          --                    ; putStrLn (show (ppCompShortFold c2))
-          --                    ; fail "EXITING!" 
-          --                    }
-          --           _ -> return ()
-          --      ; return c }
           | otherwise
           = return c
 
@@ -172,7 +155,7 @@ data PipelineRetPkg =
 runPipeLine :: Bool -> Comp CTy Ty -> IO PipelineRetPkg
 runPipeLine dumpPipeline c
   = do { let (ctx,cbase) = stripLetCtxt c       -- get the context
-       ; putStrLn $ "cbase = " ++ show (ppCompShortFold cbase) 
+--       ; putStrLn $ "cbase = " ++ show (ppCompShortFold cbase) 
        ; (buftys,splits) <- pipeLineBase cbase  -- pipeline base computation
        ; let count = length splits
        ; when (dumpPipeline && count > 1) $ 
