@@ -21,10 +21,12 @@
 #include "numerics.h"
 #include "DebugPlotU.h"
 
-
-int32 __ext_dbgplot_line(int16 item);
-int32 __ext_dbgplot_spectrum(int16 item);
-int32 __ext_dbgplot_dots(complex16 *data, int len, int toPlot);
+FINL void initDbgPlot();
+int32 __ext_dbgplot_real_line(int16 *item, int len);
+int32 __ext_dbgplot_complex_line(complex16 *line, int len, int16 real);
+int32 __ext_dbgplot_spectrum(complex16 *line, int len);
+int32 __ext_dbgplot_dots(complex16 *data, int len);
+int32 __ext_dbgplot_dot(complex16 data);
 
 
 
