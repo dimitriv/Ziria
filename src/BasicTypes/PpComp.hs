@@ -94,8 +94,8 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
       | ignorelet 
       -> ppComp c2
       | otherwise
-      -> parens (text "let comp" <+> ppTypedName x <+> text "=" <+> ppComp c1 $$
-                 text "in" $$ braces (ppComp c2))
+      -> text "let comp" <+> ppTypedName x <+> text "=" <+> ppComp c1 $$
+         text "in" $$ ppComp c2
 
     LetStruct sdef c1
       | ignorelet || ignoreexp
@@ -104,28 +104,30 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
       -> text "struct " <+> text (struct_name sdef) <+> text "=" <+> 
             (hsep $ punctuate (text ",") (map (\(f,t) -> 
                text f <> colon <+> ppTy t) (struct_flds sdef))) $$
-         text "in" $$ braces (ppComp c1)
+         text "in" $$ 
+         ppComp c1
 
     LetE x e c
       | ignorelet || ignoreexp
       -> ppComp c
       | otherwise
       -> text "let" <+> ppTypedName x <+> text "=" <+> ppExp e $$
-         text "in" $$ braces (ppComp c)
+         text "in" $$ 
+         ppComp c
     LetFun _ fn c 
       | ignorelet || ignoreexp
       -> ppComp c
       | otherwise 
       -> text "let" <+> ppFun fn $$
          text "in" $$
-         braces (ppComp c)
+         ppComp c
     LetExternal _ fn c 
       | ignorelet || ignoreexp
       -> ppComp c
       | otherwise
       -> text "let external" <+> ppFun fn $$
          text "in" $$
-         braces (ppComp c)
+         ppComp c
     LetFunC f params locls c1 c2 
       | ignorelet || (ignoreexp && not (nested_letfuns c1))
       -> ppComp c2
@@ -136,7 +138,7 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
             else empty) $$
            nest nestingDepth (ppComp c1) $$
          text "in" $$
-         braces (ppComp c2)
+         ppComp c2
     Call f eargs ->
       ppName f <+> parens (ppEs ppCallArg comma eargs)
     Emit e

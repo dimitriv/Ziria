@@ -194,6 +194,22 @@ float_letfun_repeat_step fgs comp
  | otherwise
  = return comp
 
+
+float_let_par_step fgs comp
+  | Par p c1 c2 <- unComp comp
+  , LetE x e1 c1' <- unComp c1
+  = rewrite $ cLetE loc cty x e1 (cPar loc cty p c1' c2)
+  | Par p c1 c2 <- unComp comp
+  , LetE x e2 c2' <- unComp c2
+  = rewrite $ cLetE loc cty x e2 (cPar loc cty p c1 c2')
+  | otherwise
+  = return comp
+  where loc = compLoc comp
+        cty = compInfo comp
+  
+
+
+
 is_simpl_call_arg (CAExp e) = is_simpl_expr e
 is_simpl_call_arg _         = False
 
@@ -333,8 +349,9 @@ inline_step_aux fgs comp
   | LetFunC nm params locals c1 c2 <- unComp comp
   -- NB: for now, we only inline LetFunC's with empty local environments
   , [] <- locals 
-  = do { -- liftIO $ putStrLn $ "LFC-before = " ++ show comp 
-         c2' <- inline_comp_fun (nm,params,c1) c2
+  = do { liftIO $ putStrLn $ "Inlining comp fun      = " ++ show nm
+       ; c2' <- inline_comp_fun (nm,params,c1) c2
+       ; liftIO $ putStrLn $ "nm member of rewritten = " ++ show (S.member nm (compFVs c2'))
          -- ; liftIO $ putStrLn $ "LFC-after = " ++ show c2' 
        ; return $
          if S.member nm (compFVs c2') 
@@ -361,8 +378,8 @@ is_simpl_expr0 (EValArr _) = True
 is_simpl_expr0 (EVar _)    = True
 is_simpl_expr0 (EArrRead e1 e2 _li) = is_simpl_expr e1 && is_simpl_expr e2
 is_simpl_expr0 (EUnOp u e)          = is_simpl_expr e
+is_simpl_expr0 (EStruct _ fses) = all is_simpl_expr (map snd fses)
 is_simpl_expr0 _ = False 
-
 
 no_lut_inside x 
   = isJust (mapExpM_ elut_nothing x)
@@ -996,6 +1013,9 @@ foldCompPasses flags
     , ("take-emit"          , take_emit_step flags          )
 
     , ("float-letfun-repeat", float_letfun_repeat_step flags)
+
+    , ("float-let-par-step", float_let_par_step flags)
+
 
 -- Experiment: this gives perf improvement for large pipelines
 -- probably because of less code duplication and LUT sharing.
