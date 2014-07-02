@@ -33,21 +33,20 @@ typedef struct {
 	ulong nSamples;
 } TimeMeasurements;
 
-extern TimeMeasurements measurementInfo;
 
 FINL
-void initMeasurementInfo(ulong size) {
-	measurementInfo.tsinfo.use_rdtsc = 1;
-	InitializeTimestampInfo(&measurementInfo.tsinfo, false);
+void initMeasurementInfo(TimeMeasurements *measurementInfo, ulong size) {
+	measurementInfo->tsinfo.use_rdtsc = 1;
+	InitializeTimestampInfo(&measurementInfo->tsinfo, false);
 
-	measurementInfo.aDiff = NULL;
-	measurementInfo.aDiffPtr = 0;
-	measurementInfo.nSamples = 0;
+	measurementInfo->aDiff = NULL;
+	measurementInfo->aDiffPtr = 0;
+	measurementInfo->nSamples = 0;
 	if (size > 0) {
-		measurementInfo.aDiff = (ULONGLONG*) malloc(size * sizeof(ULONGLONG));
-		measurementInfo.minDiff = ((ULONGLONG)~((ULONGLONG)0));
-		measurementInfo.maxDiff = 0;
-		measurementInfo.lastWrite = 0;
+		measurementInfo->aDiff = (ULONGLONG*) malloc(size * sizeof(ULONGLONG));
+		measurementInfo->minDiff = ((ULONGLONG)~((ULONGLONG)0));
+		measurementInfo->maxDiff = 0;
+		measurementInfo->lastWrite = 0;
 	}
 }
 

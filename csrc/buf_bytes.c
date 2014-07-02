@@ -102,25 +102,25 @@ unsigned int parse_dbg_byte(BufContextBlock *blk, char *dbg_buf, char *target)
 
 
 
-void init_getchunk(BufContextBlock *blk, HeapContextBlock *hblk, unsigned int sz)
+void init_getchunk(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, unsigned int sz)
 {
 	blk->chunk_input_siz = sz;
 
-	if (Globals.inType == TY_DUMMY)
+	if (params->inType == TY_DUMMY)
 	{
-		blk->chunk_max_dummy_samples = Globals.dummySamples;
+		blk->chunk_max_dummy_samples = params->dummySamples;
 	}
 
-	if (Globals.inType == TY_FILE)
+	if (params->inType == TY_FILE)
 	{
 		unsigned int sz;
 		char *filebuffer;
-		try_read_filebuffer(hblk, Globals.inFileName, &filebuffer, &sz);
+		try_read_filebuffer(hblk, params->inFileName, &filebuffer, &sz);
 
 		// How many bytes the file buffer has * sizeof chunk should be more than enough
 		blk->chunk_input_buffer = try_alloc_bytes(hblk, sz * blk->chunk_input_siz);
 
-		if (Globals.inFileMode == MODE_BIN)
+		if (params->inFileMode == MODE_BIN)
 		{
 			memcpy(blk->chunk_input_buffer, (void *)filebuffer, sz);
 			blk->chunk_input_entries = sz / blk->chunk_input_siz;
@@ -135,12 +135,12 @@ void init_getchunk(BufContextBlock *blk, HeapContextBlock *hblk, unsigned int sz
 
 // Get into a buffer that has at least size chunk_sz
 
-GetStatus buf_getchunk(BufContextBlock *blk, char *x)
+GetStatus buf_getchunk(BlinkParams *params, BufContextBlock *blk, char *x)
 {
 
-	if (Globals.inType == TY_DUMMY)
+	if (params->inType == TY_DUMMY)
 	{
-		if (blk->chunk_input_dummy_samples >= blk->chunk_max_dummy_samples && Globals.inFileRepeats != INF_REPEAT)
+		if (blk->chunk_input_dummy_samples >= blk->chunk_max_dummy_samples && params->inFileRepeats != INF_REPEAT)
 		{
 			return GS_EOF;
 		}
@@ -153,7 +153,7 @@ GetStatus buf_getchunk(BufContextBlock *blk, char *x)
 	if (blk->chunk_input_idx >= blk->chunk_input_entries)
 	{
 		// If no more repetitions are allowed 
-		if (Globals.inFileRepeats != INF_REPEAT && blk->chunk_input_repeats >= Globals.inFileRepeats)
+		if (params->inFileRepeats != INF_REPEAT && blk->chunk_input_repeats >= params->inFileRepeats)
 		{
 			return GS_EOF;
 		}
@@ -169,12 +169,12 @@ GetStatus buf_getchunk(BufContextBlock *blk, char *x)
 }
 
 // Get an array of elements, each of size chunk_input_siz
-GetStatus buf_getarrchunk(BufContextBlock *blk, char *x, unsigned int vlen)
+GetStatus buf_getarrchunk(BlinkParams *params, BufContextBlock *blk, char *x, unsigned int vlen)
 {
 
-	if (Globals.inType == TY_DUMMY)
+	if (params->inType == TY_DUMMY)
 	{
-		if (blk->chunk_input_dummy_samples >= blk->chunk_max_dummy_samples && Globals.inFileRepeats != INF_REPEAT)
+		if (blk->chunk_input_dummy_samples >= blk->chunk_max_dummy_samples && params->inFileRepeats != INF_REPEAT)
 		{
 			return GS_EOF;
 		}
@@ -185,7 +185,7 @@ GetStatus buf_getarrchunk(BufContextBlock *blk, char *x, unsigned int vlen)
 
 	if (blk->chunk_input_idx + vlen > blk->chunk_input_entries)
 	{
-		if (Globals.inFileRepeats != INF_REPEAT && blk->chunk_input_repeats >= Globals.inFileRepeats)
+		if (params->inFileRepeats != INF_REPEAT && blk->chunk_input_repeats >= params->inFileRepeats)
 		{
 			if (blk->chunk_input_idx != blk->chunk_input_entries)
 				fprintf(stderr, "Warning: Unaligned data in input file, ignoring final get()!\n");
@@ -225,27 +225,27 @@ void fprint_arrchar(BufContextBlock *blk, FILE *f, char *val, unsigned int vlen)
 
 
 
-void init_putchunk(BufContextBlock *blk, unsigned int sz)
+void init_putchunk(BlinkParams *params, BufContextBlock *blk, unsigned int sz)
 {
 
 	blk->chunk_output_siz = sz;
-	blk->chunk_output_buffer = (char*)malloc(Globals.outBufSize * blk->chunk_output_siz);
-	blk->chunk_output_entries = Globals.outBufSize;
+	blk->chunk_output_buffer = (char*)malloc(params->outBufSize * blk->chunk_output_siz);
+	blk->chunk_output_entries = params->outBufSize;
 
-	if (Globals.outType == TY_FILE)
-		blk->chunk_output_file = try_open(Globals.outFileName, "w");
+	if (params->outType == TY_FILE)
+		blk->chunk_output_file = try_open(params->outFileName, "w");
 
 }
 
-void buf_putchunk(BufContextBlock *blk, void *x, void(*fprint)(FILE *f, void *val))
+void buf_putchunk(BlinkParams *params, BufContextBlock *blk, void *x, void(*fprint)(FILE *f, void *val))
 {
-	if (Globals.outType == TY_DUMMY)
+	if (params->outType == TY_DUMMY)
 	{
 		return;
 	}
-	if (Globals.outType == TY_FILE)
+	if (params->outType == TY_FILE)
 	{
-		if (Globals.outFileMode == MODE_DBG)
+		if (params->outFileMode == MODE_DBG)
 			fprint(blk->chunk_output_file, x);
 		else 
 		{
@@ -260,13 +260,13 @@ void buf_putchunk(BufContextBlock *blk, void *x, void(*fprint)(FILE *f, void *va
 	}
 }
 
-void buf_putarrchunk(BufContextBlock *blk, char *x, unsigned int vlen)
+void buf_putarrchunk(BlinkParams *params, BufContextBlock *blk, char *x, unsigned int vlen)
 {
-	if (Globals.outType == TY_DUMMY) return;
+	if (params->outType == TY_DUMMY) return;
 
-	if (Globals.outType == TY_FILE)
+	if (params->outType == TY_FILE)
 	{
-		if (Globals.outFileMode == MODE_DBG) 
+		if (params->outFileMode == MODE_DBG) 
 			fprint_arrchar(blk, blk->chunk_output_file, x, vlen);
 		else
 		{
@@ -290,11 +290,11 @@ void buf_putarrchunk(BufContextBlock *blk, char *x, unsigned int vlen)
 	}
 }
 
-void flush_putchar(BufContextBlock *blk)
+void flush_putchar(BlinkParams *params, BufContextBlock *blk)
 {
-	if (Globals.outType == TY_FILE)
+	if (params->outType == TY_FILE)
 	{
-		if (Globals.outFileMode == MODE_BIN) {
+		if (params->outFileMode == MODE_BIN) {
 			fwrite(blk->chunk_output_buffer, sizeof(char), blk->chunk_output_idx, blk->chunk_output_file);
 			blk->chunk_output_idx = 0;
 		}

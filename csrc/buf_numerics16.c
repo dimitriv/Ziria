@@ -71,23 +71,23 @@ unsigned int parse_dbg_int16(char *dbg_buf, int16 *target)
   return i; // total number of entries
 }
 
-void init_getint16(BufContextBlock *blk, HeapContextBlock *hblk)
+void init_getint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
-	if (Globals.inType == TY_DUMMY)
+	if (params->inType == TY_DUMMY)
 	{
-		blk->num16_max_dummy_samples = Globals.dummySamples;
+		blk->num16_max_dummy_samples = params->dummySamples;
 	}
 
-	if (Globals.inType == TY_FILE)
+	if (params->inType == TY_FILE)
 	{
 		unsigned int sz; 
 		char *filebuffer;
-		try_read_filebuffer(hblk, Globals.inFileName, &filebuffer, &sz);
+		try_read_filebuffer(hblk, params->inFileName, &filebuffer, &sz);
 
 		// How many bytes the file buffer has * sizeof should be enough
 		blk->num16_input_buffer = (int16 *)try_alloc_bytes(hblk, sz * sizeof(int16));
 
-		if (Globals.inFileMode == MODE_BIN)
+		if (params->inFileMode == MODE_BIN)
 		{ 
 			unsigned int i;
 			int16 *typed_filebuffer = (int16 *) filebuffer;
@@ -103,22 +103,22 @@ void init_getint16(BufContextBlock *blk, HeapContextBlock *hblk)
 		}
 	}
 
-	if (Globals.inType == TY_SORA)
+	if (params->inType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
-		InitSoraRx(Globals.radioParams);
+		InitSoraRx(*params);
 #else
 		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
 		exit(1);
 #endif
 	}
 }
-GetStatus buf_getint16(BufContextBlock *blk, int16 *x)
+GetStatus buf_getint16(BlinkParams *params, BufContextBlock *blk, int16 *x)
 {
 
-	if (Globals.inType == TY_DUMMY)
+	if (params->inType == TY_DUMMY)
 	{
-		if (blk->num16_input_dummy_samples >= blk->num16_max_dummy_samples && Globals.dummySamples != INF_REPEAT)
+		if (blk->num16_input_dummy_samples >= blk->num16_max_dummy_samples && params->dummySamples != INF_REPEAT)
 		{
 			return GS_EOF;
 		}
@@ -127,13 +127,13 @@ GetStatus buf_getint16(BufContextBlock *blk, int16 *x)
 		return GS_SUCCESS;
 	}
 
-	if (Globals.inType == TY_FILE)
+	if (params->inType == TY_FILE)
 	{
 		// If we reached the end of the input buffer 
 		if (blk->num16_input_idx >= blk->num16_input_entries)
 		{
 			// If no more repetitions are allowed 
-			if (Globals.inFileRepeats != INF_REPEAT && blk->num16_input_repeats >= Globals.inFileRepeats)
+			if (params->inFileRepeats != INF_REPEAT && blk->num16_input_repeats >= params->inFileRepeats)
 			{
 				return GS_EOF;
 			}
@@ -147,7 +147,7 @@ GetStatus buf_getint16(BufContextBlock *blk, int16 *x)
 		return GS_SUCCESS;
 	}
 
-	if (Globals.inType == TY_SORA)
+	if (params->inType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora RX supports only Complex16 type.\n");
@@ -157,12 +157,12 @@ GetStatus buf_getint16(BufContextBlock *blk, int16 *x)
 
 	return GS_EOF;
 }
-GetStatus buf_getarrint16(BufContextBlock *blk, int16 *x, unsigned int vlen)
+GetStatus buf_getarrint16(BlinkParams *params, BufContextBlock *blk, int16 *x, unsigned int vlen)
 {
 
-	if (Globals.inType == TY_DUMMY)
+	if (params->inType == TY_DUMMY)
 	{
-		if (blk->num16_input_dummy_samples >= blk->num16_max_dummy_samples && Globals.dummySamples != INF_REPEAT)
+		if (blk->num16_input_dummy_samples >= blk->num16_max_dummy_samples && params->dummySamples != INF_REPEAT)
 		{
 			return GS_EOF;
 		}
@@ -171,11 +171,11 @@ GetStatus buf_getarrint16(BufContextBlock *blk, int16 *x, unsigned int vlen)
 		return GS_SUCCESS;
 	}
 
-	if (Globals.inType == TY_FILE)
+	if (params->inType == TY_FILE)
 	{
 		if (blk->num16_input_idx + vlen > blk->num16_input_entries)
 		{
-			if (Globals.inFileRepeats != INF_REPEAT && blk->num16_input_repeats >= Globals.inFileRepeats)
+			if (params->inFileRepeats != INF_REPEAT && blk->num16_input_repeats >= params->inFileRepeats)
 			{
 				if (blk->num16_input_idx != blk->num16_input_entries)
 					fprintf(stderr, "Warning: Unaligned data in input file, ignoring final get()!\n");
@@ -191,7 +191,7 @@ GetStatus buf_getarrint16(BufContextBlock *blk, int16 *x, unsigned int vlen)
 		return GS_SUCCESS;
 	}
 
-	if (Globals.inType == TY_SORA)
+	if (params->inType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora RX supports only Complex16 type.\n");
@@ -202,31 +202,31 @@ GetStatus buf_getarrint16(BufContextBlock *blk, int16 *x, unsigned int vlen)
 	return GS_EOF;
 }
 
-void init_getcomplex16(BufContextBlock *blk, HeapContextBlock *hblk)
+void init_getcomplex16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
-	init_getint16(blk, hblk);                                // we just need to initialize the input buffer in the same way
-	blk->num16_max_dummy_samples = Globals.dummySamples * 2; // since we will be doing this in integer granularity
+	init_getint16(params, blk, hblk);                                // we just need to initialize the input buffer in the same way
+	blk->num16_max_dummy_samples = params->dummySamples * 2; // since we will be doing this in integer granularity
 }
 
-GetStatus buf_getcomplex16(BufContextBlock *blk, complex16 *x)
+GetStatus buf_getcomplex16(BlinkParams *params, BufContextBlock *blk, complex16 *x)
 {
-	if (Globals.inType == TY_DUMMY || Globals.inType == TY_FILE)
+	if (params->inType == TY_DUMMY || params->inType == TY_FILE)
 	{
-		GetStatus gs1 = buf_getint16(blk, & (x->re));
+		GetStatus gs1 = buf_getint16(params, blk, & (x->re));
 		if (gs1 == GS_EOF) 
 		{ 
 			return GS_EOF;
 		}
 		else
 		{
-			return (buf_getint16(blk, & (x->im)));
+			return (buf_getint16(params, blk, & (x->im)));
 		}
 	}
 
-	if (Globals.inType == TY_SORA)
+	if (params->inType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
-		readSora(x, 1);
+		readSora(*params, x, 1);
 		return GS_SUCCESS;
 #endif
 	}
@@ -234,17 +234,17 @@ GetStatus buf_getcomplex16(BufContextBlock *blk, complex16 *x)
 	return GS_EOF;
 }
 
-GetStatus buf_getarrcomplex16(BufContextBlock *blk, complex16 *x, unsigned int vlen)
+GetStatus buf_getarrcomplex16(BlinkParams *params, BufContextBlock *blk, complex16 *x, unsigned int vlen)
 {
-	if (Globals.inType == TY_DUMMY || Globals.inType == TY_FILE)
+	if (params->inType == TY_DUMMY || params->inType == TY_FILE)
 	{
-		return (buf_getarrint16(blk, (int16*) x,vlen*2));
+		return (buf_getarrint16(params, blk, (int16*) x,vlen*2));
 	}
 
-	if (Globals.inType == TY_SORA)
+	if (params->inType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
-		readSora(x, vlen);
+		readSora(*params, x, vlen);
 		return GS_SUCCESS;
 #endif
 	}
@@ -271,17 +271,17 @@ void fprint_arrint16(BufContextBlock *blk, FILE *f, int16 *val, unsigned int vle
 }
 
 
-void init_putint16(BufContextBlock *blk, HeapContextBlock *hblk)
+void init_putint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
-	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
+	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
 	{
-		blk->num16_output_buffer = (int16 *)malloc(Globals.outBufSize * sizeof(int16));
-		blk->num16_output_entries = Globals.outBufSize;
-		if (Globals.outType == TY_FILE)
-			blk->num16_output_file = try_open(Globals.outFileName, "w");
+		blk->num16_output_buffer = (int16 *)malloc(params->outBufSize * sizeof(int16));
+		blk->num16_output_entries = params->outBufSize;
+		if (params->outType == TY_FILE)
+			blk->num16_output_file = try_open(params->outFileName, "w");
 	}
 
-	if (Globals.outType == TY_SORA) 
+	if (params->outType == TY_SORA) 
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora TX supports only Complex16 type.\n");
@@ -296,16 +296,16 @@ void init_putint16(BufContextBlock *blk, HeapContextBlock *hblk)
 
 
 FINL
-void _buf_putint16(BufContextBlock *blk, int16 x)
+void _buf_putint16(BlinkParams *params, BufContextBlock *blk, int16 x)
 {
-	if (Globals.outType == TY_DUMMY)
+	if (params->outType == TY_DUMMY)
 	{
 		return;
 	}
 
-	if (Globals.outType == TY_FILE)
+	if (params->outType == TY_FILE)
 	{
-		if (Globals.outFileMode == MODE_DBG)
+		if (params->outFileMode == MODE_DBG)
 			fprint_int16(blk, blk->num16_output_file, x);
 		else 
 		{
@@ -318,7 +318,7 @@ void _buf_putint16(BufContextBlock *blk, int16 x)
 		}
 	}
 
-	if (Globals.outType == TY_SORA) 
+	if (params->outType == TY_SORA) 
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora TX supports only Complex16 type.\n");
@@ -331,22 +331,22 @@ void _buf_putint16(BufContextBlock *blk, int16 x)
 }
 
 
-void buf_putint16(BufContextBlock *blk, int16 x)
+void buf_putint16(BlinkParams *params, BufContextBlock *blk, int16 x)
 {
-	write_time_stamp();
-	_buf_putint16(blk, x);
+	write_time_stamp(params);
+	_buf_putint16(params, blk, x);
 }
 
 
 FINL
-void _buf_putarrint16(BufContextBlock *blk, int16 *x, unsigned int vlen)
+void _buf_putarrint16(BlinkParams *params, BufContextBlock *blk, int16 *x, unsigned int vlen)
 {
 
-	if (Globals.outType == TY_DUMMY) return;
+	if (params->outType == TY_DUMMY) return;
 
-	if (Globals.outType == TY_FILE)
+	if (params->outType == TY_FILE)
 	{
-		if (Globals.outFileMode == MODE_DBG) 
+		if (params->outFileMode == MODE_DBG) 
 			fprint_arrint16(blk, blk->num16_output_file, x, vlen);
 		else
 		{
@@ -369,7 +369,7 @@ void _buf_putarrint16(BufContextBlock *blk, int16 *x, unsigned int vlen)
 		}
 	}
 
-	if (Globals.outType == TY_SORA) 
+	if (params->outType == TY_SORA) 
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora TX supports only Complex16 type.\n");
@@ -383,18 +383,18 @@ void _buf_putarrint16(BufContextBlock *blk, int16 *x, unsigned int vlen)
 
 
 
-void buf_putarrint16(BufContextBlock *blk, int16 *x, unsigned int vlen)
+void buf_putarrint16(BlinkParams *params, BufContextBlock *blk, int16 *x, unsigned int vlen)
 {
-	write_time_stamp();
-	_buf_putarrint16(blk, x, vlen);
+	write_time_stamp(params);
+	_buf_putarrint16(params, blk, x, vlen);
 }
 
 
-void flush_putint16(BufContextBlock *blk)
+void flush_putint16(BlinkParams *params, BufContextBlock *blk)
 {
-	if (Globals.outType == TY_FILE)
+	if (params->outType == TY_FILE)
 	{
-		if (Globals.outFileMode == MODE_BIN) {
+		if (params->outFileMode == MODE_BIN) {
 			fwrite(blk->num16_output_buffer, sizeof(int16), blk->num16_output_idx, blk->num16_output_file);
 			blk->num16_output_idx = 0;
 		}
@@ -403,22 +403,22 @@ void flush_putint16(BufContextBlock *blk)
 }
 
 
-void init_putcomplex16(BufContextBlock *blk, HeapContextBlock *hblk)
+void init_putcomplex16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
-	write_time_stamp();
+	write_time_stamp(params);
 
-	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
+	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
 	{
-		blk->num16_output_buffer = (int16 *)malloc(2 * Globals.outBufSize * sizeof(int16));
-		blk->num16_output_entries = Globals.outBufSize * 2;
-		if (Globals.outType == TY_FILE)
-			blk->num16_output_file = try_open(Globals.outFileName, "w");
+		blk->num16_output_buffer = (int16 *)malloc(2 * params->outBufSize * sizeof(int16));
+		blk->num16_output_entries = params->outBufSize * 2;
+		if (params->outType == TY_FILE)
+			blk->num16_output_file = try_open(params->outFileName, "w");
 	}
 
-	if (Globals.outType == TY_SORA)
+	if (params->outType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
-		InitSoraTx(Globals.radioParams);
+		InitSoraTx(*params);
 #else
 		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
 		exit(1);
@@ -426,22 +426,22 @@ void init_putcomplex16(BufContextBlock *blk, HeapContextBlock *hblk)
 	}
 }
 
-void buf_putcomplex16(BufContextBlock *blk, struct complex16 x)
+void buf_putcomplex16(BlinkParams *params, BufContextBlock *blk, struct complex16 x)
 {
-	write_time_stamp();
+	write_time_stamp(params);
 
-	if (Globals.outType == TY_DUMMY) return;
+	if (params->outType == TY_DUMMY) return;
 
-	if (Globals.outType == TY_FILE)
+	if (params->outType == TY_FILE)
 	{
-		_buf_putint16(blk, x.re);
-		_buf_putint16(blk, x.im);
+		_buf_putint16(params, blk, x.re);
+		_buf_putint16(params, blk, x.im);
 	}
 
-	if (Globals.outType == TY_SORA) 
+	if (params->outType == TY_SORA) 
 	{
 #ifdef SORA_PLATFORM
-		writeSora(&x, 1);
+		writeSora(*params, &x, 1);
 #else
 		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
 		exit(1);
@@ -449,26 +449,26 @@ void buf_putcomplex16(BufContextBlock *blk, struct complex16 x)
 	}
 
 }
-void buf_putarrcomplex16(BufContextBlock *blk, struct complex16 *x, unsigned int vlen)
+void buf_putarrcomplex16(BlinkParams *params, BufContextBlock *blk, struct complex16 *x, unsigned int vlen)
 {
-	write_time_stamp();
+	write_time_stamp(params);
 
-	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
+	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
 	{
-		_buf_putarrint16(blk, (int16 *)x, vlen * 2);
+		_buf_putarrint16(params, blk, (int16 *)x, vlen * 2);
 	}
 
-	if (Globals.outType == TY_SORA) 
+	if (params->outType == TY_SORA) 
 	{
 #ifdef SORA_PLATFORM
-		writeSora(x, vlen);
+		writeSora(*params, x, vlen);
 #else
 		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
 		exit(1);
 #endif
 	}
 }
-void flush_putcomplex16(BufContextBlock *blk)
+void flush_putcomplex16(BlinkParams *params, BufContextBlock *blk)
 {
-	flush_putint16(blk);
+	flush_putint16(params, blk);
 }

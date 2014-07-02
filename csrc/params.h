@@ -45,13 +45,15 @@ typedef enum {
 #include <stdlib.h>
 #include <time.h>
 #include "wpl_alloc.h"
+#include "utils.h"
 
-
+// We keep two sets of parameters in case we want to do full-duplex 
+// one radio each. Otherwise, we only use one set for common parameters.
 typedef struct {
 	ULONG radioId;
+	ULONG TXgain;
 	ULONG RXpa;
 	ULONG RXgain;
-	ULONG TXgain;
 	ULONG CentralFrequency;
 	LONG FreqencyOffset;
 	ULONG SampleRate;
@@ -71,7 +73,7 @@ typedef struct {
 typedef unsigned long Repetitions;
 #define INF_REPEAT 0 
 
-struct BlinkParams {
+typedef struct _BlinkParams {
 	BlinkFileType inType;       // type of input
 	BlinkFileType outType;      // type of output
 	BlinkFileMode inFileMode;   // input file mode 
@@ -94,16 +96,17 @@ struct BlinkParams {
 
 	// TX
     PVOID TXBuffer;
+
+	// Latency measurements
+	TimeMeasurements measurementInfo;
 #endif
-};
+} BlinkParams;
 
 
-/* Global configuration parameters 
-*************************************************************************/
-extern struct BlinkParams Globals;
+
 
 FILE * try_open(char *name, char *mode);
-void try_parse_args(int argc, char ** argv);
+void try_parse_args(BlinkParams *params, int argc, char ** argv);
 void try_read_filebuffer(HeapContextBlock *hblk, char *filename, char **fb, unsigned int *len);
 
 typedef struct {
@@ -111,7 +114,7 @@ typedef struct {
   char * param_use;               // Use
   char * param_descr;             // Description
   char * param_dflt;              // Initialization value as string
-  void (*param_init)(char *prm);  // Initializer
+  void (*param_init) (BlinkParams* Params, char *prm);  // Initializer
 } BlinkParamInfo;
 
 void print_blink_usage(void);

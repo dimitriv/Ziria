@@ -41,22 +41,23 @@ import Data.Maybe
 callInBufInitializer  buf_context heap_context = callExtBufInitializer "get" buf_context heap_context
 callOutBufInitializer buf_context heap_context = callExtBufInitializer "put" buf_context heap_context
 
-callExtBufInitializer str buf_context heap_context (ExtBuf base_ty) = 
+callExtBufInitializer str global_params buf_context heap_context (ExtBuf base_ty) = 
   let init_typ_spec = "init_" ++ str ++ (fst $ getTyPutGetInfo base_ty)
-  in [cstm| $id:(init_typ_spec)($id:buf_context, $id:heap_context);|]
+  in [cstm| $id:(init_typ_spec)($id:global_params, $id:buf_context, $id:heap_context);|]
 
-callExtBufInitializer _str _buf_context _heap_context (IntBuf _) 
+callExtBufInitializer _str _global_params _buf_context _heap_context (IntBuf _) 
   = error "BUG: callExtBufInitializer called with IntBuf!" 
 
 cgExtBufInitsAndFins (TBuff in_bty,TBuff out_bty) mfreshId
   = do buf_context  <- getBufContext
        heap_context <- getHeapContext
+       global_params <- getGlobalParams
        appendTopDef [cedecl|void $id:(ini_name mfreshId)() {
-                        $stm:(callInBufInitializer buf_context heap_context in_bty)
-                        $stm:(callOutBufInitializer buf_context heap_context out_bty)
+                        $stm:(callInBufInitializer global_params buf_context heap_context in_bty)
+                        $stm:(callOutBufInitializer global_params buf_context heap_context out_bty)
                         } |]
        appendTopDef [cedecl|void $id:(fin_name mfreshId)() {
-                        $stm:(callOutBufFinalizer buf_context out_bty)
+                        $stm:(callOutBufFinalizer global_params buf_context out_bty)
                         } |]
   where ini_name mfreshId = "wpl_input_initialize" ++ mfreshId
         fin_name mfreshId = "wpl_output_finalize" ++ mfreshId
@@ -64,10 +65,11 @@ cgExtBufInitsAndFins (TBuff in_bty,TBuff out_bty) mfreshId
 cgExtBufInitsAndFins (ty1,ty2) mfreshId
   = fail $ "BUG: cgExtBufInitsAndFins called with non-TBuff types!"
 
-callOutBufFinalizer buf_context (ExtBuf base_ty) =
+callOutBufFinalizer global_params buf_context (ExtBuf base_ty) =
   let finalize_typ_spec = "flush_put" ++ (fst $ getTyPutGetInfo base_ty)
-  in [cstm| $id:(finalize_typ_spec)($id:buf_context);|]
-callOutBufFinalizer _buf_context (IntBuf _) 
+  in [cstm| $id:(finalize_typ_spec)($id:global_params, $id:buf_context);|]
+
+callOutBufFinalizer _global_params _buf_context (IntBuf _) 
   = error "BUG: callOutBufFinalizer called with IntBuf!" 
 
    
@@ -84,9 +86,6 @@ mkRuntime mfreshId m = do
     go :: CompInfo -> [C.InitGroup] -> [C.Stm] -> Cg ()
     go cinfo local_decls local_stmts = do
         let (_, init_decls, init_stms) = getCode (compGenInit cinfo)
-
-        buf_context  <- getBufContext
-        heap_context <- getHeapContext
 
         appendTopDef $ 
           [cedecl|int $id:(go_name mfreshId ++ "_aux")(int initialized) {

@@ -126,102 +126,102 @@ typedef struct _BufContextBlock {
 void initBufCtxBlock(BufContextBlock *blk);
 
 
-void init_getbit(BufContextBlock *blk, HeapContextBlock *hblk);
-GetStatus buf_getbit(BufContextBlock *blk, Bit *x);
-GetStatus buf_getarrbit(BufContextBlock *blk, BitArrPtr x, unsigned int vlen);
-void init_putbit(BufContextBlock *blk, HeapContextBlock *hblk);
-void buf_putbit(BufContextBlock *blk, Bit x);
-void buf_putarrbit(BufContextBlock *blk, BitArrPtr x, unsigned int vlen);
-void flush_putbit(BufContextBlock *blk);
+void init_getbit(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk);
+GetStatus buf_getbit(BlinkParams *params, BufContextBlock *blk, Bit *x);
+GetStatus buf_getarrbit(BlinkParams *params, BufContextBlock *blk, BitArrPtr x, unsigned int vlen);
+void init_putbit(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk);
+void buf_putbit(BlinkParams *params, BufContextBlock *blk, Bit x);
+void buf_putarrbit(BlinkParams *params, BufContextBlock *blk, BitArrPtr x, unsigned int vlen);
+void flush_putbit(BlinkParams *params, BufContextBlock *blk);
 
 
-void init_getint32(BufContextBlock *blk, HeapContextBlock *hblk);
-GetStatus buf_getint32(BufContextBlock *blk, int32 *x);
-GetStatus buf_getarrint32(BufContextBlock *blk, int32 *x, unsigned int vlen);
-void init_putint32(BufContextBlock *blk, HeapContextBlock *hblk);
-void buf_putint32(BufContextBlock *blk, int32 x);
-void buf_putarrint32(BufContextBlock *blk, int32 * x, unsigned int vlen);
-void flush_putint32(BufContextBlock *blk);
+void init_getint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk);
+GetStatus buf_getint32(BlinkParams *params, BufContextBlock *blk, int32 *x);
+GetStatus buf_getarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsigned int vlen);
+void init_putint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk);
+void buf_putint32(BlinkParams *params, BufContextBlock *blk, int32 x);
+void buf_putarrint32(BlinkParams *params, BufContextBlock *blk, int32 * x, unsigned int vlen);
+void flush_putint32(BlinkParams *params, BufContextBlock *blk);
 
 
-void init_getcomplex32(BufContextBlock *blk, HeapContextBlock *hblk);
-GetStatus buf_getcomplex32(BufContextBlock *blk, struct complex32 *x);
-GetStatus buf_getarrcomplex32(BufContextBlock *blk, struct complex32 * x, unsigned int vlen);
-void init_putcomplex32(BufContextBlock *blk, HeapContextBlock *hblk);
-void buf_putcomplex32(BufContextBlock *blk, struct complex32 x);
-void buf_putarrcomplex32(BufContextBlock *blk, struct complex32 *x, unsigned int vlen);
-void flush_putcomplex32(BufContextBlock *blk);
+void init_getcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk);
+GetStatus buf_getcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex32 *x);
+GetStatus buf_getarrcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex32 * x, unsigned int vlen);
+void init_putcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk);
+void buf_putcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex32 x);
+void buf_putarrcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex32 *x, unsigned int vlen);
+void flush_putcomplex32(BlinkParams *params, BufContextBlock *blk);
 
-void init_getint16(BufContextBlock *blk, HeapContextBlock *hblk);
-GetStatus buf_getint16(BufContextBlock *blk, int16 *x);
-GetStatus buf_getarrint16(BufContextBlock *blk, int16 *x, unsigned int vlen);
-void init_putint16(BufContextBlock *blk, HeapContextBlock *hblk);
-void buf_putint16(BufContextBlock *blk, int16 x);
-void buf_putarrint16(BufContextBlock *blk, int16 * x, unsigned int vlen);
-void flush_putint16(BufContextBlock *blk);
-
-
-void init_getcomplex16(BufContextBlock *blk, HeapContextBlock *hblk);
-GetStatus buf_getcomplex16(BufContextBlock *blk, struct complex16 *x);
-GetStatus buf_getarrcomplex16(BufContextBlock *blk, struct complex16 * x, unsigned int vlen);
-void init_putcomplex16(BufContextBlock *blk, HeapContextBlock *hblk);
-void buf_putcomplex16(BufContextBlock *blk, struct complex16 x);
-void buf_putarrcomplex16(BufContextBlock *blk, struct complex16 *x, unsigned int vlen);
-void flush_putcomplex16(BufContextBlock *blk);
+void init_getint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk);
+GetStatus buf_getint16(BlinkParams *params, BufContextBlock *blk, int16 *x);
+GetStatus buf_getarrint16(BlinkParams *params, BufContextBlock *blk, int16 *x, unsigned int vlen);
+void init_putint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk);
+void buf_putint16(BlinkParams *params, BufContextBlock *blk, int16 x);
+void buf_putarrint16(BlinkParams *params, BufContextBlock *blk, int16 * x, unsigned int vlen);
+void flush_putint16(BlinkParams *params, BufContextBlock *blk);
 
 
+void init_getcomplex16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk);
+GetStatus buf_getcomplex16(BlinkParams *params, BufContextBlock *blk, struct complex16 *x);
+GetStatus buf_getarrcomplex16(BlinkParams *params, BufContextBlock *blk, struct complex16 * x, unsigned int vlen);
+void init_putcomplex16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk);
+void buf_putcomplex16(BlinkParams *params, BufContextBlock *blk, struct complex16 x);
+void buf_putarrcomplex16(BlinkParams *params, BufContextBlock *blk, struct complex16 *x, unsigned int vlen);
+void flush_putcomplex16(BlinkParams *params, BufContextBlock *blk);
 
-void init_getint8(BufContextBlock *blk, HeapContextBlock *hblk);
-GetStatus buf_getint8(BufContextBlock *blk, int8 *x);
-GetStatus buf_getarrint8(BufContextBlock *blk, int8 *x, unsigned int vlen);
-void init_putint8(BufContextBlock *blk, HeapContextBlock *hblk);
-void buf_putint8(BufContextBlock *blk, int8 x);
-void buf_putarrint8(BufContextBlock *blk, int8 * x, unsigned int vlen);
-void flush_putint8(BufContextBlock *blk);
 
 
-void init_getcomplex8(BufContextBlock *blk, HeapContextBlock *hblk);
-GetStatus buf_getcomplex8(BufContextBlock *blk, struct complex8 *x);
-GetStatus buf_getarrcomplex8(BufContextBlock *blk, struct complex8 * x, unsigned int vlen);
-void init_putcomplex8(BufContextBlock *blk, HeapContextBlock *hblk);
-void buf_putcomplex8(BufContextBlock *blk, struct complex8 x);
-void buf_putarrcomplex8(BufContextBlock *blk, struct complex8 *x, unsigned int vlen);
-void flush_putcomplex8(BufContextBlock *blk);
+void init_getint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk);
+GetStatus buf_getint8(BlinkParams *params, BufContextBlock *blk, int8 *x);
+GetStatus buf_getarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigned int vlen);
+void init_putint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk);
+void buf_putint8(BlinkParams *params, BufContextBlock *blk, int8 x);
+void buf_putarrint8(BlinkParams *params, BufContextBlock *blk, int8 * x, unsigned int vlen);
+void flush_putint8(BlinkParams *params, BufContextBlock *blk);
+
+
+void init_getcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk);
+GetStatus buf_getcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 *x);
+GetStatus buf_getarrcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 * x, unsigned int vlen);
+void init_putcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk);
+void buf_putcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 x);
+void buf_putarrcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 *x, unsigned int vlen);
+void flush_putcomplex8(BlinkParams *params, BufContextBlock *blk);
 
 
 
 #ifdef SORA_PLATFORM
 FINL
-void write_time_stamp() {
-	if (Globals.latencySampling > 0)
+void write_time_stamp(BlinkParams *params) {
+	if (params->latencySampling > 0)
 	{
-		if (measurementInfo.nSamples % Globals.latencySampling == 0)
+		if (params->measurementInfo.nSamples % params->latencySampling == 0)
 		{
-			ULONGLONG time = SoraGetCPUTimestamp(&measurementInfo.tsinfo);
-			ULONGLONG diff = time - measurementInfo.lastWrite;
+			ULONGLONG time = SoraGetCPUTimestamp(&(params->measurementInfo.tsinfo));
+			ULONGLONG diff = time - (params->measurementInfo.lastWrite);
 
 			// Skip the first difference (the first two samples) as this one is usually an outlier
-			if (measurementInfo.lastWrite > 0 && measurementInfo.nSamples / Globals.latencySampling > 1)
+			if (params->measurementInfo.lastWrite > 0 && params->measurementInfo.nSamples / params->latencySampling > 1)
 			{
-				if (measurementInfo.aDiffPtr < Globals.latencyCDFSize)
+				if (params->measurementInfo.aDiffPtr < params->latencyCDFSize)
 				{
-					measurementInfo.aDiff[measurementInfo.aDiffPtr] = diff;
-					measurementInfo.aDiffPtr++;
+					params->measurementInfo.aDiff[params->measurementInfo.aDiffPtr] = diff;
+					params->measurementInfo.aDiffPtr++;
 				}
-				if (diff < measurementInfo.minDiff)
+				if (diff < params->measurementInfo.minDiff)
 				{
-					measurementInfo.minDiff = diff;
+					params->measurementInfo.minDiff = diff;
 				}
-				if (diff > measurementInfo.maxDiff)
+				if (diff > params->measurementInfo.maxDiff)
 				{
-					measurementInfo.maxDiff = diff;
+					params->measurementInfo.maxDiff = diff;
 				}
 			}
-			measurementInfo.lastWrite = time;
+			params->measurementInfo.lastWrite = time;
 		}
-		measurementInfo.nSamples++;
+		params->measurementInfo.nSamples++;
 	}
 }
 #else
-#define write_time_stamp()
+#define write_time_stamp(x)
 #endif

@@ -131,20 +131,20 @@ unsigned int parse_dbg_bit(char *dbg_buf, BitArrPtr target)
 	return c;
 }
 
-void init_getbit(BufContextBlock* blk, HeapContextBlock *hblk)
+void init_getbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hblk)
 {
-	if (Globals.inType == TY_DUMMY)
+	if (params->inType == TY_DUMMY)
 	{
-		blk->max_dummy_samples = Globals.dummySamples;
+		blk->max_dummy_samples = params->dummySamples;
 	}
 
-	if (Globals.inType == TY_FILE)
+	if (params->inType == TY_FILE)
 	{
 		unsigned int sz; 
 		char *filebuffer;
-		try_read_filebuffer(hblk, Globals.inFileName, &filebuffer, &sz);
+		try_read_filebuffer(hblk, params->inFileName, &filebuffer, &sz);
 
-		if (Globals.inFileMode == MODE_BIN)
+		if (params->inFileMode == MODE_BIN)
 		{ 
 			blk->input_buffer = (BitArrPtr)filebuffer;
 			blk->input_entries = 8 * sz;
@@ -156,14 +156,14 @@ void init_getbit(BufContextBlock* blk, HeapContextBlock *hblk)
 		}
 	}
 
-	if (Globals.inType == TY_SORA)
+	if (params->inType == TY_SORA)
 	{
 		fprintf(stderr, "Error: Sora does not support bit receive\n");
 		exit(1);
 	}
 
 
-	if (Globals.inType == TY_IP)
+	if (params->inType == TY_IP)
 	{
 #ifdef SORA_PLATFORM
 	  // Receiving from IP
@@ -173,17 +173,17 @@ void init_getbit(BufContextBlock* blk, HeapContextBlock *hblk)
 
 }
 
-GetStatus buf_getbit(BufContextBlock* blk, Bit *x)
+GetStatus buf_getbit(BlinkParams *params, BufContextBlock* blk, Bit *x)
 {
-	if (Globals.inType == TY_IP)
+	if (params->inType == TY_IP)
 	{
 		fprintf(stderr, "Error: IP does not support single bit receive\n");
 		exit(1);
 	}
 
-	if (Globals.inType == TY_DUMMY)
+	if (params->inType == TY_DUMMY)
 	{
-		if (blk->input_dummy_samples >= blk->max_dummy_samples && Globals.dummySamples != INF_REPEAT)
+		if (blk->input_dummy_samples >= blk->max_dummy_samples && params->dummySamples != INF_REPEAT)
 		{
 			return GS_EOF;
 		}
@@ -197,7 +197,7 @@ GetStatus buf_getbit(BufContextBlock* blk, Bit *x)
 	if (blk->input_idx >= blk->input_entries)
 	{
 		// If no more repetitions are allowed 
-		if (Globals.inFileRepeats != INF_REPEAT && blk->input_repetitions >= Globals.inFileRepeats)
+		if (params->inFileRepeats != INF_REPEAT && blk->input_repetitions >= params->inFileRepeats)
 		{
 			return GS_EOF;
 		}
@@ -210,9 +210,9 @@ GetStatus buf_getbit(BufContextBlock* blk, Bit *x)
 
 	return GS_SUCCESS;
 }
-GetStatus buf_getarrbit(BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
+GetStatus buf_getarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
 {
-	if (Globals.inType == TY_IP)
+	if (params->inType == TY_IP)
 	{
 #ifdef SORA_PLATFORM
 	  UINT len = ReadFragment(x, RADIO_MTU);
@@ -220,9 +220,9 @@ GetStatus buf_getarrbit(BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
 #endif
 	}
 
-	if (Globals.inType == TY_DUMMY)
+	if (params->inType == TY_DUMMY)
 	{
-		if (blk->input_dummy_samples >= blk->max_dummy_samples && Globals.dummySamples != INF_REPEAT)
+		if (blk->input_dummy_samples >= blk->max_dummy_samples && params->dummySamples != INF_REPEAT)
 		{
 			return GS_EOF;
 		}
@@ -234,7 +234,7 @@ GetStatus buf_getarrbit(BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
 
 	if (blk->input_idx + vlen > blk->input_entries)
 	{
-		if (Globals.inFileRepeats != INF_REPEAT && blk->input_repetitions >= Globals.inFileRepeats)
+		if (params->inFileRepeats != INF_REPEAT && blk->input_repetitions >= params->inFileRepeats)
 		{
 			if (blk->input_idx != blk->input_entries)
 				fprintf(stderr, "Warning: Unaligned data in input file, ignoring final get()!\n");
@@ -252,23 +252,23 @@ GetStatus buf_getarrbit(BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
 }
 
 
-void init_putbit(BufContextBlock* blk, HeapContextBlock *hblk)
+void init_putbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hblk)
 {
-	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
+	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
 	{
-		blk->output_buffer = (unsigned char *)malloc(Globals.outBufSize);
-		blk->output_entries = Globals.outBufSize * 8;
-		if (Globals.outType == TY_FILE)
-			blk->output_file = try_open(Globals.outFileName, "w");
+		blk->output_buffer = (unsigned char *)malloc(params->outBufSize);
+		blk->output_entries = params->outBufSize * 8;
+		if (params->outType == TY_FILE)
+			blk->output_file = try_open(params->outFileName, "w");
 	}
 
-	if (Globals.outType == TY_SORA)
+	if (params->outType == TY_SORA)
 	{
 		fprintf(stderr, "Error: Sora TX does not support bits\n");
 		exit(1);
 	}
 
-	if (Globals.outType == TY_IP)
+	if (params->outType == TY_IP)
 	{
 #ifdef SORA_PLATFORM
 	  // Sending to IP
@@ -277,23 +277,23 @@ void init_putbit(BufContextBlock* blk, HeapContextBlock *hblk)
 	}
 
 }
-void buf_putbit(BufContextBlock* blk, Bit x)
+void buf_putbit(BlinkParams *params, BufContextBlock* blk, Bit x)
 {
-	write_time_stamp();
+	write_time_stamp(params);
 
-	if (Globals.outType == TY_IP)
+	if (params->outType == TY_IP)
 	{
 		fprintf(stderr, "Error: IP does not support single bit transmit\n");
 		exit(1);
 	}
 
-	if (Globals.outType == TY_DUMMY)
+	if (params->outType == TY_DUMMY)
 	{
 		return;
 	}
-	if (Globals.outType == TY_FILE)
+	if (params->outType == TY_FILE)
 	{
-		if (Globals.outFileMode == MODE_DBG)
+		if (params->outFileMode == MODE_DBG)
 			fprint_bit(blk, blk->output_file, x);
 		else 
 		{
@@ -306,11 +306,11 @@ void buf_putbit(BufContextBlock* blk, Bit x)
 		}
 	}
 }
-void buf_putarrbit(BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
+void buf_putarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
 {
-	write_time_stamp();
+	write_time_stamp(params);
 
-	if (Globals.outType == TY_IP)
+	if (params->outType == TY_IP)
 	{
 #ifdef SORA_PLATFORM
 	   int n = WriteFragment(x);
@@ -318,11 +318,11 @@ void buf_putarrbit(BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
 #endif
 	}
 
-	if (Globals.outType == TY_DUMMY) return;
+	if (params->outType == TY_DUMMY) return;
 
-	if (Globals.outType == TY_FILE)
+	if (params->outType == TY_FILE)
 	{
-		if (Globals.outFileMode == MODE_DBG) 
+		if (params->outFileMode == MODE_DBG) 
 			fprint_arrbit(blk, blk->output_file, x, vlen);
 		else
 		{ 
@@ -343,11 +343,11 @@ void buf_putarrbit(BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
 		}
 	}
 }
-void flush_putbit(BufContextBlock* blk)
+void flush_putbit(BlinkParams *params, BufContextBlock* blk)
 {
-	if (Globals.outType == TY_FILE)
+	if (params->outType == TY_FILE)
 	{
-		if (Globals.outFileMode == MODE_BIN) {
+		if (params->outFileMode == MODE_BIN) {
 			fwrite(blk->output_buffer, 1, (blk->output_idx + 7) / 8, blk->output_file);
 			blk->output_idx = 0;
 		}

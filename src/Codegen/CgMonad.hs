@@ -117,6 +117,7 @@ module CgMonad
   , withModuleName
   , getHeapContext
   , getBufContext
+  , getGlobalParams
   ) where
 
 import Control.Applicative
@@ -697,6 +698,8 @@ getHeapContext = asks $ \rho -> "pheap_ctx" ++ (moduleName rho)
 getBufContext :: Cg String
 getBufContext = asks $ \rho -> "pbuf_ctx" ++ (moduleName rho)
 
+getGlobalParams :: Cg String
+getGlobalParams = asks $ \rho -> "params" ++ (moduleName rho)
 
 withThreadId :: String -> Cg a -> Cg a
 withThreadId _ m = m

@@ -46,8 +46,6 @@
 #ifdef SORA_PLATFORM
 	#define DEBUG_PERF
 
-	TimeMeasurements measurementInfo;
-
 	PSORA_UTHREAD_PROC User_Routines[MAX_THREADS];
     // size_t sizes[MAX_THREADS];
 
@@ -76,21 +74,23 @@ extern int wpl_go();
 
 /* Global configuration parameters 
 ***************************************************************************/
-struct BlinkParams Globals;
+BlinkParams Globals;
+BlinkParams *params;
 
 // tracks bytes copied 
 extern unsigned long bytes_copied; 
 
 int __cdecl main(int argc, char **argv) {
-  
+
   // Initialize the global parameters
-  try_parse_args(argc,argv);
+  params = &Globals;
+  try_parse_args(params, argc, argv);
 
 #ifdef SORA_PLATFORM
   // Start Sora HW
   if (Globals.inType == TY_SORA || Globals.outType == TY_SORA)
   {
-	RadioStart(Globals.radioParams);
+	RadioStart(Globals);
   }
   // Start NDIS
   if (Globals.inType == TY_IP || Globals.outType == TY_IP)
@@ -100,7 +100,7 @@ int __cdecl main(int argc, char **argv) {
   }
 
   // Start measuring time
-  initMeasurementInfo(Globals.latencyCDFSize);
+  initMeasurementInfo(&(Globals.measurementInfo), Globals.latencyCDFSize);
 #endif
 
 
@@ -122,19 +122,20 @@ int __cdecl main(int argc, char **argv) {
   ULONGLONG ttstart, ttend;
 
   printf("Starting %d threads...\n", no_threads);
-  StartThreads(&ttstart, &ttend, &measurementInfo.tsinfo, no_threads, User_Routines);
+  StartThreads(&ttstart, &ttend, &Globals.measurementInfo.tsinfo, no_threads, User_Routines);
 
   printf("Time Elapsed: %ld us \n", 
-	  SoraTimeElapsed((ttend / 1000 - ttstart / 1000), &measurementInfo.tsinfo));
+	  SoraTimeElapsed((ttend / 1000 - ttstart / 1000), &Globals.measurementInfo.tsinfo));
 
   if (Globals.latencySampling > 0)
   {
-	  printf("Min write latency: %ld, max write latency: %ld\n", (ulong) measurementInfo.minDiff, (ulong) measurementInfo.maxDiff);
+	  printf("Min write latency: %ld, max write latency: %ld\n", (ulong)Globals.measurementInfo.minDiff, 
+																 (ulong) Globals.measurementInfo.maxDiff);
 	  printf("CDF: \n   ");
 	  unsigned int i = 0;
-	  while (i < measurementInfo.aDiffPtr)
+	  while (i < Globals.measurementInfo.aDiffPtr)
 	  {
-		  printf("%ld ", measurementInfo.aDiff[i]);
+		  printf("%ld ", Globals.measurementInfo.aDiff[i]);
 		  if (i % 10 == 9)
 		  {
 			  printf("\n   ");
@@ -160,7 +161,7 @@ int __cdecl main(int argc, char **argv) {
   // Stop Sora HW
   if (Globals.inType == TY_SORA || Globals.outType == TY_SORA)
   {
-	RadioStop(Globals.radioParams);
+	RadioStop(Globals);
   }
 
   // Stop NDIS

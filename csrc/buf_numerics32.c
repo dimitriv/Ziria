@@ -65,23 +65,23 @@ unsigned int parse_dbg_int32(char *dbg_buf, num32 *target)
   return i; // total number of entries
 }
 
-void init_getint32(BufContextBlock *blk, HeapContextBlock *hblk)
+void init_getint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
-	if (Globals.inType == TY_DUMMY)
+	if (params->inType == TY_DUMMY)
 	{
-		blk->num_max_dummy_samples = Globals.dummySamples;
+		blk->num_max_dummy_samples = params->dummySamples;
 	}
 
-	if (Globals.inType == TY_FILE)
+	if (params->inType == TY_FILE)
 	{
 		unsigned int sz; 
 		char *filebuffer;
-		try_read_filebuffer(hblk, Globals.inFileName, &filebuffer, &sz);
+		try_read_filebuffer(hblk, params->inFileName, &filebuffer, &sz);
 
 		// How many bytes the file buffer has * sizeof should be enough
 		blk->num_input_buffer = (int32 *)try_alloc_bytes(hblk, sz * sizeof(int32));
 
-		if (Globals.inFileMode == MODE_BIN)
+		if (params->inFileMode == MODE_BIN)
 		{ 
 			unsigned int i;
 			int16 *typed_filebuffer = (int16 *) filebuffer;
@@ -97,18 +97,18 @@ void init_getint32(BufContextBlock *blk, HeapContextBlock *hblk)
 		}
 	}
 
-	if (Globals.inType == TY_SORA)
+	if (params->inType == TY_SORA)
 	{
 		fprintf(stderr, "Error: Sora does not support 32-bit receive\n");
 		exit(1);
 	}
 }
-GetStatus buf_getint32(BufContextBlock *blk, int32 *x)
+GetStatus buf_getint32(BlinkParams *params, BufContextBlock *blk, int32 *x)
 {
 
-	if (Globals.inType == TY_DUMMY)
+	if (params->inType == TY_DUMMY)
 	{
-		if (blk->num_input_dummy_samples >= blk->num_max_dummy_samples && Globals.dummySamples != INF_REPEAT)
+		if (blk->num_input_dummy_samples >= blk->num_max_dummy_samples && params->dummySamples != INF_REPEAT)
 		{
 			return GS_EOF;
 		}
@@ -122,7 +122,7 @@ GetStatus buf_getint32(BufContextBlock *blk, int32 *x)
 	if (blk->num_input_idx >= blk->num_input_entries)
 	{
 		// If no more repetitions are allowed 
-		if (Globals.inFileRepeats != INF_REPEAT && blk->num_input_repeats >= Globals.inFileRepeats)
+		if (params->inFileRepeats != INF_REPEAT && blk->num_input_repeats >= params->inFileRepeats)
 		{
 			return GS_EOF;
 		}
@@ -135,12 +135,12 @@ GetStatus buf_getint32(BufContextBlock *blk, int32 *x)
 
 	return GS_SUCCESS;
 }
-GetStatus buf_getarrint32(BufContextBlock *blk, int32 *x, unsigned int vlen)
+GetStatus buf_getarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsigned int vlen)
 {
 
-	if (Globals.inType == TY_DUMMY)
+	if (params->inType == TY_DUMMY)
 	{
-		if (blk->num_input_dummy_samples >= blk->num_max_dummy_samples && Globals.dummySamples != INF_REPEAT)
+		if (blk->num_input_dummy_samples >= blk->num_max_dummy_samples && params->dummySamples != INF_REPEAT)
 		{
 			return GS_EOF;
 		}
@@ -151,7 +151,7 @@ GetStatus buf_getarrint32(BufContextBlock *blk, int32 *x, unsigned int vlen)
 
 	if (blk->num_input_idx + vlen > blk->num_input_entries)
 	{
-		if (Globals.inFileRepeats != INF_REPEAT && blk->num_input_repeats >= Globals.inFileRepeats)
+		if (params->inFileRepeats != INF_REPEAT && blk->num_input_repeats >= params->inFileRepeats)
 		{
 			if (blk->num_input_idx != blk->num_input_entries)
 				fprintf(stderr, "Warning: Unaligned data in input file, ignoring final get()!\n");
@@ -168,35 +168,35 @@ GetStatus buf_getarrint32(BufContextBlock *blk, int32 *x, unsigned int vlen)
 
 }
 
-void init_getcomplex32(BufContextBlock *blk, HeapContextBlock *hblk)
+void init_getcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
-	if (Globals.inType == TY_DUMMY || Globals.inType == TY_FILE)
+	if (params->inType == TY_DUMMY || params->inType == TY_FILE)
 	{
-		init_getint32(blk, hblk);                              // we just need to initialize the input buffer in the same way
-		blk->num_max_dummy_samples = Globals.dummySamples * 2; // since we will be doing this in integer granularity
+		init_getint32(params, blk, hblk);                              // we just need to initialize the input buffer in the same way
+		blk->num_max_dummy_samples = params->dummySamples * 2; // since we will be doing this in integer granularity
 	}
 
-	if (Globals.inType == TY_SORA)
+	if (params->inType == TY_SORA)
 	{
 		fprintf(stderr, "Error: Sora RX does not support Complex32\n");
 		exit(1);
 	}
 }
-GetStatus buf_getcomplex32(BufContextBlock *blk, complex32 *x)
+GetStatus buf_getcomplex32(BlinkParams *params, BufContextBlock *blk, complex32 *x)
 {
-	GetStatus gs1 = buf_getint32(blk, & (x->re));
+	GetStatus gs1 = buf_getint32(params, blk, & (x->re));
 	if (gs1 == GS_EOF) 
 	{ 
 		return GS_EOF;
 	}
 	else
 	{
-		return (buf_getint32(blk, & (x->im)));
+		return (buf_getint32(params, blk, & (x->im)));
 	}
 }
-GetStatus buf_getarrcomplex32(BufContextBlock *blk, complex32 *x, unsigned int vlen)
+GetStatus buf_getarrcomplex32(BlinkParams *params, BufContextBlock *blk, complex32 *x, unsigned int vlen)
 {
-	return (buf_getarrint32(blk, (int32*) x,vlen*2));
+	return (buf_getarrint32(params, blk, (int32*) x,vlen*2));
 }
 
 void fprint_int32(BufContextBlock *blk, FILE *f, int32 val)
@@ -218,17 +218,17 @@ void fprint_arrint32(BufContextBlock *blk, FILE *f, int32 *val, unsigned int vle
 }
 
 
-void init_putint32(BufContextBlock *blk, HeapContextBlock *hblk)
+void init_putint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
-	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
+	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
 	{
-		blk->num_output_buffer = (int16 *)malloc(Globals.outBufSize * sizeof(int16));
-		blk->num_output_entries = Globals.outBufSize;
-		if (Globals.outType == TY_FILE)
-			blk->num_output_file = try_open(Globals.outFileName, "w");
+		blk->num_output_buffer = (int16 *)malloc(params->outBufSize * sizeof(int16));
+		blk->num_output_entries = params->outBufSize;
+		if (params->outType == TY_FILE)
+			blk->num_output_file = try_open(params->outFileName, "w");
 	}
 
-	if (Globals.outType == TY_SORA)
+	if (params->outType == TY_SORA)
 	{
 		fprintf(stderr, "Error: Sora TX does not support Int32\n");
 		exit(1);
@@ -236,15 +236,15 @@ void init_putint32(BufContextBlock *blk, HeapContextBlock *hblk)
 }
 
 FINL
-void _buf_putint32(BufContextBlock *blk, int32 x)
+void _buf_putint32(BlinkParams *params, BufContextBlock *blk, int32 x)
 {
-	if (Globals.outType == TY_DUMMY)
+	if (params->outType == TY_DUMMY)
 	{
 		return;
 	}
-	if (Globals.outType == TY_FILE)
+	if (params->outType == TY_FILE)
 	{
-		if (Globals.outFileMode == MODE_DBG)
+		if (params->outFileMode == MODE_DBG)
 			fprint_int32(blk, blk->num_output_file, x);
 		else 
 		{
@@ -259,21 +259,21 @@ void _buf_putint32(BufContextBlock *blk, int32 x)
 }
 
 
-void buf_putint32(BufContextBlock *blk, int32 x)
+void buf_putint32(BlinkParams *params, BufContextBlock *blk, int32 x)
 {
-	write_time_stamp();
-	_buf_putint32(blk, x);
+	write_time_stamp(params);
+	_buf_putint32(params, blk, x);
 }
 
 
 FINL
-void _buf_putarrint32(BufContextBlock *blk, int32 *x, unsigned int vlen)
+void _buf_putarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsigned int vlen)
 {
-	if (Globals.outType == TY_DUMMY) return;
+	if (params->outType == TY_DUMMY) return;
 
-	if (Globals.outType == TY_FILE)
+	if (params->outType == TY_FILE)
 	{
-		if (Globals.outFileMode == MODE_DBG) 
+		if (params->outFileMode == MODE_DBG) 
 			fprint_arrint32(blk, blk->num_output_file, x, vlen);
 		else
 		{
@@ -297,18 +297,18 @@ void _buf_putarrint32(BufContextBlock *blk, int32 *x, unsigned int vlen)
 	}
 }
 
-void buf_putarrint32(BufContextBlock *blk, int32 *x, unsigned int vlen)
+void buf_putarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsigned int vlen)
 {
-	write_time_stamp();
-	_buf_putarrint32(blk, x, vlen);
+	write_time_stamp(params);
+	_buf_putarrint32(params, blk, x, vlen);
 }
 
 
-void flush_putint32(BufContextBlock *blk)
+void flush_putint32(BlinkParams *params, BufContextBlock *blk)
 {
-	if (Globals.outType == TY_FILE)
+	if (params->outType == TY_FILE)
 	{
-		if (Globals.outFileMode == MODE_BIN) {
+		if (params->outFileMode == MODE_BIN) {
 			fwrite(blk->num_output_buffer, sizeof(int16), blk->num_output_idx, blk->num_output_file);
 			blk->num_output_idx = 0;
 		}
@@ -317,34 +317,34 @@ void flush_putint32(BufContextBlock *blk)
 }
 
 
-void init_putcomplex32(BufContextBlock *blk, HeapContextBlock *hblk)
+void init_putcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
-	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
+	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
 	{
-		blk->num_output_buffer = (int16 *)malloc(2 * Globals.outBufSize * sizeof(int16));
-		blk->num_output_entries = Globals.outBufSize * 2;
-		if (Globals.outType == TY_FILE)
-			blk->num_output_file = try_open(Globals.outFileName, "w");
+		blk->num_output_buffer = (int16 *)malloc(2 * params->outBufSize * sizeof(int16));
+		blk->num_output_entries = params->outBufSize * 2;
+		if (params->outType == TY_FILE)
+			blk->num_output_file = try_open(params->outFileName, "w");
 	}
 
-	if (Globals.outType == TY_SORA)
+	if (params->outType == TY_SORA)
 	{
 		fprintf(stderr, "Error: Sora TX does not support Complex32\n");
 		exit(1);
 	}
 }
-void buf_putcomplex32(BufContextBlock *blk, struct complex32 x)
+void buf_putcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex32 x)
 {
-	write_time_stamp();
-	_buf_putint32(blk, x.re);
-	_buf_putint32(blk, x.im);
+	write_time_stamp(params);
+	_buf_putint32(params, blk, x.re);
+	_buf_putint32(params, blk, x.im);
 }
-void buf_putarrcomplex32(BufContextBlock *blk, struct complex32 *x, unsigned int vlen)
+void buf_putarrcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex32 *x, unsigned int vlen)
 {
-	write_time_stamp();
-	_buf_putarrint32(blk, (int32 *)x, vlen * 2);
+	write_time_stamp(params);
+	_buf_putarrint32(params, blk, (int32 *)x, vlen * 2);
 }
-void flush_putcomplex32(BufContextBlock *blk)
+void flush_putcomplex32(BlinkParams *params, BufContextBlock *blk)
 {
-	flush_putint32(blk);
+	flush_putint32(params, blk);
 }

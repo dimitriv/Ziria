@@ -136,144 +136,258 @@ unsigned long parse_size (char *rp) {
   return (strtol(rp,NULL,10));
 }
 
-void init_inType(char *typ)       { Globals.inType = parse_type(typ); }
-void init_outType(char *typ)      { Globals.outType = parse_type(typ); }
-void init_inFile(char *fn)        { Globals.inFileName  = fn; }
-void init_outFile(char *fn)       { Globals.outFileName = fn; }
-void init_inFileMode(char *md)    { Globals.inFileMode = parse_mode(md); }
-void init_outFileMode(char *md)   { Globals.outFileMode = parse_mode(md); }
-void init_outBuf(char *siz)       { Globals.outBufSize = parse_size(siz); }
-void init_dummySamples(char *siz) { Globals.dummySamples = parse_repeat(siz); }
-void init_heapSize(char *siz)     { Globals.heapSize = parse_size(siz); }
-void init_inRepeat(char *i)       { Globals.inFileRepeats = parse_repeat(i); }
-void init_LatencySampling(char *siz)     { Globals.latencySampling = parse_size(siz); }
-void init_LatencyCDFSize(char *siz)      { Globals.latencyCDFSize = parse_size(siz); }
 
-
+// TX Init functions
+void init_inTypeTX(BlinkParams *params, char *typ)				{ params[0].inType = parse_type(typ); }
+void init_outTypeTX(BlinkParams *params, char *typ)				{ params[0].outType = parse_type(typ); }
+void init_inFileTX(BlinkParams *params, char *fn)				{ params[0].inFileName = fn; }
+void init_outFileTX(BlinkParams *params, char *fn)				{ params[0].outFileName = fn; }
+void init_inFileModeTX(BlinkParams *params, char *md)			{ params[0].inFileMode = parse_mode(md); }
+void init_outFileModeTX(BlinkParams *params, char *md)			{ params[0].outFileMode = parse_mode(md); }
+void init_outBufTX(BlinkParams *params, char *siz)				{ params[0].outBufSize = parse_size(siz); }
+void init_dummySamplesTX(BlinkParams *params, char *siz)		{ params[0].dummySamples = parse_repeat(siz); }
+void init_heapSizeTX(BlinkParams *params, char *siz)			{ params[0].heapSize = parse_size(siz); }
+void init_inRepeatTX(BlinkParams *params, char *i)				{ params[0].inFileRepeats = parse_repeat(i); }
+void init_LatencySamplingTX(BlinkParams *params, char *siz)		{ params[0].latencySampling = parse_size(siz); }
+void init_LatencyCDFSizeTX(BlinkParams *params, char *siz)		{ params[0].latencyCDFSize = parse_size(siz); }
 
 #ifdef SORA_PLATFORM
-void init_radioId(char *i)           { Globals.radioParams.radioId = parse_radioID(i); }
-void init_RXpa(char *i)              { Globals.radioParams.RXpa = parse_Amp(i); }
-void init_RXgain(char *i)            { Globals.radioParams.RXgain = parse_Amp(i); }
-void init_TXgain(char *i)            { Globals.radioParams.TXgain = parse_Amp(i); }
-void init_CentralFrequency(char *i)  { Globals.radioParams.CentralFrequency = parse_CentralFrequency(i); }
-void init_FreqencyOffset(char *i)    { Globals.radioParams.FreqencyOffset = parse_FrequencyOffset(i); }
-void init_SampleRate(char *i)        { Globals.radioParams.SampleRate = parse_SampleRate(i); }
-void init_TXBufferSize(char *i)		 { Globals.radioParams.TXBufferSize = parse_TXBufferSize(i); }
+void init_radioIdTX(BlinkParams *params, char *i)				{ params[0].radioParams.radioId = parse_radioID(i); }
+void init_gainTX(BlinkParams *params, char *i)					{ params[0].radioParams.TXgain = parse_Amp(i); }
+void init_centralFrequencyTX(BlinkParams *params, char *i)		{ params[0].radioParams.CentralFrequency = parse_CentralFrequency(i); }
+void init_freqencyOffsetTX(BlinkParams *params, char *i)		{ params[0].radioParams.FreqencyOffset = parse_FrequencyOffset(i); }
+void init_sampleRateTX(BlinkParams *params, char *i)			{ params[0].radioParams.SampleRate = parse_SampleRate(i); }
+void init_bufferSizeTX(BlinkParams *params, char *i)			{ params[0].radioParams.TXBufferSize = parse_TXBufferSize(i); }
+#endif
+
+
+
+// RX Init functions
+void init_inTypeRX(BlinkParams *params, char *typ)				{ params[1].inType = parse_type(typ); }
+void init_outTypeRX(BlinkParams *params, char *typ)				{ params[1].outType = parse_type(typ); }
+void init_inFileRX(BlinkParams *params, char *fn)				{ params[1].inFileName = fn; }
+void init_outFileRX(BlinkParams *params, char *fn)				{ params[1].outFileName = fn; }
+void init_inFileModeRX(BlinkParams *params, char *md)			{ params[1].inFileMode = parse_mode(md); }
+void init_outFileModeRX(BlinkParams *params, char *md)			{ params[1].outFileMode = parse_mode(md); }
+void init_outBufRX(BlinkParams *params, char *siz)				{ params[1].outBufSize = parse_size(siz); }
+void init_dummySamplesRX(BlinkParams *params, char *siz)		{ params[1].dummySamples = parse_repeat(siz); }
+void init_heapSizeRX(BlinkParams *params, char *siz)			{ params[1].heapSize = parse_size(siz); }
+void init_inRepeatRX(BlinkParams *params, char *i)				{ params[1].inFileRepeats = parse_repeat(i); }
+void init_LatencySamplingRX(BlinkParams *params, char *siz)		{ params[1].latencySampling = parse_size(siz); }
+void init_LatencyCDFSizeRX(BlinkParams *params, char *siz)		{ params[1].latencyCDFSize = parse_size(siz); }
+
+#ifdef SORA_PLATFORM
+// Here we use one radio, so we only use radioParams in params[0]
+// For full duplex one might want to use radioParams in params[1] here instead
+void init_radioIdRX(BlinkParams *params, char *i)				{ params[0].radioParams.radioId = parse_radioID(i); }
+void init_paRX(BlinkParams* params, char *i)					{ params[0].radioParams.RXpa = parse_Amp(i); }
+void init_gainRX(BlinkParams* params, char *i)					{ params[0].radioParams.RXgain = parse_Amp(i); }
+void init_centralFrequencyRX(BlinkParams *params, char *i)		{ params[0].radioParams.CentralFrequency = parse_CentralFrequency(i); }
+void init_freqencyOffsetRX(BlinkParams *params, char *i)		{ params[0].radioParams.FreqencyOffset = parse_FrequencyOffset(i); }
+void init_sampleRateRX(BlinkParams *params, char *i)			{ params[0].radioParams.SampleRate = parse_SampleRate(i); }
 #endif
 
 
 
 // Here is where we declare the parameters
 #ifdef SORA_PLATFORM
-#define PARAM_TABLE_LENGTH		20
+#define PARAM_TABLE_LENGTH		37
 #else
-#define PARAM_TABLE_LENGTH		12
+#define PARAM_TABLE_LENGTH		24
 #endif
 
 BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] = 
-  {  { "--input=", 
-       "--input=file|dummy|sora|ip",
-       "Input samples come from a file, radio, or are dummy samples",
+// TX
+  {  { "--TX-input=", 
+       "--TX-input=file|dummy|sora|ip",
+       "Input TX samples come from a file, radio, or are dummy samples",
        "file",
-       init_inType },
-     { "--output=", 
-       "--output=file|dummy|sora|ip",
-       "Output samples written to file, radio, or are ignored (dummy)",
+       init_inTypeTX },
+     { "--TX-output=", 
+       "--TX-output=file|dummy|sora|ip",
+       "Output TX samples written to file, radio, or are ignored (dummy)",
        "file",
-       init_outType },
-     { "--input-file-name=", 
-       "--input-file-name=...",
-       "Path to input file. Meaningful if --input=file.",
+       init_outTypeTX },
+     { "--TX-input-file-name=", 
+       "--TX-input-file-name=...",
+       "Path to TX input file. Meaningful if --TX-input=file.",
        "infile", 
-       init_inFile },
-     { "--output-file-name=", 
-       "--output-file-name=...",
-       "Path to output file. Meaningful if --output=file.",
+       init_inFileTX },
+     { "--TX-output-file-name=", 
+       "--TX-output-file-name=...",
+       "Path to TX output file. Meaningful if --TX-output=file.",
        "outfile", 
-       init_outFile },
-     { "--input-file-mode=", 
-       "--input-file-mode=bin|dbg",
-       "Input file is binary/debug (human readable). Meaningful if --input=file.",
+       init_outFileTX },
+     { "--TX-input-file-mode=", 
+       "--TX-input-file-mode=bin|dbg",
+       "TX Input file is binary/debug (human readable). Meaningful if --TX-input=file.",
        "bin",
-       init_inFileMode },
-     { "--output-file-mode=", 
-       "--output-file-mode=bin|dbg",
-       "Output file is binary/debug (human readable). Meaningful if --output=file.",
+       init_inFileModeTX },
+     { "--TX-output-file-mode=", 
+       "--TX-output-file-mode=bin|dbg",
+       "Output file is binary/debug (human readable). Meaningful if --TX-output=file.",
        "bin",
-       init_outFileMode },
-     { "--output-buffer-size=", 
-       "--output-buffer-size=...",
-       "Output buffer out of which we write to the output.",
+       init_outFileModeTX },
+     { "--TX-output-buffer-size=", 
+       "--TX-output-buffer-size=...",
+       "TX Output buffer out of which we write to the output.",
        "16777216", 
-       init_outBuf },
-     { "--dummy-samples=", 
-       "--dummy-samples==*|1|2|...",
-       "Number of dummy samples (* means repeated indefinitely). Meaningful if --input=dummy",
+       init_outBufTX },
+     { "--TX-dummy-samples=", 
+       "--TX-dummy-samples==*|1|2|...",
+       "Number of dummy TX samples (* means repeated indefinitely). Meaningful if --TX-input=dummy",
        "20000000",
-       init_dummySamples },
-     { "--heap-size=", 
-       "--heap-size=...",
-       "Size of heap to use in the generated program.",
+       init_dummySamplesTX },
+     { "--TX-heap-size=", 
+       "--TX-heap-size=...",
+       "Size of heap to use in the generated TX program.",
        "20971520",     // 20MB default
-       init_heapSize },
-     { "--input-file-repeat=",
-       "--input-file-repeat=*|1|2|....",
-       "Repeat the input file indefinitely (*) or a fixed number of times",
+       init_heapSizeTX },
+     { "--TX-input-file-repeat=",
+       "--TX-input-file-repeat=*|1|2|....",
+       "Repeat the TX input file indefinitely (*) or a fixed number of times",
        "1", 
-       init_inRepeat },
-     { "--latency-sampling=",
-	   "--latency-sampling=0|1|2|...",
-	   "Number of writes over which the latency is measured (0 - no latency measurements)",
+       init_inRepeatTX },
+     { "--TX-latency-sampling=",
+	   "--TX-latency-sampling=0|1|2|...",
+	   "Number of writes over which the TX latency is measured (0 - no latency measurements)",
 	   "0",
-	   init_LatencySampling },
-     { "--latency-CDF-size=",
-	   "--latency-CDF-size=...",
-	   "Number of latency samples to be stored and printed (for CDF calculation)",
+	   init_LatencySamplingTX },
+     { "--TX-latency-CDF-size=",
+	   "--TX-latency-CDF-size=...",
+	   "Number of TX latency samples to be stored and printed (for CDF calculation)",
 	   "0",
-	   init_LatencyCDFSize }
+	   init_LatencyCDFSizeTX },
+//RX
+	   { "--RX-input=",
+	   "--RX-input=file|dummy|sora|ip",
+	   "Input RX samples come from a file, radio, or are dummy samples",
+	   "file",
+	   init_inTypeRX },
+	   { "--RX-output=",
+	   "--RX-output=file|dummy|sora|ip",
+	   "Output RX samples written to file, radio, or are ignored (dummy)",
+	   "file",
+	   init_outTypeRX },
+	   { "--RX-input-file-name=",
+	   "--RX-input-file-name=...",
+	   "Path to RX input file. Meaningful if --RX-input=file.",
+	   "infile",
+	   init_inFileRX },
+	   { "--RX-output-file-name=",
+	   "--RX-output-file-name=...",
+	   "Path to RX output file. Meaningful if --RX-output=file.",
+	   "outfile",
+	   init_outFileRX },
+	   { "--RX-input-file-mode=",
+	   "--RX-input-file-mode=bin|dbg",
+	   "RX Input file is binary/debug (human readable). Meaningful if --RX-input=file.",
+	   "bin",
+	   init_inFileModeRX },
+	   { "--RX-output-file-mode=",
+	   "--RX-output-file-mode=bin|dbg",
+	   "Output file is binary/debug (human readable). Meaningful if --RX-output=file.",
+	   "bin",
+	   init_outFileModeRX },
+	   { "--RX-output-buffer-size=",
+	   "--RX-output-buffer-size=...",
+	   "RX Output buffer out of which we write to the output.",
+	   "16777216",
+	   init_outBufRX },
+	   { "--RX-dummy-samples=",
+	   "--RX-dummy-samples==*|1|2|...",
+	   "Number of dummy RX samples (* means repeated indefinitely). Meaningful if --RX-input=dummy",
+	   "20000000",
+	   init_dummySamplesRX },
+	   { "--RX-heap-size=",
+	   "--RX-heap-size=...",
+	   "Size of heap to use in the generated RX program.",
+	   "20971520",     // 20MB default
+	   init_heapSizeRX },
+	   { "--RX-input-file-repeat=",
+	   "--RX-input-file-repeat=*|1|2|....",
+	   "Repeat the RX input file indefinitely (*) or a fixed number of times",
+	   "1",
+	   init_inRepeatRX },
+	   { "--RX-latency-sampling=",
+	   "--RX-latency-sampling=0|1|2|...",
+	   "Number of writes over which the RX latency is measured (0 - no latency measurements)",
+	   "0",
+	   init_LatencySamplingRX },
+	   { "--RX-latency-CDF-size=",
+	   "--RX-latency-CDF-size=...",
+	   "Number of RX latency samples to be stored and printed (for CDF calculation)",
+	   "0",
+	   init_LatencyCDFSizeRX },
+
 
 #ifdef SORA_PLATFORM
-     , { "--sora-radio-id=",
-       "--sora-radio-id = ...",
-       "Sora radio ID",
+       { "--TX-sora-radio-id=",
+       "--TX-sora-radio-id = ...",
+       "Sora TX radio ID",
        "0", 
-       init_radioId }
-     , { "--sora-rx-pa=",
-       "--sora-rx-pa = ...",
-       "Sora RX power amplification",
-       "0", 
-       init_RXpa }
-     , { "--sora-rx-gain=",
-       "--sora-rx-gain = ...",
-       "Sora RX gain",
-       "0", 
-       init_RXgain }
-     , { "--sora-tx-gain=",
-       "--sora-tx-gain = ...",
+       init_radioIdTX }
+     , { "--TX-sora-gain=",
+       "--TX-sora-gain = ...",
        "Sora TX gain",
        "0", 
-       init_TXgain }
-     , { "--sora-central-frequency=",
-       "--sora-central-frequency = ...",
+       init_gainTX }
+     , { "--TX-sora-central-frequency=",
+       "--TX-sora-central-frequency = ...",
        "Sora central frequency in MHz (default 578)",
        "578", 
-       init_CentralFrequency }
-     , { "--sora-freqency-offset=",
-       "--sora-freqency-offset = ...",
+       init_centralFrequencyTX }
+     , { "--TX-sora-freqency-offset=",
+       "--TX-sora-freqency-offset = ...",
        "Sora frequency offset",
        "0", 
-       init_FreqencyOffset }
-     , { "--sora-sample-rate=",
-       "--sora-sample-rate = ...",
+       init_freqencyOffsetTX }
+     , { "--TX-sora-sample-rate=",
+       "--TX-sora-sample-rate = ...",
        "Sora sample rate",
        "40", 
-       init_SampleRate }
-     , { "--sora-tx-buffer-size=",
-       "--sora-tx-buffer-size = ...",
+       init_sampleRateTX }
+     , { "--TX-sora-tx-buffer-size=",
+       "--TX-sora-tx-buffer-size = ...",
        "Size of the TX buffer transmitted at once (in number of complex16)",
        "2097152", 
-       init_TXBufferSize }
+       init_bufferSizeTX }
+// RX
+	 , { "--RX-sora-radio-id=",
+		"--RX-sora-radio-id = ...",
+		"Sora RX radio ID",
+		"0",
+		init_radioIdRX }
+	 , { "--RX-sora-rx-pa=",
+		 "--RX-sora-rx-pa = ...",
+		 "Sora RX power amplification",
+		 "0",
+		 init_paRX }
+	 , { "--RX-sora-rx-gain=",
+		 "--RX-sora-rx-gain = ...",
+		 "Sora RX gain",
+		 "0",
+		 init_gainRX }
+	 , { "--RX-sora-gain=",
+		 "--RX-sora-gain = ...",
+		 "Sora RX gain",
+		 "0",
+		 init_gainRX }
+	 , { "--RX-sora-central-frequency=",
+		 "--RX-sora-central-frequency = ...",
+		 "Sora RX central frequency in MHz (default 578)",
+		 "578",
+		 init_centralFrequencyRX }
+	 , { "--RX-sora-freqency-offset=",
+		 "--RX-sora-freqency-offset = ...",
+		 "Sora RX frequency offset",
+		 "0",
+		 init_freqencyOffsetRX }
+	 , { "--RX-sora-sample-rate=",
+		 "--RX-sora-sample-rate = ...",
+		 "Sora RX sample rate",
+		 "40",
+		 init_sampleRateRX }
 #endif
 
 
@@ -293,7 +407,7 @@ void print_blink_usage() {
 }
 
 
-void try_parse_args(int argc, char ** argv) {
+void try_parse_args(BlinkParams *params, int argc, char ** argv) {
   int pi; 
   if (argc <= 1) {
     print_blink_usage();
@@ -302,7 +416,7 @@ void try_parse_args(int argc, char ** argv) {
 
   // Initialize everything to default
   for (pi=0; pi < sizeof(paramTable) / sizeof(BlinkParamInfo); pi++) {
-      paramTable[pi].param_init(paramTable[pi].param_dflt);
+      paramTable[pi].param_init(params, paramTable[pi].param_dflt);
   }
 
   // For every command line parameter, try to initialize it or fail if unknown
@@ -312,7 +426,7 @@ void try_parse_args(int argc, char ** argv) {
 	  char *pval;
       if (!strstr(argv[ai],paramTable[pi].param_str)) continue;
       pval = & argv[ai][strlen(paramTable[pi].param_str)];
-      paramTable[pi].param_init(pval);
+      paramTable[pi].param_init(params, pval);
       initialized = 1;
       break;
     }

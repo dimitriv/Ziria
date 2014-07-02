@@ -72,8 +72,10 @@ codeGenContexts :: Cg [C.InitGroup]
 codeGenContexts 
   = do { buf_context  <- getBufContext
        ; heap_context <- getHeapContext
+       ; global_params <- getGlobalParams
        ; return [ [cdecl| extern $ty:(namedCType "BufContextBlock")* $id:buf_context;|]
                 , [cdecl| extern $ty:(namedCType "HeapContextBlock")* $id:heap_context;|]
+                , [cdecl| extern $ty:(namedCType "BlinkParams")* $id:global_params;|]
                 ]
        }
 

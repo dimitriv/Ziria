@@ -86,31 +86,42 @@ int SetUpThreads(PSORA_UTHREAD_PROC * User_Routines);
 
 /* Global configuration parameters 
 ***************************************************************************/
-struct BlinkParams Globals;
+BlinkParams params[2];
+BlinkParams *params_tx, *params_rx;
 
 // tracks bytes copied 
 extern unsigned long bytes_copied; 
 
 int __cdecl main(int argc, char **argv) {
-  
-  // Initialize the global parameters
-  try_parse_args(argc,argv);
+
+  params_tx = &(params[0]);
+  params_rx = &(params[1]);
+
+	// Initialize the global parameters
+  try_parse_args(params, argc, argv);
 
 #ifdef SORA_PLATFORM
   // Start Sora HW
-  if (Globals.inType == TY_SORA || Globals.outType == TY_SORA)
+  if (params_rx->inType == TY_SORA || params_tx->outType == TY_SORA)
   {
-	RadioStart(Globals.radioParams);
+	RadioStart(*params_tx);
   }
   // Start NDIS
-  if (Globals.inType == TY_IP || Globals.outType == TY_IP)
+  if (params_tx->inType == TY_IP)
   {
 	HRESULT hResult = SoraUEnableGetTxPacket();
 	assert(hResult == S_OK);
   }
 
+  if (params_rx->outType == TY_IP)
+  {
+	  // To be implemented
+//	  HRESULT hResult = SoraUEnableGetRxPacket();
+//	  assert(hResult == S_OK);
+  }
+
   // Start measuring time
-  initMeasurementInfo(Globals.latencyCDFSize);
+  initMeasurementInfo(&(params_tx->measurementInfo), params_tx->latencyCDFSize);
 #endif
 
 
@@ -120,8 +131,8 @@ int __cdecl main(int argc, char **argv) {
   initHeapCtxBlock(&heap_ctx_tx);
   initHeapCtxBlock(&heap_ctx_rx);
 
-  wpl_global_init_tx(Globals.heapSize);
-  wpl_global_init_rx(Globals.heapSize);
+  wpl_global_init_tx(params_tx->heapSize);
+  wpl_global_init_rx(params_rx->heapSize);
   wpl_input_initialize_tx();
   wpl_input_initialize_rx();
 
@@ -142,19 +153,19 @@ int __cdecl main(int argc, char **argv) {
   ULONGLONG ttstart, ttend;
 
   printf("Starting %d threads...\n", no_threads);
-  StartThreads(&ttstart, &ttend, &measurementInfo.tsinfo, no_threads, User_Routines);
+  StartThreads(&ttstart, &ttend, &(params_tx->measurementInfo.tsinfo), no_threads, User_Routines);
 
   printf("Time Elapsed: %ld us \n", 
-	  SoraTimeElapsed((ttend / 1000 - ttstart / 1000), &measurementInfo.tsinfo));
+	  SoraTimeElapsed((ttend / 1000 - ttstart / 1000), &(params_tx->measurementInfo.tsinfo)));
 
-  if (Globals.latencySampling > 0)
+  if (params_tx->latencySampling > 0)
   {
-	  printf("Min write latency: %ld, max write latency: %ld\n", (ulong) measurementInfo.minDiff, (ulong) measurementInfo.maxDiff);
+	  printf("Min write latency: %ld, max write latency: %ld\n", (ulong) params_tx->measurementInfo.minDiff, (ulong) params_tx->measurementInfo.maxDiff);
 	  printf("CDF: \n   ");
 	  unsigned int i = 0;
-	  while (i < measurementInfo.aDiffPtr)
+	  while (i < params_tx->measurementInfo.aDiffPtr)
 	  {
-		  printf("%ld ", measurementInfo.aDiff[i]);
+		  printf("%ld ", params_tx->measurementInfo.aDiff[i]);
 		  if (i % 10 == 9)
 		  {
 			  printf("\n   ");
@@ -180,26 +191,44 @@ int __cdecl main(int argc, char **argv) {
   wpl_output_finalize_rx();
 
 #ifdef SORA_PLATFORM
-  // Stop Sora HW
-  if (Globals.inType == TY_SORA || Globals.outType == TY_SORA)
+
+  // Start Sora HW
+  if (params_rx->inType == TY_SORA || params_tx->outType == TY_SORA)
   {
-	RadioStop(Globals.radioParams);
+	  RadioStop(*params_tx);
+  }
+  // Start NDIS
+  if (params_tx->inType == TY_IP)
+  {
+	  if (hUplinkThread != NULL)
+	  {
+		  // Sora cleanup.
+		  SoraUThreadStop(hUplinkThread);
+		  SoraUThreadFree(hUplinkThread);
+	  }
+	  SoraUDisableGetTxPacket();
+	  // Winsock cleanup.
+	  closesocket(ConnectSocket);
+	  WSACleanup();
+
   }
 
-  // Stop NDIS
-  if (Globals.inType == TY_IP || Globals.outType == TY_IP)
-    {
-      if (hUplinkThread != NULL)
-      {
-	// Sora cleanup.
-	SoraUThreadStop(hUplinkThread);
-	SoraUThreadFree(hUplinkThread);
-      }
-      SoraUDisableGetTxPacket();
-      // Winsock cleanup.
-      closesocket(ConnectSocket);
-      WSACleanup();
-    }
+  if (params_rx->outType == TY_IP)
+  {
+	  // To be implemented
+	  /*
+	  if (hUplinkThread != NULL)
+	  {
+		  // Sora cleanup.
+		  SoraUThreadStop(hUplinkThread);
+		  SoraUThreadFree(hUplinkThread);
+	  }
+	  SoraUDisableGetTxPacket();
+	  // Winsock cleanup.
+	  closesocket(ConnectSocket);
+	  WSACleanup();
+	  */
+  }
 
 #endif
 

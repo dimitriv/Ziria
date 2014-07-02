@@ -69,23 +69,23 @@ unsigned int parse_dbg_int8(char *dbg_buf, int8 *target)
 	return i; // total number of entries
 }
 
-void init_getint8(BufContextBlock *blk, HeapContextBlock *hblk)
+void init_getint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
-	if (Globals.inType == TY_DUMMY)
+	if (params->inType == TY_DUMMY)
 	{
-		blk->num8_max_dummy_samples = Globals.dummySamples;
+		blk->num8_max_dummy_samples = params->dummySamples;
 	}
 
-	if (Globals.inType == TY_FILE)
+	if (params->inType == TY_FILE)
 	{
 		unsigned int sz;
 		char *filebuffer;
-		try_read_filebuffer(hblk, Globals.inFileName, &filebuffer, &sz);
+		try_read_filebuffer(hblk, params->inFileName, &filebuffer, &sz);
 
 		// How many bytes the file buffer has * sizeof should be enough
 		blk->num8_input_buffer = (int8 *)try_alloc_bytes(hblk, sz * sizeof(int8));
 
-		if (Globals.inFileMode == MODE_BIN)
+		if (params->inFileMode == MODE_BIN)
 		{
 			unsigned int i;
 			int8 *typed_filebuffer = (int8 *)filebuffer;
@@ -101,34 +101,34 @@ void init_getint8(BufContextBlock *blk, HeapContextBlock *hblk)
 		}
 	}
 
-	if (Globals.inType == TY_SORA)
+	if (params->inType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
-		InitSoraRx(Globals.radioParams);
+		InitSoraRx(*params);
 #else
 		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
 		exit(1);
 #endif
 	}
 }
-GetStatus buf_getint8(BufContextBlock *blk, int8 *x)
+GetStatus buf_getint8(BlinkParams *params, BufContextBlock *blk, int8 *x)
 {
 
-	if (Globals.inType == TY_DUMMY)
+	if (params->inType == TY_DUMMY)
 	{
-		if (blk->num8_input_dummy_samples >= blk->num8_max_dummy_samples && Globals.dummySamples != INF_REPEAT) return GS_EOF;
+		if (blk->num8_input_dummy_samples >= blk->num8_max_dummy_samples && params->dummySamples != INF_REPEAT) return GS_EOF;
 		blk->num8_input_dummy_samples++;
 		*x = 0;
 		return GS_SUCCESS;
 	}
 
-	if (Globals.inType == TY_FILE)
+	if (params->inType == TY_FILE)
 	{
 		// If we reached the end of the input buffer 
 		if (blk->num8_input_idx >= blk->num8_input_entries)
 		{
 			// If no more repetitions are allowed 
-			if (Globals.inFileRepeats != INF_REPEAT && blk->num8_input_repeats >= Globals.inFileRepeats)
+			if (params->inFileRepeats != INF_REPEAT && blk->num8_input_repeats >= params->inFileRepeats)
 			{
 				return GS_EOF;
 			}
@@ -142,7 +142,7 @@ GetStatus buf_getint8(BufContextBlock *blk, int8 *x)
 		return GS_SUCCESS;
 	}
 
-	if (Globals.inType == TY_SORA)
+	if (params->inType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora RX supports only complex8 type.\n");
@@ -153,22 +153,22 @@ GetStatus buf_getint8(BufContextBlock *blk, int8 *x)
 	return GS_EOF;
 }
 
-GetStatus buf_getarrint8(BufContextBlock *blk, int8 *x, unsigned int vlen)
+GetStatus buf_getarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigned int vlen)
 {
 
-	if (Globals.inType == TY_DUMMY)
+	if (params->inType == TY_DUMMY)
 	{
-		if (blk->num8_input_dummy_samples >= blk->num8_max_dummy_samples && Globals.dummySamples != INF_REPEAT) return GS_EOF;
+		if (blk->num8_input_dummy_samples >= blk->num8_max_dummy_samples && params->dummySamples != INF_REPEAT) return GS_EOF;
 		blk->num8_input_dummy_samples += vlen;
 		memset(x, 0, vlen*sizeof(int8));
 		return GS_SUCCESS;
 	}
 
-	if (Globals.inType == TY_FILE)
+	if (params->inType == TY_FILE)
 	{
 		if (blk->num8_input_idx + vlen > blk->num8_input_entries)
 		{
-			if (Globals.inFileRepeats != INF_REPEAT && blk->num8_input_repeats >= Globals.inFileRepeats)
+			if (params->inFileRepeats != INF_REPEAT && blk->num8_input_repeats >= params->inFileRepeats)
 			{
 				if (blk->num8_input_idx != blk->num8_input_entries)
 					fprintf(stderr, "Warning: Unaligned data in input file, ignoring final get()!\n");
@@ -184,7 +184,7 @@ GetStatus buf_getarrint8(BufContextBlock *blk, int8 *x, unsigned int vlen)
 		return GS_SUCCESS;
 	}
 
-	if (Globals.inType == TY_SORA)
+	if (params->inType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora RX supports only complex8 type.\n");
@@ -195,30 +195,30 @@ GetStatus buf_getarrint8(BufContextBlock *blk, int8 *x, unsigned int vlen)
 	return GS_EOF;
 }
 
-void init_getcomplex8(BufContextBlock *blk, HeapContextBlock *hblk)
+void init_getcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
 	// we just need to initialize the input buffer in the same way
-	init_getint8(blk, hblk);                              
+	init_getint8(params, blk, hblk);                              
 	// since we will be doing this in integer granularity
-	blk->num8_max_dummy_samples = Globals.dummySamples * 2; 
+	blk->num8_max_dummy_samples = params->dummySamples * 2; 
 }
 
-GetStatus buf_getcomplex8(BufContextBlock *blk, complex8 *x)
+GetStatus buf_getcomplex8(BlinkParams *params, BufContextBlock *blk, complex8 *x)
 {
-	if (Globals.inType == TY_DUMMY || Globals.inType == TY_FILE)
+	if (params->inType == TY_DUMMY || params->inType == TY_FILE)
 	{
-		GetStatus gs1 = buf_getint8(blk, &(x->re));
+		GetStatus gs1 = buf_getint8(params, blk, &(x->re));
 		if (gs1 == GS_EOF)
 		{
 			return GS_EOF;
 		}
 		else
 		{
-			return (buf_getint8(blk, &(x->im)));
+			return (buf_getint8(params, blk, &(x->im)));
 		}
 	}
 
-	if (Globals.inType == TY_SORA)
+	if (params->inType == TY_SORA)
 	{
 		fprintf(stderr, "Error: Sora does not support 8-bit receive\n");
 		exit(1);
@@ -227,14 +227,14 @@ GetStatus buf_getcomplex8(BufContextBlock *blk, complex8 *x)
 	return GS_EOF;
 }
 
-GetStatus buf_getarrcomplex8(BufContextBlock *blk, complex8 *x, unsigned int vlen)
+GetStatus buf_getarrcomplex8(BlinkParams *params, BufContextBlock *blk, complex8 *x, unsigned int vlen)
 {
-	if (Globals.inType == TY_DUMMY || Globals.inType == TY_FILE)
+	if (params->inType == TY_DUMMY || params->inType == TY_FILE)
 	{
-		return (buf_getarrint8(blk, (int8*)x, vlen * 2));
+		return (buf_getarrint8(params, blk, (int8*)x, vlen * 2));
 	}
 
-	if (Globals.inType == TY_SORA)
+	if (params->inType == TY_SORA)
 	{
 		fprintf(stderr, "Error: Sora RX does not support Complex8\n");
 		exit(1);
@@ -264,17 +264,17 @@ void fprint_arrint8(BufContextBlock *blk, FILE *f, int8 *val, unsigned int vlen)
 }
 
 
-void init_putint8(BufContextBlock *blk, HeapContextBlock *hblk)
+void init_putint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
-	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
+	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
 	{
-		blk->num8_output_buffer = (int8 *)malloc(Globals.outBufSize * sizeof(int8));
-		blk->num8_output_entries = Globals.outBufSize;
-		if (Globals.outType == TY_FILE)
-			blk->num8_output_file = try_open(Globals.outFileName, "w");
+		blk->num8_output_buffer = (int8 *)malloc(params->outBufSize * sizeof(int8));
+		blk->num8_output_entries = params->outBufSize;
+		if (params->outType == TY_FILE)
+			blk->num8_output_file = try_open(params->outFileName, "w");
 	}
 
-	if (Globals.outType == TY_SORA)
+	if (params->outType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora TX supports only int16 type.\n");
@@ -289,16 +289,16 @@ void init_putint8(BufContextBlock *blk, HeapContextBlock *hblk)
 
 
 FINL
-void _buf_putint8(BufContextBlock *blk, int8 x)
+void _buf_putint8(BlinkParams *params, BufContextBlock *blk, int8 x)
 {
-	if (Globals.outType == TY_DUMMY)
+	if (params->outType == TY_DUMMY)
 	{
 		return;
 	}
 
-	if (Globals.outType == TY_FILE)
+	if (params->outType == TY_FILE)
 	{
-		if (Globals.outFileMode == MODE_DBG)
+		if (params->outFileMode == MODE_DBG)
 			fprint_int8(blk, blk->num8_output_file, x);
 		else
 		{
@@ -311,7 +311,7 @@ void _buf_putint8(BufContextBlock *blk, int8 x)
 		}
 	}
 
-	if (Globals.outType == TY_SORA)
+	if (params->outType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora TX supports only int16 type.\n");
@@ -324,22 +324,22 @@ void _buf_putint8(BufContextBlock *blk, int8 x)
 }
 
 
-void buf_putint8(BufContextBlock *blk, int8 x)
+void buf_putint8(BlinkParams *params, BufContextBlock *blk, int8 x)
 {
-	write_time_stamp();
-	_buf_putint8(blk, x);
+	write_time_stamp(params);
+	_buf_putint8(params, blk, x);
 }
 
 
 FINL
-void _buf_putarrint8(BufContextBlock *blk, int8 *x, unsigned int vlen)
+void _buf_putarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigned int vlen)
 {
 
-	if (Globals.outType == TY_DUMMY) return;
+	if (params->outType == TY_DUMMY) return;
 
-	if (Globals.outType == TY_FILE)
+	if (params->outType == TY_FILE)
 	{
-		if (Globals.outFileMode == MODE_DBG)
+		if (params->outFileMode == MODE_DBG)
 			fprint_arrint8(blk, blk->num8_output_file, x, vlen);
 		else
 		{
@@ -362,7 +362,7 @@ void _buf_putarrint8(BufContextBlock *blk, int8 *x, unsigned int vlen)
 		}
 	}
 
-	if (Globals.outType == TY_SORA)
+	if (params->outType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora TX supports only complex8 type.\n");
@@ -376,18 +376,18 @@ void _buf_putarrint8(BufContextBlock *blk, int8 *x, unsigned int vlen)
 
 
 
-void buf_putarrint8(BufContextBlock *blk, int8 *x, unsigned int vlen)
+void buf_putarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigned int vlen)
 {
-	write_time_stamp();
-	_buf_putarrint8(blk, x, vlen);
+	write_time_stamp(params);
+	_buf_putarrint8(params, blk, x, vlen);
 }
 
 
-void flush_putint8(BufContextBlock *blk)
+void flush_putint8(BlinkParams *params, BufContextBlock *blk)
 {
-	if (Globals.outType == TY_FILE)
+	if (params->outType == TY_FILE)
 	{
-		if (Globals.outFileMode == MODE_BIN) {
+		if (params->outFileMode == MODE_BIN) {
 			fwrite(blk->num8_output_buffer, sizeof(int8), blk->num8_output_idx, blk->num8_output_file);
 			blk->num8_output_idx = 0;
 		}
@@ -396,22 +396,22 @@ void flush_putint8(BufContextBlock *blk)
 }
 
 
-void init_putcomplex8(BufContextBlock *blk, HeapContextBlock *hblk)
+void init_putcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
-	write_time_stamp();
+	write_time_stamp(params);
 
-	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
+	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
 	{
-		blk->num8_output_buffer = (int8 *)malloc(2 * Globals.outBufSize * sizeof(int8));
-		blk->num8_output_entries = Globals.outBufSize * 2;
-		if (Globals.outType == TY_FILE)
-			blk->num8_output_file = try_open(Globals.outFileName, "w");
+		blk->num8_output_buffer = (int8 *)malloc(2 * params->outBufSize * sizeof(int8));
+		blk->num8_output_entries = params->outBufSize * 2;
+		if (params->outType == TY_FILE)
+			blk->num8_output_file = try_open(params->outFileName, "w");
 	}
 
-	if (Globals.outType == TY_SORA)
+	if (params->outType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
-		InitSoraTx(Globals.radioParams);
+		InitSoraTx(*params);
 #else
 		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
 		exit(1);
@@ -419,19 +419,19 @@ void init_putcomplex8(BufContextBlock *blk, HeapContextBlock *hblk)
 	}
 }
 
-void buf_putcomplex8(BufContextBlock *blk, struct complex8 x)
+void buf_putcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 x)
 {
-	write_time_stamp();
+	write_time_stamp(params);
 
-	if (Globals.outType == TY_DUMMY) return;
+	if (params->outType == TY_DUMMY) return;
 
-	if (Globals.outType == TY_FILE)
+	if (params->outType == TY_FILE)
 	{
-		_buf_putint8(blk, x.re);
-		_buf_putint8(blk, x.im);
+		_buf_putint8(params, blk, x.re);
+		_buf_putint8(params, blk, x.im);
 	}
 
-	if (Globals.outType == TY_SORA)
+	if (params->outType == TY_SORA)
 	{
 		fprintf(stderr, "Error: Sora TX does not support Complex8\n");
 		exit(1);
@@ -439,22 +439,22 @@ void buf_putcomplex8(BufContextBlock *blk, struct complex8 x)
 
 
 }
-void buf_putarrcomplex8(BufContextBlock *blk, struct complex8 *x, unsigned int vlen)
+void buf_putarrcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 *x, unsigned int vlen)
 {
-	write_time_stamp();
+	write_time_stamp(params);
 
-	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
+	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
 	{
-		_buf_putarrint8(blk, (int8 *)x, vlen * 2);
+		_buf_putarrint8(params, blk, (int8 *)x, vlen * 2);
 	}
 
-	if (Globals.outType == TY_SORA)
+	if (params->outType == TY_SORA)
 	{
 		fprintf(stderr, "Error: Sora TX does not support Complex8\n");
 		exit(1);
 	}
 }
-void flush_putcomplex8(BufContextBlock *blk)
+void flush_putcomplex8(BlinkParams *params, BufContextBlock *blk)
 {
-	flush_putint8(blk);
+	flush_putint8(params, blk);
 }

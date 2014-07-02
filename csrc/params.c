@@ -136,30 +136,30 @@ unsigned long parse_size (char *rp) {
   return (strtol(rp,NULL,10));
 }
 
-void init_inType(char *typ)       { Globals.inType = parse_type(typ); }
-void init_outType(char *typ)      { Globals.outType = parse_type(typ); }
-void init_inFile(char *fn)        { Globals.inFileName  = fn; }
-void init_outFile(char *fn)       { Globals.outFileName = fn; }
-void init_inFileMode(char *md)    { Globals.inFileMode = parse_mode(md); }
-void init_outFileMode(char *md)   { Globals.outFileMode = parse_mode(md); }
-void init_outBuf(char *siz)       { Globals.outBufSize = parse_size(siz); }
-void init_dummySamples(char *siz) { Globals.dummySamples = parse_repeat(siz); }
-void init_heapSize(char *siz)     { Globals.heapSize = parse_size(siz); }
-void init_inRepeat(char *i)       { Globals.inFileRepeats = parse_repeat(i); }
-void init_LatencySampling(char *siz)     { Globals.latencySampling = parse_size(siz); }
-void init_LatencyCDFSize(char *siz)      { Globals.latencyCDFSize = parse_size(siz); }
+void init_inType(BlinkParams *params, char *typ)			{ params->inType = parse_type(typ); }
+void init_outType(BlinkParams *params, char *typ)			{ params->outType = parse_type(typ); }
+void init_inFile(BlinkParams *params, char *fn)				{ params->inFileName = fn; }
+void init_outFile(BlinkParams *params, char *fn)			{ params->outFileName = fn; }
+void init_inFileMode(BlinkParams *params, char *md)			{ params->inFileMode = parse_mode(md); }
+void init_outFileMode(BlinkParams *params, char *md)		{ params->outFileMode = parse_mode(md); }
+void init_outBuf(BlinkParams *params, char *siz)			{ params->outBufSize = parse_size(siz); }
+void init_dummySamples(BlinkParams *params, char *siz)		{ params->dummySamples = parse_repeat(siz); }
+void init_heapSize(BlinkParams *params, char *siz)			{ params->heapSize = parse_size(siz); }
+void init_inRepeat(BlinkParams *params, char *i)			{ params->inFileRepeats = parse_repeat(i); }
+void init_LatencySampling(BlinkParams *params, char *siz)   { params->latencySampling = parse_size(siz); }
+void init_LatencyCDFSize(BlinkParams *params, char *siz)    { params->latencyCDFSize = parse_size(siz); }
 
 
 
 #ifdef SORA_PLATFORM
-void init_radioId(char *i)           { Globals.radioParams.radioId = parse_radioID(i); }
-void init_RXpa(char *i)              { Globals.radioParams.RXpa = parse_Amp(i); }
-void init_RXgain(char *i)            { Globals.radioParams.RXgain = parse_Amp(i); }
-void init_TXgain(char *i)            { Globals.radioParams.TXgain = parse_Amp(i); }
-void init_CentralFrequency(char *i)  { Globals.radioParams.CentralFrequency = parse_CentralFrequency(i); }
-void init_FreqencyOffset(char *i)    { Globals.radioParams.FreqencyOffset = parse_FrequencyOffset(i); }
-void init_SampleRate(char *i)        { Globals.radioParams.SampleRate = parse_SampleRate(i); }
-void init_TXBufferSize(char *i)		 { Globals.radioParams.TXBufferSize = parse_TXBufferSize(i); }
+void init_radioId(BlinkParams *params, char *i)				{ params->radioParams.radioId = parse_radioID(i); }
+void init_RXpa(BlinkParams *params, char *i)				{ params->radioParams.RXpa = parse_Amp(i); }
+void init_RXgain(BlinkParams *params, char *i)				{ params->radioParams.RXgain = parse_Amp(i); }
+void init_TXgain(BlinkParams *params, char *i)				{ params->radioParams.TXgain = parse_Amp(i); }
+void init_CentralFrequency(BlinkParams *params, char *i)	{ params->radioParams.CentralFrequency = parse_CentralFrequency(i); }
+void init_FreqencyOffset(BlinkParams *params, char *i)		{ params->radioParams.FreqencyOffset = parse_FrequencyOffset(i); }
+void init_SampleRate(BlinkParams *params, char *i)			{ params->radioParams.SampleRate = parse_SampleRate(i); }
+void init_TXBufferSize(BlinkParams *params, char *i)		{ params->radioParams.TXBufferSize = parse_TXBufferSize(i); }
 #endif
 
 
@@ -293,7 +293,7 @@ void print_blink_usage() {
 }
 
 
-void try_parse_args(int argc, char ** argv) {
+void try_parse_args(BlinkParams *params, int argc, char ** argv) {
   int pi; 
   if (argc <= 1) {
     print_blink_usage();
@@ -302,7 +302,7 @@ void try_parse_args(int argc, char ** argv) {
 
   // Initialize everything to default
   for (pi=0; pi < sizeof(paramTable) / sizeof(BlinkParamInfo); pi++) {
-      paramTable[pi].param_init(paramTable[pi].param_dflt);
+	  paramTable[pi].param_init(params, paramTable[pi].param_dflt);
   }
 
   // For every command line parameter, try to initialize it or fail if unknown
@@ -312,7 +312,7 @@ void try_parse_args(int argc, char ** argv) {
 	  char *pval;
       if (!strstr(argv[ai],paramTable[pi].param_str)) continue;
       pval = & argv[ai][strlen(paramTable[pi].param_str)];
-      paramTable[pi].param_init(pval);
+	  paramTable[pi].param_init(params, pval);
       initialized = 1;
       break;
     }
