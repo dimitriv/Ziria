@@ -18,19 +18,24 @@
 --
 --
 
-let sum_complex16(a : arr complex16) = 
-  var s : complex16 := complex16{re=0;im=0};
-  for i in [0,length(a)] {
-    s := s + a[i]
-  };
-  return s;    
-in
+#include "../../const.blk"
+#include <externals.blk>
+#include "../../transmitter/scramble.blk"
+#include "../../transmitter/encoding.blk"
+#include "../../transmitter/interleaving.blk"
+#include "../../transmitter/modulating.blk"
+#include "../../transmitter/map_ofdm.blk"
+#include "../../transmitter/parsePLCPHeader.blk"
+#include "../../transmitter/createPreamble.blk"
+#include "../../transmitter/ifft.blk"
 
-let sum_int16(a : arr int16) = 
-  var s : int16 := 0;
-  for i in [0,length(a)] {
-    s := s + a[i]
-  };
-  return s;    
+
+
+let comp TransmitterInfiniteWThreads(hInfo : struct HeaderInfo) = 
+{-
+   emits createSTSinTime();
+   emits createLTSinTime();
+-}
+   scrambler() >>> encode12() >>> interleaver_qpsk() |>>>| modulate_qpsk() >>> map_ofdm() >>> ifft()
 in
 

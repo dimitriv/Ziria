@@ -139,15 +139,18 @@ ppExp0 e =
         text "}" 
     ELet x e1 e2 ->
       text "let" <+> assign "=" (ppName x) (ppExp e1) $$
-      text "in" <+> ppExp e2
+      text "in" $$ 
+      ppExp e2
 
     ELetRef x (Left ty) e2 ->
       text "letref" <+> ppName x <+> colon <+> ppTy ty $$ 
-      text "in" <+> ppExp e2
+      text "in" $$ 
+      ppExp e2
 
     ELetRef x (Right e1) e2 ->
       text "letref" <+> assign ":=" (ppName x) (ppExp e1) $$
-      text "in" <+> ppExp e2
+      text "in" $$
+      ppExp e2
 
     ESeq e1 e2 -> ppExp e1 <> semi $$ ppExp e2
     ECall f eargs -> ppExp f <> parens (ppEs ppExp comma eargs)

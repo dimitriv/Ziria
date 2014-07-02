@@ -32,11 +32,21 @@ FINL void initDbgPlot()
 	}
 }
 
-int32 __ext_dbgplot_line(int16 item)
+int32 __ext_dbgplot_real_line(int16 *line, int len)
 { 
 #ifdef BUILDARCHX86
+	int *buf = (int*)malloc(len * sizeof(int));
+	if (buf == NULL)
+	{
+		printf("Memory allocation error!\n");
+		exit(1);
+	}
+	for (int i = 0; i < len; i++)
+	{
+		buf[i] = (int)line[i];
+	}
 	initDbgPlot();
-	PlotLine("Line", (int*)(&item), 1);
+	PlotLine("Line", (int*)(buf), len);
 	return 0;
 #else
 	printf("DbgPlot not supported in X64 mode.\n");
@@ -44,11 +54,31 @@ int32 __ext_dbgplot_line(int16 item)
 #endif
 }
 
-int32 __ext_dbgplot_spectrum(int16 item)
-{ 
+int32 __ext_dbgplot_complex_line(complex16 *line, int len, int16 type)
+{
 #ifdef BUILDARCHX86
+	int *buf = (int*) malloc(len * sizeof(int));
+	if (buf == NULL)
+	{
+		printf("Memory allocation error!\n");
+		exit(1);
+	}
+	for (int i = 0; i < len; i++)
+	{
+		switch (type) {
+		case 1:
+			buf[i] = (int)line[i].re;
+			break;
+		case 2:
+			buf[i] = (int)line[i].im;
+			break;
+		case 3:
+			buf[i] = (int)line[i].re * (int)line[i].re + (int)line[i].im * (int)line[i].im;
+			break;
+		}
+	}
 	initDbgPlot();
-	PlotSpectrum("Spectrum", (int*)(&item), 1);
+	PlotLine("Line", (int*)(buf), len);
 	return 0;
 #else
 	printf("DbgPlot not supported in X64 mode.\n");
@@ -56,15 +86,50 @@ int32 __ext_dbgplot_spectrum(int16 item)
 #endif
 }
 
-int32 __ext_dbgplot_dots(complex16 *data, int len, int toPlot)
+int32 __ext_dbgplot_spectrum(complex16 *line, int len)
 { 
 #ifdef BUILDARCHX86
+	int *buf = (int*)malloc(len * sizeof(int));
+	if (buf == NULL)
+	{
+		printf("Memory allocation error!\n");
+		exit(1);
+	}
+	for (int i = 0; i < len; i++)
+	{
+		buf[i] = (int)line[i].re * (int)line[i].re + (int)line[i].im * (int)line[i].im;
+	}
 	initDbgPlot();
-	PlotDots("Dots", (COMPLEX16 *)data, toPlot);
+	PlotSpectrum("Spectrum", buf, len);
 	return 0;
 #else
 	printf("DbgPlot not supported in X64 mode.\n");
 	exit(1);
 #endif
 }
+
+int32 __ext_dbgplot_dots(complex16 *data, int len)
+{ 
+#ifdef BUILDARCHX86
+	initDbgPlot();
+	PlotDots("Dots", (COMPLEX16 *)data, len);
+	return 0;
+#else
+	printf("DbgPlot not supported in X64 mode.\n");
+	exit(1);
+#endif
+}
+
+int32 __ext_dbgplot_dot(complex16 data)
+{
+#ifdef BUILDARCHX86
+	initDbgPlot();
+	PlotDots("Dots", (COMPLEX16 *)(&data), 1);
+	return 0;
+#else
+	printf("DbgPlot not supported in X64 mode.\n");
+	exit(1);
+#endif
+}
+
 #endif

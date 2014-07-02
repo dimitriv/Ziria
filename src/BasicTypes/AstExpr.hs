@@ -867,8 +867,10 @@ is_side_effecting e = case unExp e of
   ESeq e1 e2     -> any is_side_effecting [e1,e2]
   ECall e' es    -> True
   EIf e1 e2 e3   -> any is_side_effecting [e1,e2,e3]
-  EPrint nl e    -> is_side_effecting e
-  EError _       -> False
+
+  EPrint nl e    -> True -- is_side_effecting e
+  EError _       -> True -- False
+
   ELUT _ e       -> is_side_effecting e
   EBPerm e1 e2   -> any is_side_effecting [e1,e2]
 

@@ -17,20 +17,7 @@
 -- permissions and limitations under the License.
 --
 --
+#include "../const.blk"
+#include "blocks/TransmitterInfiniteWThreads.blk"
 
-let sum_complex16(a : arr complex16) = 
-  var s : complex16 := complex16{re=0;im=0};
-  for i in [0,length(a)] {
-    s := s + a[i]
-  };
-  return s;    
-in
-
-let sum_int16(a : arr int16) = 
-  var s : int16 := 0;
-  for i in [0,length(a)] {
-    s := s + a[i]
-  };
-  return s;    
-in
-
+read >>> TransmitterInfiniteWThreads(HeaderInfo{coding=CR_12;modulation=M_QPSK;len=0}) >>> write

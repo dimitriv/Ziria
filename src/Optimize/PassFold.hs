@@ -194,6 +194,22 @@ float_letfun_repeat_step fgs comp
  | otherwise
  = return comp
 
+
+float_let_par_step fgs comp
+  | Par p c1 c2 <- unComp comp
+  , LetE x e1 c1' <- unComp c1
+  = rewrite $ cLetE loc cty x e1 (cPar loc cty p c1' c2)
+  | Par p c1 c2 <- unComp comp
+  , LetE x e2 c2' <- unComp c2
+  = rewrite $ cLetE loc cty x e2 (cPar loc cty p c1 c2')
+  | otherwise
+  = return comp
+  where loc = compLoc comp
+        cty = compInfo comp
+  
+
+
+
 is_simpl_call_arg (CAExp e) = is_simpl_expr e
 is_simpl_call_arg _         = False
 
@@ -333,8 +349,9 @@ inline_step_aux fgs comp
   | LetFunC nm params locals c1 c2 <- unComp comp
   -- NB: for now, we only inline LetFunC's with empty local environments
   , [] <- locals 
-  = do { -- liftIO $ putStrLn $ "LFC-before = " ++ show comp 
-         c2' <- inline_comp_fun (nm,params,c1) c2
+  = do { liftIO $ putStrLn $ "Inlining comp fun      = " ++ show nm
+       ; c2' <- inline_comp_fun (nm,params,c1) c2
+       ; liftIO $ putStrLn $ "nm member of rewritten = " ++ show (S.member nm (compFVs c2'))
          -- ; liftIO $ putStrLn $ "LFC-after = " ++ show c2' 
        ; return $
          if S.member nm (compFVs c2') 
@@ -361,8 +378,8 @@ is_simpl_expr0 (EValArr _) = True
 is_simpl_expr0 (EVar _)    = True
 is_simpl_expr0 (EArrRead e1 e2 _li) = is_simpl_expr e1 && is_simpl_expr e2
 is_simpl_expr0 (EUnOp u e)          = is_simpl_expr e
+is_simpl_expr0 (EStruct _ fses) = all is_simpl_expr (map snd fses)
 is_simpl_expr0 _ = False 
-
 
 no_lut_inside x 
   = isJust (mapExpM_ elut_nothing x)
@@ -607,7 +624,9 @@ ifdead_step fgs comp
   where evalBool (MkExp (EBinOp Eq (MkExp (EVal (VInt i)) _ _) 
                                    (MkExp (EVal (VInt j)) _ _)) _ _) 
            = Just (i==j) 
+        evalBool (MkExp (EVal (VBool b)) _ _) = Just b
         evalBool _ = Nothing
+
         eneg e = MkExp (EUnOp Neg e) (expLoc e) (info e) 
 
         impliesBool (MkExp (EBinOp Eq e
@@ -781,7 +800,11 @@ rest_chain fgs e
        eval_arith fgs >>= 
        const_fold fgs >>= 
        arrinit_step fgs >>= 
-       subarr_inline_step fgs
+       subarr_inline_step fgs 
+       -- This leads to too much inlining and seems to have 
+       -- unstable effects to performance so I am keeping it 
+       -- commented for now:
+       -- >>= proj_inline_step fgs
 
 
 exp_inline_step :: DynFlags -> TypedExpPass
@@ -847,6 +870,15 @@ subarr_inline_step fgs e
   | otherwise
   = return e
   
+proj_inline_step :: DynFlags -> TypedExpPass
+proj_inline_step fgs e 
+ | EProj e fn <- unExp e
+ , EStruct _s fs_es <- unExp e
+ , all (is_simpl_expr . snd) fs_es -- no side effects
+ , Just ep <- lookup fn fs_es
+ = rewrite ep
+ | otherwise
+ = return e 
 
 
 for_unroll_step :: DynFlags -> TypedExpPass
@@ -997,8 +1029,14 @@ foldCompPasses flags
 
     , ("float-letfun-repeat", float_letfun_repeat_step flags)
 
-    , ("ifpar-left"         , ifpar_step_left flags         )        
-    , ("ifpar-right"        , ifpar_step_right flags        )        
+    , ("float-let-par-step", float_let_par_step flags)
+
+
+-- Experiment: this gives perf improvement for large pipelines
+-- probably because of less code duplication and LUT sharing.
+--
+--    , ("ifpar-left"         , ifpar_step_left flags         )        
+--    , ("ifpar-right"        , ifpar_step_right flags        )        
     , ("ifdead"             , ifdead_step flags             )       
 
     -- Don't use: not wrong but does not play nicely with LUT

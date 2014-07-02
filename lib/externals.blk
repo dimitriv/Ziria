@@ -151,3 +151,10 @@ let external viterbi_brick_init_fast(frame_length:int, code_rate:int16, depth:in
 let external viterbi_brick_decode_fast(svalue:arr[48] int8, bitValue:arr[96000] bit): int16 in 
 let external viterbiSig11a_brick_decode_fast(svalue:arr[48] int8, bitValue:arr[96000] bit): int16 in 
 
+
+-- DbgPlot library (works only in 32-bit mode)
+let external dbgplot_real_line(data: arr int16) : () in
+let external dbgplot_complex_line(data:arr complex16, type:int16) : () in
+let external dbgplot_spectrum(item:arr complex16) : () in
+let external dbgplot_dots(data:arr complex16) : () in
+let external dbgplot_dot(data:complex16) : () in
