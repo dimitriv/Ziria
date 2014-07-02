@@ -40,7 +40,7 @@ TGTS = $(patsubst %.wpl, %.test, $(wildcard *.wpl))
 all: $(TGTS)
 
 %.out : %.wpl
-	EXTRAOPTS='$(EXTRAOPTS) --new-src-format --pipeline --affinity-mask=5' $(PP) $< $@
+	EXTRAOPTS='$(EXTRAOPTS) --pipeline --affinity-mask=5' $(PP) $< $@
 
 # %.outfile: %.out %.infile
 # 	./$< --input=file \

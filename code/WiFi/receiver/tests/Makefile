@@ -43,7 +43,7 @@ TGTS = $(patsubst %.blk, %.test, $(wildcard *.blk))
 all: $(TGTS)
 
 %.out : %.blk
-	EXTRAOPTS='--new-src-format --bounds-check --no-exp-fold $(EXTRAOPTS)' $(PP) $< $@
+	EXTRAOPTS='--bounds-check --no-exp-fold $(EXTRAOPTS)' $(PP) $< $@
 
 %.outfile: %.out %.infile
 	./$< --input=file \

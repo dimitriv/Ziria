@@ -39,7 +39,7 @@ TGTS = $(patsubst %.zir, %.test, $(wildcard *.zir))
 all: $(TGTS)
 
 %.out : %.zir
-	EXTRAOPTS='--new-src-format --bounds-check --vectorize --ddump-vect $(EXTRAOPTS)' $(PP) $< $@
+	EXTRAOPTS='--bounds-check --vectorize --ddump-vect $(EXTRAOPTS)' $(PP) $< $@
 
 %.outfile: %.out %.infile
 	./$< --input=file \

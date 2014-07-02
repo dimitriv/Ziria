@@ -38,7 +38,7 @@ TGTS = $(patsubst %.wpl, %.test, $(wildcard *.wpl))
 all: $(TGTS)
 
 %.out : %.wpl
-	EXTRAOPTS='$(EXTRAOPTS) --new-src-format' $(PP) $< $@
+	EXTRAOPTS='$(EXTRAOPTS)' $(PP) $< $@
 #	$(PP) $< $@
 
 %.outfile: %.out %.infile

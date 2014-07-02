@@ -50,8 +50,6 @@ import qualified PassPipeline as PP
  
 import qualified BlinkParseComp as NewParser
 
-import qualified ParseComp      as OldParser
-
 import PassFold
 import PpComp
 import Rename
@@ -103,12 +101,9 @@ main = failOnException $ do
     --    putStrLn "command line parsed ..."
      
     prog <- 
-      if isDynFlagSet dflags NewSrcFormat then 
           failOnError $ 
           do { let pm = runParserT NewParser.parseProgram 0 inFile input
              ; NewParser.runParseM pm [] }
-      else
-          failOnError $ return $ parse OldParser.parserToplevel inFile input
 
     --    putStrLn "parsed ..."
     --    putStrLn $ "parsed prog = " ++ show prog
