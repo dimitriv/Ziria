@@ -43,7 +43,6 @@ data DynFlag =
   | CSrcPathPosix FilePath
   | CSrcPathNative FilePath
   | Debug
-  | NewSrcFormat
   | StdoutDump
   | BoundsCheck
 
@@ -138,12 +137,8 @@ options =
      , Option []        ["autolut"]             (NoArg AutoLUT)       "automatically convert function to use LUTs"
      , Option []        ["pipeline"]            (NoArg Pipeline)      "pipeline standalone computations"
 
-
      , Option []        ["native-mitigators"]   (NoArg NativeMitigators) "use native mitigators instead of source-based"
      , Option []        ["no-lut-hashing"]      (NoArg NoLUTHashing)     "do not hash lut generation"
-
-
-     , Option []        ["new-src-format"]      (NoArg NewSrcFormat)  "new source format"
 
      , Option []        ["dummy-thread"]        (NoArg DummyThread)   "generate dummy thread when pipelining"
      , Option []        ["ddump-to-file"]       (NoArg DumpToFile)    "dump to a file"
