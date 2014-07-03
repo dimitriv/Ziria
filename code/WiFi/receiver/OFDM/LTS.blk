@@ -33,8 +33,6 @@ let comp LTS() =
   var origPreamble:arr[64] complex16;
   var delayedPreamble:arr[64] complex16;
 
-  var phase:arr[1] int;
-  var cfo_est:int16;
   var pH:arr[64] int16;
   var sq_norm32:arr[64] int;
   var fftdata:arr[64] complex16;
@@ -76,12 +74,13 @@ seq{
      let cr = corr.re >> 5 in
      let ci = corr.im >> 5 in
 
-     if (ci == 0) then {
-       phase[0] := 42000000
-     } else {
-       phase[0] := atan2_int32(ci, cr);
-     };
-     cfo_est := int16(phase[0]/(1 << 6));
+
+     let phase = if (ci == 0) then 42000000
+                 else atan2_int32(ci, cr) 
+     in
+
+     let cfo_est = int16(phase/(1 << 6)) in 
+
 
      for i in [0,64] {
        pH[i] := cfo_est*int16(i);

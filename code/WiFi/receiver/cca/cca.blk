@@ -19,7 +19,6 @@
 --
 
 #include <externals.blk>
-#include <v_correlate.blk>
 #include <v_conj_mul.blk>
 #include <conj.blk>
 #include <sum.blk>
