@@ -19,102 +19,70 @@
 --
 
 
-#include <externals.blk>
-#include "../receiver/cca/cca.blk"
-#include "../receiver/OFDM/LTS.blk"
-#include "../receiver/removeDC.blk"
-#include "../receiver/downSample.blk"
-#include "../receiver/OFDM/DataSymbol.blk"
-#include "../receiver/OFDM/FreqCompensation.blk"
-#include "../receiver/OFDM/FFT.blk"
-#include "../receiver/OFDM/ChannelEqualization.blk"
-#include "../receiver/OFDM/PilotTrack.blk"
-#include "../receiver/OFDM/GetData.blk"
-#include "../receiver/decoding/DecodePLCP.blk"
---#include "../receiver/decoding/Decode.blk"
-#include "../transmitter/crc.blk"
 
-#include "../const.blk"
-#include "../transmitter/scramble.blk"
-#include "../receiver/decoding/DemapLimit.blk"
-#include "../receiver/decoding/DemapBPSK.blk"
-#include "../receiver/decoding/DemapQPSK.blk"
-#include "../receiver/decoding/DemapQAM16.blk"
-#include "../receiver/decoding/DemapQAM64.blk"
-#include "../receiver/decoding/DeinterleaveBPSK.blk"
-#include "../receiver/decoding/DeinterleaveQPSK.blk"
-#include "../receiver/decoding/DeinterleaveQAM16.blk"
-#include "../receiver/decoding/DeinterleaveQAM64.blk"
-#include "../receiver/decoding/Viterbi.blk"
+let comp DemapLimitPLCP(shr:int) = 
+  var symbol : arr[4] complex16;
+  var symbol_out : arr[4] complex16;
 
-
-
-let comp MockViterbi(rate:int, len:int) = 
-  var nOutput:int16;
-  var outViterbi:arr[96000] bit; 
-
- repeat {
-
-    (svalue:arr[48] int8) <- takes 48;
-   
-     do{
-       nOutput := 48;
-       for i in [0, nOutput] {
-          if svalue[i] > 3 then {
-             outViterbi[i] := '1;
-          } else {
-             outViterbi[i] := '0;
-          }
-       }
+  repeat seq {
+    
+     (x:arr[4] complex16) <- takes 4;
+    
+     do {
+         symbol_out := x;
      };
 
-     for i in [0, nOutput] {
-       do{print outViterbi[i]};
-       emit outViterbi[i];
-     }
-   }
-
+     emits symbol_out
+  }
 in
 
 
-let comp Decode(h : struct HeaderInfo) =
-  -- +8 is for CRC (4 bits but byte aligned)
-  DemapLimit(0) 
-
-  >>> DemapBPSK() >>> DeinterleaveBPSK() 
-
-  >>> Viterbi(h.coding, h.len*8 + 8) 
-in 
+let comp DecodePLCP() =
+  var hdata : arr[24] complex16;
+  seq{ DemapLimitPLCP(0)  
+                     >>> { (x:arr[24] complex16) <- takes 24; do{hdata := x}}
+     }
+in
 
 
 
-let comp detectSTS() = 
-  removeDC() >>> cca()
-in 
+let comp DemapLimit(shr:int) = 
+  var symbol : arr[4] complex16;
+  var symbol_out : arr[4] complex16;
 
--- FreqCompensation does not work but it is nor crucial so we remove it for now
---       DataSymbol() >>> FreqCompensation(params) >>> FFT() >>> ChannelEqualization(params) >>> 
+  repeat ![48,48] seq {
+    
+     (x:arr[4] complex16) <- takes 4;
+    
+     do {
+         symbol_out := x;
+     };
+
+     emits symbol_out
+  }
+in
+
+
+
 
 
 let comp receiveBits() = 
-       seq { hdata <- DecodePLCP()
-           ; Decode(hdata) -->>> seq { (c : arr[4] bit) <- crc(hdata.len); check_crc(c) }
+       seq { DecodePLCP()
+           ; DemapLimit(0) 
        }
 in
 
 
-let comp receiver() = 
-  downSample() >>> 
-  seq{ t<-detectSTS()
-#ifndef FAST
-     ; do{println "Detected at: ", t}
-#endif
-     ; params <- LTS()
-     ; DataSymbol() >>> FFT() >>> ChannelEqualization(params)
-       >>> PilotTrack()
-       >>> GetData() 
-       >>> receiveBits()
+let comp test() = 
+  repeat { -- ![192, 192] {
+    x<-takes 48;
+    emits x;
   }
+in
+
+let comp receiver() = 
+       test()
+       >>> receiveBits()
 in
 
 
