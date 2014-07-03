@@ -21,15 +21,30 @@
 #include <externals.blk>
 
 let perm8(p : arr[8] int, iarr : arr[8] bit, oarr : arr bit) = 
+  var set : bool; 
   for j in [0,length(oarr)] {
+    set := false;
     for i in [0,8] {
-       if j == p[i] then { 
+       if j == p[i] then {
            oarr[j] := iarr[i]; 
+           set := true;
        }
-    }
+    };
+    if (not set) then { oarr[j] := '0; };
   }
 in 
 
+-- Older version that did not write to the entirety of oarr, although
+-- the LUTter thought it did.
+-- let perm8(p : arr[8] int, iarr : arr[8] bit, oarr : arr bit) = 
+--   for j in [0,length(oarr)] {
+--     for i in [0,8] {
+--        if j == p[i] then { 
+--            oarr[j] := iarr[i]; 
+--        }
+--     }
+--   }
+-- in
 
 let perm(p : arr int, iarr : arr bit) = 
   var oarr    : arr[length(p)] bit;
