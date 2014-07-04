@@ -1,0 +1,37 @@
+#!/bin/bash
+#Use COMPILER={winddk, vs} to set the compiler
+
+./runTests
+if [[ $? -ne 0 ]]
+then
+    exit 1
+fi
+
+EXTRAOPTS='--no-exp-fold --no-fold' ./runTests
+if [[ $? -ne 0 ]]
+then
+    exit 1
+fi
+
+EXTRAOPTS='--vectorize' ./runTests
+if [[ $? -ne 0 ]]
+then
+    exit 1
+fi
+
+EXTRAOPTS='--autolut' ./runTests
+if [[ $? -ne 0 ]]
+then
+    exit 1
+fi
+
+EXTRAOPTS='--vectorize --autolut' ./runTests
+if [[ $? -ne 0 ]]
+then
+    exit 1
+fi
+
+
+
+
+
