@@ -17,6 +17,7 @@
 -- permissions and limitations under the License.
 --
 --
+#pragma once 
 
 let floorc(a:complex16, b:int16) =
     if a.re >= 0 && a.im >= 0 then {

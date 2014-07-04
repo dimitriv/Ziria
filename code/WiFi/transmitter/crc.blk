@@ -17,6 +17,7 @@
 -- permissions and limitations under the License.
 --
 --
+#pragma once 
 
 let update_crc(x:bit, crc_state:arr[4] bit) =
   let base = {'1, '0, '1, '1} in 

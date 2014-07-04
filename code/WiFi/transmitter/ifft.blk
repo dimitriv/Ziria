@@ -17,6 +17,8 @@
 -- permissions and limitations under the License.
 --
 --
+#pragma once 
+
 #include <externals.blk>
 let comp ifft() =
    var symbol:arr[128] complex16;

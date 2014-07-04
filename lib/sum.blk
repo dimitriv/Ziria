@@ -17,6 +17,7 @@
 -- permissions and limitations under the License.
 --
 --
+#pragma once 
 
 let sum_complex16(a : arr complex16) = 
   var s : complex16 := complex16{re=0;im=0};

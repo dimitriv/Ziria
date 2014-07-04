@@ -17,6 +17,7 @@
 -- permissions and limitations under the License.
 --
 --
+#pragma once 
 
 let external permutatew1313(x:arr[4] complex16, y:arr[4] complex16) : ()
 in
