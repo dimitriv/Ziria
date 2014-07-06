@@ -102,6 +102,14 @@ let external zero_int16(x:arr int16) : () in
 let external zero_int32(x:arr int32) : () in
 
 
+-- Equivallent to memcpy in C
+-- NB: When len is constant, this can be done with dst[0,len] := src[0,len]
+--     But this doesn't work for dynamic len
+let external copy_int16(dst : arr int16, src : arr int16, len : int) : int in
+let external copy_int32(dst : arr int32, src : arr int32, len : int) : int in
+let external copy_complex16(dst : arr complex16, src : arr complex16, len : int) : int in
+let external copy_complex32(dst : arr complex32, src : arr complex32, len : int) : int in
+
 
 
 -- Pack two int32 arrays into int16 array
