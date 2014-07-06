@@ -49,7 +49,7 @@ let computeParams() =
 
 in
 
-let comp ReceiverInfiniteWThreads(hinfo : struct HeaderInfo) = 
+let comp ReceiverInfinite(hinfo : struct HeaderInfo) = 
 
   let params = computeParams()
   in 
