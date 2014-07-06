@@ -36,7 +36,9 @@
 //#include "sora_ext_visual.c"
 #include "../sora_radio.c"
 #include "../utils.c"
-#include "../driver.c"
+#include "mac_1thread.c"
+#include "mac_2threads.c"
+#include "driver.c"
 #include "tx.c"
 #include "rx.c"
 

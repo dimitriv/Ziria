@@ -76,7 +76,7 @@ extern HeapContextBlock *pheap_ctx_tx;
 extern HeapContextBlock *pheap_ctx_rx;
 
 // Parameters
-extern BlinkParams *params;
+extern BlinkParams params[2];
 extern BlinkParams *params_tx, *params_rx;
 
 
