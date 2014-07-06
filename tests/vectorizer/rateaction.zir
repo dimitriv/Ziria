@@ -1,0 +1,91 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+
+
+
+let comp DemapLimitPLCP(shr:int) = 
+  var symbol : arr[4] complex16;
+  var symbol_out : arr[4] complex16;
+
+  repeat seq {
+    
+     (x:arr[4] complex16) <- takes 4;
+    
+     do {
+         symbol_out := x;
+     };
+
+     emits symbol_out
+  }
+in
+
+
+let comp DecodePLCP() =
+  var hdata : arr[24] complex16;
+  seq{ DemapLimitPLCP(0)  
+                     >>> { (x:arr[24] complex16) <- takes 24; do{hdata := x}}
+     }
+in
+
+
+
+let comp DemapLimit(shr:int) = 
+  var symbol : arr[4] complex16;
+  var symbol_out : arr[4] complex16;
+
+  repeat ![48,48] seq {
+    
+     (x:arr[4] complex16) <- takes 4;
+    
+     do {
+         symbol_out := x;
+     };
+
+     emits symbol_out
+  }
+in
+
+
+
+
+
+let comp receiveBits() = 
+       seq { DecodePLCP()
+           ; DemapLimit(0) 
+       }
+in
+
+
+let comp test() = 
+  repeat { -- ![192, 192] {
+    x<-takes 48;
+    emits x;
+  }
+in
+
+let comp receiver() = 
+       test()
+       >>> receiveBits()
+in
+
+
+
+
+read >>> receiver() >>> write
