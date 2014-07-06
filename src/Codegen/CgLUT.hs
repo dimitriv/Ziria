@@ -99,14 +99,14 @@ packIdx ranges vs tgt tgt_ty = go vs 0
          = do { w <- varBitWidth ranges v ty
               ; let mask = 2^w - 1
               ; (_,varexp) <- lookupVarEnv v
-              ; appendStmt $ [cstm| $tgt |= (($ty:tgt_ty) (*$varexp)) & $int:mask << $int:pos; |]
+              ; appendStmt $ [cstm| $tgt |= ((($ty:tgt_ty) (*$varexp)) & $int:mask) << $int:pos; |]
               -- ; appendStmt $ [cstm| bitArrWrite((typename BitArrPtr) $varexp, $int:pos, $int:w, $tgt); |]
               ; go vs (pos+w) }
          | otherwise
          = do { w <- varBitWidth ranges v ty
               ; let mask = 2^w - 1
               ; (_,varexp) <- lookupVarEnv v
-              ; appendStmt $ [cstm| $tgt |= (($ty:tgt_ty) $varexp) & $int:mask << $int:pos; |]
+              ; appendStmt $ [cstm| $tgt |= ((($ty:tgt_ty) $varexp) & $int:mask) << $int:pos; |]
               -- ; appendStmt $ [cstm| bitArrWrite((typename BitArrPtr) & $varexp, $int:pos, $int:w, $tgt); |]
               ; go vs (pos+w) }
 
@@ -123,11 +123,13 @@ unpackIdx xs src src_ty = go xs 0
               ; w <- tyBitWidth ty 
 
               ; let mask = 2^w - 1
-              ; tmpname <- freshName "tmp"
-              
-              -- ORIGINAL, but wrong: ; appendStmt $ [cstm| * ($ty:src_ty *) $varexp = ($src >> $int:pos) & $int:mask; |]              
 
-              ; appendDecl [cdecl| $ty:src_ty $id:(name tmpname) = ($src >> $int:pos) & $int:mask; |]
+              ; tmpname_aux <- freshName "tmp_aux"
+              ; tmpname <- freshName "tmp"
+
+              ; appendDecl [cdecl| $ty:src_ty $id:(name tmpname_aux) = ($src >> $int:pos); |]
+              
+              ; appendDecl [cdecl| $ty:src_ty $id:(name tmpname) = $id:(name tmpname_aux) & $int:mask; |]
               ; appendStmt [cstm| memcpy((void *) $varexp, (void *) & ($id:(name tmpname)), $bytesizeof);|]
 
               ; go vs (pos+w) }
@@ -135,7 +137,7 @@ unpackIdx xs src src_ty = go xs 0
          = do { (_,varexp) <- lookupVarEnv v
               ; w <- tyBitWidth ty
               ; let mask = 2^w - 1  
-              ; appendStmt $ [cstm| $varexp = ($src >> $int:pos) & $int:mask; |]
+              ; appendStmt $ [cstm| $varexp = (($src >> $int:pos)) & $int:mask; |]
               -- ; appendStmt $ [cstm| bitArrRead($src,$int:pos,$int:w, (typename BitArrPtr) & $varexp); |] 
               ; go vs (pos+w) }
 

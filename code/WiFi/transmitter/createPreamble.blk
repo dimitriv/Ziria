@@ -17,6 +17,7 @@
 -- permissions and limitations under the License.
 --
 --
+#pragma once 
 
 -- Taken from preamble11a.hpp
 

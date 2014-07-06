@@ -17,6 +17,7 @@
 -- permissions and limitations under the License.
 --
 --
+#pragma once 
 
 -- a * b
 -- re32 = a.re * b.re - a.im * b.im

@@ -17,6 +17,7 @@
 -- permissions and limitations under the License.
 --
 --
+#pragma once 
 
 #include "../../const.blk"
 #include "../../transmitter/scramble.blk"

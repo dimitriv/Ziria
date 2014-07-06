@@ -17,6 +17,7 @@
 -- permissions and limitations under the License.
 --
 --
+#pragma once 
 
 let abs_int16(c : int16) = if (c >= 0) then { return c } else { return -c } in
 let abs_int32(c : int) = if (c >= 0) then { return c } else { return -c } in
