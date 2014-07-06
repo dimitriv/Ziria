@@ -54,7 +54,8 @@ mac.outfile: mac.out mac.infile
              --RX-output=file \
              --RX-output-file-name=$@ \
              --RX-output-file-mode=dbg \
-             --memory-size=1000
+             --memory-size=1000 \
+             $(EXTRARUNOPT)
 
 mac.test: mac.outfile
 	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p

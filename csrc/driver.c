@@ -92,13 +92,24 @@ int __cdecl main(int argc, char **argv) {
   // Start Sora HW
   if (Globals.inType == TY_SORA || Globals.outType == TY_SORA)
   {
-	RadioStart(Globals);
+	  RadioStart(Globals);
+	  if (Globals.inType == TY_SORA)
+	  {
+		  InitSoraRx(*params);
+	  }
+	  if (Globals.outType == TY_SORA)
+	  {
+		  InitSoraTx(*params);
+	  }
   }
+
+
   // Start NDIS
   if (Globals.inType == TY_IP || Globals.outType == TY_IP)
   {
 	HRESULT hResult = SoraUEnableGetTxPacket();
 	assert(hResult == S_OK);
+	Ndis_init(NULL);
   }
 
   // Start measuring time
@@ -163,26 +174,26 @@ int __cdecl main(int argc, char **argv) {
   wpl_output_finalize();
 
 #ifdef SORA_PLATFORM
-  // Stop Sora HW
-  if (Globals.inType == TY_SORA || Globals.outType == TY_SORA)
-  {
-	RadioStop(Globals);
-  }
+	// Stop Sora HW
+	if (Globals.inType == TY_SORA || Globals.outType == TY_SORA)
+	{
+		RadioStop(Globals);
+	}
 
-  // Stop NDIS
-  if (Globals.inType == TY_IP || Globals.outType == TY_IP)
-    {
-      if (hUplinkThread != NULL)
-      {
-	// Sora cleanup.
-	SoraUThreadStop(hUplinkThread);
-	SoraUThreadFree(hUplinkThread);
-      }
-      SoraUDisableGetTxPacket();
-      // Winsock cleanup.
-      closesocket(ConnectSocket);
-      WSACleanup();
-    }
+	// Stop NDIS
+	if (Globals.inType == TY_IP || Globals.outType == TY_IP)
+	{
+		if (hUplinkThread != NULL)
+		{
+			// Sora cleanup.
+			SoraUThreadStop(hUplinkThread);
+			SoraUThreadFree(hUplinkThread);
+		}
+		SoraUDisableGetTxPacket();
+		// Winsock cleanup.
+		closesocket(ConnectSocket);
+		WSACleanup();
+	}
 
 #endif
 

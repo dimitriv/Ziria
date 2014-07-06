@@ -117,16 +117,6 @@ void init_getint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *
 			blk->num16_input_entries = parse_dbg_int16(filebuffer, blk->num16_input_buffer);
 		}
 	}
-
-	if (params->inType == TY_SORA)
-	{
-#ifdef SORA_PLATFORM
-		InitSoraRx(*params);
-#else
-		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
-		exit(1);
-#endif
-	}
 }
 
 FINL
@@ -493,16 +483,6 @@ void init_putcomplex16(BlinkParams *params, BufContextBlock *blk, HeapContextBlo
 			blk->num16_output_buffer = (int16*)blk->mem_output_buf;
 			blk->num16_output_entries = blk->mem_output_buf_size/(2*blk->size_out / 8);
 		}
-	}
-
-	if (params->outType == TY_SORA)
-	{
-#ifdef SORA_PLATFORM
-		InitSoraTx(*params);
-#else
-		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
-		exit(1);
-#endif
 	}
 }
 

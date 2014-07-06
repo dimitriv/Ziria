@@ -226,7 +226,7 @@ void init_getbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 	{
 #ifdef SORA_PLATFORM
 	  // Receiving from IP
-	  Ndis_init(NULL);
+	  //Ndis_init(NULL);
 #endif
 	}
 
@@ -354,7 +354,7 @@ void init_putbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 	{
 #ifdef SORA_PLATFORM
 	  // Sending to IP
-	  Ndis_init(NULL);
+	  //Ndis_init(NULL);
 #endif
 	}
 

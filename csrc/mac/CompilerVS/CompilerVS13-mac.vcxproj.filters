@@ -84,6 +84,12 @@
     <ClCompile Include="..\params.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\mac_1thread.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mac_2threads.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\bit.h">

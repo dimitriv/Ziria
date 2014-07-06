@@ -179,6 +179,8 @@
     <ClCompile Include="..\..\utils.c" />
     <ClCompile Include="..\..\wpl_alloc.c" />
     <ClCompile Include="..\driver.c" />
+    <ClCompile Include="..\mac_1thread.c" />
+    <ClCompile Include="..\mac_2threads.c" />
     <ClCompile Include="..\params.c" />
     <ClCompile Include="..\rx.c" />
     <ClCompile Include="..\tx.c" />

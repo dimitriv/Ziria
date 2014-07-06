@@ -77,7 +77,17 @@ BlinkFileType parse_type(char *typ)
 	exit(1);
 }
 
- BlinkFileMode parse_mode(char *md) {
+
+int parse_MAC(char *typ)
+{
+	if (strcmp(typ, "1-thread") == 0)	return 0;
+	if (strcmp(typ, "2-threads") == 0)	return 1;
+	fprintf(stderr, "Error: cannot parse MAC parameter %s\n", typ);
+	exit(1);
+}
+
+
+BlinkFileMode parse_mode(char *md) {
   if (strcmp(md,"dbg") == 0)
     return MODE_DBG; 
   if (strcmp(md,"bin") == 0) 
@@ -136,6 +146,11 @@ ULONG parse_TXBufferSize(char *rp)
 unsigned long parse_size (char *rp) {
   return (strtol(rp,NULL,10));
 }
+
+
+// Global function
+extern int mac_type;
+void init_inTypeMAC(BlinkParams *params, char *typ)				{ mac_type = parse_MAC(typ); }
 
 
 // TX Init functions
@@ -197,9 +212,9 @@ void init_sampleRateRX(BlinkParams *params, char *i)			{ params[0].radioParams.S
 
 // Here is where we declare the parameters
 #ifdef SORA_PLATFORM
-#define PARAM_TABLE_LENGTH		38
+#define PARAM_TABLE_LENGTH		39
 #else
-#define PARAM_TABLE_LENGTH		25
+#define PARAM_TABLE_LENGTH		26
 #endif
 
 BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] = 
@@ -209,6 +224,11 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
        "Size of memory buffer between TX and RX blocks",
        "0",
 	   init_outMemorySizeTX },
+	 { "--MAC-type=",
+	   "--TX-input=1-thread|2-threads",
+	   "Which MAC to run, 1-thread or 2-threads",
+	   "1-thread",
+	   init_inTypeMAC },
      { "--TX-input=", 
        "--TX-input=file|dummy|sora|ip",
        "Input TX samples come from a file, radio, or are dummy samples",
