@@ -17,5 +17,6 @@
 -- permissions and limitations under the License.
 --
 --
+#pragma once 
 
 let conj(c : complex16) = return complex16{re=c.re; im=c.im*(-1)} in

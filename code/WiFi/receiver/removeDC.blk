@@ -17,9 +17,9 @@
 -- permissions and limitations under the License.
 --
 --
+#pragma once 
 
 #include <externals.blk>
-
 
 
 let comp removeDC() = 

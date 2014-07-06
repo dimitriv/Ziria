@@ -17,6 +17,7 @@
 -- permissions and limitations under the License.
 --
 --
+#pragma once 
 
 let comp scrambler() =
 var scrmbl_st: arr[7] bit := {'1,'1,'1,'1,'1,'1,'1}; 
