@@ -23,7 +23,8 @@ typedef enum  {
   TY_FILE  = 0,
   TY_DUMMY = 1,
   TY_SORA = 2,
-  TY_IP = 3
+  TY_IP = 3,
+  TY_MEM = 4
 } BlinkFileType;
 
 // Binary or debug (human-readable) file format
@@ -82,6 +83,8 @@ typedef struct _BlinkParams {
 	char *outFileName;          // output file name 
 	Repetitions inFileRepeats;  // #times to repeat the input buffer
 	Repetitions dummySamples;   // #dummy samples (if inType == TY_DUMMY)
+	unsigned int inMemorySize;	// Size of memory buffer for input
+	unsigned int outMemorySize;	// Size of memory buffer for output
 	unsigned int outBufSize;    // size of buffer we serve output from
     unsigned int heapSize;      // heap size for blink/wpl program
 	unsigned long latencySampling;		// space between latency sampling in #writes (0 - no latency measurements)

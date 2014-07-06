@@ -67,9 +67,26 @@ unsigned int parse_dbg_int32(char *dbg_buf, num32 *target)
 
 void init_getint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
+	blk->size_in = 32;
+	blk->total_in = 0;
+
 	if (params->inType == TY_DUMMY)
 	{
 		blk->num_max_dummy_samples = params->dummySamples;
+	}
+
+	if (params->inType == TY_MEM)
+	{
+		if (blk->mem_input_buf == NULL || blk->mem_input_buf_size == 0)
+		{
+			fprintf(stderr, "Error: input memory buffer not initialized\n");
+			exit(1);
+		}
+		else
+		{
+			blk->num_input_buffer = (int32 *)blk->mem_input_buf;
+			blk->num_input_entries = blk->mem_input_buf_size / (blk->size_in / 8);
+		}
 	}
 
 	if (params->inType == TY_FILE)
@@ -103,76 +120,113 @@ void init_getint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *
 		exit(1);
 	}
 }
+
+FINL
+GetStatus _buf_getint32(BlinkParams *params, BufContextBlock *blk, int32 *x)
+{
+	if (params->inType == TY_DUMMY)
+	{
+		if (blk->num_input_dummy_samples >= blk->num_max_dummy_samples && params->dummySamples != INF_REPEAT) return GS_EOF;
+		blk->num_input_dummy_samples++;
+		return GS_SUCCESS;
+	}
+
+	if (params->inType == TY_FILE || params->inType == TY_MEM)
+	{
+		// If we reached the end of the input buffer 
+		if (blk->num_input_idx >= blk->num_input_entries)
+		{
+			// If no more repetitions are allowed 
+			if (params->inFileRepeats != INF_REPEAT && blk->num_input_repeats >= params->inFileRepeats)
+			{
+				return GS_EOF;
+			}
+			// Otherwise we set the index to 0 and increase repetition count
+			blk->num_input_idx = 0;
+			blk->num_input_repeats++;
+		}
+
+		*x = blk->num_input_buffer[blk->num_input_idx++];
+
+		return GS_SUCCESS;
+	}
+
+	if (params->inType == TY_SORA)
+	{
+#ifdef SORA_PLATFORM
+		fprintf(stderr, "Sora RX supports only Complex16 type.\n");
+		exit(1);
+#endif
+	}
+
+	return GS_EOF;
+}
+
 GetStatus buf_getint32(BlinkParams *params, BufContextBlock *blk, int32 *x)
 {
+	blk->total_in++;
+	return _buf_getint32(params, blk, x);
+}
 
+FINL
+GetStatus _buf_getarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsigned int vlen)
+{
 	if (params->inType == TY_DUMMY)
 	{
-		if (blk->num_input_dummy_samples >= blk->num_max_dummy_samples && params->dummySamples != INF_REPEAT)
-		{
-			return GS_EOF;
-		}
-		blk->num_input_dummy_samples++;
-		*x = 0;
+		if (blk->num_input_dummy_samples >= blk->num_max_dummy_samples && params->dummySamples != INF_REPEAT) return GS_EOF;
+		blk->num_input_dummy_samples += vlen;
 		return GS_SUCCESS;
 	}
 
-
-	// If we reached the end of the input buffer 
-	if (blk->num_input_idx >= blk->num_input_entries)
+	if (params->inType == TY_FILE || params->inType == TY_MEM)
 	{
-		// If no more repetitions are allowed 
-		if (params->inFileRepeats != INF_REPEAT && blk->num_input_repeats >= params->inFileRepeats)
+		if (blk->num_input_idx + vlen > blk->num_input_entries)
 		{
-			return GS_EOF;
+			if (params->inFileRepeats != INF_REPEAT && blk->num_input_repeats >= params->inFileRepeats)
+			{
+				if (blk->num_input_idx != blk->num_input_entries)
+					fprintf(stderr, "Warning: Unaligned data in input file, ignoring final get()!\n");
+				return GS_EOF;
+			}
+			// Otherwise ignore trailing part of the file, not clear what that part may contain ...
+			blk->num_input_idx = 0;
+			blk->num_input_repeats++;
 		}
-		// Otherwise we set the index to 0 and increase repetition count
-		blk->num_input_idx = 0;
-		blk->num_input_repeats++;
+
+		memcpy(x, &(blk->num_input_buffer[blk->num_input_idx]), vlen * sizeof(int32));
+		blk->num_input_idx += vlen;
+		return GS_SUCCESS;
 	}
 
-	*x = blk->num_input_buffer[blk->num_input_idx++];
+	if (params->inType == TY_SORA)
+	{
+#ifdef SORA_PLATFORM
+		fprintf(stderr, "Sora RX supports only Complex16 type.\n");
+		exit(1);
+#endif
+	}
 
-	return GS_SUCCESS;
+	return GS_EOF;
 }
+
 GetStatus buf_getarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsigned int vlen)
 {
-
-	if (params->inType == TY_DUMMY)
-	{
-		if (blk->num_input_dummy_samples >= blk->num_max_dummy_samples && params->dummySamples != INF_REPEAT)
-		{
-			return GS_EOF;
-		}
-		blk->num_input_dummy_samples += vlen;
-		memset(x,0,vlen*sizeof(int32));
-		return GS_SUCCESS;
-	}
-
-	if (blk->num_input_idx + vlen > blk->num_input_entries)
-	{
-		if (params->inFileRepeats != INF_REPEAT && blk->num_input_repeats >= params->inFileRepeats)
-		{
-			if (blk->num_input_idx != blk->num_input_entries)
-				fprintf(stderr, "Warning: Unaligned data in input file, ignoring final get()!\n");
-			return GS_EOF;
-		}
-		// Otherwise ignore trailing part of the file, not clear what that part may contain ...
-		blk->num_input_idx = 0;
-		blk->num_input_repeats++;
-	}
-	
-	memcpy(x, &(blk->num_input_buffer[blk->num_input_idx]), vlen * sizeof(int32));
-	blk->num_input_idx += vlen;
-	return GS_SUCCESS;
-
+	blk->total_in += vlen;
+	return _buf_getarrint32(params, blk, x, vlen);
 }
+
 
 void init_getcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
-	if (params->inType == TY_DUMMY || params->inType == TY_FILE)
+	if (params->inType == TY_DUMMY || params->inType == TY_FILE || params->inType == TY_MEM)
 	{
+		// we just need to initialize the input buffer in the same way
 		init_getint32(params, blk, hblk);                              // we just need to initialize the input buffer in the same way
+
+		// Change the values that differ in complex
+		blk->size_in = 32;
+
+		// since we will be doing this in integer granularity
 		blk->num_max_dummy_samples = params->dummySamples * 2; // since we will be doing this in integer granularity
 	}
 
@@ -184,19 +238,21 @@ void init_getcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlo
 }
 GetStatus buf_getcomplex32(BlinkParams *params, BufContextBlock *blk, complex32 *x)
 {
-	GetStatus gs1 = buf_getint32(params, blk, & (x->re));
+	blk->total_in++;
+	GetStatus gs1 = _buf_getint32(params, blk, &(x->re));
 	if (gs1 == GS_EOF) 
 	{ 
 		return GS_EOF;
 	}
 	else
 	{
-		return (buf_getint32(params, blk, & (x->im)));
+		return (_buf_getint32(params, blk, & (x->im)));
 	}
 }
 GetStatus buf_getarrcomplex32(BlinkParams *params, BufContextBlock *blk, complex32 *x, unsigned int vlen)
 {
-	return (buf_getarrint32(params, blk, (int32*) x,vlen*2));
+	blk->total_in += vlen;
+	return (_buf_getarrint32(params, blk, (int32*)x, vlen * 2));
 }
 
 void fprint_int32(BufContextBlock *blk, FILE *f, int32 val)
@@ -220,12 +276,29 @@ void fprint_arrint32(BufContextBlock *blk, FILE *f, int32 *val, unsigned int vle
 
 void init_putint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
+	blk->size_out = 32;
+	blk->total_out = 0;
+
 	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
 	{
-		blk->num_output_buffer = (int16 *)malloc(params->outBufSize * sizeof(int16));
+		blk->num_output_buffer = (int32 *)malloc(params->outBufSize * sizeof(int32));
 		blk->num_output_entries = params->outBufSize;
 		if (params->outType == TY_FILE)
 			blk->num_output_file = try_open(params->outFileName, "w");
+	}
+
+	if (params->outType == TY_MEM)
+	{
+		if (blk->mem_output_buf == NULL || blk->mem_output_buf_size == 0)
+		{
+			fprintf(stderr, "Error: output memory buffer not initialized\n");
+			exit(1);
+		}
+		else
+		{
+			blk->num_output_buffer = (int32*)blk->mem_output_buf;
+			blk->num_output_entries = blk->mem_output_buf_size / (blk->size_out / 8);
+		}
 	}
 
 	if (params->outType == TY_SORA)
@@ -242,6 +315,12 @@ void _buf_putint32(BlinkParams *params, BufContextBlock *blk, int32 x)
 	{
 		return;
 	}
+
+	if (params->outType == TY_MEM)
+	{
+		blk->num_output_buffer[blk->num_output_idx++] = (int32)x;
+	}
+
 	if (params->outType == TY_FILE)
 	{
 		if (params->outFileMode == MODE_DBG)
@@ -256,11 +335,23 @@ void _buf_putint32(BlinkParams *params, BufContextBlock *blk, int32 x)
 			blk->num_output_buffer[blk->num_output_idx++] = (int16)x;
 		}
 	}
+
+	if (params->outType == TY_SORA)
+	{
+#ifdef SORA_PLATFORM
+		fprintf(stderr, "Sora TX supports only Complex16 type.\n");
+		exit(1);
+#else
+		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
+		exit(1);
+#endif
+	}
 }
 
 
 void buf_putint32(BlinkParams *params, BufContextBlock *blk, int32 x)
 {
+	blk->total_out++;
 	write_time_stamp(params);
 	_buf_putint32(params, blk, x);
 }
@@ -270,6 +361,12 @@ FINL
 void _buf_putarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsigned int vlen)
 {
 	if (params->outType == TY_DUMMY) return;
+
+	if (params->outType == TY_MEM)
+	{
+		memcpy((void*)(blk->num_output_buffer + blk->num_output_idx), (void*)x, vlen*sizeof(int32));
+		blk->num_output_idx += vlen;
+	}
 
 	if (params->outType == TY_FILE)
 	{
@@ -293,12 +390,29 @@ void _buf_putarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsig
 				for (blk->num_output_idx = 0; blk->num_output_idx < vlen - m; blk->num_output_idx++)
 					blk->num_output_buffer[blk->num_output_idx] = x[blk->num_output_idx + m];
 			}
+			else
+			{
+				memcpy((void*)(blk->num_output_buffer + blk->num_output_idx), (void*)x, vlen*sizeof(int32));
+				blk->num_output_idx += vlen;
+			}
 		}
+	}
+
+	if (params->outType == TY_SORA)
+	{
+#ifdef SORA_PLATFORM
+		fprintf(stderr, "Sora TX supports only Complex16 type.\n");
+		exit(1);
+#else
+		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
+		exit(1);
+#endif
 	}
 }
 
 void buf_putarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsigned int vlen)
 {
+	blk->total_out += vlen;
 	write_time_stamp(params);
 	_buf_putarrint32(params, blk, x, vlen);
 }
@@ -319,12 +433,31 @@ void flush_putint32(BlinkParams *params, BufContextBlock *blk)
 
 void init_putcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
+	blk->size_out = 64;
+	blk->total_out = 0;
+
+	write_time_stamp(params);
+
 	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
 	{
-		blk->num_output_buffer = (int16 *)malloc(2 * params->outBufSize * sizeof(int16));
+		blk->num_output_buffer = (int32 *)malloc(2 * params->outBufSize * sizeof(int32));
 		blk->num_output_entries = params->outBufSize * 2;
 		if (params->outType == TY_FILE)
 			blk->num_output_file = try_open(params->outFileName, "w");
+	}
+
+	if (params->outType == TY_MEM)
+	{
+		if (blk->mem_output_buf == NULL || blk->mem_output_buf_size == 0)
+		{
+			fprintf(stderr, "Error: output memory buffer not initialized\n");
+			exit(1);
+		}
+		else
+		{
+			blk->num_output_buffer = (int32*)blk->mem_output_buf;
+			blk->num_output_entries = blk->mem_output_buf_size / (2 * blk->size_out / 8);
+		}
 	}
 
 	if (params->outType == TY_SORA)
@@ -335,14 +468,38 @@ void init_putcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlo
 }
 void buf_putcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex32 x)
 {
+	blk->total_out++;
 	write_time_stamp(params);
-	_buf_putint32(params, blk, x.re);
-	_buf_putint32(params, blk, x.im);
+
+	if (params->outType == TY_DUMMY) return;
+
+	if (params->outType == TY_FILE || params->outType == TY_MEM)
+	{
+		_buf_putint32(params, blk, x.re);
+		_buf_putint32(params, blk, x.im);
+	}
+
+	if (params->outType == TY_SORA)
+	{
+		fprintf(stderr, "Error: Sora TX does not support Complex32\n");
+		exit(1);
+	}
 }
 void buf_putarrcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex32 *x, unsigned int vlen)
 {
+	blk->total_out += vlen;
 	write_time_stamp(params);
-	_buf_putarrint32(params, blk, (int32 *)x, vlen * 2);
+
+	if (params->outType == TY_DUMMY || params->outType == TY_FILE || params->outType == TY_MEM)
+	{
+		_buf_putarrint32(params, blk, (int32 *)x, vlen * 2);
+	}
+
+	if (params->outType == TY_SORA)
+	{
+		fprintf(stderr, "Error: Sora TX does not support Complex32\n");
+		exit(1);
+	}
 }
 void flush_putcomplex32(BlinkParams *params, BufContextBlock *blk)
 {

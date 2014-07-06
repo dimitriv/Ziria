@@ -133,9 +133,7 @@ int __cdecl main(int argc, char **argv) {
 
   wpl_global_init_tx(params_tx->heapSize);
   wpl_global_init_rx(params_rx->heapSize);
-  wpl_input_initialize_tx();
-  wpl_input_initialize_rx();
-
+ 
 #ifdef SORA_PLATFORM
   /////////////////////////////////////////////////////////////////////////////  
   // DV: Pass the User_Routines here
@@ -145,22 +143,66 @@ int __cdecl main(int argc, char **argv) {
   // be initialized correctly!
   // (see /csrc/driver.c for explanation)
 
-  //SINGLE MODULE CODE: int no_threads = wpl_set_up_threads_tx(User_Routines);
-  int no_threads = SetUpThreads(User_Routines);
-
   printf("Setting up threads...\n");
 
   ULONGLONG ttstart, ttend;
 
-  printf("Starting %d threads...\n", no_threads);
-  StartThreads(&ttstart, &ttend, &(params_tx->measurementInfo.tsinfo), no_threads, User_Routines);
+  printf("Starting TX thread...\n");
 
+  if (params_tx->outType == TY_MEM)
+  {
+	  buf_ctx_tx.mem_output_buf_size = params_tx->outMemorySize;
+	  buf_ctx_tx.mem_output_buf = malloc(buf_ctx_tx.mem_output_buf_size);
+  }
+  wpl_input_initialize_tx();
+
+  //SINGLE MODULE CODE: int no_threads = wpl_set_up_threads_tx(User_Routines);
+  int no_threads = SetUpThreads(User_Routines);
+
+  StartThreads(&ttstart, &ttend, &(params_tx->measurementInfo.tsinfo), 1, User_Routines);
+
+  printf("Total input items (including EOF): %d (%d B), output items: %d (%d B)\n",
+	  buf_ctx_tx.total_in, buf_ctx_tx.total_in*buf_ctx_tx.size_in,
+	  buf_ctx_tx.total_out, buf_ctx_tx.total_out*buf_ctx_tx.size_out);
   printf("Time Elapsed: %ld us \n", 
 	  SoraTimeElapsed((ttend / 1000 - ttstart / 1000), &(params_tx->measurementInfo.tsinfo)));
 
   if (params_tx->latencySampling > 0)
   {
 	  printf("Min write latency: %ld, max write latency: %ld\n", (ulong) params_tx->measurementInfo.minDiff, (ulong) params_tx->measurementInfo.maxDiff);
+	  printf("CDF: \n   ");
+	  unsigned int i = 0;
+	  while (i < params_tx->measurementInfo.aDiffPtr)
+	  {
+		  printf("%ld ", params_tx->measurementInfo.aDiff[i]);
+		  if (i % 10 == 9)
+		  {
+			  printf("\n   ");
+		  }
+		  i++;
+	  }
+	  printf("\n");
+  }
+
+
+  printf("Starting RX thread...\n");
+  if (params_tx->outType == TY_MEM)
+  {
+	  buf_ctx_rx.mem_input_buf_size = (buf_ctx_tx.total_out * buf_ctx_tx.size_out) / 8;
+	  buf_ctx_rx.mem_input_buf = buf_ctx_tx.mem_output_buf;
+  }
+  wpl_input_initialize_rx();
+  StartThreads(&ttstart, &ttend, &(params_tx->measurementInfo.tsinfo), 1, &(User_Routines[1]));
+
+  printf("Total input items (including EOF): %d (%d B), output items: %d (%d B)\n",
+	  buf_ctx_rx.total_in, buf_ctx_rx.total_in*buf_ctx_rx.size_in,
+	  buf_ctx_rx.total_out, buf_ctx_rx.total_out*buf_ctx_rx.size_out);
+  printf("Time Elapsed: %ld us \n",
+	  SoraTimeElapsed((ttend / 1000 - ttstart / 1000), &(params_tx->measurementInfo.tsinfo)));
+
+  if (params_tx->latencySampling > 0)
+  {
+	  printf("Min write latency: %ld, max write latency: %ld\n", (ulong)params_tx->measurementInfo.minDiff, (ulong)params_tx->measurementInfo.maxDiff);
 	  printf("CDF: \n   ");
 	  unsigned int i = 0;
 	  while (i < params_tx->measurementInfo.aDiffPtr)

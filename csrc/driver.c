@@ -68,6 +68,8 @@ extern void wpl_output_finalize();
 extern void wpl_global_init(unsigned int heap_size);
 extern int wpl_go();
 
+extern void initBufCtxBlock(BufContextBlock *blk);
+
 
 // Parameters and parsing
 #include "params.h"
@@ -124,7 +126,10 @@ int __cdecl main(int argc, char **argv) {
   printf("Starting %d threads...\n", no_threads);
   StartThreads(&ttstart, &ttend, &Globals.measurementInfo.tsinfo, no_threads, User_Routines);
 
-  printf("Time Elapsed: %ld us \n", 
+  printf("Total input items (including EOF): %d (%d B), output items: %d (%d B)\n",
+	  buf_ctx.total_in, buf_ctx.total_in*buf_ctx.size_in,
+	  buf_ctx.total_out, buf_ctx.total_out*buf_ctx.size_out);
+  printf("Time Elapsed: %ld us \n",
 	  SoraTimeElapsed((ttend / 1000 - ttstart / 1000), &Globals.measurementInfo.tsinfo));
 
   if (Globals.latencySampling > 0)

@@ -30,9 +30,6 @@
     <ClCompile Include="..\..\buf_bit.c">
       <Filter>Ziria Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\buf_bytes.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\buf_numerics8.c">
       <Filter>Ziria Source Files</Filter>
     </ClCompile>

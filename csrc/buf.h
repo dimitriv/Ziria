@@ -113,16 +113,25 @@ typedef struct _BufContextBlock {
 	unsigned int num_max_dummy_samples;
 
 	int num_fst;
-	int16 *num_output_buffer;
+	int32 *num_output_buffer;
 	unsigned int num_output_entries;
 	unsigned int num_output_idx;
 	FILE *num_output_file;
 
+
+	// Buffers for memory input and output
+	// This essentially points to the same location as <type>_input/output_buffer
+	// but it is type-agnostic
+	void *mem_input_buf, *mem_output_buf;
+	unsigned long mem_input_buf_size, mem_output_buf_size;
+
+	// General statistics
+	unsigned long total_in, total_out;		// Total number of data inputs read/written
+	size_t size_in, size_out;				// Size of input and output data type (in bits)
 } BufContextBlock;
 
 
-
-// Defined in buf_bytes.c for lack of better location
+// Defined in buf_bit.c
 void initBufCtxBlock(BufContextBlock *blk);
 
 

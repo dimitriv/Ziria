@@ -71,9 +71,26 @@ unsigned int parse_dbg_int8(char *dbg_buf, int8 *target)
 
 void init_getint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
+	blk->size_in = 8;
+	blk->total_in = 0;
+
 	if (params->inType == TY_DUMMY)
 	{
 		blk->num8_max_dummy_samples = params->dummySamples;
+	}
+
+	if (params->inType == TY_MEM)
+	{
+		if (blk->mem_input_buf == NULL || blk->mem_input_buf_size == 0)
+		{
+			fprintf(stderr, "Error: input memory buffer not initialized\n");
+			exit(1);
+		}
+		else
+		{
+			blk->num8_input_buffer = (int8 *)blk->mem_input_buf;
+			blk->num8_input_entries = blk->mem_input_buf_size;
+		}
 	}
 
 	if (params->inType == TY_FILE)
@@ -111,18 +128,18 @@ void init_getint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *h
 #endif
 	}
 }
-GetStatus buf_getint8(BlinkParams *params, BufContextBlock *blk, int8 *x)
-{
 
+FINL
+GetStatus _buf_getint8(BlinkParams *params, BufContextBlock *blk, int8 *x)
+{
 	if (params->inType == TY_DUMMY)
 	{
 		if (blk->num8_input_dummy_samples >= blk->num8_max_dummy_samples && params->dummySamples != INF_REPEAT) return GS_EOF;
 		blk->num8_input_dummy_samples++;
-		*x = 0;
 		return GS_SUCCESS;
 	}
 
-	if (params->inType == TY_FILE)
+	if (params->inType == TY_FILE || params->inType == TY_MEM)
 	{
 		// If we reached the end of the input buffer 
 		if (blk->num8_input_idx >= blk->num8_input_entries)
@@ -145,7 +162,7 @@ GetStatus buf_getint8(BlinkParams *params, BufContextBlock *blk, int8 *x)
 	if (params->inType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
-		fprintf(stderr, "Sora RX supports only complex8 type.\n");
+		fprintf(stderr, "Sora RX supports only complex16 type.\n");
 		exit(1);
 #endif
 	}
@@ -153,18 +170,23 @@ GetStatus buf_getint8(BlinkParams *params, BufContextBlock *blk, int8 *x)
 	return GS_EOF;
 }
 
-GetStatus buf_getarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigned int vlen)
+GetStatus buf_getint8(BlinkParams *params, BufContextBlock *blk, int8 *x)
 {
+	blk->total_in++;
+	return _buf_getint8(params, blk, x);
+}
 
+FINL
+GetStatus _buf_getarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigned int vlen)
+{
 	if (params->inType == TY_DUMMY)
 	{
 		if (blk->num8_input_dummy_samples >= blk->num8_max_dummy_samples && params->dummySamples != INF_REPEAT) return GS_EOF;
 		blk->num8_input_dummy_samples += vlen;
-		memset(x, 0, vlen*sizeof(int8));
 		return GS_SUCCESS;
 	}
 
-	if (params->inType == TY_FILE)
+	if (params->inType == TY_FILE || params->inType == TY_MEM)
 	{
 		if (blk->num8_input_idx + vlen > blk->num8_input_entries)
 		{
@@ -195,26 +217,35 @@ GetStatus buf_getarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, uns
 	return GS_EOF;
 }
 
+GetStatus buf_getarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigned int vlen)
+{
+	blk->total_in += vlen;
+	return _buf_getarrint8(params, blk, x, vlen);
+}
+
 void init_getcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
 	// we just need to initialize the input buffer in the same way
 	init_getint8(params, blk, hblk);                              
+	blk->size_in = 16;
+
 	// since we will be doing this in integer granularity
 	blk->num8_max_dummy_samples = params->dummySamples * 2; 
 }
 
 GetStatus buf_getcomplex8(BlinkParams *params, BufContextBlock *blk, complex8 *x)
 {
-	if (params->inType == TY_DUMMY || params->inType == TY_FILE)
+	blk->total_in++;
+	if (params->inType == TY_DUMMY || params->inType == TY_FILE || params->inType == TY_MEM)
 	{
-		GetStatus gs1 = buf_getint8(params, blk, &(x->re));
+		GetStatus gs1 = _buf_getint8(params, blk, &(x->re));
 		if (gs1 == GS_EOF)
 		{
 			return GS_EOF;
 		}
 		else
 		{
-			return (buf_getint8(params, blk, &(x->im)));
+			return (_buf_getint8(params, blk, &(x->im)));
 		}
 	}
 
@@ -229,9 +260,10 @@ GetStatus buf_getcomplex8(BlinkParams *params, BufContextBlock *blk, complex8 *x
 
 GetStatus buf_getarrcomplex8(BlinkParams *params, BufContextBlock *blk, complex8 *x, unsigned int vlen)
 {
-	if (params->inType == TY_DUMMY || params->inType == TY_FILE)
+	blk->total_in += vlen;
+	if (params->inType == TY_DUMMY || params->inType == TY_FILE || params->inType == TY_MEM)
 	{
-		return (buf_getarrint8(params, blk, (int8*)x, vlen * 2));
+		return _buf_getarrint8(params, blk, (int8*)x, vlen * 2);
 	}
 
 	if (params->inType == TY_SORA)
@@ -245,8 +277,6 @@ GetStatus buf_getarrcomplex8(BlinkParams *params, BufContextBlock *blk, complex8
 
 void fprint_int8(BufContextBlock *blk, FILE *f, int8 val)
 {
-	// FIX
-	// static int isfst = 1;
 	if (blk->num8_fst)
 	{
 		fprintf(f, "%d", val);
@@ -266,12 +296,29 @@ void fprint_arrint8(BufContextBlock *blk, FILE *f, int8 *val, unsigned int vlen)
 
 void init_putint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
+	blk->size_out = 8;
+	blk->total_out = 0;
+
 	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
 	{
 		blk->num8_output_buffer = (int8 *)malloc(params->outBufSize * sizeof(int8));
 		blk->num8_output_entries = params->outBufSize;
 		if (params->outType == TY_FILE)
 			blk->num8_output_file = try_open(params->outFileName, "w");
+	}
+
+	if (params->outType == TY_MEM)
+	{
+		if (blk->mem_output_buf == NULL || blk->mem_output_buf_size == 0)
+		{
+			fprintf(stderr, "Error: output memory buffer not initialized\n");
+			exit(1);
+		}
+		else
+		{
+			blk->num8_output_buffer = (int8*)blk->mem_output_buf;
+			blk->num8_output_entries = blk->mem_output_buf_size;
+		}
 	}
 
 	if (params->outType == TY_SORA)
@@ -294,6 +341,11 @@ void _buf_putint8(BlinkParams *params, BufContextBlock *blk, int8 x)
 	if (params->outType == TY_DUMMY)
 	{
 		return;
+	}
+
+	if (params->outType == TY_MEM)
+	{
+		blk->num8_output_buffer[blk->num8_output_idx++] = (int8)x;
 	}
 
 	if (params->outType == TY_FILE)
@@ -326,6 +378,7 @@ void _buf_putint8(BlinkParams *params, BufContextBlock *blk, int8 x)
 
 void buf_putint8(BlinkParams *params, BufContextBlock *blk, int8 x)
 {
+	blk->total_out ++;
 	write_time_stamp(params);
 	_buf_putint8(params, blk, x);
 }
@@ -336,6 +389,12 @@ void _buf_putarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigne
 {
 
 	if (params->outType == TY_DUMMY) return;
+
+	if (params->outType == TY_MEM)
+	{
+		memcpy((void*)(blk->num8_output_buffer + blk->num8_output_idx), (void*)x, vlen*sizeof(int8));
+		blk->num8_output_idx += vlen;
+	}
 
 	if (params->outType == TY_FILE)
 	{
@@ -359,6 +418,11 @@ void _buf_putarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigne
 				for (blk->num8_output_idx = 0; blk->num8_output_idx < vlen - m; blk->num8_output_idx++)
 					blk->num8_output_buffer[blk->num8_output_idx] = x[blk->num8_output_idx + m];
 			}
+			else
+			{
+				memcpy((void*)(blk->num8_output_buffer + blk->num8_output_idx), (void*)x, vlen*sizeof(int8));
+				blk->num8_output_idx += vlen;
+			}
 		}
 	}
 
@@ -378,6 +442,7 @@ void _buf_putarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigne
 
 void buf_putarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigned int vlen)
 {
+	blk->total_out += vlen;
 	write_time_stamp(params);
 	_buf_putarrint8(params, blk, x, vlen);
 }
@@ -398,6 +463,9 @@ void flush_putint8(BlinkParams *params, BufContextBlock *blk)
 
 void init_putcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
+	blk->size_out = 16;
+	blk->total_out = 0;
+
 	write_time_stamp(params);
 
 	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
@@ -406,6 +474,20 @@ void init_putcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBloc
 		blk->num8_output_entries = params->outBufSize * 2;
 		if (params->outType == TY_FILE)
 			blk->num8_output_file = try_open(params->outFileName, "w");
+	}
+
+	if (params->outType == TY_MEM)
+	{
+		if (blk->mem_output_buf == NULL || blk->mem_output_buf_size == 0)
+		{
+			fprintf(stderr, "Error: output memory buffer not initialized\n");
+			exit(1);
+		}
+		else
+		{
+			blk->num8_output_buffer = (int8*)blk->mem_output_buf;
+			blk->num8_output_entries = blk->mem_output_buf_size;
+		}
 	}
 
 	if (params->outType == TY_SORA)
@@ -421,11 +503,12 @@ void init_putcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBloc
 
 void buf_putcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 x)
 {
+	blk->total_out ++;
 	write_time_stamp(params);
 
 	if (params->outType == TY_DUMMY) return;
 
-	if (params->outType == TY_FILE)
+	if (params->outType == TY_FILE || params->outType == TY_MEM)
 	{
 		_buf_putint8(params, blk, x.re);
 		_buf_putint8(params, blk, x.im);
@@ -441,9 +524,10 @@ void buf_putcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 
 }
 void buf_putarrcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 *x, unsigned int vlen)
 {
+	blk->total_out += vlen;
 	write_time_stamp(params);
 
-	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
+	if (params->outType == TY_DUMMY || params->outType == TY_FILE || params->outType == TY_MEM)
 	{
 		_buf_putarrint8(params, blk, (int8 *)x, vlen * 2);
 	}

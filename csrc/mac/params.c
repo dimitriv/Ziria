@@ -68,11 +68,12 @@ Repetitions parse_repeat(char *rp)
 // Initializers for default values
 BlinkFileType parse_type(char *typ) 
 {
-	if (strcmp(typ,"file") == 0)  return TY_FILE; 
-	if (strcmp(typ,"dummy") == 0) return TY_DUMMY;
-	if (strcmp(typ,"sora") == 0)  return TY_SORA;
-	if (strcmp(typ,"ip") == 0)    return TY_IP;
-	fprintf(stderr, "Error: cannot parse type parameter %s\n",typ);
+	if (strcmp(typ,"file") == 0)	return TY_FILE; 
+	if (strcmp(typ,"dummy") == 0)	return TY_DUMMY;
+	if (strcmp(typ,"sora") == 0)	return TY_SORA;
+	if (strcmp(typ,"ip") == 0)		return TY_IP;
+	if (strcmp(typ, "memory") == 0) return TY_MEM;
+	fprintf(stderr, "Error: cannot parse type parameter %s\n", typ);
 	exit(1);
 }
 
@@ -145,6 +146,8 @@ void init_outFileTX(BlinkParams *params, char *fn)				{ params[0].outFileName = 
 void init_inFileModeTX(BlinkParams *params, char *md)			{ params[0].inFileMode = parse_mode(md); }
 void init_outFileModeTX(BlinkParams *params, char *md)			{ params[0].outFileMode = parse_mode(md); }
 void init_outBufTX(BlinkParams *params, char *siz)				{ params[0].outBufSize = parse_size(siz); }
+void init_inMemorySizeTX(BlinkParams *params, char *size)		{ params[0].inMemorySize = parse_size(size); }
+void init_outMemorySizeTX(BlinkParams *params, char *size)		{ params[0].outMemorySize = parse_size(size); }
 void init_dummySamplesTX(BlinkParams *params, char *siz)		{ params[0].dummySamples = parse_repeat(siz); }
 void init_heapSizeTX(BlinkParams *params, char *siz)			{ params[0].heapSize = parse_size(siz); }
 void init_inRepeatTX(BlinkParams *params, char *i)				{ params[0].inFileRepeats = parse_repeat(i); }
@@ -170,11 +173,14 @@ void init_outFileRX(BlinkParams *params, char *fn)				{ params[1].outFileName = 
 void init_inFileModeRX(BlinkParams *params, char *md)			{ params[1].inFileMode = parse_mode(md); }
 void init_outFileModeRX(BlinkParams *params, char *md)			{ params[1].outFileMode = parse_mode(md); }
 void init_outBufRX(BlinkParams *params, char *siz)				{ params[1].outBufSize = parse_size(siz); }
+void init_inMemorySizeRX(BlinkParams *params, char *size)		{ params[1].inMemorySize = parse_size(size); }
+void init_outMemorySizeRX(BlinkParams *params, char *size)		{ params[1].outMemorySize = parse_size(size); }
 void init_dummySamplesRX(BlinkParams *params, char *siz)		{ params[1].dummySamples = parse_repeat(siz); }
 void init_heapSizeRX(BlinkParams *params, char *siz)			{ params[1].heapSize = parse_size(siz); }
 void init_inRepeatRX(BlinkParams *params, char *i)				{ params[1].inFileRepeats = parse_repeat(i); }
 void init_LatencySamplingRX(BlinkParams *params, char *siz)		{ params[1].latencySampling = parse_size(siz); }
 void init_LatencyCDFSizeRX(BlinkParams *params, char *siz)		{ params[1].latencyCDFSize = parse_size(siz); }
+
 
 #ifdef SORA_PLATFORM
 // Here we use one radio, so we only use radioParams in params[0]
@@ -191,20 +197,25 @@ void init_sampleRateRX(BlinkParams *params, char *i)			{ params[0].radioParams.S
 
 // Here is where we declare the parameters
 #ifdef SORA_PLATFORM
-#define PARAM_TABLE_LENGTH		37
+#define PARAM_TABLE_LENGTH		38
 #else
-#define PARAM_TABLE_LENGTH		24
+#define PARAM_TABLE_LENGTH		25
 #endif
 
 BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] = 
 // TX
-  {  { "--TX-input=", 
+  {  { "--memory-size=",
+	   "--memory-size=<bytes>",
+       "Size of memory buffer between TX and RX blocks",
+       "0",
+	   init_outMemorySizeTX },
+     { "--TX-input=", 
        "--TX-input=file|dummy|sora|ip",
        "Input TX samples come from a file, radio, or are dummy samples",
        "file",
        init_inTypeTX },
      { "--TX-output=", 
-       "--TX-output=file|dummy|sora|ip",
+       "--TX-output=memory|file|dummy|sora|ip",
        "Output TX samples written to file, radio, or are ignored (dummy)",
        "file",
        init_outTypeTX },
@@ -260,7 +271,7 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
 	   init_LatencyCDFSizeTX },
 //RX
 	   { "--RX-input=",
-	   "--RX-input=file|dummy|sora|ip",
+	   "--RX-input=memory|file|dummy|sora|ip",
 	   "Input RX samples come from a file, radio, or are dummy samples",
 	   "file",
 	   init_inTypeRX },

@@ -38,6 +38,48 @@
 #endif
 
 
+
+void initBufCtxBlock(BufContextBlock *blk)
+{
+	blk->input_idx = 0;
+	blk->input_repetitions = 1;
+	blk->input_dummy_samples = 0;
+	blk->fst = 1;
+	blk->output_idx = 0;
+	blk->chunk_input_idx = 0;
+	blk->chunk_input_repeats = 1;
+	blk->chunk_input_dummy_samples = 0;
+	blk->chunk_fst = 1;
+	blk->chunk_output_idx = 0;
+	blk->num8_input_idx = 0;
+	blk->num8_input_repeats = 1;
+	blk->num8_input_dummy_samples = 0;
+	blk->num8_fst = 1;
+	blk->num8_output_idx = 0;
+	blk->num16_input_idx = 0;
+	blk->num16_input_repeats = 1;
+	blk->num16_input_dummy_samples = 0;
+	blk->num16_fst = 1;
+	blk->num16_output_idx = 0;
+	blk->num_input_idx = 0;
+	blk->num_input_repeats = 1;
+	blk->num_input_dummy_samples = 0;
+	blk->num_fst = 1;
+	blk->num_output_idx = 0;
+
+	blk->mem_input_buf = NULL;
+	blk->mem_output_buf = NULL;
+	blk->mem_input_buf_size = 0;
+	blk->mem_output_buf_size = 0;
+
+	blk->total_in = 0;
+	blk->total_out = 0;
+	blk->size_in = 0;
+	blk->size_out = 0;
+}
+
+
+
 void fprint_bit(BufContextBlock* blk, FILE *f, Bit val)
 {
 	if (blk->fst) {
@@ -133,9 +175,26 @@ unsigned int parse_dbg_bit(char *dbg_buf, BitArrPtr target)
 
 void init_getbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hblk)
 {
+	blk->size_in = 1;
+	blk->total_in = 0;
+
 	if (params->inType == TY_DUMMY)
 	{
 		blk->max_dummy_samples = params->dummySamples;
+	}
+
+	if (params->inType == TY_MEM)
+	{
+		if (blk->mem_input_buf == NULL || blk->mem_input_buf_size == 0)
+		{
+			fprintf(stderr, "Error: input memory buffer not initialized\n");
+			exit(1);
+		}
+		else
+		{
+			blk->input_buffer = (BitArrPtr)blk->mem_input_buf;
+			blk->input_entries = 8 * blk->mem_input_buf_size;
+		}
 	}
 
 	if (params->inType == TY_FILE)
@@ -175,6 +234,8 @@ void init_getbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 
 GetStatus buf_getbit(BlinkParams *params, BufContextBlock* blk, Bit *x)
 {
+	blk->total_in++;
+
 	if (params->inType == TY_IP)
 	{
 		fprintf(stderr, "Error: IP does not support single bit receive\n");
@@ -210,8 +271,12 @@ GetStatus buf_getbit(BlinkParams *params, BufContextBlock* blk, Bit *x)
 
 	return GS_SUCCESS;
 }
+
+
 GetStatus buf_getarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
 {
+	blk->total_in += vlen;
+
 	if (params->inType == TY_IP)
 	{
 #ifdef SORA_PLATFORM
@@ -254,12 +319,29 @@ GetStatus buf_getarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, 
 
 void init_putbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hblk)
 {
-	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
+	blk->size_out = 1;
+	blk->total_out = 0;
+
+	if (params->outType == TY_DUMMY || params->outType == TY_FILE || params->inType == TY_MEM)
 	{
 		blk->output_buffer = (unsigned char *)malloc(params->outBufSize);
 		blk->output_entries = params->outBufSize * 8;
 		if (params->outType == TY_FILE)
 			blk->output_file = try_open(params->outFileName, "w");
+	}
+
+	if (params->outType == TY_MEM)
+	{
+		if (blk->mem_output_buf == NULL || blk->mem_output_buf_size == 0)
+		{
+			fprintf(stderr, "Error: output memory buffer not initialized\n");
+			exit(1);
+		}
+		else
+		{
+			blk->output_buffer = (unsigned char*) blk->mem_output_buf;
+			blk->output_entries = blk->mem_output_buf_size * 8;
+		}
 	}
 
 	if (params->outType == TY_SORA)
@@ -279,6 +361,7 @@ void init_putbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 }
 void buf_putbit(BlinkParams *params, BufContextBlock* blk, Bit x)
 {
+	blk->total_out++;
 	write_time_stamp(params);
 
 	if (params->outType == TY_IP)
@@ -291,6 +374,12 @@ void buf_putbit(BlinkParams *params, BufContextBlock* blk, Bit x)
 	{
 		return;
 	}
+
+	if (params->outType == TY_MEM)
+	{
+		bitWrite(blk->output_buffer, blk->output_idx++, x);
+	}
+
 	if (params->outType == TY_FILE)
 	{
 		if (params->outFileMode == MODE_DBG)
@@ -306,8 +395,11 @@ void buf_putbit(BlinkParams *params, BufContextBlock* blk, Bit x)
 		}
 	}
 }
+
+
 void buf_putarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
 {
+	blk->total_out+= vlen;
 	write_time_stamp(params);
 
 	if (params->outType == TY_IP)
@@ -319,6 +411,12 @@ void buf_putarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, unsig
 	}
 
 	if (params->outType == TY_DUMMY) return;
+
+	if (params->outType == TY_MEM)
+	{
+		bitArrWrite(x, blk->output_idx, vlen, blk->output_buffer);
+		blk->output_idx += vlen;
+	}
 
 	if (params->outType == TY_FILE)
 	{
@@ -337,8 +435,14 @@ void buf_putarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, unsig
 				fwrite(blk->output_buffer, blk->output_entries / 8, 1, blk->output_file);
 
 				// then write the rest
-				bitArrRead(x, m, vlen - m, blk->output_buffer);
+				// BOZIDAR: Here we used to have bitArrRead but I believe it was wrong
+				bitArrWrite(x, m, vlen - m, blk->output_buffer);
 				blk->output_idx = vlen - m;
+			}
+			else
+			{
+				bitArrWrite(x, blk->output_idx, vlen, blk->output_buffer);
+				blk->output_idx += vlen;
 			}
 		}
 	}

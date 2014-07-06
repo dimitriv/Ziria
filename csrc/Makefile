@@ -24,7 +24,7 @@ LIBS = -lm
 OBJDIR = .
 
 OBJ_INT = bit.o numerics.o params.o test.o driver.o wpl_alloc.o utils.o
-OBJ_IO  = buf_bit.o buf_bytes.o buf_numerics8.o buf_numerics32.o buf_numerics16.o
+OBJ_IO  = buf_bit.o buf_numerics8.o buf_numerics32.o buf_numerics16.o
 OBJ_LIB = 
 OBJ_EXT = ext_math.o ext_arr.o 
 

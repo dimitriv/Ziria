@@ -1,6 +1,8 @@
 let comp rx() = 
-  repeat {
-    (x:complex16) <- take;
+  do{println "RX:"};
+  repeat [8,8] {
+    (x:bit) <- take;
+    -- do {println x};
     emit x
   }
 in

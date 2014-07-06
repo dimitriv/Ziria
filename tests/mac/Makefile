@@ -40,17 +40,21 @@ CSRC = $(patsubst %.zir, %.c, $(wildcard *.zir))
 all: mac.test
 
 %.c : %.zir
-	EXTRAOPTS='$(EXTRAOPTS) --new-src-format --name=_$(basename $@)' $(PP) $< $(basename $@)
+	EXTRAOPTS='$(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
 
 mac.out: $(CSRC)
-	EXTRAOPTS='$(EXTRAOPTS) --new-src-format' $(CP) 
+	EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
 
 mac.outfile: mac.out mac.infile
-	./$< --input=file \
-             --input-file-name=$*.infile \
-             --input-file-mode=dbg \
-             --output-file-name=$@ \
-             --output-file-mode=dbg
+	./$< --TX-input=file \
+             --TX-input-file-name=mac.infile \
+             --TX-input-file-mode=dbg \
+             --TX-output=memory \
+             --RX-input=memory \
+             --RX-output=file \
+             --RX-output-file-name=$@ \
+             --RX-output-file-mode=dbg \
+             --memory-size=1000
 
 mac.test: mac.outfile
 	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
