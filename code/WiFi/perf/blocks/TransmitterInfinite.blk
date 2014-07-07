@@ -77,25 +77,17 @@ let comp tx_driver(h : struct HeaderInfo) =
 in
 
 
+
+let comp TransmitterInfinite(hInfo : struct HeaderInfo) = 
+-- STS and LTS have negligible perf impact but currently mess up pipelining, 
+-- so we remove them from all TX perf evals
 {-
-let comp TransmitterInfinite(hInfo : struct HeaderInfo) = 
-seq{ emits createSTSinTime()
-   ; emits createLTSinTime()
-   ; (scrambler() >>> 
-      encode(hInfo.coding) >>> 
-      interleaver(hInfo.modulation) >>> 
-      modulate(hInfo.modulation) >>>
-      map_ofdm() >>> ifft())
-   }
-in
--}
-
-
-let comp TransmitterInfinite(hInfo : struct HeaderInfo) = 
 seq{ emits createSTSinTime()
    ; emits createLTSinTime()
    ; (tx_driver(hInfo) >>> map_ofdm() >>> ifft())
    }
+-}
+   (tx_driver(hInfo) |>>>| map_ofdm() >>> ifft())
 in
 
 
