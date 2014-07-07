@@ -77,6 +77,8 @@ let external v_sub_complex32(c:arr complex32, a:arr[length(c)] complex32, b:arr[
 let external v_sub_int16(c:arr int16, a:arr[length(c)] int16, b:arr[length(c)] int16 ) : () in
 let external v_sub_int32(c:arr int32, a:arr[length(c)] int32, b:arr[length(c)] int32 ) : () in
 
+-- c := a * b, NB: c is also complex16
+let external v_mul_complex16(c:arr complex16, a:arr[length(c)] complex16, b:arr[length(c)] complex16 ) : () in
 
 
 
@@ -106,6 +108,7 @@ let external zero_int32(x:arr int32) : () in
 -- Equivallent to memcpy in C
 -- NB: When len is constant, this can be done with dst[0,len] := src[0,len]
 --     But this doesn't work for dynamic len
+-- NOTE: copy_bit is not trivial to write. TBD
 let external copy_int16(dst : arr int16, src : arr int16, len : int) : int in
 let external copy_int32(dst : arr int32, src : arr int32, len : int) : int in
 let external copy_complex16(dst : arr complex16, src : arr complex16, len : int) : int in
