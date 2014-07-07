@@ -263,7 +263,6 @@ csrc/CompilerVS/CompilerVS13.vcxproj.user
 csrc/CompilerVS/CompilerVS13/x64/Release/CompilerVS13.exe
 csrc/CompilerVS/CompilerVS13/x64/Release/CompilerVS13.pdb
 csrc/CompilerVS/CompilerVS13_32.vcxproj
-
 code/WiFi/perf.txt
 code/WiFi/perf/pref.txt
 csrc/CompilerVS/*.outfile
@@ -285,3 +284,6 @@ tests/mac/*.out
 tests/parser/*.exe
 tests/parser/*.dump
 tests/vectorizer/*.expanded
+csrc/mac/CompilerVS/Debug/*
+csrc/mac/CompilerVS/Release/*
+csrc/mac/CompilerVS/x64/*
