@@ -591,6 +591,32 @@ int __ext_v_shift_left_int16(int16* z, int __unused_3, int16* x, int len, int sh
 }
 
 
+//
+// mul - perform multiple of two complex vectors and return
+// the resulting complex vector, all being complex16
+//
+int __ext_v_mul_complex16(struct complex16* out, int lenout,
+						  struct complex16* x, int len1,
+						  struct complex16* y, int len2)
+{
+	const int wlen = sizeof(vcs) / sizeof(complex16);
+	for (int i = 0; i < len1 / wlen; i++)
+	{
+		vcs *vx = (vcs *)(x + wlen*i);
+		vcs *vy = (vcs *)(y + wlen*i);
+		vcs *vout = (vcs *)(out + wlen*i);
+
+		*vout = (vcs)mul(*vx, *vy);
+	}
+	for (int i = (len1 / wlen) * wlen; i < len1; i++)
+	{
+		out[i].re = x[i].re * y[i].re - x[i].im * y[i].im;
+		out[i].im = x[i].re * y[i].im + x[i].im * y[i].re;
+	}
+
+	return 0;
+}
+
 
 
 
@@ -791,32 +817,6 @@ int __ext_permutate_low1032w(struct complex16* x, int len1,
 
 
 
-//
-// mul - perform multiple of two complex vectors and return
-// the resulting complex vector, all being complex16
-//
-int __ext_mul_complex16 (struct complex16* x, int len1,
-                         struct complex16* y, int len2,
-						 struct complex16* out, int lenout)
-{
-	vcs *vx = (vcs *) x;
-	vcs *vy = (vcs *) y;
-
-	/*
-	vi re, im;
-	mul_ex (re, im, *vx, *vy);
-	
-    re = shift_right (re, 15);
-    im = shift_right (im, 15);
-
-	* ((vcs*)out) = (vcs) pack(re, im);
-	*/
-
-	* ((vcs*)out) = (vcs) mul(*vx, *vy);
-
-
-	return 0;
-}
 
 
 
