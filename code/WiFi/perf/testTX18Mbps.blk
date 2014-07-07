@@ -18,6 +18,6 @@
 --
 --
 #include "../const.blk"
-#include "blocks/TransmitterInfiniteWThreads.blk"
+#include "blocks/TransmitterInfinite.blk"
 
-read >>> TransmitterInfiniteWThreads(HeaderInfo{coding=CR_12;modulation=M_QPSK;len=0}) >>> write
+read >>> TransmitterInfinite(HeaderInfo{coding=CR_34;modulation=M_QPSK;len=0}) >>> write

@@ -14,8 +14,13 @@ then
     exit 1
 fi
 cd ../../perf
+make -B
 if [[ $? -ne 0 ]]
 then
     exit 1
 fi
-make -B
+EXTRAOPTS='--pipeline --affinity-mask=5 '$EXTRAOPTS make -B
+if [[ $? -ne 0 ]]
+then
+    exit 1
+fi
