@@ -38,7 +38,7 @@ let comp ViterbiInfinite(rate:int) =
        nOutput := viterbi_brick_decode_fast(svalue, outViterbi);
 
        itercnt := itercnt+1;
-       if (itercnt > 1500) then {
+       if (itercnt > 800) then {
          viterbi_brick_init_fast(24000, int16(rate), 256);
 	 itercnt := 0
        }
@@ -49,13 +49,11 @@ let comp ViterbiInfinite(rate:int) =
      for i in [0, nOutput] {
        emit outViterbi[i];
      }
+-}
 
      for i in [0, nOutput/8] {
        emits outViterbi[i*8,8];
      }
--}
-
-     emits {'0, '0, '0, '0, '0, '0, '0, '0};
 
    }
 

@@ -19,4 +19,4 @@
 --
 #include "blocks/ReceiverInfinite.blk"
 
-read >>> ReceiverInfinite(HeaderInfo{coding = CR_34; modulation = M_16QAM; len = 0}) >>> write
+read >>> ReceiverInfinite(HeaderInfo{coding = CR_34; modulation = M_QPSK; len = 0}) >>> write
