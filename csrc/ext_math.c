@@ -20,34 +20,51 @@
 #include "ext_math.h"
 
 
-int32 __ext_sine(int32 x, int32 prec)
+// Floating point trigonometry (slow)
+int16 __ext_sine_double_int16(int16 x, int16 prec)
 { 
-  return (int32) (sin(((float)x) / prec)*prec);
+  return (int16) (sin(((float)x) / prec)*prec);
 }
 
-int32 __ext_cosine(int32 x, int32 prec)
+int16 __ext_cosine_double_int16(int16 x, int16 prec)
 { 
-  return (int32) (cos(((float)x) / prec)*prec);
+  return (int16) (cos(((float)x) / prec)*prec);
 }
 
-
-int32 __ext_sum(int32 *arr, int alen)
+int32 __ext_sine_double_int32(int32 x, int32 prec)
 {
-	int32 s=0;
-	for (int i=0; i<alen; i++) s += arr[i];
-	return s;
+	return (int32)(sin(((float)x) / prec)*prec);
 }
 
-int32 __ext_imin(int32 x, int32 y){
+int32 __ext_cosine_double_int32(int32 x, int32 prec)
+{
+	return (int32)(cos(((float)x) / prec)*prec);
+}
+
+
+
+int16 __ext_imin_int16(int16 x, int16 y){
   return (((x) < (y))?(x):(y));
 }
 
-int32 __ext_imax(int32 x, int32 y){
+int32 __ext_imin_int32(int32 x, int32 y){
+	return (((x) < (y)) ? (x) : (y));
+}
+
+int16 __ext_imax_int16(int16 x, int16 y){
+	return (((x) > (y)) ? (x) : (y));
+}
+
+int32 __ext_imax_int32(int32 x, int32 y){
   return (((x) > (y))?(x):(y));
 }
 
-int32 __ext_ceil(double d){
+int32 __ext_ceil_int32(double d){
 	return (int32) ceil(d);
+}
+
+int16 __ext_ceil_int16(double d){
+	return (int16)ceil(d);
 }
 
 double __ext_log2(double d){
