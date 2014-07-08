@@ -9,4 +9,4 @@ To build the Ziria (wplc) compiler (under Linux or Windows/Cygwin) you will need
    - dlist
    - unix-compat
 
-Then go to src/ and type 'make'. You will be left with a 'wplc' binary.
+Then go to the Ziria root folder and type 'make'. You will be left with a 'wplc' binary.
