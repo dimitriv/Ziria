@@ -17,25 +17,10 @@
 -- permissions and limitations under the License.
 --
 --
+#include "blocks/ReceiverInfinite.blk"
 
-#include "../../const.blk"
-#include <externals.blk>
-#include "../../transmitter/scramble.blk"
-#include "../../transmitter/encoding.blk"
-#include "../../transmitter/interleaving.blk"
-#include "../../transmitter/modulating.blk"
-#include "../../transmitter/map_ofdm.blk"
-#include "../../transmitter/parsePLCPHeader.blk"
-#include "../../transmitter/createPreamble.blk"
-#include "../../transmitter/ifft.blk"
+read >>> ReceiverInfinite(HeaderInfo{coding = CR_34; modulation = M_BPSK; len = 0}) >>> write
 
 
 
-let comp TransmitterInfiniteWThreads(hInfo : struct HeaderInfo) = 
-{-
-   emits createSTSinTime();
-   emits createLTSinTime();
--}
-   scrambler() >>> encode12() >>> interleaver_qpsk() |>>>| modulate_qpsk() >>> map_ofdm() >>> ifft()
-in
 
