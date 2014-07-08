@@ -1,34 +1,165 @@
-# DESKTOP
+### DESKTOP, not native
 
-RX  6Mbps 116.3
-RX 12Mbps 91
-RX 24Mbps 58.48
-RX 36Mbps 43.48
-RX    CCA 146.7
+# TX Blocks
 
-TX6Mbps 3.05809
-TX12Mbps 1.80164
-TX24Mbps 1.00899
-TX36Mbps 0.697921
+scramble		1074.38
+encoding_12 		956.965
+encoding_23 		578.128
+encoding_34 		867.385
+interleaving_bpsk 	395.032
+interleaving_qpsk 	334.322
+interleaving_16qam 	261.228
+interleaving_64qam 	232.631
+modulating_bpsk 	1131.04
+modulating_qpsk 	576.778
+modulating_16qam 	990.962
+modulating_64qam 	1273.38
+map_ofdm 		1260.45
+ifft 			173.381
+
+# RX Blocks
+
+DownSample 		2831.1
+RemoveDC 		1036.3
+CCA 			140.238
+LTS 			174.792
+FFT 			403.379
+ChannelEqualization 	1013.52
+PilotTrack 		298.107
+DataSymbol 		2027.53
+DemapBPSK 		1210.9
+DemapQPSK 		768.386
+DemapQAM16 		568.305
+DemapQAM64 		408.178
+DeinterleaveBPSK 	1682.51
+DeinterleaveQPSK 	1592.79
+DeinterleaveQAM16 	1589.45
+DeinterleaveQAM64 	1735.75
+Viterbi 1/2 		98.6499
+
+# TX
+
+TX6Mbps 		31.8753
+TX9Mbps 		38.9454
+TX12Mbps 		40.7738
+TX18Mbps 		49.7342
+TX24Mbps 		49.0296
+TX36Mbps 		57.2263
+TX48Mbps 		56.8559
+TX54Mbps 		58.4923
+
+# RX
+
+RXCCA			183.418
+RX6Mbps			123.432
+RX9Mbps 		103.26
+RX12Mbps 		85.8221
+RX18Mbps 		70.5938
+RX24Mbps 		54.2329
+RX36Mbps 		44.7146
+RX48Mbps 		34.0536
+RX54Mbps 		32.1559
+
+# 2 threads
+
+TX6Mbps			45.0586
+TX9Mbps 		52.4099
+TX12Mbps 		42.6226
+TX18Mbps 		43.389
+TX24Mbps 		41.8877
+TX36Mbps 		47.975
+TX48Mbps 		47.5031
+TX54Mbps 		52.4645
+
+RX6Mbps 		187.667
+RX9Mbps 		185.084
+RX12Mbps 		134.291
+RX18Mbps 		109.267
+RX24Mbps 		73.1361
+RX36Mbps 		58.4953
+RX48Mbps 		42.6657
+RX54Mbps 		39.8716
 
 
-# DESKTOP LAST
 
-RXCCA 182.932
+### DESKTOP, native
 
-RX6Mbps 114.841
-RX9Mbps 109.583
-RX12Mbps 85.4069
-RX18Mbps 73.2277
-RX24Mbps 53.79
-RX36Mbps 44.8096
-RX48Mbps 33.788
-RX54Mbps 31.9596
+# TX Blocks
 
+scramble		1049.86
+encoding_12 		1035.09
+encoding_23 		564.169
+encoding_34 		822.849
+interleaving_bpsk 	402.917
+interleaving_qpsk 	338.49
+interleaving_16qam 	261.686
+interleaving_64qam 	240.626
+modulating_bpsk 	998.044
+modulating_qpsk 	608.721
+modulating_16qam 	1076.96
+modulating_64qam 	1466.23
+map_ofdm 		1229.77
+ifft 			175.104
 
-ThreadsTX12Mbps 46.296
+# RX Blocks
 
-TX6Mbps 31.3139
-TX12Mbps 40.4782
-TX24Mbps 49.2807
-TX36Mbps 56.2762
+DownSample 		1650.85
+RemoveDC		1147.09
+CCA 			140.887
+LTS 			174.107
+FFT 			356.577
+ChannelEqualization 	982.28
+PilotTrack 		298.132
+DataSymbol 		2159.27
+DemapBPSK 		1072.93
+DemapQPSK 		792.732
+DemapQAM16 		538.268
+DemapQAM64 		398.818
+DeinterleaveBPSK 	2243.81
+DeinterleaveQPSK 	1700.97
+DeinterleaveQAM16 	1795.72
+DeinterleaveQAM64 	1700.36
+Viterbi 		107.469
+
+# TX
+
+TX6Mbps			52.6928
+TX9Mbps 		73.7344
+TX12Mbps 		62.5988
+TX18Mbps 		89.2485
+TX24Mbps 		58.431
+TX36Mbps 		86.5106
+TX48Mbps 		68.6824
+TX54Mbps 		98.0176
+
+# RX
+
+RXCCA			184.369
+RX6Mbps 		148.725
+RX9Mbps 		125.299
+RX12Mbps 		110.26
+RX18Mbps 		97.0764
+RX24Mbps 		55.6284
+RX36Mbps 		46.2938
+RX48Mbps 		34.5115
+RX54Mbps 		33.2811
+
+# 2 threads 
+
+TX6Mbps			78.7172
+TX9Mbps 		89.7081
+TX12Mbps 		60.0057
+TX18Mbps 		78.0291
+TX24Mbps 		56.792
+TX36Mbps 		75.1033
+TX48Mbps 		61.9834
+TX54Mbps 		83.5481
+
+RX6Mbps 		176.088
+RX9Mbps 		193.268
+RX12Mbps 		164.096
+RX18Mbps 		165.598
+RX24Mbps 		80.7439
+RX36Mbps 		62.3978
+RX48Mbps 		44.2803
+RX54Mbps 		41.9064
