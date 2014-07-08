@@ -30,6 +30,26 @@ let external atan2_int16(y:int16, x:int16) : int16 in
 let external atan2_int32(y:int32, x:int32) : int32 in 
 
 
+-- ext_math
+let external sine_double_int16(x:int16, prec:int16) : int16 in 
+let external sine_double_int32(x:int32, prec:int32) : int32 in 
+let external cosine_double_int16(x:int16, prec:int16) : int16 in 
+let external cosine_double_int32(x:int32, prec:int32) : int32 in 
+
+let external imin_int16(x:int16, y:int16) : int16 in
+let external imin_int32(x:int, y:int) : int in
+let external imax_int16(x:int16, y:int16) : int16 in
+let external imax_int32(x:int, y:int) : int in
+
+let external ceil_int16(d:double) : int32 in 
+let external ceil_int32(d:double) : int32 in 
+
+let external log2(d:double) : double in 
+let external sqrt(d:double) : double in 
+let external sqrt_int16(d:int16) : int16 in 
+let external sqrt_int32(d:int32) : int32 in
+
+
 
 -- SIMD
 let external permutate_low1032w (x:arr[4] complex16, y:arr[4] complex16): () in
@@ -113,6 +133,8 @@ let external copy_int16(dst : arr int16, src : arr int16, len : int) : int in
 let external copy_int32(dst : arr int32, src : arr int32, len : int) : int in
 let external copy_complex16(dst : arr complex16, src : arr complex16, len : int) : int in
 let external copy_complex32(dst : arr complex32, src : arr complex32, len : int) : int in
+
+let external int_to_bit(input:int32, output:arr bit, outlen:int) : () in
 
 
 

@@ -19,12 +19,18 @@
 #include "types.h"
 
 
-int32 __ext_sine(int32 x, int32 prec);
-int32 __ext_cosine(int32 x, int32 prec);
-int32 __ext_sum(int32 *arr, int alen);
-int32 __ext_imin(int32 x, int32 y);
-int32 __ext_imax(int32 x, int32 y);
-int32 __ext_ceil(double d);
+// Floating point trigonometry (slow)
+int16 __ext_sine_double_int16(int16 x, int16 prec);
+int16 __ext_cosine_double_int16(int16 x, int16 prec);
+int32 __ext_sine_double_int32(int32 x, int32 prec);
+int32 __ext_cosine_double_int32(int32 x, int32 prec);
+
+int16 __ext_imin_int16(int16 x, int16 y);
+int32 __ext_imin_int32(int32 x, int32 y);
+int16 __ext_imax_int16(int16 x, int16 y);
+int32 __ext_imax_int32(int32 x, int32 y);
+int32 __ext_ceil_int32(double d);
+int16 __ext_ceil_int16(double d);
 double __ext_log2(double d);
 double __ext_sqrt(double d);
 int16 __ext_sqrt_int16(int16 d);

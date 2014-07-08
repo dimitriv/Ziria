@@ -87,3 +87,12 @@ int32 __ext_copy_complex32(complex32* dst, int len, complex32* src, int lens, in
   return 0;
 }
 
+
+
+int32 __ext_int_to_bit(int32 input, BitArrPtr arr, int alength, int outlen)
+{
+	*((int32*)arr) = input;
+	return 0;
+}
+
+
