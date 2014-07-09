@@ -41,7 +41,7 @@ let external imin_int32(x:int, y:int) : int in
 let external imax_int16(x:int16, y:int16) : int16 in
 let external imax_int32(x:int, y:int) : int in
 
-let external ceil_int16(d:double) : int32 in 
+let external ceil_int16(d:double) : int16 in 
 let external ceil_int32(d:double) : int32 in 
 
 let external log2(d:double) : double in 
