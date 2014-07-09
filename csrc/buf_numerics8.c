@@ -121,7 +121,7 @@ void init_getint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *h
 	if (params->inType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
-		InitSoraRx(*params);
+		InitSoraRx(params);
 #else
 		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
 		exit(1);
@@ -493,7 +493,7 @@ void init_putcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBloc
 	if (params->outType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
-		InitSoraTx(*params);
+		InitSoraTx(params);
 #else
 		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
 		exit(1);
