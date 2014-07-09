@@ -284,6 +284,3 @@ tests/mac/*.out
 tests/parser/*.exe
 tests/parser/*.dump
 tests/vectorizer/*.expanded
-csrc/mac/CompilerVS/Debug/*
-csrc/mac/CompilerVS/Release/*
-csrc/mac/CompilerVS/x64/*
