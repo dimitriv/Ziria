@@ -1,0 +1,220 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+
+#include "const.blk"
+
+let comp modulate_bpsk () = 
+var outa : arr[2] complex16;
+var outi : arr[8] int16;
+
+repeat [8,8] { 
+    (x : bit) <- take;
+    emit if (x == '0) then complex16{re=-bpsk_mod_11a; im=0}
+                      else complex16{re=bpsk_mod_11a; im=0};
+}
+
+in
+
+
+
+
+
+let modulate_qpsk_lut (x : arr[2] bit) = 
+  var outi : int16;
+
+      if (x[0] == bit(0) && x[1] == bit(1)) then { 
+         outi := 0
+      } else {
+        if (x[0] == bit(0) && x[1] == bit(0)) then { 
+          outi := 1
+        } else {
+          if (x[0] == bit(1) && x[1] == bit(1)) then { 
+            outi := 2
+          } else { 
+            outi := 3
+          }
+        } 
+      };
+  return outi
+in
+  
+
+
+let comp modulate_qpsk () = 
+var outa : arr[4] complex16;
+var outi : arr[4] int16;
+
+seq{
+  do{
+    outa[0] := complex16{re=-qpsk_mod_11a;im=qpsk_mod_11a};
+    outa[1] := complex16{re=-qpsk_mod_11a; im=-qpsk_mod_11a};
+    outa[2] := complex16{re=qpsk_mod_11a;im=qpsk_mod_11a};
+    outa[3] := complex16{re=qpsk_mod_11a;im=-qpsk_mod_11a}
+  }; 
+
+  repeat [8, 4] {
+    (x : arr[2] bit) <- takes 2;
+    emit outa[int32(modulate_qpsk_lut(x))];
+  }
+
+}
+in
+
+
+
+
+
+let comp modulate_16qam () = 
+  var re:int16;
+  var im:int16;
+  var outc : complex16; 
+
+  repeat [8, 2] {
+    x <- takes 4;
+    do {
+      if (x[0] == '0 && x[1] == '0) then {
+         re := -3*qam16_mod_11a
+      } else {
+        if (x[0] == '0 && x[1] == '1) then {
+          re := -qam16_mod_11a
+   	} else {
+          if (x[0] == '1 && x[1] == '1) then {
+            re := qam16_mod_11a
+	  } else {
+            re := 3*qam16_mod_11a
+	  }
+	}
+      };
+      if (x[2] == '0 && x[3] == '0) then {
+         im := -3*qam16_mod_11a
+      } else {
+        if (x[2] == '0 && x[3] == '1) then {
+          im := -qam16_mod_11a
+   	} else {
+          if (x[2] == '1 && x[3] == '1) then {
+            im := qam16_mod_11a
+	  } else {
+            im := 3*qam16_mod_11a
+	  }
+	}
+      };
+
+      outc := complex16{re=re; im=im}
+    };
+
+    emit outc
+  }
+in
+
+
+
+
+let comp modulate_64qam () = 
+  var re:int16;
+  var im:int16;
+  var outc : complex16; 
+
+
+  repeat <= [12, 2] {
+    x <- takes 6;
+    do {
+
+      if (x[0] == '0 && x[1] == '0 && x[2] == '0) then {
+         re := -7*qam64_mod_11a
+      } else {
+        if (x[0] == '0 && x[1] == '0 && x[2] == '1) then {
+          re := -5*qam64_mod_11a
+   	} else {
+          if (x[0] == '0 && x[1] == '1 && x[2] == '1) then {
+            re := -3*qam64_mod_11a
+	  } else {
+            if (x[0] == '0 && x[1] == '1 && x[2] == '0) then {
+              re := -1*qam64_mod_11a
+	    } else {
+              if (x[0] == '1 && x[1] == '1 && x[2] == '0) then {
+                re := qam64_mod_11a
+  	      } else {
+                if (x[0] == '1 && x[1] == '1 && x[2] == '1) then {
+                  re := 3*qam64_mod_11a
+    	        } else {
+                  if (x[0] == '1 && x[1] == '0 && x[2] == '1) then {
+                    re := 5*qam64_mod_11a
+     	          } else {
+                    re := 7*qam64_mod_11a
+		  }
+		}
+	      }
+	    }
+	  }
+	}
+      };
+
+      if (x[3] == '0 && x[4] == '0 && x[5] == '0) then {
+         im := -7*qam64_mod_11a
+      } else {
+        if (x[3] == '0 && x[4] == '0 && x[5] == '1) then {
+          im := -5*qam64_mod_11a
+   	} else {
+          if (x[3] == '0 && x[4] == '1 && x[5] == '1) then {
+            im := -3*qam64_mod_11a
+	  } else {
+            if (x[3] == '0 && x[4] == '1 && x[5] == '0) then {
+              im := -1*qam64_mod_11a
+	    } else {
+              if (x[3] == '1 && x[4] == '1 && x[5] == '0) then {
+                im := qam64_mod_11a
+  	      } else {
+                if (x[3] == '1 && x[4] == '1 && x[5] == '1) then {
+                  im := 3*qam64_mod_11a
+    	        } else {
+                  if (x[3] == '1 && x[4] == '0 && x[5] == '1) then {
+                    im := 5*qam64_mod_11a
+     	          } else {
+                    im := 7*qam64_mod_11a
+		  }
+		}
+	      }
+	    }
+	  }
+	}
+      };
+
+      outc := complex16{re=re; im=im};
+    };
+
+    emit outc
+  }
+in
+
+
+
+
+let comp modulate(m : int) =
+  if (m == M_BPSK) then 
+    modulate_bpsk()
+  else
+    if (m == M_QPSK) then
+      modulate_qpsk()
+    else
+      if (m == M_16QAM) then
+      	modulate_16qam()
+      else
+      	modulate_64qam()
+in
