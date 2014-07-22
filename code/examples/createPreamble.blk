@@ -1,0 +1,99 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+
+-- Taken from preamble11a.hpp
+
+let sts_mod = int16(double(bpsk_mod_11a) * 1.472) in
+let lts_mod = bpsk_mod_11a in
+
+
+let createSTSinTime() = 
+  var sts : arr[128] complex16;
+  var sts_time : arr[320] complex16;
+
+  -- short training symbol
+  sts[4]   := complex16{re=-sts_mod; im=-sts_mod};
+  sts[8]   := complex16{re=-sts_mod; im=-sts_mod};
+  sts[12]  := complex16{re=sts_mod; im=sts_mod};
+  sts[16]  := complex16{re=sts_mod; im=sts_mod};
+  sts[20]  := complex16{re=sts_mod; im=sts_mod};
+  sts[24]  := complex16{re=sts_mod; im=sts_mod};
+
+  sts[104] := complex16{re=sts_mod; im=sts_mod};
+  sts[108] := complex16{re=-sts_mod; im=-sts_mod};
+  sts[112] := complex16{re=sts_mod; im=sts_mod};
+  sts[116] := complex16{re=-sts_mod; im=-sts_mod};
+  sts[120] := complex16{re=-sts_mod; im=-sts_mod};
+  sts[124] := complex16{re=sts_mod; im=sts_mod};
+
+  sora_ifft(128, sts, sts_time[0, 128]);
+  sts_time[128,128] := sts_time[0,128];
+  sts_time[256,64] := sts_time[0,64];
+
+  return sts_time;
+in
+
+
+let createLTSinTime() = 
+  var lts : arr[128] complex16;
+  var lts_time : arr[320] complex16;
+  var LTS_Positive_table : arr [64] int16 := {
+      0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 
+      1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 
+      0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 
+      1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1
+  };
+
+
+  -- Reset everything - otherwise we might have an ambiguous preamble
+  for i in [0,128] {
+     lts[i] := complex16{re=0;im=0};
+  }
+
+  -- (i=1; i<=26; i++ )
+  for i in [1,26] {
+     if (LTS_Positive_table[i] > 0) then {
+        lts[i] := complex16{re=lts_mod;im=0};
+     } else {
+        lts[i] := complex16{re=-lts_mod;im=0};
+     }
+  }
+
+  -- (i=64-26; i<64; i++ )
+  for i in [(64-26),26] {
+     if (LTS_Positive_table[i] > 0) then {
+        lts[i+64] := complex16{re=lts_mod;im=0};
+     } else {
+        lts[i+64] := complex16{re=-lts_mod;im=0};
+     }
+  }
+
+  sora_ifft(128, lts, lts_time[64,128]);
+  lts_time[64+128,128] := lts_time[64,128];
+  lts_time[0,64] := lts_time[256,64];
+
+  return lts_time;
+in
+
+
+
+
+
+
