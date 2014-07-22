@@ -1,0 +1,233 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#include <externals.blk>
+#include <sum.blk>
+#include <v_mul.blk>
+#include <v_conj_mul.blk>
+#include <abs.blk>
+#include <v_correlate.blk>
+
+#include "modulating.blk"
+#include "ifft.blk"
+#include "fft.blk"
+#include "preamble.zir"
+
+
+let czero = complex16{re=0; im=0} in 
+let cone = complex16{re=10000; im=0} in 
+
+
+let comp test_ifft_wCP() =
+   var symbol:arr[64] complex16;
+   var fftdata:arr[80] complex16;
+
+   do{zero_complex16(fftdata)};
+
+   repeat{
+     (s:arr[64] complex16) <- takes 64;
+     do {
+        sora_ifft(64, s,fftdata[16,64]);
+        -- Add CP
+        fftdata[0,16] := fftdata[64,16];
+     };
+     
+     emits fftdata;
+   }
+in
+
+let comp test_ifft_wZCP() =
+   var symbol:arr[64] complex16;
+   var fftdata:arr[80] complex16;
+
+   do{zero_complex16(fftdata)};
+
+   repeat{
+     (s:arr[64] complex16) <- takes 64;
+     do {
+        sora_ifft(64, s,fftdata[0,64]);
+     };
+     
+     emits fftdata;
+   }
+in
+
+
+let comp test_fft_wCP() =
+   var symbol:arr[64] complex16;
+   var fftdata:arr[64] complex16;
+
+   repeat seq{
+      (symbol:arr[80] complex16) <- takes 80;
+      do {sora_fft(64, symbol[16,64],fftdata)};
+      emits fftdata
+   }
+  
+in
+
+
+
+let comp test_ifft() =
+   var symbol:arr[64] complex16;
+   var fftdata:arr[64] complex16;
+
+   do{zero_complex16(fftdata)};
+
+   repeat{
+     (s:arr[64] complex16) <- takes 64;
+     do {sora_ifft(64, s,fftdata[0,64])};
+     emits fftdata;
+   }
+  
+in
+
+
+let comp test_fft() =
+   var symbol:arr[64] complex16;
+   var fftdata:arr[64] complex16;
+
+   repeat seq{
+      (symbol:arr[64] complex16) <- takes 64;
+      do {sora_fft(64, symbol,fftdata)};
+      emits fftdata
+   }
+in
+
+
+
+
+
+
+let comp test_channel() = 
+  var tap: arr[12] complex16;
+  var sliding: arr[12] complex16;
+  var y: arr[12] complex16;
+  do{
+    for i in [0,3] {
+      tap[i*4+0] := complex16{re=8; im=-7};
+      tap[i*4+1] := complex16{re=-4; im=6};
+      tap[i*4+2] := complex16{re=-2; im=1};
+      tap[i*4+3] := complex16{re=-1; im=1};
+    }
+    for i in [0,12] {
+      sliding[i] := complex16{re=0; im=0};
+    }
+  }
+
+  repeat {
+    x<-take;
+    do {
+      sliding[1,11] := sliding[0,11];
+      sliding[0] := x;
+      v_mul_complex16(y, sliding, tap, 2);
+      --println sliding;
+    }
+    emit sum_complex16(y);
+  }
+in
+
+
+
+-- Slide 76, one carrier
+--read[bit] >>> modulate_qpsk() >>> {emit czero; x <- takes 2; emit x[0]; emit czero; times 61 {emit czero}} 
+--          >>> test_ifft() >>> repeat {x <- takes 64; do{dbgplot_complex_line(x, 1)}; emits x} >>> write
+
+-- Slide 76, one carrier
+--read[bit] >>> modulate_qpsk() >>> {emit czero; x <- takes 2; emit czero; emit x[1]; times 61 {emit czero}} 
+---          >>> test_ifft() >>> repeat {x <- takes 64; do{dbgplot_complex_line(x, 1)}; emits x} >>> write
+
+-- Slide 76, two carriers
+--read[bit] >>> modulate_qpsk() >>> {emit czero; x <- takes 2; emits x; times 61 {emit czero}} 
+--          >>> test_ifft() >>> repeat {x <- takes 64; do{dbgplot_complex_line(x, 1)}; emits x} >>> write
+
+-- Slide 76, two carriers
+--read[bit] >>> modulate_qpsk() 
+--          >>> test_ifft() >>> repeat {x <- takes 64; do{dbgplot_complex_line(x, 1)}; emits x} >>> write
+
+
+
+-- Slide 78, Channel impulse response in time
+
+-- Slide 78, Impulse
+{-
+read[bit] >>> 
+    { times 31 {emit czero};
+      times 2 {emit cone};
+      times 31 {emit czero}
+    } >>> repeat {x <- takes 64; do{dbgplot_complex_line(x, 1)}; emits x} >>> write
+-}
+
+-- Slide 78, Channel impulse response
+{-
+read[bit] >>> 
+    { times 31 {emit czero};
+      times 2 {emit cone};
+      times 31 {emit czero}
+    } >>> test_channel() >>> repeat {x <- takes 64; do{dbgplot_complex_line(x, 1)}; emits x} >>> write
+-}
+
+
+
+-- Slide 79, Effect of channel impulse response in time on waveform
+--read[bit] >>> modulate_qpsk() >>> test_ifft_wZCP() >>> {x <- takes 80; do{dbgplot_complex_line(x, 1)}; --emits x} >>> write
+--read[bit] >>> modulate_qpsk() >>> test_ifft_wZCP() >>> test_channel() >>> {x <- takes 80; --do{dbgplot_complex_line(x, 1)}; emits x} >>> write
+
+-- Slide 80, Channel impulse response in frequency
+--read[bit] >>> modulate_qpsk() >>> test_ifft() >>> test_fft() >>> {x <- takes 64; do{dbgplot_complex_line(x, 1)}; emits x} >>> write
+--read[bit] >>> modulate_qpsk() >>> test_ifft() >>> test_channel() >>> test_fft() >>> {x <- takes 64; do{dbgplot_complex_line(x, 1)}; emits x} >>> write
+
+-- Slide 81, Channel estimation
+--read[bit] >>> modulate_qpsk() >>> test_ifft() >>> test_fft() >>> {x<-invertChannel(); do{dbgplot_complex_line(x, 1)}; emits x} >>> write
+--read[bit] >>> modulate_qpsk() >>> test_ifft() >>> test_channel() >>> FFT() >>> {x<-invertChannel(); --do{dbgplot_complex_line(x, 1)}; emits x} >>> write
+
+
+-- Slide 82, Equalized channel 
+-- Slide 82, Equalizing OFDM with no channel
+{-
+read[bit] >>> modulate_qpsk() >>> test_ifft() >>> test_fft() >>> 
+    { channel<-invertChannel(); 
+      ChannelEqualization(channel) >>> {x <- takes 64; do{dbgplot_complex_line(x, 1)}; emits x}
+    } >>> write
+-}
+
+-- Slide 82, Equalizing OFDM with channel and with no CP
+{-
+read[bit] >>> modulate_qpsk() >>> test_ifft() >>> test_channel() >>> test_fft() >>> 
+    { channel<-invertChannel(); 
+      ChannelEqualization(channel) >>> {x <- takes 64; do{dbgplot_complex_line(x, 1)}; emits x}
+    } >>> write
+-}
+
+-- Slide 82, Equalizing OFDM with channel with zero CP
+{-
+read[bit] >>> modulate_qpsk() >>> test_ifft_wZCP() >>> test_channel() >>> test_fft_wCP() >>> 
+    { channel<-invertChannel(); 
+      ChannelEqualization(channel) >>> {x <- takes 64; do{dbgplot_complex_line(x, 1)}; emits x}
+    } >>> write
+-}
+
+-- Slide 82, Equalizing OFDM with channel with CP
+{-
+read[bit] >>> modulate_qpsk() >>> test_ifft_wCP() >>> test_channel() >>> test_fft_wCP() >>> 
+    { channel<-invertChannel(); 
+      ChannelEqualization(channel) >>> {x <- takes 64; do{dbgplot_complex_line(x, 1)}; emits x}
+    } >>> write
+-}
+
+
