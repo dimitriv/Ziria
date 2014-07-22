@@ -27,13 +27,13 @@
 
 
 
-void RadioStart(BlinkParams *params);
-void RadioStop(BlinkParams *params);
-void InitSoraRx(BlinkParams *params);
-void InitSoraTx(BlinkParams *params);
+void RadioStart(SoraParameters params);
+void RadioStop(SoraParameters params);
+void InitSoraRx(SoraParameters params);
+void InitSoraTx(SoraParameters params);
 
 
 // BOZIDAR TODO: Once debugging is finished, put these as inline and move here!
-void readSora(BlinkParams *params, complex16 *ptr, int size);
-void writeSora(BlinkParams *params, complex16 *ptr, ULONG size);
+void readSora(complex16 *ptr, int size);
+void writeSora(complex16 *ptr, ULONG size);
 
