@@ -38,7 +38,7 @@ TGTS = $(patsubst %.wpl, %.test, $(wildcard *.wpl))
 all: $(TGTS)
 
 %.out : %.wpl
-	EXTRAOPTS='$(EXTRAOPTS)' $(PP) $< $@
+	EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PP) $< $@
 #	$(PP) $< $@
 
 %.outfile: %.out %.infile
