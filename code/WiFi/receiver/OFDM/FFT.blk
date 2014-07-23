@@ -22,16 +22,9 @@
 #include <externals.blk>
 
 let comp FFT() =
-   var symbol:arr[64] complex16;
-   var fftdata:arr[64] complex16;
-
-   repeat seq{
-
+   repeat {
       (symbol:arr[64] complex16) <- takes 64;
-
-      do {sora_fft(64, symbol,fftdata)};
-
-      emits fftdata
+      emits sora_fft(symbol)
    }
-  
+
 in

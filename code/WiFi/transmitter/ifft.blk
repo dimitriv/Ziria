@@ -29,7 +29,7 @@ let comp ifft() =
      do {
         symbol[96,32] := s[0,32];
         symbol[0,32] := s[32,32];
-        sora_ifft(128, symbol,fftdata[32,128]);
+        fftdata[32,128] := sora_ifft(symbol);
         -- Add CP
         fftdata[0,32] := fftdata[128,32];
      };
