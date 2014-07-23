@@ -1,15 +1,13 @@
 #include <externals.blk>
-#include "../const.blk"
-#include "../transmitter/createPreamble.blk"
-#include "../receiver/cca/cca.blk"
+#include "../receiver/cca/cca_tufv.blk"
+
 
 let comp dummy() = 
-{-
-  times 35000 {
+  times 28800 { 
     x<- take;
   }
--}
-  repeat{
+  -- times 400 {
+  repeat {
     x<- take;
     emit x;
   }  
@@ -17,16 +15,6 @@ in
 
 
 read[complex16] >>> dummy() >>> 
-  {
-{-
-    do{
-      let pr = createSTSinTime() in 
-      for i in [0, 64] {
-        print pr[i].im, ", ";
-      }
-      println ""
-    };
--}
-    t<-cca(); 
-    do{println "t=", t}
-  } >>> write[int]
+    cca()
+  >>> write
+
