@@ -1,7 +1,8 @@
-% $$$ f = fopen('test_real_rx.infile', 'rb');
-% $$$ data = fread(f, inf, 'int16');
-% $$$ data=reshape(data, 2, length(data)/2);
-% $$$ data=data(1,:) + i*data(2,:);
+f = fopen('test_real_rx.infile', 'rb');
+data = fread(f, inf, 'int16');
+%data = load('test_rx.infile');
+data=reshape(data, 2, length(data)/2);
+data=data(1,:) + i*data(2,:);
 
 
 d = load('test_real_rx.outfile');
@@ -14,13 +15,14 @@ XL = [400 800];
 
 figure(1);
 clf(1);
-Xr = (1:length(data)) - (1800*16);
+%Xr = (1:length(data)) - (1800*16);
+Xr = (1:length(data));
 subplot(4,1,1); plot(Xr, real(data/4)); title('Real(data)');
-xlim(XL);
+%xlim(XL);
 X = (0:length(corr)-1)*16 + 1;
 subplot(4,1,2); plot(X, corr); title('Corr'); 
-xlim(XL);
-subplot(4,1,3); plot(X, corri); title('Corr immediate'); 
-xlim(XL);
+%xlim(XL);
+subplot(4,1,3); plot(X, corri); title('Number of consecutive increases'); 
+%xlim(XL);
 subplot(4,1,4); plot(X, ind); title('Index'); 
-xlim(XL);
+%xlim(XL);

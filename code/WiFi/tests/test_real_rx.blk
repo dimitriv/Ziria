@@ -1,11 +1,26 @@
 #include <externals.blk>
 #include "../receiver/cca/cca_tufv.blk"
-
+--#include "../receiver/cca/cca.blk"
+#include "../receiver/OFDM/LTS.blk"
+#include "../receiver/removeDC.blk"
+#include "../receiver/downSample.blk"
+#include "../receiver/OFDM/DataSymbol.blk"
+#include "../receiver/OFDM/FreqCompensation.blk"
+#include "../receiver/OFDM/FFT.blk"
+#include "../receiver/OFDM/ChannelEqualization.blk"
+#include "../receiver/OFDM/PilotTrack.blk"
+#include "../receiver/OFDM/GetData.blk"
+{-
+#include "../receiver/decoding/DecodePLCP.blk"
+#include "../receiver/decoding/Decode.blk"
+#include "../transmitter/crc.blk"
+-}
 
 let comp dummy() = 
   times 28800 { 
     x<- take;
   }
+
   -- times 400 {
   repeat {
     x<- take;
@@ -13,8 +28,20 @@ let comp dummy() =
   }  
 in
 
+-- Start at 593
 
-read[complex16] >>> dummy() >>> 
-    cca()
-  >>> write
 
+let comp detectPreamble() = 
+  (removeDC() >>> cca())
+in 
+
+read >>> -- dummy() >>> -- downSample() >>> 
+  seq{ t<-detectPreamble()
+#ifndef FAST
+     ; do{println "Detected at: ", t}
+#endif
+     ; params <- LTS(); 
+       DataSymbol() >>> FFT() 
+       >>> ChannelEqualization(params) >>> PilotTrack() >>> GetData()
+  }
+>>> write
