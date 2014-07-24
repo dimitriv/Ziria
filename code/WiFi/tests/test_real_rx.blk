@@ -17,7 +17,7 @@
 -}
 
 let comp dummy() = 
-  times 28800 { 
+  times 150000 { 
     x<- take;
   }
 
@@ -35,15 +35,31 @@ let comp detectPreamble() =
   (removeDC() >>> cca())
 in 
 
-read >>> -- dummy() >>> -- downSample() >>> 
+let comp agc() = 
+  var output : arr[4] complex16;
+  repeat{
+    (x : arr[4] complex16) <- takes 4;
+    do{v_shift_left_complex16(output, x, 4)};
+    emits output;
+  }
+in 
+
+
+read >>> 
+--  dummy() >>> 
+--  downSample() >>> 
+--  agc() >>> 
   seq{ t<-detectPreamble()
 #ifndef FAST
      ; do{println "Detected at: ", t}
 #endif
-     --; params <- LTS(); emits params.channelCoeffs; 
-     ; (xp:arr[61] complex16) <- takes 61;
+     times 10000 { x<-take; emit x}
+     --; (xp:arr[10] complex16) <- takes 10
+     --; params <- LTS(); -- emits params.channelCoeffs; 
+     --; (xp:arr[71] complex16) <- takes 71;
+     --; (xp:arr[61] complex16) <- takes 61;
      --; (xp:arr[141] complex16) <- takes 141;
-       DataSymbol() >>> FFT() 
-       -- >>> ChannelEqualization(params) >>> PilotTrack() >>> GetData()
+     --  DataSymbol() >>> FFT() 
+     --  >>> ChannelEqualization(params) >>> PilotTrack() >>> GetData()
   }
 >>> write
