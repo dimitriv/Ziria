@@ -40,8 +40,10 @@ read >>> -- dummy() >>> -- downSample() >>>
 #ifndef FAST
      ; do{println "Detected at: ", t}
 #endif
-     ; params <- LTS(); 
+     --; params <- LTS(); emits params.channelCoeffs; 
+     ; (xp:arr[61] complex16) <- takes 61;
+     --; (xp:arr[141] complex16) <- takes 141;
        DataSymbol() >>> FFT() 
-       >>> ChannelEqualization(params) >>> PilotTrack() >>> GetData()
+       -- >>> ChannelEqualization(params) >>> PilotTrack() >>> GetData()
   }
 >>> write

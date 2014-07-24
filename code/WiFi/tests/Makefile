@@ -56,6 +56,10 @@ test_real_%.outfile: test_real_%.out test_real_%.infile
              --output-file-name=$@ \
              --output-file-mode=dbg
 
+test_real_%.test: test_real_%.out 
+	echo "Still working on it..."
+
+
 %.outfile: %.out %.infile
 	./$< --input=file \
              --input-file-name=$*.infile \

@@ -5,6 +5,35 @@ data=reshape(data, 2, length(data)/2);
 data=data(1,:) + i*data(2,:);
 
 
+
+
+
+
+d = load('test_real_rx.outfile');
+df = d(1:2:end) + i*d(2:2:end);
+
+LTSf = [0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, ...
+        1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, ...
+        0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, ...
+        1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1];
+LTSf = 2*LTSf-1;
+
+
+figure(1);
+clf(1);
+XL = [1 1000];
+subplot(3,1,1); plot(real(data/4)); title('Real(data)');
+subplot(3,1,2); plot(abs(df)); title('Abs of FFT');
+xlim(XL);
+subplot(3,1,3); plot(angle(df)); title('Phase of FFT');
+xlim(XL);
+
+
+
+
+aaa
+
+
 d = load('test_real_rx.outfile');
 corr  = d(1:3:end);
 corri = d(2:3:end);
