@@ -44,7 +44,7 @@ let createSTSinTime() =
   sts[120] := complex16{re=-sts_mod; im=-sts_mod};
   sts[124] := complex16{re=sts_mod; im=sts_mod};
 
-  sora_ifft(128, sts, sts_time[0, 128]);
+  sts_time[0, 128] := sora_ifft(sts);
   sts_time[128,128] := sts_time[0,128];
   sts_time[256,64] := sts_time[0,64];
 
@@ -86,7 +86,7 @@ let createLTSinTime() =
      }
   }
 
-  sora_ifft(128, lts, lts_time[64,128]);
+  lts_time[64,128] := sora_ifft(lts);
   lts_time[64+128,128] := lts_time[64,128];
   lts_time[0,64] := lts_time[256,64];
 

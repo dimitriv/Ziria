@@ -1067,7 +1067,8 @@ int32 __ext_atan2_int32 ( int32 y, int32 x ) {
 
 
 //FINL 
-int __ext_sora_fft(short nFFTSize, struct complex16 * input, int unused1, struct complex16* output, int unused2)
+// int __ext_sora_fft(short nFFTSize, struct complex16 * input, int unused1, struct complex16* output, int unused2)
+void __ext_sora_fft(struct complex16* output, int nFFTSize, struct complex16 * input, int unused1)
 {
 	vcs *in = (vcs*)input;
 	vcs *out = (vcs*)output;
@@ -1101,10 +1102,11 @@ int __ext_sora_fft(short nFFTSize, struct complex16 * input, int unused1, struct
 	}
 
 	// because UNIT is 0
-	return 0;
+	//return 0;
 }
 
-int __ext_sora_ifft(short nFFTSize, struct complex16 * input, int unused1, struct complex16* output, int unused2)
+//int __ext_sora_ifft(short nFFTSize, struct complex16 * input, int unused1, struct complex16* output, int unused2)
+void __ext_sora_ifft(struct complex16* output, int nFFTSize, struct complex16 * input, int unused1)
 {
 	vcs *in = (vcs*)input;
 	vcs *out = (vcs*)output;
@@ -1138,7 +1140,7 @@ int __ext_sora_ifft(short nFFTSize, struct complex16 * input, int unused1, struc
 		break;
 	}
 
-	return 0;
+	//return 0;
 }
 
 

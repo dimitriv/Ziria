@@ -1,0 +1,224 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#include <externals.blk> 
+#include <v_correlate.blk>
+#include <abs.blk>
+#include <conj.blk>
+#include "../../const.blk"
+
+#define NO_REP           9
+#define NO_REP_M_1       8
+
+#define CORR_LEN        16
+
+
+let energy_threshold = 500000 in 
+let norm_shift = 7 in 
+
+
+-- Same as in transmitter/createPreamble, except that it is at a lower sampling rate
+let createSTSinTime() = 
+  var sts : arr[64] complex16;
+  var sts_time : arr[320] complex16;
+
+  let sts_mod = int16(double(bpsk_mod_11a) * 1.472) in
+
+
+  -- short training symbol
+  sts[4]   := complex16{re=-sts_mod; im=-sts_mod};
+  sts[8]   := complex16{re=-sts_mod; im=-sts_mod};
+  sts[12]  := complex16{re=sts_mod; im=sts_mod};
+  sts[16]  := complex16{re=sts_mod; im=sts_mod};
+  sts[20]  := complex16{re=sts_mod; im=sts_mod};
+  sts[24]  := complex16{re=sts_mod; im=sts_mod};
+
+  sts[40] := complex16{re=sts_mod; im=sts_mod};
+  sts[44] := complex16{re=-sts_mod; im=-sts_mod};
+  sts[48] := complex16{re=sts_mod; im=sts_mod};
+  sts[52] := complex16{re=-sts_mod; im=-sts_mod};
+  sts[56] := complex16{re=-sts_mod; im=-sts_mod};
+  sts[60] := complex16{re=sts_mod; im=sts_mod};
+
+  sts_time[0, 64] := sora_ifft(sts);
+  sts_time[64,64] := sts_time[0,64];
+  sts_time[128,32] := sts_time[0,32];
+
+  return sts_time;
+in
+
+
+let InitCorrPattern() = 
+  var pattern : arr[CORR_LEN*CORR_LEN] complex16;
+  var preamble : arr[64] complex16;
+
+
+  -- let sts = createSTSinTime() in 
+  let sts = createSTSinTime() in 
+  for i in [0, 64] {
+    preamble[i] := sts[i];
+  };
+
+  v_shift_right_complex16(preamble, preamble, norm_shift);
+
+  -- cyclic shift - stores all possible preamble shifts of length 16 in the pattern
+  for i in [0,CORR_LEN] {
+    pattern[i*CORR_LEN, CORR_LEN] := preamble[i,CORR_LEN];
+  }
+
+  return pattern;
+in
+
+
+
+-- Detection using Tufvesson algorithm
+-- Tufvesson et al, Time and Frequency Synchronization using PN-Sequence Preambles, VTC 99
+
+let comp cca() = 
+   var pattern : arr[CORR_LEN*CORR_LEN] complex16;
+   var corr : int32;
+   var maxCorr : int32;
+   var maxInd : int16;   
+   var input : arr[CORR_LEN] complex16;
+   var mul_hist : arr[CORR_LEN*CORR_LEN] complex32;
+   var corr_hist : arr[NO_REP*CORR_LEN] int32;
+   var oldOldCorr : int32 := 0;
+   var oldCorr : int32 := 0;
+   var oldInd : int16 := 0;
+   var oldOldInd : int16 := 0;
+   var noInc : int16 := 0;
+   var detected : bool := false; 
+   var iterind : int16 := 0;
+
+  -- calcEnergy related
+   var gesw : arr[4] int;
+   var iEnergy : int := 0;
+
+   -- DEBUG
+   var debCorr : int32;
+
+
+
+   let calcEnergy(x : arr[4] complex16) = 
+     var ge : int;
+     var xcopy:arr[4] complex16;
+     var iEnergy : int := 0;
+     var re32:arr[4] int32;
+     var im32:arr[4] int32;
+
+     v_shift_right_complex16(xcopy,x,2);
+     v_shift_right_complex16(xcopy,xcopy,2);
+
+     v_conj_mul_complex16_int32(re32, im32, xcopy, xcopy);
+     ge := v_sum_int32(re32);
+    
+     gesw[0:2] := gesw[1:3];
+     gesw[3] := ge;    
+
+     -- For small arrays a loop can be faster than SIMD
+     iEnergy := 0;
+     for i in [0,length(gesw)] {
+       iEnergy := iEnergy + gesw[i]
+     };
+ 
+     return (iEnergy)
+
+   in    
+
+
+{
+   do {
+      pattern := InitCorrPattern();
+      zero_int32(corr_hist);
+      zero_complex32(mul_hist);
+      zero_int32(gesw);
+   }
+
+   until detected == true {
+     x <- takes CORR_LEN;
+
+     do {
+       v_shift_right_complex16(input, x, norm_shift);
+
+       iEnergy := calcEnergy(x[0,4]);      
+
+       maxCorr := 0;
+       for i in [0, CORR_LEN] {
+          let corrc = v_correlate(pattern[i*CORR_LEN,CORR_LEN], input) in
+          let corrmul = corrc * conj_complex32(mul_hist[i]) in 
+          let corri = (abs_int32(corrmul.re) + abs_int32(corrmul.im)) in 
+
+          mul_hist[i] := corrc;
+
+          corr_hist[i*NO_REP+1,NO_REP_M_1] := corr_hist[i*NO_REP,NO_REP_M_1];
+          corr_hist[i*NO_REP] := corri;
+
+          corr :=0;
+          for j in [0,NO_REP] {
+            corr := corr + corr_hist[i*NO_REP+j];
+          }
+
+          if (corri > maxCorr) then {
+             maxCorr := corr;
+             debCorr := corri;
+             maxInd := int16(i);
+          }
+       }
+
+       -- Because of repeating preamble we should have a certain number of consecutive 
+       -- increases before declaring the peak - start of a packet
+       if (iEnergy > energy_threshold && noInc > 4 && (oldCorr > maxCorr || oldInd != maxInd)) then {
+          detected := true;
+       }
+
+       if (oldOldCorr < oldCorr && oldCorr < maxCorr && oldOldInd == oldInd && oldInd == maxInd) then {
+          noInc := noInc + 1;
+       } else {
+          noInc := 0;
+       }
+
+       oldOldCorr := oldCorr;
+       oldCorr := maxCorr;
+       oldOldInd := oldInd;
+       oldInd := maxInd;
+
+       iterind := iterind + 1;
+     }
+
+
+{-
+     emit maxCorr;
+     emit int32(noInc);
+--     emit int32(maxInd);
+     emit iEnergy;
+-}
+
+   }
+
+  return (16*iterind + oldInd)
+}
+in
+
+
+
+
+
+
+
+

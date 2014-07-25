@@ -1,0 +1,16 @@
+#include <externals.blk>
+
+let comp test () = 
+  var out : arr[8] int16;
+  repeat {
+    inp <- take;
+    do {
+      copy_int16(out, inp, 8);
+    }
+    emit out; 
+  }
+in 
+
+read >>> test() >>> write
+
+

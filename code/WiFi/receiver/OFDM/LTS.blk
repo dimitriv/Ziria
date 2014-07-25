@@ -88,7 +88,7 @@ seq{
        params.freqCoeffs[i] := complex16{re=cos_int16(pH[i]); im=sin_int16(pH[i])}
      };
 
-     sora_fft(64, preamble,fftdata);
+     fftdata := sora_fft(preamble);
 
 
      -- Calculate sq_norm
