@@ -12,7 +12,8 @@ data=data(1,:) + i*data(2,:);
 d = load('test_real_rx.outfile');
 df = d(1:2:end) + i*d(2:2:end);
 
-dt = df(80*0+71:end);
+dt = df(142-80:end);
+%dt = df(142:end);
 %dt = df;
 df = [];
 for j = 0:20
@@ -49,8 +50,6 @@ subplot(3,1,2); plot(abs(dc)); title('Abs of FFT');
 xlim(XL);
 subplot(3,1,3); plot(angle(dc)); title('Phase of FFT');
 xlim(XL);
-
-
 
 
 aaa

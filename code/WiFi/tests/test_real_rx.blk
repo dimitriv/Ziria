@@ -17,7 +17,7 @@
 -}
 
 let comp dummy() = 
-  times 150000 { 
+  times 17500 { 
     x<- take;
   }
 
@@ -46,8 +46,8 @@ in
 
 
 read >>> 
---  dummy() >>> 
---  downSample() >>> 
+  dummy() >>> 
+  downSample() >>> 
 --  agc() >>> 
   seq{ t<-detectPreamble()
 #ifndef FAST
