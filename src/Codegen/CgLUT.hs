@@ -25,6 +25,7 @@
 
 module CgLUT
   ( codeGenLUTExp
+  , codeGenLUTExp_Mock
   , pprLUTStats
   , shouldLUT
   ) where
@@ -32,6 +33,9 @@ module CgLUT
 
 import Opts
 import AstExpr
+
+import Text.Parsec.Pos
+
 import {-# SOURCE #-} CgExpr
 import CgMonad hiding (State)
 import CgTypes
@@ -99,7 +103,10 @@ packIdx ranges vs tgt tgt_ty = go vs 0
          = do { w <- varBitWidth ranges v ty
               ; let mask = 2^w - 1
               ; (_,varexp) <- lookupVarEnv v
-              ; appendStmt $ [cstm| $tgt |= ((($ty:tgt_ty) (*$varexp)) & $int:mask) << $int:pos; |]
+              ; z <- genSym "__z" 
+              ; appendDecl $ [cdecl| $ty:tgt_ty * $id:z;|]
+              ; appendStmt $ [cstm| $id:z = ($ty:tgt_ty *) $varexp; |]
+              ; appendStmt $ [cstm| $tgt |= ((* $id:z) & $int:mask) << $int:pos; |]
               -- ; appendStmt $ [cstm| bitArrWrite((typename BitArrPtr) $varexp, $int:pos, $int:w, $tgt); |]
               ; go vs (pos+w) }
          | otherwise
@@ -190,6 +197,22 @@ unpackByteAligned xs src = go xs 0
 -- csrcPathNative dflags = head [ path | CSrcPathNative path <- dflags]
 
 
+codeGenLUTExp_Mock :: DynFlags -> Maybe SourcePos -> Map Name Range -> Exp Ty -> Cg C.Exp
+codeGenLUTExp_Mock dflags loc r  e
+  = do { (inVars, outVars, allVars) <- inOutVars [] r e
+       ; _ <- codeGenExp dflags $ ePrint Nothing TUnit True $ 
+                               eVal Nothing TString (VString (show loc))
+       ; _ <- codeGenExp dflags $ ePrint Nothing TUnit True $ 
+                                  eVal Nothing TString (VString "INVARS")
+       ; cg_print_vars dflags inVars 
+       ; _ <- codeGenExp dflags $ ePrint Nothing TUnit True $ 
+                                  eVal Nothing TString (VString "OUTVARS")
+       ; r <- codeGenExp dflags e
+       ; cg_print_vars dflags outVars
+       ; return r 
+       }
+
+
 codeGenLUTExp :: DynFlags
               -> [(Name,Ty,Maybe (Exp Ty))]
               -> Map Name Range
@@ -264,8 +287,23 @@ codeGenLUTExp dflags locals_ ranges e mb_resname
                         ; return $ lgi_lut_var clut_gen_info 
                         }
 
-        genLUTLookup ranges inVars (outVars,resultInOutVars) clut (info e)
-                                   mb_resname 
+
+{-
+        _ <- codeGenExp dflags $ ePrint Nothing TUnit True $ 
+                                 eVal Nothing TString (VString (show (expLoc e)))
+
+        _ <- codeGenExp dflags $ ePrint Nothing TUnit True $ 
+                                 eVal Nothing TString (VString "INVARS")
+
+        cg_print_vars dflags inVars 
+
+        _ <- codeGenExp dflags $ ePrint Nothing TUnit True $ 
+                                 eVal Nothing TString (VString "OUTVARS")
+-}
+
+        genLUTLookup dflags ranges 
+                        inVars (outVars,resultInOutVars) 
+                        clut (info e) mb_resname e
 
 genLUT :: DynFlags -- ^ Flags
        -> Map Name Range
@@ -298,6 +336,19 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars locals e = do
            -- Generate local declarations for all input and output variables
            do { genLocalVarInits dflags allVars
               ; unpackIdx inVars [cexp|$id:cidx |] [cty|unsigned int|]
+
+                -- DEBUG ONLY 
+              ; let dbg_idx = "___dbg_idx"
+              ; appendDecl [cdecl| unsigned int $id:dbg_idx; |]
+
+              ; appendStmt [cstm| $id:dbg_idx = 0; |]
+              ; packIdx ranges inVars [cexp|$id:dbg_idx|] [cty|unsigned int|]
+              ; appendStmt [cstm|if ($id:cidx != $id:dbg_idx) { 
+                                   printf("FATAL BUG in LUT generation:packIdx/unpackIdx mismatch!(%s)", $string:cidx);
+                                   exit(-1);
+                                 }|]
+                -- END DEBUG
+
               ; mapM_ (\(v,_) -> ensureInRange v) inVars
               ; ce <- codeGenExp dflags e
               ; (outBitWidth, outVarsWithRes, result_env) <- 
@@ -327,6 +378,7 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars locals e = do
                        ; return (ow, outVarsWithRes, renv) }
               ; extendVarEnv result_env $ 
                 packByteAligned ranges outVarsWithRes [cexp| $id:clutentry |]
+
               ; return outBitWidth
               }
 
@@ -380,25 +432,49 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars locals e = do
      | otherwise = return ()
 
 
+print_vars :: [VarTy] -> Exp Ty -> Exp Ty
+print_vars [] e = e
+print_vars ((v,t):vs) e
+  = let p = eSeq Nothing TUnit 
+             (ePrint Nothing TUnit False 
+                       (eVal Nothing TString (VString $ name v ++ ":")))
+             (ePrint Nothing TUnit True  (eVar Nothing t v))
+    in eSeq Nothing (info e) p (print_vars vs e)
 
-genLUTLookup :: Map Name Range
-             -> [VarTy]                 -- ^ Input variables
-             -> ([VarTy],Maybe Name)    -- ^ Output variables incl. possibly a 
-                                        --   separate result variable!
-             -> C.Exp                   -- ^ LUT table
-             -> Ty                      -- ^ Expression type 
-             -> Maybe Name              -- ^ If set, store the result here
+cg_print_vars :: DynFlags -> [VarTy] -> Cg ()
+cg_print_vars dflags vs 
+  = do { _ <- codeGenExp dflags $ print_vars vs (eVal Nothing TUnit VUnit) 
+       ; return ()
+       }
+
+
+
+
+genLUTLookup :: DynFlags 
+             -> Map Name Range
+             -> [VarTy]             -- ^ Input variables
+             -> ([VarTy],Maybe Name)-- ^ Output variables incl. possibly a 
+                                    --   separate result variable!
+             -> C.Exp               -- ^ LUT table
+             -> Ty                  -- ^ Expression type 
+             -> Maybe Name          -- ^ If set, store the result here
+             -> Exp Ty              -- ^ Original expression (just for debug)
              -> Cg C.Exp
-genLUTLookup ranges inVars (outVars,res_in_outvars) clut ety mb_resname = do
+genLUTLookup dflags ranges 
+             inVars (outVars,res_in_outvars) clut ety mb_resname _e = do
     idx <- genSym "idx"
-    appendDecl [cdecl| unsigned int $id:idx = 0; |]
+    appendDecl [cdecl| unsigned int $id:idx; |]
 
+    appendStmt [cstm|$id:idx = 0; |]
     packIdx ranges inVars [cexp|$id:idx|] [cty|unsigned int|]
 
     case res_in_outvars of
       Just v -> 
         do { unpackByteAligned outVars 
                  [cexp| (typename BitArrPtr) $clut[$id:idx]|]
+
+--           ; cg_print_vars dflags outVars -- debugging
+
            ; (_,vcexp) <- lookupVarEnv v
            ; store_var mb_resname vcexp
            }
@@ -407,6 +483,9 @@ genLUTLookup ranges inVars (outVars,res_in_outvars) clut ety mb_resname = do
         | ety == TUnit
         -> do { unpackByteAligned outVars 
                      [cexp| (typename BitArrPtr) $clut[$id:idx]|]
+
+--              ; cg_print_vars dflags outVars -- debugging
+
               -- DV: used to be; return [cexp|UNIT |] }
               ; store_var mb_resname [cexp|UNIT |]
               }
@@ -418,12 +497,18 @@ genLUTLookup ranges inVars (outVars,res_in_outvars) clut ety mb_resname = do
                   ; extendVarEnv [(res,(ety,[cexp|$id:(name res)|]))] $
                     unpackByteAligned (outVars ++ 
                        [(res,ety)]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
+
+--                  ; cg_print_vars dflags outVars -- debugging
+
                   ; return $ [cexp| $id:(name res) |] 
                   }
              Just res -> 
                do { extendVarEnv [(res,(ety,[cexp|$id:(name res)|]))] $
                     unpackByteAligned (outVars ++ 
                        [(res,ety)]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
+
+--                  ; cg_print_vars dflags outVars -- debugging
+
                   ; return $ [cexp|UNIT|] 
                   }
     
