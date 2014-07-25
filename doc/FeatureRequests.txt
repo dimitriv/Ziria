@@ -1,0 +1,9 @@
+List of features that we hope to add to Ziria at some point:
+
+- More graceful automatic type casting. For example, x_int32 + x_int16 should automatically result 
+  into y_int32 and not error.
+
+- Support constant expressions wherever a literal is expected (e.g. var x:arr[const] int 
+  and a[0,const] := b[0,const] and x<-takes const).
+
+
