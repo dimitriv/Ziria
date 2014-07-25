@@ -29,7 +29,7 @@
 #define CORR_LEN        16
 
 
-let energy_threshold = 500000 in 
+let energy_threshold = 20000 in 
 let norm_shift = 7 in 
 
 
