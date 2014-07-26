@@ -104,11 +104,14 @@ let comp cca() =
    var oldOldInd : int16 := 0;
    var noInc : int16 := 0;
    var detected : bool := false; 
-   var iterind : int16 := 0;
+   var iterind : int32 := 0;
 
-  -- calcEnergy related
+   -- calcEnergy related
    var gesw : arr[4] int;
    var iEnergy : int := 0;
+
+   -- return param
+   var ret : struct CCAParams;
 
    -- DEBUG
    var debCorr : int32;
@@ -211,7 +214,13 @@ let comp cca() =
 
    }
 
-  return (16*iterind + oldInd)
+  do {
+    ret.noSamples := (16*iterind + int(oldInd));
+    ret.shift := oldInd;
+    ret.energy := iEnergy;
+  };
+
+  return ret;
 }
 in
 
