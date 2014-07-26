@@ -27,5 +27,5 @@ let comp detectPreamble() =
 in 
 
 
-read[complex16] >>> downSample() >>> {t<-detectPreamble(); emit t } >>> write[int16]
+read[complex16] >>> downSample() >>> {det<-detectPreamble(); emit int16(det.noSamples) } >>> write[int16]
 
