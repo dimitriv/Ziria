@@ -60,17 +60,21 @@ runAutoLUT dflags _ c = autolutC c
 
         go (LetE v e1 c2) =
             LetE v <$> autolutE e1 <*> autolutC c2
+            
+        -- CL
+        go (LetERef v (Right e1) c1) =
+            autolutE e1 >>= \e1' -> 
+            LetERef v (Right e1') <$> autolutC c1
 
-        go (LetExternal v f c) =
-            LetExternal v <$> autolutF f <*> autolutC c
+        go (LetERef v (Left t) c1) =
+            LetERef v (Left t) <$> autolutC c1
 
-        go (LetFun v f c) =
-            LetFun v <$> autolutF f <*> autolutC c
-
+        go (LetHeader v f c) =
+            LetHeader v <$> autolutF f <*> autolutC c
+        --
 
         go (LetStruct sdef c) =
             LetStruct sdef <$> autolutC c
-
 
         go (LetFunC v params locals c1 c2) =
             LetFunC v params locals <$> autolutC c1 <*> autolutC c2
@@ -114,8 +118,8 @@ runAutoLUT dflags _ c = autolutC c
         go (VectComp n c) =
             VectComp n <$> autolutC c
 
-        go (Map p e) =
-            Map p <$> autolutE e
+        go (Map p nm) =
+            pure (Map p nm)
 
         go (Filter e) =
             Filter <$> autolutE e

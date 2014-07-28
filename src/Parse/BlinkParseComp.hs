@@ -285,8 +285,8 @@ parseCompTerm
            , do { reserved "map"
                 ; p <- getPosition
                 ; mb_ann <- optionMaybe parseVectAnn 
-                ; e <- parseExpr
-                ; return (cMap (Just p) () mb_ann e) 
+                ; nm <- parseVarBind
+                ; return (cMap (Just p) () mb_ann nm) 
                 }
 
            , parseCompCompound
@@ -445,7 +445,7 @@ parseFunBind is_comp x p
               ; locls <- declsParser
               ; e <- parseStmts
               ; let fun = MkFun (MkFunDefined x params locls e) (Just p) ()
-              ; optInCont (cLetFun (Just p) () x fun) 
+              ; optInCont (cLetHeader (Just p) () x fun) 
               }
       Just h
         -> do { params <- parens compParamsParser
@@ -482,7 +482,7 @@ parseExternal p
        ; ty <- parseBaseType 
        ; let fn  = mkNameFromPos (Just x) p Nothing
        ; let fun = MkFun (MkFunExternal fn params ty) (Just p) ()
-       ; optInCont (cLetExternal (Just p) () fn fun) 
+       ; optInCont (cLetHeader (Just p) () fn fun) 
        }
 
 

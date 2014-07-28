@@ -114,20 +114,32 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
       -> text "let" <+> ppTypedName x <+> text "=" <+> ppExp e $$
          text "in" $$ 
          ppComp c
-    LetFun _ fn c 
+
+    -- CL
+    LetERef x (Left ty) c
+       | ignorelet || ignoreexp
+       -> ppComp c
+       | otherwise 
+       -> text "letref" <+> ppName x <+> colon <+> ppTy ty $$ 
+          text "in" $$ 
+          ppComp c
+
+    LetERef x (Right e) c
+       | ignorelet || ignoreexp
+       -> ppComp c
+       | otherwise 
+       -> text "letref" <+> assign ":=" (ppName x) (ppExp e) $$
+          text "in" $$
+          ppComp c
+
+    LetHeader _ fn c 
       | ignorelet || ignoreexp
       -> ppComp c
       | otherwise 
       -> text "let" <+> ppFun fn $$
          text "in" $$
          ppComp c
-    LetExternal _ fn c 
-      | ignorelet || ignoreexp
-      -> ppComp c
-      | otherwise
-      -> text "let external" <+> ppFun fn $$
-         text "in" $$
-         ppComp c
+    --
     LetFunC f params locls c1 c2 
       | ignorelet || (ignoreexp && not (nested_letfuns c1))
       -> ppComp c2
@@ -180,8 +192,8 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
       text "repeat" <> ppWidth (n1,n2) <+> 
                        ppComp c
 
-    Map wdth e ->
-      text "map" <> myFromMaybe ppVectWidth empty wdth <+> ppExp e 
+    Map wdth nm ->
+      text "map" <> myFromMaybe ppVectWidth empty wdth <+> ppName nm 
     Filter e ->
       text "filter" <+> ppExp e
 
@@ -200,6 +212,9 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
 
     Mitigate t n1 n2 -> 
       int n1 <> text "-mitigate" <> brackets (ppTy t) <> text "-" <> int n2
+    -- CL
+    where assign s e1 e2 = e1 <+> text s <+> e2
+    --
 
 ppVectWidth (Rigid _r ann) = ppWidth ann
 ppVectWidth (UpTo _r ann)  = text "<=" <> ppWidth ann

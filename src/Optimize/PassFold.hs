@@ -142,11 +142,12 @@ fold_step fgs comp =
                 rewrite $ MkComp (LetE nm e c12') cloc cinfo
         }  
 
-    BindView (MkComp (LetFun f fun c) floc finfo) nm c12 -> 
+    -- CL 
+    BindView (MkComp (LetHeader f fun@(MkFun (MkFunDefined {}) _ _) c) floc finfo) nm c12 -> 
         fold_step fgs c12 >>= \c12' -> 
           rewrite $ 
-          MkComp (LetFun f fun (MkComp (mkBindMany c [(nm,c12')]) cloc cinfo)) cloc cinfo
-
+          MkComp (LetHeader f fun (MkComp (mkBindMany c [(nm,c12')]) cloc cinfo)) cloc cinfo
+    --
     -- Don't forget to go inside!
     BindView c nm  c12 -> 
      fold_step fgs c12 >>= \c12' 
@@ -263,11 +264,10 @@ take_emit_step fgs comp
        ; fname <- do { fr <- genSym "auto_map_"
                      ; return $ toName fr eloc (Just fty) }
 
-       ; let letfun  = MkComp (LetFun fname fun mapcomp) cloc cty
-             mapcomp = MkComp (Map nfo fexp) cloc cty
+       ; let letfun  = MkComp (LetHeader fname fun mapcomp) cloc cty
+             mapcomp = MkComp (Map nfo fname) cloc cty
                      -- NB: We pass the nfo thing, 
                      -- to preserve vectorization hints!
-             fexp = MkExp (EVar fname) eloc fty
              fun = MkFun (MkFunDefined fname [(x,xty)] [] e) eloc fty
 
        ; rewrite letfun
@@ -328,7 +328,7 @@ inline_step_aux fgs comp
   = substExpComp (nm,e1) c2 >>= rewrite
 
 
-  | LetFun nm f c2 <- unComp comp
+  | LetHeader nm f@(MkFun (MkFunDefined {}) _ _) c2 <- unComp comp
   , MkFunDefined nm params locals body <- unFun f -- Defined 
   , no_lut_inside body                            -- Not already lutted body
 
@@ -336,7 +336,7 @@ inline_step_aux fgs comp
          -- Inlining functions not always completely eliminates 
          -- them (e.g. args to map, or non-simple arguments)
        ; if S.member nm (compFVs c2') then 
-           return $ MkComp (LetFun nm f c2') 
+           return $ MkComp (LetHeader nm f c2') 
                            (compLoc comp) 
                            (compInfo comp)
          else return c2' 
@@ -365,7 +365,7 @@ inline_step_aux fgs comp
 
 is_arg_to_map nm comp
   = isNothing (mapCompM_ return aux comp)
-  where aux c@(MkComp (Map _ (MkExp (EVar nm') _ _)) _ _) 
+  where aux c@(MkComp (Map _ nm') _ _) 
           = if nm == nm' then Nothing else Just c
         aux other = Just other
 
@@ -669,7 +669,7 @@ letfunc_step fgs comp =
              ; cont' <- purify_calls fun_ty nm cont
              ; let new_params = map (\(n,t) -> (n, unCAExp t)) params
              ; let (fun :: Fun Ty) = MkFun (MkFunDefined nm new_params locals e) (compLoc comp) fun_ty
-             ; rewrite $ MkComp (LetFun nm fun cont') (compLoc comp) (compInfo comp) -- Same type!
+             ; rewrite $ MkComp (LetHeader nm fun cont') (compLoc comp) (compInfo comp) -- Same type!
              }
     _ -> return comp
   where
@@ -685,14 +685,14 @@ letfunc_step fgs comp =
 
 letfun_times_step fgs comp = 
   case unComp comp of 
-    Times ui e elen i (MkComp (LetFun f def cont) cloc cinfo) 
+    Times ui e elen i (MkComp (LetHeader f def cont) cloc cinfo) 
      | MkFun (MkFunDefined n params locals body) floc fty <- def
      -> do { let fty' = TArrow (tyOfParams ((i,tint):params)) (fun_ret_ty fty)
                  def' = MkFun (MkFunDefined n ((i,tint):params) locals body) floc fty'
                  iexp = MkExp (EVar i) cloc tint -- The counter variable
            ; cont' <- augment_calls (n,fty') iexp cont
            ; rewrite $ 
-             MkComp (LetFun f def' (MkComp (Times ui e elen i cont') cloc cinfo)) cloc cinfo }
+             MkComp (LetHeader f def' (MkComp (Times ui e elen i cont') cloc cinfo)) cloc cinfo }
     _otherwise -> return comp
 
   where fun_ret_ty (TArrow _ r) = r
@@ -1108,11 +1108,11 @@ frm_mit c
       Nothing -> Nothing 
       Just (mit,c2') -> Just (mit, cPar (compLoc c) () p0 c1 c2')
 
-  | LetFun fn fdef cont <- unComp c -- Needed because of AutoMaps! Yikes!
+  | LetHeader fn fdef@(MkFun (MkFunDefined {}) _ _) cont <- unComp c -- Needed because of AutoMaps! Yikes!
   , let loc = compLoc c
   = case frm_mit cont of
       Nothing -> Nothing
-      Just (mit,cont') -> Just (mit,cLetFun loc () fn fdef cont')
+      Just (mit,cont') -> Just (mit,cLetHeader loc () fn fdef cont')
 
   -- Special case for code emitted by the vectorizer 
   | LetFunC fn prms locs body cont <- unComp c
@@ -1152,11 +1152,11 @@ flm_mit c
       Nothing -> Nothing 
       Just (mit,c1') -> Just (mit, cPar (compLoc c) () p0 c1' c2)
 
-  | LetFun fn fdef cont <- unComp c
+  | LetHeader fn fdef@(MkFun (MkFunDefined {}) _ _) cont <- unComp c
   , let loc = compLoc c
   = case flm_mit cont of
       Nothing -> Nothing
-      Just (mit,cont') -> Just (mit,cLetFun loc () fn fdef cont')
+      Just (mit,cont') -> Just (mit,cLetHeader loc () fn fdef cont')
 
   -- Special case for code emitted by the vectorizer 
   | LetFunC fn prms locs body cont <- unComp c

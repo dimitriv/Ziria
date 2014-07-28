@@ -549,7 +549,7 @@ codeGenComp dflags comp k =
 
                   } 
 
-    go (MkComp (Map _p e00@(MkExp (EVar f) _ (TArrow ta tb))) csp (CTBase cty0)) = do
+    go (MkComp (Map _p nm) csp (CTBase cty0)) = do
 
         mapName <- nextName ("__map_" ++ (getLnNumInStr csp))
         let prefix = name mapName
@@ -568,8 +568,7 @@ codeGenComp dflags comp k =
                                , mbtype  = Just invalty
                                , nameLoc = invalloc }
             invalarg  = MkExp (EVar invalname) invalloc invalty
-
-        let ecall     = MkExp (ECall e00 [invalarg]) 
+        let ecall     = MkExp (ECall (MkExp (EVar nm) invalloc (TArrow {})) [invalarg]) 
                         invalloc (yldTyOfCTyBase (compInfo comp))
 
         -- For tick, we are supposed to return consume so we simply emit the
@@ -789,15 +788,18 @@ codeGenComp dflags comp k =
         -- Make sure we init this guy, regardless of whether c1 is init'able
         return $ cinfo { compGenInit = codeStmts stms `mappend` 
                                        compGenInit cinfo }
-       
-    go def@(MkComp (LetFun f fdef@(MkFun (MkFunDefined nm params locals body) _ fTy) c1) csp _) 
-      = codeGenSharedCtxt_ dflags False (CLetFun csp f fdef Hole) $ 
-        codeGenCompTop dflags c1 k
 
-    go (MkComp (LetExternal f fdef@(MkFun (MkFunExternal nm params retTy) _ _) c1) csp _) 
-      = codeGenSharedCtxt_ dflags False (CLetExternal csp f fdef Hole) $ 
-        codeGenCompTop dflags c1 k
+    -- CL
+    go (MkComp (LetERef x y c2) csp _) = do 
+        (cinfo,stms) <- codeGenSharedCtxt dflags False (CLetERef csp x y Hole) $ 
+                        codeGenCompTop dflags c2 k
+        return $ cinfo { compGenInit = codeStmts stms `mappend` 
+                                       compGenInit cinfo }
 
+    go (MkComp (LetHeader f fdef c1) csp _) 
+      = codeGenSharedCtxt_ dflags False (CLetHeader csp f fdef Hole) $ 
+        codeGenCompTop dflags c1 k
+    --
     go (MkComp (LetFunC f params locals c1 c2) csp _) =
         codeGenSharedCtxt_ dflags False (CLetFunC csp f params locals c1 Hole) $
         codeGenCompTop dflags c2 k
@@ -1131,10 +1133,28 @@ codeGenComp dflags comp k =
     go (MkComp (Standalone c1) csp (CTBase cty0)) =
        codeGenCompTop dflags c1 k
 
+
+    go (MkComp c _ (CTArrow {})) = 
+        fail $ "CodeGen error: BUG!!! " ++ show c
+
+    {-go (MkComp c@(LetHeader {}) _ _) = 
+        fail $ "CodeGen error, BUG!! " ++ show c-}
+    go (MkComp c@(Take {}) _ _) = 
+        fail $ "CodeGen error, BUG!! " ++ show c
+    go (MkComp c@(Times {}) _ _) = 
+        fail $ "CodeGen error, BUG!! " ++ show c
+
+    go (MkComp c@(Filter {}) _ _) = 
+        fail $ "CodeGen error, unimplemented: " ++ show c
+    go (MkComp c@(Interleave {}) _ _) =
+        fail $ "CodeGen error, unimplemented: " ++ show c
+{-    go (MkComp c@(Map {}) _ _) = 
+        fail $ "CodeGen error, unimplemented: " ++ show c
+-}
+{- 
     go (MkComp c _ _) =
         fail $ "CodeGen error, unimplemented: " ++ show c
-
-
+-}
 
 
 codeGenSharedCtxt :: DynFlags -> Bool -> CompCtxt -> Cg a -> Cg (a, [C.Stm])
@@ -1185,11 +1205,52 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
            ; return (a,e_stmts ++ asgn_stmts ++ stms)  
            }
 
+    -- CL
+    go (CLetERef csp x (Right e) ctxt) action
+      = do { (e_decls,e_stmts,ce) <- inNewBlock $ codeGenExp dflags e
+           ; let ty = info e
+           ; x_name <- freshName ((name x) ++ "_" ++ (getLnNumInStr csp))
+           ; let x_cname = name x_name 
+
+           ; x_decl <- codeGenDeclGroup x_cname ty
+
+           ; if emit_global then
+                appendTopDecls (x_decl : e_decls)
+             else
+                appendDecls (x_decl : e_decls)
+  
+           ; (a,stms) <- extendVarEnv [(x, (ty,[cexp|$id:x_cname|]))] $
+                         do { -- cgIO $ putStrLn "before action."
+                            ; r <- go ctxt action
+                              -- cgIO $ putStrLn "after action." 
+                            ; return r
+                            }
+
+           ; (_,asgn_stmts) <- inNewBlock_ $ 
+                               assignByVal ty ty [cexp|$id:x_cname|] ce
+
+           ; return (a,e_stmts ++ asgn_stmts ++ stms)  
+           }
+    go (CLetERef csp x (Left ty) ctxt) action
+      = do { x_name <- freshName ((name x) ++ "_" ++ (getLnNumInStr csp))
+           ; let x_cname = name x_name 
+
+           ; x_decl <- codeGenDeclGroup x_cname ty
+
+           ; res <- extendVarEnv [(x, (ty,[cexp|$id:x_cname|]))] $
+                    do { -- cgIO $ putStrLn "before action."
+                        ; r <- go ctxt action
+                         -- cgIO $ putStrLn "after action." 
+                        ; return r
+                       }
+           ; return res  
+           }
+    --
     go (CLetFunC csp f params locals c1 ctxt) action
       = extendFunEnv f (compGenBind dflags f params locals c1) $
         go ctxt action
 
-    go (CLetExternal csp f (MkFun (MkFunExternal nm ps retTy) _ _) ctxt) action =
+    go (CLetHeader csp f (MkFun (MkFunExternal nm ps retTy) _ _) ctxt) action =
         codeGenLetExternalFun retTy
       where
 
@@ -1219,12 +1280,11 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
                                            $id:(extNm)($params:cparams);|] ]
             extendExpFunEnv f (extF,[]) $ go ctxt action 
    
-    go (CLetFun csp f fdef@(MkFun (MkFunDefined {}) _ _) ctxt) action = 
+    go (CLetHeader csp f fdef@(MkFun (MkFunDefined {}) _ _) ctxt) action = 
         -- defined CgFun
         cgFunDefined dflags csp f fdef $ go ctxt action
 
-    go (CLetFun {}) _      = error "BUG: All function kinds covered!"
-    go (CLetExternal {}) _ = error "BUG: All function kinds covered!"
+    --go (CLetHeader {}) _      = error "BUG: All function kinds covered!"
 
 codeGenSharedCtxt_ :: DynFlags -> Bool -> CompCtxt -> Cg a -> Cg a
 -- For contexts that we know by construction contain no statements

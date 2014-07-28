@@ -365,10 +365,18 @@ doVectorizeCompForce comp (finalin,finalout)
                     (LetE x e c1) -> 
                         do { c1' <- go c1
                            ; return $ cLetE loc () x (eraseExp e) c1' }
-                    (LetFun x fn c1) ->
+                    -- CL
+                    (LetERef x (Right e) c1) -> 
                         do { c1' <- go c1
-                           ; return $ cLetFun loc () x (eraseFun fn) c1' }
-
+                           ; return (MkComp (LetERef x (Right (eraseExp e)) c1') loc ()) }
+                    (LetERef x (Left t) c1) -> 
+                        do { c1' <- go c1
+                           ; return (MkComp (LetERef x (Left t) c1') loc ()) 
+                        }
+                    (LetHeader x fn@(MkFun (MkFunDefined {}) _ _) c1) ->
+                        do { c1' <- go c1
+                           ; return $ cLetHeader loc () x (eraseFun fn) c1' }
+                    --
                     (LetFunC f params locals c1 c2) ->
                        -- Aggressive specialization
                        do { -- liftIO $ putStrLn "S"
@@ -436,10 +444,11 @@ doVectorizeCompForce comp (finalin,finalout)
 
                     (Return e) -> return $ cReturn loc () (eraseExp e)
 
-                    (LetExternal n fn c) -> 
+                    -- CL
+                    (LetHeader n fn@(MkFun (MkFunExternal {}) _ _) c) -> 
                        do { c' <- go c 
-                          ; return $ cLetExternal loc () n (eraseFun fn) c' }
-
+                          ; return $ cLetHeader loc () n (eraseFun fn) c' }
+                    --
                     (LetStruct sdef c) -> 
                        do { c' <- go c 
                           ; return $ cLetStruct loc () sdef c' }

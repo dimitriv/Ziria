@@ -75,9 +75,12 @@ data Comp0 a b where
   Let :: Name -> Comp a b -> Comp a b -> Comp0 a b
   LetE :: Name -> Exp b -> Comp a b -> Comp0 a b
 
-  -- TODO: Remove name (it's already inside Fun)
-  LetExternal :: Name -> Fun b -> Comp a b -> Comp0 a b
-  LetFun      :: Name -> Fun b -> Comp a b -> Comp0 a b
+  -- CL
+  LetERef :: Name -> Either Ty (Exp b) -> Comp a b -> Comp0 a b
+  
+  LetHeader :: Name -> Fun b -> Comp a b -> Comp0 a b
+  --
+
   LetFunC     :: Name 
               -> [(Name, CallArg Ty CTy0)] -- params (could include computation types)
               -> [(Name,Ty,Maybe (Exp b))] -- locals
@@ -95,7 +98,8 @@ data Comp0 a b where
   Interleave :: Comp a b -> Comp a b -> Comp0 a b
   Branch     :: Exp b -> Comp a b -> Comp a b -> Comp0 a b
   Take1      :: Comp0 a b
-  Take       :: Exp b -> Comp0 a b
+
+  Take       :: Exp b -> Comp0 a b -- I think we only use this with EVal !!! Replace Exp b --> Int.
 
   Until      :: Exp b -> Comp a b -> Comp0 a b 
 
@@ -120,7 +124,7 @@ data Comp0 a b where
   VectComp :: (Int,Int) -> Comp a b -> Comp0 a b
 
   Map    :: Maybe VectAnn -- optional vectorization width annotation
-         -> Exp b -> Comp0 a b  
+         -> Name -> Comp0 a b  
 
   Filter :: Exp b -> Comp0 a b
 
@@ -143,8 +147,6 @@ data Comp0 a b where
 
 data VectAnn = Rigid Bool (Int,Int) -- True == allow mitigations up, False == disallow mitigations up
              | UpTo  Bool (Int,Int)
-
-
 
 
 -- Call argument information
@@ -170,11 +172,13 @@ cLet loc a x c1 c2 = MkComp (Let x c1 c2) loc a
 cLetE :: Maybe SourcePos -> a -> Name -> Exp b -> Comp a b -> Comp a b
 cLetE loc a x e c = MkComp (LetE x e c) loc a
 
-cLetExternal :: Maybe SourcePos -> a -> Name -> Fun b -> Comp a b -> Comp a b
-cLetExternal loc a x f c = MkComp (LetExternal x f c) loc a
+-- CL
+cLetERef :: Maybe SourcePos -> a -> Name -> Either Ty (Exp b) -> Comp a b -> Comp a b
+cLetERef loc a x y c = MkComp (LetERef x y c) loc a 
 
-cLetFun :: Maybe SourcePos -> a -> Name -> Fun b -> Comp a b -> Comp a b
-cLetFun loc a x f c = MkComp (LetFun x f c) loc a
+cLetHeader :: Maybe SourcePos -> a -> Name -> Fun b -> Comp a b -> Comp a b
+cLetHeader loc a x f c = MkComp (LetHeader x f c) loc a
+--
 
 cLetFunC :: Maybe SourcePos -> a -> Name -> [(Name, CallArg Ty CTy0)] 
          -> [(Name,Ty,Maybe (Exp b))] -> Comp a b -> Comp a b -> Comp a b
@@ -222,8 +226,8 @@ cRepeat loc a ann c = MkComp (Repeat ann c) loc a
 cVectComp :: Maybe SourcePos -> a -> (Int,Int) -> Comp a b -> Comp a b
 cVectComp loc a ann c = MkComp (VectComp ann c) loc a 
 
-cMap :: Maybe SourcePos -> a -> Maybe VectAnn -> Exp b -> Comp a b 
-cMap loc a ann e = MkComp (Map ann e) loc a
+cMap :: Maybe SourcePos -> a -> Maybe VectAnn -> Name -> Comp a b 
+cMap loc a ann nm = MkComp (Map ann nm) loc a
 
 cFilter :: Maybe SourcePos -> a -> Exp b -> Comp a b
 cFilter loc a e = MkComp (Filter e) loc a
@@ -309,9 +313,12 @@ compShortName c = go (unComp c)
         go (  Seq         {} ) = "Seq" 
         go (  Par         {} ) = "Par"
         go (  Let         {} ) = "Let"
-        go (  LetE        {} ) = "LetE" 
-        go (  LetExternal {} ) = "LetExternal"
-        go (  LetFun nm _ _  ) = "LetFun(" ++ name nm ++ ")"
+        go (  LetE        {} ) = "LetE"
+        -- CL
+        go (  LetERef     {} ) = "LetERef" 
+        go (  LetHeader nm (MkFun (MkFunDefined _ _ _ _) _ _) _  ) = "LetHeader(" ++ name nm ++ ")"
+        go (  LetHeader {} ) = "LetHeader"
+        --
         go (  LetFunC nm _ _ _ _ ) = "LetFunC(" ++ name nm ++ ")"
         go (  LetStruct   {} ) = "Struct"
         go (  Call n _       ) = "Call(" ++ name n ++ ")"
@@ -362,8 +369,10 @@ data CompCtxt
   = Hole
   | CLet  CompLoc Name (Comp CTy Ty) CompCtxt
   | CLetE CompLoc Name (Exp Ty) CompCtxt
-  | CLetExternal CompLoc Name (Fun Ty) CompCtxt
-  | CLetFun CompLoc Name (Fun Ty) CompCtxt
+  -- CL
+  | CLetERef CompLoc Name (Either Ty (Exp Ty)) CompCtxt  
+  --
+  | CLetHeader CompLoc Name (Fun Ty) CompCtxt
   | CLetFunC CompLoc Name [(Name, CallArg Ty CTy0)]  -- params
                           [(Name,Ty,Maybe (Exp Ty))] -- locals
                           (Comp CTy Ty) CompCtxt     -- body
@@ -488,8 +497,11 @@ compFVs c = case unComp c of
   Par _ c1 c2    -> compFVs c1 `S.union` compFVs c2
   Let nm c1 c2   -> (compFVs c1 `S.union` compFVs c2) S.\\ (S.singleton nm)
   LetE nm e c1   -> (exprFVs e `S.union` compFVs c1) S.\\ (S.singleton nm)
-  LetFun nm f c1 -> (funFVs f `S.union` compFVs c1) S.\\ (S.singleton nm)
-  LetExternal nm f c1 -> (funFVs f `S.union` compFVs c1) S.\\ (S.singleton nm)
+  -- CL
+  LetERef nm (Right e) c1 -> (exprFVs e `S.union` compFVs c1) S.\\ (S.singleton nm)
+  LetERef nm (Left _) c1 -> (compFVs c1) S.\\ (S.singleton nm) 
+  LetHeader nm f c1 -> (funFVs f `S.union` compFVs c1) S.\\ (S.singleton nm)
+  --
   LetFunC nm params locals c1 c2 ->
     let funVars = (foldr (\(nm,_,me) s ->
                            let se = case me of
@@ -515,7 +527,7 @@ compFVs c = case unComp c of
      -> exprFVs es `S.union` exprFVs elen `S.union` compFVs c1 S.\\ (S.singleton nm) 
   Repeat _ c1     -> compFVs c1  
   VectComp _ c1   -> compFVs c1 
-  Map _ e         -> exprFVs e
+  Map _ nm         -> S.singleton nm
   Filter e        -> exprFVs e
   Interleave c1 c2 -> compFVs c1 `S.union` compFVs c2
   
@@ -544,10 +556,12 @@ compSize c = case unComp c of
   Par _ c1 c2    -> 1 + compSize c1 + compSize c2
   Let nm c1 c2   -> 1 + compSize c1 + compSize c2
   LetE nm e c1   -> 2 + compSize c1
-  LetFun nm f c1 -> 2 + compSize c1
-  LetExternal nm f c1 -> 2 + compSize c1
+  -- CL
+  LetERef nm (Right _) c1 -> 2 + compSize c1
+  LetERef nm (Left _) c1 -> 2 + compSize c1 
+  LetHeader nm f c1 -> 2 + compSize c1
+  --
   LetStruct _sdef c1 -> 1 + compSize c1
-
   LetFunC nm params locals c1 c2 -> 1 + compSize c1 + compSize c2
   Call nm es       -> 1 + sum (map callArgSize es)
   Emit e           -> 1
@@ -561,7 +575,7 @@ compSize c = case unComp c of
   Times ui e1 e2 nm c1 -> 1 + compSize c1 
   Repeat _ c1    -> compSize c1  
   VectComp _ c1  -> compSize c1
-  Map _ e        -> 1
+  Map _ nm        -> 1
   Filter e       -> 1
   Interleave c1 c2 -> compSize c1 + compSize c2
 
@@ -616,14 +630,19 @@ mapCompM_aux on_ty on_exp on_cty g c = go c
                    do { e' <- on_exp e
                       ; c1' <- go c1
                       ; g (cLetE cloc cnfo x e' c1') }
-                 LetExternal nm fun c1 -> 
+                 -- CL
+                 LetERef x (Left y) c1 ->
+                    do {c1' <- go c1
+                       ; g (cLetERef cloc cnfo x (Left y) c1') }
+                 LetERef x (Right e) c1 ->
+                    do { e' <- on_exp e
+                       ; c1' <- go c1
+                       ; g (cLetERef cloc cnfo x (Right e') c1') }
+                 LetHeader nm fun c1 -> 
                    do { fun' <- mapFunM on_ty on_exp fun 
                       ; c1' <- go c1
-                      ; g (cLetExternal cloc cnfo nm fun' c1') }
-                 LetFun nm fun c1 -> 
-                   do { fun' <- mapFunM on_ty on_exp fun
-                      ; c1' <- go c1 
-                      ; g (cLetFun cloc cnfo nm fun' c1') }
+                      ; g (cLetHeader cloc cnfo nm fun' c1') }
+                 --
                  LetFunC nm params locals c1 c2 -> 
                    do { locals' <- mapLocalsM on_exp locals
                       ; c1' <- go c1 
@@ -677,10 +696,8 @@ mapCompM_aux on_ty on_exp on_cty g c = go c
                  VectComp wdth c1 ->
                    do { c1' <- go c1
                       ; g (cVectComp cloc cnfo wdth c1') }
+                 Map wdth nm -> g (cMap cloc cnfo wdth nm) 
 
-                 Map wdth e ->
-                   do { e' <- on_exp e
-                      ; g (cMap cloc cnfo wdth e') }
                  Filter e ->
                    do { e' <- on_exp e
                       ; g (cFilter cloc cnfo e') }
