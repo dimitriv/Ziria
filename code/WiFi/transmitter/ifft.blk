@@ -18,7 +18,7 @@
 --
 --
 #pragma once 
-
+ 
 let comp ifft() =
    var symbol:arr[128] complex16;
    var fftdata:arr[128+32] complex16;

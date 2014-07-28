@@ -796,6 +796,58 @@ exp_inlining_steps fgs e
  | otherwise 
  = return e
 
+
+mk_read_ty :: Ty -> LengthInfo -> Ty 
+mk_read_ty base_ty LISingleton  = base_ty
+mk_read_ty base_ty (LILength n) = TArr (Literal n) base_ty
+
+asgn_letref_step :: DynFlags -> TypedExpPass
+asgn_letref_step fgs e 
+
+  | EArrWrite e0 estart elen erhs <- unExp e
+  , TArr _ ty <- info e0
+  , not (ty == TBit)
+   -- It has to be LILength so we can just take a pointer
+  , LILength _ <- elen  
+  , EVar x <- unExp e0  
+   -- Just a simple expression with no side-effects
+  , not (is_side_effecting estart)
+  , Just (y, residual_erhs) <- returns_letref_var erhs
+  , let read_ty = mk_read_ty ty elen
+  = substExp (y, eArrRead loc read_ty e0 estart elen) residual_erhs >>= rewrite
+  | otherwise = return e
+  where 
+    loc = expLoc e
+    returns_letref_var :: Exp Ty -> Maybe (Name, Exp Ty)
+    returns_letref_var e = go e []
+    go e letrefs 
+     = let loc = expLoc e 
+       in 
+       case unExp e of
+          EVar v -> 
+            case lookup v letrefs of 
+              Nothing  -> Nothing
+              Just _ty -> Just (v, eVal loc TUnit VUnit)
+
+          ELet y e1 e2 -> 
+            case go e2 letrefs of 
+              Nothing -> Nothing
+              Just (w,e2') -> Just (w, eLet loc TUnit y e1 e2')
+
+          ELetRef y (Left ty) e2 -> 
+            case go e2 ((y,ty):letrefs) of
+              Nothing -> Nothing
+              Just (w,e2') | w == y 
+                           -> Just (w, e2')
+                           | otherwise
+                           -> Just (w, eLetRef loc TUnit y (Left ty) e2')
+          ESeq e1 e2 -> 
+            case go e2 letrefs of 
+              Nothing -> Nothing
+              Just (w,e2') -> Just (w, eSeq loc TUnit e1 e2')
+
+          _ -> Nothing
+
 rest_chain :: DynFlags -> TypedExpPass
 rest_chain fgs e 
      = alength_elim fgs e >>= 
@@ -1057,6 +1109,7 @@ foldExpPasses flags
   | otherwise 
   = [ ("for-unroll", for_unroll_step flags)
     , ("exp-inlining-steps", exp_inlining_steps flags)
+    , ("asgn-letref-step", asgn_letref_step flags)
     , ("rest-chain", rest_chain flags)
     ]
  
