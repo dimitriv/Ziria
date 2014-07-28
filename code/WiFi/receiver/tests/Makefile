@@ -44,7 +44,7 @@ TGTS = $(patsubst %.blk, %.test, $(wildcard *.blk))
 all: $(TGTS)
 
 %.out : %.blk
-	EXTRAOPTS='--bounds-check --no-exp-fold $(EXTRAOPTS)' $(PP) $< $@
+	EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PP) $< $@
 
 %.outfile: %.out %.infile
 	./$< --input=file \
