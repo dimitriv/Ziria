@@ -19,5 +19,5 @@
 --
 #include "../cca/cca.blk"
 
-read[complex16] >>> {t<-cca(); emit t } >>> write[int16]
+read[complex16] >>> {det <- cca(); emit int16(det.noSamples) } >>> write[int16]
 

@@ -19,4 +19,4 @@
 --
 #include "../OFDM/LTS.blk"
 
-read >>> repeat{params <- LTS(); emit 0} >>> write[int16]
+read >>> repeat{params <- LTS(3); emit 0} >>> write[int16]
