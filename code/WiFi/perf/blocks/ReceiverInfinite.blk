@@ -54,7 +54,7 @@ let comp ReceiverInfinite(hinfo : struct HeaderInfo) =
   let params = computeParams()
   in 
   (downSample() 
-       >>> DataSymbol() >>> FFT() >>> ChannelEqualization(params)
+       >>> DataSymbol(0) >>> FFT() >>> ChannelEqualization(params)
        >>> PilotTrack()
        >>> GetData() 
        >>> receiveBits(hinfo))
