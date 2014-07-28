@@ -349,9 +349,11 @@ inline_step_aux fgs comp
   | LetFunC nm params locals c1 c2 <- unComp comp
   -- NB: for now, we only inline LetFunC's with empty local environments
   , [] <- locals 
-  = do { liftIO $ putStrLn $ "Inlining comp fun      = " ++ show nm
+  = do { -- liftIO $ putStrLn $ "Inlining comp fun      = " ++ show nm
        ; c2' <- inline_comp_fun (nm,params,c1) c2
-       ; liftIO $ putStrLn $ "nm member of rewritten = " ++ show (S.member nm (compFVs c2'))
+         -- liftIO $ 
+         -- putStrLn $ 
+         -- "nm member of rewritten = " ++ show (S.member nm (compFVs c2'))
          -- ; liftIO $ putStrLn $ "LFC-after = " ++ show c2' 
        ; return $
          if S.member nm (compFVs c2') 

@@ -21,9 +21,9 @@
 
 #include <externals.blk>
 
-let comp DataSymbol() =
+let comp DataSymbol(shift:int16) =
   repeat seq{
      (xp:arr[80] complex16) <- takes 80;
-     emits xp[16:79]
+     emits xp[16-shift,64]
   }
 in

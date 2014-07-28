@@ -36,12 +36,12 @@ let comp detectPreamble() =
 in 
 
 read >>> downSample() >>> 
-  seq{ t<-detectPreamble()
+  seq{ det<-detectPreamble()
 #ifndef FAST
-     ; do{println "Detected at: ", t}
+     ; do{println "Detected at: ", det.noSamples}
 #endif
-     ; params <- LTS(); 
-       DataSymbol() >>> FFT() >>> ChannelEqualization(params)
+     ; params <- LTS(det.shift); 
+       DataSymbol(det.shift) >>> FFT() >>> ChannelEqualization(params)
        >>> PilotTrack() >>> GetData()
   }
 >>> write 

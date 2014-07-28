@@ -52,12 +52,12 @@ in
 
 let comp receiver() = 
   downSample() >>> 
-  seq{ t<-detectSTS()
+  seq{ det<-detectSTS()
 #ifndef FAST
-     ; do{println "Detected at: ", t}
+     ; do{println "Detected at: ", det.noSamples}
 #endif
-     ; params <- LTS()
-     ; DataSymbol() >>> FFT() >>> ChannelEqualization(params)
+     ; params <- LTS(det.shift)
+     ; DataSymbol(det.shift) >>> FFT() >>> ChannelEqualization(params)
        >>> PilotTrack()
        >>> GetData() 
        >>> receiveBits()

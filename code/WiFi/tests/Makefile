@@ -33,6 +33,11 @@ COMPILER?=winddk
 PP   = ../../../scripts/preprocesscompile-$(COMPILER).sh
 DIFF = ../../../tools/BlinkDiff
 
+# Do not delete outfiles to allow quick recheck of failed tests
+# use make clean to get rid of them
+.PRECIOUS: %.outfile %.out
+
+
 # Targets
 TGTS = $(patsubst %.blk, %.test, $(wildcard *.blk))
 
@@ -55,6 +60,10 @@ test_real_%.outfile: test_real_%.out test_real_%.infile
              --input-file-mode=bin \
              --output-file-name=$@ \
              --output-file-mode=dbg
+
+test_real_%.test: test_real_%.out 
+	echo "Still working on it..."
+
 
 %.outfile: %.out %.infile
 	./$< --input=file \

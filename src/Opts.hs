@@ -72,6 +72,9 @@ data DynFlag =
   | NoFold
 
   | NoLUT
+
+  | MockLUT -- just for debugging LUT
+
   deriving (Eq,Show)
 
 type DynFlags = [DynFlag]
@@ -151,6 +154,8 @@ options =
      , Option []        ["no-exp-fold"]         (NoArg NoExpFold)     "do not fold/inline expressions"
      , Option []        ["no-fold"]             (NoArg NoFold)        "do not fold/inline computations and expressions"
      , Option []        ["no-lut"]              (NoArg NoLUT)         "do not construct LUTs"       
+
+     , Option []        ["mock-lut"]            (NoArg MockLUT)       "debugging help for LUTS (internal only)"       
 
      , Option []        ["max-lut"]             (ReqArg parseMaxLUTOpt "SIZE")    "max lut size"
      , Option []        ["stack-threshold"]     (ReqArg parseStkThres  "SIZE")    "stack allocation threshold"

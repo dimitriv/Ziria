@@ -1,4 +1,8 @@
+#define LTS_ACCURATE
+
+
 #include <externals.blk>
+#include "../const.blk"
 #include "../receiver/cca/cca_tufv.blk"
 --#include "../receiver/cca/cca.blk"
 #include "../receiver/OFDM/LTS.blk"
@@ -16,8 +20,10 @@
 #include "../transmitter/crc.blk"
 -}
 
+
+
 let comp dummy() = 
-  times 28800 { 
+  times 17500 { 
     x<- take;
   }
 
@@ -35,13 +41,39 @@ let comp detectPreamble() =
   (removeDC() >>> cca())
 in 
 
-read >>> -- dummy() >>> -- downSample() >>> 
-  seq{ t<-detectPreamble()
+let comp agc() = 
+  var output : arr[4] complex16;
+  repeat{
+    (x : arr[4] complex16) <- takes 4;
+    do{v_shift_left_complex16(output, x, 2)};
+    emits output;
+  }
+in 
+
+
+{-
+let comp receiveBits() = 
+       seq { hdata <- DecodePLCP()
+           ; Decode(hdata) >>> seq { (c : arr[4] bit) <- crc(hdata.len); check_crc(c) }
+       }
+in
+-}
+
+
+read >>> 
+--  dummy() >>> 
+  downSample() >>> 
+  seq{ det<-detectPreamble()
 #ifndef FAST
-     ; do{println "Detected at: ", t}
+     ; do{println "Detected at: ", det.noSamples}
 #endif
-     ; params <- LTS(); 
-       DataSymbol() >>> FFT() 
-       >>> ChannelEqualization(params) >>> PilotTrack() >>> GetData()
+     --times 10000 { x<-take; emit x}
+     ;   params <- (LTS(det.shift)); --emits params.channelCoeffs;
+       agc() >>> 
+       DataSymbol(det.shift) >>> FFT() 
+       >>> ChannelEqualization(params)
+       >>> PilotTrack() 
+       >>> GetData()
+--       >>> receiveBits()
   }
 >>> write

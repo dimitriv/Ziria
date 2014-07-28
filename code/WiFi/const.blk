@@ -44,6 +44,12 @@ let signalAmplitude = 1000 in
 let QPSKAmp = 707 in
 -}
 
+struct CCAParams = {
+  noSamples:int32;              -- Total number of samples read from the start of CCA
+  shift:int16;                  -- Shift within 16 samples at which the peak was detected
+  energy:int32                  -- Preamble energy calculated using calcEnergy() from CCA
+} in 
+
 struct LTECoeffs = { 
   freqCoeffs:arr[64] complex16;
   channelCoeffs:arr[64] complex16 } in 
