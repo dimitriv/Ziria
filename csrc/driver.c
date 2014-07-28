@@ -70,7 +70,7 @@ extern int wpl_go();
 struct BlinkGlobals Globals;
 
 // tracks bytes copied 
-extern unsigned long bytes_copied; 
+extern unsigned long long bytes_copied; 
 
 int __cdecl main(int argc, char **argv) {
   

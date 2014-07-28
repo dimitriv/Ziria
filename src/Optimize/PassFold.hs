@@ -796,7 +796,6 @@ exp_inlining_steps fgs e
  | otherwise 
  = return e
 
-
 mk_read_ty :: Ty -> LengthInfo -> Ty 
 mk_read_ty base_ty LISingleton  = base_ty
 mk_read_ty base_ty (LILength n) = TArr (Literal n) base_ty

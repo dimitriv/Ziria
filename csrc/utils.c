@@ -31,7 +31,7 @@ void bounds_check(int siz, int len, char *msg)
   }
 }
 
-unsigned long bytes_copied = 0;
+unsigned long long bytes_copied = 0;
 
 void blink_copy(void *dst, void *src, unsigned int siz) 
 {

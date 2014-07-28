@@ -509,15 +509,6 @@ tyCheckComp c
                 ; return $ cMap cloc cTy wdth nm
                 }
 
-
-                -- ; fun_ty <- lookupEnv (name nm) cloc 
-                -- ; let (TArrow t1 t
-                -- ; fun_ty <- lookupCEnv (name nm) cloc
-                -- ; let CTArrow t1s cty = fun_ty 
-                -- --; cTy <- lookupCEnv (name nm) cloc 
-                -- ; return $ cMap cloc fun_ty wdth nm
-                -- }
-
            Filter e ->
              do { e' <- tyCheckExpr e
                 ; let t = info e'
