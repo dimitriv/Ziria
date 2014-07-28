@@ -21,11 +21,12 @@
 
 let comp DemapLimit(shr:int) = 
   var symbol : arr[4] complex16;
-  var symbol_out : arr[4] complex16;
 
   repeat seq {
     
      (x:arr[4] complex16) <- takes 4;
+
+     var symbol_out : arr[4] complex16;
     
      do {
        

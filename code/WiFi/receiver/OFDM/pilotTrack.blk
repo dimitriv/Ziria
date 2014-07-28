@@ -57,7 +57,6 @@ let comp PilotTrack() =
   var avgTheta:int16;
   var delTheta:int16;
   var symbol:arr[64] complex16;
-  var symbol_out:arr[64] complex16;
   var re32:arr[64] int;
   var im32:arr[64] int;
 
@@ -66,6 +65,7 @@ let comp PilotTrack() =
   var sSFO_tracker:int16 := 0;
   var sCFO_comp:int16 := 0;
   var sSFO_comp:int16 := 0;
+  var symbol_out:arr[64] complex16;
 
 
   var pilotSgn:arr[128] int := {0,  0,  0, -1, -1, -1,  0, -1, -1, -1, -1,  0,  0, -1,  0, -1, 
@@ -98,6 +98,7 @@ let comp PilotTrack() =
         v_mul_complex16(symbol,symbol_in,compCoeffs,15);
      };
 
+     -- var symbol_out:arr[64] complex16;
 
      -- Calculate the subsequent phase shift
      do {
