@@ -46,8 +46,8 @@ dt = df;
 figure(1);
 clf(1);
 
-XL = [1 1000];
-%XL = [1 64];
+%XL = [1 1000];
+XL = [1 10500];
 subplot(3,1,1); plot(real(data)); title('Real(data)');
 subplot(3,1,2); plot(abs(dt)); title('Abs of FFT');
 xlim(XL);
@@ -63,8 +63,8 @@ corr  = d(1:3:end);
 corri = d(2:3:end);
 ind   = d(3:3:end);
 
-XL = [0 1600];
-XL = [400 800];
+%XL = [0 10000];
+XL = [47e3 50e3];
 
 figure(1);
 clf(1);

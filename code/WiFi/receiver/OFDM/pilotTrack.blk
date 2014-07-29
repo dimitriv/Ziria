@@ -49,10 +49,13 @@ in
 
 let comp PilotTrack() = 
 
+{-
   var th1:arr[1] int16;
   var th2:arr[1] int16;
   var th3:arr[1] int16;
   var th4:arr[1] int16;
+-}
+
   var symbol_count:int := 127;
   var avgTheta:int16;
   var delTheta:int16;
@@ -65,23 +68,28 @@ let comp PilotTrack() =
   var sSFO_tracker:int16 := 0;
   var sCFO_comp:int16 := 0;
   var sSFO_comp:int16 := 0;
-  var symbol_out:arr[64] complex16;
 
-
-  var pilotSgn:arr[128] int := {0,  0,  0, -1, -1, -1,  0, -1, -1, -1, -1,  0,  0, -1,  0, -1, 
-                               -1,  0,  0, -1,  0,  0, -1,  0, 0,  0,  0,  0,  0, -1,  0,  0, 
-                               0, -1,  0,  0, -1, -1,  0,  0, 0, -1,  0, -1, -1, -1,  0, -1, 
-                               0, -1, -1,  0, 1, -1,  0,  0, 0,  0,  0, -1, -1,  0,  0, -1, 
-                               -1,  0, -1,  0, -1,  0,  0, -1, -1, -1,  0,  0, -1, -1, -1, 
-                               -1, 0, -1, -1,  0, -1,  0,  0,  0, 0, -1,  0, -1,  0, -1,  0, 
-                               -1, -1, -1, -1, -1,  0, -1,  0,  0, -1,  0, -1,  0,  0,  0, -1, 
-                               -1, 0, -1, -1, -1,  0,  0,  0, -1, -1, -1, -1, -1, -1, -1,  0,  0};
+  var pilotSgn:arr[128] int := 
+        {0,  0,  0, -1, -1, -1,  0, -1, -1, -1, -1,  0,  0, -1,  0, -1, 
+        -1,  0,  0, -1,  0,  0, -1,  0,  0,  0,  0,  0,  0, -1,  0,  0, 
+         0, -1,  0,  0, -1, -1,  0,  0,  0, -1,  0, -1, -1, -1,  0, -1, 
+         0, -1, -1,  0,  0, -1,  0,  0,  0,  0,  0, -1, -1,  0,  0, -1, 
+        -1,  0, -1,  0, -1,  0,  0, -1, -1, -1,  0,  0, -1, -1, -1, -1, 
+         0, -1, -1,  0, -1,  0,  0,  0,  0, -1,  0, -1,  0, -1,  0, -1, 
+        -1, -1, -1, -1,  0, -1,  0,  0, -1,  0, -1,  0,  0,  0, -1, -1, 
+         0, -1, -1, -1,  0,  0,  0, -1, -1, -1, -1, -1, -1, -1,  0,  0};
 
   var rotate_coeffs:arr[64] complex16;
 
 
+  -- We average over 4 last pilots to compensate for deep fades
+  var pilot_hist:arr[16] complex16;
+  var cnt : int;
+
   -- Init
   do {
+    cnt := 0;
+    zero_complex16(pilot_hist);
     for i in [0,64] {
        compCoeffs[i] := complex16{re=32500;im=0}
     }
@@ -95,33 +103,55 @@ let comp PilotTrack() =
 
     -- Compensate phase shift
      do {
-        v_mul_complex16(symbol,symbol_in,compCoeffs,15);
+-- BOZIDAR: This is frequency correction code that is not fully debugged
+-- so we disable it for the moment
+--        v_mul_complex16(symbol,symbol_in,compCoeffs,15);
+        symbol := symbol_in;
      };
 
-     -- var symbol_out:arr[64] complex16;
+     var symbol_out:arr[64] complex16;
 
      -- Calculate the subsequent phase shift
      do {
-       th1[0] := atan2_int16( symbol[64-21].im , symbol[64-21].re);
-       th2[0] := atan2_int16( symbol[64-7].im , symbol[64-7].re);
-       th3[0] := atan2_int16( symbol[7].im , symbol[7].re);
-       th4[0] := atan2_int16( -(symbol[21].im) , -(symbol[21].re));
+       cnt := cnt + 1;
+
+       -- Calculate pilots
+       let p1 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[64-21].re; im=-symbol[64-21].im}
+                else complex16{re=symbol[64-21].re;  im=symbol[64-21].im};
+       let p2 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[64-7].re; im=-symbol[64-7].im}
+                else complex16{re=symbol[64-7].re;  im=symbol[64-7].im};
+       let p3 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[7].re; im=-symbol[7].im}
+                else complex16{re=symbol[7].re;  im=symbol[7].im};
+       let p4 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[21].re; im=-symbol[21].im}
+                else complex16{re=symbol[21].re;  im=symbol[21].im};
+
+       -- Store last 4 values of each pilot
+       pilot_hist[0,15] := pilot_hist[1,15];
+       pilot_hist[3]  := complex16{re=p1.re >> 2; im=p1.im >> 2};
+       pilot_hist[7]  := complex16{re=p2.re >> 2; im=p2.im >> 2};
+       pilot_hist[11] := complex16{re=p3.re >> 2; im=p3.im >> 2};
+       pilot_hist[15] := complex16{re=p4.re >> 2; im=p4.im >> 2};
+
+       -- Find averages
+       let s1 = if (cnt < 5) then p1 else v_sum_complex16(pilot_hist[0,4]) in 
+       let s2 = if (cnt < 5) then p2 else v_sum_complex16(pilot_hist[4,4]) in 
+       let s3 = if (cnt < 5) then p3 else v_sum_complex16(pilot_hist[8,4]) in 
+       let s4 = if (cnt < 5) then p4 else v_sum_complex16(pilot_hist[12,4]) in 
+
+       let th1 = atan2_int16( s1.im, s1.re) in
+       let th2 = atan2_int16( s2.im, s2.re) in
+       let th3 = atan2_int16( s3.im, s3.re) in 
+       let th4 = atan2_int16( -s4.im, -s4.re) in 
+
  
-       if (pilotSgn[symbol_count] == -1) then {
-          -- PI = 32768
-          th1[0] := th1[0] + 32768; -- equivalent of 0x80000 from Sora code
-          th2[0] := th2[0] + 32768;
-          th3[0] := th3[0] + 32768;
-          th4[0] := th4[0] + 32768
-       };
 
        symbol_count := symbol_count + 1;
        if (symbol_count >= 127) then {
           symbol_count := 0
        };
 
-       avgTheta := (th1[0] + th2[0] + th3[0] + th4[0])/4;
-       delTheta := ((th3[0] - th1[0]) / (21 + 7) + (th4[0] - th2[0]) / (21 + 7)) >> 1;
+       avgTheta := (th1 + th2 + th3 + th4)/4;
+       delTheta := ((th3 - th1) / (21 + 7) + (th4 - th2) / (21 + 7)) >> 1;
 
 
        build_coeff(rotate_coeffs, avgTheta, delTheta);
@@ -137,6 +167,18 @@ let comp PilotTrack() =
        sSFO_comp := sSFO_comp + delTheta + sSFO_tracker;
 
        build_coeff (compCoeffs, sCFO_comp, sSFO_comp )
+
+       -- DEBUG
+{-
+       if (cnt < 10) then 
+       {
+         print "cnt: ", cnt, " D: ", pilotSgn[symbol_count-1], " th: ", double(th1)/32768.0, ", ", 
+               double(th2)/32768.0, ", ", double(th3)/32768.0, ", ", double(th4)/32768.0;
+         println " avgTheta: ", avgTheta, " delTheta: ", delTheta;
+
+         println "cnt: ", cnt, ", ", symbol[64-21], symbol[64-7], symbol[7], symbol[21];
+       }
+-}
      };
 
      emits symbol_out

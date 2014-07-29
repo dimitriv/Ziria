@@ -898,7 +898,7 @@ rest_chain fgs e
        -- This leads to too much inlining and seems to have 
        -- unstable effects to performance so I am keeping it 
        -- commented for now:
-       -- >>= proj_inline_step fgs
+          >>= proj_inline_step fgs
 
 
 exp_inline_step :: DynFlags -> TypedExpPass
