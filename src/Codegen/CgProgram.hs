@@ -98,7 +98,7 @@ codeGenCompilerGlobals :: String
                        -> Ty
                        -> Cg () 
 codeGenCompilerGlobals tid tickHdl procHdl mtv ta tb = do     
-    appendDecl =<< codeGenDeclGroup (threadIdOf tid globalDoneVal) 
+    appendDecl =<< codeGenDeclGroup (doneValOf $ threadIdOf tid globalDoneHdl) 
                                     (fromMaybe tint mtv)
     appendDecl [cdecl| char $id:globalWhatIs;|]
 
