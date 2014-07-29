@@ -115,6 +115,7 @@ let comp cca() =
 
    -- DEBUG
    var debCorr : int32;
+   var debCorr2 : int32;
 
 
 
@@ -153,6 +154,7 @@ let comp cca() =
       zero_int32(gesw);
    }
 
+
    until detected == true {
      x <- takes CORR_LEN;
 
@@ -177,7 +179,7 @@ let comp cca() =
             corr := corr + corr_hist[i*NO_REP+j];
           }
 
-          if (corri > maxCorr) then {
+          if (corr > maxCorr) then {
              maxCorr := corr;
              debCorr := corri;
              maxInd := int16(i);
@@ -203,6 +205,72 @@ let comp cca() =
 
        iterind := iterind + 1;
      }
+
+
+{-
+   until detected == true {
+     x <- takes CORR_LEN;
+
+     do {
+       v_shift_right_complex16(input, x, norm_shift);
+       iEnergy := calcEnergy(x[0,4]);      
+       maxCorr := 0;
+     }
+
+     for i in [0, CORR_LEN] {
+        do{
+          let corrc = v_correlate(pattern[i*CORR_LEN,CORR_LEN], input) in
+          let corrmul = corrc * conj_complex32(mul_hist[i]) in 
+          let corri = (abs_int32(corrmul.re) + abs_int32(corrmul.im)) in 
+          mul_hist[i] := corrc;
+
+          corr_hist[i*NO_REP+1,NO_REP_M_1] := corr_hist[i*NO_REP,NO_REP_M_1];
+          corr_hist[i*NO_REP] := corri;
+
+          corr :=0;
+          for j in [0,NO_REP] {
+            corr := corr + corr_hist[i*NO_REP+j];
+          }
+
+          if (corr > maxCorr) then {
+             maxCorr := corr;
+             debCorr := corri;
+             maxInd := int16(i);
+          }
+
+          debCorr := corri;
+          debCorr2 := corr;
+
+       }
+
+       emit debCorr;
+       emit debCorr2;
+--     emit int32(maxInd);
+       emit maxCorr;
+
+    }
+    do{
+       -- Because of repeating preamble we should have a certain number of consecutive 
+       -- increases before declaring the peak - start of a packet
+       if (iEnergy > energy_threshold && noInc > 4 && (oldCorr > maxCorr || oldInd != maxInd)) then {
+          detected := true;
+       }
+
+       if (oldOldCorr < oldCorr && oldCorr < maxCorr && oldOldInd == oldInd && oldInd == maxInd) then {
+          noInc := noInc + 1;
+       } else {
+          noInc := 0;
+       }
+
+       oldOldCorr := oldCorr;
+       oldCorr := maxCorr;
+       oldOldInd := oldInd;
+       oldInd := maxInd;
+
+       iterind := iterind + 1;
+    }
+-}    
+
 
 
 {-

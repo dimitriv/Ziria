@@ -22,4 +22,4 @@
 #include "../receiver/removeDC.blk"
 #include "../receiver/downSample.blk"
 
-read >>> downSample() >>> removeDC() >>> cca() >>> write[int]
+read >>> downSample() >>> removeDC() >>> {t<-cca()} >>> write[int]
