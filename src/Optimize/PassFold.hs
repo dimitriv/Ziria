@@ -510,6 +510,28 @@ purify_step fgs comp =
       _otherwise -> return comp
 
 
+purify_letref_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
+-- Returns Just if we managed to rewrite 
+purify_letref_step fgs comp = 
+ do -- rwMIO $ putStrLn "purify_step, comp = " 
+    -- rwMIO $ print (ppComp comp)  
+    case isMultiLetRef_maybe (unComp comp) of 
+      Just (binds, Return e) -> 
+          rewrite $ MkComp (Return (mkMultiLetRefExp (reverse binds) e)) 
+                           (compLoc comp) (compInfo comp) 
+
+      Just (binds, Emit e) -> 
+          rewrite $ MkComp (Emit (mkMultiLetRefExp (reverse binds) e))
+                           (compLoc comp) (compInfo comp)
+
+      Just (binds, Emits e) ->
+          rewrite $ MkComp (Emits (mkMultiLetRefExp (reverse binds) e))
+                           (compLoc comp) (compInfo comp)
+
+      _otherwise -> return comp
+
+
+
 ifpar_step_left :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
 -- m >>> (if e then c1 else c2)
 -- ~~>
@@ -741,10 +763,29 @@ mkMultiLetExp [] e = e
 mkMultiLetExp ((x,e1):bnds) e 
   = MkExp (ELet x e1 (mkMultiLetExp bnds e)) (expLoc e) (info e) 
 
+mkMultiLetRefExp :: [(Name,Either Ty (Exp a))] -> Exp a -> Exp a
+mkMultiLetRefExp [] e = e
+mkMultiLetRefExp ((x,b1):bnds) e 
+  = MkExp (ELetRef x b1 (mkMultiLetRefExp bnds e)) (expLoc e) (info e) 
+
 
 isMultiLet_maybe comp
   = go comp []
   where go (LetE x e c) acc = go (unComp c) ((x,e):acc)
+        go (Return e)  []   = Nothing 
+        go (Emit e)    []   = Nothing
+        go (Emits e)   []   = Nothing 
+
+        go (Return e) acc   = Just (acc, Return e) 
+              -- We must have some accumulated bindings!
+        go (Emit e) acc     = Just (acc, Emit e)
+        go (Emits e) acc    = Just (acc, Emits e)
+        go _ _ = Nothing
+
+
+isMultiLetRef_maybe comp
+  = go comp []
+  where go (LetERef x bnd c) acc = go (unComp c) ((x,bnd):acc)
         go (Return e)  []   = Nothing 
         go (Emit e)    []   = Nothing
         go (Emits e)   []   = Nothing 
@@ -857,7 +898,7 @@ rest_chain fgs e
        -- This leads to too much inlining and seems to have 
        -- unstable effects to performance so I am keeping it 
        -- commented for now:
-       -- >>= proj_inline_step fgs
+          >>= proj_inline_step fgs
 
 
 exp_inline_step :: DynFlags -> TypedExpPass
@@ -1065,8 +1106,10 @@ foldCompPasses flags
   = []
   | otherwise 
   = -- Standard good things
-    [ ("fold"        , fold_step  flags       )
-    , ("purify"      , purify_step  flags     )
+    [ ("fold"         , fold_step  flags         )
+    , ("purify"       , purify_step  flags       )
+    , ("purify-letref", purify_letref_step  flags)
+
     , ("elim-times"  , elim_times_step flags  )
     , ("letfunc"     , letfunc_step flags     )
     , ("letfun-times", letfun_times_step flags) 

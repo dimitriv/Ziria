@@ -323,7 +323,9 @@ parseCompCompound
   = choice 
       [ asComp parseCond "conditional used as command"
       , asComp parseStructDef "struct definition used as command"
-      , asComp parseBindings  "let binding used as command"
+        -- References
+      , asComp parseRefBind  "var binding used as command"
+      , asComp parseBindings "let binding used as command"
       , do { p <- getPosition
            ; reserved "do"
            ; estmts <- parseStmtBlock <?> "statement block" 
@@ -348,7 +350,7 @@ parseCommand
  = choice [ asCommand parseStructDef
           , asCommand parseCond
           , asCommand parseBindings
-
+          , asCommand parseRefBind
           , parseBindOrComp 
  
           ] <?> "command"
@@ -405,6 +407,16 @@ parseBindings :: BlinkParser (Either SrcComp CommandCont)
                      ; parseBinding p }
                 , parseExternal p ] 
        }
+
+parseRefBind :: BlinkParser (Either SrcComp CommandCont)
+  = do { p <- getPosition
+       ; (xn,ty,mbinit) <- declParser
+       ; updateState (\x -> x +1) -- increment let nesting
+       ; let bnd = case mbinit of Nothing -> Left ty
+                                  Just ei -> Right ei
+       ; optInCont (cLetERef (Just p) () xn bnd)
+       } 
+
 
 parseCompOptional :: BlinkParser (Maybe (Maybe (Int,Int)))
 -- Nothing -> no 'comp'
@@ -508,17 +520,7 @@ compParamsParser = sepBy paramParser (symbol ",")
           }
 
 declsParser = endBy declParser semi
-  where 
-    declParser 
-      = do { p <- getPosition
-           ; reserved "var"
-           ; x <- identifier
-           ; colon 
-           ; ty <- parseBaseType 
-           ; let xn = mkNameFromPos (Just x) p (Just ty)
-           ; mbinit <- optionMaybe (symbol ":=" >> parseExpr)
-           ; return (xn, ty, mbinit) 
-           }
+
 
 parseProgram :: BlinkParser (Prog () ())                              
 parseProgram 

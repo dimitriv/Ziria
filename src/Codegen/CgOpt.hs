@@ -1237,6 +1237,11 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
 
            ; x_decl <- codeGenDeclGroup x_cname ty
 
+           ; if emit_global then
+                appendTopDecls [x_decl] 
+             else
+                appendDecls [x_decl]
+
            ; res <- extendVarEnv [(x, (ty,[cexp|$id:x_cname|]))] $
                     do { -- cgIO $ putStrLn "before action."
                         ; r <- go ctxt action
