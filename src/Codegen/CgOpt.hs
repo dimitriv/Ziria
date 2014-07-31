@@ -467,13 +467,14 @@ codeGenComp dflags comp k =
   where
     go :: Comp CTy Ty -> Cg CompInfo
 
+
     go (MkComp (Mitigate bty i1 i2) csp (CTBase cty0)) = do
         -- Assume i1 `mod` i2 = 0
         mitName <- nextName ("__mit_" ++ (getLnNumInStr csp))
         let prefix = name mitName
         let ih = inHdl k
         let yh = yieldHdl k        
-        let mit_st = prefix ++ "_state"
+        let mit_st = prefix ++ "_mit_state"
         let buf = prefix ++ "_mit_buff"
 
         appendStmt [cstm|ORIGIN($string:(show csp)); |]        
@@ -494,10 +495,14 @@ codeGenComp dflags comp k =
                            cres <- codeGenArrRead dflags 
                                                   arrty 
                                                   [cexp|$id:(inValOf ih)|]
-                                                  [cexp|$id:mit_st|]
+                                                  [cexp|$id:mit_st*$int:i2|]
                                                   leninfo
-                           appendStmt [cstm|$id:mit_st++; |]
+                           -- NB: cres may contain mit_st variable, which will be mutated
+                           -- hence it is really important that we set yldVal and /then/ 
+                           -- mutate mit_st, not the other way around. 
                            appendStmt [cstm|$id:(yldValOf yh) = $cres; |]
+                           appendStmt [cstm|$id:mit_st++; |]
+
                            kontYield k
 
                   ; appendLabeledBlock (processNmOf prefix) $ do
@@ -532,19 +537,19 @@ codeGenComp dflags comp k =
                         leninfo = if i1 == 1 then LISingleton else LILength i1 
 
                   ; appendLabeledBlock (processNmOf prefix) $ do
-                        if [cexp| $id:mit_st < $int:d|] then do
                            -- buff[mit_st,leninfo] := in_val
                            codeGenArrWrite dflags arrty [cexp|$id:buf|] 
-                                                        [cexp|$id:mit_st|]
+                                                        [cexp|$id:mit_st*$int:i1|]
                                                         leninfo
                                                         [cexp|$id:(inValOf ih)|]
                            appendStmt [cstm| $id:mit_st++;|]
-                           kontConsume k
-                        else do 
-                           appendStmt [cstm|$id:(yldValOf yh) = $id:buf;|]
-                           appendStmt [cstm|$id:mit_st = 0;|]
-                           kontYield k
- 
+                           if [cexp| $id:mit_st >= $int:d|] then do
+                              appendStmt [cstm|$id:(yldValOf yh) = $id:buf;|]
+                              appendStmt [cstm|$id:mit_st = 0;|]
+                              kontYield k
+                           else 
+                               kontConsume k
+
                   ; return (mkCompInfo prefix False) -- cannot tick
 
                   } 
