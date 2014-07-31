@@ -1,4 +1,5 @@
 #define LTS_ACCURATE
+#define DO_DECODING
 
 
 #include <externals.blk>
@@ -14,20 +15,24 @@
 #include "../receiver/OFDM/ChannelEqualization.blk"
 #include "../receiver/OFDM/PilotTrack.blk"
 #include "../receiver/OFDM/GetData.blk"
-{-
+
+#ifdef DO_DECODING
 #include "../receiver/decoding/DecodePLCP.blk"
 #include "../receiver/decoding/Decode.blk"
 #include "../transmitter/crc.blk"
--}
+#endif
 
 
 
 let comp dummy() = 
-  times 17500 { 
+--  times 490000 { 
+--  times 580000 { 
+--  times 670000 { 
+  times 770000 { 
     x<- take;
   }
 
-  -- times 400 {
+--  times 20000 {
   repeat {
     x<- take;
     emit x;
@@ -51,29 +56,49 @@ let comp agc() =
 in 
 
 
-{-
+
+#ifdef DO_DECODING
 let comp receiveBits() = 
        seq { hdata <- DecodePLCP()
            ; Decode(hdata) >>> seq { (c : arr[4] bit) <- crc(hdata.len); check_crc(c) }
        }
 in
--}
+#endif
+
+
+let comp GetDataTest() = 
+repeat {
+  (x : arr[64] complex16) <- takes 64;
+
+  emits x[38,6];
+  emits x[44,14];
+  emits x[58,6];
+
+  emits x[1,7];
+  emits x[8,14];
+  emits x[22,5];
+}
+in
 
 
 read >>> 
---  dummy() >>> 
+  dummy() >>> 
   downSample() >>> 
   seq{ det<-detectPreamble()
 #ifndef FAST
      ; do{println "Detected at: ", det.noSamples}
 #endif
-     --times 10000 { x<-take; emit x}
+--     times 10000 { x<-take; emit x}
      ;   params <- (LTS(det.shift)); --emits params.channelCoeffs;
        agc() >>> 
        DataSymbol(det.shift) >>> FFT() 
        >>> ChannelEqualization(params)
        >>> PilotTrack() 
+--       >>> GetDataTest()
        >>> GetData()
---       >>> receiveBits()
+#ifdef DO_DECODING
+       >>> receiveBits()
+#endif
+
   }
 >>> write
