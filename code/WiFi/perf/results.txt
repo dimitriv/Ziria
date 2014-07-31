@@ -332,3 +332,64 @@ testTX9Mbps 102.599
 testTX36Mbps 103.709
 testRX6Mbps 197.841
 
+
+
+
+### DESKTOP, WINDDK, with memcopy-opt
+
+test_scramble_perf 1136.88
+test_modulating_16qam_perf 1280.33
+test_interleaving_qpsk_perf 319.789
+test_ifft 181.462
+test_modulating_bpsk_perf 1346.64
+test_encoding_12_perf 1203.22
+test_encoding_23_perf 604.767
+test_map_ofdm_perf 1936.82
+test_interleaving_bpsk_perf 420.513
+test_encoding_34_perf 866.912
+test_interleaving_64qam_perf 239.573
+test_modulating_64qam_perf 1923.04
+test_interleaving_16qam_perf 256.197
+test_modulating_qpsk_perf 751.021
+testDeinterleaveQAM64 2561.61
+testDeinterleaveQPSK 2349.96
+testLTS 173.512
+testCCA 142.355
+testDownSample 3412.27
+testDeinterleaveQAM16 2396.47
+testChannelEqualization 1576.07
+testDemapQAM64 439.385
+testDeinterleaveBPSK 2232.69
+testDemapQAM16 611.606
+testFFT 384.045
+testDemapQPSK 919.084
+testPilotTrack 291.018
+testDemapBPSK 1534.45
+testDataSymbol 2666.95
+testRemoveDC 1385.64
+testViterbi 109.269
+testTX18Mbps 57.1021
+testRX48Mbps 33.6389
+testTX6Mbps 38.2776
+testTX54Mbps 59.6663
+testRX9Mbps 107.035
+testRXCCA 214.037
+testRX54Mbps 31.8288
+testTX9Mbps 48.6416
+testTX12Mbps 46.6347
+testRX36Mbps 45.1156
+testTX24Mbps 55.7906
+testRX12Mbps 82.4769
+testRX24Mbps 52.2381
+testRX18Mbps 70.9253
+testTX48Mbps 57.5417
+testTX36Mbps 66.8906
+testRX6Mbps 128.525
+
+# 2 threads
+
+???
+
+
+
+
