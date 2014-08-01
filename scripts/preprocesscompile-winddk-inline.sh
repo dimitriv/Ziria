@@ -25,6 +25,7 @@ set -e
 export TOP=$(cd $(dirname $0)/.. && pwd -P)
 source $TOP/scripts/common.sh
 
+echo $TOP
 echo $1
 #echo "Preprocessing..."
 #gcc -x c -P -E $1 >$1.expanded
