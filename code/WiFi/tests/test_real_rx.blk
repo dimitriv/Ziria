@@ -25,8 +25,7 @@
 
 
 let comp dummy() = 
-  times 4 {        -- OK
---  times 100000 {   -- Fails (18000)
+  times 1 {        -- OK
 --  times 110000 {   -- OK (4234)
 --  times 200000 { -- OK (6424)
 --  times 300000 { -- OK (3392)
@@ -92,8 +91,9 @@ repeat{
      ; do{println "Detected at: ", det.noSamples}
 #endif
      ; params <- (LTS(det.shift)); 
-       agc() >>> 
-       DataSymbol(det.shift) >>> FFT() 
+       agc() 
+       >>> DataSymbol(det.shift) 
+       >>> FFT() 
        >>> ChannelEqualization(params)
        >>> PilotTrack() 
        >>> GetData()
@@ -103,4 +103,3 @@ repeat{
   }
 }
 >>> write
-
