@@ -87,9 +87,14 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
       ppComp c2
 
     Par parInfo c1 c2 ->
+{-
       parens ( ppComp c1 <+> ppParInfo parInfo $$ 
                ppComp c2
              )
+-}
+      ppComp c1 <+> ppParInfo parInfo $$ 
+      ppComp c2
+
     Let x c1 c2
       | ignorelet 
       -> ppComp c2
@@ -260,7 +265,7 @@ ppCompParams params =
        ppName x <> text ":" <+> ppCParamTy ty <> comma <+> ppCompParams params'
 
 ppCompTypedVect x =
-  let p1  = ppComp0 ppCompTypedVect False False True $ unComp x
+  let p1  = ppComp0 ppCompTypedVect False True True $ unComp x
       cty  = compInfo x
       inty  = inTyOfCTyBase cty
       yldty = yldTyOfCTyBase cty
