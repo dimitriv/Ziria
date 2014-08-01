@@ -104,9 +104,9 @@ let v_mul_complex16(c:arr complex16, a:arr complex16, b:arr complex16, shift:int
 
   -- Sum the rest one by one, if length is not modulo 4
   for i in [vlen*4,rlen] {
-    re32[i] := (int(a[i].re)*int(b[i].re) - int(a[i].im)*int(b[i].im )) >> shift;
-    im32[i] := (int(a[i].im)*int(b[i].re) + int(a[i].re)*int(b[i].im )) >> shift;
-    c[i] := complex16{re=int16(re32[i]); im=int16(im32[i])};
+    re32[i-vlen*4] := (int(a[i].re)*int(b[i].re) - int(a[i].im)*int(b[i].im )) >> shift;
+    im32[i-vlen*4] := (int(a[i].im)*int(b[i].re) + int(a[i].re)*int(b[i].im )) >> shift;
+    c[i] := complex16{re=int16(re32[i-vlen*4]); im=int16(im32[i-vlen*4])};
   };
 
 in
