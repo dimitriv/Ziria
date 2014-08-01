@@ -49,16 +49,10 @@ in
 
 let comp PilotTrack() = 
 
-{-
-  var th1:arr[1] int16;
-  var th2:arr[1] int16;
-  var th3:arr[1] int16;
-  var th4:arr[1] int16;
--}
-
+  var th:arr[4] int32;
   var symbol_count:int := 127;
-  var avgTheta:int16;
-  var delTheta:int16;
+--  var avgTheta:int16;
+--  var delTheta:int16;
   var symbol:arr[64] complex16;
   var re32:arr[64] int;
   var im32:arr[64] int;
@@ -85,6 +79,7 @@ let comp PilotTrack() =
   -- We average over 4 last pilots to compensate for deep fades
   var pilot_hist:arr[16] complex16;
   var cnt : int;
+
 
   -- Init
   do {
@@ -138,21 +133,36 @@ let comp PilotTrack() =
        let s3 = if (cnt < 5) then p3 else v_sum_complex16(pilot_hist[8,4]) in 
        let s4 = if (cnt < 5) then p4 else v_sum_complex16(pilot_hist[12,4]) in 
 
-       let th1 = atan2_int16( s1.im, s1.re) in
-       let th2 = atan2_int16( s2.im, s2.re) in
-       let th3 = atan2_int16( s3.im, s3.re) in 
-       let th4 = atan2_int16( -s4.im, -s4.re) in 
-
- 
+       th[0] := int32(atan2_int16( s1.im, s1.re));
+       th[1] := int32(atan2_int16( s2.im, s2.re));
+       th[2] := int32(atan2_int16( s3.im, s3.re));
+       th[3] := int32(atan2_int16( -s4.im, -s4.re));
 
        symbol_count := symbol_count + 1;
        if (symbol_count >= 127) then {
           symbol_count := 0
        };
 
-       avgTheta := (th1 + th2 + th3 + th4)/4;
-       delTheta := ((th3 - th1) / (21 + 7) + (th4 - th2) / (21 + 7)) >> 1;
+       -- Adjust phase to avoid interpolation errors that
+       -- arise from phase wrapping
+       for i in [0,3] {
+         -- PI = 32768
+         if (th[i] - th[i+1] > 32768) then {
+           th[i+1] := th[i+1] + 2*32768;
+         } else {
+           if (th[i+1] - th[i] > 32768) then {
+             th[i+1] := th[i+1] - 2*32768;
+           }
+         }
+       }
 
+       let avgTheta32 = (th[0] + th[1] + th[2] + th[3])/4 in 
+
+       let avgTheta = if avgTheta32 >= 32768 then int16(avgTheta32 - 2*32768)
+                      else if avgTheta32 <= -32768 then int16(avgTheta32 + 2*32768)
+                      else int16(avgTheta32) in 
+
+       let delTheta = int16(((th[2] - th[0]) / (21 + 7) + (th[3] - th[1]) / (21 + 7)) >> 1) in
 
        build_coeff(rotate_coeffs, avgTheta, delTheta);
        
@@ -168,17 +178,23 @@ let comp PilotTrack() =
 
        build_coeff (compCoeffs, sCFO_comp, sSFO_comp )
 
+
        -- DEBUG
 {-
-       if (cnt < 10) then 
+       if (cnt >= 115 && cnt <= 125) then 
        {
-         print "cnt: ", cnt, " D: ", pilotSgn[symbol_count-1], " th: ", double(th1)/32768.0, ", ", 
-               double(th2)/32768.0, ", ", double(th3)/32768.0, ", ", double(th4)/32768.0;
+--         print "cnt: ", cnt, " D: ", pilotSgn[symbol_count-1], " th: ", double(th[0])/32768.0, ", ", 
+--               double(th[1])/32768.0, ", ", double(th[2])/32768.0, ", ", double(th[3])/32768.0;
+         print "cnt: ", cnt, " D: ", pilotSgn[symbol_count-1], " th: ", th[0], ", ", 
+               th[1], ", ", th[2], ", ", th[3];
          println " avgTheta: ", avgTheta, " delTheta: ", delTheta;
 
          println "cnt: ", cnt, ", ", symbol[64-21], symbol[64-7], symbol[7], symbol[21];
+
+         -- println rotate_coeffs;
        }
 -}
+
      };
 
      emits symbol_out

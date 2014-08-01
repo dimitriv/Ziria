@@ -47,12 +47,6 @@ all: $(TGTS)
 	EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PP) $< $@
 
 
-#             --input-file-name=test_rx.infile \
-#             --input-file-mode=dbg \
-
-#             --input-file-name=test_real_$*.infile \
-#             --input-file-mode=bin \
-
 # test_real_* files have binary Sora dumps as inputs
 test_real_%.outfile: test_real_%.out test_real_%.infile
 	./$< --input=file \
@@ -60,10 +54,6 @@ test_real_%.outfile: test_real_%.out test_real_%.infile
              --input-file-mode=bin \
              --output-file-name=$@ \
              --output-file-mode=dbg
-
-test_real_%.test: test_real_%.out 
-	echo "Still working on it..."
-
 
 %.outfile: %.out %.infile
 	./$< --input=file \

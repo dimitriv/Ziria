@@ -96,6 +96,9 @@ var h:struct HeaderInfo;
        b := 2*b
      };
 
+     -- Sanity check - no packet larger than 2048B
+     h.len := if h.len > 2048 then 2048 else h.len;
+
 #ifndef FAST
      printHeader(h);
 #endif
