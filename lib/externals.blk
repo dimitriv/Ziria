@@ -52,8 +52,8 @@ let external sumc16 (x:arr[4] complex16): complex16 in
 let external sumc32 (x:arr[4] complex): complex in
 let external sumi16 (x:arr[4] int16): int16 in
 let external sumi32 (x:arr[4] int): int in
-let external v_sum_complex16(x:arr[4] complex16 ) : complex16 in
-let external v_sum_int32(x:arr[4] int32 ) : int32 in
+let external v_sum_complex16(x:arr complex16 ) : complex16 in
+let external v_sum_int32(x:arr int32 ) : int32 in
 
 
 -- equivalent to sora hadd:
