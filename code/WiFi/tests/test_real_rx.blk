@@ -25,21 +25,27 @@
 
 
 let comp dummy() = 
---  times 490000 { 
---  times 580000 { 
---  times 670000 { 
-  times 770000 { 
-    x<- take;
+  times 4 {        -- OK
+--  times 100000 {   -- Fails (18000)
+--  times 110000 {   -- OK (4234)
+--  times 200000 { -- OK (6424)
+--  times 300000 { -- OK (3392)
+--  times 390000 { -- OK (5302)
+--  times 480000 { -- OK (7257)
+--  times 570000 { -- OK (8935)
+--  times 670000 { -- OK (6099)
+--  times 770000 { -- OK (3067)
+--  times 850000 { -- OK (10015)
+-- the last fails...
+     x<- take;
   }
 
---  times 20000 {
   repeat {
     x<- take;
     emit x;
   }  
 in
 
--- Start at 593
 
 
 let comp detectPreamble() = 
@@ -66,39 +72,35 @@ in
 #endif
 
 
-let comp GetDataTest() = 
-repeat {
-  (x : arr[64] complex16) <- takes 64;
 
-  emits x[38,6];
-  emits x[44,14];
-  emits x[58,6];
+{-
+read[complex16] >>> 
+  dummy() >>> 
+  downSample() >>> 
+  {det <- detectPreamble()}
+>>> write[int32]
+-}
 
-  emits x[1,7];
-  emits x[8,14];
-  emits x[22,5];
-}
-in
 
 
 read >>> 
   dummy() >>> 
   downSample() >>> 
+repeat{
   seq{ det<-detectPreamble()
 #ifndef FAST
      ; do{println "Detected at: ", det.noSamples}
 #endif
---     times 10000 { x<-take; emit x}
-     ;   params <- (LTS(det.shift)); --emits params.channelCoeffs;
+     ; params <- (LTS(det.shift)); 
        agc() >>> 
        DataSymbol(det.shift) >>> FFT() 
        >>> ChannelEqualization(params)
        >>> PilotTrack() 
---       >>> GetDataTest()
        >>> GetData()
 #ifdef DO_DECODING
        >>> receiveBits()
 #endif
-
   }
+}
 >>> write
+
