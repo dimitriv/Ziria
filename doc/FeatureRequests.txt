@@ -6,4 +6,10 @@ List of features that we hope to add to Ziria at some point:
 - Support constant expressions wherever a literal is expected (e.g. var x:arr[const] int 
   and a[0,const] := b[0,const] and x<-takes const).
 
+- Correct file and line number reporting on errors consistently through Ziria. 
+  For example, bounds checking only reports line number from the expanged file.
+  Type checking seems to also report a line number from the expanded file. 
+
+- Array sizes are dynamically bound in function input but not in function output. 
+  It seems that we cannot declare a function that return an array of unspecified size. 
 

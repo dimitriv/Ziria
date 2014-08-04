@@ -1,0 +1,87 @@
+#define LTS_ACCURATE
+#define DO_DECODING
+
+
+#include <externals.blk>
+#include "../const.blk"
+#include "../receiver/cca/cca_tufv.blk"
+#include "../receiver/OFDM/LTS.blk"
+#include "../receiver/removeDC.blk"
+#include "../receiver/downSample.blk"
+#include "../receiver/OFDM/DataSymbol.blk"
+#include "../receiver/OFDM/FreqCompensation.blk"
+#include "../receiver/OFDM/FFT.blk"
+#include "../receiver/OFDM/ChannelEqualization.blk"
+#include "../receiver/OFDM/PilotTrack.blk"
+#include "../receiver/OFDM/GetData.blk"
+
+#ifdef DO_DECODING
+#include "../receiver/decoding/DecodePLCP.blk"
+#include "../receiver/decoding/Decode.blk"
+#include "../transmitter/crc.blk"
+#endif
+
+
+
+
+
+
+let comp detectPreamble() = 
+  (removeDC() >>> cca())
+in 
+
+let comp agc() = 
+  var output : arr[4] complex16;
+  repeat{
+    (x : arr[4] complex16) <- takes 4;
+    do{v_shift_left_complex16(output, x, 2)};
+    emits output;
+  }
+in 
+
+
+
+#ifdef DO_DECODING
+let comp receiveBits() = 
+       seq { hdata <- DecodePLCP()
+           ; Decode(hdata) >>> seq { (c : arr[4] bit) <- crc(hdata.len); check_crc(c) }
+       }
+in
+#endif
+
+
+
+{-
+read[complex16] >>> 
+  dummy() >>> 
+  downSample() >>> 
+  {det <- detectPreamble()}
+>>> write[int32]
+-}
+
+
+
+let comp continuousRX() = 
+  
+
+read >>> 
+  dummy() >>> 
+  downSample() >>> 
+repeat{
+  seq{ det<-detectPreamble()
+#ifndef FAST
+     ; do{println "Detected at: ", det.noSamples}
+#endif
+     ; params <- (LTS(det.shift)); 
+       agc() 
+       >>> DataSymbol(det.shift) 
+       >>> FFT() 
+       >>> ChannelEqualization(params)
+       >>> PilotTrack() 
+       >>> GetData()
+#ifdef DO_DECODING
+       >>> receiveBits()
+#endif
+  }
+}
+>>> write
