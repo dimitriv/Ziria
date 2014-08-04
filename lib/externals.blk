@@ -108,6 +108,10 @@ let external copy_complex32(dst:arr complex32, src:arr complex32, len:int) : () 
 let external copy_int16(dst:arr int16, src:arr int16, len:int) : () in
 let external copy_int32(dst:arr int32, src:arr int32, len:int) : () in
 
+-- Conversions
+let external bits_to_int8(dst: arr int8, src:arr bit) : () in 
+let external int8_to_bits(dst: arr bit, src:arr int8) : () in 
+
 
 
 -- Pack two int32 arrays into int16 array

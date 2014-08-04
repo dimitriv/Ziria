@@ -1,14 +1,49 @@
+#include <externals.blk>
 #include "../transmitter/transmitter.blk"
 
 
+-- 5880 bits = 735B = 3B header + 732B payload
+let comp createPkt() = 
+  (x:arr[5880] bit) <- takes 5880;
+  return x;
+in
+
+let comp modifyPkts(x:arr[5880] bit) = 
+var arr_cnt : arr[1] int8 := {0};
+--  repeat {
+    do {
+      for i in [0,16]
+      {
+        -- Skip the first 24 header bits
+        int8_to_bits(x[24+i*8,8], arr_cnt[0,1]);
+      }
+      arr_cnt[0] := arr_cnt[0] + 1;
+    }
+    emits x;
+--  }
+in
+
 let comp buf() = 
-  (buf : arr[40640] complex16) <- takes 40640;
-  --(buf : arr[40000] complex16) <- takes 40000;
   repeat {
+    (buf : arr[40640] complex16) <- takes 40640;
     emit buf;
   }
 in 
 
+let comp test() = 
+var cnt : int := 0;
+  repeat {
+    x <- take;
+    do {
+      println cnt;
+      cnt := cnt + 1;
+    }
+    emit x;
+  }
+in    
 
-
-read[bit] >>> transmitter() >>> buf () >>> write
+read[bit] >>> 
+{
+   pkt <- createPkt(); 
+   modifyPkts(pkt) >>> test() >>> repeat{ do{println "START!!!"}; transmitter() }  -- >>> buf() 
+} >>> write

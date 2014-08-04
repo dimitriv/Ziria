@@ -87,3 +87,18 @@ int32 __ext_copy_complex32(complex32* dst, int len, complex32* src, int lens, in
   return 0;
 }
 
+
+
+int32 __ext_bits_to_int8(int8* arrout, int lengthout, BitArrPtr arrin, int lengthin)
+{
+	lengthout = lengthin / 8 + ((lengthin % 8) > 0);
+	memcpy((void *)arrout, (void*)arrin, lengthout*sizeof(int8));
+	return 0;
+}
+
+int32 __ext_int8_to_bits(BitArrPtr arrout, int lengthout, int8* arrin, int lengthin)
+{
+	lengthout = lengthin * 8;
+	memcpy((void *)arrout, (void*)arrin, lengthin*sizeof(int8));
+	return 0;
+}
