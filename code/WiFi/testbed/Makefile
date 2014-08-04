@@ -31,7 +31,7 @@
 COMPILER?=winddk
 
 PP    = ../../../scripts/preprocesscompile-$(COMPILER)-inline.sh
-PPDEB = ../../../scripts/preprocesscompile-$(COMPILER).sh
+PPDEB = ../../../scripts/preprocesscompile-$(COMPILER)-debug.sh
 DIFF  = ../../../tools/BlinkDiff
 
 # Targets

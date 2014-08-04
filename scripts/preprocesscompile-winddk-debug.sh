@@ -37,7 +37,7 @@ cp $1.c $TOP/csrc/test.c
 
 
 #echo "Compiling C code (WinDDK) ..."
-pushd . && cd $TOP/csrc/CompilerDDK && ./bczcompile-inline.bat && popd
+pushd . && cd $TOP/csrc/CompilerDDK && ./bczcompile-debug.bat && popd
 
 
 if [[ $# -ge 2 ]]
