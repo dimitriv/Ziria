@@ -461,7 +461,10 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
     go t (ELUT _ e1) | isDynFlagSet dflags NoLUT =
       codeGenExp dflags e1
 
-    go t (ELUT r e1) =
+    go t (ELUT r e1) | isDynFlagSet dflags MockLUT = 
+      codeGenLUTExp_Mock dflags (expLoc e1) r e1 
+
+    go t (ELUT r e1) = 
       codeGenLUTExp dflags [] r e1 Nothing
 
     -- TODO: Re-enable permuations, or treat as library function?
@@ -512,6 +515,11 @@ printExp nl dflags e1 = do
     go e _ = printScalar dflags e
 
 printArray dflags e cupper t
+  | TBit <- t
+  = do { ce <- codeGenExp dflags e 
+       ; appendStmt [cstm|printBitArrLn($ce, $cupper); |]
+       }
+  | otherwise
   = do { pcdeclN <- genSym ("__print_cnt_")
        ; pvdeclN <- genSym ("__print_val_")
        ; let pcDeclE  = AstExpr.toExp tint (EVar (toName pcdeclN Nothing Nothing))

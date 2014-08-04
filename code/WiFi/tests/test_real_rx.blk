@@ -1,32 +1,106 @@
+#define LTS_ACCURATE
+#define DO_DECODING
+
+
 #include <externals.blk>
 #include "../const.blk"
-#include "../transmitter/createPreamble.blk"
-#include "../receiver/cca/cca.blk"
+#include "../receiver/cca/cca_tufv.blk"
+--#include "../receiver/cca/cca.blk"
+#include "../receiver/OFDM/LTS.blk"
+#include "../receiver/removeDC.blk"
+#include "../receiver/downSample.blk"
+#include "../receiver/OFDM/DataSymbol.blk"
+#include "../receiver/OFDM/FreqCompensation.blk"
+#include "../receiver/OFDM/FFT.blk"
+#include "../receiver/OFDM/ChannelEqualization.blk"
+#include "../receiver/OFDM/PilotTrack.blk"
+#include "../receiver/OFDM/GetData.blk"
+
+#ifdef DO_DECODING
+#include "../receiver/decoding/DecodePLCP.blk"
+#include "../receiver/decoding/Decode.blk"
+#include "../transmitter/crc.blk"
+#endif
+
+
 
 let comp dummy() = 
-{-
-  times 35000 {
-    x<- take;
+  times 4 {        -- OK
+--  times 100000 {   -- Fails (18000)
+--  times 110000 {   -- OK (4234)
+--  times 200000 { -- OK (6424)
+--  times 300000 { -- OK (3392)
+--  times 390000 { -- OK (5302)
+--  times 480000 { -- OK (7257)
+--  times 570000 { -- OK (8935)
+--  times 670000 { -- OK (6099)
+--  times 770000 { -- OK (3067)
+--  times 850000 { -- OK (10015)
+-- the last fails...
+     x<- take;
   }
--}
-  repeat{
+
+  repeat {
     x<- take;
     emit x;
   }  
 in
 
 
-read[complex16] >>> dummy() >>> 
-  {
+
+let comp detectPreamble() = 
+  (removeDC() >>> cca())
+in 
+
+let comp agc() = 
+  var output : arr[4] complex16;
+  repeat{
+    (x : arr[4] complex16) <- takes 4;
+    do{v_shift_left_complex16(output, x, 2)};
+    emits output;
+  }
+in 
+
+
+
+#ifdef DO_DECODING
+let comp receiveBits() = 
+       seq { hdata <- DecodePLCP()
+           ; Decode(hdata) >>> seq { (c : arr[4] bit) <- crc(hdata.len); check_crc(c) }
+       }
+in
+#endif
+
+
+
 {-
-    do{
-      let pr = createSTSinTime() in 
-      for i in [0, 64] {
-        print pr[i].im, ", ";
-      }
-      println ""
-    };
+read[complex16] >>> 
+  dummy() >>> 
+  downSample() >>> 
+  {det <- detectPreamble()}
+>>> write[int32]
 -}
-    t<-cca(); 
-    do{println "t=", t}
-  } >>> write[int]
+
+
+
+read >>> 
+  dummy() >>> 
+  downSample() >>> 
+repeat{
+  seq{ det<-detectPreamble()
+#ifndef FAST
+     ; do{println "Detected at: ", det.noSamples}
+#endif
+     ; params <- (LTS(det.shift)); 
+       agc() >>> 
+       DataSymbol(det.shift) >>> FFT() 
+       >>> ChannelEqualization(params)
+       >>> PilotTrack() 
+       >>> GetData()
+#ifdef DO_DECODING
+       >>> receiveBits()
+#endif
+  }
+}
+>>> write
+

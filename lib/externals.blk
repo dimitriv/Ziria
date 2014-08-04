@@ -72,8 +72,8 @@ let external sumc16 (x:arr[4] complex16): complex16 in
 let external sumc32 (x:arr[4] complex): complex in
 let external sumi16 (x:arr[4] int16): int16 in
 let external sumi32 (x:arr[4] int): int in
-let external v_sum_complex16(x:arr[4] complex16 ) : complex16 in
-let external v_sum_int32(x:arr[4] int32 ) : int32 in
+let external v_sum_complex16(x:arr complex16 ) : complex16 in
+let external v_sum_int32(x:arr int32 ) : int32 in
 
 
 -- equivalent to sora hadd:
@@ -124,6 +124,11 @@ let external zero_complex32(x:arr complex32) : () in
 let external zero_int16(x:arr int16) : () in
 let external zero_int32(x:arr int32) : () in
 
+-- Copy subarray
+let external copy_complex16(dst:arr complex16, src:arr complex16, len:int) : () in
+let external copy_complex32(dst:arr complex32, src:arr complex32, len:int) : () in
+let external copy_int16(dst:arr int16, src:arr int16, len:int) : () in
+let external copy_int32(dst:arr int32, src:arr int32, len:int) : () in
 
 -- Equivallent to memcpy in C
 -- NB: When len is constant, this can be done with dst[0,len] := src[0,len]
@@ -154,8 +159,10 @@ let external v_xor(input1 : arr bit, input2 : arr[length(input1)] bit)    : arr[
 ------ SORA Code:
 
 -- FFT
-let external sora_ifft(nFFTSize : int16, inp : arr complex16, out : arr complex16) : () in
-let external sora_fft(nFFTSize : int16, inp : arr complex16, out : arr complex16) : () in
+--let external sora_ifft(nFFTSize : int16, inp : arr complex16, out : arr [length(inp)] complex16) : () in
+--let external sora_fft(nFFTSize : int16, inp : arr complex16, out : arr [length(inp)] complex16) : () in
+let external sora_ifft(inp : arr complex16) : arr [length(inp)] complex16 in
+let external sora_fft(inp : arr complex16) : arr [length(inp)] complex16 in
 
 
 

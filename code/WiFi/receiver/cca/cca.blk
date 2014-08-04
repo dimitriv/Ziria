@@ -25,6 +25,7 @@
 #include <sum.blk>
 #include <abs.blk>
 #include <floor.blk>
+#include "../../const.blk"
 
 let comp cca() = 
   var sample : arr[16] complex16;
@@ -49,7 +50,7 @@ let comp cca() =
   var peak_index : int16 := 0;
   var peak_corr : int := 0;
   var notfound : int16 := 1;		-- Bool
-  var iterind : int16 := 1;
+  var iterind : int32 := 1;
 
   var sum_corr:int := 0;
   var ccr:int;
@@ -57,6 +58,10 @@ let comp cca() =
   var corr_found: bool;
   var cca_pwr_reading:int;
   var sens_count:int16; 
+
+  -- return param
+  var ret : struct CCAParams;
+
 
 
   -- STS
@@ -286,6 +291,13 @@ seq{
       
   };
 
-  return (4*(iterind-1))
+
+  do {
+    ret.noSamples := (4*(iterind-1));
+    ret.shift := peak_index;
+    ret.energy := iEnergy;
+  };
+
+  return ret;
 }
 in

@@ -1,0 +1,14 @@
+#include "../transmitter/transmitter.blk"
+
+
+let comp buf() = 
+  (buf : arr[40640] complex16) <- takes 40640;
+  --(buf : arr[40000] complex16) <- takes 40000;
+  repeat {
+    emit buf;
+  }
+in 
+
+
+
+read[bit] >>> transmitter() >>> buf () >>> write

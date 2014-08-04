@@ -30,23 +30,27 @@
 #
 COMPILER?=winddk
 
-PP   = ../../../../scripts/preprocesscompile-$(COMPILER)-inline.sh
-DIFF = ../../../../tools/BlinkDiff
+PP   = ../../../scripts/preprocesscompile-$(COMPILER)-inline.sh
+DIFF = ../../../tools/BlinkDiff
 
 # Targets
-TGTS = $(patsubst %.blk, %.perf, $(wildcard *.blk))
+TGTS = $(patsubst %.blk, %.run, $(wildcard *.blk))
 
 all: $(TGTS)
 
 %.out : %.blk
 	EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS)' $(PP) $< $@
+	EXTRAOPTS=' $(EXTRAOPTS)' $(PP) $< $@
 
-%.perf: %.out 
-	./$< --input=dummy \
-	     --dummy-samples=100000000 \
-             --output=dummy
+test_continuous_tx.run: test_continuous_tx.out
+	./$< --input=file \
+             --input-file-name=$*.infile \
+             --input-file-mode=dbg \
+	     --output=sora \
+	     --sora-radio-id=1 \
+	     --sora-central-frequency=739
 
-clean:
+clean:	
 	rm -f ./*expanded
 	rm -f ./*exe ./*exec ./*out
 	rm -f ./*.outfile

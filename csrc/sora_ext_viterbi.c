@@ -41,7 +41,7 @@ int __ext_viterbi_brick_init_fast(int32 frame_len, int16 code_r, int16 depth) {
 	code_rate = code_r;
 	if (m_outbuf != NULL) free((void *)m_outbuf);
 	TRELLIS_DEPTH = (size_t) depth;
-	m_outbuf = (uchar*) malloc((size_t) (TRELLIS_DEPTH / 8 + 1));
+	m_outbuf = (uchar*) malloc((size_t) (TRELLIS_DEPTH + 1));
 	if (m_outbuf == NULL)
 	{
 	    printf("Viterbi memory allocation failure!\n");

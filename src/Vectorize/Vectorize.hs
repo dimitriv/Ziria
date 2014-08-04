@@ -165,8 +165,8 @@ allVectMults ra ty_in xin xout = [ (x,y)
                                    else x `mod` y == 0 && x >= y
                                  , good_sizes x y 
                               ]
-  where in_vect_bound _ = 256
-        out_vect_bound  = 256 
+  where in_vect_bound _ = 256 + 32 -- Increase this slightly above 256 (needed for some rates)
+        out_vect_bound  = 256 + 32 -- Increase this slightly above 256 (needed for some rates)
         good_sizes x y = xin*x  <= in_vect_bound ty_in && 
                          xout*y <= out_vect_bound
 
@@ -707,7 +707,7 @@ computeVectTop verbose = computeVect FlexiRate
                              ; putStrLn "----------------------" 
                              }
 
-{- 
+{-
                   ; dbgv c1 vcs1
                   ; dbgv c2 vcs2 
 -}
