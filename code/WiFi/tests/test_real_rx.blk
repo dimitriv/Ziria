@@ -51,15 +51,6 @@ let comp detectPreamble() =
   (removeDC() >>> cca())
 in 
 
-let comp agc() = 
-  var output : arr[4] complex16;
-  repeat{
-    (x : arr[4] complex16) <- takes 4;
-    do{v_shift_left_complex16(output, x, 2)};
-    emits output;
-  }
-in 
-
 
 
 #ifdef DO_DECODING
@@ -91,8 +82,7 @@ repeat{
      ; do{println "Detected at: ", det.noSamples}
 #endif
      ; params <- (LTS(det.shift)); 
-       agc() 
-       >>> DataSymbol(det.shift) 
+       DataSymbol(det.shift) 
        >>> FFT() 
        >>> ChannelEqualization(params)
        >>> PilotTrack() 
