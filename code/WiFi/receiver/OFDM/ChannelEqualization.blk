@@ -26,11 +26,12 @@
 
 
 let comp ChannelEqualization(params : struct LTECoeffs) =
-   var fftdata:arr[64] complex16;
 
-   repeat seq{
+   repeat seq {
 
     (fftdata_in:arr[64] complex16) <- takes 64;
+
+    var fftdata:arr[64] complex16;
 
     do{
       --fftdata := fftdata_in;

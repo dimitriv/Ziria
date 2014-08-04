@@ -200,22 +200,28 @@ tyCheckComp c
                 ; c1' <- extendEnv [(name x,t)] $ tyCheckComp c1 
                 ; return $ cLetE cloc (compInfo c1') x e' c1'
                 }
+           
+           -- CL
+           LetERef x (Right e) c1 ->
+             do { e' <- tyCheckExpr e
+                ; let t = info e'
+                ; c1' <- extendEnv [(name x,t)] $ tyCheckComp c1
+                ; return $ cLetERef cloc (compInfo c1') x (Right e') c1'
+                }
 
-           LetFun x fn c1 ->
+           LetERef x (Left t) c1 ->
+             do { c1' <- extendEnv [(name x,t)] $ tyCheckComp c1
+                ; return $ cLetERef cloc (compInfo c1') x (Left t) c1'
+                }
+
+           LetHeader x fn c1 ->
              do { fn' <- tyCheckFun fn
                 ; let t = funInfo fn'
                 -- ; liftIO $ putStrLn $ "Fun type = " ++ show t
                 ; c1' <- extendEnv [(name x,t)] $ tyCheckComp c1
-                ; return $ cLetFun cloc (compInfo c1') x fn' c1'
+                ; return $ cLetHeader cloc (compInfo c1') x fn' c1'
                 }
-
-           LetExternal x fn c1 ->
-             do { fn' <- tyCheckFun fn
-                ; let t = funInfo fn'
-                -- ; liftIO $ putStrLn $ "External Fun type = " ++ show t
-                ; c1' <- extendEnv [(name x,t)] $ tyCheckComp c1
-                ; return $ cLetExternal cloc (compInfo c1') x fn' c1'
-                }
+           --
 
            LetFunC f params locls c1 c2 ->
              do { let from_ty (x, CAExp t)   = [(x,t)]
@@ -489,19 +495,18 @@ tyCheckComp c
                       expectedButFound "computer" "transformer" c1
                     CTArrow _ _ -> 
                       raiseErrNoVarCtx cloc $ nonFullAppErr c1'
-                }
+                } 
 
-
-           Map wdth e ->
-             do { e' <- tyCheckExpr e 
-                ; let t = info e'
+           Map wdth nm ->
+             do { e' <- tyCheckExpr (eVar cloc () nm)
                 ; a <- newTyVar "a"
                 ; b <- newTyVar "b"
                 ; let ta = TVar a
                 ; let tb = TVar b
+                ; let t = info e' 
                 ; unify cloc t (TArrow [ta] tb)
-                ; let cTy = CTBase (TTrans ta tb) 
-                ; return $ cMap cloc cTy wdth e'
+                ; let cTy = CTBase (TTrans ta tb)
+                ; return $ cMap cloc cTy wdth nm
                 }
 
            Filter e ->
@@ -639,7 +644,6 @@ checkUnresolved c
     go (MkComp (Let _ _ c)         _ _) = go c
     go (MkComp (LetStruct _ c)     _ _) = go c
     go (MkComp (LetE _ _ c)        _ _) = go c
-    go (MkComp (LetFun _ _ c)      _ _) = go c
-    go (MkComp (LetExternal _ _ c) _ _) = go c
+    go (MkComp (LetHeader _ _ c)      _ _) = go c
     go (MkComp (LetFunC _ _ _ _ c) _ _) = go c
     go other_c = other_c

@@ -417,6 +417,17 @@ genIntervalParser
                 }
            ]
 
+declParser :: BlinkParser (Name, Ty, Maybe SrcExp)
+  = do { p <- getPosition
+       ; reserved "var"
+       ; x <- identifier
+       ; colon 
+       ; ty <- parseBaseType 
+       ; let xn = mkNameFromPos (Just x) p (Just ty)
+       ; mbinit <- optionMaybe (symbol ":=" >> parseExpr)
+       ; return (xn, ty, mbinit) 
+       }
+
 intervalParser :: BlinkParser (SrcExp, LengthInfo)
 intervalParser
   = choice [ try $ 
@@ -465,6 +476,22 @@ parseStmt
                      in return k
                    Nothing ->
                      let k m = eLet (Just p) () x e (fromMaybe (eunit p) m) 
+                     in return k
+               }
+            -- References 
+          , do { (x,ty,mbinit) <- declParser
+               ; scont <- optionMaybe $ 
+                          do { reserved "in" 
+                             ; parseStmt }
+               ; let bnd = case mbinit of Nothing -> Left ty
+                                          Just ei -> Right ei
+               ; case scont of 
+                   Just r -> 
+                     let k m = eLetRef (Just p) () x bnd (r m)
+                     in return k
+                   Nothing ->
+                     let k m = eLetRef (Just p) () x bnd 
+                                       (fromMaybe (eunit p) m) 
                      in return k
                }
 
@@ -651,6 +678,7 @@ parseTerm
            , parseValue
            , parseWithVarOnHead
            , parse_let
+           , parse_ref
            , parse_cond
            ] <?> "expression"
   where 
@@ -666,6 +694,15 @@ parseTerm
            ; return $ eLet (Just p) () nm e1 e2
            }
 
+    parse_ref 
+      = do { p <- getPosition
+           ; (x,ty,mbinit) <- declParser
+           ; let bnd = case mbinit of {Nothing -> Left ty; Just ei -> Right ei}
+           ; reserved "in"
+           ; e2 <- parseExpr 
+           ; return $ eLetRef (Just p) () x bnd e2
+           }
+   
     parse_cond 
       = do { p <- getPosition
            ; reserved "if"

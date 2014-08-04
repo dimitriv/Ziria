@@ -739,10 +739,11 @@ computeVectTop verbose = computeVect FlexiRate
                     [ liftDVR (cLet loc () x (eraseComp c1)) dvr
                     | dvr <- vcs2 ]
                   }
-          LetExternal f fdef c1
+          -- CL
+          LetHeader f fdef@(MkFun (MkFunExternal {}) _ _) c1
             -> do { vcs1 <- computeVect ra c1
                   ; return $ 
-                    [ liftDVR (cLetExternal loc () f (eraseFun fdef)) dvr
+                    [ liftDVR (cLetHeader loc () f (eraseFun fdef)) dvr
                     | dvr <- vcs1 ]
                   }
 
@@ -751,13 +752,15 @@ computeVectTop verbose = computeVect FlexiRate
                   ; return $ 
                     [ liftDVR (cLetE loc () x (eraseExp e)) dvr
                     | dvr <- vcs1 ]
-                  }
-          LetFun x fn c1
+                 }
+          -- CL
+          LetHeader x fn@(MkFun (MkFunDefined {}) _ _) c1
             -> do { vcs1 <- computeVect ra c1
                   ; return $ 
-                    [ liftDVR (cLetFun loc () x (eraseFun fn)) dvr
+                    [ liftDVR (cLetHeader loc () x (eraseFun fn)) dvr
                     | dvr <- vcs1 ]
                   }
+          --
           LetFunC f params locals c1 c2
             -> do { vcs2 <- extendCFunBind f params locals c1 $
                             computeVect ra c2
@@ -1062,12 +1065,12 @@ computeVectTop verbose = computeVect FlexiRate
                   }
 
 
-          Map Nothing e -> 
+          Map Nothing nm -> 
             let mults = allVectMults ra tyin 1 1 
                 mk_vect_map env (min,mout) 
                   = DVR { dvr_comp 
                               = inCurrentEnv env $
-                                vectMap min mout tyin tyout loc e
+                                vectMap min mout tyin tyout loc nm
                         , dvr_vres = DidVect min mout minUtil
                         , dvr_orig_tyin  = tyin
                         , dvr_orig_tyout = tyout
@@ -1077,13 +1080,13 @@ computeVectTop verbose = computeVect FlexiRate
                   ; let vect_maps = map (mk_vect_map env) mults
                   ; return $ self_no_vect : vect_maps } 
 
-          Map (Just (UpTo f (min,mout))) e -> 
+          Map (Just (UpTo f (min,mout))) nm -> 
             let mults = filter (\(i,j) -> i <= min && j <= mout) $ 
                         allVectMults ra tyin 1 1 
                 mk_vect_map env (min,mout) 
                   = DVR { dvr_comp 
                               = inCurrentEnv env $
-                                vectMap min mout tyin tyout loc e
+                                vectMap min mout tyin tyout loc nm
                         , dvr_vres = DidVect min mout minUtil
                         , dvr_orig_tyin  = tyin
                         , dvr_orig_tyout = tyout
@@ -1095,13 +1098,13 @@ computeVectTop verbose = computeVect FlexiRate
                              self_no_vect : vect_maps 
                   }
 
-          Map (Just (Rigid f (min,mout))) e
+          Map (Just (Rigid f (min,mout))) nm
             | min `mod` mout == 0          -- mout divides min
             -> let mults = [(min,mout)]  
                    mk_vect_map env (min,mout) 
                      = DVR { dvr_comp 
                                 = inCurrentEnv env $ 
-                                  vectMap min mout tyin tyout loc e 
+                                  vectMap min mout tyin tyout loc nm 
                            , dvr_vres = DidVect min mout minUtil
                            , dvr_orig_tyin  = tyin
                            , dvr_orig_tyout = tyout

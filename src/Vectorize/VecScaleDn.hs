@@ -202,10 +202,20 @@ doVectorizeCompDn comp cin cout (din,dout)
                    do { c1' <- go c1
                       ; return (MkComp (LetE x (eraseExp e) c1') loc ()) 
                       }
-                (LetFun x fn c1) -> 
+                -- CL
+                (LetERef x (Right e) c1) -> 
                    do { c1' <- go c1
-                      ; return $ MkComp (LetFun x (eraseFun fn) c1') loc () 
+                      ; return (MkComp (LetERef x (Right (eraseExp e)) c1') loc ()) 
                       }
+                (LetERef x (Left t) c1) -> 
+                   do { c1' <- go c1
+                      ; return (MkComp (LetERef x (Left t) c1') loc ()) 
+                      }
+                (LetHeader x fn@(MkFun (MkFunDefined {}) _ _) c1) -> 
+                   do { c1' <- go c1
+                      ; return $ MkComp (LetHeader x (eraseFun fn) c1') loc () 
+                      }
+                --
                 (LetFunC f params locals c1 c2) ->
                    -- Aggressive specialization
                    extendCFunBind f params locals c1 $ go c2
@@ -241,9 +251,9 @@ doVectorizeCompDn comp cin cout (din,dout)
                 (Repeat {}) -> 
                     vecMFail "BUG: Repeat is not a simple computer!"
                 (Filter {}) -> 
-                    vecMFail "BUG: Repeat is not a simple computer!"
+                    vecMFail "BUG: Filter is not a simple computer!"
                 (Map {}) -> 
-                    vecMFail "BUG: Repeat is not a simple computer!"
+                    vecMFail "BUG: Map is not a simple computer!"
                 (Par p c1 c2) ->
                    vecMFail "BUG: Par is not a simple computer!"
 
@@ -274,12 +284,12 @@ doVectorizeCompDn comp cin cout (din,dout)
 
                 (Return e) -> return $ MkComp (Return $ eraseExp e) loc ()
 
-
-                (LetExternal n fn c) -> do { c' <- go c 
-                                           ; return $ MkComp (LetExternal n (eraseFun fn) c') loc () }
+                -- CL
+                (LetHeader n fn@(MkFun (MkFunExternal {}) _ _) c) -> do { c' <- go c 
+                                           ; return $ MkComp (LetHeader n (eraseFun fn) c') loc () }
                                            -- NB: Don't worry, 
                                            -- even after erasure an external function has enough type info.
-
+                --
                 (LetStruct sdef c) -> do { c' <- go c 
                                          ; return $ MkComp (LetStruct sdef c') loc ()
                                          }

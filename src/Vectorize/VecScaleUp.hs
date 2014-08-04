@@ -35,7 +35,6 @@ import CardinalityAnalysis
 
 import VecMonad -- Import the vectorization monad
 
-
 doVectorizeCompUp :: Comp (CTy,Card) Ty
                  -> Int       -- Input cardinality   (cin)
                  -> Int       -- Output cardinality  (cout
@@ -165,11 +164,20 @@ doVectorizeCompUp comp cin cout (min,mout)
                    do { c1' <- go c1
                       ; return (MkComp (LetE x (eraseExp e) c1') loc ()) 
                       }
-                (LetFun x fn c1) -> 
+                -- CL
+                (LetERef x (Right e) c1) -> 
                    do { c1' <- go c1
-                      ; return $ MkComp (LetFun x (eraseFun fn) c1') loc () 
+                      ; return (MkComp (LetERef x (Right (eraseExp e)) c1') loc ()) 
                       }
-
+                (LetERef x (Left t) c1) -> 
+                   do { c1' <- go c1
+                      ; return (MkComp (LetERef x (Left t) c1') loc ()) 
+                      }
+                (LetHeader x fn@(MkFun (MkFunDefined {}) _ _) c1) -> 
+                   do { c1' <- go c1
+                      ; return $ MkComp (LetHeader x (eraseFun fn) c1') loc () 
+                      }
+                --
                 (LetStruct sdef c1) -> 
                    do { c1' <- go c1
                       ; return $ MkComp (LetStruct sdef c1') loc () 
@@ -257,8 +265,8 @@ doVectorizeCompUp comp cin cout (min,mout)
                 (Return e) -> return $ MkComp (Return $ eraseExp e) loc ()
 
 
-                (LetExternal n fn c) -> do {  c' <- go c 
-                                           ; return $ MkComp (LetExternal n (eraseFun fn) c') loc () 
+                (LetHeader n fn@(MkFun (MkFunExternal {}) _ _) c) -> do {  c' <- go c 
+                                           ; return $ MkComp (LetHeader n (eraseFun fn) c') loc () 
                                            -- Don't worry, even after erasure an external function has type info
                                            }
                 (Seq c1 c2) -> do { c1' <- go c1 
@@ -407,7 +415,7 @@ doVectorizeCompUp comp cin cout (min,mout)
 
 
 
-vectMap :: Int -> Int -> Ty -> Ty -> Maybe SourcePos -> Exp Ty -> VecM (Comp () ())
+vectMap :: Int -> Int -> Ty -> Ty -> Maybe SourcePos -> Name -> VecM (Comp () ())
 -- Vectorizes a map (by upscaling)
 -- The plan is to create a:
 -- wrap_map_vect() {
@@ -417,9 +425,9 @@ vectMap :: Int -> Int -> Ty -> Ty -> Maybe SourcePos -> Exp Ty -> VecM (Comp () 
 --          times j mout
 --             ya[j] := e(xa[i*mout + j]
 --          emit ya
-vectMap min mout tin tout loc e 
+vectMap min mout tin tout loc nm
   | min == 1
-  = return $ MkComp (Map Nothing $ eraseExp e) loc ()
+  = return $ MkComp (Map Nothing nm) loc ()
   | otherwise
   = do { let mkexp x = MkExp x loc ()
              mkintexp x = MkExp x loc tint
@@ -447,14 +455,14 @@ vectMap min mout tin tout loc e
 
        ; let write_exp 
                | mout == 1
-               = mkcomp (Emit (mkexp (ECall (eraseExp e) [mkexp (EArrRead xa_exp (eraseExp icnt_exp) LISingleton)])))
+               = mkcomp (Emit (mkexp (ECall (mkexp $ EVar nm) [mkexp (EArrRead xa_exp (eraseExp icnt_exp) LISingleton)])))
                | otherwise 
                = let rd_idx = eraseExp $ (icnt_exp `emul` (mkintexp (EVal (VInt mout)))) `eadd` jcnt_exp
                  in
                  mkcomp $ 
                  Seq (mkTimes (mkexp $ EVal (VInt mout)) jcnt_name $
                         mkcomp $ Return $ mkexp $ 
-                        EArrWrite ya_exp (eraseExp jcnt_exp) LISingleton (mkexp $ ECall (eraseExp e) [mkexp $ EArrRead xa_exp rd_idx LISingleton]))
+                        EArrWrite ya_exp (eraseExp jcnt_exp) LISingleton (mkexp $ ECall (mkexp $ EVar nm) [mkexp $ EArrRead xa_exp rd_idx LISingleton]))
                      (mkcomp $ Emit ya_exp)
        ; let outer_expr = 
                mkcomp $ BindMany (mkcomp Take1) [(xa_name_typed, outer_loop)]
@@ -466,4 +474,5 @@ vectMap min mout tin tout loc e
 
        ; return (MkComp (Repeat Nothing (MkComp let0 loc ())) loc ())
        }
+
 

@@ -52,14 +52,14 @@ stripLetCtxt c = go c
             let (ctx,c0) = go c2 in (CLet cloc nm c1 ctx, c0)
           LetE nm e1 c2 -> 
             let (ctx,c0) = go c2 in (CLetE cloc nm e1 ctx, c0)
-          LetFun nm fun c2 ->
-            let (ctx,c0) = go c2 in (CLetFun cloc nm fun ctx, c0)
+          LetHeader nm fun@(MkFun (MkFunDefined {}) _ _) c2 ->
+            let (ctx,c0) = go c2 in (CLetHeader cloc nm fun ctx, c0)
+          LetHeader nm fun@(MkFun (MkFunExternal {}) _ _) c2 -> 
+            let (ctx,c0) = go c2 in (CLetHeader cloc nm fun ctx,c0)
           LetFunC nm ps ls c1 c2 -> 
             let (ctx,c0) = go c2 in (CLetFunC cloc nm ps ls c1 ctx, c0)
           LetStruct sdef c2 -> 
             let (ctx,c0) = go c2 in (CLetStruct cloc sdef ctx, c0)
-          LetExternal nm fun c2 -> 
-            let (ctx,c0) = go c2 in (CLetExternal cloc nm fun ctx,c0)
           _other -> (Hole,c)
       where cloc = compLoc c
 

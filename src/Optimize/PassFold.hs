@@ -142,11 +142,12 @@ fold_step fgs comp =
                 rewrite $ MkComp (LetE nm e c12') cloc cinfo
         }  
 
-    BindView (MkComp (LetFun f fun c) floc finfo) nm c12 -> 
+    -- CL 
+    BindView (MkComp (LetHeader f fun@(MkFun (MkFunDefined {}) _ _) c) floc finfo) nm c12 -> 
         fold_step fgs c12 >>= \c12' -> 
           rewrite $ 
-          MkComp (LetFun f fun (MkComp (mkBindMany c [(nm,c12')]) cloc cinfo)) cloc cinfo
-
+          MkComp (LetHeader f fun (MkComp (mkBindMany c [(nm,c12')]) cloc cinfo)) cloc cinfo
+    --
     -- Don't forget to go inside!
     BindView c nm  c12 -> 
      fold_step fgs c12 >>= \c12' 
@@ -263,11 +264,10 @@ take_emit_step fgs comp
        ; fname <- do { fr <- genSym "auto_map_"
                      ; return $ toName fr eloc (Just fty) }
 
-       ; let letfun  = MkComp (LetFun fname fun mapcomp) cloc cty
-             mapcomp = MkComp (Map nfo fexp) cloc cty
+       ; let letfun  = MkComp (LetHeader fname fun mapcomp) cloc cty
+             mapcomp = MkComp (Map nfo fname) cloc cty
                      -- NB: We pass the nfo thing, 
                      -- to preserve vectorization hints!
-             fexp = MkExp (EVar fname) eloc fty
              fun = MkFun (MkFunDefined fname [(x,xty)] [] e) eloc fty
 
        ; rewrite letfun
@@ -328,7 +328,7 @@ inline_step_aux fgs comp
   = substExpComp (nm,e1) c2 >>= rewrite
 
 
-  | LetFun nm f c2 <- unComp comp
+  | LetHeader nm f@(MkFun (MkFunDefined {}) _ _) c2 <- unComp comp
   , MkFunDefined nm params locals body <- unFun f -- Defined 
   , no_lut_inside body                            -- Not already lutted body
 
@@ -336,7 +336,7 @@ inline_step_aux fgs comp
          -- Inlining functions not always completely eliminates 
          -- them (e.g. args to map, or non-simple arguments)
        ; if S.member nm (compFVs c2') then 
-           return $ MkComp (LetFun nm f c2') 
+           return $ MkComp (LetHeader nm f c2') 
                            (compLoc comp) 
                            (compInfo comp)
          else return c2' 
@@ -367,7 +367,7 @@ inline_step_aux fgs comp
 
 is_arg_to_map nm comp
   = isNothing (mapCompM_ return aux comp)
-  where aux c@(MkComp (Map _ (MkExp (EVar nm') _ _)) _ _) 
+  where aux c@(MkComp (Map _ nm') _ _) 
           = if nm == nm' then Nothing else Just c
         aux other = Just other
 
@@ -508,6 +508,28 @@ purify_step fgs comp =
                            (compLoc comp) (compInfo comp)
 
       _otherwise -> return comp
+
+
+purify_letref_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
+-- Returns Just if we managed to rewrite 
+purify_letref_step fgs comp = 
+ do -- rwMIO $ putStrLn "purify_step, comp = " 
+    -- rwMIO $ print (ppComp comp)  
+    case isMultiLetRef_maybe (unComp comp) of 
+      Just (binds, Return e) -> 
+          rewrite $ MkComp (Return (mkMultiLetRefExp (reverse binds) e)) 
+                           (compLoc comp) (compInfo comp) 
+
+      Just (binds, Emit e) -> 
+          rewrite $ MkComp (Emit (mkMultiLetRefExp (reverse binds) e))
+                           (compLoc comp) (compInfo comp)
+
+      Just (binds, Emits e) ->
+          rewrite $ MkComp (Emits (mkMultiLetRefExp (reverse binds) e))
+                           (compLoc comp) (compInfo comp)
+
+      _otherwise -> return comp
+
 
 
 ifpar_step_left :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
@@ -671,7 +693,7 @@ letfunc_step fgs comp =
              ; cont' <- purify_calls fun_ty nm cont
              ; let new_params = map (\(n,t) -> (n, unCAExp t)) params
              ; let (fun :: Fun Ty) = MkFun (MkFunDefined nm new_params locals e) (compLoc comp) fun_ty
-             ; rewrite $ MkComp (LetFun nm fun cont') (compLoc comp) (compInfo comp) -- Same type!
+             ; rewrite $ MkComp (LetHeader nm fun cont') (compLoc comp) (compInfo comp) -- Same type!
              }
     _ -> return comp
   where
@@ -687,14 +709,14 @@ letfunc_step fgs comp =
 
 letfun_times_step fgs comp = 
   case unComp comp of 
-    Times ui e elen i (MkComp (LetFun f def cont) cloc cinfo) 
+    Times ui e elen i (MkComp (LetHeader f def cont) cloc cinfo) 
      | MkFun (MkFunDefined n params locals body) floc fty <- def
      -> do { let fty' = TArrow (tyOfParams ((i,tint):params)) (fun_ret_ty fty)
                  def' = MkFun (MkFunDefined n ((i,tint):params) locals body) floc fty'
                  iexp = MkExp (EVar i) cloc tint -- The counter variable
            ; cont' <- augment_calls (n,fty') iexp cont
            ; rewrite $ 
-             MkComp (LetFun f def' (MkComp (Times ui e elen i cont') cloc cinfo)) cloc cinfo }
+             MkComp (LetHeader f def' (MkComp (Times ui e elen i cont') cloc cinfo)) cloc cinfo }
     _otherwise -> return comp
 
   where fun_ret_ty (TArrow _ r) = r
@@ -741,10 +763,29 @@ mkMultiLetExp [] e = e
 mkMultiLetExp ((x,e1):bnds) e 
   = MkExp (ELet x e1 (mkMultiLetExp bnds e)) (expLoc e) (info e) 
 
+mkMultiLetRefExp :: [(Name,Either Ty (Exp a))] -> Exp a -> Exp a
+mkMultiLetRefExp [] e = e
+mkMultiLetRefExp ((x,b1):bnds) e 
+  = MkExp (ELetRef x b1 (mkMultiLetRefExp bnds e)) (expLoc e) (info e) 
+
 
 isMultiLet_maybe comp
   = go comp []
   where go (LetE x e c) acc = go (unComp c) ((x,e):acc)
+        go (Return e)  []   = Nothing 
+        go (Emit e)    []   = Nothing
+        go (Emits e)   []   = Nothing 
+
+        go (Return e) acc   = Just (acc, Return e) 
+              -- We must have some accumulated bindings!
+        go (Emit e) acc     = Just (acc, Emit e)
+        go (Emits e) acc    = Just (acc, Emits e)
+        go _ _ = Nothing
+
+
+isMultiLetRef_maybe comp
+  = go comp []
+  where go (LetERef x bnd c) acc = go (unComp c) ((x,bnd):acc)
         go (Return e)  []   = Nothing 
         go (Emit e)    []   = Nothing
         go (Emits e)   []   = Nothing 
@@ -796,6 +837,57 @@ exp_inlining_steps fgs e
  | otherwise 
  = return e
 
+mk_read_ty :: Ty -> LengthInfo -> Ty 
+mk_read_ty base_ty LISingleton  = base_ty
+mk_read_ty base_ty (LILength n) = TArr (Literal n) base_ty
+
+asgn_letref_step :: DynFlags -> TypedExpPass
+asgn_letref_step fgs e 
+
+  | EArrWrite e0 estart elen erhs <- unExp e
+  , TArr _ ty <- info e0
+  , not (ty == TBit)
+   -- It has to be LILength so we can just take a pointer
+  , LILength _ <- elen  
+  , EVar x <- unExp e0  
+   -- Just a simple expression with no side-effects
+  , not (is_side_effecting estart)
+  , Just (y, residual_erhs) <- returns_letref_var erhs
+  , let read_ty = mk_read_ty ty elen
+  = substExp (y, eArrRead loc read_ty e0 estart elen) residual_erhs >>= rewrite
+  | otherwise = return e
+  where 
+    loc = expLoc e
+    returns_letref_var :: Exp Ty -> Maybe (Name, Exp Ty)
+    returns_letref_var e = go e []
+    go e letrefs 
+     = let loc = expLoc e 
+       in 
+       case unExp e of
+          EVar v -> 
+            case lookup v letrefs of 
+              Nothing  -> Nothing
+              Just _ty -> Just (v, eVal loc TUnit VUnit)
+
+          ELet y e1 e2 -> 
+            case go e2 letrefs of 
+              Nothing -> Nothing
+              Just (w,e2') -> Just (w, eLet loc TUnit y e1 e2')
+
+          ELetRef y (Left ty) e2 -> 
+            case go e2 ((y,ty):letrefs) of
+              Nothing -> Nothing
+              Just (w,e2') | w == y 
+                           -> Just (w, e2')
+                           | otherwise
+                           -> Just (w, eLetRef loc TUnit y (Left ty) e2')
+          ESeq e1 e2 -> 
+            case go e2 letrefs of 
+              Nothing -> Nothing
+              Just (w,e2') -> Just (w, eSeq loc TUnit e1 e2')
+
+          _ -> Nothing
+
 rest_chain :: DynFlags -> TypedExpPass
 rest_chain fgs e 
      = alength_elim fgs e >>= 
@@ -806,7 +898,7 @@ rest_chain fgs e
        -- This leads to too much inlining and seems to have 
        -- unstable effects to performance so I am keeping it 
        -- commented for now:
-       -- >>= proj_inline_step fgs
+          >>= proj_inline_step fgs
 
 
 exp_inline_step :: DynFlags -> TypedExpPass
@@ -1014,8 +1106,10 @@ foldCompPasses flags
   = []
   | otherwise 
   = -- Standard good things
-    [ ("fold"        , fold_step  flags       )
-    , ("purify"      , purify_step  flags     )
+    [ ("fold"         , fold_step  flags         )
+    , ("purify"       , purify_step  flags       )
+    , ("purify-letref", purify_letref_step  flags)
+
     , ("elim-times"  , elim_times_step flags  )
     , ("letfunc"     , letfunc_step flags     )
     , ("letfun-times", letfun_times_step flags) 
@@ -1057,6 +1151,7 @@ foldExpPasses flags
   | otherwise 
   = [ ("for-unroll", for_unroll_step flags)
     , ("exp-inlining-steps", exp_inlining_steps flags)
+    , ("asgn-letref-step", asgn_letref_step flags)
     , ("rest-chain", rest_chain flags)
     ]
  
@@ -1110,11 +1205,11 @@ frm_mit c
       Nothing -> Nothing 
       Just (mit,c2') -> Just (mit, cPar (compLoc c) () p0 c1 c2')
 
-  | LetFun fn fdef cont <- unComp c -- Needed because of AutoMaps! Yikes!
+  | LetHeader fn fdef@(MkFun (MkFunDefined {}) _ _) cont <- unComp c -- Needed because of AutoMaps! Yikes!
   , let loc = compLoc c
   = case frm_mit cont of
       Nothing -> Nothing
-      Just (mit,cont') -> Just (mit,cLetFun loc () fn fdef cont')
+      Just (mit,cont') -> Just (mit,cLetHeader loc () fn fdef cont')
 
   -- Special case for code emitted by the vectorizer 
   | LetFunC fn prms locs body cont <- unComp c
@@ -1154,11 +1249,11 @@ flm_mit c
       Nothing -> Nothing 
       Just (mit,c1') -> Just (mit, cPar (compLoc c) () p0 c1' c2)
 
-  | LetFun fn fdef cont <- unComp c
+  | LetHeader fn fdef@(MkFun (MkFunDefined {}) _ _) cont <- unComp c
   , let loc = compLoc c
   = case flm_mit cont of
       Nothing -> Nothing
-      Just (mit,cont') -> Just (mit,cLetFun loc () fn fdef cont')
+      Just (mit,cont') -> Just (mit,cLetHeader loc () fn fdef cont')
 
   -- Special case for code emitted by the vectorizer 
   | LetFunC fn prms locs body cont <- unComp c

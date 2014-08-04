@@ -268,28 +268,37 @@ renameComp c =
          ; c2' <- extendUniqEnv x u $ renameComp c2 
          ; return $ cLet cloc cnfo x { uniqId = u } c1' c2'
          }
-
     LetStruct sdef c1 ->
       do { c1' <- renameComp c1
          ; return $ cLetStruct cloc cnfo sdef c1'
          }
-
     LetE x e c' ->
       do { e'  <- renameExpr e
          ; u <- newUniq
          ; c'' <- extendUniqEnv x u $ renameComp c'
          ; return $ cLetE cloc cnfo x { uniqId = u } e' c''
          }
-    LetFun nm e c2 -> -- Not renaming functions for now
+
+    -- CL
+    LetERef nm1 e c   -> 
+      do e' <- renameMbExpr e
+         u1 <- newUniq
+         extendUniqEnv nm1 u1 $ 
+           do { c' <- renameComp c
+              ; return $ cLetERef cloc cnfo nm1 { uniqId = u1 } e' c' }
+    
+    LetHeader nm e@(MkFun (MkFunDefined _ _ _ _) _ _) c2 -> -- Not renaming functions for now
       do { (nm',e')  <- renameFun e
          ; c2' <- extendUniqEnv nm (uniqId nm') $ renameComp c2
-         ; return $ cLetFun cloc cnfo nm' e' c2'
+         ; return $ cLetHeader cloc cnfo nm' e' c2'
          }
-    LetExternal nm e c2 ->
+
+    LetHeader nm e@(MkFun (MkFunExternal _ _ _) _ _) c2 ->
       do { (_,e')  <- renameFun e -- No renaming happens for externals for now
          ; c2' <- extendUniqEnv nm (uniqId nm) $ renameComp c2 -- Not renaming externals
-         ; return $ cLetExternal cloc cnfo nm e' c2'
+         ; return $ cLetHeader cloc cnfo nm e' c2'
          }
+    --
     LetFunC nm params locals c1 c2 ->
       do { usp <- mapM (\_ -> newUniq) params
          ; usl <- mapM (\_ -> newUniq) locals
@@ -369,9 +378,10 @@ renameComp c =
       do { c'' <- renameComp c'
          ; return $ cVectComp cloc cnfo wdth c''
          }
-    Map wdth e ->
-      do { e' <- renameExpr e
-         ; return $ cMap cloc cnfo wdth e'
+    Map wdth nm ->
+      do { uniq <- lkupUniqEnv nm 
+         ; let nm' = nm { uniqId = uniq }
+         ; return $ cMap cloc cnfo wdth nm'
          }
     Filter e -> 
       do { e' <- renameExpr e

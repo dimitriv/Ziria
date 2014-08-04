@@ -534,14 +534,12 @@ zonkComp :: Comp CTy Ty -> TcM (Comp CTy Ty)
 zonkComp = mapCompM_aux zonkTy zonkExpr zonkCTy zonk_comp
   -- We can't just use 'return' for zonkComp as we need to zonk the
   -- actual types that lived in parameters, declarations and structs
-  where zonk_comp (MkComp (LetFun nm f c1) loc cty)
+  -- CL
+  where zonk_comp (MkComp (LetHeader nm f c1) loc cty)
           = do { f' <- mapFunAndTysM zonkTy zonkTy zonkExpr f 
-               ; return (cLetFun loc cty nm f' c1) 
+               ; return (cLetHeader loc cty nm f' c1) 
                }
-        zonk_comp (MkComp (LetExternal nm f c1) loc cty)
-          = do { f' <- mapFunAndTysM zonkTy zonkTy zonkExpr f
-               ; return (cLetExternal loc cty nm f' c1) 
-               }
+        --
         zonk_comp (MkComp (LetFunC nm params locals c1 c2) loc cty)
           = do { locals' <- mapLocalsAndTysM zonkExpr zonkTy locals 
                ; return (cLetFunC loc cty nm params locals' c1 c2) 

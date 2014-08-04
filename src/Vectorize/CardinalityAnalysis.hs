@@ -213,18 +213,20 @@ computeCardTop verbose ct = computeCard ct
           = do { c1' <- computeCard c1
                ; return $ MkComp (LetE x e c1') loc (cty, snd $ compInfo c1') }
 
+        -- CL
+        computeCard0  (LetERef x y c1) 
+          = do { c1' <- computeCard c1
+               ; return $ MkComp (LetERef x y c1') loc (cty, snd $ compInfo c1') }
+        
+        computeCard0  (LetHeader x fn c1)
+          = do { c1' <- computeCard c1
+               ; return $ MkComp (LetHeader x fn c1') loc (cty, snd $ compInfo c1') }
+        --
+
         computeCard0  (LetStruct sdef c1) 
           = do { c1' <- computeCard c1
                ; return $ MkComp (LetStruct sdef c1') loc (cty, snd $ compInfo c1') 
                }
-
-        computeCard0  (LetFun x fn c1)
-          = do { c1' <- computeCard c1
-               ; return $ MkComp (LetFun x fn c1') loc (cty, snd $ compInfo c1') }
--- m    ahanth: just copied over from LetFun, might not do the correct cardinality analysis
-        computeCard0  (LetExternal x fn c1)
-          = do { c1' <- computeCard c1
-               ; return $ MkComp (LetExternal x fn c1') loc (cty, snd $ compInfo c1') }
 
         computeCard0  (LetFunC f params locals c1 c2)
           = do { c1' <- computeCard c1
@@ -314,8 +316,8 @@ computeCardTop verbose ct = computeCard ct
                  -- It's ok to make a dynamic cardinality as we will not use this information directly
                }
 
-        computeCard0 (Map w e)
-          = return $ MkComp (Map w e) loc (cty, mkIterCard Nothing $ mkSimplCard 1 1)
+        computeCard0 (Map w nm)
+          = return $ MkComp (Map w nm) loc (cty, mkIterCard Nothing $ mkSimplCard 1 1)
 
         computeCard0 (Filter e)
           = return $ MkComp (Filter e) loc (cty, mkIterCard Nothing $ mkDynamicCard)
