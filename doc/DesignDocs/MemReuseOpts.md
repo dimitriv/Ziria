@@ -28,30 +28,30 @@ Examples below show how `oup` is replaced by `vect_ya` in the optimized code so 
 
 ```
 let auto_map(vect_xa: arr[160] complex16) =
- letref vect_ya: arr[80] complex16
+ letref **vect_ya**: arr[80] complex16
  in
  let _unused_1 = 
   for vect_j in [0, 20] {
    let y = vect_xa[vect_j*8:+8]
    in
-   vect_ya[vect_j*4:+4] := 
+   **vect_ya[vect_j*4:+4]** := 
     let _unused_2 = 
      permutatew(y[0:+4],tmp1);
      permutatew(y[4:+4],tmp2)                          
     in
-    letref oup: arr[4] complex16
+    letref **oup**: arr[4] complex16
     in
-    interleave_loww(tmp1,tmp2,oup);
-    oup 
+    interleave_loww(tmp1,tmp2,**oup**);
+    **oup** 
    }
   in
-  vect_ya
+  **vect_ya**
 in
 map auto_map
 ```
 ```
 let auto_map(vect_xa: arr[160] complex16) =
- letref vect_ya: arr[80] complex16
+ letref **vect_ya**: arr[80] complex16
  in
  let _unused_1 = 
   for vect_j in [0, 20] {
@@ -61,10 +61,10 @@ let auto_map(vect_xa: arr[160] complex16) =
     permutatew(y[0:+4],tmp1);
     permutatew1313(y[4:+4],tmp2)
     in
-    interleave_loww(tmp1,tmp2,vect_ya[vect_j]);
+    interleave_loww(tmp1,tmp2,**vect_ya[vect_j]**);
    }
   in
-  vect_ya
+  **vect_ya**
 in
 map auto_map
 ```
