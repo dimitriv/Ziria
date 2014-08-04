@@ -27,12 +27,13 @@ source $TOP/scripts/common.sh
 
 echo $TOP
 echo $1
-#echo "Preprocessing..."
+echo "Preprocessing..."
+echo $TOP/lib
 #gcc -x c -P -E $1 >$1.expanded
 gcc -I $TOP/lib -w -x c -E $1 >$1.expanded
 
 
-#echo "Running WPL compiler..."
+echo "Running WPL compiler..."
 $WPLC $WPLCFLAGS $EXTRAOPTS -i $1.expanded -o $1.c
 cp $1.c $TOP/csrc/test.c
 
