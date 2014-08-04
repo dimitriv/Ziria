@@ -118,6 +118,7 @@ let comp cca() =
    -- DEBUG
    var debCorr : int32;
    var debCorr2 : int32;
+   var debCorr3 : int32;
 
 
 
@@ -195,11 +196,10 @@ let comp cca() =
           let corrc = v_correlate(pattern[i*CORR_LEN,CORR_LEN], input) in
           let corrmul = corrc * conj_complex32(mul_hist[i]) in 
           let corri = (abs_int32(corrmul.re) + abs_int32(corrmul.im)) in 
-
           mul_hist[i] := corrc;
 
-          corr_hist[i*NO_REP+1,NO_REP_M_1] := corr_hist[i*NO_REP,NO_REP_M_1];
-          corr_hist[i*NO_REP] := corri;
+          corr_hist[i*NO_REP,NO_REP_M_1] := corr_hist[i*NO_REP+1,NO_REP_M_1];
+          corr_hist[i*NO_REP+NO_REP-1] := corri;
 
           corr :=0;
           for j in [0,NO_REP] {
@@ -251,8 +251,8 @@ let comp cca() =
           let corri = (abs_int32(corrmul.re) + abs_int32(corrmul.im)) in 
           mul_hist[i] := corrc;
 
-          corr_hist[i*NO_REP+1,NO_REP_M_1] := corr_hist[i*NO_REP,NO_REP_M_1];
-          corr_hist[i*NO_REP] := corri;
+          corr_hist[i*NO_REP,NO_REP_M_1] := corr_hist[i*NO_REP+1,NO_REP_M_1];
+          corr_hist[i*NO_REP+NO_REP-1] := corri;
 
           corr :=0;
           for j in [0,NO_REP] {
@@ -266,14 +266,17 @@ let comp cca() =
           }
 
           debCorr := corri;
-          debCorr2 := corr;
+          -- debCorr2 := corr;
+          debCorr2 := corr_hist[i*NO_REP+NO_REP-2];
+          debCorr3 := corr_hist[i*NO_REP+NO_REP-3];
 
        }
 
        emit debCorr;
        emit debCorr2;
+       emit debCorr3;
 --     emit int32(maxInd);
-       emit maxCorr;
+--       emit maxCorr;
 
     }
     do{
