@@ -37,10 +37,14 @@ let comp check_crc(crc_state : arr[4] bit) =
   (x:arr[8] bit) <- takes 8;
   do {
   if (crc_state[0] == x[0] && crc_state[1] == x[1] && crc_state[2] == x[2] && crc_state[3] == x[3]) then {
+#ifndef FAST
      println "CRC passed!";
+#endif
      ret := true;
   } else {
+#ifndef FAST
      println "CRC failed!";
+#endif
      ret := false;
   }
   }
