@@ -13,3 +13,11 @@ List of features that we hope to add to Ziria at some point:
 - Array sizes are dynamically bound in function input but not in function output. 
   It seems that we cannot declare a function that return an array of unspecified size. 
 
+- Implement static initialization of a complex array with a constant array.
+
+- This is actually a bug. The following: 
+      int8_to_bits(x[24+i*8,8], arr_cnt[0,1]);
+  will create a subarray bitarrresXX using bitArrRead, call the external function on it
+  but never really write it back to x!
+
+
