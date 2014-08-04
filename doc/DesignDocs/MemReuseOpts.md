@@ -28,7 +28,7 @@ Examples below show how `oup` is replaced by `vect_ya` in the optimized code so 
 
 ```
 let auto_map(vect_xa: arr[160] complex16) =
- letref vect_ya: arr[80] complex16
+ letref *vect_ya*: arr[80] complex16
  in
  let _unused_1 = 
   for vect_j in [0, 20] {
