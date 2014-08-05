@@ -2,6 +2,17 @@
 #define DO_DECODING
 
 
+-- TODO: these should be declared in cntRxPkts but currently there is a bug
+-- that resets it in every round in cntRxPkts, even though it shouldn't
+-- Once the bug is fixed, this should be put back there.
+var cnt : int := 0;
+var lastPkt : int8 := -1;
+var received : int := 0;
+var errors : int := 0;
+var missed : int := 0;
+
+
+
 #include <externals.blk>
 #include "../const.blk"
 #include "../receiver/cca/cca_tufv.blk"
@@ -47,11 +58,9 @@ var byteCnt : int := 0;
       { 
          bits_to_int8(arrInt, x);
          pktNo := arrInt[0];
-         println arrInt[0];
       }
       if (byteCnt > 0 && byteCnt < 16) then {
          bits_to_int8(arrInt, x);
-         println arrInt[0];
          if (pktNo == -1 || pktNo != arrInt[0]) then {
            pktNo := -1;
          }
@@ -85,15 +94,16 @@ in
 
 
 let comp cntRxPkts() =
-var lastPkt : int8 := -1;
-var received : int := 0;
-var errors : int := 0;
-var missed : int := 0;
+-- TODO: See the top of the file for explanation
+-- var cnt : int := 0;
+-- var lastPkt : int8 := -1;
+-- var received : int := 0;
+-- var errors : int := 0;
+-- var missed : int := 0;
 
 repeat{
   x <- take;
   do{
-    println x;
     if (lastPkt == -1) then {
       -- Starting counting
       lastPkt := x;
@@ -106,29 +116,29 @@ repeat{
         -- Some packets missed in the counter
         if (x - lastPkt > 1) then {
           missed := missed + int(x - lastPkt - 1);
+        } else {
+          received := received + 1;
         }
         lastPkt := x;
       }
     }
-    println "Received: ", received, ", Errors: ", errors, ", Missed: ", missed;
+#ifndef FAST
+    print_time();
+    println " Received: ", received, " Errors: ", errors, " Missed: ", missed;
+#else
+    if (cnt == 100000) {
+      print_time();
+      println " Received: ", received, " Errors: ", errors, " Missed: ", missed;
+      cnt := 0;
+    }
+#endif
+    cnt := cnt + 1;
   }
 }
 in
 #endif
 
 
-
--- CCA requires an idle period before start
--- so this adds it in test cases
-let comp padding() = 
-  times 400 {
-    emit complex16{re=0; im=0}
-  }
-  repeat{
-    x<-take
-    emit x;
-  }
-in
 
 
 
@@ -145,7 +155,6 @@ read[complex16] >>>
 read >>> 
   downSample() >>> 
   repeat{
-    padding() >>>
     seq{ det<-detectPreamble()
 #ifndef FAST
        ; do{println "Detected at: ", det.noSamples}
@@ -165,3 +174,4 @@ read >>>
   >>> cntRxPkts()
 #endif
 >>> write[int]
+

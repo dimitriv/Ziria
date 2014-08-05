@@ -39,7 +39,9 @@ TGTS = $(patsubst %.blk, %.perf, $(wildcard *.blk))
 all: $(TGTS)
 
 %.out : %.blk
-	EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS)' $(PP) $< $@
+# DEBUG - TEMP
+#	EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS)' $(PP) $< $@
+	$(PP) $< $@
 
 %.perf: %.out 
 	./$< --input=dummy \
