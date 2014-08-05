@@ -1,0 +1,167 @@
+#define LTS_ACCURATE
+#define DO_DECODING
+
+
+#include <externals.blk>
+#include "../const.blk"
+#include "../receiver/cca/cca_tufv.blk"
+#include "../receiver/OFDM/LTS.blk"
+#include "../receiver/removeDC.blk"
+#include "../receiver/downSample.blk"
+#include "../receiver/OFDM/DataSymbol.blk"
+#include "../receiver/OFDM/FreqCompensation.blk"
+#include "../receiver/OFDM/FFT.blk"
+#include "../receiver/OFDM/ChannelEqualization.blk"
+#include "../receiver/OFDM/PilotTrack.blk"
+#include "../receiver/OFDM/GetData.blk"
+
+#ifdef DO_DECODING
+#include "../receiver/decoding/DecodePLCP.blk"
+#include "../receiver/decoding/Decode.blk"
+#include "../transmitter/crc.blk"
+#endif
+
+
+
+
+
+
+let comp detectPreamble() = 
+  (removeDC() >>> cca())
+in 
+
+
+
+#ifdef DO_DECODING
+-- Extract pktID from the payload and check CRC
+let comp [8, 1] getPktIdAndCheckCRC (len : int) =  
+var crc_state: arr[4] bit := {'0,'0,'0,'0};
+var arrInt : arr[1] int8; 
+var pktNo : int8 := 0;
+var byteCnt : int := 0;
+  times len seq {
+    (x:arr[8] bit) <- takes 8;
+    do {
+      -- Check the payload for pkt count
+      if (byteCnt == 0) then
+      { 
+         bits_to_int8(arrInt, x);
+         pktNo := arrInt[0];
+         println arrInt[0];
+      }
+      if (byteCnt > 0 && byteCnt < 16) then {
+         bits_to_int8(arrInt, x);
+         println arrInt[0];
+         if (pktNo == -1 || pktNo != arrInt[0]) then {
+           pktNo := -1;
+         }
+      }
+      byteCnt := byteCnt + 1;
+
+      -- Update CRC
+      for i in [0, 8] {
+        update_crc(x[i], crc_state)
+      }
+    }
+    -- emits x;
+  };
+
+  crcOK <- check_crc(crc_state);
+
+  do {
+    if (not crcOK) then pktNo := -1;
+  }
+
+  emit pktNo;
+in
+
+
+
+let comp receiveBits() = 
+  { hdata <- DecodePLCP()
+  ; Decode(hdata) >>> getPktIdAndCheckCRC(hdata.len)
+  }
+in
+
+
+let comp cntRxPkts() =
+var lastPkt : int8 := -1;
+var received : int := 0;
+var errors : int := 0;
+var missed : int := 0;
+
+repeat{
+  x <- take;
+  do{
+    println x;
+    if (lastPkt == -1) then {
+      -- Starting counting
+      lastPkt := x;
+    } else {
+      if (x == -1) then { 
+        -- Packet error detected
+        errors := errors + 1;
+        lastPkt := lastPkt + 1;
+      } else {
+        -- Some packets missed in the counter
+        if (x - lastPkt > 1) then {
+          missed := missed + int(x - lastPkt - 1);
+        }
+        lastPkt := x;
+      }
+    }
+    println "Received: ", received, ", Errors: ", errors, ", Missed: ", missed;
+  }
+}
+in
+#endif
+
+
+
+-- CCA requires an idle period before start
+-- so this adds it in test cases
+let comp padding() = 
+  times 400 {
+    emit complex16{re=0; im=0}
+  }
+  repeat{
+    x<-take
+    emit x;
+  }
+in
+
+
+
+{-
+read[complex16] >>> 
+  downSample() >>> 
+  padding() >>>
+  {det <- detectPreamble()}
+>>> write[int32]
+-}
+
+
+
+read >>> 
+  downSample() >>> 
+  repeat{
+    padding() >>>
+    seq{ det<-detectPreamble()
+#ifndef FAST
+       ; do{println "Detected at: ", det.noSamples}
+#endif
+       ; params <- (LTS(det.shift)); 
+         DataSymbol(det.shift) 
+         >>> FFT() 
+         >>> ChannelEqualization(params)
+         >>> PilotTrack() 
+         >>> GetData()
+#ifdef DO_DECODING
+         >>> receiveBits()
+#endif
+    }
+  }
+#ifdef DO_DECODING
+  >>> cntRxPkts()
+#endif
+>>> write[int]

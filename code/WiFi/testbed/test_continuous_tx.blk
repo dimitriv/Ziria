@@ -1,0 +1,71 @@
+-- Don't print any debug info
+#define FAST
+
+#include <externals.blk>
+#include "../transmitter/transmitter.blk"
+
+
+-- 5880 bits = 735B = 3B header + 732B payload
+let comp createPkt() = 
+  (x:arr[5880] bit) <- takes 5880;
+  return x;
+in
+
+
+-- Write pkt ID in the first 16 bytes of payload
+let comp modifyPkts(x:arr[5880] bit) = 
+var arr_cnt : arr[1] int8 := {0};
+var tmp : arr[8] bit;
+  do {
+    for i in [0,16]
+    {
+      -- Skip the first 24 header bits
+      -- TODO: BUG: current compiler has a bug and this won't work
+      --int8_to_bits(x[24+i*8,8], arr_cnt[0,1]);
+
+      tmp := x[24+i*8,8];
+      int8_to_bits(tmp, arr_cnt[0,1]);
+      x[24+i*8,8] := tmp;
+    }
+    arr_cnt[0] := arr_cnt[0] + 1;
+  }
+  emits x;
+in
+
+
+
+-- Here we need to modify transmitter a bit
+-- We construct packets with 5880 bits, exactly as many as transmitter() expects.
+-- But once they are supplied the transmitter is done and will be ticked again.
+-- At which point it will emit an empty header, which we don't want. 
+-- So we just make it a transformer by repeatedly sending idle output at the end
+let comp TX() = 
+  transmitter();
+  repeat{
+    x<-take;
+    emit complex16{re=0; im=0};
+  }
+in 
+
+
+-- Currently we need to buffer packets to a sufficiently large size 
+-- This should be done by Sora driver and will be fixed
+let comp Buf() = 
+  repeat {
+    (buf : arr[40640] complex16) <- takes 40640;
+    emit buf;
+  }
+in 
+
+
+
+read[bit] >>> 
+{
+  pkt <- createPkt(); 
+  times 10 {
+    modifyPkts(pkt) >>> TX() >>> Buf()
+  }
+}
+>>> write
+ 
+

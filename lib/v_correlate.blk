@@ -35,7 +35,7 @@ let v_correlate(a1 : arr complex16, a2 : arr complex16) =
   for i in [0, vlen] {
     v_conj_mul_complex16_int32(re,im,a1[4*i,4],a2[4*i,4]);
     v_add_int32(sum_re, sum_re, re);
-    v_add_int32(sum_im, sum_im, re)
+    v_add_int32(sum_im, sum_im, im)
   };
 
   sum_re[0] := v_sum_int32(sum_re);

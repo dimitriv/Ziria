@@ -25,44 +25,48 @@
 # NB: you can override this from the command line, e.g: 
 # prompt> COMPILER=gcc make
 #
-# COMPILER?=gcc
 # COMPILER?=winddk
+# COMPILER?=gcc
 #
 COMPILER?=winddk
 
-PP   = ../../../../scripts/preprocesscompile-$(COMPILER)-debug.sh
-DIFF = ../../../../tools/BlinkDiff
-
-# Do not delete outfiles to allow quick recheck of failed tests
-# use make clean to get rid of them
-.PRECIOUS: %.outfile %.out
-
+PP    = ../../../scripts/preprocesscompile-$(COMPILER)-inline.sh
+PPDEB = ../../../scripts/preprocesscompile-$(COMPILER)-debug.sh
+DIFF  = ../../../tools/BlinkDiff
 
 # Targets
-TGTS = $(patsubst %.blk, %.test, $(wildcard *.blk))
+TGTS = $(patsubst %.blk, %.run, $(wildcard *.blk))
 
 all: $(TGTS)
 
 %.out : %.blk
-	EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PP) $< $@
+	EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS)' $(PP) $< $@
 
-%.outfile: %.out %.infile
+%.deb : %.blk
+	EXTRAOPTS=' $(EXTRAOPTS)' $(PPDEB) $< $@
+
+%.outfile: %.deb %.infile
 	./$< --input=file \
              --input-file-name=$*.infile \
              --input-file-mode=dbg \
              --output-file-name=$@ \
              --output-file-mode=dbg
 
-%.test: %.outfile
-# -p prefix disabled
-	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
+test_continuous_tx.run: test_continuous_tx.out
+	./$< --input=file \
+             --input-file-name=$*.infile \
+             --input-file-mode=dbg \
+	     --output=sora \
+	     --sora-radio-id=1 \
+	     --sora-central-frequency=739
 
+test_continuous_rx.run: test_continuous_rx.out
+	./$< --input=sora \
+	     --output=dummy \
+	     --sora-radio-id=0 \
+	     --sora-central-frequency=739
 
-%.accept : %.outfile
-	cp $< $<.ground
-
-
-clean:
+clean:	
 	rm -f ./*expanded
 	rm -f ./*exe ./*exec ./*out
 	rm -f ./*.outfile
