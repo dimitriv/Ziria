@@ -1,6 +1,6 @@
 #define LTS_ACCURATE
 #define DO_DECODING
-
+#define FAST
 
 -- TODO: these should be declared in cntRxPkts but currently there is a bug
 -- that resets it in every round in cntRxPkts, even though it shouldn't
@@ -45,7 +45,9 @@ in
 
 #ifdef DO_DECODING
 -- Extract pktID from the payload and check CRC
-let comp [8, 1] getPktIdAndCheckCRC (len : int) =  
+-- TODO: There is a bug here! The following won't work:
+-- let comp [8, 1] getPktIdAndCheckCRC (len : int) =  
+let comp getPktIdAndCheckCRC (len : int) =  
 var crc_state: arr[4] bit := {'0,'0,'0,'0};
 var arrInt : arr[1] int8; 
 var pktNo : int8 := 0;
@@ -81,6 +83,8 @@ var byteCnt : int := 0;
     if (not crcOK) then pktNo := -1;
   }
 
+-- DEBUG
+--  do {println "Received ", pktNo};
   emit pktNo;
 in
 
@@ -101,12 +105,15 @@ let comp cntRxPkts() =
 -- var errors : int := 0;
 -- var missed : int := 0;
 
-repeat{
+repeat {
   x <- take;
   do{
     if (lastPkt == -1) then {
       -- Starting counting
       lastPkt := x;
+      if (x == -1) then {
+        errors := errors + 1;
+      }
     } else {
       if (x == -1) then { 
         -- Packet error detected
@@ -126,7 +133,7 @@ repeat{
     print_time();
     println " Received: ", received, " Errors: ", errors, " Missed: ", missed;
 #else
-    if (cnt == 100000) {
+    if (cnt == 100) then {
       print_time();
       println " Received: ", received, " Errors: ", errors, " Missed: ", missed;
       cnt := 0;
@@ -154,7 +161,7 @@ read[complex16] >>>
 
 read >>> 
   downSample() >>> 
-  repeat{
+  repeat {
     seq{ det<-detectPreamble()
 #ifndef FAST
        ; do{println "Detected at: ", det.noSamples}

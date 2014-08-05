@@ -174,7 +174,7 @@ let comp cca() =
        }
        if (idle_cnt >= 20) then { 
          initial_idle := true;
-         println "Energy iter: ", iterind, ", energy: ", iEnergy, ", idle_cnt: ", idle_cnt;
+         --println "Energy iter: ", iterind, ", energy: ", iEnergy, ", idle_cnt: ", idle_cnt;
          iterind := 0;
        }
        iterind := iterind + 1;

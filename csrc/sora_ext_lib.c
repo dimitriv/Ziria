@@ -1184,5 +1184,6 @@ extern TimeMeasurements measurementInfo;
 int __ext_print_time() {
 	ULONGLONG time = SoraGetCPUTimestamp(&measurementInfo.tsinfo);
 	printf("%ul", time);
+	fflush(stdout);
 	return 0;
 }
