@@ -57,7 +57,7 @@ let comp modifyPktAndTx(x:arr[5880] bit) =
 var arr_cnt : arr[1] int8 := {10};
 var tmp : arr[8] bit;
 
-times 10 {  
+repeat {
   do {
     for i in [0,16]
     {

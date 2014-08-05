@@ -54,10 +54,10 @@ all: $(TGTS)
 
 test_continuous_tx.run: test_continuous_tx.out
 	./$< --input=file \
-             --input-file-name=$*.infile \
+             --input-file-name=test_continuous_tx.infile \
              --input-file-mode=dbg \
 	     --output=sora \
-	     --sora-radio-id=1 \
+	     --sora-radio-id=0 \
 	     --sora-central-frequency=739
 
 test_continuous_rx.run: test_continuous_rx.out
