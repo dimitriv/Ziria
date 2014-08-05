@@ -30,7 +30,7 @@
 #
 COMPILER?=winddk
 
-PP   = ../../../scripts/preprocesscompile-$(COMPILER).sh
+PP   = ../../../scripts/preprocesscompile-$(COMPILER)-debug.sh
 DIFF = ../../../tools/BlinkDiff
 
 # Do not delete outfiles to allow quick recheck of failed tests
