@@ -170,3 +170,8 @@ let external dbgplot_complex_line(data:arr complex16, type:int16) : () in
 let external dbgplot_spectrum(item:arr complex16) : () in
 let external dbgplot_dots(data:arr complex16) : () in
 let external dbgplot_dot(data:complex16) : () in
+
+
+-- Time-related
+let external print_time() : () in 
+
