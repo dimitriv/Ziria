@@ -45,12 +45,14 @@ all: $(TGTS)
 %.deb : %.blk
 	EXTRAOPTS=' $(EXTRAOPTS)' $(PPDEB) $< $@
 
+
 %.outfile: %.deb %.infile
 	./$< --input=file \
              --input-file-name=$*.infile \
              --input-file-mode=dbg \
              --output-file-name=$@ \
              --output-file-mode=dbg
+
 
 test_continuous_tx.run: test_continuous_tx.out
 	./$< --input=file \

@@ -1,6 +1,6 @@
-%f = fopen('test_continuous_rx.infile', 'rb');
-%data = fread(f, inf, 'int16');
-data = load('test_continuous_rx.infile');
+f = fopen('test_continuous_rx.infile', 'rb');
+data = fread(f, inf, 'int16');
+%data = load('test_continuous_rx.infile');
 data=data(1:floor(end/2)*2);
 data=reshape(data, 2, length(data)/2);
 data=data(1,:) + i*data(2,:);
@@ -62,7 +62,7 @@ ind   = d(3:3:end);
 
 %XL = [0 10000];
 %XL = [8500 10000];
-XL = [1 400];
+%XL = [500 550];
 
 figure(1);
 clf(1);
@@ -73,8 +73,8 @@ subplot(4,1,1); plot(Xr, real(data/4)); title('Real(data)');
 %X = (0:length(corr)-1)*16 + 1;
 X = (0:length(corr)-1) + 1;
 subplot(4,1,2); plot(X, corr); title('Corr'); 
-xlim(XL);
+%xlim(XL);
 subplot(4,1,3); plot(X, corri); title('Number of consecutive increases'); 
-xlim(XL);
+%xlim(XL);
 subplot(4,1,4); plot(X, ind); title('Index'); 
-xlim(XL);
+%xlim(XL);

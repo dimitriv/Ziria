@@ -1,6 +1,8 @@
 #define LTS_ACCURATE
+#define RADIO
 #define DO_DECODING
-#define FAST
+-- #define FAST
+
 
 -- TODO: these should be declared in cntRxPkts but currently there is a bug
 -- that resets it in every round in cntRxPkts, even though it shouldn't
@@ -151,8 +153,9 @@ in
 
 {-
 read[complex16] >>> 
+#ifndef RADIO
   downSample() >>> 
-  padding() >>>
+#endif
   {det <- detectPreamble()}
 >>> write[int32]
 -}
@@ -160,7 +163,9 @@ read[complex16] >>>
 
 
 read >>> 
+#ifndef RADIO
   downSample() >>> 
+#endif
   repeat {
     seq{ det<-detectPreamble()
 #ifndef FAST
@@ -181,4 +186,3 @@ read >>>
   >>> cntRxPkts()
 #endif
 >>> write[int]
-

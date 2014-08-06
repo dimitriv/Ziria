@@ -29,7 +29,11 @@
 #define CORR_LEN        16
 
 
-let energy_threshold  = 20000 in 
+-- Use this define to debug CCA output after every input read
+-- #define CCA_TUFV_DEBUG_OUTPUT
+
+
+let energy_threshold  = 5000 in 
 let norm_shift = 7 in 
 
 
@@ -182,7 +186,7 @@ let comp cca() =
    }
 
 
-
+#ifndef CCA_TUFV_DEBUG_OUTPUT
    until detected == true {
      x <- takes CORR_LEN;
 
@@ -234,7 +238,7 @@ let comp cca() =
      }
 
 
-{-
+#else
    until detected == true {
      x <- takes CORR_LEN;
 
@@ -299,7 +303,7 @@ let comp cca() =
 
        iterind := iterind + 1;
     }
--}    
+#endif    
 
 
 
