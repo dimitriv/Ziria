@@ -165,7 +165,7 @@ GetStatus _buf_getint8(int8 *x)
 
 GetStatus buf_getint8(int8 *x)
 {
-#ifndef STAMP_AT_READ
+#ifdef STAMP_AT_READ
 	write_time_stamp();
 #endif
 	return _buf_getint8(x);
@@ -173,7 +173,7 @@ GetStatus buf_getint8(int8 *x)
 
 GetStatus _buf_getarrint8(int8 *x, unsigned int vlen)
 {
-#ifndef STAMP_AT_READ
+#ifdef STAMP_AT_READ
 	write_time_stamp();
 #endif
 
@@ -218,7 +218,7 @@ GetStatus _buf_getarrint8(int8 *x, unsigned int vlen)
 
 GetStatus buf_getarrint8(int8 *x, unsigned int vlen)
 {
-#ifndef STAMP_AT_READ
+#ifdef STAMP_AT_READ
 	write_time_stamp();
 #endif
 	return _buf_getarrint8(x, vlen);

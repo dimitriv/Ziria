@@ -163,7 +163,7 @@ GetStatus _buf_getint16(int16 *x)
 
 GetStatus buf_getint16(int16 *x)
 {
-#ifndef STAMP_AT_READ
+#ifdef STAMP_AT_READ
 	write_time_stamp();
 #endif
 	return _buf_getint16(x);
@@ -212,7 +212,7 @@ GetStatus _buf_getarrint16(int16 *x, unsigned int vlen)
 
 GetStatus buf_getarrint16(int16 *x, unsigned int vlen)
 {
-#ifndef STAMP_AT_READ
+#ifdef STAMP_AT_READ
 	write_time_stamp();
 #endif
 	return _buf_getarrint16(x, vlen);
@@ -226,7 +226,7 @@ void init_getcomplex16()
 
 GetStatus buf_getcomplex16(complex16 *x) 
 {
-#ifndef STAMP_AT_READ
+#ifdef STAMP_AT_READ
 	write_time_stamp();
 #endif
 	if (Globals.inType == TY_DUMMY || Globals.inType == TY_FILE)
@@ -255,7 +255,7 @@ GetStatus buf_getcomplex16(complex16 *x)
 
 GetStatus buf_getarrcomplex16(complex16 *x, unsigned int vlen)
 {
-#ifndef STAMP_AT_READ
+#ifdef STAMP_AT_READ
 	write_time_stamp();
 #endif
 	if (Globals.inType == TY_DUMMY || Globals.inType == TY_FILE)
