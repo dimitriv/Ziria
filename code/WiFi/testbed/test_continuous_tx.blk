@@ -9,8 +9,19 @@
 
 
 -- 5880 bits = 735B = 3B header + 732B payload
+--#define PKT_SIZE_BITS   5880 
+--#define PKT_SIZE_SAMPLES   40640
+
+-- 280 bits = 35B = 3B header + 32B payload
+#define PKT_SIZE_BITS   280
+-- 32B -> 256 bits -> 512 samples -> 11 OFMD symbols
+-- 11 OFDM data symbols + 1 header OFDM symbol + 2 STS + 2 LTS = 16 OFDM symbols
+-- 16 OFDM symbols * 160 samples / symbol (@ 40 MHz) = 2560
+#define PKT_SIZE_SAMPLES   2560
+
+
 let comp createPkt() = 
-  (x:arr[5880] bit) <- takes 5880;
+  (x:arr[PKT_SIZE_BITS] bit) <- takes PKT_SIZE_BITS;
   return x;
 in
 
@@ -35,17 +46,17 @@ in
 #ifdef RADIO
 let comp Buf() = 
   repeat {
-    (buf : arr[40640] complex16) <- takes 40640;
+    (buf : arr[PKT_SIZE_SAMPLES] complex16) <- takes PKT_SIZE_SAMPLES;
     emit buf;
   }
 in 
 #else
 let comp Buf() = 
-var b : arr[50000] complex16;
+var b : arr[PKT_SIZE_SAMPLES + 5000] complex16;
   do {zero_complex16(b)};
   repeat {
-    (buf : arr[40640] complex16) <- takes 40640;
-    do {b[5000, 40640] := buf};
+    (buf : arr[PKT_SIZE_SAMPLES] complex16) <- takes PKT_SIZE_SAMPLES;
+    do {b[5000, PKT_SIZE_SAMPLES] := buf};
     emit b;
   }
 in 
@@ -55,7 +66,7 @@ in
 
 
 -- Write pkt ID in the first 16 bytes of payload
-let comp modifyPktAndTx(x:arr[5880] bit) = 
+let comp modifyPktAndTx(x:arr[PKT_SIZE_BITS] bit) = 
 var arr_cnt : arr[1] int8 := {10};
 var tmp : arr[8] bit;
 
