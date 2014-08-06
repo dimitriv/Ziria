@@ -182,6 +182,10 @@ void init_getbit()
 
 GetStatus buf_getbit(Bit *x)
 {
+#ifdef STAMP_AT_READ
+	write_time_stamp();
+#endif
+
 	if (Globals.inType == TY_IP)
 	{
 		fprintf(stderr, "Error: IP does not support single bit receive\n");
@@ -214,8 +218,14 @@ GetStatus buf_getbit(Bit *x)
 
 	return GS_SUCCESS;
 }
+
+
 GetStatus buf_getarrbit(BitArrPtr x, unsigned int vlen)
 {
+#ifdef STAMP_AT_READ
+	write_time_stamp();
+#endif
+
 	if (Globals.inType == TY_IP)
 	{
 #ifdef SORA_PLATFORM
@@ -285,7 +295,9 @@ void init_putbit()
 }
 void buf_putbit(Bit x)
 {
+#ifndef STAMP_AT_READ
 	write_time_stamp();
+#endif
 
 	if (Globals.outType == TY_IP)
 	{
@@ -314,7 +326,9 @@ void buf_putbit(Bit x)
 }
 void buf_putarrbit(BitArrPtr x, unsigned int vlen)
 {
+#ifndef STAMP_AT_READ
 	write_time_stamp();
+#endif
 
 	if (Globals.outType == TY_IP)
 	{

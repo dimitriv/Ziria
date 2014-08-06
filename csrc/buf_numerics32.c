@@ -110,9 +110,9 @@ void init_getint32()
 		exit(1);
 	}
 }
-GetStatus buf_getint32(int32 *x)
-{
 
+GetStatus _buf_getint32(int32 *x)
+{
 	if (Globals.inType == TY_DUMMY)
 	{
 		if (num_input_dummy_samples >= num_max_dummy_samples && Globals.dummySamples != INF_REPEAT) return GS_EOF;
@@ -139,9 +139,18 @@ GetStatus buf_getint32(int32 *x)
 
 	return GS_SUCCESS;
 }
-GetStatus buf_getarrint32(int32 *x, unsigned int vlen)
-{
 
+GetStatus buf_getint32(int32 *x)
+{
+#ifdef STAMP_AT_READ
+	write_time_stamp();
+#endif
+	return _buf_getint32(x);
+}
+
+
+GetStatus _buf_getarrint32(int32 *x, unsigned int vlen)
+{
 	if (Globals.inType == TY_DUMMY)
 	{
 		if (num_input_dummy_samples >= num_max_dummy_samples && Globals.dummySamples != INF_REPEAT) return GS_EOF;
@@ -169,6 +178,14 @@ GetStatus buf_getarrint32(int32 *x, unsigned int vlen)
 
 }
 
+GetStatus buf_getarrint32(int32 *x, unsigned int vlen)
+{
+#ifdef STAMP_AT_READ
+	write_time_stamp();
+#endif
+	return _buf_getarrint32(x, vlen);
+}
+
 void init_getcomplex32()
 {
 	if (Globals.inType == TY_DUMMY || Globals.inType == TY_FILE)
@@ -185,19 +202,25 @@ void init_getcomplex32()
 }
 GetStatus buf_getcomplex32(complex32 *x) 
 {
-	GetStatus gs1 = buf_getint32(& (x->re));
+#ifdef STAMP_AT_READ
+	write_time_stamp();
+#endif
+	GetStatus gs1 = _buf_getint32(&(x->re));
 	if (gs1 == GS_EOF) 
 	{ 
 		return GS_EOF;
 	}
 	else
 	{
-		return (buf_getint32(& (x->im)));
+		return (_buf_getint32(& (x->im)));
 	}
 }
 GetStatus buf_getarrcomplex32(complex32 *x, unsigned int vlen)
 {
-	return (buf_getarrint32((int32*) x,vlen*2));
+#ifdef STAMP_AT_READ
+	write_time_stamp();
+#endif
+	return (_buf_getarrint32((int32*)x, vlen * 2));
 }
 
 void fprint_int32(FILE *f, int32 val)
@@ -267,7 +290,9 @@ void _buf_putint32(int32 x)
 
 void buf_putint32(int32 x)
 {
+#ifndef STAMP_AT_READ
 	write_time_stamp();
+#endif
 	_buf_putint32(x);
 }
 
@@ -305,7 +330,9 @@ void _buf_putarrint32(int32 *x, unsigned int vlen)
 
 void buf_putarrint32(int32 *x, unsigned int vlen)
 {
+#ifndef STAMP_AT_READ
 	write_time_stamp();
+#endif
 	_buf_putarrint32(x, vlen);
 }
 
@@ -341,13 +368,17 @@ void init_putcomplex32()
 }
 void buf_putcomplex32(struct complex32 x)
 {
+#ifndef STAMP_AT_READ
 	write_time_stamp();
+#endif
 	_buf_putint32(x.re);
 	_buf_putint32(x.im);
 }
 void buf_putarrcomplex32(struct complex32 *x, unsigned int vlen)
 {
+#ifndef STAMP_AT_READ
 	write_time_stamp();
+#endif
 	_buf_putarrint32((int32 *)x, vlen * 2);
 }
 void flush_putcomplex32()

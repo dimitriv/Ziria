@@ -120,9 +120,8 @@ void init_getint16()
 #endif
 	}
 }
-GetStatus buf_getint16(int16 *x)
+GetStatus _buf_getint16(int16 *x)
 {
-
 	if (Globals.inType == TY_DUMMY)
 	{
 		if (num16_input_dummy_samples >= num16_max_dummy_samples && Globals.dummySamples != INF_REPEAT) return GS_EOF;
@@ -161,9 +160,17 @@ GetStatus buf_getint16(int16 *x)
 
 	return GS_EOF;
 }
-GetStatus buf_getarrint16(int16 *x, unsigned int vlen)
-{
 
+GetStatus buf_getint16(int16 *x)
+{
+#ifndef STAMP_AT_READ
+	write_time_stamp();
+#endif
+	return _buf_getint16(x);
+}
+
+GetStatus _buf_getarrint16(int16 *x, unsigned int vlen)
+{
 	if (Globals.inType == TY_DUMMY)
 	{
 		if (num16_input_dummy_samples >= num16_max_dummy_samples && Globals.dummySamples != INF_REPEAT) return GS_EOF;
@@ -203,6 +210,14 @@ GetStatus buf_getarrint16(int16 *x, unsigned int vlen)
 	return GS_EOF;
 }
 
+GetStatus buf_getarrint16(int16 *x, unsigned int vlen)
+{
+#ifndef STAMP_AT_READ
+	write_time_stamp();
+#endif
+	return _buf_getarrint16(x, vlen);
+}
+
 void init_getcomplex16()
 {
 	init_getint16();                              // we just need to initialize the input buffer in the same way
@@ -211,16 +226,19 @@ void init_getcomplex16()
 
 GetStatus buf_getcomplex16(complex16 *x) 
 {
+#ifndef STAMP_AT_READ
+	write_time_stamp();
+#endif
 	if (Globals.inType == TY_DUMMY || Globals.inType == TY_FILE)
 	{
-		GetStatus gs1 = buf_getint16(& (x->re));
+		GetStatus gs1 = _buf_getint16(& (x->re));
 		if (gs1 == GS_EOF) 
 		{ 
 			return GS_EOF;
 		}
 		else
 		{
-			return (buf_getint16(& (x->im)));
+			return (_buf_getint16(& (x->im)));
 		}
 	}
 
@@ -237,9 +255,12 @@ GetStatus buf_getcomplex16(complex16 *x)
 
 GetStatus buf_getarrcomplex16(complex16 *x, unsigned int vlen)
 {
+#ifndef STAMP_AT_READ
+	write_time_stamp();
+#endif
 	if (Globals.inType == TY_DUMMY || Globals.inType == TY_FILE)
 	{
-		return (buf_getarrint16((int16*) x,vlen*2));
+		return (_buf_getarrint16((int16*) x,vlen*2));
 	}
 
 	if (Globals.inType == TY_SORA)
@@ -339,7 +360,9 @@ void _buf_putint16(int16 x)
 
 void buf_putint16(int16 x)
 {
+#ifndef STAMP_AT_READ
 	write_time_stamp();
+#endif
 	_buf_putint16(x);
 }
 
@@ -391,7 +414,9 @@ void _buf_putarrint16(int16 *x, unsigned int vlen)
 
 void buf_putarrint16(int16 *x, unsigned int vlen)
 {
+#ifndef STAMP_AT_READ
 	write_time_stamp();
+#endif
 	_buf_putarrint16(x, vlen);
 }
 
@@ -411,7 +436,9 @@ void flush_putint16()
 
 void init_putcomplex16() 
 {
+#ifndef STAMP_AT_READ
 	write_time_stamp();
+#endif
 
 	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
 	{
@@ -434,7 +461,9 @@ void init_putcomplex16()
 
 void buf_putcomplex16(struct complex16 x)
 {
+#ifndef STAMP_AT_READ
 	write_time_stamp();
+#endif
 
 	if (Globals.outType == TY_DUMMY) return;
 
@@ -457,7 +486,9 @@ void buf_putcomplex16(struct complex16 x)
 }
 void buf_putarrcomplex16(struct complex16 *x, unsigned int vlen)
 {
+#ifndef STAMP_AT_READ
 	write_time_stamp();
+#endif
 
 	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
 	{

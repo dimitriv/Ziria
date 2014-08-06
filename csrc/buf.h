@@ -93,6 +93,9 @@ void flush_putcomplex8();
 
 
 #ifdef SORA_PLATFORM
+
+#define STAMP_AT_READ
+
 FINL
 void write_time_stamp() {
 	if (Globals.latencySampling > 0)
