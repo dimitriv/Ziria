@@ -21,7 +21,9 @@
 
 -- Taken from preamble11a.hpp
 
-let sts_mod = int16(double(bpsk_mod_11a) * 1.472) in
+-- We need a stronger preamble for better detection
+--let sts_mod = int16(double(bpsk_mod_11a) * 1.472) in
+let sts_mod = int16(double(bpsk_mod_11a) * 1.472 * 2.0) in
 let lts_mod = bpsk_mod_11a in
 
 
