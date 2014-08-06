@@ -115,6 +115,8 @@ repeat {
       lastPkt := x;
       if (x == -1) then {
         errors := errors + 1;
+      } else {
+        received := received + 1;
       }
     } else {
       if (x == -1) then { 
