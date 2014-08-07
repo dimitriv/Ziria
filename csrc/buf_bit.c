@@ -235,7 +235,7 @@ void init_getbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 GetStatus buf_getbit(BlinkParams *params, BufContextBlock* blk, Bit *x)
 {
 #ifdef STAMP_AT_READ
-	write_time_stamp();
+	write_time_stamp(params);
 #endif
 	blk->total_in++;
 
@@ -279,7 +279,7 @@ GetStatus buf_getbit(BlinkParams *params, BufContextBlock* blk, Bit *x)
 GetStatus buf_getarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
 {
 #ifdef STAMP_AT_READ
-	write_time_stamp();
+	write_time_stamp(params);
 #endif
 	blk->total_in += vlen;
 
