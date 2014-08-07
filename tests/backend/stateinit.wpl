@@ -1,0 +1,24 @@
+let comp cntRxPkts() =
+var lastNo : int := -1;
+
+repeat{
+  x <- take;
+  emit lastNo;
+  do{
+    lastNo := x;
+  }
+}
+in
+
+
+read[int] >>> 
+-- BUG: remove comments to uncover bug!
+{-
+  repeat{
+    x<-take;
+    emit x;
+  }
+  >>> 
+-}
+  cntRxPkts()
+>>> write[int]

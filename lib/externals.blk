@@ -139,7 +139,9 @@ let external copy_int32(dst : arr int32, src : arr int32, len : int) : int in
 let external copy_complex16(dst : arr complex16, src : arr complex16, len : int) : int in
 let external copy_complex32(dst : arr complex32, src : arr complex32, len : int) : int in
 
-let external int_to_bit(input:int32, output:arr bit, outlen:int) : () in
+-- Conversions
+let external bits_to_int8(dst: arr int8, src:arr bit) : () in 
+let external int8_to_bits(dst: arr bit, src:arr int8) : () in 
 
 
 
@@ -199,3 +201,8 @@ let external dbgplot_complex_line(data:arr complex16, type:int16) : () in
 let external dbgplot_spectrum(item:arr complex16) : () in
 let external dbgplot_dots(data:arr complex16) : () in
 let external dbgplot_dot(data:complex16) : () in
+
+
+-- Time-related
+let external print_time() : () in 
+

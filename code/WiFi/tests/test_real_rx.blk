@@ -25,8 +25,7 @@
 
 
 let comp dummy() = 
-  times 4 {        -- OK
---  times 100000 {   -- Fails (18000)
+  times 1 {        -- OK
 --  times 110000 {   -- OK (4234)
 --  times 200000 { -- OK (6424)
 --  times 300000 { -- OK (3392)
@@ -50,15 +49,6 @@ in
 
 let comp detectPreamble() = 
   (removeDC() >>> cca())
-in 
-
-let comp agc() = 
-  var output : arr[4] complex16;
-  repeat{
-    (x : arr[4] complex16) <- takes 4;
-    do{v_shift_left_complex16(output, x, 2)};
-    emits output;
-  }
 in 
 
 
@@ -92,8 +82,8 @@ repeat{
      ; do{println "Detected at: ", det.noSamples}
 #endif
      ; params <- (LTS(det.shift)); 
-       agc() >>> 
-       DataSymbol(det.shift) >>> FFT() 
+       DataSymbol(det.shift) 
+       >>> FFT() 
        >>> ChannelEqualization(params)
        >>> PilotTrack() 
        >>> GetData()
@@ -103,4 +93,3 @@ repeat{
   }
 }
 >>> write
-

@@ -6,4 +6,23 @@ List of features that we hope to add to Ziria at some point:
 - Support constant expressions wherever a literal is expected (e.g. var x:arr[const] int 
   and a[0,const] := b[0,const] and x<-takes const).
 
+- Correct file and line number reporting on errors consistently through Ziria. 
+  For example, bounds checking only reports line number from the expanged file.
+  Type checking seems to also report a line number from the expanded file. 
+
+- Array sizes are dynamically bound in function input but not in function output. 
+  It seems that we cannot declare a function that return an array of unspecified size. 
+
+- Implement static initialization of a complex array with a constant array.
+
+- This is actually a bug. The following: 
+      int8_to_bits(x[24+i*8,8], arr_cnt[0,1]);
+  will create a subarray bitarrresXX using bitArrRead, call the external function on it
+  but never really write it back to x!
+
+- Fix the bug in typeinfer.wpl test in backend
+
+- Fix the bug in stateinit.wpl test in backend
+
+- Fix the heap bug in struct3.wpl test in backend
 

@@ -234,6 +234,9 @@ void init_getbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 
 GetStatus buf_getbit(BlinkParams *params, BufContextBlock* blk, Bit *x)
 {
+#ifdef STAMP_AT_READ
+	write_time_stamp();
+#endif
 	blk->total_in++;
 
 	if (params->inType == TY_IP)
@@ -275,6 +278,9 @@ GetStatus buf_getbit(BlinkParams *params, BufContextBlock* blk, Bit *x)
 
 GetStatus buf_getarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
 {
+#ifdef STAMP_AT_READ
+	write_time_stamp();
+#endif
 	blk->total_in += vlen;
 
 	if (params->inType == TY_IP)
@@ -361,6 +367,9 @@ void init_putbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 }
 void buf_putbit(BlinkParams *params, BufContextBlock* blk, Bit x)
 {
+#ifndef STAMP_AT_READ
+	write_time_stamp();
+#endif
 	blk->total_out++;
 	write_time_stamp(params);
 
@@ -400,7 +409,9 @@ void buf_putbit(BlinkParams *params, BufContextBlock* blk, Bit x)
 void buf_putarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
 {
 	blk->total_out+= vlen;
+#ifndef STAMP_AT_READ
 	write_time_stamp(params);
+#endif
 
 	if (params->outType == TY_IP)
 	{

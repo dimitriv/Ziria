@@ -26,19 +26,18 @@ export TOP=$(cd $(dirname $0)/.. && pwd -P)
 source $TOP/scripts/common.sh
 
 echo $1
-echo "Preprocessing..."
-echo $TOP/lib
+#echo "Preprocessing..."
 #gcc -x c -P -E $1 >$1.expanded
 gcc -I $TOP/lib -w -x c -E $1 >$1.expanded
 
 
-echo "Running WPL compiler..."
+#echo "Running WPL compiler..."
 $WPLC $WPLCFLAGS $EXTRAOPTS -i $1.expanded -o $1.c
 cp $1.c $TOP/csrc/test.c
 
 
 #echo "Compiling C code (WinDDK) ..."
-pushd . && cd $TOP/csrc/CompilerDDK && ./bczcompile-inline.bat && popd
+pushd . && cd $TOP/csrc/CompilerDDK && ./bczcompile-debug.bat && popd
 
 
 if [[ $# -ge 2 ]]

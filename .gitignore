@@ -284,3 +284,9 @@ tests/mac/*.out
 tests/parser/*.exe
 tests/parser/*.dump
 tests/vectorizer/*.expanded
+
+code/WiFi/tests/*.bin
+code/WiFi/testbed/*.bin
+code/WiFi/perf/perf_*.txt
+code/WiFi/perf_*.txt
+

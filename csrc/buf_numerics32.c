@@ -164,6 +164,9 @@ GetStatus _buf_getint32(BlinkParams *params, BufContextBlock *blk, int32 *x)
 
 GetStatus buf_getint32(BlinkParams *params, BufContextBlock *blk, int32 *x)
 {
+#ifdef STAMP_AT_READ
+	write_time_stamp();
+#endif
 	blk->total_in++;
 	return _buf_getint32(params, blk, x);
 }
@@ -209,12 +212,15 @@ GetStatus _buf_getarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, 
 	return GS_EOF;
 }
 
+
 GetStatus buf_getarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsigned int vlen)
 {
+#ifdef STAMP_AT_READ
+	write_time_stamp();
+#endif
 	blk->total_in += vlen;
 	return _buf_getarrint32(params, blk, x, vlen);
 }
-
 
 void init_getcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
 {
@@ -236,8 +242,13 @@ void init_getcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlo
 		exit(1);
 	}
 }
+
+
 GetStatus buf_getcomplex32(BlinkParams *params, BufContextBlock *blk, complex32 *x)
 {
+#ifdef STAMP_AT_READ
+	write_time_stamp();
+#endif
 	blk->total_in++;
 	GetStatus gs1 = _buf_getint32(params, blk, &(x->re));
 	if (gs1 == GS_EOF) 
@@ -251,6 +262,9 @@ GetStatus buf_getcomplex32(BlinkParams *params, BufContextBlock *blk, complex32 
 }
 GetStatus buf_getarrcomplex32(BlinkParams *params, BufContextBlock *blk, complex32 *x, unsigned int vlen)
 {
+#ifdef STAMP_AT_READ
+	write_time_stamp();
+#endif
 	blk->total_in += vlen;
 	return (_buf_getarrint32(params, blk, (int32*)x, vlen * 2));
 }
@@ -352,7 +366,9 @@ void _buf_putint32(BlinkParams *params, BufContextBlock *blk, int32 x)
 void buf_putint32(BlinkParams *params, BufContextBlock *blk, int32 x)
 {
 	blk->total_out++;
+#ifndef STAMP_AT_READ
 	write_time_stamp(params);
+#endif
 	_buf_putint32(params, blk, x);
 }
 
@@ -413,7 +429,9 @@ void _buf_putarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsig
 void buf_putarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsigned int vlen)
 {
 	blk->total_out += vlen;
+#ifndef STAMP_AT_READ
 	write_time_stamp(params);
+#endif
 	_buf_putarrint32(params, blk, x, vlen);
 }
 
@@ -469,7 +487,9 @@ void init_putcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlo
 void buf_putcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex32 x)
 {
 	blk->total_out++;
+#ifndef STAMP_AT_READ
 	write_time_stamp(params);
+#endif
 
 	if (params->outType == TY_DUMMY) return;
 
@@ -488,7 +508,9 @@ void buf_putcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex3
 void buf_putarrcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex32 *x, unsigned int vlen)
 {
 	blk->total_out += vlen;
+#ifndef STAMP_AT_READ
 	write_time_stamp(params);
+#endif
 
 	if (params->outType == TY_DUMMY || params->outType == TY_FILE || params->outType == TY_MEM)
 	{

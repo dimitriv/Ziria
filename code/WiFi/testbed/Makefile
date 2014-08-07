@@ -30,8 +30,9 @@
 #
 COMPILER?=winddk
 
-PP   = ../../../scripts/preprocesscompile-$(COMPILER)-inline.sh
-DIFF = ../../../tools/BlinkDiff
+PP    = ../../../scripts/preprocesscompile-$(COMPILER)-inline.sh
+PPDEB = ../../../scripts/preprocesscompile-$(COMPILER)-debug.sh
+DIFF  = ../../../tools/BlinkDiff
 
 # Targets
 TGTS = $(patsubst %.blk, %.run, $(wildcard *.blk))
@@ -40,14 +41,31 @@ all: $(TGTS)
 
 %.out : %.blk
 	EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS)' $(PP) $< $@
-	EXTRAOPTS=' $(EXTRAOPTS)' $(PP) $< $@
 
-test_continuous_tx.run: test_continuous_tx.out
+%.deb : %.blk
+	EXTRAOPTS=' $(EXTRAOPTS)' $(PPDEB) $< $@
+
+
+%.outfile: %.deb %.infile
 	./$< --input=file \
              --input-file-name=$*.infile \
              --input-file-mode=dbg \
+             --output-file-name=$@ \
+             --output-file-mode=dbg
+
+
+test_continuous_tx.run: test_continuous_tx.out
+	./$< --input=file \
+             --input-file-name=test_continuous_tx.infile \
+             --input-file-mode=dbg \
 	     --output=sora \
-	     --sora-radio-id=1 \
+	     --sora-radio-id=0 \
+	     --sora-central-frequency=739
+
+test_continuous_rx.run: test_continuous_rx.out
+	./$< --input=sora \
+	     --output=dummy \
+	     --sora-radio-id=0 \
 	     --sora-central-frequency=739
 
 clean:	

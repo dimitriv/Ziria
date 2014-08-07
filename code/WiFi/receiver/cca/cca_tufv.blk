@@ -29,7 +29,11 @@
 #define CORR_LEN        16
 
 
-let energy_threshold  = 20000 in 
+-- Use this define to debug CCA output after every input read
+-- #define CCA_TUFV_DEBUG_OUTPUT
+
+
+let energy_threshold  = 5000 in 
 let norm_shift = 7 in 
 
 
@@ -173,7 +177,7 @@ let comp cca() =
        }
        if (idle_cnt >= 20) then { 
          initial_idle := true;
-         println "Energy iter: ", iterind, ", energy: ", iEnergy, ", idle_cnt: ", idle_cnt;
+         --println "Energy iter: ", iterind, ", energy: ", iEnergy, ", idle_cnt: ", idle_cnt;
          iterind := 0;
        }
        iterind := iterind + 1;
@@ -181,7 +185,7 @@ let comp cca() =
    }
 
 
-
+#ifndef CCA_TUFV_DEBUG_OUTPUT
    until detected == true {
      x <- takes CORR_LEN;
 
@@ -195,11 +199,10 @@ let comp cca() =
           let corrc = v_correlate(pattern[i*CORR_LEN,CORR_LEN], input) in
           let corrmul = corrc * conj_complex32(mul_hist[i]) in 
           let corri = (abs_int32(corrmul.re) + abs_int32(corrmul.im)) in 
-
           mul_hist[i] := corrc;
 
-          corr_hist[i*NO_REP+1,NO_REP_M_1] := corr_hist[i*NO_REP,NO_REP_M_1];
-          corr_hist[i*NO_REP] := corri;
+          corr_hist[i*NO_REP,NO_REP_M_1] := corr_hist[i*NO_REP+1,NO_REP_M_1];
+          corr_hist[i*NO_REP+NO_REP-1] := corri;
 
           corr :=0;
           for j in [0,NO_REP] {
@@ -234,7 +237,7 @@ let comp cca() =
      }
 
 
-{-
+#else
    until detected == true {
      x <- takes CORR_LEN;
 
@@ -248,11 +251,12 @@ let comp cca() =
         do{
           let corrc = v_correlate(pattern[i*CORR_LEN,CORR_LEN], input) in
           let corrmul = corrc * conj_complex32(mul_hist[i]) in 
+          -- let corrmul = corrc in
           let corri = (abs_int32(corrmul.re) + abs_int32(corrmul.im)) in 
           mul_hist[i] := corrc;
 
-          corr_hist[i*NO_REP+1,NO_REP_M_1] := corr_hist[i*NO_REP,NO_REP_M_1];
-          corr_hist[i*NO_REP] := corri;
+          corr_hist[i*NO_REP,NO_REP_M_1] := corr_hist[i*NO_REP+1,NO_REP_M_1];
+          corr_hist[i*NO_REP+NO_REP-1] := corri;
 
           corr :=0;
           for j in [0,NO_REP] {
@@ -296,7 +300,7 @@ let comp cca() =
 
        iterind := iterind + 1;
     }
--}    
+#endif    
 
 
 

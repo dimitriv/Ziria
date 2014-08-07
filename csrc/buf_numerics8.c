@@ -120,7 +120,7 @@ void init_getint8()
 #endif
 	}
 }
-GetStatus buf_getint8(int8 *x)
+GetStatus _buf_getint8(int8 *x)
 {
 
 	if (Globals.inType == TY_DUMMY)
@@ -161,8 +161,21 @@ GetStatus buf_getint8(int8 *x)
 
 	return GS_EOF;
 }
-GetStatus buf_getarrint8(int8 *x, unsigned int vlen)
+
+
+GetStatus buf_getint8(int8 *x)
 {
+#ifdef STAMP_AT_READ
+	write_time_stamp();
+#endif
+	return _buf_getint8(x);
+}
+
+GetStatus _buf_getarrint8(int8 *x, unsigned int vlen)
+{
+#ifdef STAMP_AT_READ
+	write_time_stamp();
+#endif
 
 	if (Globals.inType == TY_DUMMY)
 	{
@@ -203,24 +216,32 @@ GetStatus buf_getarrint8(int8 *x, unsigned int vlen)
 	return GS_EOF;
 }
 
+GetStatus buf_getarrint8(int8 *x, unsigned int vlen)
+{
+#ifdef STAMP_AT_READ
+	write_time_stamp();
+#endif
+	return _buf_getarrint8(x, vlen);
+}
+
 void init_getcomplex8()
 {
 	init_getint8();                              // we just need to initialize the input buffer in the same way
 	num8_max_dummy_samples = Globals.dummySamples * 2; // since we will be doing this in integer granularity
 }
 
-GetStatus buf_getcomplex8(complex8 *x)
+GetStatus _buf_getcomplex8(complex8 *x)
 {
 	if (Globals.inType == TY_DUMMY || Globals.inType == TY_FILE)
 	{
-		GetStatus gs1 = buf_getint8(&(x->re));
+		GetStatus gs1 = _buf_getint8(&(x->re));
 		if (gs1 == GS_EOF)
 		{
 			return GS_EOF;
 		}
 		else
 		{
-			return (buf_getint8(&(x->im)));
+			return (_buf_getint8(&(x->im)));
 		}
 	}
 
@@ -233,11 +254,23 @@ GetStatus buf_getcomplex8(complex8 *x)
 	return GS_EOF;
 }
 
+GetStatus buf_getcomplex8(complex8 *x)
+{
+#ifdef STAMP_AT_READ
+	write_time_stamp();
+#endif
+	return _buf_getcomplex8(x);
+}
+
+
 GetStatus buf_getarrcomplex8(complex8 *x, unsigned int vlen)
 {
+#ifdef STAMP_AT_READ
+	write_time_stamp();
+#endif
 	if (Globals.inType == TY_DUMMY || Globals.inType == TY_FILE)
 	{
-		return (buf_getarrint8((int8*)x, vlen * 2));
+		return (_buf_getarrint8((int8*)x, vlen * 2));
 	}
 
 	if (Globals.inType == TY_SORA)
@@ -335,7 +368,9 @@ void _buf_putint8(int8 x)
 
 void buf_putint8(int8 x)
 {
+#ifndef STAMP_AT_READ
 	write_time_stamp();
+#endif
 	_buf_putint8(x);
 }
 
@@ -387,7 +422,9 @@ void _buf_putarrint8(int8 *x, unsigned int vlen)
 
 void buf_putarrint8(int8 *x, unsigned int vlen)
 {
+#ifndef STAMP_AT_READ
 	write_time_stamp();
+#endif
 	_buf_putarrint8(x, vlen);
 }
 
@@ -407,7 +444,9 @@ void flush_putint8()
 
 void init_putcomplex8()
 {
+#ifndef STAMP_AT_READ
 	write_time_stamp();
+#endif
 
 	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
 	{
@@ -430,7 +469,9 @@ void init_putcomplex8()
 
 void buf_putcomplex8(struct complex8 x)
 {
+#ifndef STAMP_AT_READ
 	write_time_stamp();
+#endif
 
 	if (Globals.outType == TY_DUMMY) return;
 
@@ -450,7 +491,9 @@ void buf_putcomplex8(struct complex8 x)
 }
 void buf_putarrcomplex8(struct complex8 *x, unsigned int vlen)
 {
+#ifndef STAMP_AT_READ
 	write_time_stamp();
+#endif
 
 	if (Globals.outType == TY_DUMMY || Globals.outType == TY_FILE)
 	{

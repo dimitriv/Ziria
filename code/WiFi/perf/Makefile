@@ -44,7 +44,7 @@ all: $(TGTS)
 %.perf: %.out 
 	./$< --input=dummy \
 	     --dummy-samples=100000000 \
-             --output=dummy
+             --output=dummy $(EXTRARUNOPTS)
 
 clean:	
 	rm -f ./*expanded

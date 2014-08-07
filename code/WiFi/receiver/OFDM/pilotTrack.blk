@@ -23,6 +23,13 @@
 #include <v_mul.blk>
 
 
+#define PILOT_AVG       8
+-- LOG_PILOT_AVG = log2(PILOT_AVG)
+#define LOG_PILOT_AVG   3           
+-- PILOT_WINDOW_LENGTH = 4 * PILOT_AVG - 1
+#define PILOT_WINDOW_LENGTH  31
+
+
 
 let build_coeff(pcoeffs:arr[64] complex16, ave:int16, delta:int16) = 
   var th:int16;
@@ -51,8 +58,6 @@ let comp PilotTrack() =
 
   var th:arr[4] int32;
   var symbol_count:int := 127;
---  var avgTheta:int16;
---  var delTheta:int16;
   var symbol:arr[64] complex16;
   var re32:arr[64] int;
   var im32:arr[64] int;
@@ -77,7 +82,7 @@ let comp PilotTrack() =
 
 
   -- We average over 4 last pilots to compensate for deep fades
-  var pilot_hist:arr[16] complex16;
+  var pilot_hist:arr[4*PILOT_AVG] complex16;
   var cnt : int;
 
 
@@ -91,6 +96,7 @@ let comp PilotTrack() =
   };
 
 
+  -- NOTE: This is currently only doing phase correction from pilots
 
   repeat seq{
 
@@ -108,7 +114,6 @@ let comp PilotTrack() =
 
      -- Calculate the subsequent phase shift
      do {
-       cnt := cnt + 1;
 
        -- Calculate pilots
        let p1 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[64-21].re; im=-symbol[64-21].im}
@@ -121,17 +126,19 @@ let comp PilotTrack() =
                 else complex16{re=symbol[21].re;  im=symbol[21].im};
 
        -- Store last 4 values of each pilot
-       pilot_hist[0,15] := pilot_hist[1,15];
-       pilot_hist[3]  := complex16{re=p1.re >> 2; im=p1.im >> 2};
-       pilot_hist[7]  := complex16{re=p2.re >> 2; im=p2.im >> 2};
-       pilot_hist[11] := complex16{re=p3.re >> 2; im=p3.im >> 2};
-       pilot_hist[15] := complex16{re=p4.re >> 2; im=p4.im >> 2};
+       -- TODO: Convert this into the follwoing, when compiler gets support for parsing it
+       -- pilot_hist[0,4*PILOT_AVG-1] := pilot_hist[1,4*PILOT_AVG-1];
+       pilot_hist[0,PILOT_WINDOW_LENGTH] := pilot_hist[1,PILOT_WINDOW_LENGTH];
+       pilot_hist[PILOT_AVG-1]   := complex16{re=p1.re >> LOG_PILOT_AVG; im=p1.im >> LOG_PILOT_AVG};
+       pilot_hist[2*PILOT_AVG-1] := complex16{re=p2.re >> LOG_PILOT_AVG; im=p2.im >> LOG_PILOT_AVG};
+       pilot_hist[3*PILOT_AVG-1] := complex16{re=p3.re >> LOG_PILOT_AVG; im=p3.im >> LOG_PILOT_AVG};
+       pilot_hist[4*PILOT_AVG-1] := complex16{re=p4.re >> LOG_PILOT_AVG; im=p4.im >> LOG_PILOT_AVG};
 
        -- Find averages
-       let s1 = if (cnt < 5) then p1 else v_sum_complex16(pilot_hist[0,4]) in 
-       let s2 = if (cnt < 5) then p2 else v_sum_complex16(pilot_hist[4,4]) in 
-       let s3 = if (cnt < 5) then p3 else v_sum_complex16(pilot_hist[8,4]) in 
-       let s4 = if (cnt < 5) then p4 else v_sum_complex16(pilot_hist[12,4]) in 
+       let s1 = v_sum_complex16(pilot_hist[0,PILOT_AVG]) in 
+       let s2 = v_sum_complex16(pilot_hist[PILOT_AVG,PILOT_AVG]) in 
+       let s3 = v_sum_complex16(pilot_hist[2*PILOT_AVG,PILOT_AVG]) in 
+       let s4 = v_sum_complex16(pilot_hist[3*PILOT_AVG,PILOT_AVG]) in 
 
        th[0] := int32(atan2_int16( s1.im, s1.re));
        th[1] := int32(atan2_int16( s2.im, s2.re));
@@ -165,6 +172,7 @@ let comp PilotTrack() =
        let delTheta = int16(((th[2] - th[0]) / (21 + 7) + (th[3] - th[1]) / (21 + 7)) >> 1) in
 
        build_coeff(rotate_coeffs, avgTheta, delTheta);
+
        
        -- Compensate pilots
        v_mul_complex16(symbol_out[0,28], symbol[0,28], rotate_coeffs[0,28],15);
@@ -179,15 +187,22 @@ let comp PilotTrack() =
        build_coeff (compCoeffs, sCFO_comp, sSFO_comp )
 
 
+       cnt := cnt + 1;
+
        -- DEBUG
 {-
-       if (cnt >= 115 && cnt <= 125) then 
+       if (cnt >= 1 && cnt <= 8) then 
        {
 --         print "cnt: ", cnt, " D: ", pilotSgn[symbol_count-1], " th: ", double(th[0])/32768.0, ", ", 
 --               double(th[1])/32768.0, ", ", double(th[2])/32768.0, ", ", double(th[3])/32768.0;
          print "cnt: ", cnt, " D: ", pilotSgn[symbol_count-1], " th: ", th[0], ", ", 
                th[1], ", ", th[2], ", ", th[3];
          println " avgTheta: ", avgTheta, " delTheta: ", delTheta;
+         println "p1: ", p1, ", s1: ", s1;
+         
+         let tt1 = complex16{re=6894;im=-725} in
+         let tt1 = complex16{re=-5432;im=-1158} in
+         println 
 
          println "cnt: ", cnt, ", ", symbol[64-21], symbol[64-7], symbol[7], symbol[21];
 

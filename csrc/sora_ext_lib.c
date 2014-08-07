@@ -47,6 +47,10 @@
 #include "sampling.hpp"
 #include "sora_ext_bricks.h"
 
+#include "utils.h"
+
+
+
 
 
 
@@ -1168,3 +1172,18 @@ int16 __ext_viterbi_brick_decode(char* intInput, int len1, uchar* bit, int len2)
 	return processViterbi(&ctx, intInput, bit);
 }
 
+
+
+
+// Time-related
+
+extern TimeMeasurements measurementInfo;
+
+// TODO: Once 64-bits numbers are supported convert this into getTime 
+// and return the time as a 64-bit number
+int __ext_print_time() {
+	ULONGLONG time = SoraGetCPUTimestamp(&measurementInfo.tsinfo);
+	printf("%ul", time);
+	fflush(stdout);
+	return 0;
+}
