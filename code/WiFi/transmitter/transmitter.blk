@@ -88,18 +88,10 @@ let comp transform_w_header() =
 in
 
 
-let comp test_transform() = 
-   (crc48(1024) >>> scrambler() >>> encode12() >>> interleaver_qpsk() >>> modulate_qpsk())
---   (crc72(1024) >>> scrambler() >>> encode34() >>> interleaver_qpsk() >>> modulate_qpsk())
-in
-
-
-
 let comp transmitter() = 
 seq{ emits createSTSinTime()
    ; emits createLTSinTime()
    ; (transform_w_header() >>> map_ofdm() >>> ifft())
---   ; (test_transform() >>> map_ofdm() >>> ifft())
    }
 in
 
