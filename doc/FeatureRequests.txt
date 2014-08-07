@@ -20,4 +20,9 @@ List of features that we hope to add to Ziria at some point:
   will create a subarray bitarrresXX using bitArrRead, call the external function on it
   but never really write it back to x!
 
+- Fix the bug in typeinfer.wpl test in backend
+
+- Fix the bug in stateinit.wpl test in backend
+
+- Fix the heap bug in struct3.wpl test in backend
 

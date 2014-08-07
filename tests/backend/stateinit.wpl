@@ -12,9 +12,13 @@ in
 
 
 read[int] >>> 
+-- BUG: remove comments to uncover bug!
+{-
   repeat{
     x<-take;
     emit x;
   }
-  >>> cntRxPkts()
+  >>> 
+-}
+  cntRxPkts()
 >>> write[int]

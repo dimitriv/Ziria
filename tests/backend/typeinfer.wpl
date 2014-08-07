@@ -3,7 +3,10 @@
 let comp test () = 
   var out : arr[8] int16;
   repeat {
-    inp <- take;
+-- BUG: remove the comment to produce it
+-- It shouldn't fail at runtime!
+--    inp <- take;
+    (inp : arr[8] int16) <- take;
     do {
       copy_int16(out, inp, 8);
     }
