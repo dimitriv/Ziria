@@ -56,7 +56,7 @@ extern int wpl_set_up_threads_rx(PSORA_UTHREAD_PROC *User_Routines);
 
 
 // tracks bytes copied 
-extern unsigned long bytes_copied;
+extern unsigned long long bytes_copied;
 
 
 // Blink generated functions 

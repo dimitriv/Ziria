@@ -58,6 +58,8 @@ BlinkParams params[2];
 BlinkParams *params_tx, *params_rx;
 
 
+TimeMeasurements measurementInfo;
+
 PSORA_UTHREAD_PROC User_Routines[MAX_THREADS];
 
 
@@ -72,6 +74,8 @@ extern int SetUpThreads_2t(PSORA_UTHREAD_PROC * User_Routines);
 
 int mac_type;
 
+// tracks bytes copied 
+extern unsigned long long bytes_copied;
 
 
 // Only needed to support the call from Ziria code

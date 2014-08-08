@@ -165,7 +165,7 @@ GetStatus _buf_getint32(BlinkParams *params, BufContextBlock *blk, int32 *x)
 GetStatus buf_getint32(BlinkParams *params, BufContextBlock *blk, int32 *x)
 {
 #ifdef STAMP_AT_READ
-	write_time_stamp();
+	write_time_stamp(params);
 #endif
 	blk->total_in++;
 	return _buf_getint32(params, blk, x);
@@ -216,7 +216,7 @@ GetStatus _buf_getarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, 
 GetStatus buf_getarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsigned int vlen)
 {
 #ifdef STAMP_AT_READ
-	write_time_stamp();
+	write_time_stamp(params);
 #endif
 	blk->total_in += vlen;
 	return _buf_getarrint32(params, blk, x, vlen);
@@ -247,7 +247,7 @@ void init_getcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlo
 GetStatus buf_getcomplex32(BlinkParams *params, BufContextBlock *blk, complex32 *x)
 {
 #ifdef STAMP_AT_READ
-	write_time_stamp();
+	write_time_stamp(params);
 #endif
 	blk->total_in++;
 	GetStatus gs1 = _buf_getint32(params, blk, &(x->re));
@@ -263,7 +263,7 @@ GetStatus buf_getcomplex32(BlinkParams *params, BufContextBlock *blk, complex32 
 GetStatus buf_getarrcomplex32(BlinkParams *params, BufContextBlock *blk, complex32 *x, unsigned int vlen)
 {
 #ifdef STAMP_AT_READ
-	write_time_stamp();
+	write_time_stamp(params);
 #endif
 	blk->total_in += vlen;
 	return (_buf_getarrint32(params, blk, (int32*)x, vlen * 2));
