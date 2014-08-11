@@ -63,10 +63,6 @@ TimeMeasurements measurementInfo;
 PSORA_UTHREAD_PROC User_Routines[MAX_THREADS];
 
 
-// 1-thread MAC
-extern void init_mac_1thread();
-extern int SetUpThreads_1t(PSORA_UTHREAD_PROC * User_Routines);
-
 // 2-threads MAC
 extern void init_mac_2threads();
 extern int SetUpThreads_2t(PSORA_UTHREAD_PROC * User_Routines);
@@ -99,59 +95,21 @@ int __cdecl main(int argc, char **argv)
 
 	printf("Setting up threads...\n");
 
-	if (mac_type == 0)
-	{
-		// **** Single-thread MAC
+	// **** TX/RX(2)-threaded MAC
 
-		// Initialize various parameters
-		init_mac_1thread();
+	// Initialize various parameters
+	init_mac_2threads();
 
+	int no_threads = SetUpThreads_2t(User_Routines);
+	StartThreads(&ttstart, &ttend, &(params_tx->measurementInfo.tsinfo), no_threads, User_Routines);
 
-		//SINGLE MODULE CODE: int no_threads = wpl_set_up_threads_tx(User_Routines);
-		int no_threads = SetUpThreads_1t(User_Routines);
-		StartThreads(&ttstart, &ttend, &(params_tx->measurementInfo.tsinfo), no_threads, User_Routines);
+	printf("Time Elapsed: %ld us \n",
+		SoraTimeElapsed((ttend / 1000 - ttstart / 1000), &(params_tx->measurementInfo.tsinfo)));
 
-		printf("Time Elapsed: %ld us \n",
-			SoraTimeElapsed((ttend / 1000 - ttstart / 1000), &(params_tx->measurementInfo.tsinfo)));
-
-		if (params_tx->latencySampling > 0)
-		{
-			printf("Min write latency: %ld, max write latency: %ld\n", (ulong)params_tx->measurementInfo.minDiff, (ulong)params_tx->measurementInfo.maxDiff);
-			printf("CDF: \n   ");
-			unsigned int i = 0;
-			while (i < params_tx->measurementInfo.aDiffPtr)
-			{
-				printf("%ld ", params_tx->measurementInfo.aDiff[i]);
-				if (i % 10 == 9)
-				{
-					printf("\n   ");
-				}
-				i++;
-			}
-			printf("\n");
-		}
-	}
-	else
-	{
-		// **** TX/RX(2)-threaded MAC
-
-		// Initialize various parameters
-		init_mac_2threads();
-
-
-		//SINGLE MODULE CODE: int no_threads = wpl_set_up_threads_tx(User_Routines);
-		int no_threads = SetUpThreads_2t(User_Routines);
-		StartThreads(&ttstart, &ttend, &(params_tx->measurementInfo.tsinfo), no_threads, User_Routines);
-
-		printf("Time Elapsed: %ld us \n",
-			SoraTimeElapsed((ttend / 1000 - ttstart / 1000), &(params_tx->measurementInfo.tsinfo)));
-
-	}
 
 	// Free thread separators
 	// NB: these are typically allocated in blink_set_up_threads
 	ts_free();
-
 
 
 	// Start Sora HW

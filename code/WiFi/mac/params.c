@@ -20,8 +20,8 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "wpl_alloc.h"
-#include "..\params.h"
+#include <wpl_alloc.h>
+#include <params.h>
 
 
 FILE * try_open(char *filename, char *mode) 
@@ -80,8 +80,8 @@ BlinkFileType parse_type(char *typ)
 
 int parse_MAC(char *typ)
 {
-	if (strcmp(typ, "1-thread") == 0)	return 0;
-	if (strcmp(typ, "2-threads") == 0)	return 1;
+	if (strcmp(typ, "TX-only") == 0)	return 0;
+	if (strcmp(typ, "RX-only") == 0)	return 1;
 	fprintf(stderr, "Error: cannot parse MAC parameter %s\n", typ);
 	exit(1);
 }
@@ -225,9 +225,9 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
        "0",
 	   init_outMemorySizeTX },
 	 { "--MAC-type=",
-	   "--TX-input=1-thread|2-threads",
-	   "Which MAC to run, 1-thread or 2-threads",
-	   "1-thread",
+	   "--MAC-type=TX-only|RX-only",
+	   "Which MAC to run, TX or RX",
+	   "TX-only",
 	   init_inTypeMAC },
      { "--TX-input=", 
        "--TX-input=file|dummy|sora|ip",

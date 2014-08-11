@@ -61,24 +61,24 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SORA_ROOT)\src\bb\dot11a;$(SORA_ROOT)\src\bb\dot11a\inc;$(SORA_ROOT)\src\bb\brick11\src;$(SORA_ROOT)\src\util\src;$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\inc;$(SORA_ROOT)\inc\brick;$(DDK_INC_PATH);$(ProjectDir)\..\..</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SORA_ROOT)\src\bb\dot11a;$(SORA_ROOT)\src\bb\dot11a\inc;$(SORA_ROOT)\src\bb\brick11\src;$(SORA_ROOT)\src\util\src;$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\inc;$(SORA_ROOT)\inc\brick;$(DDK_INC_PATH);$(ProjectDir)\..\..\..\..\csrc</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);$(DDK_LIB_PATH);$(SORA_ROOT)\target\chk_wxp_x86\i386\;$(SORA_ROOT)\lib\chk_wxp_x86\i386</LibraryPath>
     <OutDir>$(SolutionDir)$(ProjectName)\$(Platform)\$(Configuration)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SORA_ROOT)\src\bb\dot11a;$(SORA_ROOT)\src\bb\dot11a\inc;$(SORA_ROOT)\src\bb\brick11\src;$(SORA_ROOT)\src\util\src;$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\inc;$(SORA_ROOT)\inc\brick;$(DDK_INC_PATH);$(ProjectDir)\..\..</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SORA_ROOT)\src\bb\dot11a;$(SORA_ROOT)\src\bb\dot11a\inc;$(SORA_ROOT)\src\bb\brick11\src;$(SORA_ROOT)\src\util\src;$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\inc;$(SORA_ROOT)\inc\brick;$(DDK_INC_PATH);$(ProjectDir)\..\..\..\..\csrc</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(DDK_LIB_PATH);$(SORA_ROOT)\target\chk_win7_amd64\amd64\;$(SORA_ROOT)\lib\chk_win7_amd64\amd64</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SORA_ROOT)\src\bb\dot11a;$(SORA_ROOT)\src\bb\dot11a\inc;$(SORA_ROOT)\src\bb\brick11\src;$(SORA_ROOT)\src\util\src;$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\inc;$(SORA_ROOT)\inc\brick;$(DDK_INC_PATH);$(ProjectDir)\..\..</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SORA_ROOT)\src\bb\dot11a;$(SORA_ROOT)\src\bb\dot11a\inc;$(SORA_ROOT)\src\bb\brick11\src;$(SORA_ROOT)\src\util\src;$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\inc;$(SORA_ROOT)\inc\brick;$(DDK_INC_PATH);$(ProjectDir)\..\..\..\..\csrc</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);$(DDK_LIB_PATH);$(SORA_ROOT)\target\fre_wxp_x86\i386\;$(SORA_ROOT)\lib\fre_wxp_x86\i386</LibraryPath>
     <OutDir>$(SolutionDir)$(ProjectName)\$(Platform)\$(Configuration)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SORA_ROOT)\src\bb\dot11a;$(SORA_ROOT)\src\bb\dot11a\inc;$(SORA_ROOT)\src\bb\brick11\src;$(SORA_ROOT)\src\util\src;$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\inc;$(SORA_ROOT)\inc\brick;$(DDK_INC_PATH);$(ProjectDir)\..\..</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SORA_ROOT)\src\bb\dot11a;$(SORA_ROOT)\src\bb\dot11a\inc;$(SORA_ROOT)\src\bb\brick11\src;$(SORA_ROOT)\src\util\src;$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\inc;$(SORA_ROOT)\inc\brick;$(DDK_INC_PATH);$(ProjectDir)\..\..\..\..\csrc</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(DDK_LIB_PATH);$(SORA_ROOT)\target\fre_win7_amd64\amd64\;$(SORA_ROOT)\lib\fre_win7_amd64\amd64</LibraryPath>
     <OutDir>$(SolutionDir)$(ProjectName)\$(Platform)\$(Configuration)\</OutDir>
   </PropertyGroup>
@@ -161,46 +161,45 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\bit.c" />
-    <ClCompile Include="..\..\buf_bit.c" />
-    <ClCompile Include="..\..\buf_numerics16.c" />
-    <ClCompile Include="..\..\buf_numerics32.c" />
-    <ClCompile Include="..\..\buf_numerics8.c" />
-    <ClCompile Include="..\..\ext_arr.c" />
-    <ClCompile Include="..\..\ext_math.c" />
-    <ClCompile Include="..\..\numerics.c" />
-    <ClCompile Include="..\..\sora_ext_lib.c" />
-    <ClCompile Include="..\..\sora_ext_visual.c" />
-    <ClCompile Include="..\..\sora_ext_viterbi.c" />
-    <ClCompile Include="..\..\sora_ip.c" />
-    <ClCompile Include="..\..\sora_radio.c" />
-    <ClCompile Include="..\..\sora_threads.c" />
-    <ClCompile Include="..\..\sora_thread_queues.c" />
-    <ClCompile Include="..\..\utils.c" />
-    <ClCompile Include="..\..\wpl_alloc.c" />
+    <ClCompile Include="..\..\..\..\csrc\bit.c" />
+    <ClCompile Include="..\..\..\..\csrc\buf_bit.c" />
+    <ClCompile Include="..\..\..\..\csrc\buf_numerics16.c" />
+    <ClCompile Include="..\..\..\..\csrc\buf_numerics32.c" />
+    <ClCompile Include="..\..\..\..\csrc\buf_numerics8.c" />
+    <ClCompile Include="..\..\..\..\csrc\ext_arr.c" />
+    <ClCompile Include="..\..\..\..\csrc\ext_math.c" />
+    <ClCompile Include="..\..\..\..\csrc\numerics.c" />
+    <ClCompile Include="..\..\..\..\csrc\sora_ext_lib.c" />
+    <ClCompile Include="..\..\..\..\csrc\sora_ext_visual.c" />
+    <ClCompile Include="..\..\..\..\csrc\sora_ext_viterbi.c" />
+    <ClCompile Include="..\..\..\..\csrc\sora_ip.c" />
+    <ClCompile Include="..\..\..\..\csrc\sora_radio.c" />
+    <ClCompile Include="..\..\..\..\csrc\sora_threads.c" />
+    <ClCompile Include="..\..\..\..\csrc\sora_thread_queues.c" />
+    <ClCompile Include="..\..\..\..\csrc\utils.c" />
+    <ClCompile Include="..\..\..\..\csrc\wpl_alloc.c" />
     <ClCompile Include="..\driver.c" />
-    <ClCompile Include="..\mac_1thread.c" />
     <ClCompile Include="..\mac_2threads.c" />
     <ClCompile Include="..\params.c" />
     <ClCompile Include="..\rx.c" />
     <ClCompile Include="..\tx.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\bit.h" />
-    <ClInclude Include="..\..\buf.h" />
-    <ClInclude Include="..\..\ext_arr.h" />
-    <ClInclude Include="..\..\ext_math.h" />
-    <ClInclude Include="..\..\numerics.h" />
-    <ClInclude Include="..\..\params.h" />
-    <ClInclude Include="..\..\sora_ext_bricks.h" />
-    <ClInclude Include="..\..\sora_ext_visual.h" />
-    <ClInclude Include="..\..\sora_ip.h" />
-    <ClInclude Include="..\..\sora_radio.h" />
-    <ClInclude Include="..\..\sora_threads.h" />
-    <ClInclude Include="..\..\sora_thread_queues.h" />
-    <ClInclude Include="..\..\types.h" />
-    <ClInclude Include="..\..\utils.h" />
-    <ClInclude Include="..\..\wpl_alloc.h" />
+    <ClInclude Include="..\..\..\..\csrc\bit.h" />
+    <ClInclude Include="..\..\..\..\csrc\buf.h" />
+    <ClInclude Include="..\..\..\..\csrc\ext_arr.h" />
+    <ClInclude Include="..\..\..\..\csrc\ext_math.h" />
+    <ClInclude Include="..\..\..\..\csrc\numerics.h" />
+    <ClInclude Include="..\..\..\..\csrc\params.h" />
+    <ClInclude Include="..\..\..\..\csrc\sora_ext_bricks.h" />
+    <ClInclude Include="..\..\..\..\csrc\sora_ext_visual.h" />
+    <ClInclude Include="..\..\..\..\csrc\sora_ip.h" />
+    <ClInclude Include="..\..\..\..\csrc\sora_radio.h" />
+    <ClInclude Include="..\..\..\..\csrc\sora_threads.h" />
+    <ClInclude Include="..\..\..\..\csrc\sora_thread_queues.h" />
+    <ClInclude Include="..\..\..\..\csrc\types.h" />
+    <ClInclude Include="..\..\..\..\csrc\utils.h" />
+    <ClInclude Include="..\..\..\..\csrc\wpl_alloc.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -24,117 +24,114 @@
     <ClCompile Include="..\driver.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\bit.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\buf_bit.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\buf_numerics8.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\buf_numerics16.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\buf_numerics32.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\ext_arr.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\ext_math.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\numerics.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\rx.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\sora_ext_lib.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\sora_ext_visual.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\sora_ext_viterbi.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\sora_ip.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\sora_radio.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\sora_thread_queues.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\sora_threads.c">
       <Filter>Ziria Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\tx.c">
       <Filter>Ziria Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\utils.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\wpl_alloc.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\params.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\mac_1thread.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\mac_2threads.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\..\csrc\bit.c">
+      <Filter>Ziria Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\csrc\buf_bit.c">
+      <Filter>Ziria Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\csrc\buf_numerics8.c">
+      <Filter>Ziria Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\csrc\buf_numerics16.c">
+      <Filter>Ziria Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\csrc\buf_numerics32.c">
+      <Filter>Ziria Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\csrc\ext_arr.c">
+      <Filter>Ziria Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\csrc\ext_math.c">
+      <Filter>Ziria Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\csrc\numerics.c">
+      <Filter>Ziria Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\csrc\sora_ext_lib.c">
+      <Filter>Ziria Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\csrc\sora_ext_visual.c">
+      <Filter>Ziria Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\csrc\sora_ext_viterbi.c">
+      <Filter>Ziria Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\csrc\sora_ip.c">
+      <Filter>Ziria Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\csrc\sora_radio.c">
+      <Filter>Ziria Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\csrc\sora_thread_queues.c">
+      <Filter>Ziria Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\csrc\sora_threads.c">
+      <Filter>Ziria Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\csrc\utils.c">
+      <Filter>Ziria Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\csrc\wpl_alloc.c">
+      <Filter>Ziria Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\bit.h">
+    <ClInclude Include="..\..\..\..\csrc\bit.h">
       <Filter>Ziria Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\buf.h">
+    <ClInclude Include="..\..\..\..\csrc\buf.h">
       <Filter>Ziria Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\ext_arr.h">
+    <ClInclude Include="..\..\..\..\csrc\ext_arr.h">
       <Filter>Ziria Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\ext_math.h">
+    <ClInclude Include="..\..\..\..\csrc\ext_math.h">
       <Filter>Ziria Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\numerics.h">
+    <ClInclude Include="..\..\..\..\csrc\numerics.h">
       <Filter>Ziria Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\sora_ext_bricks.h">
+    <ClInclude Include="..\..\..\..\csrc\params.h">
       <Filter>Ziria Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\sora_ext_visual.h">
+    <ClInclude Include="..\..\..\..\csrc\sora_ext_bricks.h">
       <Filter>Ziria Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\sora_ip.h">
+    <ClInclude Include="..\..\..\..\csrc\sora_ext_visual.h">
       <Filter>Ziria Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\sora_radio.h">
+    <ClInclude Include="..\..\..\..\csrc\sora_ip.h">
       <Filter>Ziria Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\sora_thread_queues.h">
+    <ClInclude Include="..\..\..\..\csrc\sora_radio.h">
       <Filter>Ziria Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\sora_threads.h">
+    <ClInclude Include="..\..\..\..\csrc\sora_thread_queues.h">
       <Filter>Ziria Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\types.h">
+    <ClInclude Include="..\..\..\..\csrc\sora_threads.h">
       <Filter>Ziria Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\utils.h">
+    <ClInclude Include="..\..\..\..\csrc\types.h">
       <Filter>Ziria Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\wpl_alloc.h">
+    <ClInclude Include="..\..\..\..\csrc\utils.h">
       <Filter>Ziria Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\params.h">
+    <ClInclude Include="..\..\..\..\csrc\wpl_alloc.h">
       <Filter>Ziria Header Files</Filter>
     </ClInclude>
   </ItemGroup>

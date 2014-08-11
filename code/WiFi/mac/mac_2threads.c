@@ -44,6 +44,10 @@ permissions and limitations under the License.
 #include "utils.h"
 
 
+// TX or RX MAC type
+extern int mac_type;
+
+
 extern PSORA_UTHREAD_PROC User_Routines[MAX_THREADS];
 // size_t sizes[MAX_THREADS];
 
@@ -138,9 +142,23 @@ void init_mac_2threads()
 /* Returns the numer of threads */
 int SetUpThreads_2t(PSORA_UTHREAD_PROC * User_Routines)
 {
-	User_Routines[0] = (PSORA_UTHREAD_PROC)go_thread_tx;
-	User_Routines[1] = (PSORA_UTHREAD_PROC)go_thread_rx;
-	return 2;
+	int noThr = 0;
+	switch (mac_type) {
+	case 0: 
+		User_Routines[0] = (PSORA_UTHREAD_PROC)go_thread_tx;
+		noThr = 1;
+		break;
+	case 1:
+		User_Routines[0] = (PSORA_UTHREAD_PROC)go_thread_rx;
+		noThr = 1;
+		break;
+	case 2:
+		User_Routines[0] = (PSORA_UTHREAD_PROC)go_thread_tx;
+		User_Routines[1] = (PSORA_UTHREAD_PROC)go_thread_rx;
+		noThr = 2;
+		break;
+	}
+	return noThr;
 }
 
 
@@ -152,9 +170,6 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 	thread_info *ti = (thread_info *)pParam;
 
 	printf("Starting TX ...\n");
-	buf_ctx_tx.mem_output_buf_size = params_tx->outMemorySize;
-	buf_ctx_tx.mem_output_buf = malloc(buf_ctx_tx.mem_output_buf_size);
-	txReady = FALSE;
 
 	wpl_input_initialize_tx();
 
@@ -199,15 +214,7 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 	ULONGLONG ttstart, ttend;
 	thread_info *ti = (thread_info *)pParam;
 
-	printf("Waiting for TX ...\n");
-	while (!txReady);
-
 	printf("Starting RX ...\n");
-	if (params_tx->outType == TY_MEM)
-	{
-		buf_ctx_rx.mem_input_buf_size = (buf_ctx_tx.total_out * buf_ctx_tx.size_out) / 8;
-		buf_ctx_rx.mem_input_buf = buf_ctx_tx.mem_output_buf;
-	}
 
 	wpl_input_initialize_rx();
 

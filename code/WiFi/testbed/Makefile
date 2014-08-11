@@ -28,45 +28,82 @@
 # COMPILER?=winddk
 # COMPILER?=gcc
 #
-COMPILER?=winddk
+COMPILER?=vs
 
-PP    = ../../../scripts/preprocesscompile-$(COMPILER)-inline.sh
-PPDEB = ../../../scripts/preprocesscompile-$(COMPILER)-debug.sh
-DIFF  = ../../../tools/BlinkDiff
+PP    = ../../scripts/preprocesscompile-mac-$(COMPILER).sh
+PPDEB = ../../scripts/preprocesscompile-mac-$(COMPILER).sh
+CP    = ../../scripts/ccompile-mac-$(COMPILER).sh
+DIFF  = ../../tools/BlinkDiff
 
 # Targets
+vpath %.c ../../csrc/mac
 TGTS = $(patsubst %.blk, %.run, $(wildcard *.blk))
 
 all: $(TGTS)
 
 %.out : %.blk
-	EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS)' $(PP) $< $@
+	EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
 
 %.deb : %.blk
-	EXTRAOPTS=' $(EXTRAOPTS)' $(PPDEB) $< $@
+	EXTRAOPTS='$(EXTRAOPTS) --name=_$(basename $@)' $(PPDEB) $< $(basename $@)
 
 
-%.outfile: %.deb %.infile
-	./$< --input=file \
-             --input-file-name=$*.infile \
-             --input-file-mode=dbg \
-             --output-file-name=$@ \
-             --output-file-mode=dbg
+# TX test
+test_continuous_tx.outfile: test_continuous_tx.deb test_continuous_tx.infile
+	./$< --MAC-type=TX-only
+	     --TX-input=file \
+             --TX-input-file-name=tx.infile \
+             --TX-input-file-mode=dbg \
+             --TX-output=file \
+             --TX-output-file-name=tx.outfile \
+             --TX-output-file-mode=dbg \
+             $(EXTRARUNOPT)
 
 
+# RX test
+test_continuous_rx.outfile: test_continuous_rx.deb test_continuous_rx.infile
+	./$< --MAC-type=RX-only
+	     --RX-input=file \
+             --RX-input-file-name=rx.infile \
+             --RX-input-file-mode=dbg \
+             --RX-output=file \
+             --RX-output-file-name=rx.outfile \
+             --RX-output-file-mode=dbg \
+             $(EXTRARUNOPT)
+
+
+# TX real
 test_continuous_tx.run: test_continuous_tx.out
-	./$< --input=file \
-             --input-file-name=test_continuous_tx.infile \
-             --input-file-mode=dbg \
-	     --output=sora \
-	     --sora-radio-id=0 \
-	     --sora-central-frequency=739
+	./$< --MAC-type=TX-only
+	     --TX-input=file \
+             --TX-input-file-name=test_continuous_tx.infile \
+             --TX-input-file-mode=dbg \
+	     --TX-output=sora \
+	     --TX-sora-radio-id=0 \
+	     --TX-sora-central-frequency=739
 
+# RX real
 test_continuous_rx.run: test_continuous_rx.out
-	./$< --input=sora \
-	     --output=dummy \
-	     --sora-radio-id=0 \
-	     --sora-central-frequency=739
+	./$< --MAC-type=RX-only
+	     --RX-input=sora \
+	     --RX-output=dummy \
+	     --RX-sora-radio-id=0 \
+	     --RX-sora-central-frequency=739
+
+
+# Not implemented yet:
+# mac.outfile: mac.out mac.infile
+# 	./$< --TX-input=file \
+#              --TX-input-file-name=mac.infile \
+#              --TX-input-file-mode=dbg \
+#              --TX-output=memory \
+#              --RX-input=memory \
+#              --RX-output=file \
+#              --RX-output-file-name=$@ \
+#              --RX-output-file-mode=dbg \
+#              --memory-size=1000 \
+#              $(EXTRARUNOPT)
+
 
 clean:	
 	rm -f ./*expanded
