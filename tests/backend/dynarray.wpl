@@ -1,0 +1,24 @@
+#define DYNARRSIZ 128
+
+struct dynarray = { len : int; 
+                    data : arr[DYNARRSIZ] int } in
+
+let comp foo() =
+   var darr : struct dynarray;
+   -- (x :arr[35] int) <- take 35;
+   -- return (darr.len := 35);
+   -- return (darr.data[0,35] := x)
+   seq{
+   (x : arr[5] int) <- takes 5;
+   do{darr.data[0,5] := x};
+   do{darr.len := 5};
+   do{return (darr)}
+   }
+in
+
+read >>> repeat seq{d <- foo(); emit(d.data[0,5])} >>> write 
+
+
+
+
+   

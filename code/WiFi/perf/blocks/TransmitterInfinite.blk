@@ -1,0 +1,93 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#define MANUAL_VECT
+
+#include "../../const.blk"
+#include <externals.blk>
+#include "../../transmitter/scramble.blk"
+#include "../../transmitter/encoding.blk"
+#include "../../transmitter/interleaving.blk"
+#include "../../transmitter/modulating.blk"
+#include "../../transmitter/map_ofdm.blk"
+#include "../../transmitter/parsePLCPHeader.blk"
+#include "../../transmitter/createPreamble.blk"
+#include "../../transmitter/ifft.blk"
+
+
+
+
+-- Here, we have a different CRC function for each rate since 
+-- for each rate we have to provide different padding 
+-- to fill up the last OFDM symbol
+
+--  6 Mbps, 1/2,  BPSK: x -> 2x   -> 2x   = 48, x =  24
+--  9 Mbps, 3/4,  BPSK: x -> 4x/3 -> 4x/3 = 48, x =  36
+-- 12 Mbps, 1/2,  QPSK: x -> 2x   -> x    = 48, x =  48
+-- 18 Mbps, 3/4,  QPSK: x -> 4x/3 -> 2x/3 = 48, x =  72
+-- 24 Mbps, 1/2, 16QAM: x -> 2x   -> x/2  = 48, x =  96
+-- 36 Mbps, 3/4, 16QAM: x -> 4x/3 -> x/3  = 48, x = 144
+-- 48 Mbps, 2/3, 64QAM: x -> 3x/2 -> x/4  = 48, x = 192
+-- 56 Mbps, 3/4, 64QAM: x -> 4x/3 -> 2x/9 = 48, x = 216
+
+
+let comp tx_driver(h : struct HeaderInfo) = 
+ --  6 Mbps
+ if h.coding == CR_12 && h.modulation == M_BPSK then 
+   (scrambler() >>> encode12() >>> interleaver_bpsk() >>> modulate_bpsk())
+ --  9 Mbps
+ else if h.coding == CR_34 && h.modulation == M_BPSK then 
+   (scrambler() >>> encode34() >>> interleaver_bpsk() >>> modulate_bpsk())
+ -- 12 Mbps
+ else if h.coding == CR_12 && h.modulation == M_QPSK then 
+   (scrambler() >>> encode12() >>> interleaver_qpsk() >>> modulate_qpsk())
+ -- 18 Mbps
+ else if h.coding == CR_34 && h.modulation == M_QPSK then 
+   (scrambler() >>> encode34() >>> interleaver_qpsk() >>> modulate_qpsk())
+ -- 24 Mbps
+ else if h.coding == CR_12 && h.modulation == M_16QAM then 
+   (scrambler() >>> encode12() >>> interleaver_m16qam() >>> modulate_16qam())
+ -- 36 Mbps
+ else if h.coding == CR_34 && h.modulation == M_16QAM then 
+   (scrambler() >>> encode34() >>> interleaver_m16qam() >>> modulate_16qam())
+ -- 48 Mbps
+ else if h.coding == CR_23 && h.modulation == M_64QAM then 
+   (scrambler() >>> encode23() >>> interleaver_m64qam() >>> modulate_64qam())
+ -- 56 Mbps
+ else if h.coding == CR_34 && h.modulation == M_64QAM then 
+   (scrambler() >>> encode34() >>> interleaver_m64qam() >>> modulate_64qam())
+ else
+   repeat do { error "Unknown coding rate!" }
+in
+
+
+
+let comp TransmitterInfinite(hInfo : struct HeaderInfo) = 
+-- STS and LTS have negligible perf impact but currently mess up pipelining, 
+-- so we remove them from all TX perf evals
+{-
+seq{ emits createSTSinTime()
+   ; emits createLTSinTime()
+   ; (tx_driver(hInfo) >>> map_ofdm() >>> ifft())
+   }
+-}
+   (tx_driver(hInfo) |>>>| map_ofdm() >>> ifft())
+in
+
+

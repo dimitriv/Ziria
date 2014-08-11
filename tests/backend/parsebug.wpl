@@ -1,0 +1,18 @@
+let comp f() = 
+var subMsg : arr[5] int := { 1,1,1,1,1 };
+  
+seq{
+  for i in [0,5] 
+    do{subMsg[i] := 1};
+
+  for i in [0,5]
+    emit subMsg[i];
+
+  for i in [0,5] 
+    emit subMsg[i];
+}
+in
+
+read[int] >>> f() >>> write[int]
+
+

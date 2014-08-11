@@ -1,0 +1,8 @@
+let comp foo() = 
+   var y : int := 35;
+   let bar(t:int) = return y+1 in
+   let baz(t : int) = return(bar(t) + 1) in 
+   do {return 45}
+in
+
+read[int] >>> foo() >>> write[int]

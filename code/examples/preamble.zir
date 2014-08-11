@@ -1,0 +1,128 @@
+let init_preamble() = 
+var p : arr[64] complex16;
+p[0] := complex16{re=112; im=-124};
+p[1] := complex16{re=-122; im=114};
+p[2] := complex16{re=-122; im=115};
+p[3] := complex16{re=-122; im=-122};
+p[4] := complex16{re=-119; im=116};
+p[5] := complex16{re=117; im=116};
+p[6] := complex16{re=-120; im=-120};
+p[7] := complex16{re=117; im=116};
+p[8] := complex16{re=-120; im=116};
+p[9] := complex16{re=-121; im=117};
+p[10] := complex16{re=-122; im=-121};
+p[11] := complex16{re=117; im=-121};
+p[12] := complex16{re=116; im=-119};
+p[13] := complex16{re=-121; im=-120};
+p[14] := complex16{re=117; im=117};
+p[15] := complex16{re=116; im=-120};
+p[16] := complex16{re=-122; im=119};
+p[17] := complex16{re=116; im=-119};
+p[18] := complex16{re=117; im=-119};
+p[19] := complex16{re=116; im=-119};
+p[20] := complex16{re=-121; im=119};
+p[21] := complex16{re=-121; im=119};
+p[22] := complex16{re=-120; im=-119};
+p[23] := complex16{re=-121; im=117};
+p[24] := complex16{re=116; im=117};
+p[25] := complex16{re=-120; im=-121};
+p[26] := complex16{re=116; im=116};
+p[27] := complex16{re=-120; im=119};
+p[28] := complex16{re=-120; im=118};
+p[29] := complex16{re=-121; im=-119};
+p[30] := complex16{re=116; im=-119};
+p[31] := complex16{re=116; im=-119};
+p[32] := complex16{re=-119; im=-119};
+p[33] := complex16{re=117; im=117};
+p[34] := complex16{re=117; im=-120};
+p[35] := complex16{re=-119; im=117};
+p[36] := complex16{re=118; im=-119};
+p[37] := complex16{re=118; im=-119};
+p[38] := complex16{re=117; im=-119};
+p[39] := complex16{re=-120; im=119};
+p[40] := complex16{re=-119; im=117};
+p[41] := complex16{re=-120; im=-120};
+p[42] := complex16{re=-119; im=118};
+p[43] := complex16{re=118; im=118};
+p[44] := complex16{re=-121; im=-120};
+p[45] := complex16{re=118; im=119};
+p[46] := complex16{re=-120; im=118};
+p[47] := complex16{re=-119; im=-119};
+p[48] := complex16{re=117; im=116};
+p[49] := complex16{re=117; im=-120};
+p[50] := complex16{re=-120; im=116};
+p[51] := complex16{re=117; im=-120};
+p[52] := complex16{re=118; im=-120};
+p[53] := complex16{re=118; im=-120};
+p[54] := complex16{re=-121; im=118};
+p[55] := complex16{re=-120; im=116};
+p[56] := complex16{re=-121; im=-122};
+p[57] := complex16{re=-119; im=116};
+p[58] := complex16{re=117; im=115};
+p[59] := complex16{re=-119; im=-120};
+p[60] := complex16{re=117; im=117};
+p[61] := complex16{re=-120; im=116};
+p[62] := complex16{re=-121; im=116};
+p[63] := complex16{re=-121; im=-122};
+
+return p;
+in 
+
+
+let comp invertChannel() =
+  var channel : arr [64] complex16;
+  var preamble:arr[64] complex16;
+
+  var sq_norm32:arr[64] int;
+  var fftdata:arr[64] complex16;
+  var re32:arr[64] int;
+  var im32:arr[64] int;    
+
+
+
+seq{
+  do{preamble := init_preamble()};
+
+  (xp:arr[64] complex16) <- takes 64;
+
+  do{
+     fftdata := xp;
+
+     -- Calculate sq_norm
+     v_conj_mul_complex16_int32(re32,im32,fftdata[0,64],fftdata[0,64]);
+     v_shift_right_int32(sq_norm32[0,64],re32,int(norm_shift));
+
+     -- Calculate params.channelCoeffs
+
+     v_conj_mul_complex16_int32(re32,im32,preamble[0,64],fftdata[0,64]);
+
+     for i in [0,64] {
+       if sq_norm32[i] > 1 then { -- precision, 0.1 is 100
+         channel[i] := complex16{re=int16(re32[i]/sq_norm32[i]);im=int16(im32[i]/sq_norm32[i])}
+       } else {
+         channel[i] := complex16{re=0;im=0}
+       }
+     };
+
+     return (channel)
+   }
+}
+in
+
+
+
+let comp ChannelEqualization(channel:arr[64] complex16) =
+   var fftdata:arr[64] complex16;
+
+   repeat seq{
+
+    (fftdata_in:arr[64] complex16) <- takes 64;
+
+    do{
+      v_mul_complex16(fftdata, fftdata_in, channel, norm_shift);
+    };
+
+    emits fftdata
+  }
+
+in

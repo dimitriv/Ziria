@@ -1,0 +1,25 @@
+struct cca_info = { f1 : int; f2 : bit } 
+
+in
+
+
+let comp f(x : struct cca_info) = 
+  var y : struct cca_info;
+
+ seq{
+ (z : int) <- do{return (x.f1)};
+  
+ do {y.f1 := 3; y := x};
+ do {y.f1 := 3};
+
+ (x:int) <- take;
+ emit (x + y.f1)
+ }
+in 
+
+let x = cca_info { f1 = 3; f2 = '0}
+
+in
+
+read[int] >>> repeat (f(x)) >>> write
+

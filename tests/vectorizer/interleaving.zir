@@ -1,0 +1,63 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#include "const.zir"
+
+let comp interleaver_bpsk() =
+  repeat {
+    (x : arr[48] bit) <- takes 48;
+    emits x
+  }
+in
+
+let comp interleaver_qpsk() = 
+  repeat {
+    (x : arr[96] bit) <- takes 96;
+    emits x
+  }
+in 
+
+let comp interleaver_m16qam() = 
+  repeat {
+    (x : arr[192] bit) <- takes 192;
+    emits x
+  }
+in 
+
+let comp interleaver_m64qam() =
+  repeat {
+    (x : arr[288] bit) <- takes 288;
+    emits x
+  }
+in
+
+let comp interleaver(mod: int) =
+  if (mod == M_BPSK) then {
+     interleaver_bpsk()
+  } else { 
+      if (mod == M_QPSK) then { 
+          interleaver_qpsk()
+      } else {  
+          if (mod == M_16QAM) then {
+             interleaver_m16qam()
+          } else { interleaver_m64qam() }
+      }
+  }
+in
+

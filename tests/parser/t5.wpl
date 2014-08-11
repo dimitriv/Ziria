@@ -1,0 +1,24 @@
+var x : int; 
+var y : bool;
+var z : complex32;
+
+let foo(x : int) = 
+   var z : bool := true;
+   return (x+1);
+in
+
+let comp bar(x : int) = 
+  var st : arr[8] bit;
+  seq { x <- take
+      ; emit x
+      ; r <- takes 6
+      ; emit x
+      ; r <- do { st[1] := '1
+                ; return 4 
+                }
+      } >>> map foo
+in
+
+
+
+read [int] >>> map foo >>> write [int] 

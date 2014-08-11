@@ -1,0 +1,23 @@
+
+
+let comp f() = 
+
+
+  -- let comp c = repeat until true emit 3
+  -- in
+
+  -- seq { repeat until 3 emit 3
+  --     ; emit 4 }
+
+--  return ()
+
+   seq { for i in [0:3]
+           for j in [2:6]
+              emit i
+       ; emit 42
+       }
+
+in 
+
+
+read[int] >>> f() >>> write[int]

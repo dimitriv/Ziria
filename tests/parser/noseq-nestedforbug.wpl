@@ -1,0 +1,19 @@
+
+
+let comp f() = 
+
+   for i in [0:3] 
+      for j in [2:6]
+        emit i;
+   emit 42
+
+   -- seq { for i in [0:3]
+   --         for j in [2:6]
+   --            emit i
+   --     ; emit 42
+   --     }
+
+in 
+
+
+read[int] >>> f() >>> write[int]

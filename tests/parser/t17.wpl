@@ -1,0 +1,12 @@
+
+let foo(y : int) = 
+  var x : int := 0;
+  x := y;
+  while (x < 4)
+     x := x+1;
+
+  return x;
+
+in 
+
+read >>> map foo >>> write

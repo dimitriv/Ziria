@@ -1,0 +1,14 @@
+let comp foo(x : int) = 
+var y : int;
+
+seq { do { y := 0 } 
+    ; for n in [0:4]
+        (for i in [0,10] emit i)
+    ; for i in [0,y]
+         emit i
+    ; do { return x; }
+    }
+
+in
+
+read[int] >>> foo(5) >>> write[int]

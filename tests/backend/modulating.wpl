@@ -1,0 +1,45 @@
+let comp modulate_qpsk () = 
+  var x:arr[2] bit;
+  var outc : complex16; 
+  let amp = 1 in         -- 1/sqrt(2)
+
+  
+  let res = { -1 , 1 } in
+
+  repeat [8,4] seq{
+    -- TODO: put take 2
+    (y0 : bit) <- take;
+    (y1 : bit) <- take;
+    -- return( 
+    --   x[0] := y0;
+    --   x[1] := y1);
+      emit (complex16{ re = (res[int(y0)]*amp)
+                     ; im = (res[int(y1)]*amp) })
+
+
+--       if (x[0] == bit(0) && x[1] == bit(1)) { 
+--          outc := complex16{re=-amp;im=amp} 
+--       } else {
+--         if (x[0] == bit(0) && x[1] == bit(0)) { 
+--           outc := complex16{re=-amp; im=-amp}
+--         } else {
+--           if (x[0] == bit(1) && x[1] == bit(1)) { 
+--             outc := complex16{re=amp;im=amp}
+--           } else { 
+--             outc := complex16{re=amp;im=-amp} 
+--           }
+--         } 
+--       }
+--     ;
+-- 
+--    emit outc
+  }
+ 
+in
+
+read >>> modulate_qpsk() >>> write
+
+
+
+
+

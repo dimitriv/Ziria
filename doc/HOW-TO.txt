@@ -1,0 +1,42 @@
+Q: How to compile the code?
+A: For the simplest examples, just run wpl.exe. 
+   Longer examples use g++ preprocessor. One can use preprocesscompile.sh bathc file (e.g. in wifi) as a shortcut.
+   There are also runOne script files in many directories that will compile wpl, compile c with gcc and run the code in one line.
+   Also, runTest will typically run the same thing for many files.
+
+Q: How to evaluate performance?
+A: Performance evaluation is done using WinDDK (driver development kit) environment used by SORA. 
+   The reason is that gcc and VSS are several orders of magnitude slower in some cases. 
+   The simplest way to compile and run a wpl file in this environment is using runOnePerf script (e.g. in wifi/receiver). 
+   There is also runTestPerf that will run for multiple files (files are specified in sourcesPerf). 
+
+Q: How to install WinDDK and Sora?
+A: To install WinDDK, get an ISO from:
+   http://www.microsoft.com/en-us/download/details.aspx?id=11800
+   It will be installed in C:\WinDDK. The version should be 7600.16385.1. 
+   Next, install Sora v1.8 (it might work with newer versions but it is not tested).
+   Make sure the environment variable SORA_ROOT (with capital letters) is set to the Sora root (e.g. SORA_ROOT="C:\SoraSDK1.8")
+   Once Sora is installed, run "Windows Win7 x64 Free Build Environment" (a CMD-type icon in your start menu). 
+     IMPORTANT: Do not try to compile Sora from regular cmd.exe shell or cygwin -- it will fail!
+     		If you cannot find it in the start menu, look for it in:
+		C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Windows Driver Kits\WDK 7600.16385.1\Build Environments\Windows 7
+   Go to Sora directory, and then src directory (c:\SoraSDK1.8\src).
+   Run "set_dirs_x64.cmd" (to set up the correct paths) and then run "bcz" (to make the libraries).
+   Once this is done, you should see the following libraries:
+   - In C:\SoraSDK1.8\lib\fre_win7_amd64\amd64 you should see usora.lib
+   - In C:\SoraSDK1.8\target\fre_win7_amd64\amd64 you should see:
+        dot11bbbu.lib, dot11bbau.lib, libbba_lutstu.lib, libbba_modu.lib, sora_utility.lib
+   To test that everything is set up correctly, run tests: make test-wifi-rx (if this passes, WinDDK + Sora are correctly set up).
+
+Q: How to debug C code?
+   There is a VSS solution designed to help debug WPL-compiled C code. 
+   It is located in compiler\examples\Wrapper, and it is called Wrapper.sln
+   There are two projects in it, CompilerVS2012 and CompilerDDK.
+   CompilerVS2012 is for debugging using VS compiler. It does not optimize the code and is easier to debug. 
+   CompilerDDK uses the WinDDK environment to compile the code. It can still be run and debugged from the VS environment 
+   but it is more difficult to debug because the code is heavily optimized. 
+   Before starting, make sure you select the desired project and set it to be the startup project.
+   Compile a WPL file into csrc/test.c. 
+   Then use the usual VS shortcuts/command to compile/run/debug.
+
+ 

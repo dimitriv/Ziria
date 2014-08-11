@@ -1,0 +1,24 @@
+# DESKTOP
+
+test_ifft 182.326
+test_map_ofdm_perf 968.579
+
+test_modulating_bpsk_perf 1149.39
+test_modulating_qpsk_perf 894.943
+test_modulating_16qam_perf 1084.32
+test_modulating_64qam_perf 1416.77
+
+test_interleaving_bpsk_perf 389.63
+test_interleaving_qpsk_perf 335.015
+test_interleaving_16qam_perf 257.555
+test_interleaving_64qam_perf 270.587
+
+test_encoding_12_perf 1112.35
+test_encoding_23_perf 544.461
+test_encoding_34_perf 359.028
+
+test_scramble_perf 1236.54
+
+
+
+

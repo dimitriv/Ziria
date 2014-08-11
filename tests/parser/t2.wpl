@@ -1,0 +1,6 @@
+
+var x : int; 
+
+var y : bool;
+
+read [int] >>> write [int] 

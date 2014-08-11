@@ -1,0 +1,26 @@
+let comp printHead () = 
+var a:complex16;
+   seq{
+     (x:arr[64] complex16)<-takes 64; 
+     do {print "test"};
+        do{
+          for i in [0,64]{
+            print "p["; 
+            print i; 
+            print "] := complex16{re=";
+            print x[i].re;
+            print "; im=";
+            print x[i].im;
+            println "};";
+          }; 
+          a := x[0];
+       };
+     emits x
+   }
+in 
+
+--read[bit] >>> modulate_qpsk() >>> test_ifft() >>> FFT() >>> printHead() >>> write
+
+
+
+

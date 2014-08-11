@@ -1,0 +1,208 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#pragma once 
+
+-- Trigonometry
+
+let external arctan2(y:int16, x: int16, th:arr[1] int16) : () in
+let external ucosw(y:int16, out:arr[1] int16) : () in
+let external usinw(y:int16, out:arr[1] int16) : () in
+let external sin_int16(x:int16) : int16 in 
+let external cos_int16(x:int16) : int16 in 
+let external atan2_int16(y:int16, x:int16) : int16 in 
+let external atan2_int32(y:int32, x:int32) : int32 in 
+
+
+-- ext_math
+let external sine_double_int16(x:int16, prec:int16) : int16 in 
+let external sine_double_int32(x:int32, prec:int32) : int32 in 
+let external cosine_double_int16(x:int16, prec:int16) : int16 in 
+let external cosine_double_int32(x:int32, prec:int32) : int32 in 
+
+let external imin_int16(x:int16, y:int16) : int16 in
+let external imin_int32(x:int, y:int) : int in
+let external imax_int16(x:int16, y:int16) : int16 in
+let external imax_int32(x:int, y:int) : int in
+
+let external ceil_int16(d:double) : int16 in 
+let external ceil_int32(d:double) : int32 in 
+
+let external log2(d:double) : double in 
+let external sqrt(d:double) : double in 
+let external sqrt_int16(d:int16) : int16 in 
+let external sqrt_int32(d:int32) : int32 in
+
+
+
+-- SIMD
+let external permutate_low1032w (x:arr[4] complex16, y:arr[4] complex16): () in
+let external permutate_high1032w (x:arr[4] complex16, y:arr[4] complex16): () in
+let external pairwise_muladdw (x:arr[4] complex16, y:arr[4] complex16, z:arr[4] int): () in
+let external conjrew (x:arr[4] complex16, y:arr[4] complex16): () in
+let external sum_conj_mulw32 (x:arr[4] complex16, y:arr[4] complex16): complex in
+
+-- Return by reference for performance
+--let external conj0w (x:arr[4] complex16): arr[4] complex16 in
+--let external muladdw (a:arr[4] complex16, b:arr[4] complex16): arr[4] int in
+--let external conj_mulw (x:arr[4] complex16, y:arr[4] complex16): arr[4] complex16 in
+let external conj0w (ret:arr[4] complex16, x:arr[4] complex16): () in
+let external muladdw (ret:arr[4] int, a:arr[4] complex16, b:arr[4] complex16): () in
+let external conj_mulw (ret:arr[4] complex16, x:arr[4] complex16, y:arr[4] complex16): () in
+
+
+-- CHECK, unify, and make inputs polymorphic
+let external sumc16 (x:arr[4] complex16): complex16 in
+let external sumc32 (x:arr[4] complex): complex in
+let external sumi16 (x:arr[4] int16): int16 in
+let external sumi32 (x:arr[4] int): int in
+let external v_sum_complex16(x:arr complex16 ) : complex16 in
+let external v_sum_int32(x:arr int32 ) : int32 in
+
+
+-- equivalent to sora hadd:
+-- Sum all components of vector x and stores it in all components of z
+-- z(i) = sum(x) for all i
+let external v_hadd_complex16(z:arr[4] complex16, x:arr[4] complex16) : () in
+let external v_hadd_int32(z:arr[4] int, x:arr[4] int ) : () in
+
+
+
+-- let external addw(x:arr[4] complex16, y:arr[4] complex16, z:arr[4] complex16 ) : () in
+-- c := a + b
+let external v_add_complex16(c:arr complex16, a:arr[length(c)] complex16, b:arr[length(c)] complex16 ) : () in
+let external v_add_complex32(c:arr complex32, a:arr[length(c)] complex32, b:arr[length(c)] complex32 ) : () in
+let external v_add_int16(c:arr int16, a:arr[length(c)] int16, b:arr[length(c)] int16 ) : () in
+let external v_add_int32(c:arr int32, a:arr[length(c)] int32, b:arr[length(c)] int32 ) : () in
+
+-- c := a - b
+let external v_sub_complex16(c:arr complex16, a:arr[length(c)] complex16, b:arr[length(c)] complex16 ) : () in
+let external v_sub_complex32(c:arr complex32, a:arr[length(c)] complex32, b:arr[length(c)] complex32 ) : () in
+let external v_sub_int16(c:arr int16, a:arr[length(c)] int16, b:arr[length(c)] int16 ) : () in
+let external v_sub_int32(c:arr int32, a:arr[length(c)] int32, b:arr[length(c)] int32 ) : () in
+
+-- c := a * b, NB: c is also complex16
+let external v_mul_complex16(c:arr complex16, a:arr[length(c)] complex16, b:arr[length(c)] complex16 ) : () in
+
+
+
+-- z := x >> shift
+let external v_shift_right_complex32(z:arr complex32, x:arr[length(z)] complex32, shift:int ) : () in
+let external v_shift_right_complex16(z:arr complex16, x:arr[length(z)] complex16, shift:int ) : () in
+let external v_shift_right_int32(z:arr int32, x:arr[length(z)] int32, shift:int ) : () in
+let external v_shift_right_int16(z:arr int16, x:arr[length(z)] int16, shift:int ) : () in
+-- z := x << shift
+let external v_shift_left_complex32(z:arr complex32, x:arr[length(z)] complex32, shift:int ) : () in
+let external v_shift_left_complex16(z:arr complex16, x:arr[length(z)] complex16, shift:int ) : () in
+let external v_shift_left_int32(z:arr int32, x:arr[length(z)] int32, shift:int ) : () in
+let external v_shift_left_int16(z:arr int16, x:arr[length(z)] int16, shift:int ) : () in
+
+
+
+
+
+-- Set array to zero
+let external zero_bit(x:arr bit) : () in
+let external zero_complex16(x:arr complex16) : () in
+let external zero_complex32(x:arr complex32) : () in
+let external zero_int16(x:arr int16) : () in
+let external zero_int32(x:arr int32) : () in
+
+-- Copy subarray
+let external copy_complex16(dst:arr complex16, src:arr complex16, len:int) : () in
+let external copy_complex32(dst:arr complex32, src:arr complex32, len:int) : () in
+let external copy_int16(dst:arr int16, src:arr int16, len:int) : () in
+let external copy_int32(dst:arr int32, src:arr int32, len:int) : () in
+
+-- Equivallent to memcpy in C
+-- NB: When len is constant, this can be done with dst[0,len] := src[0,len]
+--     But this doesn't work for dynamic len
+-- NOTE: copy_bit is not trivial to write. TBD
+let external copy_int16(dst : arr int16, src : arr int16, len : int) : int in
+let external copy_int32(dst : arr int32, src : arr int32, len : int) : int in
+let external copy_complex16(dst : arr complex16, src : arr complex16, len : int) : int in
+let external copy_complex32(dst : arr complex32, src : arr complex32, len : int) : int in
+
+-- Conversions
+let external bits_to_int8(dst: arr int8, src:arr bit) : () in 
+let external int8_to_bits(dst: arr bit, src:arr int8) : () in 
+
+
+
+-- Pack two int32 arrays into int16 array
+let external v_pack_int32_complex16(z:arr complex16, x:arr[length(z)] int32, y:arr[length(z)] int32) : () in
+
+
+-- Bit manipulation
+
+let external v_or(input1 : arr bit, input2 : arr[length(input1)] bit)     : arr[length(input1)] bit in
+let external v_and(input1 : arr bit, input2 : arr[length(input1)] bit)    : arr[length(input1)] bit in
+let external v_andnot(input1 : arr bit, input2 : arr[length(input1)] bit) : arr[length(input1)] bit in
+let external v_xor(input1 : arr bit, input2 : arr[length(input1)] bit)    : arr[length(input1)] bit in
+
+
+
+------ SORA Code:
+
+-- FFT
+--let external sora_ifft(nFFTSize : int16, inp : arr complex16, out : arr [length(inp)] complex16) : () in
+--let external sora_fft(nFFTSize : int16, inp : arr complex16, out : arr [length(inp)] complex16) : () in
+let external sora_ifft(inp : arr complex16) : arr [length(inp)] complex16 in
+let external sora_fft(inp : arr complex16) : arr [length(inp)] complex16 in
+
+
+
+-- Do we still need this?
+-- Viterbi
+-- setting max frame size for now
+let external viterbi_init(frame_length:int): () in 
+-- const1 and const2 are used to distinguish between PLCP and data
+let external viterbi_decode(svalue:arr[48] int16, code_rate:int, 
+             bitValue:arr[96000] bit, const1:int16, const2:int16): int16 in 
+let external viterbi_decode_old(intInput:arr[48] int16, code_rate:int16, out:arr[12000] int16) : int16 in
+--let external viterbi_decode_sig11a(svalue:arr[48] int, code_rate:int, bitValue:arr[12000] int): int in
+
+-- softBits could be dynamic based nBPSC
+let external qpsk_demap(input_sample:complex16, softBits:arr[6] int16) : () in 
+let external bpsk_demap(input_sample:complex16) : int16 in
+let external qam16_demap(input_sample:complex16, softBits:arr[6] int16) : () in
+let external qam64_demap(input_sample:complex16, softBits:arr[6] int16) : () in
+
+-- Brick interface
+let external viterbi_brick_init(frame_length:int, code_rate:int16): () in 
+let external viterbiSig11a_brick_init(frame_length:int, code_rate:int16): () in 
+let external viterbi_brick_decode(svalue:arr[48] int8, bitValue:arr[96000] bit): int16 in 
+
+-- Fast version which use MSR-LA license
+let external viterbi_brick_init_fast(frame_length:int, code_rate:int16, depth:int16): () in 
+let external viterbi_brick_decode_fast(svalue:arr[48] int8, bitValue:arr bit): int16 in 
+let external viterbiSig11a_brick_decode_fast(svalue:arr[48] int8, bitValue:arr bit): int16 in 
+
+
+-- DbgPlot library (works only in 32-bit mode)
+let external dbgplot_real_line(data: arr int16) : () in
+let external dbgplot_complex_line(data:arr complex16, type:int16) : () in
+let external dbgplot_spectrum(item:arr complex16) : () in
+let external dbgplot_dots(data:arr complex16) : () in
+let external dbgplot_dot(data:complex16) : () in
+
+
+-- Time-related
+let external print_time() : () in 
+

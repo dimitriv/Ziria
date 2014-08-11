@@ -1,0 +1,12 @@
+-- 1
+-- 2
+-- #include "parserrlib.wplib"
+-- 4
+-- 5
+let comp foo() =  -- 6
+  var x:int;      -- 7
+  emit 4          -- 8
+in                -- 9
+                  -- 10 
+read[int] >>>     -- 11
+    foo() >>> write[int]  -- 12 

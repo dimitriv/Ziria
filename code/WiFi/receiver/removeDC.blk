@@ -1,0 +1,85 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#pragma once 
+
+#include <externals.blk>
+
+
+let comp removeDC() = 
+
+    var y:arr[4] complex16;
+    var sx:arr[4] complex16;
+    var ii:int := 0;
+
+    -- dc related
+    var sum_dc:arr[4] complex16;
+    var dc_update_cnt:int := 8;
+    var dc_update_interval:int := 8;
+    var dc:arr[4] complex16;
+
+    var sumx: arr[4] complex16;
+    var tmp: arr[4] complex16;
+
+seq{
+    do{
+      dc_update_cnt := 8;
+      
+      for ii in [0,4] {
+          sum_dc[ii] := complex16{re=0;im=0}; 
+          dc[ii] := complex16{re=0;im=0};
+      }
+    };
+
+    repeat seq{
+
+      (x:arr[4] complex16) <- takes 4;
+
+      do {
+         v_sub_complex16(y,x,dc);
+      };
+
+      -- dcEstimate moved here:
+      -- it doesn't affect the algorithm but simplifies the program
+      -- otherwise it has to state with removeDC and this is difficult
+      -- and there is no reason not to merge the two
+      do {
+ 
+         v_shift_right_complex16(tmp,y,5);
+         v_hadd_complex16(sumx, tmp);
+         v_add_complex16(sum_dc, sumx, sum_dc);
+
+
+         
+         if dc_update_cnt == 0 then {
+           v_shift_right_complex16(tmp,sum_dc,2);
+           v_add_complex16(dc, tmp, dc);
+           dc_update_cnt := 8;			-- dcUpdateInterval
+           zero_complex16(sum_dc);
+         };
+         
+         dc_update_cnt := dc_update_cnt - 1
+
+      };
+
+      emits y
+
+    }
+}
+in

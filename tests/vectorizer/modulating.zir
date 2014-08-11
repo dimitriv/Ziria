@@ -1,0 +1,70 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#include "const.zir"
+
+let comp modulate_bpsk () = 
+  repeat <= [8,8] { 
+    (x : bit) <- take;
+    emit if (x == '0) then complex16{re=-1; im=0}
+                      else complex16{re=1; im=0};
+  }
+in
+
+
+let comp modulate_qpsk () = 
+  repeat <= [8, 4] {
+    (x : arr[2] bit) <- takes 2;
+    emit complex16{re=1; im=1};
+  }
+in
+
+
+let comp modulate_16qam () = 
+  repeat [8, 2] {
+    x <- takes 4;
+    emit complex16{re=1; im=1}
+  }
+in
+
+
+
+
+let comp modulate_64qam () = 
+  repeat <= [12, 2] {
+    x <- takes 6;
+    emit complex16{re=1; im=1};
+  }
+in
+
+
+
+
+let comp modulate(m : int) =
+  if (m == M_BPSK) then 
+    modulate_bpsk()
+  else
+    if (m == M_QPSK) then
+      modulate_qpsk()
+    else
+      if (m == M_16QAM) then
+      	modulate_16qam()
+      else
+      	modulate_64qam()
+in

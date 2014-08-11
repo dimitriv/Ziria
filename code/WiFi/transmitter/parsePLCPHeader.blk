@@ -1,0 +1,117 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#pragma once 
+
+#include "../const.blk"
+
+
+let printHeader(h : struct HeaderInfo) = 
+  print "Header - modulation: ";
+  if (h.modulation == M_BPSK) then {
+    print "BPSK";
+  } else { if (h.modulation == M_QPSK) then {
+    print "M_QPSK";
+  } else { if (h.modulation == M_16QAM) then {
+    print "16QAM";
+  } else { 
+    print "64QAM";
+  } } }
+  print ", coding: ";
+  if (h.coding == CR_12) then {
+    print "1/2";
+  } else { if (h.coding == CR_23) then {
+    print "2/3";
+  } else { 
+    print "3/4";
+  } } 
+  println ", length: ", h.len, " B";
+in
+
+
+
+let parsePLCPHeader(hdata:arr[24] bit) = 
+var b:int;
+var h:struct HeaderInfo;
+
+    
+     if hdata[0] == '1 && hdata[1] == '1 && hdata[2] == '0 && hdata[3] == '1 then { -- 1
+       h.modulation := M_BPSK; h.coding := CR_12
+     } else {
+       if hdata[0] == '1 && hdata[1] == '1 && hdata[2] == '1 && hdata[3] == '1 then { -- 2
+         h.modulation := M_BPSK; h.coding := CR_34
+       } else {
+          if hdata[0] == '0 && hdata[1] == '1 && hdata[2] == '0 && hdata[3] == '1 then { --3
+            h.modulation := M_QPSK; h.coding := CR_12
+          } else {
+               if hdata[0] == '0 && hdata[1] == '1 && hdata[2] == '1 && hdata[3] == '1 then { -- 4
+                 h.modulation := M_QPSK; h.coding := CR_34
+               } else {
+                  if hdata[0] == '1 && hdata[1] == '0 && hdata[2] == '0 && hdata[3] == '1 then { -- 5
+                    h.modulation := M_16QAM; h.coding := CR_12
+                  } else {
+                     if hdata[0] == '1 && hdata[1] == '0 && hdata[2] == '1 && hdata[3] == '1 then { -- 6
+                       h.modulation := M_16QAM; h.coding := CR_34
+                     } else {
+                       if hdata[0] == '0 && hdata[1] == '0 && hdata[2] == '0 && hdata[3] == '1 then { -- 7
+                         h.modulation := M_64QAM; h.coding := CR_23
+                       } else {
+                         if hdata[0] == '0 && hdata[1] == '0 && hdata[2] == '1 && hdata[3] == '1 then { -- 8
+                           h.modulation := M_64QAM; h.coding := CR_34
+                         } else {
+                            h.modulation := M_BPSK; h.coding := CR_12
+                         }
+                       }
+                     }
+                  }
+               }           
+            }
+       }
+     }
+    
+
+
+     b := 1;
+     h.len := 0;
+     for j in [5,12] {
+       if hdata[j] == '1 then {
+      	  h.len := h.len + b
+       };
+       b := 2*b
+     };
+
+     -- Sanity check - no packet larger than 2048B
+     h.len := if h.len > 2048 then 2048 else h.len;
+
+#ifndef FAST
+     printHeader(h);
+#endif
+     --println "Header bits: ", hdata
+      
+  return h;
+in
+
+
+let comp emitHeader() =
+  seq{
+    (x : arr[24] bit) <- takes 24;
+    emits x;
+    return parsePLCPHeader(x)
+  }
+in

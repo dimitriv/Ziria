@@ -1,0 +1,17 @@
+let comp foo() = 
+  var x : complex16;
+  seq{
+  y <- take;
+  do {x.re := y};
+  do {x.im := y};
+  emit x;
+  do{x := complex16 { re = 1; im = 2 }};
+  let w = complex32 { re = int32(1); im = 2 }
+  in
+  do{x := complex16(w)};
+  emit x
+  -- emit (complex16 { re = 3; im = 3 });
+  }
+in 
+
+read >>> repeat foo() >>> write

@@ -1,0 +1,18 @@
+let foo(x : int) = 
+    return (x+1)
+in
+
+let comp fin(c : ST (C int) int int) =
+    c >>> map foo;
+    emit 34
+in
+
+let comp upstream() =
+   x <- takes 80;
+   emits x;
+   do return 4;
+in
+
+--read[int] >>> write[int]
+
+read[int] >>> fin(upstream()) >>> write[int]

@@ -1,0 +1,9 @@
+let comp f() = 
+    seq { (x:arr[5] int) <- takes 5
+        ; emit x }
+in
+read >>> f() >>> write
+
+
+
+

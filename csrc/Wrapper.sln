@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+VisualStudioVersion = 12.0.21005.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "CompilerDDK", "CompilerDDK\CompilerDDK.vcxproj", "{6109F561-FC23-4535-8C9B-E1A777C774EC}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{A2D1836F-BDA9-4996-80C4-E9088289AB29}"
+	ProjectSection(SolutionItems) = preProject
+		PerfEval.txt = PerfEval.txt
+		Performance1.psess = Performance1.psess
+		CompilerDDK\sources-inline = CompilerDDK\sources-inline
+		CompilerDDK\sources-noinline = CompilerDDK\sources-noinline
+		ToDo.txt = ToDo.txt
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6109F561-FC23-4535-8C9B-E1A777C774EC}.Debug|Win32.ActiveCfg = Debug|Win32
+		{6109F561-FC23-4535-8C9B-E1A777C774EC}.Debug|Win32.Build.0 = Debug|Win32
+		{6109F561-FC23-4535-8C9B-E1A777C774EC}.Release|Win32.ActiveCfg = Release|Win32
+		{6109F561-FC23-4535-8C9B-E1A777C774EC}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

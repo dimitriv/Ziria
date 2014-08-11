@@ -1,0 +1,67 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#pragma once 
+
+#include <externals.blk>
+#include "cca/cca.blk"
+#include "OFDM/LTS.blk"
+#include "removeDC.blk"
+#include "downSample.blk"
+#include "OFDM/DataSymbol.blk"
+#include "OFDM/FreqCompensation.blk"
+#include "OFDM/FFT.blk"
+#include "OFDM/ChannelEqualization.blk"
+#include "OFDM/PilotTrack.blk"
+#include "OFDM/GetData.blk"
+#include "decoding/DecodePLCP.blk"
+#include "decoding/Decode.blk"
+#include "../transmitter/crc.blk"
+
+
+let comp detectSTS() = 
+  removeDC() >>> cca()
+in 
+
+-- FreqCompensation does not work but it is nor crucial so we remove it for now
+--       DataSymbol() >>> FreqCompensation(params) >>> FFT() >>> ChannelEqualization(params) >>> 
+
+
+let comp receiveBits() = 
+       seq { hdata <- DecodePLCP()
+           ; Decode(hdata) >>> seq { (c : arr[4] bit) <- crc(hdata.len); check_crc(c) }
+       }
+in
+
+
+let comp receiver() = 
+  downSample() >>> 
+  seq{ det<-detectSTS()
+#ifndef FAST
+     ; do{println "Detected at: ", det.noSamples}
+#endif
+     ; params <- LTS(det.shift)
+     ; DataSymbol(det.shift) >>> FFT() >>> ChannelEqualization(params)
+       >>> PilotTrack()
+       >>> GetData() 
+       >>> receiveBits()
+  }
+in
+
+

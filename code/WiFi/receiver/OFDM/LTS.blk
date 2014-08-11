@@ -1,0 +1,145 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#pragma once 
+
+#include "../../const.blk"
+#include <externals.blk>
+#include <v_conj_mul.blk>
+#include <abs.blk>
+#include <v_correlate.blk>
+
+
+
+let comp LTS(shift:int16) =
+  var params : struct LTECoeffs;
+
+  var preamble:arr[64] complex16;
+  var origPreamble:arr[64] complex16;
+  var delayedPreamble:arr[64] complex16;
+
+  var pH:arr[64] int16;
+  var fftdata:arr[64] complex16;
+  var delayedFftdata:arr[64] complex16;
+
+  var aLTSSeq11a:arr[64] complex16;
+
+
+
+  let LTSInit() = 
+     var norm_one:complex16 := complex16{re=1600;im=0};
+     let lts11a = 
+        {0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 
+         1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 
+         0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 
+         1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1} in 
+
+     for i in [0,64] {
+         aLTSSeq11a[i] := ( complex16{re=(2*lts11a[i]-1); im=0}*norm_one);
+     }
+  in
+
+
+  let calcCoeff(fftdata:arr[64] complex16) = 
+     var re32:arr[28] int;
+     var im32:arr[28] int;    
+     var sq_norm32:arr[64] int;
+     var ret:arr[64] complex16;
+
+     -- Calculate sq_norm
+     v_conj_mul_complex16_int32(re32,im32,fftdata[0,28],fftdata[0,28]);
+     v_shift_right_int32(sq_norm32[0,28],re32,int(norm_shift))
+
+     v_conj_mul_complex16_int32(re32,im32,fftdata[36,28],fftdata[36,28]);
+     v_shift_right_int32(sq_norm32[36,28],re32,int(norm_shift))
+
+     -- Calculate ret
+     v_conj_mul_complex16_int32(re32,im32,aLTSSeq11a[0,28],fftdata[0,28]);
+
+     for i in [0,28] {
+       if sq_norm32[i] > 1 then { -- precision, 0.1 is 100
+         ret[i] := complex16{re=int16(re32[i]/sq_norm32[i]);im=int16(im32[i]/sq_norm32[i])}
+       } else {
+         ret[i] := complex16{re=0;im=0}
+       }
+     };
+
+     zero_complex16(ret[28,8]);
+
+     v_conj_mul_complex16_int32(re32,im32,aLTSSeq11a[36,28],fftdata[36,28]);
+
+     for i in [36,28] {
+       if sq_norm32[i] > 1 then { -- precision, 0.1 is 100
+         ret[i] := complex16{re=int16(re32[i-36]/sq_norm32[i]);im=int16(im32[i-36]/sq_norm32[i])}
+       } else {
+         ret[i] := complex16{re=0;im=0} 
+       }
+     };
+
+     return ret;
+  in 
+
+seq{
+  do{LTSInit()};
+
+  (xp:arr[144] complex16) <- takes 144;
+
+  do{
+     preamble := xp[16-shift,64];
+     delayedPreamble := xp[80-shift,64];
+
+
+     v_shift_right_complex16(preamble,preamble,1);
+
+
+     let corr = v_correlate(preamble, delayedPreamble) in 
+     let cr = corr.re >> 5 in
+     let ci = corr.im >> 5 in
+
+
+     let phase = if (ci == 0) then 42000000
+                 else atan2_int32(ci, cr) 
+     in
+
+     let cfo_est = int16(phase/(1 << 6)) in 
+
+
+     for i in [0,64] {
+       pH[i] := cfo_est*int16(i);
+       params.freqCoeffs[i] := complex16{re=cos_int16(pH[i]); im=sin_int16(pH[i])}
+     };
+
+     fftdata := sora_fft(preamble);
+
+#ifdef LTS_ACCURATE
+     delayedFftdata := sora_fft(delayedPreamble);
+     v_add_complex16(params.channelCoeffs, calcCoeff(fftdata), calcCoeff(delayedFftdata));
+     v_shift_right_complex16(params.channelCoeffs,params.channelCoeffs,1);
+#else
+     -- We use simple LTS as comparison to Sora 
+     -- since this is what Sora does by default
+     params.channelCoeffs := calcCoeff(fftdata);
+#endif
+
+     return (params)
+   }
+}
+in
+
+
