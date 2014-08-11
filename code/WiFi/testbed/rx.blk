@@ -76,7 +76,7 @@ var byteCnt : int := 0;
         update_crc(x[i], crc_state)
       }
     }
-    -- emits x;
+    --emits x;
   };
 
   crcOK <- check_crc(crc_state);
@@ -85,11 +85,8 @@ var byteCnt : int := 0;
     if (not crcOK) then pktNo := -1;
   }
 
--- DEBUG
---  do {println "Received ", pktNo};
   emit pktNo;
 in
-
 
 
 let comp receiveBits() = 
@@ -153,18 +150,36 @@ in
 
 
 
+let comp skip() = 
+  -- times 1 {
+  times 65000 {
+     x<- take;
+  }
+
+  repeat {
+    x<- take;
+    emit x;
+  }  
+in
+
+
+
 {-
 read[complex16] >>> 
+  skip() >>>
 #ifndef RADIO
   downSample() >>> 
 #endif
-  {det <- detectPreamble()}
->>> write[int32]
+  {det <- detectPreamble();
+    times 10000 {x<-take; emit x}
+  }
+>>> write
 -}
 
 
 
 read >>> 
+--  skip() >>>
 #ifndef RADIO
   downSample() >>> 
 #endif
@@ -186,5 +201,8 @@ read >>>
   }
 #ifdef DO_DECODING
   >>> cntRxPkts()
-#endif
 >>> write[int]
+#else
+>>> write
+#endif
+

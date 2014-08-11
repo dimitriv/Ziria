@@ -30,10 +30,10 @@
 #
 COMPILER?=vs
 
-PP    = ../../scripts/preprocesscompile-mac-$(COMPILER).sh
-PPDEB = ../../scripts/preprocesscompile-mac-$(COMPILER).sh
-CP    = ../../scripts/ccompile-mac-$(COMPILER).sh
-DIFF  = ../../tools/BlinkDiff
+PP    = scripts/preprocesscompile-mac-$(COMPILER).sh
+PPDEB = scripts/preprocesscompile-mac-$(COMPILER).sh
+CP    = scripts/ccompile-mac-$(COMPILER).sh
+DIFF  = ../../../tools/BlinkDiff
 
 # Targets
 vpath %.c ../../csrc/mac
@@ -41,17 +41,25 @@ TGTS = $(patsubst %.blk, %.run, $(wildcard *.blk))
 
 all: $(TGTS)
 
-%.out : %.blk
-	EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
+#%.c : %.blk
+#	EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
 
-%.deb : %.blk
+%.c : %.blk
 	EXTRAOPTS='$(EXTRAOPTS) --name=_$(basename $@)' $(PPDEB) $< $(basename $@)
 
+#%.deb: $(CSRC)
+#	EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
+
+tx.out: tx.c
+	MAC_TYPE=TX EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
+
+rx.out: rx.c
+	MAC_TYPE=RX EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
 
 # TX test
-test_continuous_tx.outfile: test_continuous_tx.deb test_continuous_tx.infile
-	./$< --MAC-type=TX-only
-	     --TX-input=file \
+tx.outfile: tx.out tx.infile
+	./$< --MAC-type=TX-only \
+             --TX-input=file \
              --TX-input-file-name=tx.infile \
              --TX-input-file-mode=dbg \
              --TX-output=file \
@@ -62,8 +70,8 @@ test_continuous_tx.outfile: test_continuous_tx.deb test_continuous_tx.infile
 
 # RX test
 test_continuous_rx.outfile: test_continuous_rx.deb test_continuous_rx.infile
-	./$< --MAC-type=RX-only
-	     --RX-input=file \
+	./$< --MAC-type=RX-only \
+             --RX-input=file \
              --RX-input-file-name=rx.infile \
              --RX-input-file-mode=dbg \
              --RX-output=file \

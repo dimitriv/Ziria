@@ -24,11 +24,11 @@ call %ZIRIA_VS%\vcvarsall.bat x64
 REM We need to clear MAKEFLAGS from make (http://www.cygwin.com/ml/cygwin/1999-10/msg00354.html)
 set MAKEFLAGS=
 
-msbuild CompilerVS13-mac.vcxproj /target:build /p:Configuration=Release /p:Platform=x64 /m /verbosity:minimal
+msbuild CompilerVS13-mac.vcxproj /target:build /p:Configuration=Debug /p:Platform=x64 /m /verbosity:minimal
 
 if %errorlevel% NEQ 0 (
 set errorlev=1
-del CompilerVS13-mac\x64\Release\CompilerVS13.exe 
+del CompilerVS13-mac\x64\Debug\CompilerVS13.exe 
 ) else (
 set errorlev=0
 )

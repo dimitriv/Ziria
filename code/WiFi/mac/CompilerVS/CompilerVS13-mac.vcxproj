@@ -181,8 +181,8 @@
     <ClCompile Include="..\driver.c" />
     <ClCompile Include="..\mac_2threads.c" />
     <ClCompile Include="..\params.c" />
-    <ClCompile Include="..\rx.c" />
-    <ClCompile Include="..\tx.c" />
+    <ClCompile Include="..\rx_thread.c" />
+    <ClCompile Include="..\tx_thread.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\..\csrc\bit.h" />

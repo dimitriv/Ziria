@@ -24,12 +24,6 @@
     <ClCompile Include="..\driver.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\rx.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\tx.c">
-      <Filter>Ziria Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\params.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -86,6 +80,12 @@
     </ClCompile>
     <ClCompile Include="..\..\..\..\csrc\wpl_alloc.c">
       <Filter>Ziria Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\rx_thread.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\tx_thread.c">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
