@@ -39,7 +39,7 @@ var crc_state: arr[4] bit := {'0,'0,'0,'0};
   let len_so_far = (len+1) * 8 in 
   let len_mod = if len_so_far % CRC_VEC > 0 then 1 else 0 in 
   let final_len = ((len_so_far / CRC_VEC) + len_mod) * CRC_VEC in
-  times (final_len - len_so_far) emits {'0,'0,'0,'0,'0,'0,'0,'0};
+  times ((final_len - len_so_far)/8) emits {'0,'0,'0,'0,'0,'0,'0,'0};
 
   return crc_state;
 in
