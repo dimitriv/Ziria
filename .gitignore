@@ -290,3 +290,10 @@ code/WiFi/testbed/*.bin
 code/WiFi/perf/perf_*.txt
 code/WiFi/perf_*.txt
 
+code/WiFi/mac/CompilerVS/Debug/*
+code/WiFi/mac/CompilerVS/x64/Debug/*
+code/WiFi/mac/CompilerVS/x64/Release/*
+code/WiFi/mac/CompilerVS/CompilerVS13-mac.opensdf
+code/WiFi/mac/CompilerVS/CompilerVS13-mac.sdf
+code/WiFi/mac/CompilerVS/CompilerVS13-mac.v12.suo
+code/WiFi/mac/CompilerVS/CompilerVS13-mac.vcxproj.user
