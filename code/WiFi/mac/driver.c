@@ -69,6 +69,7 @@ extern int SetUpThreads_2t(PSORA_UTHREAD_PROC * User_Routines);
 
 
 int mac_type;
+char txPC[255];
 
 // tracks bytes copied 
 extern unsigned long long bytes_copied;

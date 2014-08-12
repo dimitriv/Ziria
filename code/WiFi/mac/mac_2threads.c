@@ -44,12 +44,11 @@ permissions and limitations under the License.
 #include "buf.h"
 #include "utils.h"
 
+#include "mac.h"
+
 // New Sora specific - DEBUG
 #include "sora_RegisterRW.h"
 
-
-// TX or RX MAC type
-extern int mac_type;
 
 
 extern PSORA_UTHREAD_PROC User_Routines[MAX_THREADS];
@@ -121,9 +120,12 @@ void init_mac_2threads()
 
 	if (params_rx->outType == TY_IP)
 	{
-		// To be implemented
-		//	  HRESULT hResult = SoraUEnableGetRxPacket();
-		//	  assert(hResult == S_OK);
+		// TODO
+		/*
+		HRESULT hResult = SoraUEnableGetRxPacket();
+		assert(hResult == S_OK);
+		Ndis_init(txPC);
+		*/
 	}
 
 	// Start measuring time
@@ -148,14 +150,16 @@ int SetUpThreads_2t(PSORA_UTHREAD_PROC * User_Routines)
 	int noThr = 0;
 	switch (mac_type) {
 	case 0: 
+	case 2:
 		User_Routines[0] = (PSORA_UTHREAD_PROC)go_thread_tx;
 		noThr = 1;
 		break;
 	case 1:
+	case 3:
 		User_Routines[0] = (PSORA_UTHREAD_PROC)go_thread_rx;
 		noThr = 1;
 		break;
-	case 2:
+	case 4:
 		User_Routines[0] = (PSORA_UTHREAD_PROC)go_thread_tx;
 		User_Routines[1] = (PSORA_UTHREAD_PROC)go_thread_rx;
 		noThr = 2;
@@ -293,6 +297,9 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 
 		while (1) 
 		{
+			// NDIS read
+			//UINT len = ReadFragment(payloadBuf, RADIO_MTU);
+
 			// Simple payload to check correctness
 			for (int i=0; i<16; i++)
 				payloadBuf[i] = pktCnt;
@@ -456,6 +463,7 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 	if (outType == TY_IP)
 	{
 		// IP
+		//int n = WriteFragment(payload);
 	}
 
 

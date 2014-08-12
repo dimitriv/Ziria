@@ -201,6 +201,7 @@
     <ClInclude Include="..\..\..\..\csrc\types.h" />
     <ClInclude Include="..\..\..\..\csrc\utils.h" />
     <ClInclude Include="..\..\..\..\csrc\wpl_alloc.h" />
+    <ClInclude Include="..\mac.h" />
     <ClInclude Include="..\sora_RegisterRW.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

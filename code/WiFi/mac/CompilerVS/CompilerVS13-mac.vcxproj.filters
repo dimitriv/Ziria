@@ -140,5 +140,8 @@
     <ClInclude Include="..\sora_RegisterRW.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\mac.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -23,6 +23,8 @@
 #include <wpl_alloc.h>
 #include <params.h>
 
+#include "mac.h"
+
 
 FILE * try_open(char *filename, char *mode) 
 {
@@ -78,10 +80,12 @@ BlinkFileType parse_type(char *typ)
 }
 
 
-int parse_MAC(char *typ)
+MACType parse_MAC(char *typ)
 {
-	if (strcmp(typ, "TX-only") == 0)	return 0;
-	if (strcmp(typ, "RX-only") == 0)	return 1;
+	if (strcmp(typ, "TX-test") == 0)	return MAC_TX_TEST;
+	if (strcmp(typ, "RX-test") == 0)	return MAC_RX_TEST;
+	if (strcmp(typ, "TX-only") == 0)	return MAC_TX_ONLY;
+	if (strcmp(typ, "RX-only") == 0)	return MAC_RX_ONLY;
 	fprintf(stderr, "Error: cannot parse MAC parameter %s\n", typ);
 	exit(1);
 }
@@ -149,8 +153,8 @@ unsigned long parse_size (char *rp) {
 
 
 // Global function
-extern int mac_type;
 void init_inTypeMAC(BlinkParams *params, char *typ)				{ mac_type = parse_MAC(typ); }
+void init_txPC(BlinkParams *params, char *typ)					{ strcpy(txPC, typ); }
 
 
 // TX Init functions
@@ -212,9 +216,9 @@ void init_sampleRateRX(BlinkParams *params, char *i)			{ params[0].radioParams.S
 
 // Here is where we declare the parameters
 #ifdef SORA_PLATFORM
-#define PARAM_TABLE_LENGTH		39
+#define PARAM_TABLE_LENGTH		40
 #else
-#define PARAM_TABLE_LENGTH		26
+#define PARAM_TABLE_LENGTH		27
 #endif
 
 BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] = 
@@ -225,11 +229,16 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
        "0",
 	   init_outMemorySizeTX },
 	 { "--MAC-type=",
-	   "--MAC-type=TX-only|RX-only",
-	   "Which MAC to run, TX or RX",
-	   "TX-only",
+	   "--MAC-type=TX-test|RX-test|TX-only|RX-only",
+	   "Which MAC to run",
+	   "TX-test",
 	   init_inTypeMAC },
-     { "--TX-input=", 
+	   { "--TX-PC=",
+	   "--TX-PC=string",
+	   "Name of a PC to which to connect to",
+	   "",
+	   init_inTypeMAC },
+	   { "--TX-input=",
        "--TX-input=file|dummy|sora|ip",
        "Input TX samples come from a file, radio, or are dummy samples",
        "file",
