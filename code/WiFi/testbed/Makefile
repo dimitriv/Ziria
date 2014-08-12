@@ -41,11 +41,11 @@ TGTS = $(patsubst %.blk, %.test, $(wildcard *.blk))
 
 all: $(TGTS)
 
-#%.c : %.blk
-#	EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
-
 %.c : %.blk
-	EXTRAOPTS='$(EXTRAOPTS) --name=_$(basename $@)' $(PPDEB) $< $(basename $@)
+	EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
+
+#%.c : %.blk
+#	EXTRAOPTS='$(EXTRAOPTS) --name=_$(basename $@)' $(PPDEB) $< $(basename $@)
 
 tx.out: tx.c
 	MAC_TYPE=TX EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
@@ -83,20 +83,21 @@ rx.outfile: rx.out rx.infile
 
 # TX real
 tx.run: tx.out
-	./$< --MAC-type=TX-only
+	./$< --MAC-type=TX-only \
 	     --TX-input=file \
-             --TX-input-file-name=test_continuous_tx.infile \
+             --TX-input-file-name=tx.infile \
              --TX-input-file-mode=dbg \
 	     --TX-output=sora \
+	     --TX-sora-gain=4096 \
 	     --TX-sora-radio-id=0 \
 	     --TX-sora-central-frequency=739
 
 # RX real
 rx.run: rx.out
-	./$< --MAC-type=RX-only
+	./$< --MAC-type=RX-only \
 	     --RX-input=sora \
 	     --RX-output=dummy \
-	     --RX-sora-radio-id=0 \
+	     --RX-sora-radio-id=1 \
 	     --RX-sora-central-frequency=739
 
 

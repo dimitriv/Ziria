@@ -87,6 +87,9 @@
     <ClCompile Include="..\tx_thread.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\sora_RegisterRW.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\..\csrc\bit.h">
@@ -133,6 +136,9 @@
     </ClInclude>
     <ClInclude Include="..\..\..\..\csrc\wpl_alloc.h">
       <Filter>Ziria Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sora_RegisterRW.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

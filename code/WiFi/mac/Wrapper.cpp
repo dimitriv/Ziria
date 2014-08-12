@@ -36,9 +36,13 @@
 //#include "sora_ext_visual.c"
 #include "../../../csrc/sora_radio.c"
 #include "../../../csrc/utils.c"
+
+// New Sora specific - DEBUG
+#include "sora_RegisterRW.cpp"
+
 #include "mac_2threads.c"
 #include "driver.c"
-#include "tx.c"
-#include "rx.c"
+#include "tx_thread.c"
+#include "rx_thread.c"
 
 

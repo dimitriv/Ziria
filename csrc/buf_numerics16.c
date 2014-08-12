@@ -265,7 +265,7 @@ GetStatus buf_getcomplex16(BlinkParams *params, BufContextBlock *blk, complex16 
 	if (params->inType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
-		readSora(*params, x, 1);
+		readSora(params, x, 1);
 		return GS_SUCCESS;
 #endif
 	}
@@ -287,7 +287,7 @@ GetStatus buf_getarrcomplex16(BlinkParams *params, BufContextBlock *blk, complex
 	if (params->inType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
-		readSora(*params, x, vlen);
+		readSora(params, x, vlen);
 		return GS_SUCCESS;
 #endif
 	}
@@ -543,7 +543,7 @@ void buf_putcomplex16(BlinkParams *params, BufContextBlock *blk, struct complex1
 	if (params->outType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
-		writeSora(*params, &x, 1);
+		writeSora(params, &x, 1);
 #else
 		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
 		exit(1);
@@ -567,7 +567,7 @@ void buf_putarrcomplex16(BlinkParams *params, BufContextBlock *blk, struct compl
 	if (params->outType == TY_SORA)
 	{
 #ifdef SORA_PLATFORM
-		writeSora(*params, x, vlen);
+		writeSora(params, x, vlen);
 #else
 		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
 		exit(1);

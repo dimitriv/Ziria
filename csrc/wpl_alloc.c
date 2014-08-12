@@ -25,9 +25,12 @@
 #include "params.h"
 
 
-void initHeapCtxBlock(HeapContextBlock *hblk)
+// Called manually from driver
+void initHeapCtxBlock(HeapContextBlock *hblk, unsigned int max_heap_size)
 {
-	hblk->wpl_heap = NULL;
+	//hblk->wpl_heap = NULL;
+	hblk->wpl_heap_siz = max_heap_size;
+	hblk->wpl_heap = try_alloc_bytes(hblk, max_heap_size);
 }
 
 
@@ -52,12 +55,14 @@ char * try_alloc_bytes(HeapContextBlock *hblk, unsigned int siz)
 #define CALIGN16(x) (((((x) + 15) >> 4) << 4))
 
 
+// Called automtically from Ziria's produced C code
 void wpl_init_heap(HeapContextBlock *hblk, unsigned int max_heap_size)
 {
   // if (num_of_allocs == 0) return; // we need no heap!
   
-  hblk->wpl_heap_siz = max_heap_size;
-  hblk->wpl_heap = try_alloc_bytes(hblk, max_heap_size);
+  // Here we don't want to redo malloc, but just reset the start pointer
+  //hblk->wpl_heap_siz = max_heap_size;
+  //hblk->wpl_heap = try_alloc_bytes(hblk, max_heap_size);
   hblk->wpl_free_idx = CALIGN16((unsigned int)hblk->wpl_heap) - (unsigned int)hblk->wpl_heap;
 }
 

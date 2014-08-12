@@ -25,7 +25,7 @@ typedef struct _HeapContextBlock {
 } HeapContextBlock;
 
 
-void initHeapCtxBlock(HeapContextBlock *hblk);
+void initHeapCtxBlock(HeapContextBlock *hblk, unsigned int max_heap_size);
 
 
 /* The bump allocator */

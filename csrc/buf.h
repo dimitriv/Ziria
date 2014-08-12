@@ -132,6 +132,7 @@ typedef struct _BufContextBlock {
 
 
 // Defined in buf_bit.c
+void resetBufCtxBlock(BufContextBlock *blk);
 void initBufCtxBlock(BufContextBlock *blk);
 
 

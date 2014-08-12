@@ -113,9 +113,13 @@ int __cdecl main(int argc, char **argv)
 
 
 	// Start Sora HW
-	if (params_rx->inType == TY_SORA || params_tx->outType == TY_SORA)
+	if (params_rx->inType == TY_SORA)
 	{
-		RadioStop(*params_tx);
+		RadioStop(params_rx);
+	}
+	if (params_tx->outType == TY_SORA)
+	{
+		RadioStop(params_tx);
 	}
 	// Start NDIS
 	if (params_tx->inType == TY_IP)

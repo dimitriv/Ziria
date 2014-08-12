@@ -39,7 +39,7 @@
 
 
 
-void initBufCtxBlock(BufContextBlock *blk)
+void resetBufCtxBlock(BufContextBlock *blk)
 {
 	blk->input_idx = 0;
 	blk->input_repetitions = 1;
@@ -67,16 +67,24 @@ void initBufCtxBlock(BufContextBlock *blk)
 	blk->num_fst = 1;
 	blk->num_output_idx = 0;
 
-	blk->mem_input_buf = NULL;
-	blk->mem_output_buf = NULL;
-	blk->mem_input_buf_size = 0;
-	blk->mem_output_buf_size = 0;
-
 	blk->total_in = 0;
 	blk->total_out = 0;
 	blk->size_in = 0;
 	blk->size_out = 0;
 }
+
+
+
+void initBufCtxBlock(BufContextBlock *blk)
+{
+	resetBufCtxBlock(blk);
+	blk->mem_input_buf = NULL;
+	blk->mem_output_buf = NULL;
+	blk->mem_input_buf_size = 0;
+	blk->mem_output_buf_size = 0;
+}
+
+
 
 
 

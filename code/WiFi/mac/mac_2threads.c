@@ -21,6 +21,7 @@ permissions and limitations under the License.
 #include <math.h>
 #include <time.h>
 #include <string.h>
+#include <stdio.h>
 
 #ifdef SORA_PLATFORM
 #include <winsock2.h> // ws2_32.lib required
@@ -42,6 +43,9 @@ permissions and limitations under the License.
 #include "wpl_alloc.h"
 #include "buf.h"
 #include "utils.h"
+
+// New Sora specific - DEBUG
+#include "sora_RegisterRW.h"
 
 
 // TX or RX MAC type
@@ -94,13 +98,17 @@ void init_mac_2threads()
 	// Start Sora HW
 	if (params_rx->inType == TY_SORA)
 	{
-		RadioStart(*params_rx);
-		InitSoraRx(*params_rx);
+		RadioStart(params_rx);
+		InitSoraRx(params_rx);
+		// New Sora specific - DEBUG
+		SetFirmwareParameters();
 	}
 	if (params_tx->outType == TY_SORA)
 	{
-		RadioStart(*params_tx);
-		InitSoraTx(*params_tx);
+		RadioStart(params_tx);
+		InitSoraTx(params_tx);
+		// New Sora specific - DEBUG
+		SetFirmwareParameters();
 	}
 
 	// Start NDIS
@@ -124,8 +132,8 @@ void init_mac_2threads()
 	// Init
 	initBufCtxBlock(&buf_ctx_tx);
 	initBufCtxBlock(&buf_ctx_rx);
-	initHeapCtxBlock(&heap_ctx_tx);
-	initHeapCtxBlock(&heap_ctx_rx);
+	initHeapCtxBlock(&heap_ctx_tx, params_tx->heapSize);
+	initHeapCtxBlock(&heap_ctx_rx, params_rx->heapSize);
 
 	wpl_global_init_tx(params_tx->heapSize);
 	wpl_global_init_rx(params_rx->heapSize);
@@ -168,7 +176,7 @@ int SetUpThreads_2t(PSORA_UTHREAD_PROC * User_Routines)
 #define M_64QAM	3
 
 
-void createHeader(char *header, int modulation, int encoding, int length)
+void createHeader(unsigned char *header, int modulation, int encoding, int length)
 {
 	header[0] &= 0xF0;
 	switch (modulation) {
@@ -213,21 +221,22 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 	const long maxInSize = 2048;
 	const long maxOutSize = 200000;
 	const int headerSizeInBytes = 3;
-	char * headerBuf;
-	char * payloadBuf;
+	unsigned char * headerBuf;
+	unsigned char * payloadBuf;
 	unsigned int payloadSize;
 
 
 	// TX always first prepares the buffers in memory
 	params_tx->inType = TY_MEM;
 	buf_ctx_tx.mem_input_buf = (void *)try_alloc_bytes(pheap_ctx_tx, maxInSize);
-	headerBuf = (char*)buf_ctx_tx.mem_input_buf;
-	payloadBuf = (char*)buf_ctx_tx.mem_input_buf + headerSizeInBytes;
+	headerBuf = (unsigned char*)buf_ctx_tx.mem_input_buf;
+	payloadBuf = (unsigned char*)buf_ctx_tx.mem_input_buf + headerSizeInBytes;
 
-	if (params_tx->outType == TY_MEM)
+	if (params_tx->outType == TY_SORA)
 	{
+		params_tx->outType = TY_MEM;
 		buf_ctx_tx.mem_output_buf_size = maxOutSize;
-		buf_ctx_tx.mem_output_buf = (void *)try_alloc_bytes(pheap_ctx_tx, maxOutSize * sizeof(complex16));
+		buf_ctx_tx.mem_output_buf = params_tx->TXBuffer;
 	}
 
 
@@ -263,21 +272,65 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 
 	printf("Starting TX ...\n");
 
-	memset(headerBuf, 0, 3);
-	createHeader(headerBuf, M_BPSK, CR_12, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
 
-	wpl_input_initialize_tx();
-
-	// Run Ziria TX code
-	wpl_go_tx();
-
-
-	wpl_output_finalize_tx();
-
-	if (outType == TY_SORA)
+	if (outType == TY_FILE)
 	{
-		// SORA
+		memset(headerBuf, 0, 3);
+		createHeader(headerBuf, M_BPSK, CR_12, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
+
+		wpl_input_initialize_tx();
+
+		// Run Ziria TX code
+		wpl_go_tx();
+
+
+		wpl_output_finalize_tx();
 	}
+	else
+	{
+		// SORA output
+		unsigned char pktCnt = 0;
+
+		while (1) 
+		{
+			// Simple payload to check correctness
+			for (int i=0; i<16; i++)
+				payloadBuf[i] = pktCnt;
+			pktCnt ++;
+
+			memset(headerBuf, 0, 3);
+			createHeader(headerBuf, M_BPSK, CR_12, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
+
+			// Run Ziria TX code to preapre the buffer
+			resetBufCtxBlock(&buf_ctx_tx);				// reset context block (counters)
+			wpl_global_init_tx(params_tx->heapSize);	// reset memory management
+			wpl_input_initialize_tx();
+			wpl_go_tx();
+			wpl_output_finalize_tx();
+
+			// Sora TX
+			HRESULT hr;
+			ULONG TxID;
+
+			hr = SoraURadioTransferEx(params_tx->radioParams.radioId, params_tx->TXBuffer, 4*buf_ctx_tx.total_out, &TxID);	
+			if (!SUCCEEDED(hr))
+			{
+				fprintf (stderr, "Error: Fail to transfer Sora Tx buffer!\n" );
+				exit(1);
+			}
+
+			hr = SoraURadioTx(params_tx->radioParams.radioId, TxID);
+
+			if (!SUCCEEDED(hr))
+			{
+				fprintf (stderr, "Error: Fail to transmit Sora Tx buffer!\n" );
+				exit(1);
+			}
+
+			hr = SoraURadioTxFree(params_tx->radioParams.radioId, TxID);
+		}
+	}
+
 
 
 	ti->fRunning = false;
@@ -296,12 +349,17 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 	BlinkFileType inType = params_rx->inType;
 	BlinkFileType outType = params_rx->outType;
 	const long maxInSize = 200000;
-	const long maxOutSize = 2048;
+	const long maxOutSize = 4096;
 	unsigned int sampleSize;
 
-	// TX always first prepares the buffers in memory
+	// RX always first prepares the buffers in memory
 	params_rx->inType = TY_MEM;
 	buf_ctx_rx.mem_input_buf = (void *)try_alloc_bytes(pheap_ctx_rx, maxInSize * sizeof(complex16));
+
+	// RX always first receivers the buffers in memory
+	params_rx->outType = TY_MEM;
+	buf_ctx_rx.mem_output_buf = (void *)try_alloc_bytes(pheap_ctx_rx, maxOutSize * sizeof(char));
+
 
 	if (inType != TY_FILE && inType != TY_SORA)
 	{
@@ -343,12 +401,57 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 
 	printf("Starting RX ...\n");
 
-	wpl_input_initialize_rx();
 
-	// Run Ziria TX code
-	wpl_go_rx();
+	if (inType == TY_FILE)
+	{
+		// Run Ziria TX code
+		resetBufCtxBlock(&buf_ctx_rx);				// reset context block (counters)
+		wpl_global_init_rx(params_rx->heapSize);	// reset memory management
+		wpl_input_initialize_rx();
+		wpl_go_rx();
+		wpl_output_finalize_rx();
+	}
+	else
+	{
+		unsigned char pktCnt = 0xFF;
+		unsigned long long cntOk = 0;
+		unsigned long long cntError = 0;
+		unsigned long long cntMiss = 0;
 
-	wpl_output_finalize_rx();
+		while (1)
+		{
+			// Run Ziria TX code
+			wpl_input_initialize_rx();
+			wpl_go_rx();
+			wpl_output_finalize_rx();
+
+			unsigned int lengthInBytes = buf_ctx_rx.total_out / 8;
+			unsigned char * payload = (unsigned char *) buf_ctx_rx.mem_output_buf;
+			unsigned char pc = payload[0];
+			bool pktOK = true;
+
+			for (int i=1; i < 16 && pktOK; i++)
+				pktOK = pktOK && (payload[i] == pc);
+
+			if (pktOK) 
+			{
+				cntOk ++;
+				if (pktCnt == 0xFF)
+				{
+					pktCnt = pc;
+				}
+				else
+				{
+					cntMiss += (pc - pktCnt - 1);
+				}
+			}
+			else
+			{
+				cntError ++;
+			}
+		}
+	}
+
 
 	if (outType == TY_IP)
 	{

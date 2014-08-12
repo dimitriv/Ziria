@@ -182,6 +182,7 @@
     <ClCompile Include="..\mac_2threads.c" />
     <ClCompile Include="..\params.c" />
     <ClCompile Include="..\rx_thread.c" />
+    <ClCompile Include="..\sora_RegisterRW.cpp" />
     <ClCompile Include="..\tx_thread.c" />
   </ItemGroup>
   <ItemGroup>
@@ -200,6 +201,7 @@
     <ClInclude Include="..\..\..\..\csrc\types.h" />
     <ClInclude Include="..\..\..\..\csrc\utils.h" />
     <ClInclude Include="..\..\..\..\csrc\wpl_alloc.h" />
+    <ClInclude Include="..\sora_RegisterRW.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
