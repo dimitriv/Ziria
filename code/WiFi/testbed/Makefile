@@ -77,6 +77,10 @@ rx.outfile: rx.out rx.infile
              $(EXTRARUNOPT)
 
 
+%.test: %.outfile
+	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
+
+
 # TX real
 tx.run: tx.out
 	./$< --MAC-type=TX-only

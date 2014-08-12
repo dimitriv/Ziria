@@ -81,34 +81,52 @@ read[complex16] >>>
   pad() >>>
 #endif
   {det <- detectPreamble()
---    ; times 10000 {x<-take; emit x}
+    ; times 10000 {x<-take; emit x}
   }
 >>> write
 -}
 
 
 
-read >>> 
---  skip() >>>
-#ifndef RADIO
-  downSample() >>> 
-  pad() >>>
-#endif
---  repeat {
-    seq{ det<-detectPreamble()
-#ifndef FAST
-       ; do{println "Detected at: ", det.noSamples}
-#endif
-       ; params <- (LTS(det.shift)); 
-         DataSymbol(det.shift) 
-         >>> FFT() 
-         >>> ChannelEqualization(params)
-         >>> PilotTrack() 
-         >>> GetData()
-#ifdef DO_DECODING
-         >>> receiveBits()
-#endif
-    }
---  }
->>> write
 
+#ifndef RADIO 
+
+  read >>> 
+     downSample() >>> 
+     pad() >>>
+     seq{ det<-detectPreamble()
+        ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift}
+        ; params <- (LTS(det.shift)); 
+          DataSymbol(det.shift) 
+          >>> FFT() 
+          >>> ChannelEqualization(params)
+          >>> PilotTrack() 
+          >>> GetData()
+     #ifdef DO_DECODING
+          >>> receiveBits()
+     #endif
+     }
+  >>> write
+
+#else 
+
+   read >>> 
+     repeat {
+       seq{ det<-detectPreamble()
+       #ifndef FAST
+          ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift}
+       #endif
+          ; params <- (LTS(det.shift)); 
+            DataSymbol(det.shift) 
+            >>> FFT() 
+            >>> ChannelEqualization(params)
+            >>> PilotTrack() 
+            >>> GetData()
+       #ifdef DO_DECODING
+            >>> receiveBits()
+       #endif
+       }
+     }
+   >>> write
+
+#endif

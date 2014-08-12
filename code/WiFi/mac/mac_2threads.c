@@ -224,9 +224,11 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 	headerBuf = (char*)buf_ctx_tx.mem_input_buf;
 	payloadBuf = (char*)buf_ctx_tx.mem_input_buf + headerSizeInBytes;
 
-	params_tx->outType = TY_MEM;
-	buf_ctx_tx.mem_output_buf_size = maxOutSize;
-	buf_ctx_tx.mem_output_buf = (void *)try_alloc_bytes(pheap_ctx_tx, maxOutSize * sizeof(complex16));
+	if (params_tx->outType == TY_MEM)
+	{
+		buf_ctx_tx.mem_output_buf_size = maxOutSize;
+		buf_ctx_tx.mem_output_buf = (void *)try_alloc_bytes(pheap_ctx_tx, maxOutSize * sizeof(complex16));
+	}
 
 
 	if (inType != TY_FILE && inType != TY_IP)
@@ -272,33 +274,7 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 
 	wpl_output_finalize_tx();
 
-
-	if (outType == TY_FILE)
-	{
-		printf("TX Total input items (including EOF): %d (%d B), output items: %d (%d B)\n",
-			buf_ctx_tx.total_in, buf_ctx_tx.total_in*buf_ctx_tx.size_in/8,
-			buf_ctx_tx.total_out, buf_ctx_tx.total_out*buf_ctx_tx.size_out/8);
-
-		FILE *output_file = try_open(params_tx->outFileName, "w");
-		if (params_tx->inFileMode == MODE_BIN)
-		{
-			fwrite(buf_ctx_tx.mem_output_buf, buf_ctx_tx.total_out, sizeof(complex16), output_file);
-		}
-		else
-		{
-			complex16 *ptr = (complex16 *) buf_ctx_tx.mem_output_buf;
-			for (int i = 0; i < buf_ctx_tx.total_out; i++)
-			{
-				fprintf(output_file, "%d,%d", ptr[i].re, ptr[i].im);
-				if (i < buf_ctx_tx.total_out - 1)
-				{
-					fprintf(output_file, ",");
-				}
-			}
-		}
-		fclose(output_file);
-	}
-	else
+	if (outType == TY_SORA)
 	{
 		// SORA
 	}
