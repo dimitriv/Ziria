@@ -1,3 +1,4 @@
+#pragma once
 /*
 Copyright (c) Microsoft Corporation
 All rights reserved.
@@ -28,4 +29,4 @@ typedef enum __MACType {
 
 // TX or RX MAC type
 extern int mac_type;
-extern char *txPC;
+extern char txPC[];

@@ -295,6 +295,9 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 		// SORA output
 		unsigned char pktCnt = 0;
 
+		// This is slow as it includes LUT generation
+		wpl_global_init_tx(params_tx->heapSize);
+
 		while (1) 
 		{
 			// NDIS read
@@ -309,8 +312,9 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 			createHeader(headerBuf, M_BPSK, CR_12, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
 
 			// Run Ziria TX code to preapre the buffer
-			resetBufCtxBlock(&buf_ctx_tx);				// reset context block (counters)
-			wpl_global_init_tx(params_tx->heapSize);	// reset memory management
+			resetBufCtxBlock(&buf_ctx_tx);						// reset context block (counters)
+			wpl_init_heap(pheap_ctx_tx, params_tx->heapSize);	// reset memory management
+
 			wpl_input_initialize_tx();
 			wpl_go_tx();
 			wpl_output_finalize_tx();
@@ -319,10 +323,10 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 			HRESULT hr;
 			ULONG TxID;
 
-			hr = SoraURadioTransferEx(params_tx->radioParams.radioId, params_tx->TXBuffer, 4*buf_ctx_tx.total_out, &TxID);	
+			hr = SoraURadioTransferEx(params_tx->radioParams.radioId, params_tx->TXBuffer, 4 * buf_ctx_tx.total_out, &TxID);
 			if (!SUCCEEDED(hr))
 			{
-				fprintf (stderr, "Error: Fail to transfer Sora Tx buffer!\n" );
+				fprintf(stderr, "Error: Fail to transfer Sora Tx buffer!\n");
 				exit(1);
 			}
 
@@ -330,7 +334,7 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 
 			if (!SUCCEEDED(hr))
 			{
-				fprintf (stderr, "Error: Fail to transmit Sora Tx buffer!\n" );
+				fprintf(stderr, "Error: Fail to transmit Sora Tx buffer!\n");
 				exit(1);
 			}
 

@@ -20,7 +20,6 @@
 #include "../../../csrc/sora_ip.c"
 #include "../../../csrc/sora_ext_lib.c"
 #include "../../../csrc/sora_ext_viterbi.c"
-#include "../../../csrc/params.c"
 #include "../../../csrc/bit.c"
 #include "../../../csrc/wpl_alloc.c"
 #include "../../../csrc/numerics.c"
@@ -40,6 +39,7 @@
 // New Sora specific - DEBUG
 #include "sora_RegisterRW.cpp"
 
+#include "params.c"
 #include "mac_2threads.c"
 #include "driver.c"
 #include "tx_thread.c"

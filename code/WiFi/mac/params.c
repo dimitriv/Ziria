@@ -91,6 +91,11 @@ MACType parse_MAC(char *typ)
 }
 
 
+void parse_txPC(char *typ)
+{
+	//strcpy(txPC, typ);
+}
+
 BlinkFileMode parse_mode(char *md) {
   if (strcmp(md,"dbg") == 0)
     return MODE_DBG; 
@@ -154,7 +159,7 @@ unsigned long parse_size (char *rp) {
 
 // Global function
 void init_inTypeMAC(BlinkParams *params, char *typ)				{ mac_type = parse_MAC(typ); }
-void init_txPC(BlinkParams *params, char *typ)					{ strcpy(txPC, typ); }
+void init_txPC(BlinkParams *params, char *typ)					{ parse_txPC(typ); }
 
 
 // TX Init functions
@@ -237,7 +242,7 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
 	   "--TX-PC=string",
 	   "Name of a PC to which to connect to",
 	   "",
-	   init_inTypeMAC },
+	   init_txPC },
 	   { "--TX-input=",
        "--TX-input=file|dummy|sora|ip",
        "Input TX samples come from a file, radio, or are dummy samples",

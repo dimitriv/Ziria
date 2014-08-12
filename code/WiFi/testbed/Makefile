@@ -32,7 +32,8 @@ COMPILER?=vs
 
 PP    = scripts/preprocesscompile-mac-$(COMPILER).sh
 PPDEB = scripts/preprocesscompile-mac-$(COMPILER).sh
-CP    = scripts/ccompile-mac-$(COMPILER).sh
+CP    = scripts/ccompile-mac-$(COMPILER)-inline.sh
+CPDEB = scripts/ccompile-mac-$(COMPILER).sh
 DIFF  = ../../../tools/BlinkDiff
 
 # Targets
@@ -48,14 +49,16 @@ all: $(TGTS)
 #	EXTRAOPTS='$(EXTRAOPTS) --name=_$(basename $@)' $(PPDEB) $< $(basename $@)
 
 tx.out: tx.c
+#	MAC_TYPE=TX EXTRAOPTS='$(EXTRAOPTS)' $(CPDEB) 
 	MAC_TYPE=TX EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
 
 rx.out: rx.c
+#	MAC_TYPE=RX EXTRAOPTS='$(EXTRAOPTS)' $(CPDEB) 
 	MAC_TYPE=RX EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
 
 # TX test
 tx.outfile: tx.out tx.infile
-	./$< --MAC-type=TX-only \
+	./$< --MAC-type=TX-test \
              --TX-input=file \
              --TX-input-file-name=tx.infile \
              --TX-input-file-mode=dbg \
@@ -67,7 +70,7 @@ tx.outfile: tx.out tx.infile
 
 # RX test
 rx.outfile: rx.out rx.infile
-	./$< --MAC-type=RX-only \
+	./$< --MAC-type=RX-test \
              --RX-input=file \
              --RX-input-file-name=rx.infile \
              --RX-input-file-mode=dbg \
