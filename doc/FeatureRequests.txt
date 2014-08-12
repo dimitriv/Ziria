@@ -26,3 +26,4 @@ List of features that we hope to add to Ziria at some point:
 
 - Fix the heap bug in struct3.wpl test in backend
 
+- Add switch/case statement
