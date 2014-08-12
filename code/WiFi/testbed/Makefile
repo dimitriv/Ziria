@@ -37,7 +37,7 @@ DIFF  = ../../../tools/BlinkDiff
 
 # Targets
 vpath %.c ../../csrc/mac
-TGTS = $(patsubst %.blk, %.run, $(wildcard *.blk))
+TGTS = $(patsubst %.blk, %.test, $(wildcard *.blk))
 
 all: $(TGTS)
 
@@ -46,9 +46,6 @@ all: $(TGTS)
 
 %.c : %.blk
 	EXTRAOPTS='$(EXTRAOPTS) --name=_$(basename $@)' $(PPDEB) $< $(basename $@)
-
-#%.deb: $(CSRC)
-#	EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
 
 tx.out: tx.c
 	MAC_TYPE=TX EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
@@ -69,7 +66,7 @@ tx.outfile: tx.out tx.infile
 
 
 # RX test
-test_continuous_rx.outfile: test_continuous_rx.deb test_continuous_rx.infile
+rx.outfile: rx.out rx.infile
 	./$< --MAC-type=RX-only \
              --RX-input=file \
              --RX-input-file-name=rx.infile \
@@ -81,7 +78,7 @@ test_continuous_rx.outfile: test_continuous_rx.deb test_continuous_rx.infile
 
 
 # TX real
-test_continuous_tx.run: test_continuous_tx.out
+tx.run: tx.out
 	./$< --MAC-type=TX-only
 	     --TX-input=file \
              --TX-input-file-name=test_continuous_tx.infile \
@@ -91,7 +88,7 @@ test_continuous_tx.run: test_continuous_tx.out
 	     --TX-sora-central-frequency=739
 
 # RX real
-test_continuous_rx.run: test_continuous_rx.out
+rx.run: rx.out
 	./$< --MAC-type=RX-only
 	     --RX-input=sora \
 	     --RX-output=dummy \

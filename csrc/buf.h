@@ -135,6 +135,7 @@ typedef struct _BufContextBlock {
 void initBufCtxBlock(BufContextBlock *blk);
 
 
+unsigned int parse_dbg_bit(char *dbg_buf, BitArrPtr target);
 void init_getbit(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk);
 GetStatus buf_getbit(BlinkParams *params, BufContextBlock *blk, Bit *x);
 GetStatus buf_getarrbit(BlinkParams *params, BufContextBlock *blk, BitArrPtr x, unsigned int vlen);
@@ -161,6 +162,8 @@ void buf_putcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex3
 void buf_putarrcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex32 *x, unsigned int vlen);
 void flush_putcomplex32(BlinkParams *params, BufContextBlock *blk);
 
+
+unsigned int parse_dbg_int16(char *dbg_buf, int16 *target);
 void init_getint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk);
 GetStatus buf_getint16(BlinkParams *params, BufContextBlock *blk, int16 *x);
 GetStatus buf_getarrint16(BlinkParams *params, BufContextBlock *blk, int16 *x, unsigned int vlen);

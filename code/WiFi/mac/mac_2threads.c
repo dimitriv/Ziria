@@ -88,11 +88,6 @@ BOOLEAN __stdcall go_thread_tx(void * pParam);
 BOOLEAN __stdcall go_thread_rx(void * pParam);
 
 
-// Simple synchronization - we first create a sufficiently large buffer 
-// Then we run TX until it is done, blocking the RX through txReady
-// Then we stop TX and run RX
-volatile BOOLEAN txReady;
-
 
 void init_mac_2threads()
 {
@@ -163,43 +158,151 @@ int SetUpThreads_2t(PSORA_UTHREAD_PROC * User_Routines)
 
 
 
+#define CR_12	0
+#define CR_23	1
+#define CR_34	2
+
+#define M_BPSK	0
+#define M_QPSK	1
+#define M_16QAM	2
+#define M_64QAM	3
+
+
+void createHeader(char *header, int modulation, int encoding, int length)
+{
+	header[0] &= 0xF0;
+	switch (modulation) {
+	case M_BPSK:
+		header[0] |= 3;
+		if (encoding == CR_12) header[0] |= 8;
+		else header[0] |= 12;
+		break;
+	case M_QPSK:
+		header[0] |= 2;
+		if (encoding == CR_12) header[0] |= 8;
+		else header[0] |= 12;
+		break;
+	case M_16QAM:
+		header[0] |= 1;
+		if (encoding == CR_12) header[0] |= 8;
+		else header[0] |= 12;
+		break;
+	case M_64QAM:
+		header[0] |= 0;
+		if (encoding == CR_23) header[0] |= 8;
+		else header[0] |= 12;
+		break;
+	}
+
+	header[0] &= 0x1F;
+	header[1] &= 0xE0;
+	header[0] |= (length & 7) << 5;
+	header[1] |= (length & 0xF8) >> 3;
+}
+
+
+
+
 
 BOOLEAN __stdcall go_thread_tx(void * pParam)
 {
 	ULONGLONG ttstart, ttend;
 	thread_info *ti = (thread_info *)pParam;
+	BlinkFileType inType = params_tx->inType;
+	BlinkFileType outType = params_tx->outType;
+	const long maxInSize = 2048;
+	const long maxOutSize = 200000;
+	const int headerSizeInBytes = 3;
+	char * headerBuf;
+	char * payloadBuf;
+	unsigned int payloadSize;
+
+
+	// TX always first prepares the buffers in memory
+	params_tx->inType = TY_MEM;
+	buf_ctx_tx.mem_input_buf = (void *)try_alloc_bytes(pheap_ctx_tx, maxInSize);
+	headerBuf = (char*)buf_ctx_tx.mem_input_buf;
+	payloadBuf = (char*)buf_ctx_tx.mem_input_buf + headerSizeInBytes;
+
+	params_tx->outType = TY_MEM;
+	buf_ctx_tx.mem_output_buf_size = maxOutSize;
+	buf_ctx_tx.mem_output_buf = (void *)try_alloc_bytes(pheap_ctx_tx, maxOutSize * sizeof(complex16));
+
+
+	if (inType != TY_FILE && inType != TY_IP)
+	{
+		printf("Only TY_FILE or TY_IP supported for input!\n");
+		exit(1);
+	}
+
+	if (outType != TY_FILE && outType != TY_SORA)
+	{
+		printf("Only TY_FILE or TY_SORA supported for output!\n");
+		exit(1);
+	}
+
+
+	if (inType == TY_FILE)
+	{
+		char *filebuffer;
+		try_read_filebuffer(pheap_ctx_tx, params_tx->inFileName, &filebuffer, &payloadSize);
+
+		if (params_tx->inFileMode == MODE_BIN)
+		{
+			buf_ctx_tx.mem_input_buf_size = payloadSize + headerSizeInBytes;
+			memcpy(payloadBuf, (void *)filebuffer, payloadSize);
+		}
+		else
+		{
+			buf_ctx_tx.mem_input_buf_size = headerSizeInBytes + parse_dbg_bit(filebuffer, (BitArrPtr)payloadBuf) / 8;
+		}
+	}	
+
 
 	printf("Starting TX ...\n");
+
+	memset(headerBuf, 0, 3);
+	createHeader(headerBuf, M_BPSK, CR_12, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
 
 	wpl_input_initialize_tx();
 
 	// Run Ziria TX code
 	wpl_go_tx();
 
-	txReady = TRUE;
-
-	printf("TX Total input items (including EOF): %d (%d B), output items: %d (%d B)\n",
-		buf_ctx_tx.total_in, buf_ctx_tx.total_in*buf_ctx_tx.size_in,
-		buf_ctx_tx.total_out, buf_ctx_tx.total_out*buf_ctx_tx.size_out);
-
-	if (params_tx->latencySampling > 0)
-	{
-		printf("TX Min write latency: %ld, max write latency: %ld\n", (ulong)params_tx->measurementInfo.minDiff, (ulong)params_tx->measurementInfo.maxDiff);
-		printf("TX CDF: \n   ");
-		unsigned int i = 0;
-		while (i < params_tx->measurementInfo.aDiffPtr)
-		{
-			printf("%ld ", params_tx->measurementInfo.aDiff[i]);
-			if (i % 10 == 9)
-			{
-				printf("\n   ");
-			}
-			i++;
-		}
-		printf("\n");
-	}
 
 	wpl_output_finalize_tx();
+
+
+	if (outType == TY_FILE)
+	{
+		printf("TX Total input items (including EOF): %d (%d B), output items: %d (%d B)\n",
+			buf_ctx_tx.total_in, buf_ctx_tx.total_in*buf_ctx_tx.size_in/8,
+			buf_ctx_tx.total_out, buf_ctx_tx.total_out*buf_ctx_tx.size_out/8);
+
+		FILE *output_file = try_open(params_tx->outFileName, "w");
+		if (params_tx->inFileMode == MODE_BIN)
+		{
+			fwrite(buf_ctx_tx.mem_output_buf, buf_ctx_tx.total_out, sizeof(complex16), output_file);
+		}
+		else
+		{
+			complex16 *ptr = (complex16 *) buf_ctx_tx.mem_output_buf;
+			for (int i = 0; i < buf_ctx_tx.total_out; i++)
+			{
+				fprintf(output_file, "%d,%d", ptr[i].re, ptr[i].im);
+				if (i < buf_ctx_tx.total_out - 1)
+				{
+					fprintf(output_file, ",");
+				}
+			}
+		}
+		fclose(output_file);
+	}
+	else
+	{
+		// SORA
+	}
+
 
 	ti->fRunning = false;
 
@@ -214,6 +317,54 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 	ULONGLONG ttstart, ttend;
 	thread_info *ti = (thread_info *)pParam;
 
+	BlinkFileType inType = params_rx->inType;
+	BlinkFileType outType = params_rx->outType;
+	const long maxInSize = 200000;
+	const long maxOutSize = 2048;
+	unsigned int sampleSize;
+
+	// TX always first prepares the buffers in memory
+	params_rx->inType = TY_MEM;
+	buf_ctx_rx.mem_input_buf = (void *)try_alloc_bytes(pheap_ctx_rx, maxInSize * sizeof(complex16));
+
+	if (inType != TY_FILE && inType != TY_SORA)
+	{
+		printf("Only TY_FILE or TY_SORA supported for input!\n");
+		exit(1);
+	}
+
+	if (outType != TY_FILE && outType != TY_IP)
+	{
+		printf("Only TY_FILE or TY_IP supported for output!\n");
+		exit(1);
+	}
+
+
+	if (inType == TY_FILE)
+	{
+		char *filebuffer;
+		try_read_filebuffer(pheap_ctx_rx, params_rx->inFileName, &filebuffer, &sampleSize);
+
+		if (params_rx->inFileMode == MODE_BIN)
+		{
+			buf_ctx_rx.mem_input_buf_size = sampleSize;
+			memcpy(buf_ctx_rx.mem_input_buf, (void *)filebuffer, sampleSize);
+		}
+		else
+		{
+			buf_ctx_rx.mem_input_buf_size = parse_dbg_int16(filebuffer, (int16 *)buf_ctx_rx.mem_input_buf) * sizeof(complex16);
+		}
+	}
+
+
+	if (outType == TY_IP)
+	{
+		params_rx->outType = TY_MEM;
+		buf_ctx_rx.mem_output_buf_size = maxOutSize;
+		buf_ctx_rx.mem_output_buf = (void *)try_alloc_bytes(pheap_ctx_rx, maxOutSize);
+	}
+
+
 	printf("Starting RX ...\n");
 
 	wpl_input_initialize_rx();
@@ -221,28 +372,13 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 	// Run Ziria TX code
 	wpl_go_rx();
 
-	printf("RX Total input items (including EOF): %d (%d B), output items: %d (%d B)\n",
-		buf_ctx_rx.total_in, buf_ctx_rx.total_in*buf_ctx_rx.size_in,
-		buf_ctx_rx.total_out, buf_ctx_rx.total_out*buf_ctx_rx.size_out);
+	wpl_output_finalize_rx();
 
-	if (params_rx->latencySampling > 0)
+	if (outType == TY_IP)
 	{
-		printf("RX Min write latency: %ld, max write latency: %ld\n", (ulong)params_rx->measurementInfo.minDiff, (ulong)params_rx->measurementInfo.maxDiff);
-		printf("RX CDF: \n   ");
-		unsigned int i = 0;
-		while (i < params_rx->measurementInfo.aDiffPtr)
-		{
-			printf("%ld ", params_rx->measurementInfo.aDiff[i]);
-			if (i % 10 == 9)
-			{
-				printf("\n   ");
-			}
-			i++;
-		}
-		printf("\n");
+		// IP
 	}
 
-	wpl_output_finalize_rx();
 
 	ti->fRunning = false;
 
