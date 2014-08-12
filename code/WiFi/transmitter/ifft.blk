@@ -21,21 +21,27 @@
 
 #include <externals.blk>
 
-let compute_ifft(s: arr[64] complex16) = 
-   var symbol:arr[128] complex16;
-   var fftdata:arr[128+32] complex16;
-   symbol[96,32] := s[0,32];
-   symbol[0,32] := s[32,32];
-   fftdata[32,128] := sora_ifft(symbol);
-   -- Add CP
-   fftdata[0,32] := fftdata[128,32];
-   return fftdata
-in
 
 let comp ifft() =
+   var symbol:arr[128] complex16;
+   var fftdata:arr[128+32] complex16;
+
+   do {
+     zero_complex16(symbol);
+   }
+
    repeat seq {
      (s:arr[64] complex16) <- takes 64;
-     emits compute_ifft(s)
+     
+     do {
+        symbol[96,32] := s[0,32];
+        symbol[0,32] := s[32,32];
+        fftdata[32,128] := sora_ifft(symbol);
+        -- Add CP
+        fftdata[0,32] := fftdata[128,32];
+     }
+
+     emits fftdata;
    }
   
 in

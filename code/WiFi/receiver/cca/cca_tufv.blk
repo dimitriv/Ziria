@@ -44,6 +44,8 @@ let createSTSinTime() =
 
   let sts_mod = int16(double(bpsk_mod_11a) * 1.472) in
 
+  -- Reset everything - otherwise we might have an ambiguous preamble
+  zero_complex16(sts);
 
   -- short training symbol
   sts[4]   := complex16{re=-sts_mod; im=-sts_mod};
