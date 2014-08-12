@@ -92,6 +92,8 @@ void InitSoraTx(BlinkParams *params)
 		fprintf (stderr, "Error: Fail to allocate Sora Tx buffer memory!\n" );
 		exit(1);
 	}
+	// Set to 0 as it is not expensive in init and can be useful for gaps between packets
+	memset(params->TXBuffer, 0, params->radioParams.TXBufferSize);
 }
 
 

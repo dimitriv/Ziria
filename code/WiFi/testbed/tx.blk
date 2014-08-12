@@ -5,7 +5,18 @@
 #include "../transmitter/transmitter.blk"
 
 
+let comp amp() = 
+var y : arr[4] complex16;
 
-read[bit] >>> transmitter() >>> write
+repeat {
+  (x : arr[4] complex16) <- takes 4;
+  do {
+     v_shift_left_complex16(y, x, 4);
+  }
+  emits y;
+}
+in
+
+read[bit] >>> transmitter() >>> amp() >>> write
  
 

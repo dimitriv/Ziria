@@ -323,7 +323,9 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 			HRESULT hr;
 			ULONG TxID;
 
-			hr = SoraURadioTransferEx(params_tx->radioParams.radioId, params_tx->TXBuffer, 4 * buf_ctx_tx.total_out, &TxID);
+			unsigned long interpacketGap = 5000;
+			hr = SoraURadioTransferEx(params_tx->radioParams.radioId, params_tx->TXBuffer, 
+				4 * buf_ctx_tx.total_out + 4 * interpacketGap, &TxID);
 			if (!SUCCEEDED(hr))
 			{
 				fprintf(stderr, "Error: Fail to transfer Sora Tx buffer!\n");
