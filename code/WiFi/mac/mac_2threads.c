@@ -363,15 +363,6 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 	const long maxOutSize = 4096;
 	unsigned int sampleSize;
 
-	// RX always first prepares the buffers in memory
-	params_rx->inType = TY_MEM;
-	buf_ctx_rx.mem_input_buf = (void *)try_alloc_bytes(pheap_ctx_rx, maxInSize * sizeof(complex16));
-
-	// RX always first receivers the buffers in memory
-	params_rx->outType = TY_MEM;
-	buf_ctx_rx.mem_output_buf = (void *)try_alloc_bytes(pheap_ctx_rx, maxOutSize * sizeof(char));
-
-
 	if (inType != TY_FILE && inType != TY_SORA)
 	{
 		printf("Only TY_FILE or TY_SORA supported for input!\n");
@@ -383,24 +374,6 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 		printf("Only TY_FILE or TY_IP supported for output!\n");
 		exit(1);
 	}
-
-
-	if (inType == TY_FILE)
-	{
-		char *filebuffer;
-		try_read_filebuffer(pheap_ctx_rx, params_rx->inFileName, &filebuffer, &sampleSize);
-
-		if (params_rx->inFileMode == MODE_BIN)
-		{
-			buf_ctx_rx.mem_input_buf_size = sampleSize;
-			memcpy(buf_ctx_rx.mem_input_buf, (void *)filebuffer, sampleSize);
-		}
-		else
-		{
-			buf_ctx_rx.mem_input_buf_size = parse_dbg_int16(filebuffer, (int16 *)buf_ctx_rx.mem_input_buf) * sizeof(complex16);
-		}
-	}
-
 
 	if (outType == TY_IP)
 	{
@@ -429,12 +402,18 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 		unsigned long long cntError = 0;
 		unsigned long long cntMiss = 0;
 
+		// This is slow as it includes LUT generation
+		wpl_global_init_rx(params_rx->heapSize);
+
 		while (1)
 		{
 			// Run Ziria TX code
+			resetBufCtxBlock(&buf_ctx_rx);						// reset context block (counters)
+			wpl_init_heap(pheap_ctx_rx, params_rx->heapSize);	// reset memory management
 			wpl_input_initialize_rx();
 			wpl_go_rx();
 			wpl_output_finalize_rx();
+
 
 			unsigned int lengthInBytes = buf_ctx_rx.total_out / 8;
 			unsigned char * payload = (unsigned char *) buf_ctx_rx.mem_output_buf;

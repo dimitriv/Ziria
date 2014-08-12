@@ -42,19 +42,19 @@ TGTS = $(patsubst %.blk, %.test, $(wildcard *.blk))
 
 all: $(TGTS)
 
-%.c : %.blk
-	EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
-
 #%.c : %.blk
-#	EXTRAOPTS='$(EXTRAOPTS) --name=_$(basename $@)' $(PPDEB) $< $(basename $@)
+#	EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
+
+%.c : %.blk
+	EXTRAOPTS='$(EXTRAOPTS) --name=_$(basename $@)' $(PPDEB) $< $(basename $@)
 
 tx.out: tx.c
-#	MAC_TYPE=TX EXTRAOPTS='$(EXTRAOPTS)' $(CPDEB) 
-	MAC_TYPE=TX EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
+	MAC_TYPE=TX EXTRAOPTS='$(EXTRAOPTS)' $(CPDEB) 
+#	MAC_TYPE=TX EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
 
 rx.out: rx.c
-#	MAC_TYPE=RX EXTRAOPTS='$(EXTRAOPTS)' $(CPDEB) 
-	MAC_TYPE=RX EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
+	MAC_TYPE=RX EXTRAOPTS='$(EXTRAOPTS)' $(CPDEB) 
+#	MAC_TYPE=RX EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
 
 # TX test
 tx.outfile: tx.out tx.infile
@@ -68,16 +68,24 @@ tx.outfile: tx.out tx.infile
              $(EXTRARUNOPT)
 
 
+#             --RX-input-file-name=rx.infile \
+#             --RX-input-file-mode=dbg \
+#             --RX-input-file-name=debug_BPSK_12_slow.bin \
+#             --RX-input-file-mode=bin \
+
 # RX test
 rx.outfile: rx.out rx.infile
 	./$< --MAC-type=RX-test \
              --RX-input=file \
-             --RX-input-file-name=rx.infile \
-             --RX-input-file-mode=dbg \
+             --RX-input-file-name=debug_BPSK_12.bin \
+             --RX-input-file-mode=bin \
              --RX-output=file \
              --RX-output-file-name=rx.outfile \
              --RX-output-file-mode=dbg \
              $(EXTRARUNOPT)
+
+
+#--MAC-type=RX-test --RX-input=file --RX-input-file-name=C:\Users\bozidar\Documents\Code\SDR\Ziria\compiler\code\WiFi\testbed\debug_BPSK_12_slow.bin --RX-input-file-mode=bin --RX-output=file --RX-output-file-name=C:\Users\bozidar\Documents\Code\SDR\Ziria\compiler\code\WiFi\testbed\rx.outfile --RX-output-file-mode=dbg 
 
 
 %.test: %.outfile
