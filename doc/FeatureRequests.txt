@@ -27,3 +27,13 @@ List of features that we hope to add to Ziria at some point:
 - Fix the heap bug in struct3.wpl test in backend
 
 - Add switch/case statement
+
+- Statically evaluated code that will be evaluated from a separate high-level function call. 
+  For example, we can call from an outer C code: { init(); while(1){ run() }};
+  So that we can reenter the pipeline from C (MAC code) with minimum reinitialization cost.
+
+- Restructure various calls from Ziria generated code to make the API more clear. 
+  For example, wpl_global_init() initializes the heap using wpl_init_heap and generates LUTs.
+  So if I want to run wpl_go() many times in a C loop, I need to do only one one global init
+  but I need to run wpl_init_heap in each loop. This should be simplified and clarified.
+
