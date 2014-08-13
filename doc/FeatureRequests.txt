@@ -37,3 +37,6 @@ List of features that we hope to add to Ziria at some point:
   So if I want to run wpl_go() many times in a C loop, I need to do only one one global init
   but I need to run wpl_init_heap in each loop. This should be simplified and clarified.
 
+- Better return of parameters between MAC(C) and PHY(Ziria). For example, if Ziria code is a
+  computer that returns a struct, this struct should be returned by wpl_go.
+
