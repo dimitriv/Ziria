@@ -109,7 +109,7 @@ rx.outopt: rx.copt
 
 # TX real
 tx.run: tx.outopt
-	./tx.out < --MAC-type=TX-only \
+	./tx.out --MAC-type=TX-only \
 	     --TX-input=file \
              --TX-input-file-name=tx.infile \
              --TX-input-file-mode=dbg \
