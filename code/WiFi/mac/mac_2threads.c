@@ -232,7 +232,7 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 
 	// TX always first prepares the buffers in memory
 	params_tx->inType = TY_MEM;
-	buf_ctx_tx.mem_input_buf = (void *)try_alloc_bytes(pheap_ctx_tx, maxInSize);
+	buf_ctx_tx.mem_input_buf = (void *)malloc(maxInSize);
 	headerBuf = (unsigned char*)buf_ctx_tx.mem_input_buf;
 	payloadBuf = (unsigned char*)buf_ctx_tx.mem_input_buf + headerSizeInBytes;
 
@@ -284,17 +284,14 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 		memset(headerBuf, 0, 3);
 		createHeader(headerBuf, M_BPSK, CR_12, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
 
-		for (int i = 0; i < 1; i++)
-		{
-			// Run Ziria TX code to preapre the buffer
-			resetBufCtxBlock(&buf_ctx_tx);						// reset context block (counters)
-			wpl_init_heap(pheap_ctx_tx, params_tx->heapSize);	// reset memory management
+		// Run Ziria TX code to preapre the buffer
+		resetBufCtxBlock(&buf_ctx_tx);						// reset context block (counters)
+		wpl_init_heap(pheap_ctx_tx, params_tx->heapSize);	// reset memory management
 
-			// Run Ziria TX code
-			wpl_input_initialize_tx();
-			wpl_go_tx();
-			wpl_output_finalize_tx();
-		}
+		// Run Ziria TX code
+		wpl_input_initialize_tx();
+		wpl_go_tx();
+		wpl_output_finalize_tx();
 	}
 	else
 	{
@@ -307,7 +304,8 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 			//UINT len = ReadFragment(payloadBuf, RADIO_MTU);
 
 			// Simple payload to check correctness
-			for (int i=0; i<16; i++)
+			memset(payloadBuf, 0, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
+			for (int i = 0; i<16; i++)
 				payloadBuf[i] = pktCnt;
 			pktCnt ++;
 

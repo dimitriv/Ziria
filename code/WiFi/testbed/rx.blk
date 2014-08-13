@@ -1,5 +1,5 @@
 #define LTS_ACCURATE
--- #define RADIO
+#define RADIO
 #define DO_DECODING
 -- #define FAST
 
