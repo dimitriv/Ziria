@@ -336,7 +336,7 @@ void init_putbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 	blk->size_out = 1;
 	blk->total_out = 0;
 
-	if (params->outType == TY_DUMMY || params->outType == TY_FILE || params->inType == TY_MEM)
+	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
 	{
 		blk->output_buffer = (unsigned char *)malloc(params->outBufSize);
 		blk->output_entries = params->outBufSize * 8;
