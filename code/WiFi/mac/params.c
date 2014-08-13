@@ -207,14 +207,15 @@ void init_LatencyCDFSizeRX(BlinkParams *params, char *siz)		{ params[1].latencyC
 
 
 #ifdef SORA_PLATFORM
-// Here we use one radio, so we only use radioParams in params[0]
-// For full duplex one might want to use radioParams in params[1] here instead
-void init_radioIdRX(BlinkParams *params, char *i)				{ params[0].radioParams.radioId = parse_radioID(i); }
-void init_paRX(BlinkParams* params, char *i)					{ params[0].radioParams.RXpa = parse_Amp(i); }
-void init_gainRX(BlinkParams* params, char *i)					{ params[0].radioParams.RXgain = parse_Amp(i); }
-void init_centralFrequencyRX(BlinkParams *params, char *i)		{ params[0].radioParams.CentralFrequency = parse_CentralFrequency(i); }
-void init_freqencyOffsetRX(BlinkParams *params, char *i)		{ params[0].radioParams.FreqencyOffset = parse_FrequencyOffset(i); }
-void init_sampleRateRX(BlinkParams *params, char *i)			{ params[0].radioParams.SampleRate = parse_SampleRate(i); }
+// TODO - DEBUG - WARNING
+// Here we use two radios at the moment
+// But for the full MAC we may want to use one
+void init_radioIdRX(BlinkParams *params, char *i)				{ params[1].radioParams.radioId = parse_radioID(i); }
+void init_paRX(BlinkParams* params, char *i)					{ params[1].radioParams.RXpa = parse_Amp(i); }
+void init_gainRX(BlinkParams* params, char *i)					{ params[1].radioParams.RXgain = parse_Amp(i); }
+void init_centralFrequencyRX(BlinkParams *params, char *i)		{ params[1].radioParams.CentralFrequency = parse_CentralFrequency(i); }
+void init_freqencyOffsetRX(BlinkParams *params, char *i)		{ params[1].radioParams.FreqencyOffset = parse_FrequencyOffset(i); }
+void init_sampleRateRX(BlinkParams *params, char *i)			{ params[1].radioParams.SampleRate = parse_SampleRate(i); }
 #endif
 
 

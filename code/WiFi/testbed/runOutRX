@@ -1,0 +1,1 @@
+./rx.out --MAC-type=RX-only --RX-input=sora --RX-output=dummy --RX-sora-radio-id=1 --RX-sora-central-frequency=739

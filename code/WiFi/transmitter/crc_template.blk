@@ -32,11 +32,13 @@ var crc_state: arr[4] bit := {'0,'0,'0,'0};
     }
     emits x;
   };
-  emits crc_state;
-  emits {'0,'0,'0,'0};
 
-  -- Add padding so that the length of output is a multiple of CRC_VEC in bits
+  -- Only add CRC and padding at the transmitter
   if (pad) then {
+    emits crc_state;
+    emits {'0,'0,'0,'0};
+
+    -- Add padding so that the length of output is a multiple of CRC_VEC in bits
     let len_so_far = (len+1) * 8 in 
     let len_mod = if len_so_far % CRC_VEC > 0 then 1 else 0 in 
     let final_len = ((len_so_far / CRC_VEC) + len_mod) * CRC_VEC in

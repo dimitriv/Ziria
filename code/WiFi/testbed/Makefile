@@ -31,7 +31,6 @@
 COMPILER?=vs
 
 PP    = scripts/preprocesscompile-mac-$(COMPILER).sh
-PPDEB = scripts/preprocesscompile-mac-$(COMPILER).sh
 CP    = scripts/ccompile-mac-$(COMPILER)-inline.sh
 CPDEB = scripts/ccompile-mac-$(COMPILER).sh
 DIFF  = ../../../tools/BlinkDiff
@@ -42,19 +41,19 @@ TGTS = $(patsubst %.blk, %.test, $(wildcard *.blk))
 
 all: $(TGTS)
 
-#%.c : %.blk
-#	EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
+
+
+### Offline tests
 
 %.c : %.blk
-	EXTRAOPTS='$(EXTRAOPTS) --name=_$(basename $@)' $(PPDEB) $< $(basename $@)
+	EXTRADEF='' EXTRAOPTS='$(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
 
 tx.out: tx.c
 	MAC_TYPE=TX EXTRAOPTS='$(EXTRAOPTS)' $(CPDEB) 
-#	MAC_TYPE=TX EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
 
 rx.out: rx.c
 	MAC_TYPE=RX EXTRAOPTS='$(EXTRAOPTS)' $(CPDEB) 
-#	MAC_TYPE=RX EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
+
 
 # TX test
 tx.outfile: tx.out tx.infile
@@ -66,7 +65,6 @@ tx.outfile: tx.out tx.infile
              --TX-output-file-name=tx.outfile \
              --TX-output-file-mode=dbg \
              $(EXTRARUNOPT)
-
 
 #             --RX-input-file-name=rx.infile \
 #             --RX-input-file-mode=dbg \
@@ -85,16 +83,33 @@ rx.outfile: rx.out rx.infile
              $(EXTRARUNOPT)
 
 
-#--MAC-type=RX-test --RX-input=file --RX-input-file-name=C:\Users\bozidar\Documents\Code\SDR\Ziria\compiler\code\WiFi\testbed\debug_BPSK_12_slow.bin --RX-input-file-mode=bin --RX-output=file --RX-output-file-name=C:\Users\bozidar\Documents\Code\SDR\Ziria\compiler\code\WiFi\testbed\rx.outfile --RX-output-file-mode=dbg 
-
-
 %.test: %.outfile
 	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
 
 
+
+
+
+### Online runs
+
+rx.copt : rx.blk
+	EXTRADEF='-DRADIO -DFAST' EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
+
+tx.copt : tx.blk
+	EXTRADEF='-DFAST' EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
+
+
+tx.outopt: tx.copt
+	MAC_TYPE=TX EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
+
+rx.outopt: rx.copt
+	MAC_TYPE=RX EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
+
+
+
 # TX real
-tx.run: tx.out
-	./$< --MAC-type=TX-only \
+tx.run: tx.outopt
+	./tx.out < --MAC-type=TX-only \
 	     --TX-input=file \
              --TX-input-file-name=tx.infile \
              --TX-input-file-mode=dbg \
@@ -104,8 +119,8 @@ tx.run: tx.out
 	     --TX-sora-central-frequency=739
 
 # RX real
-rx.run: rx.out
-	./$< --MAC-type=RX-only \
+rx.run: rx.outopt
+	./rx.out --MAC-type=RX-only \
 	     --RX-input=sora \
 	     --RX-output=dummy \
 	     --RX-sora-radio-id=1 \

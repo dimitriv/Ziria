@@ -1,7 +1,7 @@
 #define LTS_ACCURATE
-#define RADIO
+--#define RADIO
 #define DO_DECODING
--- #define FAST
+--#define FAST
 
 
 
@@ -28,7 +28,6 @@
 
 
 
-
 let comp detectPreamble() = 
   (removeDC() >>> cca())
 in 
@@ -36,10 +35,49 @@ in
 
 
 #ifdef DO_DECODING
+let comp processCRC(hdata : struct HeaderInfo) = 
+var retCRC: arr[8] bit; 
+var retMod: arr[8] bit; 
+var retEnc: arr[8] bit; 
+var retSize: arr[16] bit; 
+var tmp: arr[2] int8;
+
+  (c : arr[4] bit) <- crc(hdata.len, false); 
+  crc <- check_crc(c);
+
+  -- The following sends packet data to MAC
+  do {
+     -- CRC
+     if (crc) then {
+        tmp[0] := 1;
+     } else {
+        tmp[0] := 0;
+     }
+     int8_to_bits(retCRC, tmp[0,1]);
+
+     -- Modulation
+     tmp[0] := int8(hdata.modulation);
+     int8_to_bits(retMod, tmp[0,1]);
+
+     -- Coding
+     tmp[0] := int8(hdata.coding);
+     int8_to_bits(retEnc, tmp[0,1]);
+
+     -- Size
+     tmp[0] := int8(hdata.len % 256);
+     tmp[1] := int8(hdata.len / 256);
+     int8_to_bits(retSize, tmp[0,2]);
+  } 
+  emits retCRC;
+  emits retMod;
+  emits retEnc;
+  emits retSize;
+in
+
 let comp receiveBits() = 
 var cnt : int := 0;
        seq { hdata <- DecodePLCP()
-           ; Decode(hdata) >>> seq { (c : arr[4] bit) <- crc(hdata.len, false); check_crc(c) }
+           ; Decode(hdata) >>> processCRC(hdata)
            }
 in
 #endif
@@ -72,6 +110,43 @@ let comp skip() =
 in
 
 
+{-
+let comp test() = 
+var xcopy:arr[4] complex16;
+var re32:arr[4] int32;
+var im32:arr[4] int32;
+var iEnergy : int := 0;
+
+repeat{
+  (x : arr[4] complex16) <- takes 4;
+  do{
+     v_shift_right_complex16(xcopy,x,2);
+     v_shift_right_complex16(xcopy,xcopy,2);
+
+     v_conj_mul_complex16_int32(re32, im32, xcopy, xcopy);
+     iEnergy := v_sum_int32(re32);
+
+    -- if (iEnergy > 10000) then 
+    if (x[0].re > 1000) then 
+    {
+      println iEnergy, " ", x;
+    }
+  }
+}
+in
+-}
+
+{-
+let comp test() = 
+repeat{
+  (x:arr[50000] complex16) <- takes 50000;
+  do{dbgplot_complex_line(x, 1)};
+}
+in
+-}
+
+
+-- read[complex16] >>> test() >>> write[bit]
 
 
 {-
@@ -86,7 +161,6 @@ read[complex16] >>>
   }
 >>> write
 -}
-
 
 
 
@@ -111,8 +185,8 @@ read[complex16] >>>
 
 #else 
 
+-- No repeat here, it happens at the MAC level
    read >>> 
-     repeat {
        seq{ det<-detectPreamble()
        #ifndef FAST
           ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift}
@@ -127,7 +201,6 @@ read[complex16] >>>
             >>> receiveBits()
        #endif
        }
-     }
    >>> write
 
 #endif

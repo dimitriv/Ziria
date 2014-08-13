@@ -366,10 +366,6 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 	const long maxOutSize = 4096;
 	unsigned int sampleSize;
 
-	// RX always first prepares the buffers in memory
-	params_rx->inType = TY_MEM;
-	buf_ctx_rx.mem_input_buf = (void *)malloc(maxInSize * sizeof(complex16));
-
 
 	if (inType != TY_FILE && inType != TY_SORA)
 	{
@@ -377,14 +373,18 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 		exit(1);
 	}
 
-	if (outType != TY_FILE && outType != TY_IP)
+	if (outType != TY_FILE && outType != TY_IP && outType != TY_DUMMY)
 	{
-		printf("Only TY_FILE or TY_IP supported for output!\n");
+		printf("Only TY_FILE or TY_IP or TY_DUMMY supported for output!\n");
 		exit(1);
 	}
 
 	if (inType == TY_FILE)
 	{
+		// RX always first prepares the buffers in memory
+		params_rx->inType = TY_MEM;
+		buf_ctx_rx.mem_input_buf = (void *)malloc(maxInSize * sizeof(complex16));
+
 		char *filebuffer;
 		try_read_filebuffer(pheap_ctx_rx, params_rx->inFileName, &filebuffer, &sampleSize);
 		if (params_rx->inFileMode == MODE_BIN)
@@ -399,11 +399,11 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 	}
 
 
-	if (outType == TY_IP)
+	if (outType == TY_IP || outType == TY_DUMMY)
 	{
 		params_rx->outType = TY_MEM;
 		buf_ctx_rx.mem_output_buf_size = maxOutSize;
-		buf_ctx_rx.mem_output_buf = (void *)try_alloc_bytes(pheap_ctx_rx, maxOutSize);
+		buf_ctx_rx.mem_output_buf = (void *)malloc(maxOutSize);
 	}
 
 
@@ -421,10 +421,18 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 	}
 	else
 	{
+		unsigned char lastCRC;
+		unsigned char lastMod;
+		unsigned char lastEnc;
+		unsigned int lastLen;
 		unsigned char pktCnt = 0xFF;
-		unsigned long long cntOk = 0;
-		unsigned long long cntError = 0;
-		unsigned long long cntMiss = 0;
+		unsigned long cntOk = 0;
+		unsigned long cntError = 0;
+		unsigned long cntMiss = 0;
+		unsigned long lastGap = 0;
+		unsigned long lastPrint = 0;
+		const unsigned long printDelay = 10000;
+
 
 		// This is slow as it includes LUT generation
 		wpl_global_init_rx(params_rx->heapSize);
@@ -439,10 +447,17 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 			wpl_output_finalize_rx();
 
 
-			unsigned int lengthInBytes = buf_ctx_rx.total_out / 8;
+			unsigned int lengthInBytes = buf_ctx_rx.total_out / 8 - 5;
 			unsigned char * payload = (unsigned char *) buf_ctx_rx.mem_output_buf;
 			unsigned char pc = payload[0];
-			bool pktOK = true;
+			bool pktOK;
+
+			lastCRC = payload[lengthInBytes];
+			lastMod = payload[lengthInBytes+1];
+			lastEnc = payload[lengthInBytes+2];
+			lastLen = payload[lengthInBytes + 3] + 256 * payload[lengthInBytes + 4];
+
+			pktOK = (lastCRC == 1);
 
 			for (int i=1; i < 16 && pktOK; i++)
 				pktOK = pktOK && (payload[i] == pc);
@@ -450,28 +465,37 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 			if (pktOK) 
 			{
 				cntOk ++;
-				if (pktCnt == 0xFF)
+				if (pktCnt != 0xFF)
 				{
-					pktCnt = pc;
+					int d = pc - pktCnt - 1;
+					cntMiss += (unsigned long) (d < 0)?0:d;
+					lastGap = d;
 				}
-				else
-				{
-					cntMiss += (pc - pktCnt - 1);
-				}
+				pktCnt = pc;
 			}
 			else
 			{
 				cntError ++;
 			}
+
+			if (lastPrint + printDelay < cntOk + cntError + cntMiss)
+			{
+				printf("Last packet: crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d, lastGap=%ld\n",
+					lastCRC, lastMod, lastEnc, lastLen, lengthInBytes, lastGap);
+				printf("OK: %ld, Error: %ld, Miss: %ld\n", cntOk, cntError, cntMiss);
+				fflush(stdout);
+				lastPrint = cntOk + cntError + cntMiss;
+			}
+
+			if (outType == TY_IP)
+			{
+				// IP
+				//int n = WriteFragment(payload);
+			}
 		}
 	}
 
 
-	if (outType == TY_IP)
-	{
-		// IP
-		//int n = WriteFragment(payload);
-	}
 
 
 	ti->fRunning = false;

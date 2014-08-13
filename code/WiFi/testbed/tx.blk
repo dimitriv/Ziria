@@ -1,5 +1,5 @@
 -- Don't print any debug info
-#define FAST
+--#define FAST
 
 #include <externals.blk>
 #include "../transmitter/transmitter.blk"
