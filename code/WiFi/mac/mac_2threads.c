@@ -227,6 +227,7 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 	const int headerSizeInBytes = 3;
 	unsigned char * headerBuf;
 	unsigned char * payloadBuf;
+	unsigned int * payloadBuf16;
 	unsigned int payloadSize;
 
 
@@ -235,6 +236,7 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 	buf_ctx_tx.mem_input_buf = (void *)malloc(maxInSize);
 	headerBuf = (unsigned char*)buf_ctx_tx.mem_input_buf;
 	payloadBuf = (unsigned char*)buf_ctx_tx.mem_input_buf + headerSizeInBytes;
+	payloadBuf16 = (unsigned int *)payloadBuf;
 
 	if (params_tx->outType == TY_SORA)
 	{
@@ -296,7 +298,7 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 	else
 	{
 		// SORA output
-		unsigned char pktCnt = 0;
+		unsigned int pktCnt = 0;
 
 		while (1) 
 		{
@@ -306,7 +308,7 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 			// Simple payload to check correctness
 			memset(payloadBuf, 0, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
 			for (int i = 0; i<16; i++)
-				payloadBuf[i] = pktCnt;
+				payloadBuf16[i] = pktCnt;
 			pktCnt ++;
 
 			memset(headerBuf, 0, 3);
@@ -425,7 +427,7 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 		unsigned char lastMod;
 		unsigned char lastEnc;
 		unsigned int lastLen;
-		unsigned char pktCnt = 0xFF;
+		unsigned int pktCnt = 0xFFFF;
 		unsigned long cntOk = 0;
 		unsigned long cntError = 0;
 		unsigned long cntMiss = 0;
@@ -449,7 +451,8 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 
 			unsigned int lengthInBytes = buf_ctx_rx.total_out / 8 - 5;
 			unsigned char * payload = (unsigned char *) buf_ctx_rx.mem_output_buf;
-			unsigned char pc = payload[0];
+			unsigned int * payload16 = (unsigned int *)buf_ctx_rx.mem_output_buf;
+			unsigned int pc = payload16[0];
 			bool pktOK;
 
 			lastCRC = payload[lengthInBytes];
@@ -460,7 +463,7 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 			pktOK = (lastCRC == 1);
 
 			for (int i=1; i < 16 && pktOK; i++)
-				pktOK = pktOK && (payload[i] == pc);
+				pktOK = pktOK && (payload16[i] == pc);
 
 			if (pktOK) 
 			{
