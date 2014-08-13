@@ -344,6 +344,13 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 			}
 
 			hr = SoraURadioTxFree(params_tx->radioParams.radioId, TxID);
+
+			// DEBUG
+			volatile int tt = 0;
+			// This delay is fine for correct reception!
+			//for (int i = 0; i < 100000; i++) tt++;
+			// This delay is too short and causes weird bugs!
+			for (int i = 0; i < 10000; i++) tt++;
 		}
 	}
 
