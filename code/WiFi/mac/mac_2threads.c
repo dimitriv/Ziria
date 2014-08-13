@@ -276,27 +276,30 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 
 	printf("Starting TX ...\n");
 
+	// This is slow as it includes LUT generation
+	wpl_global_init_tx(params_tx->heapSize);
 
 	if (outType == TY_FILE)
 	{
 		memset(headerBuf, 0, 3);
 		createHeader(headerBuf, M_BPSK, CR_12, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
 
-		wpl_input_initialize_tx();
+		for (int i = 0; i < 1; i++)
+		{
+			// Run Ziria TX code to preapre the buffer
+			resetBufCtxBlock(&buf_ctx_tx);						// reset context block (counters)
+			wpl_init_heap(pheap_ctx_tx, params_tx->heapSize);	// reset memory management
 
-		// Run Ziria TX code
-		wpl_go_tx();
-
-
-		wpl_output_finalize_tx();
+			// Run Ziria TX code
+			wpl_input_initialize_tx();
+			wpl_go_tx();
+			wpl_output_finalize_tx();
+		}
 	}
 	else
 	{
 		// SORA output
 		unsigned char pktCnt = 0;
-
-		// This is slow as it includes LUT generation
-		wpl_global_init_tx(params_tx->heapSize);
 
 		while (1) 
 		{

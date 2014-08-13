@@ -1,6 +1,6 @@
-f = fopen('debug_BPSK_12.bin', 'rb');
-data = fread(f, inf, 'int16');
-%data = load('rx.infile');
+%f = fopen('debug_BPSK_12.bin', 'rb');
+%data = fread(f, inf, 'int16');
+data = load('rx.infile');
 data=data(1:floor(end/2)*2);
 data=reshape(data, 2, length(data)/2);
 data=data(1,:) + i*data(2,:);

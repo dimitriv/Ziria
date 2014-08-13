@@ -77,8 +77,8 @@ tx.outfile: tx.out tx.infile
 rx.outfile: rx.out rx.infile
 	./$< --MAC-type=RX-test \
              --RX-input=file \
-             --RX-input-file-name=debug_BPSK_12.bin \
-             --RX-input-file-mode=bin \
+             --RX-input-file-name=rx.infile \
+             --RX-input-file-mode=dbg \
              --RX-output=file \
              --RX-output-file-name=rx.outfile \
              --RX-output-file-mode=dbg \
