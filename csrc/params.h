@@ -89,6 +89,7 @@ typedef struct _BlinkParams {
     unsigned int heapSize;      // heap size for blink/wpl program
 	unsigned long latencySampling;		// space between latency sampling in #writes (0 - no latency measurements)
 	unsigned long latencyCDFSize;		// How many latency samples to be stored in the CDF table
+	int debug;					// Level of debug info to print (0 - lowest)
 
 #ifdef SORA_PLATFORM
 	SoraParameters radioParams;

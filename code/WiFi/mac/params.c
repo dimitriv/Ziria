@@ -149,6 +149,13 @@ void parse_txPC(char *typ)
 	}
 }
 
+
+int parse_DEBUG(char *d) {
+	return (int) strtol(d, NULL, 10);
+}
+
+
+
 BlinkFileMode parse_mode(char *md) {
   if (strcmp(md,"dbg") == 0)
     return MODE_DBG; 
@@ -214,6 +221,8 @@ unsigned long parse_size (char *rp) {
 void init_inTypeMAC(BlinkParams *params, char *typ)				{ mac_type = parse_MAC(typ); }
 void init_txPC(BlinkParams *params, char *typ)					{ parse_txPC(typ); }
 void init_PHYRate(BlinkParams *params, char *typ)				{ phy_rate = parse_PHYRate(typ); }
+void init_DEBUG(BlinkParams *params, char *typ)					{ params[0].debug = parse_DEBUG(typ); 
+																  params[1].debug = params[0].debug; }
 
 // TX Init functions
 void init_inTypeTX(BlinkParams *params, char *typ)				{ params[0].inType = parse_type(typ); }
@@ -275,9 +284,9 @@ void init_sampleRateRX(BlinkParams *params, char *i)			{ params[1].radioParams.S
 
 // Here is where we declare the parameters
 #ifdef SORA_PLATFORM
-#define PARAM_TABLE_LENGTH		41
+#define PARAM_TABLE_LENGTH		42
 #else
-#define PARAM_TABLE_LENGTH		28
+#define PARAM_TABLE_LENGTH		29
 #endif
 
 BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] = 
@@ -297,6 +306,11 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
 	   "PHY TX rate in Mbps",
 	   "18",
 	   init_PHYRate },
+     { "--DEBUG=",
+	   "--DEBUG=0|1",
+	   "Turn DEBUG display on (1) or off (0)",
+	   "0",
+	   init_DEBUG },
 	 { "--TX-PC=",
 	   "--TX-PC=string",
 	   "Name of a PC to which to connect to",

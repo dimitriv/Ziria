@@ -135,11 +135,8 @@ void init_mac_2threads()
 			exit(1);
 		}
 
-		// TODO
-		/*
-		HRESULT hResult = SoraUEnableGetRxPacket();
+		HRESULT hResult = SoraUEnableGetTxPacket();
 		assert(hResult == S_OK);
-		*/
 		Ndis_init(txPC);
 	}
 
@@ -346,8 +343,11 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 			memset(headerBuf, 0, 3);
 			createHeader(headerBuf, phy_rate.mod, phy_rate.enc, payloadSizeInBytes);
 
-			// DEBUG
-			printf("Sending packet of size %ld\n", payloadSizeInBytes);
+			if (params_tx->debug > 0)
+			{
+				printf("Sending packet of size %ld\n", payloadSizeInBytes);
+				fflush(stdout);
+			}
 
 			// Run Ziria TX code to preapre the buffer
 			resetBufCtxBlock(&buf_ctx_tx);						// reset context block (counters)
@@ -507,38 +507,61 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 			wpl_output_finalize_rx();
 
 			unsigned int lengthInBytes = buf_ctx_rx.total_out / 8 - 5;
-			uint16 pc = payload16[0];
-			bool pktOK;
-
 			lastCRC = payload[lengthInBytes];
-			lastMod = payload[lengthInBytes+1];
-			lastEnc = payload[lengthInBytes+2];
+			lastMod = payload[lengthInBytes + 1];
+			lastEnc = payload[lengthInBytes + 2];
 			lastLen = payload[lengthInBytes + 3] + 256 * payload[lengthInBytes + 4];
 
-			pktOK = (lastCRC == 1);
-
-			for (int i = 1; i < lengthInBytes/2 && pktOK; i++)
-				pktOK = pktOK && (payload16[i] == pc);
-
-			if (pktOK) 
+			if (params_tx->debug > 0)
 			{
-				cntOk ++;
+				printf("Received packet: crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d\n",
+					lastCRC, lastMod, lastEnc, lastLen, lengthInBytes);
+				fflush(stdout);
+			}
+
+			if (outType == TY_IP)
+			{
+				// IP
+				if (lastCRC == 1)
+				{
+					int n = WriteFragment(payload);
+
+					if (params_tx->debug > 0)
+					{
+						printf("Delivering pkt of size %ld to IP (ret=%d)\n", lengthInBytes, n);
+						fflush(stdout);
+					}
+				}
+			}
+			else
+			{
+				uint16 pc = payload16[0];
+				bool pktOK;
+
+				pktOK = (lastCRC == 1);
+
+				for (int i = 1; i < lengthInBytes / 2 && pktOK; i++)
+					pktOK = pktOK && (payload16[i] == pc);
+
+				if (pktOK)
+				{
+					cntOk++;
 
 					int d = pc - pktCnt - 1;
 					/*
 					if (d < 0 || d > 100)
 					{
-						printf("pc=%d, pktCnt=%d, lastError=%d, lastError2=%d, d=%d\n", 
-							pc, pktCnt, lastError, lastError2, d);
-						for (int i = 0; i < 16; i++)
-							printf("%d ", payload16[i]);
-						printf("\n");
-						for (int i = 0; i < 16; i++)
-							printf("%d ", oldPkt[i]);
-						printf("\n");
-						for (int i = 0; i < 16; i++)
-							printf("%d ", oldPkt2[i]);
-						printf("\n");
+					printf("pc=%d, pktCnt=%d, lastError=%d, lastError2=%d, d=%d\n",
+					pc, pktCnt, lastError, lastError2, d);
+					for (int i = 0; i < 16; i++)
+					printf("%d ", payload16[i]);
+					printf("\n");
+					for (int i = 0; i < 16; i++)
+					printf("%d ", oldPkt[i]);
+					printf("\n");
+					for (int i = 0; i < 16; i++)
+					printf("%d ", oldPkt2[i]);
+					printf("\n");
 					}
 					*/
 
@@ -549,53 +572,48 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 					cntMiss += (unsigned long)(d < 0) ? 0 : d;
 					lastGap = d;
 
-				pktCnt = pc;
-			}
-			else
-			{
-				cntError ++;
-				pktCnt++;
+					pktCnt = pc;
+				}
+				else
+				{
+					cntError++;
+					pktCnt++;
 
-				/*
+					/*
+					{
+					printf("Last packet: cnt=%d, crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d, lastGap=%ld\n",
+					pc, lastCRC, lastMod, lastEnc, lastLen, lengthInBytes, lastGap);
+					printf("crc=%d, pc=%d, pktCnt=%d, lastError=%d, lastError=%d\n",
+					(lastCRC == 1), pc, pktCnt, lastError, lastError2);
+					for (int i = 0; i < 16; i++)
+					printf("%d ", payload16[i]);
+					printf("\n");
+					for (int i = 0; i < 16; i++)
+					printf("%d ", oldPkt[i]);
+					printf("\n");
+					for (int i = 0; i < 16; i++)
+					printf("%d ", oldPkt2[i]);
+					printf("\n");
+					}
+					*/
+
+					lastError2 = lastError;
+					lastError = 1;
+				}
+
+				memcpy((void*)oldPkt2, (void*)oldPkt, 16 * sizeof(uint16));
+				memcpy((void*)oldPkt, (void*)payload16, 16 * sizeof(uint16));
+
+				if (printDelay < cntOk + cntError + cntMiss)
 				{
 					printf("Last packet: cnt=%d, crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d, lastGap=%ld\n",
 						pc, lastCRC, lastMod, lastEnc, lastLen, lengthInBytes, lastGap);
-					printf("crc=%d, pc=%d, pktCnt=%d, lastError=%d, lastError=%d\n",
-						(lastCRC == 1), pc, pktCnt, lastError, lastError2);
-					for (int i = 0; i < 16; i++)
-						printf("%d ", payload16[i]);
-					printf("\n");
-					for (int i = 0; i < 16; i++)
-						printf("%d ", oldPkt[i]);
-					printf("\n");
-					for (int i = 0; i < 16; i++)
-						printf("%d ", oldPkt2[i]);
-					printf("\n");
+					printf("OK: %ld, Error: %ld, Miss: %ld\n", cntOk, cntError, cntMiss);
+					fflush(stdout);
+					cntOk = 0;
+					cntError = 0;
+					cntMiss = 0;
 				}
-				*/
-
-				lastError2 = lastError;
-				lastError = 1;
-			}
-
-			memcpy((void*)oldPkt2, (void*)oldPkt, 16 * sizeof(uint16));
-			memcpy((void*)oldPkt, (void*)payload16, 16 * sizeof(uint16));
-
-			if (printDelay < cntOk + cntError + cntMiss)
-			{
-				printf("Last packet: cnt=%d, crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d, lastGap=%ld\n",
-					pc, lastCRC, lastMod, lastEnc, lastLen, lengthInBytes, lastGap);
-				printf("OK: %ld, Error: %ld, Miss: %ld\n", cntOk, cntError, cntMiss);
-				fflush(stdout);
-				cntOk = 0;
-				cntError = 0;
-				cntMiss = 0;
-			}
-
-			if (outType == TY_IP)
-			{
-				// IP
-				//int n = WriteFragment(payload);
 			}
 		}
 	}
