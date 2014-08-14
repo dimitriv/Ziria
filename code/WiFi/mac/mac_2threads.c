@@ -94,7 +94,24 @@ BOOLEAN __stdcall go_thread_rx(void * pParam);
 
 void init_mac_2threads()
 {
+	// Start Sora HW
+	if (params_rx->inType == TY_SORA)
+	{
+		RadioStart(params_rx);
+		InitSoraRx(params_rx);
+		// New Sora specific - DEBUG
+		SetFirmwareParameters();
+	}
+	if (params_tx->outType == TY_SORA)
+	{
+		RadioStart(params_tx);
+		InitSoraTx(params_tx);
+		// New Sora specific - DEBUG
+		SetFirmwareParameters();
+	}
+
 	// Start NDIS
+	// This has to be after Sora as Sora initializes UMX
 	if (params_tx->inType == TY_IP)
 	{
 		if (mac_type == MAC_TX_ONLY && txPC != NULL)
@@ -124,23 +141,6 @@ void init_mac_2threads()
 		assert(hResult == S_OK);
 		*/
 		Ndis_init(txPC);
-	}
-
-
-	// Start Sora HW
-	if (params_rx->inType == TY_SORA)
-	{
-		RadioStart(params_rx);
-		InitSoraRx(params_rx);
-		// New Sora specific - DEBUG
-		SetFirmwareParameters();
-	}
-	if (params_tx->outType == TY_SORA)
-	{
-		RadioStart(params_tx);
-		InitSoraTx(params_tx);
-		// New Sora specific - DEBUG
-		SetFirmwareParameters();
 	}
 
 
@@ -325,7 +325,13 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 			if (inType == TY_IP)
 			{
 				// NDIS read
-				payloadSizeInBytes = ReadFragment(payloadBuf, RADIO_MTU);
+				payloadSizeInBytes = 0;
+				while (payloadSizeInBytes == 0)
+				{
+					payloadSizeInBytes = ReadFragment(payloadBuf, RADIO_MTU);
+				}
+
+				buf_ctx_tx.mem_input_buf_size = payloadSizeInBytes + headerSizeInBytes;
 			}
 			else
 			{
@@ -339,6 +345,9 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 
 			memset(headerBuf, 0, 3);
 			createHeader(headerBuf, phy_rate.mod, phy_rate.enc, payloadSizeInBytes);
+
+			// DEBUG
+			printf("Sending packet of size %ld\n", payloadSizeInBytes);
 
 			// Run Ziria TX code to preapre the buffer
 			resetBufCtxBlock(&buf_ctx_tx);						// reset context block (counters)

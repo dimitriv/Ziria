@@ -352,12 +352,12 @@ int Ndis_init(char *str)
 	  // Assign thread procedures appropriately
 	  BOOLEAN bResult = SoraUThreadStart(hUplinkThread, UplinkTxProc, NULL);
 	  assert(bResult);
-	  printf("Started uplink thread at UE\n");
+	  printf("Started thread at RX\n");
 	} else {
 	  // Assign thread procedures appropriately
 	  BOOLEAN bResult = SoraUThreadStart(hUplinkThread, UplinkRxProc, NULL);
 	  assert(bResult);
-	  printf("Started uplink thread at eNodeB\n");
+	  printf("Started thread at TX\n");
 	}
 
 	return 0;
