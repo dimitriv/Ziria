@@ -439,7 +439,7 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 		unsigned long cntError = 0;
 		unsigned long cntMiss = 0;
 		unsigned long lastGap = 0;
-		const unsigned long printDelay = 10000;
+		const unsigned long printDelay = 1000;
 
 		unsigned char * payload = (unsigned char *)buf_ctx_rx.mem_output_buf;
 		uint16 * payload16 = (uint16 *)buf_ctx_rx.mem_output_buf;
