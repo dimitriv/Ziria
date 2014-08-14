@@ -1,4 +1,0 @@
-#/usr/bin/bash
-
-./rx.out --MAC-type=RX-only --RX-input=sora --RX-output=dummy --RX-sora-radio-id=1 --RX-sora-central-frequency=739
-#./rx.out --MAC-type=RX-only --TX-PC=10.190.102.72 --RX-input=sora --RX-output=ip --RX-sora-radio-id=1 --RX-sora-central-frequency=739
