@@ -110,9 +110,9 @@ rx.outopt: rx.copt
 # TX real
 tx.run: tx.outopt
 	./tx.out --MAC-type=TX-only \
-	     --TX-input=file \
-             --TX-input-file-name=tx.infile \
-             --TX-input-file-mode=dbg \
+	     --TX-PHY-rate=18 \
+	     --TX-input=dummy \
+	     --TX-dummy-samples=12800 \
 	     --TX-output=sora \
 	     --TX-sora-gain=4096 \
 	     --TX-sora-radio-id=0 \

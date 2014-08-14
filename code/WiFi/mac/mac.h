@@ -19,6 +19,24 @@ permissions and limitations under the License.
 */
 
 
+typedef enum __PHYMod {
+	PHY_MOD_BPSK,
+	PHY_MOD_QPSK,
+	PHY_MOD_16QAM,
+	PHY_MOD_64QAM
+} PHYMod;
+
+typedef enum __PHYEnc {
+	PHY_ENC_CR_12,
+	PHY_ENC_CR_23,
+	PHY_ENC_CR_34
+} PHYEnc;
+
+typedef struct __PHYRate {
+	PHYMod mod;
+	PHYEnc enc;
+} PHYRate;
+
 typedef enum __MACType {
 	MAC_TX_TEST,
 	MAC_RX_TEST,
@@ -28,5 +46,8 @@ typedef enum __MACType {
 } MACType;
 
 // TX or RX MAC type
-extern int mac_type;
+extern MACType mac_type;
+extern PHYRate phy_rate;
+
+// PC name for wired uplink
 extern char txPC[];
