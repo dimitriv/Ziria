@@ -364,7 +364,6 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 
 	BlinkFileType inType = params_rx->inType;
 	BlinkFileType outType = params_rx->outType;
-	const long maxInSize = 200000;
 	const long maxOutSize = 4096;
 	unsigned int sampleSize;
 
@@ -385,10 +384,11 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 	{
 		// RX always first prepares the buffers in memory
 		params_rx->inType = TY_MEM;
-		buf_ctx_rx.mem_input_buf = (void *)malloc(maxInSize * sizeof(complex16));
 
 		char *filebuffer;
 		try_read_filebuffer(pheap_ctx_rx, params_rx->inFileName, &filebuffer, &sampleSize);
+		buf_ctx_rx.mem_input_buf = (void *)malloc(sampleSize * sizeof(complex16));
+
 		if (params_rx->inFileMode == MODE_BIN)
 		{
 			buf_ctx_rx.mem_input_buf_size = sampleSize;
