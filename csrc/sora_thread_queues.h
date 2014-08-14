@@ -48,3 +48,43 @@ bool ts_isFull(int nc);
 
 // Free memory allocated for queues
 void ts_free();
+
+
+
+#define ST_CACHE_LINE	64
+
+struct ts_context
+{
+	// All pointers are char to facilitate pointer arithmetics
+	MEM_ALIGN(ST_CACHE_LINE) char *buf;
+	MEM_ALIGN(ST_CACHE_LINE) char *wptr;
+	MEM_ALIGN(ST_CACHE_LINE) char *rptr;
+
+	MEM_ALIGN(ST_CACHE_LINE) int size;
+	MEM_ALIGN(ST_CACHE_LINE) int alg_size;
+
+	MEM_ALIGN(ST_CACHE_LINE) volatile bool evReset;
+	MEM_ALIGN(ST_CACHE_LINE) volatile bool evFinish;
+	MEM_ALIGN(ST_CACHE_LINE) volatile bool evFlush;
+	MEM_ALIGN(ST_CACHE_LINE) volatile bool evProcessDone;
+};
+
+
+
+// Equivallent of the above, but as a utility function, 
+// that can be used on an arbitrary set of queues
+// TODO: rewrite the compiler to use explicit queues, 
+// and get rid of the functions above.
+
+ts_context *s_ts_init(int no, size_t *sizes);
+void s_ts_put(ts_context *locCont, int nc, char *input);
+bool s_ts_get(ts_context *locCont, int nc, char *output);
+bool s_ts_isFinished(ts_context *locCont, int nc);
+bool s_ts_isFull(ts_context *locCont, int nc);
+bool s_ts_isEmpty(ts_context *locCont, int nc);
+void s_ts_reset(ts_context *locCont, int nc);
+void ts_reset(int nc);
+void s_ts_flush(ts_context *locCont, int nc);
+void s_ts_finish(ts_context *locCont, int nc);
+void s_ts_free(ts_context *locCont, int no);
+
