@@ -138,7 +138,15 @@ PHYRate parse_PHYRate(char *typ)
 
 void parse_txPC(char *typ)
 {
-	//strcpy(txPC, typ);
+	if (strcmp(typ, "") != 0)
+	{
+		strcpy(txPCBuf, typ);
+		txPC = txPCBuf;
+	}
+	else
+	{
+		txPC = NULL;
+	}
 }
 
 BlinkFileMode parse_mode(char *md) {

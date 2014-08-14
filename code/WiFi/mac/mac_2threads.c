@@ -94,6 +94,39 @@ BOOLEAN __stdcall go_thread_rx(void * pParam);
 
 void init_mac_2threads()
 {
+	// Start NDIS
+	if (params_tx->inType == TY_IP)
+	{
+		if (mac_type == MAC_TX_ONLY && txPC != NULL)
+		{
+			// str != NULL implies RX
+			printf("In TX-test mode with NDIS the TX wait for the connection and hence TX-PC should be empty.\n");
+			exit(1);
+		}
+
+		HRESULT hResult = SoraUEnableGetTxPacket();
+		assert(hResult == S_OK);
+		Ndis_init(NULL);
+	}
+
+	if (params_rx->outType == TY_IP)
+	{
+		if (mac_type == MAC_RX_ONLY && txPC == NULL)
+		{
+			// str == NULL implies TX
+			printf("In RX-test mode with NDIS the RX should connect to the TX by supplying TX's IP address or host name through TX-PC.\n");
+			exit(1);
+		}
+
+		// TODO
+		/*
+		HRESULT hResult = SoraUEnableGetRxPacket();
+		assert(hResult == S_OK);
+		*/
+		Ndis_init(txPC);
+	}
+
+
 	// Start Sora HW
 	if (params_rx->inType == TY_SORA)
 	{
@@ -110,23 +143,6 @@ void init_mac_2threads()
 		SetFirmwareParameters();
 	}
 
-	// Start NDIS
-	if (params_tx->inType == TY_IP)
-	{
-		HRESULT hResult = SoraUEnableGetTxPacket();
-		assert(hResult == S_OK);
-		Ndis_init(NULL);
-	}
-
-	if (params_rx->outType == TY_IP)
-	{
-		// TODO
-		/*
-		HRESULT hResult = SoraUEnableGetRxPacket();
-		assert(hResult == S_OK);
-		Ndis_init(txPC);
-		*/
-	}
 
 	// Start measuring time
 	initMeasurementInfo(&(params_tx->measurementInfo), params_tx->latencyCDFSize);
@@ -149,17 +165,17 @@ int SetUpThreads_2t(PSORA_UTHREAD_PROC * User_Routines)
 {
 	int noThr = 0;
 	switch (mac_type) {
-	case 0: 
-	case 2:
+	case MAC_TX_TEST:
+	case MAC_TX_ONLY:
 		User_Routines[0] = (PSORA_UTHREAD_PROC)go_thread_tx;
 		noThr = 1;
 		break;
-	case 1:
-	case 3:
+	case MAC_RX_TEST:
+	case MAC_RX_ONLY:
 		User_Routines[0] = (PSORA_UTHREAD_PROC)go_thread_rx;
 		noThr = 1;
 		break;
-	case 4:
+	case MAC_TX_RX:
 		User_Routines[0] = (PSORA_UTHREAD_PROC)go_thread_tx;
 		User_Routines[1] = (PSORA_UTHREAD_PROC)go_thread_rx;
 		noThr = 2;
@@ -304,18 +320,25 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 
 		while (1) 
 		{
-			// NDIS read
-			//UINT len = ReadFragment(payloadBuf, RADIO_MTU);
+			unsigned long payloadSizeInBytes;
 
-			// Simple payload to check correctness
-			unsigned long payloadSizeInBytes = buf_ctx_tx.mem_input_buf_size - headerSizeInBytes;
-			memset(payloadBuf, 0, payloadSizeInBytes);
-			for (int i = 0; i<payloadSizeInBytes/2; i++)
-				payloadBuf16[i] = pktCnt;
-			pktCnt ++;
+			if (inType == TY_IP)
+			{
+				// NDIS read
+				payloadSizeInBytes = ReadFragment(payloadBuf, RADIO_MTU);
+			}
+			else
+			{
+				// Simple payload to check correctness
+				payloadSizeInBytes = buf_ctx_tx.mem_input_buf_size - headerSizeInBytes;
+				memset(payloadBuf, 0, payloadSizeInBytes);
+				for (int i = 0; i<payloadSizeInBytes/2; i++)
+					payloadBuf16[i] = pktCnt;
+				pktCnt ++;
+			}
 
 			memset(headerBuf, 0, 3);
-			createHeader(headerBuf, phy_rate.mod, phy_rate.enc, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
+			createHeader(headerBuf, phy_rate.mod, phy_rate.enc, payloadSizeInBytes);
 
 			// Run Ziria TX code to preapre the buffer
 			resetBufCtxBlock(&buf_ctx_tx);						// reset context block (counters)
@@ -391,6 +414,7 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 		printf("Only TY_FILE or TY_IP or TY_DUMMY supported for output!\n");
 		exit(1);
 	}
+
 
 	if (inType == TY_FILE)
 	{

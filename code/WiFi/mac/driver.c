@@ -72,7 +72,8 @@ MACType mac_type;
 PHYRate phy_rate;
 
 // PC name for wired uplink
-char txPC[255];
+char *txPC = NULL;
+char txPCBuf[255];
 
 
 // tracks bytes copied 

@@ -50,4 +50,5 @@ extern MACType mac_type;
 extern PHYRate phy_rate;
 
 // PC name for wired uplink
-extern char txPC[];
+extern char *txPC;
+extern char txPCBuf[];
