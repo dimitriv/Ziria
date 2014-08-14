@@ -3,7 +3,7 @@
 if [[ "$1" == "test" ]]; then
   export TX_OUT='--TX-input=dummy --TX-dummy-samples=12800'
 else
-  export TX_OUT='--TX-output=ip'
+  export TX_OUT='--TX-input=ip'
 fi
 
 if [[ $# -eq 2 ]]; then
