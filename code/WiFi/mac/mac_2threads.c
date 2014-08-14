@@ -344,6 +344,13 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 			}
 
 			hr = SoraURadioTxFree(params_tx->radioParams.radioId, TxID);
+
+			// DEBUG
+			volatile int tt = 0;
+			// This delay is fine for correct reception!
+			//for (int i = 0; i < 100000; i++) tt++;
+			// This delay is too short and causes weird bugs!
+			for (int i = 0; i < 10000; i++) tt++;
 		}
 	}
 
@@ -427,20 +434,33 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 		unsigned char lastMod;
 		unsigned char lastEnc;
 		unsigned int lastLen;
-		uint16 pktCnt = 0xFFFF;
+		uint16 pktCnt = 0;
 		unsigned long cntOk = 0;
 		unsigned long cntError = 0;
 		unsigned long cntMiss = 0;
 		unsigned long lastGap = 0;
-		unsigned long lastPrint = 0;
 		const unsigned long printDelay = 10000;
+
+		unsigned char * payload = (unsigned char *)buf_ctx_rx.mem_output_buf;
+		uint16 * payload16 = (uint16 *)buf_ctx_rx.mem_output_buf;
 
 
 		// This is slow as it includes LUT generation
 		wpl_global_init_rx(params_rx->heapSize);
 
+
+		// DEBUG
+		int lastError = 4;
+		uint16 oldPkt[100];
+		int lastError2 = 4;
+		uint16 oldPkt2[100];
+		memset(oldPkt, 0, 100 * sizeof(uint16));
+
 		while (1)
 		{
+			// Avoid stale data, for debugging
+			memset((void*)payload16, 0, 16 * sizeof(uint16));
+
 			// Run Ziria TX code
 			resetBufCtxBlock(&buf_ctx_rx);						// reset context block (counters)
 			wpl_init_heap(pheap_ctx_rx, params_rx->heapSize);	// reset memory management
@@ -448,10 +468,7 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 			wpl_go_rx();
 			wpl_output_finalize_rx();
 
-
 			unsigned int lengthInBytes = buf_ctx_rx.total_out / 8 - 5;
-			unsigned char * payload = (unsigned char *) buf_ctx_rx.mem_output_buf;
-			uint16 * payload16 = (uint16 *)buf_ctx_rx.mem_output_buf;
 			uint16 pc = payload16[0];
 			bool pktOK;
 
@@ -468,26 +485,73 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 			if (pktOK) 
 			{
 				cntOk ++;
-				if (pktCnt != 0xFF)
-				{
+
 					int d = pc - pktCnt - 1;
-					cntMiss += (unsigned long) (d < 0)?0:d;
+					/*
+					if (d < 0 || d > 100)
+					{
+						printf("pc=%d, pktCnt=%d, lastError=%d, lastError2=%d, d=%d\n", 
+							pc, pktCnt, lastError, lastError2, d);
+						for (int i = 0; i < 16; i++)
+							printf("%d ", payload16[i]);
+						printf("\n");
+						for (int i = 0; i < 16; i++)
+							printf("%d ", oldPkt[i]);
+						printf("\n");
+						for (int i = 0; i < 16; i++)
+							printf("%d ", oldPkt2[i]);
+						printf("\n");
+					}
+					*/
+
+					lastError2 = lastError;
+					if (d > 0) lastError = 2;
+					else lastError = 0;
+
+					cntMiss += (unsigned long)(d < 0) ? 0 : d;
 					lastGap = d;
-				}
+
 				pktCnt = pc;
 			}
 			else
 			{
 				cntError ++;
+				pktCnt++;
+
+				/*
+				{
+					printf("Last packet: cnt=%d, crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d, lastGap=%ld\n",
+						pc, lastCRC, lastMod, lastEnc, lastLen, lengthInBytes, lastGap);
+					printf("crc=%d, pc=%d, pktCnt=%d, lastError=%d, lastError=%d\n",
+						(lastCRC == 1), pc, pktCnt, lastError, lastError2);
+					for (int i = 0; i < 16; i++)
+						printf("%d ", payload16[i]);
+					printf("\n");
+					for (int i = 0; i < 16; i++)
+						printf("%d ", oldPkt[i]);
+					printf("\n");
+					for (int i = 0; i < 16; i++)
+						printf("%d ", oldPkt2[i]);
+					printf("\n");
+				}
+				*/
+
+				lastError2 = lastError;
+				lastError = 1;
 			}
 
-			if (lastPrint + printDelay < cntOk + cntError + cntMiss)
+			memcpy((void*)oldPkt2, (void*)oldPkt, 16 * sizeof(uint16));
+			memcpy((void*)oldPkt, (void*)payload16, 16 * sizeof(uint16));
+
+			if (printDelay < cntOk + cntError + cntMiss)
 			{
 				printf("Last packet: cnt=%d, crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d, lastGap=%ld\n",
 					pc, lastCRC, lastMod, lastEnc, lastLen, lengthInBytes, lastGap);
 				printf("OK: %ld, Error: %ld, Miss: %ld\n", cntOk, cntError, cntMiss);
 				fflush(stdout);
-				lastPrint = cntOk + cntError + cntMiss;
+				cntOk = 0;
+				cntError = 0;
+				cntMiss = 0;
 			}
 
 			if (outType == TY_IP)
