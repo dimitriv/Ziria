@@ -42,7 +42,7 @@
 #include "wpl_alloc.h"
 #include "buf.h"
 #include "utils.h"
-
+#include "mac.h"
 
 
 // Contex blocks
@@ -68,8 +68,12 @@ extern void init_mac_2threads();
 extern int SetUpThreads_2t(PSORA_UTHREAD_PROC * User_Routines);
 
 
-int mac_type;
+MACType mac_type;
+PHYRate phy_rate;
+
+// PC name for wired uplink
 char txPC[255];
+
 
 // tracks bytes copied 
 extern unsigned long long bytes_copied;

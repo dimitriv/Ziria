@@ -90,6 +90,51 @@ MACType parse_MAC(char *typ)
 	exit(1);
 }
 
+PHYRate parse_PHYRate(char *typ)
+{
+	PHYRate r;
+	ulong nr = (ULONG)strtol(typ, NULL, 10);
+	switch (nr)
+	{
+	case 6:
+		r.enc = PHY_ENC_CR_12;
+		r.mod = PHY_MOD_BPSK;
+		break;
+	case 9:
+		r.enc = PHY_ENC_CR_34;
+		r.mod = PHY_MOD_BPSK;
+		break;
+	case 12:
+		r.enc = PHY_ENC_CR_12;
+		r.mod = PHY_MOD_QPSK;
+		break;
+	case 18:
+		r.enc = PHY_ENC_CR_34;
+		r.mod = PHY_MOD_QPSK;
+		break;
+	case 24:
+		r.enc = PHY_ENC_CR_12;
+		r.mod = PHY_MOD_16QAM;
+		break;
+	case 36:
+		r.enc = PHY_ENC_CR_34;
+		r.mod = PHY_MOD_16QAM;
+		break;
+	case 48:
+		r.enc = PHY_ENC_CR_23;
+		r.mod = PHY_MOD_64QAM;
+		break;
+	case 54:
+		r.enc = PHY_ENC_CR_34;
+		r.mod = PHY_MOD_64QAM;
+		break;
+	default:
+		fprintf(stderr, "Error: cannot parse PHY rate parameter %s\n", typ);
+		exit(1);
+	}
+	return r;
+}
+
 
 void parse_txPC(char *typ)
 {
@@ -160,7 +205,7 @@ unsigned long parse_size (char *rp) {
 // Global function
 void init_inTypeMAC(BlinkParams *params, char *typ)				{ mac_type = parse_MAC(typ); }
 void init_txPC(BlinkParams *params, char *typ)					{ parse_txPC(typ); }
-
+void init_PHYRate(BlinkParams *params, char *typ)				{ phy_rate = parse_PHYRate(typ); }
 
 // TX Init functions
 void init_inTypeTX(BlinkParams *params, char *typ)				{ params[0].inType = parse_type(typ); }
@@ -222,9 +267,9 @@ void init_sampleRateRX(BlinkParams *params, char *i)			{ params[1].radioParams.S
 
 // Here is where we declare the parameters
 #ifdef SORA_PLATFORM
-#define PARAM_TABLE_LENGTH		40
+#define PARAM_TABLE_LENGTH		41
 #else
-#define PARAM_TABLE_LENGTH		27
+#define PARAM_TABLE_LENGTH		28
 #endif
 
 BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] = 
@@ -239,12 +284,17 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
 	   "Which MAC to run",
 	   "TX-test",
 	   init_inTypeMAC },
-	   { "--TX-PC=",
+	 { "--TX-PHY-rate=",
+	   "--TX-PHY-rate=6|9|12|18|24|36|48|54",
+	   "PHY TX rate in Mbps",
+	   "18",
+	   init_PHYRate },
+	 { "--TX-PC=",
 	   "--TX-PC=string",
 	   "Name of a PC to which to connect to",
 	   "",
 	   init_txPC },
-	   { "--TX-input=",
+	 { "--TX-input=",
        "--TX-input=file|dummy|sora|ip",
        "Input TX samples come from a file, radio, or are dummy samples",
        "file",

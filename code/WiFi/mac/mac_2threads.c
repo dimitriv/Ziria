@@ -170,38 +170,30 @@ int SetUpThreads_2t(PSORA_UTHREAD_PROC * User_Routines)
 
 
 
-#define CR_12	0
-#define CR_23	1
-#define CR_34	2
-
-#define M_BPSK	0
-#define M_QPSK	1
-#define M_16QAM	2
-#define M_64QAM	3
 
 
-void createHeader(unsigned char *header, int modulation, int encoding, int length)
+void createHeader(unsigned char *header, PHYMod modulation, PHYEnc encoding, int length)
 {
 	header[0] &= 0xF0;
 	switch (modulation) {
-	case M_BPSK:
+	case PHY_MOD_BPSK:
 		header[0] |= 3;
-		if (encoding == CR_12) header[0] |= 8;
+		if (encoding == PHY_ENC_CR_12) header[0] |= 8;
 		else header[0] |= 12;
 		break;
-	case M_QPSK:
+	case PHY_MOD_QPSK:
 		header[0] |= 2;
-		if (encoding == CR_12) header[0] |= 8;
+		if (encoding == PHY_ENC_CR_12) header[0] |= 8;
 		else header[0] |= 12;
 		break;
-	case M_16QAM:
+	case PHY_MOD_16QAM:
 		header[0] |= 1;
-		if (encoding == CR_12) header[0] |= 8;
+		if (encoding == PHY_ENC_CR_12) header[0] |= 8;
 		else header[0] |= 12;
 		break;
-	case M_64QAM:
+	case PHY_MOD_64QAM:
 		header[0] |= 0;
-		if (encoding == CR_23) header[0] |= 8;
+		if (encoding == PHY_ENC_CR_23) header[0] |= 8;
 		else header[0] |= 12;
 		break;
 	}
@@ -209,7 +201,7 @@ void createHeader(unsigned char *header, int modulation, int encoding, int lengt
 	header[0] &= 0x1F;
 	header[1] &= 0xE0;
 	header[0] |= (length & 7) << 5;
-	header[1] |= (length & 0xF8) >> 3;
+	header[1] |= (length & 0xFFF8) >> 3;
 }
 
 
@@ -246,7 +238,7 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 	}
 
 
-	if (inType != TY_FILE && inType != TY_IP)
+	if (inType != TY_FILE && inType != TY_DUMMY && inType != TY_IP)
 	{
 		printf("Only TY_FILE or TY_IP supported for input!\n");
 		exit(1);
@@ -275,6 +267,16 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 		}
 	}	
 
+	if (inType == TY_DUMMY)
+	{
+		buf_ctx_tx.mem_input_buf_size = headerSizeInBytes + params_tx->dummySamples / 8;
+		if (buf_ctx_tx.mem_input_buf_size > maxInSize)
+		{
+			printf("Error: TX buffer too small!\n");
+			exit(1);
+		}
+		memset(buf_ctx_tx.mem_input_buf, 0, buf_ctx_tx.mem_input_buf_size);
+	}
 
 	printf("Starting TX ...\n");
 
@@ -284,7 +286,7 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 	if (outType == TY_FILE)
 	{
 		memset(headerBuf, 0, 3);
-		createHeader(headerBuf, M_BPSK, CR_12, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
+		createHeader(headerBuf, PHY_MOD_BPSK, PHY_ENC_CR_12, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
 
 		// Run Ziria TX code to preapre the buffer
 		resetBufCtxBlock(&buf_ctx_tx);						// reset context block (counters)
@@ -306,13 +308,14 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 			//UINT len = ReadFragment(payloadBuf, RADIO_MTU);
 
 			// Simple payload to check correctness
-			memset(payloadBuf, 0, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
+			unsigned long payloadSizeInBytes = buf_ctx_tx.mem_input_buf_size - headerSizeInBytes;
+			memset(payloadBuf, 0, payloadSizeInBytes);
 			for (int i = 0; i<16; i++)
 				payloadBuf16[i] = pktCnt;
 			pktCnt ++;
 
 			memset(headerBuf, 0, 3);
-			createHeader(headerBuf, M_BPSK, CR_12, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
+			createHeader(headerBuf, phy_rate.mod, phy_rate.enc, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
 
 			// Run Ziria TX code to preapre the buffer
 			resetBufCtxBlock(&buf_ctx_tx);						// reset context block (counters)
@@ -348,9 +351,11 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 			// DEBUG
 			volatile int tt = 0;
 			// This delay is fine for correct reception!
+			for (int i = 0; i < 1000000; i++) tt++;
+			// This delay is fine for correct reception for 32B packets but not for the large ones!
 			//for (int i = 0; i < 100000; i++) tt++;
 			// This delay is too short and causes weird bugs!
-			for (int i = 0; i < 10000; i++) tt++;
+			//for (int i = 0; i < 10000; i++) tt++;
 		}
 	}
 
