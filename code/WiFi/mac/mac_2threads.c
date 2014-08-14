@@ -484,7 +484,7 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 
 			pktOK = (lastCRC == 1);
 
-			for (int i=1; i < 16 && pktOK; i++)
+			for (int i = 1; i < lengthInBytes/2 && pktOK; i++)
 				pktOK = pktOK && (payload16[i] == pc);
 
 			if (pktOK) 
