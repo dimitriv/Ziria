@@ -310,7 +310,7 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 			// Simple payload to check correctness
 			unsigned long payloadSizeInBytes = buf_ctx_tx.mem_input_buf_size - headerSizeInBytes;
 			memset(payloadBuf, 0, payloadSizeInBytes);
-			for (int i = 0; i<16; i++)
+			for (int i = 0; i<payloadSizeInBytes/2; i++)
 				payloadBuf16[i] = pktCnt;
 			pktCnt ++;
 
