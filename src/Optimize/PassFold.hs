@@ -378,7 +378,6 @@ is_simpl_expr0 :: Exp0 Ty -> Bool
 is_simpl_expr0 (EVal _)    = True
 is_simpl_expr0 (EValArr _) = True
 is_simpl_expr0 (EVar _)    = True
-is_simpl_expr0 (EArrRead e1 e2 _li) = is_simpl_expr e1 && is_simpl_expr e2
 is_simpl_expr0 (EUnOp u e)          = is_simpl_expr e
 is_simpl_expr0 (EStruct _ fses) = all is_simpl_expr (map snd fses)
 is_simpl_expr0 _ = False 
@@ -822,12 +821,11 @@ arrinit_step _fgs e1
        }
 
 
-
 exp_inlining_steps :: DynFlags -> TypedExpPass
 exp_inlining_steps fgs e 
  | ELet nm e1 e2 <- unExp e
  , let fvs = exprFVs e2
- , let b = nm `S.member` fvs
+ , let b = nm `S.member` fvs 
  = if not b && not (is_side_effecting e) 
    then rewrite e2 
    else 
