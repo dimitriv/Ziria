@@ -1,5 +1,0 @@
-#./bash
-
-#./tx.out --MAC-type=TX-only --TX-PHY-rate=18 --TX-input=file --TX-input-file-name=tx.infile --TX-input-file-mode=dbg --TX-output=sora --TX-sora-gain=4096 --TX-sora-radio-id=0 --TX-sora-central-frequency=739
-
-./tx.out --MAC-type=TX-only --TX-PHY-rate=18 --TX-input=dummy --TX-dummy-samples=12800 --TX-output=sora --TX-sora-gain=4096 --TX-sora-radio-id=0 --TX-sora-central-frequency=739

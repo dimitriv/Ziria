@@ -126,6 +126,14 @@ rx.run: rx.outopt
 	     --RX-sora-radio-id=1 \
 	     --RX-sora-central-frequency=739
 
+rx.ip: rx.outopt
+	./rx.out --MAC-type=RX-only \
+	     --TX-PC=10.190.102.72 \
+	     --RX-input=sora \
+	     --RX-output=ip \
+	     --RX-sora-radio-id=1 \
+	     --RX-sora-central-frequency=739
+
 
 # Not implemented yet:
 # mac.outfile: mac.out mac.infile
