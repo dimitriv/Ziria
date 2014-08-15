@@ -315,8 +315,6 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
         d <- case unExp e1 of
                EValArr {} -> 
                  return [cdecl|$ty:(codeGenArrTyPtrAlg ty1) $id:(x_name);|]
-               EArrRead _ _ (LILength {}) ->  
-                 return [cdecl| $ty:(codeGenArrTyPtrAlg ty1) $id:(x_name);|]
                _ -> codeGenDeclGroup x_name (info e1)
         appendDecl d
 
@@ -325,8 +323,6 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
         extendVarEnv [(x,(info e1,[cexp|$id:x_name|]))] $
           do { case unExp e1 of
                  EValArr {} 
-                     -> appendStmt [cstm|$id:x_name = $ce1;|]
-                 EArrRead _ _ (LILength {}) 
                      -> appendStmt [cstm|$id:x_name = $ce1;|]
                  _ -> do { cx <- go (info e1) (EVar x) 
                          ; assignByVal (info e1) (info e1) cx ce1 }
