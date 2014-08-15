@@ -366,7 +366,7 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 				4 * buf_ctx_tx.total_out + 4 * interpacketGap, &TxID);
 			if (!SUCCEEDED(hr))
 			{
-				fprintf(stderr, "Error: Fail to transfer Sora Tx buffer!\n");
+				fprintf(stderr, "Error: Fail to transfer Sora Tx buffer: %lx!\n", hr);
 				exit(1);
 			}
 
@@ -374,7 +374,8 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 
 			if (!SUCCEEDED(hr))
 			{
-				fprintf(stderr, "Error: Fail to transmit Sora Tx buffer!\n");
+				HRESULT hr1 = SoraURadioTxFree(params_tx->radioParams.radioId, TxID);
+				fprintf(stderr, "Error: Fail to transmit Sora Tx buffer: %lx!\n", hr);
 				exit(1);
 			}
 
