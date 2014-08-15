@@ -54,6 +54,13 @@ void try_read_filebuffer(HeapContextBlock *hblk, char *filename, char **fb, unsi
 
 }
 
+
+// Parse debug level
+int parse_DEBUG(char *d) {
+	return (int)strtol(d, NULL, 10);
+}
+
+
 Repetitions parse_repeat(char *rp) 
 {
 	Repetitions reps;
@@ -136,6 +143,7 @@ unsigned long parse_size (char *rp) {
   return (strtol(rp,NULL,10));
 }
 
+void init_DEBUG(BlinkParams *params, char *typ)				{ params->debug = parse_DEBUG(typ); }
 void init_inType(BlinkParams *params, char *typ)			{ params->inType = parse_type(typ); }
 void init_outType(BlinkParams *params, char *typ)			{ params->outType = parse_type(typ); }
 void init_inFile(BlinkParams *params, char *fn)				{ params->inFileName = fn; }
@@ -172,7 +180,12 @@ void init_TXBufferSize(BlinkParams *params, char *i)		{ params->radioParams.TXBu
 #endif
 
 BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] = 
-  {  { "--input=", 
+  {  { "--DEBUG=",
+	   "--DEBUG=...",
+	   "Turn DEBUG display (0 - no debug output)",
+	   "0",
+	   init_DEBUG },
+	 { "--input=", 
        "--input=file|dummy|sora|ip",
        "Input samples come from a file, radio, or are dummy samples",
        "file",
