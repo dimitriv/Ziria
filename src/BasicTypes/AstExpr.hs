@@ -846,12 +846,14 @@ is_side_effecting e = case unExp e of
   EBinOp _ e1 e2        -> any is_side_effecting [e1,e2]
   EAssign e1 e2         -> True
   
-  -- The reason that EArrRead is considered as side_effecting
+  EArrRead e1 e2 LISingleton   -> any is_side_effecting [e1,e2]
+
+  -- The reason that EArrRead of a range is considered as side_effecting
   -- is because if we inline into a function that can side-effect the base 
   -- array into which we read, the EArrRead will have different values 
   -- inside the inlined body, hence we violate the call-by-value semantics
   -- of EArrRead (This bug was manifested in LTE/Blink/Wifi/crc.wpl)
-  EArrRead e1 e2 _  -> True
+  EArrRead e1 e2 (LILength {}) -> True
 
   EArrWrite e1 e2 _r e3 -> True
   EIter _ _ e1 e2       -> any is_side_effecting [e1,e2]

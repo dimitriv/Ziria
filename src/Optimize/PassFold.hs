@@ -820,20 +820,19 @@ arrinit_step _fgs e1
             rewrite $ MkExp (EValArr (map VInt vals)) (expLoc e1) (info e1) 
        }
 
-
 exp_inlining_steps :: DynFlags -> TypedExpPass
 exp_inlining_steps fgs e 
  | ELet nm e1 e2 <- unExp e
  , let fvs = exprFVs e2
  , let b = nm `S.member` fvs 
- = if not b && not (is_side_effecting e) 
-   then rewrite e2 
-   else 
-     if is_simpl_expr e1 && not (isDynFlagSet fgs NoExpFold) 
-     then substExp (nm,e1) e2 >>= rewrite
-     else return e 
+ = if not b then 
+      if not (is_side_effecting e) rewrite e2 
+      else return e
+   else if is_simpl_expr e1 && not (isDynFlagSet fgs NoExpFold) 
+   then substExp (nm,e1) e2 >>= rewrite
+   else return e 
  | otherwise 
- = return e
+ = return e 
 
 mk_read_ty :: Ty -> LengthInfo -> Ty 
 mk_read_ty base_ty LISingleton  = base_ty
