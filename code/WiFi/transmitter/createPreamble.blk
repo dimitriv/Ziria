@@ -30,6 +30,8 @@ let createSTSinTime() =
   var sts_time : arr[320] complex16;
 
   -- short training symbol
+  zero_complex16(sts);
+
   sts[4]   := complex16{re=-sts_mod; im=-sts_mod};
   sts[8]   := complex16{re=-sts_mod; im=-sts_mod};
   sts[12]  := complex16{re=sts_mod; im=sts_mod};
@@ -61,6 +63,8 @@ let createLTSinTime() =
       0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 
       1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1
   };
+
+  zero_complex16(lts);
 
 
   -- Reset everything - otherwise we might have an ambiguous preamble
