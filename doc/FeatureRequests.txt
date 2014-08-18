@@ -41,3 +41,23 @@ List of features that we hope to add to Ziria at some point:
   computer that returns a struct, this struct should be returned by wpl_go. Also, allow MAC 
   to quuery Ziria's compile-time parameters, such as input/output types.
 
+- Make letRef work with constant array. For example, allow: let A = {1,2,3,4} in
+
+- Allow to define let functions within Expr language. At the moment we can only
+  define them in computational language.
+
+- Error message for missing argument is not informative. For example, if function is defined
+  to have two arguments (e.g. f(a,b)) and I call it with one f(a), I get:
+     rx.blk
+     "rx.blk" (line 42, column 45):
+     unexpected ")"
+     expecting letter or digit, ".", "[", operator or ","
+     ExitFailure 1
+     Makefile:49: recipe for target 'rx.c' failed
+  whereas it should have told me that I failed to supply the second argument.
+  But I have also see instances where a similar error message was reported correctly.
+
+
+
+
+
