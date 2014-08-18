@@ -396,7 +396,7 @@ inline_exp_fun :: (Name,[(Name,Ty)],[(Name,Ty,Maybe (Exp Ty))],Exp Ty)
 inline_exp_fun (nm,params,locals,body) e
   = mapExpM_ replace_call e
   where replace_call e@(MkExp (ECall (MkExp (EVar nm') _ _) args) _ _)
-          | all (not . is_side_effecting) args 
+          | all is_simpl_expr args -- Like what we do for LetE/ELet
           , nm == nm'
           = do { let xs        = zip params args
                      subst     = arg_subst xs
@@ -820,20 +820,19 @@ arrinit_step _fgs e1
             rewrite $ MkExp (EValArr (map VInt vals)) (expLoc e1) (info e1) 
        }
 
-
 exp_inlining_steps :: DynFlags -> TypedExpPass
 exp_inlining_steps fgs e 
  | ELet nm e1 e2 <- unExp e
  , let fvs = exprFVs e2
  , let b = nm `S.member` fvs 
- = if not b && not (is_side_effecting e) 
-   then rewrite e2 
-   else 
-     if is_simpl_expr e1 && not (isDynFlagSet fgs NoExpFold) 
-     then substExp (nm,e1) e2 >>= rewrite
-     else return e 
+ = if not b then 
+      if not (mutates_state e) then rewrite e2 
+      else return e
+   else if is_simpl_expr e1 && not (isDynFlagSet fgs NoExpFold) 
+   then substExp (nm,e1) e2 >>= rewrite
+   else return e 
  | otherwise 
- = return e
+ = return e 
 
 mk_read_ty :: Ty -> LengthInfo -> Ty 
 mk_read_ty base_ty LISingleton  = base_ty
@@ -849,7 +848,7 @@ asgn_letref_step fgs e
   , LILength _ <- elen  
   , EVar x <- unExp e0  
    -- Just a simple expression with no side-effects
-  , not (is_side_effecting estart)
+  , not (mutates_state estart)
   , Just (y, residual_erhs) <- returns_letref_var erhs
   , let read_ty = mk_read_ty ty elen
   = substExp (y, eArrRead loc read_ty e0 estart elen) residual_erhs >>= rewrite
@@ -898,15 +897,6 @@ rest_chain fgs e
        -- commented for now:
           >>= proj_inline_step fgs
 
-
-exp_inline_step :: DynFlags -> TypedExpPass
-exp_inline_step fgs e
-  | ELet nm e1 e2 <- unExp e
-  , not (isDynFlagSet fgs NoExpFold)
-  , is_simpl_expr e1
-  = substExp (nm,e1) e2 >>= rewrite 
-  | otherwise
-  = return e
 
 alength_elim :: DynFlags -> TypedExpPass
 alength_elim fgs e 
