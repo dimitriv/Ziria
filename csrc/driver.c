@@ -94,14 +94,14 @@ int __cdecl main(int argc, char **argv) {
   // Start Sora HW
   if (Globals.inType == TY_SORA || Globals.outType == TY_SORA)
   {
-	  RadioStart(Globals);
+	  RadioStart(&Globals);
 	  if (Globals.inType == TY_SORA)
 	  {
-		  InitSoraRx(*params);
+		  InitSoraRx(params);
 	  }
 	  if (Globals.outType == TY_SORA)
 	  {
-		  InitSoraTx(*params);
+		  InitSoraTx(params);
 	  }
   }
 
@@ -121,7 +121,7 @@ int __cdecl main(int argc, char **argv) {
 
   // Init
   initBufCtxBlock(&buf_ctx);
-  initHeapCtxBlock(&heap_ctx);
+  initHeapCtxBlock(&heap_ctx, Globals.heapSize);
 
   wpl_global_init(Globals.heapSize);
   wpl_input_initialize();
@@ -179,7 +179,7 @@ int __cdecl main(int argc, char **argv) {
 	// Stop Sora HW
 	if (Globals.inType == TY_SORA || Globals.outType == TY_SORA)
 	{
-		RadioStop(Globals);
+		RadioStop(&Globals);
 	}
 
 	// Stop NDIS

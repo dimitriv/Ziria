@@ -174,9 +174,9 @@ void init_TXBufferSize(BlinkParams *params, char *i)		{ params->radioParams.TXBu
 
 // Here is where we declare the parameters
 #ifdef SORA_PLATFORM
-#define PARAM_TABLE_LENGTH		20
+#define PARAM_TABLE_LENGTH		21
 #else
-#define PARAM_TABLE_LENGTH		12
+#define PARAM_TABLE_LENGTH		13
 #endif
 
 BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] = 
