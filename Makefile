@@ -41,12 +41,12 @@ test: test-backend test-lut test-WiFi-all
 
 test-backend:
 	@echo ">>>>>>>>>>>>>>> Backend tests"
-	cd _tests/_backend && make
+	cd tests/backend && make
 	@echo "<<<<<<<<<<<<<<< Backend tests"
 
 test-lut:
 	@echo ">>>>>>>>>>>>>>> LUT tests"
-	cd _tests/_lut && make
+	cd tests/lut && make
 	@echo "<<<<<<<<<<<<<<< LUT tests"
 
 
@@ -54,17 +54,17 @@ test-WiFi-all: test-WiFi test-WiFi-TX test-WiFi-RX
 
 test-WiFi:
 	@echo ">>>>>>>>>>>>>>> Backend tests"
-	cd _code/WiFi/tests && EXTRAOPTS="--no-exp-fold" make
+	cd code/WiFi/tests && EXTRAOPTS="--no-exp-fold" make
 	@echo "<<<<<<<<<<<<<<< Backend tests"
 
 test-WiFi-TX:
 	@echo ">>>>>>>>>>>>>>> Backend tests"
-	cd _code/WiFi/transmitter/tests && make
+	cd code/WiFi/transmitter/tests && make
 	@echo "<<<<<<<<<<<<<<< Backend tests"
 
 test-WiFi-RX:
 	@echo ">>>>>>>>>>>>>>> Backend tests"
-	cd _code/WiFi/receiver/tests && make
+	cd code/WiFi/receiver/tests && make
 	@echo "<<<<<<<<<<<<<<< Backend tests"
 
 
