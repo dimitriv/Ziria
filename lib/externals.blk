@@ -31,6 +31,7 @@ let external atan2_int32(y:int32, x:int32) : int32 in
 
 
 -- ext_math
+let pi = 3.1415926536 in 
 let external sine_double_int16(x:int16, prec:int16) : int16 in 
 let external sine_double_int32(x:int32, prec:int32) : int32 in 
 let external cosine_double_int16(x:int16, prec:int16) : int16 in 
