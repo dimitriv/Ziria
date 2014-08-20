@@ -380,6 +380,8 @@ is_simpl_expr0 (EValArr _) = True
 is_simpl_expr0 (EVar _)    = True
 is_simpl_expr0 (EUnOp u e)          = is_simpl_expr e
 is_simpl_expr0 (EStruct _ fses) = all is_simpl_expr (map snd fses)
+
+
 is_simpl_expr0 _ = False 
 
 no_lut_inside x 
@@ -390,30 +392,60 @@ no_lut_inside x
 
 
 
+
+
 inline_exp_fun :: (Name,[(Name,Ty)],[(Name,Ty,Maybe (Exp Ty))],Exp Ty) 
                -> Exp Ty -> RwM (Exp Ty)
 -- True means that it is safe to just get rid of the function
 inline_exp_fun (nm,params,locals,body) e
   = mapExpM_ replace_call e
   where replace_call e@(MkExp (ECall (MkExp (EVar nm') _ _) args) _ _)
-          | all is_simpl_expr args -- Like what we do for LetE/ELet
-          , nm == nm'
-          = do { let xs        = zip params args
-                     subst     = arg_subst xs
-                     subst_len = len_subst xs
-               ; e' <- mk_local_lets subst subst_len locals body
+--          | all is_simpl_expr args -- Like what we do for LetE/ELet
+          | nm == nm'
+          = do { let xs                        = zip params args
+                     (subst, locals_from_args) = arg_subst xs
+                     subst_len                 = len_subst xs
+               ; e' <- mk_local_lets subst subst_len (locals_from_args ++ locals) body
                ; rewrite e' 
                }
          where
             loc = expLoc e
-            arg_subst [] = []
+            -- arg_subst will return (a) a substitution and (b) some local bindings
+            arg_subst [] = ([],[])
             arg_subst (((prm_nm,prm_ty),arg):rest) 
               -- An array of variable size. 
               -- Here we must substitute for the size too
               | TArr (NVar siz_nm _m) _ <- prm_ty
-              = (prm_nm,arg):(siz_nm, arg_size (info arg)):(arg_subst rest)
+              , let (rest_subst, rest_locals) = arg_subst rest 
+              , let siz_bnd = (siz_nm, arg_size (info arg))
+              = case how_to_inline prm_nm prm_ty arg of 
+                  Left bnd  -> (bnd:siz_bnd:rest_subst, rest_locals)
+                  Right bnd -> (siz_bnd:rest_subst, bnd:rest_locals)
+ 
               | otherwise
-              = (prm_nm,arg):(arg_subst rest)
+              , let (rest_subst, rest_locals) = arg_subst rest 
+              = case how_to_inline prm_nm prm_ty arg of 
+                  Left bnd  -> (bnd:rest_subst, rest_locals)
+                  Right bnd -> (rest_subst, bnd:rest_locals)
+
+            -- Delicate: classifies which arrays are passed by
+            -- reference. Should revisit.  But at the moment this is
+            -- consistent with the semantics implemented in CgExpr.
+            -- See for example codeGenArrRead in CgExpr.hs
+
+            how_to_inline :: Name -> Ty -> Exp Ty -> Either (Name,Exp Ty) (Name, Ty, Maybe (Exp Ty))
+            -- The choice is: either with a substitution (Left) or with a let-binding (Right) 
+            how_to_inline prm_nm prm_ty arg
+              = if is_simpl_expr arg 
+                then Left (prm_nm, arg)
+                else if isArrTy prm_ty && getArrTy prm_ty /= TBit && is_array_ref arg 
+                     then Left (prm_nm,arg)
+                else Right (prm_nm, prm_ty, Just arg)
+
+            is_array_ref (MkExp (EVar _) _ _)      = True 
+            is_array_ref (MkExp (EArrRead {}) _ _) = True 
+            is_array_ref _ = False 
+
 
             len_subst [] = []
             len_subst (((prm_nm,prm_ty),arg):rest)
