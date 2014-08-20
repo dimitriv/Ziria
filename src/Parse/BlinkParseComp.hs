@@ -265,10 +265,9 @@ parseComp = buildExpressionParser par_op_table (choice [parse_unary_ops, parseCo
         from_pref parsepref cont 
            = do { p <- getPosition
                 ; pref <- parsepref
-                ; c <- parseComp -- The full thing!
+                ; c <- choice [parse_unary_ops, parseCompTerm] -- Not operators, to avoid wrong fixity
                 ; return (cont p pref c)
                 }
-
 
 parseCompTerm 
   = choice [ parens parseComp
