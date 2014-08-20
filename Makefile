@@ -37,12 +37,17 @@ clean:
 	rm -rf obj wplc wplc.exe
 
 
-test: test-backend test-lut test-WiFi-all
+test: test-parser test-backend test-lut test-WiFi-all
 
 test-backend:
 	@echo ">>>>>>>>>>>>>>> Backend tests"
 	cd tests/backend && make
 	@echo "<<<<<<<<<<<<<<< Backend tests"
+
+test-parser:
+	@echo ">>>>>>>>>>>>>>> Parser tests"
+	cd tests/parser && make
+	@echo "<<<<<<<<<<<<<<< Parser tests"
 
 test-lut:
 	@echo ">>>>>>>>>>>>>>> LUT tests"
