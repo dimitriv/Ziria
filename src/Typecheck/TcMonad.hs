@@ -29,6 +29,7 @@ import TcErrors
 import qualified GenSym as GS
 
 import Text.Parsec.Pos
+import Control.Applicative hiding (empty)
 import Control.Monad.State
 
 import Text.PrettyPrint.HughesPJ
@@ -167,6 +168,25 @@ data TcM a
                  -> IO (Either Doc (a, TcMState)) }
 
 
+instance Functor TcM where
+  fmap f (TcM x) = TcM $ \tenv env cenv sym ctx st -> do
+    res <- x tenv env cenv sym ctx st
+    case res of
+      Right (x', st') -> return $ Right (f x', st')
+      Left err        -> return $ Left err
+
+instance Applicative TcM where
+  pure x = TcM $ \tenv env cenv sym ctxt st -> return (Right (x, st))
+  (TcM f) <*> (TcM x) = TcM $ \tenv env cenv sym ctx st -> do
+    fres <- f tenv env cenv sym ctx st
+    case fres of
+      Left err -> return $ Left err
+      Right (f', st') -> do
+        xres <- x tenv env cenv sym ctx st'
+        case xres of
+          Left err -> return $ Left err
+          Right (x', st'') -> pure $ Right (f' x', st'')
+
 instance Monad TcM where
   (>>=) m1 m2 =
     TcM $ \tenv env cenv sym ctxt st ->
@@ -175,7 +195,7 @@ instance Monad TcM where
              Left err -> return $ Left err
              Right (a, st') -> runTcM (m2 a) tenv env cenv sym ctxt st'
          }
-  return x = TcM $ \tenv env cenv sym ctxt st -> return (Right (x, st))
+  return = pure
 
 raiseErr :: Bool -> Maybe SourcePos -> Doc -> TcM a
 raiseErr print_vartypes p msg

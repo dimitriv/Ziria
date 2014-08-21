@@ -43,7 +43,7 @@ import CgTypes
 import Analysis.Range
 import Analysis.UseDef
 
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.IO.Class (liftIO)
 import Data.Bits
 import qualified Data.Map as Map
 import Data.Map (Map)

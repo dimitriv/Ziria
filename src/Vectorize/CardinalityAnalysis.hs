@@ -37,6 +37,7 @@ import PpComp
 import qualified GenSym as GS
 
 import qualified Data.Set as S
+import Control.Applicative
 import Control.Monad.State
 
 import Data.List as M
@@ -135,6 +136,12 @@ mkParCard c1 c2
 mkDynamicCard :: Card
 mkDynamicCard = DynamicCard
 
+instance Functor CardM where
+  fmap f (CardM c) = CardM $ \env -> fmap f (c env)
+
+instance Applicative CardM where
+  pure = CardM . const . pure
+  (CardM f) <*> (CardM x) = CardM $ \env -> f env <*> x env
 
 instance Monad CardM where
   (>>=) m1 m2 =

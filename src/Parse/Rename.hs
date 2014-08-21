@@ -24,6 +24,7 @@ import PpComp
 import qualified GenSym as GS
 
 import qualified Data.Set as S
+import Control.Applicative
 import Control.Monad.State
 
 import Data.List as M
@@ -34,6 +35,13 @@ type UniqEnv = [(Name,String)]
 data RenM a = RenM { runRenM :: GS.Sym
                              -> UniqEnv
                              -> IO a }
+
+instance Functor RenM where
+  fmap f (RenM c) = RenM $ \sym env -> fmap f (c sym env)
+
+instance Applicative RenM where
+  pure = RenM . const . const . pure
+  (RenM f) <*> (RenM x) = RenM $ \sym env -> f sym env <*> x sym env
 
 instance Monad RenM where
   (>>=) m1 m2 = 
