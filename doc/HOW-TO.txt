@@ -8,6 +8,9 @@ A: Install Cygwin from http://cygwin.com and add its bin directory
    You will also need a recent version of the Haskell Platform. Since the Platform ships
    with its own gcc binary, take care that Cygwin appears *before* the Platform on your
    $PATH.
+   Finally, you will want to make sure that your Haskell Platform and Cygwin are both
+   64 bit or 32 bit - no mixing! 64 bit Platform wants 64 bit Cygwin, and the same goes
+   for 32 bits.
 
 Q: How to compile the code?
 A: For the simplest examples, just run wpl.exe. 
