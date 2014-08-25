@@ -17,7 +17,10 @@
    permissions and limitations under the License.
 -}
 
-module PassPipeline where
+module PassPipeline ( 
+   runPipeLine
+ , ThreadId
+ , PipelineRetPkg (..) ) where
 
 import AstExpr
 import AstComp
