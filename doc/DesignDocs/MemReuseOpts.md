@@ -12,11 +12,10 @@ let perm(p: arr int,iarr: arr[length(p)] bit) =
 in
 ```
 
-Other cases where no extra allocation is needed are those of $\keyw{let}$-bound variables that are assigned an immutable value. In expressions such as: 
+Other case where no extra allocation is needed are that of `let`-bound variables that are assigned an immutable value. In expressions such as: 
 
 ```
 let x = {1,2,3} in e
-let x = y[...] in e
 ```
 
 `x` can simply be a pointer to the allocated space for 
