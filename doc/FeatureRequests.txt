@@ -79,6 +79,24 @@ List of features that we hope to add to Ziria at some point:
             }
   So we actually call pss function 62 times in this case! (which is potentially also incorrect).
 
+- Add enumerate types
+
+- Add constant size arrays with variable values. For example,
+    let y = {x1, x2} in 
+  currently does not compile, but seems to have very clean sematics: 
+    var tmp:arr[2] : int;
+    tmp[0] := x1; tmp[1] := x2; 
+    let y = tmp
+
+- Add int8_to_bit and bit_to_int8 conversion as a language operator. 
+  For example, int8_to_bit(7) should return {'0, '1, '1, '1} bit array. 
+  It is beneficial to have this in a language as it is a simple and frequently used
+  operation, so it is worth doing it efficiently.
+
+- Add a compiler switch to change endianness of bit operations
+
+
+
 
 
 
