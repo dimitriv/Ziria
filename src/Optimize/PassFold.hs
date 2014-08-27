@@ -378,9 +378,10 @@ is_simpl_expr0 :: Exp0 Ty -> Bool
 is_simpl_expr0 (EVal _)    = True
 is_simpl_expr0 (EValArr _) = True
 is_simpl_expr0 (EVar _)    = True
-is_simpl_expr0 (EArrRead e1 e2 _li) = is_simpl_expr e1 && is_simpl_expr e2
 is_simpl_expr0 (EUnOp u e)          = is_simpl_expr e
 is_simpl_expr0 (EStruct _ fses) = all is_simpl_expr (map snd fses)
+
+
 is_simpl_expr0 _ = False 
 
 no_lut_inside x 
@@ -391,30 +392,60 @@ no_lut_inside x
 
 
 
+
+
 inline_exp_fun :: (Name,[(Name,Ty)],[(Name,Ty,Maybe (Exp Ty))],Exp Ty) 
                -> Exp Ty -> RwM (Exp Ty)
 -- True means that it is safe to just get rid of the function
 inline_exp_fun (nm,params,locals,body) e
   = mapExpM_ replace_call e
   where replace_call e@(MkExp (ECall (MkExp (EVar nm') _ _) args) _ _)
-          | all (not . is_side_effecting) args 
-          , nm == nm'
-          = do { let xs        = zip params args
-                     subst     = arg_subst xs
-                     subst_len = len_subst xs
-               ; e' <- mk_local_lets subst subst_len locals body
+--          | all is_simpl_expr args -- Like what we do for LetE/ELet
+          | nm == nm'
+          = do { let xs                        = zip params args
+                     (subst, locals_from_args) = arg_subst xs
+                     subst_len                 = len_subst xs
+               ; e' <- mk_local_lets subst subst_len (locals_from_args ++ locals) body
                ; rewrite e' 
                }
          where
             loc = expLoc e
-            arg_subst [] = []
+            -- arg_subst will return (a) a substitution and (b) some local bindings
+            arg_subst [] = ([],[])
             arg_subst (((prm_nm,prm_ty),arg):rest) 
               -- An array of variable size. 
               -- Here we must substitute for the size too
               | TArr (NVar siz_nm _m) _ <- prm_ty
-              = (prm_nm,arg):(siz_nm, arg_size (info arg)):(arg_subst rest)
+              , let (rest_subst, rest_locals) = arg_subst rest 
+              , let siz_bnd = (siz_nm, arg_size (info arg))
+              = case how_to_inline prm_nm prm_ty arg of 
+                  Left bnd  -> (bnd:siz_bnd:rest_subst, rest_locals)
+                  Right bnd -> (siz_bnd:rest_subst, bnd:rest_locals)
+ 
               | otherwise
-              = (prm_nm,arg):(arg_subst rest)
+              , let (rest_subst, rest_locals) = arg_subst rest 
+              = case how_to_inline prm_nm prm_ty arg of 
+                  Left bnd  -> (bnd:rest_subst, rest_locals)
+                  Right bnd -> (rest_subst, bnd:rest_locals)
+
+            -- Delicate: classifies which arrays are passed by
+            -- reference. Should revisit.  But at the moment this is
+            -- consistent with the semantics implemented in CgExpr.
+            -- See for example codeGenArrRead in CgExpr.hs
+
+            how_to_inline :: Name -> Ty -> Exp Ty -> Either (Name,Exp Ty) (Name, Ty, Maybe (Exp Ty))
+            -- The choice is: either with a substitution (Left) or with a let-binding (Right) 
+            how_to_inline prm_nm prm_ty arg
+              = if is_simpl_expr arg 
+                then Left (prm_nm, arg)
+                else if isArrTy prm_ty && getArrTy prm_ty /= TBit && is_array_ref arg 
+                     then Left (prm_nm,arg)
+                else Right (prm_nm, prm_ty, Just arg)
+
+            is_array_ref (MkExp (EVar _) _ _)      = True 
+            is_array_ref (MkExp (EArrRead {}) _ _) = True 
+            is_array_ref _ = False 
+
 
             len_subst [] = []
             len_subst (((prm_nm,prm_ty),arg):rest)
@@ -821,21 +852,19 @@ arrinit_step _fgs e1
             rewrite $ MkExp (EValArr (map VInt vals)) (expLoc e1) (info e1) 
        }
 
-
-
 exp_inlining_steps :: DynFlags -> TypedExpPass
 exp_inlining_steps fgs e 
  | ELet nm e1 e2 <- unExp e
  , let fvs = exprFVs e2
- , let b = nm `S.member` fvs
- = if not b && not (is_side_effecting e) 
-   then rewrite e2 
-   else 
-     if is_simpl_expr e1 && not (isDynFlagSet fgs NoExpFold) 
-     then substExp (nm,e1) e2 >>= rewrite
-     else return e 
+ , let b = nm `S.member` fvs 
+ = if not b then 
+      if not (mutates_state e) then rewrite e2 
+      else return e
+   else if is_simpl_expr e1 && not (isDynFlagSet fgs NoExpFold) 
+   then substExp (nm,e1) e2 >>= rewrite
+   else return e 
  | otherwise 
- = return e
+ = return e 
 
 mk_read_ty :: Ty -> LengthInfo -> Ty 
 mk_read_ty base_ty LISingleton  = base_ty
@@ -851,7 +880,7 @@ asgn_letref_step fgs e
   , LILength _ <- elen  
   , EVar x <- unExp e0  
    -- Just a simple expression with no side-effects
-  , not (is_side_effecting estart)
+  , not (mutates_state estart)
   , Just (y, residual_erhs) <- returns_letref_var erhs
   , let read_ty = mk_read_ty ty elen
   = substExp (y, eArrRead loc read_ty e0 estart elen) residual_erhs >>= rewrite
@@ -900,15 +929,6 @@ rest_chain fgs e
        -- commented for now:
           >>= proj_inline_step fgs
 
-
-exp_inline_step :: DynFlags -> TypedExpPass
-exp_inline_step fgs e
-  | ELet nm e1 e2 <- unExp e
-  , not (isDynFlagSet fgs NoExpFold)
-  , is_simpl_expr e1
-  = substExp (nm,e1) e2 >>= rewrite 
-  | otherwise
-  = return e
 
 alength_elim :: DynFlags -> TypedExpPass
 alength_elim fgs e 

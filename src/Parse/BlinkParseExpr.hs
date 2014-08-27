@@ -38,6 +38,7 @@ import Data.Maybe ( fromMaybe, fromJust )
 
 import Data.Char ( isSpace )
 
+import Control.Applicative hiding (optional, (<|>))
 import Control.Monad.Trans
 import Control.Monad.Reader.Class
 
@@ -163,11 +164,18 @@ type ParseCompEnv     = [(Name,[(Name, CallArg Ty CTy0)])]
 newtype BlinkParseM a = BlinkParseM { runParseM :: ParseCompEnv -> IO a }
 type BlinkParser a    = ParsecT String BlinkParseState BlinkParseM a 
 
+instance Functor BlinkParseM where
+  fmap f (BlinkParseM x) = BlinkParseM $ \env -> fmap f (x env)
+
+instance Applicative BlinkParseM where
+  pure = BlinkParseM . const . return
+  (BlinkParseM f) <*> (BlinkParseM x) = BlinkParseM $ \env -> f env <*> x env
+
 instance Monad BlinkParseM where 
   (>>=) (BlinkParseM f) g 
      = BlinkParseM (\env -> 
          do { r <- f env; runParseM (g r) env })
-  return v = BlinkParseM (\_env -> return v)
+  return = pure
 
 instance MonadIO BlinkParseM where 
   liftIO comp = BlinkParseM (\_ -> comp)

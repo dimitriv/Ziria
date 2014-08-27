@@ -26,6 +26,7 @@ import qualified GenSym as GS
 import Text.Parsec.Pos
 
 import qualified Data.Set as S
+import Control.Applicative
 import Control.Monad.State
 
 import Data.List as M
@@ -56,12 +57,24 @@ data VecM a = VecM { runVecM :: GS.Sym
                              -> VecState 
                              -> IO (a, VecState) }
 
+instance Functor VecM where
+  fmap f (VecM x) = VecM $ \sym env st -> do
+    (x', st') <- x sym env st
+    return (f x', st')
+
+instance Applicative VecM where
+  pure x = VecM $ \sym env st -> return (x,st)
+  (VecM f) <*> (VecM x) = VecM $ \sym env st -> do
+    (f', st') <- f sym env st
+    (x', st'') <- x sym env st'
+    return (f' x', st'')
+
 instance Monad VecM where
   (>>=) m1 m2 =
     VecM $ \sym env st ->
       do (res,st') <- runVecM m1 sym env st
          runVecM (m2 res) sym env st'
-  return x = VecM $ \sym env st -> return (x,st)
+  return x = pure x
 
 newVectUniq :: VecM String
 newVectUniq = VecM $ \sym _env st -> do { str <- GS.genSymStr sym
@@ -341,6 +354,18 @@ eseqarr _         = error "Empty seq array!"
 newtype VecMBnd a 
   = VecMBnd { runVecMBnd :: VecM (a,[(Name,Ty, Maybe (Exp ()))]) }
 
+instance Functor VecMBnd where
+  fmap f (VecMBnd x) = VecMBnd $ do
+    (x', binds) <- x
+    return (f x', binds)
+
+instance Applicative VecMBnd where
+  pure x = VecMBnd $ return (x,[])
+  (VecMBnd f) <*> (VecMBnd x) = VecMBnd $ do
+    (f', binds1) <- f
+    (x', binds2) <- x
+    return (f' x', binds1 ++ binds2)
+
 instance Monad VecMBnd where
   (>>=) (VecMBnd m) f 
      = VecMBnd $ do { (a,binds1) <- m
@@ -348,7 +373,7 @@ instance Monad VecMBnd where
                         VecMBnd m_inside -> 
                           do { (b,binds2) <- m_inside
                              ; return (b,binds1++binds2) } }
-  return x = VecMBnd $ return (x,[])
+  return = pure
 
 instance MonadIO VecMBnd where
   liftIO m = VecMBnd $ do { a <- vecMIO m

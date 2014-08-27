@@ -1,3 +1,17 @@
+Q: How do I set up the basic build environment?
+A: Install Cygwin from http://cygwin.com and add its bin directory
+   (by default, C:\cygwin64\bin for a 64 bit install) to your PATH environment variable.
+   This directory should be *prepended* to your $PATH. In particular,
+   it *must* go before any other gcc, make, etc. binaries you may also have
+   on your $PATH, or you will encounter strange problems trying to compile with WinDDK
+   and possibly other things as well.
+   You will also need a recent version of the Haskell Platform. Since the Platform ships
+   with its own gcc binary, take care that Cygwin appears *before* the Platform on your
+   $PATH.
+   Finally, you will want to make sure that your Haskell Platform and Cygwin are both
+   64 bit or 32 bit - no mixing! 64 bit Platform wants 64 bit Cygwin, and the same goes
+   for 32 bits.
+
 Q: How to compile the code?
 A: For the simplest examples, just run wpl.exe. 
    Longer examples use g++ preprocessor. One can use preprocesscompile.sh bathc file (e.g. in wifi) as a shortcut.
