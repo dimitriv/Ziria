@@ -101,6 +101,7 @@ thread_setup affinity_mask buf_tys tids
                      //previously: ($id:bufPutF)($int:(o), $id:(bufput_suffix ++ "EOF"));                     
                      ts_finish($int:o);
  	             (ti->fRunning) = 0;
+                     printf("I'm quitting, bye! %s\n", $string:(tid));
 	             return 0;
                    } 
           |] : h tids' buf_tys'
@@ -113,6 +114,7 @@ thread_setup affinity_mask buf_tys tids
 
                      ($id:("wpl_go" ++ tid))();
  	             (ti->fRunning) = 0;
+                     printf("I'm quitting, bye! %s\n", $string:(tid));
 	             return 0;
                    } 
           |] : []

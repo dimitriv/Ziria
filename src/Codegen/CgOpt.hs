@@ -343,10 +343,7 @@ readCode comp csp buf_id read_type k = do
         appendDecl =<< codeGenDeclGroup yldTmpName yldTy
 
     appendLabeledBlock (tickNmOf prefix) $
-     do { appendStmt [cstm| while (ts_isEmpty($id:buf_id)) {
-                              if (ts_isFinished($id:buf_id)) return 3;
-                            }
-                         |]
+     do { idle_until_nonempty
         ; if yldty_is_pointer
                    -- Memcpy from ThreadSeparator buffer into new array buffer and set pointer
                    then appendStmts [cstms|$id:(bufGetF)($id:buf_id, (char *) $id:yldTmpName);
@@ -387,6 +384,25 @@ readCode comp csp buf_id read_type k = do
                           goto $id:(tickNmOf prefix);|]
 
     return (mkCompInfo prefix True) 
+  where
+    idle_until_nonempty =
+      case read_type of
+        SpinOnEmpty -> do
+          appendStmt $ [cstm| while (ts_isEmpty($id:buf_id)) {
+                                if (ts_isFinished($id:buf_id)) return 3;
+                              }
+                            |]
+        JumpToConsumeOnEmpty -> do
+          kont <- collectStmts_ $ kontConsume k
+          let C.If ex (C.Block inner iloc) melse loc = [cstm|
+                              if (ts_isEmpty($id:buf_id)) {
+                                if (ts_isFinished($id:buf_id)) return 3;
+                                printf("queue empty, going to consume\n");
+                              } else {
+                                printf("queue had an element, om nom nom\n");
+                              }
+                            |]
+          appendStmt $ C.If ex (C.Block (inner ++ map C.BlockStm kont) iloc) melse loc
 
 writeCode :: Comp CTy Ty
           -> Maybe SourcePos
