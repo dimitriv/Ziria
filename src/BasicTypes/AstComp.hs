@@ -34,6 +34,7 @@ data PlInfo where
                     -> PlInfo
   NeverPipeline  :: PlInfo
   MaybePipeline  :: PlInfo
+  deriving (Eq, Show)
 
 isMaybeOrNever plInfo =
   case plInfo of
@@ -45,6 +46,7 @@ data ParInfo
   = ParInfo { plInfo     :: PlInfo
             , inBurstSz  :: Maybe Int
             , outBurstSz :: Maybe Int }
+    deriving (Eq, Show)
 
 mkParInfo plInfo = ParInfo plInfo Nothing Nothing               
 

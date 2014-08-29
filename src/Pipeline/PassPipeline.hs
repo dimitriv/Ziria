@@ -31,7 +31,6 @@ import Control.Monad.State
 
 import TcMonad ( updYldTy, updInTy )
 
-
 -- A split records 
 --  (a) the enclosing context, 
 --  (b) the mediating buffer types, and
@@ -42,7 +41,30 @@ data SplitInfo
               , split_threads :: [Comp CTy Ty] 
               }
 
+-- | ID of an internal buffer
+data TypedBufId = TypedBufId IntBufName Ty
 
+instance Show TypedBufId where
+  show (TypedBufId bufname _) = show bufname
+
+-- | Type representing a standalone thread, with its input and output
+--   types for convenience.
+data Thread = Thread {
+    tComp :: Comp CTy Ty,
+    tInQ  :: TypedBufId,
+    tOutQ :: TypedBufId
+  } deriving Show
+
+-- | What should pipelining be based on?
+data PipelineMode
+  = PipelineFish        -- ^ Pipeline based on the |>>>| operator.
+  | PipelineStandalone  -- ^ Pipeline based on `standalone` cobmbinator.
+
+-- | Enumerable names for internal buffers.
+type IntBufName = Int
+
+nextBufId :: Ty -> State IntBufName TypedBufId
+nextBufId t = get >>= \bid -> put (bid + 1) >> return (TypedBufId bid t)
 
 stripLetCtxt :: Comp CTy Ty -> (CompCtxt, Comp CTy Ty)
 -- Find the CompContext of a computation
@@ -66,11 +88,85 @@ stripLetCtxt c = go c
           _other -> (Hole,c)
       where cloc = compLoc c
 
+-- | Split a computation containing top level standalone combinators
+--   into a main thread and a bunch of standalone threads.
+pipelineStandalone :: Comp CTy Ty -> ([Ty], [Comp CTy Ty])
+pipelineStandalone c =
+    (buftys, mainThread : map tComp threads)
+  where
+    (c', splitinfo) = toList c
+    ((buftys, threads, main), nbufs) = runState (mkSplits c') 0
+    mainThread = fromList main
+    
+    -- Turn a >>> b >>> c ... into [a, b, c, ...]
+    toList :: Comp CTy Ty -> ([Comp CTy Ty], [(ParInfo, CompLoc, CTy)])
+    toList (MkComp (Par pi left right) loc nfo) =
+        (leftcomp ++ rightcomp, leftinfo ++ [(pi, loc, nfo)] ++ rightinfo)
+      where
+        (leftcomp, leftinfo) = toList left
+        (rightcomp, rightinfo) = toList right
+    toList x =
+      ([x], [])
 
-pipeLineBase :: Comp CTy Ty -> IO ([Ty], [Comp CTy Ty])
+    -- Join a list of computations with arrows.
+    fromList :: [Comp CTy Ty] -> Comp CTy Ty
+    fromList [c] =
+        c
+    fromList (c1@(MkComp _ loc ty1) : cs) =
+        cPar loc (mkTy ty1 ty2) (ParInfo MaybePipeline Nothing Nothing) c1 c2
+      where
+        c2 = fromList cs
+        ty2 = compInfo c2
+    fromList _ =
+        error "fromList tried to make a computation from an empty list!"
+
+    mkTy (CTBase (TTrans i _)) (CTBase (TTrans _ o))  = CTBase (TTrans i o)
+    mkTy (CTBase (TComp r i _)) (CTBase (TTrans _ o)) = CTBase (TComp r i o)
+    mkTy (CTBase (TTrans i _)) (CTBase (TComp r _ o)) = CTBase (TComp r i o)
+    mkTy t1 t2 = error $ "Can't reconstruct arrow; " ++ show t1 ++
+                         " and " ++ show t2 ++ " are incompatible!"
+
+    -- Turn [a, Standalone b, c] into
+    -- ([readQ i >>> b >>> writeQ o], [a, writeQ i >>> tryReadQ o ,c]).
+    -- Invariant: runState (mkSplits cs) n = (([], cs), n)
+    --
+    -- TODO: when we have [Standalone a, Standalone b], the main thread currently
+    -- becomes [writeQ ain >>> tryReadQ aout, writeQ bin >>> tryReadQ bout].
+    -- This could be optimized into writeQ ain >>> tryReadQ bout by setting
+    -- aout = bin.
+    mkSplits :: [Comp CTy Ty] -> State IntBufName ([Ty], [Thread], [Comp CTy Ty])
+    mkSplits (MkComp (Standalone c) loc ty : cs) = do
+        inq <- nextBufId inty
+        outq <- nextBufId outty
+        let thread = Thread {
+                tComp = readq inq (TBuff $ IntBuf inty) inty SpinOnEmpty >>>
+                        c >>>
+                        writeq outq outty (TBuff $ IntBuf outty),
+                tInQ  = inq,
+                tOutQ = outq
+              }
+            c' = writeq inq inty TUnit >>> readq outq TUnit outty JumpToConsumeOnEmpty
+        (buftys, threads, cs') <- mkSplits cs
+        return (inty : outty : buftys, thread : threads, c' : cs')
+      where
+        pi = ParInfo MaybePipeline Nothing Nothing
+        inty  = inTyOfCTyBase $ compInfo c
+        outty = yldTyOfCTyBase $ compInfo c
+        readq q ity oty = cReadInternal loc (CTBase $ TTrans ity oty) (show q)
+        writeq q ity oty = cWriteInternal loc (CTBase $ TTrans ity oty) (show q)
+        a >>> b = cPar loc (mkTy (compInfo a) (compInfo b)) pi a b
+    mkSplits (c:cs) = do
+      (buftys, threads, cs') <- mkSplits cs
+      return (buftys, threads, c:cs')
+    mkSplits [] = do
+      return ([], [], [])
+
 -- Pipeline a computation that has no defs (CompCtxt) around it
 -- Pre: stripLetCtxt gives empty context and the same computation back
-pipeLineBase c
+pipeLineBase :: PipelineMode -> Comp CTy Ty -> IO ([Ty], [Comp CTy Ty])
+pipeLineBase PipelineStandalone c = do
+  return $ pipelineStandalone c
+pipeLineBase PipelineFish c
   = do { floated <- mapCompM_ return float_pipe c -- float |>>>| to the top
        -- ; putStrLn $ "floated = " ++ show (ppComp floated)
 
@@ -159,7 +255,7 @@ runPipeLine :: Bool -> Comp CTy Ty -> IO PipelineRetPkg
 runPipeLine dumpPipeline c
   = do { let (ctx,cbase) = stripLetCtxt c       -- get the context
 --       ; putStrLn $ "cbase = " ++ show (ppCompShortFold cbase) 
-       ; (buftys,splits) <- pipeLineBase cbase  -- pipeline base computation
+       ; (buftys,splits) <- pipeLineBase PipelineStandalone cbase  -- pipeline base computation
        ; let count = length splits
        ; when (dumpPipeline && count > 1) $ 
          putStrLn ("Pipeline pass created: " ++ 
