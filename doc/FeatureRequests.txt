@@ -95,9 +95,47 @@ List of features that we hope to add to Ziria at some point:
 
 - Add a compiler switch to change endianness of bit operations
 
+- The following code won't compile
+  let comp test() = 
+    let f(x:int) = return x in
+    x <- take;
+    y <- take;
+  in 
+  Instead, we have to write:
+  let comp test() = 
+    let f(x:int) = return x in
+    {
+    x <- take;
+    y <- take;
+    }
+  in 
+  which is tedious, and we don't have to do it if we remove let f.
 
+- Why can we not call a variable C? The word is reserved in a different context.
+  (i.e. we canoot write let C = 3)
 
+- Generic variables (such as counters in loops, array lengths, etc) should have 
+  an integer type of abstract width so that we don't have to explicitly cast 
+  in various situations. For example:
+    for i in [0, 10] {
+      b := b + int16(i) + int16(length(a));
+    }
 
+- print a, where a is array, compiles into printBitArrLn and it should compile into printBitArr
 
+- Add assert to verify a condition only in debug mode
 
+- Equate in types a scalar type with an array of the same type with one element
 
+- Each subarray in a matrice of bits should be byte-aligned 
+  (starting at the beginning of a byte and padded to a length divisible by 8)
+
+- Automatically LUT for expressions in expression language the same way we LUT repeat in comp. lang.
+
+- The following code:
+  let table = {3, 10, 7, 12, 19, 42, 7, 16, 7, 18, 11, 20, 5, 22, 11, 24, 7, 26, 41, 84, 103} in 
+  reg1[0] := reg1[table[-5]];
+
+  causes compiler error: 
+    Prelude.(!!): negative index
+  because compiler wants to inline without checking the index...
