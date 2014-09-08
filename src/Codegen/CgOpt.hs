@@ -397,9 +397,6 @@ readCode comp csp buf_id read_type k = do
           let C.If ex (C.Block inner iloc) melse loc = [cstm|
                               if (ts_isEmpty($id:buf_id)) {
                                 if (ts_isFinished($id:buf_id)) return 3;
-                                printf("queue empty, going to consume\n");
-                              } else {
-                                printf("queue had an element, om nom nom\n");
                               }
                             |]
           appendStmt $ C.If ex (C.Block (inner ++ map C.BlockStm kont) iloc) melse loc
