@@ -33,7 +33,6 @@ import System.IO
 import Text.Parsec
 import Text.PrettyPrint.Mainland
 
-
 import AstComp
 import AstExpr
 import AutoLUT
