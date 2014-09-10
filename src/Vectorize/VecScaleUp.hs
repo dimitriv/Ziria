@@ -288,7 +288,7 @@ doVectorizeCompUp comp cin cout (min,mout)
                                  | otherwise 
                                  = EArrWrite (eraseExp ya_exp) (eraseExp idx) LISingleton (eraseExp e)
 
-                         ; return $ MkComp (Return False (mkexp ya_write)) loc () 
+                         ; return $ MkComp (Return AutoInline (mkexp ya_write)) loc () 
                          }
                 Take1
                   | arityin == 1 
@@ -306,7 +306,7 @@ doVectorizeCompUp comp cin cout (min,mout)
 
                               rdexp = mkexp (EArrRead (eraseExp xa_exp) (eraseExp eidx) LISingleton)
                         ; return $ 
-                          MkComp (Return True rdexp) loc () -- NB: Force Inline 
+                          MkComp (Return ForceInline rdexp) loc () -- NB: Force Inline 
                         }
                 Take ne
                   | arityin == 1
@@ -327,7 +327,7 @@ doVectorizeCompUp comp cin cout (min,mout)
                               rd_exp = mkexp $ EArrRead (eraseExp xa_exp) 
                                                         (eraseExp start_index) 
                                                         (LILength n)
-                        ; return $ MkComp (Return True rd_exp) loc () -- NB: Force Inline!  
+                        ; return $ MkComp (Return ForceInline rd_exp) loc () -- NB: Force Inline!  
                         }
 
                 (Emits e)
@@ -363,7 +363,7 @@ doVectorizeCompUp comp cin cout (min,mout)
 
                         ; mapM (\_ -> incEmitCount) [1..n]
 
-                        ; return (MkComp (Return False let_exp) loc ())
+                        ; return (MkComp (Return AutoInline let_exp) loc ())
                         }
 
                    | otherwise
@@ -461,7 +461,7 @@ vectMap min mout tin tout loc nm
                  in
                  mkcomp $ 
                  Seq (mkTimes (mkexp $ EVal (VInt mout)) jcnt_name $
-                        mkcomp $ Return False $ mkexp $ 
+                        mkcomp $ Return AutoInline $ mkexp $ 
                         EArrWrite ya_exp (eraseExp jcnt_exp) LISingleton (mkexp $ ECall (mkexp $ EVar nm) [mkexp $ EArrRead xa_exp rd_idx LISingleton]))
                      (mkcomp $ Emit ya_exp)
        ; let outer_expr = 

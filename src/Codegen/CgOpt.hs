@@ -177,7 +177,7 @@ mkWhile dflags minit etest cbody mfinal cinfo k
     cty = compInfo cbody 
     k'  = k { kontDone = doneKont } 
     k'' = k { kontDone = doneKont' k }
-    cretunit = MkComp (Return False (MkExp (EVal VUnit) csp TUnit)) csp cty
+    cretunit = MkComp (Return AutoInline (MkExp (EVal VUnit) csp TUnit)) csp cty
     doneKont = do appendStmt mfinal
                   emitCode (compGenInit cinfo)
                   if canTick cinfo

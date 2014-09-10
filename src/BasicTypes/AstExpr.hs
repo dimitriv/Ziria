@@ -133,8 +133,14 @@ data UnrollInfo
   deriving Eq
 
 -- If true, the binding should be forced to be inlined. 
--- Used by the vectorizer
-type ForceInline = Bool 
+-- This is used by e.g. the vectorizer to bind inlinable
+-- sub-arrays of the input array.
+
+data ForceInline 
+  = ForceInline   -- Always inline
+  | NoInline      -- Never inline
+  | AutoInline    -- Let the compiler decide
+
 
 data Exp0 a where
   EVal :: Val -> Exp0 a

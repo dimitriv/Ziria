@@ -157,7 +157,7 @@ xRepeat :: XComp -> XComp
 xRepeat xc loc = cRepeat loc () Nothing (xc loc)
 
 xError :: String -> XComp
-xError s loc = cReturn loc () False (eError loc () s)
+xError s loc = cReturn loc () AutoInline (eError loc () s)
 
 xBind :: XComp -> Name -> XComp -> XComp
 xBind c1 nm c2 loc = cBindMany loc () (c1 loc) [(nm,c2 loc)]
@@ -194,7 +194,7 @@ instance BindLike (Comp () ()) where
   toASTBind x = ASTComp (\_ -> x)
 
 instance BindLike XExp where
-  toASTBind x = ASTComp (xReturn False x)
+  toASTBind x = ASTComp (xReturn AutoInline x)
 
 class XCompy a where 
   toXComp :: a -> XComp

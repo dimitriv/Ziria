@@ -322,9 +322,14 @@ inline_step_aux fgs comp
   , Just (_, [], _) <- inOutVars [] Map.empty e1 
   = substExpComp (nm,e1) c2 >>= rewrite 
 -}
+  | LetE nm ForceInline e1 c2 <- unComp comp
+  = substExpComp (nm,e1) c2 >>= rewrite
 
-  | LetE nm fi e1 c2 <- unComp comp
-  , (fi || is_simpl_expr e1) -- forced inline or if it is a simple expression
+  | LetE nm NoInline e1 c2 <- unComp comp
+  = return comp 
+
+  | LetE nm AutoInline e1 c2 <- unComp comp
+  , is_simpl_expr e1
   = substExpComp (nm,e1) c2 >>= rewrite
 
 
@@ -735,7 +740,7 @@ letfunc_step fgs comp =
           = let f_exp = MkExp (EVar f) xloc fun_ty
                 call  = MkExp (ECall f_exp es') xloc (fromJust $ doneTyOfCTyBase xnfo)
                         -- Since original was return, we know it's a computer, hence fromJust works.
-            in rewrite $ MkComp (Return False call) xloc xnfo
+            in rewrite $ MkComp (Return AutoInline call) xloc xnfo
         replace_call _ _ other = return other
 
 letfun_times_step fgs comp = 
@@ -774,7 +779,7 @@ times_unroll_step fgs comp
                   substExpComp (i, MkExp (EVal (VInt curr)) (expLoc e) tint) xc) idxs comps
             in case unrolled of
                  Nothing -> return comp
-                 Just [] -> return $ MkComp (Return True (MkExp (EVal VUnit) (compLoc comp) TUnit)) 
+                 Just [] -> return $ MkComp (Return ForceInline (MkExp (EVal VUnit) (compLoc comp) TUnit)) 
                                             (compLoc comp) 
                                             (compInfo comp)
                  Just xs -> rewrite $ mk_bind_many xs
@@ -833,7 +838,7 @@ elim_times_step fgs comp =
   case unComp comp of
     Times ui estart ebound cnt (MkComp (Return _ ebody) cloc cty) ->
         do { let efor = EFor ui cnt estart ebound ebody
-           ; rewrite $ MkComp (Return False (MkExp efor cloc (info ebody))) 
+           ; rewrite $ MkComp (Return AutoInline (MkExp efor cloc (info ebody))) 
                               (compLoc comp) 
                               (compInfo comp)
            }
@@ -855,10 +860,13 @@ arrinit_step _fgs e1
 exp_inlining_steps :: DynFlags -> TypedExpPass
 exp_inlining_steps fgs e
    -- Forced Inline!
- | ELet nm True e1 e2 <- unExp e
+ | ELet nm ForceInline e1 e2 <- unExp e
  = substExp (nm,e1) e2 >>= rewrite
+
+ | ELet nm NoInline e1 e2 <- unExp e
+ = return e
  
- | ELet nm fi e1 e2 <- unExp e
+ | ELet nm AutoInline e1 e2 <- unExp e
  , let fvs = exprFVs e2
  , let b = nm `S.member` fvs 
  = if not b then 
