@@ -38,6 +38,7 @@ import Data.Maybe ( fromMaybe, fromJust )
 
 import Data.Char ( isSpace )
 
+import Control.Applicative hiding (optional, (<|>))
 import Control.Monad.Trans
 import Control.Monad.Reader.Class
 
@@ -163,11 +164,18 @@ type ParseCompEnv     = [(Name,[(Name, CallArg Ty CTy0)])]
 newtype BlinkParseM a = BlinkParseM { runParseM :: ParseCompEnv -> IO a }
 type BlinkParser a    = ParsecT String BlinkParseState BlinkParseM a 
 
+instance Functor BlinkParseM where
+  fmap f (BlinkParseM x) = BlinkParseM $ \env -> fmap f (x env)
+
+instance Applicative BlinkParseM where
+  pure = BlinkParseM . const . return
+  (BlinkParseM f) <*> (BlinkParseM x) = BlinkParseM $ \env -> f env <*> x env
+
 instance Monad BlinkParseM where 
   (>>=) (BlinkParseM f) g 
      = BlinkParseM (\env -> 
          do { r <- f env; runParseM (g r) env })
-  return v = BlinkParseM (\_env -> return v)
+  return = pure
 
 instance MonadIO BlinkParseM where 
   liftIO comp = BlinkParseM (\_ -> comp)
@@ -472,10 +480,10 @@ parseStmt
                              ; parseStmt }
                ; case scont of 
                    Just r -> 
-                     let k m = eLet (Just p) () x e (r m)
+                     let k m = eLet (Just p) () x AutoInline e (r m)
                      in return k
                    Nothing ->
-                     let k m = eLet (Just p) () x e (fromMaybe (eunit p) m) 
+                     let k m = eLet (Just p) () x AutoInline e (fromMaybe (eunit p) m) 
                      in return k
                }
             -- References 
@@ -691,7 +699,7 @@ parseTerm
            ; e1 <- parseExpr
            ; reserved "in"
            ; e2 <- parseExpr 
-           ; return $ eLet (Just p) () nm e1 e2
+           ; return $ eLet (Just p) () nm AutoInline e1 e2
            }
 
     parse_ref 

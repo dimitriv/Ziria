@@ -68,10 +68,10 @@ pprRanges :: Map Name Range -> Doc
 pprRanges r = stack $
     map (\(k,v) -> ppr k <> char ':' <+> ppr v) (Map.toList r)
 
-join :: Range -> Range -> Range
-join RangeTop      _             = RangeTop
-join _             RangeTop      = RangeTop
-join (Range l1 h1) (Range l2 h2) = Range (min l1 l2) (max h1 h2)
+joinR :: Range -> Range -> Range
+joinR RangeTop      _             = RangeTop
+joinR _             RangeTop      = RangeTop
+joinR (Range l1 h1) (Range l2 h2) = Range (min l1 l2) (max h1 h2)
 
 data RState = RState { ranges :: Map Name Range }
              
@@ -107,7 +107,7 @@ joinRange v r1 =
     modify $ \s -> s { ranges = Map.alter f v (ranges s) }
   where
     f Nothing   = Just r1
-    f (Just r2) = Just $ r1 `join` r2
+    f (Just r2) = Just $ r1 `joinR` r2
 
 lookupRange :: Name -> R Range
 lookupRange v = 
@@ -228,7 +228,7 @@ erange (MkExp (EIter ix x earr ebody) _ _) = do
 erange (MkExp (EFor _ui ix estart elen ebody) _ _) = do
     r1 <- erange estart
     r2 <- erange elen
-    setRange ix (r1 `join` (r2-1))
+    setRange ix (r1 `joinR` (r2-1))
     erange ebody
     return RangeTop
 
@@ -238,7 +238,7 @@ erange (MkExp (EWhile econd ebody) _ _) = do
     return RangeTop
 
 
-erange (MkExp (ELet v e1 e2) _ _) = do
+erange (MkExp (ELet v _ e1 e2) _ _) = do
     r <- erange e1
     setRange v r
     erange e2
@@ -265,7 +265,7 @@ erange (MkExp (EIf econd ethen eelse) _ _) = do
   erange econd
   r1 <- erange ethen
   r2 <- erange eelse
-  return $ r1 `join` r2
+  return $ r1 `joinR` r2
 
 erange (MkExp (EPrint {}) _ _) =
     return RangeTop

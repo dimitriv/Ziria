@@ -177,7 +177,7 @@ mkWhile dflags minit etest cbody mfinal cinfo k
     cty = compInfo cbody 
     k'  = k { kontDone = doneKont } 
     k'' = k { kontDone = doneKont' k }
-    cretunit = MkComp (Return (MkExp (EVal VUnit) csp TUnit)) csp cty
+    cretunit = MkComp (Return AutoInline (MkExp (EVal VUnit) csp TUnit)) csp cty
     doneKont = do appendStmt mfinal
                   emitCode (compGenInit cinfo)
                   if canTick cinfo
@@ -787,9 +787,10 @@ codeGenComp dflags comp k =
         codeGenSharedCtxt_ dflags False (CLetStruct csp sdef Hole) $ 
         codeGenCompTop dflags c2 k
 
-    go (MkComp (LetE x e c2) csp _) = do 
-        (cinfo,stms) <- codeGenSharedCtxt dflags False (CLetE csp x e Hole) $ 
-                        codeGenCompTop dflags c2 k
+    go (MkComp (LetE x fi e c2) csp _) = do 
+        (cinfo,stms) <- 
+            codeGenSharedCtxt dflags False (CLetE csp x fi e Hole) $ 
+            codeGenCompTop dflags c2 k
         -- Make sure we init this guy, regardless of whether c1 is init'able
         return $ cinfo { compGenInit = codeStmts stms `mappend` 
                                        compGenInit cinfo }
@@ -1064,7 +1065,7 @@ codeGenComp dflags comp k =
         checkArrayType _ = fail $ "TakeN not supported for these types yet: "  ++
                                   show (inTyOfCTy cty0) ++ " " ++ show (doneTyOfCTy cty0)
 
-    go (MkComp (Return e) csp (CTBase cty0)) = do
+    go (MkComp (Return _ e) csp (CTBase cty0)) = do
         retName <-  nextName ("__ret_" ++ (getLnNumInStr csp))
         let prefix = name retName
 
@@ -1177,7 +1178,7 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
             ; appendStructDef (struct_name sdef) struct_defn
             ; extendTyDefEnv (struct_name sdef) sdef $ go ctxt action
             }
-    go (CLetE csp x e ctxt) action
+    go (CLetE csp x _ e ctxt) action
 
       -- TODO TODO TODO! IMPORTANT!
       -- Check what happens with CLetE and threads, i.e when

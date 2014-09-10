@@ -136,10 +136,10 @@ fold_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
 fold_step fgs comp = 
   case bindSeqView comp of
 
-    BindView (MkComp (Return e) rloc rinfo) nm c12 ->
+    BindView (MkComp (Return fi e) rloc rinfo) nm c12 ->
      do { -- rwMIO $ putStrLn ("Found BindView" ++ compShortName comp)
         ; fold_step fgs c12 >>= \c12' -> 
-                rewrite $ MkComp (LetE nm e c12') cloc cinfo
+                rewrite $ MkComp (LetE nm fi e c12') cloc cinfo
         }  
 
     -- CL 
@@ -153,12 +153,12 @@ fold_step fgs comp =
      fold_step fgs c12 >>= \c12' 
          -> return (MkComp (mkBindMany c [(nm,c12')]) cloc cinfo)
 
-    SeqView (MkComp (Return e) rloc rinfo) c12 -> 
+    SeqView (MkComp (Return fi e) rloc rinfo) c12 -> 
       do { -- rwMIO $ putStrLn ("Found BindView" ++ compShortName comp)
          ; let nm = toName ("__fold_unused_" ++ getLnNumInStr cloc) 
                            Nothing Nothing
          ; fold_step fgs c12 >>= \c12' -> 
-               rewrite $ MkComp (LetE nm e c12) cloc cinfo }
+               rewrite $ MkComp (LetE nm fi e c12) cloc cinfo }
     _otherwise -> 
        do { -- rwMIO $ putStrLn "fold_step not kicking in for term = "
             -- ; rwMIO $ print (ppCompAst comp) 
@@ -198,11 +198,11 @@ float_letfun_repeat_step fgs comp
 
 float_let_par_step fgs comp
   | Par p c1 c2 <- unComp comp
-  , LetE x e1 c1' <- unComp c1
-  = rewrite $ cLetE loc cty x e1 (cPar loc cty p c1' c2)
+  , LetE x fi e1 c1' <- unComp c1
+  = rewrite $ cLetE loc cty x fi e1 (cPar loc cty p c1' c2)
   | Par p c1 c2 <- unComp comp
-  , LetE x e2 c2' <- unComp c2
-  = rewrite $ cLetE loc cty x e2 (cPar loc cty p c1 c2')
+  , LetE x fi e2 c2' <- unComp c2
+  = rewrite $ cLetE loc cty x fi e2 (cPar loc cty p c1 c2')
   | otherwise
   = return comp
   where loc = compLoc comp
@@ -322,9 +322,14 @@ inline_step_aux fgs comp
   , Just (_, [], _) <- inOutVars [] Map.empty e1 
   = substExpComp (nm,e1) c2 >>= rewrite 
 -}
+  | LetE nm ForceInline e1 c2 <- unComp comp
+  = substExpComp (nm,e1) c2 >>= rewrite
 
-  | LetE nm e1 c2 <- unComp comp
-  , is_simpl_expr e1                     -- or if it is a simple expression
+  | LetE nm NoInline e1 c2 <- unComp comp
+  = return comp 
+
+  | LetE nm AutoInline e1 c2 <- unComp comp
+  , is_simpl_expr e1
   = substExpComp (nm,e1) c2 >>= rewrite
 
 
@@ -378,9 +383,10 @@ is_simpl_expr0 :: Exp0 Ty -> Bool
 is_simpl_expr0 (EVal _)    = True
 is_simpl_expr0 (EValArr _) = True
 is_simpl_expr0 (EVar _)    = True
-is_simpl_expr0 (EArrRead e1 e2 _li) = is_simpl_expr e1 && is_simpl_expr e2
 is_simpl_expr0 (EUnOp u e)          = is_simpl_expr e
 is_simpl_expr0 (EStruct _ fses) = all is_simpl_expr (map snd fses)
+
+
 is_simpl_expr0 _ = False 
 
 no_lut_inside x 
@@ -391,30 +397,60 @@ no_lut_inside x
 
 
 
+
+
 inline_exp_fun :: (Name,[(Name,Ty)],[(Name,Ty,Maybe (Exp Ty))],Exp Ty) 
                -> Exp Ty -> RwM (Exp Ty)
 -- True means that it is safe to just get rid of the function
 inline_exp_fun (nm,params,locals,body) e
   = mapExpM_ replace_call e
   where replace_call e@(MkExp (ECall (MkExp (EVar nm') _ _) args) _ _)
-          | all (not . is_side_effecting) args 
-          , nm == nm'
-          = do { let xs        = zip params args
-                     subst     = arg_subst xs
-                     subst_len = len_subst xs
-               ; e' <- mk_local_lets subst subst_len locals body
+--          | all is_simpl_expr args -- Like what we do for LetE/ELet
+          | nm == nm'
+          = do { let xs                        = zip params args
+                     (subst, locals_from_args) = arg_subst xs
+                     subst_len                 = len_subst xs
+               ; e' <- mk_local_lets subst subst_len (locals_from_args ++ locals) body
                ; rewrite e' 
                }
          where
             loc = expLoc e
-            arg_subst [] = []
+            -- arg_subst will return (a) a substitution and (b) some local bindings
+            arg_subst [] = ([],[])
             arg_subst (((prm_nm,prm_ty),arg):rest) 
               -- An array of variable size. 
               -- Here we must substitute for the size too
               | TArr (NVar siz_nm _m) _ <- prm_ty
-              = (prm_nm,arg):(siz_nm, arg_size (info arg)):(arg_subst rest)
+              , let (rest_subst, rest_locals) = arg_subst rest 
+              , let siz_bnd = (siz_nm, arg_size (info arg))
+              = case how_to_inline prm_nm prm_ty arg of 
+                  Left bnd  -> (bnd:siz_bnd:rest_subst, rest_locals)
+                  Right bnd -> (siz_bnd:rest_subst, bnd:rest_locals)
+ 
               | otherwise
-              = (prm_nm,arg):(arg_subst rest)
+              , let (rest_subst, rest_locals) = arg_subst rest 
+              = case how_to_inline prm_nm prm_ty arg of 
+                  Left bnd  -> (bnd:rest_subst, rest_locals)
+                  Right bnd -> (rest_subst, bnd:rest_locals)
+
+            -- Delicate: classifies which arrays are passed by
+            -- reference. Should revisit.  But at the moment this is
+            -- consistent with the semantics implemented in CgExpr.
+            -- See for example codeGenArrRead in CgExpr.hs
+
+            how_to_inline :: Name -> Ty -> Exp Ty -> Either (Name,Exp Ty) (Name, Ty, Maybe (Exp Ty))
+            -- The choice is: either with a substitution (Left) or with a let-binding (Right) 
+            how_to_inline prm_nm prm_ty arg
+              = if is_simpl_expr arg 
+                then Left (prm_nm, arg)
+                else if isArrTy prm_ty && getArrTy prm_ty /= TBit && is_array_ref arg 
+                     then Left (prm_nm,arg)
+                else Right (prm_nm, prm_ty, Just arg)
+
+            is_array_ref (MkExp (EVar _) _ _)      = True 
+            is_array_ref (MkExp (EArrRead {}) _ _) = True 
+            is_array_ref _ = False 
+
 
             len_subst [] = []
             len_subst (((prm_nm,prm_ty),arg):rest)
@@ -495,8 +531,8 @@ purify_step fgs comp =
  do -- rwMIO $ putStrLn "purify_step, comp = " 
     -- rwMIO $ print (ppComp comp)  
     case isMultiLet_maybe (unComp comp) of 
-      Just (binds, Return e) -> 
-          rewrite $ MkComp (Return (mkMultiLetExp (reverse binds) e)) 
+      Just (binds, Return fi e) -> 
+          rewrite $ MkComp (Return fi (mkMultiLetExp (reverse binds) e)) 
                            (compLoc comp) (compInfo comp) 
 
       Just (binds, Emit e) -> 
@@ -516,8 +552,8 @@ purify_letref_step fgs comp =
  do -- rwMIO $ putStrLn "purify_step, comp = " 
     -- rwMIO $ print (ppComp comp)  
     case isMultiLetRef_maybe (unComp comp) of 
-      Just (binds, Return e) -> 
-          rewrite $ MkComp (Return (mkMultiLetRefExp (reverse binds) e)) 
+      Just (binds, Return fi e) -> 
+          rewrite $ MkComp (Return fi (mkMultiLetRefExp (reverse binds) e)) 
                            (compLoc comp) (compInfo comp) 
 
       Just (binds, Emit e) -> 
@@ -687,7 +723,7 @@ letfunc_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
 -- 
 letfunc_step fgs comp = 
   case unComp comp of
-    LetFunC nm params locals (MkComp (Return e) _ _) cont
+    LetFunC nm params locals (MkComp (Return _fi e) _ _) cont
        | all (is_simpl_call_param . snd ) params
        -> do { let (fun_ty :: Ty) = TArrow (map (unCAExp . snd) params) (info e)
              ; cont' <- purify_calls fun_ty nm cont
@@ -704,7 +740,7 @@ letfunc_step fgs comp =
           = let f_exp = MkExp (EVar f) xloc fun_ty
                 call  = MkExp (ECall f_exp es') xloc (fromJust $ doneTyOfCTyBase xnfo)
                         -- Since original was return, we know it's a computer, hence fromJust works.
-            in rewrite $ MkComp (Return call) xloc xnfo
+            in rewrite $ MkComp (Return AutoInline call) xloc xnfo
         replace_call _ _ other = return other
 
 letfun_times_step fgs comp = 
@@ -743,7 +779,7 @@ times_unroll_step fgs comp
                   substExpComp (i, MkExp (EVal (VInt curr)) (expLoc e) tint) xc) idxs comps
             in case unrolled of
                  Nothing -> return comp
-                 Just [] -> return $ MkComp (Return (MkExp (EVal VUnit) (compLoc comp) TUnit)) 
+                 Just [] -> return $ MkComp (Return ForceInline (MkExp (EVal VUnit) (compLoc comp) TUnit)) 
                                             (compLoc comp) 
                                             (compInfo comp)
                  Just xs -> rewrite $ mk_bind_many xs
@@ -758,10 +794,10 @@ times_unroll_step fgs comp
         unused = toName ("__unroll_unused_" ++ getLnNumInStr (compLoc comp)) Nothing Nothing
 
 
-mkMultiLetExp :: [(Name,Exp a)] -> Exp a -> Exp a
+mkMultiLetExp :: [(Name,Exp a, ForceInline)] -> Exp a -> Exp a
 mkMultiLetExp [] e = e
-mkMultiLetExp ((x,e1):bnds) e 
-  = MkExp (ELet x e1 (mkMultiLetExp bnds e)) (expLoc e) (info e) 
+mkMultiLetExp ((x,e1,fi):bnds) e 
+  = MkExp (ELet x fi e1 (mkMultiLetExp bnds e)) (expLoc e) (info e) 
 
 mkMultiLetRefExp :: [(Name,Either Ty (Exp a))] -> Exp a -> Exp a
 mkMultiLetRefExp [] e = e
@@ -771,12 +807,12 @@ mkMultiLetRefExp ((x,b1):bnds) e
 
 isMultiLet_maybe comp
   = go comp []
-  where go (LetE x e c) acc = go (unComp c) ((x,e):acc)
-        go (Return e)  []   = Nothing 
+  where go (LetE x fi e c) acc = go (unComp c) ((x,e,fi):acc)
+        go (Return _fu e)  []  = Nothing 
         go (Emit e)    []   = Nothing
         go (Emits e)   []   = Nothing 
 
-        go (Return e) acc   = Just (acc, Return e) 
+        go (Return fi e) acc   = Just (acc, Return fi e) 
               -- We must have some accumulated bindings!
         go (Emit e) acc     = Just (acc, Emit e)
         go (Emits e) acc    = Just (acc, Emits e)
@@ -786,11 +822,11 @@ isMultiLet_maybe comp
 isMultiLetRef_maybe comp
   = go comp []
   where go (LetERef x bnd c) acc = go (unComp c) ((x,bnd):acc)
-        go (Return e)  []   = Nothing 
+        go (Return _fi e)  []    = Nothing 
         go (Emit e)    []   = Nothing
         go (Emits e)   []   = Nothing 
 
-        go (Return e) acc   = Just (acc, Return e) 
+        go (Return fi e) acc   = Just (acc, Return fi e) 
               -- We must have some accumulated bindings!
         go (Emit e) acc     = Just (acc, Emit e)
         go (Emits e) acc    = Just (acc, Emits e)
@@ -800,9 +836,9 @@ isMultiLetRef_maybe comp
 elim_times_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
 elim_times_step fgs comp =
   case unComp comp of
-    Times ui estart ebound cnt (MkComp (Return ebody) cloc cty) ->
+    Times ui estart ebound cnt (MkComp (Return _ ebody) cloc cty) ->
         do { let efor = EFor ui cnt estart ebound ebody
-           ; rewrite $ MkComp (Return (MkExp efor cloc (info ebody))) 
+           ; rewrite $ MkComp (Return AutoInline (MkExp efor cloc (info ebody))) 
                               (compLoc comp) 
                               (compInfo comp)
            }
@@ -821,21 +857,42 @@ arrinit_step _fgs e1
             rewrite $ MkExp (EValArr (map VInt vals)) (expLoc e1) (info e1) 
        }
 
-
-
 exp_inlining_steps :: DynFlags -> TypedExpPass
-exp_inlining_steps fgs e 
- | ELet nm e1 e2 <- unExp e
+exp_inlining_steps fgs e
+   -- Forced Inline!
+ | ELet nm ForceInline e1 e2 <- unExp e
+ = substExp (nm,e1) e2 >>= rewrite
+
+ | ELet nm NoInline e1 e2 <- unExp e
+ = return e
+ 
+ | ELet nm AutoInline e1 e2 <- unExp e
  , let fvs = exprFVs e2
- , let b = nm `S.member` fvs
- = if not b && not (is_side_effecting e) 
-   then rewrite e2 
-   else 
-     if is_simpl_expr e1 && not (isDynFlagSet fgs NoExpFold) 
-     then substExp (nm,e1) e2 >>= rewrite
-     else return e 
+ , let b = nm `S.member` fvs 
+ = if not b then 
+      if not (mutates_state e) then rewrite e2 
+      else return e
+   else if is_simpl_expr e1 && not (isDynFlagSet fgs NoExpFold) 
+   then substExp (nm,e1) e2 >>= rewrite
+   else return e 
+ | otherwise 
+ = return e 
+
+exp_let_push_step :: DynFlags -> TypedExpPass
+exp_let_push_step fgs e 
+ | ELet nm fi e1 e2 <- unExp e
+ , EArrWrite e0 estart0 elen0 erhs <- unExp e2
+ , EArrRead evals estart rlen <- unExp erhs
+ , let fvs = foldr (S.union . exprFVs) S.empty [e0, estart0, evals]
+ , not (nm `S.member` fvs)
+ = let estart' = eLet (expLoc estart) (info estart) nm fi e1 estart
+   in rewrite $ 
+      eArrWrite (expLoc e2) (info e2) e0 estart0 elen0 $ 
+      eArrRead (expLoc erhs) (info erhs) evals estart' rlen
  | otherwise 
  = return e
+
+
 
 mk_read_ty :: Ty -> LengthInfo -> Ty 
 mk_read_ty base_ty LISingleton  = base_ty
@@ -851,7 +908,7 @@ asgn_letref_step fgs e
   , LILength _ <- elen  
   , EVar x <- unExp e0  
    -- Just a simple expression with no side-effects
-  , not (is_side_effecting estart)
+  , not (mutates_state estart)
   , Just (y, residual_erhs) <- returns_letref_var erhs
   , let read_ty = mk_read_ty ty elen
   = substExp (y, eArrRead loc read_ty e0 estart elen) residual_erhs >>= rewrite
@@ -869,10 +926,10 @@ asgn_letref_step fgs e
               Nothing  -> Nothing
               Just _ty -> Just (v, eVal loc TUnit VUnit)
 
-          ELet y e1 e2 -> 
+          ELet y fi e1 e2 -> 
             case go e2 letrefs of 
               Nothing -> Nothing
-              Just (w,e2') -> Just (w, eLet loc TUnit y e1 e2')
+              Just (w,e2') -> Just (w, eLet loc TUnit y fi e1 e2')
 
           ELetRef y (Left ty) e2 -> 
             case go e2 ((y,ty):letrefs) of
@@ -900,15 +957,6 @@ rest_chain fgs e
        -- commented for now:
           >>= proj_inline_step fgs
 
-
-exp_inline_step :: DynFlags -> TypedExpPass
-exp_inline_step fgs e
-  | ELet nm e1 e2 <- unExp e
-  , not (isDynFlagSet fgs NoExpFold)
-  , is_simpl_expr e1
-  = substExp (nm,e1) e2 >>= rewrite 
-  | otherwise
-  = return e
 
 alength_elim :: DynFlags -> TypedExpPass
 alength_elim fgs e 
@@ -1152,6 +1200,7 @@ foldExpPasses flags
   = [ ("for-unroll", for_unroll_step flags)
     , ("exp-inlining-steps", exp_inlining_steps flags)
     , ("asgn-letref-step", asgn_letref_step flags)
+    , ("exp_let_push_step", exp_let_push_step flags)
     , ("rest-chain", rest_chain flags)
     ]
  

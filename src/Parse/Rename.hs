@@ -24,6 +24,7 @@ import PpComp
 import qualified GenSym as GS
 
 import qualified Data.Set as S
+import Control.Applicative
 import Control.Monad.State
 
 import Data.List as M
@@ -34,6 +35,13 @@ type UniqEnv = [(Name,String)]
 data RenM a = RenM { runRenM :: GS.Sym
                              -> UniqEnv
                              -> IO a }
+
+instance Functor RenM where
+  fmap f (RenM c) = RenM $ \sym env -> fmap f (c sym env)
+
+instance Applicative RenM where
+  pure = RenM . const . const . pure
+  (RenM f) <*> (RenM x) = RenM $ \sym env -> f sym env <*> x sym env
 
 instance Monad RenM where
   (>>=) m1 m2 = 
@@ -130,12 +138,12 @@ renameExpr e
          e2' <- renameExpr e2
          return $ eWhile eloc enfo e1' e2'
 
-    ELet nm1 e1 e2   -> 
+    ELet nm1 fi e1 e2   -> 
       do e1' <- renameExpr e1
          u1 <- newUniq
          extendUniqEnv nm1 u1 $ 
            do { e2' <- renameExpr e2
-              ; return $ eLet eloc enfo nm1 { uniqId = u1 } e1' e2' 
+              ; return $ eLet eloc enfo nm1 { uniqId = u1 } fi e1' e2' 
               }
 
     ELetRef nm1 e1 e2   -> 
@@ -272,11 +280,11 @@ renameComp c =
       do { c1' <- renameComp c1
          ; return $ cLetStruct cloc cnfo sdef c1'
          }
-    LetE x e c' ->
+    LetE x fi e c' ->
       do { e'  <- renameExpr e
          ; u <- newUniq
          ; c'' <- extendUniqEnv x u $ renameComp c'
-         ; return $ cLetE cloc cnfo x { uniqId = u } e' c''
+         ; return $ cLetE cloc cnfo x { uniqId = u } fi e' c''
          }
 
     -- CL
@@ -327,9 +335,9 @@ renameComp c =
       do { e' <- renameExpr e
          ; return $ cEmit cloc cnfo e'
          }
-    Return e -> 
+    Return fi e -> 
       do { e' <- renameExpr e
-         ; return $ cReturn cloc cnfo e'
+         ; return $ cReturn cloc cnfo fi e'
          }
     Emits e -> 
       do { e' <- renameExpr e

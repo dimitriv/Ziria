@@ -37,35 +37,59 @@ clean:
 	rm -rf obj wplc wplc.exe
 
 
-test: test-backend test-lut test-WiFi-all
+test: test-parser test-backend test-lut test-WiFi-all
+test-clean: test-parser-clean test-backend-clean test-lut-clean test-WiFi-all-clean
 
 test-backend:
 	@echo ">>>>>>>>>>>>>>> Backend tests"
-	cd _tests/_backend && make
+	make -C tests/backend
 	@echo "<<<<<<<<<<<<<<< Backend tests"
+
+test-backend-clean:
+	make -C tests/backend clean
+
+test-parser:
+	@echo ">>>>>>>>>>>>>>> Parser tests"
+	make -C tests/parser
+	@echo "<<<<<<<<<<<<<<< Parser tests"
+
+test-parser-clean:
+	make -C tests/parser clean
 
 test-lut:
 	@echo ">>>>>>>>>>>>>>> LUT tests"
-	cd _tests/_lut && make
+	make -C tests/lut
 	@echo "<<<<<<<<<<<<<<< LUT tests"
 
+test-lut-clean:
+	make -C tests/lut clean
 
 test-WiFi-all: test-WiFi test-WiFi-TX test-WiFi-RX
+test-WiFi-all-clean: test-WiFi-clean test-WiFi-TX-clean test-WiFi-RX-clean
 
 test-WiFi:
 	@echo ">>>>>>>>>>>>>>> Backend tests"
-	cd _code/WiFi/tests && EXTRAOPTS="--no-exp-fold" make
+	EXTRAOPTS="--no-exp-fold" make -C code/WiFi/tests
 	@echo "<<<<<<<<<<<<<<< Backend tests"
+
+test-WiFi-clean:
+	make -C code/WiFi/tests clean
 
 test-WiFi-TX:
 	@echo ">>>>>>>>>>>>>>> Backend tests"
-	cd _code/WiFi/transmitter/tests && make
+	make -C code/WiFi/transmitter/tests
 	@echo "<<<<<<<<<<<<<<< Backend tests"
+
+test-WiFi-TX-clean:
+	make -C code/WiFi/transmitter/tests clean
 
 test-WiFi-RX:
 	@echo ">>>>>>>>>>>>>>> Backend tests"
-	cd _code/WiFi/receiver/tests && make
+	make -C code/WiFi/receiver/tests
 	@echo "<<<<<<<<<<<<<<< Backend tests"
+
+test-WiFi-RX-clean:
+	make -C code/WiFi/receiver/tests clean
 
 
 

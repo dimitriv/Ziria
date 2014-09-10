@@ -132,6 +132,16 @@ data UnrollInfo
   | AutoUnroll    -- do whatever the compiler would do (no annotation)
   deriving Eq
 
+-- If true, the binding should be forced to be inlined. 
+-- This is used by e.g. the vectorizer to bind inlinable
+-- sub-arrays of the input array.
+
+data ForceInline 
+  = ForceInline   -- Always inline
+  | NoInline      -- Never inline
+  | AutoInline    -- Let the compiler decide
+
+
 data Exp0 a where
   EVal :: Val -> Exp0 a
   EValArr :: [Val] -> Exp0 a
@@ -158,7 +168,7 @@ data Exp0 a where
   EWhile :: Exp a -> Exp a -> Exp0 a 
 
 
-  ELet :: Name -> Exp a -> Exp a -> Exp0 a
+  ELet :: Name -> ForceInline -> Exp a -> Exp a -> Exp0 a
 
   -- Potentially initialized read/write variable
   ELetRef :: Name -> Either Ty (Exp a) -> Exp a -> Exp0 a 
@@ -216,8 +226,8 @@ eIter :: Maybe SourcePos -> a -> Name -> Name -> Exp a -> Exp a -> Exp a
 eIter loc a x y e1 e2 = MkExp (EIter x y e1 e2) loc a  
 eFor :: Maybe SourcePos -> a -> UnrollInfo -> Name -> Exp a -> Exp a -> Exp a -> Exp a
 eFor loc a ui n e1 e2 e3 = MkExp (EFor ui n e1 e2 e3) loc a 
-eLet :: Maybe SourcePos -> a ->  Name -> Exp a -> Exp a -> Exp a
-eLet loc a x e1 e2 = MkExp (ELet x e1 e2) loc a 
+eLet :: Maybe SourcePos -> a ->  Name -> ForceInline -> Exp a -> Exp a -> Exp a
+eLet loc a x fi e1 e2 = MkExp (ELet x fi e1 e2) loc a 
 eLetRef :: Maybe SourcePos -> a ->  Name -> Either Ty (Exp a) -> Exp a -> Exp a 
 eLetRef loc a nm x e = MkExp (ELetRef nm x e) loc a 
 eSeq :: Maybe SourcePos -> a ->  Exp a -> Exp a -> Exp a
@@ -505,7 +515,7 @@ exprFVs' take_funs e
         -- NB: We collect the state in a bottom-up fashion
         on_exp (EVar nm)              = modify (\s -> S.union (S.singleton nm) s)
         on_exp (EFor _ x _e1 _e2 _e3) = modify (\s -> s S.\\ S.singleton x)
-        on_exp (ELet x _e1 _e2)       = modify (\s -> s S.\\ S.singleton x)
+        on_exp (ELet x _fi _e1 _e2)   = modify (\s -> s S.\\ S.singleton x)
         on_exp (ELetRef x _e1 _e2)    = modify (\s -> s S.\\ S.singleton x)
         on_exp (EIter x v _e1 _e2) 
           = do { modify (\s -> s S.\\ S.singleton x)
@@ -634,10 +644,10 @@ mapExpM_aux on_ty f e = go e
                    e2' <- go e2
                    f (eWhile loc nfo e1' e2')
 
-              ELet nm1 e1 e2 -> 
+              ELet nm1 fi e1 e2 -> 
                 do e1' <- go e1                        
                    e2' <- go e2
-                   f (eLet loc nfo nm1 e1' e2')
+                   f (eLet loc nfo nm1 fi e1' e2')
 
               ELetRef nm1 (Left x) e2 ->
                 do e2' <- go  e2
@@ -835,47 +845,71 @@ isBoolBinOp Or  = True
 isBoolBinOp _   = False
 
 
--- Can this expression potentially side-effect?
+-- Can this expression potentially change the state?
 -- A super conservative side-effect analysis
-is_side_effecting :: Exp a -> Bool 
-is_side_effecting e = case unExp e of 
+mutates_state :: Exp a -> Bool 
+mutates_state e = case unExp e of 
   EVal _                -> False
   EValArr _             -> False
   EVar nm               -> False
-  EUnOp _ e'            -> is_side_effecting e'
-  EBinOp _ e1 e2        -> any is_side_effecting [e1,e2]
+  EUnOp _ e'            -> mutates_state e'
+  EBinOp _ e1 e2        -> any mutates_state [e1,e2]
   EAssign e1 e2         -> True
   
-  EArrRead e1 e2 LISingleton   -> any is_side_effecting [e1,e2]
+  EArrRead e1 e2 LISingleton   -> any mutates_state [e1,e2]
 
-  -- The reason that EArrRead of a range is considered as side_effecting
-  -- is because if we inline into a function that can side-effect the base 
-  -- array into which we read, the EArrRead will have different values 
-  -- inside the inlined body, hence we violate the call-by-value semantics
-  -- of EArrRead (This bug was manifested in LTE/Blink/Wifi/crc.wpl)
-  EArrRead e1 e2 (LILength {}) -> True
+  EArrRead e1 e2 (LILength {}) -> any mutates_state [e1,e2]
 
   EArrWrite e1 e2 _r e3 -> True
-  EIter _ _ e1 e2       -> any is_side_effecting [e1,e2]
-  EFor _ _ e1 e2 e3     -> any is_side_effecting [e1,e2,e3]
-  EWhile e1 e2          -> any is_side_effecting [e1,e2]
 
-  ELet nm e1 e2            -> any is_side_effecting [e1,e2]
-  ELetRef nm (Right e1) e2 -> any is_side_effecting [e1,e2]
-  ELetRef nm (Left {}) e2  -> is_side_effecting e2
+  EIter _ _ e1 e2       -> any mutates_state [e1,e2]
+  EFor _ _ e1 e2 e3     -> any mutates_state [e1,e2,e3]
+  EWhile e1 e2          -> any mutates_state [e1,e2]
 
-  ESeq e1 e2     -> any is_side_effecting [e1,e2]
+  ELet nm _fi e1 e2     -> any mutates_state [e1,e2]
+  ELetRef nm (Right e1) e2 -> any mutates_state [e1,e2]
+  ELetRef nm (Left {}) e2  -> mutates_state e2
+
+  ESeq e1 e2     -> any mutates_state [e1,e2]
   ECall e' es    -> True
-  EIf e1 e2 e3   -> any is_side_effecting [e1,e2,e3]
+  EIf e1 e2 e3   -> any mutates_state [e1,e2,e3]
 
-  EPrint nl e    -> True -- is_side_effecting e
-  EError _       -> True -- False
+  EPrint nl e    -> True -- See Note [IOEffects]
+  EError _       -> True
 
-  ELUT _ e       -> is_side_effecting e
-  EBPerm e1 e2   -> any is_side_effecting [e1,e2]
+  ELUT _ e       -> mutates_state e
+  EBPerm e1 e2   -> any mutates_state [e1,e2]
 
-  EStruct tn tfs -> any is_side_effecting (map snd tfs) 
-  EProj e0 f     -> is_side_effecting e0
+  EStruct tn tfs -> any mutates_state (map snd tfs) 
+  EProj e0 f     -> mutates_state e0
+
+
+{- 
+Note [IOEffects]
+~~~~~~~~~~~~~~~~
+
+If an expression does not mutate state then we would like to not
+execute it at all.  For instance, if we have:
+
+     let _ = x[0:256]
+     in (y+3)
+
+
+then we should be able to rewrite this code to just (y+3) (and not
+have to copy a useless value of 256 integers!)
+
+
+So function mutates_state gives a conservative analysis about when can
+an expression mutate or affect in some way the state of the
+program. E.g. assignments and array writes do mutate state.
+
+
+Also, 'error' and 'print' statements do affect the state by means of
+writing to the console or terminating the program hence mutate_state
+gives True for those.
+
+-}
+
 
 
 
