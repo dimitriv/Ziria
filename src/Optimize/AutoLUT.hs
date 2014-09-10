@@ -58,8 +58,8 @@ runAutoLUT dflags _ c = autolutC c
         go (Let v c1 c2) =
             Let v <$> autolutC c1 <*> autolutC c2
 
-        go (LetE v e1 c2) =
-            LetE v <$> autolutE e1 <*> autolutC c2
+        go (LetE v fi e1 c2) =
+            LetE v fi <$> autolutE e1 <*> autolutC c2
             
         -- CL
         go (LetERef v (Right e1) c1) =
@@ -88,8 +88,8 @@ runAutoLUT dflags _ c = autolutC c
         go (Emits e) =
             Emits <$> autolutE e
 
-        go (Return e) =
-            Return <$> autolutE e
+        go (Return fi e) =
+            Return fi <$> autolutE e
 
         go (Interleave c1 c2) =
             Interleave <$> autolutC c1 <*> autolutC c2
@@ -211,8 +211,8 @@ runAutoLUT dflags _ c = autolutC c
                 EWhile <$> autoE e1 <*> autoE e2
 
 
-            go (ELet v e1 e2) =
-                ELet v <$> autoE e1 <*> autoE e2
+            go (ELet v fi e1 e2) =
+                ELet v fi <$> autoE e1 <*> autoE e2
 
             go (ELetRef v (Right e1) e2) =
                 autoE e1 >>= \e1' -> 

@@ -89,7 +89,7 @@ main :: IO ()
 main = failOnException $ do
     hSetBuffering stdout NoBuffering
 
-     --    putStrLn "pre-command line parsing ..."
+    -- putStrLn "pre-command line parsing ..."
 
     args <- getArgs
     (dflags, _) <- compilerOpts args
@@ -98,7 +98,7 @@ main = failOnException $ do
     outFile <- getOutFile dflags
     input <- readFile inFile
 
-    --    putStrLn "command line parsed ..."
+    -- putStrLn "command line parsed ..."
      
     prog <- 
           failOnError $ 
@@ -112,7 +112,7 @@ main = failOnException $ do
     prog_renamed <- runRenM (renameProg prog) rensym []
     sym <- GS.initGenSym
 
-    --    putStrLn $ "renamed = " ++ show prog_renamed
+    -- putStrLn $ "renamed ... " ++ show prog_renamed
 
     let cenv     = mkCEnv []
     let tdef_env = mkTyDefEnv primComplexStructs
@@ -130,7 +130,7 @@ main = failOnException $ do
                  emptyTcMState
 
 
-    --    putStrLn "typechecked dels ..."
+    -- putStrLn "typechecked dels ..."
 
     let decl_env = envOfDecls (globals prog_renamed)
 
@@ -151,10 +151,14 @@ main = failOnException $ do
     when (not (isDynFlagSet dflags Debug)) $ do
     dump dflags DumpTypes ".type.dump" $ (text . show) (ppCompTyped c')
 
-    --    putStrLn "typechecked program ..."
+    -- putStrLn "typechecked program ..."
 
     -- First let us run some small-scale optimizations
     folded <- runFoldPhase dflags sym 1 c'
+
+    -- putStrLn $ "run the fold phase ..." ++ show folded 
+
+    -- putStrLn $ "proceeding with vectorization ...."
 
     cands <- runVectorizePhase dflags sym tdef_env decl_env cenv unifiers1 $ 
              folded 
@@ -172,11 +176,13 @@ main = failOnException $ do
     let fnames = outFile : ["v"++show i++"_"++outFile | i <- [0..]]
     let ccand_names = zip cands fnames
 
+    -- putStrLn "post vectorized (before 2nd round of fold) ..."
+
     -- Fold, inline, and pipeline
     icands <- mapM (runPostVectorizePhases dflags sym) ccand_names
 
 
-    --    putStrLn "post vectorized ..."
+    -- putStrLn "post vectorized ..."
 
     -- Generate code
     sym <- GS.initGenSym
@@ -189,7 +195,7 @@ main = failOnException $ do
                ; return $ CompiledProgram sc defs fn }
     code_names <- forM icands compile_threads 
 
-    --    putStrLn "post code generation ..."
+    -- putStrLn "post code generation ..."
 
     mapM_ outputCompiledProgram code_names
   where

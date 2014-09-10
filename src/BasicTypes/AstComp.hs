@@ -65,6 +65,7 @@ data Bind a b
   | BindMonadic Name (Comp a b)     -- Bind from a monad:      x <- c 
 -}
 
+
 data Comp0 a b where
   Var      :: Name -> Comp0 a b
   BindMany :: Comp a b -> [(Name,Comp a b)] -> Comp0 a b
@@ -72,8 +73,8 @@ data Comp0 a b where
   Seq      :: Comp a b -> Comp a b -> Comp0 a b
   Par      :: ParInfo -> Comp a b -> Comp a b -> Comp0 a b
 
-  Let :: Name -> Comp a b -> Comp a b -> Comp0 a b
-  LetE :: Name -> Exp b -> Comp a b -> Comp0 a b
+  Let :: Name  -> Comp a b -> Comp a b -> Comp0 a b
+  LetE :: Name -> ForceInline -> Exp b -> Comp a b -> Comp0 a b
 
   -- CL
   LetERef :: Name -> Either Ty (Exp b) -> Comp a b -> Comp0 a b
@@ -94,7 +95,7 @@ data Comp0 a b where
   Call   :: Name -> [CallArg (Exp b) (Comp a b)] -> Comp0 a b
   Emit   :: Exp b -> Comp0 a b
   Emits  :: Exp b -> Comp0 a b 
-  Return :: Exp b -> Comp0 a b 
+  Return :: ForceInline -> Exp b -> Comp0 a b 
   Interleave :: Comp a b -> Comp a b -> Comp0 a b
   Branch     :: Exp b -> Comp a b -> Comp a b -> Comp0 a b
   Take1      :: Comp0 a b
@@ -166,11 +167,13 @@ cSeq loc a c1 c2 = MkComp (Seq c1 c2) loc a
 cPar :: Maybe SourcePos -> a -> ParInfo -> Comp a b -> Comp a b -> Comp a b
 cPar loc a pi c1 c2 = MkComp (Par pi c1 c2) loc a
 
-cLet :: Maybe SourcePos -> a -> Name -> Comp a b -> Comp a b -> Comp a b
+cLet :: Maybe SourcePos -> a -> Name ->
+        Comp a b -> Comp a b -> Comp a b
 cLet loc a x c1 c2 = MkComp (Let x c1 c2) loc a
 
-cLetE :: Maybe SourcePos -> a -> Name -> Exp b -> Comp a b -> Comp a b
-cLetE loc a x e c = MkComp (LetE x e c) loc a
+cLetE :: Maybe SourcePos -> a -> Name -> ForceInline -> 
+         Exp b -> Comp a b -> Comp a b
+cLetE loc a x fi e c = MkComp (LetE x fi e c) loc a
 
 -- CL
 cLetERef :: Maybe SourcePos -> a -> Name -> Either Ty (Exp b) -> Comp a b -> Comp a b
@@ -196,8 +199,8 @@ cEmit loc a e = MkComp (Emit e) loc a
 cEmits :: Maybe SourcePos -> a -> Exp b -> Comp a b 
 cEmits loc a e = MkComp (Emits e) loc a
 
-cReturn :: Maybe SourcePos -> a -> Exp b -> Comp a b 
-cReturn loc a e = MkComp (Return e) loc a
+cReturn :: Maybe SourcePos -> a -> ForceInline -> Exp b -> Comp a b 
+cReturn loc a fi e = MkComp (Return fi e) loc a
 
 cInterleave :: Maybe SourcePos -> a -> Comp a b -> Comp a b -> Comp a b
 cInterleave loc a c1 c2 = MkComp (Interleave c1 c2) loc a
@@ -368,7 +371,7 @@ data Prog a b
 data CompCtxt 
   = Hole
   | CLet  CompLoc Name (Comp CTy Ty) CompCtxt
-  | CLetE CompLoc Name (Exp Ty) CompCtxt
+  | CLetE CompLoc Name ForceInline (Exp Ty) CompCtxt
   -- CL
   | CLetERef CompLoc Name (Either Ty (Exp Ty)) CompCtxt  
   --
@@ -495,10 +498,11 @@ compFVs c = case unComp c of
       (compFVs c1) xs_cs
   Seq c1 c2      -> compFVs c1 `S.union` compFVs c2
   Par _ c1 c2    -> compFVs c1 `S.union` compFVs c2
-  Let nm c1 c2   -> (compFVs c1 `S.union` compFVs c2) S.\\ (S.singleton nm)
-  LetE nm e c1   -> (exprFVs e `S.union` compFVs c1) S.\\ (S.singleton nm)
+  Let nm c1 c2 -> (compFVs c1 `S.union` compFVs c2) S.\\ (S.singleton nm)
+  LetE nm _ e c1 -> (exprFVs e `S.union` compFVs c1) S.\\ (S.singleton nm)
   -- CL
-  LetERef nm (Right e) c1 -> (exprFVs e `S.union` compFVs c1) S.\\ (S.singleton nm)
+  LetERef nm (Right e) c1 
+     -> (exprFVs e `S.union` compFVs c1) S.\\ (S.singleton nm)
   LetERef nm (Left _) c1 -> (compFVs c1) S.\\ (S.singleton nm) 
   LetHeader nm f c1 -> (funFVs f `S.union` compFVs c1) S.\\ (S.singleton nm)
   --
@@ -517,7 +521,7 @@ compFVs c = case unComp c of
                            (S.singleton nm) es
   Emit e          -> exprFVs e
   Emits e         -> exprFVs e
-  Return e        -> exprFVs e
+  Return _ e      -> exprFVs e
   Branch e c1 c2  -> exprFVs e `S.union` compFVs c1 `S.union` compFVs c2
   Take1           -> S.empty
   Take e          -> exprFVs e
@@ -554,8 +558,8 @@ compSize c = case unComp c of
     foldr (\(x,c) s -> compSize c) (compSize c1) xs_cs
   Seq c1 c2      -> 1 + compSize c1 + compSize c2
   Par _ c1 c2    -> 1 + compSize c1 + compSize c2
-  Let nm c1 c2   -> 1 + compSize c1 + compSize c2
-  LetE nm e c1   -> 2 + compSize c1
+  Let nm c1 c2 -> 1 + compSize c1 + compSize c2
+  LetE nm _ e c1 -> 2 + compSize c1
   -- CL
   LetERef nm (Right _) c1 -> 2 + compSize c1
   LetERef nm (Left _) c1 -> 2 + compSize c1 
@@ -566,7 +570,7 @@ compSize c = case unComp c of
   Call nm es       -> 1 + sum (map callArgSize es)
   Emit e           -> 1
   Emits e          -> 1
-  Return e         -> 1
+  Return _ e       -> 1
   Branch e c1 c2   -> 1 + compSize c1 + compSize c2
   Take1            -> 1
   Take e           -> 1
@@ -626,10 +630,10 @@ mapCompM_aux on_ty on_exp on_cty g c = go c
                  LetStruct sdef c1 ->
                    do { c1' <- go c1
                       ; g (cLetStruct cloc cnfo sdef c1') }
-                 LetE x e c1 -> 
+                 LetE x fi e c1 -> 
                    do { e' <- on_exp e
                       ; c1' <- go c1
-                      ; g (cLetE cloc cnfo x e' c1') }
+                      ; g (cLetE cloc cnfo x fi e' c1') }
                  -- CL
                  LetERef x (Left y) c1 ->
                     do {c1' <- go c1
@@ -655,9 +659,9 @@ mapCompM_aux on_ty on_exp on_cty g c = go c
                  Emit e -> 
                    do { e' <- on_exp e
                       ; g (cEmit cloc cnfo e') }
-                 Return e -> 
+                 Return fi e -> 
                    do { e' <- on_exp e 
-                      ; g (cReturn cloc cnfo e') }
+                      ; g (cReturn cloc cnfo fi e') }
                  Emits e -> 
                    do { e' <- on_exp e 
                       ; g (cEmits cloc cnfo e') }

@@ -238,7 +238,7 @@ erange (MkExp (EWhile econd ebody) _ _) = do
     return RangeTop
 
 
-erange (MkExp (ELet v e1 e2) _ _) = do
+erange (MkExp (ELet v _ e1 e2) _ _) = do
     r <- erange e1
     setRange v r
     erange e2

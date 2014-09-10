@@ -97,8 +97,8 @@ retByRef f locals body
          ESeq e1 e2 
            -> lift_ret (eSeq loc TUnit e1) $ 
               trans_body xs e2
-         ELet x e1 e2 
-           -> lift_ret (eLet loc TUnit x e1) $
+         ELet x fi e1 e2 
+           -> lift_ret (eLet loc TUnit x fi e1) $
               trans_body (x:xs) e2
          EVar x 
            | not (x `elem` xs)

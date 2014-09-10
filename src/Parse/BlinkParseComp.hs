@@ -271,7 +271,7 @@ parseComp = buildExpressionParser par_op_table (choice [parse_unary_ops, parseCo
 
 parseCompTerm 
   = choice [ parens parseComp
-           , parsePrimCompUnOp "return" cReturn
+           , parsePrimCompUnOp "return" (\l t -> cReturn l t False) 
            , parsePrimCompUnOp "emit" cEmit
            , parsePrimCompUnOp "emits" cEmits
            , parsePrimCompUnOp "takes" cTake 
@@ -328,7 +328,7 @@ parseCompCompound
       , do { p <- getPosition
            ; reserved "do"
            ; estmts <- parseStmtBlock <?> "statement block" 
-           ; return (cReturn (Just p) () estmts) 
+           ; return (cReturn (Just p) () False estmts) 
            }
       , optional (reserved "seq") >> braces parseCommands
       ] <?> "compound command" 
@@ -444,7 +444,7 @@ parseBinding p
 parseSimplBind is_comp x p 
   = do { symbol "="
        ; case is_comp of
-           Nothing -> parseExpr     >>= \e -> optInCont (cLetE (Just p) () x e)
+           Nothing -> parseExpr     >>= \e -> optInCont (cLetE (Just p) () x False e)
            Just h  -> parseCommands >>= \c -> optInCont (cLet  (Just p) () x (mkVectComp c h))
        }
 
@@ -482,7 +482,7 @@ optInCont cont
                 ; return (Left (cont c)) }
            ]
 
-cunit p = cReturn (Just p) () (eunit p)
+cunit p = cReturn (Just p) () True (eunit p)
 
 parseExternal :: SourcePos -> BlinkParser (Either SrcComp CommandCont) 
 parseExternal p 

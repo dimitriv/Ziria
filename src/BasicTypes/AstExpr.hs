@@ -132,6 +132,10 @@ data UnrollInfo
   | AutoUnroll    -- do whatever the compiler would do (no annotation)
   deriving Eq
 
+-- If true, the binding should be forced to be inlined. 
+-- Used by the vectorizer
+type ForceInline = Bool 
+
 data Exp0 a where
   EVal :: Val -> Exp0 a
   EValArr :: [Val] -> Exp0 a
@@ -158,7 +162,7 @@ data Exp0 a where
   EWhile :: Exp a -> Exp a -> Exp0 a 
 
 
-  ELet :: Name -> Exp a -> Exp a -> Exp0 a
+  ELet :: Name -> ForceInline -> Exp a -> Exp a -> Exp0 a
 
   -- Potentially initialized read/write variable
   ELetRef :: Name -> Either Ty (Exp a) -> Exp a -> Exp0 a 
@@ -216,8 +220,8 @@ eIter :: Maybe SourcePos -> a -> Name -> Name -> Exp a -> Exp a -> Exp a
 eIter loc a x y e1 e2 = MkExp (EIter x y e1 e2) loc a  
 eFor :: Maybe SourcePos -> a -> UnrollInfo -> Name -> Exp a -> Exp a -> Exp a -> Exp a
 eFor loc a ui n e1 e2 e3 = MkExp (EFor ui n e1 e2 e3) loc a 
-eLet :: Maybe SourcePos -> a ->  Name -> Exp a -> Exp a -> Exp a
-eLet loc a x e1 e2 = MkExp (ELet x e1 e2) loc a 
+eLet :: Maybe SourcePos -> a ->  Name -> ForceInline -> Exp a -> Exp a -> Exp a
+eLet loc a x fi e1 e2 = MkExp (ELet x fi e1 e2) loc a 
 eLetRef :: Maybe SourcePos -> a ->  Name -> Either Ty (Exp a) -> Exp a -> Exp a 
 eLetRef loc a nm x e = MkExp (ELetRef nm x e) loc a 
 eSeq :: Maybe SourcePos -> a ->  Exp a -> Exp a -> Exp a
@@ -505,7 +509,7 @@ exprFVs' take_funs e
         -- NB: We collect the state in a bottom-up fashion
         on_exp (EVar nm)              = modify (\s -> S.union (S.singleton nm) s)
         on_exp (EFor _ x _e1 _e2 _e3) = modify (\s -> s S.\\ S.singleton x)
-        on_exp (ELet x _e1 _e2)       = modify (\s -> s S.\\ S.singleton x)
+        on_exp (ELet x _fi _e1 _e2)   = modify (\s -> s S.\\ S.singleton x)
         on_exp (ELetRef x _e1 _e2)    = modify (\s -> s S.\\ S.singleton x)
         on_exp (EIter x v _e1 _e2) 
           = do { modify (\s -> s S.\\ S.singleton x)
@@ -634,10 +638,10 @@ mapExpM_aux on_ty f e = go e
                    e2' <- go e2
                    f (eWhile loc nfo e1' e2')
 
-              ELet nm1 e1 e2 -> 
+              ELet nm1 fi e1 e2 -> 
                 do e1' <- go e1                        
                    e2' <- go e2
-                   f (eLet loc nfo nm1 e1' e2')
+                   f (eLet loc nfo nm1 fi e1' e2')
 
               ELetRef nm1 (Left x) e2 ->
                 do e2' <- go  e2
@@ -856,7 +860,7 @@ mutates_state e = case unExp e of
   EFor _ _ e1 e2 e3     -> any mutates_state [e1,e2,e3]
   EWhile e1 e2          -> any mutates_state [e1,e2]
 
-  ELet nm e1 e2            -> any mutates_state [e1,e2]
+  ELet nm _fi e1 e2     -> any mutates_state [e1,e2]
   ELetRef nm (Right e1) e2 -> any mutates_state [e1,e2]
   ELetRef nm (Left {}) e2  -> mutates_state e2
 
