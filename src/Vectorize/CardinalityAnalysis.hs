@@ -212,18 +212,22 @@ computeCardTop verbose ct = computeCard ct
 
         computeCard0  (Let x c1 c2)
           = do { c1' <- computeCard c1
-               ; c2' <- extendCardCVarEnv x (snd $ compInfo c1') $ computeCard c2 
-               ; return (MkComp (Let x c1' c2') loc (cty, snd $ compInfo c2'))
+               ; c2' <- extendCardCVarEnv x (snd $ compInfo c1') $ 
+                        computeCard c2 
+               ; return $ 
+                 MkComp (Let x c1' c2') loc (cty, snd $ compInfo c2')
                }
 
-        computeCard0  (LetE x e c1) 
+        computeCard0  (LetE x fi e c1) 
           = do { c1' <- computeCard c1
-               ; return $ MkComp (LetE x e c1') loc (cty, snd $ compInfo c1') }
+               ; return $ 
+                 MkComp (LetE x fi e c1') loc (cty, snd $ compInfo c1') }
 
         -- CL
         computeCard0  (LetERef x y c1) 
           = do { c1' <- computeCard c1
-               ; return $ MkComp (LetERef x y c1') loc (cty, snd $ compInfo c1') }
+               ; return $ 
+                 MkComp (LetERef x y c1') loc (cty, snd $ compInfo c1') }
         
         computeCard0  (LetHeader x fn c1)
           = do { c1' <- computeCard c1
@@ -261,11 +265,12 @@ computeCardTop verbose ct = computeCard ct
 
         computeCard0  (Emits e)
           = case (info e) of 
-              TArr (Literal n) _ -> return $ MkComp (Emits e) loc (cty, mkSimplCard 0 n)
+              TArr (Literal n) _ -> 
+                return $ MkComp (Emits e) loc (cty, mkSimplCard 0 n)
               _ -> error "Type checker bug!" 
 
-        computeCard0  (Return e)
-          = return $ MkComp (Return e) loc (cty, mkSimplCard 0 0)
+        computeCard0  (Return fi e)
+          = return $ MkComp (Return fi e) loc (cty, mkSimplCard 0 0)
 
         computeCard0  (Interleave c1 c2)
           = do { c1' <- computeCard c1
@@ -278,7 +283,8 @@ computeCardTop verbose ct = computeCard ct
                ; c2' <- computeCard c2
                ; let card1 = snd $ compInfo c1'
                      card2 = snd $ compInfo c2'
-               ; let card = if card1 `cardEqual` card2 then card1 else mkDynamicCard
+               ; let card = if card1 `cardEqual` card2 
+                            then card1 else mkDynamicCard
                ; return $ MkComp (Branch e c1' c2') loc (cty, card)
                }
 

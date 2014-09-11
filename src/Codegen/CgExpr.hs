@@ -309,7 +309,7 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
     go t (EIter {}) =
         fail "Iterate has to be over an array!"
 
-    go t (ELet x e1 e2) = do
+    go t (ELet x _fi e1 e2) = do
         x_name <- genSym $ name x ++ getLnNumInStr (expLoc e0)
         let ty1 = info e1 
         d <- case unExp e1 of

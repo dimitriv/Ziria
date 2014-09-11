@@ -227,7 +227,7 @@ varUseDefs ranges e =
         u2 <- go ebody
         return $ u1 <> u2
 
-    go (MkExp (ELet v e1 e2) _ _) = do
+    go (MkExp (ELet v _ e1 e2) _ _) = do
         vs_e1 <- go e1
         extendVars [(v, info e1)] $ do
         insertUseDefs v vs_e1

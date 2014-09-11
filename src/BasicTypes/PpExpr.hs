@@ -137,7 +137,7 @@ ppExp0 e =
         text "in" <+> ppExp earr <+> text "{" $$
           nest nestingDepth (ppExp ebody) $$
         text "}" 
-    ELet x e1 e2 ->
+    ELet x _fi e1 e2 ->
       text "let" <+> assign "=" (ppName x) (ppExp e1) $$
       text "in" $$ 
       ppExp e2

@@ -194,11 +194,11 @@ tyCheckComp c
                 ; return $ cLetStruct cloc (compInfo c2') sdef c2'
                 }
 
-           LetE x e c1 ->
+           LetE x fi e c1 ->
              do { e' <- tyCheckExpr e
                 ; let t = info e'
                 ; c1' <- extendEnv [(name x,t)] $ tyCheckComp c1 
-                ; return $ cLetE cloc (compInfo c1') x e' c1'
+                ; return $ cLetE cloc (compInfo c1') x fi e' c1'
                 }
            
            -- CL
@@ -320,13 +320,13 @@ tyCheckComp c
                     _ -> raiseErrNoVarCtx cloc (expActualErr unknownTArr ty e')
                 }
  
-           Return e ->
+           Return fi e ->
              do { e' <- tyCheckExpr e
                 ; a <- newTyVar "a"
                 ; b <- newTyVar "b"
                 ; let ta = TVar a 
                 ; let tb = TVar b
-                ; return $ cReturn cloc (CTBase (TComp (info e') ta tb)) e' 
+                ; return $ cReturn cloc (CTBase (TComp (info e') ta tb)) fi e' 
                 }
 
            Interleave c1 c2 ->
@@ -643,7 +643,7 @@ checkUnresolved c
     find_main = go
     go (MkComp (Let _ _ c)         _ _) = go c
     go (MkComp (LetStruct _ c)     _ _) = go c
-    go (MkComp (LetE _ _ c)        _ _) = go c
+    go (MkComp (LetE _ _ _ c)      _ _) = go c
     go (MkComp (LetHeader _ _ c)      _ _) = go c
     go (MkComp (LetFunC _ _ _ _ c) _ _) = go c
     go other_c = other_c
