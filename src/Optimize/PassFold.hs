@@ -1031,7 +1031,7 @@ for_unroll_step fgs e
   | EFor ui nm estart elen ebody  <- unExp e
   , EVal (VInt 0) <- unExp estart
   , EVal (VInt n') <- unExp elen
-  , let n = fromIntegral n
+  , let n = fromIntegral n'
   , (n < 8 && n > 0 && ui == AutoUnroll) || ui == Unroll 
   = -- liftIO (putStrLn "for_unroll_step, trying ...") >> 
     let idxs = [0..n-1]
