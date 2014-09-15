@@ -265,13 +265,14 @@ parseBaseType
        where 
          int_or_length 
            = choice [ reserved "length" >> parens identifier >>= rightM
-                    , int_or_length_exp
+                    , int_or_length_exp leftM
                     ] <?> "array length description"
 
-int_or_length_exp
+int_or_length_exp :: (Int -> BlinkParser a) -> BlinkParser a
+int_or_length_exp m 
   = do { e <- parseExpr <?> "expression"
        ; case evalInt e of 
-           Just i  -> leftM i
+           Just i  -> m (fromIntegral i)
            Nothing -> parserFail "Non-constant array length expression."
        }
 
@@ -409,11 +410,11 @@ genIntervalParser :: BlinkParser (SrcExp, SrcExp)
 genIntervalParser 
   = choice [ try $ 
              do { p <- getPosition
-                ; from <- integer
+                ; from <- foldable_integer
                 ; colon
-                ; to <- integer
-                ; let start = fromIntegral from
-                ; let len = (fromIntegral to) - (fromIntegral from) + 1
+                ; to <- foldable_integer
+                ; let start = from
+                ; let len   = to - from + 1
                 ; return (eVal (Just p) () (VInt start),
                             eVal (Just p) () (VInt len))  
                 }
@@ -436,22 +437,28 @@ declParser :: BlinkParser (Name, Ty, Maybe SrcExp)
        ; return (xn, ty, mbinit) 
        }
 
+
+foldable_integer :: BlinkParser Int
+foldable_integer 
+  = int_or_length_exp return 
+
+
 intervalParser :: BlinkParser (SrcExp, LengthInfo)
 intervalParser
   = choice [ try $ 
              do { p <- getPosition
-                ; from <- integer
+                ; from <- foldable_integer
                 ; colon
-                ; to <- integer
-                ; let start = fromIntegral from
-                ; let len = (fromIntegral to) - (fromIntegral from) + 1
+                ; to <- foldable_integer
+                ; let start = from
+                ; let len = to - from + 1
                 ; return (eVal (Just p) () (VInt start), LILength len) 
                 }
            , do { startPos <- getPosition
                 ; start <- parseExpr
                 ; comma
-                ; len <- integer
-                ; return (start, LILength (fromIntegral len)) 
+                ; len <- foldable_integer
+                ; return (start, LILength len) 
                 }
            ]
 
