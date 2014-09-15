@@ -791,8 +791,9 @@ getGetLen c =
 
 
 cgTIntName :: BitWidth -> String
-cgTIntName BW8  = "int8"
-cgTIntName BW16 = "int16"
-cgTIntName BW32 = "int32"
-cgTIntName _    = "int32" -- Defaulting to 32 bits
+cgTIntName BW8           = "int8"
+cgTIntName BW16          = "int16"
+cgTIntName BW32          = "int32"
+cgTIntName BW64          = "int64"
+cgTIntName (BWUnknown _) = "int32" -- Defaulting to 32 bits
 

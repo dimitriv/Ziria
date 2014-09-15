@@ -224,6 +224,7 @@ parseBaseType
            , reserved "int8"      >> return tint8
            , reserved "int16"     >> return tint16
            , reserved "int32"     >> return tint32
+           , reserved "int64"     >> return tint64
 
            , reserved "double"    >> return (TDouble Full)
            , reserved "bool"      >> return TBool
@@ -232,6 +233,7 @@ parseBaseType
            , reserved "complex8"  >> return (TStruct complex8TyName)
            , reserved "complex16" >> return (TStruct complex16TyName)
            , reserved "complex32" >> return (TStruct complex32TyName) 
+           , reserved "complex64" >> return (TStruct complex64TyName) 
 
            , reserved "struct"    >> parse_struct_cont
            , reserved "arr"       >> parse_arr_cont
@@ -340,13 +342,17 @@ combineAsCallOrCast p x args
   | x == "int"       = assert_singleton args (cast tint)
   | x == "bit"       = assert_singleton args (cast TBit)
   | x == "double"    = assert_singleton args (cast tdouble)
+
+  | x == "int64"     = assert_singleton args (cast tint64)
   | x == "int32"     = assert_singleton args (cast tint32)
   | x == "int16"     = assert_singleton args (cast tint16)
   | x == "int8"      = assert_singleton args (cast tint8)
+
   | x == "complex"   = assert_singleton args (cast tcomplex)
   | x == "complex8"  = assert_singleton args (cast tcomplex8)
   | x == "complex16" = assert_singleton args (cast tcomplex16)
   | x == "complex32" = assert_singleton args (cast tcomplex32)
+  | x == "complex64" = assert_singleton args (cast tcomplex64)
   | otherwise        = combineAsCall p x args
   where cast t x = eUnOp (Just p) () (Cast t) x
 
@@ -415,8 +421,8 @@ genIntervalParser
                 ; to <- foldable_integer
                 ; let start = from
                 ; let len   = to - from + 1
-                ; return (eVal (Just p) () (VInt start),
-                            eVal (Just p) () (VInt len))  
+                ; return (eVal (Just p) () (vint start),
+                            eVal (Just p) () (vint len))  
                 }
            , do { startPos <- getPosition
                 ; start <- parseExpr
@@ -452,7 +458,7 @@ intervalParser
                 ; to <- foldable_integer
                 ; let start = from
                 ; let len = to - from + 1
-                ; return (eVal (Just p) () (VInt start), LILength len) 
+                ; return (eVal (Just p) () (vint start), LILength len) 
                 }
            , do { startPos <- getPosition
                 ; start <- parseExpr
@@ -619,7 +625,7 @@ parseScalarValue
                  }
       , do { i <- integer
            -- ; notFollowedBy identStart <?> ("end of " ++ show i)
-           ; return (VInt (fromIntegral i)) 
+           ; return (VInt i) 
            } 
       ]
     

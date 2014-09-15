@@ -34,6 +34,9 @@ import Data.List as M
 
 import CardinalityAnalysis
 
+
+
+
 -- 
 -- Work-in-progress vectorization plan
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

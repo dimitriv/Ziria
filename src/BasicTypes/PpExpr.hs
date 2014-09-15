@@ -84,7 +84,7 @@ instance Outputable UnrollInfo where
 ppVal v =
   case v of
     VBit b -> text $ if b then "'1" else "'0"
-    VInt n -> int n
+    VInt n -> integer n
     VDouble p d -> double d
     VBool b -> if b then text "true" else text "false"
     VString s -> text s
@@ -189,6 +189,7 @@ ppBW bw =
   case bw of BW8  -> text "8"
              BW16 -> text "16"
              BW32 -> text "32"
+             BW64 -> text "64"
              BWUnknown nm -> text "" 
              -- Or maybe print the name?
 

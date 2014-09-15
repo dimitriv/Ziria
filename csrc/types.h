@@ -30,13 +30,14 @@
 typedef num8  int8;
 typedef num16 int16;
 typedef num32 int32;
-
+typedef num64 int64;
 
 #ifdef SORA_PLATFORM
 
 typedef unsigned __int8  uint8;
 typedef unsigned __int16 uint16;
 typedef unsigned __int32 uint32;
+typedef unsigned __int64 uint64;
 
 /* Short term put these here, long term separate out */
 #include "sora_threads.h"
@@ -51,6 +52,7 @@ typedef unsigned __int32 uint32;
 typedef unsigned char  uint8;
 typedef unsigned short uint16;
 typedef unsigned int uint32;
+typedef unsigned long long int uint64;
 
 #endif
 

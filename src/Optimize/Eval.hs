@@ -91,40 +91,10 @@ val_cast _ _ = Nothing
 
 
 
-evalInt :: Exp a -> Maybe Int
+evalInt :: Exp a -> Maybe Integer
 evalInt e = case evalArith e of 
               Just (VInt i) -> return i
               _otherwise    -> Nothing 
-
-{- 
-evalInt :: Exp a -> Maybe Int 
--- An arithmetic evaluator
-evalInt e = evalInt0 (unExp e)
-evalInt0 (EVal (VInt i)) = return i
-evalInt0 (EBinOp Add e1 e2)
-  = do { i1 <- evalInt e1
-       ; i2 <- evalInt e2
-       ; return (i1+i2) }
-evalInt0 (EBinOp Sub e1 e2)
-  = do { i1 <- evalInt e1
-       ; i2 <- evalInt e2
-       ; return (i1-i2) }
-evalInt0 (EBinOp Mult e1 e2)
-  = do { i1 <- evalInt e1
-       ; i2 <- evalInt e2
-       ; return (i1*i2) }
-evalInt0 (EBinOp Div e1 e2)
-  = do { i1 <- evalInt e1
-       ; i2 <- evalInt e2
-       ; return (i1 `quot` i2) }
-evalInt0 (EBinOp Rem e1 e2) 
-  = do { i1 <- evalInt e1
-       ; i2 <- evalInt e2
-       ; return (i1 `rem` i2) }
-evalInt0 _ = Nothing
-
--}
-
 
 -- Array initialization code or the form
 -- ELetRef nm _ (ESeq init_loop nm) 
@@ -135,7 +105,7 @@ evalArrInt0 (ELetRef nm nfo e)
   , ESeq e1 e2 <- unExp e
   , EVar nm' <- unExp e2
   , nm' == nm 
-  = do { arr <- newArray (0,n-1) 0 :: IO (IOArray Int Int)
+  = do { arr <- newArray (0,n-1) 0 :: IO (IOArray Int Integer)
        ; try_body <- evalArrInitLoop (nm,arr) e1
        ; case try_body of 
            Nothing -> return Nothing
@@ -144,7 +114,7 @@ evalArrInt0 (ELetRef nm nfo e)
        }
 evalArrInt0 other = return Nothing
 
-evalArrInitLoop :: (Name, IOArray Int Int) -> Exp Ty -> IO (Maybe ())
+evalArrInitLoop :: (Name, IOArray Int Integer) -> Exp Ty -> IO (Maybe ())
 evalArrInitLoop (nm,arr) exp 
   | EFor _ k elow esize ebody <- unExp exp
   , EVal (VInt low) <- unExp elow
@@ -154,13 +124,13 @@ evalArrInitLoop (nm,arr) exp
   , arr_nm == nm
   , EVar ind_nm <- unExp eind
   , ind_nm == k 
-  , let inds = [low..(low+siz-1)] -- Indices
+  , let inds = [fromIntegral low..(fromIntegral low + fromIntegral siz - 1)] -- Indices
   , let loc = expLoc exp
   = let subst_idx i = substExp (k, MkExp (EVal (VInt i)) loc tint) eval
     in case mapM (\i -> subst_idx i >>= evalInt) inds of
          Nothing -> return Nothing 
          Just vals -> 
-           do { mapM (\(val,i) -> writeArray arr i val) (zip vals inds)
+           do { mapM (\(val,i) -> writeArray arr (fromIntegral i) val) (zip vals inds)
               ; return (Just ()) }
 
 evalArrInitLoop nm exp

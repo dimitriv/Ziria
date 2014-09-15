@@ -35,6 +35,8 @@ import CardinalityAnalysis
 
 import VecMonad -- Import the vectorization monad
 
+
+
 doVectorizeCompUp :: Comp (CTy,Card) Ty
                  -> Int       -- Input cardinality   (cin)
                  -> Int       -- Output cardinality  (cout
@@ -112,7 +114,7 @@ doVectorizeCompUp comp cin cout (min,mout)
        ; body <- withInitCounts $
                  do { inner_loop_body <- vectorize_body xa_exp ya_exp icnt_name jcnt_name comp
                     ; let inner_loop 
-                             = mkTimes (mkexp $ EVal (VInt mout)) jcnt_name inner_loop_body
+                             = mkTimes (mkexp $ EVal (vint mout)) jcnt_name inner_loop_body
                     ; let final_emit 
                              = mkcomp $ Emit ya_exp 
                     ; let outer_loop_body 
@@ -120,7 +122,7 @@ doVectorizeCompUp comp cin cout (min,mout)
                                     mkcomp (Seq inner_loop final_emit)
                                else inner_loop
                     ; let outer_loop 
-                             =  let icount = mkexp $ EVal (VInt $ min `div` mout)
+                             =  let icount = mkexp $ EVal (vint $ min `div` mout)
                                 in mkTimes icount icnt_name outer_loop_body
                     ; let final_comp
                              | arityin <= 1 -- Could be zero if the original was not taking at all ...
@@ -281,7 +283,7 @@ doVectorizeCompUp comp cin cout (min,mout)
                       do { ecnt <- getEmitCount
                          ; incEmitCount
                           -- emit ~~~> return (ya[j_cntr*cout + $emit_count] := e)
-                         ; let idx = (mkintexp (EVar jcnt_name) `emul` mkintexp (EVal $ VInt cout)) `eadd` mkintexp (EVal (VInt ecnt))
+                         ; let idx = (mkintexp (EVar jcnt_name) `emul` mkintexp (EVal $ vint cout)) `eadd` mkintexp (EVal (vint ecnt))
                          ; let ya_write 
                                  | arityout == 1
                                  = EAssign (eraseExp ya_exp) (eraseExp e) -- Just assign! No indices involved
@@ -300,9 +302,9 @@ doVectorizeCompUp comp cin cout (min,mout)
                      do { tcnt <- getTakeCount
                         ; incTakeCount
                           -- take ~~~> return (xa[i_cntr*(mout*cin) + j_cntr*cin + $take_count])
-                        ; let eidx = (mkintexp (EVar icnt_name) `emul` mkintexp (EVal $ VInt (mout*cin))) `eadd` 
-                                     (mkintexp (EVar jcnt_name) `emul` mkintexp (EVal $ VInt cin))        `eadd`
-                                     (mkintexp (EVal (VInt tcnt)))
+                        ; let eidx = (mkintexp (EVar icnt_name) `emul` mkintexp (EVal $ vint (mout*cin))) `eadd` 
+                                     (mkintexp (EVar jcnt_name) `emul` mkintexp (EVal $ vint cin))        `eadd`
+                                     (mkintexp (EVal (vint tcnt)))
 
                               rdexp = mkexp (EArrRead (eraseExp xa_exp) (eraseExp eidx) LISingleton)
                         ; return $ 
@@ -315,14 +317,14 @@ doVectorizeCompUp comp cin cout (min,mout)
                   -> let mkexp e = MkExp e loc ()
                          mkintexp e = MkExp e loc tint 
                      in   
-                     do { let n | (EVal (VInt m)) <- unExp ne = m
+                     do { let n | (EVal (VInt m)) <- unExp ne = fromIntegral m
                                 | otherwise = error "getInt: can't happen!"
                         ; tcnt <- getTakeCount
                         ; mapM (\_ -> incTakeCount) [1..n]
                           -- take ~~~> return (xa[i_cntr*(mout*cin) + j_cntr*cin + $take_count])
-                        ; let start_index = (mkintexp (EVar icnt_name) `emul` mkintexp (EVal $ VInt (mout*cin))) `eadd` 
-                                            (mkintexp (EVar jcnt_name) `emul` mkintexp (EVal $ VInt cin))        `eadd`
-                                            (mkintexp (EVal (VInt tcnt)))
+                        ; let start_index = (mkintexp (EVar icnt_name) `emul` mkintexp (EVal $ vint (mout*cin))) `eadd` 
+                                            (mkintexp (EVar jcnt_name) `emul` mkintexp (EVal $ vint cin))        `eadd`
+                                            (mkintexp (EVal (vint tcnt)))
 
                               rd_exp = mkexp $ EArrRead (eraseExp xa_exp) 
                                                         (eraseExp start_index) 
@@ -345,14 +347,14 @@ doVectorizeCompUp comp cin cout (min,mout)
                         ; let xvar = toName "_x" loc Nothing
                               xexp = mkexp (EVar xvar)
                               jexp = mkintexp (EVar jcnt_name)
-                              ecntexp = mkintexp (EVal (VInt ecnt))
+                              ecntexp = mkintexp (EVal (vint ecnt))
 
                          -- emit ~~~> return (ya[j_cntr*cout + $emit_count] := ... 
-                        ; let write_index = (jexp `emul` mkintexp (EVal $ VInt cout)) `eadd` ecntexp
+                        ; let write_index = (jexp `emul` mkintexp (EVal $ vint cout)) `eadd` ecntexp
                                                 
                         ; let asgn_expr 
                                 | arityout == 1 
-                                = mkexp $ EAssign ya_exp (mkexp (EArrRead (eraseExp e) (mkexp (EVal $ VInt 0)) LISingleton))
+                                = mkexp $ EAssign ya_exp (mkexp (EArrRead (eraseExp e) (mkexp (EVal $ vint 0)) LISingleton))
                                 | otherwise
                                 = -- DV: used to be ... mkexp $ EArrWrite ya_exp (eraseExp write_index) (LILength n) xexp
                                   mkexp $ EArrWrite ya_exp (eraseExp write_index) (LILength n) (eraseExp e)
@@ -457,17 +459,17 @@ vectMap min mout tin tout loc nm
                | mout == 1
                = mkcomp (Emit (mkexp (ECall (mkexp $ EVar nm) [mkexp (EArrRead xa_exp (eraseExp icnt_exp) LISingleton)])))
                | otherwise 
-               = let rd_idx = eraseExp $ (icnt_exp `emul` (mkintexp (EVal (VInt mout)))) `eadd` jcnt_exp
+               = let rd_idx = eraseExp $ (icnt_exp `emul` (mkintexp (EVal (vint mout)))) `eadd` jcnt_exp
                  in
                  mkcomp $ 
-                 Seq (mkTimes (mkexp $ EVal (VInt mout)) jcnt_name $
+                 Seq (mkTimes (mkexp $ EVal (vint mout)) jcnt_name $
                         mkcomp $ Return AutoInline $ mkexp $ 
                         EArrWrite ya_exp (eraseExp jcnt_exp) LISingleton (mkexp $ ECall (mkexp $ EVar nm) [mkexp $ EArrRead xa_exp rd_idx LISingleton]))
                      (mkcomp $ Emit ya_exp)
        ; let outer_expr = 
                mkcomp $ BindMany (mkcomp Take1) [(xa_name_typed, outer_loop)]
              outer_loop = 
-               mkTimes (mkexp $ EVal (VInt (min `div` mout))) icnt_name write_exp
+               mkTimes (mkexp $ EVal (vint (min `div` mout))) icnt_name write_exp
 
        ; let call = MkComp (Call wrap_fun_name []) loc ()
              let0 = LetFunC wrap_fun_name [] wrap_fun_lcls outer_expr call

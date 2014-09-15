@@ -1056,7 +1056,8 @@ computeVectTop verbose = computeVect FlexiRate
                     -- Moreover, if 'elen' is a constant expression 
                     -- then we can also scale up!
                   ; let sf_ups
-                          | MkExp (EVal (VInt n)) _ _ <- elen
+                          | MkExp (EVal (VInt n')) _ _ <- elen
+                          , let n = fromIntegral n'
                           , MkExp (EVal (VInt 0)) _ _ <- e
                           , VectScaleUp cin cout mults 
                                <- compVectScaleFactUp ra tyin cin cout
@@ -1077,7 +1078,7 @@ computeVectTop verbose = computeVect FlexiRate
                           ; return [ liftDVR (cTimes loc ()
                                                  ui 
                                                  (eraseExp e) 
-                                                 (eVal loc () (VInt n')) x) vc
+                                                 (eVal loc () (vint n')) x) vc
                                    | vc <- ups
                                    ]
                           }) sf_ups

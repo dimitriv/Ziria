@@ -1,14 +1,39 @@
+let foo(x : int64) = 
+  var y : int64;
+  var c : struct complex64; 
+
+  y := 5000000000;
+  y := y+x;
+
+  c.re := y;
+  c.im := c.re * 10;
+
+  -- println y, " ", y/1000;
+
+  let ret = c.im / 10 - 5000000000;  
+  println ret;
+
+  return ret;
+
+in
+
 let comp foo() = 
   var x : complex16;
   seq{
-  y <- take;
-  do {x.re := y};
-  do {x.im := y};
+  (y : int16) <- take;
+
+  let y0 = foo(int64(y));
+
+  do {x.re := int16(y0)};
+  do {x.im := int16(y0)};
   emit x;
   do{x := complex16 { re = 1; im = 2 }};
   let w = complex32 { re = int32(1); im = 2 }
   in
   do{x := complex16(w)};
+
+--  do { foo(0); };
+
   emit x
   -- emit (complex16 { re = 3; im = 3 });
   }

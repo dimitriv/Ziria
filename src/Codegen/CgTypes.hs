@@ -219,6 +219,7 @@ tySizeOf_C t
 bwBitWidth BW8           = return 8
 bwBitWidth BW16          = return 16
 bwBitWidth BW32          = return 32
+bwBitWidth BW64          = return 64
 bwBitWidth (BWUnknown _) = return 32 -- Defaulting! 
 
 
@@ -251,7 +252,7 @@ codeGenVal v =
   case v of
     VBit True -> return [cexp|1|]
     VBit False -> return [cexp|0|]    
-    VInt i -> return [cexp|$int:i|]
+    VInt i -> return [cexp|$lint:i|] -- NB: $lint instead of $int to accommodate 64-bit constants
     VDouble Full d -> return [cexp|$double:(toRational d)|]
     VDouble (Fixed p) d -> fail "codeGenVal: Fixed values not yet supported"
     VDouble (Unknown n) d -> fail "codeGenVal: Precision not resolved"

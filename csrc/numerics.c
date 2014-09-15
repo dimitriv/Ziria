@@ -131,6 +131,48 @@ num32 complex32_cimag(struct complex32 x)
   return x.im;
 }
 
+/* 64-bit */
+struct complex64 complex64_plus(struct complex64 x, struct complex64 y) 
+{
+  struct complex64 r;
+  r.re = x.re + y.re;
+  r.im = x.im + y.im;
+  return r;
+}
+struct complex64 complex64_minus(struct complex64 x, struct complex64 y) 
+{
+  struct complex64 r;
+  r.re = x.re - y.re;
+  r.im = x.im - y.im;
+  return r;
+}
+struct complex64 complex64_mult(struct complex64 x, struct complex64 y) 
+{
+  struct complex64 r;
+  r.re = x.re*y.re - x.im*y.im;
+  r.im = x.im*y.re + x.re*y.im;
+  return r;
+}
+struct complex64 complex64_div(struct complex64 x, struct complex64 y) 
+{
+  struct complex64 r;
+  num64 a = x.re;
+  num64 b = x.im;
+  num64 c = y.re;
+  num64 d = y.im;
+  r.re = (a*c + b*d) / (c*c + d*d);
+  r.im = (b*c - a*d) / (c*c + d*d);
+  return r;
+}
+num64 complex64_creal(struct complex64 x) 
+{
+  return x.re;
+}
+num64 complex64_cimag(struct complex64 x) 
+{
+  return x.im;
+}
+
 
 /* Up-casting */
 num16 num8to16(num8 x)
@@ -145,12 +187,37 @@ num32 num8to32(num8 x)
 	ret = x;
 	return ret;
 }
+
+num64 num8to64(num8 x)
+{
+	num64 ret;
+	ret = x;
+	return ret;
+}
+
+
 num32 num16to32(num16 x)
 {
 	num32 ret;
 	ret = x;
 	return ret;
 }
+
+num64 num16to64(num16 x)
+{
+	num64 ret;
+	ret = x;
+	return ret;
+}
+
+num64 num32to64(num32 x)
+{
+	num64 ret;
+	ret = x;
+	return ret;
+}
+
+
 struct complex16 complex8_to_complex16(struct complex8 x)
 {
 	struct complex16 ret;
@@ -165,11 +232,36 @@ struct complex32 complex8_to_complex32(struct complex8 x)
 	ret.im = num8to32(x.im);
 	return ret;
 }
+
+struct complex64 complex8_to_complex64(struct complex8 x)
+{
+	struct complex64 ret;
+	ret.re = num8to64(x.re);
+	ret.im = num8to64(x.im);
+	return ret;
+}
+
+
 struct complex32 complex16_to_complex32(struct complex16 x)
 {
 	struct complex32 ret;
 	ret.re = num16to32(x.re);
 	ret.im = num16to32(x.im);
+	return ret;
+}
+struct complex64 complex16_to_complex64(struct complex16 x)
+{
+	struct complex64 ret;
+	ret.re = num16to64(x.re);
+	ret.im = num16to64(x.im);
+	return ret;
+}
+
+struct complex64 complex32_to_complex64(struct complex32 x)
+{
+	struct complex64 ret;
+	ret.re = num32to64(x.re);
+	ret.im = num32to64(x.im);
 	return ret;
 }
 
@@ -218,6 +310,31 @@ num8 num32to8(num32 x)
 		ret = x;
 	return ret;
 }
+
+num8 num64to8(num64 x)
+{
+	num8 ret;
+	if (x > 0x7f)
+	{
+#ifdef DEBUG
+		fprintf ("Warning: truncating 16-8 (positive) cornercase\n");
+#endif
+		ret = 0x7f;
+	}
+	else if (x < - (0x80))
+	{
+#ifdef DEBUG
+		fprintf ("Warning: truncating 16-8 (negative) cornercase\n");
+#endif
+		ret = - (0x80);
+	}
+	else
+		ret = x;
+	return ret;
+}
+
+
+
 num16 num32to16(num32 x)
 {
 	num16 ret;
@@ -239,6 +356,76 @@ num16 num32to16(num32 x)
 		ret = x;
 	return ret;
 }
+
+num16 num64to16(num64 x)
+{
+	num16 ret;
+	if (x > 0x7fff)
+	{
+#ifdef DEBUG
+		fprintf ("Warning: truncating 16-8 (positive) cornercase\n");
+#endif
+		ret = 0x7fff;
+	}
+	else if (x < - (0x8000))
+	{
+#ifdef DEBUG
+		fprintf ("Warning: truncating 16-8 (negative) cornercase\n");
+#endif
+		ret = - (0x8000);
+	}
+	else
+		ret = x;
+	return ret;
+}
+
+num32 num64to32(num64 x)
+{
+	num32 ret;
+	if (x > 0x7fffffff)
+	{
+#ifdef DEBUG
+		fprintf ("Warning: truncating 32-8 (positive) cornercase\n");
+#endif
+		ret = 0x7fffffff;
+	}
+	else if (x < - (0x80000000))
+	{
+#ifdef DEBUG
+		fprintf ("Warning: truncating 32-8 (negative) cornercase\n");
+#endif
+		ret = - (0x80000000);
+	}
+	else
+		ret = x;
+	return ret;
+}
+
+
+struct complex32 complex64_to_complex32(struct complex64 x)
+{
+	struct complex32 ret;
+	ret.re = num64to32(x.re);
+	ret.im = num64to32(x.im);
+	return ret;
+}
+struct complex16 complex64_to_complex16(struct complex64 x)
+{
+	struct complex16 ret;
+	ret.re = num64to16(x.re);
+	ret.im = num64to16(x.im);
+	return ret;
+}
+
+struct complex8 complex64_to_complex8(struct complex64 x)
+{
+	struct complex8 ret;
+	ret.re = num64to8(x.re);
+	ret.im = num64to8(x.im);
+	return ret;
+}
+
+
 struct complex16 complex32_to_complex16(struct complex32 x)
 {
 	struct complex16 ret;
@@ -246,6 +433,8 @@ struct complex16 complex32_to_complex16(struct complex32 x)
 	ret.im = num32to16(x.im);
 	return ret;
 }
+
+
 struct complex8 complex32_to_complex8(struct complex32 x)
 {
 	struct complex8 ret;
@@ -253,6 +442,7 @@ struct complex8 complex32_to_complex8(struct complex32 x)
 	ret.im = num32to8(x.im);
 	return ret;
 }
+
 struct complex8 complex16_to_complex8(struct complex16 x)
 {
 	struct complex8 ret;

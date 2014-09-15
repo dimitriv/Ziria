@@ -417,7 +417,7 @@ tyCheckComp c
                 ; let to = TArr (Literal (getInt (unExp e0))) ta
                 ; return $ cTake cloc (CTBase (TComp to ta tb)) e' 
                 }
-                where getInt (EVal (VInt n)) = n
+                where getInt (EVal (VInt n)) = fromInteger n
                       getInt _ = error "BUG (tcComp): getInt, can't happen!"
                       isInt (EVal (VInt _))  = True
                       isInt _                = False
