@@ -43,6 +43,7 @@ import qualified Data.Set as S
 
 import Control.Monad ( when ) 
 
+import Eval ( evalInt ) 
 
 
 
@@ -400,16 +401,20 @@ tyCheckComp c
                 }
 
            Take e ->
-             do { e' <- tyCheckExpr e
+             do { let e0 = case evalInt e of 
+                             Just i -> eVal (expLoc e) () (VInt i)
+                             _ -> e
+
+                ; e' <- tyCheckExpr e0
                 ; a <- newTyVar "a"
                 ; b <- newTyVar "b"
 
-                ; checkWith cloc (isInt (unExp e)) $ 
+                ; checkWith cloc (isInt (unExp e0)) $ 
                   text "Expecting integer literal but got:" <+> ppExp e
 
                 ; let ta = TVar a
                 ; let tb = TVar b
-                ; let to = TArr (Literal (getInt (unExp e))) ta
+                ; let to = TArr (Literal (getInt (unExp e0))) ta
                 ; return $ cTake cloc (CTBase (TComp to ta tb)) e' 
                 }
                 where getInt (EVal (VInt n)) = n
