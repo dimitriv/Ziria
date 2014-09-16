@@ -592,7 +592,7 @@ parseStmtBlock
            , do { s <- parseStmt
                 ; return (s Nothing)
                 }
-           ]
+           ] <?> "statement block"
 
 
 
