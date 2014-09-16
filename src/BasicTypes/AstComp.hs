@@ -16,17 +16,18 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE GADTs, RankNTypes, DataKinds #-}
+{-# LANGUAGE GADTs, RankNTypes, DataKinds, DeriveGeneric #-}
 
 module AstComp where
 
+import Data.Functor.Identity ( Identity (..) )
+import GHC.Generics (Generic)
 import Text.Parsec.Pos
+import Text.Show.Pretty (PrettyVal)
 import qualified Data.Set as S
 
 import AstExpr
 import PpExpr
-
-import Data.Functor.Identity ( Identity (..) )
 
 data PlInfo where
   AlwaysPipeline ::    Int -- use this thread id for c1
@@ -34,6 +35,7 @@ data PlInfo where
                     -> PlInfo
   NeverPipeline  :: PlInfo
   MaybePipeline  :: PlInfo
+  deriving (Generic)
 
 isMaybeOrNever plInfo =
   case plInfo of
@@ -45,6 +47,7 @@ data ParInfo
   = ParInfo { plInfo     :: PlInfo
             , inBurstSz  :: Maybe Int
             , outBurstSz :: Maybe Int }
+  deriving (Generic)
 
 mkParInfo plInfo = ParInfo plInfo Nothing Nothing
 
@@ -145,15 +148,18 @@ data Comp0 a b where
   -- Mitigate t n1 n2
   -- Pre: n1, n2 > 1
   -- This is a transformer of type:  ST T (arr t n1) (arr t : n2)
+  deriving (Generic)
 
 data VectAnn = Rigid Bool (Int,Int) -- True == allow mitigations up, False == disallow mitigations up
              | UpTo  Bool (Int,Int)
+  deriving (Generic)
 
 
 -- Call argument information
 data CallArg a b
   = CAExp  { unCAExp  :: a }
   | CAComp { unCAComp :: b }
+  deriving (Generic)
 
 cVar :: Maybe SourcePos -> a -> Name -> Comp a b
 cVar loc a x = MkComp (Var x) loc a
@@ -267,7 +273,7 @@ data RWTypeAnn =
        RWBaseTyAnn Ty
      | RWRealTyAnn Ty
      | RWNoTyAnn
-  deriving Show
+  deriving (Generic, Show)
 
 
 -- Note [Standalone reads]
@@ -304,6 +310,7 @@ data RWTypeAnn =
 data ReadType
   = SpinOnEmpty
   | JumpToConsumeOnEmpty
+  deriving (Generic)
 
 readJumpToConsumeOnEmpty JumpToConsumeOnEmpty = True
 readJumpToConsumeOnEmpty _ = False
@@ -354,12 +361,14 @@ data Comp a b
   = MkComp { unComp   :: Comp0 a b
            , compLoc  :: CompLoc
            , compInfo :: a }
+  deriving (Generic)
 
 type SrcComp = Comp () ()
 
 data Prog a b
   = MkProg { globals :: [(Name,Ty,Maybe (Exp b))]
            , comp :: Comp a b }
+  deriving (Generic)
 
 
 
@@ -385,6 +394,7 @@ data CompCtxt
 data CTy0 where
   TComp :: Ty -> Ty -> Ty -> CTy0
   TTrans :: Ty -> Ty -> CTy0
+  deriving Generic
 
 inTyOfCTy   :: CTy0 -> Ty
 inTyOfCTy (TComp _ x _) = x
@@ -770,3 +780,19 @@ eraseComp c
 
 eraseCallArg (CAExp e)  = CAExp (eraseExp e)
 eraseCallArg (CAComp c) = CAComp (eraseComp c)
+
+{-------------------------------------------------------------------------------
+  PrettyVal instances (used for dumping the AST)
+-------------------------------------------------------------------------------}
+
+instance PrettyVal CTy0
+instance PrettyVal ParInfo
+instance PrettyVal PlInfo
+instance PrettyVal RWTypeAnn
+instance PrettyVal ReadType
+instance PrettyVal VectAnn
+
+instance (PrettyVal a, PrettyVal b) => PrettyVal (CallArg a b)
+instance (PrettyVal a, PrettyVal b) => PrettyVal (Comp0 a b)
+instance (PrettyVal a, PrettyVal b) => PrettyVal (Comp a b)
+instance (PrettyVal a, PrettyVal b) => PrettyVal (Prog a b)

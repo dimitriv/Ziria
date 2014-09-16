@@ -32,6 +32,7 @@ import System.Exit (exitFailure)
 import System.IO
 import Text.Parsec
 import Text.PrettyPrint.Mainland
+import Text.Show.Pretty (dumpStr)
 
 import AstComp
 import AstExpr
@@ -57,7 +58,7 @@ import TcMonad
 import TcErrors ( ErrCtx (..) )
 import TcComp
 import Vectorize
-
+import Orphans
 
 pprProgInfo :: Comp CTy Ty -> Doc
 pprProgInfo prog =
@@ -104,8 +105,10 @@ main = failOnException $ do
           do { let pm = runParserT NewParser.parseProgram 0 inFile input
              ; NewParser.runParseM pm [] }
 
-    --    putStrLn "parsed ..."
-    --    putStrLn $ "parsed prog = " ++ show prog
+    -- pretty-show's `dumpDoc` generates a `Text.PrettyPrint.HughesPJ.Doc`
+    -- rather than `Text.PrettyPrint.Mainland.Doc`, so we generate a flat
+    -- string instead
+    dump dflags DumpAst ".ast.dump" $ (text . dumpStr) prog
 
     rensym <- GS.initGenSym
     prog_renamed <- runRenM (renameProg prog) rensym []

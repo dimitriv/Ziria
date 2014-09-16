@@ -18,4 +18,8 @@
 -}
 module Analysis.Range where
 
+import Text.Show.Pretty (PrettyVal)
+
 data Range
+
+instance PrettyVal Range

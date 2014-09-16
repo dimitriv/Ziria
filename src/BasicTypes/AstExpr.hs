@@ -16,27 +16,29 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE GADTs, MultiParamTypeClasses, FlexibleInstances #-}
+{-# LANGUAGE GADTs, MultiParamTypeClasses, FlexibleInstances, DeriveGeneric #-}
 
 module AstExpr where
 
 import {-# SOURCE #-} Analysis.Range
 
-import Text.Parsec.Pos
-import Data.Map (Map)
-import qualified Data.Set as S
-import Data.Maybe
-import Text.PrettyPrint.Mainland
-
-import Data.Functor.Identity ( Identity (..) )
 import Control.Monad.State
+import Data.Functor.Identity ( Identity (..) )
+import Data.Map (Map)
+import Data.Maybe
+import GHC.Generics (Generic)
+import Text.Parsec.Pos
+import Text.PrettyPrint.Mainland
+import Text.Show.Pretty (PrettyVal)
+import qualified Data.Set as S
 
+import Orphans
 
 data Precision
      = Full
      | Fixed Int
      | Unknown Name
-  deriving (Show,Eq)
+  deriving (Generic, Show, Eq)
 
 data UnOp =
     NatExp
@@ -45,7 +47,7 @@ data UnOp =
   | BwNeg
   | Cast Ty   -- Cast to this target type
   | ALength
-  deriving Eq
+  deriving (Generic, Eq)
 
 data BinOp =
   -- arithmetic operators
@@ -70,7 +72,7 @@ data BinOp =
   | Geq
   | And
   | Or
-  deriving (Eq, Show)
+  deriving (Generic, Eq, Show)
 
 data Val where
   VBit    :: Bool    -> Val
@@ -79,7 +81,7 @@ data Val where
   VBool   :: Bool -> Val
   VString :: String -> Val
   VUnit   :: Val
-  deriving (Show, Eq)
+  deriving (Generic, Show, Eq)
 
 
 data Name
@@ -87,6 +89,7 @@ data Name
            , uniqId    :: String
            , mbtype    :: Maybe Ty
            , nameLoc :: Maybe SourcePos }
+  deriving (Generic)
 
 
 
@@ -124,13 +127,13 @@ getNameWithUniq nm = name nm ++ "_blk" ++ uniqId nm
 data LengthInfo
      = LISingleton
      | LILength Int -- Invariant: > 0
-  deriving Eq
+  deriving (Generic, Eq)
 
 data UnrollInfo
   = Unroll        -- force unroll
   | NoUnroll      -- force no-unroll
   | AutoUnroll    -- do whatever the compiler would do (no annotation)
-  deriving Eq
+  deriving (Generic, Eq)
 
 -- If true, the binding should be forced to be inlined.
 -- This is used by e.g. the vectorizer to bind inlinable
@@ -140,7 +143,7 @@ data ForceInline
   = ForceInline   -- Always inline
   | NoInline      -- Never inline
   | AutoInline    -- Let the compiler decide
-
+  deriving (Generic)
 
 data Exp0 a where
   EVal :: Val -> Exp0 a
@@ -196,6 +199,7 @@ data Exp0 a where
   EStruct :: TyName -> [(String,Exp a)] -> Exp0 a
   -- Project field out of a struct
   EProj   :: Exp a -> String -> Exp0 a
+  deriving Generic
 
 
 isEVal :: Exp a -> Bool
@@ -286,6 +290,7 @@ data Exp a
   = MkExp { unExp :: Exp0 a
           , expLoc :: Maybe SourcePos
           , info :: a }
+  deriving (Generic)
 
 type SrcExp = Exp ()
 
@@ -312,7 +317,7 @@ data NumExpr where
   -- NArr: Length is the same as the length of the array of the given name
   NArr :: Name -> NumExpr
 
-  deriving Eq
+  deriving (Generic, Eq)
 
 data BitWidth
   = BW8
@@ -320,7 +325,7 @@ data BitWidth
   | BW32
   | BW64
   | BWUnknown BWVar
-  deriving (Eq, Show)
+  deriving (Generic, Eq, Show)
 
 type BWVar = String
 
@@ -351,12 +356,12 @@ data Ty where
   TArrow :: [Ty] -> Ty -> Ty
   TBuff  :: BufTy -> Ty
 
-  deriving Eq
+  deriving (Generic, Eq)
 
 data BufTy
   = IntBuf { bufty_ty   :: Ty }   -- Identifier and type of buffer
   | ExtBuf { bufty_base :: Ty }   -- *Base* type of buffer
-  deriving Eq
+  deriving (Generic, Eq)
 
 type BufId  = String
 type TyName = String
@@ -370,7 +375,7 @@ type TyVar = String
 data StructDef
   = StructDef { struct_name :: String
               , struct_flds :: [(String,Ty)] }
-
+  deriving (Generic)
 
 dotDotName = toName "..." Nothing Nothing
 
@@ -502,6 +507,7 @@ data Fun0 a where
                 -> [(Name, Ty)]               -- params
                 -> Ty                         -- return type
                 -> Fun0 a
+  deriving (Generic)
 
 {- TODO plug this in at some point
 data FunDef a body
@@ -515,7 +521,7 @@ data Fun a
   = MkFun { unFun   :: Fun0 a
           , funLoc  :: Maybe SourcePos
           , funInfo :: a }
-
+  deriving (Generic)
 
 toFunPos a pos fn = MkFun fn (Just pos) a
 
@@ -1034,6 +1040,25 @@ Q:
 
 -}
 
+{-------------------------------------------------------------------------------
+  PrettyVal instances (used for dumping the AST)
+-------------------------------------------------------------------------------}
 
+instance PrettyVal BitWidth
+instance PrettyVal Ty
+instance PrettyVal BufTy
+instance PrettyVal NumExpr
+instance PrettyVal Precision
+instance PrettyVal Name
+instance PrettyVal BinOp
+instance PrettyVal ForceInline
+instance PrettyVal LengthInfo
+instance PrettyVal UnOp
+instance PrettyVal UnrollInfo
+instance PrettyVal Val
+instance PrettyVal StructDef
 
-
+instance PrettyVal a => PrettyVal (Exp0 a)
+instance PrettyVal a => PrettyVal (Exp a)
+instance PrettyVal a => PrettyVal (Fun a)
+instance PrettyVal a => PrettyVal (Fun0 a)

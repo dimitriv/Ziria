@@ -20,6 +20,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# OPTIONS_GHC -fwarn-unused-binds #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
@@ -31,19 +32,21 @@ module Analysis.Range
   , arrIdxRange
   ) where
 
-import AstExpr
-
 import Control.Applicative
 import Control.Monad (ap)
 import Control.Monad.State  (MonadState(..), gets, modify)
 import Data.Map (Map)
-import qualified Data.Map as Map
+import GHC.Generics (Generic)
 import Text.PrettyPrint.Mainland
+import Text.Show.Pretty (PrettyVal)
+import qualified Data.Map as Map
+
+import AstExpr
 
 -- @Range i j@ means that we know /all/ values in the range will be taken on.
 data Range = RangeTop
            | Range Integer Integer
-  deriving (Eq, Show)
+  deriving (Generic, Eq, Show)
 
 instance Num Range where
     RangeTop    + _           = RangeTop
@@ -289,4 +292,8 @@ erange (MkExp (EStruct _ tfs) _ _) = do
     mapM_ (erange . snd) tfs
     return RangeTop
 
+{-------------------------------------------------------------------------------
+  PrettyVal instances (used for dumping the AST)
+-------------------------------------------------------------------------------}
 
+instance PrettyVal Range
