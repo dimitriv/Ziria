@@ -91,6 +91,7 @@ tests/*/compout
 tests/*/*.wpl.c
 tests/*/*.wpl.c.outfile
 tests/*/*.wpl.expanded
+tests/*/*.out
 doc/*/*.aux
 doc/*/*.log
 doc/*/*.out
