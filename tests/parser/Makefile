@@ -34,8 +34,6 @@ PP   = ../../scripts/preprocesscompile-$(COMPILER).sh
 # Uncomment the following if you want to just run wplc
 #PP   = ../../scripts/compile.sh
 
-DIFF = ../../tools/BlinkDiff
-
 # Targets
 TGTS = $(patsubst %.wpl, %.out, $(wildcard *.wpl))
 
@@ -44,28 +42,16 @@ all: $(TGTS)
 %.out : %.wpl
 	EXTRAOPTS='$(EXTRAOPTS)' $(PP) $< $@
 
-%.outfile: %.out %.infile
-	./$< --input=file \
-             --input-file-name=$*.infile \
-             --input-file-mode=dbg \
-             --output-file-name=$@ \
-             --output-file-mode=dbg
-
-%.test: %.outfile
-	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
-
-
-%.accept : %.outfile
-	cp $< $<.ground
-
-
 clean:
 	rm -f ./*expanded
 	rm -f ./*exe ./*exec
 	rm -f ./*.outfile
 	rm -f ./compout ./perfout
 	rm -f ./*.c
+	rm -f ./*.out
 
 all-clean: clean
 	rm -f ./*~
 	rm -f ./*dump
+
+# vi:set noexpandtab:
