@@ -24,6 +24,7 @@
 typedef __int8  num8;
 typedef __int16 num16;
 typedef __int32 num32;
+typedef __int64 num64;
 
 #define calign __declspec(align(16))
 #define cthread __declspec(thread)
@@ -31,9 +32,10 @@ typedef __int32 num32;
 
 #else
 ////////////////////////////////////////////////
-typedef char   num8;
-typedef short  num16;
-typedef int    num32;
+typedef char          num8;
+typedef short         num16;
+typedef int           num32;
+typedef long long int num64; 
 
 #define calign
 #define cthread
@@ -64,6 +66,11 @@ typedef struct complex32 {
   num32 im;
 } complex32;
 
+typedef struct complex64 {
+  num64 re;
+  num64 im;
+} complex64;
+
 struct complex8 complex8_plus(struct complex8 x, struct complex8 y);
 struct complex8 complex8_minus(struct complex8 x, struct complex8 y);
 struct complex8 complex8_mult(struct complex8 x, struct complex8 y);
@@ -85,19 +92,49 @@ struct complex32 complex32_div(struct complex32 x, struct complex32 y);
 num32 complex32_creal(struct complex32 x);
 num32 complex32_cimag(struct complex32 x);
 
+struct complex64 complex64_plus(struct complex64 x, struct complex64 y);
+struct complex64 complex64_minus(struct complex64 x, struct complex64 y);
+struct complex64 complex64_mult(struct complex64 x, struct complex64 y);
+struct complex64 complex64_div(struct complex64 x, struct complex64 y);
+num64 complex64_creal(struct complex64 x);
+num64 complex64_cimag(struct complex64 x);
+
 /* Up-casting */
 num16 num8to16(num8 x);
 num32 num8to32(num8 x);
+num64 num8to64(num8 x);
+
 num32 num16to32(num16 x);
+num64 num16to64(num16 x);
+
+num64 num32to64(num32 x);
+
 struct complex16 complex8_to_complex16(struct complex8 x);
 struct complex32 complex8_to_complex32(struct complex8 x);
+struct complex64 complex8_to_complex64(struct complex8 x);
+
 struct complex32 complex16_to_complex32(struct complex16 x);
+struct complex64 complex16_to_complex64(struct complex16 x);
+
+struct complex64 complex32_to_complex64(struct complex32 x);
 
 /* Down-casting */
 num8 num16to8(num16 x);
 num8 num32to8(num32 x);
+num8 num64to8(num64 x);
+
 num16 num32to16(num32 x);
+num16 num64to16(num64 x);
+
+num32 num64to32(num64 x);
+
+
+struct complex32 complex64_to_complex32(struct complex64 x);
+
+struct complex16 complex64_to_complex16(struct complex64 x);
 struct complex16 complex32_to_complex16(struct complex32 x);
+
+struct complex8 complex64_to_complex8(struct complex64 x);
 struct complex8 complex32_to_complex8(struct complex32 x);
 struct complex8 complex16_to_complex8(struct complex16 x);
 

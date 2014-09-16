@@ -466,7 +466,7 @@ inline_exp_fun (nm,params,locals,body) e
                     show nm ++ ", at call location:" ++ show loc
 
             arg_size (TArr (NVar siz_nm _m) _) = eVar loc tint siz_nm
-            arg_size (TArr (Literal siz) _)    = eVal loc tint (VInt siz)
+            arg_size (TArr (Literal siz) _)    = eVal loc tint (vint siz)
             arg_size _ 
               = error $ 
                 "Could not deduce param size during inlining of function:" ++ 
@@ -767,7 +767,8 @@ letfun_times_step fgs comp =
 times_unroll_step fgs comp 
   = case unComp comp of 
         Times ui e elen i c
-         | EVal (VInt n) <- unExp elen 
+         | EVal (VInt n') <- unExp elen 
+         , let n = fromIntegral n'
          , EVal (VInt 0) <- unExp e
          , (n < 3 && n > 0 && ui == AutoUnroll) || ui == Unroll 
 -- BOZIDAR: this will currently fail perf test for TX/test_encoding_34
@@ -776,7 +777,7 @@ times_unroll_step fgs comp
          -> let idxs = [0..n-1]
                 comps = replicate n c
                 unrolled = zipWithM (\curr xc -> 
-                  substExpComp (i, MkExp (EVal (VInt curr)) (expLoc e) tint) xc) idxs comps
+                  substExpComp (i, MkExp (EVal (vint curr)) (expLoc e) tint) xc) idxs comps
             in case unrolled of
                  Nothing -> return comp
                  Just [] -> return $ MkComp (Return ForceInline (MkExp (EVal VUnit) (compLoc comp) TUnit)) 
@@ -966,7 +967,7 @@ alength_elim fgs e
  = rewrite $ numexp_to_exp loc nexp
  | otherwise 
  = return e
- where numexp_to_exp loc (Literal i) = eVal loc tint (VInt i)
+ where numexp_to_exp loc (Literal i) = eVal loc tint (vint i)
        numexp_to_exp loc (NVar nm i) = eVar loc tint nm
        numexp_to_exp loc (NArr {})   = error "TC bug: unresolved NArr!" 
 
@@ -988,12 +989,14 @@ subarr_inline_step :: DynFlags -> TypedExpPass
 subarr_inline_step fgs e
   | EArrRead evals estart LISingleton <- unExp e
   , EValArr vals <- unExp evals 
-  , EVal (VInt n) <- unExp estart
+  , EVal (VInt n') <- unExp estart
+  , let n = fromIntegral n'
   = rewrite $ eVal (expLoc e) (getArrTy $ info e) (vals!!n)
 
   | EArrRead evals estart (LILength n) <- unExp e
   , EValArr vals <- unExp evals 
-  , EVal (VInt s) <- unExp estart 
+  , EVal (VInt s') <- unExp estart 
+  , let s = fromIntegral s' 
   = rewrite $ eValArr (expLoc e) (info e) (take n $ drop s vals)
 
     -- x[0,length(x)] == x
@@ -1027,13 +1030,14 @@ for_unroll_step :: DynFlags -> TypedExpPass
 for_unroll_step fgs e 
   | EFor ui nm estart elen ebody  <- unExp e
   , EVal (VInt 0) <- unExp estart
-  , EVal (VInt n) <- unExp elen
+  , EVal (VInt n') <- unExp elen
+  , let n = fromIntegral n'
   , (n < 8 && n > 0 && ui == AutoUnroll) || ui == Unroll 
   = -- liftIO (putStrLn "for_unroll_step, trying ...") >> 
     let idxs = [0..n-1]
         exps = replicate n ebody
         unrolled = zipWith (\curr xe -> runIdentity $ 
-                                        substExp (nm, eVal (expLoc e) tint (VInt curr)) xe) idxs exps
+                                        substExp (nm, eVal (expLoc e) tint (vint curr)) xe) idxs exps
     in case unrolled of 
          [] -> return $ eVal (expLoc e) TUnit VUnit
          xs -> rewrite $ mk_eseq_many xs

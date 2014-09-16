@@ -49,7 +49,7 @@ instance XExpy Name where
  toXExp nm loc = eVar loc () nm
 
 instance XExpy Int where
- toXExp i loc = eVal loc () (VInt i)
+ toXExp i loc = eVal loc () (VInt (fromIntegral i))
 
 instance XExpy Bool where
  toXExp b loc = eVal loc () (VBool b)

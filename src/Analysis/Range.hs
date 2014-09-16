@@ -151,7 +151,7 @@ arrIdxRange ranges e len =
 
     go e (LILength l) | EBinOp Mult e1 e2 <- unExp e
                       , EVal (VInt k) <- unExp e2
-                      , k == l = do
+                      , fromIntegral k == l = do
         let k' = fromIntegral k
         r <- erange e1
         case r of

@@ -294,7 +294,7 @@ computeCardTop verbose ct = computeCard ct
         computeCard0 (Take e)
           = let n = getInt (unExp e)
             in return $ MkComp (Take e) loc (cty, mkSimplCard n 0)
-          where getInt (EVal (VInt n)) = n
+          where getInt (EVal (VInt n)) = fromIntegral n
                 getInt _ = error "getInt: can't happen!"
 
           -- Take is supposed to work on constants only apparently. See TcComp.
@@ -314,7 +314,7 @@ computeCardTop verbose ct = computeCard ct
                ; let card1 = snd $ compInfo c1'
                      card  = mkIterCard (getInt_maybe $ unExp e) card1 
                ; return $ MkComp (Times ui e elen x c1') loc (cty,card) }
-          where getInt_maybe (EVal (VInt n)) = Just n
+          where getInt_maybe (EVal (VInt n)) = Just $ fromIntegral n
                 getInt_maybe _ = Nothing
 
         computeCard0 (Repeat hint c1) 

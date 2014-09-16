@@ -114,19 +114,19 @@ doVectorizeCompDn comp cin cout (din,dout)
        ; let xa_exp   = mkexp $ EVar xa_name
              ya_exp   = mkexp $ EVar ya_name
              xtmp_exp = mkexp $ EVar xtmp_name
-             iexp n   = mkexp $ EBinOp Mult (mkexp $ EVar icnt_name) (mkexp $ EVal (VInt n))
+             iexp n   = mkexp $ EBinOp Mult (mkexp $ EVar icnt_name) (mkexp $ EVal (vint n))
           
              init_arr_in crest
                | just_one_take
                = cBindMany loc () (cTake1 loc ()) [(xa_name, crest)]
                | otherwise
-               = cSeq loc () ( mkTimes (mkexp $ (EVal (VInt $ cin `div` din))) icnt_name $ 
+               = cSeq loc () ( mkTimes (mkexp $ (EVal (vint $ cin `div` din))) icnt_name $ 
                                mkcomp $ 
                                BindMany (mkcomp Take1) $ 
                                [(xtmp_name, mkcomp (Return NoInline (mkexp $ EArrWrite xa_exp (iexp din) (LILength din) xtmp_exp)))]
                              ) crest
 
-             emit_arr_out = mkTimes (mkexp $ (EVal (VInt $ cout `div` dout))) icnt_name $
+             emit_arr_out = mkTimes (mkexp $ (EVal (vint $ cout `div` dout))) icnt_name $
                             mkcomp $ 
                             Emit (mkexp $ EArrRead ya_exp (iexp dout) (LILength dout))
 
@@ -305,7 +305,7 @@ doVectorizeCompDn comp cin cout (din,dout)
                    | otherwise 
                    -> do { ecnt <- getEmitCount
                          ; incEmitCount
-                         ; let idx = mkexp $ EVal (VInt ecnt)
+                         ; let idx = mkexp $ EVal (vint ecnt)
                                ya_write = EArrWrite (eraseExp ya_exp) idx LISingleton (eraseExp e)
                          ; return $ mkcomp (Return AutoInline $ mkexp ya_write) 
                          }
@@ -315,7 +315,7 @@ doVectorizeCompDn comp cin cout (din,dout)
                   | otherwise 
                   -> do { tcnt <- getTakeCount
                         ; incTakeCount
-                        ; let idx = mkexp $ EVal (VInt tcnt)
+                        ; let idx = mkexp $ EVal (vint tcnt)
                               xa_read = EArrRead (eraseExp xa_exp) idx LISingleton 
                         ; return $ mkcomp (Return ForceInline $ mkexp xa_read) } -- NB: Force Inline 
                 Take ne
@@ -324,8 +324,8 @@ doVectorizeCompDn comp cin cout (din,dout)
                   | EVal (VInt n) <- unExp ne 
                   -> do { tcnt <- getTakeCount
                         ; mapM (\_ -> incTakeCount) [1..n]
-                        ; let idx = mkexp $ EVal (VInt tcnt)
-                              xa_read = mkexp $ EArrRead (eraseExp xa_exp) idx (LILength n) 
+                        ; let idx = mkexp $ EVal (vint tcnt)
+                              xa_read = mkexp $ EArrRead (eraseExp xa_exp) idx (LILength $ fromIntegral n) 
                         ; return $ mkcomp (Return ForceInline xa_read) } -- NB: Force Inline 
                   | otherwise
                   -> vecMFail "BUG: takes with unknown array size! Can't be simple computer."
@@ -336,7 +336,7 @@ doVectorizeCompDn comp cin cout (din,dout)
                   | TArr (Literal n) _ <- info e
                   -> do { ecnt <- getEmitCount
                         ; mapM (\_ -> incEmitCount) [1..n]
-                        ; let idx = mkexp $ EVal (VInt ecnt)
+                        ; let idx = mkexp $ EVal (vint ecnt)
                               ya_write = EArrWrite (eraseExp ya_exp) idx (LILength n) (eraseExp e)
                         ; return $ mkcomp (Return AutoInline $ mkexp ya_write) 
                         }

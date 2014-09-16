@@ -468,7 +468,7 @@ doVectorizeCompForce comp (finalin,finalout)
                     (Take e) 
                       | EVal (VInt n) <- unExp e
                       -> do { r <- force_takes (in_buff,is_empty,in_buff_idx)
-                                        finalin (fst $ compInfo comp) loc (Just n)
+                                        finalin (fst $ compInfo comp) loc (Just $ fromInteger n)
                             -- ; liftIO $ putStrLn $ "TAKES: " ++ show r
                             ; return r
                             }

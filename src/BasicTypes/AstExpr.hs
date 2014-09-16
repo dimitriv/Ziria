@@ -73,8 +73,8 @@ data BinOp =
   deriving (Eq, Show)
 
 data Val where
-  VBit    :: Bool -> Val
-  VInt    :: Int -> Val
+  VBit    :: Bool    -> Val
+  VInt    :: Integer -> Val
   VDouble :: Precision -> Double -> Val
   VBool   :: Bool -> Val
   VString :: String -> Val
@@ -206,6 +206,11 @@ isEVal _
   = False 
 
 -- Convenience constructors
+
+vint :: Int -> Val 
+-- Auxiliary function for use in the vectorizer
+vint n = VInt (fromIntegral n)
+
 eVal :: Maybe SourcePos -> a -> Val -> Exp a
 eVal loc a v = MkExp (EVal v) loc a 
 eValArr :: Maybe SourcePos -> a ->  [Val] -> Exp a
@@ -313,11 +318,14 @@ data BitWidth
   = BW8 
   | BW16 
   | BW32 
+  | BW64
   | BWUnknown BWVar
   deriving (Eq, Show)
 
 type BWVar = String
 
+
+tint64  = TInt BW64
 tint32  = TInt BW32
 tint16  = TInt BW16
 tint8   = TInt BW8
@@ -455,6 +463,9 @@ complex16TyName :: TyName
 complex16TyName = "complex16"
 complex32TyName :: TyName
 complex32TyName = "complex32"
+complex64TyName :: TyName
+complex64TyName = "complex64"
+
 
 tcomplex :: Ty
 tcomplex = TStruct complex32TyName
@@ -465,15 +476,20 @@ tcomplex16 = TStruct complex16TyName
 tcomplex32 :: Ty
 tcomplex32 = TStruct complex32TyName
 
+tcomplex64 :: Ty
+tcomplex64 = TStruct complex64TyName
+
 -- Primitive complex structures
 primComplexStructs :: [(TyName,StructDef)]
 primComplexStructs 
   = [ (complex8TyName, 
-          StructDef complex8TyName [("re", TInt BW8), ("im", TInt BW8)])
+          StructDef complex8TyName  [("re", TInt BW8),  ("im", TInt BW8)])
     , (complex16TyName, 
           StructDef complex16TyName [("re", TInt BW16), ("im", TInt BW16)])
     , (complex32TyName, 
           StructDef complex32TyName [("re", TInt BW32), ("im", TInt BW32)]) 
+    , (complex64TyName, 
+          StructDef complex64TyName [("re", TInt BW64), ("im", TInt BW64)])
     ]
 
 data Fun0 a where
