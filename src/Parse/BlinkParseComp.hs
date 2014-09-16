@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -16,9 +16,9 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE GADTs, TemplateHaskell, 
-             MultiParamTypeClasses, 
-             RankNTypes, 
+{-# LANGUAGE GADTs, TemplateHaskell,
+             MultiParamTypeClasses,
+             RankNTypes,
              ScopedTypeVariables #-}
 
 module BlinkParseComp ( parseProgram, runParseM ) where
@@ -42,9 +42,9 @@ import PpComp
 
 {- Basic structure is the following:
 
-comp 
+comp
   ::= comp >>> comp | comp |>>>| comp
-    | comp finally comp 
+    | comp finally comp
     | f(args)
     | repeat { commands }    | repeat comp
     | times ... { commands } | times ... comp
@@ -53,53 +53,53 @@ comp
     | takes expr
     | emit expr
     | emits expr
-    | read | write 
+    | read | write
     | do { stmts }
     | return expr
     | let binding in comp
 
-commands := sepEndBy1 ";" command  
+commands := sepEndBy1 ";" command
 
-command 
+command
   ::= (x <- comp)
     | comp
     | let binding in command
 
--} 
+-}
 
 
 
 mkPrefix parsepref cont
   = Prefix $ do { p <- getPosition
                 ; pref <- parsepref
-                ; return (cont p pref) 
+                ; return (cont p pref)
                 }
 
 standalonePref     = reserved "standalone"
-standaloneKont p _ = cStandalone (Just p) () 
+standaloneKont p _ = cStandalone (Just p) ()
 
-repeatPref          
-  = do { reserved "repeat" 
+repeatPref
+  = do { reserved "repeat"
        ; p <- getPosition
-       ; optionMaybe parseVectAnn 
+       ; optionMaybe parseVectAnn
        }
 
 repeatKont p mb_ann = cRepeat (Just p)  () mb_ann
 
-untilPref = do { reserved "until" 
+untilPref = do { reserved "until"
                ; p <- getPosition
                ; parseExpr
                }
 
-untilKont p e = cUntil (Just p) () e 
+untilKont p e = cUntil (Just p) () e
 
 
 whilePref = reserved "while" >> parseExpr
-whileKont p e = cWhile (Just p) () e 
+whileKont p e = cWhile (Just p) () e
 
 
-timesPref 
-  = choice [ do { p <- getPosition 
+timesPref
+  = choice [ do { p <- getPosition
                 ; ui <- parseFor (reserved "times")
                 ; e <- parseExpr
                 ; let nm = mkNameFromPos (Just "_tmp_count") p (Just tint)
@@ -114,11 +114,11 @@ timesPref
                 }
            ] <?> "times or for"
 
-timesKont p (estart,elen,cntnm,ui) 
+timesKont p (estart,elen,cntnm,ui)
   = cTimes (Just p) () ui estart elen cntnm
 
 
-mkPar parseop pi 
+mkPar parseop pi
   = Infix $ do { p <- getPosition
                ; parseop
                ; return (cPar (Just p) () (mkParInfo pi)) }
@@ -146,22 +146,22 @@ parseIOComp ioname const
 
 -- Useful when parsing a command
 parseBindOrComp
-  = do { p <- getPosition 
+  = do { p <- getPosition
 
-       ; r <- choice [ try $ 
-                       do { x <- parseVarBind 
+       ; r <- choice [ try $
+                       do { x <- parseVarBind
                           ; symbol "<-"
                           ; return (Left x)
                           }
                      , do { parseComp >>= (return . Right) }
                      ] <?> "bind or computation"
        ; case r of
-          Left xnm -> 
+          Left xnm ->
              do c <- parseComp
-                return $ \mbc -> 
+                return $ \mbc ->
                   let cont = [(xnm, fromMaybe (cunit p) mbc)]
-                  in cBindMany (Just p) () c cont               
-          Right c -> 
+                  in cBindMany (Just p) () c cont
+          Right c ->
              do { return $ mkoptcseq p c }
       }
 
@@ -179,62 +179,62 @@ parseVarOrCall
        }
 
 combineAsCCall p fnm args
-   = return (cCall (Just p) () fnm args) 
+   = return (cCall (Just p) () fnm args)
 
 
-parseCallArgsC :: Name 
-              -> (SourcePos -> Name -> 
+parseCallArgsC :: Name
+              -> (SourcePos -> Name ->
                      [CallArg SrcExp SrcComp] -> BlinkParser a)
               -> BlinkParser a
 parseCallArgsC xnm combine
   = do { p <- getPosition
-       ; penv <- ask 
-       ; es <- case lookup xnm penv of 
+       ; penv <- ask
+       ; es <- case lookup xnm penv of
                  Just arg_info -> parens $ parse_args arg_info
-                 Nothing -> parens $ 
+                 Nothing -> parens $
                             sepBy (parseExpr >>= (return . CAExp )) comma
-       ; combine p xnm es 
+       ; combine p xnm es
        }
-  where 
+  where
     parse_arg (_,CAExp {})  = parseExpr >>= (return . CAExp)
     parse_arg (_,CAComp {}) = parseComp >>= (return . CAComp)
 
     parse_args []     = return []
     parse_args [p]    = parse_arg p >>= \e -> return [e]
-    parse_args (p:ps) = do { e <- parse_arg p 
+    parse_args (p:ps) = do { e <- parse_arg p
                            ; comma
                            ; es <- parse_args ps
                            ; return (e:es) }
 
 
 parseCompBaseType
-  = choice [ do { reserved "ST" 
+  = choice [ do { reserved "ST"
                 ; mbc <- parse_idx
                 ; ti <- parseBaseType
                 ; ty <- parseBaseType
-                ; case mbc of 
+                ; case mbc of
                     Nothing -> return (TTrans ti ty)
                     Just tv -> return (TComp tv ti ty)
                 }
-           , parens parseCompBaseType 
+           , parens parseCompBaseType
            ] <?> "computation type"
-  where parse_idx 
+  where parse_idx
             = choice [ reserved "T" >> return Nothing
                      , do { reserved "C"
                           ; t <- parseBaseType
                           ; return (Just t) }
-                     , parens parse_idx 
+                     , parens parse_idx
                      ] <?> "computation type index"
 
 
--- A vectorization annotation is just of the form [literal,literal] or <= [literal, literal] 
+-- A vectorization annotation is just of the form [literal,literal] or <= [literal, literal]
 parseVectAnn
-  = choice [ try $ (do { reservedOp "<=" 
+  = choice [ try $ (do { reservedOp "<="
                        ; parse_vect_ann_flag
                        } >>= \(f,v) -> return (UpTo f v))
            , parse_vect_ann_flag >>= (\(f,v) -> return (Rigid f v))
-           ] 
--- Parses just the [(i,j)] annotation 
+           ]
+-- Parses just the [(i,j)] annotation
 parse_vect_ann_flag
   = do { m <- optionMaybe $ reserved "!"
        ; v <- parse_vect_ann
@@ -246,7 +246,7 @@ parse_vect_ann
     do { i <- integer
        ; comma
        ; j <- integer
-       ; return (fromIntegral i, fromIntegral j) 
+       ; return (fromIntegral i, fromIntegral j)
        }
 
 parseComp = buildExpressionParser par_op_table (choice [parse_unary_ops, parseCompTerm])
@@ -256,36 +256,36 @@ parseComp = buildExpressionParser par_op_table (choice [parse_unary_ops, parseCo
                                  , from_pref whilePref      whileKont
                                  , from_pref timesPref      timesKont
                                  ]
-        par_op_table 
+        par_op_table
            = [ [ mkPar (reservedOp ">>>")   MaybePipeline        AssocLeft ]
-             , [ mkPar (reservedOp "|>>>|") (AlwaysPipeline 0 0) AssocLeft ] 
-             ] 
+             , [ mkPar (reservedOp "|>>>|") (AlwaysPipeline 0 0) AssocLeft ]
+             ]
 
         from_pref :: BlinkParser a -> (SourcePos -> a -> SrcComp -> SrcComp) -> BlinkParser SrcComp
-        from_pref parsepref cont 
+        from_pref parsepref cont
            = do { p <- getPosition
                 ; pref <- parsepref
                 ; c <- choice [parse_unary_ops, parseCompTerm] -- Not operators, to avoid wrong fixity
                 ; return (cont p pref c)
                 }
 
-parseCompTerm 
+parseCompTerm
   = choice [ parens parseComp
-           , parsePrimCompUnOp "return" (\l t -> cReturn l t AutoInline) 
+           , parsePrimCompUnOp "return" (\l t -> cReturn l t AutoInline)
            , parsePrimCompUnOp "emit" cEmit
            , parsePrimCompUnOp "emits" cEmits
-           , parsePrimCompUnOp "takes" cTake 
+           , parsePrimCompUnOp "takes" cTake
            , parsePrimCompUnOp "filter" cFilter
            , parsePrimCompNullOp "take" cTake1
-           , parseVarOrCall 
+           , parseVarOrCall
            , parseIOComp "read" cReadSrc
            , parseIOComp "write" cWriteSnk
- 
+
            , do { reserved "map"
                 ; p <- getPosition
-                ; mb_ann <- optionMaybe parseVectAnn 
+                ; mb_ann <- optionMaybe parseVectAnn
                 ; nm <- parseVarBind
-                ; return (cMap (Just p) () mb_ann nm) 
+                ; return (cMap (Just p) () mb_ann nm)
                 }
 
            , parseCompCompound
@@ -295,31 +295,31 @@ parseCompTerm
 type CommandCont = Maybe SrcComp -> SrcComp
 
 parseStructDef :: BlinkParser (Either SrcComp CommandCont)
-parseStructDef 
+parseStructDef
   = do { p <- getPosition
-       ; reserved "struct" 
-       ; updateState (\x -> x+1) 
-       ; x <- identifier 
+       ; reserved "struct"
+       ; updateState (\x -> x+1)
+       ; x <- identifier
        --; debugParse p (putStrLn  "struct")
        ; symbol "="
        ; structdef <- braces (sdef_parser x)
-       ; optInCont (cLetStruct (Just p) () structdef) 
+       ; optInCont (cLetStruct (Just p) () structdef)
        }
-  where sdef_parser tn 
+  where sdef_parser tn
           = do { tfs <- sepBy parse_field semi
-               ; return $ 
+               ; return $
                  StructDef { struct_name = tn
-                           , struct_flds = tfs } 
+                           , struct_flds = tfs }
                }
-        parse_field 
-          = do { fn <- identifier 
+        parse_field
+          = do { fn <- identifier
                ; colon
                ; ft <- parseBaseType
-               ; return (fn,ft) 
+               ; return (fn,ft)
                }
 
 parseCompCompound
-  = choice 
+  = choice
       [ asComp parseCond "conditional used as command"
       , asComp parseStructDef "struct definition used as command"
         -- References
@@ -327,31 +327,31 @@ parseCompCompound
       , asComp parseBindings "let binding used as command"
       , do { p <- getPosition
            ; reserved "do"
-           ; estmts <- parseStmtBlock <?> "statement block" 
-           ; return (cReturn (Just p) () AutoInline estmts) 
+           ; estmts <- parseStmtBlock <?> "statement block"
+           ; return (cReturn (Just p) () AutoInline estmts)
            }
       , optional (reserved "seq") >> braces parseCommands
-      ] <?> "compound command" 
+      ] <?> "compound command"
 
-parseCommands             
+parseCommands
   = do { cs <- sepEndBy1 parseCommand (optional semi)
-       ; return $ fromJust (fold_comp cs) 
+       ; return $ fromJust (fold_comp cs)
        }
 
-  where 
-          
+  where
+
      fold_comp [c]    = Just (c Nothing)
      fold_comp (c:cs) = Just (c (fold_comp cs))
      fold_comp []     = error "Can't happen"
 
 
-parseCommand 
+parseCommand
  = choice [ asCommand parseStructDef
           , asCommand parseCond
           , asCommand parseBindings
           , asCommand parseRefBind
-          , parseBindOrComp 
- 
+          , parseBindOrComp
+
           ] <?> "command"
 
 mkoptcseq :: SourcePos -> SrcComp -> Maybe SrcComp -> SrcComp
@@ -359,42 +359,42 @@ mkoptcseq p c1 Nothing   = c1
 mkoptcseq p c1 (Just c2) = cSeq (Just p) () c1 c2
 
 
-asComp :: BlinkParser (Either SrcComp CommandCont) 
-       -> String 
+asComp :: BlinkParser (Either SrcComp CommandCont)
+       -> String
        -> BlinkParser SrcComp
 asComp m err_msg
-  = do { r <- m 
+  = do { r <- m
        ; case r of
            Left c  -> return c
            Right k -> unexpected err_msg
        }
 
-asCommand :: BlinkParser (Either SrcComp CommandCont) 
+asCommand :: BlinkParser (Either SrcComp CommandCont)
           -> BlinkParser CommandCont
-asCommand m 
-  = do { r <- m 
+asCommand m
+  = do { r <- m
        ; p <- getPosition
-       ; case r of 
-           Left c  -> return $ mkoptcseq p c 
-           Right k -> return k 
+       ; case r of
+           Left c  -> return $ mkoptcseq p c
+           Right k -> return k
        }
 
 parseCond :: BlinkParser (Either SrcComp CommandCont)
-parseCond 
+parseCond
   = do { p <- getPosition
        ; reserved "if"
        ; e <- parseExpr
        ; reserved "then"
        ; c1 <- parseComp
-       ; choice 
-          [ do { notFollowedBy (reserved "else") 
+       ; choice
+          [ do { notFollowedBy (reserved "else")
                ; return (Right (mk_kont e c1 p)) }
           , do { reserved "else"
-               ; c2 <- parseComp 
-               ; return (Left (cBranch (Just p) () e c1 c2)) } 
+               ; c2 <- parseComp
+               ; return (Left (cBranch (Just p) () e c1 c2)) }
           ]
        }
-  where mk_kont e c1 p = mkoptcseq p (cBranch (Just p) () e c1 (cunit p)) 
+  where mk_kont e c1 p = mkoptcseq p (cBranch (Just p) () e c1 (cunit p))
 
 
 parseBindings :: BlinkParser (Either SrcComp CommandCont)
@@ -404,7 +404,7 @@ parseBindings :: BlinkParser (Either SrcComp CommandCont)
        --; debugParse p (putStrLn  "let")
        ; choice [ do { notFollowedBy (reserved "external")
                      ; parseBinding p }
-                , parseExternal p ] 
+                , parseExternal p ]
        }
 
 parseRefBind :: BlinkParser (Either SrcComp CommandCont)
@@ -414,12 +414,12 @@ parseRefBind :: BlinkParser (Either SrcComp CommandCont)
        ; let bnd = case mbinit of Nothing -> Left ty
                                   Just ei -> Right ei
        ; optInCont (cLetERef (Just p) () xn bnd)
-       } 
+       }
 
 
 parseCompOptional :: BlinkParser (Maybe (Maybe (Int,Int)))
 -- Nothing -> no 'comp'
--- Just h  -> a 'comp' with an optional hint 
+-- Just h  -> a 'comp' with an optional hint
   = do { is_comp <- optionMaybe (reserved "comp")
        ; case is_comp of
            Nothing -> return Nothing
@@ -437,28 +437,28 @@ parseBinding p
   = do { is_comp <- parseCompOptional
        ; x <- parseVarBind
        ; choice [ notFollowedBy (symbol "(") >> parseSimplBind is_comp x p
-                , parseFunBind is_comp x p 
-                ] 
+                , parseFunBind is_comp x p
+                ]
        }
 
-parseSimplBind is_comp x p 
+parseSimplBind is_comp x p
   = do { symbol "="
        ; case is_comp of
-           Nothing -> parseExpr     >>= \e -> 
+           Nothing -> parseExpr     >>= \e ->
                          optInCont (cLetE (Just p) () x AutoInline e)
-           Just h  -> parseCommands >>= \c -> 
+           Just h  -> parseCommands >>= \c ->
                          optInCont (cLet  (Just p) () x (mkVectComp c h))
        }
 
 parseFunBind is_comp x p
   = case is_comp of
-      Nothing 
+      Nothing
         -> do { params <- parens paramsParser
               ; symbol "="
               ; locls <- declsParser
               ; e <- parseStmts
               ; let fun = MkFun (MkFunDefined x params locls e) (Just p) ()
-              ; optInCont (cLetHeader (Just p) () x fun) 
+              ; optInCont (cLetHeader (Just p) () x fun)
               }
       Just h
         -> do { params <- parens compParamsParser
@@ -466,17 +466,17 @@ parseFunBind is_comp x p
               ; locls <- declsParser
               ; c <- parseCommands -- c <- parseComp
               ; extendParseEnv [(x,params)] $
-                optInCont (cLetFunC (Just p) () x params locls (mkVectComp c h)) 
+                optInCont (cLetFunC (Just p) () x params locls (mkVectComp c h))
               }
 
 optInCont :: (SrcComp -> SrcComp) -> BlinkParser (Either SrcComp CommandCont)
-optInCont cont 
+optInCont cont
   = choice [ do { updateState (\x -> x - 1) -- still this is like popping
                 ; notFollowedBy (reserved "in")
-                ; p <- getPosition 
+                ; p <- getPosition
                 --; debugParse p (putStrLn  "in")
                 ; return (Right (\mbc -> cont (fromMaybe (cunit p) mbc))) }
-           , do { updateState (\x -> x - 1) 
+           , do { updateState (\x -> x - 1)
                 ; reserved "in"             -- popping
                 ; p <- getPosition
                 --; debugParse p (putStrLn  "in")
@@ -486,20 +486,20 @@ optInCont cont
 
 cunit p = cReturn (Just p) () ForceInline (eunit p)
 
-parseExternal :: SourcePos -> BlinkParser (Either SrcComp CommandCont) 
-parseExternal p 
-  = do { reserved "external" 
+parseExternal :: SourcePos -> BlinkParser (Either SrcComp CommandCont)
+parseExternal p
+  = do { reserved "external"
        ; x <- identifier
        ; params <- parens paramsParser
        ; symbol ":"
-       ; ty <- parseBaseType 
+       ; ty <- parseBaseType
        ; let fn  = mkNameFromPos (Just x) p Nothing
        ; let fun = MkFun (MkFunExternal fn params ty) (Just p) ()
-       ; optInCont (cLetHeader (Just p) () fn fun) 
+       ; optInCont (cLetHeader (Just p) () fn fun)
        }
 
 
-paramsParser = sepBy paramParser (symbol ",")  
+paramsParser = sepBy paramParser (symbol ",")
   where paramParser =
           do { p <- getPosition
              ; x <- identifier
@@ -508,8 +508,8 @@ paramsParser = sepBy paramParser (symbol ",")
              ; return $ (mkNameFromPos (Just x) p (Just ty), ty)
              }
 
-compParamsParser = sepBy paramParser (symbol ",")  
-  where 
+compParamsParser = sepBy paramParser (symbol ",")
+  where
     paramParser =
        do { p <- getPosition
           ; x <- identifier
@@ -523,10 +523,10 @@ compParamsParser = sepBy paramParser (symbol ",")
 declsParser = endBy declParser semi
 
 
-parseProgram :: BlinkParser (Prog () ())                              
-parseProgram 
+parseProgram :: BlinkParser (Prog () ())
+parseProgram
   = do { whiteSpace
        ; globs <- declsParser
        ; c <- parseComp
-       ; return $ MkProg globs c 
+       ; return $ MkProg globs c
        }

@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -16,13 +16,13 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE GADTs, TemplateHaskell, 
-             MultiParamTypeClasses, 
-             RankNTypes, 
+{-# LANGUAGE GADTs, TemplateHaskell,
+             MultiParamTypeClasses,
+             RankNTypes,
              TypeSynonymInstances,
              FlexibleInstances,
              ScopedTypeVariables #-}
- 
+
 module BlinkParseExpr where
 
 import AstExpr
@@ -34,7 +34,7 @@ import Text.Parsec.Language
 import Text.Parsec.Expr
 import Text.Parsec.Pos ( newPos )
 
-import Data.Maybe ( fromMaybe, fromJust ) 
+import Data.Maybe ( fromMaybe, fromJust )
 
 import Data.Char ( isSpace )
 
@@ -42,21 +42,21 @@ import Control.Applicative hiding (optional, (<|>))
 import Control.Monad.Trans
 import Control.Monad.Reader.Class
 
-import PpExpr 
+import PpExpr
 
-import Eval ( evalInt ) 
+import Eval ( evalInt )
 
 
 unops
   = [ "-", "~" ]
 
-binops 
+binops
   = [ "**", "*", "/", "%", "+", "-", "<<", ">>", "<"
     , ">", ">=", "<=", "&", "^", "|", "==", "!=", "&&", "||"
     , ">>>", "|>>>|"
     ]
 
-blinkReservedNames 
+blinkReservedNames
   = [ -- Computation language keywords
       "let", "comp", "in", "if", "then", "else", "read", "write"
     , "emit", "emits", "take", "takes", "while", "times", "repeat"
@@ -68,17 +68,17 @@ blinkReservedNames
 
       -- Types
     , "arr", "struct"
-    , "ST", "C", "T" 
+    , "ST", "C", "T"
     ]
 
 debugParse :: SourcePos -> IO () -> BlinkParser ()
 debugParse p action
- = liftIO $ do { putStrLn $ "Debug" 
+ = liftIO $ do { putStrLn $ "Debug"
                ; putStrLn $ "Position:" ++ show p
                ; action }
 
 blinkStyle :: P.GenLanguageDef String BlinkParseState BlinkParseM
-blinkStyle 
+blinkStyle
   = emptyDef { P.commentStart     = "{-"
              , P.commentEnd       = "-}"
              , P.commentLine      = "--"
@@ -90,7 +90,7 @@ blinkStyle
              , P.reservedNames    = blinkReservedNames
              , P.reservedOpNames  = allops } -- Why not put all of them in?
   where allops      = unops ++ binops ++ reservedops
-        reservedops = [":=",":","=","=>","<-"] 
+        reservedops = [":=",":","=","=>","<-"]
 
         emptyDef   :: P.LanguageDef st
         emptyDef    = P.LanguageDef
@@ -123,7 +123,7 @@ charLiteral    =  P.charLiteral blinkLexer
 stringLiteral  =  P.stringLiteral blinkLexer
 natural        =  P.natural blinkLexer
 integer        =  P.integer blinkLexer
-float          =  P.float blinkLexer 
+float          =  P.float blinkLexer
 naturalOrFloat =  P.naturalOrFloat blinkLexer
 decimal        =  P.decimal blinkLexer
 hexadecimal    =  P.hexadecimal blinkLexer
@@ -152,7 +152,7 @@ commaSep1 x    =  P.commaSep1 blinkLexer x
 
 
 -- The Blink parser
--- (1) reads strings 
+-- (1) reads strings
 -- (2) maintains a BlinkParseState (unit for now)
 -- (3) runs in the IO monad (for debugging)
 
@@ -162,7 +162,7 @@ type BlinkParseState = Int -- Keeps track of nesting of let-bound definitions
 -- We need environment of defined functions to intelligently parse applications
 type ParseCompEnv     = [(Name,[(Name, CallArg Ty CTy0)])]
 newtype BlinkParseM a = BlinkParseM { runParseM :: ParseCompEnv -> IO a }
-type BlinkParser a    = ParsecT String BlinkParseState BlinkParseM a 
+type BlinkParser a    = ParsecT String BlinkParseState BlinkParseM a
 
 instance Functor BlinkParseM where
   fmap f (BlinkParseM x) = BlinkParseM $ \env -> fmap f (x env)
@@ -171,32 +171,32 @@ instance Applicative BlinkParseM where
   pure = BlinkParseM . const . return
   (BlinkParseM f) <*> (BlinkParseM x) = BlinkParseM $ \env -> f env <*> x env
 
-instance Monad BlinkParseM where 
-  (>>=) (BlinkParseM f) g 
-     = BlinkParseM (\env -> 
+instance Monad BlinkParseM where
+  (>>=) (BlinkParseM f) g
+     = BlinkParseM (\env ->
          do { r <- f env; runParseM (g r) env })
   return = pure
 
-instance MonadIO BlinkParseM where 
+instance MonadIO BlinkParseM where
   liftIO comp = BlinkParseM (\_ -> comp)
 
 instance MonadReader ParseCompEnv BlinkParseM where
   ask = BlinkParseM (\env -> return env)
   local upd (BlinkParseM f) = BlinkParseM (\env -> f (upd env))
-  reader f = BlinkParseM (\env -> return (f env)) 
+  reader f = BlinkParseM (\env -> return (f env))
 
 extendParseEnv :: ParseCompEnv -> BlinkParser a -> BlinkParser a
 extendParseEnv penv action
   = local (\env -> penv ++ env) action
 
 getParseEnv :: BlinkParser ParseCompEnv
-getParseEnv = ask 
+getParseEnv = ask
 
 
 -- Utilities
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-mkNameFromPos :: Maybe String  -- optional source name 
-              -> SourcePos     -- source position 
+mkNameFromPos :: Maybe String  -- optional source name
+              -> SourcePos     -- source position
               -> Maybe Ty      -- optional source type annotation
               -> Name
 mkNameFromPos mb_src_nm spos mb_ty
@@ -216,9 +216,9 @@ rightM x = return (Right x)
 -- Parsing types
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 parseBaseType :: BlinkParser Ty
-parseBaseType 
+parseBaseType
   = choice [ parens whiteSpace    >> return TUnit
-           , reserved "bit"       >> return TBit 
+           , reserved "bit"       >> return TBit
 
            , reserved "int"       >> return tint
            , reserved "int8"      >> return tint8
@@ -232,8 +232,8 @@ parseBaseType
            , reserved "complex"   >> return (TStruct complex32TyName)
            , reserved "complex8"  >> return (TStruct complex8TyName)
            , reserved "complex16" >> return (TStruct complex16TyName)
-           , reserved "complex32" >> return (TStruct complex32TyName) 
-           , reserved "complex64" >> return (TStruct complex64TyName) 
+           , reserved "complex32" >> return (TStruct complex32TyName)
+           , reserved "complex64" >> return (TStruct complex64TyName)
 
            , reserved "struct"    >> parse_struct_cont
            , reserved "arr"       >> parse_arr_cont
@@ -241,39 +241,39 @@ parseBaseType
            , parens parseBaseType
 
            ] <?> "expression type"
-  where 
+  where
      parse_struct_cont :: BlinkParser Ty
-     parse_struct_cont 
+     parse_struct_cont
        = do { t <- identifier <?> "struct name"
             ; return $ TStruct t }
      parse_arr_cont :: BlinkParser Ty
-     parse_arr_cont 
-       = choice 
+     parse_arr_cont
+       = choice
            [ do { res <- brackets int_or_length
                 ; xPos <- getPosition
                 ; t <- parseBaseType
                 ; case res of
-                    Left n  -> 
-                      let i = fromIntegral n 
+                    Left n  ->
+                      let i = fromIntegral n
                       in return (TArr (Literal i) t)
-                    Right x -> 
+                    Right x ->
                       let nm = mkNameFromPos (Just x) xPos Nothing
                       in return (TArr (NArr nm) t) }
            , do { xPos <- getPosition
                 ; t <- parseBaseType
-                ; let nm = mkNameFromPos Nothing xPos (Just tint) 
+                ; let nm = mkNameFromPos Nothing xPos (Just tint)
                 ; return $ TArr (NVar nm 0) t }
            ] <?> "array range and its base type"
-       where 
-         int_or_length 
+       where
+         int_or_length
            = choice [ reserved "length" >> parens identifier >>= rightM
                     , int_or_length_exp leftM
                     ] <?> "array length description"
 
 int_or_length_exp :: (Int -> BlinkParser a) -> BlinkParser a
-int_or_length_exp m 
+int_or_length_exp m
   = do { e <- parseExpr <?> "expression"
-       ; case evalInt e of 
+       ; case evalInt e of
            Just i  -> m (fromIntegral i)
            Nothing -> parserFail "Non-constant array length expression."
        }
@@ -282,10 +282,10 @@ int_or_length_exp m
 parseVarBind :: BlinkParser Name
 parseVarBind
   = do { pos <- getPosition
-       ; choice  
+       ; choice
           [ do { i <- identifier
                ; return $ mkNameFromPos (Just i) pos Nothing }
-          , parens $ 
+          , parens $
             do { i <- identifier
                ; symbol ":"
                ; ty <- parseBaseType
@@ -298,15 +298,15 @@ parseVarBind
 {- Parsing statements
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    stmts ::= sepEndBy stmt (symbol ";")
-   stmt  ::= assignment | return expr | f(....) | for 
+   stmt  ::= assignment | return expr | f(....) | for
            | while | iter | if e then stmts [else stmts] | etc ...
-           | let x = e;                                              
+           | let x = e;
 -}
 
 parseStmts :: BlinkParser SrcExp
 parseStmts
-  = do { es <- comb parseStmt (optional semi) 
-       ; return $ fromJust (fold_exp es) 
+  = do { es <- comb parseStmt (optional semi)
+       ; return $ fromJust (fold_exp es)
        }
   where fold_exp [e]    = Just (e Nothing)
         fold_exp (e:es) = Just (e (fold_exp es))
@@ -322,7 +322,7 @@ mkoptseq p e1 Nothing   = e1
 mkoptseq p e1 (Just e2) = eSeq (Just p) () e1 e2
 
 -- Assumes we have already read the head (function) of the call
-parseCallArgs :: String 
+parseCallArgs :: String
               -> (SourcePos -> String -> [SrcExp] -> BlinkParser a)
               -> BlinkParser a
 parseCallArgs x combine
@@ -332,12 +332,12 @@ parseCallArgs x combine
 
 
 combineAsCall :: Monad m => SourcePos -> String -> [SrcExp] -> m SrcExp
-combineAsCall p fn args 
+combineAsCall p fn args
   = let f = eVar (Just p) () (mkNameFromPos (Just fn) p Nothing)
     in return $ eCall (Just p) () f args
 
 combineAsCallOrCast :: Monad m => SourcePos -> String -> [SrcExp] -> m SrcExp
--- Create either a cast or a call since they share the same source syntax 
+-- Create either a cast or a call since they share the same source syntax
 combineAsCallOrCast p x args
   | x == "int"       = assert_singleton args (cast tint)
   | x == "bit"       = assert_singleton args (cast TBit)
@@ -370,31 +370,31 @@ parsePrint b
   = do { p <- getPosition
        ; es <- sepBy parseExpr comma
        ; return $ makePrint p b es }
-    where makePrint p b (h:t) = 
+    where makePrint p b (h:t) =
             eSeq (Just p) () (ePrint (Just p) () False h) (makePrint p b t)
-          makePrint p b [] = 
+          makePrint p b [] =
             ePrint (Just p) () b (eVal (Just p) () (VString ""))
 
 
--- Assumes we have already read the first variable of the lhs 
+-- Assumes we have already read the first variable of the lhs
 -- of the assignment, e.g x.f1.f3[35] := 42;
--- In this example we need to parse the rest, i.e. ".f1.f3[35] := 42; 
+-- In this example we need to parse the rest, i.e. ".f1.f3[35] := 42;
 parseAssign :: SrcExp -> BlinkParser SrcExp
-parseAssign e 
+parseAssign e
   = do { p <- getPosition
-       ; choice [ do { symbol ":=" 
-                     ; p <- getPosition 
-                     ; erhs <- parseExpr 
+       ; choice [ do { symbol ":="
+                     ; p <- getPosition
+                     ; erhs <- parseExpr
                      ; return $ eAssign (Just p) () e erhs
                      }
                 , do { symbol "."
                      ; y <- identifier
-                     ; p <- getPosition 
+                     ; p <- getPosition
                      ; parseAssign $ eProj (Just p) () e y
                      }
                 , do { (estart,len) <- brackets rangeParser
                      ; symbol ":="
-                     ; p <- getPosition 
+                     ; p <- getPosition
                      ; erhs <- parseExpr
                      ; return $ eArrWrite (Just p) () e estart len erhs
                      }
@@ -403,18 +403,18 @@ parseAssign e
 rangeParser :: BlinkParser (SrcExp, LengthInfo)
 rangeParser
   = choice [ try intervalParser
-           , do { e <- parseExpr 
-                ; return (e, LISingleton) 
+           , do { e <- parseExpr
+                ; return (e, LISingleton)
                 }
            ] <?> "range"
 
 
 
-genIntervalParser :: BlinkParser (SrcExp, SrcExp) 
--- A generalized interval parser 
+genIntervalParser :: BlinkParser (SrcExp, SrcExp)
+-- A generalized interval parser
 -- Returns (start,length)
-genIntervalParser 
-  = choice [ try $ 
+genIntervalParser
+  = choice [ try $
              do { p <- getPosition
                 ; from <- foldable_integer
                 ; colon
@@ -422,7 +422,7 @@ genIntervalParser
                 ; let start = from
                 ; let len   = to - from + 1
                 ; return (eVal (Just p) () (vint start),
-                            eVal (Just p) () (vint len))  
+                            eVal (Just p) () (vint len))
                 }
            , do { startPos <- getPosition
                 ; start <- parseExpr
@@ -436,45 +436,45 @@ declParser :: BlinkParser (Name, Ty, Maybe SrcExp)
   = do { p <- getPosition
        ; reserved "var"
        ; x <- identifier
-       ; colon 
-       ; ty <- parseBaseType 
+       ; colon
+       ; ty <- parseBaseType
        ; let xn = mkNameFromPos (Just x) p (Just ty)
        ; mbinit <- optionMaybe (symbol ":=" >> parseExpr)
-       ; return (xn, ty, mbinit) 
+       ; return (xn, ty, mbinit)
        }
 
 
 foldable_integer :: BlinkParser Int
-foldable_integer 
-  = int_or_length_exp return 
+foldable_integer
+  = int_or_length_exp return
 
 
 intervalParser :: BlinkParser (SrcExp, LengthInfo)
 intervalParser
-  = choice [ try $ 
+  = choice [ try $
              do { p <- getPosition
                 ; from <- foldable_integer
                 ; colon
                 ; to <- foldable_integer
                 ; let start = from
                 ; let len = to - from + 1
-                ; return (eVal (Just p) () (vint start), LILength len) 
+                ; return (eVal (Just p) () (vint start), LILength len)
                 }
            , do { startPos <- getPosition
                 ; start <- parseExpr
                 ; comma
                 ; len <- foldable_integer
-                ; return (start, LILength len) 
+                ; return (start, LILength len)
                 }
            ]
 
-type StmtCont = Maybe SrcExp -> SrcExp 
+type StmtCont = Maybe SrcExp -> SrcExp
 
 parseFor :: BlinkParser () -> BlinkParser UnrollInfo
 parseFor for_reserved
-  = choice [ for_reserved >> return AutoUnroll 
+  = choice [ for_reserved >> return AutoUnroll
            , reserved "unroll"   >> for_reserved >> return Unroll
-           , reserved "nounroll" >> for_reserved >> return NoUnroll 
+           , reserved "nounroll" >> for_reserved >> return NoUnroll
            ]
 
 parseStmt :: BlinkParser StmtCont
@@ -483,36 +483,36 @@ parseStmt
        ; choice (parse_stmt_choices startPos) <?> "statement" }
   where
     parse_stmt_choices :: SourcePos -> [BlinkParser StmtCont]
-    parse_stmt_choices p 
-        = [ do { reserved "let" 
+    parse_stmt_choices p
+        = [ do { reserved "let"
                ; x <- parseVarBind
-               ; symbol "=" 
-               ; e <- parseExpr 
-               ; scont <- optionMaybe $ 
-                          do { reserved "in" 
+               ; symbol "="
+               ; e <- parseExpr
+               ; scont <- optionMaybe $
+                          do { reserved "in"
                              ; parseStmt }
-               ; case scont of 
-                   Just r -> 
+               ; case scont of
+                   Just r ->
                      let k m = eLet (Just p) () x AutoInline e (r m)
                      in return k
                    Nothing ->
-                     let k m = eLet (Just p) () x AutoInline e (fromMaybe (eunit p) m) 
+                     let k m = eLet (Just p) () x AutoInline e (fromMaybe (eunit p) m)
                      in return k
                }
-            -- References 
+            -- References
           , do { (x,ty,mbinit) <- declParser
-               ; scont <- optionMaybe $ 
-                          do { reserved "in" 
+               ; scont <- optionMaybe $
+                          do { reserved "in"
                              ; parseStmt }
                ; let bnd = case mbinit of Nothing -> Left ty
                                           Just ei -> Right ei
-               ; case scont of 
-                   Just r -> 
+               ; case scont of
+                   Just r ->
                      let k m = eLetRef (Just p) () x bnd (r m)
                      in return k
                    Nothing ->
-                     let k m = eLetRef (Just p) () x bnd 
-                                       (fromMaybe (eunit p) m) 
+                     let k m = eLetRef (Just p) () x bnd
+                                       (fromMaybe (eunit p) m)
                      in return k
                }
 
@@ -523,27 +523,27 @@ parseStmt
                ; (estart,elen) <- brackets genIntervalParser
 
                ; ebody <- parseStmtBlock <?> "for loop body"
-               ; return $ 
+               ; return $
                  mkoptseq p (eFor (Just p) () ui k estart elen ebody)
                }
 
           , do { reserved "while"
-               ; econd <- parens parseExpr 
+               ; econd <- parens parseExpr
                ; ebody <- parseStmtBlock <?> "while loop body"
-               ; return $ 
+               ; return $
                  mkoptseq p (eWhile (Just p) () econd ebody)
                }
 
           , do { reserved "if"
-               ; e <- parseExpr 
-               ; reserved "then" 
+               ; e <- parseExpr
+               ; reserved "then"
                ; e1 <- parseStmtBlock <?> "if branch"
                ; e2 <- parse_if_cont
-               ; return $ 
+               ; return $
                  mkoptseq p (eIf (Just p) () e e1 e2)
                }
 
-          , do { reserved "return" 
+          , do { reserved "return"
                ; e <- parseExpr
                ; return $ mkoptseq p e }
 
@@ -559,18 +559,18 @@ parseStmt
 
           , do { reserved "error"
                ; s <- stringLiteral
-               ; return $ mkoptseq p (eError (Just p) () s) 
+               ; return $ mkoptseq p (eError (Just p) () s)
                }
-          , parse_call_or_assignment 
-          ] 
+          , parse_call_or_assignment
+          ]
 
     parse_call_or_assignment :: BlinkParser StmtCont
       = do { p <- getPosition
            ; x <- identifier <?> "variable or function"
-           ; e <- choice 
+           ; e <- choice
                     [ parseCallArgs x combineAsCall
-                    , parseAssign $ 
-                      eVar (Just p) () $ 
+                    , parseAssign $
+                      eVar (Just p) () $
                       mkNameFromPos (Just x) p Nothing
                     ] <?> "call or assignment"
 
@@ -578,10 +578,10 @@ parseStmt
            }
 
     parse_if_cont :: BlinkParser SrcExp
-      = choice [ do { notFollowedBy $ reserved "else" 
-                    ; p <- getPosition 
+      = choice [ do { notFollowedBy $ reserved "else"
+                    ; p <- getPosition
                     ; return (eunit p) }
-               , do { reserved "else" 
+               , do { reserved "else"
                     ; parseStmtBlock <?> "else branch"
                     }
                ]
@@ -589,9 +589,9 @@ parseStmt
 parseStmtBlock :: BlinkParser SrcExp
 parseStmtBlock
   = choice [ braces parseStmts
-           , do { s <- parseStmt 
-                ; return (s Nothing) 
-                } 
+           , do { s <- parseStmt
+                ; return (s Nothing)
+                }
            ]
 
 
@@ -600,10 +600,10 @@ parseStmtBlock
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 -- expr  ::= unops | binops | atomic_expr
 -- value ::= intlit | boollit | bitlit | () | doublelit | { arrayvalinits }
--- atomic_expr  ::= ( expr ) | struct_init 
+-- atomic_expr  ::= ( expr ) | struct_init
 --                | deref_seq | call_or_cast | just_var | value
 --                | if e1 then e2 else e3
---                | 
+--                |
 -- struct_init  ::= tyname { inits }
 -- deref_seq    ::= deref_seq.f | deref_seq[range] | x
 -- call_or_cast ::= f(expr) | tyname(expr)
@@ -621,17 +621,17 @@ parseScalarValue
       , try $ do { f <- float
                  ; return (VDouble Full f) }
       , try $ do { s <- stringLiteral
-                 ; return (VString s) 
+                 ; return (VString s)
                  }
       , do { i <- integer
            -- ; notFollowedBy identStart <?> ("end of " ++ show i)
-           ; return (VInt i) 
-           } 
+           ; return (VInt i)
+           }
       ]
-    
+
 parseValue :: BlinkParser SrcExp
 parseValue
-  = do { p <- getPosition 
+  = do { p <- getPosition
        ; choice
           [ do { v <- parseScalarValue
                ; return $ eVal (Just p) () v }
@@ -643,39 +643,39 @@ parseValue
 parseWithVarOnHead :: BlinkParser SrcExp
 parseWithVarOnHead
   = do { x <- identifier
-       ; p <- getPosition 
+       ; p <- getPosition
        ; let xexp = eVar (Just p) () (mkNameFromPos (Just x) p Nothing)
        ; choice [ do { notFollowedBy (symbol "{")
                      ; notFollowedBy (symbol ".")
                      ; notFollowedBy (symbol "[")
                      ; notFollowedBy (symbol "(")
                      ; return xexp }
-                , parse_struct_inits p x  -- struct initialization eg: { ... }  
-                , parse_deref_seq xexp    -- dereference sequence  eg: .x 
-                , parseCallArgs x combineAsCallOrCast 
+                , parse_struct_inits p x  -- struct initialization eg: { ... }
+                , parse_deref_seq xexp    -- dereference sequence  eg: .x
+                , parseCallArgs x combineAsCallOrCast
                                           -- call or cast          eg: (e1,e2)
                 ]
        }
   where
-    parse_struct_inits p x 
+    parse_struct_inits p x
       = do { tfs <- braces (sepBy1 parse_init semi)
            ; return (eStruct (Just p) () (patch_prim_struct x) tfs) }
     patch_prim_struct x | x == "complex" = complex32TyName
-                        | otherwise      = x 
+                        | otherwise      = x
     parse_init
       = do { fn <- identifier
-           ; symbol "=" 
+           ; symbol "="
            ; fe <- parseExpr
-           ; return (fn,fe) 
+           ; return (fn,fe)
            }
 
-    parse_deref_seq e 
+    parse_deref_seq e
       = choice [ do { symbol "."
                     ; y <- identifier
                     ; p <- getPosition
                     ; let pe = eProj (Just p) () e y
                     ; choice [ try (parse_deref_seq pe)
-                             , return pe 
+                             , return pe
                              ]
                     }
                , do { (est,len) <- brackets rangeParser
@@ -689,11 +689,11 @@ parseWithVarOnHead
 
 
 parseTerm  :: BlinkParser SrcExp
-parseTerm 
-  = choice [ parens $ 
-             do { p <- getPosition 
+parseTerm
+  = choice [ parens $
+             do { p <- getPosition
                 ; choice [ try parseExpr
-                         , do { whiteSpace 
+                         , do { whiteSpace
                               ; return (eVal (Just p) () VUnit)
                               } ] }
            , parseValue
@@ -702,48 +702,48 @@ parseTerm
            , parse_ref
            , parse_cond
            ] <?> "expression"
-  where 
+  where
 
-    parse_let 
+    parse_let
       = do { reserved "let"
            ; p <- getPosition
-           ; nm <- parseVarBind 
-           ; symbol "=" 
+           ; nm <- parseVarBind
+           ; symbol "="
            ; e1 <- parseExpr
            ; reserved "in"
-           ; e2 <- parseExpr 
+           ; e2 <- parseExpr
            ; return $ eLet (Just p) () nm AutoInline e1 e2
            }
 
-    parse_ref 
+    parse_ref
       = do { p <- getPosition
            ; (x,ty,mbinit) <- declParser
            ; let bnd = case mbinit of {Nothing -> Left ty; Just ei -> Right ei}
            ; reserved "in"
-           ; e2 <- parseExpr 
+           ; e2 <- parseExpr
            ; return $ eLetRef (Just p) () x bnd e2
            }
-   
-    parse_cond 
+
+    parse_cond
       = do { p <- getPosition
            ; reserved "if"
-           ; e <- parseExpr 
+           ; e <- parseExpr
            ; reserved "then"
            ; e1 <- parseExpr
            ; reserved "else"
            ; e2 <- parseExpr
-           ; return (eIf (Just p) () e e1 e2) 
+           ; return (eIf (Just p) () e e1 e2)
            }
 
 parseExpr :: BlinkParser SrcExp
   = buildExpressionParser exprOpTable parseTerm <?> "expression"
 
-exprOpTable 
-  = [ 
+exprOpTable
+  = [
           [ prefixUnOp (reservedOp "-") Neg
           , prefixUnOp (reserved "not") Not
-          , prefixUnOp (reservedOp "~") BwNeg 
-          ]   
+          , prefixUnOp (reservedOp "~") BwNeg
+          ]
 
         , [ prefixUnOp (reserved "length") ALength ]
 
@@ -751,21 +751,21 @@ exprOpTable
         , [ infixBinOp (reservedOp "**") Expon AssocLeft
           , infixBinOp (reservedOp "*")  Mult  AssocLeft
           , infixBinOp (reservedOp "/")  Div   AssocLeft
-          , infixBinOp (reservedOp "%")  Rem   AssocLeft 
+          , infixBinOp (reservedOp "%")  Rem   AssocLeft
           ]
 
         , [ infixBinOp (reservedOp "+" ) Add AssocLeft
-          , infixBinOp (reservedOp "-" ) Sub AssocLeft 
+          , infixBinOp (reservedOp "-" ) Sub AssocLeft
           ]
 
         , [ infixBinOp (reservedOp "<<") ShL AssocLeft
-          , infixBinOp (reservedOp ">>") ShR AssocLeft 
+          , infixBinOp (reservedOp ">>") ShR AssocLeft
           ]
 
         , [ infixBinOp (reservedOp "<" ) Lt  AssocLeft
           , infixBinOp (reservedOp "<=") Leq AssocLeft
           , infixBinOp (reservedOp ">" ) Gt  AssocLeft
-          , infixBinOp (reservedOp ">=") Geq AssocLeft 
+          , infixBinOp (reservedOp ">=") Geq AssocLeft
           ]
 
         , [ infixBinOp (reservedOp "&" ) BwAnd AssocLeft ]
@@ -775,24 +775,24 @@ exprOpTable
         , [ infixBinOp (reservedOp "|" ) BwOr AssocLeft  ]
 
         , [ infixBinOp (reservedOp "==") Eq  AssocLeft
-          , infixBinOp (reservedOp "!=") Neq AssocLeft 
-          ] 
+          , infixBinOp (reservedOp "!=") Neq AssocLeft
+          ]
 
         , [ infixBinOp (reservedOp "&&") And AssocLeft ]
-        , [ infixBinOp (reservedOp "||") Or AssocLeft  ] 
+        , [ infixBinOp (reservedOp "||") Or AssocLeft  ]
 
    ]
 
 
-prefixUnOp parseop op 
+prefixUnOp parseop op
   = Prefix action
   where action = do { p <- getPosition
                     ; parseop
                     ; return (eUnOp (Just p) () op) }
 
-infixBinOp parseop op 
+infixBinOp parseop op
   = Infix action
-  where action 
+  where action
           = do { p <- getPosition
                ; parseop
                ; return (\x y -> eBinOp (Just p) () op x y) }
@@ -801,7 +801,7 @@ infixBinOp parseop op
 {- New Syntax
    ~~~~~~~~~~
 
-comp 
+comp
   ::= comp >>> comp | comp |>>>| comp
     | f(args)
     | repeat { commands }    | repeat comp
@@ -811,22 +811,22 @@ comp
     | takes expr
     | emit expr
     | emits expr
-    | read | write 
+    | read | write
     | do { stmts }
     | let binding in comp
 
-commands := sepBy1 ";" command  
+commands := sepBy1 ";" command
 
-command 
+command
   ::= (x <- comp)
     | comp
     | let binding in command
 
 
-expr ::= x | unops | binops | values | f(...) 
-       | do { stmts } 
+expr ::= x | unops | binops | values | f(...)
+       | do { stmts }
        | if e1 then expr else expr
-       | lut e 
+       | lut e
        | let binding in expr
        | (expr)
 
@@ -837,11 +837,11 @@ program ::= defs; main = comp
 
 defs := sequence def
 
-def := let [qual] f(args) [opt_return_ty] = 
-              local_decls_inits; 
+def := let [qual] f(args) [opt_return_ty] =
+              local_decls_inits;
               (expr | comp)
 
-     | let external f(args) return_ty 
+     | let external f(args) return_ty
      | struct struct_def
 
 
