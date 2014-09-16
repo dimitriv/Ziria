@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -46,7 +46,7 @@ import Opts
 import CgProgram ( codeGenProgram )
 
 import qualified PassPipeline as PP
- 
+
 import qualified BlinkParseComp as NewParser
 
 import PassFold
@@ -98,16 +98,16 @@ main = failOnException $ do
     input <- readFile inFile
 
     -- putStrLn "command line parsed ..."
-     
-    prog <- 
-          failOnError $ 
+
+    prog <-
+          failOnError $
           do { let pm = runParserT NewParser.parseProgram 0 inFile input
              ; NewParser.runParseM pm [] }
 
     --    putStrLn "parsed ..."
     --    putStrLn $ "parsed prog = " ++ show prog
 
-    rensym <- GS.initGenSym 
+    rensym <- GS.initGenSym
     prog_renamed <- runRenM (renameProg prog) rensym []
     sym <- GS.initGenSym
 
@@ -119,11 +119,11 @@ main = failOnException $ do
 
     -- Maybe we should combine the two calls to the type checker?
     (globals', unifiers0)
-       <- failOnError $ 
+       <- failOnError $
           runTcM (tyCheckTopDecls (globals prog_renamed))
-                 tdef_env         
-                 varenv                               
-                 cenv                                 
+                 tdef_env
+                 varenv
+                 cenv
                  sym
                  GlobalDefs
                  emptyTcMState
@@ -134,13 +134,13 @@ main = failOnException $ do
     let decl_env = envOfDecls (globals prog_renamed)
 
     (c', unifiers1)
-       <- failOnError $ 
-          runTcM (tyCheckTopComp (comp prog_renamed)) 
-                 tdef_env         
-                 decl_env                                                
-                 cenv                                                   
+       <- failOnError $
+          runTcM (tyCheckTopComp (comp prog_renamed))
+                 tdef_env
+                 decl_env
+                 cenv
                  sym
-                 GlobalDefs                                              
+                 GlobalDefs
                  unifiers0
 
     let in_ty  = inTyOfCTyBase (compInfo c');
@@ -155,12 +155,12 @@ main = failOnException $ do
     -- First let us run some small-scale optimizations
     folded <- runFoldPhase dflags sym 1 c'
 
-    -- putStrLn $ "run the fold phase ..." ++ show folded 
+    -- putStrLn $ "run the fold phase ..." ++ show folded
 
     -- putStrLn $ "proceeding with vectorization ...."
 
-    cands <- runVectorizePhase dflags sym tdef_env decl_env cenv unifiers1 $ 
-             folded 
+    cands <- runVectorizePhase dflags sym tdef_env decl_env cenv unifiers1 $
+             folded
 
     -- The vectorizer returns a list of candidate
     -- vectorizations. But I think that if it is empty then this
@@ -186,19 +186,19 @@ main = failOnException $ do
     -- Generate code
     sym <- GS.initGenSym
 
-    let compile_threads (sc,ctx,tid_cs,bufTys,fn) 
-          = do { defs <- failOnError $ 
-                         evalCg sym (getStkThreshold dflags) $ 
-                         codeGenProgram dflags globals' 
+    let compile_threads (sc,ctx,tid_cs,bufTys,fn)
+          = do { defs <- failOnError $
+                         evalCg sym (getStkThreshold dflags) $
+                         codeGenProgram dflags globals'
                                         ctx tid_cs bufTys (in_ty,yld_ty)
                ; return $ CompiledProgram sc defs fn }
-    code_names <- forM icands compile_threads 
+    code_names <- forM icands compile_threads
 
     -- putStrLn "post code generation ..."
 
     mapM_ outputCompiledProgram code_names
   where
-    check_vect_cands cands 
+    check_vect_cands cands
       = case cands of
          [c] -> return ()
          []  -> failWithError "Vect failure: non-sensical annotations?"
@@ -206,22 +206,22 @@ main = failOnException $ do
 
     runFoldPhase :: DynFlags -> GS.Sym -> Int -> Comp CTy Ty -> IO (Comp CTy Ty)
     -- Fold Phase
-    runFoldPhase dflags sym i c 
-      | isDynFlagSet dflags Opt 
+    runFoldPhase dflags sym i c
+      | isDynFlagSet dflags Opt
       = do { c' <- runFold dflags sym c
-           ; dump dflags DumpFold (".fold-phase" ++ show i ++ ".dump") 
+           ; dump dflags DumpFold (".fold-phase" ++ show i ++ ".dump")
                                  ((text . show . ppComp) c')
            ; return c' }
       | otherwise
-      = return c 
+      = return c
 
     runAutoLUTPhase :: DynFlags -> GS.Sym -> Comp CTy Ty -> IO (Comp CTy Ty)
     -- AutoLUTPhase
-    runAutoLUTPhase dflags sym c 
-      | isDynFlagSet dflags AutoLUT 
+    runAutoLUTPhase dflags sym c
+      | isDynFlagSet dflags AutoLUT
       = do { verbose dflags $ text "Auto-LUTting (start)"
            ; c' <- runAutoLUT dflags sym c
-           ; dump dflags DumpAutoLUT (".autolut.dump") 
+           ; dump dflags DumpAutoLUT (".autolut.dump")
                                      ((text . show . ppComp) c')
            ; verbose dflags $ text "Auto-LUTting (end)"
            ; return c' }
@@ -231,22 +231,22 @@ main = failOnException $ do
     runVectorizePhase :: DynFlags
                       -> GS.Sym
                       -> TyDefEnv
-                      -> Env 
-                      -> CEnv 
-                      -> TcMState 
+                      -> Env
+                      -> CEnv
+                      -> TcMState
                       -> Comp CTy Ty
                       -> IO [Comp CTy Ty]
     -- Vectorize Phase
-    runVectorizePhase dflags sym tdef_env decl_env cenv st c 
-      | isDynFlagSet dflags Vectorize 
+    runVectorizePhase dflags sym tdef_env decl_env cenv st c
+      | isDynFlagSet dflags Vectorize
       = runDebugVecM dflags c tdef_env decl_env cenv sym st
       | otherwise
-      = return [c] 
+      = return [c]
 
-    runPipelinePhase :: DynFlags -> GS.Sym -> Comp CTy Ty 
+    runPipelinePhase :: DynFlags -> GS.Sym -> Comp CTy Ty
                      -> IO PP.PipelineRetPkg
     -- Pipeline Phase
-    runPipelinePhase dflags _ c 
+    runPipelinePhase dflags _ c
       | isDynFlagSet dflags Pipeline
       = PP.runPipeLine (isDynFlagSet dflags DumpPipeline) c
       | otherwise
@@ -257,21 +257,21 @@ main = failOnException $ do
         -> (Comp CTy Ty, FilePath)
         -> IO (Comp CTy Ty, CompCtxt, [(String, Comp CTy Ty)], [Ty], FilePath)
     runPostVectorizePhases dflags sym (c,fn) = do
-        verbose dflags $ 
+        verbose dflags $
            text "Result in file:" <+> text fn
-        dump dflags DumpVect ".vec.dump" $ 
+        dump dflags DumpVect ".vec.dump" $
            text "Result:" </> (text . show . ppCompTypedVect) c
-        dump dflags DumpVectTypes ".vec-types.dump" $ 
+        dump dflags DumpVectTypes ".vec-types.dump" $
            text "Result (with types):" </> (text . show . ppCompTyped) c
-                                         
+
         -- Second round of folding
         fc <- runFoldPhase dflags sym 2 c
-                                        
+
         lc <- runAutoLUTPhase dflags sym fc
-                                                   
+
         PP.MkPipelineRetPkg { PP.context = comp_ctxt
                             , PP.threads = comp_threads
-                            , PP.buf_tys = tys } 
+                            , PP.buf_tys = tys }
           <- runPipelinePhase dflags sym lc
         return (lc, comp_ctxt, comp_threads,tys,fn)
 
@@ -290,7 +290,7 @@ failOnException m =
                                           exitFailure
 
 failWithError :: Show a => a -> IO b
-failWithError err 
+failWithError err
   = do hFlush stdout
        hPrint stderr err
        exitFailure

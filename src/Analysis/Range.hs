@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -74,7 +74,7 @@ joinR _             RangeTop      = RangeTop
 joinR (Range l1 h1) (Range l2 h2) = Range (min l1 l2) (max h1 h2)
 
 data RState = RState { ranges :: Map Name Range }
-             
+
 newtype R a = R { runR :: RState -> Either String (a, RState) }
 
 instance Monad R where
@@ -110,7 +110,7 @@ joinRange v r1 =
     f (Just r2) = Just $ r1 `joinR` r2
 
 lookupRange :: Name -> R Range
-lookupRange v = 
+lookupRange v =
     gets $ \s -> case Map.lookup v (ranges s) of
                    Nothing -> RangeTop
                    Just r  -> r
