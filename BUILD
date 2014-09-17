@@ -1,6 +1,6 @@
 To build the Ziria (wplc) compiler (under Linux or Windows/Cygwin) you will need:
 
-* GHC 7.6 (including a cabal installation)
+* GHC 7.8 (including a cabal installation)
 * The cabal packages (install them with 'cabal install <package-name>' within cygwin shell)
    - text-1.1.1.3
    - parsec
