@@ -25,10 +25,10 @@ Generally the aim is to have a single Makefile target per test.
 
 ### tests/parser
 
-The parser tests currently test _only_ whether it parses or not. (TODO: Verify
-parse trees.) The programs in this directory are not intended to be run, so
-there are no .outfiles, .infiles, or .ground files (see below). There are only
-.wpl (ziria source) files, which
+The default target (`all`) in this directory test _only_ whether it parses or
+not. The programs in this directory are not intended to be run, so there are no
+.outfiles, .infiles, or .ground files (see below). There are only .wpl (ziria
+source) files, which
 
 1. get converted to %.wpl.expanded by running cpp
 2. then gets compiled to %.c by running wplc
@@ -41,6 +41,16 @@ PP   = ../../scripts/compile.sh
 ```
 
 instead only step (2) is executed.
+
+In addition, there is a `parsertests` target which uses `wplc` to dump a parse
+tree (`%.wpl.expanded.ast.dump`) and compares it to a previously generated 
+parse tree (`%.wpl.expanded.ast.dump.ground`). Currently these ground AST dumps
+are not in the repo as they can get quite big. You can generate them locally
+with
+
+```
+for i in *.wpl; do n=`basename $i .wpl`; make $n.ast.accept; done
+```
 
 ### tests/backend
 
@@ -61,9 +71,14 @@ make var-conflict.accept
 
 This has to be done on a target by target basis.
 
+In addition, the `parsertests` target is available here too.
+
 ### code/WiFi
 
 This directory contains the code for the actual 802.11a/g implementation, which
 is itself a very important test case. Running the associated tests (`runTests`)
-requires WinDDK, SORA, and a Windows machine.  (TODO: Split so that can run
-the compiler separately, so that we can at least test that we get C output.)
+requires WinDDK, SORA, and a Windows machine.
+
+However, the `parsertests` target is available in code/WiFi/receiver/tests,
+code/WiFi/transmitter/tests, and code/tests, and does not need a C compiler at
+all.

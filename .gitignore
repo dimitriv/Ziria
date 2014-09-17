@@ -267,3 +267,7 @@ csrc/CompilerVS/CompilerVS13_32.vcxproj
 csrc/mac/CompilerVS/Debug/*
 csrc/mac/CompilerVS/Release/*
 csrc/mac/CompilerVS/x64/*
+
+# for now, ignore AST dumps
+*.ast.dump
+*.ast.dump.ground
