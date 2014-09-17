@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -47,20 +47,21 @@ data DynFlag =
   | StdoutDump
   | BoundsCheck
 
-  | NativeMitigators 
-  | NoLUTHashing 
+  | NativeMitigators
+  | NoLUTHashing
 
   | Opt
   | Verbose
   | DumpVect
   | DumpTypes
+  | DumpAst
   | Vectorize
   | AutoLUT
   | MaxLUTSize Integer -- ^ Max size of LUT, in bytes
-  | StackAllocThreshold Int 
+  | StackAllocThreshold Int
   | Pipeline
   | AffinityMask Int
-  | DummyThread  
+  | DummyThread
   | DumpToFile
   | DumpFold
   | DumpInline
@@ -95,7 +96,7 @@ maxLUTSize :: DynFlags -> Integer
 maxLUTSize dflags =
     case [sz | MaxLUTSize sz <- dflags] of
       []     -> mAX_LUT_SIZE_DEFAULT
-      sz : _ -> sz                      
+      sz : _ -> sz
 
 dump :: MonadIO m
      => DynFlags   -- ^ Dynamic flags
@@ -107,7 +108,7 @@ dump dflags dflag ext doc | isDynFlagSet dflags dflag = liftIO $
     withDumpHandle $ \h -> hPutDoc h doc
   where
     withDumpHandle :: (Handle -> IO ()) -> IO ()
-    withDumpHandle m 
+    withDumpHandle m
        | isDynFlagSet dflags StdoutDump = m stderr >> putStrLn ""
        | otherwise
        = case [path | InputFile path <- dflags] of
@@ -139,6 +140,7 @@ options =
      , Option []        ["ddump-vect"]          (NoArg DumpVect)      "dump vectorization output"
      , Option []        ["ddump-types"]         (NoArg DumpTypes)     "dump a typechecked version of program"
      , Option []        ["ddump-vect-types"]    (NoArg DumpVectTypes) "dump typechecked vectorized program"
+     , Option []        ["ddump-ast"]           (NoArg DumpAst)       "dump the parsed AST"
      , Option []        ["vectorize"]           (NoArg Vectorize)     "vectorize program"
      , Option []        ["autolut"]             (NoArg AutoLUT)       "automatically convert function to use LUTs"
      , Option []        ["pipeline"]            (NoArg Pipeline)      "pipeline standalone computations"
@@ -150,15 +152,15 @@ options =
      , Option []        ["ddump-to-file"]       (NoArg DumpToFile)    "dump to a file"
      , Option []        ["ddump-fold"]          (NoArg DumpFold)      "dump results of folding"
      , Option []        ["ddump-inline"]        (NoArg DumpInline)    "dump results of inlining"
-     , Option []        ["ddump-pipeline"]      (NoArg DumpPipeline)  "dump results of pipelining" 
+     , Option []        ["ddump-pipeline"]      (NoArg DumpPipeline)  "dump results of pipelining"
      , Option []        ["ddump-lut"]           (NoArg DumpLUT)       "dump results of LUTting"
-     , Option []        ["ddump-autolut"]       (NoArg DumpAutoLUT)   "dump results of auto-LUT"   
+     , Option []        ["ddump-autolut"]       (NoArg DumpAutoLUT)   "dump results of auto-LUT"
 
      , Option []        ["no-exp-fold"]         (NoArg NoExpFold)     "do not fold/inline expressions"
      , Option []        ["no-fold"]             (NoArg NoFold)        "do not fold/inline computations and expressions"
-     , Option []        ["no-lut"]              (NoArg NoLUT)         "do not construct LUTs"       
+     , Option []        ["no-lut"]              (NoArg NoLUT)         "do not construct LUTs"
 
-     , Option []        ["mock-lut"]            (NoArg MockLUT)       "debugging help for LUTS (internal only)"       
+     , Option []        ["mock-lut"]            (NoArg MockLUT)       "debugging help for LUTS (internal only)"
 
      , Option []        ["max-lut"]             (ReqArg parseMaxLUTOpt "SIZE")    "max lut size"
      , Option []        ["stack-threshold"]     (ReqArg parseStkThres  "SIZE")    "stack allocation threshold"
@@ -168,7 +170,7 @@ options =
 
 usage :: String
 usage = "Usage: wpl [OPTION...] files..."
-    
+
 parseAffinityMask :: Maybe String -> DynFlag
 parseAffinityMask Nothing  = AffinityMask defaultAffinityMask
 parseAffinityMask (Just i) = AffinityMask $ read i
@@ -194,7 +196,7 @@ parseMaxLUTOpt s =
       _            -> error $ "bad argument to --max-lut option: " ++ s
 
 compilerOpts :: [String] -> IO (DynFlags, [String])
-compilerOpts argv = 
+compilerOpts argv =
   case getOpt Permute options argv of
          (o,n,[]  ) -> return (o,n)
          (_,_,errs) -> ioError (userError (concat errs ++ usageInfo usage options))

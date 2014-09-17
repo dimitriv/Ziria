@@ -78,3 +78,22 @@ clean:
 all-clean: clean
 	rm -f ./*~
 	rm -f ./*dump
+
+# Parser tests
+
+.PRECIOUS: %.blk.expanded.ast.dump
+
+PARSERTESTS = $(patsubst %.blk, %.parsertest, $(wildcard *.blk))
+
+parsertests: $(PARSERTESTS)
+
+%.parsertest: %.blk.expanded.ast.dump 
+	diff -Nur $< $<.ground 
+
+%.blk.expanded.ast.dump: %.blk
+	EXTRAOPTS='--ddump-ast'	../../../scripts/preprocesscompile.sh $< 
+
+%.ast.accept: %.blk.expanded.ast.dump
+	cp $< $<.ground
+
+# vi:set noexpandtab:

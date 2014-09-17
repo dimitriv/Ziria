@@ -21,7 +21,7 @@
 export UNAME=$(uname -s)
 export WPLC="$TOP/wplc"
 
-if [ "$UNAME" = "Linux" ]
+if [ "$UNAME" = "Linux" -o "$UNAME" = "Darwin" ]
 then 
    export CSRC_NATIVE=${TOP}/csrc
    export CSRC_POSIX=${TOP}/csrc

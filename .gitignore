@@ -91,6 +91,7 @@ tests/*/compout
 tests/*/*.wpl.c
 tests/*/*.wpl.c.outfile
 tests/*/*.wpl.expanded
+tests/*/*.out
 doc/*/*.aux
 doc/*/*.log
 doc/*/*.out
@@ -297,3 +298,7 @@ code/WiFi/mac/CompilerVS/CompilerVS13-mac.opensdf
 code/WiFi/mac/CompilerVS/CompilerVS13-mac.sdf
 code/WiFi/mac/CompilerVS/CompilerVS13-mac.v12.suo
 code/WiFi/mac/CompilerVS/CompilerVS13-mac.vcxproj.user
+
+# for now, ignore AST dumps
+*.ast.dump
+*.ast.dump.ground

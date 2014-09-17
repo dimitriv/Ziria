@@ -70,3 +70,22 @@ clean:
 all-clean: clean
 	rm -f ./*~
 	rm -f ./*dump
+
+# Parser tests
+
+.PRECIOUS: %.wpl.expanded.ast.dump
+
+PARSERTESTS = $(patsubst %.wpl, %.parsertest, $(wildcard *.wpl))
+
+parsertests: $(PARSERTESTS)
+
+%.parsertest: %.wpl.expanded.ast.dump 
+	diff -Nur $< $<.ground 
+
+%.wpl.expanded.ast.dump: %.wpl
+	EXTRAOPTS='--ddump-ast'	../../scripts/preprocesscompile.sh $< 
+
+%.ast.accept: %.wpl.expanded.ast.dump
+	cp $< $<.ground
+
+# vi:set noexpandtab:
