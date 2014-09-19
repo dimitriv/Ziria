@@ -76,6 +76,9 @@ int32 __ext_dbgplot_complex_line(complex16 *line, int len, int16 type)
 		case 3:
 			buf[i] = (int)line[i].re * (int)line[i].re + (int)line[i].im * (int)line[i].im;
 			break;
+		default:
+			buf[i] = (int)line[i].re;
+			break;
 		}
 	}
 	initDbgPlot();
