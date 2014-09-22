@@ -389,12 +389,12 @@ num32 num64to32(num64 x)
 #endif
 		ret = 0x7fffffff;
 	}
-	else if (x < - (0x80000000))
+	else if (x < -((num64)0x80000000))
 	{
 #ifdef DEBUG
 		fprintf ("Warning: truncating 32-8 (negative) cornercase\n");
 #endif
-		ret = - (0x80000000);
+		ret = -((num64)0x80000000);
 	}
 	else
 		ret = x;
