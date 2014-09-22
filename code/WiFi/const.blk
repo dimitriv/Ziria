@@ -47,7 +47,8 @@ let QPSKAmp = 707 in
 struct CCAParams = {
   noSamples:int32;              -- Total number of samples read from the start of CCA
   shift:int16;                  -- Shift within 16 samples at which the peak was detected
-  energy:int32                  -- Preamble energy calculated using calcEnergy() from CCA
+  energy:int32;                 -- Preamble energy calculated using calcEnergy() from CCA
+  maxCorr:int32                 -- Value of correlation that triggered CCA
 } in 
 
 struct LTECoeffs = { 

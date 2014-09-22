@@ -55,6 +55,18 @@ int32 __ext_dbgplot_real_line(int16 *line, int len)
 #endif
 }
 
+int32 __ext_dbgplot_real_line32(int32 *line, int len)
+{ 
+#ifdef BUILDARCHX86
+	initDbgPlot();
+	PlotLine("Line", (int*)(line), len);
+	return 0;
+#else
+	printf("DbgPlot not supported in X64 mode.\n");
+	exit(1);
+#endif
+}
+
 int32 __ext_dbgplot_complex_line(complex16 *line, int len, int16 type)
 {
 #ifdef BUILDARCHX86

@@ -44,6 +44,10 @@ else
       echo "RX only ..."
       cp dummy_tx.c tx_thread.c
       cp rx.c rx_thread.c
+  elif [ "$MAC_TYPE" = 'TEST_CCA' ]; then
+      echo "TEST CCA only ..."
+      cp dummy_tx.c tx_thread.c
+      cp test_cca.c rx_thread.c
   else
       echo "TX/RX ..."
       cp tx.c tx_thread.c
@@ -62,8 +66,10 @@ else
   if [ "$MAC_TYPE" = 'RX' ]; then
     cp -f ../mac/CompilerVS/x64/Debug/CompilerVS13-mac.exe rx.out
   else
-    cp -f ../mac/CompilerVS/x64/Debug/CompilerVS13-mac.exe mac.out
+    if [ "$MAC_TYPE" = 'TEST_CCA' ]; then
+      cp -f ../mac/CompilerVS/x64/Debug/CompilerVS13-mac.exe test_cca.out
+    else
+      cp -f ../mac/CompilerVS/x64/Debug/CompilerVS13-mac.exe mac.out
+    fi
   fi
 fi
-
-

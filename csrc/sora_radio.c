@@ -47,7 +47,7 @@ void RadioStart(BlinkParams *params) {
 	params->pRxBuf = NULL;
 
 	// DEBUG
-	printf("%ld, %ld, %ld, %ld, %ld, %ld, %ld\n", 
+	printf("RadioID: %ld, RX_PA: %ld, RX_Gain: %ld, TX_Gain: %ld, Central Freq: %ld, Freq Offset: %ld, Sample Rate: %ld\n", 
 		params->radioParams.radioId, params->radioParams.RXpa, params->radioParams.RXgain,
 		params->radioParams.TXgain, params->radioParams.CentralFrequency, params->radioParams.FreqencyOffset,
 		params->radioParams.SampleRate);

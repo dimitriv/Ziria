@@ -32,6 +32,7 @@ COMPILER?=vs
 
 PP    = scripts/preprocesscompile-mac-$(COMPILER).sh
 CP    = scripts/ccompile-mac-$(COMPILER)-inline.sh
+CP32  = scripts/ccompile-mac-$(COMPILER)32-inline.sh
 CPDEB = scripts/ccompile-mac-$(COMPILER).sh
 DIFF  = ../../../tools/BlinkDiff
 
@@ -98,6 +99,9 @@ rx.copt : rx.blk
 tx.copt : tx.blk
 	EXTRADEF='-DFAST' EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
 
+test_cca.copt : test_cca.blk
+	EXTRAOPTS='--vectorize --autolut --native-mitigators $(EXTRAOPTS) --name=_rx' $(PP) $< $(basename $@)
+
 
 tx.outopt: tx.copt
 	MAC_TYPE=TX EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
@@ -105,6 +109,8 @@ tx.outopt: tx.copt
 rx.outopt: rx.copt
 	MAC_TYPE=RX EXTRAOPTS='$(EXTRAOPTS)' $(CP) 
 
+test_cca.outopt: test_cca.copt
+	MAC_TYPE=TEST_CCA EXTRAOPTS='$(EXTRAOPTS)' $(CP32) 
 
 
 # TX real
@@ -133,6 +139,15 @@ rx.ip: rx.outopt
 	     --RX-output=ip \
 	     --RX-sora-radio-id=1 \
 	     --RX-sora-central-frequency=739
+
+# Test CCA
+test_cca.run: test_cca.outopt
+	./test_cca.out --MAC-type=RX-only \
+	     --RX-input=sora \
+	     --RX-output=dummy \
+	     --RX-sora-radio-id=1 \
+	     --RX-sora-central-frequency=739
+
 
 
 # Not implemented yet:

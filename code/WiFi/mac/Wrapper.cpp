@@ -32,9 +32,9 @@
 #include "../../../csrc/ext_arr.c"
 #include "../../../csrc/ext_math.c"
 //Sora only supports debugPlot lib in WIN32 and this is the fast 64-bit version
-//#ifdef WIN32
-//	#include "sora_ext_visual.c"
-//#endif
+#ifdef WIN32
+	#include "sora_ext_visual.c"
+#endif
 #include "../../../csrc/sora_radio.c"
 #include "../../../csrc/utils.c"
 

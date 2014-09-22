@@ -149,6 +149,16 @@ in
 -- read[complex16] >>> test() >>> write[bit]
 
 
+
+
+{-
+read[complex16] >>> 
+   times 10000 {x<-take; emit x}
+>>> write
+-}
+
+
+
 {-
 read[complex16] >>> 
   skip() >>>
@@ -157,7 +167,7 @@ read[complex16] >>>
   pad() >>>
 #endif
   {det <- detectPreamble()
-    ; times 10000 {x<-take; emit x}
+    ; times 100000 {x<-take; emit x}
   }
 >>> write
 -}
@@ -189,17 +199,21 @@ read[complex16] >>>
    read >>> 
        seq{ det<-detectPreamble()
        #ifndef FAST
-          ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift}
+          ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, ", energy: ", det.energy, ", maxCorr: ", det.maxCorr}
        #endif
           ; params <- (LTS(det.shift)); 
             DataSymbol(det.shift) 
             >>> FFT() 
             >>> ChannelEqualization(params)
+            >>> { x<-takes 100000; emits x}
+-- DEBUG
+{-
             >>> PilotTrack() 
             >>> GetData()
        #ifdef DO_DECODING
             >>> receiveBits()
        #endif
+-}
        }
    >>> write
 
