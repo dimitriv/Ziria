@@ -1,4 +1,4 @@
-let comp modulate_qpsk () = 
+fun comp modulate_qpsk () {
   var x:arr[2] bit;
   var outc : complex16; 
   let amp = 1 in         -- 1/sqrt(2)
@@ -29,7 +29,7 @@ let comp modulate_qpsk () =
     };
     emit outc
   }
-in
+} in
 
 read >>> modulate_qpsk() >>> write
 

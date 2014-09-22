@@ -35,22 +35,22 @@
 #include "../transmitter/crc.blk"
 
 
-let comp detectSTS() = 
+fun comp detectSTS() {
   removeDC() >>> cca()
-in 
+} in 
 
 -- FreqCompensation does not work but it is nor crucial so we remove it for now
 --       DataSymbol() >>> FreqCompensation(params) >>> FFT() >>> ChannelEqualization(params) >>> 
 
 
-let comp receiveBits() = 
+fun comp receiveBits() {
        seq { hdata <- DecodePLCP()
            ; Decode(hdata) >>> seq { (c : arr[4] bit) <- crc(hdata.len, false); check_crc(c) }
        }
-in
+} in
 
 
-let comp receiver() = 
+fun comp receiver() {
   downSample() >>> 
   seq{ det<-detectSTS()
 #ifndef FAST
@@ -62,6 +62,6 @@ let comp receiver() =
        >>> GetData() 
        >>> receiveBits()
   }
-in
+} in
 
 

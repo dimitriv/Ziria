@@ -25,7 +25,7 @@
 -- 
 -- Note: we don't pack it in complex32 
 -- as it requires extra cycles and is often not needed
-let v_mul_complex16_int32(re:arr int, im:arr int, a:arr complex16, b:arr complex16) = 
+fun v_mul_complex16_int32(re:arr int, im:arr int, a:arr complex16, b:arr complex16) {
   var vs1:arr[4] complex16;
   var vs2:arr[4] complex16;
 
@@ -50,7 +50,7 @@ let v_mul_complex16_int32(re:arr int, im:arr int, a:arr complex16, b:arr complex
     re[i] := (int(a[i].re)*int(b[i].re) - int(a[i].im)*int(b[i].im ));
     im[i] := (int(a[i].im)*int(b[i].re) + int(a[i].re)*int(b[i].im ));
   };
-in
+} in
 
 
 
@@ -59,7 +59,7 @@ in
 {-
 -- c = (a * b) << shift
 -- We need to do shift before casting to complex16 to avoid loss of precision
-let v_mul_complex16_slow(c:arr complex16, a:arr complex16, b:arr complex16, shift:int) = 
+fun v_mul_complex16_slow(c:arr complex16, a:arr complex16, b:arr complex16, shift:int) { 
   var re32 : arr[length(a)] int32;
   var im32 : arr[length(a)] int32;
 
@@ -69,14 +69,14 @@ let v_mul_complex16_slow(c:arr complex16, a:arr complex16, b:arr complex16, shif
     v_shift_right_int32(im32,im32,shift);
   }
   v_pack_int32_complex16(c,re32,im32);
-in
+} in
 -}
 
 
 
 -- c = (a * b) << shift
 -- We need to do shift before casting to complex16 to avoid loss of precision
-let v_mul_complex16(c:arr complex16, a:arr complex16, b:arr complex16, shift:int) = 
+fun v_mul_complex16(c:arr complex16, a:arr complex16, b:arr complex16, shift:int) { 
   var vs1:arr[4] complex16;
   var vs2:arr[4] complex16;
   var re32 : arr[4] int32;
@@ -109,4 +109,4 @@ let v_mul_complex16(c:arr complex16, a:arr complex16, b:arr complex16, shift:int
     c[i] := complex16{re=int16(re32[i-vlen*4]); im=int16(im32[i-vlen*4])};
   };
 
-in
+} in

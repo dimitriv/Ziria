@@ -25,13 +25,13 @@ in
 let external interleave_loww(x:arr[4] complex16, y:arr[4] complex16, z:arr[4] complex16) : ()
 in
 
-let interleave_aux(x:arr[4] complex16, y:arr[4] complex16) = 
+fun interleave_aux(x:arr[4] complex16, y:arr[4] complex16) {
   var oup : arr[4] complex16;
   interleave_loww(x,y,oup);
   return oup
-in
+} in
 
-let comp downSample() = 
+fun comp downSample() {
 
   var pi0:arr[4] complex16;
   var pi1:arr[4] complex16;
@@ -54,4 +54,4 @@ let comp downSample() =
   }
 
 
-in
+} in

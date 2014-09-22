@@ -24,7 +24,7 @@
 
 
 
-let comp dummy() = 
+fun comp dummy() {
   times 1 {        -- OK
 --  times 110000 {   -- OK (4234)
 --  times 200000 { -- OK (6424)
@@ -43,22 +43,22 @@ let comp dummy() =
     x<- take;
     emit x;
   }  
-in
+} in
 
 
 
-let comp detectPreamble() = 
+fun comp detectPreamble() { 
   (removeDC() >>> cca())
-in 
+} in 
 
 
 
 #ifdef DO_DECODING
-let comp receiveBits() = 
+fun comp receiveBits() { 
        seq { hdata <- DecodePLCP()
            ; Decode(hdata) >>> seq { (c : arr[4] bit) <- crc(hdata.len, false); check_crc(c) }
        }
-in
+} in
 #endif
 
 

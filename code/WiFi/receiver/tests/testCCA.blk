@@ -22,9 +22,9 @@
 #include "../downSample.blk"
 #include "../cca/cca.blk"
 
-let comp detectPreamble() = 
+fun comp detectPreamble() { 
   (removeDC() >>> cca())
-in 
+} in 
 
 
 read[complex16] >>> downSample() >>> {det<-detectPreamble(); emit int16(det.noSamples) } >>> write[int16]

@@ -31,7 +31,7 @@
 
 
 
-let build_coeff(pcoeffs:arr[64] complex16, ave:int16, delta:int16) = 
+fun build_coeff(pcoeffs:arr[64] complex16, ave:int16, delta:int16) {
   var th:int16;
 
   th := ave - delta * 26;
@@ -50,11 +50,11 @@ let build_coeff(pcoeffs:arr[64] complex16, ave:int16, delta:int16) =
      pcoeffs[i] := complex16{re=cos_int16(th);im=-sin_int16(th)};
      th := th + delta
   }
-in
+} in
 
 
 
-let comp PilotTrack() = 
+fun comp PilotTrack() {
 
   var th:arr[4] int32;
   var symbol_count:int := 127;
@@ -215,4 +215,4 @@ let comp PilotTrack() =
      emits symbol_out
    }
 
-in
+} in

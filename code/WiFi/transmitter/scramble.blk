@@ -19,7 +19,7 @@
 --
 #pragma once 
 
-let comp scrambler() =
+fun comp scrambler() {
 var scrmbl_st: arr[7] bit := {'1,'1,'1,'1,'1,'1,'1}; 
 var tmp: bit;
 var y:bit;
@@ -36,6 +36,6 @@ var y:bit;
 
     emit (y)
   }
-in
+} in
 
 

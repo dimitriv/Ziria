@@ -215,9 +215,9 @@ data LetDecl =
     LetDeclVar (Name, Ty, Maybe SrcExp)
   | LetDeclStruct StructDef
   | LetDeclExternal String [(Name, Ty)] Ty
-  | LetDeclFunComp (Maybe (Int, Int)) Name [(Name, CallArg Ty CTy0)] [(Name, Ty, Maybe SrcExp)] SrcComp
+  | LetDeclFunComp (Maybe (Int, Int)) Name [(Name, CallArg Ty CTy0)] ([(Name, Ty, Maybe SrcExp)], SrcComp)
+  | LetDeclFunExpr Name [(Name, Ty)] ([(Name, Ty, Maybe SrcExp)], SrcExp)
   | LetDeclComp (Maybe (Int, Int)) Name SrcComp
-  | LetDeclFunExpr Name [(Name, Ty)] [(Name, Ty, Maybe SrcExp)] SrcExp
   | LetDeclExpr Name SrcExp
 
 -- | The thing that is being declared in a let-statemnt
@@ -226,20 +226,23 @@ data LetDecl =
 -- >   | <decl>
 -- >   | <struct>
 -- >   | "let" "external" IDENT <params> ":" <base-type>
--- >   | "let" <comp-ann> <var-bind> <comp-params> "=" <decl>* <commands>
--- >   | "let" <comp-ann> <var-bind> "=" <commands>
--- >   | "let" <var-bind> <params> "=" <decl>* <stmts>
+-- >   | "fun" <comp-ann> <var-bind> <comp-params> "{" <decl>* <commands> "}"
+-- >   | "fun" <var-bind> <params> "{" <decl>* <stmts> "}"
+-- >   | "let" <comp-ann> <var-bind> "=" <comp>
 -- >   | "let" <var-bind> "=" <expr>
 parseLetDecl :: BlinkParser LetDecl
 parseLetDecl = choice
     [ LetDeclVar <$> declParser
     , LetDeclStruct <$> parseStruct
     , try $ LetDeclExternal <$ reserved "let" <* reserved "external" <*> identifier <*> paramsParser <* symbol ":" <*> parseBaseType
-    , try $ LetDeclFunComp  <$ reserved "let" <*> parseCompAnn <*> parseVarBind <*> compParamsParser <* symbol "=" <*> declsParser <*> nest parseCommands
-    , try $ LetDeclComp     <$ reserved "let" <*> parseCompAnn <*> parseVarBind                      <* symbol "="                 <*> nest parseCommands
-    , try $ LetDeclFunExpr  <$ reserved "let"                  <*> parseVarBind <*> paramsParser     <* symbol "=" <*> declsParser <*> nest parseStmts
-    , try $ LetDeclExpr     <$ reserved "let"                  <*> parseVarBind                      <* symbol "="                 <*> nest parseExpr
+    , try $ LetDeclFunComp  <$ reserved "fun" <*> parseCompAnn <*> parseVarBind <*> compParamsParser <*> body (nest parseCommands)
+    , try $ LetDeclFunExpr  <$ reserved "fun"                  <*> parseVarBind <*> paramsParser     <*> body (nest parseStmts)
+    , try $ LetDeclComp     <$ reserved "let" <*> parseCompAnn <*> parseVarBind <* symbol "=" <*> nest parseComp
+    , try $ LetDeclExpr     <$ reserved "let"                  <*> parseVarBind <* symbol "=" <*> nest parseExpr
     ]
+  where
+    body :: BlinkParser a -> BlinkParser ([(Name, Ty, Maybe SrcExp)] , a)
+    body p = braces $ (,) <$> declsParser <*> p
 
 -- > <struct> ::= "struct" IDENT "=" "{" (IDENT ":" <base-type>)*";" "}"
 parseStruct :: BlinkParser StructDef
@@ -307,14 +310,14 @@ cLetDecl p () (LetDeclExternal x params ty) =
   where
     fn  = mkNameFromPos (Just x) (fromJust p) Nothing
     fun = MkFun (MkFunExternal fn params ty) p ()
-cLetDecl p () (LetDeclFunComp h x params locls c) =
+cLetDecl p () (LetDeclFunComp h x params (locls, c)) =
     ([(x, params)], cLetFunC p () x params locls (mkVectComp c h))
-cLetDecl p () (LetDeclComp h x c) =
-    ([], cLet p () x (mkVectComp c h))
-cLetDecl p () (LetDeclFunExpr x params locls e) =
+cLetDecl p () (LetDeclFunExpr x params (locls, e)) =
     ([], cLetHeader p () x fun)
   where
     fun = MkFun (MkFunDefined x params locls e) p ()
+cLetDecl p () (LetDeclComp h x c) =
+    ([], cLet p () x (mkVectComp c h))
 cLetDecl p () (LetDeclExpr x e) =
     ([], cLetE p () x AutoInline e)
 

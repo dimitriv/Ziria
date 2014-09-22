@@ -27,7 +27,7 @@
 
 
 
-let comp LTS(shift:int16) =
+fun comp LTS(shift:int16) {
   var params : struct LTECoeffs;
 
   var preamble:arr[64] complex16;
@@ -42,7 +42,7 @@ let comp LTS(shift:int16) =
 
 
 
-  let LTSInit() = 
+  fun LTSInit() {
      var norm_one:complex16 := complex16{re=1600;im=0};
      let lts11a = 
         {0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 
@@ -53,10 +53,10 @@ let comp LTS(shift:int16) =
      for i in [0,64] {
          aLTSSeq11a[i] := ( complex16{re=(2*lts11a[i]-1); im=0}*norm_one);
      }
-  in
+  } in
 
 
-  let calcCoeff(fftdata:arr[64] complex16) = 
+  fun calcCoeff(fftdata:arr[64] complex16) {
      var re32:arr[28] int;
      var im32:arr[28] int;    
      var sq_norm32:arr[64] int;
@@ -93,7 +93,7 @@ let comp LTS(shift:int16) =
      };
 
      return ret;
-  in 
+  } in 
 
 seq{
   do{LTSInit()};
@@ -140,6 +140,6 @@ seq{
      return (params)
    }
 }
-in
+} in
 
 

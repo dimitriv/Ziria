@@ -46,7 +46,7 @@
 -- 56 Mbps, 3/4, 64QAM: x -> 4x/3 -> 2x/9 = 48, x = 216
 
 
-let comp tx_driver(h : struct HeaderInfo) = 
+fun comp tx_driver(h : struct HeaderInfo) {
  --  6 Mbps
  if h.coding == CR_12 && h.modulation == M_BPSK then 
    (crc24(h.len, true) >>> scrambler() >>> encode12() >>> interleaver_bpsk() >>> modulate_bpsk())
@@ -73,11 +73,11 @@ let comp tx_driver(h : struct HeaderInfo) =
    (crc216(h.len, true) >>> scrambler() >>> encode34() >>> interleaver_m64qam() >>> modulate_64qam())
  else
    do{error "Unknown coding rate!"}
-in
+} in
 
 
 
-let comp transform_w_header() = 
+fun comp transform_w_header() {
       seq{ hInfo <- ( emitHeader() >>> 
                       scrambler() >>> 
                       encode12() >>> 
@@ -85,13 +85,13 @@ let comp transform_w_header() =
                       modulate_bpsk() )
          ; crc <- tx_driver(hInfo) 
          }
-in
+} in
 
 
-let comp transmitter() = 
+fun comp transmitter() {
 seq{ emits createSTSinTime()
    ; emits createLTSinTime()
    ; (transform_w_header() >>> map_ofdm() >>> ifft())
    }
-in
+} in
 

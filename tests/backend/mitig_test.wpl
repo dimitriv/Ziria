@@ -1,16 +1,16 @@
-let comp A() = 
+fun comp A() {
 repeat [2,2] {
   x <- take;
   emit x;
 }
-in 
+} in 
 
-let comp B() = 
+fun comp B() {
 repeat [4,4] {
   x <- take;
   emit x;
 }
-in 
+} in 
 
 read[int] >>> B() >>> A() >>> B() >>> write[int]
 

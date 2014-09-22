@@ -1,16 +1,16 @@
-let comp test1(msg_len : int) = 
+fun comp test1(msg_len : int) {
     repeat seq{
         x <- take;
         emit x
     }
-in   
+} in   
 
-let comp test2() = 
+fun comp test2() {
     repeat seq{
       x <- take;
       emit x
     }
-in
+} in
 
 
 read[int] >>> 

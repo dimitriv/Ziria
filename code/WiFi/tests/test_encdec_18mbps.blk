@@ -22,7 +22,7 @@
 #include "../transmitter/transmitter.blk"
 
 
-let comp encdec_atten(c:int16) = 
+fun comp encdec_atten(c:int16) {
   repeat seq {
     (x:complex16) <-take;
     let cre = x.re in 
@@ -31,15 +31,15 @@ let comp encdec_atten(c:int16) =
     let dim = cim/c in 
     emit complex16{re=dre;im=dim}
   }
-in
+} in
 
 
-let comp dummy() = 
+fun comp dummy() {
   repeat{
     (x:bit) <-take;
     emit complex16{re=0; im=0}
   }
-in 
+} in 
 
 -- Test the entire TX/RX at the bit level
 read[bit] >>> { transform_w_header()

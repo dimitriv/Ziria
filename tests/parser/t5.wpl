@@ -2,12 +2,12 @@ var x : int;
 var y : bool;
 var z : complex32;
 
-let foo(x : int) = 
+fun foo(x : int) {
    var z : bool := true;
    return (x+1);
-in
+} in
 
-let comp bar(x : int) = 
+fun comp bar(x : int) {
   var st : arr[8] bit;
   seq { x <- take
       ; emit x
@@ -17,7 +17,7 @@ let comp bar(x : int) =
                 ; return 4 
                 }
       } >>> map foo
-in
+} in
 
 
 

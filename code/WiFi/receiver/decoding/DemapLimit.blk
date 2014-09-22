@@ -19,7 +19,7 @@
 --
 #pragma once 
 
-let comp DemapLimit(shr:int) = 
+fun comp DemapLimit(shr:int) {
   var symbol : arr[4] complex16;
 
   repeat seq {
@@ -60,4 +60,4 @@ let comp DemapLimit(shr:int) =
 
      emits symbol_out
   }
-in
+} in

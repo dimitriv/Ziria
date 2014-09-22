@@ -1,4 +1,4 @@
-let comp scrambler() =
+fun comp scrambler() {
   var scrmbl_st: arr[7] bit := {'1,'1,'1,'1,'1,'1,'1}; 
   var tmp: bit;
   var y:bit;
@@ -17,7 +17,7 @@ let comp scrambler() =
 
       emit (y)
     }
-in
+} in
 
 
 read >>> scrambler() >>> write

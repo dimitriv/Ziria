@@ -1,15 +1,15 @@
-let enc(x : int) = 
+fun enc(x : int) { 
     return (x+1);
-in
+} in
 
 
-let bar() = 
+fun bar() {
     let dvm1 = 1 in 
     let dvm2 = 2 in 
     let r1 = enc(dvm1);
     let r2 = enc(dvm2);
     return r2;
-in
+} in
 
 read[int] >>> write[int]
 

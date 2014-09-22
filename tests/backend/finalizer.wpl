@@ -1,19 +1,19 @@
-let foo(x : int) = 
+fun foo(x : int) {
     return (x+1)
-in
+} in
 
-let comp fin(c : ST (C ()) int int) =
+fun comp fin(c : ST (C ()) int int) {
     seq { c >>> map foo
         ; emit 34
         }
 
-in
+} in
 
-let comp upstream() =
+fun comp upstream() {
     seq { x <- takes 10
         ; emits x 
         }
-in
+} in
 
 
 read[int] >>> fin(upstream()) >>> write[int]

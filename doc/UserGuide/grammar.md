@@ -96,9 +96,9 @@ either be computations `<comp>` or expressions `<expr>`.
   | <decl>
   | <struct>
   | "let" "external" IDENT <params> ":" <base-type>
-  | "let" <comp-ann> <var-bind> <comp-params> "=" <decl>* <commands>
-  | "let" <comp-ann> <var-bind> "=" <commands>
-  | "let" <var-bind> <params> "=" <decl>* <stmts>
+  | "fun" <comp-ann> <var-bind> <comp-params> "{" <decl>* <commands> "}"
+  | "fun" <var-bind> <params> "{" <decl>* <stmts> "}"
+  | "let" <comp-ann> <var-bind> "=" <comp>
   | "let" <var-bind> "=" <expr>
 
 <struct> ::= "struct" IDENT "=" "{" (IDENT ":" <base-type>)*";" "}"

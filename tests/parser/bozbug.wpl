@@ -1,10 +1,10 @@
 
 
-let cc(len:int) = 
+fun cc(len:int) { 
   for i in [0,len] {
     print 0;
   }
-in
+} in
 
 read[int] >>> write[int]
 

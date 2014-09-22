@@ -1,6 +1,6 @@
 let PSS_threshold = 500 in 
 
-let comp test(printDetect : bool, corr : int) = 
+fun comp test(printDetect : bool, corr : int) { 
   repeat seq{
     x <- take;
     if (printDetect) then 
@@ -11,7 +11,7 @@ let comp test(printDetect : bool, corr : int) =
     else
       emit corr
   }
-in
+} in
 
 
 read[int] >>> test(true, 700) >>> write

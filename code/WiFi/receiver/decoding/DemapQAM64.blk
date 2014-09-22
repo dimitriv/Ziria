@@ -19,7 +19,7 @@
 --
 #pragma once 
 
-let comp DemapQAM64() = 
+fun comp DemapQAM64() {
   repeat {
      (symbol:complex16) <- take;
 
@@ -30,4 +30,4 @@ let comp DemapQAM64() =
      emit m_qam64_lut2[symbol.im];
      emit m_qam64_lut3[symbol.im];
   }
-in
+} in
