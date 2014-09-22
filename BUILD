@@ -16,7 +16,7 @@ To build the Ziria (wplc) compiler (under Linux or Windows/Cygwin) you will need
    - pretty-show
 
   NOTE: Make sure yous Haskell Platform path is before your Cygwin GCC path in Windows PATHs
-        because cabal needs Haskell Platform's ld and not the Cygwin GCC one
+        because cabal needs Haskell Platform ld and not the Cygwin GCC one
 	(otherwise horrible errors will occur)
 
 Then go to src/ and type 'make'. You will be left with a 'wplc' binary.
