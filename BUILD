@@ -21,6 +21,9 @@ To build the Ziria (wplc) compiler (under Linux or Windows/Cygwin) you will need
 
 Then go to src/ and type 'make'. You will be left with a 'wplc' binary.
 
+For many examples outside of the main path one needs to set Ziria path:
+set ZIRIA_ROOT=/path/to/Ziria/wplc/compiler
+
 NOTE: If you update GHC on Windows, make sure you delete ghc and cabal dirs 
 in /Users/<username>/AppData/Roaming to avoid stale state problems.
 
