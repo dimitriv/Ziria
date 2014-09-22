@@ -84,6 +84,7 @@ fun comp transform_w_header() {
                       interleaver_bpsk() >>> 
                       modulate_bpsk() )
          ; crc <- tx_driver(hInfo) 
+         ; return ()
          }
 } in
 

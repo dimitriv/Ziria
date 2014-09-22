@@ -121,6 +121,8 @@ either be computations `<comp>` or expressions `<expr>`.
   | <comp>
 ```
 
+The last command in the list must be a computation.
+
 ## Annotations
 
 ```

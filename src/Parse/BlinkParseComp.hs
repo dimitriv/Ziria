@@ -338,6 +338,8 @@ type Command = Either (SrcComp -> SrcComp) SrcComp
 -- However, we ignore this in the documentation where we simply say
 --
 -- > <commands> ::= (<command> ";")*
+--
+-- The last <command> must be a computation.
 parseCommands :: BlinkParser SrcComp
 parseCommands =
     parseCommand `bindExtend` go . (:[])
@@ -352,9 +354,7 @@ parseCommands =
     foldCommands :: [Command] -> BlinkParser SrcComp
     foldCommands []           = error "This cannot happen"
     foldCommands [Right c]    = return c
-    -- TODO: We should really give an error for the @[Left k]@ case.
-    -- ("last statement in a seq block should be a computation")
-    foldCommands [Left k]     = k <$> withPos cunit
+    foldCommands [Left _]     = fail "last statement in a seq block should be a computation"
     foldCommands (Right c:cs) = cSeq' c <$> foldCommands cs
     foldCommands (Left k:cs)  = k       <$> foldCommands cs
 

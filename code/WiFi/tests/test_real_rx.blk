@@ -37,6 +37,7 @@ fun comp dummy() {
 --  times 850000 { -- OK (10015)
 -- the last fails...
      x<- take;
+     return ()
   }
 
   repeat {
