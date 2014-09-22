@@ -11,7 +11,7 @@ To build the Ziria (wplc) compiler (under Linux or Windows/Cygwin) you will need
    - mainland-pretty
    - language-c-quote 
    - dlist
-   - unix-compat
+   - unix-compat (on Windows you might need to install this one from cmd rather than cygwin shell)
    - hashable
    - pretty-show
 
