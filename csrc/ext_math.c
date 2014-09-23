@@ -67,8 +67,24 @@ int16 __ext_ceil_int16(double d){
 	return (int16)ceil(d);
 }
 
+int32 __ext_round_int32(double d){
+	return (int32)((d > 0) ? (d + 0.5) : (d - 0.5));
+}
+
+int16 __ext_round_int16(double d){
+	return (int16)((d > 0) ? (d + 0.5) : (d - 0.5));
+}
+
 double __ext_log2(double d){
 	return log(d) / log(2.0);
+}
+
+int16 __ext_log2_int16(int16 d){
+	return (int16) (log((double) d) / log(2.0));
+}
+
+int32 __ext_log2_int32(int32 d){
+	return (int32)(log((double)d) / log(2.0));
 }
 
 double __ext_sqrt(double d){

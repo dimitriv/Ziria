@@ -27,7 +27,7 @@
 
 
 
-let comp LTS(shift:int16) =
+let comp LTS(shift:int16, amp:int32) =
   var params : struct LTECoeffs;
 
   var preamble:arr[64] complex16;
@@ -56,18 +56,30 @@ let comp LTS(shift:int16) =
   in
 
 
+  let arr_shift(a : arr complex16, agc_shift : int) = 
+    if (agc_shift > 0) then {
+      v_shift_left_complex16(a,a,agc_shift);
+    } else {
+      v_shift_right_complex16(a,a,-agc_shift);
+    }
+  in 
+
+
   let calcCoeff(fftdata:arr[64] complex16) = 
      var re32:arr[28] int;
      var im32:arr[28] int;    
      var sq_norm32:arr[64] int;
      var ret:arr[64] complex16;
 
+     -- let lts_norm_shift = 2 in
+     let lts_norm_shift = 6 in
+
      -- Calculate sq_norm
      v_conj_mul_complex16_int32(re32,im32,fftdata[0,28],fftdata[0,28]);
-     v_shift_right_int32(sq_norm32[0,28],re32,int(norm_shift))
+     v_shift_right_int32(sq_norm32[0,28],re32,int(lts_norm_shift))
 
      v_conj_mul_complex16_int32(re32,im32,fftdata[36,28],fftdata[36,28]);
-     v_shift_right_int32(sq_norm32[36,28],re32,int(norm_shift))
+     v_shift_right_int32(sq_norm32[36,28],re32,int(lts_norm_shift))
 
      -- Calculate ret
      v_conj_mul_complex16_int32(re32,im32,aLTSSeq11a[0,28],fftdata[0,28]);
@@ -104,11 +116,21 @@ seq{
      preamble := xp[16-shift,64];
      delayedPreamble := xp[80-shift,64];
 
+     -- Very simple AGC
+     -- This is slow, but it is only a single number.
+     let agc_shift = round_int32(log2(1000.0 / sqrt(double(amp))));
 
-     v_shift_right_complex16(preamble,preamble,1);
+     if (agc_shift > 0) then {
+       v_shift_left_complex16(preamble,preamble,agc_shift);
+       v_shift_left_complex16(delayedPreamble,delayedPreamble,agc_shift);
+     } else {
+       v_shift_right_complex16(preamble,preamble,-agc_shift);
+       v_shift_right_complex16(delayedPreamble,delayedPreamble,-agc_shift);
+     }
 
 
      let corr = v_correlate(preamble, delayedPreamble) in 
+     -- TODO: cfo is currently not used, but add AGC if you want to start using it.
      let cr = corr.re >> 5 in
      let ci = corr.im >> 5 in
 
@@ -127,16 +149,30 @@ seq{
 
      fftdata := sora_fft(preamble);
 
+     -- Below we shift back to the original scale to make sure euqalized amplitudes are
+     -- always in the same range, regardless of RX power
+     -- In particular, the range of symbols after qeualized FFT seems to be +- 2000
+
 #ifdef LTS_ACCURATE
      delayedFftdata := sora_fft(delayedPreamble);
      v_add_complex16(params.channelCoeffs, calcCoeff(fftdata), calcCoeff(delayedFftdata));
-     v_shift_right_complex16(params.channelCoeffs,params.channelCoeffs,1);
+     --v_shift_right_complex16(params.channelCoeffs,params.channelCoeffs,1);
+     let agcs = agc_shift - 1 in 
+     if (agcs > 0) then {
+       v_shift_left_complex16(params.channelCoeffs,params.channelCoeffs,agcs);
+     } else {
+       v_shift_right_complex16(params.channelCoeffs,params.channelCoeffs,-agcs);
+     }
 #else
      -- We use simple LTS as comparison to Sora 
      -- since this is what Sora does by default
      params.channelCoeffs := calcCoeff(fftdata);
+     if (agc_shift > 0) then {
+       v_shift_left_complex16(params.channelCoeffs,params.channelCoeffs,agc_shift);
+     } else {
+       v_shift_right_complex16(params.channelCoeffs,params.channelCoeffs,-agc_shift);
+     }
 #endif
-
      return (params)
    }
 }

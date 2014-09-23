@@ -84,11 +84,11 @@ rx.outfile: rx.out rx.infile
              $(EXTRARUNOPT)
 
 
+#	./rx.out --MAC-type=RX-test --RX-input=file --RX-input-file-name=out.bin --RX-input-file-mode=bin --RX-output=file --RX-output-file-name=rx.outfile --RX-output-file-mode=dbg 
+
+
 %.test: %.outfile
 	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
-
-
-
 
 
 ### Online runs

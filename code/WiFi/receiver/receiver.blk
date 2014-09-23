@@ -56,7 +56,10 @@ let comp receiver() =
 #ifndef FAST
      ; do{println "Detected at: ", det.noSamples}
 #endif
-     ; params <- LTS(det.shift)
+     -- receiver uses Sora port of cca to produce comparable performance measurements
+     -- but this one does not maxCorr value, so we provide an appropriate one here to pass tests
+     -- In real-world examples use cca_tufv instead of cca.
+     ; params <- LTS(det.shift, 850906)
      ; DataSymbol(det.shift) >>> FFT() >>> ChannelEqualization(params)
        >>> PilotTrack()
        >>> GetData() 

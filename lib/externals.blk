@@ -44,8 +44,13 @@ let external imax_int32(x:int, y:int) : int in
 
 let external ceil_int16(d:double) : int16 in 
 let external ceil_int32(d:double) : int32 in 
+let external round_int16(d:double) : int16 in 
+let external round_int32(d:double) : int32 in 
 
 let external log2(d:double) : double in 
+let external log2_int16(d:int16) : int16 in 
+let external log2_int32(d:int32) : int32 in
+
 let external sqrt(d:double) : double in 
 let external sqrt_int16(d:int16) : int16 in 
 let external sqrt_int32(d:int32) : int32 in

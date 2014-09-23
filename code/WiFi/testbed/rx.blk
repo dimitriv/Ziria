@@ -1,5 +1,5 @@
 #define LTS_ACCURATE
---#define RADIO
+#define RADIO
 #define DO_DECODING
 --#define FAST
 
@@ -10,7 +10,6 @@
 #include "../receiver/cca/cca_tufv.blk"
 #include "../receiver/OFDM/LTS.blk"
 #include "../receiver/removeDC.blk"
-#include "../receiver/downSample.blk"
 #include "../receiver/OFDM/DataSymbol.blk"
 #include "../receiver/OFDM/FreqCompensation.blk"
 #include "../receiver/OFDM/FFT.blk"
@@ -150,7 +149,6 @@ in
 
 
 
-
 {-
 read[complex16] >>> 
    times 10000 {x<-take; emit x}
@@ -158,30 +156,39 @@ read[complex16] >>>
 -}
 
 
-
 {-
 read[complex16] >>> 
   skip() >>>
 #ifndef RADIO
-  downSample() >>> 
   pad() >>>
 #endif
   {det <- detectPreamble()
-    ; times 100000 {x<-take; emit x}
+    ; times 1000 {x<-take; emit x}
   }
 >>> write
 -}
+
+
+let comp amp() = 
+repeat{
+  (x : complex16) <- take;
+  let const = 1;
+  emit complex16{re = x.re * const; im = x.im * const};
+  --emit complex16{re = x.re / const; im = x.im / const};
+}
+in
 
 
 
 #ifndef RADIO 
 
   read >>> 
-     downSample() >>> 
+     amp() >>>
      pad() >>>
      seq{ det<-detectPreamble()
-        ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift}
-        ; params <- (LTS(det.shift)); 
+        ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
+                     ", energy: ", det.energy, ", noise: ", det.noise, ", maxCorr: ", det.maxCorr}
+        ; params <- (LTS(det.shift, det.maxCorr)); 
           DataSymbol(det.shift) 
           >>> FFT() 
           >>> ChannelEqualization(params)
@@ -199,21 +206,18 @@ read[complex16] >>>
    read >>> 
        seq{ det<-detectPreamble()
        #ifndef FAST
-          ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, ", energy: ", det.energy, ", maxCorr: ", det.maxCorr}
+          ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
+                       ", energy: ", det.energy, ", noise: ", det.noise, ", maxCorr: ", det.maxCorr}
        #endif
-          ; params <- (LTS(det.shift)); 
+          ; params <- (LTS(det.shift, det.maxCorr)); 
             DataSymbol(det.shift) 
             >>> FFT() 
             >>> ChannelEqualization(params)
-            >>> { x<-takes 100000; emits x}
--- DEBUG
-{-
             >>> PilotTrack() 
             >>> GetData()
        #ifdef DO_DECODING
             >>> receiveBits()
        #endif
--}
        }
    >>> write
 

@@ -55,7 +55,6 @@ in
 
 
 let comp PilotTrack() = 
-
   var th:arr[4] int32;
   var symbol_count:int := 127;
   var symbol:arr[64] complex16;
@@ -112,19 +111,18 @@ let comp PilotTrack() =
 
      var symbol_out:arr[64] complex16;
 
+     -- Calculate pilots
+     let p1 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[64-21].re; im=-symbol[64-21].im}
+              else complex16{re=symbol[64-21].re;  im=symbol[64-21].im};
+     let p2 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[64-7].re; im=-symbol[64-7].im}
+              else complex16{re=symbol[64-7].re;  im=symbol[64-7].im};
+     let p3 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[7].re; im=-symbol[7].im}
+              else complex16{re=symbol[7].re;  im=symbol[7].im};
+     let p4 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[21].re; im=-symbol[21].im}
+              else complex16{re=symbol[21].re;  im=symbol[21].im};
+
      -- Calculate the subsequent phase shift
      do {
-
-       -- Calculate pilots
-       let p1 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[64-21].re; im=-symbol[64-21].im}
-                else complex16{re=symbol[64-21].re;  im=symbol[64-21].im};
-       let p2 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[64-7].re; im=-symbol[64-7].im}
-                else complex16{re=symbol[64-7].re;  im=symbol[64-7].im};
-       let p3 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[7].re; im=-symbol[7].im}
-                else complex16{re=symbol[7].re;  im=symbol[7].im};
-       let p4 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[21].re; im=-symbol[21].im}
-                else complex16{re=symbol[21].re;  im=symbol[21].im};
-
        -- Store last 4 values of each pilot
        -- TODO: Convert this into the follwoing, when compiler gets support for parsing it
        -- pilot_hist[0,4*PILOT_AVG-1] := pilot_hist[1,4*PILOT_AVG-1];

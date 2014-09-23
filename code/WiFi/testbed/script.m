@@ -1,10 +1,16 @@
-%f = fopen('debug_BPSK_12.bin', 'rb');
+%f = fopen('out.bin', 'rb');
 %data = fread(f, inf, 'int16');
 data = load('rx.infile');
 data=data(1:floor(end/2)*2);
 data=reshape(data, 2, length(data)/2);
 data=data(1,:) + i*data(2,:);
 
+
+d = load('rx.outfile');
+dt = d(1:2:end) + i*d(2:2:end);
+X = 1:64;
+figure; plot(X, abs(dt(X)), X, abs(dt(64+X)));
+aaa
 
 PLOT_OUT = 1;
 
@@ -18,8 +24,8 @@ if PLOT_OUT
   %XL = [1 1000];
   XL = [1 12000];
   subplot(3,1,1); plot(real(data)); title('Real(data)');
-  %subplot(3,1,2); plot(abs(dt)); title('Abs of FFT');
-  subplot(3,1,2); plot(real(dt)); title('Abs of FFT');
+  subplot(3,1,2); plot(abs(dt)); title('Abs of FFT');
+  %subplot(3,1,2); plot(real(dt)); title('Abs of FFT');
   xlim(XL);
   subplot(3,1,3); plot(angle(dt)); title('Phase of FFT');
   xlim(XL);

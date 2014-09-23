@@ -30,8 +30,9 @@
 
 
 -- Use this define to debug CCA output after every input read
--- #define CCA_TUFV_DEBUG_OUTPUT
-
+--#define CCA_TUFV_DEBUG_OUTPUT
+-- Uncomment to plot outputs using test_cca
+--#define CCA_DEBUG_PLOT
 
 -- Measured to PC in bozidar's office on the 1st floor
 -- iEnergy: idle=260, Sora12 sine: 13k, Sora12 pkt: 4k, Sora MSR roof sine: 1k, Sora MSR pkt: 400
@@ -39,8 +40,6 @@
 
 
 
---let energy_threshold  = 5000 in 
-let energy_threshold  = 200 in 
 let norm_shift = 7 in 
 
 
@@ -103,7 +102,7 @@ in
 -- Detection using Tufvesson algorithm
 -- Tufvesson et al, Time and Frequency Synchronization using PN-Sequence Preambles, VTC 99
 
-let comp cca() = 
+let comp cca(energy_threshold : int32) = 
    var pattern : arr[CORR_LEN*CORR_LEN] complex16;
    var corr : int32;
    var maxCorr : int32;
@@ -122,6 +121,7 @@ let comp cca() =
    -- calcEnergy related
    var gesw : arr[4] int;
    var iEnergy : int := 0;
+   var iNoise : int := 0;
    var initial_idle : bool := false;
    var idle_cnt : int := 0;
 
@@ -173,7 +173,7 @@ let comp cca() =
        }
        if (idle_cnt >= 20) then { 
          initial_idle := true;
-         --println "Energy iter: ", iterind, ", energy: ", iEnergy, ", idle_cnt: ", idle_cnt;
+         iNoise := iEnergy;
          iterind := 0;
        }
        iterind := iterind + 1;
@@ -273,21 +273,26 @@ let comp cca() =
 
        }
 
--- DEBUG
---       emit debCorr;
---       emit debCorr2;
--- --     emit int32(maxInd);
---       emit maxCorr;
+#ifdef CCA_DEBUG_PLOT
        emit iEnergy;
+#else
+       emit debCorr;
+--       emit debCorr2;
+       emit iEnergy;
+       emit maxCorr;
+#endif
 
     }
     do{
        -- Because of repeating preamble we should have a certain number of consecutive 
        -- increases before declaring the peak - start of a packet
        if (iEnergy > energy_threshold && noInc > 4 && (oldCorr > maxCorr || oldInd != maxInd)) then {
+#ifdef CCA_DEBUG_PLOT
 -- DEBUG (we ignore detections in debug mode to be able to plot it all)
---          detected := true;
-            detected := false;
+          detected := false;
+#else
+          detected := true;
+#endif
        }
 
        if (oldOldCorr < oldCorr && oldCorr < maxCorr && oldOldInd == oldInd && oldInd == maxInd) then {
@@ -320,6 +325,7 @@ let comp cca() =
     ret.noSamples := (16*iterind + int(oldInd));
     ret.shift := oldInd;
     ret.energy := iEnergy;
+    ret.noise := iNoise;
     ret.maxCorr := maxCorr;
   };
 

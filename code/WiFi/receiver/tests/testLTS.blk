@@ -21,4 +21,4 @@
 #include "../downSample.blk"
 #include "../OFDM/LTS.blk"
 
-read >>> downSample() >>> seq{params <- LTS(3);emit params.channelCoeffs} >>> write
+read >>> downSample() >>> seq{params <- LTS(3, 850906);emit params.channelCoeffs} >>> write
