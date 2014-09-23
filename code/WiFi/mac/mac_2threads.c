@@ -92,6 +92,20 @@ BOOLEAN __stdcall go_thread_rx(void * pParam);
 
 
 
+
+int32 PHYenergy = 0;
+int32 PHYnoise = 0;
+double PHYEWMAnoise = 0;
+
+int __ext_MAC_cca(int32 energy, int32 noise){
+	PHYenergy = energy;
+	PHYnoise = noise;
+	PHYEWMAnoise = 0.95 * PHYEWMAnoise + 0.05 * (double)noise;
+	return 0;
+}
+
+
+
 void init_mac_2threads()
 {
 	// Start Sora HW
@@ -607,7 +621,8 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 
 				if (printDelay < cntOk + cntError + cntMiss)
 				{
-					printf("Last packet: cnt=%d, crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d, lastGap=%ld\n",
+					printf("Last packet: SNR=%.2f(%d/%.0f), cnt=%d, crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d, lastGap=%ld\n",
+						10 * log10((double)PHYenergy / PHYEWMAnoise), PHYenergy, PHYEWMAnoise,
 						pc, lastCRC, lastMod, lastEnc, lastLen, lengthInBytes, lastGap);
 					printf("OK: %ld, Error: %ld, Miss: %ld\n", cntOk, cntError, cntMiss);
 					fflush(stdout);
