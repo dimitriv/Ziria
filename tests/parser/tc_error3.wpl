@@ -15,7 +15,7 @@ let getCrossCorrelation(j : int16, cc:arr[1] int16) =
       cr := 0;
       ci := 0;
    
-      let j32 = int32(j) in
+      let j32 = int32(j)
       
       for i in [0,length(sample)] {
         -- tmp := tmp + sample[i] * conj(STS[i+j])

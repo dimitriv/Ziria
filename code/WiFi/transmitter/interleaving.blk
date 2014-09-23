@@ -45,7 +45,7 @@ in
 
 let intlv_perm2(mod: int) = 
   var perm: arr[288] int; 
-  let s = if (mod == M_BPSK) then 1 else nBPSC(mod)/2 in 
+  let s = if (mod == M_BPSK) then 1 else nBPSC(mod)/2  
 
   for k in [0,288] {
     perm[k] := s * k/s + (k+nCBPS(mod) - 16*k/nCBPS(mod)) % s

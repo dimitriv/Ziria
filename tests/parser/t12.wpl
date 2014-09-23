@@ -4,11 +4,11 @@ in
 
 
 let bar() = 
-    let dvm1 = 1 in 
-    let dvm2 = 2 in 
-    let r1 = enc(dvm1);
-    let r2 = enc(dvm2);
-    return r2;
+    let dvm1 = 1 
+    let dvm2 = 2 
+    let r1 = enc(dvm1)
+    let r2 = enc(dvm2)
+    return r2
 in
 
 read[int] >>> write[int]

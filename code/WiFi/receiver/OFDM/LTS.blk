@@ -108,16 +108,15 @@ seq{
      v_shift_right_complex16(preamble,preamble,1);
 
 
-     let corr = v_correlate(preamble, delayedPreamble) in 
-     let cr = corr.re >> 5 in
-     let ci = corr.im >> 5 in
+     let corr = v_correlate(preamble, delayedPreamble) 
+     let cr = corr.re >> 5 
+     let ci = corr.im >> 5 
 
 
      let phase = if (ci == 0) then 42000000
                  else atan2_int32(ci, cr) 
-     in
 
-     let cfo_est = int16(phase/(1 << 6)) in 
+     let cfo_est = int16(phase/(1 << 6)) 
 
 
      for i in [0,64] {

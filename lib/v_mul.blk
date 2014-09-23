@@ -29,8 +29,8 @@ let v_mul_complex16_int32(re:arr int, im:arr int, a:arr complex16, b:arr complex
   var vs1:arr[4] complex16;
   var vs2:arr[4] complex16;
 
-  let vlen = (length(a) / 4) in
-  let rlen = (length(a) - vlen*4) in 
+  let vlen = (length(a) / 4) 
+  let rlen = (length(a) - vlen*4)  
 
   for i in [0, vlen] {
     -- Return by reference for performance
@@ -82,8 +82,8 @@ let v_mul_complex16(c:arr complex16, a:arr complex16, b:arr complex16, shift:int
   var re32 : arr[4] int32;
   var im32 : arr[4] int32;
 
-  let vlen = (length(a) / 4) in
-  let rlen = (length(a) - vlen*4) in 
+  let vlen = (length(a) / 4) 
+  let rlen = (length(a) - vlen*4)  
 
   for i in [0, vlen] {
     -- Return by reference for performance

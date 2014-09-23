@@ -38,8 +38,8 @@ Some notation for our informal BNF syntax below:
   | "repeat" <vect-ann>? <comp>
   | "until" <expr> <comp>
   | "while" <expr> <comp>
-  | "times" <expr> <comp>
-  | "for" <var-bind> "in" "[" <interval> "]" <comp>
+  | ("unroll" | "nounroll")? "times" <expr> <comp>
+  | ("unroll" | "nounroll")? "for" <var-bind> "in" "[" <interval> "]" <comp>
 
   | <comp> ">>>" <comp>
   | <comp> "|>>>|" <comp>
@@ -134,20 +134,32 @@ either be computations `<comp>` or expressions `<expr>`.
 
 ### Types
 
-The language of types is given by `<basetype>` that describe expression types.
+The language of types is given by `<base-type>` that describe expression types.
 `int` and `complex` default to `int32` and `complex32` unless type inference
 determines otherwise.
 
 ```
-<basetype>
-  ::= bit | bool | double 
-    | int | int8 | int16 | int32
-    | complex | complex16 | complex32
-    | struct TYPENAME
-    | arr <basetype>
-    | arr[INTEGER] <basetype>
-    | arr[length(VARNAME)] <basetype>
-```
+<base-type> ::=
+    "()"
+  | "bit"
+  | "int"
+  | "int8"
+  | "int16"
+  | "int32"
+  | "int64"
+  | "double"
+  | "bool"
+  | "complex"
+  | "complex8"
+  | "complex16"
+  | "complex32"
+  | "complex64"
+  | "struct" IDENT
+  | "arr" "[" "length" IDENT "]" <base-type>
+  | "arr" "[" <expr> "]" <base-type>
+  | "arr" <base-type> -- length inferred from context
+  | "(" <base-type> ")"
+```  
 
 Arrays can have either:
 
@@ -156,7 +168,7 @@ Arrays can have either:
    actually does support also simple expressions that can statically be
    evaluated to integer literals such as `1024 + 48`.
 3. Arrays can specify fo have the length of another array bound earler, with
-   `arr[length(VARNAME)] <basetype>`.
+   `arr[length(VARNAME)] <base-type>`.
 
 Hence you may well have:
 ```
@@ -171,154 +183,102 @@ in ...
 
 ### Expressions
 
-First of all some operator definitions. Unary operators are:
+The actual syntax of expression is: 
 
 ```
--- Unary operators
-<unop> ::= 
-    -
-  | not
-  | ~
-  | length
-```
+<expr> ::=
+    "-"      <expr>     -- negation
+  | "not"    <expr>     -- not
+  | "~"      <expr>     -- bitwise negation
 
-Binary operators:
+  | "length" <expr>     -- length
 
-```
--- Binary operators
-<binop> ::= 
-    **       -- exponentiation
-  | *        -- multiplication
-  | /        -- division
-  | %        -- modulo
+  | <expr> "**" <expr>  -- exponentiation
+  | <expr> "*"  <expr>  -- multiplication
+  | <expr> "/"  <expr>  -- division
+  | <expr> "%"  <expr>  -- remainder
 
-  | +        
-  | - 
+  | <expr> "+"  <expr>  -- addition
+  | <expr> "-"  <expr>  -- subtraction
 
-  | <<       -- shift operators
-  | >>
+  | <expr> "<<" <expr>  -- shift left
+  | <expr> ">>" <expr>  -- shift right
 
-  | <        -- comparisons
-  | <=
-  | >
-  | >=
+  | <expr> "<"  <expr>  -- less than
+  | <expr> "<=" <expr>  -- less than or equal to
+  | <expr> ">"  <expr>  -- greater than
+  | <expr> ">=" <expr>  -- greater than or equal to
 
-  | &        -- bitwise and
-  | ^        -- bitwise xor
-  | |        -- bitwise or
-  | &&       -- logical and
-  | ||       -- logical or
-```
+  | <expr> "&"  <expr>  -- bitwise AND
 
-The binary operators are presented in several groups, highest-priority
-group first, and within the same group highest-priority operator
-first. They are what one would expect in a C or Pascal-like language. 
+  | <expr> "^"  <expr>  -- bitwise XOR
 
-The actual syntax of expression follows: 
-```
-<expr> ::= 
-    <expr> binop <expr>
-  | unop <expr>
-  | (<expr>)
+  | <expr> "|"  <expr>  -- bitwise OR
+
+  | <expr> "==" <expr>  -- equality
+  | <expr> "!=" <expr>  -- inequality
+
+  | <expr> "&&" <expr>  -- logical AND
+  | <expr> "||" <expr>  -- logical OR
   | <term>
-```
+```  
+
+where we have grouped operators with the same precedence, and groups of
+operators listed earlier have higher precedence.
+
 
 And terms are:
 
 ```
-<term> ::= 
-    <value>
+<term> ::=
+    "(" <expr> ")"
+  | "()"
+  | <value>
+  | TYPENAME "{" (FLDNAME "=" <expr>)*";")     -- struct init
+  | IDENT ("." IDENT | "[" <range> "]")*  -- struct or array index
+  | IDENT "(" <expr>*"," ")"              -- function call or cast
+  | IDENT                                 -- variable
+  | "let" <var-bind> "=" <expr> "in" <expr>
+  | <decl> "in" <expr>
+  | "if" <expr> "then" <expr> "else" <expr>
 
-    -- structure initialization
-  | TYPENAME { FLDNAME1 = <expr>; ... FLDNAMEn = <expr> }
-  
-    -- dereferencing expressions
-  | <dexpr>
-  
-    -- casts 
-  | <basetype>(<expr>)
-  
-    -- function calls
-  | FUNCNAME(<eargs>)
-  
-  | -- conditionals
-    if <expr> then <expr> else <expr>
-  
-  | -- let definitions
-  let <varbind> = <expr> in <expr>
+<var-bind> ::= IDENT | "(" IDENT ":" <base-type> ")"
+<range>    ::= <interval> | <expr>
+<interval> ::= <expr> ":" <expr> | <expr> "," <expr>
+<value>    ::= <scalar-value> | "{" <scalar-value>*"," "}"
+<decl>     ::= "var" IDENT ":" <base-type> (":=" <expr>)?
 
--- expression arguments 
-<eargs> ::= null | <expr>(,<expr>)*
-
-<varbind> ::= VARNAME | ( VARNAME : <basetype>) 
-
-<dexpr> ::=
-    -- variable
-    VARNAME
-
-    -- field projection
-  | <dexpr>.FLDNAME
-  
-    -- subarray derefencing
-  | <dexpr>[INTEGER:INTEGER]
-
-    -- array element dereferencing
-  | <dexpr>[INTEGER]
-
-<value> ::= ()                -- unit
-      | true | false      -- boolean values
-      | '0 | '1           -- bit values
-        | STRING            -- e.g. "blink"
-      | INTEGER           -- e.g. 1,2,5,6 ...
-      | FLOAT             -- e.g. 3.14
-      | { <values> }      -- array values
-
-<values> ::= null | <value>(,<value>)* 
+<scalar-value> ::=
+    "(" <scalar-value> ")"
+  | "true"
+  | "false"
+  | "'0"
+  | "'1"
+  | "()"
+  | FLOAT
+  | STRING
+  | INT
 ```
 
 Now, in addition to the expressions and terms, Blink provides support for "imperative" blocks of statements.
 
 ```
-<stmts> ::= null | <stmt>(;<stmt>)*?;
-<stmtblock> ::= <stmt> | { <stmts> }
+<stmt-block> ::= "{" <stmts> "}" | <stmt>
+<stmts> ::= <stmt>*";"
+
 <stmt> ::=
-    -- assignment
-    VARNAME := <expr>
-  
-    -- return
-  | return <expr>
-
-    -- function call
-  | FUNCNAME(<eargs>)
-
-    -- for loops
-  | for VARNAME in <range> <stmtblock>
-  
-    -- while loops
-  | while <expr> <stmtblock>
-
-    -- conditional commands
-  | if <expr> then <stmtblock> ?(else <stmtblock>)
-
-    -- let bindings
-  | let <varbind> = <expr> ?(in <stmt>)
-
-    -- print to stdout
-  | print <exprs>
-  | println <exprs>
-  
-    -- exit current thread with an error message
-  | error STRING
-
-<exprs> ::= <expr>(,<expr>)*
-
-<range> ::=
-    -- (inclusive) interval range
-    [INTEGER:INTEGER]
-
-    -- start and length based range
-  | [<expr>,<expr>]
-  
+    "let" <var-bind> "=" <expr> ("in" <stmt>)?
+  | <decl> ("in" <stmt>)?
+  | ("unroll" | "nounroll")? "for" <var-bind> "in" "[" <interval> "]" <stmt-block>
+  | "while" "(" <expr> ")" <stmt-block>
+  | "if" <expr> "then" <stmt-block> ("else" <stmt-block>)?
+  | "return" <expr>
+  | "print" <expr>*","
+  | "println" <expr>*","
+  | "error" STRING
+  | FUNCNAME "(" <expr>*"," ")"
+  | VARNAME ("." IDENT)* ("[" <range> "]")? ":=" <expr>
 ```
 
-A caveat: currently we dont support parsing of nested array values.
+A caveat: currently we dont support parsing of nested array values (TODO: is
+that still true?).
