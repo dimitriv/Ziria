@@ -19,6 +19,9 @@ To build the Ziria (wplc) compiler (under Linux or Windows/Cygwin) you will need
         because cabal needs Haskell Platform ld and not the Cygwin GCC one
 	(otherwise horrible errors will occur)
 
+  NOTE: parsec 3.1.6 contains a regression bug (https://github.com/aslatter/parsec/issues/9);
+  use an older version for now.
+
 Then go to src/ and type 'make'. You will be left with a 'wplc' binary.
 
 For many examples outside of the main path one needs to set Ziria path:

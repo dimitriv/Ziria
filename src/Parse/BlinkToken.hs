@@ -16,6 +16,11 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
+{-
+  NOTE: This is modified copy of Text.Parsec.Token from parsec-3.1.1. It
+  differs from the original only in the definition of `whiteSpace`, which 
+  now supports `cppPragmaLine` (which is the only new definition).
+-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Text.Parsec.Token
