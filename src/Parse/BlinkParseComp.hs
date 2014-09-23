@@ -40,7 +40,7 @@ import BlinkParseExpr
 
 -- | > <program> ::= <decls> <comp>
 parseProgram :: BlinkParser (Prog () ())
-parseProgram = MkProg <$ whiteSpace <*> declsParser <*> parseComp
+parseProgram = MkProg <$ whiteSpace <*> declsParser <*> parseComp <* eof
 
 -- | > <decls> ::= (<decl>;)*
 --
