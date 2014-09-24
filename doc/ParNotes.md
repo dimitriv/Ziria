@@ -264,7 +264,7 @@ structure will need to look something like this:
     data TaskData = TaskData {
         taskWasTicked :: Bool,
         taskCanRun    :: IO Bool,
-	taskTickFun   :: Ziria ResultOrConsume,
+        taskTickFun   :: Ziria ResultOrConsume,
         taskProcFun   :: SomeData -> Ziria Result
       }
 
