@@ -66,8 +66,8 @@ get_RenMSym = RenM (\sym _ -> return sym)
 
 newUniq :: RenM String
 newUniq = do { sym <- get_RenMSym 
-             ; u <- renMIO $ GS.genSym sym
-             ; return ("_r" ++ show u) 
+             ; str <- renMIO $ GS.genSymStr sym
+             ; return ("_r" ++ str) 
              }
 
 lkupUniqEnv :: Name -> RenM String
@@ -138,12 +138,12 @@ renameExpr e
          e2' <- renameExpr e2
          return $ eWhile eloc enfo e1' e2'
 
-    ELet nm1 e1 e2   -> 
+    ELet nm1 fi e1 e2   -> 
       do e1' <- renameExpr e1
          u1 <- newUniq
          extendUniqEnv nm1 u1 $ 
            do { e2' <- renameExpr e2
-              ; return $ eLet eloc enfo nm1 { uniqId = u1 } e1' e2' 
+              ; return $ eLet eloc enfo nm1 { uniqId = u1 } fi e1' e2' 
               }
 
     ELetRef nm1 e1 e2   -> 
@@ -280,11 +280,11 @@ renameComp c =
       do { c1' <- renameComp c1
          ; return $ cLetStruct cloc cnfo sdef c1'
          }
-    LetE x e c' ->
+    LetE x fi e c' ->
       do { e'  <- renameExpr e
          ; u <- newUniq
          ; c'' <- extendUniqEnv x u $ renameComp c'
-         ; return $ cLetE cloc cnfo x { uniqId = u } e' c''
+         ; return $ cLetE cloc cnfo x { uniqId = u } fi e' c''
          }
 
     -- CL
@@ -335,9 +335,9 @@ renameComp c =
       do { e' <- renameExpr e
          ; return $ cEmit cloc cnfo e'
          }
-    Return e -> 
+    Return fi e -> 
       do { e' <- renameExpr e
-         ; return $ cReturn cloc cnfo e'
+         ; return $ cReturn cloc cnfo fi e'
          }
     Emits e -> 
       do { e' <- renameExpr e

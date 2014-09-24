@@ -34,6 +34,7 @@ INCLUDES        = $(INCLUDES) \
 				  $(SORA_ROOT)\inc; \
 		          $(SORA_ROOT)\src\inc; \
                   \inc\brick; \
+		  ..
 
 TARGETLIBS      = $(TARGETLIBS) \
                   $(DDK_LIB_PATH)\Ws2_32.lib \

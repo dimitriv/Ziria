@@ -219,6 +219,7 @@ tySizeOf_C t
 bwBitWidth BW8           = return 8
 bwBitWidth BW16          = return 16
 bwBitWidth BW32          = return 32
+bwBitWidth BW64          = return 64
 bwBitWidth (BWUnknown _) = return 32 -- Defaulting! 
 
 
@@ -251,7 +252,7 @@ codeGenVal v =
   case v of
     VBit True -> return [cexp|1|]
     VBit False -> return [cexp|0|]    
-    VInt i -> return [cexp|$int:i|]
+    VInt i -> return [cexp|$lint:i|] -- NB: $lint instead of $int to accommodate 64-bit constants
     VDouble Full d -> return [cexp|$double:(toRational d)|]
     VDouble (Fixed p) d -> fail "codeGenVal: Fixed values not yet supported"
     VDouble (Unknown n) d -> fail "codeGenVal: Precision not resolved"
@@ -330,10 +331,11 @@ codeGenDeclGroup_qual quals v ty vinit
                -> let cty = codeGenTy_qual quals ty
                       cty_plain = codeGenTy_qual "" ty
                   in do { newHeapAlloc 
+                        ; heap_context <- getHeapContext 
                         ; let ig1  = [cdecl| $ty:cty * $id:v = 
-                                         ($ty:cty_plain *) wpl_alloca(sizeof($ty:cty_plain));|] 
+                                         ($ty:cty_plain *) wpl_alloca($id:heap_context, sizeof($ty:cty_plain));|] 
                               ig2  = [cdecl| $ty:cty * $id:v;|]
-                        ; let stmt = [cstm| $id:v = ($ty:cty_plain *) wpl_alloca(sizeof($ty:cty_plain)); |]
+                        ; let stmt = [cstm| $id:v = ($ty:cty_plain *) wpl_alloca($id:heap_context, sizeof($ty:cty_plain)); |]
                         ; return (ig1, (ig2, Just stmt))
                         }
 
@@ -356,9 +358,10 @@ codeGenDeclGroup_qual quals v ty vinit
             in return (ig, (ig, Nothing)) 
           | alloc_as_ptr
           = do { newHeapAlloc
-               ; let ig1  = [cdecl| $ty:decl_t *$id:v = ($ty:t *) wpl_alloca($len * sizeof($ty:t)); |]
+               ; heap_context <- getHeapContext 
+               ; let ig1  = [cdecl| $ty:decl_t *$id:v = ($ty:t *) wpl_alloca($id:heap_context, $len * sizeof($ty:t)); |]
                      ig2  = [cdecl| $ty:decl_t *$id:v; |]
-                     stmt = [cstm| $id:v = ($ty:t *) wpl_alloca($len * sizeof($ty:t)); |]
+                     stmt = [cstm| $id:v = ($ty:t *) wpl_alloca($id:heap_context, $len * sizeof($ty:t)); |]
                ; return (ig1, (ig2, Just stmt))
                }
           | otherwise 

@@ -49,7 +49,7 @@ instance XExpy Name where
  toXExp nm loc = eVar loc () nm
 
 instance XExpy Int where
- toXExp i loc = eVal loc () (VInt i)
+ toXExp i loc = eVal loc () (VInt (fromIntegral i))
 
 instance XExpy Bool where
  toXExp b loc = eVal loc () (VBool b)
@@ -139,14 +139,14 @@ xIf :: XExpy a => a -> XComp -> XComp -> XComp
 xIf xe xc1 xc2 loc 
   = cBranch loc () (toXExp xe loc) (xc1 loc) (xc2 loc)
 
-xLetE :: XExpy a => Name -> a -> XComp -> XComp
-xLetE nm xe xcomp loc = cLetE loc () nm (toXExp xe loc) (xcomp loc)
+xLetE :: XExpy a => Name -> ForceInline -> a -> XComp -> XComp
+xLetE nm fi xe xcomp loc = cLetE loc () nm fi (toXExp xe loc) (xcomp loc)
 
-xReturn :: XExpy a => a -> XComp
-xReturn xe loc = cReturn loc () (toXExp xe loc)
+xReturn :: XExpy a => ForceInline -> a -> XComp
+xReturn fi xe loc = cReturn loc () fi (toXExp xe loc)
 
-xDo :: XExpy a => a -> XComp
-xDo = xReturn 
+xDo :: XExpy a => ForceInline -> a -> XComp
+xDo fi = xReturn fi 
 
 xTimes :: (XExpy a, XExpy b) => Name -> a -> b -> XComp -> XComp
 xTimes nm xs xl xc loc 
@@ -157,7 +157,7 @@ xRepeat :: XComp -> XComp
 xRepeat xc loc = cRepeat loc () Nothing (xc loc)
 
 xError :: String -> XComp
-xError s loc = cReturn loc () (eError loc () s)
+xError s loc = cReturn loc () AutoInline (eError loc () s)
 
 xBind :: XComp -> Name -> XComp -> XComp
 xBind c1 nm c2 loc = cBindMany loc () (c1 loc) [(nm,c2 loc)]
@@ -194,7 +194,7 @@ instance BindLike (Comp () ()) where
   toASTBind x = ASTComp (\_ -> x)
 
 instance BindLike XExp where
-  toASTBind x = ASTComp (xReturn x)
+  toASTBind x = ASTComp (xReturn AutoInline x)
 
 class XCompy a where 
   toXComp :: a -> XComp

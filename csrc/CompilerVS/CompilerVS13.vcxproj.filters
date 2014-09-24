@@ -21,9 +21,6 @@
     <ClCompile Include="..\buf_bit.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\buf_bytes.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\buf_numerics16.c">
       <Filter>Source Files</Filter>
     </ClCompile>

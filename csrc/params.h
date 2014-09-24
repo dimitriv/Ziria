@@ -23,7 +23,8 @@ typedef enum  {
   TY_FILE  = 0,
   TY_DUMMY = 1,
   TY_SORA = 2,
-  TY_IP = 3
+  TY_IP = 3,
+  TY_MEM = 4
 } BlinkFileType;
 
 // Binary or debug (human-readable) file format
@@ -44,13 +45,16 @@ typedef enum {
 #include <thread_func.h>
 #include <stdlib.h>
 #include <time.h>
+#include "wpl_alloc.h"
+#include "utils.h"
 
-
+// We keep two sets of parameters in case we want to do full-duplex 
+// one radio each. Otherwise, we only use one set for common parameters.
 typedef struct {
 	ULONG radioId;
+	ULONG TXgain;
 	ULONG RXpa;
 	ULONG RXgain;
-	ULONG TXgain;
 	ULONG CentralFrequency;
 	LONG FreqencyOffset;
 	ULONG SampleRate;
@@ -70,7 +74,7 @@ typedef struct {
 typedef unsigned long Repetitions;
 #define INF_REPEAT 0 
 
-struct BlinkGlobals {
+typedef struct _BlinkParams {
 	BlinkFileType inType;       // type of input
 	BlinkFileType outType;      // type of output
 	BlinkFileMode inFileMode;   // input file mode 
@@ -79,10 +83,13 @@ struct BlinkGlobals {
 	char *outFileName;          // output file name 
 	Repetitions inFileRepeats;  // #times to repeat the input buffer
 	Repetitions dummySamples;   // #dummy samples (if inType == TY_DUMMY)
+	unsigned int inMemorySize;	// Size of memory buffer for input
+	unsigned int outMemorySize;	// Size of memory buffer for output
 	unsigned int outBufSize;    // size of buffer we serve output from
     unsigned int heapSize;      // heap size for blink/wpl program
 	unsigned long latencySampling;		// space between latency sampling in #writes (0 - no latency measurements)
 	unsigned long latencyCDFSize;		// How many latency samples to be stored in the CDF table
+	int debug;					// Level of debug info to print (0 - lowest)
 
 #ifdef SORA_PLATFORM
 	SoraParameters radioParams;
@@ -93,24 +100,25 @@ struct BlinkGlobals {
 
 	// TX
     PVOID TXBuffer;
+
+	// Latency measurements
+	TimeMeasurements measurementInfo;
 #endif
-};
+} BlinkParams;
 
 
-/* Global configuration parameters 
-*************************************************************************/
-extern struct BlinkGlobals Globals;
+
 
 FILE * try_open(char *name, char *mode);
-void try_parse_args(int argc, char ** argv);
-void try_read_filebuffer(char *filename, char **fb, unsigned int *len);
+void try_parse_args(BlinkParams *params, int argc, char ** argv);
+void try_read_filebuffer(HeapContextBlock *hblk, char *filename, char **fb, unsigned int *len);
 
 typedef struct {
   char * param_str;               // Name of param (for parsing)
   char * param_use;               // Use
   char * param_descr;             // Description
   char * param_dflt;              // Initialization value as string
-  void (*param_init)(char *prm);  // Initializer
+  void (*param_init) (BlinkParams* Params, char *prm);  // Initializer
 } BlinkParamInfo;
 
 void print_blink_usage(void);

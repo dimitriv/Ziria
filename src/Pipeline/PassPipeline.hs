@@ -75,8 +75,8 @@ stripLetCtxt c = go c
       = case unComp c of
           Let nm c1 c2 -> 
             let (ctx,c0) = go c2 in (CLet cloc nm c1 ctx, c0)
-          LetE nm e1 c2 -> 
-            let (ctx,c0) = go c2 in (CLetE cloc nm e1 ctx, c0)
+          LetE nm fi e1 c2 -> 
+            let (ctx,c0) = go c2 in (CLetE cloc nm fi e1 ctx, c0)
           LetHeader nm fun@(MkFun (MkFunDefined {}) _ _) c2 ->
             let (ctx,c0) = go c2 in (CLetHeader cloc nm fun ctx, c0)
           LetHeader nm fun@(MkFun (MkFunExternal {}) _ _) c2 -> 

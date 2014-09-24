@@ -88,10 +88,10 @@ cHeader = unlines l
             , "#include <xmmintrin.h>"
             , "#include <emmintrin.h>"
 
-            , "#include \"types.h\""
-            , "#include \"wpl_alloc.h\""
-            , "#include \"utils.h\""
-            , "#include \"buf.h\""
+            , "#include <types.h>"
+            , "#include <wpl_alloc.h>"
+            , "#include <utils.h>"
+            , "#include <buf.h>"
 
             , ""
             , "#define SKIP " ++ show sKIP

@@ -47,6 +47,19 @@ int32 __ext_dbgplot_real_line(int16 *line, int len)
 	}
 	initDbgPlot();
 	PlotLine("Line", (int*)(buf), len);
+	free(buf);
+	return 0;
+#else
+	printf("DbgPlot not supported in X64 mode.\n");
+	exit(1);
+#endif
+}
+
+int32 __ext_dbgplot_real_line32(int32 *line, int len)
+{ 
+#ifdef BUILDARCHX86
+	initDbgPlot();
+	PlotLine("Line", (int*)(line), len);
 	return 0;
 #else
 	printf("DbgPlot not supported in X64 mode.\n");
@@ -75,10 +88,14 @@ int32 __ext_dbgplot_complex_line(complex16 *line, int len, int16 type)
 		case 3:
 			buf[i] = (int)line[i].re * (int)line[i].re + (int)line[i].im * (int)line[i].im;
 			break;
+		default:
+			buf[i] = (int)line[i].re;
+			break;
 		}
 	}
 	initDbgPlot();
 	PlotLine("Line", (int*)(buf), len);
+	free(buf);
 	return 0;
 #else
 	printf("DbgPlot not supported in X64 mode.\n");
@@ -101,6 +118,7 @@ int32 __ext_dbgplot_spectrum(complex16 *line, int len)
 	}
 	initDbgPlot();
 	PlotSpectrum("Spectrum", buf, len);
+	free(buf);
 	return 0;
 #else
 	printf("DbgPlot not supported in X64 mode.\n");

@@ -32,3 +32,6 @@ int32 __ext_copy_int16(int16* dst, int len, int16* src, int lens, int32 length);
 int32 __ext_copy_int32(int32* dst, int len, int32* src, int lens, int32 length);
 int32 __ext_copy_complex16(complex16* dst, int len, complex16* src, int lens, int32 length);
 int32 __ext_copy_complex32(complex32* dst, int len, complex32* src, int lens, int32 length);
+
+int32 __ext_bits_to_int8(int8* arrout, int lengthout, BitArrPtr arrin, int lengthin);
+int32 __ext_int8_to_bits(BitArrPtr arrout, int lengthout, int8* arrin, int lengthin);

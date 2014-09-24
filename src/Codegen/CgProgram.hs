@@ -20,7 +20,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RebindableSyntax #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+    {-# LANGUAGE ScopedTypeVariables #-}
 
 module CgProgram ( codeGenProgram ) where
 
@@ -65,6 +65,20 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Data.List ( nub )
 
 
+
+
+codeGenContexts :: Cg [C.InitGroup]
+-- Declare external context blocks
+codeGenContexts 
+  = do { buf_context  <- getBufContext
+       ; heap_context <- getHeapContext
+       ; global_params <- getGlobalParams
+       ; return [ [cdecl| extern $ty:(namedCType "BufContextBlock")* $id:buf_context;|]
+                , [cdecl| extern $ty:(namedCType "HeapContextBlock")* $id:heap_context;|]
+                , [cdecl| extern $ty:(namedCType "BlinkParams")* $id:global_params;|]
+                ]
+       }
+
 codeGenGlobals :: DynFlags
                -> [(Name,Ty,Maybe (Exp Ty))]
                -> Ty -- input type  (must be ext buffer!)
@@ -72,22 +86,27 @@ codeGenGlobals :: DynFlags
                -> Cg [C.Stm]
 -- Returns initialization statements
 codeGenGlobals dflags globals inty outty 
- = do { (defs, initstms) <- codeGenDeclGlobalDefs dflags globals
+ = do { ctx_decls <- codeGenContexts
+      ; appendTopDecls ctx_decls
+      ; (defs, initstms) <- codeGenDeclGlobalDefs dflags globals
       ; appendTopDefs defs
       ; (decls, stms) <- inNewBlock_ $ codeGenGlobalInitsOnly dflags globals
       ; appendTopDecls decls
-      ; cgExtBufInitsAndFins (inty,outty)
+      ; cgExtBufInitsAndFins (inty,outty) (getName dflags)
       ; return (initstms ++ stms) }
 
-codeGenWPLGlobalInit :: [C.Stm] -> Cg ()
-codeGenWPLGlobalInit stms 
-  = appendTopDef $ 
-    [cedecl|void wpl_global_init(unsigned int max_heap_siz) 
+codeGenWPLGlobalInit :: [C.Stm] -> String -> Cg ()
+codeGenWPLGlobalInit stms mfreshId
+  = do { heap_context  <- getHeapContext
+       ; appendTopDef $ 
+         [cedecl|void $id:(wpl_global_name mfreshId) (unsigned int max_heap_siz) 
             { 
-              wpl_init_heap(max_heap_siz);
+              wpl_init_heap ($id:heap_context, max_heap_siz);
               $stms:stms
             }
-    |]
+         |]
+       }
+  where wpl_global_name mfreshId = "wpl_global_init" ++ mfreshId
 
 
 codeGenCompilerGlobals :: String
@@ -111,7 +130,7 @@ codeGenThread dflags tid c = do
     (maybe_tv, ta, tb) <- checkCompType (compInfo c)
     (bta, btb) <- checkInOutFiles ta tb
     withThreadId tid $ do
-        mkRuntime (Just tid) $ do
+        mkRuntime (Just ((getName dflags) ++ tid)) $ do
         cinfo <- codeGenCompTop dflags c (finalCompKont tid)
 
         codeGenCompilerGlobals tid (tickHdl cinfo) 
@@ -143,8 +162,9 @@ codeGenProgram :: DynFlags                       -- Flags
                -> Cg ()
 codeGenProgram dflags globals shared_ctxt 
                tid_cs bufTys (in_ty,yld_ty) 
-  = do { initstms <- codeGenGlobals dflags globals in_ty yld_ty             
-       ; extendVarEnv [(nm,(ty,[cexp|$id:(name nm)|])) | (nm,ty,_)<- globals] $ 
+  = withModuleName module_name $
+    do { initstms <- codeGenGlobals dflags globals in_ty yld_ty             
+       ; extendVarEnv [(nm,(ty,[cexp|$id:(name nm)|])) | (nm,ty,_) <- globals] $ 
          do { (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
                 do { forM tid_cs $ \(tid,c) -> codeGenThread dflags tid c
                    ; if pipeline_flag then 
@@ -159,17 +179,17 @@ codeGenProgram dflags globals shared_ctxt
                             -- Emit the appropriate wpl_set_up_threads() 
                             -- definition for SORA code to work
                           ; appendTopDefs $ 
-                            ST.thread_setup affinity_mask bufTys tids
+                            ST.thread_setup affinity_mask module_name bufTys tids
                           } 
                      else 
                         -- In this case we know that wpl_go /is/ going to be 
                         -- the main function 
-                        appendTopDefs $ ST.thread_setup_shim
+                        appendTopDefs $ ST.thread_setup_shim module_name 
                    }
                -- Finally emit wpl_global_init()
              ; lut_init_stms <- getLUTHashes >>= 
                                    (return . map (lgi_lut_gen . snd))
-             ; codeGenWPLGlobalInit $ lut_init_stms ++ initstms ++ moreinitstms 
+             ; codeGenWPLGlobalInit (lut_init_stms ++ initstms ++ moreinitstms) module_name
              }
         }
 
@@ -178,4 +198,5 @@ codeGenProgram dflags globals shared_ctxt
     isMultiThreaded = length tid_cs > 1
     pipeline_flag   = isDynFlagSet dflags Pipeline
     affinity_mask   = getAffinityMask dflags
+    module_name     = getName dflags
 

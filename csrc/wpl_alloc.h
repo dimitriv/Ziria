@@ -16,14 +16,26 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 */
-/* The bump allocator */
-void wpl_init_heap(unsigned int max_heap_size);
+#pragma once
 
-void * wpl_alloca(unsigned int bytes);
+typedef struct _HeapContextBlock {
+	void * wpl_heap;
+	unsigned int wpl_free_idx;
+	int wpl_heap_siz;
+} HeapContextBlock;
+
+
+void initHeapCtxBlock(HeapContextBlock *hblk, unsigned int max_heap_size);
+
+
+/* The bump allocator */
+void wpl_init_heap(HeapContextBlock *blk, unsigned int max_heap_size);
+
+void * wpl_alloca(HeapContextBlock *blk, unsigned int bytes);
 
 /* Just a generic allocation routine */
-char * try_alloc_bytes(unsigned int siz);
+char * try_alloc_bytes(HeapContextBlock *hblk, unsigned int siz);
 
-unsigned int wpl_get_free_idx();
+unsigned int wpl_get_free_idx(HeapContextBlock *blk);
 // precondition: 16-aligned
-void wpl_restore_free_idx(unsigned int idx);
+void wpl_restore_free_idx(HeapContextBlock *blk, unsigned int idx);

@@ -113,6 +113,11 @@ module CgMonad
   , withDisabledBC
   , withDisabledBCWhen
   , isDisabledBC
+
+  , withModuleName
+  , getHeapContext
+  , getBufContext
+  , getGlobalParams
   ) where
 
 import Control.Applicative
@@ -271,12 +276,17 @@ data CgEnv = CgEnv
       -- The environment mapping function symbols 
       -- to real names and closure params
 
-    , symEnv     :: GS.Sym                
+    , symEnv     :: GS.Sym 
       -- Reference to a symbol, for gensym'ing
 
     , disableBC  :: Bool -- When true, no bound checks are emitted 
                          -- overriding any user preferences. Useful 
                          -- for external functions that are "trust me"
+
+    , moduleName :: String 
+      -- This is to be added to global variables, 
+      -- to allow us to link multiple Ziria modules in the same C project
+
     }
 
 emptyEnv :: GS.Sym -> CgEnv
@@ -288,6 +298,7 @@ emptyEnv sym =
           , funEnv     = M.empty 
           , symEnv     = sym 
           , disableBC  = False 
+          , moduleName = ""
           }
 
 -- Note [CodeGen Invariants]
@@ -467,10 +478,11 @@ inAllocFrame :: Cg a -> Cg a
 -- Execute this action in an allocation frame. Use with moderation!
 inAllocFrame action
   = do { idx <- freshName "mem_idx"
+       ; heap_context <- getHeapContext
        ; appendDecl [cdecl| unsigned int $id:(name idx); |]
-       ; appendStmt [cstm| $id:(name idx) = wpl_get_free_idx(); |]
+       ; appendStmt [cstm| $id:(name idx) = wpl_get_free_idx($id:heap_context); |]
        ; x <- action 
-       ; appendStmt [cstm| wpl_restore_free_idx($id:(name idx)); |]
+       ; appendStmt [cstm| wpl_restore_free_idx($id:heap_context, $id:(name idx)); |]
        ; return x }
 
 
@@ -498,9 +510,9 @@ collectStmts_ m = do
 
 genSym :: String -> Cg String
 genSym prefix = do
-    sym  <- asks symEnv
-    i    <- liftIO $ GS.genSym sym
-    return $ prefix ++ show i
+    sym       <- asks symEnv
+    str       <- liftIO $ GS.genSymStr sym
+    return $ prefix ++ str
 
 getNames :: Cg [Name]
 getNames = gets nameStack
@@ -676,6 +688,19 @@ isDisabledBC :: Cg Bool
 isDisabledBC = asks $ \rho -> disableBC rho
 
 
+withModuleName :: String -> Cg a -> Cg a
+withModuleName str = 
+    local $ \rho -> rho { moduleName = str }
+
+getHeapContext :: Cg String
+getHeapContext = asks $ \rho -> "pheap_ctx" ++ (moduleName rho)
+
+getBufContext :: Cg String
+getBufContext = asks $ \rho -> "pbuf_ctx" ++ (moduleName rho)
+
+getGlobalParams :: Cg String
+getGlobalParams = asks $ \rho -> "params" ++ (moduleName rho)
+
 withThreadId :: String -> Cg a -> Cg a
 withThreadId _ m = m
 
@@ -791,8 +816,9 @@ getGetLen c =
 
 
 cgTIntName :: BitWidth -> String
-cgTIntName BW8  = "int8"
-cgTIntName BW16 = "int16"
-cgTIntName BW32 = "int32"
-cgTIntName _    = "int32" -- Defaulting to 32 bits
+cgTIntName BW8           = "int8"
+cgTIntName BW16          = "int16"
+cgTIntName BW32          = "int32"
+cgTIntName BW64          = "int64"
+cgTIntName (BWUnknown _) = "int32" -- Defaulting to 32 bits
 

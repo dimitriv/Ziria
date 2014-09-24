@@ -34,6 +34,9 @@ import Data.List as M
 
 import CardinalityAnalysis
 
+
+
+
 -- 
 -- Work-in-progress vectorization plan
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -76,15 +79,15 @@ instance Monad VecM where
          runVecM (m2 res) sym env st'
   return x = pure x
 
-newVectUniq :: VecM Int
-newVectUniq = VecM $ \sym _env st -> do { i <- GS.genSym sym
-                                        ; return (i,st) }
+newVectUniq :: VecM String
+newVectUniq = VecM $ \sym _env st -> do { str <- GS.genSymStr sym
+                                        ; return (str,st) }
 
 newVectName :: String -> Maybe SourcePos -> VecM Name
 newVectName nm loc
-  = do { u <- newVectUniq
+  = do { str <- newVectUniq
        ; return $ 
-         (toName (nm ++ "_" ++ show u) loc Nothing) {uniqId = "_v" ++ show u} 
+         (toName (nm ++ "_" ++ str) loc Nothing) {uniqId = "_v" ++ str} 
        }
 
 

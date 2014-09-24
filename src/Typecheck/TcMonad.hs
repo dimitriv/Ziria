@@ -342,8 +342,8 @@ liftIO m = TcM $ \_ _ _ _ _ st -> m >>= \a -> return (Right (a,st))
 genSym :: String -> TcM String
 genSym prefix =
   TcM $ \_ _ _ sym _ st ->
-    do { fresh <- GS.genSym sym
-       ; return $ Right (prefix ++ show fresh, st) }
+    do { str <- GS.genSymStr sym
+       ; return $ Right (prefix ++ str, st) }
 
 extendEnv :: [(String,Ty)] -> TcM a -> TcM a
 extendEnv binds m 

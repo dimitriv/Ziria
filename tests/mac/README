@@ -1,0 +1,8 @@
+This is a sample mac project, to illustrate how to create a MAC around a Ziria PHY. 
+This is a dummy MAC that runs two Ziria files, rx.zir and tx.zir. 
+It can be run in a single thread or on two threads. 
+In the single thread mode we run tx.zir on data, store data in memory, run rx.zir on the memory buffer and store output. 
+In the 2 threaded mode we run the same process on two threads, where rx.zir threads waits for the tx thread to finish
+before processing the data. 
+The goal of the project is to illustrate different initializations and interfacing between components. 
+It has been used to derive WiFi MAC in code/WiFi/mac.

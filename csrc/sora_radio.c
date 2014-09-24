@@ -25,7 +25,7 @@
 #include "numerics.h"
 
 
-void RadioStart(SoraParameters params) {	
+void RadioStart(BlinkParams *params) {
 	// Initialize Sora user mode extension
     BOOLEAN succ = SoraUInitUserExtension("\\\\.\\HWTest");
     if (!succ) 
@@ -35,31 +35,37 @@ void RadioStart(SoraParameters params) {
     }
 
 	// always start radio first, it will reset radio to the default setting
-    SoraURadioStart(params.radioId);
+    SoraURadioStart(params->radioParams.radioId);
 
-    SoraURadioSetRxPA(params.radioId, params.RXpa);
-    SoraURadioSetRxGain(params.radioId, params.RXgain);
-    SoraURadioSetTxGain(params.radioId, params.TXgain);
-    SoraURadioSetCentralFreq(params.radioId, params.CentralFrequency);
-	SoraURadioSetFreqOffset(params.radioId, params.FreqencyOffset);					
-    SoraURadioSetSampleRate(params.radioId, params.SampleRate);
-	Globals.TXBuffer = NULL;
-	Globals.pRxBuf = NULL;
+    SoraURadioSetRxPA(params->radioParams.radioId, params->radioParams.RXpa);
+    SoraURadioSetRxGain(params->radioParams.radioId, params->radioParams.RXgain);
+    SoraURadioSetTxGain(params->radioParams.radioId, params->radioParams.TXgain);
+    SoraURadioSetCentralFreq(params->radioParams.radioId, params->radioParams.CentralFrequency);
+	SoraURadioSetFreqOffset(params->radioParams.radioId, params->radioParams.FreqencyOffset);					
+    SoraURadioSetSampleRate(params->radioParams.radioId, params->radioParams.SampleRate);
+	params->TXBuffer = NULL;
+	params->pRxBuf = NULL;
+
+	// DEBUG
+	printf("RadioID: %ld, RX_PA: %ld, RX_Gain: %ld, TX_Gain: %ld, Central Freq: %ld, Freq Offset: %ld, Sample Rate: %ld\n", 
+		params->radioParams.radioId, params->radioParams.RXpa, params->radioParams.RXgain,
+		params->radioParams.TXgain, params->radioParams.CentralFrequency, params->radioParams.FreqencyOffset,
+		params->radioParams.SampleRate);
 }
 
 
 
-void RadioStop(SoraParameters params) {	
-	if (Globals.TXBuffer != NULL)
+void RadioStop(BlinkParams *params) {
+	if (params->TXBuffer != NULL)
 	{
-		SoraUReleaseBuffer((PVOID)Globals.TXBuffer);
+		SoraUReleaseBuffer((PVOID)params->TXBuffer);
 	}
 
-	if (Globals.pRxBuf != NULL)
+	if (params->pRxBuf != NULL)
 	{
 		HRESULT hr;
-		SoraURadioReleaseRxStream(&Globals.RxStream, params.radioId);
-        hr = SoraURadioUnmapRxSampleBuf(params.radioId, Globals.pRxBuf);
+		SoraURadioReleaseRxStream(&params->RxStream, params->radioParams.radioId);
+        hr = SoraURadioUnmapRxSampleBuf(params->radioParams.radioId, params->pRxBuf);
 	}
 
 	SoraUCleanUserExtension();
@@ -67,31 +73,33 @@ void RadioStop(SoraParameters params) {
 
 
 
-void InitSoraRx(SoraParameters params)
+void InitSoraRx(BlinkParams *params)
 {
     HRESULT hr;
     ULONG nRxBufSize = 0;
 
 	// Map Rx Buffer 
-    hr = SoraURadioMapRxSampleBuf( params.radioId, &Globals.pRxBuf, & nRxBufSize);
+    hr = SoraURadioMapRxSampleBuf( params->radioParams.radioId, &params->pRxBuf, & nRxBufSize);
     if ( FAILED (hr) ) {
         fprintf (stderr, "Error: Fail to map Sora Rx buffer!\n" );
         exit(1);
     }
     
     // Generate a sample stream from mapped Rx buffer
-	SoraURadioAllocRxStream( &(Globals.RxStream), params.radioId, (PUCHAR)Globals.pRxBuf, nRxBufSize);
+	SoraURadioAllocRxStream( &(params->RxStream), params->radioParams.radioId, (PUCHAR)params->pRxBuf, nRxBufSize);
 }
 
 
-void InitSoraTx(SoraParameters params)
+void InitSoraTx(BlinkParams *params)
 {
-	Globals.TXBuffer = SoraUAllocBuffer(Globals.radioParams.TXBufferSize);					// alloc tx sample buffer
-	if (Globals.TXBuffer == NULL) 
+	params->TXBuffer = SoraUAllocBuffer(params->radioParams.TXBufferSize);					// alloc tx sample buffer
+	if (params->TXBuffer == NULL) 
 	{
 		fprintf (stderr, "Error: Fail to allocate Sora Tx buffer memory!\n" );
 		exit(1);
 	}
+	// Set to 0 as it is not expensive in init and can be useful for gaps between packets
+	memset(params->TXBuffer, 0, params->radioParams.TXBufferSize);
 }
 
 
@@ -99,7 +107,7 @@ void InitSoraTx(SoraParameters params)
 
 // readSora reads <size> of __int16 inputs from Sora radio
 // It is a blocking function and returns only once everything is read
-void readSora(complex16 *ptr, int size)
+void readSora(BlinkParams *params, complex16 *ptr, int size)
 {
     HRESULT hr;
     FLAG fReachEnd;
@@ -123,7 +131,7 @@ void readSora(complex16 *ptr, int size)
 	while (remaining > 0)
 	{
 		// Read from the radio
-		hr = SoraRadioReadRxStream( &(Globals.RxStream), &fReachEnd, block);
+		hr = SoraRadioReadRxStream( &(params->RxStream), &fReachEnd, block);
 		if (FAILED(hr)) {
 			fprintf (stderr, "Error: Fail to read Sora Rx buffer!\n" );
 			exit(1);
@@ -144,14 +152,14 @@ void readSora(complex16 *ptr, int size)
 
 // Transit a buffer of <size> complex16 numbers
 // ptr has to be 16 aligned and has to have space for x8 complex16 numbers, due to efficien packing to complex8
-void writeSora(complex16 *ptr, ULONG size)
+void writeSora(BlinkParams *params, complex16 *ptr, ULONG size)
 {
     HRESULT hr;
 	ULONG TxID;
 
 	ULONG dbg=0;
 
-	if (size*2 > Globals.radioParams.TXBufferSize)
+	if (size*2 > params->radioParams.TXBufferSize)
 	{
 		fprintf (stderr, "Error: Sora Tx buffer too small (%ld needed)!\n", 2*size );
 		exit(1);
@@ -174,7 +182,7 @@ void writeSora(complex16 *ptr, ULONG size)
         s2 = vPtr[i+1];
         vcb b = (vcb)saturated_pack((vs&)s1, (vs&)s2);
 
-		char *dst = (char *) Globals.TXBuffer;
+		char *dst = (char *) params->TXBuffer;
 		memcpy((void*)(dst+index), (void*) (&b), sizeof(vcb));
 		index += sizeof(vcb);
 
@@ -182,8 +190,8 @@ void writeSora(complex16 *ptr, ULONG size)
 
 
 	// DEBUG: 
-	//hr = SoraURadioTransferEx(Globals.radioParams.radioId, Globals.TXBuffer, 2*size, &TxID);	
-	hr = SoraURadioTransferEx(Globals.radioParams.radioId, Globals.TXBuffer, 4*size, &TxID);	
+	//hr = SoraURadioTransferEx(params->radioParams.radioId, params->TXBuffer, 2*size, &TxID);	
+	hr = SoraURadioTransferEx(params->radioParams.radioId, params->TXBuffer, 4*size, &TxID);	
 
     if (!SUCCEEDED(hr))
     {
@@ -191,12 +199,12 @@ void writeSora(complex16 *ptr, ULONG size)
 		exit(1);
 	}
 
-	hr = SoraURadioTx(Globals.radioParams.radioId, TxID);
+	hr = SoraURadioTx(params->radioParams.radioId, TxID);
     if (!SUCCEEDED(hr))
     {
 		fprintf (stderr, "Error: Fail to transmit Sora Tx buffer!\n" );
 		exit(1);
 	}
 
-    hr = SoraURadioTxFree(Globals.radioParams.radioId, TxID);
+    hr = SoraURadioTxFree(params->radioParams.radioId, TxID);
 }

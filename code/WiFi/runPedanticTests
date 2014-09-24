@@ -7,7 +7,6 @@ if [[ $? -ne 0 ]]
 then
     exit 1
 fi
-
 #read -p "DEFAULT tests passed, press any key to continue... " -n1 -s
 
 echo "========================= NO-EXP-FOLD NO-FOLD ==========="
@@ -16,7 +15,6 @@ if [[ $? -ne 0 ]]
 then
     exit 1
 fi
-
 # #read -p "NO-EXP-FOLD,NO-FOLD tests passed, press any key to continue... " -n1 -s
 
 echo "========================= VECTORIZE ====================="

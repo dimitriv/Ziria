@@ -1,0 +1,227 @@
+#define LTS_ACCURATE
+#define RADIO
+#define DO_DECODING
+--#define FAST
+
+
+
+#include <externals.blk>
+#include "../const.blk"
+#include "../receiver/cca/cca_tufv.blk"
+#include "../receiver/OFDM/LTS.blk"
+#include "../receiver/removeDC.blk"
+#include "../receiver/OFDM/DataSymbol.blk"
+#include "../receiver/OFDM/FreqCompensation.blk"
+#include "../receiver/OFDM/FFT.blk"
+#include "../receiver/OFDM/ChannelEqualization.blk"
+#include "../receiver/OFDM/PilotTrack.blk"
+#include "../receiver/OFDM/GetData.blk"
+
+#ifdef DO_DECODING
+#include "../receiver/decoding/DecodePLCP.blk"
+#include "../receiver/decoding/Decode.blk"
+#include "../transmitter/crc.blk"
+#endif
+
+
+-- External function to return parameters to MAC
+let external MAC_cca(energy : int32, noise : int32) : () in
+
+
+
+let comp detectPreamble(energy_threshold : int32) = 
+  (removeDC() >>> cca(energy_threshold))
+in 
+
+
+
+#ifdef DO_DECODING
+let comp processCRC(hdata : struct HeaderInfo) = 
+var retCRC: arr[8] bit; 
+var retMod: arr[8] bit; 
+var retEnc: arr[8] bit; 
+var retSize: arr[16] bit; 
+var tmp: arr[2] int8;
+
+  (c : arr[4] bit) <- crc(hdata.len, false); 
+  crc <- check_crc(c);
+
+  -- The following sends packet data to MAC
+  do {
+     -- CRC
+     if (crc) then {
+        tmp[0] := 1;
+     } else {
+        tmp[0] := 0;
+     }
+     int8_to_bits(retCRC, tmp[0,1]);
+
+     -- Modulation
+     tmp[0] := int8(hdata.modulation);
+     int8_to_bits(retMod, tmp[0,1]);
+
+     -- Coding
+     tmp[0] := int8(hdata.coding);
+     int8_to_bits(retEnc, tmp[0,1]);
+
+     -- Size
+     tmp[0] := int8(hdata.len % 256);
+     tmp[1] := int8(hdata.len / 256);
+     int8_to_bits(retSize, tmp[0,2]);
+  } 
+  emits retCRC;
+  emits retMod;
+  emits retEnc;
+  emits retSize;
+in
+
+let comp receiveBits() = 
+var cnt : int := 0;
+       seq { hdata <- DecodePLCP()
+           ; Decode(hdata) >>> processCRC(hdata)
+           }
+in
+#endif
+
+
+
+
+let comp pad() = 
+  times 500 {
+    emit complex16{re=0; im=0};
+  };
+  repeat{
+    x<-take;
+    emit x;
+  }
+in
+
+
+
+let comp skip() = 
+  times 1 {
+  -- times 65000 {
+     x<- take;
+  }
+
+  repeat {
+    x<- take;
+    emit x;
+  }  
+in
+
+
+{-
+let comp test() = 
+var xcopy:arr[4] complex16;
+var re32:arr[4] int32;
+var im32:arr[4] int32;
+var iEnergy : int := 0;
+
+repeat{
+  (x : arr[4] complex16) <- takes 4;
+  do{
+     v_shift_right_complex16(xcopy,x,2);
+     v_shift_right_complex16(xcopy,xcopy,2);
+
+     v_conj_mul_complex16_int32(re32, im32, xcopy, xcopy);
+     iEnergy := v_sum_int32(re32);
+
+    -- if (iEnergy > 10000) then 
+    if (x[0].re > 1000) then 
+    {
+      println iEnergy, " ", x;
+    }
+  }
+}
+in
+-}
+
+{-
+let comp test() = 
+repeat{
+  (x:arr[50000] complex16) <- takes 50000;
+  do{dbgplot_complex_line(x, 1)};
+}
+in
+-}
+
+
+-- read[complex16] >>> test() >>> write[bit]
+
+
+
+{-
+read[complex16] >>> 
+   times 10000 {x<-take; emit x}
+>>> write
+-}
+
+
+{-
+read[complex16] >>> 
+  skip() >>>
+#ifndef RADIO
+  pad() >>>
+#endif
+  {det <- detectPreamble()
+    ; times 1000 {x<-take; emit x}
+  }
+>>> write
+-}
+
+
+let comp amp() = 
+repeat{
+  (x : complex16) <- take;
+  let const = 1;
+  emit complex16{re = x.re * const; im = x.im * const};
+  --emit complex16{re = x.re / const; im = x.im / const};
+}
+in
+
+
+
+#ifndef RADIO 
+
+  read >>> 
+     amp() >>>
+     pad() >>>
+     seq{ det<-detectPreamble(cca_energy_threshold)
+        ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
+                     ", energy: ", det.energy, ", noise: ", det.noise, ", maxCorr: ", det.maxCorr}
+        ; params <- (LTS(det.shift, det.maxCorr)); 
+          DataSymbol(det.shift) 
+          >>> FFT() 
+          >>> ChannelEqualization(params)
+          >>> PilotTrack() 
+          >>> GetData()
+     #ifdef DO_DECODING
+          >>> receiveBits()
+     #endif
+     }
+  >>> write
+
+#else 
+
+-- No repeat here, it happens at the MAC level
+   read >>> 
+       seq{ det<-detectPreamble(cca_energy_threshold)
+          ; do{MAC_cca(det.energy, det.noise)}
+       #ifndef FAST
+          ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
+                       ", energy: ", det.energy, ", noise: ", det.noise, ", maxCorr: ", det.maxCorr}
+       #endif
+          ; params <- (LTS(det.shift, det.maxCorr)); 
+            DataSymbol(det.shift) 
+            >>> FFT() 
+            >>> ChannelEqualization(params)
+            >>> PilotTrack() 
+            >>> GetData()
+       #ifdef DO_DECODING
+            >>> receiveBits()
+       #endif
+       }
+   >>> write
+
+#endif

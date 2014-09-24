@@ -47,8 +47,8 @@ in
 
 
 
-let comp detectPreamble() = 
-  (removeDC() >>> cca())
+let comp detectPreamble(energy_threshold : int32) = 
+  (removeDC() >>> cca(energy_threshold))
 in 
 
 
@@ -56,10 +56,11 @@ in
 #ifdef DO_DECODING
 let comp receiveBits() = 
        seq { hdata <- DecodePLCP()
-           ; Decode(hdata) >>> seq { (c : arr[4] bit) <- crc(hdata.len); check_crc(c) }
+           ; Decode(hdata) >>> seq { (c : arr[4] bit) <- crc(hdata.len, false); check_crc(c) }
        }
 in
 #endif
+
 
 
 
@@ -77,11 +78,12 @@ read >>>
   dummy() >>> 
   downSample() >>> 
 repeat{
-  seq{ det<-detectPreamble()
+  seq{ det<-detectPreamble(5000)
 #ifndef FAST
-     ; do{println "Detected at: ", det.noSamples}
+     ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
+                  ", energy: ", det.energy, ", noise: ", det.noise, ", maxCorr: ", det.maxCorr}
 #endif
-     ; params <- (LTS(det.shift)); 
+     ; params <- (LTS(det.shift, det.maxCorr)); 
        DataSymbol(det.shift) 
        >>> FFT() 
        >>> ChannelEqualization(params)

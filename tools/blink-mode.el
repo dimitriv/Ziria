@@ -40,7 +40,7 @@
 
 (setq blink-types '("arr" "struct" "enum"
               "complex" "int" "int8" "bit" "bool" "int"
-              "int16" "int32" "complex8" "complex16" "complex32"
+              "int16" "int32" "int64" "complex8" "complex16" "complex32" "complex64"
               "struct"))
 
 (setq blink-consts '("true" "false" "'0" "'1")) 

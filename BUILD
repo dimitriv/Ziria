@@ -1,16 +1,34 @@
 To build the Ziria (wplc) compiler (under Linux or Windows/Cygwin) you will need:
 
-* GHC 7.6 (including a cabal installation)
+* GHC 7.8 (including a cabal installation). 
+  On Windows it is best to install Haskell Platform for Windows, which contains everything.
+  Also, make sure you use the same bit-widths for Haskell and Cygwin
+  (64-bit Cygwin is known to have issues with 32-bit Haskell)
+
 * The cabal packages (install them with 'cabal install <package-name>' within cygwin shell)
-   - text-1.1.1.3
+   - text
    - parsec
    - mainland-pretty
    - language-c-quote 
    - dlist
-   - unix-compat
+   - unix-compat (on Windows you might need to install this one from cmd rather than cygwin shell)
    - hashable
+   - pretty-show
+
+  NOTE: Make sure yous Haskell Platform path is before your Cygwin GCC path in Windows PATHs
+        because cabal needs Haskell Platform ld and not the Cygwin GCC one
+	(otherwise horrible errors will occur)
+
+  NOTE: parsec 3.1.6 contains a regression bug (https://github.com/aslatter/parsec/issues/9);
+  use an older version for now.
 
 Then go to src/ and type 'make'. You will be left with a 'wplc' binary.
+
+For many examples outside of the main path one needs to set Ziria path:
+set ZIRIA_ROOT=/path/to/Ziria/wplc/compiler
+
+NOTE: If you update GHC on Windows, make sure you delete ghc and cabal dirs 
+in /Users/<username>/AppData/Roaming to avoid stale state problems.
 
 
 * Running the basic tests:

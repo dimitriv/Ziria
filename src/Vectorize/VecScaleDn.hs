@@ -114,19 +114,19 @@ doVectorizeCompDn comp cin cout (din,dout)
        ; let xa_exp   = mkexp $ EVar xa_name
              ya_exp   = mkexp $ EVar ya_name
              xtmp_exp = mkexp $ EVar xtmp_name
-             iexp n   = mkexp $ EBinOp Mult (mkexp $ EVar icnt_name) (mkexp $ EVal (VInt n))
+             iexp n   = mkexp $ EBinOp Mult (mkexp $ EVar icnt_name) (mkexp $ EVal (vint n))
           
              init_arr_in crest
                | just_one_take
                = cBindMany loc () (cTake1 loc ()) [(xa_name, crest)]
                | otherwise
-               = cSeq loc () ( mkTimes (mkexp $ (EVal (VInt $ cin `div` din))) icnt_name $ 
+               = cSeq loc () ( mkTimes (mkexp $ (EVal (vint $ cin `div` din))) icnt_name $ 
                                mkcomp $ 
                                BindMany (mkcomp Take1) $ 
-                               [(xtmp_name, mkcomp (Return (mkexp $ EArrWrite xa_exp (iexp din) (LILength din) xtmp_exp)))]
+                               [(xtmp_name, mkcomp (Return NoInline (mkexp $ EArrWrite xa_exp (iexp din) (LILength din) xtmp_exp)))]
                              ) crest
 
-             emit_arr_out = mkTimes (mkexp $ (EVal (VInt $ cout `div` dout))) icnt_name $
+             emit_arr_out = mkTimes (mkexp $ (EVal (vint $ cout `div` dout))) icnt_name $
                             mkcomp $ 
                             Emit (mkexp $ EArrRead ya_exp (iexp dout) (LILength dout))
 
@@ -134,7 +134,7 @@ doVectorizeCompDn comp cin cout (din,dout)
 
        ; res_var <- newVectName "vect_res" loc
        ; let res_exp = mkexp $ EVar res_var
-             final_return = mkcomp $ Return res_exp
+             final_return = mkcomp $ Return AutoInline res_exp
 
        ; let emit_and_return 
                | doneTyOfCTyBase (fst $ compInfo comp) == Just TUnit
@@ -198,9 +198,9 @@ doVectorizeCompDn comp cin cout (din,dout)
                 (Let x c1 c2) -> 
                    extendCVarBind x c1 $ go c2
 
-                (LetE x e c1) -> 
+                (LetE x fi e c1) -> 
                    do { c1' <- go c1
-                      ; return (MkComp (LetE x (eraseExp e) c1') loc ()) 
+                      ; return (MkComp (LetE x fi (eraseExp e) c1') loc ()) 
                       }
                 -- CL
                 (LetERef x (Right e) c1) -> 
@@ -282,7 +282,7 @@ doVectorizeCompDn comp cin cout (din,dout)
                      -> return $ MkComp (ReadInternal bid tp) loc ()
                 (WriteInternal bid) -> return $ MkComp (WriteInternal bid) loc ()
 
-                (Return e) -> return $ MkComp (Return $ eraseExp e) loc ()
+                (Return fi e) -> return $ MkComp (Return fi $ eraseExp e) loc ()
 
                 -- CL
                 (LetHeader n fn@(MkFun (MkFunExternal {}) _ _) c) -> do { c' <- go c 
@@ -305,9 +305,9 @@ doVectorizeCompDn comp cin cout (din,dout)
                    | otherwise 
                    -> do { ecnt <- getEmitCount
                          ; incEmitCount
-                         ; let idx = mkexp $ EVal (VInt ecnt)
+                         ; let idx = mkexp $ EVal (vint ecnt)
                                ya_write = EArrWrite (eraseExp ya_exp) idx LISingleton (eraseExp e)
-                         ; return $ mkcomp (Return $ mkexp ya_write) 
+                         ; return $ mkcomp (Return AutoInline $ mkexp ya_write) 
                          }
                 Take1
                   | arityin == 1 -- NB: This now covers the case where we vectorize on the output only!
@@ -315,18 +315,18 @@ doVectorizeCompDn comp cin cout (din,dout)
                   | otherwise 
                   -> do { tcnt <- getTakeCount
                         ; incTakeCount
-                        ; let idx = mkexp $ EVal (VInt tcnt)
+                        ; let idx = mkexp $ EVal (vint tcnt)
                               xa_read = EArrRead (eraseExp xa_exp) idx LISingleton 
-                        ; return $ mkcomp (Return $ mkexp xa_read) }
+                        ; return $ mkcomp (Return ForceInline $ mkexp xa_read) } -- NB: Force Inline 
                 Take ne
                   | arityin == 1 -- NB: This now covers the case where we vectorize on the output only!
                   -> return $ mkcomp (Take (eraseExp ne))
                   | EVal (VInt n) <- unExp ne 
                   -> do { tcnt <- getTakeCount
                         ; mapM (\_ -> incTakeCount) [1..n]
-                        ; let idx = mkexp $ EVal (VInt tcnt)
-                              xa_read = mkexp $ EArrRead (eraseExp xa_exp) idx (LILength n) 
-                        ; return $ mkcomp (Return xa_read) }
+                        ; let idx = mkexp $ EVal (vint tcnt)
+                              xa_read = mkexp $ EArrRead (eraseExp xa_exp) idx (LILength $ fromIntegral n) 
+                        ; return $ mkcomp (Return ForceInline xa_read) } -- NB: Force Inline 
                   | otherwise
                   -> vecMFail "BUG: takes with unknown array size! Can't be simple computer."
 
@@ -336,9 +336,9 @@ doVectorizeCompDn comp cin cout (din,dout)
                   | TArr (Literal n) _ <- info e
                   -> do { ecnt <- getEmitCount
                         ; mapM (\_ -> incEmitCount) [1..n]
-                        ; let idx = mkexp $ EVal (VInt ecnt)
+                        ; let idx = mkexp $ EVal (vint ecnt)
                               ya_write = EArrWrite (eraseExp ya_exp) idx (LILength n) (eraseExp e)
-                        ; return $ mkcomp (Return $ mkexp ya_write) 
+                        ; return $ mkcomp (Return AutoInline $ mkexp ya_write) 
                         }
                   | otherwise
                   -> vecMFail "BUG: emits with unknown array size! Can't be simple computer."

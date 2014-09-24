@@ -32,6 +32,10 @@ COMPILER?=gcc
 PP   = ../../scripts/preprocesscompile-$(COMPILER).sh
 DIFF = ../../tools/BlinkDiff
 
+# Do not delete outfiles to allow quick recheck of failed tests
+# use make clean to get rid of them
+.PRECIOUS: %.outfile
+
 # Targets
 TGTS = $(patsubst %.wpl, %.test, $(wildcard *.wpl))
 
@@ -58,7 +62,7 @@ all: $(TGTS)
 
 clean:
 	rm -f ./*expanded
-	rm -f ./*exe ./*exec
+	rm -f ./*exe ./*exec ./*out
 	rm -f ./*.outfile
 	rm -f ./compout ./perfout
 	rm -f ./*.c
@@ -66,3 +70,22 @@ clean:
 all-clean: clean
 	rm -f ./*~
 	rm -f ./*dump
+
+# Parser tests
+
+.PRECIOUS: %.wpl.expanded.ast.dump
+
+PARSERTESTS = $(patsubst %.wpl, %.parsertest, $(wildcard *.wpl))
+
+parsertests: $(PARSERTESTS)
+
+%.parsertest: %.wpl.expanded.ast.dump 
+	diff -Nur $< $<.ground 
+
+%.wpl.expanded.ast.dump: %.wpl
+	EXTRAOPTS='--ddump-ast'	../../scripts/preprocesscompile.sh $< 
+
+%.ast.accept: %.wpl.expanded.ast.dump
+	cp $< $<.ground
+
+# vi:set noexpandtab:

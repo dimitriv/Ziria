@@ -30,6 +30,32 @@ let external atan2_int16(y:int16, x:int16) : int16 in
 let external atan2_int32(y:int32, x:int32) : int32 in 
 
 
+-- ext_math
+let pi = 3.1415926536 in 
+let external sine_double_int16(x:int16, prec:int16) : int16 in 
+let external sine_double_int32(x:int32, prec:int32) : int32 in 
+let external cosine_double_int16(x:int16, prec:int16) : int16 in 
+let external cosine_double_int32(x:int32, prec:int32) : int32 in 
+
+let external imin_int16(x:int16, y:int16) : int16 in
+let external imin_int32(x:int, y:int) : int in
+let external imax_int16(x:int16, y:int16) : int16 in
+let external imax_int32(x:int, y:int) : int in
+
+let external ceil_int16(d:double) : int16 in 
+let external ceil_int32(d:double) : int32 in 
+let external round_int16(d:double) : int16 in 
+let external round_int32(d:double) : int32 in 
+
+let external log2(d:double) : double in 
+let external log2_int16(d:int16) : int16 in 
+let external log2_int32(d:int32) : int32 in
+
+let external sqrt(d:double) : double in 
+let external sqrt_int16(d:int16) : int16 in 
+let external sqrt_int32(d:int32) : int32 in
+
+
 
 -- SIMD
 let external permutate_low1032w (x:arr[4] complex16, y:arr[4] complex16): () in
@@ -77,6 +103,8 @@ let external v_sub_complex32(c:arr complex32, a:arr[length(c)] complex32, b:arr[
 let external v_sub_int16(c:arr int16, a:arr[length(c)] int16, b:arr[length(c)] int16 ) : () in
 let external v_sub_int32(c:arr int32, a:arr[length(c)] int32, b:arr[length(c)] int32 ) : () in
 
+-- c := a * b, NB: c is also complex16
+let external v_mul_complex16(c:arr complex16, a:arr[length(c)] complex16, b:arr[length(c)] complex16 ) : () in
 
 
 
@@ -107,6 +135,15 @@ let external copy_complex16(dst:arr complex16, src:arr complex16, len:int) : () 
 let external copy_complex32(dst:arr complex32, src:arr complex32, len:int) : () in
 let external copy_int16(dst:arr int16, src:arr int16, len:int) : () in
 let external copy_int32(dst:arr int32, src:arr int32, len:int) : () in
+
+-- Equivallent to memcpy in C
+-- NB: When len is constant, this can be done with dst[0,len] := src[0,len]
+--     But this doesn't work for dynamic len
+-- NOTE: copy_bit is not trivial to write. TBD
+let external copy_int16(dst : arr int16, src : arr int16, len : int) : int in
+let external copy_int32(dst : arr int32, src : arr int32, len : int) : int in
+let external copy_complex16(dst : arr complex16, src : arr complex16, len : int) : int in
+let external copy_complex32(dst : arr complex32, src : arr complex32, len : int) : int in
 
 -- Conversions
 let external bits_to_int8(dst: arr int8, src:arr bit) : () in 
@@ -166,6 +203,7 @@ let external viterbiSig11a_brick_decode_fast(svalue:arr[48] int8, bitValue:arr b
 
 -- DbgPlot library (works only in 32-bit mode)
 let external dbgplot_real_line(data: arr int16) : () in
+let external dbgplot_real_line32(data: arr int32) : () in
 let external dbgplot_complex_line(data:arr complex16, type:int16) : () in
 let external dbgplot_spectrum(item:arr complex16) : () in
 let external dbgplot_dots(data:arr complex16) : () in

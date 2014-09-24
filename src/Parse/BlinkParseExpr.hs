@@ -224,6 +224,7 @@ parseBaseType
            , reserved "int8"      >> return tint8
            , reserved "int16"     >> return tint16
            , reserved "int32"     >> return tint32
+           , reserved "int64"     >> return tint64
 
            , reserved "double"    >> return (TDouble Full)
            , reserved "bool"      >> return TBool
@@ -232,6 +233,7 @@ parseBaseType
            , reserved "complex8"  >> return (TStruct complex8TyName)
            , reserved "complex16" >> return (TStruct complex16TyName)
            , reserved "complex32" >> return (TStruct complex32TyName) 
+           , reserved "complex64" >> return (TStruct complex64TyName) 
 
            , reserved "struct"    >> parse_struct_cont
            , reserved "arr"       >> parse_arr_cont
@@ -265,13 +267,14 @@ parseBaseType
        where 
          int_or_length 
            = choice [ reserved "length" >> parens identifier >>= rightM
-                    , int_or_length_exp
+                    , int_or_length_exp leftM
                     ] <?> "array length description"
 
-int_or_length_exp
+int_or_length_exp :: (Int -> BlinkParser a) -> BlinkParser a
+int_or_length_exp m 
   = do { e <- parseExpr <?> "expression"
        ; case evalInt e of 
-           Just i  -> leftM i
+           Just i  -> m (fromIntegral i)
            Nothing -> parserFail "Non-constant array length expression."
        }
 
@@ -339,13 +342,17 @@ combineAsCallOrCast p x args
   | x == "int"       = assert_singleton args (cast tint)
   | x == "bit"       = assert_singleton args (cast TBit)
   | x == "double"    = assert_singleton args (cast tdouble)
+
+  | x == "int64"     = assert_singleton args (cast tint64)
   | x == "int32"     = assert_singleton args (cast tint32)
   | x == "int16"     = assert_singleton args (cast tint16)
   | x == "int8"      = assert_singleton args (cast tint8)
+
   | x == "complex"   = assert_singleton args (cast tcomplex)
   | x == "complex8"  = assert_singleton args (cast tcomplex8)
   | x == "complex16" = assert_singleton args (cast tcomplex16)
   | x == "complex32" = assert_singleton args (cast tcomplex32)
+  | x == "complex64" = assert_singleton args (cast tcomplex64)
   | otherwise        = combineAsCall p x args
   where cast t x = eUnOp (Just p) () (Cast t) x
 
@@ -409,13 +416,13 @@ genIntervalParser :: BlinkParser (SrcExp, SrcExp)
 genIntervalParser 
   = choice [ try $ 
              do { p <- getPosition
-                ; from <- integer
+                ; from <- foldable_integer
                 ; colon
-                ; to <- integer
-                ; let start = fromIntegral from
-                ; let len = (fromIntegral to) - (fromIntegral from) + 1
-                ; return (eVal (Just p) () (VInt start),
-                            eVal (Just p) () (VInt len))  
+                ; to <- foldable_integer
+                ; let start = from
+                ; let len   = to - from + 1
+                ; return (eVal (Just p) () (vint start),
+                            eVal (Just p) () (vint len))  
                 }
            , do { startPos <- getPosition
                 ; start <- parseExpr
@@ -436,22 +443,28 @@ declParser :: BlinkParser (Name, Ty, Maybe SrcExp)
        ; return (xn, ty, mbinit) 
        }
 
+
+foldable_integer :: BlinkParser Int
+foldable_integer 
+  = int_or_length_exp return 
+
+
 intervalParser :: BlinkParser (SrcExp, LengthInfo)
 intervalParser
   = choice [ try $ 
              do { p <- getPosition
-                ; from <- integer
+                ; from <- foldable_integer
                 ; colon
-                ; to <- integer
-                ; let start = fromIntegral from
-                ; let len = (fromIntegral to) - (fromIntegral from) + 1
-                ; return (eVal (Just p) () (VInt start), LILength len) 
+                ; to <- foldable_integer
+                ; let start = from
+                ; let len = to - from + 1
+                ; return (eVal (Just p) () (vint start), LILength len) 
                 }
            , do { startPos <- getPosition
                 ; start <- parseExpr
                 ; comma
-                ; len <- integer
-                ; return (start, LILength (fromIntegral len)) 
+                ; len <- foldable_integer
+                ; return (start, LILength len) 
                 }
            ]
 
@@ -480,10 +493,10 @@ parseStmt
                              ; parseStmt }
                ; case scont of 
                    Just r -> 
-                     let k m = eLet (Just p) () x e (r m)
+                     let k m = eLet (Just p) () x AutoInline e (r m)
                      in return k
                    Nothing ->
-                     let k m = eLet (Just p) () x e (fromMaybe (eunit p) m) 
+                     let k m = eLet (Just p) () x AutoInline e (fromMaybe (eunit p) m) 
                      in return k
                }
             -- References 
@@ -612,7 +625,7 @@ parseScalarValue
                  }
       , do { i <- integer
            -- ; notFollowedBy identStart <?> ("end of " ++ show i)
-           ; return (VInt (fromIntegral i)) 
+           ; return (VInt i) 
            } 
       ]
     
@@ -699,7 +712,7 @@ parseTerm
            ; e1 <- parseExpr
            ; reserved "in"
            ; e2 <- parseExpr 
-           ; return $ eLet (Just p) () nm e1 e2
+           ; return $ eLet (Just p) () nm AutoInline e1 e2
            }
 
     parse_ref 

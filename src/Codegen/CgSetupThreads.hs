@@ -41,18 +41,20 @@ import Data.Maybe
 
 
 thread_setup :: Int      -- affinity mask
+             -> String   -- name of the Ziria module
              -> [Ty]     -- types of internal thread buffers, in order from 0..num_thread_bufs-1
              -> [String] -- list of thread ids
              -> [C.Definition]                
-thread_setup affinity_mask buf_tys tids
+thread_setup affinity_mask name buf_tys tids
   = defsPkg
   where my_sizes_decl = [cdecl|typename size_t my_sizes[$int:(num_thread_bufs+1)];|]
         tids'         = tids
         ts_init_stmts = if (num_thread_bufs > 0) 
                         then [ [cstm| ts_init($int:num_thread_bufs,my_sizes); |] ] 
                         else []
+        thread_name = "wpl_set_up_threads" ++ name
         defsPkg  = thread_wrappers
-                   ++ [[cedecl| int wpl_set_up_threads(typename PSORA_UTHREAD_PROC * User_Routines) {
+                   ++ [[cedecl| int $id:(thread_name) (typename PSORA_UTHREAD_PROC * User_Routines) {
                                  typename HANDLE procHdl = GetCurrentProcess();
                                  typename DWORD_PTR affinityMask = $int:affinity_mask;
                                  SetProcessAffinityMask(procHdl, affinityMask);
@@ -122,12 +124,12 @@ thread_setup affinity_mask buf_tys tids
 
 
 
-thread_setup_shim :: [C.Definition]
-thread_setup_shim 
+thread_setup_shim :: String -> [C.Definition]
+thread_setup_shim name
    = [ [cedecl|extern int SetUpThreads(typename PSORA_UTHREAD_PROC * User_Routines); 
        |]
 
-     , [cedecl|int wpl_set_up_threads(typename PSORA_UTHREAD_PROC * User_Routines) 
+     , [cedecl|int $id:("wpl_set_up_threads" ++ name)(typename PSORA_UTHREAD_PROC * User_Routines) 
                { return (SetUpThreads(User_Routines)); }
        |]
      ]

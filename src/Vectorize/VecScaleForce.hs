@@ -127,9 +127,9 @@ force_takes (in_buff, is_empty, in_buff_idx) finalin cty loc ne
                              if (0 < rest) then
                               xSeq [ CMD $ y <:- takes_rest  -- xTakes rest
                                    , CMD $ ya_buff.!(cnt, rest) .:= y
-                                   , CMD $ xReturn ya_buff
+                                   , CMD $ xReturn ForceInline ya_buff
                                    ]
-                             else xReturn ya_buff
+                             else xReturn ForceInline ya_buff
                            ]
                
               -- ; liftIO $ putStrLn $ "comp = " ++ show (comp loc)
@@ -177,7 +177,7 @@ force_emits (out_buff, out_buff_idx) e_or_es finalout loc
                             finalout
                             (TArr (Literal rest) tbase) loc 
 
-              ; let c = xLetE x es $
+              ; let c = xLetE x AutoInline es $
                         xSeq $ 
                         [ CMD $ cnt .:= (0::Int)
                         , CMD $ xTimes i (0::Int) (n `div` finalout) $
@@ -192,7 +192,7 @@ force_emits (out_buff, out_buff_idx) e_or_es finalout loc
                                   -- xEmits (x .!(cnt .* finalout, rest))
                                   (\_ -> emits_cnt_rest)
                                 else 
-                                  xReturn ()
+                                  xReturn AutoInline ()
                         ]
 
               ; return $ c loc 
@@ -238,16 +238,16 @@ rewrite_takes in_buff     -- Input buffer name (of size finalin)
                               , CMD $ is_empty .:= False
                               , CMD $ in_buff_idx .:= (0::Int)
                               ]
-                       else xReturn ()
+                       else xReturn AutoInline ()
                      , CMD $ 
                        if finalin .= (in_buff_idx .+ n0) then 
                          xSeq [ CMD $ is_empty .:= True
-                              , CMD $ xReturn (in_buff .! (in_buff_idx,n0))
+                              , CMD $ xReturn ForceInline (in_buff .! (in_buff_idx,n0))
                               ]
                        else if ((in_buff_idx .+ n0) .< finalin) then
                                xSeq [ CMD $ tmp_idx .:= in_buff_idx
                                     , CMD $ in_buff_idx .:= (in_buff_idx .+ n0)
-                                    , CMD $ xReturn (in_buff .! (tmp_idx,n0))
+                                    , CMD $ xReturn ForceInline (in_buff .! (tmp_idx,n0))
                                     ]
                                  -- The only reason this is an error is the
                                  -- lack of memcpy as a primitive but
@@ -257,7 +257,7 @@ rewrite_takes in_buff     -- Input buffer name (of size finalin)
                                         -- Just a dummy return to make code generator happy ...
                                         -- Fix this at some point by providing a proper 
                                         -- computer-level error function 
-                                      , CMD $ xReturn (in_buff .!(0::Int,n0))
+                                      , CMD $ xReturn ForceInline (in_buff .!(0::Int,n0))
                                       ]
                      ] loc
 --       ; liftIO $ putStrLn "rewrite_takes,3"
@@ -280,7 +280,7 @@ rewrite_emits out_buf     -- buffer where we store the output
                   TArr (Literal n0) _ -> n0
                   _other -> 1 
       ; let comp = 
-              xLetE x es $ 
+              xLetE x AutoInline es $ 
               if finalout .= (out_buf_idx .+ n) then 
                    xSeq [ CMD $ 
                           case e_or_es of 
@@ -362,9 +362,9 @@ doVectorizeCompForce comp (finalin,finalout)
                          }
                     (Let x c1 c2) -> 
                       extendCVarBind' x c1 $ go c2
-                    (LetE x e c1) -> 
+                    (LetE x fi e c1) -> 
                         do { c1' <- go c1
-                           ; return $ cLetE loc () x (eraseExp e) c1' }
+                           ; return $ cLetE loc () x fi (eraseExp e) c1' }
                     -- CL
                     (LetERef x (Right e) c1) -> 
                         do { c1' <- go c1
@@ -442,7 +442,7 @@ doVectorizeCompForce comp (finalin,finalout)
                     (ReadInternal bid tp) -> return $ cReadInternal loc () bid tp
                     (WriteInternal bid)   -> return $ cWriteInternal loc () bid
 
-                    (Return e) -> return $ cReturn loc () (eraseExp e)
+                    (Return fi e) -> return $ cReturn loc () fi (eraseExp e)
 
                     -- CL
                     (LetHeader n fn@(MkFun (MkFunExternal {}) _ _) c) -> 
@@ -468,7 +468,7 @@ doVectorizeCompForce comp (finalin,finalout)
                     (Take e) 
                       | EVal (VInt n) <- unExp e
                       -> do { r <- force_takes (in_buff,is_empty,in_buff_idx)
-                                        finalin (fst $ compInfo comp) loc (Just n)
+                                        finalin (fst $ compInfo comp) loc (Just $ fromInteger n)
                             -- ; liftIO $ putStrLn $ "TAKES: " ++ show r
                             ; return r
                             }

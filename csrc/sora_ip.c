@@ -154,7 +154,7 @@ int WriteFragment(PUCHAR buf)
 		WriteEthernetFrameLen = 0;
 		assert(len > ETHERNET_HEADER_LENGTH);
 		//DEBUG
-		DumpPacket("Rx", WriteEthernetFrameBuffer, len);
+		//DumpPacket("Rx", WriteEthernetFrameBuffer, len);
 		bytesRx += len;
 	}
 	return len;
@@ -352,12 +352,15 @@ int Ndis_init(char *str)
 	  // Assign thread procedures appropriately
 	  BOOLEAN bResult = SoraUThreadStart(hUplinkThread, UplinkTxProc, NULL);
 	  assert(bResult);
-	  printf("Started uplink thread at UE\n");
-	} else {
+	  printf("Started thread at RX\n");
+	  fflush(stdout);
+	}
+	else {
 	  // Assign thread procedures appropriately
 	  BOOLEAN bResult = SoraUThreadStart(hUplinkThread, UplinkRxProc, NULL);
 	  assert(bResult);
-	  printf("Started uplink thread at eNodeB\n");
+	  printf("Started thread at TX\n");
+	  fflush(stdout);
 	}
 
 	return 0;

@@ -1,0 +1,9 @@
+let invert_bits(input : arr bit) = 
+var output : arr[length(input)] bit;
+
+  for i in[0, length(input)] {
+    output[length(input) - i -1] := input[i];
+  }
+
+  return output;
+in

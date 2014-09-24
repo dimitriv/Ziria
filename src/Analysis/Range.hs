@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -20,6 +20,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# OPTIONS_GHC -fwarn-unused-binds #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
@@ -31,19 +32,21 @@ module Analysis.Range
   , arrIdxRange
   ) where
 
-import AstExpr
-
 import Control.Applicative
 import Control.Monad (ap)
 import Control.Monad.State  (MonadState(..), gets, modify)
 import Data.Map (Map)
-import qualified Data.Map as Map
+import GHC.Generics (Generic)
 import Text.PrettyPrint.Mainland
+import Text.Show.Pretty (PrettyVal)
+import qualified Data.Map as Map
+
+import AstExpr
 
 -- @Range i j@ means that we know /all/ values in the range will be taken on.
 data Range = RangeTop
            | Range Integer Integer
-  deriving (Eq, Show)
+  deriving (Generic, Eq, Show)
 
 instance Num Range where
     RangeTop    + _           = RangeTop
@@ -74,7 +77,7 @@ joinR _             RangeTop      = RangeTop
 joinR (Range l1 h1) (Range l2 h2) = Range (min l1 l2) (max h1 h2)
 
 data RState = RState { ranges :: Map Name Range }
-             
+
 newtype R a = R { runR :: RState -> Either String (a, RState) }
 
 instance Monad R where
@@ -110,7 +113,7 @@ joinRange v r1 =
     f (Just r2) = Just $ r1 `joinR` r2
 
 lookupRange :: Name -> R Range
-lookupRange v = 
+lookupRange v =
     gets $ \s -> case Map.lookup v (ranges s) of
                    Nothing -> RangeTop
                    Just r  -> r
@@ -151,7 +154,7 @@ arrIdxRange ranges e len =
 
     go e (LILength l) | EBinOp Mult e1 e2 <- unExp e
                       , EVal (VInt k) <- unExp e2
-                      , k == l = do
+                      , fromIntegral k == l = do
         let k' = fromIntegral k
         r <- erange e1
         case r of
@@ -238,7 +241,7 @@ erange (MkExp (EWhile econd ebody) _ _) = do
     return RangeTop
 
 
-erange (MkExp (ELet v e1 e2) _ _) = do
+erange (MkExp (ELet v _ e1 e2) _ _) = do
     r <- erange e1
     setRange v r
     erange e2
@@ -289,4 +292,8 @@ erange (MkExp (EStruct _ tfs) _ _) = do
     mapM_ (erange . snd) tfs
     return RangeTop
 
+{-------------------------------------------------------------------------------
+  PrettyVal instances (used for dumping the AST)
+-------------------------------------------------------------------------------}
 
+instance PrettyVal Range

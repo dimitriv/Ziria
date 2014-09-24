@@ -296,11 +296,11 @@ tyCheckExpr e
                         expActualErr unknownTArr tarr earr'
               }
 
-          ELet x e1 e2 ->
+          ELet x fi e1 e2 ->
             do { e1' <- tyCheckExpr e1
                ; let t1 = info e1'
                ; e2' <- extendEnv [(name x,t1)] $ tyCheckExpr e2
-               ; return $ eLet loc (info e2') x e1' e2' 
+               ; return $ eLet loc (info e2') x fi e1' e2' 
                }
 
           ELetRef x (Right e1) e2 ->

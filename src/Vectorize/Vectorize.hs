@@ -372,38 +372,49 @@ matchData :: (GS.Sym, VecEnv)
           -> [ DelayedVectRes ] 
           -> [ DelayedVectRes ] 
           -> [ DelayedVectRes ]
-matchData (sym,venv) p loc xs ys = go_left xs ys 
+matchData (sym,venv) p loc xs ys = go_left_top xs ys 
   where 
-    go_left [vc1] vcs2       = lchoose vc1 vcs2 []
-    go_left (vc1:vcs1) vcs2  = lchoose vc1 vcs2 (go_right vcs1 vcs2)
+    go_left_top xs ys        = -- trace "go_left"  $ 
+                               go_left xs ys
+    go_right_top xs ys       = -- trace "go_right" $ 
+                               go_right xs ys
+
+    go_left [vc1] vcs2       = -- trace ("A" ++ (show $ length vcs2)) $ 
+                               lchoose vc1 vcs2 []
+
+    go_left (vc1:vcs1) vcs2  = -- trace "B" $ 
+                               lchoose vc1 vcs2 (go_right_top vcs1 vcs2)
     go_left [] _             = error "go_left"
     go_right vcs1 [vc2]      = rchoose vcs1 vc2 []
-    go_right vcs1 (vc2:vcs2) = rchoose vcs1 vc2 (go_left vcs1 vcs2)
+    go_right vcs1 (vc2:vcs2) = rchoose vcs1 vc2 (go_left_top vcs1 vcs2)
     go_right _ []            = error "go_right"
 
     lchoose vc1 [vc2] k
-      | vcs <- mitigatePar (sym,venv) p loc vc1 vc2
-      = vcs ++ k 
+      | Just vcs <- mitigatePar (sym,venv) p loc vc1 vc2
+      = vcs : k 
       | otherwise
       = k
     lchoose vc1 (vc2:vc2s) k
-      | vcs <- mitigatePar (sym,venv) p loc vc1 vc2
-      = vcs ++ k ++ lchoose vc1 vc2s []
+      | Just vcs <- -- trace ("foo" ++ show (length vc2s)) $ 
+             mitigatePar (sym,venv) p loc vc1 vc2
+      = -- trace "lchoose(1)" $ 
+        vcs : lchoose vc1 vc2s k
       | otherwise
-      = k ++ lchoose vc1 vc2s []
+      = -- trace "lchoose(2)" $ 
+        lchoose vc1 vc2s k
 
     lchoose _ [] _ = error "lchoose"
 
     rchoose [vc1] vc2 k
-      | vcs <- mitigatePar (sym,venv) p loc vc1 vc2 
-      = vcs ++ k
+      | Just vcs <- mitigatePar (sym,venv) p loc vc1 vc2 
+      = vcs : k
       | otherwise
       = k
     rchoose (vc1:vc1s) vc2 k
-      | vcs <- mitigatePar (sym,venv) p loc vc1 vc2
-      = vcs ++ k ++ rchoose vc1s vc2 []
+      | Just vcs <- mitigatePar (sym,venv) p loc vc1 vc2
+      = vcs : rchoose vc1s vc2 k
       | otherwise
-      = k ++ rchoose vc1s vc2 []
+      = rchoose vc1s vc2 k
 
     rchoose [] _ _ = error "rchoose"
 
@@ -440,16 +451,18 @@ mitigatePar :: (GS.Sym, VecEnv)
             -> Maybe SourcePos
             -> DelayedVectRes 
             -> DelayedVectRes 
-            -> [ DelayedVectRes ]
+            -> Maybe DelayedVectRes
 mitigatePar (sym,venv) pnfo loc dp1 dp2
- = case (dvr_vres dp1, dvr_vres dp2) of
+ = -- trace ("mitigatePar:" ++ show loc) $ 
+   case (dvr_vres dp1, dvr_vres dp2) of
      (NoVect,NoVect) -> 
-        [ DVR { dvr_comp = mk_par dp1 dp2 
-              , dvr_vres = NoVect
-              , dvr_orig_tyin  = dvr_orig_tyin dp1 
-              , dvr_orig_tyout = dvr_orig_tyout dp2
-              }  
-        ]
+        Just $ 
+        DVR { dvr_comp = mk_par dp1 dp2 
+            , dvr_vres = NoVect
+            , dvr_orig_tyin  = dvr_orig_tyin dp1 
+            , dvr_orig_tyout = dvr_orig_tyout dp2
+            }  
+        
 
      -- Treat NoVect as DidVect 1 1 
      (v1@NoVect, v2@(DidVect cin cout u))
@@ -460,15 +473,16 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
         , t1 == t2
         , let u = chooseParUtility (vectResUtil v1) 
                                    (vectResUtil v2) (cin,cin)
-        -> [ DVR { dvr_comp = mk_par dp1 dp2
+        -> Just $ 
+             DVR { dvr_comp = mk_par dp1 dp2
                  , dvr_vres = DidVect 1 cout u
                  , dvr_orig_tyin  = dvr_orig_tyin dp1
                  , dvr_orig_tyout = dvr_orig_tyout dp2
                  }
-           ]
+           
         | otherwise
           -- TODO: make this more flexible in the future
-        -> []
+        -> Nothing
 
      (v1@(DidVect cin cout u), v2@NoVect) 
 
@@ -479,33 +493,34 @@ mitigatePar (sym,venv) pnfo loc dp1 dp2
         , t1 == t2
         , let u = chooseParUtility (vectResUtil v1) 
                                    (vectResUtil v2) (cout,cout) 
-        -> [ DVR { dvr_comp = mk_par dp1 dp2
+        -> Just $ 
+             DVR { dvr_comp = mk_par dp1 dp2
                  , dvr_vres = DidVect cin 1 u
                  , dvr_orig_tyin  = dvr_orig_tyin dp1
                  , dvr_orig_tyout = dvr_orig_tyout dp2
                  } 
-           ] 
+           
         | otherwise
           -- TODO: make this more flexible in the future
-        -> []
+        -> Nothing
 
      (DidVect ci co u1, DidVect ci' co' u2)
        | co == ci' || co == 0 || ci' == 0
        -> let m = if co > 0 then co else ci'
               u = chooseParUtility u1 u2 (m,m)
-          in [ DVR { dvr_comp = mk_par dp1 dp2
+          in Just $ 
+               DVR { dvr_comp = mk_par dp1 dp2
                    , dvr_vres = DidVect ci co' u
                    , dvr_orig_tyin  = dvr_orig_tyin dp1
                    , dvr_orig_tyout = dvr_orig_tyout dp2
                    }
-             ]
-
+            
 {- NO PAR MITIGATION!
        | co `mod` ci' == 0 -- divisible
        -> mitPars (sym,venv) pnfo loc ci co u1 dp1 ci' co' u2 dp2
 -}
        | otherwise
-       -> [] 
+       -> Nothing 
 
   where 
     -- No mitigation
@@ -616,9 +631,11 @@ computeVectTop :: Bool -> Comp (CTy, Card) Ty -> VecM [DelayedVectRes]
 computeVectTop verbose = computeVect FlexiRate
   where
     computeVect ra x 
-       = do { -- vecMIO $ putStrLn $ 
-              -- "Vectorizer, traversing: " ++ compShortName x
-              go ra x
+       = do { when verbose $ vecMIO $ putStrLn $ 
+              "Vectorizer, traversing: " ++ compShortName x
+            ; r <- go ra x
+            ; when verbose $ vecMIO $ putStrLn "... finished."
+            ; return r
             }
     go ra comp =
         let (cty,card) = compInfo comp
@@ -712,13 +729,23 @@ computeVectTop verbose = computeVect FlexiRate
                   ; dbgv c2 vcs2 
 -}
                   ; env <- getVecEnv 
+
                   ; let ress_pre = matchData env p loc vcs1 vcs2
+
+{- 
+                  ; when verbose $ 
+                    vecMIO $ 
+                    putStrLn $ "(Par) Length ress_pre = " ++ 
+                                       show (length ress_pre) 
+-}
+
                   ; let ress = pruneMaximal ress_pre
 
 {-
                   ; vecMIO $ 
                     putStrLn $ "(Par) Length ress = " ++ show (length ress) 
 -}
+
                   ; when (null ress) $ vecMIO $ 
                     do { putStrLn "WARNING: Par empty vectorization:"
                        ; print $ ppComp comp
@@ -747,10 +774,10 @@ computeVectTop verbose = computeVect FlexiRate
                     | dvr <- vcs1 ]
                   }
 
-          LetE x e c1
+          LetE x fi e c1
             -> do { vcs1 <- computeVect ra c1
                   ; return $ 
-                    [ liftDVR (cLetE loc () x (eraseExp e)) dvr
+                    [ liftDVR (cLetE loc () x fi (eraseExp e)) dvr
                     | dvr <- vcs1 ]
                  }
           -- CL
@@ -890,6 +917,8 @@ computeVectTop verbose = computeVect FlexiRate
     
                   ; let vcs = vcs_ups ++ vcs_dns
 
+                  ; when verbose $ vecMIO (putStrLn (show $ length vcs))
+
                   ; let self = self_no_vect 
                   ; return $ self : [ liftDVR (cRepeat loc () Nothing) vc
                                     | vc <- vcs ]
@@ -973,7 +1002,7 @@ computeVectTop verbose = computeVect FlexiRate
             | isVectorizable tyin
             -> return [ self_no_vect { dvr_vres = DidVect 0 0 minUtil } ]
 
-          Return e
+          Return _fi e
             | isVectorizable tyin  || isBufTy tyin
             , isVectorizable tyout || isBufTy tyout 
             -> return [ self_no_vect { dvr_vres = DidVect 0 0 minUtil } ]
@@ -1027,7 +1056,8 @@ computeVectTop verbose = computeVect FlexiRate
                     -- Moreover, if 'elen' is a constant expression 
                     -- then we can also scale up!
                   ; let sf_ups
-                          | MkExp (EVal (VInt n)) _ _ <- elen
+                          | MkExp (EVal (VInt n')) _ _ <- elen
+                          , let n = fromIntegral n'
                           , MkExp (EVal (VInt 0)) _ _ <- e
                           , VectScaleUp cin cout mults 
                                <- compVectScaleFactUp ra tyin cin cout
@@ -1048,7 +1078,7 @@ computeVectTop verbose = computeVect FlexiRate
                           ; return [ liftDVR (cTimes loc ()
                                                  ui 
                                                  (eraseExp e) 
-                                                 (eVal loc () (VInt n')) x) vc
+                                                 (eVal loc () (vint n')) x) vc
                                    | vc <- ups
                                    ]
                           }) sf_ups
