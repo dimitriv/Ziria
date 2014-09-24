@@ -118,8 +118,27 @@ seq{
 
      -- Very simple AGC
      -- This is slow, but it is only a single number.
+     -- Roughly on Sora-MIMO:
+     --        * amp == 215487 corresponds to signal level abs(I + iQ) = 550
+     --          noise is typically abs(I + iQ) = 180 so that is 10dB SNR
+     --          After equalization, QPSK point is ~ (1000, 1000), thus amplitude is ~ 1414.
+     --          Corresponding params.channelCoeffs is ~ 10000. 
+     --        * amp == 45815 corresponds to signal level abs(I + iQ) = 225
+     --          After equalization, QPSK point is ~ (1000, 1000), thus amplitude is ~ 1414.
+     --          Corresponding params.channelCoeffs is ~ 20000. 
+     --        * amp == 55189406 corresponds to signal level abs(I + iQ) = 880
+     --          After equalization, QPSK point is ~ (1000, 1000), thus amplitude is ~ 1414.
+     --          Corresponding params.channelCoeffs is ~ 500. 
+     -- Notes:
+     --        * We cannot go much below signal amplitude 225 because we will saturate 
+     --          params.channelCoeffs. But this is fine as this is already ~4dB
+     --        * We lose some precision for high SNR due to low bits used in 
+     --          params.channelCoeffs. But this is probably ok for large SNRs, 
+     --          unless we want to do high-order modulation. 
+     --        * To increase precision of hign SNR one might want to increase lts_norm_shift 
+     --          It can probably be increased to 7 or 8 without affecting low SNR
+     --          (saturating params.channelCoeffs) but this needs to be tested.
      let agc_shift = round_int32(log2(1000.0 / sqrt(double(amp))));
-
      if (agc_shift > 0) then {
        v_shift_left_complex16(preamble,preamble,agc_shift);
        v_shift_left_complex16(delayedPreamble,delayedPreamble,agc_shift);

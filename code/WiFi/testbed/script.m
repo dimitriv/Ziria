@@ -1,5 +1,6 @@
 %f = fopen('out.bin', 'rb');
-%data = fread(f, inf, 'int16');
+%din = fread(f, inf, 'int16');
+%din = din(1:2:end) + i*din(1:2:end);
 data = load('rx.infile');
 data=data(1:floor(end/2)*2);
 data=reshape(data, 2, length(data)/2);
