@@ -793,7 +793,7 @@ codeGenComp dflags comp k =
         return (mkCompInfo prefix True) { compGenInit = codeStmt [cstm|$id:stateVar = FALSE;|] }
 
     go (MkComp (Let x c1 c2) csp _) =
-        codeGenSharedCtxt_ dflags False (CLet csp x c1 Hole) $ 
+        codeGenSharedCtxt_ dflags True (CLet csp x c1 Hole) $ 
         codeGenCompTop dflags c2 k
 
     go (MkComp (LetStruct sdef c2) csp _) = 
@@ -801,7 +801,7 @@ codeGenComp dflags comp k =
         codeGenCompTop dflags c2 k
 
     go (MkComp (LetE x e c2) csp _) = do 
-        (cinfo,stms) <- codeGenSharedCtxt dflags False (CLetE csp x e Hole) $ 
+        (cinfo,stms) <- codeGenSharedCtxt dflags True (CLetE csp x e Hole) $ 
                         codeGenCompTop dflags c2 k
         -- Make sure we init this guy, regardless of whether c1 is init'able
         return $ cinfo { compGenInit = codeStmts stms `mappend` 
@@ -809,7 +809,7 @@ codeGenComp dflags comp k =
 
     -- CL
     go (MkComp (LetERef x y c2) csp _) = do 
-        (cinfo,stms) <- codeGenSharedCtxt dflags False (CLetERef csp x y Hole) $ 
+        (cinfo,stms) <- codeGenSharedCtxt dflags True (CLetERef csp x y Hole) $ 
                         codeGenCompTop dflags c2 k
         return $ cinfo { compGenInit = codeStmts stms `mappend` 
                                        compGenInit cinfo }
@@ -819,7 +819,7 @@ codeGenComp dflags comp k =
         codeGenCompTop dflags c1 k
     --
     go (MkComp (LetFunC f params locals c1 c2) csp _) =
-        codeGenSharedCtxt_ dflags False (CLetFunC csp f params locals c1 Hole) $
+        codeGenSharedCtxt_ dflags True (CLetFunC csp f params locals c1 Hole) $
         codeGenCompTop dflags c2 k
 
     go (MkComp (BindMany c1 []) csp _) =
@@ -868,7 +868,7 @@ codeGenComp dflags comp k =
 
                 new_dh <- freshName ("__dv_tmp_"  ++ (getLnNumInStr csp))
                 let new_dhval = doneValOf $ name new_dh
-                appendDecl =<< 
+                appendTopDecl =<< 
                     -- Note [Take Optimization]
                     -- If the component is a Take1 then we can simply make
                     -- sure that we return the address of the in value, and 
