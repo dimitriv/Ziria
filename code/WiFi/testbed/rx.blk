@@ -24,11 +24,13 @@
 #endif
 
 
+-- External function to return parameters to MAC
+let external MAC_cca(energy : int32, noise : int32) : () in
 
 
 
-let comp detectPreamble() = 
-  (removeDC() >>> cca())
+let comp detectPreamble(energy_threshold : int32) = 
+  (removeDC() >>> cca(energy_threshold))
 in 
 
 
@@ -185,7 +187,7 @@ in
   read >>> 
      amp() >>>
      pad() >>>
-     seq{ det<-detectPreamble()
+     seq{ det<-detectPreamble(cca_energy_threshold)
         ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
                      ", energy: ", det.energy, ", noise: ", det.noise, ", maxCorr: ", det.maxCorr}
         ; params <- (LTS(det.shift, det.maxCorr)); 
@@ -204,7 +206,8 @@ in
 
 -- No repeat here, it happens at the MAC level
    read >>> 
-       seq{ det<-detectPreamble()
+       seq{ det<-detectPreamble(cca_energy_threshold)
+          ; do{MAC_cca(det.energy, det.noise)}
        #ifndef FAST
           ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
                        ", energy: ", det.energy, ", noise: ", det.noise, ", maxCorr: ", det.maxCorr}
