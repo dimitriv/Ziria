@@ -182,6 +182,11 @@ let comp cca(energy_threshold : int32) =
 #endif
 
 
+-- TODO: Here, we should not use the absolute value of energy_threshold
+-- Noise floor can be very different in different environment (indoor vs outdoor)
+-- and it is difficult to set the threshold correctly
+-- Instead, we should use the ration of maxCorr / iEnergy to decide on detection.
+
 #ifndef CCA_TUFV_DEBUG_OUTPUT
    until detected == true {
      x <- takes CORR_LEN;
