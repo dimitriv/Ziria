@@ -41,6 +41,7 @@
 
 
 let norm_shift = 7 in 
+let no_consec_increases = 4 in
 
 
 -- Same as in transmitter/createPreamble, except that it is at a lower sampling rate
@@ -220,7 +221,7 @@ let comp cca(energy_threshold : int32) =
 
        -- Because of repeating preamble we should have a certain number of consecutive 
        -- increases before declaring the peak - start of a packet
-       if (iEnergy > energy_threshold && noInc > 4 && (oldCorr > maxCorr || oldInd != maxInd)) then {
+       if (iEnergy > energy_threshold && noInc > no_consec_increases && (oldCorr > maxCorr || oldInd != maxInd)) then {
           detected := true;
        }
 
@@ -291,7 +292,7 @@ let comp cca(energy_threshold : int32) =
     do{
        -- Because of repeating preamble we should have a certain number of consecutive 
        -- increases before declaring the peak - start of a packet
-       if (iEnergy > energy_threshold && noInc > 4 && (oldCorr > maxCorr || oldInd != maxInd)) then {
+       if (iEnergy > energy_threshold && noInc > no_consec_increases && (oldCorr > maxCorr || oldInd != maxInd)) then {
 #ifdef CCA_DEBUG_PLOT
 -- DEBUG (we ignore detections in debug mode to be able to plot it all)
           detected := false;

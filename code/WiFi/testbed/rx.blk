@@ -1,5 +1,5 @@
 #define LTS_ACCURATE
-#define RADIO
+--#define RADIO
 #define DO_DECODING
 --#define FAST
 
@@ -164,9 +164,8 @@ read[complex16] >>>
 #ifndef RADIO
   pad() >>>
 #endif
-  {det <- detectPreamble()
-    ; times 1000 {x<-take; emit x}
-  }
+--  {det <- detectPreamble(200)}
+  {det <- detectPreamble(2000000)}
 >>> write
 -}
 
@@ -185,6 +184,7 @@ in
 #ifndef RADIO 
 
   read >>> 
+--  repeat{
      amp() >>>
      pad() >>>
      seq{ det<-detectPreamble(cca_energy_threshold)
@@ -200,6 +200,7 @@ in
           >>> receiveBits()
      #endif
      }
+--  }
   >>> write
 
 #else 
