@@ -384,9 +384,8 @@ parseStmts =
 
     eSeq' s1 s2 = eSeq (expLoc s2) () s1 s2
 
--- TODO: Do we want to disallow an implicit () ?
 stmtToExp :: Statement -> BlinkParser SrcExp
-stmtToExp (Left  f) = f <$> withPos eunit
+stmtToExp (Left  _) = fail "Last statement in a block must be an expression"
 stmtToExp (Right s) = return s
 
 type Statement = Either (SrcExp -> SrcExp) SrcExp
