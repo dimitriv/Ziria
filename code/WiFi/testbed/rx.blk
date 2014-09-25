@@ -25,7 +25,8 @@
 
 
 -- External function to return parameters to MAC
-let external MAC_cca(energy : int32, noise : int32) : () in
+let external MAC_cca_write(energy : int32, noise : int32, detected : bool) : () in
+--let external MAC_cca_read() : int32 in
 
 
 
@@ -182,48 +183,31 @@ read[complex16] >>>
 
 
 
-
-#ifndef RADIO 
-
-  read[complex16] >>> 
-  repeat{
---     amp() >>>
-     seq{ det<-detectPreamble()
-        ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
-                     ", energy: ", det.energy, ", noise: ", det.noise, ", maxCorr: ", det.maxCorr}
-        ; params <- (LTS(det.shift, det.maxCorr)); 
-          DataSymbol(det.shift) 
-          >>> FFT() 
-          >>> ChannelEqualization(params)
-          >>> PilotTrack() 
-          >>> GetData()
-     #ifdef DO_DECODING
-          >>> receiveBits()
-     #endif
-     }
-  }
-  >>> write
-
-#else 
-
 -- No repeat here, it happens at the MAC level
    read >>> 
+#ifndef RADIO 
+   repeat{
+#endif
        seq{ det<-detectPreamble()
-          ; do{MAC_cca(det.energy, det.noise)}
+          ; do{MAC_cca_write(det.energy, det.noise, not det.timeout)}
        #ifndef FAST
           ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
                        ", energy: ", det.energy, ", noise: ", det.noise, ", maxCorr: ", det.maxCorr}
        #endif
-          ; params <- (LTS(det.shift, det.maxCorr)); 
-            DataSymbol(det.shift) 
-            >>> FFT() 
-            >>> ChannelEqualization(params)
-            >>> PilotTrack() 
-            >>> GetData()
-       #ifdef DO_DECODING
-            >>> receiveBits()
-       #endif
-       }
+          ; if (not det.timeout) then {
+              params <- (LTS(det.shift, det.maxCorr));
+              DataSymbol(det.shift) 
+                >>> FFT() 
+                >>> ChannelEqualization(params)
+                >>> PilotTrack() 
+                >>> GetData()
+              #ifdef DO_DECODING
+                >>> receiveBits()
+              #endif
+            }
+          }
+#ifndef RADIO 
+   }
+#endif
    >>> write
 
-#endif

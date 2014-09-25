@@ -23,12 +23,15 @@
 #include <conj.blk>
 #include "../../const.blk"
 
-#define NO_REP           9
-#define NO_REP_M_1       8
 
-#define CORR_LEN        16
+--#define CORR_LEN        16
+--#define NO_REP           9
 
-#define MAX_CORR_HIST   16
+#define CORR_LEN         16
+#define NO_REP          ((160/CORR_LEN)-1)
+
+--#define MAX_CORR_HIST   16
+#define MAX_CORR_HIST   (256/CORR_LEN)
 #define MAX_CORR_THR    5
 
 -- Use this define to debug CCA output after every input read
@@ -43,7 +46,8 @@
 
 
 let norm_shift = 7 in 
-let no_consec_increases = 4 in
+--let no_consec_increases = 4 in
+let no_consec_increases = NO_REP/2 in
 
 
 -- Same as in transmitter/createPreamble, except that it is at a lower sampling rate
@@ -120,6 +124,7 @@ let comp cca() =
    var oldOldInd : int16 := 0;
    var noInc : int16 := 0;
    var detected : bool := false; 
+   var timeout : bool := false; 
    var iterind : int32 := 0;
 
    -- calcEnergy related
@@ -130,6 +135,7 @@ let comp cca() =
    var idle_cnt : int := 0;
 
    -- return param
+   var ccaTimeout : int32;
    var ret : struct CCAParams;
 
    -- DEBUG
@@ -155,7 +161,11 @@ let comp cca() =
 
 
 {
+   -- TODO: Move this to the top with the new parser
+   let external MAC_cca_read() : int32 in
+
    do {
+      ccaTimeout := MAC_cca_read();
       pattern := InitCorrPattern();
       zero_int32(corr_hist);
       zero_complex32(mul_hist);
@@ -164,19 +174,24 @@ let comp cca() =
         -- Not too close to saturation!
         max_corr_hist[i] := 1000000;
       }
+      iterind := 0;
    }
 
 
 
 
 #ifndef CCA_TUFV_DEBUG_OUTPUT
-   until detected == true {
+   until (detected == true || timeout == true) {
      x <- takes CORR_LEN;
 
      do {
        v_shift_right_complex16(input, x, norm_shift);
 
        iEnergy := calcEnergy(x);      
+
+       if (iterind == 1000) then {
+         iNoise := iEnergy;
+       }
 
        maxCorr := 0;
        for i in [0, CORR_LEN] {
@@ -185,7 +200,7 @@ let comp cca() =
           let corri = (abs_int32(corrmul.re) + abs_int32(corrmul.im)) in 
           mul_hist[i] := corrc;
 
-          corr_hist[i*NO_REP,NO_REP_M_1] := corr_hist[i*NO_REP+1,NO_REP_M_1];
+          corr_hist[i*NO_REP,NO_REP-1] := corr_hist[i*NO_REP+1,NO_REP-1];
           corr_hist[i*NO_REP+NO_REP-1] := corri;
 
           corr :=0;
@@ -231,6 +246,12 @@ let comp cca() =
        oldInd := maxInd;
 
        iterind := iterind + 1;
+
+
+       if (iterind > ccaTimeout) then {
+         timeout := true;
+       }
+
      }
 
 
@@ -254,7 +275,7 @@ let comp cca() =
           let corri = (abs_int32(corrmul.re) + abs_int32(corrmul.im)) in 
           mul_hist[i] := corrc;
 
-          corr_hist[i*NO_REP,NO_REP_M_1] := corr_hist[i*NO_REP+1,NO_REP_M_1];
+          corr_hist[i*NO_REP,NO_REP-1] := corr_hist[i*NO_REP+1,NO_REP-1];
           corr_hist[i*NO_REP+NO_REP-1] := corri;
 
           corr :=0;
@@ -335,6 +356,7 @@ let comp cca() =
     ret.energy := iEnergy;
     ret.noise := iNoise;
     ret.maxCorr := maxCorr;
+    ret.timeout := timeout;
   };
 
   return ret;

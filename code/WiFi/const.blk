@@ -49,7 +49,8 @@ struct CCAParams = {
   shift:int16;                  -- Shift within 16 samples at which the peak was detected
   energy:int32;                 -- Preamble energy calculated using calcEnergy() from CCA
   noise:int32;                  -- Noise energy calculated using calcEnergy() from CCA
-  maxCorr:int32                 -- Value of correlation that triggered CCA
+  maxCorr:int32;                -- Value of correlation that triggered CCA
+  timeout:bool                  -- True if CCA returned because of timeout and not because of packet detected
 } in 
 
 struct LTECoeffs = { 

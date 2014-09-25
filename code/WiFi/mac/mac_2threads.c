@@ -96,12 +96,27 @@ BOOLEAN __stdcall go_thread_rx(void * pParam);
 int32 PHYenergy = 0;
 int32 PHYnoise = 0;
 double PHYEWMAnoise = 0;
+bool pktDetected = false;
 
-int __ext_MAC_cca(int32 energy, int32 noise){
+// How many iterations of idle CCA to run before returning to MAC
+// (e.g. to check timer, etc). Note that we return to MAC anyway
+// after packet reception so this should not be too often. 
+// Each iteration is 8 samples so we do 160ms
+int32 ccaTimeout = 125000;
+
+
+
+int __ext_MAC_cca_write(int32 energy, int32 noise, unsigned char pkt){
 	PHYenergy = energy;
 	PHYnoise = noise;
 	PHYEWMAnoise = 0.95 * PHYEWMAnoise + 0.05 * (double)noise;
+	pktDetected = (pkt > 0);
 	return 0;
+}
+
+
+int32 __ext_MAC_cca_read(){
+	return ccaTimeout;
 }
 
 
@@ -425,6 +440,7 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 	BlinkFileType outType = params_rx->outType;
 	const long maxOutSize = 4096;
 	unsigned int sampleSize;
+	ULONGLONG lastTimeStamp = SoraGetCPUTimestamp(&(params_tx->measurementInfo.tsinfo));
 
 
 	if (inType != TY_FILE && inType != TY_SORA)
@@ -491,8 +507,12 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 		unsigned long cntOk = 0;
 		unsigned long cntError = 0;
 		unsigned long cntMiss = 0;
+		unsigned long cntIdle = 0;
 		unsigned long lastGap = 0;
+		bool afterPrintout = true;
 		const unsigned long printDelay = 1000;
+		uint16 pc = 0;
+		unsigned int lengthInBytes = 0;
 
 		unsigned char * payload = (unsigned char *)buf_ctx_rx.mem_output_buf;
 		uint16 * payload16 = (uint16 *)buf_ctx_rx.mem_output_buf;
@@ -521,117 +541,145 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 			wpl_go_rx();
 			wpl_output_finalize_rx();
 
-			unsigned int lengthInBytes = buf_ctx_rx.total_out / 8 - 5;
-			lastCRC = payload[lengthInBytes];
-			lastMod = payload[lengthInBytes + 1];
-			lastEnc = payload[lengthInBytes + 2];
-			lastLen = payload[lengthInBytes + 3] + 256 * payload[lengthInBytes + 4];
-
-			if (params_tx->debug > 0)
+			if (pktDetected)
 			{
-				printf("Received packet: crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d\n",
-					lastCRC, lastMod, lastEnc, lastLen, lengthInBytes);
-				fflush(stdout);
-			}
+				lengthInBytes = buf_ctx_rx.total_out / 8 - 5;
+				lastCRC = payload[lengthInBytes];
+				lastMod = payload[lengthInBytes + 1];
+				lastEnc = payload[lengthInBytes + 2];
+				lastLen = payload[lengthInBytes + 3] + 256 * payload[lengthInBytes + 4];
 
-			if (outType == TY_IP)
-			{
-				// IP
-				if (lastCRC == 1)
+				if (params_tx->debug > 0)
 				{
-					int n = WriteFragment(payload);
+					printf("Received packet: crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d\n",
+						lastCRC, lastMod, lastEnc, lastLen, lengthInBytes);
+					fflush(stdout);
+				}
 
-					if (params_tx->debug > 0)
+				if (outType == TY_IP)
+				{
+					// IP
+					if (lastCRC == 1)
 					{
-						printf("Delivering pkt of size %ld to IP (ret=%d)\n", lengthInBytes, n);
-						fflush(stdout);
+						int n = WriteFragment(payload);
+
+						if (params_tx->debug > 0)
+						{
+							printf("Delivering pkt of size %ld to IP (ret=%d)\n", lengthInBytes, n);
+							fflush(stdout);
+						}
 					}
+				}
+				else
+				{
+					pc = payload16[0];
+					bool pktOK;
+
+					pktOK = (lastCRC == 1);
+
+					for (int i = 1; i < lengthInBytes / 2 && pktOK; i++)
+						pktOK = pktOK && (payload16[i] == pc);
+
+					if (pktOK)
+					{
+						cntOk++;
+
+						int d;
+
+						if (afterPrintout)
+						{
+							// We miss packets due to a potentially slow printf
+							// so don't count that
+							d = 0;
+							afterPrintout = false;
+						}
+						else
+						{
+							d = pc - pktCnt - 1;
+						}
+
+						// DEBUG
+						/*
+						if (d < 0 || d > 100)
+						{
+							printf("pc=%d, pktCnt=%d, lastError=%d, lastError2=%d, d=%d\n",
+								pc, pktCnt, lastError, lastError2, d);
+							for (int i = 0; i < 16; i++)
+								printf("%d ", payload16[i]);
+							printf("\n");
+							for (int i = 0; i < 16; i++)
+								printf("%d ", oldPkt[i]);
+							printf("\n");
+							for (int i = 0; i < 16; i++)
+								printf("%d ", oldPkt2[i]);
+							printf("\n");
+						}
+						*/
+
+
+						lastError2 = lastError;
+						if (d > 0) lastError = 2;
+						else lastError = 0;
+
+						cntMiss += (unsigned long)(d < 0) ? 0 : d;
+						lastGap = d;
+
+						pktCnt = pc;
+					}
+					else
+					{
+						cntError++;
+						pktCnt++;
+
+						/*
+						{
+						printf("Last packet: cnt=%d, crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d, lastGap=%ld\n",
+						pc, lastCRC, lastMod, lastEnc, lastLen, lengthInBytes, lastGap);
+						printf("crc=%d, pc=%d, pktCnt=%d, lastError=%d, lastError=%d\n",
+						(lastCRC == 1), pc, pktCnt, lastError, lastError2);
+						for (int i = 0; i < 16; i++)
+						printf("%d ", payload16[i]);
+						printf("\n");
+						for (int i = 0; i < 16; i++)
+						printf("%d ", oldPkt[i]);
+						printf("\n");
+						for (int i = 0; i < 16; i++)
+						printf("%d ", oldPkt2[i]);
+						printf("\n");
+						}
+						*/
+
+						lastError2 = lastError;
+						lastError = 1;
+					}
+
+					memcpy((void*)oldPkt2, (void*)oldPkt, 16 * sizeof(uint16));
+					memcpy((void*)oldPkt, (void*)payload16, 16 * sizeof(uint16));
 				}
 			}
 			else
 			{
-				uint16 pc = payload16[0];
-				bool pktOK;
-
-				pktOK = (lastCRC == 1);
-
-				for (int i = 1; i < lengthInBytes / 2 && pktOK; i++)
-					pktOK = pktOK && (payload16[i] == pc);
-
-				if (pktOK)
-				{
-					cntOk++;
-
-					int d = pc - pktCnt - 1;
-					/*
-					if (d < 0 || d > 100)
-					{
-					printf("pc=%d, pktCnt=%d, lastError=%d, lastError2=%d, d=%d\n",
-					pc, pktCnt, lastError, lastError2, d);
-					for (int i = 0; i < 16; i++)
-					printf("%d ", payload16[i]);
-					printf("\n");
-					for (int i = 0; i < 16; i++)
-					printf("%d ", oldPkt[i]);
-					printf("\n");
-					for (int i = 0; i < 16; i++)
-					printf("%d ", oldPkt2[i]);
-					printf("\n");
-					}
-					*/
-
-					lastError2 = lastError;
-					if (d > 0) lastError = 2;
-					else lastError = 0;
-
-					cntMiss += (unsigned long)(d < 0) ? 0 : d;
-					lastGap = d;
-
-					pktCnt = pc;
-				}
-				else
-				{
-					cntError++;
-					pktCnt++;
-
-					/*
-					{
-					printf("Last packet: cnt=%d, crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d, lastGap=%ld\n",
-					pc, lastCRC, lastMod, lastEnc, lastLen, lengthInBytes, lastGap);
-					printf("crc=%d, pc=%d, pktCnt=%d, lastError=%d, lastError=%d\n",
-					(lastCRC == 1), pc, pktCnt, lastError, lastError2);
-					for (int i = 0; i < 16; i++)
-					printf("%d ", payload16[i]);
-					printf("\n");
-					for (int i = 0; i < 16; i++)
-					printf("%d ", oldPkt[i]);
-					printf("\n");
-					for (int i = 0; i < 16; i++)
-					printf("%d ", oldPkt2[i]);
-					printf("\n");
-					}
-					*/
-
-					lastError2 = lastError;
-					lastError = 1;
-				}
-
-				memcpy((void*)oldPkt2, (void*)oldPkt, 16 * sizeof(uint16));
-				memcpy((void*)oldPkt, (void*)payload16, 16 * sizeof(uint16));
-
-				if (printDelay < cntOk + cntError + cntMiss)
-				{
-					printf("%ld Last packet: SNR=%.2f(%d/%.0f), cnt=%d, crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d, lastGap=%ld\n",
-						SoraGetCPUTimestamp(&(params_tx->measurementInfo.tsinfo)),
-						10 * log10((double)PHYenergy / PHYEWMAnoise), PHYenergy, PHYEWMAnoise,
-						pc, lastCRC, lastMod, lastEnc, lastLen, lengthInBytes, lastGap);
-					printf("OK: %ld, Error: %ld, Miss: %ld\n", cntOk, cntError, cntMiss);
-					fflush(stdout);
-					cntOk = 0;
-					cntError = 0;
-					cntMiss = 0;
-				}
+				// CCA exited idle
+				cntIdle++; 
 			}
+
+			if (printDelay < cntOk + cntError + cntMiss || cntIdle >= 10)
+			{
+				ULONGLONG timeStamp = SoraGetCPUTimestamp(&(params_tx->measurementInfo.tsinfo));
+				printf("%ld Last packet: SNR=%.2f(%ld/%.0f/%ld), cnt=%d, crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d, lastGap=%ld\n",
+					SoraTimeElapsed((timeStamp / 1000 - lastTimeStamp / 1000), &(params_tx->measurementInfo.tsinfo)),
+					10 * log10((double)PHYenergy / PHYEWMAnoise), PHYenergy, PHYEWMAnoise, PHYnoise,
+					pc, lastCRC, lastMod, lastEnc, lastLen, lengthInBytes, lastGap);
+				printf("OK: %ld, Error: %ld, Miss: %ld, Idle: %ld\n", cntOk, cntError, cntMiss, cntIdle);
+				lastTimeStamp = timeStamp;
+				fflush(stdout);
+				afterPrintout = true;
+				cntOk = 0;
+				cntError = 0;
+				cntMiss = 0;
+				cntIdle = 0;
+			}
+
 		}
 	}
 
