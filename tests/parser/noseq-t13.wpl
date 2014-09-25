@@ -1,6 +1,6 @@
 fun comp f() { 
   x <- take;
   return 42
-} in
+}
 
-read[int] >>> f() >>> write[int]
+let comp main = read[int] >>> f() >>> write[int]

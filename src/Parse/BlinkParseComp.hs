@@ -25,6 +25,7 @@ module BlinkParseComp ( parseProgram, runParseM ) where
 
 import Control.Applicative ((<$>), (<*>), (<$), (<*), (*>))
 import Control.Arrow (second)
+import Control.Monad (join)
 import Control.Monad.Reader.Class
 import Data.Maybe (fromJust)
 import Text.Parsec
@@ -40,9 +41,33 @@ import BlinkParseM
   Top-level
 -------------------------------------------------------------------------------}
 
--- | > <program> ::= <decls> <comp>
+-- | > <program> ::= <decls> <let-decls>*
+--
+-- TODO: Update the grammar
 parseProgram :: BlinkParser (Prog () ())
-parseProgram = MkProg <$ whiteSpace <*> declsParser <*> parseComp <* eof
+parseProgram =  
+    join $ mkProg <$ whiteSpace <*> declsParser <*> parseTopLevel <* eof
+  where
+    mkProg _  ([],     _)  = fail "No main found"
+    mkProg _  (_:_:_,  _)  = fail "More than one main found"
+    mkProg ds ([main], bs) = MkProg ds <$> foldCommands (map Left bs ++ [Right main])
+
+-- | Parse a list of top level declarations
+--
+-- We return the list of declarations of 'main' separately so that we can 
+-- construct a single SrcComp in `parseProgram`.
+parseTopLevel :: BlinkParser ([SrcComp], [SrcComp -> SrcComp])
+parseTopLevel = go
+  where
+    go   = withPos cLetDecl' <*> parseLetDecl `bindExtend` \d -> append d <$> more 
+    more = optional semi *> (go <|> return ([], []))  
+
+    append (decl, fun) (mains, funs) = 
+      case decl of
+        LetDeclComp Nothing nm c | name nm == "main" -> (c:mains, funs)
+        _                                            -> (mains, fun:funs)
+
+    cLetDecl' p () d = let (env, f) = cLetDecl p () d in (env, (d, f))
 
 -- | > <decls> ::= (<decl>;)*
 --
@@ -339,23 +364,18 @@ type Command = Either (SrcComp -> SrcComp) SrcComp
 --
 -- The last <command> must be a computation.
 parseCommands :: BlinkParser SrcComp
-parseCommands =
-    parseCommand `bindExtend` go . (:[])
+parseCommands = foldCommands =<< go
   where
-    go :: [Command] -> BlinkParser SrcComp
-    go cs = do
-      optional semi
-      choice [ parseCommand `bindExtend` go . (:cs)
-             , foldCommands (reverse cs)
-             ]
+    go   = parseCommand `bindExtend` \c -> (c:) <$> more 
+    more = optional semi *> (go <|> return [])
 
-    foldCommands :: [Command] -> BlinkParser SrcComp
-    foldCommands []           = error "This cannot happen"
-    foldCommands [Right c]    = return c
-    foldCommands [Left _]     = fail "last statement in a seq block should be a computation"
-    foldCommands (Right c:cs) = cSeq' c <$> foldCommands cs
-    foldCommands (Left k:cs)  = k       <$> foldCommands cs
-
+foldCommands :: [Command] -> BlinkParser SrcComp
+foldCommands []           = error "This cannot happen"
+foldCommands [Left _]     = fail "last statement in a seq block should be a computation"
+foldCommands [Right c]    = return c
+foldCommands (Left k:cs)  = k       <$> foldCommands cs
+foldCommands (Right c:cs) = cSeq' c <$> foldCommands cs
+  where
     cSeq' c1 c2 = cSeq (compLoc c2) () c1 c2
 
 -- | Commands

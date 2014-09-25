@@ -1,7 +1,7 @@
 fun foo(x : int) { 
    var y : arr[5+1024] int;
    return y[0];
-} in
+}
 
 
-read[int] >>> map foo >>> write[int]
+let comp main = read[int] >>> map foo >>> write[int]

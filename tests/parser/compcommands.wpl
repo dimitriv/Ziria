@@ -17,7 +17,7 @@ fun comp f() {
       }
 
 
-} in 
+}
 
 
-read[int] >>> f() >>> write[int]
+let comp main = read[int] >>> f() >>> write[int]
