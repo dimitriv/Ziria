@@ -804,8 +804,8 @@ codeGenComp dflags comp k =
                                        compGenInit cinfo }
 
     -- CL
-    go (MkComp (LetERef x y c2) csp _) = do 
-        (cinfo,stms) <- codeGenSharedCtxt dflags False (CLetERef csp x y Hole) $ 
+    go (MkComp (LetERef x ty y c2) csp _) = do 
+        (cinfo,stms) <- codeGenSharedCtxt dflags False (CLetERef csp x ty y Hole) $ 
                         codeGenCompTop dflags c2 k
         return $ cinfo { compGenInit = codeStmts stms `mappend` 
                                        compGenInit cinfo }
@@ -1220,7 +1220,8 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
            }
 
     -- CL
-    go (CLetERef csp x (Right e) ctxt) action
+    -- TODO: Should we do something with _ty here?
+    go (CLetERef csp x _ty (Just e) ctxt) action
       = do { (e_decls,e_stmts,ce) <- inNewBlock $ codeGenExp dflags e
            ; let ty = info e
            ; x_name <- freshName ((name x) ++ "_" ++ (getLnNumInStr csp))
@@ -1245,7 +1246,7 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
 
            ; return (a,e_stmts ++ asgn_stmts ++ stms)  
            }
-    go (CLetERef csp x (Left ty) ctxt) action
+    go (CLetERef csp x ty Nothing ctxt) action
       = do { x_name <- freshName ((name x) ++ "_" ++ (getLnNumInStr csp))
            ; let x_cname = name x_name 
 

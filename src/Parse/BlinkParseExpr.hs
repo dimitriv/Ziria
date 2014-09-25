@@ -27,7 +27,6 @@ module BlinkParseExpr (
     -- * Top-level parsers
     parseExpr
   , declParser
-  , declParser'
   , parseBaseType
   , parseStmtBlock
   , parseStmts
@@ -164,14 +163,14 @@ parseTerm = choice
     , withPos eLet' <* reserved "let" <*> parseVarBind
                     <* symbol "="     <*> parseExpr
                     <* reserved "in"  <*> parseExpr
-    , withPos eLetRef' <*> declParser' <* reserved "in" <*> parseExpr
+    , withPos eLetRef' <*> declParser <* reserved "in" <*> parseExpr
     , withPos eIf <* reserved "if"   <*> parseExpr
                   <* reserved "then" <*> parseExpr
                   <* reserved "else" <*> parseExpr
     ] <?> "expression"
   where
-    eLet'    p () x        = eLet    p () x AutoInline
-    eLetRef' p () (x, bnd) = eLetRef p () x bnd
+    eLet'    p () x          = eLet    p () x AutoInline
+    eLetRef' p () (x, ty, e) = eLetRef p () x ty e
 
 {-------------------------------------------------------------------------------
   Values
@@ -273,12 +272,6 @@ declParser =
                    <*> optionMaybe (symbol ":=" *> parseExpr)
   where
     mkDecl p () x ty mbinit = (mkNameFromPos (Just x) (fromJust p) (Just ty), ty, mbinit)
-
--- | This is the form of `declParser` that we use everywhere except top-level
-declParser' :: BlinkParser (Name, Either Ty SrcExp)
-declParser' = do
-  (x, ty, mbinit) <- declParser
-  return (x, case mbinit of Nothing -> Left ty ; Just ei -> Right ei)
 
 -- | Base types
 --
@@ -401,7 +394,7 @@ parseStmt = choice
     [ join $ withPos eLet' <* reserved "let" <*> parseVarBind
                            <* symbol "=" <*> parseExpr
                            <*> optionMaybe (reserved "in" *> parseStmt)
-    , join $ withPos eLetRef' <*> declParser'
+    , join $ withPos eLetRef' <*> declParser
                               <*> optionMaybe (reserved "in" *> parseStmt)
 
     , Right <$> parseSimpleStmt
@@ -413,11 +406,11 @@ parseStmt = choice
     eLet' p () x e Nothing =
       return . Left $ \m -> eLet p () x AutoInline e m
 
-    eLetRef' p () (x, bnd) (Just s) = do
+    eLetRef' p () (x, ty, e) (Just s) = do
       s' <- stmtToExp s
-      return . Right $ eLetRef p () x bnd s'
-    eLetRef' p () (x, bnd) Nothing = do
-      return . Left $ \m -> eLetRef p () x bnd m
+      return . Right $ eLetRef p () x ty e s'
+    eLetRef' p () (x, ty, e) Nothing = do
+      return . Left $ \m -> eLetRef p () x ty e m
 
 -- | "Simple" statements (that do not expect a continuation)
 --

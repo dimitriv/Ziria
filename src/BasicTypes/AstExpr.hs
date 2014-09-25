@@ -174,7 +174,7 @@ data Exp0 a where
   ELet :: Name -> ForceInline -> Exp a -> Exp a -> Exp0 a
 
   -- Potentially initialized read/write variable
-  ELetRef :: Name -> Either Ty (Exp a) -> Exp a -> Exp0 a
+  ELetRef :: Name -> Ty -> Maybe (Exp a) -> Exp a -> Exp0 a
 
   ESeq :: Exp a -> Exp a -> Exp0 a
   ECall :: Exp a -> [Exp a] -> Exp0 a
@@ -237,8 +237,8 @@ eFor :: Maybe SourcePos -> a -> UnrollInfo -> Name -> Exp a -> Exp a -> Exp a ->
 eFor loc a ui n e1 e2 e3 = MkExp (EFor ui n e1 e2 e3) loc a
 eLet :: Maybe SourcePos -> a ->  Name -> ForceInline -> Exp a -> Exp a -> Exp a
 eLet loc a x fi e1 e2 = MkExp (ELet x fi e1 e2) loc a
-eLetRef :: Maybe SourcePos -> a ->  Name -> Either Ty (Exp a) -> Exp a -> Exp a
-eLetRef loc a nm x e = MkExp (ELetRef nm x e) loc a
+eLetRef :: Maybe SourcePos -> a ->  Name -> Ty -> Maybe (Exp a) -> Exp a -> Exp a
+eLetRef loc a nm ty x e = MkExp (ELetRef nm ty x e) loc a
 eSeq :: Maybe SourcePos -> a ->  Exp a -> Exp a -> Exp a
 eSeq loc a e1 e2 = MkExp (ESeq e1 e2) loc a
 eCall :: Maybe SourcePos -> a ->  Exp a -> [Exp a] -> Exp a
@@ -538,7 +538,7 @@ exprFVs' take_funs e
         on_exp (EVar nm)              = modify (\s -> S.union (S.singleton nm) s)
         on_exp (EFor _ x _e1 _e2 _e3) = modify (\s -> s S.\\ S.singleton x)
         on_exp (ELet x _fi _e1 _e2)   = modify (\s -> s S.\\ S.singleton x)
-        on_exp (ELetRef x _e1 _e2)    = modify (\s -> s S.\\ S.singleton x)
+        on_exp (ELetRef x _t _e1 _e2) = modify (\s -> s S.\\ S.singleton x)
         on_exp (EIter x v _e1 _e2)
           = do { modify (\s -> s S.\\ S.singleton x)
                ; modify (\s -> s S.\\ S.singleton v) }
@@ -671,14 +671,14 @@ mapExpM_aux on_ty f e = go e
                    e2' <- go e2
                    f (eLet loc nfo nm1 fi e1' e2')
 
-              ELetRef nm1 (Left x) e2 ->
+              ELetRef nm1 t Nothing e2 ->
                 do e2' <- go  e2
-                   f (eLetRef loc nfo nm1 (Left x) e2')
+                   f (eLetRef loc nfo nm1 t Nothing e2')
 
-              ELetRef nm1 (Right e1) e2 ->
+              ELetRef nm1 t (Just e1) e2 ->
                 do e1' <- go  e1
                    e2' <- go  e2
-                   f (eLetRef loc nfo nm1 (Right e1') e2')
+                   f (eLetRef loc nfo nm1 t (Just e1') e2')
 
               ESeq e1 e2 ->
                 do e1' <- go e1
@@ -889,8 +889,8 @@ mutates_state e = case unExp e of
   EWhile e1 e2          -> any mutates_state [e1,e2]
 
   ELet nm _fi e1 e2     -> any mutates_state [e1,e2]
-  ELetRef nm (Right e1) e2 -> any mutates_state [e1,e2]
-  ELetRef nm (Left {}) e2  -> mutates_state e2
+  ELetRef nm _ (Just e1) e2 -> any mutates_state [e1,e2]
+  ELetRef nm _ Nothing   e2 -> mutates_state e2
 
   ESeq e1 e2     -> any mutates_state [e1,e2]
   ECall e' es    -> True

@@ -203,16 +203,17 @@ tyCheckComp c
                 }
            
            -- CL
-           LetERef x (Right e) c1 ->
+           -- TODO: We should do something with tyAnn here
+           LetERef x tyAnn (Just e) c1 ->
              do { e' <- tyCheckExpr e
                 ; let t = info e'
                 ; c1' <- extendEnv [(name x,t)] $ tyCheckComp c1
-                ; return $ cLetERef cloc (compInfo c1') x (Right e') c1'
+                ; return $ cLetERef cloc (compInfo c1') x tyAnn (Just e') c1'
                 }
 
-           LetERef x (Left t) c1 ->
+           LetERef x t Nothing c1 ->
              do { c1' <- extendEnv [(name x,t)] $ tyCheckComp c1
-                ; return $ cLetERef cloc (compInfo c1') x (Left t) c1'
+                ; return $ cLetERef cloc (compInfo c1') x t Nothing c1'
                 }
 
            LetHeader x fn c1 ->

@@ -233,10 +233,11 @@ varUseDefs ranges e =
         insertUseDefs v vs_e1
         Set.delete v <$> go e2
 
-    go (MkExp (ELetRef v e1 e2) _ _) = do
+    -- TODO: We probably should not ignore tyAnn in the `Just` case 
+    go (MkExp (ELetRef v tyAnn e1 e2) _ _) = do
         (ty, vs_e1) <- 
-           case e1 of Left ty   -> return (ty, mempty)
-                      Right e1' -> go e1' >>= \r -> return (info e1', r)
+           case e1 of Nothing  -> return (tyAnn, mempty)
+                      Just e1' -> go e1' >>= \r -> return (info e1', r)
         extendVars [(v,ty)] $ do
         insertUseDefs v vs_e1
         Set.delete v <$> go e2

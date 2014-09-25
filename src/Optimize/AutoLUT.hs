@@ -62,12 +62,12 @@ runAutoLUT dflags _ c = autolutC c
             LetE v fi <$> autolutE e1 <*> autolutC c2
             
         -- CL
-        go (LetERef v (Right e1) c1) =
+        go (LetERef v t (Just e1) c1) =
             autolutE e1 >>= \e1' -> 
-            LetERef v (Right e1') <$> autolutC c1
+            LetERef v t (Just e1') <$> autolutC c1
 
-        go (LetERef v (Left t) c1) =
-            LetERef v (Left t) <$> autolutC c1
+        go (LetERef v t Nothing c1) =
+            LetERef v t Nothing <$> autolutC c1
 
         go (LetHeader v f c) =
             LetHeader v <$> autolutF f <*> autolutC c
@@ -214,12 +214,12 @@ runAutoLUT dflags _ c = autolutC c
             go (ELet v fi e1 e2) =
                 ELet v fi <$> autoE e1 <*> autoE e2
 
-            go (ELetRef v (Right e1) e2) =
+            go (ELetRef v t (Just e1) e2) =
                 autoE e1 >>= \e1' -> 
-                ELetRef v (Right e1') <$> autoE e2
+                ELetRef v t (Just e1') <$> autoE e2
 
-            go (ELetRef v (Left t) e2) =
-                ELetRef v (Left t) <$> autoE e2
+            go (ELetRef v t Nothing e2) =
+                ELetRef v t Nothing <$> autoE e2
 
 
             go (ESeq e1 e2) =

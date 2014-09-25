@@ -214,7 +214,7 @@ parseArgs xnm = parens $ do
 -------------------------------------------------------------------------------}
 
 data LetDecl =
-    LetDeclVar (Name, Either Ty SrcExp)
+    LetDeclVar (Name, Ty, Maybe SrcExp)
   | LetDeclStruct StructDef
   | LetDeclExternal String [(Name, Ty)] Ty
   | LetDeclFunComp (Maybe (Int, Int)) Name [(Name, CallArg Ty CTy0)] ([(Name, Ty, Maybe SrcExp)], SrcComp)
@@ -234,7 +234,7 @@ data LetDecl =
 -- >   | "let" <var-bind> "=" <expr>
 parseLetDecl :: BlinkParser LetDecl
 parseLetDecl = choice
-    [ LetDeclVar <$> declParser'
+    [ LetDeclVar <$> declParser
     , LetDeclStruct <$> parseStruct
     , try $ LetDeclExternal <$ reserved "let" <* reserved "external" <*> identifier <*> paramsParser <* symbol ":" <*> parseBaseType
     , try $ LetDeclFunComp  <$ reserved "fun" <*> parseCompAnn <*> parseVarBind <*> compParamsParser <*> body (nest parseCommands)
@@ -299,8 +299,8 @@ parseCompBaseType = choice
     mkCTy0 (Just tv) ti ty = TComp tv ti ty
 
 cLetDecl :: Maybe SourcePos -> () -> LetDecl -> (ParseCompEnv, SrcComp -> SrcComp)
-cLetDecl p () (LetDeclVar (xn, bnd)) =
-    ([], cLetERef p () xn bnd)
+cLetDecl p () (LetDeclVar (xn, ty, e)) =
+    ([], cLetERef p () xn ty e)
 cLetDecl p () (LetDeclStruct sdef) =
     ([], cLetStruct p () sdef)
 cLetDecl p () (LetDeclExternal x params ty) =

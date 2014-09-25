@@ -80,7 +80,7 @@ data Comp0 a b where
   LetE :: Name -> ForceInline -> Exp b -> Comp a b -> Comp0 a b
 
   -- CL
-  LetERef :: Name -> Either Ty (Exp b) -> Comp a b -> Comp0 a b
+  LetERef :: Name -> Ty -> Maybe (Exp b) -> Comp a b -> Comp0 a b
 
   LetHeader :: Name -> Fun b -> Comp a b -> Comp0 a b
   --
@@ -182,8 +182,8 @@ cLetE :: Maybe SourcePos -> a -> Name -> ForceInline ->
 cLetE loc a x fi e c = MkComp (LetE x fi e c) loc a
 
 -- CL
-cLetERef :: Maybe SourcePos -> a -> Name -> Either Ty (Exp b) -> Comp a b -> Comp a b
-cLetERef loc a x y c = MkComp (LetERef x y c) loc a
+cLetERef :: Maybe SourcePos -> a -> Name -> Ty -> Maybe (Exp b) -> Comp a b -> Comp a b
+cLetERef loc a x t y c = MkComp (LetERef x t y c) loc a
 
 cLetHeader :: Maybe SourcePos -> a -> Name -> Fun b -> Comp a b -> Comp a b
 cLetHeader loc a x f c = MkComp (LetHeader x f c) loc a
@@ -382,7 +382,7 @@ data CompCtxt
   | CLet  CompLoc Name (Comp CTy Ty) CompCtxt
   | CLetE CompLoc Name ForceInline (Exp Ty) CompCtxt
   -- CL
-  | CLetERef CompLoc Name (Either Ty (Exp Ty)) CompCtxt
+  | CLetERef CompLoc Name Ty (Maybe (Exp Ty)) CompCtxt
   --
   | CLetHeader CompLoc Name (Fun Ty) CompCtxt
   | CLetFunC CompLoc Name [(Name, CallArg Ty CTy0)]  -- params
@@ -511,9 +511,10 @@ compFVs c = case unComp c of
   Let nm c1 c2 -> (compFVs c1 `S.union` compFVs c2) S.\\ (S.singleton nm)
   LetE nm _ e c1 -> (exprFVs e `S.union` compFVs c1) S.\\ (S.singleton nm)
   -- CL
-  LetERef nm (Right e) c1
+
+  LetERef nm _ty (Just e) c1
      -> (exprFVs e `S.union` compFVs c1) S.\\ (S.singleton nm)
-  LetERef nm (Left _) c1 -> (compFVs c1) S.\\ (S.singleton nm)
+  LetERef nm _ty Nothing c1 -> (compFVs c1) S.\\ (S.singleton nm)
   LetHeader nm f c1 -> (funFVs f `S.union` compFVs c1) S.\\ (S.singleton nm)
   --
   LetFunC nm params locals c1 c2 ->
@@ -571,8 +572,8 @@ compSize c = case unComp c of
   Let nm c1 c2 -> 1 + compSize c1 + compSize c2
   LetE nm _ e c1 -> 2 + compSize c1
   -- CL
-  LetERef nm (Right _) c1 -> 2 + compSize c1
-  LetERef nm (Left _) c1 -> 2 + compSize c1
+  LetERef nm _ty (Just _) c1 -> 2 + compSize c1
+  LetERef nm _ty Nothing  c1 -> 2 + compSize c1
   LetHeader nm f c1 -> 2 + compSize c1
   --
   LetStruct _sdef c1 -> 1 + compSize c1
@@ -645,13 +646,13 @@ mapCompM_aux on_ty on_exp on_cty g c = go c
                       ; c1' <- go c1
                       ; g (cLetE cloc cnfo x fi e' c1') }
                  -- CL
-                 LetERef x (Left y) c1 ->
+                 LetERef x ty Nothing c1 ->
                     do {c1' <- go c1
-                       ; g (cLetERef cloc cnfo x (Left y) c1') }
-                 LetERef x (Right e) c1 ->
+                       ; g (cLetERef cloc cnfo x ty Nothing c1') }
+                 LetERef x ty (Just e) c1 ->
                     do { e' <- on_exp e
                        ; c1' <- go c1
-                       ; g (cLetERef cloc cnfo x (Right e') c1') }
+                       ; g (cLetERef cloc cnfo x ty (Just e') c1') }
                  LetHeader nm fun c1 ->
                    do { fun' <- mapFunM on_ty on_exp fun
                       ; c1' <- go c1

@@ -303,16 +303,17 @@ tyCheckExpr e
                ; return $ eLet loc (info e2') x fi e1' e2' 
                }
 
-          ELetRef x (Right e1) e2 ->
+          -- TODO: We should do something with tyAnn here 
+          ELetRef x tyAnn (Just e1) e2 ->
             do { e1' <- tyCheckExpr e1
                ; let t1 = info e1'
                ; e2' <- extendEnv [(name x,t1)] $ tyCheckExpr e2
-               ; return $ eLetRef loc (info e2') x (Right e1') e2'
+               ; return $ eLetRef loc (info e2') x tyAnn (Just e1') e2'
                }
 
-          ELetRef x (Left t1) e2 ->
+          ELetRef x t1 Nothing e2 ->
             do { e2' <- extendEnv [(name x,t1)] $ tyCheckExpr e2
-               ; return $ eLetRef loc (info e2') x (Left t1) e2'
+               ; return $ eLetRef loc (info e2') x t1 Nothing e2'
                }
 
           ESeq e1 e2 -> 
