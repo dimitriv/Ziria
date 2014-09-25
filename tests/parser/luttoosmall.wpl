@@ -1,7 +1,7 @@
 
 
-let foo(y : arr[3] bit) = 
+fun foo(y : arr[3] bit) { 
   if (y[1] == '0 && y[2] == '1 && y[3] == '0) then return '0 else return '1
-in 
+} in 
 
 read >>> map foo >>> write

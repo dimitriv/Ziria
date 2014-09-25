@@ -27,12 +27,12 @@
 #include "DeinterleaveBPSK.blk"
 #include "ViterbiSig11a.blk"
 
-let comp DecodePLCP() =
+fun comp DecodePLCP() {
   var hdata : arr[24] bit;
   seq{ DemapLimit(0) >>> DemapBPSK() >>> DeinterleaveBPSK() 
                      >>> ViterbiSig11a() >>> scrambler()
                      >>> repeat{ (x:arr[24] bit) <- takes 24; do{hdata := x}}
      ; return parsePLCPHeader(hdata)
      }
-in
+} in
 

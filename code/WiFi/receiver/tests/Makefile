@@ -82,7 +82,7 @@ PARSERTESTS = $(patsubst %.blk, %.parsertest, $(wildcard *.blk))
 parsertests: $(PARSERTESTS)
 
 %.parsertest: %.blk.expanded.ast.dump 
-	diff -Nur $< $<.ground 
+	-diff -Nur $< $<.ground 
 
 %.blk.expanded.ast.dump: %.blk
 	EXTRAOPTS='--ddump-ast'	../../../../scripts/preprocesscompile.sh $< 

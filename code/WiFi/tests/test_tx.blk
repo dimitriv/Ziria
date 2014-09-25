@@ -21,7 +21,7 @@
 #include "../transmitter/transmitter.blk"
 
 
-let comp amp(c:int16) = 
+fun comp amp(c:int16) { 
   repeat seq {
     (x:complex16) <-take;
     let cre = x.re in 
@@ -30,7 +30,7 @@ let comp amp(c:int16) =
     let dim = cim*c in 
     emit complex16{re=dre;im=dim}
   }
-in
+} in
 
 
 read >>> transmitter() >>> amp(10) >>> write

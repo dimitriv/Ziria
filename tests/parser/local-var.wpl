@@ -1,15 +1,15 @@
-let f(x:int) = 
+fun f(x:int) { 
   var y : int;
   y := x;
   var z : int := 1;
   z := y + 1;
   return (z+1);
+} in
+
+fun g(x:int) { return x }
 in
 
-let g(x:int) = return x
-in
-
-let comp g(y:int) =
+fun comp g(y:int) {
   var y : int; 
   seq { x <- take 
       ; do { y := f(x); } 
@@ -17,6 +17,6 @@ let comp g(y:int) =
       ; emit y
       }
 
-in
+} in
 
 read >>> g(33) >>> write

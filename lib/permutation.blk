@@ -21,7 +21,7 @@
 
 #include <externals.blk>
 
-let perm8(p : arr[8] int, iarr : arr[8] bit, oarr : arr bit) = 
+fun perm8(p : arr[8] int, iarr : arr[8] bit, oarr : arr bit) {
   var set : bool; 
   for j in [0,length(oarr)] {
     set := false;
@@ -33,7 +33,7 @@ let perm8(p : arr[8] int, iarr : arr[8] bit, oarr : arr bit) =
     };
     if (not set) then { oarr[j] := '0; };
   }
-in 
+} in 
 
 -- Older version that did not write to the entirety of oarr, although
 -- the LUTter thought it did.
@@ -47,7 +47,7 @@ in
 --   }
 -- in
 
-let perm(p : arr int, iarr : arr bit) = 
+fun perm(p : arr int, iarr : arr bit) {
   var oarr    : arr[length(p)] bit;
   var oarrtmp : arr[length(p)] bit;
   var iarr1 : arr[8] bit;
@@ -64,5 +64,5 @@ let perm(p : arr int, iarr : arr bit) =
   }
 
   return oarr;
-in
+} in
 

@@ -1,6 +1,6 @@
 #define N_FFT_SAMPLE_SIZE_T   128
 
-let comp comp_mult (c : int16) = 
+fun comp comp_mult (c : int16) { 
   var out : arr[N_FFT_SAMPLE_SIZE_T] complex16;
   var n : complex16;
   var m : int16;
@@ -14,7 +14,7 @@ let comp comp_mult (c : int16) =
              }
         ; emit out
         }
-in
+} in
   
 
 read >>> comp_mult(2) >>> write

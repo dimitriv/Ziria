@@ -22,7 +22,7 @@
 #include "../../const.blk"
 #include <v_mul.blk>
 
-let comp FreqCompensation(params : struct LTECoeffs) =
+fun comp FreqCompensation(params : struct LTECoeffs) {
    var symbol:arr[64] complex16;
 
    repeat seq {
@@ -34,4 +34,4 @@ let comp FreqCompensation(params : struct LTECoeffs) =
       };
       emits symbol
    }
-in
+} in

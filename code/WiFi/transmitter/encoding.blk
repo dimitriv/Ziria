@@ -21,14 +21,14 @@
 
 #include "../const.blk"
 
-let comp encode34() =
+fun comp encode34() {
  var s:arr[6] bit := {'0, '0, '0, '0, '0, '0};
  var x:bit;
  var oA:bit;
  var oB:bit;
  
 
- let enc_state_machine(b:bit) = 
+ fun enc_state_machine(b:bit) {
    var r:arr[2] bit;
    r[0] := b ^ s[1] ^ s[2] ^ s[4] ^ s[5];
    r[1] := b ^ s[0] ^ s[1] ^ s[2] ^ s[5];
@@ -36,7 +36,7 @@ let comp encode34() =
    s[1:5] := s[0:4];
    s[0] := b;
    return r
- in 
+ } in 
    
 -- This is too big for LUTter as we take three times
 -- and it gets inlined
@@ -53,16 +53,16 @@ let comp encode34() =
    let r3 = enc_state_machine(dvm3) in
    emit (r3[1])
  }
-in
+} in
 
 
-let comp encode23() =
+fun comp encode23() {
  var s:arr[6] bit := {'0, '0, '0, '0, '0, '0};
  var x:bit;
  var oA:bit;
  var oB:bit;
  
- let enc_state_machine(b:bit) = 
+ fun enc_state_machine(b:bit) {
    var r:arr[2] bit;
    r[0] := b ^ s[1] ^ s[2] ^ s[4] ^ s[5];
     r[1] := b ^ s[0] ^ s[1] ^ s[2] ^ s[5];
@@ -70,7 +70,7 @@ let comp encode23() =
    s[1:5] := s[0:4];
    s[0] := b;
    return r
- in 
+ } in 
 
 -- This is too big for LUTter as we take twice
 -- and it gets inlined, so this becomes [16,24]
@@ -87,15 +87,15 @@ let comp encode23() =
  }
 
 
-in
+} in
 
-let comp encode12() =
+fun comp encode12() {
  var s:arr[6] bit := {'0, '0, '0, '0, '0, '0};
  var x:bit;
  var oA:bit;
  var oB:bit;
  
- let enc_state_machine(b:bit) = 
+ fun enc_state_machine(b:bit) { 
    var r:arr[2] bit;
    r[0] := b ^ s[1] ^ s[2] ^ s[4] ^ s[5];
    r[1] := b ^ s[0] ^ s[1] ^ s[2] ^ s[5];
@@ -103,19 +103,19 @@ let comp encode12() =
    s[1:5] := s[0:4];
    s[0] := b;
    return r
- in 
+ } in 
 
  repeat <= [8,16] seq {
    dvm1 <- take;
    emits (enc_state_machine(dvm1))
  }
-in
+} in
 
 
 
 
 
-let comp encode(coding: int) =
+fun comp encode(coding: int) {
  if coding == CR_34 then
    encode34()
  else 
@@ -126,5 +126,5 @@ let comp encode(coding: int) =
       encode12()
      else
        repeat do{error "Unknown coding rate!"}
-in
+} in
 

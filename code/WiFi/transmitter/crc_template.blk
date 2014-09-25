@@ -20,7 +20,7 @@
 
 -- Used with macros to create a simple template structure
 
-let comp [8, CRC_VEC] CRC_NAME (len : int, pad : bool) =  
+fun comp [8, CRC_VEC] CRC_NAME (len : int, pad : bool) {
 var crc_state: arr[4] bit := {'0,'0,'0,'0};
 
   times len seq {
@@ -46,4 +46,4 @@ var crc_state: arr[4] bit := {'0,'0,'0,'0};
   }
 
   return crc_state;
-in
+} in

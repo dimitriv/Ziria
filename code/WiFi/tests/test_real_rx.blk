@@ -24,7 +24,7 @@
 
 
 
-let comp dummy() = 
+fun comp dummy() {
   times 1 {        -- OK
 --  times 110000 {   -- OK (4234)
 --  times 200000 { -- OK (6424)
@@ -37,28 +37,29 @@ let comp dummy() =
 --  times 850000 { -- OK (10015)
 -- the last fails...
      x<- take;
+     return ()
   }
 
   repeat {
     x<- take;
     emit x;
   }  
-in
+} in
 
 
 
-let comp detectPreamble(energy_threshold : int32) = 
+fun comp detectPreamble(energy_threshold : int32) { 
   (removeDC() >>> cca(energy_threshold))
-in 
+} in 
 
 
 
 #ifdef DO_DECODING
-let comp receiveBits() = 
+fun comp receiveBits() { 
        seq { hdata <- DecodePLCP()
            ; Decode(hdata) >>> seq { (c : arr[4] bit) <- crc(hdata.len, false); check_crc(c) }
        }
-in
+} in
 #endif
 
 
