@@ -33,6 +33,8 @@ import Text.Parsec.Expr
 import AstComp
 import AstExpr
 import BlinkParseExpr
+import BlinkLexer
+import BlinkParseM
 
 {-------------------------------------------------------------------------------
   Top-level
@@ -55,8 +57,8 @@ declsParser = declParser `endBy` semi
 -- >   | "repeat" <vect-ann>? <comp>
 -- >   | "until" <expr> <comp>
 -- >   | "while" <expr> <comp>
--- >   | "times" <expr> <comp>
--- >   | "for" <var-bind> "in" "[" <interval> "]" <comp>
+-- >   | ("unroll" | "nounroll")? "times" <expr> <comp>
+-- >   | ("unroll" | "nounroll")? "for" <var-bind> "in" "[" <interval> "]" <comp>
 -- >
 -- >   | <comp> ">>>" <comp>
 -- >   | <comp> "|>>>|" <comp>
@@ -152,7 +154,7 @@ opMaybePipeline = mkParInfo MaybePipeline <$ reservedOp ">>>"
 opAlwaysPipeline :: BlinkParser ParInfo
 opAlwaysPipeline = mkParInfo (AlwaysPipeline 0 0) <$ reservedOp "|>>>|"
 
--- > "times" <expr>
+-- > ("unroll" | "nounroll")? "times" <expr>
 timesPref :: BlinkParser (UnrollInfo, SrcExp, SrcExp, Name)
 timesPref =
     (withPos mkTimes <*> parseFor (reserved "times") <*> parseExpr) <?> "times"
@@ -161,7 +163,7 @@ timesPref =
       let nm = mkNameFromPos (Just "_tmp_count") (fromJust p) (Just tint)
       in (ui, eVal p () (VInt 0), e, nm)
 
--- "for" <var-bind> "in" "[" <interval> "]"
+-- > ("unroll" | "nounroll")? "for" <var-bind> "in" "[" <interval> "]"
 forPref :: BlinkParser (UnrollInfo, SrcExp, SrcExp, Name)
 forPref =
     (withPos mkFor <*> parseFor (reserved "for") <*> parseVarBind
@@ -212,7 +214,7 @@ parseArgs xnm = parens $ do
 -------------------------------------------------------------------------------}
 
 data LetDecl =
-    LetDeclVar (Name, Ty, Maybe SrcExp)
+    LetDeclVar (Name, Either Ty SrcExp)
   | LetDeclStruct StructDef
   | LetDeclExternal String [(Name, Ty)] Ty
   | LetDeclFunComp (Maybe (Int, Int)) Name [(Name, CallArg Ty CTy0)] ([(Name, Ty, Maybe SrcExp)], SrcComp)
@@ -232,7 +234,7 @@ data LetDecl =
 -- >   | "let" <var-bind> "=" <expr>
 parseLetDecl :: BlinkParser LetDecl
 parseLetDecl = choice
-    [ LetDeclVar <$> declParser
+    [ LetDeclVar <$> declParser'
     , LetDeclStruct <$> parseStruct
     , try $ LetDeclExternal <$ reserved "let" <* reserved "external" <*> identifier <*> paramsParser <* symbol ":" <*> parseBaseType
     , try $ LetDeclFunComp  <$ reserved "fun" <*> parseCompAnn <*> parseVarBind <*> compParamsParser <*> body (nest parseCommands)
@@ -296,13 +298,9 @@ parseCompBaseType = choice
     mkCTy0 Nothing   ti ty = TTrans ti ty
     mkCTy0 (Just tv) ti ty = TComp tv ti ty
 
-
 cLetDecl :: Maybe SourcePos -> () -> LetDecl -> (ParseCompEnv, SrcComp -> SrcComp)
-cLetDecl p () (LetDeclVar (xn, ty, mbinit)) =
+cLetDecl p () (LetDeclVar (xn, bnd)) =
     ([], cLetERef p () xn bnd)
-  where
-    bnd = case mbinit of Nothing -> Left ty
-                         Just ei -> Right ei
 cLetDecl p () (LetDeclStruct sdef) =
     ([], cLetStruct p () sdef)
 cLetDecl p () (LetDeclExternal x params ty) =
@@ -382,7 +380,7 @@ parseCommand = choice
     cBindMany' loc a x c  = ([], Left $ \c' -> cBindMany loc a c [(x, c')])
 
 cunit :: Maybe SourcePos -> () -> SrcComp
-cunit p a = cReturn p a ForceInline (eunit (fromJust p))
+cunit p () = cReturn p () ForceInline (eunit p ())
 
 {-------------------------------------------------------------------------------
   Annotations
@@ -431,54 +429,3 @@ optVectAnn = optionMaybe parseVectAnn
 -- > <comp-ann> ::= "comp" <range>?
 parseCompAnn :: BlinkParser (Maybe (Int, Int))
 parseCompAnn = reserved "comp" *> optionMaybe parseRange
-
-{-------------------------------------------------------------------------------
-  Auxiliary BlinkParser
--------------------------------------------------------------------------------}
-
-withPos :: (Maybe SourcePos -> () -> a) -> BlinkParser a
-withPos constr = do
-  p <- getPosition
-  return $ constr (Just p) ()
-
-bindExtend :: BlinkParser (ParseCompEnv, a) -> (a -> BlinkParser b) -> BlinkParser b
-bindExtend x f = x >>= \(env, a) -> extendParseEnv env $ f a
-
-infixl 1 `bindExtend`  -- Same precedence as (>>=)
-
--- TODO: Should we use a bracket-like construct here?
-nest :: BlinkParser a -> BlinkParser a
-nest p = do
-  updateState $ \x -> x + 1
-  a <- p
-  updateState $ \x -> x - 1
-  return a
-
-{-------------------------------------------------------------------------------
-  Auxiliary
--------------------------------------------------------------------------------}
-
-uncurry4 :: (a -> b -> c -> d -> z) -> (a, b, c, d) -> z
-uncurry4 fun (a, b, c, d) = fun a b c d
-
-(.:) :: (y -> z) -> (a -> b -> y) -> a -> b -> z
-(.:) fun' fun a b = fun' (fun a b)
-
-(..:) :: (y -> z) -> (a -> b -> c -> y) -> a -> b -> c -> z
-(..:) fun' fun a b c = fun' (fun a b c)
-
--- | Like parsec's `Prefix` but allow repeated application of the operator.
---
--- See http://stackoverflow.com/a/10475767/742991.
-xPrefix :: Stream s m t => ParsecT s u m (a -> a) -> Operator s u m a
-xPrefix op = Prefix . chainl1 op $ return (.)
-
--- | Left-associative `Infix`
-lInfix :: ParsecT s u m (a -> a -> a) -> Operator s u m a
-lInfix op = Infix op AssocLeft
-
--- | Variant on `sepBy` that takes a list of parsers rather than repeating one
-sepsBy :: Stream s m t => [ParsecT s u m a] -> ParsecT s u m sep -> ParsecT s u m [a]
-sepsBy []     _  = return []
-sepsBy [p]    _  = (:[]) <$> p
-sepsBy (p:ps) op = (:) <$> p <* op <*> sepsBy ps op

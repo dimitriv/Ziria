@@ -29,8 +29,8 @@ fun v_correlate(a1 : arr complex16, a2 : arr complex16) {
   var sum_re : arr[4] int32 := {0,0,0,0};
   var sum_im : arr[4] int32 := {0,0,0,0};
 
-  let vlen = (length(a1) / 4) in
-  let rlen = (length(a1) - vlen*4) in 
+  let vlen = (length(a1) / 4) 
+  let rlen = (length(a1) - vlen*4)  
 
   for i in [0, vlen] {
     v_conj_mul_complex16_int32(re,im,a1[4*i,4],a2[4*i,4]);

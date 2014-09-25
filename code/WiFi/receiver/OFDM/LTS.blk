@@ -148,17 +148,16 @@ seq{
      }
 
 
-     let corr = v_correlate(preamble, delayedPreamble) in 
+     let corr = v_correlate(preamble, delayedPreamble) 
      -- TODO: cfo is currently not used, but add AGC if you want to start using it.
-     let cr = corr.re >> 5 in
-     let ci = corr.im >> 5 in
+     let cr = corr.re >> 5 
+     let ci = corr.im >> 5 
 
 
      let phase = if (ci == 0) then 42000000
                  else atan2_int32(ci, cr) 
-     in
 
-     let cfo_est = int16(phase/(1 << 6)) in 
+     let cfo_est = int16(phase/(1 << 6)) 
 
 
      for i in [0,64] {

@@ -133,10 +133,10 @@ fun comp PilotTrack() {
        pilot_hist[4*PILOT_AVG-1] := complex16{re=p4.re >> LOG_PILOT_AVG; im=p4.im >> LOG_PILOT_AVG};
 
        -- Find averages
-       let s1 = v_sum_complex16(pilot_hist[0,PILOT_AVG]) in 
-       let s2 = v_sum_complex16(pilot_hist[PILOT_AVG,PILOT_AVG]) in 
-       let s3 = v_sum_complex16(pilot_hist[2*PILOT_AVG,PILOT_AVG]) in 
-       let s4 = v_sum_complex16(pilot_hist[3*PILOT_AVG,PILOT_AVG]) in 
+       let s1 = v_sum_complex16(pilot_hist[0,PILOT_AVG]) 
+       let s2 = v_sum_complex16(pilot_hist[PILOT_AVG,PILOT_AVG]) 
+       let s3 = v_sum_complex16(pilot_hist[2*PILOT_AVG,PILOT_AVG]) 
+       let s4 = v_sum_complex16(pilot_hist[3*PILOT_AVG,PILOT_AVG]) 
 
        th[0] := int32(atan2_int16( s1.im, s1.re));
        th[1] := int32(atan2_int16( s2.im, s2.re));
@@ -161,13 +161,13 @@ fun comp PilotTrack() {
          }
        }
 
-       let avgTheta32 = (th[0] + th[1] + th[2] + th[3])/4 in 
+       let avgTheta32 = (th[0] + th[1] + th[2] + th[3])/4 
 
        let avgTheta = if avgTheta32 >= 32768 then int16(avgTheta32 - 2*32768)
                       else if avgTheta32 <= -32768 then int16(avgTheta32 + 2*32768)
-                      else int16(avgTheta32) in 
+                      else int16(avgTheta32) 
 
-       let delTheta = int16(((th[2] - th[0]) / (21 + 7) + (th[3] - th[1]) / (21 + 7)) >> 1) in
+       let delTheta = int16(((th[2] - th[0]) / (21 + 7) + (th[3] - th[1]) / (21 + 7)) >> 1) 
 
        build_coeff(rotate_coeffs, avgTheta, delTheta);
 
