@@ -7,13 +7,13 @@ data=reshape(data, 2, length(data)/2);
 data=data(1,:) + i*data(2,:);
 
 
-d = load('rx.outfile');
-dt = d(1:2:end) + i*d(2:2:end);
-X = 1:64;
-figure; plot(X, abs(dt(X)), X, abs(dt(64+X)));
-aaa
+% $$$ d = load('rx.outfile');
+% $$$ dt = d(1:2:end) + i*d(2:2:end);
+% $$$ X = 1:64;
+% $$$ figure; plot(X, abs(dt(X)), X, abs(dt(64+X)));
+% $$$ aaa
 
-PLOT_OUT = 1;
+PLOT_OUT = 0;
 
 if PLOT_OUT
   d = load('rx.outfile');
@@ -34,9 +34,10 @@ if PLOT_OUT
 else
 
   d = load('rx.outfile');
-  corr  = d(1:3:end);
-  corri = d(2:3:end);
-  ind   = d(3:3:end);
+  corr    = d(1:4:end);
+  corri   = d(2:4:end);
+  oldcorr = d(3:4:end);
+  ind     = d(4:4:end);
 
   %XL = [0 10000];
   %XL = [8500 10000];
@@ -56,4 +57,6 @@ else
   %xlim(XL);
   subplot(4,1,4); plot(X, ind); title('Index'); 
   %xlim(XL);
+  
+  subplot(4,1,1); plot(corr ./ oldcorr);
 end

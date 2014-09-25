@@ -29,8 +29,8 @@ let external MAC_cca(energy : int32, noise : int32) : () in
 
 
 
-let comp detectPreamble(energy_threshold : int32) = 
-  (removeDC() >>> cca(energy_threshold))
+let comp detectPreamble() = 
+  (removeDC() >>> cca())
 in 
 
 
@@ -100,7 +100,7 @@ in
 
 let comp skip() = 
   times 1 {
-  -- times 65000 {
+  -- times 30000 * 16 {
      x<- take;
   }
 
@@ -151,25 +151,6 @@ in
 
 
 
-{-
-read[complex16] >>> 
-   times 10000 {x<-take; emit x}
->>> write
--}
-
-
-{-
-read[complex16] >>> 
-  skip() >>>
-#ifndef RADIO
-  pad() >>>
-#endif
---  {det <- detectPreamble(200)}
-  {det <- detectPreamble(2000000)}
->>> write
--}
-
-
 let comp amp() = 
 repeat{
   (x : complex16) <- take;
@@ -180,14 +161,34 @@ repeat{
 in
 
 
+{-
+read[complex16] >>> 
+   times 10000 {x<-take; emit x}
+>>> write
+-}
+
+
+
+{-
+read[complex16] >>> 
+  skip() >>>
+  {det <- detectPreamble()
+        ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
+                     ", energy: ", det.energy, ", noise: ", det.noise, ", maxCorr: ", det.maxCorr}
+  }
+>>> write
+-}
+
+
+
+
 
 #ifndef RADIO 
 
-  read >>> 
---  repeat{
-     amp() >>>
-     pad() >>>
-     seq{ det<-detectPreamble(cca_energy_threshold)
+  read[complex16] >>> 
+  repeat{
+--     amp() >>>
+     seq{ det<-detectPreamble()
         ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
                      ", energy: ", det.energy, ", noise: ", det.noise, ", maxCorr: ", det.maxCorr}
         ; params <- (LTS(det.shift, det.maxCorr)); 
@@ -200,14 +201,14 @@ in
           >>> receiveBits()
      #endif
      }
---  }
+  }
   >>> write
 
 #else 
 
 -- No repeat here, it happens at the MAC level
    read >>> 
-       seq{ det<-detectPreamble(cca_energy_threshold)
+       seq{ det<-detectPreamble()
           ; do{MAC_cca(det.energy, det.noise)}
        #ifndef FAST
           ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 

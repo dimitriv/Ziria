@@ -32,10 +32,6 @@ let qam16_mod_11a = int16(double(bpsk_mod_11a) / 3.162) in -- divided by sqrt(10
 let qam64_mod_11a = int16(double(bpsk_mod_11a) / 6.481) in -- divided by sqrt(42)
 
 
---let cca_energy_threshold  = 5000 in 
-let cca_energy_threshold  = 200 in 
-
-
 let M_BPSK  = 0 in
 let M_QPSK  = 1 in
 let M_16QAM = 2 in

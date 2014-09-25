@@ -28,6 +28,8 @@
 
 #define CORR_LEN        16
 
+#define MAX_CORR_HIST   16
+#define MAX_CORR_THR    5
 
 -- Use this define to debug CCA output after every input read
 --#define CCA_TUFV_DEBUG_OUTPUT
@@ -103,7 +105,7 @@ in
 -- Detection using Tufvesson algorithm
 -- Tufvesson et al, Time and Frequency Synchronization using PN-Sequence Preambles, VTC 99
 
-let comp cca(energy_threshold : int32) = 
+let comp cca() = 
    var pattern : arr[CORR_LEN*CORR_LEN] complex16;
    var corr : int32;
    var maxCorr : int32;
@@ -111,6 +113,7 @@ let comp cca(energy_threshold : int32) =
    var input : arr[CORR_LEN] complex16;
    var mul_hist : arr[CORR_LEN*CORR_LEN] complex32;
    var corr_hist : arr[NO_REP*CORR_LEN] int32;
+   var max_corr_hist : arr[MAX_CORR_HIST] int32;
    var oldOldCorr : int32 := 0;
    var oldCorr : int32 := 0;
    var oldInd : int16 := 0;
@@ -157,36 +160,14 @@ let comp cca(energy_threshold : int32) =
       zero_int32(corr_hist);
       zero_complex32(mul_hist);
       zero_int32(gesw);
+      for i in [0, MAX_CORR_HIST] {
+        -- Not too close to saturation!
+        max_corr_hist[i] := 1000000;
+      }
    }
 
-#ifndef CCA_TUFV_DEBUG_OUTPUT
-   -- To avoid detecting during the tail of the last received packet
-   -- make sure you first wait until the energy has gone down.
-   until initial_idle == true {
-     x <- takes CORR_LEN;
-
-     do {
-       iEnergy := calcEnergy(x);      
-       if (iEnergy < energy_threshold) then {
-         idle_cnt := idle_cnt + 1;
-       } else {
-         idle_cnt := 0;
-       }
-       if (idle_cnt >= 20) then { 
-         initial_idle := true;
-         iNoise := iEnergy;
-         iterind := 0;
-       }
-       iterind := iterind + 1;
-     }
-   }
-#endif
 
 
--- TODO: Here, we should not use the absolute value of energy_threshold
--- Noise floor can be very different in different environment (indoor vs outdoor)
--- and it is difficult to set the threshold correctly
--- Instead, we should use the ration of maxCorr / iEnergy to decide on detection.
 
 #ifndef CCA_TUFV_DEBUG_OUTPUT
    until detected == true {
@@ -221,7 +202,13 @@ let comp cca(energy_threshold : int32) =
 
        -- Because of repeating preamble we should have a certain number of consecutive 
        -- increases before declaring the peak - start of a packet
-       if (iEnergy > energy_threshold && noInc > no_consec_increases && (oldCorr > maxCorr || oldInd != maxInd)) then {
+       -- Also, we check that the energy has increased by comparing the peak with 
+       -- the one MAX_CORR_THR rounds before - it has to be substantially larger because:
+       -- (a) packet has started and the energy increased
+       -- (b) preamble detection is coherent and noise is non-coherent
+       if (maxCorr > MAX_CORR_THR * max_corr_hist[MAX_CORR_HIST-1]
+           && noInc > no_consec_increases 
+           && (oldCorr > maxCorr || oldInd != maxInd)) then {
           detected := true;
        }
 
@@ -230,6 +217,13 @@ let comp cca(energy_threshold : int32) =
        } else {
           noInc := 0;
        }
+
+       -- DEBUG
+       debCorr2 := max_corr_hist[MAX_CORR_HIST-1];
+
+       max_corr_hist[1, MAX_CORR_HIST-1] := max_corr_hist[0, MAX_CORR_HIST-1];
+       max_corr_hist[0] := maxCorr;
+
 
        oldOldCorr := oldCorr;
        oldCorr := maxCorr;
@@ -279,6 +273,7 @@ let comp cca(energy_threshold : int32) =
 
        }
 
+
 #ifdef CCA_DEBUG_PLOT
        emit iEnergy;
 #else
@@ -292,7 +287,9 @@ let comp cca(energy_threshold : int32) =
     do{
        -- Because of repeating preamble we should have a certain number of consecutive 
        -- increases before declaring the peak - start of a packet
-       if (iEnergy > energy_threshold && noInc > no_consec_increases && (oldCorr > maxCorr || oldInd != maxInd)) then {
+       if (maxCorr > MAX_CORR_THR * max_corr_hist[MAX_CORR_HIST-1]
+           && noInc > no_consec_increases 
+           && (oldCorr > maxCorr || oldInd != maxInd)) then {
 #ifdef CCA_DEBUG_PLOT
 -- DEBUG (we ignore detections in debug mode to be able to plot it all)
           detected := false;
@@ -307,6 +304,9 @@ let comp cca(energy_threshold : int32) =
           noInc := 0;
        }
 
+       max_corr_hist[1, MAX_CORR_HIST-1] := max_corr_hist[0, MAX_CORR_HIST-1];
+       max_corr_hist[0] := maxCorr;
+
        oldOldCorr := oldCorr;
        oldCorr := maxCorr;
        oldOldInd := oldInd;
@@ -318,9 +318,11 @@ let comp cca(energy_threshold : int32) =
 
 
 
+
 {-
      emit maxCorr;
      emit int32(noInc);
+     emit debCorr2;
 --     emit int32(maxInd);
      emit iEnergy;
 -}
