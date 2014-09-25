@@ -72,7 +72,7 @@ fun comp LTS(shift:int16, amp:int32) {
      var ret:arr[64] complex16;
 
      -- let lts_norm_shift = 2 in
-     let lts_norm_shift = 6 in
+     let lts_norm_shift = 6
 
      -- Calculate sq_norm
      v_conj_mul_complex16_int32(re32,im32,fftdata[0,28],fftdata[0,28]);
@@ -175,7 +175,7 @@ seq{
      delayedFftdata := sora_fft(delayedPreamble);
      v_add_complex16(params.channelCoeffs, calcCoeff(fftdata), calcCoeff(delayedFftdata));
      --v_shift_right_complex16(params.channelCoeffs,params.channelCoeffs,1);
-     let agcs = agc_shift - 1 in 
+     let agcs = agc_shift - 1
      if (agcs > 0) then {
        v_shift_left_complex16(params.channelCoeffs,params.channelCoeffs,agcs);
      } else {
