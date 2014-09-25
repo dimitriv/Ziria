@@ -19,7 +19,7 @@
 --
 #pragma once 
 
-let floorc(a:complex16, b:int16) =
+fun floorc(a:complex16, b:int16) {
     if a.re >= 0 && a.im >= 0 then {
        return a/complex16{re=b;im=0} 
     } else
@@ -39,4 +39,4 @@ let floorc(a:complex16, b:int16) =
           }
       };
     return 0
-in 
+} in 

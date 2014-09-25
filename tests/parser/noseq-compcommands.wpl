@@ -1,5 +1,5 @@
 
-let comp f() = 
+fun comp f() { 
 
   -- Shows Blink compuitations as commands 
   var p : int;
@@ -17,7 +17,7 @@ let comp f() =
       }
 
 
-in 
+} in 
 
 
 read[int] >>> f() >>> write[int]

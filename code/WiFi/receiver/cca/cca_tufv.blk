@@ -44,7 +44,7 @@ let norm_shift = 7 in
 
 
 -- Same as in transmitter/createPreamble, except that it is at a lower sampling rate
-let createSTSinTime() = 
+fun createSTSinTime() {
   var sts : arr[64] complex16;
   var sts_time : arr[320] complex16;
 
@@ -73,10 +73,10 @@ let createSTSinTime() =
   sts_time[128,32] := sts_time[0,32];
 
   return sts_time;
-in
+} in
 
 
-let InitCorrPattern() = 
+fun InitCorrPattern() {
   var pattern : arr[CORR_LEN*CORR_LEN] complex16;
   var preamble : arr[64] complex16;
 
@@ -95,14 +95,14 @@ let InitCorrPattern() =
   }
 
   return pattern;
-in
+} in
 
 
 
 -- Detection using Tufvesson algorithm
 -- Tufvesson et al, Time and Frequency Synchronization using PN-Sequence Preambles, VTC 99
 
-let comp cca(energy_threshold : int32) = 
+fun comp cca(energy_threshold : int32) { 
    var pattern : arr[CORR_LEN*CORR_LEN] complex16;
    var corr : int32;
    var maxCorr : int32;
@@ -134,7 +134,7 @@ let comp cca(energy_threshold : int32) =
 
 
 
-   let calcEnergy(x : arr complex16) = 
+   fun calcEnergy(x : arr complex16) {
      var ge : int;
      var xcopy:arr[length(x)] complex16;
      var iEnergy : int := 0;
@@ -147,7 +147,7 @@ let comp cca(energy_threshold : int32) =
      v_conj_mul_complex16_int32(re32, im32, xcopy, xcopy);
      iEnergy := v_sum_int32(re32);
      return (iEnergy)
-   in    
+   } in    
 
 
 {
@@ -336,7 +336,7 @@ let comp cca(energy_threshold : int32) =
 
   return ret;
 }
-in
+} in
 
 
 

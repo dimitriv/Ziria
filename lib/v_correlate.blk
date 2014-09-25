@@ -23,7 +23,7 @@
 
 -- c = sum(a1 * conj(a2))
 -- All vectors have to be 16-bit aligned
-let v_correlate(a1 : arr complex16, a2 : arr complex16) = 
+fun v_correlate(a1 : arr complex16, a2 : arr complex16) {
   var re : arr[4] int32;
   var im : arr[4] int32;
   var sum_re : arr[4] int32 := {0,0,0,0};
@@ -48,4 +48,4 @@ let v_correlate(a1 : arr complex16, a2 : arr complex16) =
   };
 
   return complex{re=sum_re[0]; im=sum_im[0]};
-in 
+} in 

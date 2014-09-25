@@ -1,4 +1,4 @@
-let comp f() = 
+fun comp f() {
 var subMsg : arr[5] int := { 1,1,1,1,1 };
   
 seq{
@@ -11,7 +11,7 @@ seq{
   for i in [0,5] 
     emit subMsg[i];
 }
-in
+} in
 
 read[int] >>> f() >>> write[int]
 

@@ -5,7 +5,7 @@ struct cca_info = { f1 : int; f2 : bit }
 in
 
 
-let comp f(x : struct cca_info) = 
+fun comp f(x : struct cca_info) {
 var y : struct cca_info;
 var st : int;
 
@@ -25,18 +25,18 @@ seq{
            emit (y)
  }
 }
-in 
+} in 
 
 let x = cca_info { f1 = 3; f2 = '0}
 
 in
 
-let comp g() = 
+fun comp g() {
 seq{
   (z : struct cca_info) <- take;
   emit (z.f1)
 }
-in
+} in
 
 read[int] >>> f(x) >>> repeat (g()) >>> write
 

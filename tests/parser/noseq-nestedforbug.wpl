@@ -1,6 +1,6 @@
 
 
-let comp f() = 
+fun comp f() {
 
    for i in [0:3] 
       for j in [2:6]
@@ -13,7 +13,7 @@ let comp f() =
    --     ; emit 42
    --     }
 
-in 
+} in 
 
 
 read[int] >>> f() >>> write[int]

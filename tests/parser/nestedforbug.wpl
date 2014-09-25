@@ -1,6 +1,6 @@
 
 
-let comp f() = 
+fun comp f() { 
 
 
   -- let comp c = repeat until true emit 3
@@ -17,7 +17,7 @@ let comp f() =
        ; emit 42
        }
 
-in 
+} in 
 
 
 read[int] >>> f() >>> write[int]

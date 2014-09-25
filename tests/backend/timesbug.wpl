@@ -1,4 +1,4 @@
-let comp foo(x : int) = 
+fun comp foo(x : int) {
 var y : int;
 
 seq { do { y := 0 } 
@@ -9,6 +9,6 @@ seq { do { y := 0 }
     ; do { return x; }
     }
 
-in
+} in
 
 read[int] >>> foo(5) >>> write[int]

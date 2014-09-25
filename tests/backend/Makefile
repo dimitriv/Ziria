@@ -80,7 +80,7 @@ PARSERTESTS = $(patsubst %.wpl, %.parsertest, $(wildcard *.wpl))
 parsertests: $(PARSERTESTS)
 
 %.parsertest: %.wpl.expanded.ast.dump 
-	diff -Nur $< $<.ground 
+	-diff -Nur $< $<.ground 
 
 %.wpl.expanded.ast.dump: %.wpl
 	EXTRAOPTS='--ddump-ast'	../../scripts/preprocesscompile.sh $< 
