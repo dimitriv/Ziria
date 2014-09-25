@@ -1,0 +1,27 @@
+--MEM: #define LEN 2500000000
+#define LEN 250000
+
+let comp ttt() = 
+var cnt : int32 := 0;
+var exit : bool := false; 
+  until (exit) {
+    x <- takes 8;
+    do{
+      cnt := cnt +1
+      if (cnt > LEN) then {
+        exit := true;
+      } 
+    };
+  }
+in
+
+let comp ttt1() = 
+  times LEN {
+    x <- takes 8;
+  }
+in 
+
+
+-- The top one is 10 times slower than the bottom one. Why???
+read[complex16] >>> ttt() >>> write[complex16]
+--read[complex16] >>> ttt1() >>> write[complex16]
