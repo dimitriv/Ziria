@@ -162,10 +162,10 @@ fun comp cca() {
      v_conj_mul_complex16_int32(re32, im32, xcopy, xcopy);
      iEnergy := v_sum_int32(re32);
      return (iEnergy)
-   } in    
+   };
 
 
-{
+
 
    do {
 #ifdef MAC
@@ -369,7 +369,7 @@ fun comp cca() {
   };
 
   return ret;
-}
+
 } in
 
 

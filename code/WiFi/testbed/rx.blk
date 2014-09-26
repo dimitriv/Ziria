@@ -3,6 +3,8 @@
 #define DO_DECODING
 --#define FAST
 
+#define MAC                     -- USe this to exit CCA after a timeout
+
 
 
 #include <externals.blk>
@@ -26,7 +28,7 @@
 
 -- External function to return parameters to MAC
 let external MAC_cca_write(energy : int32, noise : int32, detected : bool) : () in
---let external MAC_cca_read() : int32 in
+
 
 
 
@@ -111,43 +113,7 @@ fun comp skip() {
 } in
 
 
-{-
-fun comp test() {
-var xcopy:arr[4] complex16;
-var re32:arr[4] int32;
-var im32:arr[4] int32;
-var iEnergy : int := 0;
 
-repeat{
-  (x : arr[4] complex16) <- takes 4;
-  do{
-     v_shift_right_complex16(xcopy,x,2);
-     v_shift_right_complex16(xcopy,xcopy,2);
-
-     v_conj_mul_complex16_int32(re32, im32, xcopy, xcopy);
-     iEnergy := v_sum_int32(re32);
-
-    -- if (iEnergy > 10000) then 
-    if (x[0].re > 1000) then 
-    {
-      println iEnergy, " ", x;
-    }
-  }
-}
-} in
--}
-
-{-
-fun comp test() {
-  repeat{
-    (x:arr[50000] complex16) <- takes 50000;
-    do{dbgplot_complex_line(x, 1)};
-  }
-} in
--}
-
-
--- read[complex16] >>> test() >>> write[bit]
 
 
 
