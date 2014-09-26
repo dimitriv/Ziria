@@ -24,15 +24,18 @@
 #include "../../const.blk"
 
 
---#define CORR_LEN        16
---#define NO_REP           9
 
-#define CORR_LEN         16
+-- NOTE: CCA_Tuffveson is not real time on Dell T3500. Currently, 
+-- with CORR_LEN == 8 it takes 1.7s to process 20e samples 
+-- (which should be done in 1s). This should be further optimized
+-- for line speed.
+
+#define CORR_LEN         8
 #define NO_REP          ((160/CORR_LEN)-1)
 
---#define MAX_CORR_HIST   16
 #define MAX_CORR_HIST   (256/CORR_LEN)
 #define MAX_CORR_THR    5
+
 
 -- Use this define to debug CCA output after every input read
 --#define CCA_TUFV_DEBUG_OUTPUT
@@ -192,6 +195,7 @@ fun comp cca() {
      x <- takes CORR_LEN;
 
      do {
+
        v_shift_right_complex16(input, x, norm_shift);
 
        iEnergy := calcEnergy(x);      
@@ -221,7 +225,6 @@ fun comp cca() {
              maxInd := int16(i);
           }
        }
-
        -- Because of repeating preamble we should have a certain number of consecutive 
        -- increases before declaring the peak - start of a packet
        -- Also, we check that the energy has increased by comparing the peak with 

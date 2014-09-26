@@ -147,6 +147,24 @@ read[complex16] >>>
 
 
 
+{- LINE SPEED TEST
+fun comp test() {
+var cnt : int32 := 0;
+var detected : bool := false;
+  until (detected) {
+    x <- takes 16;
+    do{
+      cnt := cnt + 1;
+      if (cnt >= 125000) then {
+        detected := true;
+      }
+    }
+  }
+} in 
+read[complex16] >>> test() >>> write[int]
+-}
+
+
 
 -- No repeat here, it happens at the MAC level
    read >>> 

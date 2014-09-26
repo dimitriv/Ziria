@@ -101,8 +101,10 @@ bool pktDetected = false;
 // How many iterations of idle CCA to run before returning to MAC
 // (e.g. to check timer, etc). Note that we return to MAC anyway
 // after packet reception so this should not be too often. 
-// Each iteration is 8 samples so we do 160ms
-int32 ccaTimeout = 125000;
+// ccaTimeout = x [sec] * 20e6 [samples/sec] / samples_per_CCA_take / cntIdle_iter(=10)
+// for x = 1 sec we get 125000;
+//int32 ccaTimeout = 125000;
+int32 ccaTimeout = 125000*2;
 
 
 
