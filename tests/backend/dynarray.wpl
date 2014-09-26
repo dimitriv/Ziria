@@ -1,7 +1,7 @@
 #define DYNARRSIZ 128
 
 struct dynarray = { len : int; 
-                    data : arr[DYNARRSIZ] int } in
+                    data : arr[DYNARRSIZ] int } 
 
 fun comp foo() {
    var darr : struct dynarray;
@@ -14,9 +14,9 @@ fun comp foo() {
    do{darr.len := 5};
    do{return (darr)}
    }
-} in
+} 
 
-read >>> repeat seq{d <- foo(); emit(d.data[0,5])} >>> write 
+let comp main = read >>> repeat seq{d <- foo(); emit(d.data[0,5])} >>> write 
 
 
 

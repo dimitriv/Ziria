@@ -9,6 +9,6 @@ seq { do { y := 0 }
     ; do { return x; }
     }
 
-} in
+}
 
-read[int] >>> foo(5) >>> write[int]
+let comp main = read[int] >>> foo(5) >>> write[int]

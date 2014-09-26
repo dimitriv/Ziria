@@ -18,6 +18,6 @@ seq{
 
    emits y
 }
-} in
+}
 
-read [int] >>> repeat (stc()) >>> write
+let comp main = read [int] >>> repeat (stc()) >>> write

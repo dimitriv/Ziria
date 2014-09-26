@@ -7,7 +7,7 @@ fun f( y : int) {
     x := x + 1;
   };
   return x;
-} in
+}
 
 fun comp fc() {
    var x : int; 
@@ -20,6 +20,6 @@ fun comp fc() {
                 ; emit 0 
                 }
        }
-} in
+}
 
-read [int] >>> map f >>> fc() >>> write [int]
+let comp main = read [int] >>> map f >>> fc() >>> write [int]

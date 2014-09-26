@@ -8,7 +8,7 @@ fun comp f() {
          ; emit (z+1) 
          }
 
-} in
+}
 
-read[int] >>> times 2 (f()) >>> write[int]
+let comp main = read[int] >>> times 2 (f()) >>> write[int]
 

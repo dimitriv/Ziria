@@ -1,6 +1,6 @@
 struct cca_info = { f1 : int; f2 : bit } 
 
-in
+
 
 
 fun comp f(x : struct cca_info) {
@@ -15,11 +15,11 @@ fun comp f(x : struct cca_info) {
  (x:int) <- take;
  emit (x + y.f1)
  }
-} in 
+}
 
 let x = cca_info { f1 = 3; f2 = '0}
 
-in
 
-read[int] >>> repeat (f(x)) >>> write
+
+let comp main = read[int] >>> repeat (f(x)) >>> write
 

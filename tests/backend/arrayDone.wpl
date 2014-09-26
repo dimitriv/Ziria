@@ -13,13 +13,13 @@ seq{
    do{return(x)}
 }
 
-} in
+}
 
 fun comp stt(u:int) { 
 seq{
   (inp  : int) <- take;
   emit inp
 }
-} in
+}
 
-read >>> seq{(y : arr[2] int) <- stc(); stt(y[0])} >>> write
+let comp main = read >>> seq{(y : arr[2] int) <- stc(); stt(y[0])} >>> write

@@ -44,7 +44,7 @@ fun v_conj_mul_complex16_int32(re32:arr int, im32:arr int, a:arr complex16, b:ar
        re32[i] := (int(a[i].re)*int(b[i].re) + int(a[i].im)*int(b[i].im ));
        im32[i] := (int(a[i].im)*int(b[i].re) - int(a[i].re)*int(b[i].im ));
    };
-} in
+}
 
 
 fun v_conj_mul_complex16(c:arr complex16, a:arr complex16, b:arr complex16, shift:int) {
@@ -57,4 +57,4 @@ fun v_conj_mul_complex16(c:arr complex16, a:arr complex16, b:arr complex16, shif
     v_shift_right_int32(im32,im32,shift);
   }
   v_pack_int32_complex16(c,re32,im32);
-} in
+}
