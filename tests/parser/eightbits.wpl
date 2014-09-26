@@ -1,8 +1,8 @@
-let f ( x : int) = 
+fun f ( x : int) {
  var z : int8;
  z := int8(x);
  let r = complex8 { re = z; im = z };
  return complex16(r)
-in
+} in
 
 read >>> map f >>> write 

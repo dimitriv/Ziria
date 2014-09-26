@@ -1,4 +1,4 @@
-let comp stc() = 
+fun comp stc() { 
 var x:arr[2] int;
 
 seq{
@@ -13,13 +13,13 @@ seq{
    do{return(x)}
 }
 
-in
+} in
 
-let comp stt(u:int) = 
+fun comp stt(u:int) { 
 seq{
   (inp  : int) <- take;
   emit inp
 }
-in
+} in
 
 read >>> seq{(y : arr[2] int) <- stc(); stt(y[0])} >>> write

@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -16,517 +16,416 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE GADTs, TemplateHaskell, 
-             MultiParamTypeClasses, 
-             RankNTypes, 
+{-# LANGUAGE GADTs, TemplateHaskell,
+             MultiParamTypeClasses,
+             RankNTypes,
              ScopedTypeVariables #-}
-
+{-# OPTIONS_GHC -Wall -Wwarn #-}
 module BlinkParseComp ( parseProgram, runParseM ) where
 
-import AstExpr
-import AstComp
-
-import BlinkParseExpr
-
-import qualified Data.Map as Map
+import Control.Applicative ((<$>), (<*>), (<$), (<*), (*>))
+import Control.Arrow (second)
+import Control.Monad.Reader.Class
+import Data.Maybe (fromJust)
 import Text.Parsec
-import Text.Parsec.Language
 import Text.Parsec.Expr
 
-import Control.Monad.Reader.Class
+import AstComp
+import AstExpr
+import BlinkParseExpr
+import BlinkLexer
+import BlinkParseM
 
+{-------------------------------------------------------------------------------
+  Top-level
+-------------------------------------------------------------------------------}
 
-import Data.Maybe ( fromMaybe, fromJust )
+-- | > <program> ::= <decls> <comp>
+parseProgram :: BlinkParser (Prog () ())
+parseProgram = MkProg <$ whiteSpace <*> declsParser <*> parseComp <* eof
 
-import PpComp
+-- | > <decls> ::= (<decl>;)*
+--
+-- (declParser comes from the expression language)
+declsParser :: BlinkParser [(Name, Ty, Maybe SrcExp)]
+declsParser = declParser `endBy` semi
 
-{- Basic structure is the following:
+-- | Parse a computation expression
+--
+-- > <comp> ::=
+-- >     "standalone" <comp>
+-- >   | "repeat" <vect-ann>? <comp>
+-- >   | "until" <expr> <comp>
+-- >   | "while" <expr> <comp>
+-- >   | ("unroll" | "nounroll")? "times" <expr> <comp>
+-- >   | ("unroll" | "nounroll")? "for" <var-bind> "in" "[" <interval> "]" <comp>
+-- >
+-- >   | <comp> ">>>" <comp>
+-- >   | <comp> "|>>>|" <comp>
+-- >
+-- >   | <term>
+--
+-- where
+--
+-- * the prefix operators `standalone`, `repeat`, `until`, `while`, `times` and
+--   `for` all have the same precedence, and all bind stronger than the infix
+--   operators `>>>` and `|>>>|`
+-- * `>>>` and `|>>>|` are both left associative
+-- * `>>>` binds stronger than `|>>>|`
+--
+-- TODOs:
+-- * Is the relative precedence of `>>>` and `|>>>|` intended?
+-- * We don't have any tests at all for 'standalone'. Is it obsolete?
+parseComp :: BlinkParser SrcComp
+parseComp =
+    buildExpressionParser table parseCompTerm
+  where
+    table =
+      [ [ xPrefix $ withPos cStandalone <*  reserved "standalone"
+        , xPrefix $ withPos cRepeat     <*  reserved "repeat" <*> optVectAnn
+        , xPrefix $ withPos cUntil      <*  reserved "until"  <*> parseExpr
+        , xPrefix $ withPos cWhile      <*  reserved "while"  <*> parseExpr
+        , xPrefix $ withPos cTimes'     <*> timesPref
+        , xPrefix $ withPos cTimes'     <*> forPref
+        ]
+      , [ lInfix $ withPos cPar <*> opMaybePipeline  ]
+      , [ lInfix $ withPos cPar <*> opAlwaysPipeline ]
+      ]
 
-comp 
-  ::= comp >>> comp | comp |>>>| comp
-    | comp finally comp 
-    | f(args)
-    | repeat { commands }    | repeat comp
-    | times ... { commands } | times ... comp
-    | seq { commands }
-    | take
-    | takes expr
-    | emit expr
-    | emits expr
-    | read | write 
-    | do { stmts }
-    | return expr
-    | let binding in comp
+    cTimes' = uncurry4 .: cTimes
 
-commands := sepEndBy1 ";" command  
+-- | A term in a computation expression
+--
+-- > term ::=
+-- >     "(" <comp> ")"
+-- >   | "return" <expr>"
+-- >   | "emit" <expr>
+-- >   | "emits" <expr>
+-- >   | "takes" <expr>
+-- >   | "filter" <expr>
+-- >   | "read" <type-ann>?
+-- >   | "write" <type-ann>?
+-- >   | "map" <vect-ann>? <var-bind>
+-- >   | "take"
+-- >   | <var-or-call>
+-- >   | "if" <expr> "then" <comp> "else" <comp>
+-- >   | <let-decl> "in" <comp>
+-- >   | "do" <stmt-block>
+-- >   | "seq"? "{" <commands> "}"
+--
+-- `<stmt_block>` comes from the expression language.
+parseCompTerm :: BlinkParser SrcComp
+parseCompTerm = choice
+    [ parens parseComp
 
-command 
-  ::= (x <- comp)
-    | comp
-    | let binding in command
+    , withPos cReturn'  <* reserved "return" <*> parseExpr
+    , withPos cEmit     <* reserved "emit"   <*> parseExpr
+    , withPos cEmits    <* reserved "emits"  <*> parseExpr
+    , withPos cTake     <* reserved "takes"  <*> parseExpr
+    , withPos cFilter   <* reserved "filter" <*> parseExpr
+    , withPos cReadSrc  <* reserved "read"   <*> optTypeAnn
+    , withPos cWriteSnk <* reserved "write"  <*> optTypeAnn
+    , withPos cMap      <* reserved "map"    <*> optVectAnn <*> parseVarBind
+    , withPos cTake1    <* reserved "take"
 
--} 
+    , parseVarOrCall
 
+    , withPos cBranch <* reserved "if"   <*> parseExpr
+                      <* reserved "then" <*> parseComp
+                      <* reserved "else" <*> parseComp
+    , withPos cLetDecl <*> parseLetDecl `bindExtend` \f -> f <$ reserved "in" <*> parseComp
+    , withPos cReturn' <* reservedOp "do" <*> parseStmtBlock
+    , optional (reserved "seq") >> braces parseCommands
+    ] <?> "computation"
+  where
+    cReturn' = ($ AutoInline) .: cReturn
 
+{-------------------------------------------------------------------------------
+  Operators (used to build parseComp)
 
-mkPrefix parsepref cont
-  = Prefix $ do { p <- getPosition
-                ; pref <- parsepref
-                ; return (cont p pref) 
-                }
+  These are not assigned non-terminals of their own in the grammar.
+-------------------------------------------------------------------------------}
 
-standalonePref     = reserved "standalone"
-standaloneKont p _ = cStandalone (Just p) () 
+-- > ">>>"
+opMaybePipeline :: BlinkParser ParInfo
+opMaybePipeline = mkParInfo MaybePipeline <$ reservedOp ">>>"
 
-repeatPref          
-  = do { reserved "repeat" 
-       ; p <- getPosition
-       ; optionMaybe parseVectAnn 
-       }
+-- > "|>>>|"
+opAlwaysPipeline :: BlinkParser ParInfo
+opAlwaysPipeline = mkParInfo (AlwaysPipeline 0 0) <$ reservedOp "|>>>|"
 
-repeatKont p mb_ann = cRepeat (Just p)  () mb_ann
+-- > ("unroll" | "nounroll")? "times" <expr>
+timesPref :: BlinkParser (UnrollInfo, SrcExp, SrcExp, Name)
+timesPref =
+    (withPos mkTimes <*> parseFor (reserved "times") <*> parseExpr) <?> "times"
+  where
+    mkTimes p () ui e =
+      let nm = mkNameFromPos (Just "_tmp_count") (fromJust p) (Just tint)
+      in (ui, eVal p () (VInt 0), e, nm)
 
-untilPref = do { reserved "until" 
-               ; p <- getPosition
-               ; parseExpr
-               }
+-- > ("unroll" | "nounroll")? "for" <var-bind> "in" "[" <interval> "]"
+forPref :: BlinkParser (UnrollInfo, SrcExp, SrcExp, Name)
+forPref =
+    (withPos mkFor <*> parseFor (reserved "for") <*> parseVarBind
+                   <* reserved "in" <*> brackets genIntervalParser) <?> "for"
+  where
+    mkFor _p () ui k (estart, elen) = (ui, estart,elen,k)
 
-untilKont p e = cUntil (Just p) () e 
+{-------------------------------------------------------------------------------
+  Variable or call
+-------------------------------------------------------------------------------}
 
+-- | Variable or function call
+parseVarOrCall :: BlinkParser SrcComp
+parseVarOrCall = go <?> "variable or function call"
+  where
+    go = do
+      p <- getPosition
+      x <- identifier
+      let xnm = mkNameFromPos (Just x) p Nothing
+      choice [ do notFollowedBy (symbol "(")
+                  notFollowedBy (symbol "<-")
+                  return (cVar (Just p) () xnm)
+             , withPos (($ xnm) .: cCall) <*> parseArgs xnm
+             ] <?> "variable or function call"
 
-whilePref = reserved "while" >> parseExpr
-whileKont p e = cWhile (Just p) () e 
+-- | Parse an argument list
+--
+-- If `xnm` is not a known defined function, this is simply
+--
+-- > <arglist> ::= "(" <expr>*"," ")"
+--
+-- If however `xnm` is a known function we expect a comma-separated list of
+-- as many arguments as the function expect, which can either be computations
+-- `<comp>` or expressions `<expr>`.
+parseArgs :: Name -> BlinkParser [CallArg SrcExp SrcComp]
+parseArgs xnm = parens $ do
+    penv <- ask
+    case lookup xnm penv of
+      Just arg_info -> map parseArg arg_info `sepsBy` comma
+      Nothing       -> (CAExp <$> parseExpr) `sepBy`  comma
+  where
+    parseArg :: (Name, CallArg Ty CTy0) -> BlinkParser (CallArg SrcExp SrcComp)
+    parseArg (_, CAExp  _) = CAExp  <$> parseExpr
+    parseArg (_, CAComp _) = CAComp <$> parseComp
 
+{-------------------------------------------------------------------------------
+  Let statements
+-------------------------------------------------------------------------------}
 
-timesPref 
-  = choice [ do { p <- getPosition 
-                ; ui <- parseFor (reserved "times")
-                ; e <- parseExpr
-                ; let nm = mkNameFromPos (Just "_tmp_count") p (Just tint)
-                ; return (eVal (Just p) () (VInt 0), e, nm, ui)
-                }
-           , do { p <- getPosition
-                ; ui <- parseFor (reserved "for")
-                ; k <- parseVarBind
-                ; reserved "in"
-                ; (estart,elen) <- brackets genIntervalParser
-                ; return (estart,elen,k,ui)
-                }
-           ] <?> "times or for"
+data LetDecl =
+    LetDeclVar (Name, Either Ty SrcExp)
+  | LetDeclStruct StructDef
+  | LetDeclExternal String [(Name, Ty)] Ty
+  | LetDeclFunComp (Maybe (Int, Int)) Name [(Name, CallArg Ty CTy0)] ([(Name, Ty, Maybe SrcExp)], SrcComp)
+  | LetDeclFunExpr Name [(Name, Ty)] ([(Name, Ty, Maybe SrcExp)], SrcExp)
+  | LetDeclComp (Maybe (Int, Int)) Name SrcComp
+  | LetDeclExpr Name SrcExp
 
-timesKont p (estart,elen,cntnm,ui) 
-  = cTimes (Just p) () ui estart elen cntnm
+-- | The thing that is being declared in a let-statemnt
+--
+-- > <let-decl> ::=
+-- >   | <decl>
+-- >   | <struct>
+-- >   | "let" "external" IDENT <params> ":" <base-type>
+-- >   | "fun" <comp-ann> <var-bind> <comp-params> "{" <decl>* <commands> "}"
+-- >   | "fun" <var-bind> <params> "{" <decl>* <stmts> "}"
+-- >   | "let" <comp-ann> <var-bind> "=" <comp>
+-- >   | "let" <var-bind> "=" <expr>
+parseLetDecl :: BlinkParser LetDecl
+parseLetDecl = choice
+    [ LetDeclVar <$> declParser'
+    , LetDeclStruct <$> parseStruct
+    , try $ LetDeclExternal <$ reserved "let" <* reserved "external" <*> identifier <*> paramsParser <* symbol ":" <*> parseBaseType
+    , try $ LetDeclFunComp  <$ reserved "fun" <*> parseCompAnn <*> parseVarBind <*> compParamsParser <*> body (nest parseCommands)
+    , try $ LetDeclFunExpr  <$ reserved "fun"                  <*> parseVarBind <*> paramsParser     <*> body (nest parseStmts)
+    , try $ LetDeclComp     <$ reserved "let" <*> parseCompAnn <*> parseVarBind <* symbol "=" <*> nest parseComp
+    , try $ LetDeclExpr     <$ reserved "let"                  <*> parseVarBind <* symbol "=" <*> nest parseExpr
+    ]
+  where
+    body :: BlinkParser a -> BlinkParser ([(Name, Ty, Maybe SrcExp)] , a)
+    body p = braces $ (,) <$> declsParser <*> p
 
+-- > <struct> ::= "struct" IDENT "=" "{" (IDENT ":" <base-type>)*";" "}"
+parseStruct :: BlinkParser StructDef
+parseStruct = do
+    reserved "struct"
+    x <- identifier
+    _ <- symbol "="
+    braces $ StructDef x <$> parseField `sepBy` semi
+  where
+    parseField = (,) <$> identifier <* colon <*> parseBaseType
 
-mkPar parseop pi 
-  = Infix $ do { p <- getPosition
-               ; parseop
-               ; return (cPar (Just p) () (mkParInfo pi)) }
+-- | Parameters to a (non-comp) function
+--
+-- > <params> ::= "(" (IDENT ":" <base-type>)*"," ")"
+paramsParser :: BlinkParser [(Name, Ty)]
+paramsParser = parens $ sepBy paramParser (symbol ",")
+  where
+    paramParser = withPos mkParam <*> identifier <* colon <*> parseBaseType
+    mkParam p () x ty = (mkNameFromPos (Just x) (fromJust p) (Just ty), ty)
 
+-- | Parameters to a (comp) function
+--
+-- > <comp-params> ::= "(" (IDENT ":" (<base-type> | <comp-base-type>))*"," ")"
+--
+-- (<base-type> comes from the expr parser; <comp-base-type> is defined here).
+compParamsParser :: BlinkParser [(Name, CallArg Ty CTy0)]
+compParamsParser = parens $ sepBy paramParser (symbol ",")
+  where
+    paramParser = withPos mkParam <*> identifier <* colon <*> parseType
+    parseType   = choice [ CAExp  <$> parseBaseType
+                         , CAComp <$> parseCompBaseType
+                         ] <?> "computation parameter type"
 
+    mkParam p () x mty = (mkNameFromPos (Just x) (fromJust p) Nothing, mty)
 
-parsePrimCompUnOp primname const
-  = do { p <- getPosition
-       ; reserved primname
-       ; e <- parseExpr
-       ; return (const (Just p) () e) }
+-- | Computation type
+--
+-- > <comp-base-type> ::= "ST" ("T" | "C" <base-type>) <base-type> <base-type>
+parseCompBaseType :: BlinkParser CTy0
+parseCompBaseType = choice
+    [ mkCTy0 <$ reserved "ST" <*> parse_idx <*> parseBaseType <*> parseBaseType
+    , parens parseCompBaseType
+    ] <?> "computation type"
+  where
+    parse_idx = choice
+      [ Nothing <$ reserved "T"
+      , Just    <$ reserved "C" <*> parseBaseType
+      , parens parse_idx
+      ] <?> "computation type index"
 
-parsePrimCompNullOp primname const
-  = do { p <- getPosition
-       ; reserved primname
-       ; return (const (Just p) ()) }
+    mkCTy0 Nothing   ti ty = TTrans ti ty
+    mkCTy0 (Just tv) ti ty = TComp tv ti ty
 
-parseIOComp ioname const
-  = do { p <- getPosition
-       ; reserved ioname
-       ; mty <- optionMaybe $ brackets parseBaseType
-       ; let annty = case mty of Nothing -> RWNoTyAnn
-                                 Just t  -> RWRealTyAnn t
-       ; return (const (Just p) () annty) }
-
--- Useful when parsing a command
-parseBindOrComp
-  = do { p <- getPosition 
-
-       ; r <- choice [ try $ 
-                       do { x <- parseVarBind 
-                          ; symbol "<-"
-                          ; return (Left x)
-                          }
-                     , do { parseComp >>= (return . Right) }
-                     ] <?> "bind or computation"
-       ; case r of
-          Left xnm -> 
-             do c <- parseComp
-                return $ \mbc -> 
-                  let cont = [(xnm, fromMaybe (cunit p) mbc)]
-                  in cBindMany (Just p) () c cont               
-          Right c -> 
-             do { return $ mkoptcseq p c }
-      }
-
-
--- Useful when parsing a computation
-parseVarOrCall
-  = do { p <- getPosition
-       ; x <- identifier
-       ; let xnm = mkNameFromPos (Just x) p Nothing
-       ; choice [ do { notFollowedBy (symbol "(")
-                     ; notFollowedBy (symbol "<-")
-                     ; return (cVar (Just p) () xnm) }
-                , parseCallArgsC xnm combineAsCCall
-                ] <?> "variable or function call"
-       }
-
-combineAsCCall p fnm args
-   = return (cCall (Just p) () fnm args) 
-
-
-parseCallArgsC :: Name 
-              -> (SourcePos -> Name -> 
-                     [CallArg SrcExp SrcComp] -> BlinkParser a)
-              -> BlinkParser a
-parseCallArgsC xnm combine
-  = do { p <- getPosition
-       ; penv <- ask 
-       ; es <- case lookup xnm penv of 
-                 Just arg_info -> parens $ parse_args arg_info
-                 Nothing -> parens $ 
-                            sepBy (parseExpr >>= (return . CAExp )) comma
-       ; combine p xnm es 
-       }
-  where 
-    parse_arg (_,CAExp {})  = parseExpr >>= (return . CAExp)
-    parse_arg (_,CAComp {}) = parseComp >>= (return . CAComp)
-
-    parse_args []     = return []
-    parse_args [p]    = parse_arg p >>= \e -> return [e]
-    parse_args (p:ps) = do { e <- parse_arg p 
-                           ; comma
-                           ; es <- parse_args ps
-                           ; return (e:es) }
-
-
-parseCompBaseType
-  = choice [ do { reserved "ST" 
-                ; mbc <- parse_idx
-                ; ti <- parseBaseType
-                ; ty <- parseBaseType
-                ; case mbc of 
-                    Nothing -> return (TTrans ti ty)
-                    Just tv -> return (TComp tv ti ty)
-                }
-           , parens parseCompBaseType 
-           ] <?> "computation type"
-  where parse_idx 
-            = choice [ reserved "T" >> return Nothing
-                     , do { reserved "C"
-                          ; t <- parseBaseType
-                          ; return (Just t) }
-                     , parens parse_idx 
-                     ] <?> "computation type index"
-
-
--- A vectorization annotation is just of the form [literal,literal] or <= [literal, literal] 
-parseVectAnn
-  = choice [ try $ (do { reservedOp "<=" 
-                       ; parse_vect_ann_flag
-                       } >>= \(f,v) -> return (UpTo f v))
-           , parse_vect_ann_flag >>= (\(f,v) -> return (Rigid f v))
-           ] 
--- Parses just the [(i,j)] annotation 
-parse_vect_ann_flag
-  = do { m <- optionMaybe $ reserved "!"
-       ; v <- parse_vect_ann
-       ; case m of { Nothing -> return (True,v) ; Just _ -> return (False,v) }
-       }
-
-parse_vect_ann
-  = brackets $
-    do { i <- integer
-       ; comma
-       ; j <- integer
-       ; return (fromIntegral i, fromIntegral j) 
-       }
-
-parseComp = buildExpressionParser par_op_table (choice [parse_unary_ops, parseCompTerm])
-  where parse_unary_ops = choice [ from_pref standalonePref standaloneKont
-                                 , from_pref repeatPref     repeatKont
-                                 , from_pref untilPref      untilKont
-                                 , from_pref whilePref      whileKont
-                                 , from_pref timesPref      timesKont
-                                 ]
-        par_op_table 
-           = [ [ mkPar (reservedOp ">>>")   MaybePipeline        AssocLeft ]
-             , [ mkPar (reservedOp "|>>>|") (AlwaysPipeline 0 0) AssocLeft ] 
-             ] 
-
-        from_pref :: BlinkParser a -> (SourcePos -> a -> SrcComp -> SrcComp) -> BlinkParser SrcComp
-        from_pref parsepref cont 
-           = do { p <- getPosition
-                ; pref <- parsepref
-                ; c <- choice [parse_unary_ops, parseCompTerm] -- Not operators, to avoid wrong fixity
-                ; return (cont p pref c)
-                }
-
-parseCompTerm 
-  = choice [ parens parseComp
-           , parsePrimCompUnOp "return" (\l t -> cReturn l t AutoInline) 
-           , parsePrimCompUnOp "emit" cEmit
-           , parsePrimCompUnOp "emits" cEmits
-           , parsePrimCompUnOp "takes" cTake 
-           , parsePrimCompUnOp "filter" cFilter
-           , parsePrimCompNullOp "take" cTake1
-           , parseVarOrCall 
-           , parseIOComp "read" cReadSrc
-           , parseIOComp "write" cWriteSnk
- 
-           , do { reserved "map"
-                ; p <- getPosition
-                ; mb_ann <- optionMaybe parseVectAnn 
-                ; nm <- parseVarBind
-                ; return (cMap (Just p) () mb_ann nm) 
-                }
-
-           , parseCompCompound
-           ] <?> "computation"
-
-
-type CommandCont = Maybe SrcComp -> SrcComp
-
-parseStructDef :: BlinkParser (Either SrcComp CommandCont)
-parseStructDef 
-  = do { p <- getPosition
-       ; reserved "struct" 
-       ; updateState (\x -> x+1) 
-       ; x <- identifier 
-       --; debugParse p (putStrLn  "struct")
-       ; symbol "="
-       ; structdef <- braces (sdef_parser x)
-       ; optInCont (cLetStruct (Just p) () structdef) 
-       }
-  where sdef_parser tn 
-          = do { tfs <- sepBy parse_field semi
-               ; return $ 
-                 StructDef { struct_name = tn
-                           , struct_flds = tfs } 
-               }
-        parse_field 
-          = do { fn <- identifier 
-               ; colon
-               ; ft <- parseBaseType
-               ; return (fn,ft) 
-               }
-
-parseCompCompound
-  = choice 
-      [ asComp parseCond "conditional used as command"
-      , asComp parseStructDef "struct definition used as command"
-        -- References
-      , asComp parseRefBind  "var binding used as command"
-      , asComp parseBindings "let binding used as command"
-      , do { p <- getPosition
-           ; reserved "do"
-           ; estmts <- parseStmtBlock <?> "statement block" 
-           ; return (cReturn (Just p) () AutoInline estmts) 
-           }
-      , optional (reserved "seq") >> braces parseCommands
-      ] <?> "compound command" 
-
-parseCommands             
-  = do { cs <- sepEndBy1 parseCommand (optional semi)
-       ; return $ fromJust (fold_comp cs) 
-       }
-
-  where 
-          
-     fold_comp [c]    = Just (c Nothing)
-     fold_comp (c:cs) = Just (c (fold_comp cs))
-     fold_comp []     = error "Can't happen"
-
-
-parseCommand 
- = choice [ asCommand parseStructDef
-          , asCommand parseCond
-          , asCommand parseBindings
-          , asCommand parseRefBind
-          , parseBindOrComp 
- 
-          ] <?> "command"
-
-mkoptcseq :: SourcePos -> SrcComp -> Maybe SrcComp -> SrcComp
-mkoptcseq p c1 Nothing   = c1
-mkoptcseq p c1 (Just c2) = cSeq (Just p) () c1 c2
-
-
-asComp :: BlinkParser (Either SrcComp CommandCont) 
-       -> String 
-       -> BlinkParser SrcComp
-asComp m err_msg
-  = do { r <- m 
-       ; case r of
-           Left c  -> return c
-           Right k -> unexpected err_msg
-       }
-
-asCommand :: BlinkParser (Either SrcComp CommandCont) 
-          -> BlinkParser CommandCont
-asCommand m 
-  = do { r <- m 
-       ; p <- getPosition
-       ; case r of 
-           Left c  -> return $ mkoptcseq p c 
-           Right k -> return k 
-       }
-
-parseCond :: BlinkParser (Either SrcComp CommandCont)
-parseCond 
-  = do { p <- getPosition
-       ; reserved "if"
-       ; e <- parseExpr
-       ; reserved "then"
-       ; c1 <- parseComp
-       ; choice 
-          [ do { notFollowedBy (reserved "else") 
-               ; return (Right (mk_kont e c1 p)) }
-          , do { reserved "else"
-               ; c2 <- parseComp 
-               ; return (Left (cBranch (Just p) () e c1 c2)) } 
-          ]
-       }
-  where mk_kont e c1 p = mkoptcseq p (cBranch (Just p) () e c1 (cunit p)) 
-
-
-parseBindings :: BlinkParser (Either SrcComp CommandCont)
-  = do { p <- getPosition
-       ; reserved "let"
-       ; updateState (\x -> x + 1)  -- increment let nesting
-       --; debugParse p (putStrLn  "let")
-       ; choice [ do { notFollowedBy (reserved "external")
-                     ; parseBinding p }
-                , parseExternal p ] 
-       }
-
-parseRefBind :: BlinkParser (Either SrcComp CommandCont)
-  = do { p <- getPosition
-       ; (xn,ty,mbinit) <- declParser
-       ; updateState (\x -> x +1) -- increment let nesting
-       ; let bnd = case mbinit of Nothing -> Left ty
-                                  Just ei -> Right ei
-       ; optInCont (cLetERef (Just p) () xn bnd)
-       } 
-
-
-parseCompOptional :: BlinkParser (Maybe (Maybe (Int,Int)))
--- Nothing -> no 'comp'
--- Just h  -> a 'comp' with an optional hint 
-  = do { is_comp <- optionMaybe (reserved "comp")
-       ; case is_comp of
-           Nothing -> return Nothing
-           Just {} -> do { r <- optionMaybe parse_vect_ann
-                         ; return $ Just r
-                         }
-       }
+cLetDecl :: Maybe SourcePos -> () -> LetDecl -> (ParseCompEnv, SrcComp -> SrcComp)
+cLetDecl p () (LetDeclVar (xn, bnd)) =
+    ([], cLetERef p () xn bnd)
+cLetDecl p () (LetDeclStruct sdef) =
+    ([], cLetStruct p () sdef)
+cLetDecl p () (LetDeclExternal x params ty) =
+    ([], cLetHeader p () fn fun)
+  where
+    fn  = mkNameFromPos (Just x) (fromJust p) Nothing
+    fun = MkFun (MkFunExternal fn params ty) p ()
+cLetDecl p () (LetDeclFunComp h x params (locls, c)) =
+    ([(x, params)], cLetFunC p () x params locls (mkVectComp c h))
+cLetDecl p () (LetDeclFunExpr x params (locls, e)) =
+    ([], cLetHeader p () x fun)
+  where
+    fun = MkFun (MkFunDefined x params locls e) p ()
+cLetDecl p () (LetDeclComp h x c) =
+    ([], cLet p () x (mkVectComp c h))
+cLetDecl p () (LetDeclExpr x e) =
+    ([], cLetE p () x AutoInline e)
 
 mkVectComp :: SrcComp -> Maybe (Int,Int) -> SrcComp
 mkVectComp sc Nothing  = sc
 mkVectComp sc (Just h) = cVectComp (compLoc sc) (compInfo sc) h sc
 
-parseBinding :: SourcePos -> BlinkParser (Either SrcComp CommandCont)
-parseBinding p
-  = do { is_comp <- parseCompOptional
-       ; x <- parseVarBind
-       ; choice [ notFollowedBy (symbol "(") >> parseSimplBind is_comp x p
-                , parseFunBind is_comp x p 
-                ] 
-       }
+{-------------------------------------------------------------------------------
+  Commands
+-------------------------------------------------------------------------------}
 
-parseSimplBind is_comp x p 
-  = do { symbol "="
-       ; case is_comp of
-           Nothing -> parseExpr     >>= \e -> 
-                         optInCont (cLetE (Just p) () x AutoInline e)
-           Just h  -> parseCommands >>= \c -> 
-                         optInCont (cLet  (Just p) () x (mkVectComp c h))
-       }
+type Command = Either (SrcComp -> SrcComp) SrcComp
 
-parseFunBind is_comp x p
-  = case is_comp of
-      Nothing 
-        -> do { params <- parens paramsParser
-              ; symbol "="
-              ; locls <- declsParser
-              ; e <- parseStmts
-              ; let fun = MkFun (MkFunDefined x params locls e) (Just p) ()
-              ; optInCont (cLetHeader (Just p) () x fun) 
-              }
-      Just h
-        -> do { params <- parens compParamsParser
-              ; symbol "="
-              ; locls <- declsParser
-              ; c <- parseCommands -- c <- parseComp
-              ; extendParseEnv [(x,params)] $
-                optInCont (cLetFunC (Just p) () x params locls (mkVectComp c h)) 
-              }
+-- | A list of commands
+--
+-- Technically speaking, we cannot give a context free grammar here because the
+-- parser for function calls depends on the functions that are in scope.
+-- However, we ignore this in the documentation where we simply say
+--
+-- > <commands> ::= (<command> ";")*
+--
+-- The last <command> must be a computation.
+parseCommands :: BlinkParser SrcComp
+parseCommands =
+    parseCommand `bindExtend` go . (:[])
+  where
+    go :: [Command] -> BlinkParser SrcComp
+    go cs = do
+      optional semi
+      choice [ parseCommand `bindExtend` go . (:cs)
+             , foldCommands (reverse cs)
+             ]
 
-optInCont :: (SrcComp -> SrcComp) -> BlinkParser (Either SrcComp CommandCont)
-optInCont cont 
-  = choice [ do { updateState (\x -> x - 1) -- still this is like popping
-                ; notFollowedBy (reserved "in")
-                ; p <- getPosition 
-                --; debugParse p (putStrLn  "in")
-                ; return (Right (\mbc -> cont (fromMaybe (cunit p) mbc))) }
-           , do { updateState (\x -> x - 1) 
-                ; reserved "in"             -- popping
-                ; p <- getPosition
-                --; debugParse p (putStrLn  "in")
-                ; c <- parseComp
-                ; return (Left (cont c)) }
-           ]
+    foldCommands :: [Command] -> BlinkParser SrcComp
+    foldCommands []           = error "This cannot happen"
+    foldCommands [Right c]    = return c
+    foldCommands [Left _]     = fail "last statement in a seq block should be a computation"
+    foldCommands (Right c:cs) = cSeq' c <$> foldCommands cs
+    foldCommands (Left k:cs)  = k       <$> foldCommands cs
 
-cunit p = cReturn (Just p) () ForceInline (eunit p)
+    cSeq' c1 c2 = cSeq (compLoc c2) () c1 c2
 
-parseExternal :: SourcePos -> BlinkParser (Either SrcComp CommandCont) 
-parseExternal p 
-  = do { reserved "external" 
-       ; x <- identifier
-       ; params <- parens paramsParser
-       ; symbol ":"
-       ; ty <- parseBaseType 
-       ; let fn  = mkNameFromPos (Just x) p Nothing
-       ; let fun = MkFun (MkFunExternal fn params ty) (Just p) ()
-       ; optInCont (cLetHeader (Just p) () fn fun) 
-       }
+-- | Commands
+--
+-- > <command> ::=
+-- >     <let-decl>
+-- >   | "if" <expr> "then" <comp>
+-- >   | <var-bind> "<-" <comp>
+-- >   | <comp>
+parseCommand :: BlinkParser (ParseCompEnv, Command)
+parseCommand = choice
+    [ try $ withPos cLetDecl' <*> parseLetDecl <* notFollowedBy (reserved "in")
+    , try $ withPos cBranch' <* reserved "if"   <*> parseExpr
+                             <* reserved "then" <*> parseComp
+                             <* notFollowedBy (reserved "else")
+    , try $ withPos cBindMany' <*> parseVarBind <* symbol "<-" <*> parseComp
+    , (\c -> ([], Right c)) <$> parseComp
+    ] <?> "command"
+  where
+    cLetDecl' = second Left ..: cLetDecl
+    cBranch'   loc a e c1 = ([], Right $ cBranch loc a e c1 (cunit loc ()))
+    cBindMany' loc a x c  = ([], Left $ \c' -> cBindMany loc a c [(x, c')])
 
+cunit :: Maybe SourcePos -> () -> SrcComp
+cunit p () = cReturn p () ForceInline (eunit p ())
 
-paramsParser = sepBy paramParser (symbol ",")  
-  where paramParser =
-          do { p <- getPosition
-             ; x <- identifier
-             ; colon
-             ; ty <- parseBaseType
-             ; return $ (mkNameFromPos (Just x) p (Just ty), ty)
-             }
+{-------------------------------------------------------------------------------
+  Annotations
+-------------------------------------------------------------------------------}
 
-compParamsParser = sepBy paramParser (symbol ",")  
-  where 
-    paramParser =
-       do { p <- getPosition
-          ; x <- identifier
-          ; colon
-          ; mty <- choice [ parseBaseType     >>= ( return . CAExp )
-                          , parseCompBaseType >>= ( return . CAComp )
-                          ] <?> "computation parameter type"
-          ; return $ (mkNameFromPos (Just x) p Nothing, mty)
-          }
+-- | Optional type annotation
+--
+-- > <type-ann> ::= "[" <base-type> "]"
+optTypeAnn :: BlinkParser RWTypeAnn
+optTypeAnn =
+    mkTypeAnn <$> optionMaybe (brackets parseBaseType)
+  where
+    mkTypeAnn Nothing  = RWNoTyAnn
+    mkTypeAnn (Just t) = RWRealTyAnn t
 
-declsParser = endBy declParser semi
+-- | Vectorization annotation
+--
+-- > <vect-ann> ::= "<="? "!"? <range>
+parseVectAnn :: BlinkParser VectAnn
+parseVectAnn =
+    mkVectAnn <$> optionMaybe (reservedOp "<=") <*> parseVectAnnFlag
+  where
+    mkVectAnn Nothing   = uncurry Rigid
+    mkVectAnn (Just ()) = uncurry UpTo
 
+-- | Parses just the @[(i,j)]@ annotation
+parseVectAnnFlag :: BlinkParser (Bool, (Int, Int))
+parseVectAnnFlag =
+    mkFlag <$> optionMaybe (reserved "!") <*> parseRange
+  where
+    mkFlag Nothing   v = (True,  v)
+    mkFlag (Just ()) v = (False, v)
 
-parseProgram :: BlinkParser (Prog () ())                              
-parseProgram 
-  = do { whiteSpace
-       ; globs <- declsParser
-       ; c <- parseComp
-       ; return $ MkProg globs c 
-       }
+-- | Range
+--
+-- > <range> ::= "[" <int> "," <int> "]"
+parseRange :: BlinkParser (Int, Int)
+parseRange = brackets $ mkRange <$> integer <* comma <*> integer
+  where
+    mkRange i j = (fromInteger i, fromInteger j)
+
+-- | Shorthand for @<vect-ann>?@
+optVectAnn :: BlinkParser (Maybe VectAnn)
+optVectAnn = optionMaybe parseVectAnn
+
+-- > <comp-ann> ::= "comp" <range>?
+parseCompAnn :: BlinkParser (Maybe (Int, Int))
+parseCompAnn = reserved "comp" *> optionMaybe parseRange

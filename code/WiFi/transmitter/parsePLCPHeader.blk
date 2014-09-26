@@ -22,7 +22,7 @@
 #include "../const.blk"
 
 
-let printHeader(h : struct HeaderInfo) = 
+fun printHeader(h : struct HeaderInfo) {
   print "Header - modulation: ";
   if (h.modulation == M_BPSK) then {
     print "BPSK";
@@ -42,11 +42,11 @@ let printHeader(h : struct HeaderInfo) =
     print "3/4";
   } } 
   println ", length: ", h.len, " B";
-in
+} in
 
 
 
-let parsePLCPHeader(hdata:arr[24] bit) = 
+fun parsePLCPHeader(hdata:arr[24] bit) {
 var b:int;
 var h:struct HeaderInfo;
 
@@ -105,13 +105,13 @@ var h:struct HeaderInfo;
      --println "Header bits: ", hdata
       
   return h;
-in
+} in
 
 
-let comp emitHeader() =
+fun comp emitHeader() {
   seq{
     (x : arr[24] bit) <- takes 24;
     emits x;
     return parsePLCPHeader(x)
   }
-in
+} in

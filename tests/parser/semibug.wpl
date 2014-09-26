@@ -1,5 +1,5 @@
 
-let comp init() = 
+fun comp init() { 
   var params : int;
   do {
     for ii in [0,64] {
@@ -7,7 +7,7 @@ let comp init() =
     }
   }
   return params
-in
+} in
 
 
 read[int] >>> init() >>> write[int]

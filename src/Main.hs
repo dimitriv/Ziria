@@ -109,6 +109,7 @@ main = failOnException $ do
     -- rather than `Text.PrettyPrint.Mainland.Doc`, so we generate a flat
     -- string instead
     dump dflags DumpAst ".ast.dump" $ (text . dumpStr) prog
+    dump dflags DumpAstPretty ".ast.pretty.dump" $ (text . show) prog
 
     rensym <- GS.initGenSym (getName dflags)
     prog_renamed <- runRenM (renameProg prog) rensym []

@@ -25,7 +25,7 @@ let sts_mod = int16(double(bpsk_mod_11a) * 1.472) in
 let lts_mod = bpsk_mod_11a in
 
 
-let createSTSinTime() = 
+fun createSTSinTime() {
   var sts : arr[128] complex16;
   var sts_time : arr[320] complex16;
 
@@ -54,10 +54,10 @@ let createSTSinTime() =
   sts_time[256,64] := sts_time[0,64];
 
   return sts_time;
-in
+} in
 
 
-let createLTSinTime() = 
+fun createLTSinTime() {
   var lts : arr[128] complex16;
   var lts_time : arr[320] complex16;
   var LTS_Positive_table : arr [64] int16 := {
@@ -96,7 +96,7 @@ let createLTSinTime() =
   lts_time[0,64] := lts_time[256,64];
 
   return lts_time;
-in
+} in
 
 
 

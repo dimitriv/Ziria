@@ -1,9 +1,9 @@
-let test2(x : arr [4] int) =
+fun test2(x : arr [4] int) {
     x[0] := 9;
     return x;
-in
+} in
 
-let comp test1() =
+fun comp test1() {
   var a : arr [4] int;
   var b : arr [4] int;
   var f : arr [2] int; 
@@ -13,6 +13,6 @@ let comp test1() =
             in let d = test2(a)
                in c)}
   emits f
-in
+} in
 
 read[int] >>> test1() >>> write[int]

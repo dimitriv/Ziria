@@ -1,15 +1,15 @@
-let comp f() = 
+fun comp f() {
 seq{
   (a : int) <- take;
   emit a
 }
-in
+} in
 
-let comp g() = 
+fun comp g() {
 seq{
   (a : arr[9] int) <- takes 9;
   emit (-1)
 }
-in
+} in
 
 read >>> repeat seq{f() ; g()} >>> write

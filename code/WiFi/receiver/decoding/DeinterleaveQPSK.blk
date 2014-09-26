@@ -19,7 +19,7 @@
 --
 #pragma once 
 
-let comp DeinterleaveQPSK() =
+fun comp DeinterleaveQPSK() {
 
   var output:arr[96] int8;
 
@@ -131,4 +131,4 @@ let comp DeinterleaveQPSK() =
     
   }
 
-in
+} in

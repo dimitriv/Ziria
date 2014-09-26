@@ -1,10 +1,10 @@
 
 -- Very silly proof of concept update
-let update_crc(x : bit, st : arr[4] bit) = 
+fun update_crc(x : bit, st : arr[4] bit) { 
   st[3] := x;
-in
+} in
 
-let comp [8,24] crc_24 (len : int) = 
+fun comp [8,24] crc_24 (len : int) { 
   var crc_state: arr[4] bit := {'0,'0,'0,'0};
 
   times len seq {
@@ -26,7 +26,7 @@ let comp [8,24] crc_24 (len : int) =
   times (final_len - len_so_far) emits {'0,'0,'0,'0,'0,'0,'0,'0};
 
   return crc_state;
-in
+} in
 
 -- let comp [8,8] test = crc_24(32)
 -- in

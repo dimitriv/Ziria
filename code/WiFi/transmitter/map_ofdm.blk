@@ -19,14 +19,14 @@
 --
 #pragma once 
 
-let comp map_ofdm() = 
+fun comp map_ofdm() {
   var state : arr[7] int := {1,1,1,1,1,1,1};
   var pilotIndex : int := 127;
   var x : arr[48] complex;
   var pilots : arr[4] complex16;
   var allPilots : arr[4*128] complex16;
 
-  let generateAllPilots() = 
+  fun generateAllPilots() {
     var allPilotSgn:arr[128] int16 := 
         {0,  0,  0, -1, -1, -1,  0, -1, -1, -1, -1,  0,  0, -1,  0, -1, 
         -1,  0,  0, -1,  0,  0, -1,  0,  0,  0,  0,  0,  0, -1,  0,  0, 
@@ -49,10 +49,10 @@ let comp map_ofdm() =
         allPilots[4*i+3] := complex16{re=-bpsk_mod_11a; im=0}
       }
     }
-  in 
+  } in 
 
 
-  let getNextPilot() = 
+  fun getNextPilot() {
     var oldPilotIndex : int;
 
     oldPilotIndex := pilotIndex;
@@ -60,7 +60,7 @@ let comp map_ofdm() =
     if (pilotIndex >= 127) then pilotIndex := 0;
 
     return allPilots[4*oldPilotIndex,4];
-  in 
+  } in 
 
 
 
@@ -104,4 +104,4 @@ seq{
   }
 }
 
-in
+} in

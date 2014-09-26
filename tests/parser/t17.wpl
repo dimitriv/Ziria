@@ -1,5 +1,5 @@
 
-let foo(y : int) = 
+fun foo(y : int) {
   var x : int := 0;
   x := y;
   while (x < 4)
@@ -7,6 +7,6 @@ let foo(y : int) =
 
   return x;
 
-in 
+} in 
 
 read >>> map foo >>> write

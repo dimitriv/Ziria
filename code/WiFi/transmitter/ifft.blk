@@ -22,7 +22,7 @@
 #include <externals.blk>
 
 
-let comp ifft() =
+fun comp ifft() {
    var symbol:arr[128] complex16;
    var fftdata:arr[128+32] complex16;
 
@@ -44,5 +44,5 @@ let comp ifft() =
      emits fftdata;
    }
   
-in
+} in
 

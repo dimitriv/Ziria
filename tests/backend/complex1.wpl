@@ -1,4 +1,4 @@
-let foo(x : int64) = 
+fun foo(x : int64) { 
   var y : int64;
   var c : struct complex64; 
 
@@ -15,9 +15,9 @@ let foo(x : int64) =
 
   return ret;
 
-in
+} in
 
-let comp foo() = 
+fun comp foo() { 
   var x : complex16;
   seq{
   (y : int16) <- take;
@@ -37,6 +37,6 @@ let comp foo() =
   emit x
   -- emit (complex16 { re = 3; im = 3 });
   }
-in 
+} in 
 
 read >>> repeat foo() >>> write

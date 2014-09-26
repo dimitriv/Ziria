@@ -22,7 +22,7 @@
 #include "../../const.blk"
 #include <externals.blk>
 
-let comp ViterbiSig11a() = 
+fun comp ViterbiSig11a() {
   var nOutput:int16;
   var outViterbi:arr[96000] bit; 
 
@@ -50,5 +50,5 @@ let comp ViterbiSig11a() =
      -- So here we cheat to pass the test, and don't use the upper 8 bits of PLCP
      emits {'1,'1,'0,'0,'1,'0,'0,'1};
   }
-in
+} in
 

@@ -33,7 +33,7 @@
 #include "Viterbi.blk"
 
 
-let comp Decode(h : struct HeaderInfo) =
+fun comp Decode(h : struct HeaderInfo) {
   -- +8 is for CRC (4 bits but byte aligned)
   DemapLimit(0) 
   >>> {if (h.modulation == M_BPSK) then 
@@ -48,4 +48,4 @@ let comp Decode(h : struct HeaderInfo) =
                 DemapQAM64() >>> DeinterleaveQAM64() 
       }
   >>> Viterbi(h.coding, h.len*8 + 8) >>> scrambler()
-in 
+} in 

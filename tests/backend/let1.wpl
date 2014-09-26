@@ -1,4 +1,4 @@
-let comp test() =
+fun comp test() {
    var i : int;
 
    let A = 1;
@@ -6,6 +6,6 @@ let comp test() =
    let B = A+1;
    emit B;
 
-in
+} in
 
 read[int] >>> test() >>> write[int]

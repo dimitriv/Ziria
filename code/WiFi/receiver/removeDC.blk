@@ -22,7 +22,7 @@
 #include <externals.blk>
 
 
-let comp removeDC() = 
+fun comp removeDC() {
 
     var y:arr[4] complex16;
     var sx:arr[4] complex16;
@@ -82,4 +82,4 @@ seq{
 
     }
 }
-in
+} in

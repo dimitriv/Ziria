@@ -1,4 +1,4 @@
-let comp modulate_64qam () = 
+fun comp modulate_64qam () {
 var re:int16;
 var im:int16;
 var outc : complex16; 
@@ -75,7 +75,7 @@ repeat [12,2]
 
     emit outc
   }
-in
+} in
 
 
 read[bit] >>> modulate_64qam() >>> write[complex16]

@@ -21,7 +21,7 @@
 
 #include "../const.blk"
 
-let comp modulate_bpsk () = 
+fun comp modulate_bpsk () {
 var outa : arr[2] complex16;
 var outi : arr[8] int16;
 
@@ -31,13 +31,13 @@ repeat [8,8] {
                       else complex16{re=bpsk_mod_11a; im=0};
 }
 
-in
+} in
 
 
 
 
 
-let modulate_qpsk_lut (x : arr[2] bit) = 
+fun modulate_qpsk_lut (x : arr[2] bit) {
   var outi : int16;
 
       if (x[0] == bit(0) && x[1] == bit(1)) then { 
@@ -54,11 +54,11 @@ let modulate_qpsk_lut (x : arr[2] bit) =
         } 
       };
   return outi
-in
+} in
   
 
 
-let comp modulate_qpsk () = 
+fun comp modulate_qpsk () {
 var outa : arr[4] complex16;
 var outi : arr[4] int16;
 
@@ -76,13 +76,13 @@ seq{
   }
 
 }
-in
+} in
 
 
 
 
 
-let comp modulate_16qam () = 
+fun comp modulate_16qam () {
   var re:int16;
   var im:int16;
   var outc : complex16; 
@@ -122,12 +122,12 @@ let comp modulate_16qam () =
 
     emit outc
   }
-in
+} in
 
 
 
 
-let comp modulate_64qam () = 
+fun comp modulate_64qam () {
   var re:int16;
   var im:int16;
   var outc : complex16; 
@@ -202,12 +202,12 @@ let comp modulate_64qam () =
 
     emit outc
   }
-in
+} in
 
 
 
 
-let comp modulate(m : int) =
+fun comp modulate(m : int) {
   if (m == M_BPSK) then 
     modulate_bpsk()
   else
@@ -218,4 +218,4 @@ let comp modulate(m : int) =
       	modulate_16qam()
       else
       	modulate_64qam()
-in
+} in
