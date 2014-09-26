@@ -443,7 +443,7 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 	ULONGLONG lastTimeStamp = SoraGetCPUTimestamp(&(params_tx->measurementInfo.tsinfo));
 
 
-	if (inType != TY_FILE && inType != TY_SORA)
+	if (inType != TY_FILE && inType != TY_SORA && inType != TY_DUMMY)
 	{
 		printf("Only TY_FILE or TY_SORA supported for input!\n");
 		exit(1);
@@ -475,7 +475,6 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 			buf_ctx_rx.mem_input_buf_size = parse_dbg_int16(filebuffer, (int16 *)buf_ctx_rx.mem_input_buf) * sizeof(complex16);
 		}
 	}
-
 
 	if (outType == TY_IP || outType == TY_DUMMY)
 	{
