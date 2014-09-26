@@ -27,7 +27,7 @@
 #include <floor.blk>
 #include "../../const.blk"
 
-let comp cca() = 
+fun comp cca() {
   var sample : arr[16] complex16;
   var stsind:int16 := 0;
   var detected:bool := false;
@@ -79,7 +79,7 @@ let comp cca() =
   var STS:arr[64] complex16;
 
 
-  let calcAutoCorr(x : arr[4] complex16, oldsample : arr[16] complex16) = 
+  fun calcAutoCorr(x : arr[4] complex16, oldsample : arr[16] complex16) {
     var cr : int;
     var ci : int;
     var xcp:arr[4] complex16;
@@ -128,10 +128,10 @@ let comp cca() =
 
     return(iAutoCorr)
 
-  in
+  } in
 
 
-  let calcEnergy(x : arr[4] complex16) = 
+  fun calcEnergy(x : arr[4] complex16) { 
     var ge : int;
     var xcopy:arr[4] complex16;
     var iEnergy : int := 0;
@@ -158,13 +158,13 @@ let comp cca() =
  
     return (iEnergy)
 
-  in    
+  } in    
 
 
 
   -- We need this function since it can calculate correlation on arbitrary shifts of STS
   -- not only 16-bit aligned, as v_correlate. This will be improved in future.
-  let getCrossCorrelation(j : int, s : arr[16] complex16) = 
+  fun getCrossCorrelation(j : int, s : arr[16] complex16) { 
       var cr:int;
       var ci:int;
 
@@ -177,7 +177,7 @@ let comp cca() =
       };
 
      return abs_int32(cr) + abs_int32(ci);
-  in
+  } in
 
 
 
@@ -300,4 +300,4 @@ seq{
 
   return ret;
 }
-in
+} in

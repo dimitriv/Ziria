@@ -30,14 +30,14 @@ let external MAC_cca_write(energy : int32, noise : int32, detected : bool) : () 
 
 
 
-let comp detectPreamble() = 
+fun comp detectPreamble() {
   (removeDC() >>> cca())
-in 
+} in 
 
 
 
 #ifdef DO_DECODING
-let comp processCRC(hdata : struct HeaderInfo) = 
+fun comp processCRC(hdata : struct HeaderInfo) {
 var retCRC: arr[8] bit; 
 var retMod: arr[8] bit; 
 var retEnc: arr[8] bit; 
@@ -74,20 +74,20 @@ var tmp: arr[2] int8;
   emits retMod;
   emits retEnc;
   emits retSize;
-in
+} in
 
-let comp receiveBits() = 
+fun comp receiveBits() {
 var cnt : int := 0;
        seq { hdata <- DecodePLCP()
            ; Decode(hdata) >>> processCRC(hdata)
            }
-in
+} in
 #endif
 
 
 
 
-let comp pad() = 
+fun comp pad() {
   times 500 {
     emit complex16{re=0; im=0};
   };
@@ -95,25 +95,24 @@ let comp pad() =
     x<-take;
     emit x;
   }
-in
+} in
 
 
 
-let comp skip() = 
+fun comp skip() {
   times 1 {
-  -- times 30000 * 16 {
-     x<- take;
-  }
+     take;
+  };
 
   repeat {
     x<- take;
     emit x;
   }  
-in
+} in
 
 
 {-
-let comp test() = 
+fun comp test() {
 var xcopy:arr[4] complex16;
 var re32:arr[4] int32;
 var im32:arr[4] int32;
@@ -135,16 +134,16 @@ repeat{
     }
   }
 }
-in
+} in
 -}
 
 {-
-let comp test() = 
-repeat{
-  (x:arr[50000] complex16) <- takes 50000;
-  do{dbgplot_complex_line(x, 1)};
-}
-in
+fun comp test() {
+  repeat{
+    (x:arr[50000] complex16) <- takes 50000;
+    do{dbgplot_complex_line(x, 1)};
+  }
+} in
 -}
 
 
@@ -152,14 +151,14 @@ in
 
 
 
-let comp amp() = 
+fun comp amp() {
 repeat{
   (x : complex16) <- take;
   let const = 1;
   emit complex16{re = x.re * const; im = x.im * const};
   --emit complex16{re = x.re / const; im = x.im / const};
 }
-in
+} in
 
 
 {-

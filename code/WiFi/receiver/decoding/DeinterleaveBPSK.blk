@@ -19,7 +19,7 @@
 --
 #pragma once 
 
-let comp DeinterleaveBPSK() =
+fun comp DeinterleaveBPSK() {
 
   var output:arr[48] int8;
 
@@ -82,4 +82,4 @@ let comp DeinterleaveBPSK() =
     
   }
 
-in
+} in

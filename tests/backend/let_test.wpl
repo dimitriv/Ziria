@@ -1,6 +1,6 @@
-let test(n : int) = 
+fun test(n : int) {
   let l = if (n == 0) then 0 else 1 in 
   return l;
-in
+} in
 
 read[int] >>> repeat seq{(x:int)<-take; emit test(x)} >>> write[int]

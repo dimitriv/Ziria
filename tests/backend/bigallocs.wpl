@@ -1,4 +1,4 @@
-let comp foo() =
+fun comp foo() {
 
   var y : arr[500000] complex16;
 
@@ -8,6 +8,6 @@ let comp foo() =
     do{x[19] := 3};
     emit (x[13])
   }
-in
+} in
 
 read[int] >>> foo() >>> write[int]

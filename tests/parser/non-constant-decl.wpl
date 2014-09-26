@@ -1,7 +1,7 @@
-let foo(x : int) = 
+fun foo(x : int) { 
    var y : arr[5+1024] int;
    return y[0];
-in
+} in
 
 
 read[int] >>> map foo >>> write[int]

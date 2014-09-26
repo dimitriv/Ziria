@@ -16,7 +16,7 @@ let zeros = { '0,'0,'0,'0,'0,'0,'0,'0
             }
 in
 
-let perm8(p : arr[8] int, iarr : arr[8] bit) = 
+fun perm8(p : arr[8] int, iarr : arr[8] bit) {
   var oarr : arr[48] bit := zeros;
 
   -- Slow when run like this, hopefully fast when autolutted
@@ -28,17 +28,17 @@ let perm8(p : arr[8] int, iarr : arr[8] bit) =
     }
   }
   return oarr;
-in 
+} in 
 
-let vector_or(a1 : arr[48] bit, a2 : arr[48] bit) = 
+fun vector_or(a1 : arr[48] bit, a2 : arr[48] bit) {
   var res : arr[48] bit;
   for i in [0,48]
     res[i] := a1[i] | a2[i];
   return res;
-in
+} in
 
        
-let perm(p : arr[48] int, iarr : arr[48] bit) = 
+fun perm(p : arr[48] int, iarr : arr[48] bit) {
   var oarr    : arr[48] bit := zeros;
   var oarrtmp : arr[48] bit := zeros;
 
@@ -50,7 +50,7 @@ let perm(p : arr[48] int, iarr : arr[48] bit) =
      oarr := vector_or(oarr,perm8(p1,iarr1));
   }
   return oarr;
-in
+} in
   
 read[bit] >>> 
 repeat { x <- takes 48

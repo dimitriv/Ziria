@@ -1,9 +1,9 @@
-let f(x:int) = 
+fun f(x:int) {
   var outc : complex16;
   var amp  : int16 := 0;
   outc := complex16 { re = 0; im = -amp };
   return outc;
-in
+} in
 
 
 

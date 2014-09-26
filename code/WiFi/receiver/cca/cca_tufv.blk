@@ -45,17 +45,22 @@
 
 
 
+#ifdef MAC
+   let external MAC_cca_read() : int32 in
+#endif
+
+
 let norm_shift = 7 in 
 --let no_consec_increases = 4 in
 let no_consec_increases = NO_REP/2 in
 
 
 -- Same as in transmitter/createPreamble, except that it is at a lower sampling rate
-let createSTSinTime() = 
+fun createSTSinTime() {
   var sts : arr[64] complex16;
   var sts_time : arr[320] complex16;
 
-  let sts_mod = int16(double(bpsk_mod_11a) * 1.472) in
+  let sts_mod = int16(double(bpsk_mod_11a) * 1.472) 
 
   -- Reset everything - otherwise we might have an ambiguous preamble
   zero_complex16(sts);
@@ -80,16 +85,16 @@ let createSTSinTime() =
   sts_time[128,32] := sts_time[0,32];
 
   return sts_time;
-in
+} in
 
 
-let InitCorrPattern() = 
+fun InitCorrPattern() {
   var pattern : arr[CORR_LEN*CORR_LEN] complex16;
   var preamble : arr[64] complex16;
 
 
-  -- let sts = createSTSinTime() in 
-  let sts = createSTSinTime() in 
+  -- let sts = createSTSinTime()  
+  let sts = createSTSinTime()  
   for i in [0, 64] {
     preamble[i] := sts[i];
   };
@@ -102,14 +107,14 @@ let InitCorrPattern() =
   }
 
   return pattern;
-in
+} in
 
 
 
 -- Detection using Tufvesson algorithm
 -- Tufvesson et al, Time and Frequency Synchronization using PN-Sequence Preambles, VTC 99
 
-let comp cca() = 
+fun comp cca() {
    var pattern : arr[CORR_LEN*CORR_LEN] complex16;
    var corr : int32;
    var maxCorr : int32;
@@ -144,7 +149,7 @@ let comp cca() =
 
 
 
-   let calcEnergy(x : arr complex16) = 
+   fun calcEnergy(x : arr complex16) {
      var ge : int;
      var xcopy:arr[length(x)] complex16;
      var iEnergy : int := 0;
@@ -157,15 +162,17 @@ let comp cca() =
      v_conj_mul_complex16_int32(re32, im32, xcopy, xcopy);
      iEnergy := v_sum_int32(re32);
      return (iEnergy)
-   in    
+   } in    
 
 
 {
-   -- TODO: Move this to the top with the new parser
-   let external MAC_cca_read() : int32 in
 
    do {
+#ifdef MAC
       ccaTimeout := MAC_cca_read();
+#else
+      ccaTimeout := 2000000000;
+#endif
       pattern := InitCorrPattern();
       zero_int32(corr_hist);
       zero_complex32(mul_hist);
@@ -195,9 +202,9 @@ let comp cca() =
 
        maxCorr := 0;
        for i in [0, CORR_LEN] {
-          let corrc = v_correlate(pattern[i*CORR_LEN,CORR_LEN], input) in
-          let corrmul = corrc * conj_complex32(mul_hist[i]) in 
-          let corri = (abs_int32(corrmul.re) + abs_int32(corrmul.im)) in 
+          let corrc = v_correlate(pattern[i*CORR_LEN,CORR_LEN], input) 
+          let corrmul = corrc * conj_complex32(mul_hist[i])  
+          let corri = (abs_int32(corrmul.re) + abs_int32(corrmul.im))  
           mul_hist[i] := corrc;
 
           corr_hist[i*NO_REP,NO_REP-1] := corr_hist[i*NO_REP+1,NO_REP-1];
@@ -248,9 +255,11 @@ let comp cca() =
        iterind := iterind + 1;
 
 
+#ifdef MAC
        if (iterind > ccaTimeout) then {
          timeout := true;
        }
+#endif
 
      }
 
@@ -269,10 +278,10 @@ let comp cca() =
 
      for i in [0, CORR_LEN] {
         do{
-          let corrc = v_correlate(pattern[i*CORR_LEN,CORR_LEN], input) in
-          let corrmul = corrc * conj_complex32(mul_hist[i]) in 
-          -- let corrmul = corrc in
-          let corri = (abs_int32(corrmul.re) + abs_int32(corrmul.im)) in 
+          let corrc = v_correlate(pattern[i*CORR_LEN,CORR_LEN], input) 
+          let corrmul = corrc * conj_complex32(mul_hist[i])  
+          -- let corrmul = corrc 
+          let corri = (abs_int32(corrmul.re) + abs_int32(corrmul.im))  
           mul_hist[i] := corrc;
 
           corr_hist[i*NO_REP,NO_REP-1] := corr_hist[i*NO_REP+1,NO_REP-1];
@@ -361,7 +370,7 @@ let comp cca() =
 
   return ret;
 }
-in
+} in
 
 
 

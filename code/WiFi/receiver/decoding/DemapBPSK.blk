@@ -19,9 +19,9 @@
 --
 #pragma once 
 
-let comp DemapBPSK() = 
+fun comp DemapBPSK() {
   repeat seq {
      (symbol:complex16) <- take;
      emit m_bpsk_lut[symbol.re]
   }
-in
+} in

@@ -23,7 +23,7 @@
 #include <externals.blk>
 
 
-let comp Viterbi(rate:int, len:int) = 
+fun comp Viterbi(rate:int, len:int) { 
   var nOutput:int16;
   var outViterbi:arr[96000] bit; 
 
@@ -47,4 +47,4 @@ let comp Viterbi(rate:int, len:int) =
 
    }
 
-in
+} in

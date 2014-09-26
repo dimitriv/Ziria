@@ -21,7 +21,7 @@
 
 
 -- Remove pilots and pack data in proper order
-let comp GetData() = 
+fun comp GetData() {
 repeat {
   (x : arr[64] complex16) <- takes 64;
 
@@ -33,4 +33,4 @@ repeat {
   emits x[8,13];
   emits x[22,5];
 }
-in
+} in

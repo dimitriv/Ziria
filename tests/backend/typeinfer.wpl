@@ -1,6 +1,6 @@
 #include <externals.blk>
 
-let comp test () = 
+fun comp test () {
   var out : arr[8] int16;
   repeat {
 -- BUG: remove the comment to produce it
@@ -12,7 +12,7 @@ let comp test () =
     }
     emit out; 
   }
-in 
+} in 
 
 read >>> test() >>> write
 

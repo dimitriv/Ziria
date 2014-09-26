@@ -1,6 +1,6 @@
 
 
-let comp f() = 
+fun comp f() {
    var x : int := 5;
    while (x >= 0) 
      seq { (z : int) <- take
@@ -8,7 +8,7 @@ let comp f() =
          ; emit (z+1) 
          }
 
-in
+} in
 
 read[int] >>> times 2 (f()) >>> write[int]
 

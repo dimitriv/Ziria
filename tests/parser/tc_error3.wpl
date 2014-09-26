@@ -2,10 +2,10 @@ var STS:arr[64] complex16;
 var sample : arr[16] complex16;
 var test:arr[1] int16;
 
-let abswpl(c : int16) = if (c >= 0) then { return c } else { return -c } in
+fun abswpl(c : int16) { if (c >= 0) then { return c } else { return -c } } in
 
 -- TOASK: What is STS   TOFIX
-let getCrossCorrelation(j : int16, cc:arr[1] int16) = 
+fun getCrossCorrelation(j : int16, cc:arr[1] int16) { 
     --var cc : complex := {complex | 0,0};
       --var STS:arr[4] complex;
       -- var tmp: complex;
@@ -15,7 +15,7 @@ let getCrossCorrelation(j : int16, cc:arr[1] int16) =
       cr := 0;
       ci := 0;
    
-      let j32 = int32(j) in
+      let j32 = int32(j)
       
       for i in [0,length(sample)] {
         -- tmp := tmp + sample[i] * conj(STS[i+j])
@@ -28,6 +28,6 @@ let getCrossCorrelation(j : int16, cc:arr[1] int16) =
      cc[0] := abswpl(cr) + abswpl(ci);
 
    return 0;
-in
+} in
 
 read[complex16] >>> do{getCrossCorrelation(1,test)} >>> write[complex16]

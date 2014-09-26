@@ -25,7 +25,7 @@
 #include <v_mul.blk>
 
 
-let comp ChannelEqualization(params : struct LTECoeffs) =
+fun comp ChannelEqualization(params : struct LTECoeffs) {
 
    repeat seq {
 
@@ -43,4 +43,4 @@ let comp ChannelEqualization(params : struct LTECoeffs) =
     emits fftdata
   }
 
-in
+} in

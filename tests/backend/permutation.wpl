@@ -7,13 +7,13 @@ let testp = {  0,  3,  6,  9, 12, 15, 18, 21
             }
 in
 
-let perm(p : arr int, iarr : arr[length(p)] bit) = 
+fun perm(p : arr int, iarr : arr[length(p)] bit) {
   var oarr : arr[length(p)] bit;
   for i in [0,length(p)] {
     oarr[p[i]] := iarr[i]
   }
   return oarr
-in
+} in
 
 
 
