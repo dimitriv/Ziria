@@ -29,8 +29,21 @@
 -- with CORR_LEN == 8 it takes 1.7s to process 20e samples 
 -- (which should be done in 1s). This should be further optimized
 -- for line speed.
+-- Note also that this is not entirely consistant with Ziria's default 
+-- performance measurements, which indicate that the performance is sufficient:
+-- 
+-- T3600:
+-- CCA: 100e6 / 736597 = 135.7594
+-- CCA_tufv (8): 100000000 / 2840969 = 35.1993
+-- CCA_tufv (16): 100000000 / 2916247 = 34.2906
+--
+-- T3500:
+-- CCA: 100000000 / 992183 = 100.7879
+-- CCA_tufv(8): 100000000 / 4192765 = 23.8506
+-- CCA_tufv(16): 100000000 / 3829262 = 26.1147
 
-#define CORR_LEN         8
+
+#define CORR_LEN         16
 #define NO_REP          ((160/CORR_LEN)-1)
 
 #define MAX_CORR_HIST   (256/CORR_LEN)

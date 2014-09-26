@@ -101,10 +101,10 @@ bool pktDetected = false;
 // How many iterations of idle CCA to run before returning to MAC
 // (e.g. to check timer, etc). Note that we return to MAC anyway
 // after packet reception so this should not be too often. 
-// ccaTimeout = x [sec] * 20e6 [samples/sec] / samples_per_CCA_take / cntIdle_iter(=10)
-// for x = 1 sec we get 125000;
-//int32 ccaTimeout = 125000;
-int32 ccaTimeout = 125000*2;
+// ccaTimeout = x [sec] * 20e6 [samples/sec] / samples_per_CCA_take / cntIdleThreshold(=1)
+// for x = 1 sec we get 1250000;
+int32 ccaTimeout = 1250000;
+
 
 
 
@@ -518,6 +518,7 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 		unsigned char * payload = (unsigned char *)buf_ctx_rx.mem_output_buf;
 		uint16 * payload16 = (uint16 *)buf_ctx_rx.mem_output_buf;
 
+		const unsigned long cntIdleThreshold = 1;
 
 		// This is slow as it includes LUT generation
 		wpl_global_init_rx(params_rx->heapSize);
@@ -664,7 +665,7 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 				cntIdle++; 
 			}
 
-			if (printDelay < cntOk + cntError + cntMiss || cntIdle >= 10)
+			if (printDelay < cntOk + cntError + cntMiss || cntIdle >= cntIdleThreshold)
 			{
 				ULONGLONG timeStamp = SoraGetCPUTimestamp(&(params_tx->measurementInfo.tsinfo));
 				printf("%ld Last packet: SNR=%.2f(%ld/%.0f/%ld), cnt=%d, crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d, lastGap=%ld\n",
