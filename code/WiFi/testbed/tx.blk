@@ -5,7 +5,7 @@
 #include "../transmitter/transmitter.blk"
 
 
-let comp amp() = 
+fun comp amp() {
 var y : arr[4] complex16;
 
 repeat {
@@ -15,7 +15,7 @@ repeat {
   }
   emits y;
 }
-in
+} in
 
 read[bit] >>> transmitter() >>> amp() >>> write
  
