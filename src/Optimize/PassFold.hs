@@ -567,98 +567,6 @@ purify_letref_step fgs comp =
       _otherwise -> return comp
 
 
-
-ifpar_step_left :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
--- m >>> (if e then c1 else c2)
--- ~~>
--- (if e then m >>> c1 else m >>> c2)
--- 
--- NB: This seems only safe if 'e' does not somehow depend on shared
--- state with m (which it shouldn't)
--- 
-ifpar_step_left fgs comp = 
-  case unComp comp of 
-    Par _p m (MkComp (Branch e c1 c2) bloc binfo)
-      -> let mc1 = MkComp (Par _p m c1) (compLoc comp) (compInfo comp)
-             mc2 = MkComp (Par _p m c2) (compLoc comp) (compInfo comp)
-         in rewrite $ MkComp (Branch e mc1 mc2) bloc (compInfo comp)
-
-    _otherwise -> return comp
-
-ifpar_step_right :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
--- (if e then c1 else c2) >>> c3 
--- ~~>
--- (if e then c1 >>> c3 else c2 >>> c3)
-ifpar_step_right fgs comp = 
-  case unComp comp of 
-
-    Par _p (MkComp (Branch e c1 c2) bloc binfo) c3
-     -> rewrite $ 
-        MkComp (Branch e (MkComp (Par _p c1 c3) (compLoc comp) (compInfo comp))
-                         (MkComp (Par _p c2 c3) (compLoc comp) (compInfo comp)))
-               bloc (compInfo comp)
-
-    _otherwise -> return comp
-
-
-bm_par_step_left :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
--- m >>> (c1 ; ...;  cn)
--- ~~> 
--- (m >>> c1 ; m >>> c2 ; ... m >>> cn)
---
-bm_par_step_left fgs comp 
-  = case unComp comp of
-      Par _p m (MkComp (BindMany c1 xs_cs) bloc binfo)
-         -> let mc1 = MkComp (Par _p m c1) bloc (upd_inty m (compInfo c1))
-                m_xs_cs = map (\(x,c) -> 
-                 (x, MkComp (Par _p m c) bloc (upd_inty m (compInfo c)))) xs_cs
-            in rewrite $ MkComp (BindMany mc1 m_xs_cs) bloc (compInfo comp)
-
-      Par _p m (MkComp (Seq c1 c2) bloc binfo)
-         -> let mc1 = MkComp (Par _p m c1) bloc (upd_inty m (compInfo c1))
-                mc2 = MkComp (Par _p m c2) bloc (upd_inty m (compInfo c2))
-            in rewrite $ MkComp (Seq mc1 mc2) bloc (compInfo comp)
-
-      _otherwise -> return comp
-    
-  where upd_inty m (CTBase (TComp v a b))
-           = CTBase (TComp v (inTyOfCTyBase $ compInfo m) b)
-        upd_inty m (CTBase (TTrans a b))   
-           = CTBase (TTrans (inTyOfCTyBase $ compInfo m) b)
-        upd_inty m _ 
-           = error "upd_comp_ty: not a base type"
-
-
-bm_par_step_right :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
--- (c1 ; ...;  cn) >>> m 
--- ~~> 
--- (c1 >>> m; c2 >>> m; ... cn >>> m)
---
--- 
--- (c1 >>> {m1;m2}) >>> m 
-bm_par_step_right fgs comp 
-  = case unComp comp of
- 
-      Par _p (MkComp (BindMany c1 xs_cs) bloc binfo) m 
-         -> let mc1     = MkComp (Par _p c1 m) bloc (upd_yldty m (compInfo c1))
-                m_xs_cs = map (\(x,c) -> 
-                 (x, MkComp (Par _p c m) bloc (upd_yldty m (compInfo c)))) xs_cs
-            in rewrite $ MkComp (BindMany mc1 m_xs_cs) bloc (compInfo comp)
-
-      Par _p (MkComp (Seq c1 c2) bloc binfo) m 
-         -> let mc1 = MkComp (Par _p c1 m) bloc (upd_yldty m (compInfo c1))
-                mc2 = MkComp (Par _p c2 m) bloc (upd_yldty m (compInfo c2))
-            in rewrite $ MkComp (Seq mc1 mc2) bloc (compInfo comp)
-
-      _otherwise -> return comp
-    
-  where upd_yldty m (CTBase (TComp a b x))
-           = CTBase (TComp a b (yldTyOfCTyBase $ compInfo m))
-        upd_yldty m (CTBase (TTrans a x))   
-           = CTBase (TTrans a (yldTyOfCTyBase $ compInfo m))
-        upd_yldty m _ 
-           = error "upd_comp_ty: not a base type"
-
 ifdead_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
 ifdead_step fgs comp 
   = case unComp comp of 
@@ -1180,20 +1088,11 @@ foldCompPasses flags
     , ("float-let-par-step", float_let_par_step flags)
 
 
--- Experiment: this gives perf improvement for large pipelines
--- probably because of less code duplication and LUT sharing.
---
---    , ("ifpar-left"         , ifpar_step_left flags         )        
---    , ("ifpar-right"        , ifpar_step_right flags        )        
     , ("ifdead"             , ifdead_step flags             )       
 
     -- Don't use: not wrong but does not play nicely with LUT
-    --  , ("float-top-letref"   , float_top_letref_step flags   )
-    --     
-    -- The following cause the DDK compiler to explode for no obvious reason,
-    -- so I keep them commented for now (although they are actually important)
-    --  , ("bmpar-left"  , bm_par_step_left )
-    --  , ("bmpar-right" , bm_par_step_right)
+    --  , ("float-top-letref"   , float_top_letref_step flags )
+
     ]
 
 foldExpPasses :: DynFlags -> [(String,TypedExpPass)]
@@ -1211,10 +1110,11 @@ foldExpPasses flags
 runFold :: DynFlags -> GS.Sym -> Comp CTy Ty -> IO (Comp CTy Ty)
 runFold flags sym comp 
    = do { (comp',mp') <- go (RwStats Map.empty) 0 comp
-{-
-        ; putStrLn "Optimizer statistics:"
-        ; printRwStats mp'
--}
+
+        ; when (isDynFlagSet flags Verbose) $
+          do { putStrLn "Optimizer statistics:"
+             ; printRwStats mp' }
+
         ; return comp'
         }
  where
