@@ -44,22 +44,21 @@ module BlinkLexer (
   , naturalOrFloat
   , octal
   , operator
-  , optionalSemi
   , parens
-  , requiredSemi
   , reserved
   , reservedOp
+  , semi
   , stringLiteral
   , symbol
   , whiteSpace
+  , P.AllowFilenameChange(..)
   ) where
 
 import Control.Monad (void)
 import Text.Parsec
-import Text.Parsec.Pos (newPos)
-import qualified Text.Parsec.Token as P
 
 import BlinkParseM
+import qualified BlinkToken as P
 
 {-------------------------------------------------------------------------------
   Language definitions
@@ -118,44 +117,6 @@ blinkStyle =
       ]
 
 {-------------------------------------------------------------------------------
-  Dealing with CPP
--------------------------------------------------------------------------------}
-
-cppPragmaLine :: BlinkParser ()
-cppPragmaLine = do
-    _  <- symbol "#"
-    i  <- natural
-
-    -- We don't use stringLiteral because we don't want to ignore all whitespace
-    fn <- between (char '"')
-                  (char '"' <?> "end of string")
-                  (many (satisfy (/= '"')))
-            <?> "literal string"
-
-    -- Ignore everything up to a newline
-    skipMany (satisfy (/= '\n'))
-
-    -- set position to i-1 since CPP reports the line number after the include
-    setPosition $ newPos fn (fromIntegral i - 1) 0
-
-    -- Skip the newline and subsequent whitespace
-    whiteSpace
-
-requiredSemi :: BlinkParser ()
-requiredSemi = do
-  _ <- many cppPragmaLine
-  _ <- P.semi blinkLexer
-  _ <- many cppPragmaLine
-  return ()
-
-optionalSemi :: BlinkParser ()
-optionalSemi = do
-  _ <- many cppPragmaLine
-  _ <- optional $ P.semi blinkLexer
-  _ <- many cppPragmaLine
-  return ()
-
-{-------------------------------------------------------------------------------
   Parsec bindings
 -------------------------------------------------------------------------------}
 
@@ -168,6 +129,7 @@ brackets       = P.brackets       blinkLexer
 charLiteral    = P.charLiteral    blinkLexer
 commaSep       = P.commaSep       blinkLexer
 commaSep1      = P.commaSep1      blinkLexer
+cppPragmaLine  = P.cppPragmaLine  blinkLexer
 decimal        = P.decimal        blinkLexer
 float          = P.float          blinkLexer
 hexadecimal    = P.hexadecimal    blinkLexer
@@ -187,4 +149,5 @@ whiteSpace     = P.whiteSpace     blinkLexer
 colon   = void $ P.colon          blinkLexer
 comma   = void $ P.comma          blinkLexer
 dot     = void $ P.dot            blinkLexer
+semi    = void $ P.semi           blinkLexer
 symbol  = void . P.symbol         blinkLexer

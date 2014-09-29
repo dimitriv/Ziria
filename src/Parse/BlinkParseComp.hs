@@ -25,7 +25,7 @@ module BlinkParseComp ( parseProgram, runParseM ) where
 
 import Control.Applicative ((<$>), (<*>), (<$), (<*), (*>))
 import Control.Arrow (second)
-import Control.Monad (join)
+import Control.Monad (join, void)
 import Control.Monad.Reader.Class
 import Data.Maybe (fromJust)
 import Text.Parsec
@@ -46,7 +46,7 @@ import BlinkParseM
 -- TODO: Update the grammar
 parseProgram :: BlinkParser (Prog () ())
 parseProgram =
-    join $ mkProg <$ whiteSpace <* many cppPragmaLine
+    join $ mkProg <$ whiteSpace <* cppPragmas AllowFilenameChange
        <*> declsParser <*> parseTopLevel <* eof
   where
     mkProg _  ([],     _)  = fail "No main found"
@@ -62,7 +62,7 @@ parseTopLevel :: BlinkParser ([SrcComp], [SrcComp -> SrcComp])
 parseTopLevel =
     withPos cLetDecl' <*> parseLetDecl `bindExtend` \d -> append d <$> more
   where
-    more = optionalSemi *> (parseTopLevel <|> return ([], []))
+    more = topLevelSep *> (parseTopLevel <|> return ([], []))
 
     append (decl, fun) (mains, funs) =
       case decl of
@@ -71,11 +71,19 @@ parseTopLevel =
 
     cLetDecl' p () d = let (env, f) = cLetDecl p () d in (env, (d, f))
 
+topLevelSep :: BlinkParser ()
+topLevelSep =
+    cppPragmas AllowFilenameChange *> optional semi <* cppPragmas AllowFilenameChange
+
+cppPragmas :: AllowFilenameChange -> BlinkParser ()
+cppPragmas allowFilenameChange =
+    void $ many (cppPragmaLine allowFilenameChange <* whiteSpace)
+
 -- | > <decls> ::= (<decl>;)*
 --
 -- (declParser comes from the expression language)
 declsParser :: BlinkParser [(Name, Ty, Maybe SrcExp)]
-declsParser = declParser `endBy` optionalSemi
+declsParser = declParser `endBy` topLevelSep
 
 -- | Parse a computation expression
 --
@@ -279,7 +287,7 @@ parseStruct = do
     reserved "struct"
     x <- identifier
     symbol "="
-    braces $ StructDef x <$> parseField `sepBy` requiredSemi
+    braces $ StructDef x <$> parseField `sepBy` semi
   where
     parseField = (,) <$> identifier <* colon <*> parseBaseType
 
@@ -369,7 +377,7 @@ parseCommands :: BlinkParser SrcComp
 parseCommands = foldCommands =<< go
   where
     go   = parseCommand `bindExtend` \c -> (c:) <$> more
-    more = optionalSemi *> (go <|> return [])
+    more = optional semi *> (go <|> return [])
 
 foldCommands :: [Command] -> BlinkParser SrcComp
 foldCommands []           = error "This cannot happen"
