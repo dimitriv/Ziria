@@ -225,7 +225,7 @@ parseScalarValue = choice
 -- > | IDENT                                 -- variable
 parseWithVarOnHead :: BlinkParser SrcExp
 parseWithVarOnHead = choice
-    [ try        $ withPos eStruct'     <*> identifier <*> braces (parseInit `sepBy1` semi)
+    [ try        $ withPos eStruct'     <*> identifier <*> braces (parseInit `sepBy1` requiredSemi)
     , try        $ withPos mkDeref      <*> identifier <*> many1 parseDerefSuffix
     , try $ join $ withPos mkCallOrCast <*> identifier <*> parens (parseExpr `sepBy` comma)
     , withPos mkVar <*> identifier
@@ -367,7 +367,7 @@ parseStmtBlock = choice
 -- we not record any bindings in the expression parser.
 parseStmts :: BlinkParser SrcExp
 parseStmts =
-    foldStatements =<< parseStmt `sepEndBy1` optional semi
+    foldStatements =<< parseStmt `sepEndBy1` optionalSemi
   where
     foldStatements :: [Statement] -> BlinkParser SrcExp
     foldStatements []  = error "This cannot happen"

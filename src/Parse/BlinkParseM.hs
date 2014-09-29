@@ -31,7 +31,6 @@ module BlinkParseM (
   , getParseEnv
   , withPos
   , bindExtend
-  , nest
     -- * Generic auxiliary parsers
   , xPrefix
   , lInfix
@@ -59,8 +58,7 @@ import AstComp (CallArg, CTy0)
   3. runs in the IO monad (for debugging)
 -------------------------------------------------------------------------------}
 
-type BlinkParseState = Int -- Keeps track of nesting of let-bound definitions
-                           -- to avoid ill-nestings from file includes.
+type BlinkParseState = ()
 
 -- We need environment of defined functions to intelligently parse applications
 type ParseCompEnv     = [(Name,[(Name, CallArg Ty CTy0)])]
@@ -114,14 +112,6 @@ bindExtend :: BlinkParser (ParseCompEnv, a) -> (a -> BlinkParser b) -> BlinkPars
 bindExtend x f = x >>= \(env, a) -> extendParseEnv env $ f a
 
 infixl 1 `bindExtend`  -- Same precedence as (>>=)
-
--- TODO: Should we use a bracket-like construct here?
-nest :: BlinkParser a -> BlinkParser a
-nest p = do
-  updateState $ \x -> x + 1
-  a <- p
-  updateState $ \x -> x - 1
-  return a
 
 {-------------------------------------------------------------------------------
   Generic auxiliary parsers

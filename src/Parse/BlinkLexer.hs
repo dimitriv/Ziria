@@ -20,6 +20,9 @@
 -- definitions are simply (near) synonyms for the parsec equivalents.
 {-# OPTIONS_GHC -Wall -fno-warn-missing-signatures #-}
 -- | Lexical analysis
+--
+-- NOTE: The definition of 'semi' and related functions are non-standard:
+-- we allow for CPP pragma lines wherever we allow for a semicolon.
 module BlinkLexer (
     angles
   , braces
@@ -29,6 +32,7 @@ module BlinkLexer (
   , comma
   , commaSep
   , commaSep1
+  , cppPragmaLine
   , decimal
   , dot
   , float
@@ -40,21 +44,22 @@ module BlinkLexer (
   , naturalOrFloat
   , octal
   , operator
+  , optionalSemi
   , parens
+  , requiredSemi
   , reserved
   , reservedOp
-  , semi
-  , semiSep
-  , semiSep1
   , stringLiteral
   , symbol
   , whiteSpace
   ) where
 
+import Control.Monad (void)
 import Text.Parsec
+import Text.Parsec.Pos (newPos)
+import qualified Text.Parsec.Token as P
 
 import BlinkParseM
-import qualified BlinkToken as P
 
 {-------------------------------------------------------------------------------
   Language definitions
@@ -113,6 +118,44 @@ blinkStyle =
       ]
 
 {-------------------------------------------------------------------------------
+  Dealing with CPP
+-------------------------------------------------------------------------------}
+
+cppPragmaLine :: BlinkParser ()
+cppPragmaLine = do
+    _  <- symbol "#"
+    i  <- natural
+
+    -- We don't use stringLiteral because we don't want to ignore all whitespace
+    fn <- between (char '"')
+                  (char '"' <?> "end of string")
+                  (many (satisfy (/= '"')))
+            <?> "literal string"
+
+    -- Ignore everything up to a newline
+    skipMany (satisfy (/= '\n'))
+
+    -- set position to i-1 since CPP reports the line number after the include
+    setPosition $ newPos fn (fromIntegral i - 1) 0
+
+    -- Skip the newline and subsequent whitespace
+    whiteSpace
+
+requiredSemi :: BlinkParser ()
+requiredSemi = do
+  _ <- many cppPragmaLine
+  _ <- P.semi blinkLexer
+  _ <- many cppPragmaLine
+  return ()
+
+optionalSemi :: BlinkParser ()
+optionalSemi = do
+  _ <- many cppPragmaLine
+  _ <- optional $ P.semi blinkLexer
+  _ <- many cppPragmaLine
+  return ()
+
+{-------------------------------------------------------------------------------
   Parsec bindings
 -------------------------------------------------------------------------------}
 
@@ -123,12 +166,9 @@ angles         = P.angles         blinkLexer
 braces         = P.braces         blinkLexer
 brackets       = P.brackets       blinkLexer
 charLiteral    = P.charLiteral    blinkLexer
-colon          = P.colon          blinkLexer
-comma          = P.comma          blinkLexer
 commaSep       = P.commaSep       blinkLexer
 commaSep1      = P.commaSep1      blinkLexer
 decimal        = P.decimal        blinkLexer
-dot            = P.dot            blinkLexer
 float          = P.float          blinkLexer
 hexadecimal    = P.hexadecimal    blinkLexer
 identifier     = P.identifier     blinkLexer
@@ -141,9 +181,10 @@ operator       = P.operator       blinkLexer
 parens         = P.parens         blinkLexer
 reserved       = P.reserved       blinkLexer
 reservedOp     = P.reservedOp     blinkLexer
-semi           = P.semi           blinkLexer
-semiSep        = P.semiSep        blinkLexer
-semiSep1       = P.semiSep1       blinkLexer
 stringLiteral  = P.stringLiteral  blinkLexer
-symbol         = P.symbol         blinkLexer
 whiteSpace     = P.whiteSpace     blinkLexer
+
+colon   = void $ P.colon          blinkLexer
+comma   = void $ P.comma          blinkLexer
+dot     = void $ P.dot            blinkLexer
+symbol  = void . P.symbol         blinkLexer

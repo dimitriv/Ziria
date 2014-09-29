@@ -45,8 +45,9 @@ import BlinkParseM
 --
 -- TODO: Update the grammar
 parseProgram :: BlinkParser (Prog () ())
-parseProgram =  
-    join $ mkProg <$ whiteSpace <*> declsParser <*> parseTopLevel <* eof
+parseProgram =
+    join $ mkProg <$ whiteSpace <* many cppPragmaLine
+       <*> declsParser <*> parseTopLevel <* eof
   where
     mkProg _  ([],     _)  = fail "No main found"
     mkProg _  (_:_:_,  _)  = fail "More than one main found"
@@ -54,15 +55,16 @@ parseProgram =
 
 -- | Parse a list of top level declarations
 --
--- We return the list of declarations of 'main' separately so that we can 
+-- We return the list of declarations of 'main' separately so that we can
 -- construct a single SrcComp in `parseProgram`.
+--
 parseTopLevel :: BlinkParser ([SrcComp], [SrcComp -> SrcComp])
-parseTopLevel = go
+parseTopLevel =
+    withPos cLetDecl' <*> parseLetDecl `bindExtend` \d -> append d <$> more
   where
-    go   = withPos cLetDecl' <*> parseLetDecl `bindExtend` \d -> append d <$> more 
-    more = optional semi *> (go <|> return ([], []))  
+    more = optionalSemi *> (parseTopLevel <|> return ([], []))
 
-    append (decl, fun) (mains, funs) = 
+    append (decl, fun) (mains, funs) =
       case decl of
         LetDeclComp Nothing nm c | name nm == "main" -> (c:mains, funs)
         _                                            -> (mains, fun:funs)
@@ -73,7 +75,7 @@ parseTopLevel = go
 --
 -- (declParser comes from the expression language)
 declsParser :: BlinkParser [(Name, Ty, Maybe SrcExp)]
-declsParser = declParser `endBy` semi
+declsParser = declParser `endBy` optionalSemi
 
 -- | Parse a computation expression
 --
@@ -262,10 +264,10 @@ parseLetDecl = choice
     [ LetDeclVar <$> declParser
     , LetDeclStruct <$> parseStruct
     , try $ LetDeclExternal <$ reserved "let" <* reserved "external" <*> identifier <*> paramsParser <* symbol ":" <*> parseBaseType
-    , try $ LetDeclFunComp  <$ reserved "fun" <*> parseCompAnn <*> parseVarBind <*> compParamsParser <*> body (nest parseCommands)
-    , try $ LetDeclFunExpr  <$ reserved "fun"                  <*> parseVarBind <*> paramsParser     <*> body (nest parseStmts)
-    , try $ LetDeclComp     <$ reserved "let" <*> parseCompAnn <*> parseVarBind <* symbol "=" <*> nest parseComp
-    , try $ LetDeclExpr     <$ reserved "let"                  <*> parseVarBind <* symbol "=" <*> nest parseExpr
+    , try $ LetDeclFunComp  <$ reserved "fun" <*> parseCompAnn <*> parseVarBind <*> compParamsParser <*> body parseCommands
+    , try $ LetDeclFunExpr  <$ reserved "fun"                  <*> parseVarBind <*> paramsParser     <*> body parseStmts
+    , try $ LetDeclComp     <$ reserved "let" <*> parseCompAnn <*> parseVarBind <* symbol "=" <*> parseComp
+    , try $ LetDeclExpr     <$ reserved "let"                  <*> parseVarBind <* symbol "=" <*> parseExpr
     ]
   where
     body :: BlinkParser a -> BlinkParser ([(Name, Ty, Maybe SrcExp)] , a)
@@ -276,8 +278,8 @@ parseStruct :: BlinkParser StructDef
 parseStruct = do
     reserved "struct"
     x <- identifier
-    _ <- symbol "="
-    braces $ StructDef x <$> parseField `sepBy` semi
+    symbol "="
+    braces $ StructDef x <$> parseField `sepBy` requiredSemi
   where
     parseField = (,) <$> identifier <* colon <*> parseBaseType
 
@@ -366,8 +368,8 @@ type Command = Either (SrcComp -> SrcComp) SrcComp
 parseCommands :: BlinkParser SrcComp
 parseCommands = foldCommands =<< go
   where
-    go   = parseCommand `bindExtend` \c -> (c:) <$> more 
-    more = optional semi *> (go <|> return [])
+    go   = parseCommand `bindExtend` \c -> (c:) <$> more
+    more = optionalSemi *> (go <|> return [])
 
 foldCommands :: [Command] -> BlinkParser SrcComp
 foldCommands []           = error "This cannot happen"

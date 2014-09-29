@@ -102,7 +102,8 @@ main = failOnException $ do
 
     prog <-
           failOnError $
-          do { let pm = runParserT NewParser.parseProgram 0 inFile input
+          do { let st = ()
+                   pm = runParserT NewParser.parseProgram st inFile input
              ; NewParser.runParseM pm [] }
 
     -- pretty-show's `dumpDoc` generates a `Text.PrettyPrint.HughesPJ.Doc`
