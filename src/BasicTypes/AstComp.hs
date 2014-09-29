@@ -161,6 +161,31 @@ data CallArg a b
   | CAComp { unCAComp :: b }
   deriving (Generic)
 
+
+-- A view of some Pars as a list 
+data ParListView a b 
+  = ParListView { plv_loc  :: CompLoc 
+                , plv_nfo  :: a 
+                , plv_head :: Comp a b 
+                , plv_rest :: [(ParInfo,Comp a b)] 
+                }
+
+parsToParList :: Comp a b -> ParListView a b 
+parsToParList c
+  = ParListView { plv_loc  = compLoc c
+                , plv_nfo  = compInfo c
+                , plv_head = cfst
+                , plv_rest = crest 
+                }
+  where (cfst,crest) = go c 
+        go :: Comp a b -> (Comp a b, [(ParInfo, Comp a b)])
+        go c@(MkComp (Par p c1 c2) loc nfo)
+          = let (cfst,c1rest)  = go c1
+                (c2fst,c2rest) = go c2
+            in (cfst, c1rest ++ (p,c2fst) : c2rest)
+        go cother = (cother, [])
+
+
 cVar :: Maybe SourcePos -> a -> Name -> Comp a b
 cVar loc a x = MkComp (Var x) loc a
 
