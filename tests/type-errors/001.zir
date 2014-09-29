@@ -1,0 +1,8 @@
+fun comp f() {
+  -- Just so that the var decl isn't the first in the file
+  return ()
+}
+
+var x : () := true
+
+let comp main = read [int] >>> write [int]

@@ -203,9 +203,9 @@ tyCheckComp c
                 }
            
            -- CL
-           -- TODO: We should do something with tyAnn here
            LetERef x tyAnn (Just e) c1 ->
              do { e' <- tyCheckExpr e
+                ; unify cloc tyAnn (info e')
                 ; let t = info e'
                 ; c1' <- extendEnv [(name x,t)] $ tyCheckComp c1
                 ; return $ cLetERef cloc (compInfo c1') x tyAnn (Just e') c1'

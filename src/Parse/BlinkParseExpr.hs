@@ -158,8 +158,6 @@ parseTerm = choice
     [ parens $ choice [ try parseExpr
                       , withPos eVal <*> (VUnit <$ whiteSpace)
                       ]
-    , parseValue
-    , parseWithVarOnHead
     , withPos eLet' <* reserved "let" <*> parseVarBind
                     <* symbol "="     <*> parseExpr
                     <* reserved "in"  <*> parseExpr
@@ -167,6 +165,8 @@ parseTerm = choice
     , withPos eIf <* reserved "if"   <*> parseExpr
                   <* reserved "then" <*> parseExpr
                   <* reserved "else" <*> parseExpr
+    , parseValue
+    , parseWithVarOnHead
     ] <?> "expression"
   where
     eLet'    p () x          = eLet    p () x AutoInline
