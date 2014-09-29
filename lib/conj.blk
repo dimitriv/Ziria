@@ -19,6 +19,6 @@
 --
 #pragma once 
 
-let conj_complex16(c : complex16) = return complex16{re=c.re; im=c.im*(-1)} in
-let conj_complex32(c : complex32) = return complex32{re=c.re; im=c.im*(-1)} in
+fun conj_complex16(c : complex16) { return complex16{re=c.re; im=c.im*(-1)} } in
+fun conj_complex32(c : complex32) { return complex32{re=c.re; im=c.im*(-1)} } in
 

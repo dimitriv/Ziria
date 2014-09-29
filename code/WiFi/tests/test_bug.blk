@@ -20,7 +20,7 @@
 
 
 
-let comp DemapLimitPLCP(shr:int) = 
+fun comp DemapLimitPLCP(shr:int) {
   var symbol : arr[4] complex16;
   var symbol_out : arr[4] complex16;
 
@@ -34,19 +34,19 @@ let comp DemapLimitPLCP(shr:int) =
 
      emits symbol_out
   }
-in
+} in
 
 
-let comp DecodePLCP() =
+fun comp DecodePLCP() {
   var hdata : arr[24] complex16;
   seq{ DemapLimitPLCP(0)  
                      >>> { (x:arr[24] complex16) <- takes 24; do{hdata := x}}
      }
-in
+} in
 
 
 
-let comp DemapLimit(shr:int) = 
+fun comp DemapLimit(shr:int) {
   var symbol : arr[4] complex16;
   var symbol_out : arr[4] complex16;
 
@@ -60,30 +60,30 @@ let comp DemapLimit(shr:int) =
 
      emits symbol_out
   }
-in
+} in
 
 
 
 
 
-let comp receiveBits() = 
+fun comp receiveBits() {
        seq { DecodePLCP()
            ; DemapLimit(0) 
        }
-in
+} in
 
 
-let comp test() = 
+fun comp test() {
   repeat { -- ![192, 192] {
     x<-takes 48;
     emits x;
   }
-in
+} in
 
-let comp receiver() = 
+fun comp receiver() {
        test()
        >>> receiveBits()
-in
+} in
 
 
 

@@ -621,7 +621,8 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 
 				if (printDelay < cntOk + cntError + cntMiss)
 				{
-					printf("Last packet: SNR=%.2f(%d/%.0f), cnt=%d, crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d, lastGap=%ld\n",
+					printf("%ld Last packet: SNR=%.2f(%d/%.0f), cnt=%d, crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d, lastGap=%ld\n",
+						SoraGetCPUTimestamp(&(params_tx->measurementInfo.tsinfo)),
 						10 * log10((double)PHYenergy / PHYEWMAnoise), PHYenergy, PHYEWMAnoise,
 						pc, lastCRC, lastMod, lastEnc, lastLen, lengthInBytes, lastGap);
 					printf("OK: %ld, Error: %ld, Miss: %ld\n", cntOk, cntError, cntMiss);

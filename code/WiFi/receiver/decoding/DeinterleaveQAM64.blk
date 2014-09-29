@@ -19,7 +19,7 @@
 --
 #pragma once 
 
-let comp DeinterleaveQAM64() =
+fun comp DeinterleaveQAM64() {
 
   var output:arr[288] int8;
 
@@ -324,4 +324,4 @@ let comp DeinterleaveQAM64() =
     
   }
 
-in
+} in

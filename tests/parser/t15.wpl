@@ -1,14 +1,14 @@
 
 
-let f1() = 
+fun f1() {
   var out : int;
   out := 3 
-in
+} in
 
-let f2() = 
+fun f2() {
   var out : int;
   out := 3;
   return ()
-in
+} in
 
 read [int] >>> write[int]

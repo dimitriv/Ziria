@@ -25,11 +25,11 @@
 --
 -- Note: we don't pack it in complex32 
 -- as it requires extra cycles and is often not needed
-let v_conj_mul_complex16_int32(re32:arr int, im32:arr int, a:arr complex16, b:arr complex16) = 
+fun v_conj_mul_complex16_int32(re32:arr int, im32:arr int, a:arr complex16, b:arr complex16) {
    var vs1:arr[4] complex16;
 
-   let vlen = (length(a) / 4) in
-   let rlen = (length(a) - vlen*4) in 
+   let vlen = (length(a) / 4) 
+   let rlen = (length(a) - vlen*4)  
 
    for i in [0, vlen] {
        permutate_low1032w(b[4*i,4], vs1);
@@ -44,10 +44,10 @@ let v_conj_mul_complex16_int32(re32:arr int, im32:arr int, a:arr complex16, b:ar
        re32[i] := (int(a[i].re)*int(b[i].re) + int(a[i].im)*int(b[i].im ));
        im32[i] := (int(a[i].im)*int(b[i].re) - int(a[i].re)*int(b[i].im ));
    };
-in
+} in
 
 
-let v_conj_mul_complex16(c:arr complex16, a:arr complex16, b:arr complex16, shift:int) = 
+fun v_conj_mul_complex16(c:arr complex16, a:arr complex16, b:arr complex16, shift:int) {
   var re32 : arr[length(a)] int32;
   var im32 : arr[length(a)] int32;
 
@@ -57,4 +57,4 @@ let v_conj_mul_complex16(c:arr complex16, a:arr complex16, b:arr complex16, shif
     v_shift_right_int32(im32,im32,shift);
   }
   v_pack_int32_complex16(c,re32,im32);
-in
+} in

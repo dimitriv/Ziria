@@ -21,10 +21,10 @@
 
 #include <externals.blk>
 
-let comp FFT() =
+fun comp FFT() {
    repeat {
       (symbol:arr[64] complex16) <- takes 64;
       emits sora_fft(symbol)
    }
 
-in
+} in

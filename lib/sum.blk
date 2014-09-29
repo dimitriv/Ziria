@@ -19,19 +19,19 @@
 --
 #pragma once 
 
-let sum_complex16(a : arr complex16) = 
+fun sum_complex16(a : arr complex16) { 
   var s : complex16 := complex16{re=0;im=0};
   for i in [0,length(a)] {
     s := s + a[i]
   };
   return s;    
-in
+} in
 
-let sum_int16(a : arr int16) = 
+fun sum_int16(a : arr int16) { 
   var s : int16 := 0;
   for i in [0,length(a)] {
     s := s + a[i]
   };
   return s;    
-in
+} in
 

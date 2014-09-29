@@ -19,10 +19,10 @@
 --
 #pragma once 
 
-let comp DemapQPSK() = 
+fun comp DemapQPSK() {
   repeat {
      (symbol:complex16) <- take;  
      emit m_bpsk_lut[symbol.re];
      emit m_bpsk_lut[symbol.im];
   }
-in
+} in

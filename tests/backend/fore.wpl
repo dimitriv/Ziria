@@ -1,15 +1,15 @@
 
 
-let f( y : int) = 
+fun f( y : int) {
   var x : int;
   x := y;
   for i in [0:5] {
     x := x + 1;
   };
   return x;
-in
+} in
 
-let comp fc() = 
+fun comp fc() {
    var x : int; 
    seq { for i in [0:5] 
            seq { x <- take
@@ -20,6 +20,6 @@ let comp fc() =
                 ; emit 0 
                 }
        }
-in
+} in
 
 read [int] >>> map f >>> fc() >>> write [int]

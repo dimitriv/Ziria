@@ -299,6 +299,8 @@ code/WiFi/mac/CompilerVS/CompilerVS13-mac.sdf
 code/WiFi/mac/CompilerVS/CompilerVS13-mac.v12.suo
 code/WiFi/mac/CompilerVS/CompilerVS13-mac.vcxproj.user
 
+code/WiFi/testbed/samples/*
+
 # for now, ignore AST dumps
 *.ast.dump
 *.ast.dump.ground
