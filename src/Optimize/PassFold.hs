@@ -131,6 +131,24 @@ incRewrites mp d s = RwStats (Map.alter aux s $ getRwStats mp)
 {- The main rewriter individual steps
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -}
 
+-- | Flatten nested BindMany. Currently does NOT flatten Seq - fix that!
+flatten_multibind :: DynFlags -> TypedCompPass
+flatten_multibind fs (MkComp (BindMany first rest) loc nfo) = do
+    case unComp first of
+      BindMany ffirst frest -> do
+        return $ MkComp (BindMany ffirst (frest ++ concatMap flatten rest)) loc nfo
+      _ -> do
+        return $ MkComp (BindMany first (concatMap flatten rest)) loc nfo
+  where
+    flatten :: (Name, Comp a b) -> [(Name, Comp a b)]
+    flatten (bndr, MkComp (BindMany first' rest') _ _) =
+      ((bndr, first') : rest')
+    flatten bndr_comp =
+      [bndr_comp]
+flatten_multibind fs comp = do
+  return comp
+
+
 fold_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
 -- Just a single step of converting a return to a let
 fold_step fgs comp = 
@@ -1093,6 +1111,7 @@ foldCompPasses flags
     -- Don't use: not wrong but does not play nicely with LUT
     --  , ("float-top-letref"   , float_top_letref_step flags )
 
+    , ("flatten-multibind", flatten_multibind flags)
     ]
 
 foldExpPasses :: DynFlags -> [(String,TypedExpPass)]
