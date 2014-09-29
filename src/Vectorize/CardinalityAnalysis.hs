@@ -208,7 +208,7 @@ computeCardTop verbose ct = computeCard ct
           = do { c1' <- computeCard c1
                ; c2' <- computeCard c2
                ; let card = mkParCard (snd (compInfo c1')) (snd (compInfo c2'))
-               ; return (MkComp (Par p c1' c2') loc (cty,card)) }
+               ; return $ cPar loc (cty,card) p c1' c2' }
 
         computeCard0  (Let x c1 c2)
           = do { c1' <- computeCard c1
