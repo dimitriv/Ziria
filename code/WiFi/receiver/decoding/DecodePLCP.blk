@@ -34,5 +34,5 @@ fun comp DecodePLCP() {
                      >>> repeat{ (x:arr[24] bit) <- takes 24; do{hdata := x}}
      ; return parsePLCPHeader(hdata)
      }
-} in
+}
 

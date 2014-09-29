@@ -20,4 +20,4 @@
 
 #include "../OFDM/PilotTrack.blk"
 
-read >>> PilotTrack() >>> write
+let comp main = read >>> PilotTrack() >>> write

@@ -33,7 +33,7 @@ fun perm8(p : arr[8] int, iarr : arr[8] bit, oarr : arr bit) {
     };
     if (not set) then { oarr[j] := '0; };
   }
-} in 
+}
 
 -- Older version that did not write to the entirety of oarr, although
 -- the LUTter thought it did.
@@ -64,5 +64,5 @@ fun perm(p : arr int, iarr : arr bit) {
   }
 
   return oarr;
-} in
+}
 

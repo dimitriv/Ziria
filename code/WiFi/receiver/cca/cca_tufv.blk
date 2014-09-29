@@ -40,7 +40,7 @@
 
 
 
-let norm_shift = 7 in 
+let norm_shift = 7 
 
 
 -- Same as in transmitter/createPreamble, except that it is at a lower sampling rate
@@ -73,7 +73,7 @@ fun createSTSinTime() {
   sts_time[128,32] := sts_time[0,32];
 
   return sts_time;
-} in
+}
 
 
 fun InitCorrPattern() {
@@ -95,7 +95,7 @@ fun InitCorrPattern() {
   }
 
   return pattern;
-} in
+} 
 
 
 
@@ -336,7 +336,7 @@ fun comp cca(energy_threshold : int32) {
 
   return ret;
 }
-} in
+}
 
 
 

@@ -30,9 +30,9 @@ fun nBPSC(mod: int) {
   if mod == M_16QAM then { return 4 } else {
   if mod == M_64QAM then { return 6 } else { return -1 }
   }}}
-} in
+}
 
-fun nCBPS(mod: int) { return nBPSC(mod) * 48 } in
+fun nCBPS(mod: int) { return nBPSC(mod) * 48 } 
 
 
 fun intlv_perm1(mod : int) {
@@ -41,7 +41,7 @@ fun intlv_perm1(mod : int) {
     perm[k] := nCBPS(mod)/16 * (k%16) + k/16
   }; 
   return perm
-} in
+}
 
 fun intlv_perm2(mod: int) {
   var perm: arr[288] int; 
@@ -51,7 +51,7 @@ fun intlv_perm2(mod: int) {
     perm[k] := s * k/s + (k+nCBPS(mod) - 16*k/nCBPS(mod)) % s
   };
   return perm
-} in
+}
 
 fun comp interleaver_bpsk() {
   var y : arr[48] bit; 
@@ -67,7 +67,7 @@ fun comp interleaver_bpsk() {
     do { y := perm(ids1[0,48], x) };
     emits perm(ids2[0,48], y);
   }
-} in
+}
 
 fun comp interleaver_qpsk() {
   var y : arr[2*48] bit; 
@@ -83,7 +83,7 @@ fun comp interleaver_qpsk() {
     do { y := perm(ids1[0,96], x) };
     emits perm(ids2[0,96], y);
   }
-} in 
+}
 
 fun comp interleaver_m16qam() {
   var y : arr[4*48] bit; 
@@ -99,7 +99,7 @@ fun comp interleaver_m16qam() {
     do { y := perm(ids1[0,192], x) };
     emits perm(ids2[0,192], y);
   }
-} in 
+}
 
 fun comp interleaver_m64qam() {
   var y : arr[6*48] bit; 
@@ -115,7 +115,7 @@ fun comp interleaver_m64qam() {
     do { y := perm(ids1[0,288], x) };
     emits perm(ids2[0,288], y);
   }
-} in
+}
 
 fun comp interleaver(mod: int) {
   if (mod == M_BPSK) then {
@@ -129,5 +129,5 @@ fun comp interleaver(mod: int) {
           } else { interleaver_m64qam() }
       }
   }
-} in
+}
 

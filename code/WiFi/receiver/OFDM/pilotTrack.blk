@@ -50,7 +50,7 @@ fun build_coeff(pcoeffs:arr[64] complex16, ave:int16, delta:int16) {
      pcoeffs[i] := complex16{re=cos_int16(th);im=-sin_int16(th)};
      th := th + delta
   }
-} in
+}
 
 
 
@@ -213,4 +213,4 @@ fun comp PilotTrack() {
      emits symbol_out
    }
 
-} in
+}

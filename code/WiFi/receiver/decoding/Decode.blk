@@ -48,4 +48,4 @@ fun comp Decode(h : struct HeaderInfo) {
                 DemapQAM64() >>> DeinterleaveQAM64() 
       }
   >>> Viterbi(h.coding, h.len*8 + 8) >>> scrambler()
-} in 
+}

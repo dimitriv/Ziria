@@ -21,5 +21,5 @@
 #include "../decoding/Viterbi.blk"
 
 
-read >>> Viterbi(CR_12, 100) >>> write
+let comp main = read >>> Viterbi(CR_12, 100) >>> write
 

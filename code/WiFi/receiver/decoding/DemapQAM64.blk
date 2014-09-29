@@ -30,4 +30,4 @@ fun comp DemapQAM64() {
      emit m_qam64_lut2[symbol.im];
      emit m_qam64_lut3[symbol.im];
   }
-} in
+}
