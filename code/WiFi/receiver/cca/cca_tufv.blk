@@ -185,7 +185,9 @@ fun comp cca() {
 
    do {
 #ifdef MAC
-      ccaTimeout := MAC_cca_read();
+      -- DEBUG
+      -- ccaTimeout := MAC_cca_read();
+      ccaTimeout := 1250000;
 #else
       ccaTimeout := 2000000000;
 #endif

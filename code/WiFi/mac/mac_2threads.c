@@ -524,6 +524,9 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 		wpl_global_init_rx(params_rx->heapSize);
 
 
+		//DEBUG
+		ULONGLONG timeStampDebug, timeStampDebug2;
+
 		// DEBUG
 		int lastError = 4;
 		uint16 oldPkt[100];
@@ -540,7 +543,13 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 			resetBufCtxBlock(&buf_ctx_rx);						// reset context block (counters)
 			wpl_init_heap(pheap_ctx_rx, params_rx->heapSize);	// reset memory management
 			wpl_input_initialize_rx();
+
+			timeStampDebug = SoraGetCPUTimestamp(&(params_tx->measurementInfo.tsinfo));
+
 			wpl_go_rx();
+
+			timeStampDebug2 = SoraGetCPUTimestamp(&(params_tx->measurementInfo.tsinfo));
+
 			wpl_output_finalize_rx();
 
 			if (pktDetected)
@@ -668,6 +677,8 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 			if (printDelay < cntOk + cntError + cntMiss || cntIdle >= cntIdleThreshold)
 			{
 				ULONGLONG timeStamp = SoraGetCPUTimestamp(&(params_tx->measurementInfo.tsinfo));
+				printf("%ld\n", SoraTimeElapsed((timeStamp / 1000 - timeStampDebug / 1000), &(params_tx->measurementInfo.tsinfo)));
+				printf("%ld\n", SoraTimeElapsed((timeStampDebug2 / 1000 - timeStampDebug / 1000), &(params_tx->measurementInfo.tsinfo)));
 				printf("%ld Last packet: SNR=%.2f(%ld/%.0f/%ld), cnt=%d, crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d, lastGap=%ld\n",
 					SoraTimeElapsed((timeStamp / 1000 - lastTimeStamp / 1000), &(params_tx->measurementInfo.tsinfo)),
 					10 * log10((double)PHYenergy / PHYEWMAnoise), PHYenergy, PHYEWMAnoise, PHYnoise,

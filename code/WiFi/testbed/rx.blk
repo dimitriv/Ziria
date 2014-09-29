@@ -165,7 +165,40 @@ read[complex16] >>> test() >>> write[int]
 -}
 
 
+{-
+read >>> { det <- detectPreamble()
+         ; do{MAC_cca_write(det.energy, det.noise, not det.timeout)}
+         } >>> write [int]
+-}
 
+
+
+---- BOZIDAR: Slow code
+read >>> 
+       seq{ det<-detectPreamble()
+          ; if (not det.timeout) then {
+              do {println "HEYS: ", det.timeout};
+              -- BOZIDAR: Remove the line below to get it fast
+              params <- (LTS(det.shift, det.maxCorr));
+              do {println "HEY: ", det.timeout};
+            }
+          }
+   >>> write[int]
+
+
+
+---- BOZIDAR: Fast code
+{-
+read >>> 
+       seq{ det<-detectPreamble()
+          ; emit 0
+          }
+   >>> write[int]
+-}
+
+
+
+{-
 -- No repeat here, it happens at the MAC level
    read >>> 
 #ifndef RADIO 
@@ -193,4 +226,4 @@ read[complex16] >>> test() >>> write[int]
    }
 #endif
    >>> write
-
+-}
