@@ -1,1 +1,1 @@
-read >>> repeat seq{(x : arr[2] int) <- take; emit x} >>> write
+let comp main = read >>> repeat seq{(x : arr[2] int) <- take; emit x} >>> write

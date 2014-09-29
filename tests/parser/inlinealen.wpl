@@ -7,6 +7,6 @@ fun f(x : arr[48] bit) {
   for i in [0,length(x)] print i;
   return x;
 
-} in 
+}
 
-read >>> map f >>> write
+let comp main = read >>> map f >>> write

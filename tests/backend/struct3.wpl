@@ -1,4 +1,4 @@
-struct test = { aData : arr[100000] int16; len : int } in
+struct test = { aData : arr[100000] int16; len : int } 
 
 fun comp test() {
 var s : struct test;
@@ -8,6 +8,6 @@ seq{
   do{s.aData[5] := 5};
   emit x
 }
-} in
+} 
 
-read[int] >>> repeat (test()) >>> write[int]
+let comp main = read[int] >>> repeat (test()) >>> write[int]

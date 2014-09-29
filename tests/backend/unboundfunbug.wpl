@@ -3,17 +3,17 @@ fun comp test1(msg_len : int) {
         x <- take;
         emit x
     }
-} in   
+}
 
 fun comp test2() {
     repeat seq{
       x <- take;
       emit x
     }
-} in
+}
 
 
-read[int] >>> 
+let comp main = read[int] >>> 
     test1(10+8) >>>
     test2() >>>
 write[int]

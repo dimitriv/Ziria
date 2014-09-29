@@ -20,6 +20,9 @@
 -- definitions are simply (near) synonyms for the parsec equivalents.
 {-# OPTIONS_GHC -Wall -fno-warn-missing-signatures #-}
 -- | Lexical analysis
+--
+-- NOTE: The definition of 'semi' and related functions are non-standard:
+-- we allow for CPP pragma lines wherever we allow for a semicolon.
 module BlinkLexer (
     angles
   , braces
@@ -29,6 +32,7 @@ module BlinkLexer (
   , comma
   , commaSep
   , commaSep1
+  , cppPragmaLine
   , decimal
   , dot
   , float
@@ -44,13 +48,13 @@ module BlinkLexer (
   , reserved
   , reservedOp
   , semi
-  , semiSep
-  , semiSep1
   , stringLiteral
   , symbol
   , whiteSpace
+  , P.AllowFilenameChange(..)
   ) where
 
+import Control.Monad (void)
 import Text.Parsec
 
 import BlinkParseM
@@ -123,12 +127,10 @@ angles         = P.angles         blinkLexer
 braces         = P.braces         blinkLexer
 brackets       = P.brackets       blinkLexer
 charLiteral    = P.charLiteral    blinkLexer
-colon          = P.colon          blinkLexer
-comma          = P.comma          blinkLexer
 commaSep       = P.commaSep       blinkLexer
 commaSep1      = P.commaSep1      blinkLexer
+cppPragmaLine  = P.cppPragmaLine  blinkLexer
 decimal        = P.decimal        blinkLexer
-dot            = P.dot            blinkLexer
 float          = P.float          blinkLexer
 hexadecimal    = P.hexadecimal    blinkLexer
 identifier     = P.identifier     blinkLexer
@@ -141,9 +143,11 @@ operator       = P.operator       blinkLexer
 parens         = P.parens         blinkLexer
 reserved       = P.reserved       blinkLexer
 reservedOp     = P.reservedOp     blinkLexer
-semi           = P.semi           blinkLexer
-semiSep        = P.semiSep        blinkLexer
-semiSep1       = P.semiSep1       blinkLexer
 stringLiteral  = P.stringLiteral  blinkLexer
-symbol         = P.symbol         blinkLexer
 whiteSpace     = P.whiteSpace     blinkLexer
+
+colon   = void $ P.colon          blinkLexer
+comma   = void $ P.comma          blinkLexer
+dot     = void $ P.dot            blinkLexer
+semi    = void $ P.semi           blinkLexer
+symbol  = void . P.symbol         blinkLexer

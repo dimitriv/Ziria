@@ -2,7 +2,7 @@
 
 struct cca_info = { f1 : int; f2 : bit } 
 
-in
+
 
 
 fun comp f(x : struct cca_info) {
@@ -25,19 +25,19 @@ seq{
            emit (y)
  }
 }
-} in 
+}
 
 let x = cca_info { f1 = 3; f2 = '0}
 
-in
+
 
 fun comp g() {
 seq{
   (z : struct cca_info) <- take;
   emit (z.f1)
 }
-} in
+}
 
-read[int] >>> f(x) >>> repeat (g()) >>> write
+let comp main = read[int] >>> f(x) >>> repeat (g()) >>> write
 
   

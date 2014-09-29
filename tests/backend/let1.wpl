@@ -6,6 +6,6 @@ fun comp test() {
    let B = A+1;
    emit B;
 
-} in
+}
 
-read[int] >>> test() >>> write[int]
+let comp main = read[int] >>> test() >>> write[int]

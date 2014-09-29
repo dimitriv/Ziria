@@ -24,8 +24,8 @@
 
 fun comp detectPreamble() { 
   (removeDC() >>> cca())
-} in 
+}
 
 
-read[complex16] >>> downSample() >>> {det<-detectPreamble(); emit int16(det.noSamples) } >>> write[int16]
+let comp main = read[complex16] >>> downSample() >>> {det<-detectPreamble(); emit int16(det.noSamples) } >>> write[int16]
 

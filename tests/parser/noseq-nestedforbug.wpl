@@ -13,7 +13,7 @@ fun comp f() {
    --     ; emit 42
    --     }
 
-} in 
+}
 
 
-read[int] >>> f() >>> write[int]
+let comp main = read[int] >>> f() >>> write[int]

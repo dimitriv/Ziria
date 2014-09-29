@@ -50,7 +50,7 @@ fun v_mul_complex16_int32(re:arr int, im:arr int, a:arr complex16, b:arr complex
     re[i] := (int(a[i].re)*int(b[i].re) - int(a[i].im)*int(b[i].im ));
     im[i] := (int(a[i].im)*int(b[i].re) + int(a[i].re)*int(b[i].im ));
   };
-} in
+}
 
 
 
@@ -109,4 +109,4 @@ fun v_mul_complex16(c:arr complex16, a:arr complex16, b:arr complex16, shift:int
     c[i] := complex16{re=int16(re32[i-vlen*4]); im=int16(im32[i-vlen*4])};
   };
 
-} in
+}

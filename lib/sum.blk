@@ -25,7 +25,7 @@ fun sum_complex16(a : arr complex16) {
     s := s + a[i]
   };
   return s;    
-} in
+}
 
 fun sum_int16(a : arr int16) { 
   var s : int16 := 0;
@@ -33,5 +33,5 @@ fun sum_int16(a : arr int16) {
     s := s + a[i]
   };
   return s;    
-} in
+}
 

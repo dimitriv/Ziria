@@ -3,8 +3,8 @@ fun foo() {
    var amp : int16 := 0;
    outc := complex16{re=0; im=-amp};
    return outc
-} in
+}
 
-read [int] >>> write [int]
+let comp main = read [int] >>> write [int]
 
 

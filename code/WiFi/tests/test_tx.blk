@@ -30,8 +30,8 @@ fun comp amp(c:int16) {
     let dim = cim*c in 
     emit complex16{re=dre;im=dim}
   }
-} in
+}
 
 
-read >>> transmitter() >>> amp(10) >>> write
+let comp main = read >>> transmitter() >>> amp(10) >>> write
 

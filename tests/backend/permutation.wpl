@@ -5,7 +5,7 @@ let testp = {  0,  3,  6,  9, 12, 15, 18, 21
             ,  2,  5,  8, 11, 14, 17, 20, 23
             , 26, 29, 32, 35, 38, 41, 44, 47
             }
-in
+
 
 fun perm(p : arr int, iarr : arr[length(p)] bit) {
   var oarr : arr[length(p)] bit;
@@ -13,11 +13,11 @@ fun perm(p : arr int, iarr : arr[length(p)] bit) {
     oarr[p[i]] := iarr[i]
   }
   return oarr
-} in
+}
 
 
 
-read >>> 
+let comp main = read >>> 
 repeat { x <- takes 48
        ; emits (perm(testp,x))
        } >>> write 

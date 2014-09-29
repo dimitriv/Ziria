@@ -14,7 +14,7 @@ fun comp comp_mult (c : int16) {
              }
         ; emit out
         }
-} in
+}
   
 
-read >>> comp_mult(2) >>> write
+let comp main = read >>> comp_mult(2) >>> write

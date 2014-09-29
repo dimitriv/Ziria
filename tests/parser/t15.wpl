@@ -3,12 +3,12 @@
 fun f1() {
   var out : int;
   out := 3 
-} in
+}
 
 fun f2() {
   var out : int;
   out := 3;
   return ()
-} in
+}
 
-read [int] >>> write[int]
+let comp main = read [int] >>> write[int]

@@ -246,10 +246,10 @@ erange (MkExp (ELet v _ e1 e2) _ _) = do
     setRange v r
     erange e2
 
-erange (MkExp (ELetRef v e1 e2) _ _) = do
+erange (MkExp (ELetRef v _t e1 e2) _ _) = do
     r <- case e1 of
-           Left _    -> return RangeTop
-           Right e1' -> erange e1'
+           Nothing  -> return RangeTop
+           Just e1' -> erange e1'
     setRange v r
     erange e2
 

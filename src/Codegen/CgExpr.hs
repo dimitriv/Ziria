@@ -328,8 +328,9 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
                          ; assignByVal (info e1) (info e1) cx ce1 }
             ; codeGenExp dflags e2 
             }
-
-    go t (ELetRef x (Right e1) e2) = do
+    
+    -- TODO: Is it right that we ignore _ty1 here?
+    go t (ELetRef x _ty1 (Just e1) e2) = do
         x_name <- genSym $ name x ++ getLnNumInStr (expLoc e0)
 
         codeGenDeclGroup x_name (info e1) >>= appendDecl
@@ -341,7 +342,7 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
           assignByVal (info e1) (info e1) cx ce1
           codeGenExp dflags e2
 
-    go t (ELetRef x (Left ty1) e2) = do
+    go t (ELetRef x ty1 Nothing e2) = do
         x_name <- genSym $ name x ++ getLnNumInStr (expLoc e0)
 
         codeGenDeclGroup x_name ty1 >>= appendDecl

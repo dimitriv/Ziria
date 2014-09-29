@@ -8,10 +8,10 @@ repeat{
     lastNo := x;
   }
 }
-} in
+}
 
 
-read[int] >>> 
+let comp main = read[int] >>> 
 -- BUG: remove comments to uncover bug!
 {-
   repeat{

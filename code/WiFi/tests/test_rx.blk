@@ -21,4 +21,4 @@
 #include "../receiver/receiver.blk"
 
 
-read >>> receiver() >>> write
+let comp main = read >>> receiver() >>> write

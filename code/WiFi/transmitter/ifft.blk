@@ -44,5 +44,5 @@ fun comp ifft() {
      emits fftdata;
    }
   
-} in
+}
 

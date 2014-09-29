@@ -1,6 +1,6 @@
 fun enc(x : int) { 
     return (x+1);
-} in
+}
 
 
 fun bar() {
@@ -9,9 +9,9 @@ fun bar() {
     let r1 = enc(dvm1)
     let r2 = enc(dvm2)
     return r2
-} in
+}
 
-read[int] >>> write[int]
+let comp main = read[int] >>> write[int]
 
 
 

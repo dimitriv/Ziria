@@ -8,6 +8,6 @@ fun comp foo() {
     do{x[19] := 3};
     emit (x[13])
   }
-} in
+}
 
-read[int] >>> foo() >>> write[int]
+let comp main = read[int] >>> foo() >>> write[int]

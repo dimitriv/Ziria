@@ -270,9 +270,9 @@ shouldLUT dflags locals ranges e = flip evalLM s0 $ do
     go (ELet _ _ e1 e2) =
         should e1 >> should e2
 
-    go (ELetRef _ (Left {}) e2) = 
+    go (ELetRef _ _ty Nothing e2) = 
         should e2
-    go (ELetRef _ (Right e1) e2) = 
+    go (ELetRef _ _ty (Just e1) e2) = 
         should e1 >> should e2
 
     go (ESeq e1 e2) =

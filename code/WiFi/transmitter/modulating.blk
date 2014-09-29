@@ -31,7 +31,7 @@ repeat [8,8] {
                       else complex16{re=bpsk_mod_11a; im=0};
 }
 
-} in
+}
 
 
 
@@ -54,7 +54,7 @@ fun modulate_qpsk_lut (x : arr[2] bit) {
         } 
       };
   return outi
-} in
+}
   
 
 
@@ -76,7 +76,7 @@ seq{
   }
 
 }
-} in
+}
 
 
 
@@ -122,7 +122,7 @@ fun comp modulate_16qam () {
 
     emit outc
   }
-} in
+}
 
 
 
@@ -202,7 +202,7 @@ fun comp modulate_64qam () {
 
     emit outc
   }
-} in
+} 
 
 
 
@@ -218,4 +218,4 @@ fun comp modulate(m : int) {
       	modulate_16qam()
       else
       	modulate_64qam()
-} in
+}

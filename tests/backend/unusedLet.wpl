@@ -1,10 +1,10 @@
 fun comp test(a: int) {
 var c:int := 0;
-let z = c + a in
+let z = c + a 
 seq{
   return(5);
   emit 0
 }
-} in
+}
 
-read[int] >>> test(5) >>> write[int]
+let comp main = read[int] >>> test(5) >>> write[int]

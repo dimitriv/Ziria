@@ -75,7 +75,7 @@ repeat [12,2]
 
     emit outc
   }
-} in
+}
 
 
-read[bit] >>> modulate_64qam() >>> write[complex16]
+let comp main = read[bit] >>> modulate_64qam() >>> write[complex16]

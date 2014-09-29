@@ -7,7 +7,7 @@ fun comp init() {
     }
   }
   return params
-} in
+}
 
 
-read[int] >>> init() >>> write[int]
+let comp main = read[int] >>> init() >>> write[int]

@@ -20,5 +20,5 @@
 
 #include "../removeDC.blk"
 
-read >>> removeDC() >>> write
+let comp main = read >>> removeDC() >>> write
 

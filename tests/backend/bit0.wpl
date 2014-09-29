@@ -1,5 +1,5 @@
 
-read >>> 
+let comp main = read >>> 
   (repeat seq{ (x : bit) <- take; emit x }) >>> write
 
  

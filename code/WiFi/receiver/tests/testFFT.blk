@@ -20,4 +20,4 @@
 
 #include "../OFDM/FFT.blk"
 
-read >>> FFT() >>> write
+let comp main = read >>> FFT() >>> write

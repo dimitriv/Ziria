@@ -12,7 +12,7 @@ fun comp f() {
   emits x;
   emits baf
   }
-} in 
+}
 
-read >>> repeat (f()) >>> write
+let comp main = read >>> repeat (f()) >>> write
   
