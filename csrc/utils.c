@@ -65,7 +65,7 @@ char* delete_trailing_comma(char *s) {
       case ',':
         // Overwrite trailing comma
         *p = 0;
-        return *p;
+        return p;
 
       default:
         // Found a different character. No trailing comma.
