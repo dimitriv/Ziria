@@ -460,8 +460,13 @@ tyCheckComp c
            Times ui e elen x c1 ->
              do { e' <- tyCheckExpr e
                 ; elen' <- tyCheckExpr elen
-                ; let t = info e'
-                ; c1' <- extendEnv [(name x,tint)] $ tyCheckComp c1
+                ; unify cloc (info e') (info elen')
+
+                ; xType <- case mbtype x of
+                    Just t  -> do unify cloc t (info e') ; return t
+                    Nothing -> return (info e')
+
+                ; c1' <- extendEnv [(name x,xType)] $ tyCheckComp c1
                 ; case compInfo c1' of
                     CTBase (TComp v a b) ->
                       do { ti <- newTInt_BWUnknown

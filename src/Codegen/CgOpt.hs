@@ -1127,11 +1127,11 @@ codeGenComp dflags comp k =
         -- initialization.
 
         nm' <- freshName ("__times_" ++ name nm ++ getLnNumInStr csp)
-        appendDecl [cdecl|int $id:(name nm') = 0;|]
+        appendDecl [cdecl|$ty:(codeGenTy (info estart)) $id:(name nm') = 0;|]
 
         cestart <- codeGenExp dflags estart
 
-        extendVarEnv [(nm,(tint,[cexp|$id:(name nm')|]))] $ do
+        extendVarEnv [(nm,(info estart,[cexp|$id:(name nm')|]))] $ do
 
         let efinal = eBinOp csp tint Add elen estart
 

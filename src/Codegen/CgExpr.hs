@@ -247,7 +247,7 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
             return (ceStart, ceLen)
 
         (body_decls, body_stms, cebody) <- inNewBlock $
-            extendVarEnv [(k, (tint,[cexp|$id:(name k_new)|]))] $
+            extendVarEnv [(k, (info estart,[cexp|$id:(name k_new)|]))] $
             codeGenExp dflags ebody
 
         -- cebody may be side-effecting; must eval. each iter.
@@ -257,7 +257,7 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
         appendDecls init_decls
         appendDecls body_decls
         appendStmts init_stms
-        appendStmt [cstm|for (int $id:(name k_new) = $ceStart; $id:(name k_new) < ($ceStart + $ceLen); $id:(name k_new)++) {
+        appendStmt [cstm|for ($ty:(codeGenTy (info estart)) $id:(name k_new) = $ceStart; $id:(name k_new) < ($ceStart + $ceLen); $id:(name k_new)++) {
                            $stms:init_stms
                            $stms:body_stms
                            $id:freshSym = $cebody;

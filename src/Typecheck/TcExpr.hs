@@ -269,7 +269,13 @@ tyCheckExpr e
           EFor ui ix estart elen ebody ->
             do estart' <- tyCheckExpr estart
                elen'   <- tyCheckExpr elen
-               ebody'  <- extendEnv [(name ix, maybe tint id (mbtype ix))] (tyCheckExpr ebody)
+               unify loc (info estart') (info elen')
+
+               ixType <- case mbtype ix of
+                 Just t  -> do unify loc t (info estart') ; return t
+                 Nothing -> return (info estart')
+
+               ebody'  <- extendEnv [(name ix, ixType)] (tyCheckExpr ebody)
                unify loc (info ebody') TUnit
                return $ eFor loc (info ebody') ui ix estart' elen' ebody'
 
