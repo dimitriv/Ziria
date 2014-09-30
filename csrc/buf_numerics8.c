@@ -229,7 +229,8 @@ GetStatus buf_getarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, uns
 {
 #ifdef STAMP_AT_READ
 	write_time_stamp(params);
-#endif	blk->total_in += vlen;
+#endif	
+	blk->total_in += vlen;
 	return _buf_getarrint8(params, blk, x, vlen);
 }
 
