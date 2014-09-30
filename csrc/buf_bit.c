@@ -131,6 +131,8 @@ unsigned int parse_dbg_bit(char *dbg_buf, BitArrPtr target)
 	long x;
 	unsigned int c = 0;
 	char *s = NULL;
+
+  char* trailing_comma = delete_trailing_comma(dbg_buf);
 	s = strtok(dbg_buf, ",");
 	
  	if (s == NULL) 
@@ -178,6 +180,7 @@ unsigned int parse_dbg_bit(char *dbg_buf, BitArrPtr target)
 		bitWrite(target, c++, val);
 	}
 
+  restore_trailing_comma(trailing_comma);
 	return c;
 }
 
