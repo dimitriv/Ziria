@@ -21,4 +21,4 @@
 #include "../decoding/ViterbiSig11a.blk"
 
 
-read >>> ViterbiSig11a() >>> write
+let comp main = read >>> ViterbiSig11a() >>> write

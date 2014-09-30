@@ -15,7 +15,7 @@ fun foo(x : int64) {
 
   return ret;
 
-} in
+}
 
 fun comp foo() { 
   var x : complex16;
@@ -37,6 +37,6 @@ fun comp foo() {
   emit x
   -- emit (complex16 { re = 3; im = 3 });
   }
-} in 
+}
 
-read >>> repeat foo() >>> write
+let comp main = read >>> repeat foo() >>> write

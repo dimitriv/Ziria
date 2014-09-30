@@ -240,8 +240,9 @@ stripLetRefs e = go [] e
   where go defs e  
           = go0 defs (unExp e)
           where 
-             go0 defs (ELetRef nm (Left ty) e') 
+             go0 defs (ELetRef nm ty Nothing e') 
                = go ((nm,ty,Nothing):defs) e'
-             go0 defs (ELetRef nm (Right einit) e')
+             -- TODO: Should we do something with _ty here?
+             go0 defs (ELetRef nm _ty (Just einit) e')
                = go ((nm, info einit, Just einit):defs) e'
              go0 defs _other = (reverse defs, e)

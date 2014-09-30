@@ -43,4 +43,4 @@ fun comp ChannelEqualization(params : struct LTECoeffs) {
     emits fftdata
   }
 
-} in
+}

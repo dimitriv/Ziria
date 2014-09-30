@@ -142,12 +142,13 @@ ppExp0 e =
       text "in" $$ 
       ppExp e2
 
-    ELetRef x (Left ty) e2 ->
+    ELetRef x ty Nothing e2 ->
       text "letref" <+> ppName x <+> colon <+> ppTy ty $$ 
       text "in" $$ 
       ppExp e2
-
-    ELetRef x (Right e1) e2 ->
+  
+    -- TODO: We should pretty-print the type here
+    ELetRef x _ty (Just e1) e2 ->
       text "letref" <+> assign ":=" (ppName x) (ppExp e1) $$
       text "in" $$
       ppExp e2

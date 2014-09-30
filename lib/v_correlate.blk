@@ -48,4 +48,4 @@ fun v_correlate(a1 : arr complex16, a2 : arr complex16) {
   };
 
   return complex{re=sum_re[0]; im=sum_im[0]};
-} in 
+}

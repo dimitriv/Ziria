@@ -20,32 +20,32 @@
 
 #pragma once
 
-let CR_12 = 0 in 
-let CR_23 = 1 in
-let CR_34 = 2 in
+let CR_12 = 0
+let CR_23 = 1
+let CR_34 = 2
 
-let norm_shift = 8 in
+let norm_shift = 8
 
-let bpsk_mod_11a = 10720 in
-let qpsk_mod_11a  = int16(double(bpsk_mod_11a) / 1.414) in -- divided by sqrt(2)
-let qam16_mod_11a = int16(double(bpsk_mod_11a) / 3.162) in -- divided by sqrt(10)
-let qam64_mod_11a = int16(double(bpsk_mod_11a) / 6.481) in -- divided by sqrt(42)
-
-
---let cca_energy_threshold  = 5000 in 
-let cca_energy_threshold  = 200 in 
+let bpsk_mod_11a = 10720
+let qpsk_mod_11a  = int16(double(bpsk_mod_11a) / 1.414) -- divided by sqrt(2)
+let qam16_mod_11a = int16(double(bpsk_mod_11a) / 3.162) -- divided by sqrt(10)
+let qam64_mod_11a = int16(double(bpsk_mod_11a) / 6.481) -- divided by sqrt(42)
 
 
-let M_BPSK  = 0 in
-let M_QPSK  = 1 in
-let M_16QAM = 2 in
-let M_64QAM = 3 in
+--let cca_energy_threshold  = 5000
+let cca_energy_threshold  = 200
+
+
+let M_BPSK  = 0
+let M_QPSK  = 1
+let M_16QAM = 2
+let M_64QAM = 3
 
 
 {-
-let amp = 1 in         -- 1/sqrt(2)
-let signalAmplitude = 1000 in
-let QPSKAmp = 707 in
+let amp = 1         -- 1/sqrt(2)
+let signalAmplitude = 1000
+let QPSKAmp = 707
 -}
 
 struct CCAParams = {
@@ -54,17 +54,17 @@ struct CCAParams = {
   energy:int32;                 -- Preamble energy calculated using calcEnergy() from CCA
   noise:int32;                  -- Noise energy calculated using calcEnergy() from CCA
   maxCorr:int32                 -- Value of correlation that triggered CCA
-} in 
+}
 
 struct LTECoeffs = { 
   freqCoeffs:arr[64] complex16;
-  channelCoeffs:arr[64] complex16 } in 
+  channelCoeffs:arr[64] complex16 }
 
 struct HeaderInfo = { 
   coding:int32;
   modulation:int32;
   len:int32
-} in 
+}
 
 
 
@@ -87,7 +87,7 @@ let m_bpsk_lut = {
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 
 	2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3} 
-in
+
 
 
 let m_qam16_lut2 = {
@@ -107,7 +107,7 @@ let m_qam16_lut2 = {
 	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
 	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
 	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7} 
-in
+
 
 
 let m_qam64_lut2 = {
@@ -127,7 +127,7 @@ let m_qam64_lut2 = {
 	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
 	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
 	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7} 
-in
+
 
 
 let m_qam64_lut3 = {
@@ -147,6 +147,6 @@ let m_qam64_lut3 = {
 	7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 6, 6, 6, 5, 5, 
 	4, 4, 3, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} 
-in 
+
 
 

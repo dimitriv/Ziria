@@ -24,4 +24,4 @@ fun comp DemapBPSK() {
      (symbol:complex16) <- take;
      emit m_bpsk_lut[symbol.re]
   }
-} in
+}

@@ -20,4 +20,4 @@
 
 #include "../crc.blk"
 
-read [bit] >>> crc(2, true) >>> write[bit]
+let comp main = read [bit] >>> crc(2, true) >>> write[bit]

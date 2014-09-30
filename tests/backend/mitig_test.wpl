@@ -3,16 +3,16 @@ repeat [2,2] {
   x <- take;
   emit x;
 }
-} in 
+}
 
 fun comp B() {
 repeat [4,4] {
   x <- take;
   emit x;
 }
-} in 
+}
 
-read[int] >>> B() >>> A() >>> B() >>> write[int]
+let comp main = read[int] >>> B() >>> A() >>> B() >>> write[int]
 
 
 

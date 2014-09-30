@@ -3,6 +3,6 @@ fun comp foo() {
    fun bar(t:int) { return y+1 } in
    fun baz(t : int) { return(bar(t) + 1) } in 
    do {return 45}
-} in
+}
 
-read[int] >>> foo() >>> write[int]
+let comp main = read[int] >>> foo() >>> write[int]

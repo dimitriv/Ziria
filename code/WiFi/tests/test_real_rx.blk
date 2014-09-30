@@ -44,13 +44,13 @@ fun comp dummy() {
     x<- take;
     emit x;
   }  
-} in
+}
 
 
 
 fun comp detectPreamble(energy_threshold : int32) { 
   (removeDC() >>> cca(energy_threshold))
-} in 
+} 
 
 
 
@@ -59,7 +59,7 @@ fun comp receiveBits() {
        seq { hdata <- DecodePLCP()
            ; Decode(hdata) >>> seq { (c : arr[4] bit) <- crc(hdata.len, false); check_crc(c) }
        }
-} in
+}
 #endif
 
 
@@ -75,7 +75,8 @@ read[complex16] >>>
 
 
 
-read >>> 
+let comp main = 
+  read >>> 
   dummy() >>> 
   downSample() >>> 
 repeat{

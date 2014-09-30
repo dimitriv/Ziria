@@ -38,3 +38,46 @@ void blink_copy(void *dst, void *src, unsigned int siz)
   bytes_copied += siz;
   memcpy(dst,src,siz);
 }
+
+/**
+ * If `s` contains a trailing comma (possibly followed by whitespace) overwrite
+ * it with 0 (that is, 0-terminate the string at that point) and return the
+ * corresponding address so that the string can be restored later.
+ *
+ * Returns NULL if the string does not contain a trailing comma.
+ *
+ * The return value of `delete_trailing_comma` can be passed to 
+ * `restore_trailing_comma`.
+ */
+char* delete_trailing_comma(char *s) {
+  char* p = s + strlen(s) - 1;
+
+  while(p > s) {
+    switch(*p) {
+      case ' ':
+      case '\t':
+      case '\n':
+      case '\r':
+        // Skip trailing whitespace
+        p--; 
+        break;
+
+      case ',':
+        // Overwrite trailing comma
+        *p = 0;
+        return *p;
+
+      default:
+        // Found a different character. No trailing comma.
+        return NULL;
+    }
+  }
+
+  return NULL;
+}
+
+void restore_trailing_comma(char* trailing_comma) {
+  if(trailing_comma != 0) {
+    *trailing_comma = ',';
+  }
+}

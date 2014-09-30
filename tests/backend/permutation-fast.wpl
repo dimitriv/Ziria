@@ -5,7 +5,7 @@ let testp = {  0,  3,  6,  9, 12, 15, 18, 21
             ,  2,  5,  8, 11, 14, 17, 20, 23
             , 26, 29, 32, 35, 38, 41, 44, 47
             }
-in
+
 
 let zeros = { '0,'0,'0,'0,'0,'0,'0,'0 
             , '0,'0,'0,'0,'0,'0,'0,'0 
@@ -14,7 +14,7 @@ let zeros = { '0,'0,'0,'0,'0,'0,'0,'0
             , '0,'0,'0,'0,'0,'0,'0,'0 
             , '0,'0,'0,'0,'0,'0,'0,'0 
             }
-in
+
 
 fun perm8(p : arr[8] int, iarr : arr[8] bit) {
   var oarr : arr[48] bit := zeros;
@@ -28,14 +28,14 @@ fun perm8(p : arr[8] int, iarr : arr[8] bit) {
     }
   }
   return oarr;
-} in 
+}
 
 fun vector_or(a1 : arr[48] bit, a2 : arr[48] bit) {
   var res : arr[48] bit;
   for i in [0,48]
     res[i] := a1[i] | a2[i];
   return res;
-} in
+}
 
        
 fun perm(p : arr[48] int, iarr : arr[48] bit) {
@@ -50,9 +50,9 @@ fun perm(p : arr[48] int, iarr : arr[48] bit) {
      oarr := vector_or(oarr,perm8(p1,iarr1));
   }
   return oarr;
-} in
+}
   
-read[bit] >>> 
+let comp main = read[bit] >>> 
 repeat { x <- takes 48
        ; emits (perm(testp,x))
        } >>> write[bit]

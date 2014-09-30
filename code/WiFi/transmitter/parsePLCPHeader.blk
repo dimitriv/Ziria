@@ -42,7 +42,7 @@ fun printHeader(h : struct HeaderInfo) {
     print "3/4";
   } } 
   println ", length: ", h.len, " B";
-} in
+}
 
 
 
@@ -105,7 +105,7 @@ var h:struct HeaderInfo;
      --println "Header bits: ", hdata
       
   return h;
-} in
+}
 
 
 fun comp emitHeader() {
@@ -114,4 +114,4 @@ fun comp emitHeader() {
     emits x;
     return parsePLCPHeader(x)
   }
-} in
+}

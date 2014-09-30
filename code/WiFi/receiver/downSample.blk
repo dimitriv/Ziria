@@ -20,16 +20,16 @@
 #pragma once 
 
 let external permutatew1313(x:arr[4] complex16, y:arr[4] complex16) : ()
-in
+
 
 let external interleave_loww(x:arr[4] complex16, y:arr[4] complex16, z:arr[4] complex16) : ()
-in
+
 
 fun interleave_aux(x:arr[4] complex16, y:arr[4] complex16) {
   var oup : arr[4] complex16;
   interleave_loww(x,y,oup);
   return oup
-} in
+}
 
 fun comp downSample() {
 
@@ -54,4 +54,4 @@ fun comp downSample() {
   }
 
 
-} in
+}

@@ -26,4 +26,4 @@ fun comp DataSymbol(shift:int16) {
      (xp:arr[80] complex16) <- takes 80;
      emits xp[16-shift,64]
   }
-} in
+}

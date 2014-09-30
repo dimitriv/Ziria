@@ -46,4 +46,4 @@ var crc_state: arr[4] bit := {'0,'0,'0,'0};
   }
 
   return crc_state;
-} in
+}

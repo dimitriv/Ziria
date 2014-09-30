@@ -25,6 +25,7 @@ module BlinkParseComp ( parseProgram, runParseM ) where
 
 import Control.Applicative ((<$>), (<*>), (<$), (<*), (*>))
 import Control.Arrow (second)
+import Control.Monad (join, void)
 import Control.Monad.Reader.Class
 import Data.Maybe (fromJust)
 import Text.Parsec
@@ -40,15 +41,49 @@ import BlinkParseM
   Top-level
 -------------------------------------------------------------------------------}
 
--- | > <program> ::= <decls> <comp>
+-- | > <program> ::= <decls> <let-decls>*
+--
+-- TODO: Update the grammar
 parseProgram :: BlinkParser (Prog () ())
-parseProgram = MkProg <$ whiteSpace <*> declsParser <*> parseComp <* eof
+parseProgram =
+    join $ mkProg <$ whiteSpace <* cppPragmas AllowFilenameChange
+       <*> declsParser <*> parseTopLevel <* eof
+  where
+    mkProg _  ([],     _)  = fail "No main found"
+    mkProg _  (_:_:_,  _)  = fail "More than one main found"
+    mkProg ds ([main], bs) = MkProg ds <$> foldCommands (map Left bs ++ [Right main])
+
+-- | Parse a list of top level declarations
+--
+-- We return the list of declarations of 'main' separately so that we can
+-- construct a single SrcComp in `parseProgram`.
+--
+parseTopLevel :: BlinkParser ([SrcComp], [SrcComp -> SrcComp])
+parseTopLevel =
+    withPos cLetDecl' <*> parseLetDecl `bindExtend` \d -> append d <$> more
+  where
+    more = topLevelSep *> (parseTopLevel <|> return ([], []))
+
+    append (decl, fun) (mains, funs) =
+      case decl of
+        LetDeclComp Nothing nm c | name nm == "main" -> (c:mains, funs)
+        _                                            -> (mains, fun:funs)
+
+    cLetDecl' p () d = let (env, f) = cLetDecl p () d in (env, (d, f))
+
+topLevelSep :: BlinkParser ()
+topLevelSep =
+    cppPragmas AllowFilenameChange *> optional semi <* cppPragmas AllowFilenameChange
+
+cppPragmas :: AllowFilenameChange -> BlinkParser ()
+cppPragmas allowFilenameChange =
+    void $ many (cppPragmaLine allowFilenameChange <* whiteSpace)
 
 -- | > <decls> ::= (<decl>;)*
 --
 -- (declParser comes from the expression language)
 declsParser :: BlinkParser [(Name, Ty, Maybe SrcExp)]
-declsParser = declParser `endBy` semi
+declsParser = declParser `endBy` topLevelSep
 
 -- | Parse a computation expression
 --
@@ -214,7 +249,7 @@ parseArgs xnm = parens $ do
 -------------------------------------------------------------------------------}
 
 data LetDecl =
-    LetDeclVar (Name, Either Ty SrcExp)
+    LetDeclVar (Name, Ty, Maybe SrcExp)
   | LetDeclStruct StructDef
   | LetDeclExternal String [(Name, Ty)] Ty
   | LetDeclFunComp (Maybe (Int, Int)) Name [(Name, CallArg Ty CTy0)] ([(Name, Ty, Maybe SrcExp)], SrcComp)
@@ -234,13 +269,13 @@ data LetDecl =
 -- >   | "let" <var-bind> "=" <expr>
 parseLetDecl :: BlinkParser LetDecl
 parseLetDecl = choice
-    [ LetDeclVar <$> declParser'
+    [ LetDeclVar <$> declParser
     , LetDeclStruct <$> parseStruct
     , try $ LetDeclExternal <$ reserved "let" <* reserved "external" <*> identifier <*> paramsParser <* symbol ":" <*> parseBaseType
-    , try $ LetDeclFunComp  <$ reserved "fun" <*> parseCompAnn <*> parseVarBind <*> compParamsParser <*> body (nest parseCommands)
-    , try $ LetDeclFunExpr  <$ reserved "fun"                  <*> parseVarBind <*> paramsParser     <*> body (nest parseStmts)
-    , try $ LetDeclComp     <$ reserved "let" <*> parseCompAnn <*> parseVarBind <* symbol "=" <*> nest parseComp
-    , try $ LetDeclExpr     <$ reserved "let"                  <*> parseVarBind <* symbol "=" <*> nest parseExpr
+    , try $ LetDeclFunComp  <$ reserved "fun" <*> parseCompAnn <*> parseVarBind <*> compParamsParser <*> body parseCommands
+    , try $ LetDeclFunExpr  <$ reserved "fun"                  <*> parseVarBind <*> paramsParser     <*> body parseStmts
+    , try $ LetDeclComp     <$ reserved "let" <*> parseCompAnn <*> parseVarBind <* symbol "=" <*> parseComp
+    , try $ LetDeclExpr     <$ reserved "let"                  <*> parseVarBind <* symbol "=" <*> parseExpr
     ]
   where
     body :: BlinkParser a -> BlinkParser ([(Name, Ty, Maybe SrcExp)] , a)
@@ -251,7 +286,7 @@ parseStruct :: BlinkParser StructDef
 parseStruct = do
     reserved "struct"
     x <- identifier
-    _ <- symbol "="
+    symbol "="
     braces $ StructDef x <$> parseField `sepBy` semi
   where
     parseField = (,) <$> identifier <* colon <*> parseBaseType
@@ -299,8 +334,8 @@ parseCompBaseType = choice
     mkCTy0 (Just tv) ti ty = TComp tv ti ty
 
 cLetDecl :: Maybe SourcePos -> () -> LetDecl -> (ParseCompEnv, SrcComp -> SrcComp)
-cLetDecl p () (LetDeclVar (xn, bnd)) =
-    ([], cLetERef p () xn bnd)
+cLetDecl p () (LetDeclVar (xn, ty, e)) =
+    ([], cLetERef p () xn ty e)
 cLetDecl p () (LetDeclStruct sdef) =
     ([], cLetStruct p () sdef)
 cLetDecl p () (LetDeclExternal x params ty) =
@@ -339,23 +374,18 @@ type Command = Either (SrcComp -> SrcComp) SrcComp
 --
 -- The last <command> must be a computation.
 parseCommands :: BlinkParser SrcComp
-parseCommands =
-    parseCommand `bindExtend` go . (:[])
+parseCommands = foldCommands =<< go
   where
-    go :: [Command] -> BlinkParser SrcComp
-    go cs = do
-      optional semi
-      choice [ parseCommand `bindExtend` go . (:cs)
-             , foldCommands (reverse cs)
-             ]
+    go   = parseCommand `bindExtend` \c -> (c:) <$> more
+    more = optional semi *> (go <|> return [])
 
-    foldCommands :: [Command] -> BlinkParser SrcComp
-    foldCommands []           = error "This cannot happen"
-    foldCommands [Right c]    = return c
-    foldCommands [Left _]     = fail "last statement in a seq block should be a computation"
-    foldCommands (Right c:cs) = cSeq' c <$> foldCommands cs
-    foldCommands (Left k:cs)  = k       <$> foldCommands cs
-
+foldCommands :: [Command] -> BlinkParser SrcComp
+foldCommands []           = error "This cannot happen"
+foldCommands [Left _]     = fail "last statement in a seq block should be a computation"
+foldCommands [Right c]    = return c
+foldCommands (Left k:cs)  = k       <$> foldCommands cs
+foldCommands (Right c:cs) = cSeq' c <$> foldCommands cs
+  where
     cSeq' c1 c2 = cSeq (compLoc c2) () c1 c2
 
 -- | Commands

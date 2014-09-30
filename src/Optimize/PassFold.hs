@@ -37,6 +37,7 @@ import Data.Time
 import System.CPUTime
 
 import Text.Printf
+import Text.Parsec.Pos (SourcePos)
 
 import CgLUT ( shouldLUT )
 import Analysis.Range ( varRanges )
@@ -239,12 +240,15 @@ push_comp_locals_step fgs comp
        }
   | otherwise 
   = return comp
-  where mk_letrefs eloc ety lcls e = go lcls e 
-          where go [] e = e 
-                go ((lcl,ty,Nothing):lcls) e 
-                  = eLetRef eloc ety lcl (Left ty) (go lcls e)
-                go ((lcl,ty,Just einit):lcls) e
-                  = eLetRef eloc ety lcl (Right einit) (go lcls e)
+  where 
+    mk_letrefs :: Maybe SourcePos -> a -> [(Name, Ty, Maybe (Exp a))] -> Exp a -> Exp a
+    mk_letrefs eloc ety lcls e = go lcls e 
+      where 
+        go [] e = e 
+        go ((lcl,ty,Nothing):lcls) e 
+          = eLetRef eloc ety lcl ty Nothing (go lcls e)
+        go ((lcl,ty,Just einit):lcls) e
+          = eLetRef eloc ety lcl ty (Just einit) (go lcls e)
 
 
 take_emit_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
@@ -480,7 +484,7 @@ inline_exp_fun (nm,params,locals,body) e
                            ; ty' <- substAllLengthTy len_subst ty
                            ; let x' = x { mbtype = Just ty } 
                            ; return $ 
-                             eLetRef (expLoc e) (info e) x' (Left ty') e' 
+                             eLetRef (expLoc e) (info e) x' ty' Nothing e' 
                            }
                     go ((x,ty,Just xe):xs) e 
                       = do { e' <- go xs e
@@ -488,7 +492,7 @@ inline_exp_fun (nm,params,locals,body) e
                            ; ty' <- substAllLengthTy len_subst ty
                            ; let x' = x { mbtype = Just ty' } 
                            ; return $ 
-                             eLetRef (expLoc e) (info e) x' (Right xe') e' 
+                             eLetRef (expLoc e) (info e) x' ty' (Just xe') e' 
                            }
 
         replace_call other = return other
@@ -708,10 +712,10 @@ mkMultiLetExp [] e = e
 mkMultiLetExp ((x,e1,fi):bnds) e 
   = MkExp (ELet x fi e1 (mkMultiLetExp bnds e)) (expLoc e) (info e) 
 
-mkMultiLetRefExp :: [(Name,Either Ty (Exp a))] -> Exp a -> Exp a
+mkMultiLetRefExp :: [(Name, Ty, Maybe (Exp a))] -> Exp a -> Exp a
 mkMultiLetRefExp [] e = e
-mkMultiLetRefExp ((x,b1):bnds) e 
-  = MkExp (ELetRef x b1 (mkMultiLetRefExp bnds e)) (expLoc e) (info e) 
+mkMultiLetRefExp ((x,ty,b1):bnds) e 
+  = MkExp (ELetRef x ty b1 (mkMultiLetRefExp bnds e)) (expLoc e) (info e) 
 
 
 isMultiLet_maybe comp
@@ -730,7 +734,7 @@ isMultiLet_maybe comp
 
 isMultiLetRef_maybe comp
   = go comp []
-  where go (LetERef x bnd c) acc = go (unComp c) ((x,bnd):acc)
+  where go (LetERef x ty e c) acc = go (unComp c) ((x,ty,e):acc)
         go (Return _fi e)  []    = Nothing 
         go (Emit e)    []   = Nothing
         go (Emits e)   []   = Nothing 
@@ -826,6 +830,8 @@ asgn_letref_step fgs e
     loc = expLoc e
     returns_letref_var :: Exp Ty -> Maybe (Name, Exp Ty)
     returns_letref_var e = go e []
+
+    go :: Exp Ty -> [(Name, Ty)] -> Maybe (Name, Exp Ty)
     go e letrefs 
      = let loc = expLoc e 
        in 
@@ -840,13 +846,13 @@ asgn_letref_step fgs e
               Nothing -> Nothing
               Just (w,e2') -> Just (w, eLet loc TUnit y fi e1 e2')
 
-          ELetRef y (Left ty) e2 -> 
+          ELetRef y ty Nothing e2 -> 
             case go e2 ((y,ty):letrefs) of
               Nothing -> Nothing
               Just (w,e2') | w == y 
                            -> Just (w, e2')
                            | otherwise
-                           -> Just (w, eLetRef loc TUnit y (Left ty) e2')
+                           -> Just (w, eLetRef loc TUnit y ty Nothing e2')
           ESeq e1 e2 -> 
             case go e2 letrefs of 
               Nothing -> Nothing

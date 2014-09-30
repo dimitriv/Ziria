@@ -20,4 +20,4 @@
 
 #include "../downSample.blk"
 
-read >>> downSample() >>> write
+let comp main = read >>> downSample() >>> write

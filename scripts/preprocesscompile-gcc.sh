@@ -35,6 +35,14 @@ echo "Running WPL compiler..."
 $WPLC $WPLCFLAGS $EXTRAOPTS -i $1.expanded -o $1.c
 cp $1.c $TOP/csrc/test.c
 
+# when we run the unit tests it might happen that we copy the source file for
+# test B within the same second as we created the executable for the previous
+# test. On systems with filesystems without sub-second timestamp granularity
+# this means that make will think it won't need to rebuild the executable
+# and we will get very strange results. To avoid this we remove the executable
+# and the object file (if they exist).
+rm -f $TOP/csrc/driver $TOP/csrc/test.o
+
 echo "Compiling C code (GCC) "
 pushd . && cd $TOP/csrc && make && popd 
 

@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -88,10 +88,10 @@ cHeader = unlines l
             , "#include <xmmintrin.h>"
             , "#include <emmintrin.h>"
 
-            , "#include <types.h>"
-            , "#include <wpl_alloc.h>"
-            , "#include <utils.h>"
-            , "#include <buf.h>"
+            , "#include \"types.h\""
+            , "#include \"wpl_alloc.h\""
+            , "#include \"utils.h\""
+            , "#include \"buf.h\""
 
             , ""
             , "#define SKIP " ++ show sKIP
@@ -99,8 +99,8 @@ cHeader = unlines l
             , "#define DONE " ++ show dONE
             , "#define IMMEDIATE " ++ show iMMEDIATE
             , "#define CONSUME " ++ show cONSUME
-            , "#define FALSE 0"               
-            , "#define TRUE 1" 
+            , "#define FALSE 0"
+            , "#define TRUE 1"
             , "#define UNIT 0"
             ]
-    
+

@@ -5,16 +5,16 @@ fun sum(a:arr int) {
     s := s + a[i]
   };
   return s
-} in 
+}
 
 fun test1() {
   var a1 : arr[2] int := {1,2};
   return sum(a1);
-} in 
+}
 
 fun test2() {
   var a2 : arr[3] int := {1,2,3};
   return sum(a2);
-} in 
+}
 
-read[int] >>> seq{emit test1(); emit test2()} >>> write[int]
+let comp main = read[int] >>> seq{emit test1(); emit test2()} >>> write[int]
