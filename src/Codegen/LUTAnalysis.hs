@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -29,8 +29,8 @@ module LUTAnalysis ( LUTStats, calcLUTStats, pprLUTStats
 
                    , varBitWidth, varsBitWidth, varsBitWidth_ByteAlign
 
-                   , expResultVar 
-                   ) where              
+                   , expResultVar
+                   ) where
 
 import Opts
 import AstExpr
@@ -48,14 +48,14 @@ import Text.PrettyPrint.Mainland
 
 
 varsBitWidth_ByteAlign :: (Functor m, Monad m) => [VarTy] -> m Int
-varsBitWidth_ByteAlign vartys 
+varsBitWidth_ByteAlign vartys
   = do { sizes <- mapM (tyBitWidth_ByteAlign . snd) vartys
-       ; return $ sum sizes 
+       ; return $ sum sizes
        }
 
 varsBitWidth :: (Functor m, Monad m) => Map Name Range -> [VarTy] -> m Int
-varsBitWidth ranges vartys 
-  = do { sizes <- mapM (\(v,ty) -> varBitWidth ranges v ty) vartys 
+varsBitWidth ranges vartys
+  = do { sizes <- mapM (\(v,ty) -> varBitWidth ranges v ty) vartys
        ; return (sum sizes) }
 varBitWidth :: Monad m => Map Name Range -> Name -> Ty -> m Int
 varBitWidth ranges v ty | Just (Range _ h) <- Map.lookup v ranges =
@@ -83,7 +83,7 @@ data LUTStats = LUTStats { lutInBitWidth      :: Int
                          }
 
 instance Pretty LUTStats where
-    ppr s = 
+    ppr s =
         text "   result bitsize:" <+> (if lutResultInOutVars s
                                        then text "included in output variables"
                                        else ppr (lutResultBitWidth s)) </>
@@ -102,7 +102,7 @@ calcLUTStats locals ranges e = do
     outVarsBitWidth      <- varsBitWidth ranges outVars
     let resultInOutVars  =  case expResultVar e of
                               Just v | v `elem` map fst outVars -> True
-                              _ -> False 
+                              _ -> False
     resultBitWidth       <- if resultInOutVars
                             then return 0
                             else tyBitWidth (info e)
@@ -128,7 +128,7 @@ pprLUTStats :: Monad m
             => DynFlags
             -> [(Name,Ty)]
             -> Map Name Range
-            -> Exp Ty 
+            -> Exp Ty
             -> m Doc
 pprLUTStats dflags locals ranges e = do
     (inVars, outVars, allVars) <- inOutVars locals ranges e
@@ -193,14 +193,14 @@ shouldLUT dflags locals ranges e = flip evalLM s0 $ do
     stats <- calcLUTStats locals ranges e
     should e
     s <- get
-    
-    
+
+
 
     return $ and [ not (lmHasCall s)
                  , not (lmHasLUT s)
                  , not (lmHasBPerm s) -- Bit permutation will independently be compiled to LUTs
                                       -- so this would amount to a lut within a lut
-                 , lutOutBitWidth stats /= 0 && (lutOutBitWidth stats > 2) 
+                 , lutOutBitWidth stats /= 0 && (lutOutBitWidth stats > 2)
                    -- LUTting only if bitwidth of output is > 2 bits, otherwise probably it's not worth it
                  , lmOpCount s > mIN_OP_COUNT
                  , lutTableSize stats <= maxLUTSize dflags
@@ -265,14 +265,14 @@ shouldLUT dflags locals ranges e = flip evalLM s0 $ do
         -- making sure that we LUT loops more often
         modify $ \s -> s { lmOpCount = max (lmOpCount s) (mIN_OP_COUNT+1) }
 
-    
+
 
     go (ELet _ _ e1 e2) =
         should e1 >> should e2
 
-    go (ELetRef _ _ty Nothing e2) = 
+    go (ELetRef _ _ty Nothing e2) =
         should e2
-    go (ELetRef _ _ty (Just e1) e2) = 
+    go (ELetRef _ _ty (Just e1) e2) =
         should e1 >> should e2
 
     go (ESeq e1 e2) =
@@ -299,8 +299,8 @@ shouldLUT dflags locals ranges e = flip evalLM s0 $ do
        modify $ \s -> s { lmHasBPerm = True }
        should e1 >> should e2
 
-    go (EStruct tn tfs) 
+    go (EStruct tn tfs)
        = mapM_ (\(fn,fe) -> should fe) tfs
 
-    go (EProj e fn)     
+    go (EProj e fn)
        = should e

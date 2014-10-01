@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -60,10 +60,10 @@ runAutoLUT dflags _ c = autolutC c
 
         go (LetE v fi e1 c2) =
             LetE v fi <$> autolutE e1 <*> autolutC c2
-            
+
         -- CL
         go (LetERef v t (Just e1) c1) =
-            autolutE e1 >>= \e1' -> 
+            autolutE e1 >>= \e1' ->
             LetERef v t (Just e1') <$> autolutC c1
 
         go (LetERef v t Nothing c1) =
@@ -141,11 +141,11 @@ runAutoLUT dflags _ c = autolutC c
 
         go c0@(Mitigate {}) = pure c0
 
-    autolutCallArg :: CallArg (Exp Ty) (Comp a Ty) 
+    autolutCallArg :: CallArg (Exp Ty) (Comp a Ty)
                    -> IO (CallArg (Exp Ty) (Comp a Ty))
     autolutCallArg (CAExp e)  = autolutE e >>= \e' -> return (CAExp e')
     autolutCallArg (CAComp c) = autolutC c >>= \c' -> return (CAComp c')
-   
+
     autolutE :: Exp Ty -> IO (Exp Ty)
     autolutE e_ = autoE e_
 
@@ -160,7 +160,7 @@ runAutoLUT dflags _ c = autolutC c
                                Just doc -> doc
             pure $ MkExp (ELUT ranges e0) loc inf
 
-        autoE e0@(MkExp e loc inf) 
+        autoE e0@(MkExp e loc inf)
            = MkExp <$> go e <*> pure loc <*> pure inf
           where
             go :: Exp0 Ty -> IO (Exp0 Ty)
@@ -215,7 +215,7 @@ runAutoLUT dflags _ c = autolutC c
                 ELet v fi <$> autoE e1 <*> autoE e2
 
             go (ELetRef v t (Just e1) e2) =
-                autoE e1 >>= \e1' -> 
+                autoE e1 >>= \e1' ->
                 ELetRef v t (Just e1') <$> autoE e2
 
             go (ELetRef v t Nothing e2) =
@@ -239,7 +239,7 @@ runAutoLUT dflags _ c = autolutC c
             go (ELUT _ e) =
                 pure $ ELUT ranges e
 
-            go (EBPerm e1 e2) = 
+            go (EBPerm e1 e2) =
                autoE e1 >>= \e1' -> autoE e2 >>= \e2' -> return (EBPerm e1' e2')
 
             -- TODO: Revisit this, it seems defensive
@@ -251,7 +251,7 @@ runAutoLUT dflags _ c = autolutC c
         MkFun <$> go f <*> pure loc <*> pure inf
       where
         go :: Fun0 Ty -> IO (Fun0 Ty)
-        go (MkFunDefined v params locals body@(MkExp _ loc inf)) 
+        go (MkFunDefined v params locals body@(MkExp _ loc inf))
           | Right True <- shouldLUT dflags locals' ranges body = do
             verbose dflags $ text "Function autolutted:" </> nest 4 (ppr f0 <> line) <>
                              case pprLUTStats dflags locals' ranges body of
@@ -261,7 +261,7 @@ runAutoLUT dflags _ c = autolutC c
 
           where
             locals' = [(v,ty) | (v,ty,_) <- locals]
-            
+
             ranges :: Map Name Range
             ranges = maybe Map.empty id (varRanges body)
 

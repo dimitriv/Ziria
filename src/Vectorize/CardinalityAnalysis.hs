@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -17,8 +17,8 @@
    permissions and limitations under the License.
 -}
 {-# LANGUAGE ScopedTypeVariables #-}
- 
-module CardinalityAnalysis ( 
+
+module CardinalityAnalysis (
 
     runCardinalityAnalysis
   , Card ( .. )
@@ -27,7 +27,7 @@ module CardinalityAnalysis (
   , mkSimplCard
   , mkIterCard
   , mkParCard
-  , mkDynamicCard 
+  , mkDynamicCard
 ) where
 
 
@@ -51,39 +51,39 @@ type CEnv = [(CEnvDom,Card)]
 data CardM a = CardM (CEnv -> IO a)
 
 
-cardMIO :: IO a -> CardM a 
+cardMIO :: IO a -> CardM a
 cardMIO m = CardM (\_ -> m)
 
 
-data Card 
+data Card
   =  -- Simple cardinality
      SimplCard (Maybe Int) (Maybe Int)
- 
-  | -- Iterated cardinality, such as the one arising from until / repeat
-    -- We might actually statically know the iteration count, 
-    -- hence a Maybe Int   
-    IterCard (Maybe Int) Card  
-     
-    -- Sum of all cardinalities                           
-  | SumCard [Card] 
 
-    -- Underlying cardinalities for (>>>) composition 
+  | -- Iterated cardinality, such as the one arising from until / repeat
+    -- We might actually statically know the iteration count,
+    -- hence a Maybe Int
+    IterCard (Maybe Int) Card
+
+    -- Sum of all cardinalities
+  | SumCard [Card]
+
+    -- Underlying cardinalities for (>>>) composition
   | ParCard Card Card
 
     -- Dynamic cardinality, can't tell anything
-  | DynamicCard  
+  | DynamicCard
 
   deriving ( Show )
 
--- Smart constructors: think later if we need more functionality 
+-- Smart constructors: think later if we need more functionality
 
-                             
+
 isSimplCard :: Card -> Bool
 isSimplCard (SimplCard {}) = True
 isSimplCard _ = False
 
-cardEqual :: Card -> Card -> Bool 
-cardEqual (SimplCard (Just i) (Just j)) 
+cardEqual :: Card -> Card -> Bool
+cardEqual (SimplCard (Just i) (Just j))
           (SimplCard (Just i') (Just j')) = (i==i') && (j == j')
 cardEqual (SimplCard _ _) (SimplCard _ _) = False  -- Could contain some unknowns
 cardEqual (IterCard (Just i) c1) (IterCard (Just j) c2) = (i==j) && (cardEqual c1 c2)
@@ -112,7 +112,7 @@ mkSimplCard :: Int -> Int -> Card
 -- Definitely known input and output cardinalities
 mkSimplCard i j = SimplCard (Just i) (Just j)
 
-mkInSimplCard :: Int -> Card 
+mkInSimplCard :: Int -> Card
 -- Definitely known input cardinality, unknown output cardinality
 mkInSimplCard i = SimplCard (Just i) Nothing
 
@@ -123,15 +123,15 @@ mkOutSimplCard j = SimplCard Nothing (Just j)
 mkIterCard :: Maybe Int -> Card -> Card
 mkIterCard (Just 1) c = c
 -- No takes, just convert this to a simpl-card and unknown emits:
-mkIterCard Nothing (SimplCard (Just 0) other) = SimplCard (Just 0) Nothing 
+mkIterCard Nothing (SimplCard (Just 0) other) = SimplCard (Just 0) Nothing
 -- No emits, just convert this to a simpl-card and unknown takes
 mkIterCard Nothing (SimplCard other (Just 0)) = SimplCard Nothing (Just 0)
 -- Fall back to just IterCard
 mkIterCard m c = IterCard m c
 
 mkParCard :: Card -> Card -> Card
-mkParCard c1 c2 
-  = ParCard c1 c2 
+mkParCard c1 c2
+  = ParCard c1 c2
 
 mkDynamicCard :: Card
 mkDynamicCard = DynamicCard
@@ -171,25 +171,25 @@ runCardM init_env (CardM f) = f init_env
 -- Compute cardinality of a type checked computation
 computeCardTop :: Bool -> Comp CTy Ty -> CardM (Comp (CTy,Card) Ty)
 computeCardTop verbose ct = computeCard ct
-  where 
-    computeCallArgCard (CAExp e)  
+  where
+    computeCallArgCard (CAExp e)
       = return (CAExp e)
-    computeCallArgCard (CAComp c) 
+    computeCallArgCard (CAComp c)
       = do { c' <- computeCard c
-           ; return (CAComp c') 
+           ; return (CAComp c')
            }
     computeCard c = computeCard0 (unComp c)
       where
         cty = compInfo c
-        loc = compLoc c 
+        loc = compLoc c
         computeCard0 :: Comp0 CTy Ty -> CardM (Comp (CTy,Card) Ty)
-        computeCard0  (Var x) = 
+        computeCard0  (Var x) =
           do { cenv <- getCardEnv
              ; case M.lookup (CDomVar $ name x) cenv of
                  Just card -> return $ MkComp (Var x) loc (cty,card)
                  Nothing   -> return $ MkComp (Var x) loc (cty,mkDynamicCard) } -- Or fail?
 
-        computeCard0  (BindMany c1 xs_cs) 
+        computeCard0  (BindMany c1 xs_cs)
           = do { c1' <- computeCard c1
                ; let xs = map fst xs_cs
                ; cs' <- mapM (\(_,c) -> computeCard c) xs_cs
@@ -197,7 +197,7 @@ computeCardTop verbose ct = computeCard ct
                      card = mkSumCard cards
                ; return $ MkComp (mkBindMany c1' (zip xs cs')) loc (cty,card)
                }
- 
+
         computeCard0 (Seq c1 c2)
           = do { c1' <- computeCard c1
                ; c2' <- computeCard c2
@@ -212,41 +212,41 @@ computeCardTop verbose ct = computeCard ct
 
         computeCard0  (Let x c1 c2)
           = do { c1' <- computeCard c1
-               ; c2' <- extendCardCVarEnv x (snd $ compInfo c1') $ 
-                        computeCard c2 
-               ; return $ 
+               ; c2' <- extendCardCVarEnv x (snd $ compInfo c1') $
+                        computeCard c2
+               ; return $
                  MkComp (Let x c1' c2') loc (cty, snd $ compInfo c2')
                }
 
-        computeCard0  (LetE x fi e c1) 
+        computeCard0  (LetE x fi e c1)
           = do { c1' <- computeCard c1
-               ; return $ 
+               ; return $
                  MkComp (LetE x fi e c1') loc (cty, snd $ compInfo c1') }
 
         -- CL
-        computeCard0  (LetERef x ty y c1) 
+        computeCard0  (LetERef x ty y c1)
           = do { c1' <- computeCard c1
-               ; return $ 
+               ; return $
                  MkComp (LetERef x ty y c1') loc (cty, snd $ compInfo c1') }
-        
+
         computeCard0  (LetHeader x fn c1)
           = do { c1' <- computeCard c1
                ; return $ MkComp (LetHeader x fn c1') loc (cty, snd $ compInfo c1') }
         --
 
-        computeCard0  (LetStruct sdef c1) 
+        computeCard0  (LetStruct sdef c1)
           = do { c1' <- computeCard c1
-               ; return $ MkComp (LetStruct sdef c1') loc (cty, snd $ compInfo c1') 
+               ; return $ MkComp (LetStruct sdef c1') loc (cty, snd $ compInfo c1')
                }
 
         computeCard0  (LetFunC f params locals c1 c2)
           = do { c1' <- computeCard c1
-               ; c2' <- extendCardCFunEnv f (snd $ compInfo c1') $ computeCard c2 
+               ; c2' <- extendCardCFunEnv f (snd $ compInfo c1') $ computeCard c2
                ; return $ MkComp (LetFunC f params locals c1' c2') loc (cty, snd $ compInfo c2')
                }
 
-        computeCard0  (Call f es) 
-{-  
+        computeCard0  (Call f es)
+{-
           = do { es' <- mapM computeCallArgCard es
                ; return $ MkComp (Call f es') loc (cty, mkDynamicCard)  -- Unknown, for now
                }
@@ -255,7 +255,7 @@ computeCardTop verbose ct = computeCard ct
                 ; es' <- mapM computeCallArgCard es
                 ; case M.lookup (CDomFun $ name f) cenv of
                    Just card -> return $ MkComp (Call f es') loc (cty,card)
-                   Nothing   -> return $ MkComp (Call f es') loc (cty,mkDynamicCard) -- Or fail? 
+                   Nothing   -> return $ MkComp (Call f es') loc (cty,mkDynamicCard) -- Or fail?
                 }
 
 
@@ -264,10 +264,10 @@ computeCardTop verbose ct = computeCard ct
 
 
         computeCard0  (Emits e)
-          = case (info e) of 
-              TArr (Literal n) _ -> 
+          = case (info e) of
+              TArr (Literal n) _ ->
                 return $ MkComp (Emits e) loc (cty, mkSimplCard 0 n)
-              _ -> error "Type checker bug!" 
+              _ -> error "Type checker bug!"
 
         computeCard0  (Return fi e)
           = return $ MkComp (Return fi e) loc (cty, mkSimplCard 0 0)
@@ -278,17 +278,17 @@ computeCardTop verbose ct = computeCard ct
                ; return $ MkComp (Interleave c1' c2') loc (cty, mkDynamicCard) }
                -- Can do better? Not sure we care
 
-        computeCard0  (Branch e c1 c2)   
+        computeCard0  (Branch e c1 c2)
           = do { c1' <- computeCard c1
                ; c2' <- computeCard c2
                ; let card1 = snd $ compInfo c1'
                      card2 = snd $ compInfo c2'
-               ; let card = if card1 `cardEqual` card2 
+               ; let card = if card1 `cardEqual` card2
                             then card1 else mkDynamicCard
                ; return $ MkComp (Branch e c1' c2') loc (cty, card)
                }
 
-        computeCard0  Take1 
+        computeCard0  Take1
           = return $ MkComp Take1 loc (cty, mkSimplCard 1 0)
 
         computeCard0 (Take e)
@@ -309,15 +309,15 @@ computeCardTop verbose ct = computeCard ct
                ; let card = mkIterCard Nothing (snd $ compInfo c1')
                ; return $ MkComp (While e c1') loc (cty,card) } -- Don't know how many times to iterate
 
-        computeCard0 (Times ui e elen x c1) 
+        computeCard0 (Times ui e elen x c1)
           = do { c1' <- computeCard c1
                ; let card1 = snd $ compInfo c1'
-                     card  = mkIterCard (getInt_maybe $ unExp e) card1 
+                     card  = mkIterCard (getInt_maybe $ unExp e) card1
                ; return $ MkComp (Times ui e elen x c1') loc (cty,card) }
           where getInt_maybe (EVal (VInt n)) = Just $ fromIntegral n
                 getInt_maybe _ = Nothing
 
-        computeCard0 (Repeat hint c1) 
+        computeCard0 (Repeat hint c1)
           = do { c1' <- computeCard c1
                ; let card1 = snd $ compInfo c1'
                      card  = mkIterCard Nothing card1
@@ -336,28 +336,28 @@ computeCardTop verbose ct = computeCard ct
           = return $ MkComp (Filter e) loc (cty, mkIterCard Nothing $ mkDynamicCard)
 
         computeCard0 (ReadSrc mty)
-          = return $ 
+          = return $
             MkComp (ReadSrc mty) loc (cty,IterCard Nothing (mkSimplCard 0 1))
         computeCard0 (WriteSnk mty)
-          = return $ 
+          = return $
             MkComp (WriteSnk mty) loc (cty,IterCard Nothing (mkSimplCard 1 0))
 
         computeCard0 (ReadInternal s tp)
-          = return $ 
+          = return $
             MkComp (ReadInternal s tp) loc (cty,IterCard Nothing (mkSimplCard 0 1))
         computeCard0 (WriteInternal s)
-          = return $ 
+          = return $
             MkComp (WriteInternal s) loc (cty,IterCard Nothing (mkSimplCard 1 0))
 
         computeCard0 (Standalone c1)
           = computeCard c1
- 
+
         computeCard0 (Mitigate t n1 n2)
           = return $ MkComp (Mitigate t n1 n2) loc (cty, mkIterCard Nothing $ mkDynamicCard)
 
 
 runCardinalityAnalysis :: Bool -> Comp CTy Ty -> IO (Comp (CTy,Card) Ty)
-runCardinalityAnalysis verbose comp = 
+runCardinalityAnalysis verbose comp =
    runCardM [] (computeCardTop verbose comp)
 
 

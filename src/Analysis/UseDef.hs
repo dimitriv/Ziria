@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -68,7 +68,7 @@ data UDState = UDState { usedefs  :: Map Name VarSet -- ^ In-scope variables and
 
 udstate0 :: UDState
 udstate0 = UDState Map.empty Map.empty
-             
+
 newtype UDM a = UDM { runUDM :: UDEnv -> UDState -> Either String (a, UDState) }
 
 instance Monad UDM where
@@ -233,15 +233,15 @@ varUseDefs ranges e =
         insertUseDefs v vs_e1
         Set.delete v <$> go e2
 
-    -- TODO: We probably should not ignore tyAnn in the `Just` case 
+    -- TODO: We probably should not ignore tyAnn in the `Just` case
     go (MkExp (ELetRef v tyAnn e1 e2) _ _) = do
-        (ty, vs_e1) <- 
+        (ty, vs_e1) <-
            case e1 of Nothing  -> return (tyAnn, mempty)
                       Just e1' -> go e1' >>= \r -> return (info e1', r)
         extendVars [(v,ty)] $ do
         insertUseDefs v vs_e1
         Set.delete v <$> go e2
-        
+
     -- For ESeq we throw away the variables used to calculate the pure part of
     -- 'e1'.
     go (MkExp (ESeq e1 e2) _ _) = do
@@ -286,7 +286,7 @@ varUseDefs ranges e =
             comb (u1:us) = u1 <> comb us
             comb []      = error "Can't happen!"
         return $ comb us
-    go (MkExp (EProj e fn)_ _) = go e 
+    go (MkExp (EProj e fn)_ _) = go e
 
 
 inOutVars :: Monad m
