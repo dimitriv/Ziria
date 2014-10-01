@@ -19,12 +19,14 @@
 
 module PassPipeline ( 
    runPipeLine
+ , runTaskPipeLine
  , ThreadId
  , PipelineRetPkg (..) ) where
 
 import AstExpr
 import AstComp
 import PpComp
+import ExecPlan
 
 import qualified Data.Set as S
 import Control.Monad.State
@@ -255,7 +257,7 @@ runPipeLine :: Bool -> Comp CTy Ty -> IO PipelineRetPkg
 runPipeLine dumpPipeline c
   = do { let (ctx,cbase) = stripLetCtxt c       -- get the context
 --       ; putStrLn $ "cbase = " ++ show (ppCompShortFold cbase) 
-       ; (buftys,splits) <- pipeLineBase PipelineStandalone cbase  -- pipeline base computation
+       ; (buftys,splits) <- pipeLineBase PipelineFish cbase  -- pipeline base computation
        ; let count = length splits
        ; when (dumpPipeline && count > 1) $ 
          putStrLn ("Pipeline pass created: " ++ 
@@ -264,3 +266,8 @@ runPipeLine dumpPipeline c
        ; return $ MkPipelineRetPkg ctx threads buftys }
   where mk_thread (tid,c) = ("thread" ++ show tid, c)
 
+-- | Run the new, task-based pipelining pass.
+runTaskPipeLine :: Comp CTy Ty -> IO PipelineRetPkg
+runTaskPipeLine c = do
+  putStrLn "--new-pipeline currently does nothing. Here, try the old one!"
+  runPipeLine False c

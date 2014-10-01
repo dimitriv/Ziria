@@ -252,6 +252,8 @@ main = failOnException $ do
                      -> IO PP.PipelineRetPkg
     -- Pipeline Phase
     runPipelinePhase dflags _ c
+      | all (isDynFlagSet dflags) [Pipeline, NewPipeline]
+      = PP.runTaskPipeLine c
       | isDynFlagSet dflags Pipeline
       = PP.runPipeLine (isDynFlagSet dflags DumpPipeline) c
       | otherwise

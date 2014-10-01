@@ -77,6 +77,7 @@ data DynFlag =
   | NoLUT
 
   | MockLUT -- just for debugging LUT
+  | NewPipeline
 
   deriving (Eq,Show)
 
@@ -146,6 +147,7 @@ options =
      , Option []        ["vectorize"]           (NoArg Vectorize)     "vectorize program"
      , Option []        ["autolut"]             (NoArg AutoLUT)       "automatically convert function to use LUTs"
      , Option []        ["pipeline"]            (NoArg Pipeline)      "pipeline standalone computations"
+     , Option []        ["new-pipeline"]        (NoArg NewPipeline)   "use new scheduler-based pipelining"
 
      , Option []        ["native-mitigators"]   (NoArg NativeMitigators) "use native mitigators instead of source-based"
      , Option []        ["no-lut-hashing"]      (NoArg NoLUTHashing)     "do not hash lut generation"
