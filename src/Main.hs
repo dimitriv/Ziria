@@ -92,7 +92,13 @@ main = failOnException $ do
     -- putStrLn "pre-command line parsing ..."
 
     args <- getArgs
-    (dflags, _) <- compilerOpts args
+    dflags <- do
+      -- --new-pipeline implies --pipeline
+      (dflags, _) <- compilerOpts args
+      if isDynFlagSet dflags NewPipeline &&
+         not (isDynFlagSet dflags Pipeline)
+        then return (Pipeline : dflags)
+        else return dflags
 
     inFile  <- getInFile dflags
     outFile <- getOutFile dflags
