@@ -353,8 +353,8 @@ taskify c = do
     go (LetE name inl rhs comp) = do
       comp' <- LetE name inl rhs <$> taskify comp
       return $ MkComp comp' (compLoc c) (compInfo c)
-    go (LetERef name rhs comp)  = do
-      comp' <- LetERef name rhs <$> taskify comp
+    go (LetERef name ty rhs comp)  = do
+      comp' <- LetERef name ty rhs <$> taskify comp
       return $ MkComp comp' (compLoc c) (compInfo c)
 
     go (LetFunC name args locs body comp) = do
@@ -428,7 +428,7 @@ containsBarrier = containsBarrier' S.empty
           containsBarrier' barriers comp
         go (LetE _ _ _ comp) =
           containsBarrier' barriers comp
-        go (LetERef _ _ comp) =
+        go (LetERef _ _ _ comp) =
           containsBarrier' barriers comp
         go (LetFunC name _ _ body comp) =
           if containsBarrier' barriers body

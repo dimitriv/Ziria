@@ -813,8 +813,8 @@ codeGenComp dflags comp k =
                                        compGenInit cinfo }
 
     -- CL
-    go (MkComp (LetERef x y c2) csp _) = do 
-        (cinfo,stms) <- codeGenSharedCtxt dflags True (CLetERef csp x y Hole) $ 
+    go (MkComp (LetERef x ty y c2) csp _) = do 
+        (cinfo,stms) <- codeGenSharedCtxt dflags True (CLetERef csp x ty y Hole) $ 
                         codeGenCompTop dflags c2 k
         return $ cinfo { compGenInit = codeStmts stms `mappend`
                                        compGenInit cinfo }
