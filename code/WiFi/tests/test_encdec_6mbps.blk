@@ -31,7 +31,7 @@ fun comp encdec_atten(c:int16) {
     let dim = cim/c in 
     emit complex16{re=dre;im=dim}
   }
-} in
+}
 
 
 fun comp dummy() {
@@ -39,11 +39,12 @@ fun comp dummy() {
     (x:bit) <-take;
     emit complex16{re=0; im=0}
   }
-} in 
+} 
 
 
 -- Test the entire TX/RX at the bit level
-read[bit] >>> { transform_w_header()
+let comp main = read[bit] 
+          >>> { transform_w_header()
                 ; dummy()                   -- This is here just to make it a computer
               }
           >>> encdec_atten(16) 

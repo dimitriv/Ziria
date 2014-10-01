@@ -9,7 +9,7 @@ fun comp f() {
       ; ret[3] := x[0]
       };
    emits ret;
-} in
+}
 
 
-read >>> (repeat [8,8] f()) >>> write
+let comp main = read >>> (repeat [8,8] f()) >>> write

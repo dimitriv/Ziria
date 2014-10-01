@@ -1,0 +1,35 @@
+fun comp foo() {
+  var y : int8 := 0;
+
+  -- For-loop in computation, with type annotation 
+  for (i : int8) in [0:3] {
+    x <- take
+    emit i
+    emit x
+  }
+
+  -- For-loop in computation, no type annotation
+  for (i : int8) in [4:7] {
+    x <- take
+    emit i
+    emit x
+  }
+
+  -- For-loop in expression, with type annotation
+  do {
+    for (j : int8) in [0:3] {
+      y := y + j
+    }
+  }
+  
+  -- For-loop in expression, no type annotation
+  do {
+    for j in [4:7] {
+      y := y + j
+    }
+  }
+
+  emit y;
+}
+
+let comp main = read [int8] >>> foo() >>> write [int8]

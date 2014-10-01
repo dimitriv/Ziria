@@ -27,4 +27,4 @@ fun comp DemapQAM16() {
      emit m_bpsk_lut[symbol.im];
      emit m_qam16_lut2[symbol.im];
   }
-} in
+}

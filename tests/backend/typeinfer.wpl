@@ -12,8 +12,8 @@ fun comp test () {
     }
     emit out; 
   }
-} in 
+}
 
-read >>> test() >>> write
+let comp main = read >>> test() >>> write
 
 

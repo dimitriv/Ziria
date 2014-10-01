@@ -4,7 +4,7 @@ seq{
   emit (2*a)
 }
 
-} in 
+}
 
 
-read >>> repeat (f()) >>> write
+let comp main = read >>> repeat (f()) >>> write

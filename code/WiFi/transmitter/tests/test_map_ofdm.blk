@@ -21,6 +21,6 @@
 #include "../../const.blk"
 #include "../map_ofdm.blk"
 
-read[complex16] >>> map_ofdm() >>> write[complex16]
+let comp main = read[complex16] >>> map_ofdm() >>> write[complex16]
 
 

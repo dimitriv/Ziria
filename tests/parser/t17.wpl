@@ -7,6 +7,6 @@ fun foo(y : int) {
 
   return x;
 
-} in 
+} 
 
-read >>> map foo >>> write
+let comp main = read >>> map foo >>> write

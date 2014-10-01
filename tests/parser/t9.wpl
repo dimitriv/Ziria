@@ -6,7 +6,7 @@ fun sum(x : arr int) {
     i := i + 1
   };
   return i;
-} in 
+}
 
 fun test() {
   var a1 : arr[3] int := {1,2,3};
@@ -14,7 +14,7 @@ fun test() {
 
   println sum(a1);
   println sum(a2)
-} in 
+}
 
-read[int] >>> do { return(test()) } >>> write[int]
+let comp main = read[int] >>> do { return(test()) } >>> write[int]
 

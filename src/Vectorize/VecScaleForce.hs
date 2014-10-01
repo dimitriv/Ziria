@@ -366,12 +366,12 @@ doVectorizeCompForce comp (finalin,finalout)
                         do { c1' <- go c1
                            ; return $ cLetE loc () x fi (eraseExp e) c1' }
                     -- CL
-                    (LetERef x (Right e) c1) -> 
+                    (LetERef x t (Just e) c1) -> 
                         do { c1' <- go c1
-                           ; return (MkComp (LetERef x (Right (eraseExp e)) c1') loc ()) }
-                    (LetERef x (Left t) c1) -> 
+                           ; return (MkComp (LetERef x t (Just (eraseExp e)) c1') loc ()) }
+                    (LetERef x t Nothing c1) -> 
                         do { c1' <- go c1
-                           ; return (MkComp (LetERef x (Left t) c1') loc ()) 
+                           ; return (MkComp (LetERef x t Nothing c1') loc ()) 
                         }
                     (LetHeader x fn@(MkFun (MkFunDefined {}) _ _) c1) ->
                         do { c1' <- go c1

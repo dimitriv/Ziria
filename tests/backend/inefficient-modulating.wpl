@@ -29,9 +29,9 @@ fun comp modulate_qpsk () {
     };
     emit outc
   }
-} in
+}
 
-read >>> modulate_qpsk() >>> write
+let comp main = read >>> modulate_qpsk() >>> write
 
 
 

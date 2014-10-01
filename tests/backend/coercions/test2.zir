@@ -1,0 +1,25 @@
+fun test() {
+  var i8 : int8 := 0;
+  var i16 : int16 := 0;
+  var i32 : int32 := 0;
+  var i64 : int64 := 0;
+
+  for i in [0, 5] {
+    i8 := i;
+  };
+
+  for i in [0, 5] {
+    i16 := i;
+  };
+
+  for i in [0, 5] {
+    i32 := i;
+  };
+
+  for i in [0, 5] {
+    i64 := i;
+  };
+};
+
+let comp main = read[int] >>> do{test()} >>> write[int]
+

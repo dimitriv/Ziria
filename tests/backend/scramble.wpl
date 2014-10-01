@@ -17,10 +17,10 @@ fun comp scrambler() {
 
       emit (y)
     }
-} in
+}
 
 
-read >>> scrambler() >>> write
+let comp main = read >>> scrambler() >>> write
 
 
 

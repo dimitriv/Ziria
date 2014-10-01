@@ -33,9 +33,9 @@
 
 fun comp detectPreamble() {
   (removeDC() >>> cca())
-} in 
+}
 
-read >>> downSample() >>> 
+let comp main = read >>> downSample() >>> 
   seq{ det<-detectPreamble()
 #ifndef FAST
      ; do{println "Detected at: ", det.noSamples}

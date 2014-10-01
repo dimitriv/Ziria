@@ -34,4 +34,4 @@ fun comp FreqCompensation(params : struct LTECoeffs) {
       };
       emits symbol
    }
-} in
+}

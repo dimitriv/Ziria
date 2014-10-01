@@ -20,4 +20,4 @@
 
 #include "../encoding.blk"
 
-read[bit] >>> encode(0) >>> write[bit]
+let comp main = read[bit] >>> encode(0) >>> write[bit]

@@ -3,6 +3,6 @@ fun f ( x : int) {
  z := int8(x);
  let r = complex8 { re = z; im = z };
  return complex16(r)
-} in
+} 
 
-read >>> map f >>> write 
+let comp main = read >>> map f >>> write 

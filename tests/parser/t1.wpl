@@ -1,5 +1,5 @@
 var x : int;
 
 
-read [int] >>> write [int]
+let comp main = read [int] >>> write [int]
 

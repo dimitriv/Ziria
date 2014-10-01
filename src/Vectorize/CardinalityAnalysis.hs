@@ -224,10 +224,10 @@ computeCardTop verbose ct = computeCard ct
                  MkComp (LetE x fi e c1') loc (cty, snd $ compInfo c1') }
 
         -- CL
-        computeCard0  (LetERef x y c1) 
+        computeCard0  (LetERef x ty y c1) 
           = do { c1' <- computeCard c1
                ; return $ 
-                 MkComp (LetERef x y c1') loc (cty, snd $ compInfo c1') }
+                 MkComp (LetERef x ty y c1') loc (cty, snd $ compInfo c1') }
         
         computeCard0  (LetHeader x fn c1)
           = do { c1' <- computeCard c1

@@ -25,4 +25,4 @@ fun comp DemapQPSK() {
      emit m_bpsk_lut[symbol.re];
      emit m_bpsk_lut[symbol.im];
   }
-} in
+}

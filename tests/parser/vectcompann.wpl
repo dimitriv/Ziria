@@ -2,7 +2,7 @@
 -- Very silly proof of concept update
 fun update_crc(x : bit, st : arr[4] bit) { 
   st[3] := x;
-} in
+}
 
 fun comp [8,24] crc_24 (len : int) { 
   var crc_state: arr[4] bit := {'0,'0,'0,'0};
@@ -26,9 +26,9 @@ fun comp [8,24] crc_24 (len : int) {
   times (final_len - len_so_far) emits {'0,'0,'0,'0,'0,'0,'0,'0};
 
   return crc_state;
-} in
+}
 
 -- let comp [8,8] test = crc_24(32)
 -- in
 
-read >>> crc_24(4) >>> write
+let comp main = read >>> crc_24(4) >>> write

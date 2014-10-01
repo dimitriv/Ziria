@@ -33,4 +33,4 @@ repeat {
   emits x[8,13];
   emits x[22,5];
 }
-} in
+}

@@ -3,8 +3,8 @@ fun f(x:int) {
   var amp  : int16 := 0;
   outc := complex16 { re = 0; im = -amp };
   return outc;
-} in
+}
 
 
 
-read[int] >>> map f >>> write[complex16]
+let comp main = read[int] >>> map f >>> write[complex16]

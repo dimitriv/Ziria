@@ -1,0 +1,3 @@
+let expr = var x : () := true in () 
+
+let comp main = read [int] >>> write [int]

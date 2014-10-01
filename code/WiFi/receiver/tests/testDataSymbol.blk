@@ -20,4 +20,4 @@
 
 #include "../OFDM/DataSymbol.blk"
 
-read >>> DataSymbol(0) >>> write
+let comp main = read >>> DataSymbol(0) >>> write

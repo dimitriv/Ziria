@@ -6,8 +6,8 @@ var z : complex32;
 fun foo(x : int) {
    var z : bool := true;
    return (x+1);
-} in
+}
 
-read [int] >>> map foo >>> write [int] 
+let comp main = read [int] >>> map foo >>> write [int] 
 
 

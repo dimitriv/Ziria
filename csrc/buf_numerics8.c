@@ -39,6 +39,7 @@ unsigned int parse_dbg_int8(char *dbg_buf, int8 *target)
 	unsigned int i = 0;
 	long val;
 
+  char* trailing_comma = delete_trailing_comma(dbg_buf);
 	s = strtok(dbg_buf, ",");
 
 	if (s == NULL)
@@ -66,6 +67,8 @@ unsigned int parse_dbg_int8(char *dbg_buf, int8 *target)
 		}
 		target[i++] = (num8)val;
 	}
+
+  restore_trailing_comma(trailing_comma);
 	return i; // total number of entries
 }
 
@@ -226,7 +229,8 @@ GetStatus buf_getarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, uns
 {
 #ifdef STAMP_AT_READ
 	write_time_stamp(params);
-#endif	blk->total_in += vlen;
+#endif	
+	blk->total_in += vlen;
 	return _buf_getarrint8(params, blk, x, vlen);
 }
 

@@ -21,4 +21,4 @@
 #include "../modulating.blk"
 
 -- read[bit] >>> modulate(bpsk) >>> write[complex16]
-read >>> modulate_bpsk() >>> write
+let comp main = read >>> modulate_bpsk() >>> write

@@ -11,8 +11,8 @@ seq{
   for i in [0,5] 
     emit subMsg[i];
 }
-} in
+}
 
-read[int] >>> f() >>> write[int]
+let comp main = read[int] >>> f() >>> write[int]
 
 

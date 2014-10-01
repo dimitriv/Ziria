@@ -6,7 +6,7 @@ fun perm(data:arr bit, index:arr int) {
   };
 
   return out
-} in
+}
 
 
 fun comp test () { 
@@ -16,7 +16,7 @@ fun comp test () {
   x <- takes 4;
   emits perm(x, ind)
 
-} in 
+}
 
-read [bit] >>> test() >>> write[bit]
+let comp main = read [bit] >>> test() >>> write[bit]
 

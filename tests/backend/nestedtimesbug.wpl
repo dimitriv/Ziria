@@ -22,7 +22,7 @@ fun comp test() {
       emit 0
     }
   }
-} in 
+}
 
-read[int] >>> test() >>> write[int]
+let comp main = read[int] >>> test() >>> write[int]
 

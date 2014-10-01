@@ -28,6 +28,6 @@ fun comp init() {
     }
   };
   return params
-} in
+}
 
-read >>> seq{params <- init(); ChannelEqualization(params)} >>> write
+let comp main = read >>> seq{params <- init(); ChannelEqualization(params)} >>> write

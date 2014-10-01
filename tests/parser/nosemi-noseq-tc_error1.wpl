@@ -9,7 +9,7 @@ fun update_crc(x:bit, crc_state:arr[4] bit) {
   }
   crc_state[0,3] := crc_state[1,3];
   crc_state[3] := x
-} in
+}
 
 fun comp crc () {  
     var crc_state: arr[4] bit;
@@ -18,6 +18,6 @@ fun comp crc () {
       do update_crc(x, crc_state);
       emits crc_state 
     }
-} in
+}
 
-read [bit] >>> crc() >>> write[bit]
+let comp main = read [bit] >>> crc() >>> write[bit]

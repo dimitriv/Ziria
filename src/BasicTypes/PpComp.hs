@@ -121,7 +121,7 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
          ppComp c
 
     -- CL
-    LetERef x (Left ty) c
+    LetERef x ty Nothing c
        | ignorelet || ignoreexp
        -> ppComp c
        | otherwise 
@@ -129,7 +129,8 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
           text "in" $$ 
           ppComp c
 
-    LetERef x (Right e) c
+    -- TODO: We should pretty-print the type annotation
+    LetERef x _ty (Just e) c
        | ignorelet || ignoreexp
        -> ppComp c
        | otherwise 

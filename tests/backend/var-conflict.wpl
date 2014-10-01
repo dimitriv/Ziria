@@ -4,6 +4,6 @@ fun comp proc() {
       x <- take;
       emit f(x)
    }
-} in
+}
 
-read >>> proc () >>> proc () >>> write
+let comp main = read >>> proc () >>> proc () >>> write

@@ -100,8 +100,8 @@ evalInt e = case evalArith e of
 -- ELetRef nm _ (ESeq init_loop nm) 
 -- 
 evalArrInt e = evalArrInt0 (unExp e)
-evalArrInt0 (ELetRef nm nfo e)
-  | Left (TArr (Literal n) (TInt _)) <- nfo
+evalArrInt0 (ELetRef nm ty Nothing e)
+  | TArr (Literal n) (TInt _) <- ty
   , ESeq e1 e2 <- unExp e
   , EVar nm' <- unExp e2
   , nm' == nm 

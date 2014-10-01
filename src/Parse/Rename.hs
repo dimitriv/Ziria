@@ -146,12 +146,12 @@ renameExpr e
               ; return $ eLet eloc enfo nm1 { uniqId = u1 } fi e1' e2' 
               }
 
-    ELetRef nm1 e1 e2   -> 
+    ELetRef nm1 ty e1 e2   -> 
       do e1' <- renameMbExpr e1
          u1 <- newUniq
          extendUniqEnv nm1 u1 $ 
            do { e2' <- renameExpr e2
-              ; return $ eLetRef eloc enfo nm1 { uniqId = u1 } e1' e2' }
+              ; return $ eLetRef eloc enfo nm1 { uniqId = u1 } ty e1' e2' }
 
     ESeq e1 e2       ->
       do e1' <- renameExpr e1                        
@@ -189,9 +189,9 @@ renameExpr e
     eloc = expLoc e
     enfo = info e
     
-renameMbExpr :: Either Ty (Exp e) -> RenM (Either Ty (Exp e))
-renameMbExpr (Left x)  = return (Left x)
-renameMbExpr (Right e) = renameExpr e >>= (return . Right)
+renameMbExpr :: Maybe (Exp e) -> RenM (Maybe (Exp e))
+renameMbExpr Nothing  = return Nothing 
+renameMbExpr (Just e) = renameExpr e >>= (return . Just)
 
 
 renameBinds :: [(Name,Comp a b)] -> RenM [(Name,Comp a b)] 
@@ -288,12 +288,12 @@ renameComp c =
          }
 
     -- CL
-    LetERef nm1 e c   -> 
+    LetERef nm1 ty e c   -> 
       do e' <- renameMbExpr e
          u1 <- newUniq
          extendUniqEnv nm1 u1 $ 
            do { c' <- renameComp c
-              ; return $ cLetERef cloc cnfo nm1 { uniqId = u1 } e' c' }
+              ; return $ cLetERef cloc cnfo nm1 { uniqId = u1 } ty e' c' }
     
     LetHeader nm e@(MkFun (MkFunDefined _ _ _ _) _ _) c2 -> -- Not renaming functions for now
       do { (nm',e')  <- renameFun e

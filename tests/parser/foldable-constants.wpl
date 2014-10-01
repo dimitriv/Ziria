@@ -4,12 +4,12 @@ fun f(x : arr[64] int) {
   y[0,3+18] := x[0,23-2];
 
   return y
-} in
+}
 
 fun comp g() { 
    (y : arr[64] int) <- takes (32+32);
    emit f(y);
-} in
+}
 
 
-read >>> g() >>> write
+let comp main = read >>> g() >>> write
