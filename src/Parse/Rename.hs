@@ -408,10 +408,15 @@ renameComp c =
          }
 
     Mitigate {} -> return c
-
+    ActivateTask {} -> taskControlRenamerBug
+    DeactivateSelf -> taskControlRenamerBug
 
   where cloc = compLoc c
         cnfo = compInfo c
+
+taskControlRenamerBug :: a
+taskControlRenamerBug =
+  error "BUG: renamer hit a task start/stop node!"
 
 renameCallArg (CAExp e)  = do { e' <- renameExpr e ; return (CAExp e')  }
 renameCallArg (CAComp c) = do { c' <- renameComp c ; return (CAComp c') }

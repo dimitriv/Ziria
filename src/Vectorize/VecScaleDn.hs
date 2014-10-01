@@ -259,6 +259,10 @@ doVectorizeCompDn comp cin cout (din,dout)
 
                 (Mitigate {}) -> 
                    vecMFail "BUG: Mitigate is not a simple computer!"
+                (ActivateTask {}) -> 
+                    vecMFail "BUG: ActivateTask should never appear pre vectorization!"
+                (DeactivateSelf) -> 
+                    vecMFail "BUG: DeactivateSelf should never appear pre vectorization!"
 
                 -- However, these guys are ok, /provided/ they either take OR emit, in which case we will
                 -- have vectorized only the takes or emits respectively. So this is not an error, instead we

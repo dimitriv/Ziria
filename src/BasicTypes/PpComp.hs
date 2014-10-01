@@ -217,6 +217,13 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
 
     Mitigate t n1 n2 -> 
       int n1 <> text "-mitigate" <> brackets (ppTy t) <> text "-" <> int n2
+
+    ActivateTask taskid mname ->
+      let name = maybe empty ((text " with FV " <>) . ppName) mname
+      in text "{- activate task " <> int taskid <> name <> text " -}"
+
+    DeactivateSelf ->
+      text "{- deactivate current task -}"
     -- CL
     where assign s e1 e2 = e1 <+> text s <+> e2
     --

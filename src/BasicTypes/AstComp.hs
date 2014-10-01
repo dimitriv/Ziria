@@ -392,6 +392,8 @@ compShortName c = go (unComp c)
         go (  WriteInternal   {} ) = "WriteInternal"
         go (  Standalone      {} ) = "Standalone"
         go (  Mitigate        {} ) = "Mitigate"
+        go (  ActivateTask    {} ) = "ActivateTask"
+        go (  DeactivateSelf  {} ) = "DeactivateSelf"
 
 
 type CompLoc = Maybe SourcePos
@@ -589,6 +591,9 @@ compFVs c = case unComp c of
   WriteSnk {} -> S.empty
   ReadInternal  {} -> S.empty
   WriteInternal {} -> S.empty
+  -- TODO: not sure if the name of an activate is really an FV or not; brain slightly broken ATM
+  ActivateTask _ mname -> maybe S.empty S.singleton mname
+  DeactivateSelf -> S.empty
   Standalone c1  -> compFVs c1
 
   Mitigate {} -> S.empty
@@ -637,6 +642,8 @@ compSize c = case unComp c of
   ReadInternal  {} -> 1
   WriteInternal {} -> 1
   Standalone c1  -> compSize c1
+  ActivateTask {} -> 1
+  DeactivateSelf {} -> 1
 
   Mitigate {} -> 1
 
@@ -764,6 +771,9 @@ mapCompM_aux on_ty on_exp on_cty g c = go c
                       ; g (cStandalone cloc cnfo c1') }
 
                  Mitigate t n1 n2 -> g (cMitigate cloc cnfo t n1 n2)
+
+                 ActivateTask t mn -> g (MkComp (ActivateTask t mn) cloc cnfo)
+                 DeactivateSelf -> g (MkComp DeactivateSelf cloc cnfo)
              }
 
 mapCallArgM :: Monad m

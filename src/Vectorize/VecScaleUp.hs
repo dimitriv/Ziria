@@ -242,6 +242,10 @@ doVectorizeCompUp comp cin cout (min,mout)
                 (Mitigate {}) -> 
                     vecMFail "BUG: Mitigate is not a simple computer!" 
 
+                (ActivateTask {}) -> 
+                    vecMFail "BUG: ActivateTask should never appear pre vectorization!"
+                (DeactivateSelf) -> 
+                    vecMFail "BUG: DeactivateSelf should never appear pre vectorization!"
 
                 (ReadSrc mty)  
                    | RWRealTyAnn ty <- mty

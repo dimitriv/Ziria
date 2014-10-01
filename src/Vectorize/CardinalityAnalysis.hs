@@ -349,12 +349,21 @@ computeCardTop verbose ct = computeCard ct
           = return $ 
             MkComp (WriteInternal s) loc (cty,IterCard Nothing (mkSimplCard 1 0))
 
+        computeCard0 (ActivateTask t mn)
+          = taskControlCardBug
+
+        computeCard0 (DeactivateSelf)
+          = taskControlCardBug
+
         computeCard0 (Standalone c1)
           = computeCard c1
  
         computeCard0 (Mitigate t n1 n2)
           = return $ MkComp (Mitigate t n1 n2) loc (cty, mkIterCard Nothing $ mkDynamicCard)
 
+taskControlCardBug :: a
+taskControlCardBug =
+  error "BUG: cardinality analysis hit a task start/stop statement!"
 
 runCardinalityAnalysis :: Bool -> Comp CTy Ty -> IO (Comp (CTy,Card) Ty)
 runCardinalityAnalysis verbose comp = 

@@ -422,6 +422,11 @@ doVectorizeCompForce comp (finalin,finalout)
                     (Mitigate {}) -> 
                         liftVecM $ vecMFail "Can't force vectorization of non-simple comp: mitigate"
 
+                    (ActivateTask {}) -> 
+                        liftVecM $ vecMFail "BUG: ActivateTask should never appear pre vectorization!"
+                    (DeactivateSelf) -> 
+                        liftVecM $ vecMFail "BUG: DeactivateSelf should never appear pre vectorization!"
+
                     (VectComp hint c) -> 
                         liftVecM $ 
                         vecMFail "Nested vectorization annotations disallowed" 

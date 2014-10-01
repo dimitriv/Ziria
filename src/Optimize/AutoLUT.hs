@@ -141,6 +141,9 @@ runAutoLUT dflags _ c = autolutC c
 
         go c0@(Mitigate {}) = pure c0
 
+        go c0@(ActivateTask {}) = taskControlAutoLUTBug
+        go c0@(DeactivateSelf {}) = taskControlAutoLUTBug
+
     autolutCallArg :: CallArg (Exp Ty) (Comp a Ty) 
                    -> IO (CallArg (Exp Ty) (Comp a Ty))
     autolutCallArg (CAExp e)  = autolutE e >>= \e' -> return (CAExp e')
@@ -270,3 +273,7 @@ runAutoLUT dflags _ c = autolutC c
 
         go f@(MkFunExternal {}) =
             pure f
+
+taskControlAutoLUTBug :: a
+taskControlAutoLUTBug =
+  error "BUG: AutoLUT hit a task start/stop node!"

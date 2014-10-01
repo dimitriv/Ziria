@@ -575,6 +575,10 @@ tyCheckComp c
                 ; let cty = CTBase (TTrans t1 t2)
                 ; return $ cMitigate cloc cty t n1 n2
                 }
+           ActivateTask t mname ->
+             failTcM $ text "BUG: ActivateTask should not appear pre-type checking!"
+           DeactivateSelf ->
+             failTcM $ text "BUG: DeactivateSelf should not appear pre-type checking!"
        }
 
 mk_rw_ty (RWRealTyAnn t) = return t

@@ -1161,6 +1161,21 @@ codeGenComp dflags comp k =
        codeGenCompTop dflags c1 k
 
 
+    -- TODO: codegen for this is pretty nonsensical ATM
+    go (MkComp (ActivateTask taskid mname) csp _) = do
+       let t = show taskid
+       case fmap name mname of
+         Just n  -> appendStmt  [cstm|activate($t, $n);|]
+         Nothing -> appendStmt  [cstm|activate($t);|]
+       prefix <- name `fmap` nextName ("__activate_task_" ++ (getLnNumInStr csp))
+       return $ mkCompInfo prefix True
+
+
+    go (MkComp DeactivateSelf csp _) = do
+       appendStmt  [cstm|deactivate_self();|]
+       prefix <- name `fmap` nextName ("__deactivate_self_" ++ (getLnNumInStr csp))
+       return $ mkCompInfo prefix True
+
     go (MkComp c _ (CTArrow {})) = 
         fail $ "CodeGen error: BUG!!! " ++ show c
 
