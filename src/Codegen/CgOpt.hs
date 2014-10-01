@@ -331,12 +331,8 @@ readCode comp csp buf_id read_type k = do
     yldTmp <- nextName ("__yldarr_" ++ getLnNumInStr csp)
     let yldTmpName = name yldTmp
 
-    cgIO $ putStrLn $ "readCode! (before): " ++ show yldTy
-
     is_struct_ptr <- isStructPtrType yldTy
     let yldty_is_pointer = isArrTy yldTy || is_struct_ptr
-    
-    cgIO $ putStrLn "readCode! (after) "
 
     when yldty_is_pointer $
         -- Allocate a new array buffer
