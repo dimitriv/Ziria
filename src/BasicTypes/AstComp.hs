@@ -56,6 +56,9 @@ pnever = mkParInfo NeverPipeline
 type CParams  = [(Name, CallArg Ty CTy0)]
 type Locals b = [(Name, Maybe (Exp b))]
 
+-- | Identifier for tasks.
+type TaskID = Int
+
 
 {- TODO -- replace all the let constructs with simpler binding forms
 data Bind a b
@@ -148,6 +151,17 @@ data Comp0 a b where
   -- Mitigate t n1 n2
   -- Pre: n1, n2 > 1
   -- This is a transformer of type:  ST T (arr t n1) (arr t : n2)
+
+  -- | Activate a task. Only ever inserted by the execution planner
+  --   for parallel compilation.
+  --   ActivateTask may be generated as part of a BindMany. If this
+  --   happens, the Maybe Name argument should be filled with the name
+  --   of the computation's input var.
+  ActivateTask :: TaskID -> Maybe Name -> Comp0 a b
+
+  -- | Deactivate the currently running task. Only ever inserted by
+  --   the execution planner.
+  DeactivateSelf :: Comp0 a b
   deriving (Generic)
 
 data VectAnn = Rigid Bool (Int,Int) -- True == allow mitigations up, False == disallow mitigations up
