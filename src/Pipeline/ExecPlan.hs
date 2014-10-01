@@ -257,6 +257,11 @@ startTask mloc info t = MkComp (ActivateTask t Nothing) mloc info
 startTaskFromBind :: Maybe SourcePos -> a -> TaskID -> Name -> Comp a Ty
 startTaskFromBind mloc info t v = MkComp (ActivateTask t (Just v)) mloc info
 
+-- | Split program into entry points and tasks to be started along the road.
+--   TODO: task map needs more info.
+insertTasks :: Comp CTy Ty -> (M.Map TaskID (Comp CTy Ty), Comp CTy Ty)
+insertTasks = runTaskGen . taskify
+
 -- | Split the given AST along task barriers. The returned AST is the entry
 --   point of the program, from which further tasks are spawned as needed.
 --   In the absence of `standalone` annotations, this is the identity function.

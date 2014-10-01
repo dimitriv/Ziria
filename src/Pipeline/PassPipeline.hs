@@ -29,6 +29,7 @@ import PpComp
 import ExecPlan
 
 import qualified Data.Set as S
+import qualified Data.Map as M
 import Control.Monad.State
 
 import TcMonad ( updYldTy, updInTy )
@@ -267,7 +268,20 @@ runPipeLine dumpPipeline c
   where mk_thread (tid,c) = ("thread" ++ show tid, c)
 
 -- | Run the new, task-based pipelining pass.
-runTaskPipeLine :: Comp CTy Ty -> IO PipelineRetPkg
-runTaskPipeLine c = do
-  putStrLn "--new-pipeline currently does nothing. Here, try the old one!"
-  runPipeLine False c
+--   A no-op in the absence of `standalone` annotations.
+--   Otherwise prints some statistics (if dump is True) and crashes.
+runTaskPipeLine :: Bool -> Comp CTy Ty -> IO PipelineRetPkg
+runTaskPipeLine dump c = do
+  let (ts, c') = insertTasks c
+      ret = MkPipelineRetPkg {
+          context = Hole,
+          threads = [("thread0", c')],
+          buf_tys = []
+        }
+  when dump $ do
+    putStrLn $ "Created " ++ show (M.size ts) ++ " tasks:"
+    forM_ (M.toList ts) $ \(tid, comp) -> do
+      putStrLn $ show tid ++ ":"
+      putStrLn $ show comp ++ "\n"
+    putStrLn $ "Entry point:\n" ++ show c'
+  return ret
