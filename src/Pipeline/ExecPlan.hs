@@ -1,22 +1,91 @@
-{-# LANGUAGE GADTs, EmptyDataDecls #-}
-module ExecPlan (
-    Plan (..), Map (..), TaskID, TaskPlacement (..), TaskInfo (..),
-    Queue (..), Computer, Transformer,
-    makePlan,
-    comp, trans
-  ) where
+{-# LANGUAGE GADTs, EmptyDataDecls, MultiParamTypeClasses, FlexibleInstances #-}
+module ExecPlan where
+import Control.Applicative
+import Control.Monad.State
 import Data.Default
 import Data.Maybe
+import Data.Monoid
 import Data.List
+import Data.Tuple
 import qualified Data.Set as S
 import qualified Data.Map as M
-import AstComp (CompCtxt (Hole), Comp, CTy)
-import AstExpr (Ty)
+import AstComp
+import AstExpr
+import Text.Parsec.Pos
 
 data Computer
 data Transformer
 
-type TaskID = String
+data TaskGenState name task = TaskGenState {
+    tgstBarrierFuns :: S.Set Name,
+    tgstTaskInfo    :: M.Map name task
+  }
+
+instance Default (TaskGenState name task) where
+  def = TaskGenState {
+      tgstBarrierFuns = S.empty,
+      tgstTaskInfo = M.empty
+    }
+
+newtype NameT name m a = NameT {runNameT :: name -> m (name, a)}
+type TaskGen name task a = NameT name (State (TaskGenState name task)) a
+
+instance MonadState (TaskGenState name task)
+         (NameT name (State (TaskGenState name task))) where
+  get = NameT $ \n -> get >>= \x -> return (n, x)
+  put x = NameT $ \n -> put x >> return (n, ())
+
+instance Functor m => Functor (NameT name m) where
+  fmap f (NameT x) = NameT $ \n -> fmap (fmap f) (x n)
+
+instance (Functor m, Monad m) => Applicative (NameT name m) where
+  (NameT f) <*> (NameT x) = NameT $ \n -> do
+    (n', f') <- f n
+    (n'', x') <- x n'
+    return (n'', f' x')
+  pure x = NameT $ \n -> return (n, x)
+
+instance Monad m => Monad (NameT name m) where
+  return x = NameT $ \n -> return (n, x)
+  (NameT m) >>= f = NameT $ \n -> do
+    (n', x) <- m n
+    runNameT (f x) n'
+
+-- | Generate a fresh name.
+freshName :: (Enum name, Monad m) => NameT name m name
+freshName = NameT $ \n -> return (succ n, n)
+
+-- | Associate a task with a name.
+associate :: Ord name => name -> task -> TaskGen name task ()
+associate name task = do
+  st <- get
+  put $ st {
+      tgstTaskInfo = M.insert name task (tgstTaskInfo st)
+    }
+
+-- | Mark a function as a merge barrier.
+addBarrierFun :: Name -> TaskGen name task ()
+addBarrierFun fun = do
+  st <- get
+  put $ st {
+      tgstBarrierFuns = S.insert fun (tgstBarrierFuns st)
+    }
+
+-- | Return the set of all barrier functions encountered so far.
+getAllBarrierFuns :: TaskGen name task (S.Set Name)
+getAllBarrierFuns = fmap tgstBarrierFuns get
+
+-- | Associate a fresh name with a task, then return the name.
+freshAssoc :: (Ord name, Enum name) => task -> TaskGen name task name
+freshAssoc task = do
+  name <- freshName
+  associate name task
+  return name
+
+-- | Run a task generation computation.
+runTaskGen :: (Default name, Enum name) => TaskGen name task a -> (M.Map name task, a)
+runTaskGen =
+  swap . fmap tgstTaskInfo . flip runState def . fmap snd . flip runNameT def
 
 data TaskInfo = TaskInfo {
     -- | Should we take care to place the task on its own core?
@@ -46,7 +115,7 @@ newtype Task a = Task TaskID
   deriving (Eq, Ord)
 
 instance Show (Task a) where
-  show (Task s) = s
+  show (Task s) = show s
 
 data AnyTask = CompTask (Task Computer) | TransTask (Task Transformer)
   deriving (Eq, Ord)
@@ -61,48 +130,9 @@ isComp :: AnyTask -> Bool
 isComp (CompTask _) = True
 isComp _            = False
 
--- | Construct a computation atom. Convenient for building test @Map@s.
-comp :: String -> Map
-comp = Atom . CompTask . Task
-
--- | Construct a transformer atom. Convenient for building test @Map@s.
-trans :: String -> Map
-trans = Atom . TransTask . Task
-
--- | Calculate the maximum number of tasks that will ever be active at the same
---   time for the given @Map@.
-maxTasks :: Map -> Int
-maxTasks (Seq ps)   = maximum $ map maxTasks ps
-maxTasks (Par ps)   = sum $ map maxTasks ps
-maxTasks (Repeat p) = maxTasks p
-maxTasks (Atom _)   = 1
-
--- | An execution map, describing the flow of the program from a bird's view.
---   Used as an intermediary between AST and @Plan@, as the AST contains a lot
---   of detail that's completely unnecessary to figure out an execution plan.
---
---   In the execution map, each atom is not an atomic computer or transformer,
---   but rather a task; an independently schedulable unit. These tasks are of
---   course either computers or transformers, but they may be consist of
---   numerous smaller parts inside.
-data Map where
-  -- | A sequence of maps. Corresponds to seq {c1 ; ... ; cn}.
-  Seq :: [Map]   -> Map
-
-  -- | Parallel composition. Corresponds to t1 >>> ... >>> tn.
-  --   Invariant: argument can contain any number of transformers, but only a
-  --   single computer.
-  Par :: [Map]   -> Map
-
-  -- | Repeat a computater, turning it into a transformer.
-  --   Invariant: argument must be a computer.
-  Repeat :: Map     -> Map
-
-  -- | A task; an individually schedulable computer or transformer. May be
-  --   composed of numerous smaller parts, but on this level tasks are atomic.
-  Atom :: AnyTask -> Map
-
 -- | An execution plan, describing when and how to switch schedules.
+--   TODO: this has to go, probably. This is better described as AST
+--         transformations.
 data Plan taskinfo = Plan {
     -- | The mapping of computers to their continuations. When some tasks
     --   finish executing, some other task(s) should take their place.
@@ -143,15 +173,21 @@ instance Default (Plan a) where
       planContext = Hole
     }
 
+{-
+
+This is dead code, but kept around as design notes until equivalent
+can be designed for AstComp.
+
+
 -- | Returns the final computer of a map. When this computer is done,
 --   the whole map is done.
 lastComp :: Map -> Maybe (Task Computer)
 lastComp (Atom ac)
-  | CompTask c <- ac = Just c
-  | otherwise        = Nothing
-lastComp (Repeat _)  = Nothing
-lastComp (Seq ms)    = lastComp $ last ms
-lastComp (Par ms)    = findComp (map lastComp ms)
+  | CompTask c <- ac         = Just c
+  | otherwise                = Nothing
+lastComp (ExecPlan.Repeat _) = Nothing
+lastComp (ExecPlan.Seq ms)   = lastComp $ last ms
+lastComp (ExecPlan.Par ms)   = findComp (map lastComp ms)
 
 -- | Find the computation in a list of possible computations.
 --   If there is none, return Nothing. If there is more than one,
@@ -163,13 +199,6 @@ findComp ms =
     []   -> Nothing
     _    -> error "BUG: more than one computer in Par"
 
--- | Find the set of tasks that will activate immediately when the
---   given @Map@ is activated.
-firstTasks :: Map -> S.Set AnyTask
-firstTasks (Atom t)   = S.singleton t
-firstTasks (Repeat m) = firstTasks m
-firstTasks (Seq ms)   = firstTasks $ head ms
-firstTasks (Par ms)   = S.unions $ map firstTasks ms
 
 -- | Create an execution @Plan@ from an execution @Map@.
 --   Will crash loud and hard when fed a Map that breaks the invariants
@@ -184,28 +213,28 @@ makePlan m = fillLasts m $ fillConts m def {
 fillLasts :: Map -> Plan a -> Plan a
 fillLasts (Atom _) plan =
   plan
-fillLasts (Repeat m) plan =
+fillLasts (ExecPlan.Repeat m) plan =
   fillLasts m plan
-fillLasts (Seq ms) plan =
+fillLasts (ExecPlan.Seq ms) plan =
   foldl' (flip fillLasts) plan ms
-fillLasts exmap@(Par _) plan =
+fillLasts exmap@(ExecPlan.Par _) plan =
     case (lastComp exmap, lastTrans exmap) of
       (Just c, t) -> plan {planLastTask = M.insert c t (planLastTask plan)}
       _           -> plan
   where
-    lastTrans (Par m)    = lastTrans (last m)
-    lastTrans (Seq m)    = lastTrans (last m)
-    lastTrans (Repeat m) = lastTrans m
-    lastTrans (Atom t)   = t
+    lastTrans (ExecPlan.Par m)    = lastTrans (last m)
+    lastTrans (ExecPlan.Seq m)    = lastTrans (last m)
+    lastTrans (ExecPlan.Repeat m) = lastTrans m
+    lastTrans (Atom t)            = t
 
 -- | Fill in the @planConts@ field of a @Plan@.
 fillConts :: Map -> Plan a -> Plan a
-fillConts (Repeat m) plan =
+fillConts (ExecPlan.Repeat m) plan =
   fillConts m plan
 fillConts (Atom _) plan =
   plan
-fillConts (Seq (m1:ms@(m2:_))) plan =
-    fillConts (Seq ms) (fillConts m1 plan')
+fillConts (ExecPlan.Seq (m1:ms@(m2:_))) plan =
+    fillConts (ExecPlan.Seq ms) (fillConts m1 plan')
   where
     nextTasks = firstTasks m2
     conts = planConts plan
@@ -213,7 +242,212 @@ fillConts (Seq (m1:ms@(m2:_))) plan =
       case lastComp m1 of
         Just c -> plan {planConts = M.insert c nextTasks conts}
         _      -> plan
-fillConts (Seq _) plan =
+fillConts (ExecPlan.Seq _) plan =
   plan
-fillConts (Par ms) plan =
+fillConts (ExecPlan.Par ms) plan =
   foldl' (flip fillConts) plan ms
+
+-}
+
+-- | Comp representing the starting of a task.
+startTask :: Maybe SourcePos -> a -> TaskID -> Comp a Ty
+startTask mloc info t = MkComp (ActivateTask t Nothing) mloc info
+
+-- | Comp representing the starting of a task from a BindMany, with an input var.
+startTaskFromBind :: Maybe SourcePos -> a -> TaskID -> Name -> Comp a Ty
+startTaskFromBind mloc info t v = MkComp (ActivateTask t (Just v)) mloc info
+
+-- | Split the given AST along task barriers. The returned AST is the entry
+--   point of the program, from which further tasks are spawned as needed.
+--   In the absence of `standalone` annotations, this is the identity function.
+--
+--   Currently, only @Standalone@ creates a primitive barrier. |>>>| is treated
+--   like >>>.
+--
+--   TODO: the compInfo stuff (the types) will need some reshuffling for
+--         BindMany; having tasks return (), etc.
+--
+--   TODO: current algorithm, calling containsBarrier all over the place, is
+--         O(n^2) - could be O(n) if we instead annotated the AST as we
+--         traverse it.
+--
+--   TODO: currently doesn't do queues or synchronization at start/end of tasks.
+--
+--   TODO: currently doesn't calculate task cap or cardinalities for commit queues.
+taskify :: Comp CTy Ty -> TaskGen TaskID (Comp CTy Ty) (Comp CTy Ty)
+taskify c = do
+    if containsBarrier c
+      then go (unComp c)
+      else return c
+  where
+    -- Invariant: if go gets called, its argument *does* contain a barrier.
+    -- TODO: sync code here!
+    go (BindMany first rest)
+      | containsBarrier first = do
+          let ((_, comp):xs) = rest
+          m <- taskify first >>= freshAssoc
+          ms <- taskify (MkComp (BindMany comp xs) (compLoc comp) (compInfo c))
+          let st = startTask (compLoc c) (compInfo c) m
+          return $ MkComp (st `AstComp.Seq` ms) (compLoc c) (compInfo c)
+      | otherwise = do
+          genBindManyBarriers first (splitBarriers rest)
+      where
+        -- Invariant: each (first ++ b) contains a barrier.
+        genBindManyBarriers first (b:bs) = do
+          b' <- taskify $ MkComp (BindMany first b) (compLoc first) (compInfo c)
+          case bs of
+            (((_, first'):rest):bs') -> do
+              bs'' <- genBindManyBarriers first' (rest:bs')
+              return $ MkComp (b' `AstComp.Seq` bs'') (compLoc c) (compInfo c)
+            _                        -> do
+              return b'
+        genBindManyBarriers first [] = do
+          error "BUG: barrier is in first comp of BindMany, but genBindManyBarriers was called!"
+
+    go (Seq left right) = do
+      let (bar : bars) = reverse $ findBarriers c
+      foldM seqStart bar bars
+      where
+        -- Turn (next_task_id, comp) into comp >> start next_task_id
+        -- TODO: some more sync code should go here as well!
+        seqStart next comp = do
+          startNext <- startTask (compLoc c) (compInfo c) <$> freshAssoc next
+          return $ MkComp (comp `Seq` startNext) (compLoc c) (compInfo c)
+
+        -- Turn a ; standalone b ; c ; d into [a, standalone b, c ; d]
+        findBarriers s@(MkComp (Seq l r) loc nfo) =
+          case (containsBarrier l, containsBarrier r) of
+            (True, True)  -> findBarriers l ++ findBarriers r
+            (True, False) -> findBarriers l ++ [r]
+            (False, True) -> l:findBarriers r
+            _             -> [s]
+        findBarriers s = [s]
+
+    go (Par _ left right) = do
+      -- TODO: find first and last components of pipeline, as well as the computer (if any) and add sync
+      --       code!
+      taskIds <- mapM freshAssoc $ findBarriers c
+      let starts = foldr1 (cSeq (compLoc c) (compInfo c)) $
+                     map (startTask (compLoc c) (compInfo c)) taskIds
+      return starts
+      where
+        -- Turn a >>> standalone b >>> c >>> d into [a, standalone b, c >>> d]
+        findBarriers p@(MkComp (Par _ l r) loc nfo) =
+          case (containsBarrier l, containsBarrier r) of
+            (True, True)  -> findBarriers l ++ findBarriers r
+            (True, False) -> findBarriers l ++ [r]
+            (False, True) -> l:findBarriers r
+            _             -> [p]
+        findBarriers p = [p]
+
+    -- Let bindings will be declared on the top level, so we keep them around
+    -- in the AST just to have their values properly assigned.
+    go (Let name rhs comp) = do
+      comp' <- Let name rhs <$> taskify comp
+      return $ MkComp comp' (compLoc c) (compInfo c)
+    go (LetE name inl rhs comp) = do
+      comp' <- LetE name inl rhs <$> taskify comp
+      return $ MkComp comp' (compLoc c) (compInfo c)
+    go (LetERef name rhs comp)  = do
+      comp' <- LetERef name rhs <$> taskify comp
+      return $ MkComp comp' (compLoc c) (compInfo c)
+
+    go (LetFunC name args locs body comp) = do
+      -- We don't go into the body of the function since we simply can't split
+      -- non-inlined functions into tasks.
+      when (containsBarrier body) $ do
+        addBarrierFun name
+      comp' <- LetFunC name args locs body <$> taskify comp
+      return $ MkComp comp' (compLoc c) (compInfo c)
+
+    go (Interleave left right) =
+      error "BUG: Interleave in AST!"
+    go (Branch cond th el) = do
+      th' <- taskify th
+      el' <- taskify el
+      t <- freshAssoc $ MkComp (Branch cond th' el') (compLoc c) (compInfo c)
+      return $ startTask (compLoc c) (compInfo c) t
+    go (Until cond comp) = do
+      error "TODO: until requires some extra code"
+    go (While cond comp) = do
+      error "TODO: while requires some extra code"
+    go (Times ui from to it comp) = do
+      error "TODO: times requires some extra code"
+    go (AstComp.Repeat mvect comp) = do
+      error "TODO: repeat requires some extra code"
+    go (VectComp vect comp) = do
+      -- TODO: cardinality information needed to inform the counting
+      --       not necessarily right here though?
+      comp' <- VectComp vect <$> taskify comp
+      return $ MkComp comp' (compLoc c) (compInfo c)
+    go (Standalone comp)
+      | containsBarrier comp = do
+        -- If we run into nested barriers, only the innermost level is
+        -- honored. Maybe warn about this?
+        taskify comp
+      | otherwise = do
+        -- TODO: mark this guy as running on his own core!
+        tComp <- freshAssoc comp
+        return $ startTask (compLoc comp) (compInfo comp) tComp
+
+    -- If we get to either Map or Call, then the name they're calling on
+    -- is a barrier for sure.
+    go (Map _ name) = do
+      startTask (compLoc c) (compInfo c) <$> freshAssoc c
+    go (Call name _) = do
+      startTask (compLoc c) (compInfo c) <$> freshAssoc c
+    go _ = error "Atomic computations can't possibly contain barriers!"
+
+-- | Split a list of computations, with an extra piece of information,
+--   along task barrier lines.
+splitBarriers :: [(a, Comp CTy Ty)] -> [[(a, Comp CTy Ty)]]
+splitBarriers cs =
+  case break (containsBarrier . snd) cs of
+    (front, (barrier:back)) -> front : [barrier] : splitBarriers back
+    (front, [])             -> [front]
+
+-- | Does the given computation contain a task barrier?
+--   Essentially, does it have a standalone subtree?
+containsBarrier :: Comp CTy Ty -> Bool
+containsBarrier = containsBarrier' S.empty
+  where
+    containsBarrier' barriers = go . unComp
+      where
+        go (BindMany first rest) =
+          any (containsBarrier' barriers) (first : map snd rest)
+        go (AstComp.Seq left right) =
+          containsBarrier' barriers left || containsBarrier' barriers right
+        go (AstComp.Par _ left right) =
+          containsBarrier' barriers left || containsBarrier' barriers right
+        go (Let _ rhs comp) =
+          containsBarrier' barriers comp
+        go (LetE _ _ _ comp) =
+          containsBarrier' barriers comp
+        go (LetERef _ _ comp) =
+          containsBarrier' barriers comp
+        go (LetFunC name _ _ body comp) =
+          if containsBarrier' barriers body
+            then containsBarrier' (S.insert name barriers) comp
+            else containsBarrier' barriers comp
+        go (Interleave left right) =
+          containsBarrier' barriers left || containsBarrier' barriers right
+        go (Branch cond th el) =
+          containsBarrier' barriers th || containsBarrier' barriers el
+        go (Until cond comp) =
+          containsBarrier' barriers comp
+        go (While cond comp) =
+          containsBarrier' barriers comp
+        go (Times _ _ _ _ comp) =
+          containsBarrier' barriers comp
+        go (AstComp.Repeat _ comp) =
+          containsBarrier' barriers comp
+        go (VectComp _ comp) =
+          containsBarrier' barriers comp
+        go (Call n _) =
+          n `S.member` barriers
+        go (Map _ n) =
+          n `S.member` barriers
+        go (Standalone _) =
+          True
+        go _ =
+          False
