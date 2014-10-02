@@ -657,4 +657,5 @@ checkUnresolved c
     go (MkComp (LetE _ _ _ c)      _ _) = go c
     go (MkComp (LetHeader _ _ c)      _ _) = go c
     go (MkComp (LetFunC _ _ _ _ c) _ _) = go c
+    go (MkComp (LetERef _ _ _ c) _ _)   = go c
     go other_c = other_c
