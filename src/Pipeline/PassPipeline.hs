@@ -270,18 +270,18 @@ runPipeLine dumpPipeline c
 -- | Run the new, task-based pipelining pass.
 --   A no-op in the absence of `standalone` annotations.
 --   Otherwise prints some statistics (if dump is True) and crashes.
-runTaskPipeLine :: Bool -> Comp CTy Ty -> IO PipelineRetPkg
+runTaskPipeLine :: Bool -> Comp CTy Ty -> IO (PipelineRetPkg, M.Map TaskID (Comp CTy Ty))
 runTaskPipeLine dump c = do
-  let (ts, c') = insertTasks c
+  let (tenv, c') = insertTasks c
       ret = MkPipelineRetPkg {
           context = Hole,
           threads = [("thread0", c')],
           buf_tys = []
         }
   when dump $ do
-    putStrLn $ "Created " ++ show (M.size ts) ++ " tasks:"
-    forM_ (M.toList ts) $ \(tid, comp) -> do
+    putStrLn $ "Created " ++ show (M.size tenv) ++ " tasks:"
+    forM_ (M.toList tenv) $ \(tid, comp) -> do
       putStrLn $ show tid ++ ":"
       putStrLn $ show comp ++ "\n"
     putStrLn $ "Entry point:\n" ++ show c'
-  return ret
+  return (ret, tenv)

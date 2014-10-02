@@ -16,7 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables, TupleSections #-}
 
 module Main where
 
@@ -198,9 +198,9 @@ main = failOnException $ do
     -- Use module name to avoid generating the same name in different modules
     sym <- GS.initGenSym (getName dflags)
 
-    let compile_threads (sc,ctx,tid_cs,bufTys,fn)
+    let compile_threads (sc,ctx,tenv,tid_cs,bufTys,fn)
           = do { defs <- failOnError $
-                         evalCg sym (getStkThreshold dflags) $
+                         evalCg tenv sym (getStkThreshold dflags) $
                          codeGenProgram dflags globals'
                                         ctx tid_cs bufTys (in_ty,yld_ty)
                ; return $ CompiledProgram sc defs fn }
@@ -256,20 +256,20 @@ main = failOnException $ do
       = return [c]
 
     runPipelinePhase :: DynFlags -> GS.Sym -> Comp CTy Ty
-                     -> IO PP.PipelineRetPkg
+                     -> IO (PP.PipelineRetPkg, TaskEnv)
     -- Pipeline Phase
     runPipelinePhase dflags _ c
       | all (isDynFlagSet dflags) [Pipeline, NewPipeline]
       = PP.runTaskPipeLine (isDynFlagSet dflags DumpPipeline) c
       | isDynFlagSet dflags Pipeline
-      = PP.runPipeLine (isDynFlagSet dflags DumpPipeline) c
+      = (, M.empty) `fmap` PP.runPipeLine (isDynFlagSet dflags DumpPipeline) c
       | otherwise
-      = return $ PP.MkPipelineRetPkg Hole [("",c)] []
+      = return $ (PP.MkPipelineRetPkg Hole [("",c)] [], M.empty)
 
     runPostVectorizePhases :: DynFlags
         -> GS.Sym
         -> (Comp CTy Ty, FilePath)
-        -> IO (Comp CTy Ty, CompCtxt, [(String, Comp CTy Ty)], [Ty], FilePath)
+        -> IO (Comp CTy Ty, CompCtxt, TaskEnv, [(String, Comp CTy Ty)], [Ty], FilePath)
     runPostVectorizePhases dflags sym (c,fn) = do
         verbose dflags $
            text "Result in file:" <+> text fn
@@ -283,11 +283,12 @@ main = failOnException $ do
 
         lc <- runAutoLUTPhase dflags sym fc
 
-        PP.MkPipelineRetPkg { PP.context = comp_ctxt
+        (PP.MkPipelineRetPkg { PP.context = comp_ctxt
                             , PP.threads = comp_threads
-                            , PP.buf_tys = tys }
+                            , PP.buf_tys = tys },
+         tenv)
           <- runPipelinePhase dflags sym lc
-        return (lc, comp_ctxt, comp_threads,tys,fn)
+        return (lc, comp_ctxt, tenv, comp_threads,tys,fn)
 
 
 failOnError :: Show a => IO (Either a b) -> IO b

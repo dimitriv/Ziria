@@ -1160,6 +1160,7 @@ codeGenComp dflags comp k =
     -- TODO: codegen for this is pretty nonsensical ATM
     go (MkComp (ActivateTask taskid mname) csp _) = do
        let t = show taskid
+       codeGenCompTop dflags c1 k
        case fmap name mname of
          Just n  -> appendStmt  [cstm|activate($t, $n);|]
          Nothing -> appendStmt  [cstm|activate($t);|]

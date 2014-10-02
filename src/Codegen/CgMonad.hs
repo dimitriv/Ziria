@@ -27,6 +27,7 @@ module CgMonad
   , Cg
   , CgError(..)
   , LUTGenInfo (..)
+  , TaskEnv
   , evalCg
   , emptyEnv
   , emptyState
@@ -99,6 +100,7 @@ module CgMonad
   , lookupVarEnv
   , lookupCompCode
   , lookupTyDefEnv
+  , lookupTaskEnv
 
   , newHeapAlloc
   , getMaxStackAlloc
@@ -260,6 +262,8 @@ type CompGen = CompKont -> Cg CompInfo
 
 type CompFunGen = [CallArg (Exp Ty) (Comp CTy Ty)] -> CompKont -> Cg CompInfo
 
+type TaskEnv = M.Map TaskID (Comp CTy Ty)
+
 data CgEnv = CgEnv
     { 
       compFunEnv :: M.Map Name CompFunGen  
@@ -286,11 +290,12 @@ data CgEnv = CgEnv
     , moduleName :: String 
       -- This is to be added to global variables, 
       -- to allow us to link multiple Ziria modules in the same C project
+    , taskEnv    :: TaskEnv
 
     }
 
-emptyEnv :: GS.Sym -> CgEnv
-emptyEnv sym =
+emptyEnv :: TaskEnv -> GS.Sym -> CgEnv
+emptyEnv tenv sym =
     CgEnv { compFunEnv = M.empty 
           , compEnv    = M.empty 
           , tyDefEnv   = M.fromList primComplexStructs 
@@ -299,6 +304,7 @@ emptyEnv sym =
           , symEnv     = sym 
           , disableBC  = False 
           , moduleName = ""
+          , taskEnv    = tenv
           }
 
 -- Note [CodeGen Invariants]
@@ -366,9 +372,9 @@ newtype Cg a = Cg { runCg :: CgEnv
                           -> CgState 
                           -> IO (Either CgError (a, Code, CgState)) }
 
-evalCg :: GS.Sym -> Int -> Cg () -> IO (Either CgError [C.Definition])
-evalCg sym stack_alloc_threshold m = do
-    res <- runCg m (emptyEnv sym)
+evalCg :: TaskEnv -> GS.Sym -> Int -> Cg () -> IO (Either CgError [C.Definition])
+evalCg tenv sym stack_alloc_threshold m = do
+    res <- runCg m (emptyEnv tenv sym)
                    (emptyState { maxStackAlloc = stack_alloc_threshold })
     case res of
       Left err -> return $ Left err
@@ -720,6 +726,13 @@ lookupCompFunCode nm = do
     case maybe_gen of
       Nothing  -> fail ("CodeGen: unbound computation function: " ++ show nm)
       Just gen -> return gen
+
+lookupTaskEnv :: TaskID -> Cg (Comp CTy Ty)
+lookupTaskEnv tid = do
+  mtask <- asks $ M.lookup tid . taskEnv
+  case mtask of
+    Just task -> return task
+    _         -> fail $ "Task ID " ++ show tid ++ " not found in task environment!"
 
 lookupExpFunEnv :: Name -> Cg (Name,[(Name,Ty)])
 lookupExpFunEnv nm  = do
