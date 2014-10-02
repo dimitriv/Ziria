@@ -12,6 +12,7 @@ import qualified Data.Map as M
 import AstComp
 import AstExpr
 import Text.Parsec.Pos
+import PpComp
 
 data Computer
 data Transformer
@@ -250,8 +251,8 @@ fillConts (ExecPlan.Par ms) plan =
 -}
 
 -- | Comp representing the starting of a task.
-startTask :: Maybe SourcePos -> a -> TaskID -> Comp a Ty
-startTask mloc info t = MkComp (ActivateTask t Nothing) mloc info
+startTask :: Comp CTy Ty -> TaskID -> Comp CTy Ty
+startTask c t = MkComp (ActivateTask t Nothing) (compLoc c) (compUnitTy c)
 
 -- | Comp representing the starting of a task from a BindMany, with an input var.
 startTaskFromBind :: Maybe SourcePos -> a -> TaskID -> Name -> Comp a Ty
@@ -261,6 +262,20 @@ startTaskFromBind mloc info t v = MkComp (ActivateTask t (Just v)) mloc info
 --   TODO: task map needs more info.
 insertTasks :: Comp CTy Ty -> (M.Map TaskID (Comp CTy Ty), Comp CTy Ty)
 insertTasks = runTaskGen . taskify
+
+-- | Produces the type of a >>> b given the types of a and b.
+mkParTy (CTBase (TTrans i _)) (CTBase (TTrans _ o))  = CTBase (TTrans i o)
+mkParTy (CTBase (TComp r i _)) (CTBase (TTrans _ o)) = CTBase (TComp r i o)
+mkParTy (CTBase (TTrans i _)) (CTBase (TComp r _ o)) = CTBase (TComp r i o)
+mkParTy _ _ = error $ "Can't reconstruct incompatible arrows!"
+
+-- | Given an expression of type Comp a i o, produces a type Comp () i o.
+compUnitTy :: Comp CTy Ty -> CTy
+compUnitTy c =
+  case compInfo c of
+    (CTBase (TComp _ i o)) -> CTBase $ TComp TUnit i o
+    (CTBase (TTrans i o))  -> CTBase $ TComp TUnit i o
+    _                      -> error $ "Non base type in compUnitTy:\n" ++ show (ppCTy $ compInfo c)
 
 -- | Split the given AST along task barriers. The returned AST is the entry
 --   point of the program, from which further tasks are spawned as needed.
@@ -292,7 +307,7 @@ taskify c = do
           let ((_, comp):xs) = rest
           m <- taskify first >>= freshAssoc
           ms <- taskify (MkComp (BindMany comp xs) (compLoc comp) (compInfo c))
-          let st = startTask (compLoc c) (compInfo c) m
+          let st = startTask c m
           return $ MkComp (st `AstComp.Seq` ms) (compLoc c) (compInfo c)
       | otherwise = do
           genBindManyBarriers first (splitBarriers rest)
@@ -316,7 +331,7 @@ taskify c = do
         -- Turn (next_task_id, comp) into comp >> start next_task_id
         -- TODO: some more sync code should go here as well!
         seqStart next comp = do
-          startNext <- startTask (compLoc c) (compInfo c) <$> freshAssoc next
+          startNext <- startTask next <$> freshAssoc next
           return $ MkComp (comp `Seq` startNext) (compLoc c) (compInfo c)
 
         -- Turn a ; standalone b ; c ; d into [a, standalone b, c ; d]
@@ -331,9 +346,10 @@ taskify c = do
     go (Par _ left right) = do
       -- TODO: find first and last components of pipeline, as well as the computer (if any) and add sync
       --       code!
-      taskIds <- mapM freshAssoc $ findBarriers c
-      let starts = foldr1 (cSeq (compLoc c) (compInfo c)) $
-                     map (startTask (compLoc c) (compInfo c)) taskIds
+      let bars = findBarriers c
+      taskIds <- mapM freshAssoc bars
+      let starts = foldr1 (cSeq (compLoc c) (compUnitTy c)) $
+                     zipWith startTask bars taskIds
       return starts
       where
         -- Turn a >>> standalone b >>> c >>> d into [a, standalone b, c >>> d]
@@ -371,7 +387,7 @@ taskify c = do
       th' <- taskify th
       el' <- taskify el
       t <- freshAssoc $ MkComp (Branch cond th' el') (compLoc c) (compInfo c)
-      return $ startTask (compLoc c) (compInfo c) t
+      return $ startTask c t
     go (Until cond comp) = do
       error "TODO: until requires some extra code"
     go (While cond comp) = do
@@ -393,14 +409,14 @@ taskify c = do
       | otherwise = do
         -- TODO: mark this guy as running on his own core!
         tComp <- freshAssoc comp
-        return $ startTask (compLoc comp) (compInfo comp) tComp
+        return $ startTask c tComp
 
     -- If we get to either Map or Call, then the name they're calling on
     -- is a barrier for sure.
     go (Map _ name) = do
-      startTask (compLoc c) (compInfo c) <$> freshAssoc c
+      startTask c <$> freshAssoc c
     go (Call name _) = do
-      startTask (compLoc c) (compInfo c) <$> freshAssoc c
+      startTask c <$> freshAssoc c
     go _ = error "Atomic computations can't possibly contain barriers!"
 
 -- | Split a list of computations, with an extra piece of information,
