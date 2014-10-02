@@ -37,7 +37,7 @@ import Data.IORef
 import Text.PrettyPrint.HughesPJ
 import PpExpr
 import PpComp
-
+import Outputable
 
 import qualified Data.Set as S
 
@@ -161,11 +161,11 @@ tyCheckComp c
                                     ; raiseErr False cloc $
                                       vcat [ text "Computer-Computer (>>>) composition"
                                            , text "Left computer:"
-                                           , nest 2 (ppComp c1')
-                                           , text "Type:" <+> ppCTy cty1
+                                           , nest 2 (ppr c1')
+                                           , text "Type:" <+> ppr cty1
                                            , text "Right computer:"
-                                           , nest 2 (ppComp c2')
-                                           , text "Type:" <+> ppCTy cty2
+                                           , nest 2 (ppr c2')
+                                           , text "Type:" <+> ppr cty2
                                            ]
                                     }
                                  -- NB: To enable computer-computer
@@ -264,7 +264,7 @@ tyCheckComp c
                 ; checkWith cloc (not (isCTyBase fun_ty)) $
                   vcat [ text "Computation " <+> ppName f
                        , text "applied, but has non-arrow type:" <+>
-                         ppCTy fun_ty
+                         ppr fun_ty
                        ]
 
                 ; let CTArrow t1s cty = fun_ty
@@ -287,7 +287,7 @@ tyCheckComp c
                       check_call_arg (_,ca)
                         = raiseErrNoVarCtx cloc $
                           vcat [ text "Unexpected call argument"
-                               , nest 2 $ ppCallArg ca
+                               , nest 2 $ ppr ca
                                ]
 
                       ct_base_of ca (CTBase ctb)
@@ -336,11 +336,11 @@ tyCheckComp c
                 ; let err_msg x y
                        = vcat [ text "Interleave expects two transformers"
                               , text "but got:"
-                              , nest 2 $ ppComp x <+> text "of type"
-                                                  <+> ppCTy (compInfo x)
+                              , nest 2 $ ppr x <+> text "of type"
+                                                  <+> ppr (compInfo x)
                               , text "and"
-                              , nest 2 $ ppComp y <+> text "of type"
-                                                  <+> ppCTy (compInfo y)
+                              , nest 2 $ ppr y <+> text "of type"
+                                                  <+> ppr (compInfo y)
                               ]
 
                 ; case compInfo c1' of
@@ -411,7 +411,7 @@ tyCheckComp c
                 ; b <- newTyVar "b"
 
                 ; checkWith cloc (isInt (unExp e0)) $
-                  text "Expecting integer literal but got:" <+> ppExp e
+                  text "Expecting integer literal but got:" <+> ppr e
 
                 ; let ta = TVar a
                 ; let tb = TVar b
@@ -645,9 +645,9 @@ checkUnresolved c
       | otherwise
       = raiseErrNoVarCtx loc $
         vcat [ text "Computation:"
-             , nest 2 $ ppComp c
+             , nest 2 $ ppr c
              , text "has unresolved type:"
-             , nest 2 $ ppCTy cty
+             , nest 2 $ ppr cty
              ]
 
     -- Descend the context to find the main computation

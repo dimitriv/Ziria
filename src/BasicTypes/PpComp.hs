@@ -16,7 +16,16 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-module PpComp where
+{-# OPTIONS_GHC -Wall -fno-warn-orphans -fno-warn-name-shadowing #-}
+module PpComp (
+    ppCompPipeline
+  , ppCompShortFold
+  , ppCompAst
+  , ppCompLoc
+  , ppCompTyped
+  , ppCompTypedVect
+  , isSimplComp
+  ) where
 
 import Text.PrettyPrint.HughesPJ
 
@@ -26,50 +35,64 @@ import PpExpr
 
 import Outputable
 
-instance Outputable CTy0 where
-  ppr = ppCTy0
+{-------------------------------------------------------------------------------
+  Outputable instances
+-------------------------------------------------------------------------------}
 
-ppCTy0 cty =
-  case cty of
+instance Outputable CTy0 where
+  ppr cty = case cty of
     TComp t1 t2 t3 ->
-      text "ST" <+> parens (text "C" <+> ppTy t1) <+> ppTy t2 <+> ppTy t3
+      text "ST" <+> parens (text "C" <+> ppr t1) <+> ppr t2 <+> ppr t3
     TTrans t1 t2 ->
-      text "ST" <+> text "T" <+> ppTy t1 <+> ppTy t2
+      text "ST" <+> text "T" <+> ppr t1 <+> ppr t2
 
 instance Outputable CTy where
-  ppr = ppCTy
+  ppr cty = case cty of
+    CTBase cty      -> ppr cty
+    CTArrow tys cty ->
+      parens (hsep (punctuate comma (map ppr tys))) <+>
+      text "->" <+>
+      ppr cty
 
-ppCTy cty =
-  case cty of
-    CTBase cty -> ppCTy0 cty
-    CTArrow tys cty
-     -> parens (hsep (punctuate comma (map ppCParamTy tys))) <+>
-        text "->" <+>
-        ppCTy0 cty
+instance Outputable (Comp a b) where
+  ppr = ppComp0 ppr False False False . unComp
 
-ppCParamTy (CAExp ty)    = ppTy ty
-ppCParamTy (CAComp cty0) = ppCTy0 cty0
+instance (Outputable a, Outputable b) => Outputable (CallArg a b) where
+  ppr (CAExp  e) = ppr e
+  ppr (CAComp c) = ppr c
 
-myFromMaybe f d ma =
-  case ma of
-    Nothing -> d
-    Just a  -> f a
+instance Outputable ParInfo where
+  ppr info =
+    let comb = case plInfo info of
+                 AlwaysPipeline _ _ -> text "|>>>|"
+                 NeverPipeline -> text ".>>>."
+                 MaybePipeline -> text ">>>"
+        inBurst  = maybe empty (\sz -> int sz <> text "_") (inBurstSz info)
+        outBurst = maybe empty (\sz -> int sz <> text "_") (outBurstSz info)
+    in inBurst <> comb <> outBurst
 
-ppParInfo info =
-  let comb = case plInfo info of
-               AlwaysPipeline _ _ -> text "|>>>|"
-               NeverPipeline -> text ".>>>."
-               MaybePipeline -> text ">>>"
-      inBurst  = myFromMaybe (\sz -> int sz <> text "_") empty (inBurstSz info)
-      outBurst = myFromMaybe (\sz -> int sz <> text "_") empty (outBurstSz info)
-  in inBurst <> comb <> outBurst
+instance Outputable VectAnn where
+  ppr (Rigid _r ann) = ppWidth ann
+  ppr (UpTo _r ann)  = text "<=" <> ppWidth ann
 
-ppTypedName nm =
+instance Outputable (Prog a b) where
+  ppr p = case p of
+    MkProg globs c ->
+      ppDecls globs $$
+      ppr c
+
+{-------------------------------------------------------------------------------
+  Util
+-------------------------------------------------------------------------------}
+
+pprpedName :: Name -> Doc
+pprpedName nm =
   case mbtype nm of
-    Just ty -> parens $ ppName nm <+> text ":" <+> ppTy ty
+    Just ty -> parens $ ppName nm <+> text ":" <+> ppr ty
     Nothing -> ppName nm
 
-ppComp0 ppComp printtypes ignorelet ignoreexp c =
+ppComp0 :: (Comp a b -> Doc) -> Bool -> Bool -> Bool -> Comp0 a b -> Doc
+ppComp0 ppComp _printtypes ignorelet ignoreexp c =
   case c of
     Var x ->
       ppName x
@@ -77,7 +100,7 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
 
          let go_pp c [] = ppComp c
              go_pp c ((x,c2):rest) =
-               ppTypedName x <+> text "<-" <+> ppComp c <> semi $$
+               pprpedName x <+> text "<-" <+> ppComp c <> semi $$
                go_pp c2 rest
          in text "seq" <+> vcat [ text "{" <+> go_pp c1 xs_cs
                                 , text "}" ]
@@ -88,18 +111,18 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
 
     Par parInfo c1 c2 ->
 {-
-      parens ( ppComp c1 <+> ppParInfo parInfo $$
+      parens ( ppComp c1 <+> ppr parInfo $$
                ppComp c2
              )
 -}
-      ppComp c1 <+> ppParInfo parInfo $$
+      ppComp c1 <+> ppr parInfo $$
       ppComp c2
 
     Let x c1 c2
       | ignorelet
       -> ppComp c2
       | otherwise
-      -> text "let comp" <+> ppTypedName x <+> text "=" <+> ppComp c1 $$
+      -> text "let comp" <+> pprpedName x <+> text "=" <+> ppComp c1 $$
          text "in" $$ ppComp c2
 
     LetStruct sdef c1
@@ -108,7 +131,7 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
       | otherwise
       -> text "struct " <+> text (struct_name sdef) <+> text "=" <+>
             (hsep $ punctuate (text ",") (map (\(f,t) ->
-               text f <> colon <+> ppTy t) (struct_flds sdef))) $$
+               text f <> colon <+> ppr t) (struct_flds sdef))) $$
          text "in" $$
          ppComp c1
 
@@ -116,7 +139,7 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
       | ignorelet || ignoreexp
       -> ppComp c
       | otherwise
-      -> text "let" <+> ppTypedName x <+> text "=" <+> ppExp e $$
+      -> text "let" <+> pprpedName x <+> text "=" <+> ppr e $$
          text "in" $$
          ppComp c
 
@@ -125,7 +148,7 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
        | ignorelet || ignoreexp
        -> ppComp c
        | otherwise
-       -> text "letref" <+> ppName x <+> colon <+> ppTy ty $$
+       -> text "letref" <+> ppName x <+> colon <+> ppr ty $$
           text "in" $$
           ppComp c
 
@@ -134,7 +157,7 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
        | ignorelet || ignoreexp
        -> ppComp c
        | otherwise
-       -> text "letref" <+> assign ":=" (ppName x) (ppExp e) $$
+       -> text "letref" <+> assign ":=" (ppName x) (ppr e) $$
           text "in" $$
           ppComp c
 
@@ -142,7 +165,7 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
       | ignorelet || ignoreexp
       -> ppComp c
       | otherwise
-      -> text "let" <+> ppFun fn $$
+      -> text "let" <+> ppr fn $$
          text "in" $$
          ppComp c
     --
@@ -158,40 +181,40 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
          text "in" $$
          ppComp c2
     Call f eargs ->
-      ppName f <+> parens (ppEs ppCallArg comma eargs)
+      ppName f <+> parens (ppEs ppr comma eargs)
     Emit e
       | ignoreexp -> text "emit ..."
-      | otherwise -> text "emit" <+> ppExp e
+      | otherwise -> text "emit" <+> ppr e
     Emits e
       | ignoreexp -> text "emits ..."
-      | otherwise -> text "emits" <+> ppExp e
+      | otherwise -> text "emits" <+> ppr e
     Return _ e
       | ignoreexp -> text "return ..."
-      | otherwise -> text "return" <+> ppExp e
+      | otherwise -> text "return" <+> ppr e
     Interleave c1 c2 ->
       ppComp c1 <+> text "<|>" <+> ppComp c2
     Branch e c1 c2 ->
-      text "if" <+> ppExp e $$
+      text "if" <+> ppr e $$
       text "then" <+> ppComp c1 $$
       text "else" <+> ppComp c2
     Take1 ->
       text "take"
     Take e ->
-      text "takes" <+> ppExp e
+      text "takes" <+> ppr e
     Until e c ->
-      text "until" <+> parens (ppExp e) <+> ppComp c
+      text "until" <+> parens (ppr e) <+> ppComp c
     While e c ->
-      text "while" <+> parens (ppExp e) <+> ppComp c
+      text "while" <+> parens (ppr e) <+> ppComp c
 
     Times ui estart elen ix c ->
-      ppUI ui $
+      ppr ui <+>
        text "for" <+>
          ppIx ix <+> text "in" <+>
-            brackets (ppExp estart <> comma <+> ppExp elen) $$
+            brackets (ppr estart <> comma <+> ppr elen) $$
          nest nestingDepth (ppComp c)
 
     Repeat wdth c ->
-      text "repeat" <> myFromMaybe ppVectWidth empty wdth <+>
+      text "repeat" <> maybe empty ppr wdth <+>
                        ppComp c
 
     VectComp (n1,n2) c ->
@@ -199,9 +222,9 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
                        ppComp c
 
     Map wdth nm ->
-      text "map" <> myFromMaybe ppVectWidth empty wdth <+> ppName nm
+      text "map" <> maybe empty ppr wdth <+> ppName nm
     Filter e ->
-      text "filter" <+> ppExp e
+      text "filter" <+> ppr e
 
     ReadSrc {} ->
       text "read"
@@ -217,54 +240,52 @@ ppComp0 ppComp printtypes ignorelet ignoreexp c =
       text "standalone" <> braces (ppComp c1)
 
     Mitigate t n1 n2 ->
-      int n1 <> text "-mitigate" <> brackets (ppTy t) <> text "-" <> int n2
+      int n1 <> text "-mitigate" <> brackets (ppr t) <> text "-" <> int n2
     -- CL
     where assign s e1 e2 = e1 <+> text s <+> e2
     --
 
-ppVectWidth (Rigid _r ann) = ppWidth ann
-ppVectWidth (UpTo _r ann)  = text "<=" <> ppWidth ann
 
+ppWidth :: (Int, Int) -> Doc
 ppWidth (i,j) = brackets $ (int i) <> text "," <> (int j)
 
-ppCallArg (CAExp e)  = ppExp e
-ppCallArg (CAComp c) = ppComp c
 
-ppComp = ppComp0 ppComp False False False . unComp
 
+ppCompPipeline :: Comp a b -> Doc
 ppCompPipeline = ppComp0 ppCompPipeline False True False . unComp
 
+ppCompShortFold :: Comp a b -> Doc
 ppCompShortFold = ppComp0 ppCompShortFold False False True . unComp
 
 
+ppCompAst :: Comp a b -> Doc
 ppCompAst cmp =
    brackets (text $ compShortName cmp) <+>
-   ppComp0 (\c -> brackets (text $ compShortName c) <+> ppComp c)
+   ppComp0 (\c -> brackets (text $ compShortName c) <+> ppr c)
            False False False (unComp cmp)
 
+ppCompLoc :: Comp a b -> Doc
 ppCompLoc c =
   (case compLoc c of
     Just pos -> text (show pos)
     Nothing -> empty)
 
-ppProg p =
-  case p of
-    MkProg globs c ->
-      ppDecls globs $$
-      ppComp c
 
+ppCompTyped :: Outputable a => Comp a b -> Doc
 ppCompTyped x =
   let p1 = ppComp0 ppCompTyped True False False $ unComp x
-      pty = ppCTy (compInfo x)
+      pty = ppr (compInfo x)
   in parens (p1 <+> text "::" <+> pty)
 
+ppCompParams :: (Outputable a, Outputable b) => [(Name, CallArg a b)] -> Doc
 ppCompParams params =
   case params of
     [] -> empty
-    (x, ty) : [] -> ppName x <> text ":" <+> ppCParamTy ty
+    (x, ty) : [] -> ppName x <> text ":" <+> ppr ty
     (x, ty) : params' ->
-       ppName x <> text ":" <+> ppCParamTy ty <> comma <+> ppCompParams params'
+       ppName x <> text ":" <+> ppr ty <> comma <+> ppCompParams params'
 
+ppCompTypedVect :: Comp CTy b -> Doc
 ppCompTypedVect x =
   let p1  = ppComp0 ppCompTypedVect False True True $ unComp x
       cty  = compInfo x
@@ -279,6 +300,7 @@ ppCompTypedVect x =
      then text ain <> text "-" <> braces p1 <> text "-" <> text ayld
      else p1
 
+isSimplComp :: Comp0 a b -> Bool
 isSimplComp (Var {})      = True
 isSimplComp (Call {})     = True
 isSimplComp (Emit {})     = True
@@ -291,7 +313,7 @@ isSimplComp (ReadSrc {})  = True
 isSimplComp (WriteSnk {}) = True
 isSimplComp _             = False
 
-
+nested_letfuns :: Comp a b -> Bool
 nested_letfuns c
   = case mapCompM_ return aux c of
       Nothing -> True
@@ -300,19 +322,14 @@ nested_letfuns c
               | Let {}     <- unComp c = Nothing
               | otherwise              = Just c
 
+{-------------------------------------------------------------------------------
+  Show instances
+-------------------------------------------------------------------------------}
 
-instance Show CTy0 where
-  show cty = render $ ppCTy0 cty
-
-instance Show CTy where
-  show cty = render $ ppCTy cty
+instance Show CTy0       where show = render . ppr
+instance Show CTy        where show = render . ppr
+instance Show (Comp a b) where show = render . ppr
+instance Show (Prog a b) where show = render . ppr
 
 instance Show (Comp0 a b) where
-  show c = render $ ppComp0 ppComp False False False c
-
-instance Show (Comp a b) where
-  show = render . ppComp
-
-instance Show (Prog a b) where
-  show = render . ppProg
-
+  show = render . ppComp0 ppr False False False

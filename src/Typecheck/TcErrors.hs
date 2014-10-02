@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -17,7 +17,7 @@
    permissions and limitations under the License.
 -}
 {-# LANGUAGE GADTs, MultiParamTypeClasses #-}
- 
+
 module TcErrors where
 
 import AstExpr
@@ -31,37 +31,38 @@ import Text.Parsec.Pos
 
 import qualified Text.Parsec as PS
 
+import Outputable
 
 import Data.Maybe ( maybe )
 
-data ErrCtx 
-  = CompErrCtx (Comp () ()) 
+data ErrCtx
+  = CompErrCtx (Comp () ())
   | ExprErrCtx (Exp ())
-  | SolvingInCts 
+  | SolvingInCts
   | SolvingOutCts
   | GlobalDefs
 
-data TyErr 
+data TyErr
   = TyErr { err_ctxt     :: ErrCtx
           , err_pos      :: Maybe SourcePos
-          , err_msg      :: Doc 
+          , err_msg      :: Doc
           , err_var_ctxt :: Doc }
 
-ppTyErr :: TyErr -> Doc 
+ppTyErr :: TyErr -> Doc
 ppTyErr (TyErr ctxt pos msg var_ctxt)
   = vcat [ msg
          , pp_ctxt ctxt
-         , text "At location:" <+> 
+         , text "At location:" <+>
            text (maybe (error "BUG: Unknown location!") show pos)
          , var_ctxt
          ]
-  where 
-    pp_ctxt (CompErrCtx c) 
+  where
+    pp_ctxt (CompErrCtx c)
       = vcat [ text "When type checking computation:"
-             , nest 2 $ ppComp c ] 
-    pp_ctxt (ExprErrCtx e) 
+             , nest 2 $ ppr c ]
+    pp_ctxt (ExprErrCtx e)
       = vcat [ text "When type checking expression:"
-             , nest 2 $ ppExp e ]
+             , nest 2 $ ppr e ]
     pp_ctxt (SolvingInCts)
       = text "When solving constraints arising from read(s)"
     pp_ctxt (SolvingOutCts)
@@ -73,21 +74,21 @@ ppTyErr (TyErr ctxt pos msg var_ctxt)
 
 expActualErr :: Ty -> Ty -> Exp a -> Doc
 expActualErr exp_ty actual_ty exp
-  = vcat [ text "Couldn't match expected type:" <+> ppTy exp_ty 
-         , text "with actual type:            " <+> ppTy actual_ty
-         , text "for expression:" <+> ppExp exp ]
+  = vcat [ text "Couldn't match expected type:" <+> ppr exp_ty
+         , text "with actual type:            " <+> ppr actual_ty
+         , text "for expression:" <+> ppr exp ]
 
 nonFullAppErr :: Comp a b -> Doc
 nonFullAppErr comp
-  = vcat [ text "Computer/transformer not fully applied:" 
-         , nest 2 $ ppComp comp
+  = vcat [ text "Computer/transformer not fully applied:"
+         , nest 2 $ ppr comp
          ]
 
 expectedButFound :: String -> String -> Comp a b -> Doc
 expectedButFound expected found c
-  = vcat [ text "Expected" <+> text expected 
-                           <+> text "but found" 
+  = vcat [ text "Expected" <+> text expected
+                           <+> text "but found"
                            <+> text found <> colon
-         , nest 2 $ ppComp c
+         , nest 2 $ ppr c
          ]
 

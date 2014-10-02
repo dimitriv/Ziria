@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -32,10 +32,11 @@ import Text.Parsec.Pos
 
 import TcMonad
 
-import Text.PrettyPrint.HughesPJ 
+import Text.PrettyPrint.HughesPJ
 
-import PpExpr 
-import PpComp 
+import PpExpr
+import PpComp
+import Outputable
 
 import qualified Data.Set as S
 
@@ -45,14 +46,14 @@ import Data.List ( nub )
 {- Unification
  - ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -}
 
-unifyErrGeneric :: Doc -> Maybe SourcePos -> Ty -> Ty -> TcM () 
+unifyErrGeneric :: Doc -> Maybe SourcePos -> Ty -> Ty -> TcM ()
 unifyErrGeneric msg pos ty1 ty2
   = do { zty1 <- zonkTy ty1
        ; zty2 <- zonkTy ty2
        ; raiseErr True pos $
          vcat [ msg
-              , text "Cannot unify type" <+> 
-                ppTy zty1 <+> text "with" <+> ppTy zty2 
+              , text "Cannot unify type" <+>
+                ppr zty1 <+> text "with" <+> ppr zty2
               ] }
 
 unifyErr :: Maybe SourcePos -> Ty -> Ty -> TcM ()
@@ -63,29 +64,29 @@ occCheckErr p = unifyErrGeneric (text "Occurs check error.") p
 
 
 unify_cty0 :: Maybe SourcePos -> CTy0 -> CTy0 -> TcM ()
-unify_cty0 p (TTrans a b) (TTrans a' b') 
-  = do { unify p a a' 
-       ; unify p b b' 
+unify_cty0 p (TTrans a b) (TTrans a' b')
+  = do { unify p a a'
+       ; unify p b b'
        }
-unify_cty0 p (TComp v a b) (TComp v' a' b') 
-  = do { unify p v v' 
-       ; unify p a a' 
+unify_cty0 p (TComp v a b) (TComp v' a' b')
+  = do { unify p v v'
+       ; unify p a a'
        ; unify p b b'
        }
 unify_cty0 p cty0 cty1
   = do { zty1 <- zonkCTy (CTBase cty0)
        ; zty2 <- zonkCTy (CTBase cty1)
        ; raiseErr True p $
-         vcat [ text "Cannot unify type" <+> 
-                ppCTy zty1 <+> text "with" <+> ppCTy zty2 
-              ] 
+         vcat [ text "Cannot unify type" <+>
+                ppr zty1 <+> text "with" <+> ppr zty2
+              ]
        }
 
 
 unify :: Maybe SourcePos -> Ty -> Ty -> TcM ()
-unify p tya tyb = go tya tyb 
-  where 
-    go (TVar x) ty 
+unify p tya tyb = go tya tyb
+  where
+    go (TVar x) ty
        = do { tenv <- getTyEnv
             ; case M.lookup x tenv of
                 Just xty -> go xty ty
@@ -94,39 +95,39 @@ unify p tya tyb = go tya tyb
     go TUnit TUnit = return ()
     go TBit TBit   = return ()
     go (TInt bw1) (TInt bw2) = unifyBitWidth p tya tyb bw1 bw2
-    go (TDouble _p1) (TDouble _p2) = return () 
+    go (TDouble _p1) (TDouble _p2) = return ()
     go (TBuff (IntBuf ta))(TBuff (IntBuf tb))    = go ta tb
     go (TBuff (ExtBuf bta)) (TBuff (ExtBuf btb)) = go bta btb
-    go (TInterval n)(TInterval n') 
+    go (TInterval n)(TInterval n')
       | n == n'   = return ()
       | otherwise = unifyErr p tya tyb
     go (TStruct n1) (TStruct n2)
       | n1 == n2  = return ()
       | otherwise = unifyErr p tya tyb
     go TBool TBool = return ()
-    go (TArr n ty1) (TArr m ty2) 
+    go (TArr n ty1) (TArr m ty2)
       = unifyALen p tya tyb n m >> go ty1 ty2
     go (TArrow tys1 ty2) (TArrow tys1' ty2')
       | length tys1 /= length tys1'
       = unifyErr p tya tyb
       | otherwise
-      = goMany tys1 tys1' >> go ty2 ty2' 
+      = goMany tys1 tys1' >> go ty2 ty2'
 
     go _ _ = unifyErr p tya tyb
 
-    goMany ts1 ts2 
+    goMany ts1 ts2
       = mapM (\(t1,t2) -> go t1 t2) (zip ts1 ts2)
-  
+
     goTyVar x (TVar y)
       | x == y = return ()
-      | otherwise 
+      | otherwise
       = do { tenv <- getTyEnv
-           ; case M.lookup y tenv of 
+           ; case M.lookup y tenv of
                Just yty -> goTyVar x yty
                Nothing  -> updTyEnv [(x,(TVar y))]
            }
 
-    goTyVar x ty 
+    goTyVar x ty
       | x `S.member` tyVarsOfTy ty
       = occCheckErr p tya tyb
       | otherwise
@@ -143,26 +144,26 @@ unifyMany p t1s t2s = mapM (\(t1,t2) -> unify p t1 t2) (zip t1s t2s)
 
 unifyBitWidth :: Maybe SourcePos -> Ty -> Ty -> BitWidth -> BitWidth -> TcM ()
 unifyBitWidth p orig_ty1 orig_ty2 bw1 bw2 = go bw1 bw2
-  where go (BWUnknown bvar) bw 
-          = do { benv <- getBWEnv 
-               ; case M.lookup bvar benv of 
+  where go (BWUnknown bvar) bw
+          = do { benv <- getBWEnv
+               ; case M.lookup bvar benv of
                    Just bw1 -> go bw1 bw
                    Nothing  -> goBWVar bvar bw }
-        go bw (BWUnknown bvar) 
+        go bw (BWUnknown bvar)
           = go (BWUnknown bvar) bw
 
-        go b1 b2 
+        go b1 b2
           | b1 == b2
           = return ()
-          | otherwise 
+          | otherwise
           = unifyErrGeneric (text "Int width mismatch") p orig_ty1 orig_ty2
 
-        goBWVar bvar1 (BWUnknown bvar2) 
-          | bvar1 == bvar2 
+        goBWVar bvar1 (BWUnknown bvar2)
+          | bvar1 == bvar2
           = return ()
-          | otherwise 
+          | otherwise
           = do { benv <- getBWEnv
-               ; case M.lookup bvar2 benv of 
+               ; case M.lookup bvar2 benv of
                    Just bw -> goBWVar bvar1 bw
                    Nothing -> updBWEnv [(bvar1,BWUnknown bvar2)] }
 
@@ -172,12 +173,12 @@ unifyBitWidth p orig_ty1 orig_ty2 bw1 bw2 = go bw1 bw2
 
 unifyALen :: Maybe SourcePos -> Ty -> Ty -> NumExpr -> NumExpr -> TcM ()
 unifyALen p orig_ty1 orig_ty2 nm1 nm2 = go nm1 nm2
-  where 
-    go (NArr a) nm     
+  where
+    go (NArr a) nm
       = do { env <- getEnv
            ; case M.lookup (name a) env of
                Just (TArr nm1 _t) -> go nm1 nm
-               Just ty -> 
+               Just ty ->
                  let msg = text "Non-array variable: " <+> ppName a
                  in unifyErrGeneric msg p orig_ty1 orig_ty2
                Nothing ->
@@ -185,52 +186,52 @@ unifyALen p orig_ty1 orig_ty2 nm1 nm2 = go nm1 nm2
                  in unifyErrGeneric msg p orig_ty1 orig_ty2
            }
 
-    go nm (NArr a) 
+    go nm (NArr a)
       = go (NArr a) nm
 
-    go (NVar n _m) nm2 
-      = do { alenv <- getALenEnv 
+    go (NVar n _m) nm2
+      = do { alenv <- getALenEnv
            ; case M.lookup n alenv of
-               Just nm1 -> go nm1 nm2 
-               Nothing  -> goNVar n nm2 
+               Just nm1 -> go nm1 nm2
+               Nothing  -> goNVar n nm2
            }
 
-    go nm1 (NVar n _m) 
+    go nm1 (NVar n _m)
       = go (NVar n _m) nm1
 
     go (Literal i) (Literal j)
-      | i == j 
+      | i == j
       = return ()
-      | otherwise 
+      | otherwise
       = unifyErrGeneric (text "Array length mismatch") p orig_ty1 orig_ty2
 
     -- Invariant: num expression is never an array
     goNVar nvar1 (Literal i)
       = updALenEnv [(nvar1,Literal i)]
 
-    goNVar nvar1 (NVar nvar2 _m) 
+    goNVar nvar1 (NVar nvar2 _m)
       | nvar1 == nvar2 = return ()
       | otherwise
-      = do { alenv <- getALenEnv 
+      = do { alenv <- getALenEnv
            ; case M.lookup nvar2 alenv of
-               Just nm2 -> 
+               Just nm2 ->
                  -- NB: not goNVar
                  go (NVar nvar1 undefined) nm2
                Nothing ->
                  updALenEnv [(nvar1,(NVar nvar2 _m))] }
 
-    goNVar nvar1 (NArr {}) 
+    goNVar nvar1 (NArr {})
       = error "goNVar: assertion failure!"
 
 
 defaultExpr = mapExpM_aux zonkTy zonk_exp
   where zonk_exp :: Exp Ty -> TcM (Exp Ty)
-        zonk_exp e 
+        zonk_exp e
           | EError {} <- unExp e
           = do { zty <- zonkTy (info e)
-               ; zty' <- 
-                   case zty of 
-                    TVar {} 
+               ; zty' <-
+                   case zty of
+                    TVar {}
                       -> do { unify (expLoc e) zty TUnit
                            ; return TUnit }
                     _ -> return zty
@@ -248,8 +249,8 @@ defaultComp = mapCompM_aux zonkTy defaultExpr zonkCTy zonkComp
 solveCts :: TcM ()
 solveCts = do getStEnv tcm_in_cts  >>= \cs -> pushErrCtx SolvingInCts  (solve_cts "in"  cs)
               getStEnv tcm_out_cts >>= \cs -> pushErrCtx SolvingOutCts (solve_cts "out" cs)
-              discardInOutCts 
-  where solve_cts str cts 
+              discardInOutCts
+  where solve_cts str cts
          = mapM_ (do_solve str) cts >> unify_all cts
         do_solve str (BaseTyCt p ty tybase)
           = do { sty <- zonkTy ty
@@ -259,27 +260,27 @@ solveCts = do getStEnv tcm_in_cts  >>= \cs -> pushErrCtx SolvingInCts  (solve_ct
                    _           -> unify p stybase sty }
         unify_all []   = return ()
         unify_all [ct] = return ()
-        unify_all (ct1:ct2:cts) 
-          = do { unify (ct_pos ct1) (ct_ty ct1) (ct_ty ct2) 
+        unify_all (ct1:ct2:cts)
+          = do { unify (ct_pos ct1) (ct_ty ct1) (ct_ty ct2)
                ; unify_all (ct2:cts) }
 
 
 instantiateCall :: Ty -> TcM Ty
--- Instantiates the array length variables 
--- to fresh variables, to be used in subsequent 
--- unifications. Notice that these are only the 
+-- Instantiates the array length variables
+-- to fresh variables, to be used in subsequent
+-- unifications. Notice that these are only the
 -- ones bound by the parameters of the function
 instantiateCall t@(TArrow tas tb)
   = do { let lvars = gatherPolyVars (tb:tas)
        ; s <- mapM freshen lvars
-       ; mapTyM (subst_len s) t 
+       ; mapTyM (subst_len s) t
        }
-  where freshen lv 
+  where freshen lv
           = do { lv' <- newALenVar (name lv)
                ; return (lv, NVar lv' 0) }
 
-        subst_len s (TArr (NVar n _mx) t) = 
-             case lookup n s of 
+        subst_len s (TArr (NVar n _mx) t) =
+             case lookup n s of
                Nothing  -> return (TArr (NVar n _mx) t)
                Just ne' -> return (TArr ne' t)
         subst_len s ty = return ty
@@ -293,9 +294,9 @@ gatherPolyVars :: [Ty] -> [Name]
 gatherPolyVars tys = nub $ gather tys []
   where
      gather [] acc = acc
-     gather ((TArr (NVar nm1 _) _):ts) acc 
+     gather ((TArr (NVar nm1 _) _):ts) acc
        = gather ts (nm1:acc)
-     gather ((TArr (NArr nm) _):ts) acc 
+     gather ((TArr (NArr nm) _):ts) acc
        = error "Unzonked type (gatherPolyVars)"
      gather (t:ts) acc = gather ts acc
 

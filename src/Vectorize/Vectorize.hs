@@ -23,6 +23,7 @@ import AstComp
 import AstCombinator
 
 import PpComp
+import Outputable
 import qualified GenSym as GS
 
 import Text.Parsec.Pos
@@ -696,7 +697,7 @@ computeVectTop verbose = computeVect FlexiRate
 
                   ; when (null ress) $ vecMIO $
                     do { putStrLn "WARNING: BindMany empty vectorization:"
-                       ; print $ ppComp comp }
+                       ; print $ ppr comp }
 
 
                     -- Step 3: build for each candidate in ress a BindMany
@@ -748,7 +749,7 @@ computeVectTop verbose = computeVect FlexiRate
 
                   ; when (null ress) $ vecMIO $
                     do { putStrLn "WARNING: Par empty vectorization:"
-                       ; print $ ppComp comp
+                       ; print $ ppr comp
 
                        }
 
@@ -854,7 +855,7 @@ computeVectTop verbose = computeVect FlexiRate
                   ; when (null ress) $
                     vecMIO $
                     do { putStrLn "WARNING: Branch empty vectorization:"
-                       ; print $ ppComp comp }
+                       ; print $ ppr comp }
 
 
 
@@ -1163,7 +1164,7 @@ computeVectTop verbose = computeVect FlexiRate
                         ; putStrLn $ "In-type     = " ++ show tyin
                         ; putStrLn $ "Out-type    = " ++ show tyout
                         ; putStrLn $ "Cardinality = " ++ show card
-                        ; print $ ppComp (eraseComp comp)
+                        ; print $ ppr (eraseComp comp)
                         ; putStrLn $ "Returning self."
                         }
                    ; return $ [self_no_vect]
@@ -1299,7 +1300,7 @@ runDebugVecM dflags comp tenv env cenv sym unifiers
                          Left err
                           -> do { putStrLn "Type error in vectorization result."
                                 ; print err
-                                ; print (ppComp vc)
+                                ; print (ppr vc)
                                 ; error "Vectorization bug!" }
                          Right (tcv,_st)
                           -> return tcv
