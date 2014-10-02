@@ -563,15 +563,14 @@ tyCheckComp c
                 }
 
            -- Standalone computations (forked onto another core)
-           -- must have type [ST T a b]
+           -- USED TO have type [ST T a b]; not they are [ST c a b]
            Standalone c1 ->
              do { c1' <- tyCheckComp c1
                 ; case compInfo c1' of
                     CTBase (TTrans ta tb) ->
                       return $ cStandalone cloc (compInfo c1') c1'
-                    CTBase {} ->
-                      raiseErrNoVarCtx cloc $
-                      expectedButFound "transformer" "computer" c1'
+                    CTBase (TComp tc ta tb) ->
+                      return $ cStandalone cloc (compInfo c1') c1'
                     CTArrow {} ->
                       raiseErrNoVarCtx cloc $ nonFullAppErr c1'
                 }
