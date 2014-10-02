@@ -22,7 +22,7 @@
 {-# LANGUAGE RebindableSyntax #-}
     {-# LANGUAGE ScopedTypeVariables #-}
 
-module CgProgram ( codeGenProgram ) where
+module CgProgram ( codeGenProgram, codeGenThread ) where
 
 import Prelude
 
