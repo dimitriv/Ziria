@@ -29,7 +29,9 @@ data TaskGenState name task = TaskGenState {
 instance Default (TaskGenState name task) where
   def = TaskGenState {
       tgstBarrierFuns = S.empty,
-      tgstTaskInfo = M.empty
+      tgstTaskInfo    = M.empty,
+      tgstNextQ       = Queue 0 False,
+      tgstNextCQ      = Queue 0 True
     }
 
 newtype NameT name m a = NameT {runNameT :: name -> m (name, a)}
@@ -59,6 +61,20 @@ instance Monad m => Monad (NameT name m) where
 -- | Generate a fresh name.
 freshName :: (Enum name, Monad m) => NameT name m name
 freshName = NameT $ \n -> return (succ n, n)
+
+-- | Get a fresh queue.
+freshQueue :: TaskGen name task Queue
+freshQueue = do
+  st <- get
+  put $ st {tgstNextQ = succ $ tgstNextQ st}
+  return $ tgstNextQ st
+
+-- | Get a fresh commit queue.
+freshCommitQueue :: TaskGen name task Queue
+freshCommitQueue = do
+  st <- get
+  put $ st {tgstNextCQ = succ $ tgstNextCQ st}
+  return $ tgstNextCQ st
 
 -- | Associate a task with a name.
 associate :: Ord name => name -> task -> TaskGen name task ()
@@ -117,6 +133,11 @@ data Queue = Queue {
     qID        :: Int,
     qIsCommitQ :: Bool
   } deriving Show
+
+instance Enum Queue where
+  succ (Queue qid qcq) = Queue (succ qid) qcq
+  toEnum qid           = Queue qid False
+  fromEnum             = qID
 
 -- | Take care to put task on a separate core, or just put it anywhere?
 data TaskPlacement = Alone | Anywhere
