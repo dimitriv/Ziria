@@ -403,8 +403,6 @@ dummyQueue = trace ("DUMMY QUEUE IN USE - PLEASE FIX ASAP!") $ Queue 0 False
 --
 --   TODO: currently doesn't calculate task cap or cardinalities for commit queues.
 --
---   TODO: in/out queues should come in from above, not be generated from below!
---
 --   TODO: don't generate queues for external buf typed computations
 taskify :: Queue -> Queue -> Comp CTy Ty -> TaskGen TaskID TaskInfo TaskID
 taskify inq outq c = do
