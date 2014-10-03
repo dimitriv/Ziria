@@ -270,7 +270,7 @@ runPipeLine dumpPipeline c
 -- | Run the new, task-based pipelining pass.
 --   A no-op in the absence of `standalone` annotations.
 --   Otherwise prints some statistics (if dump is True) and crashes.
-runTaskPipeLine :: Bool -> Comp CTy Ty -> IO (PipelineRetPkg, M.Map TaskID (Comp CTy Ty))
+runTaskPipeLine :: Bool -> Comp CTy Ty -> IO (PipelineRetPkg, TaskEnv)
 runTaskPipeLine dump c = do
   let (tenv, c') = insertTasks c
       ret = MkPipelineRetPkg {

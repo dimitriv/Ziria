@@ -59,6 +59,7 @@ import TcErrors ( ErrCtx (..) )
 import TcComp
 import Vectorize
 import Orphans
+import ExecPlan (TaskEnv)
 
 pprProgInfo :: Comp CTy Ty -> Doc
 pprProgInfo prog =

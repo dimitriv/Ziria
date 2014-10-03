@@ -62,6 +62,7 @@ import Data.List ( nub )
 
 import CgFun
 import {-# SOURCE #-} CgProgram (codeGenThread)
+import ExecPlan
 
 ------------------------------------------------------------------------------
 -- | Computation Code Generation
@@ -1162,7 +1163,7 @@ codeGenComp dflags comp k =
     go (MkComp (ActivateTask taskid mname) csp _) = do
        let t = show taskid
        task <- lookupTaskEnv taskid
-       codeGenThread dflags t task
+       codeGenTask dflags taskid task
        case fmap name mname of
          Just n  -> appendStmt  [cstm|activate($t, $n);|]
          Nothing -> appendStmt  [cstm|activate($t);|]
@@ -1195,6 +1196,11 @@ codeGenComp dflags comp k =
         fail $ "CodeGen error, unimplemented: " ++ show c
 -}
 
+
+-- | Generate code for a task.
+codeGenTask :: DynFlags -> TaskID -> TaskInfo -> Cg ()
+codeGenTask dflags tid task = do
+  codeGenThread dflags (show tid) (taskComp task)
 
 codeGenSharedCtxt :: DynFlags -> Bool -> CompCtxt -> Cg a -> Cg (a, [C.Stm])
 codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action

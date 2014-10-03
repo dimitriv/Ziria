@@ -27,7 +27,6 @@ module CgMonad
   , Cg
   , CgError(..)
   , LUTGenInfo (..)
-  , TaskEnv
   , evalCg
   , emptyEnv
   , emptyState
@@ -153,6 +152,7 @@ import PpComp
 import PpExpr
 import qualified GenSym as GS
 import CgHeader
+import ExecPlan (TaskEnv, TaskInfo)
 
 
 instance IfThenElse Bool a where
@@ -261,8 +261,6 @@ type ExpGen = C.Exp
 type CompGen = CompKont -> Cg CompInfo
 
 type CompFunGen = [CallArg (Exp Ty) (Comp CTy Ty)] -> CompKont -> Cg CompInfo
-
-type TaskEnv = M.Map TaskID (Comp CTy Ty)
 
 data CgEnv = CgEnv
     { 
@@ -727,7 +725,7 @@ lookupCompFunCode nm = do
       Nothing  -> fail ("CodeGen: unbound computation function: " ++ show nm)
       Just gen -> return gen
 
-lookupTaskEnv :: TaskID -> Cg (Comp CTy Ty)
+lookupTaskEnv :: TaskID -> Cg TaskInfo
 lookupTaskEnv tid = do
   mtask <- asks $ M.lookup tid . taskEnv
   case mtask of
