@@ -23,7 +23,9 @@ data Transformer
 
 data TaskGenState name task = TaskGenState {
     tgstBarrierFuns :: S.Set Name,
-    tgstTaskInfo    :: M.Map name task
+    tgstTaskInfo    :: M.Map name task,
+    tgstNextQ       :: Queue,
+    tgstNextCQ      :: Queue
   }
 
 instance Default (TaskGenState name task) where
@@ -83,6 +85,16 @@ associate name task = do
   put $ st {
       tgstTaskInfo = M.insert name task (tgstTaskInfo st)
     }
+
+-- | Look up a task in the environment.
+lookupTask :: Ord name => name -> TaskGen name task task
+lookupTask tid = (M.! tid) . tgstTaskInfo <$> get
+
+-- | Update a task in the environment.
+updateTask :: Ord name => name -> (task -> task) -> TaskGen name task ()
+updateTask tid f = do
+  st <- get
+  put $ st {tgstTaskInfo = M.adjust f tid $ tgstTaskInfo st}
 
 -- | Mark a function as a merge barrier.
 addBarrierFun :: Name -> TaskGen name task ()
