@@ -86,13 +86,11 @@ codeGenTy_qual :: String -- Type qualifiers
                -> C.Type
 codeGenTy_qual quals ty =
   case ty of
-    TBit  -> namedCType $ quals ++ " Bit"
-    TBool -> namedCType $ quals ++ " unsigned char"
-    TArr _n ty'  -> codeGenArrTyPtr_qual quals ty
-    TDouble Full -> namedCType $ quals ++ " double"
-    TDouble (Fixed p) -> namedCType $ quals ++ " struct fixed16"
-
-    TUnit  -> unitTy quals
+    TBit        -> namedCType $ quals ++ " Bit"
+    TBool       -> namedCType $ quals ++ " unsigned char"
+    TArr _n ty' -> codeGenArrTyPtr_qual quals ty
+    TDouble     -> namedCType $ quals ++ " double"
+    TUnit       -> unitTy quals
 
     -- TODO: Fail here (don't want to generate code for type vars.)!
     -- TODO: Make codeGenTy monadic so we can give some context error location
@@ -129,8 +127,7 @@ tyBitWidth TUnit                 = return 0
 tyBitWidth TBit                  = return 1 -- NB not 8
 tyBitWidth TBool                 = return 1 -- NB not 8
 tyBitWidth (TInt bw)             = bwBitWidth bw
-tyBitWidth (TDouble Full)        = return 64
-tyBitWidth (TDouble (Fixed {}))  = return 16
+tyBitWidth TDouble               = return 64
 tyBitWidth (TArr (Literal n) ty)
   = do { w <- tyBitWidth ty
        ; return (n*w)
@@ -158,8 +155,7 @@ tyBitWidth_ByteAlign TUnit                 = return 0
 tyBitWidth_ByteAlign TBit                  = return 8 -- NB not 1
 tyBitWidth_ByteAlign TBool                 = return 8 -- NB not 1
 tyBitWidth_ByteAlign (TInt bw)             = bwBitWidth bw
-tyBitWidth_ByteAlign (TDouble Full)        = return 64
-tyBitWidth_ByteAlign (TDouble (Fixed {}))  = return 16
+tyBitWidth_ByteAlign TDouble               = return 64
 tyBitWidth_ByteAlign (TArr (Literal n) ty)
   = do { w <- tyBitWidth ty
        ; return $ (((n*w) + 7) `div` 8) * 8
@@ -184,7 +180,7 @@ tySizeOf TUnit      = return $ Just 1
 tySizeOf TBit       = return $ Just 1
 tySizeOf TBool      = return $ Just 1
 tySizeOf (TInt bw)  = bwBitWidth bw >>= \s -> return $ Just (s `div` 8)
-tySizeOf (TDouble _)             = return $ Just 64
+tySizeOf TDouble    = return $ Just (64 `div` 8)
 tySizeOf (TArr (Literal n) TBit) = return $ Just (getBitArrayByteLength n)
 tySizeOf (TArr (Literal n) ty)
   = do { m <- tySizeOf ty
@@ -236,8 +232,6 @@ codeGenArrTyPtr_qual :: String -- Qualifier
 codeGenArrTyPtr_qual quals ty
  | TArr (Literal n) t <- ty = aux n t
  | TArr (NVar c n)  t <- ty = aux n t
- | TArr (NArr a)    t <- ty
- = error "codeGenArrTyPtr_qual: unexpected unresolved array type"
  | otherwise
  = error "codeGenArrTyPtr_qual: unexpected non-array type"
  where aux n t
@@ -250,16 +244,14 @@ codeGenArrTyPtr_qual quals ty
 codeGenVal :: Val -> Cg C.Exp
 codeGenVal v =
   case v of
-    VBit True -> return [cexp|1|]
-    VBit False -> return [cexp|0|]
-    VInt i -> return [cexp|$lint:i|] -- NB: $lint instead of $int to accommodate 64-bit constants
-    VDouble Full d -> return [cexp|$double:(toRational d)|]
-    VDouble (Fixed p) d -> fail "codeGenVal: Fixed values not yet supported"
-    VDouble (Unknown n) d -> fail "codeGenVal: Precision not resolved"
-    VBool True -> return [cexp|$uint:(1)|]
+    VBit True   -> return [cexp|1|]
+    VBit False  -> return [cexp|0|]
+    VInt i      -> return [cexp|$lint:i|] -- NB: $lint instead of $int to accommodate 64-bit constants
+    VDouble d   -> return [cexp|$double:(toRational d)|]
+    VBool True  -> return [cexp|$uint:(1)|]
     VBool False -> return [cexp|$uint:(0)|]
     VString str -> return [cexp|$string:(str)|]
-    VUnit -> return unitVal
+    VUnit       -> return unitVal
 
 ------------------------------------------------------------------------------
 -- | Arrays related code
@@ -320,9 +312,6 @@ codeGenDeclGroup_qual quals v ty vinit
                      ; arr_decl True v vlen tbase tdecl_base
                      }
 
-            TArr (NArr _) t
-               -> fail $ "Unexpected unresolved array size:" ++ show ty
-
             _other
                | Just val <- vinit
                -> let ig = [cdecl| $ty:(codeGenTy_qual quals ty) $id:v = $val; |]
@@ -378,7 +367,6 @@ codeGenFieldDeclGroup v ty =
   case ty of
     TArr (Literal n) t -> arr_decl v (arr_siz t n) (arr_base t)
     TArr (NVar c n) t  -> arr_decl v (arr_siz t n) (arr_base t)
-    TArr (NArr _) _    -> error "Unexpected unresolved array size!"
     _other             -> [csdecl| $ty:(codeGenTy ty) $id:v; |]
 
   where arr_siz TBit n = getBitArrayByteLength n
@@ -448,20 +436,8 @@ assignByVal ty@(TArr (NVar n m) t) _ ce1 ce2 =
     appendStmt [cstm|blink_copy($ce1, $ce2,
                       $id:(name n)*sizeof($ty:(codeGenTy t)));|]
 
-assignByVal (TDouble Full) (TDouble Full) ce1 ce2 =
+assignByVal TDouble TDouble ce1 ce2 =
     appendStmt [cstm|$ce1 = $ce2;|]
-
-assignByVal (TDouble Full) (TDouble (Fixed p2)) ce1 ce2 =
-    appendStmt [cstm|$ce1 = convert_f16_d($ce2);|]
-
-assignByVal (TDouble (Fixed p1)) (TDouble Full) ce1 ce2 =
-    appendStmt [cstm| $(ce1) = convert_d_f16($ce2, $int:p1);|]
-
-assignByVal (TDouble (Fixed p1)) (TDouble (Fixed p2)) ce1 ce2 | p1 == p2 =
-    appendStmt [cstm|$ce1 = $ce2;|]
-
-assignByVal (TDouble (Fixed p1)) (TDouble (Fixed p2)) ce1 ce2 =
-    appendStmt [cstm|$ce1 = convert_f16_f16($ce2, $int:p1);|]
 
 -- Works for structs
 assignByVal t t' ce1 ce2 =

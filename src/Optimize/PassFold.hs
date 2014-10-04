@@ -883,7 +883,6 @@ alength_elim fgs e
  = return e
  where numexp_to_exp loc (Literal i) = eVal loc tint (vint i)
        numexp_to_exp loc (NVar nm i) = eVar loc tint nm
-       numexp_to_exp loc (NArr {})   = error "TC bug: unresolved NArr!"
 
 
 eval_arith :: DynFlags -> TypedExpPass

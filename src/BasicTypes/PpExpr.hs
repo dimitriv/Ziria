@@ -16,8 +16,6 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGe FlexibleContexts #-}
-{-# LANGUAGe FlexibleInstances #-}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans -fno-warn-name-shadowing #-}
 -- | Pretty-printing type classes instances
 module PpExpr (nestingDepth, ppName, ppDecls, ppEs, ppIx) where
@@ -36,7 +34,7 @@ nestingDepth = 2
   Outputable instances
 -------------------------------------------------------------------------------}
 
-instance Outputable UnOp where
+instance Outputable ty => Outputable (GUnOp ty) where
   ppr op = case op of
     NatExp  -> text "exp"
     Neg     -> text "-"
@@ -71,14 +69,14 @@ instance Outputable BinOp where
 
 instance Outputable Val where
   ppr v = case v of
-    VBit b       -> text $ if b then "'1" else "'0"
-    VInt n       -> integer n
-    VDouble _p d -> double d
-    VBool b      -> if b then text "true" else text "false"
-    VString s    -> text s
-    VUnit        -> text "tt"
+    VBit b    -> text $ if b then "'1" else "'0"
+    VInt n    -> integer n
+    VDouble d -> double d
+    VBool b   -> if b then text "true" else text "false"
+    VString s -> text s
+    VUnit     -> text "tt"
 
-instance Outputable (Exp0 a) where
+instance Outputable ty => Outputable (GExp0 ty a) where
   ppr e = case e of
     EVal v          -> ppr v
     EValArr v       -> text "{" <> pprArr v <> text "}"
@@ -157,7 +155,7 @@ instance Outputable UnrollInfo where
   ppr NoUnroll   = text "nounroll"
   ppr AutoUnroll = empty
 
-instance Outputable (Exp a) where
+instance Outputable ty => Outputable (GExp ty a) where
   ppr = ppr . unExp
 
 instance Outputable BitWidth where
@@ -169,25 +167,43 @@ instance Outputable BitWidth where
     BWUnknown _nm -> text ""
     -- Or maybe print the name?
 
+instance Outputable SrcBitWidth where
+  ppr bw = case bw of
+    SrcBW8  -> text "8"
+    SrcBW16 -> text "16"
+    SrcBW32 -> text "32"
+    SrcBW64 -> text "64"
+
 instance Outputable Ty where
   ppr ty = case ty of
     TVar x               -> text "?" <> text x
     TUnit                -> text "()"
     TBit                 -> text "bit"
     TInt bw              -> text "int" <> ppr bw
-    TDouble p            -> text "double:" <> ppr p
+    TDouble              -> text "double"
     TBool                -> text "bool"
     TString              -> text "string"
     TArr (Literal n) ty' -> text "arr" <> brackets (int n) <+> ppr ty'
-    TArr (NVar n m) ty'  -> text "arr" <> brackets (text (show n)) <+> text "(max: " <+> int m <+> text ")" <+> ppr ty'
-    TArr (NArr n) ty'    -> text "arr" <> brackets (text ("arr " ++ (show n))) <+> ppr ty'
+    TArr (NVar n m)  ty' -> text "arr" <> brackets (text (show n)) <+> text "(max: " <+> int m <+> text ")" <+> ppr ty'
     TArrow tys tyres     -> parens (hsep (punctuate comma (map ppr tys))) <+> text "->" <+> ppr tyres
     TInterval n          -> text "interval" <> brackets (int n)
     TBuff (IntBuf t)     -> parens $ text "INTBUF" <> brackets (ppr t)
     TBuff (ExtBuf bt)    -> parens $ text "EXTBUF" <> brackets (text "base=" <> ppr bt)
     TStruct tyname       -> text tyname
 
-instance Outputable (Fun a) where
+instance Outputable SrcTy where
+  ppr ty = case ty of
+    SrcTUnit                   -> text "()"
+    SrcTBit                    -> text "bit"
+    SrcTInt bw                 -> text "int" <> ppr bw
+    SrcTDouble                 -> text "double"
+    SrcTBool                   -> text "bool"
+    SrcTArr (SrcLiteral n) ty' -> text "arr" <> brackets (int n) <+> ppr ty'
+    SrcTArr (SrcNVar n)    ty' -> text "arr" <> brackets (text (show n)) <+> ppr ty'
+    SrcTArr (SrcNArr n)    ty' -> text "arr" <> brackets (text ("arr " ++ (show n))) <+> ppr ty'
+    SrcTStruct tyname          -> text tyname
+
+instance Outputable ty => Outputable (GFun ty a) where
   ppr fn = case unFun fn of
     MkFunDefined f params decls ebody ->
       ppName f <> parens (ppParams params) <+> text "=" $$
@@ -200,13 +216,6 @@ instance Outputable NumExpr where
   ppr ne = case ne of
     Literal i -> int i
     NVar n m  -> text (show (name n)) <+> (text " (max:") <+> int m <+> text ") "
-    NArr n    -> text ("arr " ++ (show (name n)))
-
-instance Outputable Precision where
-  ppr ne = case ne of
-    Full      -> text "full"
-    Fixed p   -> text ("fixed " ++ (show p))
-    Unknown n -> text ("unknown " ++ (show n))
 
 {-------------------------------------------------------------------------------
   Utility
@@ -225,15 +234,15 @@ ppEs f sep eargs = case eargs of
     e : []     -> f e
     e : eargs' -> f e <> sep <+> ppEs f sep eargs'
 
-ppIx :: Name -> Doc
+ppIx :: Outputable ty => GName ty -> Doc
 ppIx ix = case mbtype ix of
     Nothing -> ppName ix
     Just ty -> parens (ppName ix <+> char ':' <+> ppr ty)
 
-ppName :: Name -> Doc
+ppName :: GName ty -> Doc
 ppName nm = text (name nm) -- only in debug mode we want this: <> braces (text $ uniqId nm)
 
-ppDecls :: [(Name, Ty, Maybe (Exp a))] -> Doc
+ppDecls :: Outputable ty => [(GName ty, ty, Maybe (GExp ty a))] -> Doc
 ppDecls decls =
   case decls of
     [] -> empty
@@ -245,7 +254,7 @@ ppDecls decls =
       text "var" <+> ppName x <> text ":" <+> ppr ty <> semi $$
       ppDecls decls'
 
-ppParams :: [(Name, Ty)] -> Doc
+ppParams :: Outputable ty => [(GName ty, ty)] -> Doc
 ppParams params =
   case params of
     [] -> empty
@@ -258,21 +267,22 @@ ppParams params =
 -------------------------------------------------------------------------------}
 
 instance Show (NumExpr) where show = render . ppr
-instance Show (Fun a)   where show = render . ppr
-instance Show UnOp      where show = render . ppr
 instance Show Ty        where show = render . ppr
-instance Show (Exp0 a)  where show = render . ppr
-instance Show (Exp a)   where show = render . ppr
+
+instance Outputable ty => Show (GFun ty a)  where show = render . ppr
+instance Outputable ty => Show (GUnOp ty)   where show = render . ppr
+instance Outputable ty => Show (GExp0 ty a) where show = render . ppr
+instance Outputable ty => Show (GExp ty a)  where show = render . ppr
 
 {-------------------------------------------------------------------------------
   Pretty instances
 -------------------------------------------------------------------------------}
 
-instance Pretty (Fun a) where
+instance Outputable ty => Pretty (GFun ty a) where
     ppr = Mainland.string . show
 
 instance Pretty Ty where
     ppr = Mainland.string . show
 
-instance Pretty Ty => Pretty (Exp Ty) where
+instance Outputable ty => Pretty (GExp ty a) where
     ppr = Mainland.string . show

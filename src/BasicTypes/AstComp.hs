@@ -16,10 +16,11 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE GADTs, RankNTypes, DataKinds, DeriveGeneric #-}
-
+{-# LANGUAGE GADTs, RankNTypes, DeriveGeneric #-}
+{-# OPTIONS_GHC -Wall #-}
 module AstComp where
 
+import Prelude hiding (pi)
 import Data.Functor.Identity ( Identity (..) )
 import GHC.Generics (Generic)
 import Text.Parsec.Pos
@@ -27,37 +28,32 @@ import Text.Show.Pretty (PrettyVal)
 import qualified Data.Set as S
 
 import AstExpr
-import PpExpr
+import PpExpr ()
 
-data PlInfo where
-  AlwaysPipeline ::    Int -- use this thread id for c1
-                    -> Int -- use this thread id for c2
-                    -> PlInfo
-  NeverPipeline  :: PlInfo
-  MaybePipeline  :: PlInfo
-  deriving (Generic)
+{-------------------------------------------------------------------------------
+  Comp types
 
-isMaybeOrNever plInfo =
-  case plInfo of
-    AlwaysPipeline _ _ -> False
-    NeverPipeline      -> True
-    MaybePipeline      -> True
+  Although we do not distinguish between source and internal comp types, we
+  _do_ distinguish between source and internal expression types, and since
+  comp types include expression types, we parameterize by the expression type.
+-------------------------------------------------------------------------------}
 
-data ParInfo
-  = ParInfo { plInfo     :: PlInfo
-            , inBurstSz  :: Maybe Int
-            , outBurstSz :: Maybe Int }
-  deriving (Generic)
+data GCTy0 ty where
+  TComp :: ty -> ty -> ty -> GCTy0 ty
+  TTrans :: ty -> ty -> GCTy0 ty
+  deriving Generic
 
-mkParInfo plInfo = ParInfo plInfo Nothing Nothing
+data GCTy ty where
+  CTBase :: GCTy0 ty -> GCTy ty
+  -- Invariant: non-empty list and CTy0 is not arrow
+  CTArrow :: [CallArg ty (GCTy0 ty)] -> GCTy0 ty -> GCTy ty
 
-pnever = mkParInfo NeverPipeline
-
-type CParams  = [(Name, CallArg Ty CTy0)]
-type Locals b = [(Name, Maybe (Exp b))]
-
+{-------------------------------------------------------------------------------
+  AST parameterized by type (see "AstExpr")
+-------------------------------------------------------------------------------}
 
 {- TODO -- replace all the let constructs with simpler binding forms
+   NOTE: A similar data type exists in the parse as LetDecl.
 data Bind a b
   = BindC Name (Comp a b)           -- Bind computation:       let comp x = ...
   | BindStruct String StructDef     -- Structure definition:   struct x = { ... }
@@ -68,83 +64,82 @@ data Bind a b
   | BindMonadic Name (Comp a b)     -- Bind from a monad:      x <- c
 -}
 
+data GComp0 ty a b where
+  Var      :: GName ty -> GComp0 ty a b
+  BindMany :: GComp ty a b -> [(GName ty,GComp ty a b)] -> GComp0 ty a b
 
-data Comp0 a b where
-  Var      :: Name -> Comp0 a b
-  BindMany :: Comp a b -> [(Name,Comp a b)] -> Comp0 a b
+  Seq      :: GComp ty a b -> GComp ty a b -> GComp0 ty a b
+  Par      :: ParInfo -> GComp ty a b -> GComp ty a b -> GComp0 ty a b
 
-  Seq      :: Comp a b -> Comp a b -> Comp0 a b
-  Par      :: ParInfo -> Comp a b -> Comp a b -> Comp0 a b
-
-  Let :: Name  -> Comp a b -> Comp a b -> Comp0 a b
-  LetE :: Name -> ForceInline -> Exp b -> Comp a b -> Comp0 a b
+  Let :: GName ty  -> GComp ty a b -> GComp ty a b -> GComp0 ty a b
+  LetE :: GName ty -> ForceInline -> GExp ty b -> GComp ty a b -> GComp0 ty a b
 
   -- CL
-  LetERef :: Name -> Ty -> Maybe (Exp b) -> Comp a b -> Comp0 a b
+  LetERef :: GName ty -> ty -> Maybe (GExp ty b) -> GComp ty a b -> GComp0 ty a b
 
-  LetHeader :: Name -> Fun b -> Comp a b -> Comp0 a b
+  LetHeader :: GName ty -> GFun ty b -> GComp ty a b -> GComp0 ty a b
   --
 
-  LetFunC     :: Name
-              -> [(Name, CallArg Ty CTy0)] -- params (could include computation types)
-              -> [(Name,Ty,Maybe (Exp b))] -- locals
-              -> Comp a b                  -- body
-              -> Comp a b                  -- rhs
-              -> Comp0 a b
+  LetFunC     :: GName ty
+              -> [(GName ty, CallArg ty (GCTy0 ty))] -- params (could include computation types)
+              -> [(GName ty,ty,Maybe (GExp ty b))] -- locals
+              -> GComp ty a b                  -- body
+              -> GComp ty a b                  -- rhs
+              -> GComp0 ty a b
 
   -- Struct definition
-  LetStruct :: StructDef -> Comp a b -> Comp0 a b
+  LetStruct :: GStructDef ty -> GComp ty a b -> GComp0 ty a b
 
-  Call   :: Name -> [CallArg (Exp b) (Comp a b)] -> Comp0 a b
-  Emit   :: Exp b -> Comp0 a b
-  Emits  :: Exp b -> Comp0 a b
-  Return :: ForceInline -> Exp b -> Comp0 a b
-  Interleave :: Comp a b -> Comp a b -> Comp0 a b
-  Branch     :: Exp b -> Comp a b -> Comp a b -> Comp0 a b
-  Take1      :: Comp0 a b
+  Call   :: GName ty -> [CallArg (GExp ty b) (GComp ty a b)] -> GComp0 ty a b
+  Emit   :: GExp ty b -> GComp0 ty a b
+  Emits  :: GExp ty b -> GComp0 ty a b
+  Return :: ForceInline -> GExp ty b -> GComp0 ty a b
+  Interleave :: GComp ty a b -> GComp ty a b -> GComp0 ty a b
+  Branch     :: GExp ty b -> GComp ty a b -> GComp ty a b -> GComp0 ty a b
+  Take1      :: GComp0 ty a b
 
-  Take       :: Exp b -> Comp0 a b -- I think we only use this with EVal !!! Replace Exp b --> Int.
+  Take       :: GExp ty b -> GComp0 ty a b -- I think we only use this with EVal !!! Replace GExp ty b --> Int.
 
-  Until      :: Exp b -> Comp a b -> Comp0 a b
+  Until      :: GExp ty b -> GComp ty a b -> GComp0 ty a b
 
-  While      :: Exp b -> Comp a b -> Comp0 a b
+  While      :: GExp ty b -> GComp ty a b -> GComp0 ty a b
 
   -- times N count_var computation
-  Times      :: UnrollInfo -> Exp b -> Exp b -> Name -> Comp a b -> Comp0 a b
+  Times      :: UnrollInfo -> GExp ty b -> GExp ty b -> GName ty -> GComp ty a b -> GComp0 ty a b
   -- First is starting value, second is length
 
   -- This will replace times eventually
-  -- For        :: Name -> Exp b -> Exp b -> Comp a b -> Comp 0 a b
+  -- For        :: GName ty -> GExp ty b -> GExp ty b -> GComp ty a b -> GComp ty 0 a b
 
 
   Repeat :: Maybe VectAnn -- optional vectorization width annotation
-         -> Comp a b -> Comp0 a b
+         -> GComp ty a b -> GComp0 ty a b
 
   -- A computer annotated with vectorization width
   -- information.
   -- NB: it must be a computer -- not transformer
   -- Also notice we allow only rigid vectorization
   -- annotations here, the programmer must know what they are doing.
-  VectComp :: (Int,Int) -> Comp a b -> Comp0 a b
+  VectComp :: (Int,Int) -> GComp ty a b -> GComp0 ty a b
 
   Map    :: Maybe VectAnn -- optional vectorization width annotation
-         -> Name -> Comp0 a b
+         -> GName ty -> GComp0 ty a b
 
-  Filter :: Exp b -> Comp0 a b
+  Filter :: GExp ty b -> GComp0 ty a b
 
   -- Source/sink primitives, see Note [RW Annotations]
-  ReadSrc  :: RWTypeAnn -> Comp0 a b
-  WriteSnk :: RWTypeAnn -> Comp0 a b
+  ReadSrc  :: GRWTypeAnn ty -> GComp0 ty a b
+  WriteSnk :: GRWTypeAnn ty -> GComp0 ty a b
 
   -- Read/write from thread separator queues
   -- What is ReadType? See Note [Standalone Reads]
-  ReadInternal  :: BufId -> ReadType -> Comp0 a b
-  WriteInternal :: BufId -> Comp0 a b
+  ReadInternal  :: BufId -> ReadType -> GComp0 ty a b
+  WriteInternal :: BufId -> GComp0 ty a b
 
   -- Pipelining primitives
-  Standalone :: Comp a b -> Comp0 a b
+  Standalone :: GComp ty a b -> GComp0 ty a b
 
-  Mitigate :: Ty -> Int -> Int -> Comp0 a b
+  Mitigate :: ty -> Int -> Int -> GComp0 ty a b
   -- Mitigate t n1 n2
   -- Pre: n1, n2 > 1
   -- This is a transformer of type:  ST T (arr t n1) (arr t : n2)
@@ -170,121 +165,22 @@ data ParListView a b
                 , plv_rest :: [(ParInfo,Comp a b)]
                 }
 
-parsToParList :: Comp a b -> ParListView a b
-parsToParList c
-  = ParListView { plv_loc  = compLoc c
-                , plv_nfo  = compInfo c
-                , plv_head = cfst
-                , plv_rest = crest
-                }
-  where (cfst,crest) = go c
-        go :: Comp a b -> (Comp a b, [(ParInfo, Comp a b)])
-        go c@(MkComp (Par p c1 c2) loc nfo)
-          = let (cfst,c1rest)  = go c1
-                (c2fst,c2rest) = go c2
-            in (cfst, c1rest ++ (p,c2fst) : c2rest)
-        go cother = (cother, [])
+data PlInfo where
+  AlwaysPipeline ::    Int -- use this thread id for c1
+                    -> Int -- use this thread id for c2
+                    -> PlInfo
+  NeverPipeline  :: PlInfo
+  MaybePipeline  :: PlInfo
+  deriving (Generic)
 
+data ParInfo
+  = ParInfo { plInfo     :: PlInfo
+            , inBurstSz  :: Maybe Int
+            , outBurstSz :: Maybe Int }
+  deriving (Generic)
 
-cVar :: Maybe SourcePos -> a -> Name -> Comp a b
-cVar loc a x = MkComp (Var x) loc a
-
-cBindMany :: Maybe SourcePos -> a -> Comp a b -> [(Name,Comp a b)] -> Comp a b
-cBindMany loc a c cs = MkComp (mkBindMany c cs) loc a -- NB: using smar constructor
-
-cSeq :: Maybe SourcePos -> a -> Comp a b -> Comp a b -> Comp a b
-cSeq loc a c1 c2 = MkComp (Seq c1 c2) loc a
-
-cPar :: Maybe SourcePos -> a -> ParInfo -> Comp a b -> Comp a b -> Comp a b
-cPar loc a pi c1 c2 = MkComp (Par pi c1 c2) loc a
-
-cLet :: Maybe SourcePos -> a -> Name ->
-        Comp a b -> Comp a b -> Comp a b
-cLet loc a x c1 c2 = MkComp (Let x c1 c2) loc a
-
-cLetE :: Maybe SourcePos -> a -> Name -> ForceInline ->
-         Exp b -> Comp a b -> Comp a b
-cLetE loc a x fi e c = MkComp (LetE x fi e c) loc a
-
--- CL
-cLetERef :: Maybe SourcePos -> a -> Name -> Ty -> Maybe (Exp b) -> Comp a b -> Comp a b
-cLetERef loc a x t y c = MkComp (LetERef x t y c) loc a
-
-cLetHeader :: Maybe SourcePos -> a -> Name -> Fun b -> Comp a b -> Comp a b
-cLetHeader loc a x f c = MkComp (LetHeader x f c) loc a
---
-
-cLetFunC :: Maybe SourcePos -> a -> Name -> [(Name, CallArg Ty CTy0)]
-         -> [(Name,Ty,Maybe (Exp b))] -> Comp a b -> Comp a b -> Comp a b
-cLetFunC loc a x args locs c1 c2 = MkComp (LetFunC x args locs c1 c2) loc a
-
-cLetStruct :: Maybe SourcePos -> a -> StructDef -> Comp a b -> Comp a b
-cLetStruct loc a sd c = MkComp (LetStruct sd c) loc a
-
-cCall :: Maybe SourcePos -> a -> Name -> [CallArg (Exp b) (Comp a b)] -> Comp a b
-cCall loc a x es = MkComp (Call x es) loc a
-
-cEmit :: Maybe SourcePos -> a -> Exp b -> Comp a b
-cEmit loc a e = MkComp (Emit e) loc a
-
-cEmits :: Maybe SourcePos -> a -> Exp b -> Comp a b
-cEmits loc a e = MkComp (Emits e) loc a
-
-cReturn :: Maybe SourcePos -> a -> ForceInline -> Exp b -> Comp a b
-cReturn loc a fi e = MkComp (Return fi e) loc a
-
-cInterleave :: Maybe SourcePos -> a -> Comp a b -> Comp a b -> Comp a b
-cInterleave loc a c1 c2 = MkComp (Interleave c1 c2) loc a
-
-cBranch :: Maybe SourcePos -> a -> Exp b -> Comp a b -> Comp a b -> Comp a b
-cBranch loc a e c1 c2 = MkComp (Branch e c1 c2) loc a
-
-cTake1 :: Maybe SourcePos -> a -> Comp a b
-cTake1 loc a = MkComp Take1 loc a
-
-cTake :: Maybe SourcePos -> a -> Exp b -> Comp a b
-cTake loc a e = MkComp (Take e) loc a
-
-cUntil :: Maybe SourcePos -> a -> Exp b -> Comp a b -> Comp a b
-cUntil loc a e c = MkComp (Until e c) loc a
-
-cWhile :: Maybe SourcePos -> a -> Exp b -> Comp a b -> Comp a b
-cWhile loc a e c = MkComp (While e c) loc a
-
-cTimes :: Maybe SourcePos -> a -> UnrollInfo -> Exp b -> Exp b -> Name -> Comp a b -> Comp a b
-cTimes loc a ui es elen x c = MkComp (Times ui es elen x c) loc a
-
-cRepeat :: Maybe SourcePos -> a -> Maybe VectAnn -> Comp a b -> Comp a b
-cRepeat loc a ann c = MkComp (Repeat ann c) loc a
-
-cVectComp :: Maybe SourcePos -> a -> (Int,Int) -> Comp a b -> Comp a b
-cVectComp loc a ann c = MkComp (VectComp ann c) loc a
-
-cMap :: Maybe SourcePos -> a -> Maybe VectAnn -> Name -> Comp a b
-cMap loc a ann nm = MkComp (Map ann nm) loc a
-
-cFilter :: Maybe SourcePos -> a -> Exp b -> Comp a b
-cFilter loc a e = MkComp (Filter e) loc a
-
-cReadSrc  :: Maybe SourcePos -> a -> RWTypeAnn -> Comp a b
-cReadSrc loc a ann = MkComp (ReadSrc ann) loc a
-
-cWriteSnk :: Maybe SourcePos -> a -> RWTypeAnn -> Comp a b
-cWriteSnk loc a ann = MkComp (WriteSnk ann) loc a
-
-cReadInternal  :: Maybe SourcePos -> a -> BufId -> ReadType -> Comp a b
-cReadInternal  loc a b rt = MkComp (ReadInternal b rt) loc a
-
-cWriteInternal :: Maybe SourcePos -> a -> BufId -> Comp a b
-cWriteInternal loc a b = MkComp (WriteInternal b) loc a
-
-cStandalone :: Maybe SourcePos -> a -> Comp a b -> Comp a b
-cStandalone loc a c = MkComp (Standalone c) loc a
-
-
-cMitigate :: Maybe SourcePos -> a -> Ty -> Int -> Int -> Comp a b
-cMitigate loc a t n1 n2 = MkComp (Mitigate t n1 n2) loc a
-
+type GCParams ty  = [(Name, CallArg ty (GCTy0 ty))]
+type GLocals ty b = [(Name, Maybe (GExp ty b))]
 
 {- Note [RW Annotations]
    ~~~~~~~~~~~~~~~~~~~~~
@@ -294,42 +190,11 @@ cMitigate loc a t n1 n2 = MkComp (Mitigate t n1 n2) loc a
     (c) or no annotations whatsoever
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-}
 
-data RWTypeAnn =
-       RWBaseTyAnn Ty
-     | RWRealTyAnn Ty
+data GRWTypeAnn ty =
+       RWBaseTyAnn ty
+     | RWRealTyAnn ty
      | RWNoTyAnn
   deriving (Generic, Show)
-
-
--- Note [Standalone reads]
--- ~~~~~~~~~~~~~~~~~~~~~~~
---
--- Reads arising from standalone pipelining are slightly problematic.
--- Normally, if a read from a thread-separator cannot be executed because
--- the queue is empty we could return SKIP and jump to this threads main
--- control loop. That's all very fine.
---
--- *Except* when this thread is the main thread (i.e. /not/ a standalone).
--- Example:
---    main thread: read >>> c1 >>> write(s) >>> read(q) >>> c2 >>> write
---    standalone : read(s) >>> s >>> write(q)
---
--- If the 'read(q)' returns SKIP and jumps back to the main threads
--- loop, next time around we will ask again to read(q), which will
--- also be empty.  Our only chance of making progress, is to jump to
--- the *consume* continuation which is the consume continuation of the
--- write(s) which will eventually cause the 's' queue to be filled in,
--- give a chance to the standalone thread to write to 'q', and then
--- give a chance to the main thread to read(q) successfully!
---
---
--- Hence, we pass a flag down to ReadInternal that will allow us to choose
--- one of the two behaviours for reading.
---
--- TODO: We might want to revisit this design later, or even deprecate the
--- standalone pipelining which does not perform great anyway, but at the time
--- of the writing of this comment (10/01/2014), this is not done.
-
 
 -- See Note [Standalone Reads]
 data ReadType
@@ -337,309 +202,162 @@ data ReadType
   | JumpToConsumeOnEmpty
   deriving (Generic)
 
-readJumpToConsumeOnEmpty JumpToConsumeOnEmpty = True
-readJumpToConsumeOnEmpty _ = False
-
-
-compShortName :: Comp a b -> String
-compShortName c = go (unComp c)
-  where go (  Var n          ) = "Var(" ++ name n ++ ")"
-        go (  BindMany    {} ) = "BindMany"
-        go (  Seq         {} ) = "Seq"
-        go (  Par         {} ) = "Par"
-        go (  Let         {} ) = "Let"
-        go (  LetE        {} ) = "LetE"
-        -- CL
-        go (  LetERef     {} ) = "LetERef"
-        go (  LetHeader nm (MkFun (MkFunDefined _ _ _ _) _ _) _  ) = "LetHeader(" ++ name nm ++ ")"
-        go (  LetHeader {} ) = "LetHeader"
-        --
-        go (  LetFunC nm _ _ _ _ ) = "LetFunC(" ++ name nm ++ ")"
-        go (  LetStruct   {} ) = "Struct"
-        go (  Call n _       ) = "Call(" ++ name n ++ ")"
-        go (  Emit        {} ) = "Emit"
-        go (  Emits       {} ) = "Emits"
-        go (  Return      {} ) = "Return"
-        go (  Interleave  {} ) = "Interleave"
-        go (  Branch      {} ) = "Branch"
-        go (  Take1       {} ) = "Take1"
-        go (  Take        {} ) = "Take"
-        go (  Until       {} ) = "Until"
-        go (  While       {} ) = "While"
-        go (  Times       {} ) = "Times"
-        go (  Repeat      {} ) = "Repeat"
-        go (  VectComp    {} ) = "VectComp"
-        go (  Map         {} ) = "Map"
-        go (  Filter      {} ) = "Filter"
-
-        go (  ReadSrc         {} ) = "ReadSrc"
-        go (  WriteSnk        {} ) = "WriteSnk"
-        go (  ReadInternal    {} ) = "ReadInternal"
-        go (  WriteInternal   {} ) = "WriteInternal"
-        go (  Standalone      {} ) = "Standalone"
-        go (  Mitigate        {} ) = "Mitigate"
-
-
 type CompLoc = Maybe SourcePos
 
-data Comp a b
-  = MkComp { unComp   :: Comp0 a b
+data GComp ty a b
+  = MkComp { unComp   :: GComp0 ty a b
            , compLoc  :: CompLoc
            , compInfo :: a }
   deriving (Generic)
 
-type SrcComp = Comp () ()
-
-data Prog a b
-  = MkProg { globals :: [(Name,Ty,Maybe (Exp b))]
-           , comp :: Comp a b }
+data GProg ty a b
+  = MkProg { globals :: [(GName ty,ty,Maybe (GExp ty b))]
+           , comp :: GComp ty a b }
   deriving (Generic)
 
+{-------------------------------------------------------------------------------
+  Specialization of the AST to Ty (internal types)
+
+  These types are used everywhere in the compiler except in the front-end.
+-------------------------------------------------------------------------------}
+
+type CParams   = GCParams   Ty
+type Locals b  = GLocals    Ty b
+type CTy0      = GCTy0      Ty
+type CTy       = GCTy       Ty
+type Comp0     = GComp0     Ty
+type Comp      = GComp      Ty
+type RWTypeAnn = GRWTypeAnn Ty
+type Prog      = GProg      Ty
+
+{-------------------------------------------------------------------------------
+  Specializations of the AST to SrcTy (source level types)
+
+  These types are only used in the parser and as input to the renamer.
+-------------------------------------------------------------------------------}
+
+type SrcComp = GComp SrcTy () ()
+type SrcProg = GProg SrcTy () ()
+
+{-------------------------------------------------------------------------------
+  Convenience constructors
+-------------------------------------------------------------------------------}
+
+cVar :: Maybe SourcePos -> a -> GName ty -> GComp ty a b
+cVar loc a x = MkComp (Var x) loc a
+
+cBindMany :: Maybe SourcePos -> a -> GComp ty a b -> [(GName ty,GComp ty a b)] -> GComp ty a b
+cBindMany loc a c cs = MkComp (mkBindMany c cs) loc a -- NB: using smar constructor
+
+cSeq :: Maybe SourcePos -> a -> GComp ty a b -> GComp ty a b -> GComp ty a b
+cSeq loc a c1 c2 = MkComp (Seq c1 c2) loc a
+
+cPar :: Maybe SourcePos -> a -> ParInfo -> GComp ty a b -> GComp ty a b -> GComp ty a b
+cPar loc a pi c1 c2 = MkComp (Par pi c1 c2) loc a
+
+cLet :: Maybe SourcePos -> a -> GName ty ->
+        GComp ty a b -> GComp ty a b -> GComp ty a b
+cLet loc a x c1 c2 = MkComp (Let x c1 c2) loc a
+
+cLetE :: Maybe SourcePos -> a -> GName ty -> ForceInline ->
+         GExp ty b -> GComp ty a b -> GComp ty a b
+cLetE loc a x fi e c = MkComp (LetE x fi e c) loc a
+
+-- CL
+cLetERef :: Maybe SourcePos -> a -> GName ty -> ty -> Maybe (GExp ty b) -> GComp ty a b -> GComp ty a b
+cLetERef loc a x t y c = MkComp (LetERef x t y c) loc a
+
+cLetHeader :: Maybe SourcePos -> a -> GName ty -> GFun ty b -> GComp ty a b -> GComp ty a b
+cLetHeader loc a x f c = MkComp (LetHeader x f c) loc a
+--
+
+cLetFunC :: Maybe SourcePos -> a -> GName ty -> [(GName ty, CallArg ty (GCTy0 ty))]
+         -> [(GName ty,ty,Maybe (GExp ty b))] -> GComp ty a b -> GComp ty a b -> GComp ty a b
+cLetFunC loc a x args locs c1 c2 = MkComp (LetFunC x args locs c1 c2) loc a
+
+cLetStruct :: Maybe SourcePos -> a -> GStructDef ty -> GComp ty a b -> GComp ty a b
+cLetStruct loc a sd c = MkComp (LetStruct sd c) loc a
+
+cCall :: Maybe SourcePos -> a -> GName ty -> [CallArg (GExp ty b) (GComp ty a b)] -> GComp ty a b
+cCall loc a x es = MkComp (Call x es) loc a
+
+cEmit :: Maybe SourcePos -> a -> GExp ty b -> GComp ty a b
+cEmit loc a e = MkComp (Emit e) loc a
+
+cEmits :: Maybe SourcePos -> a -> GExp ty b -> GComp ty a b
+cEmits loc a e = MkComp (Emits e) loc a
+
+cReturn :: Maybe SourcePos -> a -> ForceInline -> GExp ty b -> GComp ty a b
+cReturn loc a fi e = MkComp (Return fi e) loc a
+
+cInterleave :: Maybe SourcePos -> a -> GComp ty a b -> GComp ty a b -> GComp ty a b
+cInterleave loc a c1 c2 = MkComp (Interleave c1 c2) loc a
+
+cBranch :: Maybe SourcePos -> a -> GExp ty b -> GComp ty a b -> GComp ty a b -> GComp ty a b
+cBranch loc a e c1 c2 = MkComp (Branch e c1 c2) loc a
+
+cTake1 :: Maybe SourcePos -> a -> GComp ty a b
+cTake1 loc a = MkComp Take1 loc a
+
+cTake :: Maybe SourcePos -> a -> GExp ty b -> GComp ty a b
+cTake loc a e = MkComp (Take e) loc a
+
+cUntil :: Maybe SourcePos -> a -> GExp ty b -> GComp ty a b -> GComp ty a b
+cUntil loc a e c = MkComp (Until e c) loc a
+
+cWhile :: Maybe SourcePos -> a -> GExp ty b -> GComp ty a b -> GComp ty a b
+cWhile loc a e c = MkComp (While e c) loc a
+
+cTimes :: Maybe SourcePos -> a -> UnrollInfo -> GExp ty b -> GExp ty b -> GName ty -> GComp ty a b -> GComp ty a b
+cTimes loc a ui es elen x c = MkComp (Times ui es elen x c) loc a
+
+cRepeat :: Maybe SourcePos -> a -> Maybe VectAnn -> GComp ty a b -> GComp ty a b
+cRepeat loc a ann c = MkComp (Repeat ann c) loc a
+
+cVectComp :: Maybe SourcePos -> a -> (Int,Int) -> GComp ty a b -> GComp ty a b
+cVectComp loc a ann c = MkComp (VectComp ann c) loc a
+
+cMap :: Maybe SourcePos -> a -> Maybe VectAnn -> GName ty -> GComp ty a b
+cMap loc a ann nm = MkComp (Map ann nm) loc a
+
+cFilter :: Maybe SourcePos -> a -> GExp ty b -> GComp ty a b
+cFilter loc a e = MkComp (Filter e) loc a
+
+cReadSrc  :: Maybe SourcePos -> a -> GRWTypeAnn ty -> GComp ty a b
+cReadSrc loc a ann = MkComp (ReadSrc ann) loc a
+
+cWriteSnk :: Maybe SourcePos -> a -> GRWTypeAnn ty -> GComp ty a b
+cWriteSnk loc a ann = MkComp (WriteSnk ann) loc a
+
+cReadInternal  :: Maybe SourcePos -> a -> BufId -> ReadType -> GComp ty a b
+cReadInternal  loc a b rt = MkComp (ReadInternal b rt) loc a
+
+cWriteInternal :: Maybe SourcePos -> a -> BufId -> GComp ty a b
+cWriteInternal loc a b = MkComp (WriteInternal b) loc a
+
+cStandalone :: Maybe SourcePos -> a -> GComp ty a b -> GComp ty a b
+cStandalone loc a c = MkComp (Standalone c) loc a
 
 
--- Just A binding context (for multiple threads)
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- We may have to pipeline under a shared context and CompCtxt simply
--- records this shared context. We are not really using this context
--- in AstComp but it seems the right place to define this datatype.
-data CompCtxt
-  = Hole
-  | CLet  CompLoc Name (Comp CTy Ty) CompCtxt
-  | CLetE CompLoc Name ForceInline (Exp Ty) CompCtxt
-  -- CL
-  | CLetERef CompLoc Name Ty (Maybe (Exp Ty)) CompCtxt
-  --
-  | CLetHeader CompLoc Name (Fun Ty) CompCtxt
-  | CLetFunC CompLoc Name [(Name, CallArg Ty CTy0)]  -- params
-                          [(Name,Ty,Maybe (Exp Ty))] -- locals
-                          (Comp CTy Ty) CompCtxt     -- body
-  | CLetStruct CompLoc StructDef CompCtxt
+cMitigate :: Maybe SourcePos -> a -> ty -> Int -> Int -> GComp ty a b
+cMitigate loc a t n1 n2 = MkComp (Mitigate t n1 n2) loc a
 
+{-------------------------------------------------------------------------------
+  Various map functions
 
-data CTy0 where
-  TComp :: Ty -> Ty -> Ty -> CTy0
-  TTrans :: Ty -> Ty -> CTy0
-  deriving Generic
-
-inTyOfCTy   :: CTy0 -> Ty
-inTyOfCTy (TComp _ x _) = x
-inTyOfCTy (TTrans x _)  = x
-
-yldTyOfCTy  :: CTy0 -> Ty
-yldTyOfCTy (TComp _ _ x)  = x
-yldTyOfCTy (TTrans _ x)   = x
-
-
-inTyOfCTyBase :: CTy -> Ty
-inTyOfCTyBase (CTBase ct) = inTyOfCTy ct
-inTyOfCTyBase _ = error "inTyOfCTyBase: not a base type!"
-
-yldTyOfCTyBase (CTBase ct) = yldTyOfCTy ct
-yldTyOfCTyBase _ = error "yldTyOfCTyBase: not a base type!"
-
-doneTyOfCTyBase (CTBase ct) = doneTyOfCTy ct
-doneTyOfCTyBase _ = error "doneTyOfCTyBase: not a base type!"
-
-
-isCTyBase :: CTy -> Bool
-isCTyBase (CTBase {}) = True
-isCTyBase _ = False
-
-
-doneTyOfCTy :: CTy0 -> Maybe Ty
--- NOTE: transformers have no doneTy
-doneTyOfCTy (TComp x _ _) = Just x
-doneTyOfCTy (TTrans _ _) = Nothing
-
-hasDoneTyBase (CTBase ct) = hasDoneTy ct
-hasDoneTyBase _ = error "hasDoneTyBase: not a base type!"
-
-hasDoneTy :: CTy0 -> Bool
-hasDoneTy cty
-  | Just _ <- doneTyOfCTy cty = True
-  | otherwise                 = False
-
-isCompCTy :: CTy0 -> Bool
-isCompCTy (TComp {}) = True
-isCompCTy _ = False
-
-data CTy where
-  CTBase :: CTy0 -> CTy
-  -- Invariant: non-empty list and CTy0 is not arrow
-  CTArrow :: [CallArg Ty CTy0] -> CTy0 -> CTy
-
-
--- Composing transformers and computers
-parCompose (CTBase (TTrans t1 _))
-           (CTBase (TTrans _ t3))  = CTBase (TTrans t1 t3)
-parCompose (CTBase (TTrans t1 _))
-           (CTBase (TComp v _ t3)) = CTBase (TComp v t1 t3)
-parCompose (CTBase (TComp v t1 _))
-           (CTBase (TTrans _ t3))  = CTBase (TComp v t1 t3)
-parCompose (CTBase (TComp v t1 _))
-           (CTBase (TComp _ _ t3)) = CTBase (TComp v t1 t3)
-parCompose _ct1 _cty2
-  = error "Type checking bug: revealed in parCompose!"
-
-
-toComp :: a -> Comp0 a b -> Comp a b
-toComp a c0 = MkComp c0 Nothing a
-
-toCompPos :: a -> SourcePos -> Comp0 a b -> Comp a b
-toCompPos a pos c0 = MkComp c0 (Just pos) a
-
-mkBind :: Comp a b -> (Name, Comp a b) -> Comp0 a b
-mkBind c1 (n,c2) = mkBindMany c1 [(n,c2)]
-
-mkBindMany :: Comp a b -> [(Name,Comp a b)] -> Comp0 a b
--- First push all the bindmany's on the list
-mkBindMany comp args = go comp args
-   where
-     go (MkComp (BindMany c0 c0s) _ _) c1s = mkBindMany c0 (c0s++c1s)
-     -- Now we know that 'c' is not a BindMany, empty continuation: just return
-     go c [] = unComp c
-     -- We know that 'c' is not a BindMany, but we do have a continuation, so
-     -- recurse into the continuation to flatten the continuation this time.
-     go c ((n,c1):cs)
-       = case mkBindMany c1 cs of
-           BindMany c1' c1s' -> BindMany c ((n,c1'):c1s')
-           c1' -> BindMany c [(n, MkComp c1' (compLoc c1) (compInfo c1))]
-
-
-data BindView a b
-  = BindView (Comp a b) Name (Comp a b)
-  | SeqView (Comp a b) (Comp a b)
-  | NotSeqOrBind (Comp a b)
-
-
-bindSeqView :: Comp a b -> BindView a b
-bindSeqView comp = mk_view comp
-  where mk_view comp@(MkComp (BindMany c1 c2s) cloc cinfo)
-          = case c2s of
-              (nm,c2):crest ->
-                 BindView c1 nm (MkComp (mkBindMany c2 crest) cloc cinfo)
-              [] ->
-                 NotSeqOrBind comp
-        mk_view comp@(MkComp (Seq c1 c2) cloc cinfo) = SeqView c1 c2
-        mk_view comp = NotSeqOrBind comp
-
-compFVs :: Comp a b -> S.Set Name
-compFVs c = case unComp c of
-  Var nm -> S.singleton nm
-  BindMany c1 xs_cs ->
-    -- NB: important that we `foldr' here since `x' may appear free
-    -- in rest of `xs_cs'
-    foldr (\(x,c) s -> (s `S.union` compFVs c) S.\\ (S.singleton x))
-      (compFVs c1) xs_cs
-  Seq c1 c2      -> compFVs c1 `S.union` compFVs c2
-  Par _ c1 c2    -> compFVs c1 `S.union` compFVs c2
-  Let nm c1 c2 -> (compFVs c1 `S.union` compFVs c2) S.\\ (S.singleton nm)
-  LetE nm _ e c1 -> (exprFVs e `S.union` compFVs c1) S.\\ (S.singleton nm)
-  -- CL
-
-  LetERef nm _ty (Just e) c1
-     -> (exprFVs e `S.union` compFVs c1) S.\\ (S.singleton nm)
-  LetERef nm _ty Nothing c1 -> (compFVs c1) S.\\ (S.singleton nm)
-  LetHeader nm f c1 -> (funFVs f `S.union` compFVs c1) S.\\ (S.singleton nm)
-  --
-  LetFunC nm params locals c1 c2 ->
-    let funVars = (foldr (\(nm,_,me) s ->
-                           let se = case me of
-                                 Just e  -> S.union (exprFVs e) s
-                                 Nothing -> s
-                           in se S.\\ (S.singleton nm)) (compFVs c1) locals) S.\\
-                  (S.fromList . map fst) params
-    in (funVars `S.union` compFVs c2) S.\\ (S.singleton nm)
-
-  LetStruct _sdef c1 -> compFVs c1
-
-  Call nm es      -> foldl (\s e -> callArgFVs e `S.union` s)
-                           (S.singleton nm) es
-  Emit e          -> exprFVs e
-  Emits e         -> exprFVs e
-  Return _ e      -> exprFVs e
-  Branch e c1 c2  -> exprFVs e `S.union` compFVs c1 `S.union` compFVs c2
-  Take1           -> S.empty
-  Take e          -> exprFVs e
-  Until e c1      -> exprFVs e `S.union` compFVs c1
-  While e c1      -> exprFVs e `S.union` compFVs c1
-  Times ui es elen nm c1
-     -> exprFVs es `S.union` exprFVs elen `S.union` compFVs c1 S.\\ (S.singleton nm)
-  Repeat _ c1     -> compFVs c1
-  VectComp _ c1   -> compFVs c1
-  Map _ nm         -> S.singleton nm
-  Filter e        -> exprFVs e
-  Interleave c1 c2 -> compFVs c1 `S.union` compFVs c2
-
-
-  ReadSrc  {} -> S.empty
-  WriteSnk {} -> S.empty
-  ReadInternal  {} -> S.empty
-  WriteInternal {} -> S.empty
-  Standalone c1  -> compFVs c1
-
-  Mitigate {} -> S.empty
-
-callArgFVs :: CallArg (Exp b) (Comp a b) -> S.Set Name
-callArgFVs (CAExp e)  = exprFVs e
-callArgFVs (CAComp c) = compFVs c
-
-compFVs_all :: [Comp a b] -> S.Set Name
-compFVs_all = S.unions . map compFVs
-
-compSize :: Comp a b -> Int
-compSize c = case unComp c of
-  Var nm -> 1
-  BindMany c1 xs_cs ->
-    foldr (\(x,c) s -> compSize c) (compSize c1) xs_cs
-  Seq c1 c2      -> 1 + compSize c1 + compSize c2
-  Par _ c1 c2    -> 1 + compSize c1 + compSize c2
-  Let nm c1 c2 -> 1 + compSize c1 + compSize c2
-  LetE nm _ e c1 -> 2 + compSize c1
-  -- CL
-  LetERef nm _ty (Just _) c1 -> 2 + compSize c1
-  LetERef nm _ty Nothing  c1 -> 2 + compSize c1
-  LetHeader nm f c1 -> 2 + compSize c1
-  --
-  LetStruct _sdef c1 -> 1 + compSize c1
-  LetFunC nm params locals c1 c2 -> 1 + compSize c1 + compSize c2
-  Call nm es       -> 1 + sum (map callArgSize es)
-  Emit e           -> 1
-  Emits e          -> 1
-  Return _ e       -> 1
-  Branch e c1 c2   -> 1 + compSize c1 + compSize c2
-  Take1            -> 1
-  Take e           -> 1
-  Until e c1        -> 1 + compSize c1
-  While e c1        -> 1 + compSize c1
-  Times ui e1 e2 nm c1 -> 1 + compSize c1
-  Repeat _ c1    -> compSize c1
-  VectComp _ c1  -> compSize c1
-  Map _ nm        -> 1
-  Filter e       -> 1
-  Interleave c1 c2 -> compSize c1 + compSize c2
-
-  ReadSrc  {} -> 1
-  WriteSnk {} -> 1
-  ReadInternal  {} -> 1
-  WriteInternal {} -> 1
-  Standalone c1  -> compSize c1
-
-  Mitigate {} -> 1
-
-callArgSize :: CallArg (Exp b) (Comp a b) -> Int
-callArgSize (CAExp x)  = 0
-callArgSize (CAComp x) = 1
+  Since these are used on both source terms and internal terms they have the
+  general types where possible.
+-------------------------------------------------------------------------------}
 
 mapCompM_aux :: Monad m
-             => (b -> m d)                 -- What to do on expression types
-             -> (Exp b -> m (Exp d))       -- What to do on expressions
-             -> (a -> m c)                 -- What to do on computation types
-             -> (Comp c d -> m (Comp c d)) -- How to combine results
-             -> Comp a b -> m (Comp c d)
+             => (b -> m d)                         -- What to do on expression types
+             -> (GExp ty b -> m (GExp ty d))       -- What to do on expressions
+             -> (a -> m c)                         -- What to do on computation types
+             -> (GComp ty c d -> m (GComp ty c d)) -- How to combine results
+             -> GComp ty a b -> m (GComp ty c d)
 -- NB: Ignores binding, if your monadic actions should be
 -- binding-aware then you should be using some different function
-mapCompM_aux on_ty on_exp on_cty g c = go c
+mapCompM_aux on_ty on_exp on_cty g = go
   where
    go c = do { let cloc = compLoc c
              ; cnfo <- on_cty (compInfo c)
@@ -647,9 +365,9 @@ mapCompM_aux on_ty on_exp on_cty g c = go c
                  Var x -> g (cVar cloc cnfo x)
                  BindMany c1 xs_cs ->
                    do { c1' <- go c1
-                      ; xs_cs' <- mapM (\(x,c) ->
-                          do { c' <- go c
-                             ; return (x,c') }) xs_cs
+                      ; xs_cs' <- mapM (\(x,c') ->
+                          do { c'' <- go c'
+                             ; return (x,c'') }) xs_cs
                       ; g (cBindMany cloc cnfo c1' xs_cs') }
                  Seq c1 c2 ->
                    do { c1' <- go c1
@@ -754,10 +472,10 @@ mapCompM_aux on_ty on_exp on_cty g c = go c
              }
 
 mapCallArgM :: Monad m
-            => (Exp b -> m (Exp d))
-            -> (Comp a b -> m (Comp c d))
-            -> CallArg (Exp b) (Comp a b)
-            -> m (CallArg (Exp d) (Comp c d))
+            => (GExp ty b -> m (GExp ty d))
+            -> (GComp ty a b -> m (GComp ty c d))
+            -> CallArg (GExp ty b) (GComp ty a b)
+            -> m (CallArg (GExp ty d) (GComp ty c d))
 mapCallArgM on_exp on_comp arg = do_arg arg
   where
     do_arg (CAExp e)  = on_exp e  >>= \e' -> return (CAExp e')
@@ -766,11 +484,330 @@ mapCallArgM on_exp on_comp arg = do_arg arg
 
 
 mapCompM_ :: Monad m
-         => (Exp b -> m (Exp b))
-         -> (Comp a b -> m (Comp a b))
-         -> Comp a b
-         -> m (Comp a b)
+         => (GExp ty b -> m (GExp ty b))
+         -> (GComp ty a b -> m (GComp ty a b))
+         -> GComp ty a b
+         -> m (GComp ty a b)
 mapCompM_ f g = mapCompM_aux return f return g
+
+
+{-------------------------------------------------------------------------------
+  Utility
+-------------------------------------------------------------------------------}
+
+isMaybeOrNever :: PlInfo -> Bool
+isMaybeOrNever nfo =
+  case nfo of
+    AlwaysPipeline _ _ -> False
+    NeverPipeline      -> True
+    MaybePipeline      -> True
+
+
+mkParInfo :: PlInfo -> ParInfo
+mkParInfo nfo = ParInfo nfo Nothing Nothing
+
+pnever :: ParInfo
+pnever = mkParInfo NeverPipeline
+
+
+
+
+parsToParList :: Comp a b -> ParListView a b
+parsToParList c
+  = ParListView { plv_loc  = compLoc c
+                , plv_nfo  = compInfo c
+                , plv_head = cfst
+                , plv_rest = crest
+                }
+  where (cfst,crest) = go c
+        go :: Comp a b -> (Comp a b, [(ParInfo, Comp a b)])
+        go (MkComp (Par p c1 c2) _loc _nfo)
+          = let (c1fst,c1rest) = go c1
+                (c2fst,c2rest) = go c2
+            in (c1fst, c1rest ++ (p,c2fst) : c2rest)
+        go cother = (cother, [])
+
+
+
+readJumpToConsumeOnEmpty :: ReadType -> Bool
+readJumpToConsumeOnEmpty JumpToConsumeOnEmpty = True
+readJumpToConsumeOnEmpty _ = False
+
+
+compShortName :: Comp a b -> String
+compShortName c = go (unComp c)
+  where go (  Var n          ) = "Var(" ++ name n ++ ")"
+        go (  BindMany    {} ) = "BindMany"
+        go (  Seq         {} ) = "Seq"
+        go (  Par         {} ) = "Par"
+        go (  Let         {} ) = "Let"
+        go (  LetE        {} ) = "LetE"
+        -- CL
+        go (  LetERef     {} ) = "LetERef"
+        go (  LetHeader nm (MkFun (MkFunDefined _ _ _ _) _ _) _  ) = "LetHeader(" ++ name nm ++ ")"
+        go (  LetHeader {} ) = "LetHeader"
+        --
+        go (  LetFunC nm _ _ _ _ ) = "LetFunC(" ++ name nm ++ ")"
+        go (  LetStruct   {} ) = "Struct"
+        go (  Call n _       ) = "Call(" ++ name n ++ ")"
+        go (  Emit        {} ) = "Emit"
+        go (  Emits       {} ) = "Emits"
+        go (  Return      {} ) = "Return"
+        go (  Interleave  {} ) = "Interleave"
+        go (  Branch      {} ) = "Branch"
+        go (  Take1       {} ) = "Take1"
+        go (  Take        {} ) = "Take"
+        go (  Until       {} ) = "Until"
+        go (  While       {} ) = "While"
+        go (  Times       {} ) = "Times"
+        go (  Repeat      {} ) = "Repeat"
+        go (  VectComp    {} ) = "VectComp"
+        go (  Map         {} ) = "Map"
+        go (  Filter      {} ) = "Filter"
+
+        go (  ReadSrc         {} ) = "ReadSrc"
+        go (  WriteSnk        {} ) = "WriteSnk"
+        go (  ReadInternal    {} ) = "ReadInternal"
+        go (  WriteInternal   {} ) = "WriteInternal"
+        go (  Standalone      {} ) = "Standalone"
+        go (  Mitigate        {} ) = "Mitigate"
+
+
+
+
+
+
+
+-- Just A binding context (for multiple threads)
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- We may have to pipeline under a shared context and CompCtxt simply
+-- records this shared context. We are not really using this context
+-- in AstComp but it seems the right place to define this datatype.
+data CompCtxt
+  = Hole
+  | CLet  CompLoc Name (Comp CTy Ty) CompCtxt
+  | CLetE CompLoc Name ForceInline (Exp Ty) CompCtxt
+  -- CL
+  | CLetERef CompLoc Name Ty (Maybe (Exp Ty)) CompCtxt
+  --
+  | CLetHeader CompLoc Name (Fun Ty) CompCtxt
+  | CLetFunC CompLoc Name [(Name, CallArg Ty CTy0)]  -- params
+                          [(Name,Ty,Maybe (Exp Ty))] -- locals
+                          (Comp CTy Ty) CompCtxt     -- body
+  | CLetStruct CompLoc StructDef CompCtxt
+
+
+
+inTyOfCTy   :: CTy0 -> Ty
+inTyOfCTy (TComp _ x _) = x
+inTyOfCTy (TTrans x _)  = x
+
+yldTyOfCTy  :: CTy0 -> Ty
+yldTyOfCTy (TComp _ _ x)  = x
+yldTyOfCTy (TTrans _ x)   = x
+
+
+inTyOfCTyBase :: CTy -> Ty
+inTyOfCTyBase (CTBase ct) = inTyOfCTy ct
+inTyOfCTyBase _ = error "inTyOfCTyBase: not a base type!"
+
+yldTyOfCTyBase :: CTy -> Ty
+yldTyOfCTyBase (CTBase ct) = yldTyOfCTy ct
+yldTyOfCTyBase _ = error "yldTyOfCTyBase: not a base type!"
+
+doneTyOfCTyBase :: CTy -> Maybe Ty
+doneTyOfCTyBase (CTBase ct) = doneTyOfCTy ct
+doneTyOfCTyBase _ = error "doneTyOfCTyBase: not a base type!"
+
+
+isCTyBase :: CTy -> Bool
+isCTyBase (CTBase {}) = True
+isCTyBase _ = False
+
+
+doneTyOfCTy :: CTy0 -> Maybe Ty
+-- NOTE: transformers have no doneTy
+doneTyOfCTy (TComp x _ _) = Just x
+doneTyOfCTy (TTrans _ _) = Nothing
+
+hasDoneTyBase :: CTy -> Bool
+hasDoneTyBase (CTBase ct) = hasDoneTy ct
+hasDoneTyBase _ = error "hasDoneTyBase: not a base type!"
+
+hasDoneTy :: CTy0 -> Bool
+hasDoneTy cty
+  | Just _ <- doneTyOfCTy cty = True
+  | otherwise                 = False
+
+isCompCTy :: CTy0 -> Bool
+isCompCTy (TComp {}) = True
+isCompCTy _ = False
+
+
+
+-- Composing transformers and computers
+parCompose :: CTy -> CTy -> CTy
+parCompose (CTBase (TTrans t1 _))
+           (CTBase (TTrans _ t3))  = CTBase (TTrans t1 t3)
+parCompose (CTBase (TTrans t1 _))
+           (CTBase (TComp v _ t3)) = CTBase (TComp v t1 t3)
+parCompose (CTBase (TComp v t1 _))
+           (CTBase (TTrans _ t3))  = CTBase (TComp v t1 t3)
+parCompose (CTBase (TComp v t1 _))
+           (CTBase (TComp _ _ t3)) = CTBase (TComp v t1 t3)
+parCompose _ct1 _cty2
+  = error "Type checking bug: revealed in parCompose!"
+
+
+toComp :: a -> Comp0 a b -> Comp a b
+toComp a c0 = MkComp c0 Nothing a
+
+toCompPos :: a -> SourcePos -> Comp0 a b -> Comp a b
+toCompPos a pos c0 = MkComp c0 (Just pos) a
+
+mkBind :: Comp a b -> (Name, Comp a b) -> Comp0 a b
+mkBind c1 (n,c2) = mkBindMany c1 [(n,c2)]
+
+mkBindMany :: GComp ty a b -> [(GName ty,GComp ty a b)] -> GComp0 ty a b
+-- First push all the bindmany's on the list
+mkBindMany = go
+   where
+     go (MkComp (BindMany c0 c0s) _ _) c1s = mkBindMany c0 (c0s++c1s)
+     -- Now we know that 'c' is not a BindMany, empty continuation: just return
+     go c [] = unComp c
+     -- We know that 'c' is not a BindMany, but we do have a continuation, so
+     -- recurse into the continuation to flatten the continuation this time.
+     go c ((n,c1):cs)
+       = case mkBindMany c1 cs of
+           BindMany c1' c1s' -> BindMany c ((n,c1'):c1s')
+           c1' -> BindMany c [(n, MkComp c1' (compLoc c1) (compInfo c1))]
+
+
+data BindView a b
+  = BindView (Comp a b) Name (Comp a b)
+  | SeqView (Comp a b) (Comp a b)
+  | NotSeqOrBind (Comp a b)
+
+
+bindSeqView :: Comp a b -> BindView a b
+bindSeqView = mk_view
+  where mk_view c@(MkComp (BindMany c1 c2s) cloc cinfo)
+          = case c2s of
+              (nm,c2):crest ->
+                 BindView c1 nm (MkComp (mkBindMany c2 crest) cloc cinfo)
+              [] ->
+                 NotSeqOrBind c
+        mk_view (MkComp (Seq c1 c2) _cloc _cinfo) = SeqView c1 c2
+        mk_view c = NotSeqOrBind c
+
+compFVs :: Comp a b -> S.Set Name
+compFVs c = case unComp c of
+  Var nm -> S.singleton nm
+  BindMany c1 xs_cs ->
+    -- NB: important that we `foldr' here since `x' may appear free
+    -- in rest of `xs_cs'
+    foldr (\(x,c') s -> (s `S.union` compFVs c') S.\\ (S.singleton x))
+      (compFVs c1) xs_cs
+  Seq c1 c2      -> compFVs c1 `S.union` compFVs c2
+  Par _ c1 c2    -> compFVs c1 `S.union` compFVs c2
+  Let nm c1 c2 -> (compFVs c1 `S.union` compFVs c2) S.\\ (S.singleton nm)
+  LetE nm _ e c1 -> (exprFVs e `S.union` compFVs c1) S.\\ (S.singleton nm)
+  -- CL
+
+  LetERef nm _ty (Just e) c1
+     -> (exprFVs e `S.union` compFVs c1) S.\\ (S.singleton nm)
+  LetERef nm _ty Nothing c1 -> (compFVs c1) S.\\ (S.singleton nm)
+  LetHeader nm f c1 -> (funFVs f `S.union` compFVs c1) S.\\ (S.singleton nm)
+  --
+  LetFunC nm params locals c1 c2 ->
+    let funVars = (foldr (\(x,_,me) s ->
+                           let se = case me of
+                                 Just e  -> S.union (exprFVs e) s
+                                 Nothing -> s
+                           in se S.\\ (S.singleton x)) (compFVs c1) locals) S.\\
+                  (S.fromList . map fst) params
+    in (funVars `S.union` compFVs c2) S.\\ (S.singleton nm)
+
+  LetStruct _sdef c1 -> compFVs c1
+
+  Call nm es      -> foldl (\s e -> callArgFVs e `S.union` s)
+                           (S.singleton nm) es
+  Emit e          -> exprFVs e
+  Emits e         -> exprFVs e
+  Return _ e      -> exprFVs e
+  Branch e c1 c2  -> exprFVs e `S.union` compFVs c1 `S.union` compFVs c2
+  Take1           -> S.empty
+  Take e          -> exprFVs e
+  Until e c1      -> exprFVs e `S.union` compFVs c1
+  While e c1      -> exprFVs e `S.union` compFVs c1
+  Times _ui es elen nm c1
+     -> exprFVs es `S.union` exprFVs elen `S.union` compFVs c1 S.\\ (S.singleton nm)
+  Repeat _ c1     -> compFVs c1
+  VectComp _ c1   -> compFVs c1
+  Map _ nm         -> S.singleton nm
+  Filter e        -> exprFVs e
+  Interleave c1 c2 -> compFVs c1 `S.union` compFVs c2
+
+
+  ReadSrc  {} -> S.empty
+  WriteSnk {} -> S.empty
+  ReadInternal  {} -> S.empty
+  WriteInternal {} -> S.empty
+  Standalone c1  -> compFVs c1
+
+  Mitigate {} -> S.empty
+
+callArgFVs :: CallArg (Exp b) (Comp a b) -> S.Set Name
+callArgFVs (CAExp e)  = exprFVs e
+callArgFVs (CAComp c) = compFVs c
+
+compFVs_all :: [Comp a b] -> S.Set Name
+compFVs_all = S.unions . map compFVs
+
+compSize :: Comp a b -> Int
+compSize c = case unComp c of
+  Var _nm -> 1
+  BindMany c1 xs_cs ->
+    foldr (\(_x,c') _s -> compSize c') (compSize c1) xs_cs
+  Seq c1 c2      -> 1 + compSize c1 + compSize c2
+  Par _ c1 c2    -> 1 + compSize c1 + compSize c2
+  Let _nm c1 c2 -> 1 + compSize c1 + compSize c2
+  LetE _nm _ _e c1 -> 2 + compSize c1
+  -- CL
+  LetERef _nm _ty (Just _) c1 -> 2 + compSize c1
+  LetERef _nm _ty Nothing  c1 -> 2 + compSize c1
+  LetHeader _nm _f c1 -> 2 + compSize c1
+  --
+  LetStruct _sdef c1 -> 1 + compSize c1
+  LetFunC _nm _params _locals c1 c2 -> 1 + compSize c1 + compSize c2
+  Call _nm es       -> 1 + sum (map callArgSize es)
+  Emit _e           -> 1
+  Emits _e          -> 1
+  Return _ _e       -> 1
+  Branch _e c1 c2   -> 1 + compSize c1 + compSize c2
+  Take1            -> 1
+  Take _e           -> 1
+  Until _e c1        -> 1 + compSize c1
+  While _e c1        -> 1 + compSize c1
+  Times _ui _e1 _e2 _nm c1 -> 1 + compSize c1
+  Repeat _ c1    -> compSize c1
+  VectComp _ c1  -> compSize c1
+  Map _ _nm        -> 1
+  Filter _e       -> 1
+  Interleave c1 c2 -> compSize c1 + compSize c2
+
+  ReadSrc  {} -> 1
+  WriteSnk {} -> 1
+  ReadInternal  {} -> 1
+  WriteInternal {} -> 1
+  Standalone c1  -> compSize c1
+
+  Mitigate {} -> 1
+
+callArgSize :: CallArg (Exp b) (Comp a b) -> Int
+callArgSize (CAExp _)  = 0
+callArgSize (CAComp _) = 1
+
 
 
 
@@ -800,10 +837,11 @@ substAllComp substs c
 eraseComp :: Comp a b -> Comp () ()
 eraseComp c
   = runIdentity $
-    mapCompM_aux (\t -> return ())
+    mapCompM_aux (\_ -> return ())
                  (return . eraseExp)
-                 (\t -> return ()) return c
+                 (\_ -> return ()) return c
 
+eraseCallArg :: CallArg (Exp b) (Comp a b) -> CallArg (Exp ()) (Comp () ())
 eraseCallArg (CAExp e)  = CAExp (eraseExp e)
 eraseCallArg (CAComp c) = CAComp (eraseComp c)
 
@@ -811,14 +849,45 @@ eraseCallArg (CAComp c) = CAComp (eraseComp c)
   PrettyVal instances (used for dumping the AST)
 -------------------------------------------------------------------------------}
 
-instance PrettyVal CTy0
 instance PrettyVal ParInfo
 instance PrettyVal PlInfo
-instance PrettyVal RWTypeAnn
 instance PrettyVal ReadType
 instance PrettyVal VectAnn
 
+instance PrettyVal ty => PrettyVal (GCTy0 ty)
+instance PrettyVal ty => PrettyVal (GRWTypeAnn ty)
+
 instance (PrettyVal a, PrettyVal b) => PrettyVal (CallArg a b)
-instance (PrettyVal a, PrettyVal b) => PrettyVal (Comp0 a b)
-instance (PrettyVal a, PrettyVal b) => PrettyVal (Comp a b)
-instance (PrettyVal a, PrettyVal b) => PrettyVal (Prog a b)
+
+instance (PrettyVal ty, PrettyVal a, PrettyVal b) => PrettyVal (GComp0 ty a b)
+instance (PrettyVal ty, PrettyVal a, PrettyVal b) => PrettyVal (GComp ty a b)
+instance (PrettyVal ty, PrettyVal a, PrettyVal b) => PrettyVal (GProg ty a b)
+
+-- Note [Standalone reads]
+-- ~~~~~~~~~~~~~~~~~~~~~~~
+--
+-- Reads arising from standalone pipelining are slightly problematic.
+-- Normally, if a read from a thread-separator cannot be executed because
+-- the queue is empty we could return SKIP and jump to this threads main
+-- control loop. That's all very fine.
+--
+-- *Except* when this thread is the main thread (i.e. /not/ a standalone).
+-- Example:
+--    main thread: read >>> c1 >>> write(s) >>> read(q) >>> c2 >>> write
+--    standalone : read(s) >>> s >>> write(q)
+--
+-- If the 'read(q)' returns SKIP and jumps back to the main threads
+-- loop, next time around we will ask again to read(q), which will
+-- also be empty.  Our only chance of making progress, is to jump to
+-- the *consume* continuation which is the consume continuation of the
+-- write(s) which will eventually cause the 's' queue to be filled in,
+-- give a chance to the standalone thread to write to 'q', and then
+-- give a chance to the main thread to read(q) successfully!
+--
+--
+-- Hence, we pass a flag down to ReadInternal that will allow us to choose
+-- one of the two behaviours for reading.
+--
+-- TODO: We might want to revisit this design later, or even deprecate the
+-- standalone pipelining which does not perform great anyway, but at the time
+-- of the writing of this comment (10/01/2014), this is not done.

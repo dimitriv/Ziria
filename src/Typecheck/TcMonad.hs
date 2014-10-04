@@ -86,12 +86,6 @@ type AMaxLenEnv = M.Map Name NumExpr
 mkAMaxLenEnv :: [(Name,NumExpr)] -> AMaxLenEnv
 mkAMaxLenEnv = M.fromList
 
--- maps fixed point precision lengths to ints
-type PLenEnv = M.Map Name Precision
-
-mkPLenEnv :: [(Name,Precision)] -> PLenEnv
-mkPLenEnv = M.fromList
-
 -- maps bitwidth precisions to BitWidths
 type BWEnv = M.Map BWVar BitWidth
 
@@ -108,7 +102,6 @@ data TcMState
   = TcMState { tcm_tyenv       :: TyEnv
              , tcm_alenenv     :: ALenEnv
              , tcm_amaxlenenv  :: AMaxLenEnv
-             , tcm_plenenv     :: PLenEnv
              , tcm_bwenv       :: BWEnv
 
              , tcm_in_cts   :: [Ct]
@@ -151,7 +144,6 @@ emptyTcMState
   = TcMState { tcm_tyenv      = mkTyEnv []
              , tcm_alenenv    = mkALenEnv []
              , tcm_amaxlenenv = mkAMaxLenEnv []
-             , tcm_plenenv    = mkPLenEnv []
              , tcm_bwenv      = mkBWEnv []
              , tcm_in_cts     = []
              , tcm_out_cts    = []
@@ -291,15 +283,6 @@ setAMaxLenEnv e = updStEnv (\st -> st { tcm_amaxlenenv = e })
 updAMaxLenEnv :: [(Name,NumExpr)] -> TcM ()
 updAMaxLenEnv binds
   = updStEnv $ \st -> st { tcm_amaxlenenv = updBinds binds (tcm_amaxlenenv st) }
-
--- Precision environment
-getPLenEnv :: TcM PLenEnv
-getPLenEnv = getStEnv tcm_plenenv
-setPLenEnv :: PLenEnv -> TcM ()
-setPLenEnv e = updStEnv (\st -> st { tcm_plenenv = e })
-updPLenEnv :: [(Name,Precision)] -> TcM ()
-updPLenEnv binds
-  = updStEnv $ \st -> st { tcm_plenenv = updBinds binds (tcm_plenenv st) }
 
 -- BitWidth environment
 getBWEnv :: TcM BWEnv
@@ -483,14 +466,6 @@ zonkALen (NVar n _m)
        ; case M.lookup n env of
            Nothing -> return (NVar n _m)
            Just ne -> zonkALen ne
-       }
-zonkALen (NArr a)
-  = do { env <- getEnv
-       -- ; liftIO $ putStrLn $ "zonkALen, env = " ++ show env
-       -- ; liftIO $ putStrLn $ "zonking for   = " ++ show a ++ " / " ++ name a
-       ; case M.lookup (name a) env of
-           Just (TArr ne _) -> zonkALen ne
-           _ -> return (NArr a)
        }
 zonkALen (Literal i)
   = return (Literal i)

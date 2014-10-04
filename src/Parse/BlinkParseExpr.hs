@@ -32,7 +32,6 @@ module BlinkParseExpr (
   , parseStmts
     -- * Utilities
   , parseFor
-  , mkNameFromPos
   , parseVarBind
   , genIntervalParser
   , eunit
@@ -40,7 +39,7 @@ module BlinkParseExpr (
 
 import Control.Applicative ((<*>), (<$), (<*), (*>), (<$>))
 import Control.Monad (join)
-import Data.Maybe ( fromMaybe, fromJust )
+import Data.Maybe (fromJust)
 import Text.Parsec
 import Text.Parsec.Expr
 
@@ -208,8 +207,8 @@ parseScalarValue = choice
     , VBit  False <$ reserved "'0"
     , VBit  True  <$ reserved "'1"
     , VUnit       <$ parens whiteSpace
-    , try $ VDouble Full <$> float
-    , try $ VString      <$> stringLiteral
+    , try $ VDouble <$> float
+    , try $ VString <$> stringLiteral
     , VInt <$> integer
     ]
 
@@ -256,7 +255,7 @@ parseDerefSuffix = choice
     eArrRead' loc a (y, l) x = eArrRead loc a x y l
 
 mkVar :: Maybe SourcePos -> () -> String -> SrcExp
-mkVar p () x = eVar p () (mkNameFromPos (Just x) (fromJust p) Nothing)
+mkVar p () x = eVar p () (toName x p Nothing)
 
 {-------------------------------------------------------------------------------
   Declarations and types
@@ -265,13 +264,13 @@ mkVar p () x = eVar p () (mkNameFromPos (Just x) (fromJust p) Nothing)
 -- | Declarations
 --
 -- <decl> ::= "var" IDENT ":" <base-type> (":=" <expr>)?
-declParser :: BlinkParser (Name, Ty, Maybe SrcExp)
+declParser :: BlinkParser (GName SrcTy, SrcTy, Maybe SrcExp)
 declParser =
     withPos mkDecl <* reserved "var" <*> identifier
                    <* colon <*> parseBaseType
                    <*> optionMaybe (symbol ":=" *> parseExpr)
   where
-    mkDecl p () x ty mbinit = (mkNameFromPos (Just x) (fromJust p) (Just ty), ty, mbinit)
+    mkDecl p () x ty mbinit = (toName x p (Just ty), ty, mbinit)
 
 -- | Base types
 --
@@ -298,33 +297,33 @@ declParser =
 --
 -- where we must be able to evaluate the the <expr> for an array length to
 -- a constant integer at compile time.
-parseBaseType :: BlinkParser Ty
+parseBaseType :: BlinkParser SrcTy
 parseBaseType = choice
-    [ TUnit                   <$ parens whiteSpace
-    , TBit                    <$ reserved "bit"
+    [ SrcTUnit         <$ parens whiteSpace
+    , SrcTBit          <$ reserved "bit"
 
-    , tint                    <$ reserved "int"
-    , tint8                   <$ reserved "int8"
-    , tint16                  <$ reserved "int16"
-    , tint32                  <$ reserved "int32"
-    , tint64                  <$ reserved "int64"
+    , SrcTInt SrcBW32  <$ reserved "int"
+    , SrcTInt SrcBW8   <$ reserved "int8"
+    , SrcTInt SrcBW16  <$ reserved "int16"
+    , SrcTInt SrcBW32  <$ reserved "int32"
+    , SrcTInt SrcBW64  <$ reserved "int64"
 
-    , TDouble Full            <$ reserved "double"
-    , TBool                   <$ reserved "bool"
+    , SrcTDouble       <$ reserved "double"
+    , SrcTBool         <$ reserved "bool"
 
-    , TStruct complex32TyName <$ reserved "complex"
-    , TStruct complex8TyName  <$ reserved "complex8"
-    , TStruct complex16TyName <$ reserved "complex16"
-    , TStruct complex32TyName <$ reserved "complex32"
-    , TStruct complex64TyName <$ reserved "complex64"
+    , SrcTStruct complex32TyName <$ reserved "complex"
+    , SrcTStruct complex8TyName  <$ reserved "complex8"
+    , SrcTStruct complex16TyName <$ reserved "complex16"
+    , SrcTStruct complex32TyName <$ reserved "complex32"
+    , SrcTStruct complex64TyName <$ reserved "complex64"
 
-    , TStruct <$ reserved "struct" <*> identifier <?> "struct name"
+    , SrcTStruct <$ reserved "struct" <*> identifier <?> "struct name"
     , reserved "arr" *> arrLength
 
     , parens parseBaseType
     ] <?> "expression type"
   where
-    arrLength :: BlinkParser Ty
+    arrLength :: BlinkParser SrcTy
     arrLength = choice
       [ withPos mkFixed    <*> brackets intOrLength <*> parseBaseType
       , withPos mkInferred <*> parseBaseType
@@ -337,12 +336,11 @@ parseBaseType = choice
       ] <?> "array length description"
 
     mkFixed _ () (Left n)  t = let i = fromIntegral n
-                               in TArr (Literal i) t
-    mkFixed p () (Right x) t = let nm = mkNameFromPos (Just x) (fromJust p) Nothing
-                               in TArr (NArr nm) t
+                               in SrcTArr (SrcLiteral i) t
+    mkFixed p () (Right x) t = let nm = toName x p Nothing
+                               in SrcTArr (SrcNArr nm) t
 
-    mkInferred p () t = let nm = mkNameFromPos Nothing (fromJust p) (Just tint)
-                        in TArr (NVar nm 0) t
+    mkInferred p () t = SrcTArr (SrcNVar (fromJust p)) t
 
 {-------------------------------------------------------------------------------
   Statements
@@ -481,14 +479,14 @@ foldIntExpr = do
 -- | Variable with optional type annotation
 --
 -- > <var-bind> ::= IDENT | "(" IDENT ":" <base-type> ")"
-parseVarBind :: BlinkParser Name
+parseVarBind :: BlinkParser (GName SrcTy)
 parseVarBind = choice
     [ withPos mkName <*> identifier
     , parens $ withPos mkNameTy <*> identifier <* symbol ":" <*> parseBaseType
     ] <?> "variable binding"
   where
-    mkName   p () i    = mkNameFromPos (Just i) (fromJust p) Nothing
-    mkNameTy p () i ty = mkNameFromPos (Just i) (fromJust p) (Just ty)
+    mkName   p () i    = toName i p Nothing
+    mkNameTy p () i ty = toName i p (Just ty)
 
 -- | Range
 --
@@ -543,21 +541,10 @@ parseFor for_reserved = choice
   Utilities
 -------------------------------------------------------------------------------}
 
-mkNameFromPos :: Maybe String  -- ^ optional source name
-              -> SourcePos     -- ^ source position
-              -> Maybe Ty      -- ^ optional source type annotation
-              -> Name
-mkNameFromPos mb_src_nm spos mb_ty =
-    toName (fromMaybe uniq mb_src_nm) (Just spos) mb_ty
-  where
-    uniq = "_t" ++ ln ++ "_" ++ col
-    ln   = show (sourceLine spos)
-    col  = show (sourceColumn spos)
-
 mkCall :: Maybe SourcePos -> () -> String -> [SrcExp] -> SrcExp
 mkCall p () fn args = eCall p () f args
   where
-    f = eVar p () (mkNameFromPos (Just fn) (fromJust p) Nothing)
+    f = eVar p () (toName fn p Nothing)
 
 eunit :: Maybe SourcePos -> () -> SrcExp
 eunit p () = eVal p () VUnit

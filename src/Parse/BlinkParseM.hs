@@ -47,8 +47,8 @@ import Control.Monad.Reader
 import Text.Parsec
 import Text.Parsec.Expr
 
-import AstExpr (Name, Ty)
-import AstComp (CallArg, CTy0)
+import AstExpr (GName, SrcTy)
+import AstComp (CallArg, GCTy0)
 
 {-------------------------------------------------------------------------------
   The Blink parser monad
@@ -61,7 +61,7 @@ import AstComp (CallArg, CTy0)
 type BlinkParseState = ()
 
 -- We need environment of defined functions to intelligently parse applications
-type ParseCompEnv     = [(Name,[(Name, CallArg Ty CTy0)])]
+type ParseCompEnv     = [(GName SrcTy,[(GName SrcTy, CallArg SrcTy (GCTy0 SrcTy))])]
 newtype BlinkParseM a = BlinkParseM { runParseM :: ParseCompEnv -> IO a }
 type BlinkParser a    = ParsecT String BlinkParseState BlinkParseM a
 

@@ -50,12 +50,12 @@ tyCheckExprWith e ty
 tyCheckVal :: Val -> TcM Ty
 tyCheckVal v
   = case v of
-      VBit b      -> return TBit
-      VInt n      -> newTInt_BWUnknown
-      VDouble p d -> return $ TDouble p
-      VBool b     -> return $ TBool
-      VString s   -> return $ TString
-      VUnit       -> return $ TUnit
+      VBit b    -> return TBit
+      VInt n    -> newTInt_BWUnknown
+      VDouble d -> return TDouble
+      VBool b   -> return TBool
+      VString s -> return TString
+      VUnit     -> return TUnit
 
 tyCheckExpr :: Exp () -> TcM (Exp Ty)
 tyCheckExpr e
@@ -113,8 +113,8 @@ tyCheckExpr e
                             case (target_ty, t0) of
                               (TBit,TInt _p)             -> return True
                               (TInt _p, TBit)            -> return True
-                              (TDouble _p, TInt _)       -> return True
-                              (TInt _p, TDouble _)       -> return True
+                              (TDouble, TInt _)          -> return True
+                              (TInt _p, TDouble)         -> return True
                               (TInt p, TInt p')          -> return True
                               (TStruct _s1, TStruct _s2) -> return $ isComplexTy target_ty && isComplexTy t0
                               -- Otherwise just try to unify

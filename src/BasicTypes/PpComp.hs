@@ -17,6 +17,7 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans -fno-warn-name-shadowing #-}
+-- | Pretty-printing type classes instances
 module PpComp (
     ppCompPipeline
   , ppCompShortFold
@@ -39,14 +40,14 @@ import Outputable
   Outputable instances
 -------------------------------------------------------------------------------}
 
-instance Outputable CTy0 where
+instance Outputable ty => Outputable (GCTy0 ty) where
   ppr cty = case cty of
     TComp t1 t2 t3 ->
       text "ST" <+> parens (text "C" <+> ppr t1) <+> ppr t2 <+> ppr t3
     TTrans t1 t2 ->
       text "ST" <+> text "T" <+> ppr t1 <+> ppr t2
 
-instance Outputable CTy where
+instance Outputable ty => Outputable (GCTy ty) where
   ppr cty = case cty of
     CTBase cty      -> ppr cty
     CTArrow tys cty ->
@@ -54,7 +55,7 @@ instance Outputable CTy where
       text "->" <+>
       ppr cty
 
-instance Outputable (Comp a b) where
+instance Outputable ty => Outputable (GComp ty a b) where
   ppr = ppComp0 ppr False False False . unComp
 
 instance (Outputable a, Outputable b) => Outputable (CallArg a b) where
@@ -75,7 +76,7 @@ instance Outputable VectAnn where
   ppr (Rigid _r ann) = ppWidth ann
   ppr (UpTo _r ann)  = text "<=" <> ppWidth ann
 
-instance Outputable (Prog a b) where
+instance Outputable ty => Outputable (GProg ty a b) where
   ppr p = case p of
     MkProg globs c ->
       ppDecls globs $$
@@ -85,13 +86,13 @@ instance Outputable (Prog a b) where
   Util
 -------------------------------------------------------------------------------}
 
-pprpedName :: Name -> Doc
+pprpedName :: Outputable ty => GName ty -> Doc
 pprpedName nm =
   case mbtype nm of
     Just ty -> parens $ ppName nm <+> text ":" <+> ppr ty
     Nothing -> ppName nm
 
-ppComp0 :: (Comp a b -> Doc) -> Bool -> Bool -> Bool -> Comp0 a b -> Doc
+ppComp0 :: Outputable ty => (GComp ty a b -> Doc) -> Bool -> Bool -> Bool -> GComp0 ty a b -> Doc
 ppComp0 ppComp _printtypes ignorelet ignoreexp c =
   case c of
     Var x ->
@@ -277,7 +278,7 @@ ppCompTyped x =
       pty = ppr (compInfo x)
   in parens (p1 <+> text "::" <+> pty)
 
-ppCompParams :: (Outputable a, Outputable b) => [(Name, CallArg a b)] -> Doc
+ppCompParams :: (Outputable ty, Outputable a, Outputable b) => [(GName ty, CallArg a b)] -> Doc
 ppCompParams params =
   case params of
     [] -> empty
@@ -313,7 +314,7 @@ isSimplComp (ReadSrc {})  = True
 isSimplComp (WriteSnk {}) = True
 isSimplComp _             = False
 
-nested_letfuns :: Comp a b -> Bool
+nested_letfuns :: GComp ty a b -> Bool
 nested_letfuns c
   = case mapCompM_ return aux c of
       Nothing -> True
@@ -326,10 +327,10 @@ nested_letfuns c
   Show instances
 -------------------------------------------------------------------------------}
 
-instance Show CTy0       where show = render . ppr
-instance Show CTy        where show = render . ppr
-instance Show (Comp a b) where show = render . ppr
-instance Show (Prog a b) where show = render . ppr
+instance Outputable ty => Show (GCTy0 ty)     where show = render . ppr
+instance Outputable ty => Show (GCTy ty)      where show = render . ppr
+instance Outputable ty => Show (GComp ty a b) where show = render . ppr
+instance Outputable ty => Show (GProg ty a b) where show = render . ppr
 
-instance Show (Comp0 a b) where
+instance Outputable ty => Show (GComp0 ty a b) where
   show = render . ppComp0 ppr False False False

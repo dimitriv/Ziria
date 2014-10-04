@@ -95,7 +95,7 @@ unify p tya tyb = go tya tyb
     go TUnit TUnit = return ()
     go TBit TBit   = return ()
     go (TInt bw1) (TInt bw2) = unifyBitWidth p tya tyb bw1 bw2
-    go (TDouble _p1) (TDouble _p2) = return ()
+    go TDouble TDouble = return ()
     go (TBuff (IntBuf ta))(TBuff (IntBuf tb))    = go ta tb
     go (TBuff (ExtBuf bta)) (TBuff (ExtBuf btb)) = go bta btb
     go (TInterval n)(TInterval n')
@@ -174,21 +174,6 @@ unifyBitWidth p orig_ty1 orig_ty2 bw1 bw2 = go bw1 bw2
 unifyALen :: Maybe SourcePos -> Ty -> Ty -> NumExpr -> NumExpr -> TcM ()
 unifyALen p orig_ty1 orig_ty2 nm1 nm2 = go nm1 nm2
   where
-    go (NArr a) nm
-      = do { env <- getEnv
-           ; case M.lookup (name a) env of
-               Just (TArr nm1 _t) -> go nm1 nm
-               Just ty ->
-                 let msg = text "Non-array variable: " <+> ppName a
-                 in unifyErrGeneric msg p orig_ty1 orig_ty2
-               Nothing ->
-                 let msg = text "Unbound array variable:" <+> ppName a
-                 in unifyErrGeneric msg p orig_ty1 orig_ty2
-           }
-
-    go nm (NArr a)
-      = go (NArr a) nm
-
     go (NVar n _m) nm2
       = do { alenv <- getALenEnv
            ; case M.lookup n alenv of
@@ -219,9 +204,6 @@ unifyALen p orig_ty1 orig_ty2 nm1 nm2 = go nm1 nm2
                  go (NVar nvar1 undefined) nm2
                Nothing ->
                  updALenEnv [(nvar1,(NVar nvar2 _m))] }
-
-    goNVar nvar1 (NArr {})
-      = error "goNVar: assertion failure!"
 
 
 defaultExpr = mapExpM_aux zonkTy zonk_exp
@@ -296,7 +278,5 @@ gatherPolyVars tys = nub $ gather tys []
      gather [] acc = acc
      gather ((TArr (NVar nm1 _) _):ts) acc
        = gather ts (nm1:acc)
-     gather ((TArr (NArr nm) _):ts) acc
-       = error "Unzonked type (gatherPolyVars)"
      gather (t:ts) acc = gather ts acc
 
