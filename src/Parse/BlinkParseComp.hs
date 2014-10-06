@@ -27,7 +27,6 @@ import Control.Applicative ((<$>), (<*>), (<$), (<*), (*>))
 import Control.Arrow (second)
 import Control.Monad (join, void)
 import Control.Monad.Reader.Class
-import Data.Maybe (fromJust)
 import Text.Parsec
 import Text.Parsec.Expr
 
@@ -44,7 +43,7 @@ import BlinkParseM
 -- | > <program> ::= <decls> <let-decls>*
 --
 -- TODO: Update the grammar
-parseProgram :: BlinkParser (Prog () ())
+parseProgram :: BlinkParser SrcProg
 parseProgram =
     join $ mkProg <$ whiteSpace <* cppPragmas AllowFilenameChange
        <*> declsParser <*> parseTopLevel <* eof
@@ -82,7 +81,7 @@ cppPragmas allowFilenameChange =
 -- | > <decls> ::= (<decl>;)*
 --
 -- (declParser comes from the expression language)
-declsParser :: BlinkParser [(Name, Ty, Maybe SrcExp)]
+declsParser :: BlinkParser [(GName SrcTy, SrcTy, Maybe SrcExp)]
 declsParser = declParser `endBy` topLevelSep
 
 -- | Parse a computation expression
@@ -190,16 +189,19 @@ opAlwaysPipeline :: BlinkParser ParInfo
 opAlwaysPipeline = mkParInfo (AlwaysPipeline 0 0) <$ reservedOp "|>>>|"
 
 -- > ("unroll" | "nounroll")? "times" <expr>
-timesPref :: BlinkParser (UnrollInfo, SrcExp, SrcExp, Name)
+timesPref :: BlinkParser (UnrollInfo, SrcExp, SrcExp, GName SrcTy)
 timesPref =
     (withPos mkTimes <*> parseFor (reserved "times") <*> parseExpr) <?> "times"
   where
+    -- NOTE: It doesn't matter that we only have 32-bit iterators here, since
+    -- in a 'times' loop the code doesn't get access to the iterator anyway,
+    -- so there is no possibility to cast the iterator to a different type.
     mkTimes p () ui e =
-      let nm = mkNameFromPos (Just "_tmp_count") (fromJust p) (Just tint)
+      let nm = toName "_tmp_count" p (Just (SrcTInt SrcBW32))
       in (ui, eVal p () (VInt 0), e, nm)
 
 -- > ("unroll" | "nounroll")? "for" <var-bind> "in" "[" <interval> "]"
-forPref :: BlinkParser (UnrollInfo, SrcExp, SrcExp, Name)
+forPref :: BlinkParser (UnrollInfo, SrcExp, SrcExp, GName SrcTy)
 forPref =
     (withPos mkFor <*> parseFor (reserved "for") <*> parseVarBind
                    <* reserved "in" <*> brackets genIntervalParser) <?> "for"
@@ -217,7 +219,7 @@ parseVarOrCall = go <?> "variable or function call"
     go = do
       p <- getPosition
       x <- identifier
-      let xnm = mkNameFromPos (Just x) p Nothing
+      let xnm = toName x (Just p) Nothing
       choice [ do notFollowedBy (symbol "(")
                   notFollowedBy (symbol "<-")
                   return (cVar (Just p) () xnm)
@@ -233,14 +235,14 @@ parseVarOrCall = go <?> "variable or function call"
 -- If however `xnm` is a known function we expect a comma-separated list of
 -- as many arguments as the function expect, which can either be computations
 -- `<comp>` or expressions `<expr>`.
-parseArgs :: Name -> BlinkParser [CallArg SrcExp SrcComp]
+parseArgs :: GName SrcTy -> BlinkParser [CallArg SrcExp SrcComp]
 parseArgs xnm = parens $ do
     penv <- ask
     case lookup xnm penv of
       Just arg_info -> map parseArg arg_info `sepsBy` comma
       Nothing       -> (CAExp <$> parseExpr) `sepBy`  comma
   where
-    parseArg :: (Name, CallArg Ty CTy0) -> BlinkParser (CallArg SrcExp SrcComp)
+    parseArg :: (GName SrcTy, CallArg SrcTy (GCTy0 SrcTy)) -> BlinkParser (CallArg SrcExp SrcComp)
     parseArg (_, CAExp  _) = CAExp  <$> parseExpr
     parseArg (_, CAComp _) = CAComp <$> parseComp
 
@@ -248,14 +250,14 @@ parseArgs xnm = parens $ do
   Let statements
 -------------------------------------------------------------------------------}
 
-data LetDecl =
-    LetDeclVar (Name, Ty, Maybe SrcExp)
-  | LetDeclStruct StructDef
-  | LetDeclExternal String [(Name, Ty)] Ty
-  | LetDeclFunComp (Maybe (Int, Int)) Name [(Name, CallArg Ty CTy0)] ([(Name, Ty, Maybe SrcExp)], SrcComp)
-  | LetDeclFunExpr Name [(Name, Ty)] ([(Name, Ty, Maybe SrcExp)], SrcExp)
-  | LetDeclComp (Maybe (Int, Int)) Name SrcComp
-  | LetDeclExpr Name SrcExp
+data LetDecl ty =
+    LetDeclVar (GName ty, ty, Maybe SrcExp)
+  | LetDeclStruct (GStructDef ty)
+  | LetDeclExternal String [(GName ty, ty)] ty
+  | LetDeclFunComp (Maybe (Int, Int)) (GName ty) [(GName ty, CallArg ty (GCTy0 ty))] ([(GName ty, ty, Maybe SrcExp)], SrcComp)
+  | LetDeclFunExpr (GName ty) [(GName ty, ty)] ([(GName ty, ty, Maybe SrcExp)], SrcExp)
+  | LetDeclComp (Maybe (Int, Int)) (GName ty) SrcComp
+  | LetDeclExpr (GName ty) SrcExp
 
 -- | The thing that is being declared in a let-statemnt
 --
@@ -267,7 +269,7 @@ data LetDecl =
 -- >   | "fun" <var-bind> <params> "{" <decl>* <stmts> "}"
 -- >   | "let" <comp-ann> <var-bind> "=" <comp>
 -- >   | "let" <var-bind> "=" <expr>
-parseLetDecl :: BlinkParser LetDecl
+parseLetDecl :: BlinkParser (LetDecl SrcTy)
 parseLetDecl = choice
     [ LetDeclVar <$> declParser
     , LetDeclStruct <$> parseStruct
@@ -278,11 +280,11 @@ parseLetDecl = choice
     , try $ LetDeclExpr     <$ reserved "let"                  <*> parseVarBind <* symbol "=" <*> parseExpr
     ]
   where
-    body :: BlinkParser a -> BlinkParser ([(Name, Ty, Maybe SrcExp)] , a)
+    body :: BlinkParser a -> BlinkParser ([(GName SrcTy, SrcTy, Maybe SrcExp)], a)
     body p = braces $ (,) <$> declsParser <*> p
 
 -- > <struct> ::= "struct" IDENT "=" "{" (IDENT ":" <base-type>)*";" "}"
-parseStruct :: BlinkParser StructDef
+parseStruct :: BlinkParser (GStructDef SrcTy)
 parseStruct = do
     reserved "struct"
     x <- identifier
@@ -294,18 +296,18 @@ parseStruct = do
 -- | Parameters to a (non-comp) function
 --
 -- > <params> ::= "(" (IDENT ":" <base-type>)*"," ")"
-paramsParser :: BlinkParser [(Name, Ty)]
+paramsParser :: BlinkParser [(GName SrcTy, SrcTy)]
 paramsParser = parens $ sepBy paramParser (symbol ",")
   where
     paramParser = withPos mkParam <*> identifier <* colon <*> parseBaseType
-    mkParam p () x ty = (mkNameFromPos (Just x) (fromJust p) (Just ty), ty)
+    mkParam p () x ty = (toName x p (Just ty), ty)
 
 -- | Parameters to a (comp) function
 --
 -- > <comp-params> ::= "(" (IDENT ":" (<base-type> | <comp-base-type>))*"," ")"
 --
 -- (<base-type> comes from the expr parser; <comp-base-type> is defined here).
-compParamsParser :: BlinkParser [(Name, CallArg Ty CTy0)]
+compParamsParser :: BlinkParser [(GName SrcTy, CallArg SrcTy (GCTy0 SrcTy))]
 compParamsParser = parens $ sepBy paramParser (symbol ",")
   where
     paramParser = withPos mkParam <*> identifier <* colon <*> parseType
@@ -313,12 +315,12 @@ compParamsParser = parens $ sepBy paramParser (symbol ",")
                          , CAComp <$> parseCompBaseType
                          ] <?> "computation parameter type"
 
-    mkParam p () x mty = (mkNameFromPos (Just x) (fromJust p) Nothing, mty)
+    mkParam p () x mty = (toName x p Nothing, mty)
 
 -- | Computation type
 --
 -- > <comp-base-type> ::= "ST" ("T" | "C" <base-type>) <base-type> <base-type>
-parseCompBaseType :: BlinkParser CTy0
+parseCompBaseType :: BlinkParser (GCTy0 SrcTy)
 parseCompBaseType = choice
     [ mkCTy0 <$ reserved "ST" <*> parse_idx <*> parseBaseType <*> parseBaseType
     , parens parseCompBaseType
@@ -333,7 +335,7 @@ parseCompBaseType = choice
     mkCTy0 Nothing   ti ty = TTrans ti ty
     mkCTy0 (Just tv) ti ty = TComp tv ti ty
 
-cLetDecl :: Maybe SourcePos -> () -> LetDecl -> (ParseCompEnv, SrcComp -> SrcComp)
+cLetDecl :: Maybe SourcePos -> () -> LetDecl SrcTy -> (ParseCompEnv, SrcComp -> SrcComp)
 cLetDecl p () (LetDeclVar (xn, ty, e)) =
     ([], cLetERef p () xn ty e)
 cLetDecl p () (LetDeclStruct sdef) =
@@ -341,7 +343,7 @@ cLetDecl p () (LetDeclStruct sdef) =
 cLetDecl p () (LetDeclExternal x params ty) =
     ([], cLetHeader p () fn fun)
   where
-    fn  = mkNameFromPos (Just x) (fromJust p) Nothing
+    fn  = toName x p Nothing
     fun = MkFun (MkFunExternal fn params ty) p ()
 cLetDecl p () (LetDeclFunComp h x params (locls, c)) =
     ([(x, params)], cLetFunC p () x params locls (mkVectComp c h))
@@ -419,7 +421,7 @@ cunit p () = cReturn p () ForceInline (eunit p ())
 -- | Optional type annotation
 --
 -- > <type-ann> ::= "[" <base-type> "]"
-optTypeAnn :: BlinkParser RWTypeAnn
+optTypeAnn :: BlinkParser (GRWTypeAnn SrcTy)
 optTypeAnn =
     mkTypeAnn <$> optionMaybe (brackets parseBaseType)
   where

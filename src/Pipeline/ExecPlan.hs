@@ -16,6 +16,7 @@ import AstComp
 import AstExpr
 import Text.Parsec.Pos
 import PpComp
+import Outputable
 import Debug.Trace
 
 data Computer
@@ -374,7 +375,7 @@ compUnitTy c =
   case compInfo c of
     (CTBase (TComp _ i o)) -> CTBase $ TComp TUnit i o
     (CTBase (TTrans i o))  -> CTBase $ TComp TUnit i o
-    _                      -> error $ "Non base type in compUnitTy:\n" ++ show (ppCTy $ compInfo c)
+    _                      -> error $ "Non base type in compUnitTy:\n" ++ show (ppr $ compInfo c)
 
 -- | The type Comp (C ()) () ().
 compTripleUnitTy :: CTy

@@ -82,7 +82,6 @@ cgBoundsCheck dflags loc arrty cbase linfo
                         <- case numexpr of
                              Literal m -> return [cexp| $int:m |]
                              NVar nm _ -> lookupVarEnv nm >>= (return . snd)
-                             NArr _ -> fail "cgBoundsCheck: unexpected NArr!"
                   ; appendStmt $
                     [cstm|bounds_check($cnumexpr, $cbase + $int:(leninfo),$string:spos);|]
                   }
@@ -111,11 +110,11 @@ cgUnOp (Cast target_ty) ce src_ty _target_ty
   = fail "codeGenExp: catastrophic bug, type of castee different than cast target type!"
   | otherwise
   = case (target_ty, src_ty) of
-      (TBit, TInt _)        -> return [cexp|$ce & 1|]
-      (TInt _, TBit)        -> return ce
-      (TDouble _p, TInt _)  -> return [cexp|(double) $ce|]
-      (TInt bw, TDouble _p) -> return [cexp|($ty:(namedCType (cgTIntName bw))) $ce |]
-      (TInt bw, TInt _)     -> return [cexp|($ty:(namedCType (cgTIntName bw))) $ce |]
+      (TBit, TInt _)     -> return [cexp|$ce & 1|]
+      (TInt _, TBit)     -> return ce
+      (TDouble, TInt _)  -> return [cexp|(double) $ce|]
+      (TInt bw, TDouble) -> return [cexp|($ty:(namedCType (cgTIntName bw))) $ce |]
+      (TInt bw, TInt _)  -> return [cexp|($ty:(namedCType (cgTIntName bw))) $ce |]
 
       -- For complex we must emit a proper function, see _csrc/numerics.h
       (TStruct tn, TStruct sn)
@@ -397,7 +396,6 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
                     cer     = [cexp|$id:(name retNewN)|]
                     clen    = case li of Literal l -> [cexp| $int:l|]
                                          NVar c _m -> [cexp| $id:(name c)|]
-                                         NArr {}   -> error "codeGenExp: don't know what Narr is doing."
               ; appendDecls =<<
                    codeGenDeclGlobalGroups dflags [(retNewN, retTy, Nothing)]
 
@@ -553,7 +551,7 @@ printScalar dflags e = do
        TBool        -> [cstm| printf("%d", $ce1); |]
        TString      -> [cstm| printf("%s", $ce1); |]
        TInt {}      -> [cstm| printf("%ld", $ce1);|]
-       TDouble Full -> [cstm| printf("%f", $ce1); |]
+       TDouble      -> [cstm| printf("%f", $ce1); |]
        ty | isComplexTy ty
           -> [cstm| printf("(%ld,%ld)", $ce1.re, $ce1.im);|]
           | otherwise

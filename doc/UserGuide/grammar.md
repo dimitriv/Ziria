@@ -163,6 +163,10 @@ determines otherwise.
   | "(" <base-type> ")"
 ```  
 
+Note that "int" means "int32".  Bit widths in the source language are _always_
+given, and we don't support bitwidth polymorphism (unknown bit widths are only
+used in the type checker for the types of literals).
+
 Arrays can have either:
 
 1. A programmer-unspecified length, that type inference is going to try to infer.

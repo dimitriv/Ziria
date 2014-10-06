@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -22,7 +22,7 @@ module CgTypes ( codeGenTy
                , codeGenTy_val
                , codeGenTyAlg
                , codeGenArrTyPtr
-               , codeGenArrTyPtrAlg 
+               , codeGenArrTyPtrAlg
                , assignByVal
                , tyBitWidth, tySizeOf_C, tySizeOf, tyBitWidth_ByteAlign
                , codeGenDeclGroup, codeGenDeclVolGroup, codeGenDeclVolGroup_init
@@ -33,7 +33,7 @@ module CgTypes ( codeGenTy
                , initGroupDef
                , codeGenVal
                , codeGenArrVal
-               , namedCType 
+               , namedCType
                , isStructPtrType
                ) where
 
@@ -63,65 +63,63 @@ procTy :: C.Type
 procTy = [cty|char|]
 
 
-namedCType nm = 
-  C.Type 
+namedCType nm =
+  C.Type
     (C.DeclSpec [] [] (C.Tnamed (C.Id nm emptyLoc) [] emptyLoc) emptyLoc)
     (C.DeclRoot emptyLoc)
     emptyLoc
-  where emptyLoc = Data.Loc.SrcLoc Data.Loc.NoLoc    
+  where emptyLoc = Data.Loc.SrcLoc Data.Loc.NoLoc
 
 codeGenTy    = codeGenTy_qual ""
 codeGenTyAlg = codeGenTy_qual "calign"
 
 
 codeGenTy_val :: Ty -> Cg C.Initializer
-codeGenTy_val (TStruct {}) = do { v <- cg_values [VInt 0] >>= (return . fromJust) 
+codeGenTy_val (TStruct {}) = do { v <- cg_values [VInt 0] >>= (return . fromJust)
                                 ; return [cinit| { $v } |] }
 codeGenTy_val (TArr {})    = return [cinit| NULL |]
 codeGenTy_val _            = return [cinit| 0 |]
 
 
 codeGenTy_qual :: String -- Type qualifiers
-               -> Ty 
+               -> Ty
                -> C.Type
 codeGenTy_qual quals ty =
   case ty of
-    TBit  -> namedCType $ quals ++ " Bit"
-    TBool -> namedCType $ quals ++ " unsigned char"
-    TArr _n ty'  -> codeGenArrTyPtr_qual quals ty
-    TDouble Full -> namedCType $ quals ++ " double"
-    TDouble (Fixed p) -> namedCType $ quals ++ " struct fixed16"
-
-    TUnit  -> unitTy quals
+    TBit        -> namedCType $ quals ++ " Bit"
+    TBool       -> namedCType $ quals ++ " unsigned char"
+    TArr _n ty' -> codeGenArrTyPtr_qual quals ty
+    TDouble     -> namedCType $ quals ++ " double"
+    TUnit       -> unitTy quals
 
     -- TODO: Fail here (don't want to generate code for type vars.)!
     -- TODO: Make codeGenTy monadic so we can give some context error location
     TVar _ -> error "CodeGen error: ambiguous intermediate type variable, missing a type annotation?"
-    
+
     -- Must keep in sync with CgLut.typeBitWidth and CgLut.lutField.
 
     TInt bw -> namedCType $ quals ++ " " ++ cgTIntName bw
 
-    -- TODO: Why do we ever call codeGenTy 
+    -- TODO: Why do we ever call codeGenTy
     -- for these? And why is the ExtBuf giving void?
     -- Old comment said:
     -- ``We should never have to generate code for TBuff but this is
     --   an artifact of the fact that we generate dummy signatures for
     --   everything.''
-    TBuff (IntBuf (TVar _)) 
+    TBuff (IntBuf (TVar _))
           -> error "CodeGen error: uninferred intermediate buffer type!"
-    TBuff (IntBuf ty')      
+    TBuff (IntBuf ty')
           -> codeGenTy_qual quals ty'
     TBuff (ExtBuf _ty) -> [cty|void |]
 
     -- Structs
     TStruct namety -> namedCType $ quals ++ " " ++ namety
 
-    _ -> error $ show (ppTy ty) ++ " type not yet supported in codeGenTy"
+    _ -> error $ show (ppr ty) ++ " type not yet supported in codeGenTy"
 
 
 -- The bit width that is required to represent a type NB: the actual
--- storage bitwidth might be larger.  
+-- storage bitwidth might be larger.
 -- Example: (arr [5] bit) is represented as an unsigned char (or maybe
 -- as a 4 byte unsigned int). But tyBitWidth would return 5
 tyBitWidth :: Monad m => Ty -> m Int
@@ -129,11 +127,10 @@ tyBitWidth TUnit                 = return 0
 tyBitWidth TBit                  = return 1 -- NB not 8
 tyBitWidth TBool                 = return 1 -- NB not 8
 tyBitWidth (TInt bw)             = bwBitWidth bw
-tyBitWidth (TDouble Full)        = return 64
-tyBitWidth (TDouble (Fixed {}))  = return 16
-tyBitWidth (TArr (Literal n) ty) 
+tyBitWidth TDouble               = return 64
+tyBitWidth (TArr (Literal n) ty)
   = do { w <- tyBitWidth ty
-       ; return (n*w) 
+       ; return (n*w)
        }
 tyBitWidth t@(TStruct tn)
   | tn == complexTyName
@@ -148,7 +145,7 @@ tyBitWidth t@(TStruct tn)
 -- For the moment let's say that we can't calculate bit width of
 -- arbitrary structs.  This means that expressions that manipulated
 -- structs will not be lutted.
-tyBitWidth ty 
+tyBitWidth ty
   -- = error $ "Cannot calculate bit width of type: " ++ show ty
   = fail $ "Cannot calculate bit width of type " ++ show ty
 
@@ -158,9 +155,8 @@ tyBitWidth_ByteAlign TUnit                 = return 0
 tyBitWidth_ByteAlign TBit                  = return 8 -- NB not 1
 tyBitWidth_ByteAlign TBool                 = return 8 -- NB not 1
 tyBitWidth_ByteAlign (TInt bw)             = bwBitWidth bw
-tyBitWidth_ByteAlign (TDouble Full)        = return 64
-tyBitWidth_ByteAlign (TDouble (Fixed {}))  = return 16
-tyBitWidth_ByteAlign (TArr (Literal n) ty) 
+tyBitWidth_ByteAlign TDouble               = return 64
+tyBitWidth_ByteAlign (TArr (Literal n) ty)
   = do { w <- tyBitWidth ty
        ; return $ (((n*w) + 7) `div` 8) * 8
        }
@@ -175,52 +171,52 @@ tyBitWidth_ByteAlign t@(TStruct tn)
   | tn == complex32TyName
   = return 64
 
-tyBitWidth_ByteAlign ty 
+tyBitWidth_ByteAlign ty
   = fail $ "Cannot calculate bit width of type " ++ show ty
 
 -- Returns the representation of the type in bytes
 tySizeOf :: Ty -> Cg (Maybe Int)
-tySizeOf TUnit      = return $ Just 1  
+tySizeOf TUnit      = return $ Just 1
 tySizeOf TBit       = return $ Just 1
 tySizeOf TBool      = return $ Just 1
 tySizeOf (TInt bw)  = bwBitWidth bw >>= \s -> return $ Just (s `div` 8)
-tySizeOf (TDouble _)             = return $ Just 64
+tySizeOf TDouble    = return $ Just (64 `div` 8)
 tySizeOf (TArr (Literal n) TBit) = return $ Just (getBitArrayByteLength n)
-tySizeOf (TArr (Literal n) ty)   
-  = do { m <- tySizeOf ty 
-       ; case m of 
+tySizeOf (TArr (Literal n) ty)
+  = do { m <- tySizeOf ty
+       ; case m of
            Nothing -> return Nothing
-           Just s -> return (Just (n*s)) 
+           Just s -> return (Just (n*s))
        }
-tySizeOf (TStruct sn)            
+tySizeOf (TStruct sn)
   = do { sdef <- lookupTyDefEnv sn
        ; szs  <- mapM (tySizeOf . snd) (struct_flds sdef)
        ; return (sequence szs >>= (return . sum)) }
 
-tySizeOf _other = return Nothing 
+tySizeOf _other = return Nothing
 
 tySizeOfCg :: Ty -> Cg Int
 tySizeOfCg ty = do { mi <- tySizeOf ty
-                   ; case mi of 
-                      Nothing -> 
+                   ; case mi of
+                      Nothing ->
                         fail $ "Can't determine tySizeOf of type: " ++ show ty
                       Just i -> return i
                    }
 
 tySizeOf_C :: Ty -> C.Exp
-tySizeOf_C (TArr (Literal n) TBit) 
+tySizeOf_C (TArr (Literal n) TBit)
  = [cexp| $int:(getBitArrayByteLength n)|]
-tySizeOf_C (TArr (Literal n) t) 
+tySizeOf_C (TArr (Literal n) t)
  = [cexp| $int:n * $(tySizeOf_C t) |]
-tySizeOf_C t 
- = [cexp| sizeof($ty:(codeGenTy t)) |] 
+tySizeOf_C t
+ = [cexp| sizeof($ty:(codeGenTy t)) |]
 
 
 bwBitWidth BW8           = return 8
 bwBitWidth BW16          = return 16
 bwBitWidth BW32          = return 32
 bwBitWidth BW64          = return 64
-bwBitWidth (BWUnknown _) = return 32 -- Defaulting! 
+bwBitWidth (BWUnknown _) = return 32 -- Defaulting!
 
 
 codeGenArrTyPtr :: Ty -> C.Type
@@ -234,13 +230,11 @@ codeGenArrTyPtr_qual :: String -- Qualifier
                      -> Ty     -- An array type
                      -> C.Type
 codeGenArrTyPtr_qual quals ty
- | TArr (Literal n) t <- ty = aux n t 
+ | TArr (Literal n) t <- ty = aux n t
  | TArr (NVar c n)  t <- ty = aux n t
- | TArr (NArr a)    t <- ty 
- = error "codeGenArrTyPtr_qual: unexpected unresolved array type"
  | otherwise
  = error "codeGenArrTyPtr_qual: unexpected non-array type"
- where aux n t 
+ where aux n t
         | TBit <- t
         = [cty| $ty:(namedCType $ quals ++ " BitArrPtr") |]
         | otherwise
@@ -250,43 +244,41 @@ codeGenArrTyPtr_qual quals ty
 codeGenVal :: Val -> Cg C.Exp
 codeGenVal v =
   case v of
-    VBit True -> return [cexp|1|]
-    VBit False -> return [cexp|0|]    
-    VInt i -> return [cexp|$lint:i|] -- NB: $lint instead of $int to accommodate 64-bit constants
-    VDouble Full d -> return [cexp|$double:(toRational d)|]
-    VDouble (Fixed p) d -> fail "codeGenVal: Fixed values not yet supported"
-    VDouble (Unknown n) d -> fail "codeGenVal: Precision not resolved"
-    VBool True -> return [cexp|$uint:(1)|]
+    VBit True   -> return [cexp|1|]
+    VBit False  -> return [cexp|0|]
+    VInt i      -> return [cexp|$lint:i|] -- NB: $lint instead of $int to accommodate 64-bit constants
+    VDouble d   -> return [cexp|$double:(toRational d)|]
+    VBool True  -> return [cexp|$uint:(1)|]
     VBool False -> return [cexp|$uint:(0)|]
     VString str -> return [cexp|$string:(str)|]
-    VUnit -> return unitVal
+    VUnit       -> return unitVal
 
 ------------------------------------------------------------------------------
 -- | Arrays related code
 ------------------------------------------------------------------------------
 -- Note: for SIMD/SSE instructions we need to declare 16-bytes aligned arrays
--- To do that we have special versions of codeGenTy and variants 
+-- To do that we have special versions of codeGenTy and variants
 -- with suffic Alg which appends the alignment keyword in front of decls.
 
 
--- Get the length of a bitarray in bytes. 
+-- Get the length of a bitarray in bytes.
 -- Coupled to the implementation in _csrc/bit.c
-getBitArrayByteLength n = (n + 7) `div` 8 
+getBitArrayByteLength n = (n + 7) `div` 8
 
 
 -- Arrays more than 128K wide allocated on the heap
 mAX_STACK_ALLOC = 1024 * 32
 
 -- Is this type a *struct* represented by pointer?
-isStructPtrType :: Ty -> Cg Bool 
-isStructPtrType ty 
+isStructPtrType :: Ty -> Cg Bool
+isStructPtrType ty
   | isArrTy ty
   = return False
   | otherwise
-  = tySizeOfCg ty >>= isLargeTy 
+  = tySizeOfCg ty >>= isLargeTy
 
 isLargeTy :: Int -> Cg Bool
-isLargeTy ty_size 
+isLargeTy ty_size
   = do { mAX_STACK_ALLOC <- getMaxStackAlloc
        ; return (ty_size > mAX_STACK_ALLOC) }
 
@@ -298,12 +290,12 @@ codeGenDeclGroup_qual :: String      -- Type qualifiers
 -- We return two different representations
 -- (a) the initgroup
 -- (b) just the declaration and in a separate statement the initialization
-codeGenDeclGroup_qual quals v ty vinit 
+codeGenDeclGroup_qual quals v ty vinit
   = do { alloc_as_ptr <- isStructPtrType ty
        ; case ty of
-            TArr (Literal n) t 
+            TArr (Literal n) t
                -> do { s <- tySizeOfCg ty
-                     ; alloc_as_ptr <- isLargeTy s 
+                     ; alloc_as_ptr <- isLargeTy s
                      ; let vlen       = [cexp|$int:(arr_len t n)|]
                            tbase      = arr_base t
                            tdecl_base = aligned_base t
@@ -312,7 +304,7 @@ codeGenDeclGroup_qual quals v ty vinit
 
             -- dynamic allocation for variable-size arrays
             TArr (NVar siz_nm _) t
-               -> do { let vlen = case t of 
+               -> do { let vlen = case t of
                                     TBit -> [cexp|($id:(name siz_nm) + 7) >> 3|]
                                     _    -> [cexp|$id:(name siz_nm)|]
                            tbase = arr_base t
@@ -320,32 +312,29 @@ codeGenDeclGroup_qual quals v ty vinit
                      ; arr_decl True v vlen tbase tdecl_base
                      }
 
-            TArr (NArr _) t
-               -> fail $ "Unexpected unresolved array size:" ++ show ty
-
-            _other 
+            _other
                | Just val <- vinit
                -> let ig = [cdecl| $ty:(codeGenTy_qual quals ty) $id:v = $val; |]
-                  in return (ig, (ig, Nothing)) 
+                  in return (ig, (ig, Nothing))
                | alloc_as_ptr
                -> let cty = codeGenTy_qual quals ty
                       cty_plain = codeGenTy_qual "" ty
-                  in do { newHeapAlloc 
-                        ; heap_context <- getHeapContext 
-                        ; let ig1  = [cdecl| $ty:cty * $id:v = 
-                                         ($ty:cty_plain *) wpl_alloca($id:heap_context, sizeof($ty:cty_plain));|] 
+                  in do { newHeapAlloc
+                        ; heap_context <- getHeapContext
+                        ; let ig1  = [cdecl| $ty:cty * $id:v =
+                                         ($ty:cty_plain *) wpl_alloca($id:heap_context, sizeof($ty:cty_plain));|]
                               ig2  = [cdecl| $ty:cty * $id:v;|]
                         ; let stmt = [cstm| $id:v = ($ty:cty_plain *) wpl_alloca($id:heap_context, sizeof($ty:cty_plain)); |]
                         ; return (ig1, (ig2, Just stmt))
                         }
 
-               | otherwise 
+               | otherwise
                -> let ig = [cdecl| $ty:(codeGenTy_qual quals ty) $id:v;|]
                   in return (ig, (ig, Nothing))
         }
 
   where arr_len TBit n = getBitArrayByteLength n
-        arr_len _    n = n 
+        arr_len _    n = n
         arr_base TBit = [cty| unsigned char |]
         arr_base t    = codeGenTy_qual "" t
 
@@ -355,34 +344,33 @@ codeGenDeclGroup_qual quals v ty vinit
         arr_decl alloc_as_ptr v len t decl_t
           | Just val <- vinit -- NB: "braces" around val as it's a Seq!
           = let ig = [cdecl| $ty:decl_t $id:v[$len] = {$val}; |]
-            in return (ig, (ig, Nothing)) 
+            in return (ig, (ig, Nothing))
           | alloc_as_ptr
           = do { newHeapAlloc
-               ; heap_context <- getHeapContext 
+               ; heap_context <- getHeapContext
                ; let ig1  = [cdecl| $ty:decl_t *$id:v = ($ty:t *) wpl_alloca($id:heap_context, $len * sizeof($ty:t)); |]
                      ig2  = [cdecl| $ty:decl_t *$id:v; |]
                      stmt = [cstm| $id:v = ($ty:t *) wpl_alloca($id:heap_context, $len * sizeof($ty:t)); |]
                ; return (ig1, (ig2, Just stmt))
                }
-          | otherwise 
+          | otherwise
           = let ig = [cdecl| $ty:decl_t $id:v[$len]; |]
-            in return (ig, (ig, Nothing)) 
-  
+            in return (ig, (ig, Nothing))
+
 
 
 
 codeGenFieldDeclGroup :: String      -- Id
                       -> Ty          -- Type to be declared with
                       -> C.FieldGroup
-codeGenFieldDeclGroup v ty = 
+codeGenFieldDeclGroup v ty =
   case ty of
     TArr (Literal n) t -> arr_decl v (arr_siz t n) (arr_base t)
     TArr (NVar c n) t  -> arr_decl v (arr_siz t n) (arr_base t)
-    TArr (NArr _) _    -> error "Unexpected unresolved array size!"
     _other             -> [csdecl| $ty:(codeGenTy ty) $id:v; |]
 
   where arr_siz TBit n = getBitArrayByteLength n
-        arr_siz _    n = n 
+        arr_siz _    n = n
         arr_base TBit  = [cty| unsigned char |]
         arr_base t     = codeGenTy t
         arr_decl v sz t = [csdecl| $ty:t $id:v[$int:sz]; |]
@@ -393,31 +381,31 @@ codeGenDeclGroup :: String -> Ty -> Cg C.InitGroup
 codeGenDeclGroup v ty = return . fst =<< codeGenDeclGroup_qual "calign" v ty Nothing
 
 codeGenDeclVolGroup :: String -> Ty -> Cg C.InitGroup
-codeGenDeclVolGroup v ty 
+codeGenDeclVolGroup v ty
   = return . fst =<< codeGenDeclGroup_qual "volatile" v ty Nothing
 
 codeGenDeclVolGroup_init :: String -> Ty -> C.Exp -> Cg C.InitGroup
-codeGenDeclVolGroup_init v ty e 
+codeGenDeclVolGroup_init v ty e
   = return . fst =<< codeGenDeclGroup_qual "volatile" v ty (Just e)
 
 
 
 codeGenDeclDef :: String -> Ty -> Cg C.Definition
-codeGenDeclDef v ty 
+codeGenDeclDef v ty
   = do { ig <- codeGenDeclGroup v ty
-       ; return $ initGroupDef ig 
+       ; return $ initGroupDef ig
        }
 
 initGroupDef :: C.InitGroup -> C.Definition
-initGroupDef ig = C.DecDef ig Data.Loc.noLoc 
+initGroupDef ig = C.DecDef ig Data.Loc.noLoc
 
 
-codeGenDeclGlobalGroups :: DynFlags 
+codeGenDeclGlobalGroups :: DynFlags
                         -> [(Name, Ty, Maybe (Exp Ty))] -> Cg [C.InitGroup]
 codeGenDeclGlobalGroups dflags = mapM $ \(nm, ty, me) ->
   codeGenDeclGroup (name nm) ty
 
-codeGenDeclGlobalDefs :: DynFlags 
+codeGenDeclGlobalDefs :: DynFlags
                       -> [(Name, Ty, Maybe (Exp Ty))] -> Cg ([C.Definition],[C.Stm])
 codeGenDeclGlobalDefs dflags defs
  = do { defs_inits <- mapM (\(nm, ty, me) ->
@@ -426,13 +414,13 @@ codeGenDeclGlobalDefs dflags defs
                          ; case mstm of Nothing   -> return (id,[])
                                         Just init -> return (id,[init]) }) defs
       ; let (defs,inits) = unzip defs_inits
-      ; return (defs, concat inits) 
+      ; return (defs, concat inits)
       }
 
 assignByVal :: Ty -> Ty -> C.Exp -> C.Exp -> Cg ()
-assignByVal ty@(TArr (Literal n) TBit) _ ce1 ce2 
+assignByVal ty@(TArr (Literal n) TBit) _ ce1 ce2
   | n `mod` 8 == 0
-  = if n == 8 
+  = if n == 8
     then appendStmt [cstm| *($ce1) = *($ce2); |]
     else appendStmt [cstm|blink_copy($ce1,$ce2,$int:(n `div` 8));|]
   | otherwise
@@ -441,37 +429,25 @@ assignByVal ty@(TArr (Literal n) TBit) _ ce1 ce2
 assignByVal ty@(TArr (Literal n) t) _ ce1 ce2 =
     appendStmt [cstm|blink_copy($ce1, $ce2, $int:n*sizeof($ty:(codeGenTy t)));|]
 
-assignByVal ty@(TArr (NVar n m) TBit) _ ce1 ce2 
+assignByVal ty@(TArr (NVar n m) TBit) _ ce1 ce2
   =  appendStmt [cstm|bitArrRead($ce2,0,$id:(name n),$ce1);|]
 
 assignByVal ty@(TArr (NVar n m) t) _ ce1 ce2 =
-    appendStmt [cstm|blink_copy($ce1, $ce2, 
+    appendStmt [cstm|blink_copy($ce1, $ce2,
                       $id:(name n)*sizeof($ty:(codeGenTy t)));|]
 
-assignByVal (TDouble Full) (TDouble Full) ce1 ce2 =
+assignByVal TDouble TDouble ce1 ce2 =
     appendStmt [cstm|$ce1 = $ce2;|]
-
-assignByVal (TDouble Full) (TDouble (Fixed p2)) ce1 ce2 =
-    appendStmt [cstm|$ce1 = convert_f16_d($ce2);|]
-
-assignByVal (TDouble (Fixed p1)) (TDouble Full) ce1 ce2 =
-    appendStmt [cstm| $(ce1) = convert_d_f16($ce2, $int:p1);|]
-
-assignByVal (TDouble (Fixed p1)) (TDouble (Fixed p2)) ce1 ce2 | p1 == p2 =
-    appendStmt [cstm|$ce1 = $ce2;|]
-
-assignByVal (TDouble (Fixed p1)) (TDouble (Fixed p2)) ce1 ce2 =
-    appendStmt [cstm|$ce1 = convert_f16_f16($ce2, $int:p1);|]
 
 -- Works for structs
 assignByVal t t' ce1 ce2 =
   do { b <- isStructPtrType t
-     ; if b then 
+     ; if b then
          -- If represented as pointers then do a memcopy
          appendStmt [cstm|blink_copy($ce1, $ce2, sizeof($ty:(codeGenTy t)));|]
          -- Else just do assignment
        else just_assign ce1 ce2 }
-  where just_assign ce1 ce2 
+  where just_assign ce1 ce2
             -- just an optimization for expensive complex assignments
           | isComplexTy t && is_c_var ce2
           = do appendStmt [cstm|$ce1.re = $ce2.re;|]
@@ -481,7 +457,7 @@ assignByVal t t' ce1 ce2 =
           = appendStmt [cstm|$ce1 = $ce2;|]
 
         is_c_var (C.Var (C.Id {}) _) = True
-        is_c_var _                   = False 
+        is_c_var _                   = False
 
 
 -- NB: Only assigns by ref for arrays
@@ -490,30 +466,30 @@ assignByRef ty ce1 ce2 = [cstm| $(ce1) = $(ce2);|]
 
 
 codeGenArrVal :: String -> Ty -> [Val] -> Cg C.InitGroup
-codeGenArrVal name ty@(TArr _ TBit) vals 
-  = do { let mvs = cg_bitvalues vals 
+codeGenArrVal name ty@(TArr _ TBit) vals
+  = do { let mvs = cg_bitvalues vals
        ; return . fst =<< codeGenDeclGroup_qual "" name ty mvs }
-codeGenArrVal name ty@(TArr _ _ty) vals 
-  = do { mvs <- cg_values vals 
+codeGenArrVal name ty@(TArr _ _ty) vals
+  = do { mvs <- cg_values vals
        ; return . fst =<< codeGenDeclGroup_qual "" name ty mvs }
-codeGenArrVal name _ty vals 
+codeGenArrVal name _ty vals
   = fail "codeGenArrVal: non-array type!"
 
 -- Generates a list of vales
 cg_values [] = return Nothing
-cg_values (h:hs) 
+cg_values (h:hs)
   = do { c <- codeGenVal h -- Why is this monadic?
        ; m_cs <- cg_values hs
-       ; case m_cs of 
+       ; case m_cs of
            Nothing -> return (Just c)
            Just cs -> return (Just [cexp|$c, $cs|]) }
 
 cg_bitvalues [] = Nothing
-cg_bitvalues xs 
+cg_bitvalues xs
   = case cg_bitvalues (drop 8 xs) of
            Just bs -> Just $ [cexp|$(first_cexp),$(bs)|]
            Nothing -> Just $ [cexp|$(first_cexp)|]
-  where to_num = foldr (\(VBit t) s -> if t then s*2 + 1 else s*2) 0 
+  where to_num = foldr (\(VBit t) s -> if t then s*2 + 1 else s*2) 0
         first = take 8 xs
         first_num = to_num (first ++ replicate (8 - length first) (VBit False))
         first_cexp = [cexp|$int:(first_num) |]

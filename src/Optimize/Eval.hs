@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -26,7 +26,7 @@ import AstComp
 import Text.PrettyPrint.HughesPJ
 
 import PpExpr
-import PpComp 
+import PpComp
 import qualified Data.Set as S
 import Control.Applicative
 import Control.Monad.State
@@ -35,7 +35,7 @@ import qualified Data.Map as Map
 
 import CgLUT ( shouldLUT )
 import Analysis.Range ( varRanges )
-import Analysis.UseDef ( inOutVars ) 
+import Analysis.UseDef ( inOutVars )
 
 import Opts
 
@@ -47,10 +47,10 @@ import TcExpr ( tyOfParams )
 
 
 
-evalArith :: Exp a -> Maybe Val
+evalArith :: GExp ty a -> Maybe Val
 evalArith e = go (unExp e)
   where go (EVal val) = return val
-        go (EBinOp b e1 e2) 
+        go (EBinOp b e1 e2)
           = do { v1 <- evalArith e1
                ; v2 <- evalArith e2
                ; val_binop b v1 v2
@@ -71,51 +71,51 @@ val_binop Sub  (VInt i1) (VInt i2) = return (VInt $ i1-i2)
 val_binop Div  (VInt i1) (VInt i2) = return (VInt $ i1 `quot` i2)
 val_binop Rem  (VInt i1) (VInt i2) = return (VInt $ i1 `rem` i2)
 
-val_binop Add  (VDouble p i1) (VDouble p' i2) = return (VDouble p $ i1+i2)
-val_binop Mult (VDouble p i1) (VDouble p' i2) = return (VDouble p $ i1*i2)
-val_binop Sub  (VDouble p i1) (VDouble p' i2) = return (VDouble p $ i1-i2)
-val_binop Div  (VDouble p i1) (VDouble p' i2) = return (VDouble p $ i1 / i2)
+val_binop Add  (VDouble i1) (VDouble i2) = return (VDouble $ i1+i2)
+val_binop Mult (VDouble i1) (VDouble i2) = return (VDouble $ i1*i2)
+val_binop Sub  (VDouble i1) (VDouble i2) = return (VDouble $ i1-i2)
+val_binop Div  (VDouble i1) (VDouble i2) = return (VDouble $ i1 / i2)
 
-val_binop _ _ _ = Nothing 
+val_binop _ _ _ = Nothing
 
 val_unop Neg (VInt i) = return (VInt (-i))
-val_unop _ _ = Nothing 
+val_unop _ _ = Nothing
 
-val_cast (TInt {})    (VDouble _p d) = return (VInt (floor d))
+val_cast (TInt {})    (VDouble d)    = return (VInt (floor d))
 val_cast (TInt {})    (VInt i)       = return (VInt i)
-val_cast (TDouble p) (VInt d)        = return (VDouble p (fromIntegral d))
+val_cast (TDouble)    (VInt d)       = return (VDouble (fromIntegral d))
 val_cast (TInt {})    (VBit False)   = return (VInt 0)
 val_cast (TInt {})    (VBit True)    = return (VInt 1)
 
-val_cast _ _ = Nothing 
+val_cast _ _ = Nothing
 
 
 
-evalInt :: Exp a -> Maybe Integer
-evalInt e = case evalArith e of 
+evalInt :: GExp ty a -> Maybe Integer
+evalInt e = case evalArith e of
               Just (VInt i) -> return i
-              _otherwise    -> Nothing 
+              _otherwise    -> Nothing
 
 -- Array initialization code or the form
--- ELetRef nm _ (ESeq init_loop nm) 
--- 
+-- ELetRef nm _ (ESeq init_loop nm)
+--
 evalArrInt e = evalArrInt0 (unExp e)
 evalArrInt0 (ELetRef nm ty Nothing e)
   | TArr (Literal n) (TInt _) <- ty
   , ESeq e1 e2 <- unExp e
   , EVar nm' <- unExp e2
-  , nm' == nm 
+  , nm' == nm
   = do { arr <- newArray (0,n-1) 0 :: IO (IOArray Int Integer)
        ; try_body <- evalArrInitLoop (nm,arr) e1
-       ; case try_body of 
+       ; case try_body of
            Nothing -> return Nothing
            Just () -> do { contents <- getElems arr
-                         ; return (Just contents) } 
+                         ; return (Just contents) }
        }
 evalArrInt0 other = return Nothing
 
 evalArrInitLoop :: (Name, IOArray Int Integer) -> Exp Ty -> IO (Maybe ())
-evalArrInitLoop (nm,arr) exp 
+evalArrInitLoop (nm,arr) exp
   | EFor _ k elow esize ebody <- unExp exp
   , EVal (VInt low) <- unExp elow
   , EVal (VInt siz) <- unExp esize
@@ -123,13 +123,13 @@ evalArrInitLoop (nm,arr) exp
   , EVar arr_nm <- unExp earr
   , arr_nm == nm
   , EVar ind_nm <- unExp eind
-  , ind_nm == k 
+  , ind_nm == k
   , let inds = [fromIntegral low..(fromIntegral low + fromIntegral siz - 1)] -- Indices
   , let loc = expLoc exp
   = let subst_idx i = substExp (k, MkExp (EVal (VInt i)) loc tint) eval
     in case mapM (\i -> subst_idx i >>= evalInt) inds of
-         Nothing -> return Nothing 
-         Just vals -> 
+         Nothing -> return Nothing
+         Just vals ->
            do { mapM (\(val,i) -> writeArray arr (fromIntegral i) val) (zip vals inds)
               ; return (Just ()) }
 
@@ -141,13 +141,13 @@ evalArrInitLoop nm exp
 --       Just vals -> do { mapM (\(val,i) -> writeArray arr i val) (zip vals inds)
 --                       ; return (Just ()) }
 
---   | otherwise 
+--   | otherwise
 --   = return Nothing
 
-{- 
+{-
 
 let inds = [low:low+siz-1] -- Indices
-    in 
+    in
     case mapM (\i -> substAll (k,EVal (VInt i)) eval) inds of
       Nothing   -> return Nothing -- One of the values could not evaluate
       Just vals -> do { mapM (\(val,i) -> writeArray arr i val) (zip vals inds)

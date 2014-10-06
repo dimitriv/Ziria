@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -17,7 +17,7 @@
    permissions and limitations under the License.
 -}
 module VecScaleDn ( doVectorizeCompDn, doVectorizeCompDnInOrOut ) where
- 
+
 import AstExpr
 import AstComp
 import PpComp
@@ -37,8 +37,8 @@ import VecMonad -- Import the vectorization monad
 
 
 
-doVectorizeCompDnInOrOut :: Comp (CTy,Card) Ty -> Either Int Int -> Int -> VecM (Comp () ()) 
-doVectorizeCompDnInOrOut comp (Left i) di 
+doVectorizeCompDnInOrOut :: Comp (CTy,Card) Ty -> Either Int Int -> Int -> VecM (Comp () ())
+doVectorizeCompDnInOrOut comp (Left i) di
   = doVectorizeCompDn comp i 1 (di,1)
 doVectorizeCompDnInOrOut comp (Right j) dj
   = doVectorizeCompDn comp 1 j (1,dj)
@@ -55,16 +55,16 @@ doVectorizeCompDn :: Comp (CTy,Card) Ty
 -- Plan for scaling down:
 -- (1) Create a temporary array variable to hold cin values
 -- (2) Create a temporary array variable to hold dout values (yes, dout, not cout)
--- (3) Create a loop cin / din times that initializes the bi input array. 
+-- (3) Create a loop cin / din times that initializes the bi input array.
 -- (4) Go through the code, replacing takes from the input with takes from that array
---     and every 'dout' emits really do emit a dout vector. 
--- 
+--     and every 'dout' emits really do emit a dout vector.
+--
 -- Concretely:
 --    wrap_vect_dn() {
---          var xa : arr[cin] 
---          var ya : arr[cout] 
---   
---          times i (cin/din) 
+--          var xa : arr[cin]
+--          var ya : arr[cout]
+--
+--          times i (cin/din)
 --             ( x <- take // array of size din
 --               return (xa[i:i+din] := x))
 --          v  <- rewritten body
@@ -74,8 +74,8 @@ doVectorizeCompDn :: Comp (CTy,Card) Ty
 --    }
 --    in wrap_vect_dn()
 --
-doVectorizeCompDn comp cin cout (din,dout) 
-  = do { 
+doVectorizeCompDn comp cin cout (din,dout)
+  = do {
 
 {-
          vecMIO $ putStrLn "doVectorizeCompDn!"
@@ -89,25 +89,25 @@ doVectorizeCompDn comp cin cout (din,dout)
        ; wrap_fun_name <- newVectName "vect_dn" loc
        ; let wrap_fun_prms = []
 
-         -- Create names for the local arrays 
-       ; xa_name' <- newVectName "vect_xa" loc 
-       ; ya_name' <- newVectName "vect_ya_dn" loc 
+         -- Create names for the local arrays
+       ; xa_name' <- newVectName "vect_xa" loc
+       ; ya_name' <- newVectName "vect_ya_dn" loc
 
        ; let xa_name = xa_name' { mbtype = Just $ TArr (Literal cin) inty }
        ; let ya_name = ya_name' { mbtype = Just $ TArr (Literal cout) outty }
 
-         -- avoid copying 
+         -- avoid copying
        ; let just_one_take = (cin == din)
-       
+
          -- Declare them to be arrays of size cin and cout respectively
-       ; let wrap_fun_lcls = 
-                  [ (xa_name, TArr (Literal cin) inty,  Nothing) | arityin > 1  && (not just_one_take) ] ++ 
+       ; let wrap_fun_lcls =
+                  [ (xa_name, TArr (Literal cin) inty,  Nothing) | arityin > 1  && (not just_one_take) ] ++
                   [ (ya_name, TArr (Literal cout) outty, Nothing) | arityout > 1 ]
 
-       ; icnt_name <- newVectName "vect_i" loc 
+       ; icnt_name <- newVectName "vect_i" loc
        ; xtmp_name_untyped <- newVectName "xtemp" loc
        ; let xtmp_name = xtmp_name_untyped { mbtype = Just (TArr (Literal din) inty) }
- 
+
        ; let mkexp e = MkExp e loc ()
        ; let mkcomp c = MkComp c loc ()
 
@@ -115,19 +115,19 @@ doVectorizeCompDn comp cin cout (din,dout)
              ya_exp   = mkexp $ EVar ya_name
              xtmp_exp = mkexp $ EVar xtmp_name
              iexp n   = mkexp $ EBinOp Mult (mkexp $ EVar icnt_name) (mkexp $ EVal (vint n))
-          
+
              init_arr_in crest
                | just_one_take
                = cBindMany loc () (cTake1 loc ()) [(xa_name, crest)]
                | otherwise
-               = cSeq loc () ( mkTimes (mkexp $ (EVal (vint $ cin `div` din))) icnt_name $ 
-                               mkcomp $ 
-                               BindMany (mkcomp Take1) $ 
+               = cSeq loc () ( mkTimes (mkexp $ (EVal (vint $ cin `div` din))) icnt_name $
+                               mkcomp $
+                               BindMany (mkcomp Take1) $
                                [(xtmp_name, mkcomp (Return NoInline (mkexp $ EArrWrite xa_exp (iexp din) (LILength din) xtmp_exp)))]
                              ) crest
 
              emit_arr_out = mkTimes (mkexp $ (EVal (vint $ cout `div` dout))) icnt_name $
-                            mkcomp $ 
+                            mkcomp $
                             Emit (mkexp $ EArrRead ya_exp (iexp dout) (LILength dout))
 
        ; comp_rewritten <- withInitCounts $ vectorize_body xa_exp ya_exp comp
@@ -136,21 +136,21 @@ doVectorizeCompDn comp cin cout (din,dout)
        ; let res_exp = mkexp $ EVar res_var
              final_return = mkcomp $ Return AutoInline res_exp
 
-       ; let emit_and_return 
+       ; let emit_and_return
                | doneTyOfCTyBase (fst $ compInfo comp) == Just TUnit
                = unComp emit_arr_out
-               | otherwise 
-               = Seq emit_arr_out final_return 
+               | otherwise
+               = Seq emit_arr_out final_return
 
          -- A bit of tedious case analysis depending on whether we generate
          -- code for arrays or not really
 
-       ; let body = if (arityin > 1) then 
-                       init_arr_in $ 
-                       if (arityout > 1) then 
-                          mkcomp $ 
-                          BindMany comp_rewritten $ 
-                          [(res_var, mkcomp emit_and_return)] 
+       ; let body = if (arityin > 1) then
+                       init_arr_in $
+                       if (arityout > 1) then
+                          mkcomp $
+                          BindMany comp_rewritten $
+                          [(res_var, mkcomp emit_and_return)]
                        else comp_rewritten
                     else
                         if (arityout > 1) then
@@ -162,15 +162,15 @@ doVectorizeCompDn comp cin cout (din,dout)
        ; let call = MkComp (Call wrap_fun_name []) loc ()
              let0 = LetFunC wrap_fun_name [] wrap_fun_lcls body call
 
-             final_prog = MkComp let0 loc () 
+             final_prog = MkComp let0 loc ()
 
---       ; vecMIO $ putStrLn "Vectorized (CompDn) program:" 
+--       ; vecMIO $ putStrLn "Vectorized (CompDn) program:"
 --       ; vecMIO $ print $ ppComp final_prog
 
        ; return final_prog
        }
 
- where    
+ where
    arityin  = din
    arityout = dout
    inty     = inTyOfCTyBase  (fst $ compInfo comp)
@@ -178,86 +178,86 @@ doVectorizeCompDn comp cin cout (din,dout)
    v_inty   = mkVectTy inty arityin
    v_outty  = mkVectTy outty arityout
 
-   vectorize_body xa_exp ya_exp comp = go comp 
-      where go comp 
+   vectorize_body xa_exp ya_exp comp = go comp
+      where go comp
              | let loc = compLoc comp
              , let mkexp e = MkExp e loc ()
              , let mkintexp e = MkExp e loc TInt
              , let mkcomp c = MkComp c loc ()
-             = -- vecMIO (putStrLn ("go: "))      >> 
+             = -- vecMIO (putStrLn ("go: "))      >>
                -- vecMIO (print (ppCompAst comp)) >>
-               case unComp comp of 
-                (Var x) -> lookupCVarBind x >>= go 
-                (BindMany c1 xs_cs) -> 
+               case unComp comp of
+                (Var x) -> lookupCVarBind x >>= go
+                (BindMany c1 xs_cs) ->
                     do { c1' <- go c1
                        ; let go_one (x,c) = go c >>= \c' -> return (x,c')
                        ; xs_cs' <- mapM go_one xs_cs
-                       ; return (MkComp (BindMany c1' xs_cs') loc ()) 
+                       ; return (MkComp (BindMany c1' xs_cs') loc ())
                        }
 
-                (Let x c1 c2) -> 
+                (Let x c1 c2) ->
                    extendCVarBind x c1 $ go c2
 
-                (LetE x fi e c1) -> 
+                (LetE x fi e c1) ->
                    do { c1' <- go c1
-                      ; return (MkComp (LetE x fi (eraseExp e) c1') loc ()) 
+                      ; return (MkComp (LetE x fi (eraseExp e) c1') loc ())
                       }
                 -- CL
-                (LetERef x t (Just e) c1) -> 
+                (LetERef x t (Just e) c1) ->
                    do { c1' <- go c1
-                      ; return (MkComp (LetERef x t (Just (eraseExp e)) c1') loc ()) 
+                      ; return (MkComp (LetERef x t (Just (eraseExp e)) c1') loc ())
                       }
-                (LetERef x t Nothing c1) -> 
+                (LetERef x t Nothing c1) ->
                    do { c1' <- go c1
-                      ; return (MkComp (LetERef x t Nothing c1') loc ()) 
+                      ; return (MkComp (LetERef x t Nothing c1') loc ())
                       }
-                (LetHeader x fn@(MkFun (MkFunDefined {}) _ _) c1) -> 
+                (LetHeader x fn@(MkFun (MkFunDefined {}) _ _) c1) ->
                    do { c1' <- go c1
-                      ; return $ MkComp (LetHeader x (eraseFun fn) c1') loc () 
+                      ; return $ MkComp (LetHeader x (eraseFun fn) c1') loc ()
                       }
                 --
                 (LetFunC f params locals c1 c2) ->
                    -- Aggressive specialization
                    extendCFunBind f params locals c1 $ go c2
-                (Call f es) -> 
+                (Call f es) ->
                    do { (CFunBind { cfun_params = prms
                                   , cfun_locals = lcls
                                   , cfun_body = body }) <- lookupCFunBind f
                       ; vbody <- go body
                       ; new_f <- newVectName (name f ++ "_spec") loc
                       ; let -- new_f = f { name = name f ++ "_spec_" ++ show loc }
-                            es'   = map eraseCallArg es 
+                            es'   = map eraseCallArg es
                             call = MkComp (Call new_f es') loc ()
-                            lcls' = eraseLocals lcls 
+                            lcls' = eraseLocals lcls
                             let0 = LetFunC new_f prms lcls' vbody call
                       ; return (MkComp let0 loc ())
                       }
                 (Branch e c1 c2) ->
-                    do { (c1',st1) <- withCurrentCounters (go c1) 
+                    do { (c1',st1) <- withCurrentCounters (go c1)
                        ; (c2',st2) <- withCurrentCounters (go c2)
                        ; let g1 = vs_take_count st1 == vs_take_count st2
                              g2 = vs_emit_count st1 == vs_emit_count st2
-                       ; unless (g1 && g2) $ 
-                         vecMFail "BUG: Branch with non-simple card!?" 
+                       ; unless (g1 && g2) $
+                         vecMFail "BUG: Branch with non-simple card!?"
 
                        ; setVecState st1
 
-                       ; return $ MkComp (Branch (eraseExp e) c1' c2') loc () 
+                       ; return $ MkComp (Branch (eraseExp e) c1' c2') loc ()
                        }
 
                 -- Some non-simple computers
                 (Interleave {}) ->
                     vecMFail "BUG: Interleave is not a simple computer!"
-                (Repeat {}) -> 
+                (Repeat {}) ->
                     vecMFail "BUG: Repeat is not a simple computer!"
-                (Filter {}) -> 
+                (Filter {}) ->
                     vecMFail "BUG: Filter is not a simple computer!"
-                (Map {}) -> 
+                (Map {}) ->
                     vecMFail "BUG: Map is not a simple computer!"
                 (Par p c1 c2) ->
                    vecMFail "BUG: Par is not a simple computer!"
 
-                (Mitigate {}) -> 
+                (Mitigate {}) ->
                    vecMFail "BUG: Mitigate is not a simple computer!"
                 (ActivateTask {}) -> 
                     vecMFail "BUG: ActivateTask should never appear pre vectorization!"
@@ -266,71 +266,71 @@ doVectorizeCompDn comp cin cout (din,dout)
 
                 -- However, these guys are ok, /provided/ they either take OR emit, in which case we will
                 -- have vectorized only the takes or emits respectively. So this is not an error, instead we
-                -- vectorize the contents. 
-                (Until e c) -> 
+                -- vectorize the contents.
+                (Until e c) ->
                    do { c' <- go c
-                      ; return $ MkComp (Until (eraseExp e) c') loc () } 
-                (While e c) -> 
+                      ; return $ MkComp (Until (eraseExp e) c') loc () }
+                (While e c) ->
                    do { c' <- go c
-                      ; return $ MkComp (While (eraseExp e) c') loc () } 
+                      ; return $ MkComp (While (eraseExp e) c') loc () }
 
-                (Times ui e elen x c1) -> 
+                (Times ui e elen x c1) ->
                    do { c1' <- go c1
-                      ; return $ MkComp (Times ui (eraseExp e) (eraseExp elen) x c1') loc () } 
+                      ; return $ MkComp (Times ui (eraseExp e) (eraseExp elen) x c1') loc () }
 
 
                 ReadSrc mty  -> return $ MkComp (ReadSrc mty)  loc ()
                 WriteSnk mty -> return $ MkComp (WriteSnk mty) loc ()
 
-                (ReadInternal bid tp)  
+                (ReadInternal bid tp)
                      -> return $ MkComp (ReadInternal bid tp) loc ()
                 (WriteInternal bid) -> return $ MkComp (WriteInternal bid) loc ()
 
                 (Return fi e) -> return $ MkComp (Return fi $ eraseExp e) loc ()
 
                 -- CL
-                (LetHeader n fn@(MkFun (MkFunExternal {}) _ _) c) -> do { c' <- go c 
+                (LetHeader n fn@(MkFun (MkFunExternal {}) _ _) c) -> do { c' <- go c
                                            ; return $ MkComp (LetHeader n (eraseFun fn) c') loc () }
-                                           -- NB: Don't worry, 
+                                           -- NB: Don't worry,
                                            -- even after erasure an external function has enough type info.
                 --
-                (LetStruct sdef c) -> do { c' <- go c 
+                (LetStruct sdef c) -> do { c' <- go c
                                          ; return $ MkComp (LetStruct sdef c') loc ()
                                          }
 
-                (Seq c1 c2) -> do { c1' <- go c1 
-                                  ; c2' <- go c2 
+                (Seq c1 c2) -> do { c1' <- go c1
+                                  ; c2' <- go c2
                                   ; return $ MkComp (Seq c1' c2') loc () }
- 
+
                 -- Now for the meat of the thing
-                (Emit e) 
+                (Emit e)
                    | arityout == 1 -- NB: This now covers the case where we vectorize on the input only!
                    -> return $ MkComp (Emit (eraseExp e)) loc ()
-                   | otherwise 
+                   | otherwise
                    -> do { ecnt <- getEmitCount
                          ; incEmitCount
                          ; let idx = mkexp $ EVal (vint ecnt)
                                ya_write = EArrWrite (eraseExp ya_exp) idx LISingleton (eraseExp e)
-                         ; return $ mkcomp (Return AutoInline $ mkexp ya_write) 
+                         ; return $ mkcomp (Return AutoInline $ mkexp ya_write)
                          }
                 Take1
                   | arityin == 1 -- NB: This now covers the case where we vectorize on the output only!
-                  -> return $ MkComp Take1 loc () 
-                  | otherwise 
+                  -> return $ MkComp Take1 loc ()
+                  | otherwise
                   -> do { tcnt <- getTakeCount
                         ; incTakeCount
                         ; let idx = mkexp $ EVal (vint tcnt)
-                              xa_read = EArrRead (eraseExp xa_exp) idx LISingleton 
-                        ; return $ mkcomp (Return ForceInline $ mkexp xa_read) } -- NB: Force Inline 
+                              xa_read = EArrRead (eraseExp xa_exp) idx LISingleton
+                        ; return $ mkcomp (Return ForceInline $ mkexp xa_read) } -- NB: Force Inline
                 Take ne
                   | arityin == 1 -- NB: This now covers the case where we vectorize on the output only!
                   -> return $ mkcomp (Take (eraseExp ne))
-                  | EVal (VInt n) <- unExp ne 
+                  | EVal (VInt n) <- unExp ne
                   -> do { tcnt <- getTakeCount
                         ; mapM (\_ -> incTakeCount) [1..n]
                         ; let idx = mkexp $ EVal (vint tcnt)
-                              xa_read = mkexp $ EArrRead (eraseExp xa_exp) idx (LILength $ fromIntegral n) 
-                        ; return $ mkcomp (Return ForceInline xa_read) } -- NB: Force Inline 
+                              xa_read = mkexp $ EArrRead (eraseExp xa_exp) idx (LILength $ fromIntegral n)
+                        ; return $ mkcomp (Return ForceInline xa_read) } -- NB: Force Inline
                   | otherwise
                   -> vecMFail "BUG: takes with unknown array size! Can't be simple computer."
 
@@ -342,15 +342,15 @@ doVectorizeCompDn comp cin cout (din,dout)
                         ; mapM (\_ -> incEmitCount) [1..n]
                         ; let idx = mkexp $ EVal (vint ecnt)
                               ya_write = EArrWrite (eraseExp ya_exp) idx (LILength n) (eraseExp e)
-                        ; return $ mkcomp (Return AutoInline $ mkexp ya_write) 
+                        ; return $ mkcomp (Return AutoInline $ mkexp ya_write)
                         }
                   | otherwise
                   -> vecMFail "BUG: emits with unknown array size! Can't be simple computer."
 
-                (Standalone c) -> do { c' <- go c 
+                (Standalone c) -> do { c' <- go c
                                      ; return $ cStandalone loc () c' }
 
-                (VectComp hint c) -> vecMFail "BUG: VectComp is not a simple computer!" 
+                (VectComp hint c) -> vecMFail "BUG: VectComp is not a simple computer!"
 
                 -- _otherwise
                 --    -> vecMFail "BUG: emits with non known array size! Can't be simple computer!"

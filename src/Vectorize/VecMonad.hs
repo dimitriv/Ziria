@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -17,7 +17,7 @@
    permissions and limitations under the License.
 -}
 module VecMonad where
- 
+
 import AstExpr
 import AstComp
 import PpComp
@@ -37,7 +37,7 @@ import CardinalityAnalysis
 
 
 
--- 
+--
 -- Work-in-progress vectorization plan
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 --
@@ -45,19 +45,19 @@ data VecState = VecState { vs_take_count :: Int
                          , vs_emit_count :: Int }
 
 -- Computation (variables or functions) bindings
--- TODO: Push these to the Comp AST at some point, 
+-- TODO: Push these to the Comp AST at some point,
 type CVarBind = Comp (CTy,Card) Ty
 data CFunBind = CFunBind { cfun_params :: [(Name,CallArg Ty CTy0)]
-                         , cfun_locals :: [(Name,Ty,Maybe (Exp Ty))] 
+                         , cfun_locals :: [(Name,Ty,Maybe (Exp Ty))]
                          , cfun_body   :: Comp (CTy,Card) Ty }
 
-data VecEnv 
+data VecEnv
   = VecEnv { cvar_binds :: [(Name,CVarBind)]
            , cfun_binds :: [(Name,CFunBind)] }
 
-data VecM a = VecM { runVecM :: GS.Sym 
-                             -> VecEnv 
-                             -> VecState 
+data VecM a = VecM { runVecM :: GS.Sym
+                             -> VecEnv
+                             -> VecState
                              -> IO (a, VecState) }
 
 instance Functor VecM where
@@ -86,22 +86,22 @@ newVectUniq = VecM $ \sym _env st -> do { str <- GS.genSymStr sym
 newVectName :: String -> Maybe SourcePos -> VecM Name
 newVectName nm loc
   = do { str <- newVectUniq
-       ; return $ 
-         (toName (nm ++ "_" ++ str) loc Nothing) {uniqId = "_v" ++ str} 
+       ; return $
+         (toName (nm ++ "_" ++ str) loc Nothing) {uniqId = "_v" ++ str}
        }
 
 
 extendCVarBind :: Name -> Comp (CTy,Card) Ty -> VecM a -> VecM a
 extendCVarBind nm comp (VecM action)
-  = VecM (\sym env st -> 
+  = VecM (\sym env st ->
       let env' = env { cvar_binds = (nm,comp):(cvar_binds env) }
       in action sym env' st)
 
-extendCFunBind :: Name -> [(Name,CallArg Ty CTy0)] 
-                       -> [(Name,Ty,Maybe (Exp Ty))] 
+extendCFunBind :: Name -> [(Name,CallArg Ty CTy0)]
+                       -> [(Name,Ty,Maybe (Exp Ty))]
                        -> (Comp (CTy,Card) Ty) -> VecM a -> VecM a
 extendCFunBind nm params locals cbody (VecM action)
-  = VecM (\sym env st -> 
+  = VecM (\sym env st ->
       let entry = (nm, CFunBind params locals cbody)
           env' = env { cfun_binds = entry:(cfun_binds env) }
       in action sym env' st)
@@ -110,35 +110,35 @@ getVecEnv :: VecM (GS.Sym, VecEnv)
 getVecEnv = VecM (\sym env _st -> return ((sym,env),_st))
 
 getCVarBinds :: VecM [(Name,CVarBind)]
-getCVarBinds = VecM (\sym env st -> return (cvar_binds env, st)) 
+getCVarBinds = VecM (\sym env st -> return (cvar_binds env, st))
 
 
 
 getCFunBinds :: VecM [(Name,CFunBind)]
-getCFunBinds = VecM (\sym env st -> return (cfun_binds env, st)) 
+getCFunBinds = VecM (\sym env st -> return (cfun_binds env, st))
 
 lookupCVarBind :: Name -> VecM CVarBind
 lookupCVarBind nm = do { bnds <- getCVarBinds
-                       ; case lookup nm bnds of 
+                       ; case lookup nm bnds of
                             Just bnd -> return bnd
-                            Nothing -> error "Unbound cvar bind!" 
+                            Nothing -> error "Unbound cvar bind!"
                        }
 lookupCFunBind :: Name -> VecM CFunBind
 lookupCFunBind nm = do { bnds <- getCFunBinds
-                       ; case lookup nm bnds of 
+                       ; case lookup nm bnds of
                             Just bnd -> return bnd
-                            Nothing -> error "Unbound cfun bind!" 
+                            Nothing -> error "Unbound cfun bind!"
                        }
 
 
- 
+
 incTakeCount :: VecM ()
-incTakeCount = VecM (\_ _env st -> 
+incTakeCount = VecM (\_ _env st ->
    let st' = st { vs_take_count = (vs_take_count st) + 1 }
    in return ((),st'))
 
 withCurrentCounters :: VecM a -> VecM (a,VecState)
--- Run the action in the current state, but in the end return 
+-- Run the action in the current state, but in the end return
 -- the final state. The VecM state remains as it was in the beginning.
 withCurrentCounters (VecM action)
   = VecM (\sym env st -> do { (a,st') <- action sym env st
@@ -152,7 +152,7 @@ getTakeCount :: VecM Int
 getTakeCount = VecM (\_ _env st -> return (vs_take_count st, st))
 
 incEmitCount :: VecM ()
-incEmitCount = VecM (\_ _env st -> 
+incEmitCount = VecM (\_ _env st ->
    let st' = st { vs_emit_count = vs_emit_count st + 1 }
    in return ((),st'))
 
@@ -164,16 +164,16 @@ vecMIO action =
   VecM $ \_sym _env st -> action >>= \res -> return (res, st)
 
 vecMFail :: String -> VecM a
-vecMFail msg = 
-  VecM $ \_ _ st -> 
-        do { putStrLn (error msg) 
+vecMFail msg =
+  VecM $ \_ _ st ->
+        do { putStrLn (error msg)
            ; return (undefined,st) }
 
 withInitCounts :: VecM a -> VecM a
 withInitCounts (VecM action)
-  = VecM (\sym env st -> 
+  = VecM (\sym env st ->
                do { (res,st') <- action sym env (st { vs_take_count = 0, vs_emit_count = 0 })
-                  ; return (res,st) -- Return original state! 
+                  ; return (res,st) -- Return original state!
                   })
 
 
@@ -183,7 +183,7 @@ inCurrentEnv (sym,venv) (VecM action)
        ; return r
        }
 
--- Vectorization result, a quick way to get 
+-- Vectorization result, a quick way to get
 -- the result arity of vectorization w.o. re type checking.
 data VectRes
  = NoVect
@@ -195,36 +195,36 @@ data VectRes
 
 
 -- vecResMatch :: VectRes -> VectRes -> Bool
--- -- The '0' cases have to do with being able to vectorize computers that do not take or 
+-- -- The '0' cases have to do with being able to vectorize computers that do not take or
 -- -- do not emit. In this case /any/ vectorization of the input or output queue is valid
 -- -- actually.
 -- vecResMatch NoVect NoVect = True
 -- vecResMatch (DidVect 1 i) NoVect | i <= 1 = True
 -- vecResMatch NoVect (DidVect i 1) | i <= 1 = True
--- vecResMatch (DidVect i j) (DidVect i' j') 
+-- vecResMatch (DidVect i j) (DidVect i' j')
 --     = arMatch i i' && arMatch j j'
 -- vecResMatch _ _ = False
 
--- arMatch 0 i2 
+-- arMatch 0 i2
 --   = (i2 `elem` [0,1,2,4,6,8,16])
 -- arMatch i1 0
 --   = (i1 `elem` [0,1,2,4,6,8,16])
--- arMatch i1 i2 
+-- arMatch i1 i2
 --   = i1 == i2 && arMatch 0 i1 && arMatch 0 i2
 
 
-mkNoVect :: Int -> Int -> VectRes 
+mkNoVect :: Int -> Int -> VectRes
 -- Accepts 'cin' and 'cout' and it is safe and sound to just give back NoVect.
 -- After all we performed no vectorization.
 -- However, if the input/queue arities are 0 (that is, we never even took or emited)
 -- we are in better shape emitting a 'DidVect 0 x' or 'DidVect x 0' so that other components
--- can take advantage of this information. 
--- In the case where we have cin = 0 and cout = n > 0 we say DidVect 0 *1*. 
--- NB: *1* is important, it effectively means: we did not vectorize on the output queue. 
+-- can take advantage of this information.
+-- In the case where we have cin = 0 and cout = n > 0 we say DidVect 0 *1*.
+-- NB: *1* is important, it effectively means: we did not vectorize on the output queue.
 
-mkNoVect 0 0 = DidVect 0 0 minUtil  
-mkNoVect 0 n = DidVect 0 1 minUtil 
-mkNoVect n 0 = DidVect 1 0 minUtil 
+mkNoVect 0 0 = DidVect 0 0 minUtil
+mkNoVect 0 n = DidVect 0 1 minUtil
+mkNoVect n 0 = DidVect 1 0 minUtil
 
 mkNoVect n m = NoVect
 
@@ -242,7 +242,7 @@ vectResQueueComp v v' = compare v v'
 vectResUtil (DidVect _ _ u) = u
 vectResUtil NoVect          = minUtil
 
--- Utility computation of a Bind 
+-- Utility computation of a Bind
 chooseBindUtility :: [Double] -> Double
 chooseBindUtility [] = 0.0
 chooseBindUtility ds = (sum ds :: Double) / (fromIntegral (length ds) :: Double)
@@ -255,27 +255,27 @@ util :: Int -> Double
 util d = if d == 0 then minUtil
          else log (fromIntegral d :: Double)
 
-minUtil = log 0.1 
+minUtil = log 0.1
 
 allVecResMatch :: [VectRes] -> [VectRes]
 allVecResMatch vs
-  = if all_equal filtered_in && all_equal filtered_out 
-    then [DidVect (maximum (0:filtered_in)) (maximum (0:filtered_out)) 
+  = if all_equal filtered_in && all_equal filtered_out
+    then [DidVect (maximum (0:filtered_in)) (maximum (0:filtered_out))
                   (chooseBindUtility (map vectResUtil vs))
          ]
     else []
 
   where filtered_in = filter (\i -> i > 0) all_in_queues
         filtered_out = filter (\i -> i > 0) all_out_queues
-        all_in_queues = map get_in_queue vs 
-        all_out_queues = map get_out_queue vs 
-        get_in_queue  = fst . get_queue 
-        get_out_queue = snd . get_queue 
+        all_in_queues = map get_in_queue vs
+        all_out_queues = map get_out_queue vs
+        get_in_queue  = fst . get_queue
+        get_out_queue = snd . get_queue
         get_queue NoVect = (1,1)
         get_queue (DidVect i j _) = (i,j)
         all_equal [] = True
         all_equal [v] = True
-        all_equal (v1:v2:vs) = v1 == v2 && all_equal (v2:vs)    
+        all_equal (v1:v2:vs) = v1 == v2 && all_equal (v2:vs)
 
 
 
@@ -285,7 +285,7 @@ mkVectTy ty wdth
   | not (isVectorizable ty)
   = error ("Type not vectorizable:" ++ show ty)
   -- Specialization below implemented in the code generator, not here
-  -- | ty == TBit && wdth <= 8 
+  -- | ty == TBit && wdth <= 8
   -- = TWord8
   -- | ty == TBit && wdth <= 32
   -- = TWord32
@@ -297,10 +297,10 @@ mkVectTy ty wdth
 
 {- When is a type vectorizable -}
 isVectorizable :: Ty -> Bool
-isVectorizable ty 
+isVectorizable ty
  | isScalarTy ty  = True
  | TBit <- ty     = True -- Bits are vectorizable all right
- | otherwise = False 
+ | otherwise = False
 
 isBufTy (TBuff {}) = True
 isBufTy _          = False
@@ -313,7 +313,7 @@ mkTimes :: Exp b -> Name -> Comp a b -> Comp a b
 mkTimes elen@(MkExp (EVal (VInt 1)) eloc einfo) nm comp
   = let ezero = MkExp (EVal (VInt 0)) eloc einfo
     in head $ substExpComp (nm, ezero) comp
-mkTimes elen nm comp 
+mkTimes elen nm comp
   = let ezero = MkExp (EVal (VInt 0)) (compLoc comp) (info elen)
     in MkComp (Times AutoUnroll ezero elen nm comp) (compLoc comp) (compInfo comp)
 
@@ -333,19 +333,19 @@ edec e           = assign e (esub e exp1)
 emul e1 e2       = toExp tint (EBinOp Mult e1 e2)
 
 
-arrRead wdth ty x eix 
+arrRead wdth ty x eix
   = toExp ty (EArrRead evar eix LISingleton)
   where arrTy = TArr wdth ty
         evar  = toExp arrTy (EVar x)
 
-arrWrite wdth x eix eval 
+arrWrite wdth x eix eval
   = toExp TUnit (EArrWrite evar eix LISingleton eval)
-  where arrTy = TArr wdth (info eval) 
+  where arrTy = TArr wdth (info eval)
         evar  = toExp arrTy (EVar x)
 
 eseqarr (e : [])  = e
-eseqarr (e : es') = toExp (info e) (ESeq e (eseqarr es')) 
-eseqarr _         = error "Empty seq array!" 
+eseqarr (e : es') = toExp (info e) (ESeq e (eseqarr es'))
+eseqarr _         = error "Empty seq array!"
 
 
 {- VecMBnd
@@ -354,7 +354,7 @@ eseqarr _         = error "Empty seq array!"
    generation and binding collection -}
 
 -- Just the vectorization monad with extra binds
-newtype VecMBnd a 
+newtype VecMBnd a
   = VecMBnd { runVecMBnd :: VecM (a,[(Name,Ty, Maybe (Exp ()))]) }
 
 instance Functor VecMBnd where
@@ -370,10 +370,10 @@ instance Applicative VecMBnd where
     return (f' x', binds1 ++ binds2)
 
 instance Monad VecMBnd where
-  (>>=) (VecMBnd m) f 
+  (>>=) (VecMBnd m) f
      = VecMBnd $ do { (a,binds1) <- m
-                    ; case f a of 
-                        VecMBnd m_inside -> 
+                    ; case f a of
+                        VecMBnd m_inside ->
                           do { (b,binds2) <- m_inside
                              ; return (b,binds1++binds2) } }
   return = pure
@@ -384,9 +384,9 @@ instance MonadIO VecMBnd where
                           }
 
 liftVecM :: VecM a -> VecMBnd a
-liftVecM m 
+liftVecM m
   = VecMBnd $ do { a <- m
-                 ; return (a,[]) 
+                 ; return (a,[])
                  }
 
 extendCVarBind' :: Name -> Comp (CTy,Card) Ty -> VecMBnd a -> VecMBnd a
@@ -397,12 +397,12 @@ extendCVarBind' nm comp m
        ; return res
        }
 
-extendCFunBind' :: Name -> [(Name,CallArg Ty CTy0)] 
-                        -> [(Name,Ty,Maybe (Exp Ty))] 
+extendCFunBind' :: Name -> [(Name,CallArg Ty CTy0)]
+                        -> [(Name,Ty,Maybe (Exp Ty))]
                         -> (Comp (CTy,Card) Ty) -> VecMBnd a -> VecMBnd a
-extendCFunBind' nm params locals cbody m 
+extendCFunBind' nm params locals cbody m
   = do { let action = runVecMBnd m
-       ; (res,bnds) <- liftVecM $ 
+       ; (res,bnds) <- liftVecM $
                        extendCFunBind nm params locals cbody action
        ; throwBnds bnds
        ; return res
@@ -413,14 +413,14 @@ throwBnds xs = VecMBnd $ return ((),xs)
 
 newTypedName :: String -> Ty -> Maybe SourcePos -> VecMBnd Name
 -- Generate new name (but don't declare it)
-newTypedName s ty loc 
+newTypedName s ty loc
   = do { x <- liftVecM $ newVectName s loc
        ; return x { mbtype = Just ty }
        }
 
-newDeclTypedName :: String 
-                 -> Ty -> Maybe SourcePos 
-                 -> Maybe (Exp ()) -> VecMBnd Name 
+newDeclTypedName :: String
+                 -> Ty -> Maybe SourcePos
+                 -> Maybe (Exp ()) -> VecMBnd Name
 -- Generate new name (but do declare it)
 newDeclTypedName s ty loc me
   = do { nm <- newTypedName s ty loc

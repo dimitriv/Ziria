@@ -52,6 +52,7 @@ import qualified BlinkParseComp as NewParser
 
 import PassFold
 import PpComp
+import qualified Outputable -- Qualified so that we don't clash with Mainland
 import Rename
 import TcExpr
 import TcMonad
@@ -223,7 +224,7 @@ main = failOnException $ do
       | isDynFlagSet dflags Opt
       = do { c' <- runFold dflags sym c
            ; dump dflags DumpFold (".fold-phase" ++ show i ++ ".dump")
-                                 ((text . show . ppComp) c')
+                                 ((text . show . Outputable.ppr) c')
            ; return c' }
       | otherwise
       = return c
@@ -235,7 +236,7 @@ main = failOnException $ do
       = do { verbose dflags $ text "Auto-LUTting (start)"
            ; c' <- runAutoLUT dflags sym c
            ; dump dflags DumpAutoLUT (".autolut.dump")
-                                     ((text . show . ppComp) c')
+                                     ((text . show . Outputable.ppr) c')
            ; verbose dflags $ text "Auto-LUTting (end)"
            ; return c' }
       | otherwise

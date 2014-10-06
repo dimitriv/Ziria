@@ -38,6 +38,8 @@ import Control.Monad ( unless )
 import Text.PrettyPrint.HughesPJ
 import PpExpr
 
+import Outputable
+
 
 tyCheckExprWith :: Exp () -> Ty -> TcM (Exp Ty)
 tyCheckExprWith e ty
@@ -48,12 +50,12 @@ tyCheckExprWith e ty
 tyCheckVal :: Val -> TcM Ty
 tyCheckVal v
   = case v of
-      VBit b      -> return TBit
-      VInt n      -> newTInt_BWUnknown
-      VDouble p d -> return $ TDouble p
-      VBool b     -> return $ TBool
-      VString s   -> return $ TString
-      VUnit       -> return $ TUnit
+      VBit b    -> return TBit
+      VInt n    -> newTInt_BWUnknown
+      VDouble d -> return TDouble
+      VBool b   -> return TBool
+      VString s -> return TString
+      VUnit     -> return TUnit
 
 tyCheckExpr :: Exp () -> TcM (Exp Ty)
 tyCheckExpr e
@@ -87,7 +89,7 @@ tyCheckExpr e
           EUnOp uop e0 ->
             do { e0' <- tyCheckExpr e0
                ; t0  <- zonkTy (info e0')
-               ; let msg = text "Unary operator type mismatch:" <+> ppUnOp uop
+               ; let msg = text "Unary operator type mismatch:" <+> ppr uop
                ; case uop of
                    Neg ->
                      do { checkWith loc (isScalarTy t0) msg
@@ -111,15 +113,15 @@ tyCheckExpr e
                             case (target_ty, t0) of
                               (TBit,TInt _p)             -> return True
                               (TInt _p, TBit)            -> return True
-                              (TDouble _p, TInt _)       -> return True
-                              (TInt _p, TDouble _)       -> return True
+                              (TDouble, TInt _)          -> return True
+                              (TInt _p, TDouble)         -> return True
                               (TInt p, TInt p')          -> return True
                               (TStruct _s1, TStruct _s2) -> return $ isComplexTy target_ty && isComplexTy t0
                               -- Otherwise just try to unify
                               (t1,t2) -> unify loc t1 t2 >> return True
 
                         ; checkWith loc compat_test $
-                          text "Invalid cast from type" <+> ppTy t0 <+> text "to" <+> ppTy target_ty
+                          text "Invalid cast from type" <+> ppr t0 <+> text "to" <+> ppr target_ty
 
                         ; return $ eUnOp loc target_ty (Cast target_ty) e0'
 
@@ -130,7 +132,7 @@ tyCheckExpr e
                      -> return (eUnOp loc tint ALength e0')
                      | TVar _ <- t0
                      -> raiseErrNoVarCtx loc $
-                        text "Could not resolve array length of:" <+> ppExp e0
+                        text "Could not resolve array length of:" <+> ppr e0
                      | otherwise
                      -> raiseErrNoVarCtx loc (expActualErr unknownTArr t0 e0)
 
@@ -144,7 +146,7 @@ tyCheckExpr e
                t1  <- zonkTy (info e1')
                t2  <- zonkTy (info e2')
 
-               let msg = text "Binary operator type mismatch:" <+> ppBinOp bop
+               let msg = text "Binary operator type mismatch:" <+> ppr bop
                case bop of
                  x | isArithBinOp x -- Add / Sub / Mult / Div / Rem / Expon
                    -> do { -- liftIO $ putStrLn $ "t1 = " ++ show t1
@@ -337,7 +339,7 @@ tyCheckExpr e
                ; case t1' of
                    TArrow tas tb ->
                      do { checkWith loc (length tas == length es2) $
-                          vcat [ text "Function" <+> ppExp e1'
+                          vcat [ text "Function" <+> ppr e1'
                                , text "Expecting" <+> int (length tas) <+>
                                                       text "arguments"
                                , text "but was given" <+> int (length es2)
@@ -391,7 +393,7 @@ tyCheckExpr e
                               Just fty -> return $ eProj loc fty e' fn
                           }
                   _other -> raiseErrNoVarCtx loc $
-                            text "Field projection from non-struct type: " <+> ppTy ty'
+                            text "Field projection from non-struct type: " <+> ppr ty'
                }
 
           EStruct tn tfs ->
@@ -495,8 +497,8 @@ check_unbound_polymorphism loc fn (TArrow atys rty)
              rvars = gatherPolyVars [rty]
        ; checkWith loc (null $ rvars L.\\ lvars) $
          vcat [ text "Function" <+> (text $ show fn)
-              , text "Has unresolved return type:" <+> ppTy rty
-              , text "Parameter rypes:" <+> hsep (map ppTy atys)
+              , text "Has unresolved return type:" <+> ppr rty
+              , text "Parameter rypes:" <+> hsep (map ppr atys)
               ]
        }
 check_unbound_polymorphism loc fn _other

@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -17,7 +17,7 @@
    permissions and limitations under the License.
 -}
 
-module PassPipeline ( 
+module PassPipeline (
    runPipeLine
  , runTaskPipeLine
  , ThreadId
@@ -34,14 +34,14 @@ import Control.Monad.State
 
 import TcMonad ( updYldTy, updInTy )
 
--- A split records 
---  (a) the enclosing context, 
+-- A split records
+--  (a) the enclosing context,
 --  (b) the mediating buffer types, and
 --  (c) the actual threads
-data SplitInfo 
+data SplitInfo
   = SplitInfo { split_contxt  :: CompCtxt
               , split_buffers :: [Ty]
-              , split_threads :: [Comp CTy Ty] 
+              , split_threads :: [Comp CTy Ty]
               }
 
 -- | ID of an internal buffer
@@ -72,21 +72,21 @@ nextBufId t = get >>= \bid -> put (bid + 1) >> return (TypedBufId bid t)
 stripLetCtxt :: Comp CTy Ty -> (CompCtxt, Comp CTy Ty)
 -- Find the CompContext of a computation
 stripLetCtxt c = go c
-  where 
+  where
     -- It would have been nicer to build this bottom up
     go c
       = case unComp c of
-          Let nm c1 c2 -> 
+          Let nm c1 c2 ->
             let (ctx,c0) = go c2 in (CLet cloc nm c1 ctx, c0)
-          LetE nm fi e1 c2 -> 
+          LetE nm fi e1 c2 ->
             let (ctx,c0) = go c2 in (CLetE cloc nm fi e1 ctx, c0)
           LetHeader nm fun@(MkFun (MkFunDefined {}) _ _) c2 ->
             let (ctx,c0) = go c2 in (CLetHeader cloc nm fun ctx, c0)
-          LetHeader nm fun@(MkFun (MkFunExternal {}) _ _) c2 -> 
+          LetHeader nm fun@(MkFun (MkFunExternal {}) _ _) c2 ->
             let (ctx,c0) = go c2 in (CLetHeader cloc nm fun ctx,c0)
-          LetFunC nm ps ls c1 c2 -> 
+          LetFunC nm ps ls c1 c2 ->
             let (ctx,c0) = go c2 in (CLetFunC cloc nm ps ls c1 ctx, c0)
-          LetStruct sdef c2 -> 
+          LetStruct sdef c2 ->
             let (ctx,c0) = go c2 in (CLetStruct cloc sdef ctx, c0)
           _other -> (Hole,c)
       where cloc = compLoc c
@@ -174,7 +174,7 @@ pipeLineBase PipelineFish c
        -- ; putStrLn $ "floated = " ++ show (ppComp floated)
 
        ; let splits = create_splits floated       -- create splits
-       ; return $ insertBufs splits [0..]         -- insert buffers 
+       ; return $ insertBufs splits [0..]         -- insert buffers
        }
 
   where float_pipe c
@@ -201,49 +201,49 @@ pipeLineBase PipelineFish c
           | otherwise
           = return c
 
-        -- Just return a list of the splits 
-        create_splits :: Comp CTy Ty -> [Comp CTy Ty] 
+        -- Just return a list of the splits
+        create_splits :: Comp CTy Ty -> [Comp CTy Ty]
         create_splits c
           | MkComp c0 cloc cnfo <- c
           , Par p c1 c2 <- c0
           , AlwaysPipeline {} <- plInfo p
           = let c1s = create_splits c1
-                c2s = create_splits c2 
+                c2s = create_splits c2
             in c1s ++ c2s
           | otherwise
           = [c]
 
 
 insertBufs :: [Comp CTy Ty] -> [Int] -> ([Ty], [Comp CTy Ty])
--- Takes the splits and a sequence of buffer 
+-- Takes the splits and a sequence of buffer
 -- ids, and insers read/writes where needed.
 insertBufs [c1] _bids = ([],[c1])
 insertBufs (c1:c2:cs) (bid:bids)
-  = let buf_m   = show bid              
-        c1cty   = compInfo c1            
+  = let buf_m   = show bid
+        c1cty   = compInfo c1
         c1yldty = yldTyOfCTyBase c1cty
-        bufty   = TBuff (IntBuf c1yldty)      
+        bufty   = TBuff (IntBuf c1yldty)
         pnfo    = mkParInfo MaybePipeline -- why not 'never'?
 
         c1loc   = compLoc c1
-        c2loc   = compLoc c2 
+        c2loc   = compLoc c2
 
         -- c1' = c1 >>> writeInternal buf_m
         cwrite = cWriteInternal c1loc (CTBase (TTrans c1yldty bufty)) buf_m
         c1' = cPar c1loc (updYldTy bufty c1cty) pnfo c1 cwrite
 
-        -- c2' = readInternal buf_m >>> c2 
+        -- c2' = readInternal buf_m >>> c2
         -- NB: 'SpinOnEmpty' relevant? (had to do with Standalone Reads)
-        cread = cReadInternal c2loc (CTBase (TTrans bufty c1yldty)) buf_m $ 
-                SpinOnEmpty                
-        c2' = cPar c2loc (updInTy bufty $ compInfo c2) pnfo cread c2 
+        cread = cReadInternal c2loc (CTBase (TTrans bufty c1yldty)) buf_m $
+                SpinOnEmpty
+        c2' = cPar c2loc (updInTy bufty $ compInfo c2) pnfo cread c2
 
-        -- Recursively call in the rest of the splits 
+        -- Recursively call in the rest of the splits
         (btys, cs') = insertBufs (c2' : cs) bids
     in
     (c1yldty : btys, c1' : cs')
 
-insertBufs _ _ 
+insertBufs _ _
   = error "BUG: insertBufs!"
 
 
@@ -260,8 +260,8 @@ runPipeLine dumpPipeline c
 --       ; putStrLn $ "cbase = " ++ show (ppCompShortFold cbase) 
        ; (buftys,splits) <- pipeLineBase PipelineFish cbase  -- pipeline base computation
        ; let count = length splits
-       ; when (dumpPipeline && count > 1) $ 
-         putStrLn ("Pipeline pass created: " ++ 
+       ; when (dumpPipeline && count > 1) $
+         putStrLn ("Pipeline pass created: " ++
                             show count ++ " top-level splits.")
        ; let threads = map mk_thread (zip [0..] splits)
        ; return $ MkPipelineRetPkg ctx threads buftys }

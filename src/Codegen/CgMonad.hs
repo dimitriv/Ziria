@@ -1,6 +1,6 @@
-{- 
+{-
    Copyright (c) Microsoft Corporation
-   All rights reserved. 
+   All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
    may not use this file except in compliance with the License. You may
@@ -39,7 +39,7 @@ module CgMonad
   , collectStmts
   , collectStmts_
 
-  , inAllocFrame 
+  , inAllocFrame
 
   , collect
 
@@ -60,7 +60,7 @@ module CgMonad
   , nextName
   , pushName
   , printNames
-    
+
   , getLUTHashes
   , setLUTHashes
 
@@ -88,7 +88,7 @@ module CgMonad
   , extendExpFunEnv
   , extendCompEnv
   , extendTyDefEnv
- 
+
   , withThreadId
 
   , withClonedState
@@ -141,7 +141,7 @@ import qualified Language.C.Syntax as C
 import Language.C.Quote.C
 import qualified Language.C.Pretty as P
 import qualified Data.Map as M
-import Text.PrettyPrint.HughesPJ hiding ( (<>) ) 
+import Text.PrettyPrint.HughesPJ hiding ( (<>) )
 import Data.Maybe
 import qualified Text.Parsec as PS
 
@@ -173,7 +173,7 @@ instance IfThenElse C.Exp (Cg ()) where
 
 
 instance IfThenElse C.Exp Code where
-    ifThenElse ce mth mel = 
+    ifThenElse ce mth mel =
         let (th_defs,th_decls,th_stms) = getCode mth
             (el_defs,el_decls,el_stms) = getCode mel
             s = [cstm|if ($ce) {
@@ -215,20 +215,20 @@ mkCompInfo pref = CompInfo mempty pref pref
 --
 -- The following three continuations do not overlap. Importantly: they are the
 -- last thing that happens inside the tick()/process() functions.
--- NB: Although they are Cg () stuff they never create labelled blocks 
--- 
+-- NB: Although they are Cg () stuff they never create labelled blocks
+--
 data CompKont = CompKont
     { kontDone    :: Cg () -- Note [kontDone]
-                           -- What to do in the body of tick() or process() once/if 
+                           -- What to do in the body of tick() or process() once/if
                            -- they set the whatIs flag to Done (and the doneVal to something)
 
     , kontYield   :: Cg () -- Note [kontYield]
-                           -- What to do in the body of tick() or process() once/if 
+                           -- What to do in the body of tick() or process() once/if
                            -- they set the whatIs flag to Yield (and the yldVal to something)
 
                            -- E.g. if you are the upstream process() or tick() function in a >>> composition
-                           -- you must (i) push your yldVal to the downstream process() function instead of 
-                           -- returning (IMMEDIATE if you were tick(), or void + setting whatIs=YLD if you 
+                           -- you must (i) push your yldVal to the downstream process() function instead of
+                           -- returning (IMMEDIATE if you were tick(), or void + setting whatIs=YLD if you
                            -- were process) and (ii) return (IMMEIDATE if you were tick() otherwise void).
 
     , kontConsume :: Cg () -- Note [kontConsume]
@@ -236,10 +236,10 @@ data CompKont = CompKont
 
                            -- E.g. you are the downstream component in a >>> composition, and
                            -- instead of returning 'CONSUME', you call the upstream tick()
-                           -- But if you have no upstream component then you'd simply return 
+                           -- But if you have no upstream component then you'd simply return
                            -- CONSUME.
 
-    , doneHdl  :: Handle   -- where to write our done value 
+    , doneHdl  :: Handle   -- where to write our done value
     , yieldHdl :: Handle   -- where to write our yield value
     , inHdl    :: Handle   -- where to read our input values
     }
@@ -256,37 +256,37 @@ finalCompKont tid = CompKont
     , inHdl       = threadIdOf tid globalInHdl
     }
 
-type ExpGen = C.Exp 
+type ExpGen = C.Exp
 
 type CompGen = CompKont -> Cg CompInfo
 
 type CompFunGen = [CallArg (Exp Ty) (Comp CTy Ty)] -> CompKont -> Cg CompInfo
 
 data CgEnv = CgEnv
-    { 
-      compFunEnv :: M.Map Name CompFunGen  
+    {
+      compFunEnv :: M.Map Name CompFunGen
       -- Parameterized ST computations
-    
+
     , compEnv    :: M.Map Name CompGen
 
-    , tyDefEnv   :: M.Map TyName StructDef 
+    , tyDefEnv   :: M.Map TyName StructDef
       -- Type definitions
 
     , varEnv     :: M.Map Name (Ty, ExpGen)
 
-    , funEnv     :: M.Map Name (Name,[(Name,Ty)])   
-      -- The environment mapping function symbols 
+    , funEnv     :: M.Map Name (Name,[(Name,Ty)])
+      -- The environment mapping function symbols
       -- to real names and closure params
 
-    , symEnv     :: GS.Sym 
+    , symEnv     :: GS.Sym
       -- Reference to a symbol, for gensym'ing
 
-    , disableBC  :: Bool -- When true, no bound checks are emitted 
-                         -- overriding any user preferences. Useful 
+    , disableBC  :: Bool -- When true, no bound checks are emitted
+                         -- overriding any user preferences. Useful
                          -- for external functions that are "trust me"
 
-    , moduleName :: String 
-      -- This is to be added to global variables, 
+    , moduleName :: String
+      -- This is to be added to global variables,
       -- to allow us to link multiple Ziria modules in the same C project
     , taskEnv    :: TaskEnv
 
@@ -307,25 +307,25 @@ emptyEnv tenv sym =
 
 -- Note [CodeGen Invariants]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~
--- 
+--
 -- (1) In tick() or process(), whenever we produce a Result
 -- (yldVal/doneVal + whatIs) we must set the global /data/ pointers
 -- (global_yldVal/global_doneVal + global_whatIs) to our result.
--- 
--- (2) We respect the continuation invariants, 
+--
+-- (2) We respect the continuation invariants,
 -- see Note [Continuation Invariants]
 
-data LUTGenInfo 
+data LUTGenInfo
   = LUTGenInfo { lgi_lut_var  :: C.Exp -- the lut table variable
                , lgi_lut_gen  :: C.Stm -- call to the lut initializer
                }
-  deriving Show 
+  deriving Show
 
-data CgState = CgState { nameStack :: [Name] 
+data CgState = CgState { nameStack :: [Name]
                        , numAllocs :: Int -- # of heap-allocated variables
-                       , maxStackAlloc :: Int  
+                       , maxStackAlloc :: Int
 
-                         -- Hashed LUT-ted exprs, 
+                         -- Hashed LUT-ted exprs,
                          -- along with the C variable for the LUT
                        , lutHashes  :: [(Int,LUTGenInfo)]
 
@@ -340,7 +340,7 @@ cMAX_STACK_ALLOC :: Int
 cMAX_STACK_ALLOC = 32 * 1024
 
 data Code = Code
-    { -- Top-level definitions    
+    { -- Top-level definitions
       defs     :: !(DList C.Definition)
       -- Local declarations
     , decls    :: !(DList C.InitGroup)
@@ -367,7 +367,7 @@ data CgError = GenericError String
   deriving (Show)
 
 newtype Cg a = Cg { runCg :: CgEnv
-                          -> CgState 
+                          -> CgState
                           -> IO (Either CgError (a, Code, CgState)) }
 
 evalCg :: TaskEnv -> GS.Sym -> Int -> Cg () -> IO (Either CgError [C.Definition])
@@ -381,7 +381,7 @@ evalCg tenv sym stack_alloc_threshold m = do
 instance Monad Cg where
     return x = Cg $ \rho s -> return (Right (x, mempty, s))
 
-    (>>=) m f = 
+    (>>=) m f =
         Cg $ \rho s -> do res1 <- runCg m rho s
                           case res1 of
                             Left err -> return (Left err)
@@ -430,7 +430,7 @@ instance MonadError CgError Cg where
                             Right x  -> return $ Right x
 
 instance MonadReader CgEnv Cg where
-    -- | Fetch the value of the environment. 
+    -- | Fetch the value of the environment.
     ask = Cg $ \r s -> return (Right (r, mempty, s))
 
     -- | Execute a computation in a modified environment.
@@ -465,7 +465,7 @@ collect :: MonadWriter w m => m a -> m (a, w)
 collect m = censor (const mempty) $ listen m
 
 inNewBlock :: Cg a -> Cg ([C.InitGroup], [C.Stm], a)
-inNewBlock m 
+inNewBlock m
  = do { (x, code) <- collect m
       ; tell code { decls = mempty, stmts  = mempty }
       ; let decls' = DL.toList (decls code)
@@ -485,7 +485,7 @@ inAllocFrame action
        ; heap_context <- getHeapContext
        ; appendDecl [cdecl| unsigned int $id:(name idx); |]
        ; appendStmt [cstm| $id:(name idx) = wpl_get_free_idx($id:heap_context); |]
-       ; x <- action 
+       ; x <- action
        ; appendStmt [cstm| wpl_restore_free_idx($id:heap_context, $id:(name idx)); |]
        ; return x }
 
@@ -526,16 +526,16 @@ setNames names' = modify $ \s -> s { nameStack = names' }
 
 
 getLUTHashes :: Cg [(Int,LUTGenInfo)]
-getLUTHashes 
+getLUTHashes
   = gets lutHashes
 
 setLUTHashes :: [(Int,LUTGenInfo)] -> Cg ()
-setLUTHashes hs 
+setLUTHashes hs
   = modify $ \s -> s { lutHashes = hs }
 
 
 newHeapAlloc :: Cg ()
-newHeapAlloc = modify $ \s -> 
+newHeapAlloc = modify $ \s ->
    s { numAllocs = numAllocs s + 1 }
 
 
@@ -544,9 +544,9 @@ getMaxStackAlloc = gets maxStackAlloc
 
 
 freshName :: String -> Cg Name
-freshName prefix 
+freshName prefix
   = do { s' <- genSym prefix
-       ; return $ toName s' Nothing Nothing 
+       ; return $ toName s' Nothing Nothing
        }
 
 nextName :: String -> Cg Name
@@ -580,12 +580,12 @@ appendTopDefs newDefs =
 appendStructDef :: TyName -> C.InitGroup -> Cg ()
 -- Structs can't shadow each other in Blink, but we may end up
 -- in a situation where we translate 2 structs at the same time
--- due to pipelining. But we should only emit the struct once. 
-appendStructDef tyname sdef 
+-- due to pipelining. But we should only emit the struct once.
+appendStructDef tyname sdef
   = do { sdefs <- gets structDefs
        ; if tyname `elem` sdefs then return ()
          else do { modify $ \s -> s { structDefs = tyname : (structDefs s) }
-                 ; appendTopDecl sdef 
+                 ; appendTopDecl sdef
                  }
        }
 
@@ -600,9 +600,9 @@ appendTopDecls newDecls =
 
 appendDecl :: C.InitGroup -> Cg ()
 appendDecl newDecl = tell (codeDecl newDecl)
-  
+
 appendDecls :: [C.InitGroup] -> Cg ()
-appendDecls newDecls = tell (codeDecls newDecls) 
+appendDecls newDecls = tell (codeDecls newDecls)
 
 codeStmt :: C.Stm -> Code
 codeStmt newStmt = mempty { stmts = DL.singleton newStmt }
@@ -618,7 +618,7 @@ codeDecls newDecls = mempty { decls = DL.fromList newDecls }
 
 
 emitCode :: Code -> Cg ()
-emitCode cd 
+emitCode cd
   = do { let (defs,decls,stms) = getCode cd
        ; appendTopDefs defs
        ; appendDecls decls
@@ -628,20 +628,20 @@ appendStmt :: C.Stm -> Cg ()
 appendStmt newStmt = tell (codeStmt newStmt)
 
 appendStmts :: [C.Stm] -> Cg ()
-appendStmts newStmts = tell (codeStmts newStmts) 
+appendStmts newStmts = tell (codeStmts newStmts)
 
 {- Original:
 appendLabeledBlock :: C.ToIdent i => i -> Cg () -> Cg ()
-appendLabeledBlock i m 
+appendLabeledBlock i m
   = do { (decls, stms) <- inNewBlock_ m
        ; appendStmt [cstm|$id:i: { $decls:decls $stms:stms }|] }
 -}
 
 -- Modified
 appendLabeledBlock :: C.ToIdent i => i -> Cg () -> Cg ()
-appendLabeledBlock i m 
+appendLabeledBlock i m
   = do { (decls, stms) <- inNewBlock_ m
-       ; appendDecls decls -- Propagate those out! 
+       ; appendDecls decls -- Propagate those out!
        ; appendStmt [cstm|$id:i: { $stms:stms }|] }
 
 
@@ -651,15 +651,13 @@ extendFunEnv nm fn =
 
 extendVarEnv :: [(Name, (Ty, ExpGen))] -> Cg a -> Cg a
 -- BUG: This seems wrong: We can't inline a potentially
--- imperative expression anywhere we want! What is this ExpGen stuff???? 
+-- imperative expression anywhere we want! What is this ExpGen stuff????
 extendVarEnv binds =
     -- We need to bind array lengths of polymorphic array as well
     local $ \rho -> rho { varEnv = M.union (M.fromList (binds ++ convTy binds)) (varEnv rho) }
   where
     getPolymArrTy :: (Name, (Ty, ExpGen)) -> Maybe (Name, (Ty, ExpGen))
-    getPolymArrTy (n, (TArr (NVar nv s) ta,e)) 
-      = Just (nv, (tint, [cexp|$id:(name nv)|]))
-    getPolymArrTy (n, (TArr (NArr nv) ta,e)) 
+    getPolymArrTy (n, (TArr (NVar nv s) ta,e))
       = Just (nv, (tint, [cexp|$id:(name nv)|]))
     getPolymArrTy _ = Nothing
 
@@ -681,10 +679,10 @@ extendCompEnv nm bind =
 
 
 withDisabledBC :: Cg a -> Cg a
-withDisabledBC = 
+withDisabledBC =
     local $ \rho -> rho { disableBC = True }
 
-withDisabledBCWhen :: Bool -> Cg a -> Cg a 
+withDisabledBCWhen :: Bool -> Cg a -> Cg a
 withDisabledBCWhen True  x = withDisabledBC x
 withDisabledBCWhen False x = x
 
@@ -693,7 +691,7 @@ isDisabledBC = asks $ \rho -> disableBC rho
 
 
 withModuleName :: String -> Cg a -> Cg a
-withModuleName str = 
+withModuleName str =
     local $ \rho -> rho { moduleName = str }
 
 getHeapContext :: Cg String
@@ -718,7 +716,7 @@ withClonedState cg = do
     put st0
     return ret
 
-lookupCompFunCode :: Name -> Cg CompFunGen 
+lookupCompFunCode :: Name -> Cg CompFunGen
 lookupCompFunCode nm = do
     maybe_gen <- asks $ \rho -> M.lookup nm (compFunEnv rho)
     case maybe_gen of
@@ -738,7 +736,7 @@ lookupExpFunEnv nm  = do
     case maybe_x of
       Nothing -> do funs <- asks funEnv
                     let bound = map (show . ppName) (M.keys funs)
-                    fail ("Unbound function in code generation: "  ++ show (ppName nm) ++ 
+                    fail ("Unbound function in code generation: "  ++ show (ppName nm) ++
                           " bound = " ++ show bound ++ " pos = " ++ show (nameLoc nm))
       Just x  -> return x
 
@@ -750,12 +748,12 @@ lookupExpFunEnv_maybe nm  =
 lookupVarEnv :: Name -> Cg (Ty, ExpGen)
 lookupVarEnv nm = do
     maybe_x <- asks $ \rho -> M.lookup nm (varEnv rho)
-    case maybe_x of 
+    case maybe_x of
       Nothing -> do vars <- asks varEnv
                     let bound = map (show . ppName) (M.keys vars)
                     -- TODO: This still does not render properly because we do a show on this string.
-                    -- It has to do with the type of failOnError in Main.hs. The right thing to do 
-                    -- would be to simply make Cg return a Doc in the case of an error, not a string. 
+                    -- It has to do with the type of failOnError in Main.hs. The right thing to do
+                    -- would be to simply make Cg return a Doc in the case of an error, not a string.
                     fail (show (vcat [ text ("Unbound variable in code generation: "  ++ show (ppName nm))
                                      , text ("bound = " ++ show bound)
                                      , text ("pos = " ++ show (nameLoc nm)) ]))
@@ -764,14 +762,14 @@ lookupVarEnv nm = do
 lookupCompCode :: Name -> Cg CompGen
 lookupCompCode nm = do
     maybe_e <- asks $ \rho -> M.lookup nm (compEnv rho)
-    case maybe_e of 
+    case maybe_e of
       Nothing -> fail $ "CodeGen: Unbound computation var " ++ show nm ++ " detected!"
       Just e  -> return e
 
 lookupTyDefEnv :: TyName -> Cg StructDef
 lookupTyDefEnv nm = do
     (maybe_e,env) <- asks $ \rho -> (M.lookup nm (tyDefEnv rho), tyDefEnv rho)
-    case maybe_e of 
+    case maybe_e of
       Nothing -> fail $ "CodeGen: Unbound struct type " ++ show nm ++ " detected!" ++ "\nBound are: " ++ show (M.keys env)
       Just e  -> return e
 
@@ -787,14 +785,14 @@ getTyPutGetInfo ty = (buf_typ ty, buf_siz ty)
   where buf_siz (TArr (Literal n) _) = n
         buf_siz (TBuff (IntBuf t)) = buf_siz t
         buf_siz _other     = 1
-        buf_typ ty 
-          = case ty of 
+        buf_typ ty
+          = case ty of
 
               -- Bit buffers
               TBit -> "bit"
               TBool -> "bit"
 
-              -- Complex buffers 
+              -- Complex buffers
               TStruct nm | nm == complexTyName   -> "complex32"
               TStruct nm | nm == complex32TyName -> "complex32"
               TStruct nm | nm == complex16TyName -> "complex16"
@@ -802,25 +800,25 @@ getTyPutGetInfo ty = (buf_typ ty, buf_siz ty)
 
               -- Arrays should be just fine
               TArr _ bty -> "arr" ++ buf_typ bty
- 
+
               TInt bw   -> cgTIntName bw
 
-              -- internal synchronization queue buffers 
+              -- internal synchronization queue buffers
               (TBuff (IntBuf t)) -> buf_typ t
 
-              -- Others ... Not sure how well-supported they are 
-              otherty 
+              -- Others ... Not sure how well-supported they are
+              otherty
                 -> error $ "Code generation does not yet support buffers for type:" ++ show otherty
 
 
 getGetLen :: Comp CTy Ty -> (Int, Int)
-getGetLen c = 
+getGetLen c =
   let (tya, tyb) = case compInfo c of
                         CTBase (TComp tv ta tb) -> (ta, tb)
                         CTBase (TTrans ta tb)   -> (ta, tb)
                         _ -> (TUnit, TUnit)
-  in 
-  let buftyp ty = case ty of 
+  in
+  let buftyp ty = case ty of
                        (TArr (Literal n) _) -> n
                        _ -> 1
   in (buftyp tya, buftyp tyb)
