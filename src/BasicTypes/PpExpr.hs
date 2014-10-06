@@ -18,7 +18,7 @@
 -}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans -fno-warn-name-shadowing #-}
 -- | Pretty-printing type classes instances
-module PpExpr (nestingDepth, ppName, ppDecls, ppEs, ppIx) where
+module PpExpr (nestingDepth, ppName, ppDecls, ppEs) where
 
 import Text.PrettyPrint.HughesPJ
 import Text.PrettyPrint.Mainland (Pretty)
@@ -78,8 +78,8 @@ instance Outputable Val where
 
 instance Outputable ty => Outputable (GExp0 ty a) where
   ppr e = case e of
-    EVal v          -> ppr v
-    EValArr v       -> text "{" <> pprArr v <> text "}"
+    EVal _ v        -> ppr v
+    EValArr _ v     -> text "{" <> pprArr v <> text "}"
     EVar x          -> ppName x
     EUnOp op e      -> ppr op <> parens (ppr e)
     EBinOp op e1 e2 -> ppr e1 <> ppr op <> ppr e2
@@ -97,7 +97,7 @@ instance Outputable ty => Outputable (GExp0 ty a) where
     EFor ui ix estart elen ebody ->
       ppr ui <+>
        (text "for" <+>
-         ppIx ix <+> text "in" <+> brackets (ppr estart <> comma <+> ppr elen) <+> text "{" $$
+         ppr ix <+> text "in" <+> brackets (ppr estart <> comma <+> ppr elen) <+> text "{" $$
          nest nestingDepth (ppr ebody) $$
          text "}"
        )
@@ -109,7 +109,7 @@ instance Outputable ty => Outputable (GExp0 ty a) where
 
     EIter ix val earr ebody ->
       text "for" <+>
-        ppIx ix <> comma <+> text (name val) <+>
+        ppr ix <> comma <+> text (name val) <+>
         text "in" <+> ppr earr <+> text "{" $$
           nest nestingDepth (ppr ebody) $$
         text "}"
@@ -139,7 +139,7 @@ instance Outputable ty => Outputable (GExp0 ty a) where
                         text "}"
     EPrint True e1   -> text "printl" <+> ppr e1
     EPrint False e1  -> text "print" <+> ppr e1
-    EError str       -> text "error " <+> text str
+    EError _ str     -> text "error " <+> text str
     ELUT _ e1        -> text "LUT" <+> ppr e1
     EBPerm e1 e2     -> text "bperm " <> parens (ppr e1 <> comma <> ppr e2)
     EProj e fn       -> ppr e <> text "." <> text fn
@@ -189,7 +189,7 @@ instance Outputable Ty where
     TInterval n          -> text "interval" <> brackets (int n)
     TBuff (IntBuf t)     -> parens $ text "INTBUF" <> brackets (ppr t)
     TBuff (ExtBuf bt)    -> parens $ text "EXTBUF" <> brackets (text "base=" <> ppr bt)
-    TStruct tyname       -> text tyname
+    TStruct tyname _     -> text tyname
 
 instance Outputable SrcTy where
   ppr ty = case ty of
@@ -217,6 +217,12 @@ instance Outputable NumExpr where
     Literal i -> int i
     NVar n m  -> text (show (name n)) <+> (text " (max:") <+> int m <+> text ") "
 
+instance Outputable ty => Outputable (GName ty) where
+  ppr ix | isEmpty pprTy = ppName ix
+         | otherwise     = parens (ppName ix <+> char ':' <+> pprTy)
+    where
+      pprTy = ppr (nameTyp ix)
+
 {-------------------------------------------------------------------------------
   Utility
 
@@ -233,11 +239,6 @@ ppEs f sep eargs = case eargs of
     []         -> empty
     e : []     -> f e
     e : eargs' -> f e <> sep <+> ppEs f sep eargs'
-
-ppIx :: Outputable ty => GName ty -> Doc
-ppIx ix = case mbtype ix of
-    Nothing -> ppName ix
-    Just ty -> parens (ppName ix <+> char ':' <+> ppr ty)
 
 ppName :: GName ty -> Doc
 ppName nm = text (name nm) -- only in debug mode we want this: <> braces (text $ uniqId nm)

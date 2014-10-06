@@ -153,7 +153,7 @@ arrIdxRange ranges e len =
         erange e
 
     go e (LILength l) | EBinOp Mult e1 e2 <- unExp e
-                      , EVal (VInt k) <- unExp e2
+                      , EVal _ (VInt k) <- unExp e2
                       , fromIntegral k == l = do
         let k' = fromIntegral k
         r <- erange e1
@@ -164,13 +164,13 @@ arrIdxRange ranges e len =
     go _ (LILength _) = return RangeTop
 
 erange :: Exp Ty -> R Range
-erange (MkExp (EVal (VInt i)) _ _) =
+erange (MkExp (EVal _ (VInt i)) _ _) =
     return $ Range (fromIntegral i) (fromIntegral i)
 
-erange (MkExp (EVal _) _ _) =
+erange (MkExp (EVal _ _) _ _) =
     return RangeTop
 
-erange (MkExp (EValArr _) _ _) =
+erange (MkExp (EValArr _ _) _ _) =
     return RangeTop
 
 erange (MkExp (EVar v) _ _) =

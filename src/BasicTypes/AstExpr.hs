@@ -38,10 +38,12 @@ import Orphans ()
   Various kinds of variables
 -------------------------------------------------------------------------------}
 
-type TyName = String
-type TyVar  = String    -- For now
-type BWVar  = String
-type BufId  = String
+type TyName  = String
+type FldName = String
+
+type TyVar   = String    -- For now
+type BWVar   = String
+type BufId   = String
 
 {-------------------------------------------------------------------------------
   Names
@@ -140,7 +142,7 @@ data Ty where
   TArr      :: NumExpr -> Ty -> Ty
   TInt      :: BitWidth -> Ty
   TDouble   :: Ty
-  TStruct   :: TyName -> Ty
+  TStruct   :: TyName -> [(FldName, Ty)] -> Ty
   TInterval :: Int -> Ty
 
   -- Arrow and buffer types
@@ -242,8 +244,8 @@ data ForceInline
   deriving (Generic)
 
 data GExp0 ty a where
-  EVal :: Val -> GExp0 ty a
-  EValArr :: [Val] -> GExp0 ty a
+  EVal :: ty -> Val -> GExp0 ty a
+  EValArr :: ty -> [Val] -> GExp0 ty a
   EVar :: GName ty -> GExp0 ty a
   EUnOp :: UnOp -> GExp ty a -> GExp0 ty a
   EBinOp :: BinOp -> GExp ty a -> GExp ty a -> GExp0 ty a
@@ -280,7 +282,7 @@ data GExp0 ty a where
   EPrint :: Bool -> GExp ty a -> GExp0 ty a
 
   -- Generate runtime failure, with error report
-  EError :: String -> GExp0 ty a
+  EError :: ty -> String -> GExp0 ty a
   ELUT :: Map (GName ty) Range -> GExp ty a -> GExp0 ty a
 
   -- Permute a bit array: In the long run this should probably
@@ -292,9 +294,9 @@ data GExp0 ty a where
   EBPerm :: GExp ty a -> GExp ty a -> GExp0 ty a
 
   -- Constructing structs
-  EStruct :: TyName -> [(String,GExp ty a)] -> GExp0 ty a
+  EStruct :: TyName -> [(FldName,GExp ty a)] -> GExp0 ty a
   -- Project field out of a struct
-  EProj   :: GExp ty a -> String -> GExp0 ty a
+  EProj   :: GExp ty a -> FldName -> GExp0 ty a
   deriving Generic
 
 data GExp ty a
@@ -366,10 +368,10 @@ vint :: Int -> Val
 -- Auxiliary function for use in the vectorizer
 vint n = VInt (fromIntegral n)
 
-eVal :: Maybe SourcePos -> a -> Val -> GExp ty a
-eVal loc a v = MkExp (EVal v) loc a
-eValArr :: Maybe SourcePos -> a ->  [Val] -> GExp ty a
-eValArr loc a v = MkExp (EValArr v) loc a
+eVal :: Maybe SourcePos -> a -> ty -> Val -> GExp ty a
+eVal loc a ty v = MkExp (EVal ty v) loc a
+eValArr :: Maybe SourcePos -> a -> ty -> [Val] -> GExp ty a
+eValArr loc a ty v = MkExp (EValArr ty v) loc a
 eVar :: Maybe SourcePos -> a ->  GName ty -> GExp ty a
 eVar loc a v = MkExp (EVar v) loc a
 eUnOp :: Maybe SourcePos -> a -> UnOp -> GExp ty a -> GExp ty a
@@ -398,8 +400,8 @@ eIf :: Maybe SourcePos -> a ->  GExp ty a -> GExp ty a -> GExp ty a -> GExp ty a
 eIf loc a e1 e2 e3 = MkExp (EIf e1 e2 e3) loc a
 ePrint :: Maybe SourcePos -> a ->  Bool -> GExp ty a -> GExp ty a
 ePrint loc a b e = MkExp (EPrint b e) loc a
-eError :: Maybe SourcePos -> a ->  String -> GExp ty a
-eError loc a s = MkExp (EError s) loc a
+eError :: Maybe SourcePos -> a -> ty -> String -> GExp ty a
+eError loc a ty s = MkExp (EError ty s) loc a
 eLUT :: Maybe SourcePos -> a ->  Map (GName ty) Range -> GExp ty a -> GExp ty a
 eLUT loc a m e = MkExp (ELUT m e) loc a
 eBPerm :: Maybe SourcePos -> a ->  GExp ty a -> GExp ty a -> GExp ty a
@@ -421,12 +423,14 @@ tint    = tint32
 tdouble :: Ty
 tdouble = TDouble
 
+{-
 tcomplex, tcomplex8, tcomplex16, tcomplex32, tcomplex64 :: Ty
 tcomplex   = TStruct complex32TyName
 tcomplex8  = TStruct complex8TyName
 tcomplex16 = TStruct complex16TyName
 tcomplex32 = TStruct complex32TyName
 tcomplex64 = TStruct complex64TyName
+-}
 
 {-------------------------------------------------------------------------------
   Various map functions
@@ -437,19 +441,22 @@ tcomplex64 = TStruct complex64TyName
 
 mapTyM :: Monad m => (Ty -> m Ty) -> Ty -> m Ty
 mapTyM f ty = go ty
-  where go (TVar s)      = f (TVar s)
-        go TUnit         = f TUnit
-        go TBit          = f TBit
-        go TBool         = f TBool
-        go TString       = f TString
-        go (TInt bw)     = f (TInt bw)
-        go (TStruct tn)  = f (TStruct tn)
-        go (TInterval n) = f (TInterval n)
-        go TDouble       = f TDouble
-        go (TArr n t)    = go t >>= \t' -> f (TArr n t')
-        go (TArrow ts t) = do { ts' <- mapM go ts
-                              ; t'  <- go t
-                              ; f (TArrow ts' t') }
+  where go (TVar s)        = f (TVar s)
+        go TUnit           = f TUnit
+        go TBit            = f TBit
+        go TBool           = f TBool
+        go TString         = f TString
+        go (TInt bw)       = f (TInt bw)
+        go (TStruct tn ts) = do { ts' <- mapM go (map snd ts)
+                                ; f (TStruct tn (zip (map fst ts) ts'))
+                                }
+        go (TInterval n)   = f (TInterval n)
+        go TDouble         = f TDouble
+        go (TArr n t)      = go t >>= \t' -> f (TArr n t')
+        go (TArrow ts t)   = do { ts' <- mapM go ts
+                                ; t'  <- go t
+                                ; f (TArrow ts' t')
+                                }
         go (TBuff (IntBuf bt)) = go bt >>= \bt' -> f (TBuff (IntBuf bt'))
         go (TBuff (ExtBuf bt)) = go bt >>= \bt' -> f (TBuff (ExtBuf bt'))
 
@@ -468,9 +475,9 @@ mapExpM_aux on_ty f = go
            ; nfo <- on_ty (info e)
            ; case unExp e of
 
-              EVal v       -> f (eVal loc nfo v)
+              EVal ty v    -> f (eVal loc nfo ty v)
 
-              EValArr varr -> f (eValArr loc nfo varr)
+              EValArr ty varr -> f (eValArr loc nfo ty varr)
 
               EVar x       -> f (eVar loc nfo x)
 
@@ -550,7 +557,7 @@ mapExpM_aux on_ty f = go
                 do e1' <- go  e1
                    f (ePrint loc nfo nl e1')
 
-              EError err -> f (eError loc nfo err)
+              EError ty err -> f (eError loc nfo ty err)
 
               ELUT r e1 ->
                 do e1'  <- go e1
@@ -659,7 +666,7 @@ expEq :: Exp a -> Exp a -> Bool
 -- Are these two expressions /definitely/ equal?
 expEq e e' = expEq0 (unExp e) (unExp e')
   where
-    expEq0 (EVal v) (EVal v') = v == v'
+    expEq0 (EVal ty v) (EVal ty' v') = ty == ty' && v == v'
     expEq0 (EVar x) (EVar y)  = x == y
     expEq0 (EArrRead e1 e2 li) (EArrRead e1' e2' li')
       = expEq e1 e1' && expEq e2 e2' && (li == li')
@@ -756,7 +763,7 @@ supportsCmpTy ty =
 
 
 isComplexTy :: Ty -> Bool
-isComplexTy (TStruct tn)
+isComplexTy (TStruct tn _)
   = any (== tn) [ complexTyName
                 , complex8TyName
                 , complex16TyName
@@ -937,8 +944,8 @@ isBoolBinOp _   = False
 -- A super conservative side-effect analysis
 mutates_state :: Exp a -> Bool
 mutates_state e = case unExp e of
-  EVal _                -> False
-  EValArr _             -> False
+  EVal _ _              -> False
+  EValArr _ _           -> False
   EVar _                -> False
   EUnOp _ e'            -> mutates_state e'
   EBinOp _ e1 e2        -> any mutates_state [e1,e2]
@@ -963,7 +970,7 @@ mutates_state e = case unExp e of
   EIf e1 e2 e3   -> any mutates_state [e1,e2,e3]
 
   EPrint _nl _e1 -> True -- See Note [IOEffects]
-  EError _       -> True
+  EError _ _     -> True
 
   ELUT _ e1      -> mutates_state e1
   EBPerm e1 e2   -> any mutates_state [e1,e2]

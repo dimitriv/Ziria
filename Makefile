@@ -19,7 +19,7 @@
 #
 
 GHCFLAGS += -fwarn-incomplete-patterns -Werror
-GHCFLAGS += -isrc:src/Typecheck:src/Codegen:src/Vectorize:src/Parse:src/Optimize:src/Pipeline:src/BasicTypes:src/Utils
+GHCFLAGS += -isrc:src/Typecheck:src/Codegen:src/Vectorize:src/Parse:src/Optimize:src/Pipeline:src/BasicTypes:src/Utils:src/ComputeType
 GHCFLAGS += -odir obj -hidir obj
 
 ifneq ($(wildcard .cabal-sandbox/*-packages.conf.d),)
