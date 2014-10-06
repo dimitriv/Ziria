@@ -405,6 +405,8 @@ dummyQueue = trace ("DUMMY QUEUE IN USE - PLEASE FIX ASAP!") $ Queue 0 False
 --   TODO: currently doesn't calculate task cap or cardinalities for commit queues.
 --
 --   TODO: don't generate queues for external buf typed computations
+--
+--   TODO: investigate why tasks from seq don't spawn tasks after they're done
 taskify :: Queue -> Queue -> Comp CTy Ty -> TaskGen TaskID TaskInfo TaskID
 taskify inq outq c = do
     if containsBarrier c

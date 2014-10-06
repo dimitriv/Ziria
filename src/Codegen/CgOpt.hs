@@ -138,7 +138,7 @@ mkRepeat dflags c cinfo k =
     cDoneKont = do
         emitCode (compGenInit cinfo)
         if canTick cinfo
-          then appendStmt  [cstm|goto $id:(tickNmOf (tickHdl cinfo));|]
+          then appendStmt  [cstm|goto $id:(tickNmOf(tickHdl cinfo));|]
           else appendStmts [cstms|$id:globalWhatIs = SKIP;
                                   goto l_IMMEDIATE;|]
 
@@ -1159,19 +1159,40 @@ codeGenComp dflags comp k =
        codeGenCompTop dflags c1 k
 
 
-    -- TODO: codegen for this is pretty nonsensical ATM
     go (MkComp (ActivateTask taskid mname) csp _) = do
        let t = show taskid
        task <- lookupTaskEnv taskid
+       activateLbl <- name `fmap` freshName ("activate_task_" ++ t)
        codeGenTask dflags taskid task
-       case fmap name mname of
-         Just n  -> appendStmt  [cstm|activate($t, $n);|]
-         Nothing -> appendStmt  [cstm|activate($t);|]
-       return $ mkCompInfo globalDoneHdl True
+
+       -- Dummy process continuation; this code is unreachable.
+       appendLabeledBlock (processNmOf activateLbl) $ do
+         appendStmt [cstm|printf("Process of ActivateTask %s called - impossible!\n", $t);|]
+         appendStmt [cstm|$id:globalWhatIs = DONE;|]
+         kontDone k
+
+       appendLabeledBlock (tickNmOf activateLbl) $ do
+         case fmap name mname of
+           Just n  -> appendStmt  [cstm|activate($t, $n);|]
+           Nothing -> appendStmt  [cstm|activate($t);|]
+         appendStmt [cstm|$id:globalWhatIs = DONE;|]
+         kontDone k
+
+       return $ mkCompInfo activateLbl True
 
 
     go (MkComp DeactivateSelf csp _) = do
-       appendStmt  [cstm|deactivate_self();|]
+       deactivateLbl <- name `fmap` freshName "deactivate_self"
+       appendLabeledBlock (tickNmOf deactivateLbl) $ do
+         appendStmt [cstm|printf("Process of DeactivateSelf called - impossible!\n");|]
+         appendStmt [cstm|$id:globalWhatIs = DONE;|]
+         kontDone k
+
+       appendLabeledBlock (tickNmOf deactivateLbl) $ do
+         appendStmt  [cstm|deactivate_self();|]
+         appendStmt [cstm|$id:globalWhatIs = DONE;|]
+         kontDone k
+
        return $ mkCompInfo globalDoneHdl True
 
     go (MkComp c _ (CTArrow {})) = 
