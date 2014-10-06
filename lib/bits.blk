@@ -6,4 +6,4 @@ var output : arr[length(input)] bit;
   }
 
   return output;
-} in
+};
