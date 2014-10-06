@@ -34,6 +34,7 @@ import Text.Parsec
 import Text.PrettyPrint.Mainland
 import Text.Show.Pretty (dumpStr)
 
+{-
 import AstComp
 import AstExpr
 import AutoLUT
@@ -85,9 +86,12 @@ outputCompiledProgram (CompiledProgram sc cc fn) = do
     hPutStr outHdl cHeader
     hPutStr outHdl $ show $ ppr cc
     hClose outHdl
-
+-}
 main :: IO ()
 main = failOnException $ do
+    return ()
+
+{-
     hSetBuffering stdout NoBuffering
 
     -- putStrLn "pre-command line parsing ..."
@@ -281,7 +285,7 @@ main = failOnException $ do
                             , PP.buf_tys = tys }
           <- runPipelinePhase dflags sym lc
         return (lc, comp_ctxt, comp_threads,tys,fn)
-
+-}
 
 failOnError :: Show a => IO (Either a b) -> IO b
 failOnError m = do
