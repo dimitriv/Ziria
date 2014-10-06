@@ -48,10 +48,11 @@ type BufId  = String
 -------------------------------------------------------------------------------}
 
 data GName ty
-  = MkName { name      :: String
-           , uniqId    :: String
-           , mbtype    :: Maybe ty
-           , nameLoc :: Maybe SourcePos }
+  = MkName { name    :: String
+           , uniqId  :: String
+           , nameTyp :: ty
+           , nameLoc :: Maybe SourcePos
+           }
   deriving (Generic)
 
 instance Eq (GName ty) where
@@ -66,13 +67,14 @@ instance Show (GName ty) where
 instance Pretty (GName ty) where
     ppr = string . show
 
-toName :: String -> Maybe SourcePos -> Maybe ty -> GName ty
+toName :: String -> Maybe SourcePos -> ty -> GName ty
 -- This is our only function to create new names
-toName s mpos mty
-  = MkName { name    = s
+toName s mpos typ =
+    MkName { name    = s
            , uniqId  = s
            , nameLoc = mpos
-           , mbtype  = mty }
+           , nameTyp = typ
+           }
 
 
 updNameId :: String -> Name -> Name
@@ -677,6 +679,7 @@ binopList :: BinOp -> a -> Exp a -> [Exp a] -> Exp a
 binopList _  _ e0 []       = e0
 binopList op a e0 (e : es) = toExp a $ EBinOp op e (binopList op a e0 es)
 
+{-
 dotDotName :: Name
 dotDotName = toName "..." Nothing Nothing
 
@@ -690,6 +693,7 @@ unknownTArrOfBase t = TArr (NVar dotDotName 0) t
 unknownTFun :: Int -> Ty
 unknownTFun n = TArrow (replicate n (TVar (name dotDotName)))
                        (TVar (name dotDotName))
+-}
 
 -- Observations/questions about the following code
 -- (a) Excludes Bit. Not sure why. (TODO)

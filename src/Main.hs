@@ -34,9 +34,10 @@ import Text.Parsec
 import Text.PrettyPrint.Mainland
 import Text.Show.Pretty (dumpStr)
 
+import AstExpr
+
 {-
 import AstComp
-import AstExpr
 import AutoLUT
 import CardinalityAnalysis
 import CgHeader
