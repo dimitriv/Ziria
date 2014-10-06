@@ -54,8 +54,12 @@
     // set_up_threads is defined in the compiler-generated code
     // and returns the number of threads we set up 
 	extern int wpl_set_up_threads(PSORA_UTHREAD_PROC *User_Routines);
+
 #endif
 
+#ifdef __GNUC__
+	#define __cdecl
+#endif
 
 // Contex blocks
 BufContextBlock buf_ctx;
