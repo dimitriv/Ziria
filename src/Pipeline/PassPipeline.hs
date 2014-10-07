@@ -26,7 +26,8 @@ module PassPipeline (
 import AstExpr
 import AstComp
 import PpComp
-import ExecPlan
+import TaskGenTypes
+import TaskGen
 
 import qualified Data.Set as S
 import qualified Data.Map as M

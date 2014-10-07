@@ -62,7 +62,7 @@ import Data.List ( nub )
 
 import CgFun
 import {-# SOURCE #-} CgProgram (codeGenThread)
-import ExecPlan
+import TaskGenTypes
 
 ------------------------------------------------------------------------------
 -- | Computation Code Generation

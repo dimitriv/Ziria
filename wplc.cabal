@@ -19,7 +19,7 @@ build-type: Simple
 
 Executable wplc
   hs-source-dirs:   src src/BasicTypes src/Codegen src/Optimize src/Parse
-                    src/Pipeline src/Typecheck src/Utils src/Vectorize
+                    src/Pipeline src/Typecheck src/Utils src/Vectorize src/TaskGen
   main-is:          Main.hs
 
   default-language: Haskell98

@@ -152,7 +152,7 @@ import PpComp
 import PpExpr
 import qualified GenSym as GS
 import CgHeader
-import ExecPlan (TaskEnv, TaskInfo)
+import TaskGenTypes (TaskEnv, TaskInfo)
 
 
 instance IfThenElse Bool a where
