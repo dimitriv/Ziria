@@ -431,9 +431,11 @@ taskify :: (Queue, Queue)
         -> Comp CTy Ty
         -> TaskGen TaskID TaskInfo TaskID
 taskify qs@(inq, outq) mnxt c = do
-    if containsBarrier c
-      then go (unComp c)
-      else createTask c qs
+    case (containsBarrier c, mnxt) of
+      (True, _)         -> go (unComp c)
+      (False, Just nxt)
+        | isComputer c  -> createTask (MkComp (c `Seq` nxt) (compLoc c) (compInfo c)) qs
+      _                 -> createTask c qs
   where
     -- Invariant: if go gets called, its argument *does* contain a barrier.
     -- It's important to note that sequential code is generated right to left,
@@ -568,15 +570,17 @@ taskify qs@(inq, outq) mnxt c = do
         -- honored. Maybe warn about this?
         taskify qs mnxt comp
       | otherwise = do
-        createHeavyTask comp qs
-
+        let c' = maybe comp (\nxt -> MkComp (comp `Seq` nxt) (compLoc c) (compInfo c)) mnxt
+        createHeavyTask c' qs
     -- If we get to either Map or Call, then the name they're calling on
     -- is a barrier for sure; make this a primitive barrier since we can't
     -- split funs.
     go (Map _ name) = do
-      createHeavyTask c qs
+        let c' = maybe c (\nxt -> MkComp (c `Seq` nxt) (compLoc c) (compInfo c)) mnxt
+        createHeavyTask c' qs
     go (Call name _) = do
-      createHeavyTask c qs
+        let c' = maybe c (\nxt -> MkComp (c `Seq` nxt) (compLoc c) (compInfo c)) mnxt
+        createHeavyTask c' qs
     go _ = error "Atomic computations can't possibly contain barriers!"
 
 -- | Split a list of computations, with an extra piece of information,

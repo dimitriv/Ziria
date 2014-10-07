@@ -661,6 +661,11 @@ isCompCTy :: CTy0 -> Bool
 isCompCTy (TComp {}) = True
 isCompCTy _ = False
 
+isComputer :: Comp CTy Ty -> Bool
+isComputer c =
+  case compInfo c of
+    CTBase ty -> isCompCTy ty
+    _         -> False
 
 
 -- Composing transformers and computers
