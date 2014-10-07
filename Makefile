@@ -18,24 +18,24 @@
 #
 #
 
-GHCFLAGS += -fwarn-incomplete-patterns -Werror
-GHCFLAGS += -isrc:src/Typecheck:src/Codegen:src/Vectorize:src/Parse:src/Optimize:src/Pipeline:src/BasicTypes:src/Utils
-GHCFLAGS += -odir obj -hidir obj
+all: create-sandbox
+	cabal install
+	cp .cabal-sandbox/bin/wplc* .
+	cp .cabal-sandbox/bin/BlinkDiff* tools/
 
-ifneq ($(wildcard .cabal-sandbox/*-packages.conf.d),)
-GHCFLAGS += \
-	-no-user-package-db \
-	-package-db $(wildcard .cabal-sandbox/*-packages.conf.d)
-endif
-
-all:
-	ghc $(GHCFLAGS) --make Main -o wplc
-	ghc --make tools/BlinkDiff.hs -o tools/BlinkDiff
-
+create-sandbox:
+	cabal sandbox init
+	cabal install --dependencies-only
 
 clean:
-	rm -rf obj wplc wplc.exe
+	-rm -rf wplc
+	-rm -rf wplc.exe
+	-rm -rf tools/BlinkDiff
+	-rm -rf tools/BlinkDiff.exe
 
+clean-sandbox:
+	-rm -rf .cabal-sandbox
+	-rm -rf dist
 
 test: test-parser test-backend test-lut test-WiFi-all
 test-clean: test-parser-clean test-backend-clean test-lut-clean test-WiFi-all-clean
