@@ -20,6 +20,7 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include "types.h"
 #include "wpl_alloc.h"
 #include "params.h"
 
@@ -36,10 +37,10 @@ FILE * try_open(char *filename, char *mode)
 }
 
 /* Read the file as a null-terminated string */ 
-void try_read_filebuffer(HeapContextBlock *hblk, char *filename, char **fb, unsigned int *len)
+void try_read_filebuffer(HeapContextBlock *hblk, char *filename, char **fb, memsize_int *len)
 {
 	char *filebuffer;
-	unsigned int sz;
+	memsize_int sz;
 
 	FILE *f = try_open(filename,"r");
 	fseek(f, 0L, SEEK_END);
@@ -143,6 +144,14 @@ unsigned long parse_size (char *rp) {
   return (strtol(rp,NULL,10));
 }
 
+
+
+memsize_int parse_mem_size(char *rp) {
+	return (strtoll(rp, NULL, 10));
+}
+
+
+
 void init_DEBUG(BlinkParams *params, char *typ)				{ params->debug = parse_DEBUG(typ); }
 void init_inType(BlinkParams *params, char *typ)			{ params->inType = parse_type(typ); }
 void init_outType(BlinkParams *params, char *typ)			{ params->outType = parse_type(typ); }
@@ -152,7 +161,7 @@ void init_inFileMode(BlinkParams *params, char *md)			{ params->inFileMode = par
 void init_outFileMode(BlinkParams *params, char *md)		{ params->outFileMode = parse_mode(md); }
 void init_outBuf(BlinkParams *params, char *siz)			{ params->outBufSize = parse_size(siz); }
 void init_dummySamples(BlinkParams *params, char *siz)		{ params->dummySamples = parse_repeat(siz); }
-void init_heapSize(BlinkParams *params, char *siz)			{ params->heapSize = parse_size(siz); }
+void init_heapSize(BlinkParams *params, char *siz)			{ params->heapSize = parse_mem_size(siz); }
 void init_inRepeat(BlinkParams *params, char *i)			{ params->inFileRepeats = parse_repeat(i); }
 void init_LatencySampling(BlinkParams *params, char *siz)   { params->latencySampling = parse_size(siz); }
 void init_LatencyCDFSize(BlinkParams *params, char *siz)    { params->latencyCDFSize = parse_size(siz); }

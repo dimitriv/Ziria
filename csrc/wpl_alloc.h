@@ -18,24 +18,26 @@
 */
 #pragma once
 
+#include "types.h"
+
 typedef struct _HeapContextBlock {
 	void * wpl_heap;
-	unsigned int wpl_free_idx;
-	int wpl_heap_siz;
+	memsize_int wpl_free_idx;
+	memsize_int wpl_heap_siz;
 } HeapContextBlock;
 
 
-void initHeapCtxBlock(HeapContextBlock *hblk, unsigned int max_heap_size);
+void initHeapCtxBlock(HeapContextBlock *hblk, memsize_int max_heap_size);
 
 
 /* The bump allocator */
-void wpl_init_heap(HeapContextBlock *blk, unsigned int max_heap_size);
+void wpl_init_heap(HeapContextBlock *blk, memsize_int max_heap_size);
 
-void * wpl_alloca(HeapContextBlock *blk, unsigned int bytes);
+void * wpl_alloca(HeapContextBlock *blk, memsize_int bytes);
 
 /* Just a generic allocation routine */
-char * try_alloc_bytes(HeapContextBlock *hblk, unsigned int siz);
+char * try_alloc_bytes(HeapContextBlock *hblk, memsize_int siz);
 
 unsigned int wpl_get_free_idx(HeapContextBlock *blk);
 // precondition: 16-aligned
-void wpl_restore_free_idx(HeapContextBlock *blk, unsigned int idx);
+void wpl_restore_free_idx(HeapContextBlock *blk, memsize_int idx);

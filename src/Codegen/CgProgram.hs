@@ -99,7 +99,7 @@ codeGenWPLGlobalInit :: [C.Stm] -> String -> Cg ()
 codeGenWPLGlobalInit stms mfreshId
   = do { heap_context  <- getHeapContext
        ; appendTopDef $
-         [cedecl|void $id:(wpl_global_name mfreshId) (unsigned int max_heap_siz)
+         [cedecl|void $id:(wpl_global_name mfreshId) ($ty:(namedCType("memsize_int")) max_heap_siz)
             {
               wpl_init_heap ($id:heap_context, max_heap_siz);
               $stms:stms

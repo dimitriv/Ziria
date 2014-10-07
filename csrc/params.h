@@ -45,6 +45,7 @@ typedef enum {
 #include <thread_func.h>
 #include <stdlib.h>
 #include <time.h>
+#include "types.h"
 #include "wpl_alloc.h"
 #include "utils.h"
 
@@ -86,7 +87,7 @@ typedef struct _BlinkParams {
 	unsigned int inMemorySize;	// Size of memory buffer for input
 	unsigned int outMemorySize;	// Size of memory buffer for output
 	unsigned int outBufSize;    // size of buffer we serve output from
-    unsigned int heapSize;      // heap size for blink/wpl program
+	memsize_int heapSize;      // heap size for blink/wpl program
 	unsigned long latencySampling;		// space between latency sampling in #writes (0 - no latency measurements)
 	unsigned long latencyCDFSize;		// How many latency samples to be stored in the CDF table
 	int debug;					// Level of debug info to print (0 - lowest)
@@ -111,7 +112,7 @@ typedef struct _BlinkParams {
 
 FILE * try_open(char *name, char *mode);
 void try_parse_args(BlinkParams *params, int argc, char ** argv);
-void try_read_filebuffer(HeapContextBlock *hblk, char *filename, char **fb, unsigned int *len);
+void try_read_filebuffer(HeapContextBlock *hblk, char *filename, char **fb, memsize_int *len);
 
 typedef struct {
   char * param_str;               // Name of param (for parsing)

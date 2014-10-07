@@ -17,6 +17,7 @@
    permissions and limitations under the License.
 */
 
+#pragma once
 
 /**************************************************************
  *                                                            *
@@ -39,6 +40,11 @@ typedef unsigned __int16 uint16;
 typedef unsigned __int32 uint32;
 typedef unsigned __int64 uint64;
 
+typedef unsigned __int64 memsize_int;
+//typedef intptr_t memsize_int;
+
+#define strtoll _strtoi64
+
 /* Short term put these here, long term separate out */
 #include "sora_threads.h"
 #include "sora_thread_queues.h"
@@ -53,6 +59,12 @@ typedef unsigned char  uint8;
 typedef unsigned short uint16;
 typedef unsigned int uint32;
 typedef unsigned long long int uint64;
+
+// Stackoverflow says we should use intptr_t on gcc
+// but it is not 64 bit!
+// So we use long long and we have -Wpointer-to-int-cast warnings
+//typedef intptr_t memsize_int;
+typedef unsigned long long int memsize_int;
 
 #endif
 

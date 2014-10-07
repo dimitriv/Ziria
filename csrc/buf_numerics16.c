@@ -98,7 +98,7 @@ void init_getint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *
 
 	if (params->inType == TY_FILE)
 	{
-		unsigned int sz; 
+		memsize_int sz;
 		char *filebuffer;
 		try_read_filebuffer(hblk, params->inFileName, &filebuffer, &sz);
 
