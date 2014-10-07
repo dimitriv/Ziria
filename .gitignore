@@ -189,7 +189,7 @@ doc/*/*.pdf
 /_tests/*/perfout
 /_tests/*/*outfile
 /csrc/test.c
-/tools/BlinkDiff.exe
+/tools/BlinkDiff*
 code/WiFi/receiver/*.c
 code/WiFi/receiver/*.exe
 code/WiFi/receiver/*.expanded
@@ -304,3 +304,4 @@ code/WiFi/testbed/samples/*
 # for now, ignore AST dumps
 *.ast.dump
 *.ast.dump.ground
+dist
