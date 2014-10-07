@@ -23,10 +23,24 @@ data Computer
 data Transformer
 
 data TaskGenState name task = TaskGenState {
+    -- | The set of functions containing merge barriers.
+    --   We need to keep track of these to be able to shove calls
+    --   to such functions into their own tasks.
     tgstBarrierFuns :: S.Set Name,
+
+    -- | Mapping from task IDs to their respective info structures.
     tgstTaskInfo    :: M.Map name task,
+
+    -- | Name of next sync queue to generate.
     tgstNextQ       :: Queue,
-    tgstNextCQ      :: Queue
+
+    -- | Name of next commit queue to generate.
+    tgstNextCQ      :: Queue,
+
+    -- | # of tasks created so far. Useful for statistics as well
+    --   as for a *very* generous estimate of how large an active
+    --   queue the scheduler will need.
+    tgstNumTasks    :: Int
   }
 
 instance Default (TaskGenState name task) where
@@ -34,7 +48,8 @@ instance Default (TaskGenState name task) where
       tgstBarrierFuns = S.empty,
       tgstTaskInfo    = M.empty,
       tgstNextQ       = Queue 0 False,
-      tgstNextCQ      = Queue 0 True
+      tgstNextCQ      = Queue 0 True,
+      tgstNumTasks    = 0
     }
 
 newtype NameT name m a = NameT {runNameT :: name -> m (name, a)}
@@ -125,6 +140,7 @@ getAllBarrierFuns = fmap tgstBarrierFuns get
 --   complete with queue reads and writes.
 createTaskEx :: (Ord name, Enum name) => TaskInfo -> TaskGen name TaskInfo name
 createTaskEx task = do
+  modify $ \st -> st {tgstNumTasks = tgstNumTasks st + 1}
   name <- freshName
   associate name $ task {
       taskComp = insertQs (taskComp task)
@@ -423,7 +439,7 @@ dummyQueue = trace ("DUMMY QUEUE IN USE - PLEASE FIX ASAP!") $ Queue 0 False
 --
 --   TODO: currently doesn't do synchronization at start/end of tasks.
 --
---   TODO: currently doesn't calculate task cap or cardinalities for commit queues.
+--   TODO: currently doesn't calculate cardinalities for commit queues.
 --
 --   TODO: don't generate unnecessary queues or their associated reads/writes.
 --         they don't really do anything so it's not incorrect per se to generate
