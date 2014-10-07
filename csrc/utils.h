@@ -52,8 +52,8 @@ void initMeasurementInfo(TimeMeasurements *measurementInfo, ulong size) {
 
 #endif
 
-void bounds_check(int siz, int len, char *msg);
-void blink_copy(void *dst, void *src, unsigned int siz);
+void bounds_check(memsize_int siz, memsize_int len, char *msg);
+void blink_copy(void *dst, void *src, memsize_int siz);
 
 char* delete_trailing_comma(char *s);
 void restore_trailing_comma(char* trailing_comma);

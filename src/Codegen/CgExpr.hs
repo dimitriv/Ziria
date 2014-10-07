@@ -389,36 +389,32 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
 
         is_struct_ptr <- isStructPtrType retTy
 
-        case retTy of
-          TArr li _ty ->
-           do { newNm <- freshName $ name nef ++ "_" ++ getLnNumInStr (expLoc e0)
-              ; let retNewN = toName ("__retcall_" ++ name newNm) Nothing Nothing
-                    cer     = [cexp|$id:(name retNewN)|]
-                    clen    = case li of Literal l -> [cexp| $int:l|]
-                                         NVar c _m -> [cexp| $id:(name c)|]
-              ; appendDecls =<<
-                   codeGenDeclGlobalGroups dflags [(retNewN, retTy, Nothing)]
+        newNm <- freshName $ name nef ++ "_" ++ getLnNumInStr (expLoc e0)
+        
+        let retNewN = toName ("__retcall_" ++ name newNm) Nothing Nothing
+            cer     = [cexp|$id:(name retNewN)|]
 
-              ; inAllocFrame $
-                appendStmt [cstm|$(cef)($cer, $clen, $args:cargs);|]
-                -- ok to deallocated since result is allocated in parent's space
-              ; return [cexp|$cer|]
-              }
+        appendDecls =<<
+           codeGenDeclGlobalGroups dflags [(retNewN, retTy, Nothing)]
+
+        case retTy of
+          TArr li _ty
+            | let clen = case li of Literal l -> [cexp| $int:l|]
+                                    NVar c _m -> [cexp| $id:(name c)|]
+            -> inAllocFrame $
+               appendStmt [cstm|$(cef)($cer, $clen, $args:cargs);|]
 
           _ | is_struct_ptr
-            -> do { newNm <- freshName $ name nef ++ "_" ++ getLnNumInStr (expLoc e0)
-                  ; let retNewN = toName ("__retcall_" ++ name newNm) Nothing Nothing
-                        cer     = [cexp|$id:(name retNewN)|]
-                  ; appendDecls =<<
-                       codeGenDeclGlobalGroups dflags [(retNewN, retTy, Nothing)]
+            -> inAllocFrame $
+               appendStmt [cstm|$(cef)($cer, $args:cargs);|]
 
-                  ; inAllocFrame $
-                    appendStmt [cstm|$(cef)($cer, $args:cargs);|]
-                    -- ok to deallocate since result is allocated in parent's space
-                  ; return [cexp|$cer|]
-                  }
             | otherwise
-           -> return [cexp|$(cef)($args:cargs)|]
+           -> inAllocFrame $ 
+              appendStmt [cstm| $cer = $(cef)($args:cargs);|]
+        
+        return [cexp|$cer|]  
+         
+
 
     go t (ECall {}) =
         fail "ECall found but no function!"

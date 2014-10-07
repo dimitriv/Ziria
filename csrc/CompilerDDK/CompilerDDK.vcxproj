@@ -5,9 +5,17 @@
       <Configuration>Debug</Configuration>
       <Platform>Win32</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Release|Win32">
       <Configuration>Release</Configuration>
       <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -24,7 +32,17 @@
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v110</PlatformToolset>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Makefile</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v110</PlatformToolset>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Makefile</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v110</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Makefile</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v110</PlatformToolset>
@@ -35,7 +53,13 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
@@ -47,7 +71,22 @@
     <NMakeReBuildCommandLine>$(SolutionDir)compile.bat $(ProjectDir) /r chk x86 WXP</NMakeReBuildCommandLine>
     <NMakeCleanCommandLine>echo $(ProjectDir)</NMakeCleanCommandLine>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <NMakeOutput>$(ProjectDir)target\i386\CompilerDDK.exe</NMakeOutput>
+    <NMakePreprocessorDefinitions>WIN64;_DEBUG;$(NMakePreprocessorDefinitions);SORA_PLATFORM;USER_MODE;WINDDK</NMakePreprocessorDefinitions>
+    <IncludePath>$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSDK_IncludePath);C:\SoraSDK2.0\inc\brick;C:\SoraSDK2.0\inc;C:\SoraSDK2.0\src\bb\dot11a;C:\SoraSDK2.0\src\bb\dot11a\inc;C:\SoraSDK2.0\src\bb\brick11\src;C:\SoraSDK2.0\src\util\src;$(DDK_INC_PATH)</IncludePath>
+    <NMakeBuildCommandLine>$(SolutionDir)compile.bat $(ProjectDir) /b chk x64 Win7</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>$(SolutionDir)compile.bat $(ProjectDir) /r chk x64 Win7</NMakeReBuildCommandLine>
+    <NMakeCleanCommandLine>echo $(ProjectDir)</NMakeCleanCommandLine>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <NMakeOutput>$(ProjectDir)target\amd64\CompilerDDK.exe</NMakeOutput>
+    <NMakePreprocessorDefinitions>WIN32;NDEBUG;$(NMakePreprocessorDefinitions);SORA_PLATFORM</NMakePreprocessorDefinitions>
+    <NMakeBuildCommandLine>$(SolutionDir)compile.bat $(ProjectDir) /b fre x64 WIN7</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>$(SolutionDir)compile.bat $(ProjectDir) /r fre x64 WIN7</NMakeReBuildCommandLine>
+    <IncludePath>$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSDK_IncludePath);C:\SoraSDK2.0\inc\brick;C:\SoraSDK2.0\inc;C:\SoraSDK2.0\src\bb\dot11a;C:\SoraSDK2.0\src\bb\dot11a\inc;C:\SoraSDK2.0\src\bb\brick11\src;C:\SoraSDK2.0\src\util\src;$(DDK_INC_PATH)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <NMakeOutput>$(ProjectDir)target\amd64\CompilerDDK.exe</NMakeOutput>
     <NMakePreprocessorDefinitions>WIN32;NDEBUG;$(NMakePreprocessorDefinitions);SORA_PLATFORM</NMakePreprocessorDefinitions>
     <NMakeBuildCommandLine>$(SolutionDir)compile.bat $(ProjectDir) /b fre x64 WIN7</NMakeBuildCommandLine>

@@ -67,7 +67,7 @@ HeapContextBlock *pheap_ctx = &heap_ctx;
 // Blink generated functions 
 extern void wpl_input_initialize();
 extern void wpl_output_finalize();
-extern void wpl_global_init(unsigned int heap_size);
+extern void wpl_global_init(memsize_int heap_size);
 extern int wpl_go();
 
 extern void initBufCtxBlock(BufContextBlock *blk);
