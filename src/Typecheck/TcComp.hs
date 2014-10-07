@@ -486,6 +486,7 @@ tyCheckComp c
              do { c1' <- tyCheckComp c1
                 ; case compInfo c1' of
                     CTBase (TComp v a b) ->
+                      -- TODO: Should we not unify v with TUnit here?
                       do { let c1TyNew = CTBase (TTrans a b)
                          ; return $ cRepeat cloc c1TyNew wdth c1'
                          }
@@ -526,6 +527,7 @@ tyCheckComp c
                 ; a <- newTyVar "a"
                 ; let ta = TVar a
                 ; unify cloc t (TArrow [ta] TBool)
+                  -- TODO: This is a bug. Should be TTrans a a
                 ; let cTy = CTBase (TTrans ta TBool)
                 ; return $ cFilter cloc cTy e'
                 }
@@ -578,6 +580,7 @@ tyCheckComp c
            Mitigate t n1 n2 ->
              do { let t1 = if n1 == 1 then t else TArr (Literal n1) t
                 ; let t2 = if n2 == 1 then t else TArr (Literal n2) t
+                  -- TODO: Check that n1 divides n2 or n2 divides n1
                 ; let cty = CTBase (TTrans t1 t2)
                 ; return $ cMitigate cloc cty t n1 n2
                 }

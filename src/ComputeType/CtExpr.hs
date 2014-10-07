@@ -1,3 +1,21 @@
+{-
+   Copyright (c) Microsoft Corporation
+   All rights reserved.
+
+   Licensed under the Apache License, Version 2.0 (the ""License""); you
+   may not use this file except in compliance with the License. You may
+   obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+   THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+   CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+   LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+   A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+
+   See the Apache Version 2.0 License for specific language governing
+   permissions and limitations under the License.
+-}
 -- | Compute the types of expressions
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -7,13 +25,10 @@ import Control.Arrow (second)
 import Text.PrettyPrint.HughesPJ
 
 import AstExpr
+import CtCall
 import Outputable
 import PpExpr ()
 import Utils
-
-{-------------------------------------------------------------------------------
-  Compute types of expressions
--------------------------------------------------------------------------------}
 
 ctExp :: GExp Ty a -> Ty
 ctExp MkExp{..} = ctExp0 unExp
@@ -31,9 +46,9 @@ ctExp0 (EIter _ _ _ _)     = TUnit
 ctExp0 (EFor _ _ _ _ _)    = TUnit
 ctExp0 (EWhile _ _)        = TUnit
 ctExp0 (ELet _ _ _ e2)     = ctExp e2
-ctExp0 (ELetRef _ _ _ e2)  = ctExp e2
+ctExp0 (ELetRef _ _ e2)    = ctExp e2
 ctExp0 (ESeq _ e2)         = ctExp e2
-ctExp0 (ECall f xs)        = ctCall (ctExp f) (map ctExp xs)
+ctExp0 (ECall f xs)        = ctECall (nameTyp f) (map ctExp xs)
 ctExp0 (EIf _ a _)         = ctExp a
 ctExp0 (EPrint _ _)        = TUnit
 ctExp0 (EError ty _)       = ty
@@ -61,54 +76,10 @@ ctBinOp op a _b
   | otherwise          = panic $ text "ctBinOp:" <+> ppr op
 
 ctArrRead :: Ty -> LengthInfo -> Ty
-ctArrRead (TArr _ t) LISingleton  = t
-ctArrRead (TArr _ t) (LILength n) = TArr (Literal n) t
+ctArrRead (TArray _ t) LISingleton  = t
+ctArrRead (TArray _ t) (LILength n) = TArray (Literal n) t
 ctArrRead ty _ = panic $ text "ctExp0:" <+> ppr ty
-
-ctCall :: Ty -> [Ty] -> Ty
-ctCall (TArrow args res) args' = apply (matchAll (zip args args')) res
-ctCall t _ = panic $ text "ctCall:" <+> ppr t
 
 ctProj :: Ty -> FldName -> Ty
 ctProj (TStruct _ fs) n = lookup' n fs
 ctProj t _ = panic $ text "ctProj:" <+> ppr t
-
-{-------------------------------------------------------------------------------
-  Polymorphic instantation of function arguments
-
-  Note that the only kind of polymorphism that still exists after type checking
-  is length polymorphism.
--------------------------------------------------------------------------------}
-
-type Subst = [(Name, NumExpr)]
-
-matchAll :: [(Ty, Ty)] -> Subst
-matchAll = concatMap (uncurry match)
-
-match :: Ty -> Ty -> Subst
-match (TArr n t)    (TArr n' t')    = matchNumExpr n n' ++ match t t'
-match (TArrow ts t) (TArrow ts' t') = matchAll (zip (t:ts) (t':ts'))
-match _             _               = []
-
-matchNumExpr :: NumExpr -> NumExpr -> Subst
-matchNumExpr (NVar n _) e = [(n, e)]
-matchNumExpr _          _ = []
-
-apply :: Subst -> Ty -> Ty
-apply s (TArr n t)    = TArr (applyNumExpr s n) (apply s t)
-apply s (TArrow ts t) = TArrow (map (apply s) ts) (apply s t)
-apply _ t             = t
-
-applyNumExpr :: Subst -> NumExpr -> NumExpr
-applyNumExpr s (NVar n _) = lookup' n s
-applyNumExpr _ e          = e
-
-{-------------------------------------------------------------------------------
-  Auxiliary
--------------------------------------------------------------------------------}
-
-lookup' :: (Outputable a, Eq a) => a -> [(a, b)] -> b
-lookup' a dict =
-  case lookup a dict of
-    Nothing -> panic $ text "lookup:" <+> ppr a <+> text "not found"
-    Just b  -> b

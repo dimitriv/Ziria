@@ -67,7 +67,7 @@ instance Num Range where
 instance Pretty Range where
     ppr = string . show
 
-pprRanges :: Map Name Range -> Doc
+pprRanges :: Map (GName Ty) Range -> Doc
 pprRanges r = stack $
     map (\(k,v) -> ppr k <> char ':' <+> ppr v) (Map.toList r)
 
@@ -76,7 +76,7 @@ joinR RangeTop      _             = RangeTop
 joinR _             RangeTop      = RangeTop
 joinR (Range l1 h1) (Range l2 h2) = Range (min l1 l2) (max h1 h2)
 
-data RState = RState { ranges :: Map Name Range }
+data RState = RState { ranges :: Map (GName Ty) Range }
 
 newtype R a = R { runR :: RState -> Either String (a, RState) }
 
@@ -101,18 +101,18 @@ instance MonadState RState R where
     get   = R $ \s -> Right (s,  s)
     put s = R $ \_ -> Right ((), s)
 
-setRange :: Name -> Range -> R ()
+setRange :: GName Ty -> Range -> R ()
 setRange v r =
     modify $ \s -> s { ranges = Map.insert v r (ranges s) }
 
-joinRange :: Name -> Range -> R ()
+joinRange :: GName Ty -> Range -> R ()
 joinRange v r1 =
     modify $ \s -> s { ranges = Map.alter f v (ranges s) }
   where
     f Nothing   = Just r1
     f (Just r2) = Just $ r1 `joinR` r2
 
-lookupRange :: Name -> R Range
+lookupRange :: GName Ty -> R Range
 lookupRange v =
     gets $ \s -> case Map.lookup v (ranges s) of
                    Nothing -> RangeTop
@@ -120,7 +120,7 @@ lookupRange v =
 
 varRanges :: Monad m
           => Exp Ty
-          -> m (Map Name Range)
+          -> m (Map (GName Ty) Range)
 varRanges e =
     case runR (erange e) (RState Map.empty) of
       Left err -> fail err
@@ -128,7 +128,7 @@ varRanges e =
             return ranges
 
 expRange :: Monad m
-         => Map Name Range
+         => Map (GName Ty) Range
          -> Exp Ty
          -> m Range
 expRange ranges e =
@@ -138,7 +138,7 @@ expRange ranges e =
             return r
 
 arrIdxRange :: Monad m
-            => Map Name Range
+            => Map (GName Ty) Range
             -> Exp Ty
             -> LengthInfo
             -> m Range
@@ -217,7 +217,7 @@ erange (MkExp (EArrWrite (MkExp (EVar v) _ _) ei _ e) _ _) = do
 erange (MkExp (EArrWrite {}) _ _) =
     fail "Illegal array write expression: array is an expression"
 
-erange (MkExp (EIter ix x earr ebody) _ _) | TArr (Literal n) _ <- info earr = do
+erange (MkExp (EIter ix x earr ebody) _ _) | TArray (Literal n) _ <- info earr = do
     erange earr
     setRange ix (Range 0 (fromIntegral n - 1))
     erange ebody
@@ -246,7 +246,7 @@ erange (MkExp (ELet v _ e1 e2) _ _) = do
     setRange v r
     erange e2
 
-erange (MkExp (ELetRef v _t e1 e2) _ _) = do
+erange (MkExp (ELetRef v e1 e2) _ _) = do
     r <- case e1 of
            Nothing  -> return RangeTop
            Just e1' -> erange e1'
@@ -260,7 +260,6 @@ erange (MkExp (ESeq e1 e2) _ _) = do
     erange e2
 
 erange (MkExp (ECall f es) _ _) = do
-    erange f
     mapM_ erange es
     return RangeTop
 

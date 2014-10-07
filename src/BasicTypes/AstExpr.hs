@@ -16,21 +16,24 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE GADTs, DeriveGeneric #-}
+{-# LANGUAGE GADTs, DeriveGeneric, ScopedTypeVariables, RecordWildCards #-}
 {-# OPTIONS_GHC -Wall #-}
 module AstExpr where
 
 import {-# SOURCE #-} Analysis.Range
 
-import Prelude hiding (id)
-import Control.Monad.State
+import Prelude hiding (exp, mapM)
+import Control.Monad (liftM, foldM, when)
+import Control.Monad.State (State, execState, modify)
 import Data.Functor.Identity ( Identity (..) )
 import Data.Map (Map)
 import GHC.Generics (Generic)
 import Text.Parsec.Pos
 import Text.PrettyPrint.Mainland
 import Text.Show.Pretty (PrettyVal)
+import Data.Traversable (mapM)
 import qualified Data.Set as S
+import qualified Data.Map as Map
 
 import Orphans ()
 
@@ -49,27 +52,27 @@ type BufId   = String
   Names
 -------------------------------------------------------------------------------}
 
-data GName ty
+data GName t
   = MkName { name    :: String
            , uniqId  :: String
-           , nameTyp :: ty
+           , nameTyp :: t
            , nameLoc :: Maybe SourcePos
            }
   deriving (Generic)
 
-instance Eq (GName ty) where
+instance Eq (GName t) where
   nm1 == nm2 = (name nm1 == name nm2) && (uniqId nm1 == uniqId nm2)
 
-instance Ord (GName ty) where
+instance Ord (GName t) where
   nm1 <= nm2 = (uniqId nm1 <= uniqId nm2)
 
-instance Show (GName ty) where
+instance Show (GName t) where
   show (MkName x _id _ _loc)    = x
 
-instance Pretty (GName ty) where
+instance Pretty (GName t) where
     ppr = string . show
 
-toName :: String -> Maybe SourcePos -> ty -> GName ty
+toName :: String -> Maybe SourcePos -> t -> GName t
 -- This is our only function to create new names
 toName s mpos typ =
     MkName { name    = s
@@ -78,11 +81,10 @@ toName s mpos typ =
            , nameTyp = typ
            }
 
+updNameId :: String -> GName t -> GName t
+updNameId uid nm = nm { uniqId = uid }
 
-updNameId :: String -> Name -> Name
-updNameId id nm = nm { uniqId = id }
-
-getNameWithUniq :: Name -> String
+getNameWithUniq :: GName t -> String
 getNameWithUniq nm = name nm ++ "_blk" ++ uniqId nm
 
 {-------------------------------------------------------------------------------
@@ -139,7 +141,7 @@ data Ty where
   TBool     :: Ty
   TString   :: Ty                       -- Currently we have very limited supports for strings -
                                         -- they can only be printed
-  TArr      :: NumExpr -> Ty -> Ty
+  TArray    :: NumExpr -> Ty -> Ty
   TInt      :: BitWidth -> Ty
   TDouble   :: Ty
   TStruct   :: TyName -> [(FldName, Ty)] -> Ty
@@ -158,7 +160,7 @@ data NumExpr where
   -- Int parameter denotes the max length seen
   -- and is used as a return of length function on polymorphic arrays
   -- to denote the max array size that can occur in the program
-  NVar :: Name -> Int -> NumExpr
+  NVar :: GName Ty -> Int -> NumExpr
 
   deriving (Generic, Eq)
 
@@ -167,24 +169,30 @@ data BitWidth
   | BW16
   | BW32
   | BW64
-  | BWUnknown BWVar -- TODO: Why is this not a Name instead of a BWVar?
+  | BWUnknown BWVar -- TODO: Why is this not a GName t instead of a BWVar?
   deriving (Generic, Eq, Show)
 
-data BufTy
-  = IntBuf { bufty_ty   :: Ty }   -- Identifier and type of buffer
-  | ExtBuf { bufty_base :: Ty }   -- *Base* type of buffer
+data BufTy =
+    -- | Internal buffer (for parallelization)
+    IntBuf { bufty_ty :: Ty }
+
+    -- | External buffer (for the `ReadSrc` or `WriteSnk`)
+    --
+    -- NOTE: We record the type that the program is reading/writing, _NOT_
+    -- its base type (in previous versions we recorded the base type here).
+  | ExtBuf { bufty_ty :: Ty }
   deriving (Generic, Eq)
 
 {-------------------------------------------------------------------------------
   Expressions (parameterized by the (Haskell) type of (Ziria) types
 -------------------------------------------------------------------------------}
 
-data GUnOp ty =
+data GUnOp t =
     NatExp
   | Neg
   | Not
   | BwNeg
-  | Cast ty   -- Cast to this target type
+  | Cast t   -- Cast to this target type
   | ALength
   deriving (Generic, Eq)
 
@@ -243,14 +251,22 @@ data ForceInline
   | AutoInline    -- Let the compiler decide
   deriving (Generic)
 
-data GExp0 ty a where
-  EVal :: ty -> Val -> GExp0 ty a
-  EValArr :: ty -> [Val] -> GExp0 ty a
-  EVar :: GName ty -> GExp0 ty a
-  EUnOp :: UnOp -> GExp ty a -> GExp0 ty a
-  EBinOp :: BinOp -> GExp ty a -> GExp ty a -> GExp0 ty a
+data GExp0 t a where
+  EVal :: t -> Val -> GExp0 t a
+  EValArr :: t -> [Val] -> GExp0 t a
+  EVar :: GName t -> GExp0 t a
+  EUnOp :: GUnOp t -> GExp t a -> GExp0 t a
+  EBinOp :: BinOp -> GExp t a -> GExp t a -> GExp0 t a
 
-  EAssign :: GExp ty a -> GExp ty a -> GExp0 ty a
+  -- | Assignment
+  --
+  -- Although the syntax here allows for arbitrary expressions on the LHS,
+  -- really we only allow "dereferencing expressions" of the form
+  --
+  -- > d := x | d.f | d[e] | d[e,j]
+  --
+  -- See semantics for details.
+  EAssign :: GExp t a -> GExp t a -> GExp0 t a
 
   -- EArrRead ex ei j.
   -- Read a subarray of 'ex' starting at index ei of
@@ -258,32 +274,32 @@ data GExp0 ty a where
   -- Similarly for EArrWrite.
   -- If LengthInfo is LISingleton, then we are supposed to only read
   -- at a single position and return a scalar. Otherwise we return an array.
-  EArrRead :: GExp ty a -> GExp ty a -> LengthInfo -> GExp0 ty a
-  EArrWrite :: GExp ty a -> GExp ty a -> LengthInfo -> GExp ty a -> GExp0 ty a
+  EArrRead :: GExp t a -> GExp t a -> LengthInfo -> GExp0 t a
+  EArrWrite :: GExp t a -> GExp t a -> LengthInfo -> GExp t a -> GExp0 t a
 
-  EIter :: GName ty -> GName ty -> GExp ty a -> GExp ty a -> GExp0 ty a
+  EIter :: GName t -> GName t -> GExp t a -> GExp t a -> GExp0 t a
 
-  EFor :: UnrollInfo -> GName ty -> GExp ty a -> GExp ty a -> GExp ty a -> GExp0 ty a
-
-
-  EWhile :: GExp ty a -> GExp ty a -> GExp0 ty a
+  EFor :: UnrollInfo -> GName t -> GExp t a -> GExp t a -> GExp t a -> GExp0 t a
 
 
-  ELet :: GName ty -> ForceInline -> GExp ty a -> GExp ty a -> GExp0 ty a
+  EWhile :: GExp t a -> GExp t a -> GExp0 t a
+
+
+  ELet :: GName t -> ForceInline -> GExp t a -> GExp t a -> GExp0 t a
 
   -- Potentially initialized read/write variable
-  ELetRef :: GName ty -> ty -> Maybe (GExp ty a) -> GExp ty a -> GExp0 ty a
+  ELetRef :: GName t -> Maybe (GExp t a) -> GExp t a -> GExp0 t a
 
-  ESeq :: GExp ty a -> GExp ty a -> GExp0 ty a
-  ECall :: GExp ty a -> [GExp ty a] -> GExp0 ty a
-  EIf :: GExp ty a -> GExp ty a -> GExp ty a -> GExp0 ty a
+  ESeq :: GExp t a -> GExp t a -> GExp0 t a
+  ECall :: GName t -> [GExp t a] -> GExp0 t a
+  EIf :: GExp t a -> GExp t a -> GExp t a -> GExp0 t a
 
   -- Print any expression, for debugging
-  EPrint :: Bool -> GExp ty a -> GExp0 ty a
+  EPrint :: Bool -> GExp t a -> GExp0 t a
 
   -- Generate runtime failure, with error report
-  EError :: ty -> String -> GExp0 ty a
-  ELUT :: Map (GName ty) Range -> GExp ty a -> GExp0 ty a
+  EError :: t -> String -> GExp0 t a
+  ELUT :: Map (GName t) Range -> GExp t a -> GExp0 t a
 
   -- Permute a bit array: In the long run this should probably
   -- become a generalized array read but for now I am keeping it as
@@ -291,48 +307,48 @@ data GExp0 ty a where
   --  e1 : arr[N] bit   e2 : arr[N] int
   --  ------------------------------------
   --   EBPerm e1 e2  : arr[N] bit
-  EBPerm :: GExp ty a -> GExp ty a -> GExp0 ty a
+  EBPerm :: GExp t a -> GExp t a -> GExp0 t a
 
   -- Constructing structs
-  EStruct :: TyName -> [(FldName,GExp ty a)] -> GExp0 ty a
+  EStruct :: TyName -> [(FldName,GExp t a)] -> GExp0 t a
   -- Project field out of a struct
-  EProj   :: GExp ty a -> FldName -> GExp0 ty a
+  EProj   :: GExp t a -> FldName -> GExp0 t a
   deriving Generic
 
-data GExp ty a
-  = MkExp { unExp :: GExp0 ty a
+data GExp t a
+  = MkExp { unExp :: GExp0 t a
           , expLoc :: Maybe SourcePos
           , info :: a }
   deriving (Generic)
 
 -- Structure definitions
-data GStructDef ty
+data GStructDef t
   = StructDef { struct_name :: String
-              , struct_flds :: [(String,ty)] }
+              , struct_flds :: [(String,t)] }
   deriving (Generic)
 
-data GFun0 ty a where
-  MkFunDefined  :: GName ty                           -- name
-                -> [(GName ty, ty)]                   -- params
-                -> [(GName ty,ty,Maybe (GExp ty a))]  -- locals
-                -> GExp ty a                          -- body
-                -> GFun0 ty a
-  MkFunExternal :: GName ty                           -- name
-                -> [(GName ty, ty)]                   -- params
-                -> ty                                 -- return type
-                -> GFun0 ty a
+data GFun0 t a where
+  MkFunDefined  :: GName t                       -- name
+                -> [GName t]                     -- params
+                -> [(GName t,Maybe (GExp t a))]  -- locals
+                -> GExp t a                      -- body
+                -> GFun0 t a
+  MkFunExternal :: GName t                       -- name
+                -> [GName t]                     -- params
+                -> t                             -- return type
+                -> GFun0 t a
   deriving (Generic)
 
 {- TODO plug this in at some point
 data FunDef a body
-  = FunDef { funName   :: Name
-           , funParams :: [(Name,Ty)]
-           , funLocals :: [(Name,Ty,Maybe (Exp a))]
+  = FunDef { funName   :: GName t
+           , funParams :: [(GName t,Ty)]
+           , funLocals :: [(GName t,Ty,Maybe (Exp a))]
            , funDef    :: body }
 -}
 
-data GFun ty a
-  = MkFun { unFun   :: GFun0 ty a
+data GFun t a
+  = MkFun { unFun   :: GFun0 t a
           , funLoc  :: Maybe SourcePos
           , funInfo :: a }
   deriving (Generic)
@@ -345,7 +361,6 @@ data GFun ty a
 -------------------------------------------------------------------------------}
 
 type UnOp      = GUnOp      Ty
-type Name      = GName      Ty
 type Exp0      = GExp0      Ty
 type Exp       = GExp       Ty
 type StructDef = GStructDef Ty
@@ -368,49 +383,49 @@ vint :: Int -> Val
 -- Auxiliary function for use in the vectorizer
 vint n = VInt (fromIntegral n)
 
-eVal :: Maybe SourcePos -> a -> ty -> Val -> GExp ty a
-eVal loc a ty v = MkExp (EVal ty v) loc a
-eValArr :: Maybe SourcePos -> a -> ty -> [Val] -> GExp ty a
-eValArr loc a ty v = MkExp (EValArr ty v) loc a
-eVar :: Maybe SourcePos -> a ->  GName ty -> GExp ty a
+eVal :: Maybe SourcePos -> a -> t -> Val -> GExp t a
+eVal loc a t v = MkExp (EVal t v) loc a
+eValArr :: Maybe SourcePos -> a -> t -> [Val] -> GExp t a
+eValArr loc a t v = MkExp (EValArr t v) loc a
+eVar :: Maybe SourcePos -> a ->  GName t -> GExp t a
 eVar loc a v = MkExp (EVar v) loc a
-eUnOp :: Maybe SourcePos -> a -> UnOp -> GExp ty a -> GExp ty a
+eUnOp :: Maybe SourcePos -> a -> GUnOp t -> GExp t a -> GExp t a
 eUnOp loc a o v = MkExp (EUnOp o v) loc a
-eBinOp :: Maybe SourcePos -> a -> BinOp -> GExp ty a -> GExp ty a -> GExp ty a
+eBinOp :: Maybe SourcePos -> a -> BinOp -> GExp t a -> GExp t a -> GExp t a
 eBinOp loc a b x y = MkExp (EBinOp b x y) loc a
-eAssign :: Maybe SourcePos -> a ->  GExp ty a -> GExp ty a -> GExp ty a
+eAssign :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> GExp t a
 eAssign loc a x y = MkExp (EAssign x y) loc a
-eArrRead :: Maybe SourcePos -> a ->  GExp ty a -> GExp ty a -> LengthInfo -> GExp ty a
+eArrRead :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> LengthInfo -> GExp t a
 eArrRead loc a x y l = MkExp (EArrRead x y l) loc a
-eArrWrite :: Maybe SourcePos -> a ->  GExp ty a -> GExp ty a -> LengthInfo -> GExp ty a -> GExp ty a
+eArrWrite :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> LengthInfo -> GExp t a -> GExp t a
 eArrWrite loc a x y l e = MkExp (EArrWrite x y l e) loc a
-eIter :: Maybe SourcePos -> a -> GName ty -> GName ty -> GExp ty a -> GExp ty a -> GExp ty a
+eIter :: Maybe SourcePos -> a -> GName t -> GName t -> GExp t a -> GExp t a -> GExp t a
 eIter loc a x y e1 e2 = MkExp (EIter x y e1 e2) loc a
-eFor :: Maybe SourcePos -> a -> UnrollInfo -> GName ty -> GExp ty a -> GExp ty a -> GExp ty a -> GExp ty a
+eFor :: Maybe SourcePos -> a -> UnrollInfo -> GName t -> GExp t a -> GExp t a -> GExp t a -> GExp t a
 eFor loc a ui n e1 e2 e3 = MkExp (EFor ui n e1 e2 e3) loc a
-eLet :: Maybe SourcePos -> a ->  GName ty -> ForceInline -> GExp ty a -> GExp ty a -> GExp ty a
+eLet :: Maybe SourcePos -> a ->  GName t -> ForceInline -> GExp t a -> GExp t a -> GExp t a
 eLet loc a x fi e1 e2 = MkExp (ELet x fi e1 e2) loc a
-eLetRef :: Maybe SourcePos -> a ->  GName ty -> ty -> Maybe (GExp ty a) -> GExp ty a -> GExp ty a
-eLetRef loc a nm ty x e = MkExp (ELetRef nm ty x e) loc a
-eSeq :: Maybe SourcePos -> a ->  GExp ty a -> GExp ty a -> GExp ty a
+eLetRef :: Maybe SourcePos -> a ->  GName t -> Maybe (GExp t a) -> GExp t a -> GExp t a
+eLetRef loc a nm x e = MkExp (ELetRef nm x e) loc a
+eSeq :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> GExp t a
 eSeq loc a e1 e2 = MkExp (ESeq e1 e2) loc a
-eCall :: Maybe SourcePos -> a ->  GExp ty a -> [GExp ty a] -> GExp ty a
-eCall loc a e es = MkExp (ECall e es) loc a
-eIf :: Maybe SourcePos -> a ->  GExp ty a -> GExp ty a -> GExp ty a -> GExp ty a
+eCall :: Maybe SourcePos -> a ->  GName t -> [GExp t a] -> GExp t a
+eCall loc a f es = MkExp (ECall f es) loc a
+eIf :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> GExp t a -> GExp t a
 eIf loc a e1 e2 e3 = MkExp (EIf e1 e2 e3) loc a
-ePrint :: Maybe SourcePos -> a ->  Bool -> GExp ty a -> GExp ty a
+ePrint :: Maybe SourcePos -> a ->  Bool -> GExp t a -> GExp t a
 ePrint loc a b e = MkExp (EPrint b e) loc a
-eError :: Maybe SourcePos -> a -> ty -> String -> GExp ty a
-eError loc a ty s = MkExp (EError ty s) loc a
-eLUT :: Maybe SourcePos -> a ->  Map (GName ty) Range -> GExp ty a -> GExp ty a
+eError :: Maybe SourcePos -> a -> t -> String -> GExp t a
+eError loc a t s = MkExp (EError t s) loc a
+eLUT :: Maybe SourcePos -> a ->  Map (GName t) Range -> GExp t a -> GExp t a
 eLUT loc a m e = MkExp (ELUT m e) loc a
-eBPerm :: Maybe SourcePos -> a ->  GExp ty a -> GExp ty a -> GExp ty a
+eBPerm :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> GExp t a
 eBPerm loc a e1 e2 = MkExp (EBPerm e1 e2) loc a
-eStruct :: Maybe SourcePos -> a ->  TyName -> [(String,GExp ty a)] -> GExp ty a
+eStruct :: Maybe SourcePos -> a ->  TyName -> [(String,GExp t a)] -> GExp t a
 eStruct loc a tn es = MkExp (EStruct tn es) loc a
-eProj :: Maybe SourcePos -> a ->  GExp ty a -> String -> GExp ty a
+eProj :: Maybe SourcePos -> a ->  GExp t a -> String -> GExp t a
 eProj loc a e s = MkExp (EProj e s) loc a
-eWhile :: Maybe SourcePos -> a -> GExp ty a -> GExp ty a -> GExp ty a
+eWhile :: Maybe SourcePos -> a -> GExp t a -> GExp t a -> GExp t a
 eWhile loc a econd ebody = MkExp (EWhile econd ebody) loc a
 
 tint, tint8, tint16, tint32, tint64 :: Ty
@@ -440,201 +455,355 @@ tcomplex64 = TStruct complex64TyName
 -------------------------------------------------------------------------------}
 
 mapTyM :: Monad m => (Ty -> m Ty) -> Ty -> m Ty
-mapTyM f ty = go ty
-  where go (TVar s)        = f (TVar s)
-        go TUnit           = f TUnit
-        go TBit            = f TBit
-        go TBool           = f TBool
-        go TString         = f TString
-        go (TInt bw)       = f (TInt bw)
-        go (TStruct tn ts) = do { ts' <- mapM go (map snd ts)
-                                ; f (TStruct tn (zip (map fst ts) ts'))
-                                }
-        go (TInterval n)   = f (TInterval n)
-        go TDouble         = f TDouble
-        go (TArr n t)      = go t >>= \t' -> f (TArr n t')
-        go (TArrow ts t)   = do { ts' <- mapM go ts
-                                ; t'  <- go t
-                                ; f (TArrow ts' t')
-                                }
-        go (TBuff (IntBuf bt)) = go bt >>= \bt' -> f (TBuff (IntBuf bt'))
-        go (TBuff (ExtBuf bt)) = go bt >>= \bt' -> f (TBuff (ExtBuf bt'))
+mapTyM f = go
+  where
+    go (TVar s)            = f $ TVar s
+    go TUnit               = f $ TUnit
+    go TBit                = f $ TBit
+    go TBool               = f $ TBool
+    go TString             = f $ TString
+    go (TInt bw)           = f $ TInt bw
+    go (TInterval n)       = f $ TInterval n
+    go TDouble             = f $ TDouble
+    go (TStruct tn ts)     = do ts' <- mapM go (map snd ts)
+                                f $ TStruct tn (zip (map fst ts) ts')
+    go (TArray n t)        = do t' <- go t
+                                f $ TArray n t'
+    go (TArrow ts t)       = do ts' <- mapM go ts
+                                t'  <- go t
+                                f $ TArrow ts' t'
+    go (TBuff (IntBuf bt)) = do bt' <- go bt
+                                f $ TBuff (IntBuf bt')
+    go (TBuff (ExtBuf bt)) = do bt' <- go bt
+                                f $ TBuff (ExtBuf bt')
+
+mapNameM :: Monad m => (t -> m t') -> GName t -> m (GName t')
+mapNameM onTyp MkName{..} = do
+    nameTyp' <- onTyp nameTyp
+    return MkName{nameTyp = nameTyp', ..}
+
+-- | Most general form of mapping over expressions
+mapExpM :: forall t t' a a' m. Monad m
+        => (t -> m t')                     -- ^ On types
+        -> (a -> m a')                     -- ^ On annotations
+        -> (GExp t' a' -> m (GExp t' a'))  -- ^ Combine results
+        -> GExp t a
+        -> m (GExp t' a')
+mapExpM onTyp onAnn f = goExp
+  where
+    goExp :: GExp t a -> m (GExp t' a')
+    goExp MkExp{..} = do
+      info'  <- onAnn info
+      unExp' <- goExp0 unExp
+      f MkExp{unExp = unExp', info = info', ..}
+
+    goExp0 :: GExp0 t a -> m (GExp0 t' a')
+    goExp0 (EVal t v) = do
+      t' <- onTyp t
+      return $ EVal t' v
+    goExp0 (EValArr t varr) = do
+      t' <- onTyp t
+      return $ EValArr t' varr
+    goExp0 (EVar x) = do
+      x' <- mapNameM onTyp x
+      return $ EVar x'
+    goExp0 (EUnOp op e1) = do
+      op' <- goUnOp op
+      e1' <- goExp e1
+      return $ EUnOp op' e1'
+    goExp0 (EBinOp op e1 e2) = do
+      e1' <- goExp e1
+      e2' <- goExp e2
+      return $ EBinOp op e1' e2'
+    goExp0 (EAssign e1 e2) = do
+      e1' <- goExp e1
+      e2' <- goExp e2
+      return $ EAssign e1' e2'
+    goExp0 (EArrRead e1 e2 r) = do
+      e1' <- goExp e1
+      e2' <- goExp e2
+      return $ EArrRead e1' e2' r
+    goExp0 (EArrWrite e1 e2 r e3) = do
+      e1' <- goExp e1
+      e2' <- goExp e2
+      e3' <- goExp e3
+      return $ EArrWrite e1' e2' r e3'
+    goExp0 (EIter nm1 nm2 e1 e2) = do
+      nm1' <- mapNameM onTyp nm1
+      nm2' <- mapNameM onTyp nm2
+      e1'  <- goExp e1
+      e2'  <- goExp e2
+      return $ EIter nm1' nm2' e1' e2'
+    goExp0 (EFor ui nm1 e1 e2 e3) = do
+      nm1' <- mapNameM onTyp nm1
+      e1'  <- goExp e1
+      e2'  <- goExp e2
+      e3'  <- goExp e3
+      return $ EFor ui nm1' e1' e2' e3'
+    goExp0 (EWhile e1 e2) = do
+      e1' <- goExp e1
+      e2' <- goExp e2
+      return $ EWhile e1' e2'
+    goExp0 (ELet nm1 fi e1 e2) = do
+      nm1' <- mapNameM onTyp nm1
+      e1'  <- goExp e1
+      e2'  <- goExp e2
+      return $ ELet nm1' fi e1' e2'
+    goExp0 (ELetRef nm1 Nothing e2) = do
+      nm1' <- mapNameM onTyp nm1
+      e2'  <- goExp e2
+      return $ ELetRef nm1' Nothing e2'
+    goExp0 (ELetRef nm1 (Just e1) e2) = do
+      nm1' <- mapNameM onTyp nm1
+      e1'  <- goExp e1
+      e2'  <- goExp e2
+      return $ ELetRef nm1' (Just e1') e2'
+    goExp0 (ESeq e1 e2) = do
+      e1' <- goExp e1
+      e2' <- goExp e2
+      return $ ESeq e1' e2'
+    goExp0 (ECall fun es) = do
+      fun' <- mapNameM onTyp fun
+      es'  <- mapM goExp es
+      return $ ECall fun' es'
+    goExp0 (EIf e1 e2 e3) = do
+      e1' <- goExp e1
+      e2' <- goExp e2
+      e3' <- goExp e3
+      return $ EIf e1' e2' e3'
+    goExp0 (EPrint nl e1) = do
+      e1' <- goExp  e1
+      return $ EPrint nl e1'
+    goExp0 (EError t err) = do
+      t' <- onTyp t
+      return $ EError t' err
+    goExp0 (ELUT r e1) = do
+      r'   <- goRanges r
+      e1'  <- goExp e1
+      return $ ELUT r' e1'
+    goExp0 (EBPerm e1 e2) = do
+      e1' <- goExp e1
+      e2' <- goExp e2
+      return $ EBPerm e1' e2'
+    goExp0 (EStruct tn tfs) = do
+      let do_fld (t,e') = goExp e' >>= \e'' -> return (t,e'')
+      tfs' <- mapM do_fld tfs
+      return $ EStruct tn tfs'
+    goExp0 (EProj e1 fn) = do
+      e1' <- goExp e1
+      return $ EProj e1' fn
+
+    goUnOp :: GUnOp t -> m (GUnOp t')
+    goUnOp NatExp   = return NatExp
+    goUnOp Neg      = return Neg
+    goUnOp Not      = return Not
+    goUnOp BwNeg    = return BwNeg
+    goUnOp (Cast t) = do t' <- onTyp t ; return (Cast t')
+    goUnOp ALength  = return ALength
+
+    goRanges :: Map (GName t) Range -> m (Map (GName t') Range)
+    goRanges = liftM Map.fromList
+             . mapM (\(n, r) -> do n' <- mapNameM onTyp n ; return (n', r))
+             . Map.toList
+
+-- | Most general mapping over function and program locals
+mapLocalsM :: forall t t' a a' m. Monad m
+           => (t -> m t')                    -- ^ On types
+           -> (GExp t a -> m (GExp t' a'))   -- ^ On expressions
+           -> [(GName t,  Maybe (GExp t a))] -- ^ Locals
+           -> m [(GName t', Maybe (GExp t' a'))]
+mapLocalsM onTyp onExp = mapM (uncurry aux)
+  where
+    aux :: GName t -> Maybe (GExp t a) -> m (GName t', Maybe (GExp t' a'))
+    aux nm exp = do
+      nm'  <- mapNameM onTyp nm
+      exp' <- mapM onExp exp
+      return (nm', exp')
+
+mapFunM :: forall t t' a a' m. Monad m
+        => (t -> m t')                    -- ^ On types
+        -> (a -> m a')                    -- ^ On annotations
+        -> (GExp t a -> m (GExp t' a'))   -- ^ On expressions
+        -> GFun t a
+        -> m (GFun t' a')
+mapFunM onTyp onAnn onExp = goFun
+  where
+    goFun :: GFun t a -> m (GFun t' a')
+    goFun MkFun{..} = do
+      unFun'   <- goFun0 unFun
+      funInfo' <- onAnn funInfo
+      return MkFun{unFun = unFun', funInfo = funInfo', ..}
+
+    goFun0 :: GFun0 t a -> m (GFun0 t' a')
+    goFun0 (MkFunDefined nm params locals body) = do
+      nm'     <- mapNameM onTyp nm
+      params' <- mapM (mapNameM onTyp) params
+      locals' <- mapLocalsM onTyp onExp locals
+      body'   <- onExp body
+      return $ MkFunDefined nm' params' locals' body'
+    goFun0 (MkFunExternal nm params ret) = do
+      nm'     <- mapNameM onTyp nm
+      params' <- mapM (mapNameM onTyp) params
+      ret'    <- onTyp ret
+      return $ MkFunExternal nm' params' ret'
+
+{-------------------------------------------------------------------------------
+  Pure mapping functions
+-------------------------------------------------------------------------------}
 
 mapTy :: (Ty -> Ty) -> Ty -> Ty
-mapTy f ty = runIdentity (mapTyM (Identity . f) ty)
+mapTy f = runIdentity . mapTyM (Identity . f)
 
-mapExpM_aux :: Monad m
-            => (a -> m b)                   -- What to do on types
-            -> (GExp ty b -> m (GExp ty b)) -- How to combine results
-            -> GExp ty a
-            -> m (GExp ty b)
-mapExpM_aux on_ty f = go
+mapName :: (t -> t') -> GName t -> GName t'
+mapName f = runIdentity . mapNameM (Identity . f)
+
+mapExp :: (t -> t')                   -- ^ On types
+       -> (a -> a')                   -- ^ On annotations
+       -> (GExp t' a' -> GExp t' a')  -- ^ Combine results
+       -> GExp t a
+       -> GExp t' a'
+mapExp onTyp onAnn f = runIdentity . mapExpM (Identity . onTyp)
+                                             (Identity . onAnn)
+                                             (Identity . f)
+
+mapLocals :: (t -> t')                       -- ^ On types
+          -> (GExp t a -> GExp t' a')        -- ^ On expressions
+          -> [(GName t,  Maybe (GExp t a))]  -- ^ Locals
+          -> [(GName t', Maybe (GExp t' a'))]
+mapLocals onTyp f = runIdentity . mapLocalsM (Identity . onTyp)
+                                             (Identity . f)
+
+mapFun :: (t -> t')                    -- ^ On types
+       -> (a -> a')                    -- ^ On annotations
+       -> (GExp t a -> (GExp t' a'))   -- ^ On expressions
+       -> GFun t a
+       -> GFun t' a'
+mapFun onTyp onAnn f = runIdentity . mapFunM (Identity . onTyp)
+                                             (Identity . onAnn)
+                                             (Identity . f)
+
+{-------------------------------------------------------------------------------
+  Erase annotations
+-------------------------------------------------------------------------------}
+
+eraseExp :: GExp t a -> GExp t ()
+eraseExp = mapExp id (const ()) id
+
+eraseFun :: GFun t a -> GFun t ()
+eraseFun = mapFun id (const ()) eraseExp
+
+eraseLocals :: [(GName t, Maybe (GExp t a))] -> [(GName t, Maybe (GExp t ()))]
+eraseLocals = mapLocals id eraseExp
+
+{-------------------------------------------------------------------------------
+  Free variables
+-------------------------------------------------------------------------------}
+
+type ExprFVs t = S.Set (GName t)
+
+-- | Collect free variables in an expression
+--
+-- The `takeFuns` argument indicates whether we want to include the names of
+-- functions that are called in the expression. This is useful when we are
+-- computing the free variables in a nested function definition (which become
+-- additional arguments to the function when we generate C code).
+exprFVs' :: forall t b. Bool -> GExp t b -> ExprFVs t
+exprFVs' takeFuns = \e ->
+    execState (mapExpM return return goExp e) S.empty
   where
-    go e
-      = do { let loc = expLoc e
-           ; nfo <- on_ty (info e)
-           ; case unExp e of
+    goExp :: GExp t b -> State (ExprFVs t) (GExp t b)
+    goExp x = goExp0 (unExp x) >> return x
 
-              EVal ty v    -> f (eVal loc nfo ty v)
+    goExp0 :: GExp0 t b -> State (ExprFVs t) ()
+    goExp0 (EVar nm)        = record nm
+    goExp0 (EFor _ x _ _ _) = unrecord x
+    goExp0 (ELet x _ _ _)   = unrecord x
+    goExp0 (ELetRef x _ _)  = unrecord x
+    goExp0 (EIter x v _ _)  = unrecord x >> unrecord v
+    goExp0 (ECall f _)      = when takeFuns $ record f
+    goExp0 _                = return ()
 
-              EValArr ty varr -> f (eValArr loc nfo ty varr)
+    record, unrecord :: GName t -> State (ExprFVs t) ()
+    record   nm = modify $ S.insert nm
+    unrecord nm = modify $ S.delete nm
 
-              EVar x       -> f (eVar loc nfo x)
+-- NB: Take function variables (hence True)
+exprFVs :: GExp t b -> S.Set (GName t)
+exprFVs = exprFVs' True
 
-              EUnOp op e1 ->
-                do e1' <- go e1
-                   f (eUnOp loc nfo op e1')
+-- NB: Don't take function variables when computing fvs of closure
+exprFVsClos :: GExp t b -> S.Set (GName t)
+exprFVsClos = exprFVs' False
 
-              EBinOp op e1 e2 ->
-                do e1' <- go e1
-                   e2' <- go e2
-                   f (eBinOp loc nfo op e1' e2')
+funFVs :: GFun t a -> S.Set (GName t)
+funFVs f = case unFun f of
+  MkFunDefined _nm params locals body ->
+    -- NB: important that we use foldr here instead of foldl
+    (foldr (\(nm,me) s ->
+             let se = case me of
+                   Just e  -> S.union (exprFVs e) s
+                   Nothing -> s
+             in se S.\\ (S.singleton nm)) (exprFVs body) locals) S.\\
+    (S.fromList params)
+  MkFunExternal _nm _params _ty -> S.empty
 
-              EAssign e1 e2 ->
-                do e1' <- go e1
-                   e2' <- go e2
-                   f (eAssign loc nfo e1' e2')
+-- | Find free variables in a function definition
+--
+-- Note that this is not polymorphic in Ty because we need to inspect the
+-- types to find their free variables too.
+funFVsClos :: GFun Ty a -> S.Set (GName Ty)
+funFVsClos f = case unFun f of
+    MkFunDefined _nm params locals body ->
+      -- NB: important that we use foldr here instead of foldl
+      (foldr (\(nm,me) s ->
+               let se = case me of
+                     Just e  -> S.union (exprFVsClos e) s
+                     Nothing -> s
+               in se S.\\ (S.singleton nm)) (exprFVsClos body) locals) S.\\
+      (S.fromList $ params ++ (convTy params))
+    MkFunExternal _nm _params _ty -> S.empty
+  where
+    getPolymArrTy nm
+      | TArray (NVar nv _s) _ta <- nameTyp nm = [nv]
+      | otherwise = []
 
-              EArrRead e1 e2 r ->
-                do e1' <- go e1
-                   e2' <- go e2
-                   f (eArrRead loc nfo e1' e2' r)
+    convTy (h:t) = (getPolymArrTy h) ++ (convTy t)
+    convTy [] = []
 
-              EArrWrite e1 e2 r e3  ->
-                do e1' <- go e1
-                   e2' <- go e2
-                   e3' <- go e3
-                   f (eArrWrite loc nfo e1' e2' r e3')
+{-------------------------------------------------------------------------------
+  Substitutions
+-------------------------------------------------------------------------------}
 
-              EIter nm1 nm2 e1 e2 ->
-                do e1' <- go e1
-                   e2' <- go e2
-                   f (eIter loc nfo nm1 nm2 e1' e2')
+substExp :: Monad m => (GName t, GExp t a) -> GExp t a -> m (GExp t a)
+substExp (nm,e') = mapExpM return return go
+  where
+    go e | EVar nm' <- unExp e = if nm == nm' then return e' else return e
+         | otherwise           = return e
 
-              EFor ui nm1 e1 e2 e3 ->
-                do e1' <- go e1
-                   e2' <- go e2
-                   e3' <- go e3
-                   f (eFor loc nfo ui nm1 e1' e2' e3')
+substAll :: Monad m => [(GName t, GExp t a)] -> GExp t a -> m (GExp t a)
+substAll substs e = foldM (\x p -> substExp p x) e substs
 
+-- | Substitute lengths through
+substLength :: Monad m => (GName Ty, NumExpr) -> GExp Ty a -> m (GExp Ty a)
+substLength (nm,numexpr) = mapExpM (substLengthTy (nm,numexpr)) return return
 
-              EWhile e1 e2 ->
-                do e1' <- go e1
-                   e2' <- go e2
-                   f (eWhile loc nfo e1' e2')
+substLengthTy :: Monad m => (GName Ty, NumExpr) -> Ty -> m Ty
+substLengthTy (nm,numexpr) = mapTyM on_ty
+  where
+    on_ty (TArray (NVar nm' _m) t) | nm == nm' = return (TArray numexpr t)
+    on_ty ty_other                             = return ty_other
 
-              ELet nm1 fi e1 e2 ->
-                do e1' <- go e1
-                   e2' <- go e2
-                   f (eLet loc nfo nm1 fi e1' e2')
+substAllLengthTy :: Monad m => [(GName Ty, NumExpr)] -> Ty -> m Ty
+substAllLengthTy substs t = foldM (\x p -> substLengthTy p x) t substs
 
-              ELetRef nm1 t Nothing e2 ->
-                do e2' <- go  e2
-                   f (eLetRef loc nfo nm1 t Nothing e2')
-
-              ELetRef nm1 t (Just e1) e2 ->
-                do e1' <- go  e1
-                   e2' <- go  e2
-                   f (eLetRef loc nfo nm1 t (Just e1') e2')
-
-              ESeq e1 e2 ->
-                do e1' <- go e1
-                   e2' <- go e2
-                   f (eSeq loc nfo e1' e2')
-
-              ECall e1 es      ->
-                do e1' <- go e1
-                   es' <- mapM go es
-                   f (eCall loc nfo e1' es')
-
-              EIf e1 e2 e3 ->
-                do e1' <- go e1
-                   e2' <- go e2
-                   e3' <- go e3
-                   f (eIf loc nfo e1' e2' e3')
-
-              EPrint nl e1 ->
-                do e1' <- go  e1
-                   f (ePrint loc nfo nl e1')
-
-              EError ty err -> f (eError loc nfo ty err)
-
-              ELUT r e1 ->
-                do e1'  <- go e1
-                   f (eLUT loc nfo r e1')
-
-              EBPerm e1 e2 ->
-                do e1' <- go e1
-                   e2' <- go e2
-                   f (eBPerm loc nfo e1' e2')
-
-              EStruct tn tfs ->
-                do { let do_fld (t,e') = go e' >>= \e'' -> return (t,e'')
-                   ; tfs' <- mapM do_fld tfs
-                   ; f (eStruct loc nfo tn tfs') }
-
-              EProj e1 fn ->
-                do { e1' <- go e1
-                   ; f (eProj loc nfo e1' fn) }
-           }
-
-mapExpM_ :: Monad m => (GExp ty a -> m (GExp ty a)) -> GExp ty a -> m (GExp ty a)
-mapExpM_ f = mapExpM_aux return f
-
-mapLocalsM :: Monad m
-           => (GExp ty a -> m (GExp ty b))
-           -> [(GName ty,ty,Maybe (GExp ty a))]
-           -> m [(GName ty,ty,Maybe (GExp ty b))]
-mapLocalsM g locs = mapLocalsAndTysM g return locs
-
-mapLocalsAndTysM :: Monad m
-                 => (GExp ty a -> m (GExp ty b))
-                 -> (ty -> m ty)
-                 -> [(GName ty,ty,Maybe (GExp ty a))]
-                 -> m [(GName ty,ty,Maybe (GExp ty b))]
-mapLocalsAndTysM g on_ty locs = mapM do_loc locs
-  where do_loc (x,ty,Nothing)
-          = do { ty' <- on_ty ty
-               ; return (x,ty',Nothing)
-               }
-        do_loc (x,ty,Just e)
-            = do { e' <- g e
-                 ; ty' <- on_ty ty
-                 ; return (x,ty',Just e')
-                 }
-
-mapFunAndTysM :: Monad m
-        => (a -> m b)                   -- on types
-        -> (ty -> m ty)                 -- on annotated types
-        -> (GExp ty a -> m (GExp ty b)) -- on expressions
-        -> GFun ty a
-        -> m (GFun ty b)
-mapFunAndTysM on_ty on_concrete_ty on_exp fe
-  = case unFun fe of
-     MkFunDefined nm params locals body
-       -> do { params' <- mapM on_param params
-             ; locals' <- mapLocalsAndTysM on_exp on_concrete_ty locals
-             ; body' <- on_exp body
-             ; info' <- on_ty (funInfo fe)
-             ; return $
-               MkFun (MkFunDefined nm params' locals' body')
-                     (funLoc fe) info'
-             }
-     MkFunExternal nm params res_ty
-       -> do { info' <- on_ty (funInfo fe)
-             ; params' <- mapM on_param params
-             ; res_ty' <- on_concrete_ty res_ty
-             ; return $
-               MkFun (MkFunExternal nm params' res_ty') (funLoc fe) info'
-             }
-  where on_param (pn,pt) = do { pt' <- on_concrete_ty pt; return (pn,pt') }
-
-mapFunM :: Monad m
-        => (a -> m b)                   -- on types
-        -> (GExp ty a -> m (GExp ty b)) -- on expressions
-        -> GFun ty a
-        -> m (GFun ty b)
-mapFunM on_ty on_exp fe = mapFunAndTysM on_ty return on_exp fe
+substAllTyped :: Monad m
+              => [(GName Ty, GExp Ty a)]
+              -> [(GName Ty, NumExpr)]
+              -> GExp Ty a
+              -> m (GExp Ty a)
+substAllTyped substs len_substs e = do
+    e' <- foldM (\x p -> substLength p x) e len_substs
+    foldM (\x p -> substExp p x) e' substs
 
 {-------------------------------------------------------------------------------
   Utility
@@ -653,20 +822,20 @@ isEVal e
 isEVal _
   = False
 
-isArrTy :: Ty -> Bool
-isArrTy (TArr _ _) = True
-isArrTy _          = False
+isArrayTy :: Ty -> Bool
+isArrayTy (TArray _ _) = True
+isArrayTy _          = False
 
-getArrTy :: Ty -> Ty
-getArrTy (TArr _n t) = t
-getArrTy t           = t
+getArrayTy :: Ty -> Ty
+getArrayTy (TArray _n t) = t
+getArrayTy t             = t
 
 
 expEq :: Exp a -> Exp a -> Bool
 -- Are these two expressions /definitely/ equal?
 expEq e e' = expEq0 (unExp e) (unExp e')
   where
-    expEq0 (EVal ty v) (EVal ty' v') = ty == ty' && v == v'
+    expEq0 (EVal t v) (EVal t' v') = t == t' && v == v'
     expEq0 (EVar x) (EVar y)  = x == y
     expEq0 (EArrRead e1 e2 li) (EArrRead e1' e2' li')
       = expEq e1 e1' && expEq e2 e2' && (li == li')
@@ -687,7 +856,7 @@ binopList _  _ e0 []       = e0
 binopList op a e0 (e : es) = toExp a $ EBinOp op e (binopList op a e0 es)
 
 {-
-dotDotName :: Name
+dotDotName :: GName t
 dotDotName = toName "..." Nothing Nothing
 
 -- Just for debugging purposes
@@ -708,8 +877,8 @@ unknownTFun n = TArrow (replicate n (TVar (name dotDotName)))
 -- (c) Structs are assumed to be scalars. Probably that's fine as they
 --     can be treated in a CBV fashion.
 isScalarTy :: Ty -> Bool
-isScalarTy ty =
-  case ty of
+isScalarTy t =
+  case t of
     TVar {}      -> True
     TUnit        -> True
     TBit         -> False
@@ -719,7 +888,7 @@ isScalarTy ty =
     TBool        -> True
     TString      -> True
     TInterval {} -> False
-    TArr {}      -> False
+    TArray {}    -> False
     TArrow {}    -> False
     TBuff {}     -> False
 
@@ -727,19 +896,19 @@ isScalarTy ty =
 
 -- Does this type support arithmetic operations?
 supportsArithTy :: Ty -> Bool
-supportsArithTy ty =
-  case ty of
+supportsArithTy t =
+  case t of
     TVar {}      -> True
     TInt {}      -> True
     TDouble {}   -> True
-    TStruct {}   -> isComplexTy ty
+    TStruct {}   -> isComplexTy t
     _other       -> False
 
 
 -- Does this type support direct comparison (= in C)
 supportsEqTy :: Ty -> Bool
-supportsEqTy ty =
-  case ty of
+supportsEqTy t =
+  case t of
     TVar {}      -> True
     TUnit        -> True
     TBit         -> True
@@ -752,8 +921,8 @@ supportsEqTy ty =
 
 -- Does this type support <, <= etc?
 supportsCmpTy :: Ty -> Bool
-supportsCmpTy ty =
-  case ty of
+supportsCmpTy t =
+  case t of
     TVar {}      -> True
     TInt {}      -> True
     TDouble {}   -> True
@@ -786,120 +955,10 @@ complex64TyName = "complex64"
 toFunPos :: a -> SourcePos -> Fun0 a -> Fun a
 toFunPos a pos fn = MkFun fn (Just pos) a
 
-funName :: Fun a -> Name
+funName :: GFun t a -> GName t
 funName fn = aux (unFun fn)
   where aux (MkFunDefined nm _params _locals _body) = nm
         aux (MkFunExternal nm _ _) = nm
-
-
-exprFVs' :: Bool -> Exp b -> S.Set Name
-exprFVs' take_funs e
-  = snd $ runState (mapExpM_aux return on_exp_action e) S.empty
-  where on_exp_action x = on_exp (unExp x) >> return x
-        -- NB: We collect the state in a bottom-up fashion
-        on_exp (EVar nm)              = modify (\s -> S.union (S.singleton nm) s)
-        on_exp (EFor _ x _e1 _e2 _e3) = modify (\s -> s S.\\ S.singleton x)
-        on_exp (ELet x _fi _e1 _e2)   = modify (\s -> s S.\\ S.singleton x)
-        on_exp (ELetRef x _t _e1 _e2) = modify (\s -> s S.\\ S.singleton x)
-        on_exp (EIter x v _e1 _e2)
-          = do { modify (\s -> s S.\\ S.singleton x)
-               ; modify (\s -> s S.\\ S.singleton v) }
-        on_exp (ECall (MkExp (EVar nm) _ _) _es)
-          | take_funs = return ()
-          | otherwise = modify (\s -> s S.\\ S.singleton nm)
-        on_exp _z = return ()
-
-
--- NB: Take function variables (hence True)
-exprFVs :: Exp b -> S.Set Name
-exprFVs = exprFVs' True
-
--- NB: Don't take function variables when computing fvs of closure
-exprFVsClos :: Exp b -> S.Set Name
-exprFVsClos = exprFVs' False
-
-funFVs :: Fun a -> S.Set Name
-funFVs f = case unFun f of
-  MkFunDefined _nm params locals body ->
-    -- NB: important that we use foldr here instead of foldl
-    (foldr (\(nm,_,me) s ->
-             let se = case me of
-                   Just e  -> S.union (exprFVs e) s
-                   Nothing -> s
-             in se S.\\ (S.singleton nm)) (exprFVs body) locals) S.\\
-    (S.fromList $ map fst params)
-  MkFunExternal _nm _params _ty -> S.empty
-
-funFVsClos :: Fun a -> S.Set Name
-funFVsClos f = case unFun f of
-  MkFunDefined _nm params locals body ->
-    -- NB: important that we use foldr here instead of foldl
-    (foldr (\(nm,_,me) s ->
-             let se = case me of
-                   Just e  -> S.union (exprFVsClos e) s
-                   Nothing -> s
-             in se S.\\ (S.singleton nm)) (exprFVsClos body) locals) S.\\
-    (S.fromList $ (map fst params) ++ (convTy params))
-  MkFunExternal _nm _params _ty -> S.empty
-  where getPolymArrTy (_n, t)
-          | (TArr (NVar nv _s) _ta) <- t = [nv]
-          | otherwise = []
-        convTy (h:t) = (getPolymArrTy h) ++ (convTy t)
-        convTy [] = []
-
-substExp :: Monad m => (Name, Exp a) -> Exp a -> m (Exp a)
-substExp (nm,e') e = mapExpM_ subst_var e
-  where subst_var e0
-          | EVar nm' <- unExp e0
-          = if nm == nm' then return e' else return e0
-          | otherwise
-          = return e0
-
-substLength :: Monad m => (Name, NumExpr) -> Exp Ty -> m (Exp Ty)
--- Substitute lengths through
-substLength (nm,numexpr) e
-  = mapExpM_aux (substLengthTy (nm,numexpr)) return e
-
-substLengthTy :: Monad m => (Name,NumExpr) -> Ty -> m Ty
-substLengthTy (nm,numexpr) = mapTyM on_ty
-  where on_ty (TArr (NVar nm' _m) ty)
-          | nm == nm'
-          = return (TArr numexpr ty)
-        on_ty ty_other
-          = return ty_other
-
-substAllLengthTy :: Monad m => [(Name,NumExpr)] -> Ty -> m Ty
-substAllLengthTy substs t
-  = foldM (\x p -> substLengthTy p x) t substs
-
-substAllTyped :: Monad m
-              => [(Name, Exp Ty)]
-              -> [(Name,NumExpr)]
-              -> Exp Ty
-              -> m (Exp Ty)
-substAllTyped substs len_substs e
-  = do { e' <- foldM (\x p -> substLength p x) e len_substs
-       ; foldM (\x p -> substExp p x) e' substs
-       }
-
-
-substAll :: Monad m => [(Name, Exp a)] -> Exp a -> m (Exp a)
-substAll substs e = foldM (\x p -> substExp p x) e substs
-
-
-eraseExp :: Exp a -> Exp ()
-eraseExp e
-   = runIdentity $
-     mapExpM_aux (\_t -> return ()) return e
-
-eraseFun :: Fun a -> Fun ()
-eraseFun f
-   = runIdentity $ mapFunM (\_t -> return ()) (return . eraseExp) f
-
-eraseLocals :: [(Name, Ty, Maybe (Exp a))] -> [(Name, Ty, Maybe (Exp ()))]
-eraseLocals locs
-   = runIdentity $ mapLocalsM (return . eraseExp) locs
-
 
 isArithBinOp :: BinOp -> Bool
 isArithBinOp Add   = True
@@ -962,8 +1021,8 @@ mutates_state e = case unExp e of
   EWhile e1 e2          -> any mutates_state [e1,e2]
 
   ELet _nm _fi e1 e2     -> any mutates_state [e1,e2]
-  ELetRef _nm _ (Just e1) e2 -> any mutates_state [e1,e2]
-  ELetRef _nm _ Nothing   e2 -> mutates_state e2
+  ELetRef _nm (Just e1) e2 -> any mutates_state [e1,e2]
+  ELetRef _nm Nothing   e2 -> mutates_state e2
 
   ESeq e1 e2     -> any mutates_state [e1,e2]
   ECall _e' _es  -> True
@@ -1012,14 +1071,14 @@ instance PrettyVal LengthInfo
 instance PrettyVal UnrollInfo
 instance PrettyVal Val
 
-instance PrettyVal ty => PrettyVal (GName ty)
-instance PrettyVal ty => PrettyVal (GUnOp ty)
-instance PrettyVal ty => PrettyVal (GStructDef ty)
+instance PrettyVal t => PrettyVal (GName t)
+instance PrettyVal t => PrettyVal (GUnOp t)
+instance PrettyVal t => PrettyVal (GStructDef t)
 
-instance (PrettyVal ty, PrettyVal a) => PrettyVal (GExp0 ty a)
-instance (PrettyVal ty, PrettyVal a) => PrettyVal (GExp ty a)
-instance (PrettyVal ty, PrettyVal a) => PrettyVal (GFun ty a)
-instance (PrettyVal ty, PrettyVal a) => PrettyVal (GFun0 ty a)
+instance (PrettyVal t, PrettyVal a) => PrettyVal (GExp0 t a)
+instance (PrettyVal t, PrettyVal a) => PrettyVal (GExp t a)
+instance (PrettyVal t, PrettyVal a) => PrettyVal (GFun t a)
+instance (PrettyVal t, PrettyVal a) => PrettyVal (GFun0 t a)
 
 {-
 Note [IOEffects]

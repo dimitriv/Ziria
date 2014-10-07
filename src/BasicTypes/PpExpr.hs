@@ -119,13 +119,12 @@ instance Outputable ty => Outputable (GExp0 ty a) where
       text "in" $$
       ppr e2
 
-    ELetRef x ty Nothing e2 ->
-      text "letref" <+> ppName x <+> colon <+> ppr ty $$
+    ELetRef x Nothing e2 ->
+      text "letref" <+> ppName x $$
       text "in" $$
       ppr e2
 
-    -- TODO: We should pretty-print the type here
-    ELetRef x _ty (Just e1) e2 ->
+    ELetRef x (Just e1) e2 ->
       text "letref" <+> assign ":=" (ppName x) (ppr e1) $$
       text "in" $$
       ppr e2
@@ -176,20 +175,20 @@ instance Outputable SrcBitWidth where
 
 instance Outputable Ty where
   ppr ty = case ty of
-    TVar x               -> text "?" <> text x
-    TUnit                -> text "()"
-    TBit                 -> text "bit"
-    TInt bw              -> text "int" <> ppr bw
-    TDouble              -> text "double"
-    TBool                -> text "bool"
-    TString              -> text "string"
-    TArr (Literal n) ty' -> text "arr" <> brackets (int n) <+> ppr ty'
-    TArr (NVar n m)  ty' -> text "arr" <> brackets (text (show n)) <+> text "(max: " <+> int m <+> text ")" <+> ppr ty'
-    TArrow tys tyres     -> parens (hsep (punctuate comma (map ppr tys))) <+> text "->" <+> ppr tyres
-    TInterval n          -> text "interval" <> brackets (int n)
-    TBuff (IntBuf t)     -> parens $ text "INTBUF" <> brackets (ppr t)
-    TBuff (ExtBuf bt)    -> parens $ text "EXTBUF" <> brackets (text "base=" <> ppr bt)
-    TStruct tyname _     -> text tyname
+    TVar x                 -> text "?" <> text x
+    TUnit                  -> text "()"
+    TBit                   -> text "bit"
+    TInt bw                -> text "int" <> ppr bw
+    TDouble                -> text "double"
+    TBool                  -> text "bool"
+    TString                -> text "string"
+    TArray (Literal n) ty' -> text "arr" <> brackets (int n) <+> ppr ty'
+    TArray (NVar n m)  ty' -> text "arr" <> brackets (text (show n)) <+> text "(max: " <+> int m <+> text ")" <+> ppr ty'
+    TArrow tys tyres       -> parens (hsep (punctuate comma (map ppr tys))) <+> text "->" <+> ppr tyres
+    TInterval n            -> text "interval" <> brackets (int n)
+    TBuff (IntBuf t)       -> parens $ text "INTBUF" <> brackets (ppr t)
+    TBuff (ExtBuf bt)      -> parens $ text "EXTBUF" <> brackets (text "base=" <> ppr bt)
+    TStruct tyname _       -> text tyname
 
 instance Outputable SrcTy where
   ppr ty = case ty of
@@ -243,25 +242,24 @@ ppEs f sep eargs = case eargs of
 ppName :: GName ty -> Doc
 ppName nm = text (name nm) -- only in debug mode we want this: <> braces (text $ uniqId nm)
 
-ppDecls :: Outputable ty => [(GName ty, ty, Maybe (GExp ty a))] -> Doc
+ppDecls :: Outputable ty => [(GName ty, Maybe (GExp ty a))] -> Doc
 ppDecls decls =
   case decls of
     [] -> empty
-    (x,ty,Just einit) : decls' ->
+    (x,Just einit) : decls' ->
       text "var" <+>
-        ppName x <> text ":" <+> ppr ty <+> text ":=" <+> ppr einit <> semi $$
+        ppName x <> text ":" <+> ppr (nameTyp x) <+> text ":=" <+> ppr einit <> semi $$
       ppDecls decls'
-    (x,ty,Nothing) : decls' ->
-      text "var" <+> ppName x <> text ":" <+> ppr ty <> semi $$
+    (x,Nothing) : decls' ->
+      text "var" <+> ppName x <> text ":" <+> ppr (nameTyp x) <> semi $$
       ppDecls decls'
 
-ppParams :: Outputable ty => [(GName ty, ty)] -> Doc
+ppParams :: Outputable ty => [GName ty] -> Doc
 ppParams params =
   case params of
-    [] -> empty
-    (x,ty) : [] -> ppName x <> text ":" <+> ppr ty
-    (x,ty) : params' ->
-      ppName x <> text ":" <+> ppr ty <> comma <+> ppParams params'
+    []          -> empty
+    x : []      -> ppName x <> text ":" <+> ppr (nameTyp x)
+    x : params' -> ppName x <> text ":" <+> ppr (nameTyp x) <> comma <+> ppParams params'
 
 {-------------------------------------------------------------------------------
   Show instances

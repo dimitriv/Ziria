@@ -35,7 +35,9 @@ import Text.PrettyPrint.Mainland
 import Text.Show.Pretty (dumpStr)
 
 import AstExpr
+
 import CtExpr
+import CtComp
 
 {-
 import AstComp

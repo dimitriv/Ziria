@@ -55,7 +55,7 @@ instance Outputable ty => Outputable (GCTy ty) where
       text "->" <+>
       ppr cty
 
-instance Outputable ty => Outputable (GComp ty a b) where
+instance (Outputable tc, Outputable t) => Outputable (GComp t tc a b) where
   ppr = ppComp0 ppr False False False . unComp
 
 instance (Outputable a, Outputable b) => Outputable (CallArg a b) where
@@ -76,7 +76,7 @@ instance Outputable VectAnn where
   ppr (Rigid _r ann) = ppWidth ann
   ppr (UpTo _r ann)  = text "<=" <> ppWidth ann
 
-instance Outputable ty => Outputable (GProg ty a b) where
+instance (Outputable tc, Outputable t) => Outputable (GProg tc t a b) where
   ppr p = case p of
     MkProg globs c ->
       ppDecls globs $$
@@ -86,13 +86,11 @@ instance Outputable ty => Outputable (GProg ty a b) where
   Util
 -------------------------------------------------------------------------------}
 
-pprpedName :: Outputable ty => GName ty -> Doc
-pprpedName nm =
-  case mbtype nm of
-    Just ty -> parens $ ppName nm <+> text ":" <+> ppr ty
-    Nothing -> ppName nm
-
-ppComp0 :: Outputable ty => (GComp ty a b -> Doc) -> Bool -> Bool -> Bool -> GComp0 ty a b -> Doc
+ppComp0 :: (Outputable tc, Outputable t)
+        => (GComp tc t a b -> Doc)
+        -> Bool -> Bool -> Bool
+        -> GComp0 tc t a b
+        -> Doc
 ppComp0 ppComp _printtypes ignorelet ignoreexp c =
   case c of
     Var x ->
@@ -101,7 +99,7 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
 
          let go_pp c [] = ppComp c
              go_pp c ((x,c2):rest) =
-               pprpedName x <+> text "<-" <+> ppComp c <> semi $$
+               ppr x <+> text "<-" <+> ppComp c <> semi $$
                go_pp c2 rest
          in text "seq" <+> vcat [ text "{" <+> go_pp c1 xs_cs
                                 , text "}" ]
@@ -123,7 +121,7 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
       | ignorelet
       -> ppComp c2
       | otherwise
-      -> text "let comp" <+> pprpedName x <+> text "=" <+> ppComp c1 $$
+      -> text "let comp" <+> ppr x <+> text "=" <+> ppComp c1 $$
          text "in" $$ ppComp c2
 
     LetStruct sdef c1
@@ -140,21 +138,20 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
       | ignorelet || ignoreexp
       -> ppComp c
       | otherwise
-      -> text "let" <+> pprpedName x <+> text "=" <+> ppr e $$
+      -> text "let" <+> ppr x <+> text "=" <+> ppr e $$
          text "in" $$
          ppComp c
 
     -- CL
-    LetERef x ty Nothing c
+    LetERef x Nothing c
        | ignorelet || ignoreexp
        -> ppComp c
        | otherwise
-       -> text "letref" <+> ppName x <+> colon <+> ppr ty $$
+       -> text "letref" <+> ppName x $$
           text "in" $$
           ppComp c
 
-    -- TODO: We should pretty-print the type annotation
-    LetERef x _ty (Just e) c
+    LetERef x (Just e) c
        | ignorelet || ignoreexp
        -> ppComp c
        | otherwise
@@ -183,13 +180,13 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
          ppComp c2
     Call f eargs ->
       ppName f <+> parens (ppEs ppr comma eargs)
-    Emit e
+    Emit _ e
       | ignoreexp -> text "emit ..."
       | otherwise -> text "emit" <+> ppr e
-    Emits e
+    Emits _ e
       | ignoreexp -> text "emits ..."
       | otherwise -> text "emits" <+> ppr e
-    Return _ e
+    Return _ _ _ e
       | ignoreexp -> text "return ..."
       | otherwise -> text "return" <+> ppr e
     Interleave c1 c2 ->
@@ -198,10 +195,10 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
       text "if" <+> ppr e $$
       text "then" <+> ppComp c1 $$
       text "else" <+> ppComp c2
-    Take1 ->
+    Take1 _ _ ->
       text "take"
-    Take e ->
-      text "takes" <+> ppr e
+    Take _ _ n ->
+      text "takes" <+> int n
     Until e c ->
       text "until" <+> parens (ppr e) <+> ppComp c
     While e c ->
@@ -210,7 +207,7 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
     Times ui estart elen ix c ->
       ppr ui <+>
        text "for" <+>
-         ppIx ix <+> text "in" <+>
+         ppr ix <+> text "in" <+>
             brackets (ppr estart <> comma <+> ppr elen) $$
          nest nestingDepth (ppComp c)
 
@@ -232,9 +229,9 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
     WriteSnk {} ->
       text "write"
 
-    ReadInternal bid _typ ->
+    ReadInternal _ bid _typ ->
       text "read_internal[sq]" <> parens (text bid)
-    WriteInternal bid ->
+    WriteInternal _ bid ->
       text "write_internal[sq]" <> parens (text bid)
 
     Standalone c1 ->
@@ -278,13 +275,12 @@ ppCompTyped x =
       pty = ppr (compInfo x)
   in parens (p1 <+> text "::" <+> pty)
 
-ppCompParams :: (Outputable ty, Outputable a, Outputable b) => [(GName ty, CallArg a b)] -> Doc
+ppCompParams :: (Outputable tc, Outputable t) => [GName (CallArg tc t)] -> Doc
 ppCompParams params =
   case params of
-    [] -> empty
-    (x, ty) : [] -> ppName x <> text ":" <+> ppr ty
-    (x, ty) : params' ->
-       ppName x <> text ":" <+> ppr ty <> comma <+> ppCompParams params'
+    []   -> empty
+    x:[] -> ppName x
+    x:ps -> ppName x <> comma <+> ppCompParams ps
 
 ppCompTypedVect :: Comp CTy b -> Doc
 ppCompTypedVect x =
@@ -292,7 +288,7 @@ ppCompTypedVect x =
       cty  = compInfo x
       inty  = inTyOfCTyBase cty
       yldty = yldTyOfCTyBase cty
-      arity (TArr (Literal n) _) = show n
+      arity (TArray (Literal n) _) = show n
       arity _                    = "1"
       ain   = arity inty
       ayld  = arity yldty
@@ -314,14 +310,15 @@ isSimplComp (ReadSrc {})  = True
 isSimplComp (WriteSnk {}) = True
 isSimplComp _             = False
 
-nested_letfuns :: GComp ty a b -> Bool
-nested_letfuns c
-  = case mapCompM_ return aux c of
+nested_letfuns :: GComp tc t a b -> Bool
+nested_letfuns c =
+    case mapCompM return return return return return goComp c of
       Nothing -> True
       Just _  -> False
-  where aux c | LetFunC {} <- unComp c = Nothing
-              | Let {}     <- unComp c = Nothing
-              | otherwise              = Just c
+  where
+    goComp c | LetFunC {} <- unComp c = Nothing
+             | Let {}     <- unComp c = Nothing
+             | otherwise              = Just c
 
 {-------------------------------------------------------------------------------
   Show instances
@@ -329,8 +326,9 @@ nested_letfuns c
 
 instance Outputable ty => Show (GCTy0 ty)     where show = render . ppr
 instance Outputable ty => Show (GCTy ty)      where show = render . ppr
-instance Outputable ty => Show (GComp ty a b) where show = render . ppr
-instance Outputable ty => Show (GProg ty a b) where show = render . ppr
 
-instance Outputable ty => Show (GComp0 ty a b) where
+instance (Outputable tc, Outputable t) => Show (GComp tc t a b) where show = render . ppr
+instance (Outputable tc, Outputable t) => Show (GProg tc t a b) where show = render . ppr
+
+instance (Outputable tc, Outputable t) => Show (GComp0 tc t a b) where
   show = render . ppComp0 ppr False False False
