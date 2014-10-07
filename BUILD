@@ -9,7 +9,7 @@ To build the Ziria (wplc) compiler (under Linux or Windows/Cygwin) you will need
    - text
    - parsec-3.1.5 (caball install parsec-3.1.5, see the note below)
    - mainland-pretty
-   - language-c-quote (version 0.8.0 as newer versions seem to have a problem with C++-style inlined comments)
+   - language-c-quote (version 0.10.1.2 or newer) 
    - dlist
    - unix-compat (on Windows you might need to install this one from cmd rather than cygwin shell)
    - hashable
