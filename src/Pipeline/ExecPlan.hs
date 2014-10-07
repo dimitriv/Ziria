@@ -135,23 +135,23 @@ createTaskEx task = do
 
 -- | Create a new task from a computation and a pair of queues.
 --   The new task will be schedulable 'Anywhere'. To create a task
---   for executing 'Alone', use 'createHeavyTask'.
+--   for executing 'Alone', use 'createTaskWithPlacement'.
 createTask :: (Ord name, Enum name) => Comp CTy Ty -> (Queue, Queue) -> TaskGen name TaskInfo name
-createTask comp (qin, qout) = createTaskEx $ TaskInfo {
-    taskComp = comp,
-    taskInputQueue = qin,
-    taskOutputQueue = qout,
-    taskPlacement = Anywhere
-  }
+createTask = createTaskWithPlacement Anywhere
 
 -- | Like 'createTask' but creates the task with the 'Alone'
 --   placement annotation.
-createHeavyTask :: (Ord name, Enum name) => Comp CTy Ty -> (Queue, Queue) -> TaskGen name TaskInfo name
-createHeavyTask comp (qin, qout) = createTaskEx $ TaskInfo {
+createTaskWithPlacement :: (Ord name, Enum name)
+                        => TaskPlacement  -- ^ CPU allocation info for task.
+                        -> Comp CTy Ty    -- ^ Task computation.
+                        -> (Queue, Queue) -- ^ Input/output queues.
+                        -> TaskGen name TaskInfo name
+createTaskWithPlacement placement comp (qin, qout) = do
+  createTaskEx $ TaskInfo {
     taskComp = comp,
     taskInputQueue = qin,
     taskOutputQueue = qout,
-    taskPlacement = Alone
+    taskPlacement = placement
   }
 
 -- | Run a task generation computation.
@@ -571,16 +571,16 @@ taskify qs@(inq, outq) mnxt c = do
         taskify qs mnxt comp
       | otherwise = do
         let c' = maybe comp (\nxt -> MkComp (comp `Seq` nxt) (compLoc c) (compInfo c)) mnxt
-        createHeavyTask c' qs
+        createTaskWithPlacement Alone c' qs
     -- If we get to either Map or Call, then the name they're calling on
     -- is a barrier for sure; make this a primitive barrier since we can't
     -- split funs.
     go (Map _ name) = do
         let c' = maybe c (\nxt -> MkComp (c `Seq` nxt) (compLoc c) (compInfo c)) mnxt
-        createHeavyTask c' qs
+        createTaskWithPlacement Alone c' qs
     go (Call name _) = do
         let c' = maybe c (\nxt -> MkComp (c `Seq` nxt) (compLoc c) (compInfo c)) mnxt
-        createHeavyTask c' qs
+        createTaskWithPlacement Alone c' qs
     go _ = error "Atomic computations can't possibly contain barriers!"
 
 -- | Split a list of computations, with an extra piece of information,
