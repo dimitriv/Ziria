@@ -25,37 +25,6 @@
 #include "params.h"
 
 
-FILE * try_open(char *filename, char *mode) 
-{
-  FILE *h;
-  h = fopen(filename,mode);
-  if (h == NULL) {
-    fprintf (stderr, "Error: could not open file %s\n", filename);
-    exit(1);
-  }
-  return h;
-}
-
-/* Read the file as a null-terminated string */ 
-void try_read_filebuffer(HeapContextBlock *hblk, char *filename, char **fb, memsize_int *len)
-{
-	char *filebuffer;
-	memsize_int sz;
-
-	FILE *f = try_open(filename,"r");
-	fseek(f, 0L, SEEK_END);
-	sz = ftell(f);
-	fseek(f, 0L, SEEK_SET);
-	filebuffer = try_alloc_bytes(hblk, 2*(sz+1));
-	fread(filebuffer, 1, sz, f);
-	fclose(f);
-	filebuffer[sz] = 0;
-	*fb = filebuffer;
-	*len = sz;
-
-}
-
-
 // Parse debug level
 int parse_DEBUG(char *d) {
 	return (int)strtol(d, NULL, 10);
