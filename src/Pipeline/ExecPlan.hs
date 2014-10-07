@@ -425,7 +425,9 @@ dummyQueue = trace ("DUMMY QUEUE IN USE - PLEASE FIX ASAP!") $ Queue 0 False
 --
 --   TODO: currently doesn't calculate task cap or cardinalities for commit queues.
 --
---   TODO: don't generate queues for external buf typed computations
+--   TODO: don't generate unnecessary queues or their associated reads/writes.
+--         they don't really do anything so it's not incorrect per se to generate
+--         them, but it's ugly.
 taskify :: (Queue, Queue)
         -> Maybe (Comp CTy Ty)
         -> Comp CTy Ty
@@ -480,7 +482,7 @@ taskify qs@(inq, outq) mnxt c = do
         seqStart :: Maybe (Comp CTy Ty) -> Comp CTy Ty -> TaskGen TaskID TaskInfo (Maybe (Comp CTy Ty))
         seqStart (Just next) comp = do
           startNext <- startTask next <$> createTask next qs
-          return . Just $ MkComp (comp `Seq` startNext) (compLoc startNext) (compInfo startNext)
+          return . Just $ MkComp (comp `Seq` startNext) (compLoc comp) (compInfo comp)
         seqStart Nothing comp = do
           return $ Just comp
 
@@ -570,16 +572,22 @@ taskify qs@(inq, outq) mnxt c = do
         -- honored. Maybe warn about this?
         taskify qs mnxt comp
       | otherwise = do
-        let c' = maybe comp (\nxt -> MkComp (comp `Seq` nxt) (compLoc c) (compInfo c)) mnxt
+        let c' = case (isComputer c, mnxt) of
+                   (True, Just nxt) -> MkComp (c `Seq` nxt) (compLoc c) (compInfo c)
+                   _                -> c
         createTaskWithPlacement Alone c' qs
     -- If we get to either Map or Call, then the name they're calling on
     -- is a barrier for sure; make this a primitive barrier since we can't
     -- split funs.
     go (Map _ name) = do
-        let c' = maybe c (\nxt -> MkComp (c `Seq` nxt) (compLoc c) (compInfo c)) mnxt
+        let c' = case (isComputer c, mnxt) of
+                   (True, Just nxt) -> MkComp (c `Seq` nxt) (compLoc c) (compInfo c)
+                   _                -> c
         createTaskWithPlacement Alone c' qs
     go (Call name _) = do
-        let c' = maybe c (\nxt -> MkComp (c `Seq` nxt) (compLoc c) (compInfo c)) mnxt
+        let c' = case (isComputer c, mnxt) of
+                   (True, Just nxt) -> MkComp (c `Seq` nxt) (compLoc c) (compInfo c)
+                   _                -> c
         createTaskWithPlacement Alone c' qs
     go _ = error "Atomic computations can't possibly contain barriers!"
 

@@ -869,6 +869,9 @@ codeGenComp dflags comp k =
                -> [(Name, Comp CTy Ty)] -> Cg [CompInfo]
             go branch_var num_branches (c1,c1Name) ((nm,c2):rest) = do
                 let (CTBase cty1) = compInfo c1
+                case doneTyOfCTy cty1 of
+                  Nothing -> error $ "MAYBE EXPLOSION!\n" ++ show c1 ++ "\n" ++ show cty1 ++ "\n\n" ++ show nms_cs
+                  _       -> return ()
                 let (Just vTy) = doneTyOfCTy cty1
                 let is_take (Take1 {}) = True
                     is_take _          = False
