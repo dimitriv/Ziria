@@ -1,4 +1,4 @@
-let f(x : arr[2] bit) = 
+fun f(x : arr[2] bit) {
   var ret : complex16;
 
   if (x[0] == '1 && x[1] == '0)
@@ -9,8 +9,8 @@ let f(x : arr[2] bit) =
 
   return ret;
 
-in
+};
 
-read >>> map f >>> write
+let comp main = read >>> map f >>> write
 
 
