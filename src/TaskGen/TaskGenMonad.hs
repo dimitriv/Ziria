@@ -27,8 +27,8 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 
 import PpComp ()
-import AstComp
-import AstExpr
+import AstComp hiding (comp)
+import AstExpr hiding (name)
 import TaskGenTypes
 
 -- | Environment for task generation computations.
@@ -193,9 +193,9 @@ insertQs c qin qout =
       (False, True) ->
         cPar loc (mkParTy rbufty (compInfo c)) pnfo reader c
   where
-    (inty, outty, mretty) = case compInfo c of
-      CTBase (TTrans i o)  -> (i, o, Nothing)
-      CTBase (TComp r i o) -> (i, o, Just r)
+    (inty, outty) = case compInfo c of
+      CTBase (TTrans i o)  -> (i, o)
+      CTBase (TComp _ i o) -> (i, o)
       _                    -> error $ "BUG: bad types to readFrom"
     loc = compLoc c
     rbufty = CTBase $ TTrans (TBuff (IntBuf inty)) inty

@@ -6,173 +6,21 @@ module TaskGen (
   ) where
 import Control.Applicative
 import Control.Monad.State
-import Data.Default
-import Data.Maybe
-import Data.Monoid
-import Data.List
-import Data.Tuple
 import qualified Data.Set as S
-import qualified Data.Map as M
-import Text.Parsec.Pos
 
-import AstComp
-import AstExpr
-import PpComp
+import AstComp hiding (comp)
+import AstExpr hiding (name, info)
 import Outputable
 import TaskGenTypes
 import TaskGenMonad
-
-import Debug.Trace
-
-data Computer
-data Transformer
-
-
-newtype Task a = Task TaskID
-  deriving (Eq, Ord)
-
-instance Show (Task a) where
-  show (Task s) = show s
-
-data AnyTask = CompTask (Task Computer) | TransTask (Task Transformer)
-  deriving (Eq, Ord)
-
--- | Just some debug pretty-printing.
-instance Show AnyTask where
-  show (CompTask c) = "c(" ++ show c ++ ")"
-  show (TransTask t) = "t(" ++ show t ++ ")"
-
--- | If the given task a computer?
-isComp :: AnyTask -> Bool
-isComp (CompTask _) = True
-isComp _            = False
-
--- | An execution plan, describing when and how to switch schedules.
---   TODO: this has to go, probably. This is better described as AST
---         transformations.
-data Plan taskinfo = Plan {
-    -- | The mapping of computers to their continuations. When some tasks
-    --   finish executing, some other task(s) should take their place.
-    --   This field indicates which tasks to start upon each other task's death.
-    planConts    :: M.Map (Task Computer) (S.Set AnyTask),
-
-    -- | The mapping of computers to their last dependent.
-    --   Then a computer finishes executing, we need to wait until that
-    --   computer's downstream is done executing as well before we can continue
-    --   with the next computation in a sequence. Thus, each computer with a
-    --   downstream needs to know which task to wait for.
-    planLastTask :: M.Map (Task Computer) AnyTask,
-
-    -- | The set of tasks to activate on program initialization.
-    planInitial  :: S.Set AnyTask,
-
-    -- | The maximum number of tasks that will ever be active in the system at
-    --   the same time. This includes tasks running on all cores, so it will be
-    --   slightly too high for parallel programs. That's probably OK though,
-    --   since each task takes up very little memory.
-    planMaxTasks :: Int,
-
-    -- | Detailed information about each task.
-    planTaskInfo :: M.Map TaskID taskinfo,
-
-    -- | Shared context for threads.
-    planContext  :: CompCtxt
-  }
-
--- | The default execution plan consists of doing nothing.
-instance Default (Plan a) where
-  def = Plan {
-      planConts = M.empty,
-      planLastTask = M.empty,
-      planInitial = S.empty,
-      planMaxTasks = 0,
-      planTaskInfo = M.empty,
-      planContext = Hole
-    }
-
-{-
-
-This is dead code, but kept around as design notes until equivalent
-can be designed for AstComp.
-
-
--- | Returns the final computer of a map. When this computer is done,
---   the whole map is done.
-lastComp :: Map -> Maybe (Task Computer)
-lastComp (Atom ac)
-  | CompTask c <- ac         = Just c
-  | otherwise                = Nothing
-lastComp (ExecPlan.Repeat _) = Nothing
-lastComp (ExecPlan.Seq ms)   = lastComp $ last ms
-lastComp (ExecPlan.Par ms)   = findComp (map lastComp ms)
-
--- | Find the computation in a list of possible computations.
---   If there is none, return Nothing. If there is more than one,
---   fail loudly, because this is clearly a bug.
-findComp :: [Maybe (Task Computer)] -> Maybe (Task Computer)
-findComp ms =
-  case filter isJust ms of
-    [mc] -> mc
-    []   -> Nothing
-    _    -> error "BUG: more than one computer in Par"
-
-
--- | Create an execution @Plan@ from an execution @Map@.
---   Will crash loud and hard when fed a Map that breaks the invariants
---   of the type.
-makePlan :: Map -> Plan a
-makePlan m = fillLasts m $ fillConts m def {
-    planInitial = firstTasks m,
-    planMaxTasks = maxTasks m
-  }
-
--- | Fill in the @planLastTask@ field of a @Plan@.
-fillLasts :: Map -> Plan a -> Plan a
-fillLasts (Atom _) plan =
-  plan
-fillLasts (ExecPlan.Repeat m) plan =
-  fillLasts m plan
-fillLasts (ExecPlan.Seq ms) plan =
-  foldl' (flip fillLasts) plan ms
-fillLasts exmap@(ExecPlan.Par _) plan =
-    case (lastComp exmap, lastTrans exmap) of
-      (Just c, t) -> plan {planLastTask = M.insert c t (planLastTask plan)}
-      _           -> plan
-  where
-    lastTrans (ExecPlan.Par m)    = lastTrans (last m)
-    lastTrans (ExecPlan.Seq m)    = lastTrans (last m)
-    lastTrans (ExecPlan.Repeat m) = lastTrans m
-    lastTrans (Atom t)            = t
-
--- | Fill in the @planConts@ field of a @Plan@.
-fillConts :: Map -> Plan a -> Plan a
-fillConts (ExecPlan.Repeat m) plan =
-  fillConts m plan
-fillConts (Atom _) plan =
-  plan
-fillConts (ExecPlan.Seq (m1:ms@(m2:_))) plan =
-    fillConts (ExecPlan.Seq ms) (fillConts m1 plan')
-  where
-    nextTasks = firstTasks m2
-    conts = planConts plan
-    plan' =
-      case lastComp m1 of
-        Just c -> plan {planConts = M.insert c nextTasks conts}
-        _      -> plan
-fillConts (ExecPlan.Seq _) plan =
-  plan
-fillConts (ExecPlan.Par ms) plan =
-  foldl' (flip fillConts) plan ms
-
--}
 
 -- | Comp representing the starting of a task.
 startTask :: Comp CTy Ty -> TaskID -> Comp CTy Ty
 startTask c t = MkComp (ActivateTask t Nothing) (compLoc c) (compUnitTy c)
 
--- | Comp representing the starting of a task from a BindMany, with an input var.
-startTaskFromBind :: Maybe SourcePos -> a -> TaskID -> Name -> Comp a Ty
-startTaskFromBind mloc info t v = MkComp (ActivateTask t (Just v)) mloc info
+-- | Comp representing the starting of a task from a 'BindMany', with an input var.
+startTaskWithInVar :: Name -> Comp CTy Ty -> TaskID -> Comp CTy Ty
+startTaskWithInVar v c t = MkComp (ActivateTask t (Just v)) (compLoc c) (compUnitTy c)
 
 -- | Split program into entry points and tasks to be started along the road.
 --   TODO: task map needs more info.
@@ -197,20 +45,15 @@ compUnitTy c =
 compTripleUnitTy :: CTy
 compTripleUnitTy = CTBase $ TComp TUnit TUnit TUnit
 
--- | A placeholder queue for now. Outputs annoying warnings as a reminder to
---   remove it.
-dummyQueue :: Queue
-dummyQueue = trace ("DUMMY QUEUE IN USE - PLEASE FIX ASAP!") $ Queue 0 False
-
--- | Split the given AST along task barriers. The returned AST is the entry
+-- | Split the given AST along task barriers. The returned task is the entry
 --   point of the program, from which further tasks are spawned as needed.
---   In the absence of `standalone` annotations, this is the identity function.
+--   In the absence of `standalone` annotations, this generates a single
+--   task containing the entirety of the program.
 --
---   Currently, only @Standalone@ creates a primitive barrier. |>>>| is treated
+--   Currently, only 'Standalone' creates a primitive barrier. |>>>| is treated
 --   like >>>.
 --
---   TODO: the compInfo stuff (the types) will need some reshuffling for
---         BindMany; having tasks return (), etc.
+--   TODO: the compInfo stuff (the types) are probably incorrect for parts.
 --
 --   TODO: current algorithm, calling containsBarrier all over the place, is
 --         O(n^2) - could be O(n) if we instead annotated the AST as we
@@ -242,9 +85,9 @@ taskify qs@(inq, outq) mnxt c = do
     go :: Comp0 CTy Ty -> TaskGen TaskID TaskInfo TaskID
     go (BindMany first rest)
       | containsBarrier first = do
-          let ((_, comp):xs) = rest
+          let ((v, comp):xs) = rest
           ms <- taskify qs mnxt (MkComp (BindMany comp xs) (compLoc comp) (compInfo c))
-          tid <- taskify qs (Just $ startTask c ms) first
+          tid <- taskify qs (Just $ startTaskWithInVar v c ms) first
           createTask (startTask first tid) qs
       | otherwise = do
           comp <- genBindManyBarriers first (splitBarriers rest)
@@ -252,22 +95,21 @@ taskify qs@(inq, outq) mnxt c = do
       where
         -- Invariant: each (first ++ b) contains a barrier.
         genBindManyBarriers :: Comp CTy Ty -> [[(Name, Comp CTy Ty)]] -> TaskGen TaskID TaskInfo (Comp CTy Ty)
-        genBindManyBarriers first (b:bs) = do
+        genBindManyBarriers frst (b:bs) = do
           case bs of
-            (((_, first'):rest):bs') -> do
+            (((_, first'):rest'):bs') -> do
               -- Next task is just the next in the list of barriers
-              nxt <- Just <$> genBindManyBarriers first' (rest:bs')
-              b' <- taskify qs nxt $ MkComp (BindMany first b) (compLoc first) (compInfo c)
+              nxt <- Just <$> genBindManyBarriers first' (rest':bs')
+              b' <- taskify qs nxt $ MkComp (BindMany frst b) (compLoc frst) (compInfo c)
               startTask c <$> createTask (startTask c b') qs
             _                        -> do
               -- End of bind; next task is whatever came from the outside, if any
               b' <- taskify qs mnxt $ MkComp (BindMany first b) (compLoc first) (compInfo c)
               startTask c <$> createTask (startTask c b') qs
-        genBindManyBarriers first [] = do
+        genBindManyBarriers _ [] = do
           error "BUG: barrier is in first comp of BindMany, but genBindManyBarriers was called!"
 
-    go (Seq left right) = do
-      -- TODO: pass in continuation task start
+    go (Seq _ _) = do
       mcomp <- foldM seqStart mnxt (reverse $ findBarriers c)
       case mcomp of
         Just comp -> createTask comp qs
@@ -283,7 +125,7 @@ taskify qs@(inq, outq) mnxt c = do
 
         -- Turn a ; standalone b ; c ; d into [a, standalone b, c ; d]
         findBarriers :: Comp CTy Ty -> [Comp CTy Ty]
-        findBarriers s@(MkComp (Seq l r) loc nfo) =
+        findBarriers s@(MkComp (Seq l r) _ _) =
           case (containsBarrier l, containsBarrier r) of
             (True, True)  -> findBarriers l ++ findBarriers r
             (True, False) -> findBarriers l ++ [r]
@@ -291,7 +133,7 @@ taskify qs@(inq, outq) mnxt c = do
             _             -> [s]
         findBarriers s = [s]
 
-    go (Par _ left right) = do
+    go (Par _ _ _) = do
       -- TODO: find first and last components of pipeline, as well as the computer (if any) and add sync
       --       code! Also, commit queues; currently everything is simple queues.
       let bars = findBarriers c
@@ -304,7 +146,7 @@ taskify qs@(inq, outq) mnxt c = do
         createTask' (c', qin', qout') = taskify (qin', qout') mnxt c'
 
         -- Turn a >>> standalone b >>> c >>> d into [a, standalone b, c >>> d]
-        findBarriers p@(MkComp (Par _ l r) loc nfo) =
+        findBarriers p@(MkComp (Par _ l r) _ _) =
           case (containsBarrier l, containsBarrier r) of
             (True, True)  -> findBarriers l ++ findBarriers r
             (True, False) -> findBarriers l ++ [r]
@@ -340,19 +182,19 @@ taskify qs@(inq, outq) mnxt c = do
         MkComp (LetFunC name args locs body c') (compLoc c) (compInfo c)
       return tid
 
-    go (Interleave left right) =
+    go (Interleave _ _) =
       error "BUG: Interleave in AST!"
     go (Branch cond th el) = do
       th' <- startTask th <$> taskify qs mnxt th
       el' <- startTask el <$> taskify qs mnxt el
       createTask (MkComp (Branch cond th' el') (compLoc c) (compInfo c)) qs
-    go (Until cond comp) = do
+    go (Until _cond _comp) = do
       error "TODO: until requires some extra code"
-    go (While cond comp) = do
+    go (While _cond _comp) = do
       error "TODO: while requires some extra code"
-    go (Times ui from to it comp) = do
+    go (Times _ui _from _to _it _comp) = do
       error "TODO: times requires some extra code"
-    go (AstComp.Repeat mvect comp) = do
+    go (AstComp.Repeat _mvect _comp) = do
       error "TODO: repeat requires some extra code"
     go (VectComp vect comp) = do
       -- TODO: cardinality information needed to inform the counting
@@ -374,12 +216,12 @@ taskify qs@(inq, outq) mnxt c = do
     -- If we get to either Map or Call, then the name they're calling on
     -- is a barrier for sure; make this a primitive barrier since we can't
     -- split funs.
-    go (Map _ name) = do
+    go (Map _ _) = do
         let c' = case (isComputer c, mnxt) of
                    (True, Just nxt) -> MkComp (c `Seq` nxt) (compLoc c) (compInfo c)
                    _                -> c
         createTaskWithPlacement Alone c' qs
-    go (Call name _) = do
+    go (Call _ _) = do
         let c' = case (isComputer c, mnxt) of
                    (True, Just nxt) -> MkComp (c `Seq` nxt) (compLoc c) (compInfo c)
                    _                -> c
@@ -407,7 +249,7 @@ containsBarrier = containsBarrier' S.empty
           containsBarrier' barriers left || containsBarrier' barriers right
         go (Par _ left right) =
           containsBarrier' barriers left || containsBarrier' barriers right
-        go (Let _ rhs comp) =
+        go (Let _ _rhs comp) =
           containsBarrier' barriers comp
         go (LetE _ _ _ comp) =
           containsBarrier' barriers comp
@@ -419,11 +261,11 @@ containsBarrier = containsBarrier' S.empty
             else containsBarrier' barriers comp
         go (Interleave left right) =
           containsBarrier' barriers left || containsBarrier' barriers right
-        go (Branch cond th el) =
+        go (Branch _ th el) =
           containsBarrier' barriers th || containsBarrier' barriers el
-        go (Until cond comp) =
+        go (Until _ comp) =
           containsBarrier' barriers comp
-        go (While cond comp) =
+        go (While _ comp) =
           containsBarrier' barriers comp
         go (Times _ _ _ _ comp) =
           containsBarrier' barriers comp
