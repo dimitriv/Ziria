@@ -11,7 +11,7 @@ fun foo(x : int64) {
   -- println y, " ", y/1000;
 
   let ret = c.im / 10 - 5000000000;  
-  println ret;
+  --println ret;
 
   return ret;
 
