@@ -4,8 +4,10 @@
    in a round-robin fashion. Having only a single entry point, scheduling
    a task consists of just calling it.
 
-   TODO: will need some fine tuning for playing as nice with
-         cache as the rest of the C code.
+   Please note that the scheduler is currently *not* thread safe!
+
+   TODO: will need some optimizaion and cache tuning.
+   TODO: thread safety and finding idle cores to start tasks on.
  */
 #ifndef SCHED_H
 
@@ -19,6 +21,15 @@ typedef task_tick_t task_t;
 typedef struct sched_struct {
   /* Active queue. */
   task_t *active_q;
+
+  /* Current task. */
+  int cur_task;
+
+  /* Current # of active tasks. */
+  int active_tasks;
+
+  /* Max # of concurrent tasks. */
+  int max_tasks;
 } *sched_t;
 
 /* Create a new scheduler. */
@@ -30,8 +41,10 @@ void sched_activate(sched_t, task_t);
 /* Remove the currently running task from the active queue. */
 void sched_deactivate_current(sched_t);
 
-/* Activate the next task in the active queue. */
-void sched_next(sched_t);
+/* Activate the next task in the active queue.
+   Returns 0 if a task could be scheduled, otherwise nonzero.
+*/
+int sched_next(sched_t);
 
 /* Destroy a scheduler and free any associated memory. */
 void sched_destroy(sched_t);
