@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, GeneralizedNewtypeDeriving #-}
 -- | Monad for turning an AST into a task-oriented dito.
 module TaskGenMonad (
   -- The TaskGen type
@@ -66,7 +66,9 @@ instance Default name => Default (TaskGenState name task) where
       tgstNumTasks    = 0
     }
 
-type TaskGen name task a = State (TaskGenState name task) a
+newtype TaskGen name task a =
+  TaskGen {runTG :: State (TaskGenState name task) a}
+  deriving (Functor, Applicative, Monad, MonadState (TaskGenState name task))
 
 -- | Generate a fresh name.
 freshName :: Enum name => TaskGen name task name
@@ -128,7 +130,7 @@ getAllBarrierFuns = fmap tgstBarrierFuns get
 -- | Run a task generation computation.
 runTaskGen :: (Default name, Enum name) => TaskGen name task a -> (M.Map name task, a)
 runTaskGen =
-  swap . fmap tgstTaskInfo . flip runState def
+  swap . fmap tgstTaskInfo . flip runState def . runTG
 
 -- | Create a new task from a 'TaskInfo' structure,
 --   complete with queue reads and writes.
