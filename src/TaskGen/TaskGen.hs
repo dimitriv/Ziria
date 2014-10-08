@@ -18,12 +18,16 @@ import TaskGenMonad
 import Debug.Trace -- Only for temporary dummy queue in insertTask
 
 -- | Comp representing the starting of a task.
+--   Preserves stream types, but turns the task into a computer
+--   if it's a transformer.
 startTask :: Maybe SourcePos -> CTy -> TaskID -> Comp CTy Ty
-startTask loc ty tid = MkComp (ActivateTask tid Nothing) loc ty
+startTask loc ty tid =
+  MkComp (ActivateTask tid Nothing) loc (compUnitTy ty)
 
 -- | Comp representing the starting of a task from a 'BindMany', with an input var.
 startTaskWithInVar :: Name -> Maybe SourcePos -> CTy -> TaskID -> Comp CTy Ty
-startTaskWithInVar v loc ty tid = MkComp (ActivateTask tid (Just v)) loc ty
+startTaskWithInVar v loc ty tid =
+  MkComp (ActivateTask tid (Just v)) loc (compUnitTy ty)
 
 -- | Split program into entry points and tasks to be started along the road.
 insertTasks :: Comp CTy Ty -> (TaskEnv, Comp CTy Ty)
@@ -35,13 +39,11 @@ insertTasks = runTaskGen . go
       tid <- taskify (errq, errq) Nothing comp
       taskComp <$> lookupTask tid
 
--- | Given an expression of type Comp a i o, produces a type Comp () i o.
-compUnitTy :: Comp CTy Ty -> CTy
-compUnitTy c =
-  case compInfo c of
-    (CTBase (TComp _ i o)) -> CTBase $ TComp TUnit i o
-    (CTBase (TTrans i o))  -> CTBase $ TComp TUnit i o
-    _                      -> error $ "Non base type in compUnitTy:\n" ++ show (ppr $ compInfo c)
+-- | Given a type ST a i o, produces a type ST (C ()) i o.
+compUnitTy :: CTy -> CTy
+compUnitTy (CTBase (TComp _ i o)) = CTBase $ TComp TUnit i o
+compUnitTy (CTBase (TTrans i o))  = CTBase $ TComp TUnit i o
+compUnitTy ty = error $ "Non base type in compUnitTy:\n" ++ show (ppr ty)
 
 -- | The type Comp (C ()) () ().
 compTripleUnitTy :: CTy
