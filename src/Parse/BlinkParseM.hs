@@ -48,7 +48,7 @@ import Text.Parsec
 import Text.Parsec.Expr
 
 import AstExpr (GName, SrcTy)
-import AstComp (CallArg, GCTy0)
+import AstComp (CallArg, GCTy)
 
 {-------------------------------------------------------------------------------
   The Blink parser monad
@@ -60,10 +60,20 @@ import AstComp (CallArg, GCTy0)
 
 type BlinkParseState = ()
 
--- We need environment of defined functions to intelligently parse applications
-type ParseCompEnv     = [(GName SrcTy,[(GName SrcTy, CallArg SrcTy (GCTy0 SrcTy))])]
+-- | The parser environment
+--
+-- We need environment of defined functions to intelligently parse
+-- applications: we map (comp) function names to their list of arguments. The
+-- parser uses this to select the expr parser or the comp parser, depending on
+-- the type of the argument.
+type ParseCompEnv = [( GName (Maybe (GCTy SrcTy))
+                     , [GName (CallArg (Maybe SrcTy) (Maybe (GCTy SrcTy)))]
+                     )]
+
+-- | The parser monad
 newtype BlinkParseM a = BlinkParseM { runParseM :: ParseCompEnv -> IO a }
-type BlinkParser a    = ParsecT String BlinkParseState BlinkParseM a
+
+type BlinkParser a = ParsecT String BlinkParseState BlinkParseM a
 
 instance Functor BlinkParseM where
   fmap f (BlinkParseM x) = BlinkParseM $ \env -> fmap f (x env)

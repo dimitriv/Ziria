@@ -46,7 +46,7 @@ import Text.Parsec.Expr
 import AstExpr
 import BlinkLexer
 import BlinkParseM
-import Eval ( evalInt )
+import Eval (evalInt)
 
 {-------------------------------------------------------------------------------
   Expressions
@@ -155,7 +155,7 @@ parseExpr =
 parseTerm :: BlinkParser SrcExp
 parseTerm = choice
     [ parens $ choice [ try parseExpr
-                      , withPos eVal <*> (VUnit <$ whiteSpace)
+                      , withPos eVal' <*> (VUnit <$ whiteSpace)
                       ]
     , withPos eLet' <* reserved "let" <*> parseVarBind
                     <* symbol "="     <*> parseExpr
@@ -168,8 +168,9 @@ parseTerm = choice
     , parseWithVarOnHead
     ] <?> "expression"
   where
-    eLet'    p () x          = eLet    p () x AutoInline
-    eLetRef' p () (x, ty, e) = eLetRef p () x ty e
+    eVal'    p ()        = eVal    p () Nothing
+    eLet'    p () x      = eLet    p () x AutoInline
+    eLetRef' p () (x, e) = eLetRef p () x e
 
 {-------------------------------------------------------------------------------
   Values
@@ -180,9 +181,12 @@ parseTerm = choice
 -- > <value> ::= <scalar-value> | "{" <scalar-value>*"," "}"
 parseValue :: BlinkParser SrcExp
 parseValue = choice
-    [ withPos eVal    <*> parseScalarValue
-    , withPos eValArr <*> braces (sepBy parseScalarValue comma)
+    [ withPos eVal'    <*> parseScalarValue
+    , withPos eValArr' <*> braces (sepBy parseScalarValue comma)
     ] <?> "value"
+  where
+    eVal'    p () = eVal    p () Nothing
+    eValArr' p () = eValArr p () Nothing
 
 -- | Scalar values
 --
@@ -264,13 +268,13 @@ mkVar p () x = eVar p () (toName x p Nothing)
 -- | Declarations
 --
 -- <decl> ::= "var" IDENT ":" <base-type> (":=" <expr>)?
-declParser :: BlinkParser (GName SrcTy, SrcTy, Maybe SrcExp)
+declParser :: BlinkParser (GName (Maybe SrcTy), Maybe SrcExp)
 declParser =
     withPos mkDecl <* reserved "var" <*> identifier
                    <* colon <*> parseBaseType
                    <*> optionMaybe (symbol ":=" *> parseExpr)
   where
-    mkDecl p () x ty mbinit = (toName x p (Just ty), ty, mbinit)
+    mkDecl p () x ty mbinit = (toName x p (Just ty), mbinit)
 
 -- | Base types
 --
@@ -336,11 +340,11 @@ parseBaseType = choice
       ] <?> "array length description"
 
     mkFixed _ () (Left n)  t = let i = fromIntegral n
-                               in SrcTArr (SrcLiteral i) t
+                               in SrcTArray (SrcLiteral i) t
     mkFixed p () (Right x) t = let nm = toName x p Nothing
-                               in SrcTArr (SrcNArr nm) t
+                               in SrcTArray (SrcNArr nm) t
 
-    mkInferred p () t = SrcTArr (SrcNVar (fromJust p)) t
+    mkInferred p () t = SrcTArray (SrcNVar (fromJust p)) t
 
 {-------------------------------------------------------------------------------
   Statements
@@ -404,11 +408,11 @@ parseStmt = choice
     eLet' p () x e Nothing =
       return . Left $ \m -> eLet p () x AutoInline e m
 
-    eLetRef' p () (x, ty, e) (Just s) = do
+    eLetRef' p () (x, e) (Just s) = do
       s' <- stmtToExp s
-      return . Right $ eLetRef p () x ty e s'
-    eLetRef' p () (x, ty, e) Nothing = do
-      return . Left $ \m -> eLetRef p () x ty e m
+      return . Right $ eLetRef p () x e s'
+    eLetRef' p () (x, e) Nothing = do
+      return . Left $ \m -> eLetRef p () x e m
 
 -- | "Simple" statements (that do not expect a continuation)
 --
@@ -436,7 +440,7 @@ parseSimpleStmt = choice
     ,                              reserved "return"   *> parseExpr
     , withPos (makePrint False) <* reserved "print"   <*> parseExpr `sepBy` comma
     , withPos (makePrint True)  <* reserved "println" <*> parseExpr `sepBy` comma
-    , withPos eError            <* reserved "error"   <*> stringLiteral
+    , withPos eError'           <* reserved "error"   <*> stringLiteral
 
     , try $ withPos mkCall <*> identifier <*> parens (parseExpr `sepBy` comma)
     , withPos mkAssign <*> identifier
@@ -452,12 +456,13 @@ parseSimpleStmt = choice
       , reserved "else" *> (parseStmtBlock <?> "else branch")
       ]
 
-    eFor'  p () ui k (estart, elen) = eFor  p () ui k estart elen
-    eProj' p () s e                 = eProj p () e s
+    eFor'   p () ui k (estart, elen) = eFor   p () ui k estart elen
+    eProj'  p () s e                 = eProj  p () e s
+    eError' p ()                     = eError p () Nothing
 
     -- Print a series of expression; @b@ argument indicates whether we a newline
     makePrint b p () (h:t) = eSeq p () (ePrint p () False h) (makePrint b p () t)
-    makePrint b p () []    = ePrint p () b (eVal p () (VString ""))
+    makePrint b p () []    = ePrint p () b (eVal p () Nothing (VString ""))
 
     mkAssign p () x ds Nothing rhs =
       eAssign p () (foldr ($) (mkVar p () x) ds) rhs
@@ -479,7 +484,7 @@ foldIntExpr = do
 -- | Variable with optional type annotation
 --
 -- > <var-bind> ::= IDENT | "(" IDENT ":" <base-type> ")"
-parseVarBind :: BlinkParser (GName SrcTy)
+parseVarBind :: BlinkParser (GName (Maybe SrcTy))
 parseVarBind = choice
     [ withPos mkName <*> identifier
     , parens $ withPos mkNameTy <*> identifier <* symbol ":" <*> parseBaseType
@@ -511,7 +516,7 @@ genIntervalParser = choice
   where
     mkStartTo p () from to =
       let len = to - from + 1
-      in (eVal p () (vint from), eVal p () (vint len))
+      in (eVal p () Nothing (vint from), eVal p () Nothing (vint len))
 
     mkStartLen start len = (start, len)
 
@@ -526,7 +531,7 @@ intervalParser = choice
   where
     mkStartTo p () from to =
        let len = to - from + 1
-       in (eVal p () (vint from), LILength len)
+       in (eVal p () Nothing (vint from), LILength len)
 
     mkStartLen start len = (start, LILength len)
 
@@ -542,34 +547,32 @@ parseFor for_reserved = choice
 -------------------------------------------------------------------------------}
 
 mkCall :: Maybe SourcePos -> () -> String -> [SrcExp] -> SrcExp
-mkCall p () fn args = eCall p () f args
-  where
-    f = eVar p () (toName fn p Nothing)
+mkCall p () fn args = eCall p () (toName fn p Nothing) args
 
 eunit :: Maybe SourcePos -> () -> SrcExp
-eunit p () = eVal p () VUnit
+eunit p () = eVal p () Nothing VUnit
 
 -- | Create either a cast or a call since they share the same source syntax
 mkCallOrCast :: Monad m => Maybe SourcePos -> () -> String -> [SrcExp] -> m SrcExp
 mkCallOrCast p () x args
-  | x == "int"       = assertSingleton args (cast tint)
-  | x == "bit"       = assertSingleton args (cast TBit)
-  | x == "double"    = assertSingleton args (cast tdouble)
+  | x == "int"       = assertSingleton args (cast tintSrc)
+  | x == "bit"       = assertSingleton args (cast SrcTBit)
+  | x == "double"    = assertSingleton args (cast tdoubleSrc)
 
-  | x == "int64"     = assertSingleton args (cast tint64)
-  | x == "int32"     = assertSingleton args (cast tint32)
-  | x == "int16"     = assertSingleton args (cast tint16)
-  | x == "int8"      = assertSingleton args (cast tint8)
+  | x == "int64"     = assertSingleton args (cast tintSrc64)
+  | x == "int32"     = assertSingleton args (cast tintSrc32)
+  | x == "int16"     = assertSingleton args (cast tintSrc16)
+  | x == "int8"      = assertSingleton args (cast tintSrc8)
 
-  | x == "complex"   = assertSingleton args (cast tcomplex)
-  | x == "complex8"  = assertSingleton args (cast tcomplex8)
-  | x == "complex16" = assertSingleton args (cast tcomplex16)
-  | x == "complex32" = assertSingleton args (cast tcomplex32)
-  | x == "complex64" = assertSingleton args (cast tcomplex64)
+  | x == "complex"   = assertSingleton args (cast tcomplexSrc)
+  | x == "complex8"  = assertSingleton args (cast tcomplexSrc8)
+  | x == "complex16" = assertSingleton args (cast tcomplexSrc16)
+  | x == "complex32" = assertSingleton args (cast tcomplexSrc32)
+  | x == "complex64" = assertSingleton args (cast tcomplexSrc64)
 
   | otherwise        = return $ mkCall p () x args
   where
-    cast t = eUnOp p () (Cast t)
+    cast t = eUnOp p () (Cast (Just t))
 
 assertSingleton :: Monad m => [t] -> (t -> a) -> m a
 assertSingleton [e] action = return (action e)

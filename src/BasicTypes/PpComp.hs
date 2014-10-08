@@ -17,6 +17,7 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans -fno-warn-name-shadowing #-}
+{-# LANGUAGE FlexibleInstances #-}
 -- | Pretty-printing type classes instances
 module PpComp (
     ppCompPipeline
@@ -321,6 +322,10 @@ nested_letfuns c =
     goComp c | LetFunC {} <- unComp c = Nothing
              | Let {}     <- unComp c = Nothing
              | otherwise              = Just c
+
+instance Outputable t => Outputable (Maybe (GCTy t)) where
+  ppr Nothing  = empty
+  ppr (Just t) = ppr t
 
 {-------------------------------------------------------------------------------
   Show instances

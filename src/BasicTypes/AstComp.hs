@@ -83,7 +83,7 @@ data GComp0 tc t a b where
   -- is represented as:
   --
   -- > BindMany c1 [(x1,c2), (x2,c3) .... (x_(n-1),cn)]
-  BindMany :: GComp tc t a b -> [(GName tc,GComp tc t a b)] -> GComp0 tc t a b
+  BindMany :: GComp tc t a b -> [(GName t,GComp tc t a b)] -> GComp0 tc t a b
 
   -- | Sequential composition
   --
@@ -384,8 +384,8 @@ type ParListView = GParListView CTy Ty () ()
   to the type checker (which translates from SrcTy to Ty).
 -------------------------------------------------------------------------------}
 
-type SrcComp = GComp SrcTy () ()
-type SrcProg = GProg SrcTy () ()
+type SrcComp = GComp (Maybe (GCTy SrcTy)) (Maybe SrcTy) () ()
+type SrcProg = GProg (Maybe (GCTy SrcTy)) (Maybe SrcTy) () ()
 
 {-------------------------------------------------------------------------------
   Convenience constructors
@@ -394,8 +394,8 @@ type SrcProg = GProg SrcTy () ()
 cVar :: Maybe SourcePos -> a -> GName tc -> GComp tc t a b
 cVar loc a x = MkComp (Var x) loc a
 
-cBindMany :: Maybe SourcePos -> a -> GComp tc t a b -> [(GName tc,GComp tc t a b)] -> GComp tc t a b
-cBindMany loc a c cs = MkComp (mkBindMany c cs) loc a -- NB: using smar constructor
+cBindMany :: Maybe SourcePos -> a -> GComp tc t a b -> [(GName t,GComp tc t a b)] -> GComp tc t a b
+cBindMany loc a c cs = MkComp (mkBindMany c cs) loc a -- NB: using smart constructor
 
 cSeq :: Maybe SourcePos -> a -> GComp tc t a b -> GComp tc t a b -> GComp tc t a b
 cSeq loc a c1 c2 = MkComp (Seq c1 c2) loc a
@@ -490,10 +490,10 @@ cStandalone loc a c = MkComp (Standalone c) loc a
 cMitigate :: Maybe SourcePos -> a -> t -> Int -> Int -> GComp tc t a b
 cMitigate loc a t n1 n2 = MkComp (Mitigate t n1 n2) loc a
 
-mkBind :: GComp tc t a b -> (GName tc, GComp tc t a b) -> GComp0 tc t a b
+mkBind :: GComp tc t a b -> (GName t, GComp tc t a b) -> GComp0 tc t a b
 mkBind c1 (n,c2) = mkBindMany c1 [(n,c2)]
 
-mkBindMany :: GComp tc t a b -> [(GName tc,GComp tc t a b)] -> GComp0 tc t a b
+mkBindMany :: GComp tc t a b -> [(GName t,GComp tc t a b)] -> GComp0 tc t a b
 -- First push all the bindmany's on the list
 mkBindMany = go
    where
@@ -541,7 +541,7 @@ mapCompM onCTyp onETyp onCAnn onEAnn onExp f = goComp
     goComp0 (BindMany c1 xs_cs) = do
        c1'    <- goComp c1
        xs_cs' <- forM  xs_cs $ \(x,c') -> do
-                   x'  <- mapNameM onCTyp x
+                   x'  <- mapNameM onETyp x
                    c'' <- goComp c'
                    return (x', c'')
        return $ BindMany c1' xs_cs'
@@ -731,7 +731,7 @@ compFVs = \c ->
 
     goComp0 :: GComp0 tc t a b -> State (CompFVs tc t) ()
     goComp0 (Var nm)               = recordC nm
-    goComp0 (BindMany _ xcs)       = mapM_ unrecordC (map fst xcs)
+    goComp0 (BindMany _ xcs)       = mapM_ unrecordE (map fst xcs)
     goComp0 (Let nm _ _)           = unrecordC nm
     goComp0 (LetE nm _ _ _)        = unrecordE nm
     goComp0 (LetERef nm _ _)       = unrecordE nm
@@ -948,7 +948,7 @@ toCompPos a pos c0 = MkComp c0 (Just pos) a
 
 
 data GBindView tc t a b
-  = BindView (GComp tc t a b) (GName tc) (GComp tc t a b)
+  = BindView (GComp tc t a b) (GName t) (GComp tc t a b)
   | SeqView (GComp tc t a b) (GComp tc t a b)
   | NotSeqOrBind (GComp tc t a b)
 
@@ -1015,6 +1015,7 @@ instance PrettyVal ReadType
 instance PrettyVal VectAnn
 
 instance PrettyVal t => PrettyVal (GCTy0 t)
+instance PrettyVal t => PrettyVal (GCTy t)
 
 instance (PrettyVal a, PrettyVal b) => PrettyVal (CallArg a b)
 

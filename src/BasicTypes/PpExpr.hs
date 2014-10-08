@@ -17,6 +17,7 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans -fno-warn-name-shadowing #-}
+{-# LANGUAGE FlexibleInstances #-}
 -- | Pretty-printing type classes instances
 module PpExpr (nestingDepth, ppName, ppDecls, ppEs) where
 
@@ -192,15 +193,15 @@ instance Outputable Ty where
 
 instance Outputable SrcTy where
   ppr ty = case ty of
-    SrcTUnit                   -> text "()"
-    SrcTBit                    -> text "bit"
-    SrcTInt bw                 -> text "int" <> ppr bw
-    SrcTDouble                 -> text "double"
-    SrcTBool                   -> text "bool"
-    SrcTArr (SrcLiteral n) ty' -> text "arr" <> brackets (int n) <+> ppr ty'
-    SrcTArr (SrcNVar n)    ty' -> text "arr" <> brackets (text (show n)) <+> ppr ty'
-    SrcTArr (SrcNArr n)    ty' -> text "arr" <> brackets (text ("arr " ++ (show n))) <+> ppr ty'
-    SrcTStruct tyname          -> text tyname
+    SrcTUnit      -> text "()"
+    SrcTBit       -> text "bit"
+    SrcTInt bw    -> text "int" <> ppr bw
+    SrcTDouble    -> text "double"
+    SrcTBool      -> text "bool"
+    SrcTStruct nm -> text nm
+    SrcTArray (SrcLiteral n) ty' -> text "arr" <> brackets (int n) <+> ppr ty'
+    SrcTArray (SrcNVar n)    ty' -> text "arr" <> brackets (text (show n)) <+> ppr ty'
+    SrcTArray (SrcNArr n)    ty' -> text "arr" <> brackets (text ("arr " ++ (show n))) <+> ppr ty'
 
 instance Outputable ty => Outputable (GFun ty a) where
   ppr fn = case unFun fn of
@@ -221,6 +222,10 @@ instance Outputable ty => Outputable (GName ty) where
          | otherwise     = parens (ppName ix <+> char ':' <+> pprTy)
     where
       pprTy = ppr (nameTyp ix)
+
+instance Outputable (Maybe SrcTy) where
+  ppr Nothing  = empty
+  ppr (Just t) = ppr t
 
 {-------------------------------------------------------------------------------
   Utility

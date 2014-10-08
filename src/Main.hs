@@ -34,10 +34,10 @@ import Text.Parsec
 import Text.PrettyPrint.Mainland
 import Text.Show.Pretty (dumpStr)
 
-import AstExpr
-
-import CtExpr
-import CtComp
+import Opts
+import qualified BlinkParseComp as NewParser
+-- import Analysis.UseDef
+import PpComp
 
 {-
 import AstComp
@@ -47,16 +47,13 @@ import CgHeader
 import CgMonad
 import CgOpt
 import qualified GenSym as GS
-import Opts
 
 import CgProgram ( codeGenProgram )
 
 import qualified PassPipeline as PP
 
-import qualified BlinkParseComp as NewParser
 
 import PassFold
-import PpComp
 import qualified Outputable -- Qualified so that we don't clash with Mainland
 import Rename
 import TcExpr
@@ -93,9 +90,6 @@ outputCompiledProgram (CompiledProgram sc cc fn) = do
 -}
 main :: IO ()
 main = failOnException $ do
-    return ()
-
-{-
     hSetBuffering stdout NoBuffering
 
     -- putStrLn "pre-command line parsing ..."
@@ -108,6 +102,7 @@ main = failOnException $ do
     input <- readFile inFile
 
     -- putStrLn "command line parsed ..."
+    return ()
 
     prog <-
           failOnError $
@@ -121,6 +116,7 @@ main = failOnException $ do
     dump dflags DumpAst ".ast.dump" $ (text . dumpStr) prog
     dump dflags DumpAstPretty ".ast.pretty.dump" $ (text . show) prog
 
+{-
     rensym <- GS.initGenSym (getName dflags)
     prog_renamed <- runRenM (renameProg prog) rensym []
     sym <- GS.initGenSym (getName dflags)

@@ -16,180 +16,130 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# OPTIONS_GHC -Wall #-}
+module Eval (evalArith, evalInt, evalArrInt) where
 
-module Eval where
+import Control.Monad (forM)
+import Data.Array
 
 import AstExpr
-import AstComp
 
-import Text.PrettyPrint.HughesPJ
+{-------------------------------------------------------------------------------
+  Compile time casting of expressions
 
-import PpExpr
-import PpComp
-import qualified Data.Set as S
-import Control.Applicative
-import Control.Monad.State
-import qualified Data.Map as Map
+  This we may call this at various points in the compiler, we can cast using
+  both source types and internall types.
+-------------------------------------------------------------------------------}
 
+class TypeAnn ty where
+  valCast :: ty -> Val -> Maybe Val
+  intArrayLen :: ty -> Maybe Int
 
-import CgLUT ( shouldLUT )
-import Analysis.Range ( varRanges )
-import Analysis.UseDef ( inOutVars )
+instance TypeAnn Ty where
+  valCast (TInt {}) (VDouble d)  = return (VInt (floor d))
+  valCast (TInt {}) (VInt i)     = return (VInt i)
+  valCast (TDouble) (VInt d)     = return (VDouble (fromIntegral d))
+  valCast (TInt {}) (VBit False) = return (VInt 0)
+  valCast (TInt {}) (VBit True)  = return (VInt 1)
+  valCast _         _            = Nothing
 
-import Opts
+  intArrayLen (TArray (Literal n) (TInt _)) = Just n
+  intArrayLen _ = Nothing
 
-import Data.Array.IO
+instance TypeAnn (Maybe SrcTy) where
+  valCast (Just (SrcTInt {})) (VDouble d)  = return (VInt (floor d))
+  valCast (Just (SrcTInt {})) (VInt i)     = return (VInt i)
+  valCast (Just (SrcTDouble)) (VInt d)     = return (VDouble (fromIntegral d))
+  valCast (Just (SrcTInt {})) (VBit False) = return (VInt 0)
+  valCast (Just (SrcTInt {})) (VBit True)  = return (VInt 1)
+  valCast _            _            = Nothing
 
-import qualified GenSym as GS
+  intArrayLen (Just (SrcTArray (SrcLiteral n) (SrcTInt _))) = Just n
+  intArrayLen _ = Nothing
 
-import TcExpr ( tyOfParams )
+{-------------------------------------------------------------------------------
+  Simple static evaluation of expressions
+-------------------------------------------------------------------------------}
 
-
-
-evalArith :: GExp ty a -> Maybe Val
+evalArith :: TypeAnn ty => GExp ty a -> Maybe Val
 evalArith e = go (unExp e)
-  where go (EVal val) = return val
-        go (EBinOp b e1 e2)
-          = do { v1 <- evalArith e1
-               ; v2 <- evalArith e2
-               ; val_binop b v1 v2
-               }
-        go (EUnOp (Cast ty) e1)
-          = do { v1 <- evalArith e1
-               ; val_cast ty v1
-               }
-        go (EUnOp u e1)
-          = do { v1 <- evalArith e1
-               ; val_unop u v1
-               }
-        go _other = Nothing
+  where
+    go (EVal _ val)         = return val
+    go (EBinOp b e1 e2)     = do v1 <- evalArith e1
+                                 v2 <- evalArith e2
+                                 valBinOp b v1 v2
+    go (EUnOp (Cast ty) e1) = do v1 <- evalArith e1
+                                 valCast ty v1
+    go (EUnOp u e1)         = do v1 <- evalArith e1
+                                 valUnOp u v1
+    go _other               = Nothing
 
-val_binop Add  (VInt i1) (VInt i2) = return (VInt $ i1+i2)
-val_binop Mult (VInt i1) (VInt i2) = return (VInt $ i1*i2)
-val_binop Sub  (VInt i1) (VInt i2) = return (VInt $ i1-i2)
-val_binop Div  (VInt i1) (VInt i2) = return (VInt $ i1 `quot` i2)
-val_binop Rem  (VInt i1) (VInt i2) = return (VInt $ i1 `rem` i2)
-
-val_binop Add  (VDouble i1) (VDouble i2) = return (VDouble $ i1+i2)
-val_binop Mult (VDouble i1) (VDouble i2) = return (VDouble $ i1*i2)
-val_binop Sub  (VDouble i1) (VDouble i2) = return (VDouble $ i1-i2)
-val_binop Div  (VDouble i1) (VDouble i2) = return (VDouble $ i1 / i2)
-
-val_binop _ _ _ = Nothing
-
-val_unop Neg (VInt i) = return (VInt (-i))
-val_unop _ _ = Nothing
-
-val_cast (TInt {})    (VDouble d)    = return (VInt (floor d))
-val_cast (TInt {})    (VInt i)       = return (VInt i)
-val_cast (TDouble)    (VInt d)       = return (VDouble (fromIntegral d))
-val_cast (TInt {})    (VBit False)   = return (VInt 0)
-val_cast (TInt {})    (VBit True)    = return (VInt 1)
-
-val_cast _ _ = Nothing
-
-
-
-evalInt :: GExp ty a -> Maybe Integer
+evalInt :: TypeAnn ty => GExp ty a -> Maybe Integer
 evalInt e = case evalArith e of
               Just (VInt i) -> return i
               _otherwise    -> Nothing
 
--- Array initialization code or the form
--- ELetRef nm _ (ESeq init_loop nm)
+valBinOp :: BinOp -> Val -> Val -> Maybe Val
+valBinOp Add  (VInt i1) (VInt i2) = return (VInt $ i1+i2)
+valBinOp Mult (VInt i1) (VInt i2) = return (VInt $ i1*i2)
+valBinOp Sub  (VInt i1) (VInt i2) = return (VInt $ i1-i2)
+valBinOp Div  (VInt i1) (VInt i2) = return (VInt $ i1 `quot` i2)
+valBinOp Rem  (VInt i1) (VInt i2) = return (VInt $ i1 `rem` i2)
+
+valBinOp Add  (VDouble i1) (VDouble i2) = return (VDouble $ i1+i2)
+valBinOp Mult (VDouble i1) (VDouble i2) = return (VDouble $ i1*i2)
+valBinOp Sub  (VDouble i1) (VDouble i2) = return (VDouble $ i1-i2)
+valBinOp Div  (VDouble i1) (VDouble i2) = return (VDouble $ i1 / i2)
+
+valBinOp _ _ _ = Nothing
+
+valUnOp :: GUnOp ty -> Val -> Maybe Val
+valUnOp Neg (VInt i) = return (VInt (-i))
+valUnOp _ _ = Nothing
+
+{-------------------------------------------------------------------------------
+  Static execution of array initialization code
+
+  NOTE: We used to support more kinds of initialization code, but that was
+  commented out and badly bitrotted. Search history for `evalArrInit`.
+-------------------------------------------------------------------------------}
+
+-- | Execute array initialization code of the form
 --
-evalArrInt e = evalArrInt0 (unExp e)
-evalArrInt0 (ELetRef nm ty Nothing e)
-  | TArr (Literal n) (TInt _) <- ty
+-- > ELetRef nm Nothing (ESeq init_loop nm)
+evalArrInt :: TypeAnn ty => GExp ty () -> Maybe [Integer]
+evalArrInt = evalArrInt0 . unExp
+
+evalArrInt0 :: TypeAnn ty => GExp0 ty () -> Maybe [Integer]
+evalArrInt0 (ELetRef nm Nothing e)
+  | Just n     <- intArrayLen (nameTyp nm)
   , ESeq e1 e2 <- unExp e
-  , EVar nm' <- unExp e2
+  , EVar nm'   <- unExp e2
   , nm' == nm
-  = do { arr <- newArray (0,n-1) 0 :: IO (IOArray Int Integer)
-       ; try_body <- evalArrInitLoop (nm,arr) e1
-       ; case try_body of
-           Nothing -> return Nothing
-           Just () -> do { contents <- getElems arr
-                         ; return (Just contents) }
-       }
-evalArrInt0 other = return Nothing
+  = do values <- evalArrInitLoop nm e1
+       return $ elems $ array (0, n - 1) values
+evalArrInt0 _ = Nothing
 
-evalArrInitLoop :: (Name, IOArray Int Integer) -> Exp Ty -> IO (Maybe ())
-evalArrInitLoop (nm,arr) exp
-  | EFor _ k elow esize ebody <- unExp exp
-  , EVal (VInt low) <- unExp elow
-  , EVal (VInt siz) <- unExp esize
+-- | Execute an array initialization loop of the form
+--
+-- > for k in [low, siz] { arr[k] := eval }
+evalArrInitLoop :: TypeAnn ty => GName ty -> GExp ty () -> Maybe [(Int, Integer)]
+evalArrInitLoop arr loop
+  | EFor _ k elow esize ebody            <- unExp loop
+  , EVal _ (VInt low)                    <- unExp elow
+  , EVal _ (VInt siz)                    <- unExp esize
   , EArrWrite earr eind LISingleton eval <- unExp ebody
-  , EVar arr_nm <- unExp earr
-  , arr_nm == nm
-  , EVar ind_nm <- unExp eind
-  , ind_nm == k
-  , let inds = [fromIntegral low..(fromIntegral low + fromIntegral siz - 1)] -- Indices
-  , let loc = expLoc exp
-  = let subst_idx i = substExp (k, MkExp (EVal (VInt i)) loc tint) eval
-    in case mapM (\i -> subst_idx i >>= evalInt) inds of
-         Nothing -> return Nothing
-         Just vals ->
-           do { mapM (\(val,i) -> writeArray arr (fromIntegral i) val) (zip vals inds)
-              ; return (Just ()) }
+  , EVar arr'                            <- unExp earr
+  , EVar k'                              <- unExp eind
+  , arr' == arr
+  , k'   == k
+  = let inds = [fromIntegral low .. fromIntegral low + fromIntegral siz - 1]
+        loc  = expLoc loop
+        subst_idx i = substExp (k, MkExp (EVal (nameTyp k) (VInt i)) loc ()) eval
+    in forM inds $ \i -> do
+         v <- subst_idx i >>= evalInt
+         return (fromInteger i, v)
 
-evalArrInitLoop nm exp
-  = return Nothing
-
--- case mapM (\i -> substExp (k, MkExp (EVal (VInt i))  eval) inds of
---       Nothing   -> return Nothing -- One of the values could not evaluate
---       Just vals -> do { mapM (\(val,i) -> writeArray arr i val) (zip vals inds)
---                       ; return (Just ()) }
-
---   | otherwise
---   = return Nothing
-
-{-
-
-let inds = [low:low+siz-1] -- Indices
-    in
-    case mapM (\i -> substAll (k,EVal (VInt i)) eval) inds of
-      Nothing   -> return Nothing -- One of the values could not evaluate
-      Just vals -> do { mapM (\(val,i) -> writeArray arr i val) (zip vals inds)
-                      ; return (Just ()) }
--}
-
--- evalArrInit :: [Name,IORef [Int]] -> Exp Ty -> IO (Maybe [Int])
--- -- Evaluate array initialization loops statically
--- evalArrInit env exp = evalArrInit0 env (unExp exp)
--- evalArrInit0 (Var nm)
---   | Just ref <- lookup env nm
---   = do { contents <- readIORef ref
---        ; return $ Just contents }
---   | Nothing
---   = return Nothing
-
--- evalArrInit (ESeq e1 e2)
---   = do { evalUnit e1
---        ; evalArrInt e2 }
-
--- evalArrInt0 (ELetRef nm nfo e)
---   | Left (TArr _ TInt) <- nfo
---   = do { arr <- newIORef Int 0
---        ; evalArrUnit ((nm,arref):env) e }
---   | otherwise
---   = return Nothing
-
--- evalArrUnit (EIter nm lower size e)
---   | EVal (VInt l) <- unExp lower
---   , EVal (VInt s) <- unExp size
---   = let es = replicate s e
---         is = [l..(l+s-1)]
---         substs = zip (repeat nm) is
---         es' = zipWith (\(s,e) -> substAll s e) subst es
---     in mapM evalUnit es'
--- evalArrUnit env (EArrWrite earr eind eval)
---   | (EVar nm) <- unExp earr
---   , Just arref <- lookup nm env
---   , (EVal (VInt i)) <- eind
---   , Just r <- evalInt eval
---   = do { writeIORef ........... }
-
-
--- evalArrUnit _ = return Nothing
-
+evalArrInitLoop _ _
+  = Nothing

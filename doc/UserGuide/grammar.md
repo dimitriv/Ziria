@@ -96,15 +96,16 @@ either be computations `<comp>` or expressions `<expr>`.
   | <decl>
   | <struct>
   | "let" "external" IDENT <params> ":" <base-type>
-  | "fun" <comp-ann> <var-bind> <comp-params> "{" <decl>* <commands> "}"
+  | "fun" <comp-ann> <cvar-bind> <comp-params> "{" <decl>* <commands> "}"
   | "fun" <var-bind> <params> "{" <decl>* <stmts> "}"
-  | "let" <comp-ann> <var-bind> "=" <comp>
+  | "let" <comp-ann> <cvar-bind> "=" <comp>
   | "let" <var-bind> "=" <expr>
 
 <struct> ::= "struct" IDENT "=" "{" (IDENT ":" <base-type>)*";" "}"
 <params> ::= "(" (IDENT ":" <base-type>)*"," ")"
 <comp-params> ::= "(" (IDENT ":" (<base-type> | <comp-base-type>))*"," ")"
 <comp-base-type> ::= "ST" ("T" | "C" <base-type>) <base-type> <base-type>
+<cvar-bind> ::= IDENT | "(" IDENT ":" <comp-base-type> ")"
 ```
 
 (`<base-type>` comes from the expression language.)

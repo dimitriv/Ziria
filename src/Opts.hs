@@ -34,7 +34,7 @@ import System.Exit (exitFailure)
 import System.IO
 import Text.Parsec
 
-import CgMonad ( cMAX_STACK_ALLOC )
+-- import CgMonad ( cMAX_STACK_ALLOC )
 
 data DynFlag =
     InputFile String
@@ -180,9 +180,8 @@ parseAffinityMask (Just i) = AffinityMask $ read i
 parseStkThres :: String -> DynFlag
 parseStkThres i = StackAllocThreshold (read i)
 
-
 defaultMaxStkThreshold :: Int
-defaultMaxStkThreshold = cMAX_STACK_ALLOC
+defaultMaxStkThreshold = 0 -- TODO: Once we can import CgMonad: cMAX_STACK_ALLOC
 
 defaultAffinityMask :: Int
 defaultAffinityMask = 255

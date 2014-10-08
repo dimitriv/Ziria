@@ -98,7 +98,7 @@ data SrcTy where
   SrcTBit      :: SrcTy
   SrcTBool     :: SrcTy
 
-  SrcTArr      :: SrcNumExpr -> SrcTy -> SrcTy
+  SrcTArray    :: SrcNumExpr -> SrcTy -> SrcTy
   SrcTInt      :: SrcBitWidth -> SrcTy
   SrcTDouble   :: SrcTy
   SrcTStruct   :: TyName -> SrcTy
@@ -119,7 +119,7 @@ data SrcNumExpr where
   SrcLiteral :: Int -> SrcNumExpr
 
   -- | NArr: Length is the same as the length of the array of the given name
-  SrcNArr :: GName SrcTy -> SrcNumExpr
+  SrcNArr :: GName (Maybe SrcTy) -> SrcNumExpr
 
   -- | User doesn't specify array length.
   -- We record the the location for the sake of error messages.
@@ -390,7 +390,7 @@ type Fun       = GFun       Ty ()
   These types are only used in the parser and as input to the renamer.
 -------------------------------------------------------------------------------}
 
-type SrcExp = GExp SrcTy ()
+type SrcExp = GExp (Maybe SrcTy) ()
 
 {-------------------------------------------------------------------------------
   Convenience constructors
@@ -445,6 +445,10 @@ eProj loc a e s = MkExp (EProj e s) loc a
 eWhile :: Maybe SourcePos -> a -> GExp t a -> GExp t a -> GExp t a
 eWhile loc a econd ebody = MkExp (EWhile econd ebody) loc a
 
+{-------------------------------------------------------------------------------
+  Built-in types
+-------------------------------------------------------------------------------}
+
 tint, tint8, tint16, tint32, tint64 :: Ty
 tint64  = TInt BW64
 tint32  = TInt BW32
@@ -455,14 +459,36 @@ tint    = tint32
 tdouble :: Ty
 tdouble = TDouble
 
-{-
 tcomplex, tcomplex8, tcomplex16, tcomplex32, tcomplex64 :: Ty
-tcomplex   = TStruct complex32TyName
-tcomplex8  = TStruct complex8TyName
-tcomplex16 = TStruct complex16TyName
-tcomplex32 = TStruct complex32TyName
-tcomplex64 = TStruct complex64TyName
--}
+tcomplex8  = complexTy complex8TyName  BW8
+tcomplex16 = complexTy complex16TyName BW16
+tcomplex32 = complexTy complex32TyName BW32
+tcomplex64 = complexTy complex64TyName BW64
+tcomplex   = tcomplex32
+
+complexTy :: TyName -> BitWidth -> Ty
+complexTy nm bw = TStruct nm [("re", TInt bw), ("im", TInt bw)]
+
+{-------------------------------------------------------------------------------
+  Built-in types (source syntax)
+-------------------------------------------------------------------------------}
+
+tintSrc, tintSrc8, tintSrc16, tintSrc32, tintSrc64 :: SrcTy
+tintSrc64  = SrcTInt SrcBW64
+tintSrc32  = SrcTInt SrcBW32
+tintSrc16  = SrcTInt SrcBW16
+tintSrc8   = SrcTInt SrcBW8
+tintSrc    = tintSrc32
+
+tdoubleSrc :: SrcTy
+tdoubleSrc = SrcTDouble
+
+tcomplexSrc, tcomplexSrc8, tcomplexSrc16, tcomplexSrc32, tcomplexSrc64 :: SrcTy
+tcomplexSrc8  = SrcTStruct complex8TyName
+tcomplexSrc16 = SrcTStruct complex16TyName
+tcomplexSrc32 = SrcTStruct complex32TyName
+tcomplexSrc64 = SrcTStruct complex64TyName
+tcomplexSrc   = tcomplexSrc32
 
 {-------------------------------------------------------------------------------
   Various map functions
@@ -1053,23 +1079,6 @@ mutates_state e = case unExp e of
 
   EStruct _tn tfs -> any mutates_state (map snd tfs)
   EProj e0 _f     -> mutates_state e0
-
-{-------------------------------------------------------------------------------
-  Built-ins
--------------------------------------------------------------------------------}
-
--- Primitive complex structures
-primComplexStructs :: [(TyName,StructDef)]
-primComplexStructs
-  = [ (complex8TyName,
-          StructDef complex8TyName  [("re", TInt BW8),  ("im", TInt BW8)])
-    , (complex16TyName,
-          StructDef complex16TyName [("re", TInt BW16), ("im", TInt BW16)])
-    , (complex32TyName,
-          StructDef complex32TyName [("re", TInt BW32), ("im", TInt BW32)])
-    , (complex64TyName,
-          StructDef complex64TyName [("re", TInt BW64), ("im", TInt BW64)])
-    ]
 
 {-------------------------------------------------------------------------------
   PrettyVal instances (used for dumping the AST)
