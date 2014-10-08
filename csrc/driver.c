@@ -58,7 +58,9 @@
 #endif
 
 #ifdef __GNUC__
+#ifndef __cdecl
 	#define __cdecl
+#endif
 #endif
 
 // Contex blocks
