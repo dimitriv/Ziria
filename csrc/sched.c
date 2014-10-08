@@ -42,10 +42,13 @@ void sched_deactivate_current(sched_t sched) {
 }
 
 int sched_next(sched_t sched) {
+  task_t task;
   if(sched->active_tasks == 0) {
     return -1;
   }
-  sched->active_q[sched->cur_task]();
+  task = sched->active_q[sched->cur_task];
+  task->tick(task->initialized);
+  task->initialized = 1;
   sched->cur_task = (sched->cur_task + 1) % sched->active_tasks;
   return 0;
 }

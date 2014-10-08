@@ -12,10 +12,16 @@
 #ifndef SCHED_H
 
 /* Pointer to a Ziria tick function. */
-typedef void (*task_tick_t)();
+typedef void (*task_tick_t)(int);
 
-/* Task info for the scheduler. Currently only tick function. */
-typedef task_tick_t task_t;
+/* Task info for the scheduler.
+   Currently only tick function and a var to keep track of
+   whether the task's been initialized or not.
+*/
+typedef struct task_struct {
+  task_tick_t tick;
+  int initialized;
+} *task_t;
 
 /* State of the scheduler. */
 typedef struct sched_struct {
