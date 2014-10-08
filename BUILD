@@ -1,16 +1,20 @@
-To build the Ziria (wplc) compiler (under Linux or Windows/Cygwin) you will need:
+To build the Ziria (wplc) compiler (under Linux or Windows/Cygwin) you will
+need:
 
-* GHC 7.8 (including a cabal installation). 
-  On Windows it is best to install Haskell Platform for Windows (2014.2 or later), which contains everything.
-  Also, make sure you use the same bit-widths for Haskell and Cygwin
+* GHC 7.8.3 or greater
+  On Windows it is best to install Haskell Platform for Windows (2014.2 or
+  later), which also includes cabal.
+  Also, make sure you use the same bit-widths for Haskell and Cygwin.
   (64-bit Cygwin is known to have issues with 32-bit Haskell)
 
 * cabal 1.18 or greater
   This is included with the Haskell Platform 2014.2 or later.
 
-  NOTE: Make sure yous Haskell Platform path (e.g. C:\Program Files\Haskell Platform\2014.2.0.0\mingw\bin) 
-  	is before your Cygwin GCC path in Windows PATHs because cabal needs Haskell Platform ld and not the 
-	Cygwin GCC one (otherwise horrible errors will occur)
+  NOTE: Make sure yous Haskell Platform path
+        (e.g. C:\Program Files\Haskell Platform\2014.2.0.0\mingw\bin)
+        is before your Cygwin GCC path in Windows PATHs because cabal needs
+        the Haskell Platform ld and not the Cygwin GCC one (otherwise horrible
+        errors will occur)
 
 In the root directory, run `cabal update` and then `make`.
 
@@ -18,11 +22,10 @@ The Makefile creates a cabal sandbox, installs dependencies from Hackage, and
 finally. You will be left with a `wplc` binary.
 
 For many examples outside of the main path one needs to set Ziria path:
-set ZIRIA_ROOT=/path/to/Ziria/wplc/compiler
+set `ZIRIA_ROOT=/path/to/Ziria/wplc/compiler`
 
 NOTE: If you update GHC on Windows, make sure you delete ghc and cabal dirs 
-in /Users/<username>/AppData/Roaming to avoid stale state problems.
-
+in `/Users/<username>/AppData/Roaming` to avoid stale state problems.
 
 * Running the basic tests:
 
