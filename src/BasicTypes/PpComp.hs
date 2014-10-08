@@ -249,27 +249,27 @@ ppWidth (i,j) = brackets $ (int i) <> text "," <> (int j)
 
 
 
-ppCompPipeline :: Comp a b -> Doc
+ppCompPipeline :: (Outputable tc, Outputable t) => GComp tc t a b -> Doc
 ppCompPipeline = ppComp0 ppCompPipeline False True False . unComp
 
-ppCompShortFold :: Comp a b -> Doc
+ppCompShortFold :: (Outputable tc, Outputable t) => GComp tc t a b -> Doc
 ppCompShortFold = ppComp0 ppCompShortFold False False True . unComp
 
 
-ppCompAst :: Comp a b -> Doc
+ppCompAst :: (Outputable tc, Outputable t) => GComp tc t a b -> Doc
 ppCompAst cmp =
    brackets (text $ compShortName cmp) <+>
    ppComp0 (\c -> brackets (text $ compShortName c) <+> ppr c)
            False False False (unComp cmp)
 
-ppCompLoc :: Comp a b -> Doc
+ppCompLoc :: GComp tc t a b -> Doc
 ppCompLoc c =
   (case compLoc c of
     Just pos -> text (show pos)
     Nothing -> empty)
 
 
-ppCompTyped :: Outputable a => Comp a b -> Doc
+ppCompTyped :: (Outputable tc, Outputable t, Outputable a) => GComp tc t a b -> Doc
 ppCompTyped x =
   let p1 = ppComp0 ppCompTyped True False False $ unComp x
       pty = ppr (compInfo x)
@@ -282,7 +282,9 @@ ppCompParams params =
     x:[] -> ppName x
     x:ps -> ppName x <> comma <+> ppCompParams ps
 
-ppCompTypedVect :: Comp CTy b -> Doc
+-- TODO: Not sure this makes sense anymore, as it used to print the stuff
+-- in labels?
+ppCompTypedVect :: (Outputable tc, Outputable t) => GComp tc t CTy b -> Doc
 ppCompTypedVect x =
   let p1  = ppComp0 ppCompTypedVect False True True $ unComp x
       cty  = compInfo x
@@ -297,7 +299,7 @@ ppCompTypedVect x =
      then text ain <> text "-" <> braces p1 <> text "-" <> text ayld
      else p1
 
-isSimplComp :: Comp0 a b -> Bool
+isSimplComp :: GComp0 tc t a b -> Bool
 isSimplComp (Var {})      = True
 isSimplComp (Call {})     = True
 isSimplComp (Emit {})     = True

@@ -16,14 +16,9 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# OPTIONS_GHC -fwarn-unused-binds #-}
-{-# OPTIONS_GHC -fwarn-unused-imports #-}
-
+{-# LANGUAGE DeriveGeneric, GeneralizedNewtypeDeriving #-}
+{-# OPTIONS_GHC -Wall -fno-warn-unused-do-bind #-}
+-- | Range analysis
 module Analysis.Range
   ( Range(..)
   , pprRanges
@@ -33,8 +28,8 @@ module Analysis.Range
   ) where
 
 import Control.Applicative
-import Control.Monad (ap)
-import Control.Monad.State  (MonadState(..), gets, modify)
+import Control.Monad.State
+import Control.Monad.Error
 import Data.Map (Map)
 import GHC.Generics (Generic)
 import Text.PrettyPrint.Mainland
@@ -42,6 +37,11 @@ import Text.Show.Pretty (PrettyVal)
 import qualified Data.Map as Map
 
 import AstExpr
+import CtExpr
+
+{-------------------------------------------------------------------------------
+  Definition of the Range
+-------------------------------------------------------------------------------}
 
 -- @Range i j@ means that we know /all/ values in the range will be taken on.
 data Range = RangeTop
@@ -67,6 +67,8 @@ instance Num Range where
 instance Pretty Range where
     ppr = string . show
 
+instance PrettyVal Range
+
 pprRanges :: Map (GName Ty) Range -> Doc
 pprRanges r = stack $
     map (\(k,v) -> ppr k <> char ':' <+> ppr v) (Map.toList r)
@@ -76,85 +78,62 @@ joinR RangeTop      _             = RangeTop
 joinR _             RangeTop      = RangeTop
 joinR (Range l1 h1) (Range l2 h2) = Range (min l1 l2) (max h1 h2)
 
+{-------------------------------------------------------------------------------
+  Range monad and infrastructure
+-------------------------------------------------------------------------------}
+
 data RState = RState { ranges :: Map (GName Ty) Range }
 
-newtype R a = R { runR :: RState -> Either String (a, RState) }
+newtype R a = R (ErrorT String (State RState) a)
+  deriving ( Functor
+           , Applicative
+           , Monad
+           , MonadState RState
+           , MonadError String
+           )
 
-instance Monad R where
-    return a = R $ \s -> Right (a, s)
-    m1 >> m2 = R $ \s -> case runR m1 s of
-                           Left  err     -> Left err
-                           Right (_, s') -> runR m2 s'
-    m1 >>= k = R $ \s -> case runR m1 s of
-                           Left  err     -> Left err
-                           Right (a, s') -> runR (k a) s'
-    fail err = R $ \_ -> Left err
-
-instance Functor R where
-    fmap f x = x >>= return . f
-
-instance Applicative R where
-    pure   = return
-    (<*>)  = ap
-
-instance MonadState RState R where
-    get   = R $ \s -> Right (s,  s)
-    put s = R $ \_ -> Right ((), s)
+runR :: Monad m => RState -> R a -> m (a, RState)
+runR st (R r) = case runState (runErrorT r) st of
+                  (Left err,  _) -> fail err
+                  (Right a, st') -> return (a, st')
 
 setRange :: GName Ty -> Range -> R ()
-setRange v r =
-    modify $ \s -> s { ranges = Map.insert v r (ranges s) }
+setRange v r = modify $ \s -> s { ranges = Map.insert v r (ranges s) }
 
 joinRange :: GName Ty -> Range -> R ()
-joinRange v r1 =
-    modify $ \s -> s { ranges = Map.alter f v (ranges s) }
+joinRange v r1 = modify $ \s -> s { ranges = Map.alter f v (ranges s) }
   where
     f Nothing   = Just r1
     f (Just r2) = Just $ r1 `joinR` r2
 
 lookupRange :: GName Ty -> R Range
-lookupRange v =
-    gets $ \s -> case Map.lookup v (ranges s) of
+lookupRange v = gets $ \s -> case Map.lookup v (ranges s) of
                    Nothing -> RangeTop
                    Just r  -> r
 
-varRanges :: Monad m
-          => Exp Ty
-          -> m (Map (GName Ty) Range)
-varRanges e =
-    case runR (erange e) (RState Map.empty) of
-      Left err -> fail err
-      Right (_, RState ranges) ->
-            return ranges
+{-------------------------------------------------------------------------------
+  Various ways of calling the analysis
+-------------------------------------------------------------------------------}
 
-expRange :: Monad m
-         => Map (GName Ty) Range
-         -> Exp Ty
-         -> m Range
-expRange ranges e =
-    case runR (erange e) (RState ranges) of
-      Left err -> fail err
-      Right (r, _) ->
-            return r
+varRanges :: Monad m => Exp -> m (Map (GName Ty) Range)
+varRanges = liftM (ranges . snd) . runR (RState Map.empty) . erange
+
+expRange :: Monad m => Map (GName Ty) Range -> Exp -> m Range
+expRange rs = liftM fst . runR (RState rs) . erange
 
 arrIdxRange :: Monad m
             => Map (GName Ty) Range
-            -> Exp Ty
+            -> Exp
             -> LengthInfo
             -> m Range
-arrIdxRange ranges e len =
-    case runR (go e len) (RState ranges) of
-      Left err -> fail err
-      Right (r, _) ->
-            return r
+arrIdxRange rs = \e len -> liftM fst $ runR (RState rs) (go e len)
   where
-    go :: Exp Ty  -> LengthInfo -> R Range
-    go e LISingleton =
-        erange e
+    go :: Exp -> LengthInfo -> R Range
+    go e LISingleton = erange e
 
-    go e (LILength l) | EBinOp Mult e1 e2 <- unExp e
-                      , EVal _ (VInt k) <- unExp e2
-                      , fromIntegral k == l = do
+    go e (LILength len) | EBinOp Mult e1 e2 <- unExp e
+                        , EVal _ (VInt k) <- unExp e2
+                        , fromIntegral k == len = do
         let k' = fromIntegral k
         r <- erange e1
         case r of
@@ -163,7 +142,15 @@ arrIdxRange ranges e len =
 
     go _ (LILength _) = return RangeTop
 
-erange :: Exp Ty -> R Range
+{-------------------------------------------------------------------------------
+  The range analysis proper
+
+  TODO: This definition is somewhat odd, in the sense that virtually all
+  recursive calls to `erange` throw their result away. Maybe we should write
+  this slightly differently. For now, have enabled -fno-warn-unused-do-bind.
+-------------------------------------------------------------------------------}
+
+erange :: Exp -> R Range
 erange (MkExp (EVal _ (VInt i)) _ _) =
     return $ Range (fromIntegral i) (fromIntegral i)
 
@@ -209,7 +196,7 @@ erange (MkExp (EArrRead earr ei _) _ _) = do
     erange ei
     return RangeTop
 
-erange (MkExp (EArrWrite (MkExp (EVar v) _ _) ei _ e) _ _) = do
+erange (MkExp (EArrWrite (MkExp (EVar _) _ _) ei _ e) _ _) = do
     erange ei
     erange e
     return RangeTop
@@ -217,13 +204,13 @@ erange (MkExp (EArrWrite (MkExp (EVar v) _ _) ei _ e) _ _) = do
 erange (MkExp (EArrWrite {}) _ _) =
     fail "Illegal array write expression: array is an expression"
 
-erange (MkExp (EIter ix x earr ebody) _ _) | TArray (Literal n) _ <- info earr = do
+erange (MkExp (EIter ix _ earr ebody) _ _) | TArray (Literal n) _ <- ctExp earr = do
     erange earr
     setRange ix (Range 0 (fromIntegral n - 1))
     erange ebody
     return RangeTop
 
-erange (MkExp (EIter ix x earr ebody) _ _) = do
+erange (MkExp (EIter _ _ earr ebody) _ _) = do
     erange earr
     erange ebody
     return RangeTop
@@ -259,7 +246,7 @@ erange (MkExp (ESeq e1 e2) _ _) = do
     erange e1
     erange e2
 
-erange (MkExp (ECall f es) _ _) = do
+erange (MkExp (ECall _ es) _ _) = do
     mapM_ erange es
     return RangeTop
 
@@ -283,16 +270,10 @@ erange (MkExp (EBPerm e1 e2) _ _) = do
     erange e2
     return RangeTop
 
-erange (MkExp (EProj e fn) _ _) = do
+erange (MkExp (EProj e _) _ _) = do
     erange e
     return RangeTop
 
 erange (MkExp (EStruct _ tfs) _ _) = do
     mapM_ (erange . snd) tfs
     return RangeTop
-
-{-------------------------------------------------------------------------------
-  PrettyVal instances (used for dumping the AST)
--------------------------------------------------------------------------------}
-
-instance PrettyVal Range

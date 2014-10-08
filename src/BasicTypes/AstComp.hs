@@ -321,11 +321,11 @@ data CallArg a b
   deriving (Generic)
 
 -- A view of some Pars as a list
-data ParListView a b
+data GParListView tc t a b
   = ParListView { plv_loc  :: CompLoc
                 , plv_nfo  :: a
-                , plv_head :: Comp a b
-                , plv_rest :: [(ParInfo,Comp a b)]
+                , plv_head :: GComp tc t a b
+                , plv_rest :: [(ParInfo,GComp tc t a b)]
                 }
 
 data PlInfo where
@@ -368,17 +368,20 @@ data GProg tc t a b
   These types are used everywhere in the compiler except in the front-end.
 -------------------------------------------------------------------------------}
 
-type CTy0      = GCTy0  Ty
-type CTy       = GCTy   Ty
+type CTy0        = GCTy0  Ty
+type CTy         = GCTy   Ty
 
-type Comp0     = GComp0 CTy Ty
-type Comp      = GComp  CTy Ty
-type Prog      = GProg  CTy Ty
+type Comp0       = GComp0 CTy Ty () ()
+type Comp        = GComp  CTy Ty () ()
+type Prog        = GProg  CTy Ty () ()
+
+type ParListView = GParListView CTy Ty () ()
 
 {-------------------------------------------------------------------------------
   Specializations of the AST to SrcTy (source level types)
 
-  These types are only used in the parser and as input to the renamer.
+  These types are only used in the parser and the renamer, and as input
+  to the type checker (which translates from SrcTy to Ty).
 -------------------------------------------------------------------------------}
 
 type SrcComp = GComp SrcTy () ()
@@ -800,7 +803,7 @@ pnever = mkParInfo NeverPipeline
 
 
 
-parsToParList :: Comp a b -> ParListView a b
+parsToParList :: GComp tc t a b -> GParListView tc t a b
 parsToParList c
   = ParListView { plv_loc  = compLoc c
                 , plv_nfo  = compInfo c
@@ -808,7 +811,7 @@ parsToParList c
                 , plv_rest = crest
                 }
   where (cfst,crest) = go c
-        go :: Comp a b -> (Comp a b, [(ParInfo, Comp a b)])
+        go :: GComp tc t a b -> (GComp tc t a b, [(ParInfo, GComp tc t a b)])
         go (MkComp (Par p c1 c2) _loc _nfo)
           = let (c1fst,c1rest) = go c1
                 (c2fst,c2rest) = go c2
@@ -963,7 +966,7 @@ bindSeqView = mk_view
 
 -- TODO: The cases for Repeat, VectComp, Interleave and Standalone look
 -- suspicious? Why no +1? Fix or document.
-compSize :: Comp a b -> Int
+compSize :: GComp tc t a b -> Int
 compSize c = case unComp c of
   Var _nm                           -> 1
   BindMany c1 xs_cs                 -> foldr (\(_x,c') _s -> compSize c') (compSize c1) xs_cs
@@ -998,7 +1001,7 @@ compSize c = case unComp c of
   Standalone c1                     -> compSize c1
   Mitigate {}                       -> 1
 
-callArgSize :: CallArg (Exp b) (Comp a b) -> Int
+callArgSize :: CallArg (GExp t b) (GComp tc t a b) -> Int
 callArgSize (CAExp _)  = 0
 callArgSize (CAComp _) = 1
 

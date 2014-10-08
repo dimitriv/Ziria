@@ -252,11 +252,28 @@ data ForceInline
   deriving (Generic)
 
 data GExp0 t a where
+  -- | A single value
+  --
+  -- We record the type of the value because literals are overloaded.
   EVal :: t -> Val -> GExp0 t a
+
+  -- | An array value
+  --
+  -- We record the type of the array value (see also `EVal`).
   EValArr :: t -> [Val] -> GExp0 t a
+
   EVar :: GName t -> GExp0 t a
   EUnOp :: GUnOp t -> GExp t a -> GExp0 t a
   EBinOp :: BinOp -> GExp t a -> GExp t a -> GExp0 t a
+
+  -- | EArrRead ex ei j.
+  --
+  -- Read a subarray of 'ex' starting at index ei of length j and going as long
+  -- as LengthInfo says.
+  --
+  -- If LengthInfo is LISingleton, then we are supposed to only read at a
+  -- single position and return a scalar. Otherwise we return an array.
+  EArrRead :: GExp t a -> GExp t a -> LengthInfo -> GExp0 t a
 
   -- | Assignment
   --
@@ -268,13 +285,11 @@ data GExp0 t a where
   -- See semantics for details.
   EAssign :: GExp t a -> GExp t a -> GExp0 t a
 
-  -- EArrRead ex ei j.
-  -- Read a subarray of 'ex' starting at index ei of
-  -- length j and going as long as LengthInfo says.
-  -- Similarly for EArrWrite.
-  -- If LengthInfo is LISingleton, then we are supposed to only read
-  -- at a single position and return a scalar. Otherwise we return an array.
-  EArrRead :: GExp t a -> GExp t a -> LengthInfo -> GExp0 t a
+  -- | Array write
+  --
+  -- See comments for `EArrRead` and `EAssign`.
+  --
+  -- TODO: Maybe merge with `EAssign`.
   EArrWrite :: GExp t a -> GExp t a -> LengthInfo -> GExp t a -> GExp0 t a
 
   EIter :: GName t -> GName t -> GExp t a -> GExp t a -> GExp0 t a
@@ -287,31 +302,33 @@ data GExp0 t a where
 
   ELet :: GName t -> ForceInline -> GExp t a -> GExp t a -> GExp0 t a
 
-  -- Potentially initialized read/write variable
+  -- | Potentially initialized read/write variable
   ELetRef :: GName t -> Maybe (GExp t a) -> GExp t a -> GExp0 t a
 
   ESeq :: GExp t a -> GExp t a -> GExp0 t a
   ECall :: GName t -> [GExp t a] -> GExp0 t a
   EIf :: GExp t a -> GExp t a -> GExp t a -> GExp0 t a
 
-  -- Print any expression, for debugging
+  -- | Print any expression, for debugging
   EPrint :: Bool -> GExp t a -> GExp0 t a
 
-  -- Generate runtime failure, with error report
+  -- | Generate runtime failure, with error report
   EError :: t -> String -> GExp0 t a
   ELUT :: Map (GName t) Range -> GExp t a -> GExp0 t a
 
-  -- Permute a bit array: In the long run this should probably
+  -- | Permute a bit array: In the long run this should probably
   -- become a generalized array read but for now I am keeping it as
   -- is.
-  --  e1 : arr[N] bit   e2 : arr[N] int
-  --  ------------------------------------
-  --   EBPerm e1 e2  : arr[N] bit
+  --
+  -- > e1 : arr[N] bit   e2 : arr[N] int
+  -- > ---------------------------------
+  -- >  EBPerm e1 e2  : arr[N] bit
   EBPerm :: GExp t a -> GExp t a -> GExp0 t a
 
-  -- Constructing structs
+  -- | Constructing structs
   EStruct :: TyName -> [(FldName,GExp t a)] -> GExp0 t a
-  -- Project field out of a struct
+
+  -- | Project field out of a struct
   EProj   :: GExp t a -> FldName -> GExp0 t a
   deriving Generic
 
@@ -361,11 +378,11 @@ data GFun t a
 -------------------------------------------------------------------------------}
 
 type UnOp      = GUnOp      Ty
-type Exp0      = GExp0      Ty
-type Exp       = GExp       Ty
+type Exp0      = GExp0      Ty ()
+type Exp       = GExp       Ty ()
 type StructDef = GStructDef Ty
-type Fun0      = GFun0      Ty
-type Fun       = GFun       Ty
+type Fun0      = GFun0      Ty ()
+type Fun       = GFun       Ty ()
 
 {-------------------------------------------------------------------------------
   Specializations of the AST to SrcTy (source level types)
@@ -815,7 +832,7 @@ getLnNumInStr csp
        Just l  -> "ln" ++ (show $ sourceLine l) ++ "_"
        Nothing -> "ln_"
 
-isEVal :: Exp a -> Bool
+isEVal :: GExp t a -> Bool
 isEVal e
   | EVal {} <- unExp e
   = True
@@ -831,7 +848,7 @@ getArrayTy (TArray _n t) = t
 getArrayTy t             = t
 
 
-expEq :: Exp a -> Exp a -> Bool
+expEq :: Eq t => GExp t a -> GExp t a -> Bool
 -- Are these two expressions /definitely/ equal?
 expEq e e' = expEq0 (unExp e) (unExp e')
   where
@@ -845,13 +862,13 @@ expEq e e' = expEq0 (unExp e) (unExp e')
       = (b == b') && expEq e1 e1' && expEq e2 e2'
     expEq0 _e _e' = False
 
-toExp :: a -> Exp0 a -> Exp a
+toExp :: a -> GExp0 t a -> GExp t a
 toExp a e = MkExp { unExp = e, expLoc = Nothing, info = a }
 
-toExpPos :: a -> SourcePos -> Exp0 a -> Exp a
+toExpPos :: a -> SourcePos -> GExp0 t a -> GExp t a
 toExpPos a pos e = MkExp { unExp = e, expLoc = Just pos, info = a }
 
-binopList :: BinOp -> a -> Exp a -> [Exp a] -> Exp a
+binopList :: BinOp -> a -> GExp t a -> [GExp t a] -> GExp t a
 binopList _  _ e0 []       = e0
 binopList op a e0 (e : es) = toExp a $ EBinOp op e (binopList op a e0 es)
 
@@ -952,7 +969,7 @@ complex64TyName :: TyName
 complex64TyName = "complex64"
 
 
-toFunPos :: a -> SourcePos -> Fun0 a -> Fun a
+toFunPos :: a -> SourcePos -> GFun0 t a -> GFun t a
 toFunPos a pos fn = MkFun fn (Just pos) a
 
 funName :: GFun t a -> GName t
@@ -1001,7 +1018,7 @@ isBoolBinOp _   = False
 
 -- Can this expression potentially change the state?
 -- A super conservative side-effect analysis
-mutates_state :: Exp a -> Bool
+mutates_state :: GExp t a -> Bool
 mutates_state e = case unExp e of
   EVal _ _              -> False
   EValArr _ _           -> False
