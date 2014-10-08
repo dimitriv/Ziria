@@ -60,12 +60,5 @@ data TaskInfo = TaskInfo {
     taskInputQueue  :: Queue,
 
     -- | Queue which task writes its output into.  
-    --   NB: if the taskComp ends with writing to output (WriteSnk) then this queue
-    --   will never be used.  
-    -- 
-    -- TODO: probably we should fix this (in the long run taskComp will not contain 
-    -- readSrc/writeSnk and the queue type should be something like:
-    -- data Queue = QueueOutput ... | QueueInput ... | QueueCommit ... | QueueOrdinary ... 
-
     taskOutputQueue :: Queue
   } deriving Show
