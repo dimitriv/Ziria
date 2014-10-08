@@ -1,0 +1,29 @@
+This is an example of how Ziria PHY can be interfaced with a custom MAC.
+This is avery simple example whose purpose is to illustrate how mutliple
+Ziria PHY pipelines can be stages within a custom C code. 
+
+*** NOTE: We use all library functions from csrc. The files in this
+directory only replace the driver files (driver.c and params.c).
+
+This MAC runs two Ziria pipelines: rx.zir and tx.zir (the Ziria source
+code for these files is in tests/mac, and the whole code should be
+compiled from there). These two files are dummy Ziria pipelines that
+just copy data through. The entire example pipes that data first
+through tx.zir, and the output of it through rx.zir. 
+
+There are two variants of the MAC, a single-threaded and a
+multi-threaded one. The version is specified through command line
+parameters.  A single threaded version reads the data from a desired
+input, specifies through parameters, and stores the output to a memory
+buffer. The driver (mac_1thread.c) then calls the rx.zir on the memory 
+buffer, and the data gets processed and stored to an output specified
+by command line parameters. 
+
+Two-threaded version is a very simple extension of the above example.
+tx.zir runs in one thread and rx.zir runs in another. The
+functionality is exactly the same as above, except that rx.zir thread
+spin-waits until the tx.zir is done.
+
+
+
+

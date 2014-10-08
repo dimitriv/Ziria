@@ -1,0 +1,35 @@
+This directory contains C library files that linked to Ziria code, 
+and C driver files that run Ziria code.
+
+Library files:
+- buf_*.c: read/write operations for various data types and for 
+  various input/output devices (file, memory, Sora, dummy...)
+
+- wpl_alloc: fast memory management library for Ziria
+
+- utils.c: Various utility functions written in standard C
+
+- numerics.c: Standard arithmetic over Ziria data types (e.g. complex)
+
+- ext_*.c: various library files that are written in standard C
+  and should be platform independent
+  * extp_arr.c: array operations
+  * ext_math.c: math operations (fixed-point trigonometry)
+
+- sora_*: various library files that are written for Windows (7/8)
+  and rely on having Sora library installed
+  * sora_radio.c: interface with Sora radio hardware
+  * sora ip.c: interface with NDIS, Windows networking stack
+  * sora_threads.c: Methods for running code in real-time threads
+    (note: all Ziria code runs within a real-time thread pinned to a core)
+  * sora_thread_queues.c: port of Sora inter-thread queues to C 
+    (to avoid polymorphism)
+  
+
+Driver files:
+- driver.c: File with main(). Parses parameters, initialized the environment
+  and run Ziria code in a single, real-time thread. 
+  Note: this is a default driver. For more complex MAC, this file should
+  be replaced with a custom MAC (for examples see csrc/mac or code/Wifi/testbed).
+
+- params.c: Parses command line parameters and 
