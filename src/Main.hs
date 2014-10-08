@@ -34,10 +34,12 @@ import Text.Parsec
 import Text.PrettyPrint.Mainland
 import Text.Show.Pretty (dumpStr)
 
-import Opts
-import qualified BlinkParseComp as NewParser
 -- import Analysis.UseDef
+import Opts
 import PpComp
+import Rename
+import qualified BlinkParseComp as NewParser
+import qualified GenSym as GS
 
 {-
 import AstComp
@@ -46,7 +48,6 @@ import CardinalityAnalysis
 import CgHeader
 import CgMonad
 import CgOpt
-import qualified GenSym as GS
 
 import CgProgram ( codeGenProgram )
 
@@ -55,7 +56,6 @@ import qualified PassPipeline as PP
 
 import PassFold
 import qualified Outputable -- Qualified so that we don't clash with Mainland
-import Rename
 import TcExpr
 import TcMonad
 import TcErrors ( ErrCtx (..) )
@@ -116,13 +116,13 @@ main = failOnException $ do
     dump dflags DumpAst ".ast.dump" $ (text . dumpStr) prog
     dump dflags DumpAstPretty ".ast.pretty.dump" $ (text . show) prog
 
-{-
     rensym <- GS.initGenSym (getName dflags)
-    prog_renamed <- runRenM (renameProg prog) rensym []
+    prog_renamed <- runRenM rensym (rename prog)
     sym <- GS.initGenSym (getName dflags)
 
     -- putStrLn $ "renamed ... " ++ show prog_renamed
-
+    return ()
+{-
     let cenv     = mkCEnv []
     let tdef_env = mkTyDefEnv primComplexStructs
     let varenv   = mkEnv []

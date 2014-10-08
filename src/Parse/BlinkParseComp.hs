@@ -365,14 +365,14 @@ cLetDecl p () (LetDeclERef (xn,  e)) =
 cLetDecl p () (LetDeclStruct sdef) =
     ([], cLetStruct p () sdef)
 cLetDecl p () (LetDeclExternal x params ty) =
-    ([], cLetHeader p () fn fun)
+    ([], cLetHeader p () fun)
   where
     fn  = toName x p Nothing
     fun = MkFun (MkFunExternal fn params ty) p ()
 cLetDecl p () (LetDeclFunComp h x params (locls, c)) =
     ([(x, params)], cLetFunC p () x params locls (mkVectComp c h))
 cLetDecl p () (LetDeclFunExpr x params (locls, e)) =
-    ([], cLetHeader p () x fun)
+    ([], cLetHeader p () fun)
   where
     fun = MkFun (MkFunDefined x params locls e) p ()
 cLetDecl p () (LetDeclComp h x c) =

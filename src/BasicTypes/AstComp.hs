@@ -121,9 +121,11 @@ data GComp0 tc t a b where
   LetERef :: GName t -> Maybe (GExp t b) -> GComp tc t a b -> GComp0 tc t a b
 
   -- | Bind an expression function
-  LetHeader :: GName t -> GFun t b -> GComp tc t a b -> GComp0 tc t a b
+  LetHeader :: GFun t b -> GComp tc t a b -> GComp0 tc t a b
 
   -- | Bind a computation function
+  --
+  -- TODO: Why does this not use GFun?
   LetFunC :: GName tc
           -> [GName (CallArg t tc)]           -- params (could include computation types)
           -> [(GName t,Maybe (GExp t b))]     -- locals
@@ -415,8 +417,8 @@ cLetE loc a x fi e c = MkComp (LetE x fi e c) loc a
 cLetERef :: Maybe SourcePos -> a -> GName t -> Maybe (GExp t b) -> GComp tc t a b -> GComp tc t a b
 cLetERef loc a x y c = MkComp (LetERef x y c) loc a
 
-cLetHeader :: Maybe SourcePos -> a -> GName t -> GFun t b -> GComp tc t a b -> GComp tc t a b
-cLetHeader loc a x f c = MkComp (LetHeader x f c) loc a
+cLetHeader :: Maybe SourcePos -> a -> GFun t b -> GComp tc t a b -> GComp tc t a b
+cLetHeader loc a f c = MkComp (LetHeader f c) loc a
 --
 
 cLetFunC :: Maybe SourcePos -> a -> GName tc -> [(GName (CallArg t tc))]
@@ -572,11 +574,10 @@ mapCompM onCTyp onETyp onCAnn onEAnn onExp f = goComp
       me' <- mapM onExp me
       c1' <- goComp c1
       return $ LetERef x' me' c1'
-    goComp0 (LetHeader nm fun c1) = do
-      nm'  <- mapNameM onETyp nm
+    goComp0 (LetHeader fun c1) = do
       fun' <- mapFunM onETyp onEAnn onExp fun
       c1'  <- goComp c1
-      return $ LetHeader nm' fun' c1'
+      return $ LetHeader fun' c1'
     goComp0 (LetFunC nm params locals c1 c2) = do
       nm'     <- mapNameM onCTyp nm
       params' <- mapM (mapNameM goCallArgT) params
@@ -735,7 +736,7 @@ compFVs = \c ->
     goComp0 (Let nm _ _)           = unrecordC nm
     goComp0 (LetE nm _ _ _)        = unrecordE nm
     goComp0 (LetERef nm _ _)       = unrecordE nm
-    goComp0 (LetHeader nm _ _)     = unrecordE nm
+    goComp0 (LetHeader fun _)      = unrecordE (funName fun)
     goComp0 (LetFunC nm ps ls _ _) = do unrecordC nm
                                         mapM_ unrecordCA ps
                                         mapM_ unrecordE (map fst ls)
@@ -833,8 +834,7 @@ compShortName = go . unComp
     go (Let             {}) = "Let"
     go (LetE            {}) = "LetE"
     go (LetERef         {}) = "LetERef"
-    go (LetHeader nm (MkFun (MkFunDefined _ _ _ _) _ _) _  ) = "LetHeader(" ++ name nm ++ ")"
-    go (LetHeader       {}) = "LetHeader"
+    go (LetHeader fun _   ) = "LetHeader(" ++ name (funName fun) ++ ")"
     go (LetFunC nm _ _ _ _) = "LetFunC(" ++ name nm ++ ")"
     go (LetStruct       {}) = "Struct"
     go (Call n _          ) = "Call(" ++ name n ++ ")"
@@ -976,7 +976,7 @@ compSize c = case unComp c of
   LetE _nm _ _e c1                  -> 2 + compSize c1
   LetERef _nm (Just _) c1           -> 2 + compSize c1
   LetERef _nm Nothing  c1           -> 2 + compSize c1
-  LetHeader _nm _f c1               -> 2 + compSize c1
+  LetHeader _f c1                   -> 2 + compSize c1
   LetStruct _sdef c1                -> 1 + compSize c1
   LetFunC _nm _params _locals c1 c2 -> 1 + compSize c1 + compSize c2
   Call _nm es                       -> 1 + sum (map callArgSize es)

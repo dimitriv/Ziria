@@ -370,6 +370,9 @@ data GFun t a
           , funInfo :: a }
   deriving (Generic)
 
+funName :: GFun t a -> GName t
+funName (MkFun (MkFunDefined  nm _ _ _) _ _) = nm
+funName (MkFun (MkFunExternal nm _ _)   _ _) = nm
 
 {-------------------------------------------------------------------------------
   Specialization of the AST to Ty (internal types)
@@ -391,6 +394,7 @@ type Fun       = GFun       Ty ()
 -------------------------------------------------------------------------------}
 
 type SrcExp = GExp (Maybe SrcTy) ()
+type SrcFun = GFun (Maybe SrcTy) ()
 
 {-------------------------------------------------------------------------------
   Convenience constructors
@@ -997,11 +1001,6 @@ complex64TyName = "complex64"
 
 toFunPos :: a -> SourcePos -> GFun0 t a -> GFun t a
 toFunPos a pos fn = MkFun fn (Just pos) a
-
-funName :: GFun t a -> GName t
-funName fn = aux (unFun fn)
-  where aux (MkFunDefined nm _params _locals _body) = nm
-        aux (MkFunExternal nm _ _) = nm
 
 isArithBinOp :: BinOp -> Bool
 isArithBinOp Add   = True

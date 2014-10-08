@@ -17,542 +17,450 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall #-}
-{-# LANGUAGE RecordWildCards #-}
-module Rename (runRenM, renameProg) where
+{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, FlexibleInstances #-}
+module Rename (runRenM, rename) where
 
 import Prelude hiding (mapM)
 import Control.Applicative
-import Control.Monad.State ()
+import Control.Monad.Reader hiding (mapM)
 import Data.Traversable (mapM)
-import Data.Maybe (fromJust)
--- import Text.Show.Pretty (dumpStr)
 
 import AstComp
 import AstExpr
 import Utils
 import qualified GenSym as GS
 
--- A uniq environment mapping names to unique binding identifiers
-type UniqEnv = [(GName SrcTy,Name)]
+{-------------------------------------------------------------------------------
+  Renamer monad
+-------------------------------------------------------------------------------}
 
-data RenM a = RenM { runRenM :: GS.Sym
-                             -> UniqEnv
-                             -> IO a }
+data RenEnv = RenEnv {
+    renSym     :: GS.Sym
+  , renUniqEnv :: [(String, String)] -- | Map names to unique IDs
+  }
 
-instance Functor RenM where
-  fmap f (RenM c) = RenM $ \sym env -> fmap f (c sym env)
+newtype RenM a = RenM (ReaderT RenEnv IO a)
+  deriving ( Functor
+           , Applicative
+           , Monad
+           , MonadReader RenEnv
+           , MonadIO
+           )
 
-instance Applicative RenM where
-  pure = RenM . const . const . pure
-  (RenM f) <*> (RenM x) = RenM $ \sym env -> f sym env <*> x sym env
-
-instance Monad RenM where
-  (>>=) m1 m2 =
-    RenM $ \sym env ->
-      do b <- runRenM m1 sym env
-         runRenM (m2 b) sym env
-  return x = RenM $ \_sym _env -> return x
-  fail = failRenM
-
-extendUniqEnv :: GName SrcTy -> Name -> RenM a -> RenM a
-extendUniqEnv nm uniq (RenM action)
-  = RenM (\sym env -> action sym ((nm,uniq):env))
-
-extendUniqEnvMany :: [(GName SrcTy,Name)] -> RenM a -> RenM a
-extendUniqEnvMany nms (RenM action)
-  = RenM (\sym env -> action sym (nms ++ env))
-
-renMIO :: IO a -> RenM a
-renMIO m = RenM (\_ _ -> m)
-
-get_RenMSym :: RenM GS.Sym
-get_RenMSym = RenM (\sym _ -> return sym)
+runRenM :: GS.Sym -> RenM a -> IO a
+runRenM renSym (RenM ren) = do
+  let renUniqEnv = []
+  runReaderT ren RenEnv{..}
 
 newUniq :: RenM String
-newUniq = do { sym <- get_RenMSym
-             ; str <- renMIO $ GS.genSymStr sym
-             ; return ("_r" ++ str)
-             }
+newUniq = do
+  sym <- asks renSym
+  str <- liftIO $ GS.genSymStr sym
+  return ("_r" ++ str)
 
-lkupUniqEnv :: GName SrcTy -> RenM Name
-lkupUniqEnv nm =
-   RenM $ \_ env ->
-     case lookup nm env of
-       Just uniq -> return uniq
-       Nothing   -> do { putStrLn $ "Unbound identifier: " ++ (name nm)
-                       ; putStrLn $ "Location: " ++ (show (nameLoc nm))
-                       ; error "Failing to compile." }
+extendUniq :: String -> String -> RenM a -> RenM a
+extendUniq nm uniqId = local $ \env -> env {
+      renUniqEnv = (nm, uniqId) : renUniqEnv env
+    }
 
-failRenM :: String -> RenM a
-failRenM msg = renMIO $ putStrLn msg >> error "Failure"
+lookupUniq :: GName ty -> RenM String
+lookupUniq nm = do
+  env <- asks renUniqEnv
+  case lookup (name nm) env of
+    Just uniq -> return uniq
+    Nothing   -> liftIO $ do
+      putStrLn $ "Unbound identifier: " ++ name nm
+      putStrLn $ "Location: " ++ show (nameLoc nm)
+      error "Failing to compile."
 
-renameBoundName :: GName SrcTy -> RenM Name
-renameBoundName nm = do
-  uniqId' <- newUniq
-  mbtype' <- mapM renameType (mbtype nm)
-  return MkName{ name    = name    nm
-               , nameLoc = nameLoc nm
-               , uniqId  = uniqId'
-               , mbtype  = mbtype'
-               }
+_failRenM :: String -> RenM a
+_failRenM msg = liftIO $ putStrLn msg >> error "Failure"
 
-renameFreeName :: GName SrcTy -> RenM Name
-renameFreeName nm = do
-  nm'     <- lkupUniqEnv nm
-  mbtype' <- mapM renameType (mbtype nm)
-  return MkName{ name    = name    nm
-               , nameLoc = nameLoc nm
-               , uniqId  = uniqId nm'
-               , mbtype  = mbtype'
-               }
+{-------------------------------------------------------------------------------
+  The heart of renaming: renaming variables
+-------------------------------------------------------------------------------}
 
-renameType :: SrcTy -> RenM Ty
-renameType SrcTUnit             = return TUnit
-renameType SrcTBit              = return TBit
-renameType SrcTBool             = return TBool
-renameType (SrcTArr numExpr ty) = TArr <$> renameNumExpr numExpr <*> renameType ty
-renameType (SrcTInt bw)         = TInt <$> renameBitWidth bw
-renameType SrcTDouble           = return TDouble
-renameType (SrcTStruct nm)      = return $ TStruct nm
+renameBound :: Rename ty => GName ty -> RenM (GName ty)
+renameBound MkName{..} = do
+  uniqId'  <- newUniq
+  nameTyp' <- rename nameTyp
+  return MkName{uniqId = uniqId', nameTyp = nameTyp', ..}
 
-renameNumExpr :: SrcNumExpr -> RenM NumExpr
-renameNumExpr (SrcLiteral n) =
-  return $ Literal n
-renameNumExpr (SrcNArr nm) = do
-  nm' <- lkupUniqEnv nm
-  -- TODO: Really this belongs in the type checker, especially because of the
-  -- first case. See #66.
-  ne <- case mbtype nm' of
-    Nothing                 -> fail "length of unknown array"
-    Just (TArr numExpr _ty) -> return numExpr
-    Just _                  -> fail "length of non-array type"
-  return ne
-renameNumExpr (SrcNVar loc) = do
-  uniq <- newUniq
-  -- This variable ranges over the _length_ of the array, and we assume that
-  -- array lengths have type `tint`. This is _not_ the type of the _elements_
-  -- of the array.
-  let nm = toName uniq (Just loc) (Just tint)
-  return $ NVar nm 0
+renameFree :: Rename ty => GName ty -> RenM (GName ty)
+renameFree nm@MkName{..} = do
+  uniqId'  <- lookupUniq nm
+  nameTyp' <- rename nameTyp
+  return MkName{uniqId = uniqId', nameTyp = nameTyp', ..}
 
-renameBitWidth :: SrcBitWidth -> RenM BitWidth
-renameBitWidth SrcBW8  = return BW8
-renameBitWidth SrcBW16 = return BW16
-renameBitWidth SrcBW32 = return BW32
-renameBitWidth SrcBW64 = return BW64
+{-------------------------------------------------------------------------------
+  Interacting with the environment
+-------------------------------------------------------------------------------}
 
-renameCompType :: GCTy0 SrcTy -> RenM CTy0
-renameCompType (TComp v a b) = TComp  <$> renameType v <*> renameType a <*> renameType b
-renameCompType (TTrans a b)  = TTrans <$> renameType a <*> renameType b
+class Extend a where
+  extend :: a -> a -> RenM b -> RenM b
 
-renameStructDef :: GStructDef SrcTy -> RenM StructDef
-renameStructDef StructDef{..} = do
-  struct_flds' <- mapM (\(fld, ty) -> do ty' <- renameType ty ; return (fld, ty')) struct_flds
-  return StructDef { struct_name = struct_name
-                   , struct_flds = struct_flds'
-                   }
+instance Extend (GName ty) where
+  extend nm nm' = extendUniq (name nm) (uniqId nm')
 
-renameRWTypeAnn :: GRWTypeAnn SrcTy -> RenM RWTypeAnn
-renameRWTypeAnn (RWBaseTyAnn ty) = RWBaseTyAnn <$> renameType ty
-renameRWTypeAnn (RWRealTyAnn ty) = RWRealTyAnn <$> renameType ty
-renameRWTypeAnn RWNoTyAnn        = return RWNoTyAnn
+instance Extend (GName ty, a) where -- Locals, monadic bind
+  extend (nm, _) (nm', _) = extend nm nm'
 
-renameExpr :: GExp SrcTy a -> RenM (Exp a)
-renameExpr e
-  = case unExp e of
-    EVal v         -> return $ eVal eloc enfo v
-    EValArr vs     -> return $ eValArr eloc enfo vs
-    EVar nm        -> do { nm' <- renameFreeName nm
-                         ; return $ eVar eloc enfo nm'
-                         }
-    EUnOp op e1    ->
-      do { e1' <- renameExpr e1
-         ; return $ eUnOp eloc enfo op e1'
-         }
-    EBinOp op e1 e2 ->
-      do e1' <- renameExpr e1
-         e2' <- renameExpr e2
-         return $ eBinOp eloc enfo op e1' e2'
+instance Extend SrcFun where
+  extend fun fun' = extend (funName fun) (funName fun')
 
-    EAssign e1 e2   ->
-      do e1' <- renameExpr e1
-         e2' <- renameExpr e2
-         return $ eAssign eloc enfo e1' e2'
-    EArrRead e1 e2 r ->
-      do e1' <- renameExpr e1
-         e2' <- renameExpr e2
-         return $ eArrRead eloc enfo e1' e2' r
+instance Extend a => Extend [a] where
+  extend []     []     act = act
+  extend (x:xs) (y:ys) act = extend x y $ extend xs ys act
+  extend _      _      _   = fail "extend: length mismatch"
 
-    EArrWrite e1 e2 r e3 ->
-      do e1' <- renameExpr e1
-         e2' <- renameExpr e2
-         e3' <- renameExpr e3
-         return $ eArrWrite eloc enfo e1' e2' r e3'
-    EIter nm1 nm2 e1 e2 ->
-      do { nm1' <- renameBoundName nm1
-         ; nm2' <- renameBoundName nm2
-         ; extendUniqEnv nm2 nm2' $
-           extendUniqEnv nm1 nm1' $
-              do e1' <- renameExpr e1
-                 e2' <- renameExpr e2
-                 return $ eIter eloc enfo nm1' nm2' e1' e2'
-         }
-    EFor ui nm1 e1 e2 e3   ->
-      do e1' <- renameExpr e1
-         e2' <- renameExpr e2
-         nm1' <- renameBoundName nm1
-         extendUniqEnv nm1 nm1' $
-           do { e3' <- renameExpr e3
-              ; return $ eFor eloc enfo ui nm1' e1' e2' e3'
-              }
-    EWhile e1 e2 ->
-      do e1' <- renameExpr e1
-         e2' <- renameExpr e2
-         return $ eWhile eloc enfo e1' e2'
+{-------------------------------------------------------------------------------
+  Telescopes
+-------------------------------------------------------------------------------}
 
-    ELet nm1 fi e1 e2   ->
-      do e1' <- renameExpr e1
-         nm1' <- renameBoundName nm1
-         extendUniqEnv nm1 nm1' $
-           do { e2' <- renameExpr e2
-              ; return $ eLet eloc enfo nm1' fi e1' e2'
-              }
-
-    ELetRef nm1 _ty e1 e2   ->
-      do e1' <- mapM renameExpr e1
-         nm1' <- renameBoundName nm1
-         -- ty'  <- renameType ty -- NOTE [Redundant types]
-         let ty' = fromJust (mbtype nm1')
-         extendUniqEnv nm1 nm1' $
-           do { e2' <- renameExpr e2
-              ; return $ eLetRef eloc enfo nm1' ty' e1' e2' }
-
-    ESeq e1 e2       ->
-      do e1' <- renameExpr e1
-         e2' <- renameExpr e2
-         return $ eSeq eloc enfo e1' e2'
-    ECall e1 es      ->
-      do e1' <- renameExpr e1
-         es' <- mapM renameExpr es
-         return $ eCall eloc enfo e1' es'
-    EIf e1 e2 e3     ->
-      do e1' <- renameExpr e1
-         e2' <- renameExpr e2
-         e3' <- renameExpr e3
-         return $ eIf eloc enfo e1' e2' e3'
-    EPrint nl e1   ->
-      do e1' <- renameExpr e1
-         return $ ePrint eloc enfo nl e1'
-    EError str       -> return $ eError eloc enfo str
-    ELUT r e1 ->
-      do r' <- mapKeysM renameFreeName r
-         e1' <- renameExpr e1
-         return $ eLUT eloc enfo r' e1'
-    EBPerm e1 e2 -> do
-      e1' <- renameExpr e1
-      e2' <- renameExpr e2
-      return $ eBPerm eloc enfo e1' e2'
-
-    EStruct tn tfs ->
-      do { tfs' <- mapM (\(f,e') -> renameExpr e' >>= \e'' -> return (f,e'')) tfs
-         ; return $ eStruct eloc enfo tn tfs' }
-
-    EProj e1 fn ->
-      do { e1' <- renameExpr e1
-         ; return $ eProj eloc enfo e1' fn }
+-- | Rename a telescope
+--
+-- A /telescope/ is a list of binding sites where later items in the list
+-- can refer to earlier items the list. A typical example is a list of
+-- parameters, where we might have
+--
+-- > fun comp f(arr int x, arr[length(x)] int y) { .. }
+renameTelescope :: Extend a => (a -> RenM a) -> [a] -> RenM [a]
+renameTelescope f = go
   where
-    eloc = expLoc e
-    enfo = info e
+    go []     = return []
+    go (x:xs) = do
+      x'  <- f x
+      xs' <- extend x x' $ go xs
+      return (x':xs')
 
+-- | Local variables
+renameLocal :: (GName (Maybe SrcTy), Maybe SrcExp)
+            -> RenM (GName (Maybe SrcTy), Maybe SrcExp)
+renameLocal (x, me) = do
+    x'  <- renameBound x
+    me' <- mapM rename me -- No recursion!
+    return (x', me')
 
-renameBinds :: [(GName SrcTy,GComp SrcTy a b)] -> RenM [(Name,Comp a b)]
-renameBinds [] = return []
-renameBinds ((nm,c):bnds) =
-  do { nm' <- renameBoundName nm
-     ; (c',bnds') <- extendUniqEnv nm nm' $
-                     do { c' <- renameComp c
-                        ; bnds' <- renameBinds bnds
-                        ; return (c',bnds') }
-    ; return $ (nm',c'):bnds' }
+-- | Monadic bind
+renameBind :: (GName (Maybe SrcTy), SrcComp)
+           -> RenM (GName (Maybe SrcTy), SrcComp)
+renameBind (x, c) = do
+    x' <- renameBound x
+    c' <- extend x x' $ rename c
+    return (x', c')
 
-renameFun :: GFun SrcTy a -> RenM (Name, Fun a)
-renameFun fe = case unFun fe of
-  MkFunDefined nm params locals body ->
-    do { nm'     <- renameBoundName nm
-       ; (env1', params') <- renameParams params
-       ; (env2', locals') <- extendUniqEnvMany env1' $ renameLocals locals
-       ; body' <- extendUniqEnvMany (env2' ++ env1') $ renameExpr body
-       ; return $ (nm', MkFun (MkFunDefined nm' params' locals' body')
-                              (funLoc fe)
-                              (funInfo fe))
-      }
+{-------------------------------------------------------------------------------
+  Renaming proper
+-------------------------------------------------------------------------------}
 
-  MkFunExternal nm params retTy ->
-    do { nm'     <- renameBoundName nm
-       ; (env', params') <- renameParams params
-       ; retTy'  <- extendUniqEnvMany env' $ renameType retTy
-       ; return $ (nm', MkFun (MkFunExternal nm' params' retTy')
-                              (funLoc fe)
-                              (funInfo fe))
-      }
+-- | Renaming does not change the type, just assigns unique IDs to variables.
+class Rename a where
+  rename :: a -> RenM a
 
--- | Rename function parameter list
---
--- Returns both the renamed parameter list and the name mapping.
---
--- NOTE: This is not a simply map, because the recursive calls happen inside
--- extended environments (these lists where later types can refer to earlier
--- types are sometimes called "telescopes").
-renameParams :: [(GName SrcTy, SrcTy)]
-             -> RenM ([(GName SrcTy, Name)], [(Name, Ty)])
-renameParams []                         = return ([], [])
-renameParams ((parNm, _parTy) : params) = do
-    parNm' <- renameBoundName parNm
-    -- parTy' <- renameType parTy -- NOTE [Redundant types]
-    let parTy' = fromJust (mbtype parNm')
-    (env, params') <- extendUniqEnv parNm parNm' $ renameParams params
-    return ((parNm, parNm') : env, (parNm', parTy') : params')
+instance Rename a => Rename (Maybe a) where
+  rename = mapM rename
 
--- | Like renameParams, but for comp functions.
-renameCParams :: [(GName SrcTy, CallArg SrcTy (GCTy0 SrcTy))]
-              -> RenM ([(GName SrcTy, Name)], [(Name, CallArg Ty CTy0)])
-renameCParams []                        = return ([], [])
-renameCParams ((parNm, parTy) : params) = do
-    parNm' <- renameBoundName parNm
-    -- NOTE [Redundant types]
-    parTy' <- case parTy of
-                CAExp  ty  -> CAExp  <$> renameType ty
-                CAComp cty -> CAComp <$> renameCompType cty
-    (env, params') <- extendUniqEnv parNm parNm' $ renameCParams params
-    return ((parNm, parNm') : env, (parNm', parTy') : params')
+instance (Rename a, Rename b) => Rename (CallArg a b) where
+  rename (CAExp  e) = CAExp  <$> rename e
+  rename (CAComp c) = CAComp <$> rename c
 
--- | Rename locals list.
---
--- Returns both the renamed locals and the name mapping.
-renameLocals :: [(GName SrcTy,SrcTy,Maybe (GExp SrcTy a))]
-             -> RenM ([(GName SrcTy, Name)], [(Name,Ty,Maybe (Exp a))])
-renameLocals []                                 = return ([], [])
-renameLocals ((locNm, _locTy, locExp) : locals) = do
-    locNm'  <- renameBoundName locNm
-    -- locTy'  <- renameType locTy -- NOTE [Redundant types]
-    let locTy' = fromJust (mbtype locNm')
-    locExp' <- mapM renameExpr locExp
-    (env, locals') <- extendUniqEnv locNm locNm' $ renameLocals locals
-    return ((locNm, locNm') : env, (locNm', locTy', locExp') : locals')
+{-------------------------------------------------------------------------------
+  Renaming types
 
-renameComp :: GComp SrcTy a b -> RenM (Comp a b)
-renameComp c =
-  case unComp c of
-    Var nm ->
-      do { nm' <- renameFreeName nm
-         ; return $ cVar cloc cnfo nm'
-         }
-    BindMany c1 xs_cs ->
-      do { c1' <- renameComp c1
-         ; xs_cs' <- renameBinds xs_cs
-         ; return $ MkComp (mkBindMany c1' xs_cs') cloc cnfo
-         }
+  We have to rename types because types can refer to term variables (length(x)).
+-------------------------------------------------------------------------------}
 
-    Seq c1 c2 ->
-      do { c1' <- renameComp c1
-         ; c2' <- renameComp c2
-         ; return $ cSeq cloc cnfo c1' c2'
-         }
-    Par parInfo c1 c2 ->
-      do { c1' <- renameComp c1
-         ; c2' <- renameComp c2
-         ; return $ cPar cloc cnfo parInfo c1' c2'
-         }
-    Let x c1 c2 ->
-      do { c1' <- renameComp c1
-         ; x'  <- renameBoundName x
-         ; c2' <- extendUniqEnv x x' $ renameComp c2
-         ; return $ cLet cloc cnfo x' c1' c2'
-         }
-    LetStruct sdef c1 ->
-      do { c1'   <- renameComp c1
-         ; sdef' <- renameStructDef sdef
-         ; return $ cLetStruct cloc cnfo sdef' c1'
-         }
-    LetE x fi e c1 ->
-      do { e'  <- renameExpr e
-         ; x' <- renameBoundName x
-         ; c1' <- extendUniqEnv x x' $ renameComp c1
-         ; return $ cLetE cloc cnfo x' fi e' c1'
-         }
+instance Rename SrcTy where
+  rename SrcTUnit               = return SrcTUnit
+  rename SrcTBit                = return SrcTBit
+  rename SrcTBool               = return SrcTBool
+  rename (SrcTArray numExpr ty) = SrcTArray <$> rename numExpr <*> rename ty
+  rename (SrcTInt bw)           = SrcTInt   <$> rename bw
+  rename SrcTDouble             = return SrcTDouble
+  rename (SrcTStruct nm)        = return $ SrcTStruct nm
 
-    -- CL
-    LetERef nm1 _ty e c1  ->
-      do e'   <- mapM renameExpr e
-         nm1' <- renameBoundName nm1
-         -- ty'  <- renameType ty -- NOTE [Redundant types]
-         let ty' = fromJust (mbtype nm1')
-         extendUniqEnv nm1 nm1' $
-           do { c1' <- renameComp c1
-              ; return $ cLetERef cloc cnfo nm1' ty' e' c1' }
+instance Rename SrcNumExpr where
+  rename (SrcLiteral n) = return $ SrcLiteral n
+  rename (SrcNArr nm)   = SrcNArr <$> renameFree nm
+  rename (SrcNVar loc)  = return $ SrcNVar loc
 
-    LetHeader nm fun c2 ->
-      do { (nm',fun')  <- renameFun fun
-         ; c2' <- extendUniqEnv nm nm' $ renameComp c2
-         ; return $ cLetHeader cloc cnfo nm' fun' c2'
-         }
+instance Rename SrcBitWidth where
+  rename = return -- (source) bitwidths don't contain variable names
 
-    LetFunC nm params locals c1 c2 ->
-      do { (env1', params') <- renameCParams params
-         ; (env2', locals') <- extendUniqEnvMany env1' $ renameLocals locals
-         ; c1' <- extendUniqEnvMany (env2' ++ env1') $ renameComp c1
-         ; nm' <- renameBoundName nm
-         ; c2' <- extendUniqEnv nm nm' $ renameComp c2
-         ; return $ cLetFunC cloc cnfo nm' params' locals' c1' c2'
-         }
+instance Rename ty => Rename (GCTy0 ty) where
+  rename (TComp u a b) = TComp  <$> rename u <*> rename a <*> rename b
+  rename (TTrans a b)  = TTrans <$> rename a <*> rename b
 
-    Call nm es ->
-      do { es' <- mapM renameCallArg es
-         ; nm' <- renameFreeName nm
-         ; return $ cCall cloc cnfo nm' es'
-         }
-    Emit e ->
-      do { e' <- renameExpr e
-         ; return $ cEmit cloc cnfo e'
-         }
-    Return fi e ->
-      do { e' <- renameExpr e
-         ; return $ cReturn cloc cnfo fi e'
-         }
-    Emits e ->
-      do { e' <- renameExpr e
-         ; return $ cEmits cloc cnfo e'
-         }
-    Interleave c1 c2 ->
-      do { c1' <- renameComp c1
-         ; c2' <- renameComp c2
-         ; return $ cInterleave cloc cnfo c1' c2'
-         }
-    Branch e c1 c2 ->
-      do { e'  <- renameExpr e
-         ; c1' <- renameComp c1
-         ; c2' <- renameComp c2
-         ; return $ cBranch cloc cnfo e' c1' c2'
-         }
-    Take1 -> return $ cTake1 cloc cnfo
-    Take e ->
-      do { e' <- renameExpr e
-         ; return $ cTake cloc cnfo e'
-         }
-    Until e c' ->
-      do { e'  <- renameExpr e
-         ; c'' <- renameComp c'
-         ; return $ cUntil cloc cnfo e' c''
-         }
+instance Rename ty => Rename (GCTy ty) where
+  rename (CTBase ty)        = CTBase  <$> rename ty
+  rename (CTArrow args res) = CTArrow <$> mapM rename args <*> rename res
 
-    While e c' ->
-      do { e'  <- renameExpr e
-         ; c'' <- renameComp c'
-         ; return $ cWhile cloc cnfo e' c''
-         }
+instance Rename ty => Rename (GStructDef ty) where
+  rename StructDef{..} = do
+    struct_flds' <- forM struct_flds $ \(fld, ty) -> do
+                      ty' <- rename ty
+                      return (fld, ty')
+    return StructDef { struct_name = struct_name
+                     , struct_flds = struct_flds'
+                     }
 
-    Times ui e elen nm c' ->
-      do { e'  <- renameExpr e
-         ; elen' <- renameExpr elen
-         ; nm' <- renameBoundName nm
-         ; c'' <- extendUniqEnv nm nm' $ renameComp c'
-         ; return $ cTimes cloc cnfo ui e' elen' nm' c''
-         }
-    Repeat wdth c' ->
-      do { c'' <- renameComp c'
-         ; return $ cRepeat cloc cnfo wdth c''
-         }
-    VectComp wdth c' ->
-      do { c'' <- renameComp c'
-         ; return $ cVectComp cloc cnfo wdth c''
-         }
-    Map wdth nm ->
-      do { nm' <- renameFreeName nm
-         ; return $ cMap cloc cnfo wdth nm'
-         }
-    Filter e ->
-      do { e' <- renameExpr e
-         ; return $ cFilter cloc cnfo e'
-         }
+{-------------------------------------------------------------------------------
+  Renaming computations
+-------------------------------------------------------------------------------}
 
-    ReadSrc  ann -> do ann' <- renameRWTypeAnn ann
-                       return $ cReadSrc cloc cnfo ann'
-    WriteSnk ann -> do ann' <- renameRWTypeAnn ann
-                       return $ cWriteSnk cloc cnfo ann'
+instance Rename SrcProg where
+  rename (MkProg globals comp) = do
+    globals' <- renameTelescope renameLocal globals
+    comp'    <- extend globals globals' $ rename comp
+    return $ MkProg globals' comp'
 
-    ReadInternal  s typ -> return $ cReadInternal cloc cnfo s typ
-    WriteInternal s     -> return $ cWriteInternal cloc cnfo s
+instance Rename SrcFun where
+  rename fun = case unFun fun of
+    MkFunDefined nm params locals body -> do
+      nm'     <- renameBound nm
+      params' <- renameTelescope renameBound params
+      locals' <- extend params params' $ renameTelescope renameLocal locals
+      body'   <- extend params params' $ extend locals locals' $ rename body
+      return $ MkFun (MkFunDefined nm' params' locals' body')
+                     (funLoc  fun)
+                     (funInfo fun)
 
-    Standalone c' ->
-      do { c'' <- renameComp c'
-         ; return $ cStandalone cloc cnfo c''
-         }
+    MkFunExternal nm params retTy -> do
+      nm'     <- renameBound nm
+      params' <- renameTelescope renameBound params
+      retTy'  <- extend params params' $ rename retTy
+      return $ MkFun (MkFunExternal nm' params' retTy')
+                     (funLoc  fun)
+                     (funInfo fun)
 
-    Mitigate ty n1 n2 -> do
-      ty' <- renameType ty
-      return $ cMitigate cloc cnfo ty' n1 n2
+instance Rename SrcComp where
+  rename c = case unComp c of
+      Var nm -> do
+        nm' <- renameFree nm
+        return $ cVar cloc cnfo nm'
+      BindMany c1 xs_cs -> do
+        c1' <- rename c1
+        xs_cs' <- renameTelescope renameBind $ xs_cs
+        return $ MkComp (mkBindMany c1' xs_cs') cloc cnfo
+      Seq c1 c2 -> do
+        c1' <- rename c1
+        c2' <- rename c2
+        return $ cSeq cloc cnfo c1' c2'
+      Par parInfo c1 c2 -> do
+        c1' <- rename c1
+        c2' <- rename c2
+        return $ cPar cloc cnfo parInfo c1' c2'
+      Let x c1 c2 -> do
+        c1' <- rename c1
+        x'  <- renameBound x
+        c2' <- extend x x' $ rename c2
+        return $ cLet cloc cnfo x' c1' c2'
+      LetStruct sdef c1 -> do
+        c1'   <- rename c1
+        sdef' <- rename sdef
+        return $ cLetStruct cloc cnfo sdef' c1'
+      LetE x fi e c1 -> do
+        e'  <- rename e
+        x' <- renameBound x
+        c1' <- extend x x' $ rename c1
+        return $ cLetE cloc cnfo x' fi e' c1'
+      LetERef nm1 e c1 -> do
+        e'   <- mapM rename e
+        nm1' <- renameBound nm1
+        extend nm1 nm1' $ do
+          c1' <- rename c1
+          return $ cLetERef cloc cnfo nm1' e' c1'
+      LetHeader fun c2 -> do
+        fun' <- rename fun
+        c2'  <- extend fun fun' $ rename c2
+        return $ cLetHeader cloc cnfo fun' c2'
+      LetFunC nm params locals c1 c2 -> do
+        nm'     <- renameBound nm
+        params' <- renameTelescope renameBound params
+        locals' <- extend params params' $ renameTelescope renameLocal locals
+        c1'     <- extend params params' $ extend locals locals' $ rename c1
+        c2'     <- extend nm nm' $ rename c2
+        return $ cLetFunC cloc cnfo nm' params' locals' c1' c2'
+      Call nm es -> do
+        es' <- mapM rename es
+        nm' <- renameFree nm
+        return $ cCall cloc cnfo nm' es'
+      Emit a e -> do
+        a' <- rename a
+        e' <- rename e
+        return $ cEmit cloc cnfo a' e'
+      Return a b fi e -> do
+        a' <- rename a
+        b' <- rename b
+        e' <- rename e
+        return $ cReturn cloc cnfo a' b' fi e'
+      Emits a e -> do
+        a' <- rename a
+        e' <- rename e
+        return $ cEmits cloc cnfo a' e'
+      Interleave c1 c2 -> do
+        c1' <- rename c1
+        c2' <- rename c2
+        return $ cInterleave cloc cnfo c1' c2'
+      Branch e c1 c2 -> do
+        e'  <- rename e
+        c1' <- rename c1
+        c2' <- rename c2
+        return $ cBranch cloc cnfo e' c1' c2'
+      Take1 a b -> do
+        a' <- rename a
+        b' <- rename b
+        return $ cTake1 cloc cnfo a' b'
+      Take a b n -> do
+        a' <- rename a
+        b' <- rename b
+        return $ cTake cloc cnfo a' b' n
+      Until e c' -> do
+        e'  <- rename e
+        c'' <- rename c'
+        return $ cUntil cloc cnfo e' c''
+      While e c' -> do
+        e'  <- rename e
+        c'' <- rename c'
+        return $ cWhile cloc cnfo e' c''
+      Times ui e elen nm c' -> do
+        e'    <- rename e
+        elen' <- rename elen
+        nm'   <- renameBound nm
+        c''   <- extend nm nm' $ rename c'
+        return $ cTimes cloc cnfo ui e' elen' nm' c''
+      Repeat wdth c' -> do
+        c'' <- rename c'
+        return $ cRepeat cloc cnfo wdth c''
+      VectComp wdth c' -> do
+        c'' <- rename c'
+        return $ cVectComp cloc cnfo wdth c''
+      Map wdth nm -> do
+        nm' <- renameFree nm
+        return $ cMap cloc cnfo wdth nm'
+      Filter f -> do
+        f' <- renameFree f
+        return $ cFilter cloc cnfo f'
+      ReadSrc ann -> do
+        ann' <- rename ann
+        return $ cReadSrc cloc cnfo ann'
+      WriteSnk ann -> do
+        ann' <- rename ann
+        return $ cWriteSnk cloc cnfo ann'
+      ReadInternal a s typ -> do
+        a' <- rename a
+        return $ cReadInternal cloc cnfo a' s typ
+      WriteInternal a s -> do
+        a' <- rename a
+        return $ cWriteInternal cloc cnfo a' s
+      Standalone c' -> do
+        c'' <- rename c'
+        return $ cStandalone cloc cnfo c''
+      Mitigate ty n1 n2 -> do
+        ty' <- rename ty
+        return $ cMitigate cloc cnfo ty' n1 n2
+    where
+      cloc = compLoc c
+      cnfo = compInfo c
 
+{-------------------------------------------------------------------------------
+  Renaming expressions
+-------------------------------------------------------------------------------}
 
-  where cloc = compLoc c
-        cnfo = compInfo c
-
-renameCallArg :: CallArg (GExp SrcTy a) (GComp SrcTy a1 b)
-              -> RenM (CallArg (Exp a) (Comp a1 b))
-renameCallArg (CAExp e)  = do { e' <- renameExpr e ; return (CAExp e')  }
-renameCallArg (CAComp c) = do { c' <- renameComp c ; return (CAComp c') }
-
-renameProg :: GProg SrcTy a b -> RenM (Prog a b)
-renameProg (MkProg globals comp) = do
-  (initEnv, globals') <- renameLocals globals
-  comp' <- extendUniqEnvMany initEnv $ renameComp comp
-  return $ MkProg globals' comp'
-
-{-
-NOTE [Redundant types]
-
-The AST contains redundant types in a number of places:
-
-* As part of parameter lists for expression functions
-* As part of locals for functions and the top-level program
-* As part of var-declarations, both in the comp and in the expr language
-
-In all these cases the source language contains a _single_ type annotation, say
-
-    var x : int
-
-but the AST contains the type _twice_: once as part of the name (`x`) as once
-as an explicit type in the AST. This is a problem for the renamer in the case
-of implicit variables; for instance, when the user writes
-
-    var x : arr int
-
-then this "arr int" (with unspecified length) expression occurs, again, twice
-in the AST. Then when the renamer passes over the tree and starts to introduce
-type variables, the result will be something like
-
-    LetERef (Name "x_1" <arr[_r3] int>) <arr[_r4] int> ...
-
-because the renamer sees two array types with an unspecified size and does
-not know that they are related.
-
-There are two possible solutions to this. One is to modify the type checker to
-unify the two types in the type checking phase. This might make sense because
-it means that if we later introduce incompatible types in these places in the
-AST we would find it when we type check again. However, since we are planning
-to remove this redundancy from the AST anyway, for now we've simply _ignored_
-the redundant types and instead we do something like for function parameters:
-
-``` Haskell
-aux (parNm, _parTy) = do
-  parNm' <- renameBoundName parNm
-  -- parTy' <- renameType parTy -- NOTE [Redundant types]
-  let parTy' = fromJust (mbtype parNm')
-  return ((parNm, parNm'), (parNm', parTy'))
-```
-
-and likewise for the other cases.
-
-NOTE: For some strange reason we do NOT record the type on the name of comp
-function parameters, so we don't do this trick in `renameCParams`.
--}
-
+instance Rename SrcExp where
+  rename e = case unExp e of
+      EVal t v -> do
+        t' <- rename t
+        return $ eVal eloc enfo t' v
+      EValArr t vs -> do
+        t' <- rename t
+        return $ eValArr eloc enfo t' vs
+      EVar nm -> do
+        nm' <- renameFree nm
+        return $ eVar eloc enfo nm'
+      EUnOp op e1 -> do
+        e1' <- rename e1
+        return $ eUnOp eloc enfo op e1'
+      EBinOp op e1 e2 -> do
+        e1' <- rename e1
+        e2' <- rename e2
+        return $ eBinOp eloc enfo op e1' e2'
+      EAssign e1 e2 -> do
+        e1' <- rename e1
+        e2' <- rename e2
+        return $ eAssign eloc enfo e1' e2'
+      EArrRead e1 e2 r -> do
+        e1' <- rename e1
+        e2' <- rename e2
+        return $ eArrRead eloc enfo e1' e2' r
+      EArrWrite e1 e2 r e3 -> do
+        e1' <- rename e1
+        e2' <- rename e2
+        e3' <- rename e3
+        return $ eArrWrite eloc enfo e1' e2' r e3'
+      EIter nm1 nm2 e1 e2 -> do
+        nm1' <- renameBound nm1
+        nm2' <- renameBound nm2
+        extend [nm2, nm1] [nm2', nm1'] $ do
+          e1' <- rename e1
+          e2' <- rename e2
+          return $ eIter eloc enfo nm1' nm2' e1' e2'
+      EFor ui nm1 e1 e2 e3 -> do
+        e1' <- rename e1
+        e2' <- rename e2
+        nm1' <- renameBound nm1
+        extend nm1 nm1' $ do
+          e3' <- rename e3
+          return $ eFor eloc enfo ui nm1' e1' e2' e3'
+      EWhile e1 e2 -> do
+        e1' <- rename e1
+        e2' <- rename e2
+        return $ eWhile eloc enfo e1' e2'
+      ELet nm1 fi e1 e2 -> do
+        e1' <- rename e1
+        nm1' <- renameBound nm1
+        extend nm1 nm1' $ do
+          e2' <- rename e2
+          return $ eLet eloc enfo nm1' fi e1' e2'
+      ELetRef nm1 e1 e2 -> do
+        e1'  <- mapM rename e1
+        nm1' <- renameBound nm1
+        extend nm1 nm1' $ do
+          e2' <- rename e2
+          return $ eLetRef eloc enfo nm1' e1' e2'
+      ESeq e1 e2 -> do
+        e1' <- rename e1
+        e2' <- rename e2
+        return $ eSeq eloc enfo e1' e2'
+      ECall f es -> do
+        f'  <- renameFree f
+        es' <- mapM rename es
+        return $ eCall eloc enfo f' es'
+      EIf e1 e2 e3 -> do
+        e1' <- rename e1
+        e2' <- rename e2
+        e3' <- rename e3
+        return $ eIf eloc enfo e1' e2' e3'
+      EPrint nl e1 -> do
+        e1' <- rename e1
+        return $ ePrint eloc enfo nl e1'
+      EError a str -> do
+        a' <- rename a
+        return $ eError eloc enfo a' str
+      ELUT r e1 -> do
+        r'  <- mapKeysM renameFree r
+        e1' <- rename e1
+        return $ eLUT eloc enfo r' e1'
+      EBPerm e1 e2 -> do
+        e1' <- rename e1
+        e2' <- rename e2
+        return $ eBPerm eloc enfo e1' e2'
+      EStruct tn tfs -> do
+        tfs' <- mapM (\(f,e') -> rename e' >>= \e'' -> return (f,e'')) tfs
+        return $ eStruct eloc enfo tn tfs'
+      EProj e1 fn -> do
+        e1' <- rename e1
+        return $ eProj eloc enfo e1' fn
+    where
+      eloc = expLoc e
+      enfo = info e

@@ -160,7 +160,7 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
           text "in" $$
           ppComp c
 
-    LetHeader _ fn c
+    LetHeader fn c
       | ignorelet || ignoreexp
       -> ppComp c
       | otherwise
