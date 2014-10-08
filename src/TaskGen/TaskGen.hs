@@ -16,8 +16,12 @@ import TaskGenMonad
 
 -- | Comp representing the starting of a task.
 startTask :: Comp CTy Ty -> TaskID -> Comp CTy Ty
+**************************
+DV: change this to the following signature, to emphasize that startTask does not do anything with the comp:
+startTask :: Maybe SrcLoc -> CTy -> TaskId -> Comp CTy TY 
 startTask c t = MkComp (ActivateTask t Nothing) (compLoc c) (compUnitTy c)
 
+**** same comment applies here as for startTask: 
 -- | Comp representing the starting of a task from a 'BindMany', with an input var.
 startTaskWithInVar :: Name -> Comp CTy Ty -> TaskID -> Comp CTy Ty
 startTaskWithInVar v c t = MkComp (ActivateTask t (Just v)) (compLoc c) (compUnitTy c)
