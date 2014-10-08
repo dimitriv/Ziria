@@ -28,9 +28,8 @@ insertTasks :: Comp CTy Ty -> (TaskEnv, Comp CTy Ty)
 insertTasks = runTaskGen . go
   where
     go comp = do
-      inq <- freshQueue
-      outq <- freshQueue
-      tid <- taskify (inq, outq) Nothing comp
+      let errq = error "Queue is not supposed to be used!" 
+      tid <- taskify (errq, errq) Nothing comp
       taskComp <$> lookupTask tid
 
 -- | Given an expression of type Comp a i o, produces a type Comp () i o.
@@ -66,8 +65,15 @@ compTripleUnitTy = CTBase $ TComp TUnit TUnit TUnit
 --   TODO: don't generate unnecessary queues or their associated reads/writes.
 --         they don't really do anything so it's not incorrect per se to generate
 --         them, but it's ugly.
+--
+--
+--   TODO:  Change the Maybe (Comp CTy Ty) to something that more explicitly records if t
+--          this continuation has been taskified or not. E.g. a TaskId or maybe if we need
+--          to also emit code about waiting someone else then another TaskId. In general
+--          something like:   SynchronizationInfo  (who to start next and who to wait for etc)
+-- 
 taskify :: (Queue, Queue)
-        -> Maybe (Comp CTy Ty)
+        -> Maybe (Comp CTy Ty)  
         -> Comp CTy Ty
         -> TaskGen TaskID TaskInfo TaskID
 taskify qs@(inq, outq) mnxt c = do
@@ -119,9 +125,9 @@ taskify qs@(inq, outq) mnxt c = do
         seqStart :: Maybe (Comp CTy Ty) -> Comp CTy Ty -> TaskGen TaskID TaskInfo (Maybe (Comp CTy Ty))
         seqStart (Just next) comp = do
           startNext <- startTask next <$> createTask next qs
-          return . Just $ MkComp (comp `Seq` startNext) (compLoc comp) (compInfo comp)
+          Just <$> taskify qs (Just startNext) comp
         seqStart Nothing comp = do
-          return $ Just comp
+          Just <$> taskify qs Nothing comp
 
         -- Turn a ; standalone b ; c ; d into [a, standalone b, c ; d]
         findBarriers :: Comp CTy Ty -> [Comp CTy Ty]

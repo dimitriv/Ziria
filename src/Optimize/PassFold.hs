@@ -134,12 +134,16 @@ incRewrites mp d s = RwStats (Map.alter aux s $ getRwStats mp)
 
 -- | Flatten nested BindMany. Currently does NOT flatten Seq - fix that!
 flatten_multibind :: DynFlags -> TypedCompPass
-flatten_multibind fs (MkComp (BindMany first rest) loc nfo) = do
+flatten_multibind fs c@(MkComp (BindMany first rest) loc nfo) = do
     case unComp first of
       BindMany ffirst frest -> do
-        return $ MkComp (BindMany ffirst (frest ++ concatMap flatten rest)) loc nfo
+        rewrite $ MkComp (BindMany ffirst (frest ++ concatMap flatten rest)) loc nfo
       _ -> do
-        return $ MkComp (BindMany first (concatMap flatten rest)) loc nfo
+        let frest' = concatMap flatten rest
+        case frest' of 
+          [_] -> return c 
+          _   -> rewrite $ 
+                 MkComp (BindMany first frest') loc nfo
   where
     flatten :: (Name, Comp a b) -> [(Name, Comp a b)]
     flatten (bndr, MkComp (BindMany first' rest') _ _) =
