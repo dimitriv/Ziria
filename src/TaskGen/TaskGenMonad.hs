@@ -47,48 +47,33 @@ data TaskGenState name task = TaskGenState {
     -- | Name of next commit queue to generate.
     tgstNextCQ      :: Queue,
 
+    -- | Next task ID to generate.
+    tgstNextTaskID  :: name,
+
     -- | # of tasks created so far. Useful for statistics as well
     --   as for a *very* generous estimate of how large an active
     --   queue the scheduler will need.
     tgstNumTasks    :: Int
   }
 
-instance Default (TaskGenState name task) where
+instance Default name => Default (TaskGenState name task) where
   def = TaskGenState {
       tgstBarrierFuns = S.empty,
       tgstTaskInfo    = M.empty,
       tgstNextQ       = SyncQ 0,
       tgstNextCQ      = CommitQ 0,
+      tgstNextTaskID  = def,
       tgstNumTasks    = 0
     }
 
-newtype NameT name m a = NameT {runNameT :: name -> m (name, a)}
-type TaskGen name task a = NameT name (State (TaskGenState name task)) a
-
-instance MonadState (TaskGenState name task)
-         (NameT name (State (TaskGenState name task))) where
-  get = NameT $ \n -> get >>= \x -> return (n, x)
-  put x = NameT $ \n -> put x >> return (n, ())
-
-instance Functor m => Functor (NameT name m) where
-  fmap f (NameT x) = NameT $ \n -> fmap (fmap f) (x n)
-
-instance (Functor m, Monad m) => Applicative (NameT name m) where
-  (NameT f) <*> (NameT x) = NameT $ \n -> do
-    (n', f') <- f n
-    (n'', x') <- x n'
-    return (n'', f' x')
-  pure x = NameT $ \n -> return (n, x)
-
-instance Monad m => Monad (NameT name m) where
-  return x = NameT $ \n -> return (n, x)
-  (NameT m) >>= f = NameT $ \n -> do
-    (n', x) <- m n
-    runNameT (f x) n'
+type TaskGen name task a = State (TaskGenState name task) a
 
 -- | Generate a fresh name.
-freshName :: (Enum name, Monad m) => NameT name m name
-freshName = NameT $ \n -> return (succ n, n)
+freshName :: Enum name => TaskGen name task name
+freshName = do
+  st@(TaskGenState {tgstNextTaskID = tid}) <- get
+  put $ st {tgstNextTaskID = succ tid}
+  return tid
 
 -- | Get a fresh queue.
 freshQueue :: TaskGen name task Queue
@@ -143,7 +128,7 @@ getAllBarrierFuns = fmap tgstBarrierFuns get
 -- | Run a task generation computation.
 runTaskGen :: (Default name, Enum name) => TaskGen name task a -> (M.Map name task, a)
 runTaskGen =
-  swap . fmap tgstTaskInfo . flip runState def . fmap snd . flip runNameT def
+  swap . fmap tgstTaskInfo . flip runState def
 
 -- | Create a new task from a 'TaskInfo' structure,
 --   complete with queue reads and writes.
