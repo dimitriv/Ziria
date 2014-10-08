@@ -27,6 +27,7 @@ import qualified GenSym as GS
 import CgHeader
 import CgMonad
 import CgTypes
+import Opts (getName)
 
 import qualified Data.Loc
 import qualified Data.Symbol
@@ -139,3 +140,5 @@ mkRuntime mfreshId m = do
 go_name mfreshId = 
   let goName = "wpl_go" 
   in goName ++ fromMaybe "" mfreshId
+
+go_name_prefix dflags tid = getName dflags ++ tid

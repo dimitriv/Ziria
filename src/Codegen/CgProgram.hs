@@ -121,7 +121,6 @@ codeGenCompilerGlobals tid tickHdl procHdl mtv ta tb = do
                                     (fromMaybe tint mtv)
     appendDecl [cdecl| char $id:globalWhatIs;|]
 
-
 codeGenThread :: DynFlags
               -> String                     -- thread id
               -> Comp CTy Ty                -- computation to be compiled
@@ -130,7 +129,7 @@ codeGenThread dflags tid c = do
     (maybe_tv, ta, tb) <- checkCompType (compInfo c)
     (bta, btb) <- checkInOutFiles ta tb
     withThreadId tid $ do
-        mkRuntime (Just ((getName dflags) ++ tid)) $ do
+        mkRuntime (Just (go_name_prefix dflags tid)) $ do
         cinfo <- codeGenCompTop dflags c (finalCompKont tid)
 
         codeGenCompilerGlobals tid (tickHdl cinfo)

@@ -1175,9 +1175,7 @@ codeGenComp dflags comp k =
          kontDone k
 
        appendLabeledBlock (tickNmOf activateLbl) $ do
-         case fmap name mname of
-           Just n  -> appendStmt  [cstm|activate($t, $n);|]
-           Nothing -> appendStmt  [cstm|activate($t);|]
+         appendStmt [cstm|sched_activate(global_sched, $id:(taskFunName dflags taskid));|]
          appendStmt [cstm|$id:globalWhatIs = DONE;|]
          kontDone k
 
@@ -1192,7 +1190,7 @@ codeGenComp dflags comp k =
          kontDone k
 
        appendLabeledBlock (tickNmOf deactivateLbl) $ do
-         appendStmt  [cstm|deactivate_self();|]
+         appendStmt [cstm|sched_deactivate_current(global_sched);|]
          appendStmt [cstm|$id:globalWhatIs = DONE;|]
          kontDone k
 
@@ -1220,8 +1218,16 @@ codeGenComp dflags comp k =
         fail $ "CodeGen error, unimplemented: " ++ show c
 -}
 
+-- | Name of a task's function.
+taskFunName :: DynFlags -> TaskID -> String
+taskFunName dflags tid =
+  go_name (Just $ go_name_prefix dflags (show tid)) ++ "_aux"
 
 -- | Generate code for a task.
+--
+--   TODO: since this is just reusing the old 'codeGenThread', generated
+--         tasks may contain unnecessary cruft. Might be worthwhile to
+--         do some spring cleaning.
 codeGenTask :: DynFlags -> TaskID -> TaskInfo -> Cg ()
 codeGenTask dflags tid task = do
   codeGenThread dflags (show tid) (taskComp task)
