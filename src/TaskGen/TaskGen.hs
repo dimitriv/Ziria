@@ -80,8 +80,8 @@ taskify qs@(inq, outq) mnxt c = do
     case (containsBarrier c, mnxt) of
       (True, _)         -> go (unComp c)
       (False, Just nxt)
-        | isComputer c  -> createTask (MkComp (c `Seq` nxt) (compLoc c) (compInfo c)) qs
-      _                 -> createTask c qs
+        | isComputer c  -> createTask (MkComp (c `Seq` nxt) (compLoc c) (compInfo c)) qs noSyncInfo
+      _                 -> createTask c qs noSyncInfo
   where
     -- Invariant: if go gets called, its argument *does* contain a barrier.
     -- It's important to note that sequential code is generated right to left,
@@ -94,10 +94,10 @@ taskify qs@(inq, outq) mnxt c = do
           let ((v, comp):xs) = rest
           ms <- taskify qs mnxt (MkComp (BindMany comp xs) (compLoc comp) (compInfo c))
           tid <- taskify qs (Just $ startTaskWithInVar v (compLoc c) (compInfo c) ms) first
-          createTask (startTask (compLoc first) (compInfo first) tid) qs
+          createTask (startTask (compLoc first) (compInfo first) tid) qs noSyncInfo
       | otherwise = do
           comp <- genBindManyBarriers first (splitBarriers rest)
-          createTask comp qs
+          createTask comp qs noSyncInfo
       where
         -- Invariant: each (first ++ b) contains a barrier.
         genBindManyBarriers :: Comp CTy Ty -> [[(Name, Comp CTy Ty)]] -> TaskGen TaskID TaskInfo (Comp CTy Ty)
@@ -149,7 +149,7 @@ taskify qs@(inq, outq) mnxt c = do
       taskIds <- mapM createTask' $ zip3 bars (inq:queues) (queues ++ [outq])
       let starts = foldr1 (cSeq (compLoc c) compTripleUnitTy) $
                      zipWith startTask' bars taskIds
-      createTask starts (head queues, last queues)
+      createTask starts (head queues, last queues) noSyncInfo
       where
         startTask' bar tid = startTask (compLoc bar) (compInfo bar) tid
         createTask' (c', qin', qout') = taskify (qin', qout') mnxt c'
@@ -196,7 +196,7 @@ taskify qs@(inq, outq) mnxt c = do
     go (Branch cond th el) = do
       th' <- startTask (compLoc th) (compInfo th) <$> taskify qs mnxt th
       el' <- startTask (compLoc el) (compInfo el) <$> taskify qs mnxt el
-      createTask (MkComp (Branch cond th' el') (compLoc c) (compInfo c)) qs
+      createTask (MkComp (Branch cond th' el') (compLoc c) (compInfo c)) qs noSyncInfo
     go (Until _cond _comp) = do
       error "TODO: until requires some extra code"
     go (While _cond _comp) = do
@@ -221,7 +221,7 @@ taskify qs@(inq, outq) mnxt c = do
         let c' = case (isComputer c, mnxt) of
                    (True, Just nxt) -> MkComp (c `Seq` nxt) (compLoc c) (compInfo c)
                    _                -> c
-        createTaskWithPlacement Alone c' qs
+        createTaskWithPlacement Alone c' qs noSyncInfo
     -- If we get to either Map or Call, then the name they're calling on
     -- is a barrier for sure; make this a primitive barrier since we can't
     -- split funs.
@@ -229,12 +229,12 @@ taskify qs@(inq, outq) mnxt c = do
         let c' = case (isComputer c, mnxt) of
                    (True, Just nxt) -> MkComp (c `Seq` nxt) (compLoc c) (compInfo c)
                    _                -> c
-        createTaskWithPlacement Alone c' qs
+        createTaskWithPlacement Alone c' qs noSyncInfo
     go (Call _ _) = do
         let c' = case (isComputer c, mnxt) of
                    (True, Just nxt) -> MkComp (c `Seq` nxt) (compLoc c) (compInfo c)
                    _                -> c
-        createTaskWithPlacement Alone c' qs
+        createTaskWithPlacement Alone c' qs noSyncInfo
     go _ = error "Atomic computations can't possibly contain barriers!"
 
 -- | Split a list of computations, with an extra piece of information,

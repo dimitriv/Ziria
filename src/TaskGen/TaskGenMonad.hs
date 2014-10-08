@@ -148,7 +148,11 @@ createTaskEx task = do
 -- | Create a new task from a computation and a pair of queues.
 --   The new task will be schedulable 'Anywhere'. To create a task
 --   for executing 'Alone', use 'createTaskWithPlacement'.
-createTask :: (Ord name, Enum name) => Comp CTy Ty -> (Queue, Queue) -> TaskGen name TaskInfo name
+createTask :: (Ord name, Enum name)
+           => Comp CTy Ty
+           -> (Queue, Queue)
+           -> SyncInfo
+           -> TaskGen name TaskInfo name
 createTask = createTaskWithPlacement Anywhere
 
 -- | Like 'createTask' but creates the task with the 'Alone'
@@ -157,13 +161,15 @@ createTaskWithPlacement :: (Ord name, Enum name)
                         => TaskPlacement  -- ^ CPU allocation info for task.
                         -> Comp CTy Ty    -- ^ Task computation.
                         -> (Queue, Queue) -- ^ Input/output queues.
+                        -> SyncInfo       -- ^ Synchronization for this task.
                         -> TaskGen name TaskInfo name
-createTaskWithPlacement placement comp (qin, qout) = do
+createTaskWithPlacement placement comp (qin, qout) sync = do
   createTaskEx $ TaskInfo {
     taskComp = comp,
     taskInputQueue = qin,
     taskOutputQueue = qout,
-    taskPlacement = placement
+    taskPlacement = placement,
+    taskSyncInfo = sync
   }
 
 -- | Insert queue reads and writes for a task.
