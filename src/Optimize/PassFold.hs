@@ -55,6 +55,8 @@ import Eval
 
 import Data.Maybe ( fromJust, isJust, isNothing )
 
+import Debug.Trace -- Only for temporary TODO in flatten_multibind
+
 {- A Rewritting monad
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -}
 
@@ -140,11 +142,12 @@ flatten_multibind fs c@(MkComp (BindMany first rest) loc nfo) = do
         rewrite $ MkComp (BindMany ffirst (frest ++ concatMap flatten rest)) loc nfo
       _ -> do
         let frest' = concatMap flatten rest
-        case frest' of 
-          [_] -> return c 
-          _   -> rewrite $ 
+        case frest' of
+          [_] -> return c
+          _   -> rewrite $
                  MkComp (BindMany first frest') loc nfo
   where
+    rewrite = trace "TODO: rewrite in flatten_multibind causes an infinite loop - wat?" return
     flatten :: (Name, Comp a b) -> [(Name, Comp a b)]
     flatten (bndr, MkComp (BindMany first' rest') _ _) =
       ((bndr, first') : rest')

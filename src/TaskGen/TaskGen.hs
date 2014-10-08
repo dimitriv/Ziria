@@ -7,6 +7,7 @@ module TaskGen (
 import Control.Applicative
 import Control.Monad.State
 import qualified Data.Set as S
+import Text.Parsec.Pos (SourcePos)
 
 import AstComp hiding (comp)
 import AstExpr hiding (name, info)
@@ -14,25 +15,23 @@ import Outputable
 import TaskGenTypes
 import TaskGenMonad
 
--- | Comp representing the starting of a task.
-startTask :: Comp CTy Ty -> TaskID -> Comp CTy Ty
-**************************
-DV: change this to the following signature, to emphasize that startTask does not do anything with the comp:
-startTask :: Maybe SrcLoc -> CTy -> TaskId -> Comp CTy TY 
-startTask c t = MkComp (ActivateTask t Nothing) (compLoc c) (compUnitTy c)
+import Debug.Trace -- Only for temporary dummy queue in insertTask
 
-**** same comment applies here as for startTask: 
+-- | Comp representing the starting of a task.
+startTask :: Maybe SourcePos -> CTy -> TaskID -> Comp CTy Ty
+startTask loc ty tid = MkComp (ActivateTask tid Nothing) loc ty
+
 -- | Comp representing the starting of a task from a 'BindMany', with an input var.
-startTaskWithInVar :: Name -> Comp CTy Ty -> TaskID -> Comp CTy Ty
-startTaskWithInVar v c t = MkComp (ActivateTask t (Just v)) (compLoc c) (compUnitTy c)
+startTaskWithInVar :: Name -> Maybe SourcePos -> CTy -> TaskID -> Comp CTy Ty
+startTaskWithInVar v loc ty tid = MkComp (ActivateTask tid (Just v)) loc ty
 
 -- | Split program into entry points and tasks to be started along the road.
---   TODO: task map needs more info.
 insertTasks :: Comp CTy Ty -> (TaskEnv, Comp CTy Ty)
 insertTasks = runTaskGen . go
   where
     go comp = do
-      let errq = error "Queue is not supposed to be used!" 
+      -- trace instead of error since --ddump-pipeline inspects the queue.
+      let errq = trace "Queue is not supposed to be used!" $ Queue (-1) False
       tid <- taskify (errq, errq) Nothing comp
       taskComp <$> lookupTask tid
 
@@ -97,8 +96,8 @@ taskify qs@(inq, outq) mnxt c = do
       | containsBarrier first = do
           let ((v, comp):xs) = rest
           ms <- taskify qs mnxt (MkComp (BindMany comp xs) (compLoc comp) (compInfo c))
-          tid <- taskify qs (Just $ startTaskWithInVar v c ms) first
-          createTask (startTask first tid) qs
+          tid <- taskify qs (Just $ startTaskWithInVar v (compLoc c) (compInfo c) ms) first
+          createTask (startTask (compLoc first) (compInfo first) tid) qs
       | otherwise = do
           comp <- genBindManyBarriers first (splitBarriers rest)
           createTask comp qs
@@ -111,27 +110,29 @@ taskify qs@(inq, outq) mnxt c = do
               -- Next task is just the next in the list of barriers
               nxt <- Just <$> genBindManyBarriers first' (rest':bs')
               b' <- taskify qs nxt $ MkComp (BindMany frst b) (compLoc frst) (compInfo c)
-              startTask c <$> createTask (startTask c b') qs
+              return $ startTask (compLoc c) (compInfo c) b'
             _                        -> do
               -- End of bind; next task is whatever came from the outside, if any
               b' <- taskify qs mnxt $ MkComp (BindMany first b) (compLoc first) (compInfo c)
-              startTask c <$> createTask (startTask c b') qs
+              return $ startTask (compLoc c) (compInfo c) b'
         genBindManyBarriers _ [] = do
           error "BUG: barrier is in first comp of BindMany, but genBindManyBarriers was called!"
 
     go (Seq _ _) = do
-      mcomp <- foldM seqStart mnxt (reverse $ findBarriers c)
+      mcomp <- foldM seqStart (Left mnxt) (reverse $ findBarriers c)
       case mcomp of
-        Just comp -> createTask comp qs
+        Right tid -> return tid
         _         -> error "The impossible happened!"
       where
         -- TODO: some more sync code should go here!
-        seqStart :: Maybe (Comp CTy Ty) -> Comp CTy Ty -> TaskGen TaskID TaskInfo (Maybe (Comp CTy Ty))
-        seqStart (Just next) comp = do
-          startNext <- startTask next <$> createTask next qs
-          Just <$> taskify qs (Just startNext) comp
-        seqStart Nothing comp = do
-          Just <$> taskify qs Nothing comp
+        seqStart :: Either (Maybe (Comp CTy Ty)) TaskID
+                 -> Comp CTy Ty
+                 -> TaskGen TaskID TaskInfo (Either (Maybe (Comp CTy Ty)) TaskID)
+        seqStart (Right next) comp = do
+          nc <- taskComp <$> lookupTask next
+          Right <$> taskify qs (Just $ startTask (compLoc nc) (compInfo nc) next) comp
+        seqStart (Left mnxt') comp = do
+          Right <$> taskify qs mnxt comp
 
         -- Turn a ; standalone b ; c ; d into [a, standalone b, c ; d]
         findBarriers :: Comp CTy Ty -> [Comp CTy Ty]
@@ -150,9 +151,10 @@ taskify qs@(inq, outq) mnxt c = do
       queues <- mapM (const freshQueue) (drop 1 bars)
       taskIds <- mapM createTask' $ zip3 bars (inq:queues) (queues ++ [outq])
       let starts = foldr1 (cSeq (compLoc c) compTripleUnitTy) $
-                     zipWith startTask bars taskIds
+                     zipWith startTask' bars taskIds
       createTask starts (head queues, last queues)
       where
+        startTask' bar tid = startTask (compLoc bar) (compInfo bar) tid
         createTask' (c', qin', qout') = taskify (qin', qout') mnxt c'
 
         -- Turn a >>> standalone b >>> c >>> d into [a, standalone b, c >>> d]
@@ -195,8 +197,8 @@ taskify qs@(inq, outq) mnxt c = do
     go (Interleave _ _) =
       error "BUG: Interleave in AST!"
     go (Branch cond th el) = do
-      th' <- startTask th <$> taskify qs mnxt th
-      el' <- startTask el <$> taskify qs mnxt el
+      th' <- startTask (compLoc th) (compInfo th) <$> taskify qs mnxt th
+      el' <- startTask (compLoc el) (compInfo el) <$> taskify qs mnxt el
       createTask (MkComp (Branch cond th' el') (compLoc c) (compInfo c)) qs
     go (Until _cond _comp) = do
       error "TODO: until requires some extra code"
