@@ -5,6 +5,7 @@ module TaskGenTypes (
   , TaskInfo (..)
   , TaskEnv
   , TaskID
+  , nextQ
   ) where
 import qualified Data.Map as M
 
@@ -14,20 +15,27 @@ import PpComp ()
 
 -- | A queue identifier with an indicator as to whether the queue is a
 --   commit queue or not.
---   NB: The queue is characterized uniquely by both qId and
---   qIsCommitQ e.g.  we can well have an ordinary queue with qId=0
---   and a commit queue with qId=0.
 --
---   Hence we derive an Eq instance. 
-data Queue = Queue {
-    qID        :: Int,
-    qIsCommitQ :: Bool
-  } deriving (Eq, Show)
+--   NB: A queue is characterized uniquely by both its identifier and
+--       its type. Thus it's completely conceivable to have both a sync
+--       queue and a commit queue with qID 0.
+data Queue
+  = SyncQ   {qID :: Int} -- ^ A normal Sora synchronization queue.
+  | CommitQ {qID :: Int} -- ^ A commit queue. See @ParNotes.md@ for details.
+  | ExtReadQ             -- ^ The external read buffer.
+  | ExtWriteQ            -- ^ The external write buffer.
+    deriving (Eq, Show)
 
-instance Enum Queue where
-  succ (Queue qid qcq) = Queue (succ qid) qcq
-  toEnum qid           = Queue qid False
-  fromEnum             = qID
+-- | Successor function for queues. We use this rather than making an
+--   'Enum' instance since 'toEnum' and 'fromEnum' don't make sense for
+--   all queues.
+--   This function preserves the type of queue; there is only one external
+--   read and write queue respectively, so calling @nextQ@ on either of
+--   those is an error as a sanity check.
+nextQ :: Queue -> Queue
+nextQ (SyncQ qid)   = SyncQ (succ qid)
+nextQ (CommitQ qid) = CommitQ (succ qid)
+nextQ q             = error $ "nextQ (" ++ show q ++ ") does not make sense!"
 
 -- | Take care to put task on a separate core where only this task will run, or just put it anywhere?
 data TaskPlacement = Alone | Anywhere
@@ -38,7 +46,6 @@ data TaskPlacement = Alone | Anywhere
 --   the output types are already buffer types (i.e. all reads and writes have been inserted)
 --   Moreover the id's of internal queues used in the taskComp will agree with the taskInputQueue and
 --   taskOutputQueue of the TaskInfo. 
-
 type TaskEnv = M.Map TaskID TaskInfo
 
 -- | Data structure describing a single task.

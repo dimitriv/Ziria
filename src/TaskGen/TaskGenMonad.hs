@@ -57,8 +57,8 @@ instance Default (TaskGenState name task) where
   def = TaskGenState {
       tgstBarrierFuns = S.empty,
       tgstTaskInfo    = M.empty,
-      tgstNextQ       = Queue 0 False,
-      tgstNextCQ      = Queue 0 True,
+      tgstNextQ       = SyncQ 0,
+      tgstNextCQ      = CommitQ 0,
       tgstNumTasks    = 0
     }
 
@@ -94,14 +94,14 @@ freshName = NameT $ \n -> return (succ n, n)
 freshQueue :: TaskGen name task Queue
 freshQueue = do
   st <- get
-  put $ st {tgstNextQ = succ $ tgstNextQ st}
+  put $ st {tgstNextQ = nextQ $ tgstNextQ st}
   return $ tgstNextQ st
 
 -- | Get a fresh commit queue.
 freshCommitQueue :: TaskGen name task Queue
 freshCommitQueue = do
   st <- get
-  put $ st {tgstNextCQ = succ $ tgstNextCQ st}
+  put $ st {tgstNextCQ = nextQ $ tgstNextCQ st}
   return $ tgstNextCQ st
 
 -- | Associate a task with a name.

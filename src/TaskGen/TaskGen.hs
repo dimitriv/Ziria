@@ -34,9 +34,7 @@ insertTasks :: Comp CTy Ty -> (TaskEnv, Comp CTy Ty)
 insertTasks = runTaskGen . go
   where
     go comp = do
-      -- trace instead of error since --ddump-pipeline inspects the queue.
-      let errq = trace "Queue is not supposed to be used!" $ Queue (-1) False
-      tid <- taskify (errq, errq) Nothing comp
+      tid <- taskify (ExtReadQ, ExtWriteQ) Nothing comp
       taskComp <$> lookupTask tid
 
 -- | Given a type ST a i o, produces a type ST (C ()) i o.
@@ -67,10 +65,7 @@ compTripleUnitTy = CTBase $ TComp TUnit TUnit TUnit
 --
 --   TODO: currently doesn't calculate cardinalities for commit queues.
 --
---   TODO: don't generate unnecessary queues or their associated reads/writes.
---         they don't really do anything so it's not incorrect per se to generate
---         them, but it's ugly.
---
+--   TODO: don't generate unnecessary queue reads/writes
 --
 --   TODO:  Change the Maybe (Comp CTy Ty) to something that more explicitly records if t
 --          this continuation has been taskified or not. E.g. a TaskId or maybe if we need
