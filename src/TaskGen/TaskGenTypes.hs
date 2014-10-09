@@ -7,12 +7,12 @@ module TaskGenTypes (
   , TaskEnv
   , TaskID
   , nextQ
-  , transSyncInfo
-  , compSyncInfo
-  , noSyncInfo
+  , justAwait
+  , justStart
+  , dontSync
+  , withStartsFrom
   ) where
 import qualified Data.Map as M
-import Data.Maybe (catMaybes)
 
 import AstComp (TaskID, Comp, CTy)
 import AstExpr (Ty)
@@ -93,30 +93,39 @@ data SyncInfo = SyncInfo {
     syncStart       :: [TaskID]
   } deriving Show
 
--- | Sync info for a transformer. All transformers wait for their upstream
---   component to finish. The upstream-most (is that even a word?) transformer
---   can just go ahead and die whenever he feels like it though.
-transSyncInfo :: Maybe TaskID -> SyncInfo
-transSyncInfo waitTID = SyncInfo {
-    syncWait = catMaybes [waitTID],
+-- | Update the first 'SyncInfo' with any task starts from the second.
+--   The second @SyncInfo@ needs to be empty except for those starts,
+--   to avoid throwing away any sync information. If this invariant is
+--   broken, this function bombs out with an angry error.
+withStartsFrom :: SyncInfo -> SyncInfo -> SyncInfo
+a `withStartsFrom` (SyncInfo [] Nothing bstarts) =
+  a {syncStart = syncStart a ++ bstarts}
+_ `withStartsFrom` _ =
+  error "BUG: withStartsFrom discarded some sync information!"
+
+-- | Just await completion of a single task before finishing. This is what
+--   all transformers should do, except for the upstream-most one, which
+--   can just go a head and die whenever, without any syncing.
+justAwait :: TaskID -> SyncInfo
+justAwait waitTID = SyncInfo {
+    syncWait = [waitTID],
     syncCommitQueue = Nothing,
     syncStart = []
   }
 
--- | Sync info for a computer which does not have any concurrent tasks.
---   A computer which is not part of a stretch of @>>>@ only has to start
---   the next set of tasks when he finishes.
-compSyncInfo :: [TaskID] -> SyncInfo
-compSyncInfo startTIDs = SyncInfo {
+-- | Only start the given list of tasks. This is what computers that are not
+--   part of a @>>>@ stretch should do.
+justStart :: [TaskID] -> SyncInfo
+justStart startTIDs = SyncInfo {
     syncWait = [],
     syncCommitQueue = Nothing,
     syncStart = startTIDs
   }
 
--- | Don't perform any synchronization at all.
---   Placeholder to get stuff to build until conversion is done.
-noSyncInfo :: SyncInfo
-noSyncInfo = SyncInfo {
+-- | Just die, without any synchronization. This is what upstream-most (is
+--   that even a word?) transformers should do.
+dontSync :: SyncInfo
+dontSync = SyncInfo {
     syncWait = [],
     syncCommitQueue = Nothing,
     syncStart = []

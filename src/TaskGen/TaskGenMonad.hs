@@ -11,7 +11,7 @@ module TaskGenMonad (
   , freshQueue, freshCommitQueue
 
   -- Inspecting and manipulating tasks
-  , lookupTask, updateTask, updateTaskComp
+  , lookupTask, updateTask, updateTaskComp, updateTaskSyncInfo
 
   -- Dealing with barrier functions
   , addBarrierFun, getAllBarrierFuns
@@ -102,21 +102,20 @@ lookupTask tid = (M.! tid) . tgstTaskInfo <$> get
 
 -- | Update a task in the environment.
 updateTask :: Ord name => name -> (task -> task) -> TaskGen name task ()
-updateTask tid f = do
-  st <- get
-  put $ st {tgstTaskInfo = M.adjust f tid $ tgstTaskInfo st}
+updateTask tid f = modify $ \st ->
+  st {tgstTaskInfo = M.adjust f tid $ tgstTaskInfo st}
 
 -- | Special case of 'updateTask' for the common case where only the
 --   comp needs updating.
 updateTaskComp :: Ord name => name -> (Comp CTy Ty -> Comp CTy Ty) -> TaskGen name TaskInfo ()
 updateTaskComp tid f = do
-  st <- get
-  put $ st {
-      tgstTaskInfo =
-        M.adjust (\t -> t {taskComp = f (taskComp t)})
-                 tid
-                 (tgstTaskInfo st)
-    }
+  updateTask tid $ \t -> t {taskComp = f (taskComp t)}
+
+-- | Special case of 'updateTask' for the common case where only the
+--   'SyncInfo' needs updating.
+updateTaskSyncInfo :: Ord name => name -> (SyncInfo -> SyncInfo) -> TaskGen name TaskInfo ()
+updateTaskSyncInfo tid f = do
+  updateTask tid $ \t -> t {taskSyncInfo = f (taskSyncInfo t)}
 
 -- | Mark a function as a merge barrier.
 addBarrierFun :: Name -> TaskGen name task ()
