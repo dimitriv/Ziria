@@ -36,7 +36,7 @@ import qualified GenSym as GS
 
 data RenEnv = RenEnv {
     renSym     :: GS.Sym
-  , renUniqEnv :: [(String, String)] -- | Map names to unique IDs
+  , renUniqEnv :: [(String, String)] -- ^ Map names to unique IDs
   }
 
 newtype RenM a = RenM (ReaderT RenEnv IO a)

@@ -16,287 +16,259 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE QuasiQuotes #-}
-{-# OPTIONS_GHC -fwarn-unused-binds #-}
-{-# OPTIONS_GHC -fwarn-unused-imports #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# OPTIONS_GHC -Wall #-}
+-- | Use-Def analysis
+--
+-- See `varUseDefs` for an explanation of what this module is intended to
+-- compute.
+--
+-- NOTE: It should probably be renamed, as it does not appear to be a
+-- traditional use-def analysis
+-- (http://en.wikipedia.org/wiki/Use-define_chain).
+--
+-- TODO: This needs to be rewritten as a proper backwards analysis.
+module Analysis.UseDef (inOutVars) where
 
-module Analysis.UseDef
-  ( VarTy
-  , inOutVars
-  , varUseDefs
-  ) where
+import Control.Applicative
+import Control.Monad.Error
+import Control.Monad.Reader
+import Control.Monad.State
+import Data.List ((\\), foldl', nub)
+import Data.Map (Map)
+import Data.Monoid
+import Data.Set (Set)
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 import AstExpr
 import Analysis.Range
 
-import Control.Applicative
-import Control.Monad (ap)
-import Control.Monad.Reader (MonadReader(..), asks)
-import Control.Monad.State  (MonadState(..), gets, modify)
-import Data.List ((\\), foldl', nub)
-import Data.Map (Map)
-import qualified Data.Map as Map
-import Data.Monoid
-import Data.Set (Set)
-import qualified Data.Set as Set
+{-------------------------------------------------------------------------------
+  Types
+-------------------------------------------------------------------------------}
 
--- XXX
---
--- This needs to be rewritten as a proper backwards analysis.
+type VarSet = Set (GName Ty)
 
-type VarSet = Set Name
-
-type VarTy = (Name, Ty)
-
-data UDEnv = UDEnv { flowvars :: Set Name    -- ^ Variables that influenced
-                                             -- control flow
-                   }
+data UDEnv = UDEnv {
+    -- | Variables that influenced control flow
+    flowvars :: Set (GName Ty)
+  }
 
 udenv0 :: UDEnv
 udenv0 = UDEnv Set.empty
 
-data UDState = UDState { usedefs  :: Map Name VarSet -- ^ In-scope variables and
-                                                     -- the /free/ variables
-                                                     -- used to imperatively
-                                                     -- define them.
-                       , usetys   :: Map.Map Name Ty -- ^ Types of in-scope
-                                                     -- variables.
-                       }
+data UDState = UDState {
+    -- | In-scope variables and the /free/ variables used to imperatively
+    -- define them.
+    usedefs :: Map (GName Ty) VarSet
+
+    -- | All free variables (currently in scope) that are actually used
+  , usefree :: VarSet
+  }
 
 udstate0 :: UDState
-udstate0 = UDState Map.empty Map.empty
+udstate0 = UDState Map.empty Set.empty
 
-newtype UDM a = UDM { runUDM :: UDEnv -> UDState -> Either String (a, UDState) }
+{-------------------------------------------------------------------------------
+  The UDM monad and infrastructure
+-------------------------------------------------------------------------------}
 
-instance Monad UDM where
-    return a = UDM $ \_ s -> Right (a, s)
-    m1 >> m2 = UDM $ \env s -> case runUDM m1 env s of
-                                 Left  err     -> Left err
-                                 Right (_, s') -> runUDM m2 env s'
-    m1 >>= k = UDM $ \env s -> case runUDM m1 env s of
-                                 Left  err     -> Left err
-                                 Right (a, s') -> runUDM (k a) env s'
-    fail err = UDM $ \_ _ -> Left err
+newtype UDM a = UDM (ReaderT UDEnv (ErrorT String (State UDState)) a)
+  deriving ( Functor
+           , Applicative
+           , Monad
+           , MonadReader UDEnv
+           , MonadState UDState
+           , MonadError String
+           )
 
-instance Functor UDM where
-    fmap f x = x >>= return . f
+runUDM :: Monad m => UDEnv -> UDState -> UDM a -> m (a, UDState)
+runUDM env st (UDM udm) =
+  case runState (runErrorT (runReaderT udm env)) st of
+    (Left err,  _) -> fail err
+    (Right a, st') -> return (a, st')
 
-instance Applicative UDM where
-    pure   = return
-    (<*>)  = ap
-
-instance MonadReader UDEnv UDM where
-    ask = UDM $ \env s -> Right (env, s)
-
-    local f m = UDM $ \env s -> runUDM m (f env) s
-
-    reader f = UDM $ \env s -> Right (f env, s)
-
-instance MonadState UDState UDM where
-    get   = UDM $ \_ s -> Right (s,  s)
-    put s = UDM $ \_ _ -> Right ((), s)
-
+-- TODO: This is currently _only_ called for conditions, and not, for example,
+-- for loops. Is that intended?
 extendFlowVars :: VarSet -> UDM a -> UDM a
 extendFlowVars vs =
     local $ \env -> env { flowvars = flowvars env `Set.union` vs }
 
-extendVars :: [(Name, Ty)] -> UDM a -> UDM a
+-- | Run an action, and then remove the given variables from the scope
+extendVars :: [GName Ty] -> UDM a -> UDM a
 extendVars vs m = do
     a <- m
-    modify $ \s -> s { usedefs = foldl' (flip Map.delete) (usedefs s) (map fst vs)
-                     , usetys  = foldl' (flip Map.delete) (usetys s)  (map fst vs)
+    modify $ \s -> s { usedefs = foldl' (flip Map.delete) (usedefs s) vs
+                     , usefree = foldl' (flip Set.delete) (usefree s) vs
                      }
     return a
 
-insertUseDefs :: Name -> VarSet -> UDM ()
+insertUseDefs :: GName Ty -> VarSet -> UDM ()
 insertUseDefs v vs = do
     flowvs <- asks flowvars
     modify $ \s -> s { usedefs = Map.insert v (vs `Set.union` flowvs) (usedefs s) }
 
-insertUseTy :: Name -> Ty -> UDM ()
-insertUseTy v ty =
-    modify $ \s -> s { usetys  = Map.insert v ty (usetys s) }
+insertUseFree :: GName Ty -> UDM ()
+insertUseFree v =
+    modify $ \s -> s { usefree = Set.insert v (usefree s) }
 
-lookupVarDef :: Name -> UDM VarSet
+lookupVarDef :: GName Ty -> UDM VarSet
 lookupVarDef v = do
     maybe_vs <- gets $ \s -> Map.lookup v (usedefs s)
     case maybe_vs of
       Nothing -> return $ Set.singleton v -- In this case 'v' is a free variable
       Just vs -> return vs
 
+{-------------------------------------------------------------------------------
+  The analysis proper
+-------------------------------------------------------------------------------}
+
+-- | Use-def analysis
+--
+-- Returns free variables that were modified, free variable used to make
+-- imperative modifications, free variables used to calculate the pure result
+-- of the expression, and all free variables used.
 varUseDefs :: Monad m
-           => Map Name Range
-           -> Exp Ty -- ^ Expression to analyze
-           -> m ([VarTy], [VarTy], [VarTy], [VarTy])
-              -- ^ Returns free variables that were modified, free variable used
-              -- to make imperative modifications, free variables used to
-              -- calculate the pure result of the expression, and all free
-              -- variables used.
-varUseDefs ranges e =
-    case runUDM (go e) udenv0 udstate0 of
-      Left err -> fail err
-      Right (vs, udstate) ->
-          let modified, impUsed, pureUsed :: [Name]
-              modified = Map.keys (usedefs udstate)
-              impUsed  = Set.toList $ foldl' Set.union Set.empty (Map.elems (usedefs udstate))
-              pureUsed = Set.toList vs
+           => Map (GName Ty) Range
+           -> Exp -- ^ Expression to analyze
+           -> m ([GName Ty], [GName Ty], [GName Ty], [GName Ty])
+varUseDefs ranges = \e -> do
+     (vs, udstate) <- runUDM udenv0 udstate0 (go e)
 
-              allVars :: Map.Map Name Ty
-              allVars =  usetys udstate
+     let modified, impUsed, pureUsed :: [GName Ty]
+         modified = Map.keys (usedefs udstate)
+         impUsed  = Set.toList $ foldl' Set.union Set.empty (Map.elems (usedefs udstate))
+         pureUsed = Set.toList vs
 
-              look :: Name -> VarTy
-              look v = case Map.lookup v allVars of
-                         Just ty -> (v, ty)
-                         Nothing -> error $ "Cannot find " ++ show v ++ " in type environment"
-          in
-            return (map look modified, map look impUsed, map look pureUsed, Map.toList allVars)
+         allVars :: VarSet
+         allVars = usefree udstate
+
+     return (modified, impUsed, pureUsed, Set.toList allVars)
   where
     -- Returns the set of variables used to calculate the pure part of the
     -- expression being analyzed.
-    go :: Exp Ty -> UDM VarSet
-    go (MkExp (EVal _) _ _)         = return mempty
-    go (MkExp (EValArr _) _ _)      = return mempty
-    go (MkExp (EVar v) _ ty)        = do insertUseTy v ty
-                                         lookupVarDef v
-    go (MkExp (EUnOp _ e) _ _)      = go e
-    go (MkExp (EBinOp _ e1 e2) _ _) = (<>) <$> go e1 <*> go e2
+    go :: Exp -> UDM VarSet
+    go = go0 . unExp
 
-    -- go (MkExp (EComplex e1 e2) _ _) = (<>) <$> go e1 <*> go e2
-
-    go (MkExp (EAssign (MkExp (EVar v) _ ty) e2) _ _) = do
+    go0 :: Exp0 -> UDM VarSet
+    go0 (EVal _ _) =
+        return mempty
+    go0 (EValArr _ _) =
+        return mempty
+    go0 (EVar v) = do
+        insertUseFree v
+        lookupVarDef v
+    go0 (EUnOp _ e) =
+        go e
+    go0 (EBinOp _ e1 e2) =
+        (<>) <$> go e1 <*> go e2
+    go0 (EAssign (MkExp (EVar v) _ _) e2) = do
         vs <- go e2
-        insertUseTy v ty
+        insertUseFree v
         insertUseDefs v vs
         return mempty
-
-    go (MkExp (EAssign {}) _ _) =
+    -- TODO: What about assignment to struct fields?
+    go0 (EAssign {}) =
         fail "Illegal assignment expression: assignment to an expression"
-
-    go (MkExp (EArrRead earr ei _) _ _) = do
+    go0 (EArrRead earr ei _) = do
         earr_use <- go earr
         ei_use   <- go ei
         return $ earr_use <> ei_use
-
     -- Bit permutation is like an array read
-    go (MkExp (EBPerm earr ei) _ _) = do
+    go0 (EBPerm earr ei) = do
         earr_use <- go earr
         ei_use   <- go ei
         return $ earr_use <> ei_use
-
-    go (MkExp (EArrWrite (MkExp (EVar v) _ ty) ei len e) _ _) = do
-        insertUseTy v ty
+    go0 (EArrWrite (MkExp (EVar v) _ _) ei len e) = do
+        insertUseFree v
         vs0 <- lookupVarDef v
         vs  <- (<>) <$> go ei <*> go e
-        updateArrUseDef v vs0 vs
+        updateArrUseDef vs0 vs
         return mempty
       where
-        updateArrUseDef :: Name -> VarSet -> VarSet -> UDM ()
-        updateArrUseDef v vs0 vs | TArr (Literal n) _ <- ty
-                                 , Just (Range l h)   <- arrIdxRange ranges ei len
-                                 , l == 0 && h == fromIntegral n - 1 = do
+        updateArrUseDef :: VarSet -> VarSet -> UDM ()
+        updateArrUseDef _vs0 vs | TArray (Literal n) _ <- nameTyp v
+                                , Just (Range l h)     <- arrIdxRange ranges ei len
+                                , l == 0 && h == fromIntegral n - 1 = do
             insertUseDefs v vs
-
-        updateArrUseDef v vs0 vs =
+        updateArrUseDef vs0 vs =
             insertUseDefs v (vs0 `Set.union` vs)
-
-    go (MkExp (EArrWrite {}) _ _) =
+    -- TODO: What about array-writes to structs?
+    go0 (EArrWrite {}) =
         fail "Illegal array write expression: array is an expression"
-
-    go (MkExp (EIter ix x earr ebody) _ _) = do
-        tarr <- case info earr of
-                  TArr _ tarr -> return tarr
-                  _           -> fail "Array type expected"
-        extendVars [(ix, tint32)
-                   ,(x,  tarr)] $ do
-        vs_earr <- go earr
-        insertUseDefs ix Set.empty
-        insertUseDefs x  vs_earr
-        (Set.delete ix . Set.delete x) <$> go ebody
-
-    go (MkExp (EFor _ ix estart elen ebody) _ _) =
-        extendVars [(ix, tint32)] $ do
-        vs_ix <- (<>) <$> go estart <*> go elen
-        insertUseDefs ix vs_ix
-        Set.delete ix <$> go ebody
-
-    go (MkExp (EWhile econd ebody) _ _) = do
+    go0 (EIter ix x earr ebody) = do
+        extendVars [ix, x] $ do
+          vs_earr <- go earr
+          insertUseDefs ix Set.empty
+          insertUseDefs x  vs_earr
+          (Set.delete ix . Set.delete x) <$> go ebody
+    go0 (EFor _ ix estart elen ebody) =
+        extendVars [ix] $ do
+          vs_ix <- (<>) <$> go estart <*> go elen
+          insertUseDefs ix vs_ix
+          Set.delete ix <$> go ebody
+    go0 (EWhile econd ebody) = do
         u1 <- go econd
         u2 <- go ebody
         return $ u1 <> u2
-
-    go (MkExp (ELet v _ e1 e2) _ _) = do
+    go0 (ELet v _ e1 e2) = do
         vs_e1 <- go e1
-        extendVars [(v, info e1)] $ do
-        insertUseDefs v vs_e1
-        Set.delete v <$> go e2
-
-    -- TODO: We probably should not ignore tyAnn in the `Just` case
-    go (MkExp (ELetRef v tyAnn e1 e2) _ _) = do
-        (ty, vs_e1) <-
-           case e1 of Nothing  -> return (tyAnn, mempty)
-                      Just e1' -> go e1' >>= \r -> return (info e1', r)
-        extendVars [(v,ty)] $ do
-        insertUseDefs v vs_e1
-        Set.delete v <$> go e2
-
+        extendVars [v] $ do
+          insertUseDefs v vs_e1
+          Set.delete v <$> go e2
+    go0 (ELetRef v me1 e2) = do
+        vs_e1 <- case me1 of Nothing -> return mempty
+                             Just e1 -> go e1
+        extendVars [v] $ do
+          insertUseDefs v vs_e1
+          Set.delete v <$> go e2
     -- For ESeq we throw away the variables used to calculate the pure part of
     -- 'e1'.
-    go (MkExp (ESeq e1 e2) _ _) = do
+    go0 (ESeq e1 e2) = do
         _ <- go e1
         go e2
-
-    go (MkExp (ECall {}) _ _) =
+    go0 (ECall {}) =
         fail "Cannot handle call"
+    go0 (EIf econd ethen eelse) = do
+        vs_cond <- go econd
+        ud0     <- gets usedefs
 
-    go (MkExp (EIf econd ethen eelse) _ _) = do
-      vs_cond <- go econd
-      ud0     <- gets usedefs
+        -- Run the then branch
+        vs_then <- extendFlowVars vs_cond $ go ethen
+        ud_then <- gets usedefs
 
-      -- Run the then branch
-      vs_then <- extendFlowVars vs_cond $ go ethen
-      ud_then <- gets usedefs
+        -- Put back the use-def state that was in effect before the then branch
+        modify $ \s -> s { usedefs = ud0 }
 
-      -- Put back the use-def state that was in effect before the then branch
-      modify $ \s -> s { usedefs = ud0 }
+        -- Run the else branch
+        vs_else <- extendFlowVars vs_cond $ go eelse
+        ud_else <- gets usedefs
 
-      -- Run the else branch
-      vs_else <- extendFlowVars vs_cond $ go eelse
-      ud_else <- gets usedefs
+        -- Join the effects from the two branches
+        modify $ \s -> s { usedefs = Map.unionWith Set.union ud_then ud_else }
 
-      -- Join the effects from the two branches
-      modify $ \s -> s { usedefs = Map.unionWith Set.union ud_then ud_else }
-
-      return $ mconcat [vs_cond, vs_then, vs_else]
-
-    go (MkExp (EPrint {}) _ _) =
+        return $ mconcat [vs_cond, vs_then, vs_else]
+    go0 (EPrint {}) =
         return mempty
-
-    go (MkExp (EError {}) _ _) =
+    go0 (EError {}) =
         return mempty
-
-    go (MkExp (ELUT {}) _ _) =
+    go0 (ELUT {}) =
         fail "Cannot handle a recursive LUT"
-
-    go (MkExp (EStruct fn tfs) _ _) = do
-        us <- mapM (\(fn,e) -> go e) tfs
-        let comb [u]     = u
-            comb (u1:us) = u1 <> comb us
-            comb []      = error "Can't happen!"
-        return $ comb us
-    go (MkExp (EProj e fn)_ _) = go e
-
+    go0 (EStruct _tn tfs) = do
+        us <- mapM (\(_fn,e) -> go e) tfs
+        return $ mconcat us
+    go0 (EProj e _) =
+        go e
 
 inOutVars :: Monad m
-          => [(Name,Ty)]
-          -> Map Name Range
-          -> Exp Ty
-          -> m ([VarTy], [VarTy], [VarTy])
+          => [GName Ty]
+          -> Map (GName Ty) Range
+          -> Exp
+          -> m ([GName Ty], [GName Ty], [GName Ty])
 inOutVars locals ranges e = do
     (modified, impUsed, pureUsed, allVars) <- varUseDefs ranges e
-    let inVars, outVars :: [VarTy]
+    let inVars, outVars :: [GName Ty]
         inVars  = nub $ impUsed ++ pureUsed
         outVars = modified \\ locals
     return (inVars, outVars, allVars)

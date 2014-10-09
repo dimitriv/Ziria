@@ -34,7 +34,6 @@ import Text.Parsec
 import Text.PrettyPrint.Mainland
 import Text.Show.Pretty (dumpStr)
 
--- import Analysis.UseDef
 import Opts
 import PpComp
 import Rename
