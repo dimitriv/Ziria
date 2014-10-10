@@ -23,7 +23,6 @@ import Control.Applicative
 import Control.Monad.State
 import Data.Default
 import Data.Tuple (swap)
-import Data.Maybe (isJust)
 import qualified Data.Map as M
 import qualified Data.Set as S
 
@@ -63,7 +62,7 @@ instance Default name => Default (TaskGenState name task) where
       tgstBarrierFuns = S.empty,
       tgstTaskInfo    = M.empty,
       tgstNextQ       = SyncQ 0,
-      tgstNextCQ      = CommitQ 0 False,
+      tgstNextCQ      = CommitQ 0,
       tgstNextTaskID  = def,
       tgstNumTasks    = 0
     }
@@ -130,6 +129,8 @@ runTaskGen =
 
 -- | Create a new task from a 'TaskInfo' structure,
 --   complete with sync info and queue reads and writes.
+--   Also fills the 'syncCloseQueues' field of a computer's sync info
+--   with the upstream and downstream queue.
 createTaskEx :: (Ord name, Enum name)
              => Maybe SyncInfo
              -> TaskInfo (Comp CTy Ty)
@@ -140,11 +141,15 @@ createTaskEx snfo task = do
     associate name $ task {taskComp = task'}
     return name
   where
+    snfo' = flip fmap snfo $ \s -> s {
+        syncCloseQueues = [taskInputQueue task, taskOutputQueue task]
+                          ++ syncCloseQueues s
+      }
     withQs = insertQs (taskComp task)
                       (taskInputQueue task)
                       (taskOutputQueue task)
-                      (isJust snfo)
-    task' = withQs `withSync` snfo
+                      snfo
+    task' = withQs `withSync` snfo'
 
     --  Append synchronization code to a component. If the component is a
     --  computer, the sync information is seq'd onto the end of it.
@@ -164,10 +169,10 @@ createTaskEx snfo task = do
     -- Does not insert a read/write is one is already present.
     -- Also inserts sync code to close a queue when upstream/downstream finishes
     -- under these conditions:
-    -- * sync == True && not (isComputer c) && propagateDeathDown qin => close qout
-    -- * sync == True && not (isComputer c) && propagateDeathUp qout => close qin
-    insertQs :: Comp CTy Ty -> Queue -> Queue -> Bool -> Comp CTy Ty
-    insertQs c qin qout sync =
+    -- * not (isComputer c) && closeDownstream (fromJust msnfo) => close qout
+    -- * not (isComputer c) && closeUpstream (fromJust msnfo) => close qin
+    insertQs :: Comp CTy Ty -> Queue -> Queue -> Maybe SyncInfo -> Comp CTy Ty
+    insertQs c qin qout msnfo =
         case (isReadBufTy $ compInfo c, isWriteBufTy $ compInfo c) of
           (False, False) ->
             cPar loc (mkParTy rbufty partyout) pnfo reader (cPar loc partyout pnfo c writer)
@@ -187,12 +192,12 @@ createTaskEx snfo task = do
         wbufty = CTBase $ TTrans outty (TBuff (IntBuf outty))
         pnfo = mkParInfo MaybePipeline
         partyout = mkParTy (compInfo c) wbufty
-        killQOut = case (sync, isComputer c, propagateDeathDown qin) of
-          (True, False, True) -> Just qout
-          _                   -> Nothing
-        killQIn = case (sync, isComputer c, propagateDeathUp qout) of
-          (True, False, True) -> Just qin
-          _                   -> Nothing
+        killQOut = case (syncCloseDownstream <$> msnfo, isComputer c) of
+          (Just True, True) -> Just qout
+          _                 -> Nothing
+        killQIn = case (syncCloseUpstream <$> msnfo, isComputer c) of
+          (Just True, True) -> Just qin
+          _                 -> Nothing
         -- TODO: read type doesn't really matter probably, but this may not be right
         reader = cReadInternal loc rbufty (show $ qID qin) SpinOnEmpty killQOut
         writer = cWriteInternal loc wbufty (show $ qID qout) killQIn

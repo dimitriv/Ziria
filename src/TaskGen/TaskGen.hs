@@ -37,7 +37,8 @@ insertTasks = runTaskGen . go
 --         O(n^2) - could be O(n) if we instead annotated the AST as we
 --         traverse it.
 --
---   TODO: currently doesn't do synchronization at start/end of tasks.
+--   TODO: when generating tasks for a bind, commit queues must be passed
+--         in from above, NOT sync queues!
 --
 --   TODO: currently doesn't calculate cardinalities for commit queues.
 --
@@ -79,31 +80,34 @@ taskify qs@(inq, outq) snfo c = do
       error "Seq appeared during task generation!"
 
     go (Par _ _ _) = do
-      -- Generating tasks for Par:
-      --   For each component:
-      --     If component is a computer:
-      --       Pass full sync info, merged with the one coming from outside.
-      --       Info from outside will always be justStart ts.
-      --     Else:
-      --       If component is the first in the pipeline:
-      --         Pass dontSync.
-      --       Else:
-      --         Pass justClose outq.
       let bars = findBarriers c
       queues <- mapM (const freshQueue) (drop 1 bars)
-      let syncsnfo = undefined
+      let syncsnfo = SyncInfo {
+              syncCloseUpstream = True,
+              syncCloseDownstream = True,
+              syncCloseQueues = [],        -- will be filled in by createTask
+              syncWait = undefined,        -- wait for upstream-most/downstream-most component of pipeline
+              syncCommitQueue = undefined, -- rollback upstream-most queue
+              syncStart = []               -- no starts of our own
+            }
           compsnfo = syncsnfo `withStartsFrom` snfo
+          -- TODO: it's not incorrect to close both up- and downstream,
+          --       but it would be more elegant not to.
+          transsnfo = closeUpstream {syncCloseDownstream = True}
           bars_qs = zip3 bars (inq:queues) (queues ++ [outq])
-      taskIds <- foldM (taskify' compsnfo) [] $ reverse bars_qs
+      taskIds <- foldM (taskify' transsnfo compsnfo) [] $
+                       reverse (zip (True : repeat False) bars_qs)
       createTask (cSync (compLoc c) (compInfo c) (justStart taskIds)) qs Nothing
       where
-        taskify' compsnfo downstream (c', qin', qout')
+        taskify' transsnfo compsnfo downstream (isFirst, (c', qin', qout'))
           | isComputer c' = do
             (: downstream) <$> taskify (qin', qout') compsnfo c'
           | [] <- downstream = do
             (: []) <$> taskify (qin', qout') dontSync c'
+          | isFirst = do
+            (: downstream) <$> taskify (qin', qout') dontSync c'
           | otherwise = do
-            (: downstream) <$> taskify (qin', qout') (justClose qout') c'
+            (: downstream) <$> taskify (qin', qout') transsnfo c'
 
         -- Turn a >>> standalone b >>> c >>> d into [a, standalone b, c >>> d]
         findBarriers p@(MkComp (Par _ l r) _ _) =

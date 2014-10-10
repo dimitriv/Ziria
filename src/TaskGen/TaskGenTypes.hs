@@ -8,12 +8,11 @@ module TaskGenTypes (
   , TaskEnv
   , TaskID
   , nextQ
-  , justClose
+  , closeUpstream
+  , closeDownstream
   , justStart
   , dontSync
   , withStartsFrom
-  , propagateDeathUp
-  , propagateDeathDown
   ) where
 import qualified Data.Map as M
 import GHC.Generics
@@ -30,9 +29,7 @@ data Queue =
     -- | A normal Sora synchronization queue.
     SyncQ   {qID :: Int}
     -- | A commit queue. See @ParNotes.md@ for details.
-    --   Invariant: commit queues are always locally first in a pipe.
-  | CommitQ {qID :: Int,
-             qLast :: Bool}
+  | CommitQ {qID :: Int}
     -- | The external read buffer.
   | ExtReadQ
     -- | The external write buffer.
@@ -48,20 +45,9 @@ instance PrettyVal Queue
 --   read and write queue respectively, so calling @nextQ@ on either of
 --   those is an error as a sanity check.
 nextQ :: Queue -> Queue
-nextQ (SyncQ qid)         = SyncQ (succ qid)
-nextQ (CommitQ qid qlast) = CommitQ (succ qid) qlast
-nextQ q                   = error $ "nextQ (" ++ show q ++ ") does not make sense!"
-
--- | Should this queue propagate a "finished" signal upstream?
-propagateDeathUp :: Queue -> Bool
-propagateDeathUp (CommitQ {}) = True
-propagateDeathUp _            = False
-
--- | Should this queue propagate a "finished" signal downstream?
-propagateDeathDown :: Queue -> Bool
-propagateDeathDown (CommitQ _ islast) = not islast
-propagateDeathDown (SyncQ {})         = True
-propagateDeathDown _                  = False
+nextQ (SyncQ qid)   = SyncQ (succ qid)
+nextQ (CommitQ qid) = CommitQ (succ qid)
+nextQ q             = error $ "nextQ (" ++ show q ++ ") does not make sense!"
 
 
 -- | Take care to put task on a separate core where only this task will run, or just put it anywhere?
@@ -109,18 +95,24 @@ data TaskInfo comp = TaskInfo {
 --   In practice, a transformer task will only perform the first step since
 --   its other 'syncCommitQueue' and 'syncStart' fields will be empty.
 data SyncInfo = SyncInfo {
+    -- | Close upstream queue when done.
+    syncCloseUpstream   :: Bool,
+
+    -- | Close downstream queue when done.
+    syncCloseDownstream :: Bool,
+
     -- | Queues which are to be closed/finished on sync.
     --   Used to propagate kill signals upstream and downstream.
-    syncCloseQueues :: [Queue],
+    syncCloseQueues     :: [Queue],
 
     -- | Tasks which must finish before this task may finish.
-    syncWait        :: [TaskID],
+    syncWait            :: [TaskID],
 
     -- | Commit queue to rollback when task finishes.
-    syncCommitQueue :: Maybe Queue,
+    syncCommitQueue     :: Maybe Queue,
     
     -- | Other tasks that need to be started after this task finishes.
-    syncStart       :: [TaskID]
+    syncStart           :: [TaskID]
   } deriving (Show, Generic)
 
 instance PrettyVal SyncInfo
@@ -130,7 +122,7 @@ instance PrettyVal SyncInfo
 --   to avoid throwing away any sync information. If this invariant is
 --   broken, this function bombs out with an angry error.
 withStartsFrom :: SyncInfo -> SyncInfo -> SyncInfo
-a `withStartsFrom` (SyncInfo [] [] Nothing bstarts) =
+a `withStartsFrom` (SyncInfo False False [] [] Nothing bstarts) =
   a {syncStart = syncStart a ++ bstarts}
 _ `withStartsFrom` _ =
   error "BUG: withStartsFrom discarded some sync information!"
@@ -139,26 +131,32 @@ _ `withStartsFrom` _ =
 --   part of a @>>>@ stretch should do.
 justStart :: [TaskID] -> SyncInfo
 justStart startTIDs = SyncInfo {
+    syncCloseUpstream = False,
+    syncCloseDownstream = False,
     syncCloseQueues = [],
     syncWait = [],
     syncCommitQueue = Nothing,
     syncStart = startTIDs
   }
 
--- | Just close a queue when finished. This is what all transformers but the
---   downstream-most should do.
-justClose :: Queue -> SyncInfo
-justClose q = SyncInfo {
-    syncCloseQueues = [q],
-    syncWait = [],
-    syncCommitQueue = Nothing,
-    syncStart = []
-  }
+-- | Just close the upstream queue when finished.
+--   This is what transformers upstream of the computer should do,
+--   except for the first.
+closeUpstream :: SyncInfo
+closeUpstream = dontSync {syncCloseUpstream = True}
+
+-- | Just close the upstream queue when finished.
+--   This is what transformers downstream of the computer should do,
+--   except for the last.
+closeDownstream :: SyncInfo
+closeDownstream = dontSync {syncCloseDownstream = True}
 
 -- | Just die, without any synchronization. This is what the
 --   downstream-most transformer in a pipeline should do.
 dontSync :: SyncInfo
 dontSync = SyncInfo {
+    syncCloseUpstream = False,
+    syncCloseDownstream = False,
     syncCloseQueues = [],
     syncWait = [],
     syncCommitQueue = Nothing,
