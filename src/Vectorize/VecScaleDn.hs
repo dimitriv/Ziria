@@ -259,10 +259,8 @@ doVectorizeCompDn comp cin cout (din,dout)
 
                 (Mitigate {}) ->
                    vecMFail "BUG: Mitigate is not a simple computer!"
-                (ActivateTask {}) -> 
-                    vecMFail "BUG: ActivateTask should never appear pre vectorization!"
-                (DeactivateSelf) -> 
-                    vecMFail "BUG: DeactivateSelf should never appear pre vectorization!"
+                (Sync {}) -> 
+                    vecMFail "BUG: Sync should never appear pre vectorization!"
 
                 -- However, these guys are ok, /provided/ they either take OR emit, in which case we will
                 -- have vectorized only the takes or emits respectively. So this is not an error, instead we
@@ -282,9 +280,9 @@ doVectorizeCompDn comp cin cout (din,dout)
                 ReadSrc mty  -> return $ MkComp (ReadSrc mty)  loc ()
                 WriteSnk mty -> return $ MkComp (WriteSnk mty) loc ()
 
-                (ReadInternal bid tp)
-                     -> return $ MkComp (ReadInternal bid tp) loc ()
-                (WriteInternal bid) -> return $ MkComp (WriteInternal bid) loc ()
+                (ReadInternal bid tp mq)
+                     -> return $ MkComp (ReadInternal bid tp mq) loc ()
+                (WriteInternal bid mq) -> return $ MkComp (WriteInternal bid mq) loc ()
 
                 (Return fi e) -> return $ MkComp (Return fi $ eraseExp e) loc ()
 

@@ -258,7 +258,7 @@ main = failOnException $ do
       = return [c]
 
     runPipelinePhase :: DynFlags -> GS.Sym -> Comp CTy Ty
-                     -> IO (PP.PipelineRetPkg, TaskEnv)
+                     -> IO (PP.PipelineRetPkg, TaskEnv (Comp CTy Ty))
     -- Pipeline Phase
     runPipelinePhase dflags _ c
       | all (isDynFlagSet dflags) [Pipeline, NewPipeline]
@@ -271,7 +271,12 @@ main = failOnException $ do
     runPostVectorizePhases :: DynFlags
         -> GS.Sym
         -> (Comp CTy Ty, FilePath)
-        -> IO (Comp CTy Ty, CompCtxt, TaskEnv, [(String, Comp CTy Ty)], [Ty], FilePath)
+        -> IO (Comp CTy Ty,
+               CompCtxt,
+               TaskEnv (Comp CTy Ty),
+               [(String, Comp CTy Ty)],
+               [Ty],
+               FilePath)
     runPostVectorizePhases dflags sym (c,fn) = do
         verbose dflags $
            text "Result in file:" <+> text fn

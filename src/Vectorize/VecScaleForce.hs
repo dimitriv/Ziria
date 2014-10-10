@@ -422,10 +422,8 @@ doVectorizeCompForce comp (finalin,finalout)
                     (Mitigate {}) ->
                         liftVecM $ vecMFail "Can't force vectorization of non-simple comp: mitigate"
 
-                    (ActivateTask {}) -> 
-                        liftVecM $ vecMFail "BUG: ActivateTask should never appear pre vectorization!"
-                    (DeactivateSelf) -> 
-                        liftVecM $ vecMFail "BUG: DeactivateSelf should never appear pre vectorization!"
+                    (Sync {}) -> 
+                        liftVecM $ vecMFail "BUG: Sync should never appear pre vectorization!"
 
                     (VectComp hint c) ->
                         liftVecM $
@@ -444,8 +442,8 @@ doVectorizeCompForce comp (finalin,finalout)
 
                     (ReadSrc mty)  -> return $ cReadSrc loc () mty
                     (WriteSnk mty) -> return $ cWriteSnk loc () mty
-                    (ReadInternal bid tp) -> return $ cReadInternal loc () bid tp
-                    (WriteInternal bid)   -> return $ cWriteInternal loc () bid
+                    (ReadInternal bid tp mq) -> return $ cReadInternal loc () bid tp mq
+                    (WriteInternal bid mq)   -> return $ cWriteInternal loc () bid mq
 
                     (Return fi e) -> return $ cReturn loc () fi (eraseExp e)
 

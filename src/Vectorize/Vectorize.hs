@@ -995,11 +995,11 @@ computeVectTop verbose = computeVect FlexiRate
             -> return [ self_no_vect { dvr_vres = DidVect 0 0 minUtil } ]
 
 
-          ReadInternal bid tp
+          ReadInternal bid tp _
             | isVectorizable tyout
             -> return [ self_no_vect { dvr_vres = DidVect 0 0 minUtil } ]
 
-          WriteInternal bid
+          WriteInternal bid _
             | isVectorizable tyin
             -> return [ self_no_vect { dvr_vres = DidVect 0 0 minUtil } ]
 

@@ -15,37 +15,13 @@ import Outputable
 import TaskGenTypes
 import TaskGenMonad
 
-import Debug.Trace -- Only for temporary dummy queue in insertTask
-
--- | Comp representing the starting of a task.
---   Preserves stream types, but turns the task into a computer
---   if it's a transformer.
-startTask :: Maybe SourcePos -> CTy -> TaskID -> Comp CTy Ty
-startTask loc ty tid =
-  MkComp (ActivateTask tid Nothing) loc (compUnitTy ty)
-
--- | Comp representing the starting of a task from a 'BindMany', with an input var.
-startTaskWithInVar :: Name -> Maybe SourcePos -> CTy -> TaskID -> Comp CTy Ty
-startTaskWithInVar v loc ty tid =
-  MkComp (ActivateTask tid (Just v)) loc (compUnitTy ty)
-
 -- | Split program into entry points and tasks to be started along the road.
-insertTasks :: Comp CTy Ty -> (TaskEnv, Comp CTy Ty)
+insertTasks :: Comp CTy Ty -> (TaskEnv (Comp CTy Ty), Comp CTy Ty)
 insertTasks = runTaskGen . go
   where
     go comp = do
-      tid <- taskify (ExtReadQ, ExtWriteQ) Nothing comp
+      tid <- taskify (ExtReadQ, ExtWriteQ) dontSync comp
       taskComp <$> lookupTask tid
-
--- | Given a type ST a i o, produces a type ST (C ()) i o.
-compUnitTy :: CTy -> CTy
-compUnitTy (CTBase (TComp _ i o)) = CTBase $ TComp TUnit i o
-compUnitTy (CTBase (TTrans i o))  = CTBase $ TComp TUnit i o
-compUnitTy ty = error $ "Non base type in compUnitTy:\n" ++ show (ppr ty)
-
--- | The type Comp (C ()) () ().
-compTripleUnitTy :: CTy
-compTripleUnitTy = CTBase $ TComp TUnit TUnit TUnit
 
 -- | Split the given AST along task barriers. The returned task is the entry
 --   point of the program, from which further tasks are spawned as needed.
@@ -66,93 +42,68 @@ compTripleUnitTy = CTBase $ TComp TUnit TUnit TUnit
 --   TODO: currently doesn't calculate cardinalities for commit queues.
 --
 --   TODO: don't generate unnecessary queue reads/writes
---
---   TODO:  Change the Maybe (Comp CTy Ty) to something that more explicitly records if t
---          this continuation has been taskified or not. E.g. a TaskId or maybe if we need
---          to also emit code about waiting someone else then another TaskId. In general
---          something like:   SynchronizationInfo  (who to start next and who to wait for etc)
--- 
 taskify :: (Queue, Queue)
-        -> Maybe (Comp CTy Ty)  
+        -> SyncInfo
         -> Comp CTy Ty
-        -> TaskGen TaskID TaskInfo TaskID
-taskify qs@(inq, outq) mnxt c = do
-    case (containsBarrier c, mnxt) of
-      (True, _)         -> go (unComp c)
-      (False, Just nxt)
-        | isComputer c  -> createTask (MkComp (c `Seq` nxt) (compLoc c) (compInfo c)) qs noSyncInfo
-      _                 -> createTask c qs noSyncInfo
+        -> TaskGen TaskID (TaskInfo (Comp CTy Ty)) TaskID
+taskify qs@(inq, outq) snfo c = do
+    if containsBarrier c
+      then go (unComp c)
+      else createTask c qs (Just snfo)
   where
     -- Invariant: if go gets called, its argument *does* contain a barrier.
-    -- It's important to note that sequential code is generated right to left,
-    -- in order to ensure that each sequential computation always knows its
-    -- continuation.
-    -- TODO: sync code here!
-    go :: Comp0 CTy Ty -> TaskGen TaskID TaskInfo TaskID
+    go :: Comp0 CTy Ty -> TaskGen TaskID (TaskInfo (Comp CTy Ty)) TaskID
     go (BindMany first rest)
       | containsBarrier first = do
           let ((v, comp):xs) = rest
-          ms <- taskify qs mnxt (MkComp (BindMany comp xs) (compLoc comp) (compInfo c))
-          tid <- taskify qs (Just $ startTaskWithInVar v (compLoc c) (compInfo c) ms) first
-          createTask (startTask (compLoc first) (compInfo first) tid) qs noSyncInfo
+          nxt <- taskify qs snfo (MkComp (BindMany comp xs) (compLoc comp) (compInfo c))
+          taskify qs (justStart [nxt]) first
       | otherwise = do
-          comp <- genBindManyBarriers first (splitBarriers rest)
-          createTask comp qs noSyncInfo
+          genBindManyBarriers first (splitBarriers rest)
       where
         -- Invariant: each (first ++ b) contains a barrier.
-        genBindManyBarriers :: Comp CTy Ty -> [[(Name, Comp CTy Ty)]] -> TaskGen TaskID TaskInfo (Comp CTy Ty)
         genBindManyBarriers frst (b:bs) = do
           case bs of
             (((_, first'):rest'):bs') -> do
               -- Next task is just the next in the list of barriers
-              nxt <- Just <$> genBindManyBarriers first' (rest':bs')
-              b' <- taskify qs nxt $ MkComp (BindMany frst b) (compLoc frst) (compInfo c)
-              return $ startTask (compLoc c) (compInfo c) b'
+              nxt <- genBindManyBarriers first' (rest':bs')
+              taskify qs (justStart [nxt]) $ MkComp (BindMany frst b) (compLoc frst) (compInfo c)
             _                        -> do
-              -- End of bind; next task is whatever came from the outside, if any
-              b' <- taskify qs mnxt $ MkComp (BindMany first b) (compLoc first) (compInfo c)
-              return $ startTask (compLoc c) (compInfo c) b'
+              -- End of bind; sync info is whatever came from the outside
+              taskify qs snfo $ MkComp (BindMany frst b) (compLoc frst) (compInfo c)
         genBindManyBarriers _ [] = do
           error "BUG: barrier is in first comp of BindMany, but genBindManyBarriers was called!"
 
-    go (Seq _ _) = do
-      mcomp <- foldM seqStart (Left mnxt) (reverse $ findBarriers c)
-      case mcomp of
-        Right tid -> return tid
-        _         -> error "The impossible happened!"
-      where
-        -- TODO: some more sync code should go here!
-        seqStart :: Either (Maybe (Comp CTy Ty)) TaskID
-                 -> Comp CTy Ty
-                 -> TaskGen TaskID TaskInfo (Either (Maybe (Comp CTy Ty)) TaskID)
-        seqStart (Right next) comp = do
-          nc <- taskComp <$> lookupTask next
-          Right <$> taskify qs (Just $ startTask (compLoc nc) (compInfo nc) next) comp
-        seqStart (Left mnxt') comp = do
-          Right <$> taskify qs mnxt comp
-
-        -- Turn a ; standalone b ; c ; d into [a, standalone b, c ; d]
-        findBarriers :: Comp CTy Ty -> [Comp CTy Ty]
-        findBarriers s@(MkComp (Seq l r) _ _) =
-          case (containsBarrier l, containsBarrier r) of
-            (True, True)  -> findBarriers l ++ findBarriers r
-            (True, False) -> findBarriers l ++ [r]
-            (False, True) -> l:findBarriers r
-            _             -> [s]
-        findBarriers s = [s]
+    go (Seq _ _) =
+      -- Seq should be in source AST only
+      error "Seq appeared during task generation!"
 
     go (Par _ _ _) = do
-      -- TODO: find first and last components of pipeline, as well as the computer (if any) and add sync
-      --       code! Also, commit queues; currently everything is simple queues.
+      -- Generating tasks for Par:
+      --   For each component:
+      --     If component is a computer:
+      --       Pass full sync info, merged with the one coming from outside.
+      --       Info from outside will always be justStart ts.
+      --     Else:
+      --       If component is the first in the pipeline:
+      --         Pass dontSync.
+      --       Else:
+      --         Pass justClose outq.
       let bars = findBarriers c
       queues <- mapM (const freshQueue) (drop 1 bars)
-      taskIds <- mapM createTask' $ zip3 bars (inq:queues) (queues ++ [outq])
-      let starts = foldr1 (cSeq (compLoc c) compTripleUnitTy) $
-                     zipWith startTask' bars taskIds
-      createTask starts (head queues, last queues) noSyncInfo
+      let syncsnfo = undefined
+          compsnfo = syncsnfo `withStartsFrom` snfo
+          bars_qs = zip3 bars (inq:queues) (queues ++ [outq])
+      taskIds <- foldM (taskify' compsnfo) [] $ reverse bars_qs
+      createTask (cSync (compLoc c) (compInfo c) (justStart taskIds)) qs Nothing
       where
-        startTask' bar tid = startTask (compLoc bar) (compInfo bar) tid
-        createTask' (c', qin', qout') = taskify (qin', qout') mnxt c'
+        taskify' compsnfo downstream (c', qin', qout')
+          | isComputer c' = do
+            (: downstream) <$> taskify (qin', qout') compsnfo c'
+          | [] <- downstream = do
+            (: []) <$> taskify (qin', qout') dontSync c'
+          | otherwise = do
+            (: downstream) <$> taskify (qin', qout') (justClose qout') c'
 
         -- Turn a >>> standalone b >>> c >>> d into [a, standalone b, c >>> d]
         findBarriers p@(MkComp (Par _ l r) _ _) =
@@ -166,17 +117,17 @@ taskify qs@(inq, outq) mnxt c = do
     -- Let bindings will be declared on the top level, so we keep them around
     -- in the AST just to have their values properly assigned.
     go (Let name rhs comp) = do
-      tid <- taskify qs mnxt comp
+      tid <- taskify qs snfo comp
       updateTaskComp tid $ \c' ->
         MkComp (Let name rhs c') (compLoc c) (compInfo c)
       return tid
     go (LetE name inl rhs comp) = do
-      tid <- taskify qs mnxt comp
+      tid <- taskify qs snfo comp
       updateTaskComp tid $ \c' ->
         MkComp (LetE name inl rhs c') (compLoc c) (compInfo c)
       return tid
     go (LetERef name ty rhs comp)  = do
-      tid <- taskify qs mnxt comp
+      tid <- taskify qs snfo comp
       updateTaskComp tid $ \c' ->
         MkComp (LetERef name ty rhs c') (compLoc c) (compInfo c)
       return tid
@@ -186,7 +137,7 @@ taskify qs@(inq, outq) mnxt c = do
       -- non-inlined functions into tasks.
       when (containsBarrier body) $ do
         addBarrierFun name
-      tid <- taskify qs mnxt comp
+      tid <- taskify qs snfo comp
       updateTaskComp tid $ \c' ->
         MkComp (LetFunC name args locs body c') (compLoc c) (compInfo c)
       return tid
@@ -194,9 +145,11 @@ taskify qs@(inq, outq) mnxt c = do
     go (Interleave _ _) =
       error "BUG: Interleave in AST!"
     go (Branch cond th el) = do
-      th' <- startTask (compLoc th) (compInfo th) <$> taskify qs mnxt th
-      el' <- startTask (compLoc el) (compInfo el) <$> taskify qs mnxt el
-      createTask (MkComp (Branch cond th' el') (compLoc c) (compInfo c)) qs noSyncInfo
+      thID <- taskify qs snfo th
+      elID <- taskify qs snfo el
+      let th' = cSync (compLoc th') (compInfo th') (justStart [thID])
+          el' = cSync (compLoc el') (compInfo el') (justStart [elID])
+      createTask (MkComp (Branch cond th' el') (compLoc c) (compInfo c)) qs Nothing
     go (Until _cond _comp) = do
       error "TODO: until requires some extra code"
     go (While _cond _comp) = do
@@ -208,7 +161,7 @@ taskify qs@(inq, outq) mnxt c = do
     go (VectComp vect comp) = do
       -- TODO: cardinality information needed to inform the counting
       --       not necessarily right here though?
-      tid <- taskify qs mnxt comp
+      tid <- taskify qs snfo comp
       updateTaskComp tid $ \comp' ->
         MkComp (VectComp vect comp') (compLoc c) (compInfo c)
       return tid
@@ -216,25 +169,16 @@ taskify qs@(inq, outq) mnxt c = do
       | containsBarrier comp = do
         -- If we run into nested barriers, only the innermost level is
         -- honored. Maybe warn about this?
-        taskify qs mnxt comp
+        taskify qs snfo comp
       | otherwise = do
-        let c' = case (isComputer c, mnxt) of
-                   (True, Just nxt) -> MkComp (c `Seq` nxt) (compLoc c) (compInfo c)
-                   _                -> c
-        createTaskWithPlacement Alone c' qs noSyncInfo
+        createTaskWithPlacement Alone c qs (Just snfo)
     -- If we get to either Map or Call, then the name they're calling on
     -- is a barrier for sure; make this a primitive barrier since we can't
     -- split funs.
     go (Map _ _) = do
-        let c' = case (isComputer c, mnxt) of
-                   (True, Just nxt) -> MkComp (c `Seq` nxt) (compLoc c) (compInfo c)
-                   _                -> c
-        createTaskWithPlacement Alone c' qs noSyncInfo
+        createTaskWithPlacement Alone c qs (Just snfo)
     go (Call _ _) = do
-        let c' = case (isComputer c, mnxt) of
-                   (True, Just nxt) -> MkComp (c `Seq` nxt) (compLoc c) (compInfo c)
-                   _                -> c
-        createTaskWithPlacement Alone c' qs noSyncInfo
+        createTaskWithPlacement Alone c qs (Just snfo)
     go _ = error "Atomic computations can't possibly contain barriers!"
 
 -- | Split a list of computations, with an extra piece of information,

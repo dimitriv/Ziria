@@ -11,7 +11,7 @@ module TaskGenMonad (
   , freshQueue, freshCommitQueue
 
   -- Inspecting and manipulating tasks
-  , lookupTask, updateTask, updateTaskComp, updateTaskSyncInfo
+  , lookupTask, updateTask, updateTaskComp
 
   -- Dealing with barrier functions
   , addBarrierFun, getAllBarrierFuns
@@ -23,10 +23,12 @@ import Control.Applicative
 import Control.Monad.State
 import Data.Default
 import Data.Tuple (swap)
+import Data.Maybe (isJust)
 import qualified Data.Map as M
 import qualified Data.Set as S
 
 import PpComp ()
+import Outputable (ppr)
 import AstComp hiding (comp)
 import AstExpr hiding (name)
 import TaskGenTypes
@@ -61,7 +63,7 @@ instance Default name => Default (TaskGenState name task) where
       tgstBarrierFuns = S.empty,
       tgstTaskInfo    = M.empty,
       tgstNextQ       = SyncQ 0,
-      tgstNextCQ      = CommitQ 0,
+      tgstNextCQ      = CommitQ 0 False,
       tgstNextTaskID  = def,
       tgstNumTasks    = 0
     }
@@ -77,7 +79,8 @@ freshName = do
   put $ st {tgstNextTaskID = succ tid}
   return tid
 
--- | Get a fresh queue.
+-- | Get a fresh queue. The queue is *not* marked as the last in a
+--   pipeline.
 freshQueue :: TaskGen name task Queue
 freshQueue = do
   st <- get
@@ -107,15 +110,9 @@ updateTask tid f = modify $ \st ->
 
 -- | Special case of 'updateTask' for the common case where only the
 --   comp needs updating.
-updateTaskComp :: Ord name => name -> (Comp CTy Ty -> Comp CTy Ty) -> TaskGen name TaskInfo ()
+updateTaskComp :: Ord name => name -> (comp -> comp) -> TaskGen name (TaskInfo comp) ()
 updateTaskComp tid f = do
   updateTask tid $ \t -> t {taskComp = f (taskComp t)}
-
--- | Special case of 'updateTask' for the common case where only the
---   'SyncInfo' needs updating.
-updateTaskSyncInfo :: Ord name => name -> (SyncInfo -> SyncInfo) -> TaskGen name TaskInfo ()
-updateTaskSyncInfo tid f = do
-  updateTask tid $ \t -> t {taskSyncInfo = f (taskSyncInfo t)}
 
 -- | Mark a function as a merge barrier.
 addBarrierFun :: Name -> TaskGen name task ()
@@ -132,17 +129,73 @@ runTaskGen =
   swap . fmap tgstTaskInfo . flip runState def . runTG
 
 -- | Create a new task from a 'TaskInfo' structure,
---   complete with queue reads and writes.
-createTaskEx :: (Ord name, Enum name) => TaskInfo -> TaskGen name TaskInfo name
-createTaskEx task = do
-  modify $ \st -> st {tgstNumTasks = tgstNumTasks st + 1}
-  name <- freshName
-  associate name $ task {
-      taskComp = insertQs (taskComp task)
-                          (taskInputQueue task)
-                          (taskOutputQueue task)
-    }
-  return name
+--   complete with sync info and queue reads and writes.
+createTaskEx :: (Ord name, Enum name)
+             => Maybe SyncInfo
+             -> TaskInfo (Comp CTy Ty)
+             -> TaskGen name (TaskInfo (Comp CTy Ty)) name
+createTaskEx snfo task = do
+    modify $ \st -> st {tgstNumTasks = tgstNumTasks st + 1}
+    name <- freshName
+    associate name $ task {taskComp = task'}
+    return name
+  where
+    withQs = insertQs (taskComp task)
+                      (taskInputQueue task)
+                      (taskOutputQueue task)
+                      (isJust snfo)
+    task' = withQs `withSync` snfo
+
+    --  Append synchronization code to a component. If the component is a
+    --  computer, the sync information is seq'd onto the end of it.
+    --  Otherwise, the original computation is returned, as we assume that
+    --  insertQs already inserted sync info for the transformer.
+    withSync :: Comp CTy Ty -> Maybe SyncInfo -> Comp CTy Ty
+    withSync c (Just snfo) | isComputer c =
+        cSeq (compLoc c) ty c (cSync (compLoc c) ty snfo)
+      where
+        ty = case compInfo c of
+               CTBase (TComp _ i o) -> CTBase (TComp TUnit i o)
+               _                    -> error "unreachable"
+    withSync c _ =
+        c
+
+    -- Insert queue reads and writes for a task.
+    -- Does not insert a read/write is one is already present.
+    -- Also inserts sync code to close a queue when upstream/downstream finishes
+    -- under these conditions:
+    -- * sync == True && not (isComputer c) && propagateDeathDown qin => close qout
+    -- * sync == True && not (isComputer c) && propagateDeathUp qout => close qin
+    insertQs :: Comp CTy Ty -> Queue -> Queue -> Bool -> Comp CTy Ty
+    insertQs c qin qout sync =
+        case (isReadBufTy $ compInfo c, isWriteBufTy $ compInfo c) of
+          (False, False) ->
+            cPar loc (mkParTy rbufty partyout) pnfo reader (cPar loc partyout pnfo c writer)
+          (True, True) ->
+            c
+          (True, False) ->
+            cPar loc partyout pnfo c writer
+          (False, True) ->
+            cPar loc (mkParTy rbufty (compInfo c)) pnfo reader c
+      where
+        (inty, outty) = case compInfo c of
+          CTBase (TTrans i o)  -> (i, o)
+          CTBase (TComp _ i o) -> (i, o)
+          _                    -> error $ "BUG: bad types to readFrom"
+        loc = compLoc c
+        rbufty = CTBase $ TTrans (TBuff (IntBuf inty)) inty
+        wbufty = CTBase $ TTrans outty (TBuff (IntBuf outty))
+        pnfo = mkParInfo MaybePipeline
+        partyout = mkParTy (compInfo c) wbufty
+        killQOut = case (sync, isComputer c, propagateDeathDown qin) of
+          (True, False, True) -> Just qout
+          _                   -> Nothing
+        killQIn = case (sync, isComputer c, propagateDeathUp qout) of
+          (True, False, True) -> Just qin
+          _                   -> Nothing
+        -- TODO: read type doesn't really matter probably, but this may not be right
+        reader = cReadInternal loc rbufty (show $ qID qin) SpinOnEmpty killQOut
+        writer = cWriteInternal loc wbufty (show $ qID qout) killQIn
 
 -- | Create a new task from a computation and a pair of queues.
 --   The new task will be schedulable 'Anywhere'. To create a task
@@ -150,53 +203,30 @@ createTaskEx task = do
 createTask :: (Ord name, Enum name)
            => Comp CTy Ty
            -> (Queue, Queue)
-           -> SyncInfo
-           -> TaskGen name TaskInfo name
+           -> Maybe SyncInfo
+           -> TaskGen name (TaskInfo (Comp CTy Ty)) name
 createTask = createTaskWithPlacement Anywhere
 
 -- | Like 'createTask' but creates the task with the 'Alone'
 --   placement annotation.
+--
+--   Passing 'Nothing' for sync info will result in no additional
+--   sync code being generated. This is useful for tasks which already
+--   contain manually crafted sync code, for instance tasks which only
+--   start other tasks.
 createTaskWithPlacement :: (Ord name, Enum name)
                         => TaskPlacement  -- ^ CPU allocation info for task.
                         -> Comp CTy Ty    -- ^ Task computation.
                         -> (Queue, Queue) -- ^ Input/output queues.
-                        -> SyncInfo       -- ^ Synchronization for this task.
-                        -> TaskGen name TaskInfo name
-createTaskWithPlacement placement comp (qin, qout) sync = do
-  createTaskEx $ TaskInfo {
+                        -> Maybe SyncInfo -- ^ Possible sync info.
+                        -> TaskGen name (TaskInfo (Comp CTy Ty)) name
+createTaskWithPlacement placement comp (qin, qout) snfo = do
+  createTaskEx snfo $ TaskInfo {
     taskComp = comp,
     taskInputQueue = qin,
     taskOutputQueue = qout,
-    taskPlacement = placement,
-    taskSyncInfo = sync
+    taskPlacement = placement
   }
-
--- | Insert queue reads and writes for a task.
---   Does not insert a read/write is one is already present.
-insertQs :: Comp CTy Ty -> Queue -> Queue -> Comp CTy Ty
-insertQs c qin qout =
-    case (isReadBufTy $ compInfo c, isWriteBufTy $ compInfo c) of
-      (False, False) ->
-        cPar loc (mkParTy rbufty partyout) pnfo reader (cPar loc partyout pnfo c writer)
-      (True, True) ->
-        c
-      (True, False) ->
-        cPar loc partyout pnfo c writer
-      (False, True) ->
-        cPar loc (mkParTy rbufty (compInfo c)) pnfo reader c
-  where
-    (inty, outty) = case compInfo c of
-      CTBase (TTrans i o)  -> (i, o)
-      CTBase (TComp _ i o) -> (i, o)
-      _                    -> error $ "BUG: bad types to readFrom"
-    loc = compLoc c
-    rbufty = CTBase $ TTrans (TBuff (IntBuf inty)) inty
-    wbufty = CTBase $ TTrans outty (TBuff (IntBuf outty))
-    pnfo = mkParInfo MaybePipeline
-    partyout = mkParTy (compInfo c) wbufty
-    -- TODO: read type doesn't really matter probably, but this may not be right
-    reader = cReadInternal loc rbufty (show $ qID qin) SpinOnEmpty
-    writer = cWriteInternal loc wbufty (show $ qID qout)
 
 -- | Is the transformer from a buffer read to something else?
 isReadBufTy :: CTy -> Bool

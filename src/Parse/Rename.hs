@@ -480,16 +480,15 @@ renameComp c =
     WriteSnk ann -> do ann' <- renameRWTypeAnn ann
                        return $ cWriteSnk cloc cnfo ann'
 
-    ReadInternal  s typ -> return $ cReadInternal cloc cnfo s typ
-    WriteInternal s     -> return $ cWriteInternal cloc cnfo s
+    ReadInternal  s typ mq -> return $ cReadInternal cloc cnfo s typ mq
+    WriteInternal s mq     -> return $ cWriteInternal cloc cnfo s mq
 
     Standalone c' ->
       do { c'' <- renameComp c'
          ; return $ cStandalone cloc cnfo c''
          }
 
-    ActivateTask {} -> taskControlRenamerBug
-    DeactivateSelf -> taskControlRenamerBug
+    Sync {} -> taskControlRenamerBug
     Mitigate ty n1 n2 -> do
       ty' <- renameType ty
       return $ cMitigate cloc cnfo ty' n1 n2
@@ -499,7 +498,7 @@ renameComp c =
 
 taskControlRenamerBug :: a
 taskControlRenamerBug =
-  error "BUG: renamer hit a task start/stop node!"
+  error "BUG: renamer hit a task sync node!"
 
 renameCallArg :: CallArg (GExp SrcTy a) (GComp SrcTy a1 b)
               -> RenM (CallArg (Exp a) (Comp a1 b))

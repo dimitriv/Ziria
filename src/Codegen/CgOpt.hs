@@ -753,11 +753,11 @@ codeGenComp dflags comp k =
 
 
     -- Write to an internal ThreadSeparator buffer [buf_id].
-    go (MkComp (WriteInternal buf_id) csp his_ty)
+    -- TODO: add sync code for closing _mq when read/write queue is finished!
+    go (MkComp (WriteInternal buf_id _mq) csp his_ty)
       = writeCode comp csp buf_id k
 
-
-    go (MkComp (ReadInternal buf_id tp) csp _) =
+    go (MkComp (ReadInternal buf_id tp _mq) csp _) =
         readCode comp csp buf_id tp k
 
     go (MkComp (Emit e) csp (CTBase cty0)) = do
@@ -1162,7 +1162,9 @@ codeGenComp dflags comp k =
        codeGenCompTop dflags c1 k
 
 
-    go (MkComp (ActivateTask taskid mname) csp _) = do
+    go (MkComp (Sync snfo) csp _) = do
+       codeGenSyncComp k snfo
+{-
        let t = show taskid
        task <- lookupTaskEnv taskid
        activateLbl <- name `fmap` freshName ("activate_task_" ++ t)
@@ -1181,7 +1183,6 @@ codeGenComp dflags comp k =
 
        return $ mkCompInfo activateLbl True
 
-
     go (MkComp DeactivateSelf csp _) = do
        deactivateLbl <- name `fmap` freshName "deactivate_self"
        appendLabeledBlock (tickNmOf deactivateLbl) $ do
@@ -1195,6 +1196,7 @@ codeGenComp dflags comp k =
          kontDone k
 
        return $ mkCompInfo globalDoneHdl True
+-}
 
     go (MkComp c _ (CTArrow {})) = 
         fail $ "CodeGen error: BUG!!! " ++ show c
@@ -1218,6 +1220,18 @@ codeGenComp dflags comp k =
         fail $ "CodeGen error, unimplemented: " ++ show c
 -}
 
+-- | Generate synchronization code for a computer.
+codeGenSyncComp :: CompKont -> SyncInfo -> Cg CompInfo
+codeGenSyncComp k snfo = do
+  syncLbl <- name `fmap` freshName "sync"
+  appendLabeledBlock (tickNmOf syncLbl) $ do
+    appendStmt [cstm|TODO_sync_code_goes_here();|]
+    kontDone k
+  appendLabeledBlock (processNmOf syncLbl) $ do
+    kontDone k
+  return $ mkCompInfo syncLbl False
+      
+
 -- | Name of a task's function.
 taskFunName :: DynFlags -> TaskID -> String
 taskFunName dflags tid =
@@ -1228,7 +1242,7 @@ taskFunName dflags tid =
 --   TODO: since this is just reusing the old 'codeGenThread', generated
 --         tasks may contain unnecessary cruft. Might be worthwhile to
 --         do some spring cleaning.
-codeGenTask :: DynFlags -> TaskID -> TaskInfo -> Cg ()
+codeGenTask :: DynFlags -> TaskID -> TaskInfo (Comp CTy Ty) -> Cg ()
 codeGenTask dflags tid task = do
   codeGenThread dflags (show tid) (taskComp task)
 

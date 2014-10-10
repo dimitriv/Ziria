@@ -152,7 +152,7 @@ import PpComp
 import PpExpr
 import qualified GenSym as GS
 import CgHeader
-import TaskGenTypes (TaskEnv, TaskInfo)
+import TaskGenTypes (TaskEnv, TaskInfo, TaskID)
 
 
 instance IfThenElse Bool a where
@@ -288,11 +288,11 @@ data CgEnv = CgEnv
     , moduleName :: String
       -- This is to be added to global variables,
       -- to allow us to link multiple Ziria modules in the same C project
-    , taskEnv    :: TaskEnv
+    , taskEnv    :: TaskEnv (Comp CTy Ty)
 
     }
 
-emptyEnv :: TaskEnv -> GS.Sym -> CgEnv
+emptyEnv :: TaskEnv (Comp CTy Ty) -> GS.Sym -> CgEnv
 emptyEnv tenv sym =
     CgEnv { compFunEnv = M.empty 
           , compEnv    = M.empty 
@@ -370,7 +370,7 @@ newtype Cg a = Cg { runCg :: CgEnv
                           -> CgState
                           -> IO (Either CgError (a, Code, CgState)) }
 
-evalCg :: TaskEnv -> GS.Sym -> Int -> Cg () -> IO (Either CgError [C.Definition])
+evalCg :: TaskEnv (Comp CTy Ty) -> GS.Sym -> Int -> Cg () -> IO (Either CgError [C.Definition])
 evalCg tenv sym stack_alloc_threshold m = do
     res <- runCg m (emptyEnv tenv sym)
                    (emptyState { maxStackAlloc = stack_alloc_threshold })
@@ -723,7 +723,7 @@ lookupCompFunCode nm = do
       Nothing  -> fail ("CodeGen: unbound computation function: " ++ show nm)
       Just gen -> return gen
 
-lookupTaskEnv :: TaskID -> Cg TaskInfo
+lookupTaskEnv :: TaskID -> Cg (TaskInfo (Comp CTy Ty))
 lookupTaskEnv tid = do
   mtask <- asks $ M.lookup tid . taskEnv
   case mtask of

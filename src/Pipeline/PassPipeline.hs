@@ -143,13 +143,13 @@ pipelineStandalone c =
         inq <- nextBufId inty
         outq <- nextBufId outty
         let thread = Thread {
-                tComp = readq inq (TBuff $ IntBuf inty) inty SpinOnEmpty >>>
+                tComp = readq inq (TBuff $ IntBuf inty) inty SpinOnEmpty Nothing >>>
                         c >>>
-                        writeq outq outty (TBuff $ IntBuf outty),
+                        writeq outq outty (TBuff $ IntBuf outty) Nothing,
                 tInQ  = inq,
                 tOutQ = outq
               }
-            c' = writeq inq inty TUnit >>> readq outq TUnit outty JumpToConsumeOnEmpty
+            c' = writeq inq inty TUnit Nothing >>> readq outq TUnit outty JumpToConsumeOnEmpty Nothing
         (buftys, threads, cs') <- mkSplits cs
         return (inty : outty : buftys, thread : threads, c' : cs')
       where
@@ -231,12 +231,13 @@ insertBufs (c1:c2:cs) (bid:bids)
 
         -- c1' = c1 >>> writeInternal buf_m
         cwrite = cWriteInternal c1loc (CTBase (TTrans c1yldty bufty)) buf_m
+                                Nothing
         c1' = cPar c1loc (updYldTy bufty c1cty) pnfo c1 cwrite
 
         -- c2' = readInternal buf_m >>> c2
         -- NB: 'SpinOnEmpty' relevant? (had to do with Standalone Reads)
-        cread = cReadInternal c2loc (CTBase (TTrans bufty c1yldty)) buf_m $
-                SpinOnEmpty
+        cread = cReadInternal c2loc (CTBase (TTrans bufty c1yldty)) buf_m
+                              SpinOnEmpty Nothing
         c2' = cPar c2loc (updInTy bufty $ compInfo c2) pnfo cread c2
 
         -- Recursively call in the rest of the splits
@@ -271,7 +272,7 @@ runPipeLine dumpPipeline c
 -- | Run the new, task-based pipelining pass.
 --   A no-op in the absence of `standalone` annotations.
 --   Otherwise prints some statistics (if dump is True) and crashes.
-runTaskPipeLine :: Bool -> Comp CTy Ty -> IO (PipelineRetPkg, TaskEnv)
+runTaskPipeLine :: Bool -> Comp CTy Ty -> IO (PipelineRetPkg, TaskEnv (Comp CTy Ty))
 runTaskPipeLine dump c = do
   let (tenv, c') = insertTasks c
       ret = MkPipelineRetPkg {

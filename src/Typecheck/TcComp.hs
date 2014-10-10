@@ -539,11 +539,11 @@ tyCheckComp c
                 ; return $ cWriteSnk cloc cty' mty
                 }
 
-           WriteInternal bid ->
+           WriteInternal bid mq ->
              do { a <- newTyVar "a"
                 ; let ta = TVar a
                       cty' = CTBase (TTrans ta (TBuff (IntBuf ta)))
-                ; return $ cWriteInternal cloc cty' bid
+                ; return $ cWriteInternal cloc cty' bid mq
                 }
 
            -- Ditto for read
@@ -555,11 +555,11 @@ tyCheckComp c
                 ; return $ cReadSrc cloc cty' mty
                 }
 
-           ReadInternal bid tp ->
+           ReadInternal bid tp mq ->
              do { a <- newTyVar "a"
                 ; let ta = TVar a
                       cty' = CTBase (TTrans (TBuff (IntBuf ta)) ta)
-                ; return $ cReadInternal cloc cty' bid tp
+                ; return $ cReadInternal cloc cty' bid tp mq
                 }
 
            -- Standalone computations (forked onto another core)
@@ -580,10 +580,8 @@ tyCheckComp c
                 ; let cty = CTBase (TTrans t1 t2)
                 ; return $ cMitigate cloc cty t n1 n2
                 }
-           ActivateTask t mname ->
-             failTcM $ text "BUG: ActivateTask should not appear pre-type checking!"
-           DeactivateSelf ->
-             failTcM $ text "BUG: DeactivateSelf should not appear pre-type checking!"
+           Sync _ ->
+             failTcM $ text "BUG: Sync should not appear pre-type checking!"
        }
 
 mk_rw_ty (RWRealTyAnn t) = return t

@@ -342,17 +342,14 @@ computeCardTop verbose ct = computeCard ct
           = return $
             MkComp (WriteSnk mty) loc (cty,IterCard Nothing (mkSimplCard 1 0))
 
-        computeCard0 (ReadInternal s tp)
+        computeCard0 (ReadInternal s tp mq)
           = return $
-            MkComp (ReadInternal s tp) loc (cty,IterCard Nothing (mkSimplCard 0 1))
-        computeCard0 (WriteInternal s)
+            MkComp (ReadInternal s tp mq) loc (cty,IterCard Nothing (mkSimplCard 0 1))
+        computeCard0 (WriteInternal s mq)
           = return $
-            MkComp (WriteInternal s) loc (cty,IterCard Nothing (mkSimplCard 1 0))
+            MkComp (WriteInternal s mq) loc (cty,IterCard Nothing (mkSimplCard 1 0))
 
-        computeCard0 (ActivateTask t mn)
-          = taskControlCardBug
-
-        computeCard0 (DeactivateSelf)
+        computeCard0 (Sync _)
           = taskControlCardBug
 
         computeCard0 (Standalone c1)
@@ -363,7 +360,7 @@ computeCardTop verbose ct = computeCard ct
 
 taskControlCardBug :: a
 taskControlCardBug =
-  error "BUG: cardinality analysis hit a task start/stop statement!"
+  error "BUG: cardinality analysis hit a task sync node!"
 
 runCardinalityAnalysis :: Bool -> Comp CTy Ty -> IO (Comp (CTy,Card) Ty)
 runCardinalityAnalysis verbose comp =

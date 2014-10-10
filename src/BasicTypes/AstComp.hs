@@ -29,7 +29,7 @@ import qualified Data.Set as S
 
 import AstExpr
 import PpExpr ()
-
+import TaskGenTypes
 {-------------------------------------------------------------------------------
   Comp types
 
@@ -47,9 +47,6 @@ data GCTy ty where
   CTBase :: GCTy0 ty -> GCTy ty
   -- Invariant: non-empty list and CTy0 is not arrow
   CTArrow :: [CallArg ty (GCTy0 ty)] -> GCTy0 ty -> GCTy ty
-
--- | Identifier for tasks.
-type TaskID = Int
 
 {-------------------------------------------------------------------------------
   AST parameterized by type (see "AstExpr")
@@ -136,8 +133,10 @@ data GComp0 ty a b where
 
   -- Read/write from thread separator queues
   -- What is ReadType? See Note [Standalone Reads]
-  ReadInternal  :: BufId -> ReadType -> GComp0 ty a b
-  WriteInternal :: BufId -> GComp0 ty a b
+  -- The extra queue argument contains the queue to be closed, if any, when
+  -- the transformer in question dies from an empty queue.
+  ReadInternal  :: BufId -> ReadType -> Maybe Queue -> GComp0 ty a b
+  WriteInternal :: BufId -> Maybe Queue -> GComp0 ty a b
 
   -- Pipelining primitives
   Standalone :: GComp ty a b -> GComp0 ty a b
@@ -147,16 +146,9 @@ data GComp0 ty a b where
   -- Pre: n1, n2 > 1
   -- This is a transformer of type:  ST T (arr t n1) (arr t : n2)
 
-  -- | Activate a task. Only ever inserted by the execution planner
-  --   for parallel compilation.
-  --   ActivateTask may be generated as part of a BindMany. If this
-  --   happens, the Maybe Name argument should be filled with the name
-  --   of the computation's input var.
-  ActivateTask :: TaskID -> Maybe Name -> GComp0 ty a b
-
-  -- | Deactivate the currently running task. Only ever inserted by
-  --   the execution planner.
-  DeactivateSelf :: GComp0 ty a b
+  -- | Perform any needed synchronization, then terminate a task.
+  --   Inserted by "TaskGen".
+  Sync :: SyncInfo -> GComp0 ty a b
   deriving (Generic)
 
 data VectAnn = Rigid Bool (Int,Int) -- True == allow mitigations up, False == disallow mitigations up
@@ -269,6 +261,9 @@ cSeq loc a c1 c2 = MkComp (Seq c1 c2) loc a
 cPar :: Maybe SourcePos -> a -> ParInfo -> GComp ty a b -> GComp ty a b -> GComp ty a b
 cPar loc a pi c1 c2 = MkComp (Par pi c1 c2) loc a
 
+cSync :: Maybe SourcePos -> a -> SyncInfo -> GComp ty a b
+cSync loc a snfo = MkComp (Sync snfo) loc a
+
 cLet :: Maybe SourcePos -> a -> GName ty ->
         GComp ty a b -> GComp ty a b -> GComp ty a b
 cLet loc a x c1 c2 = MkComp (Let x c1 c2) loc a
@@ -343,11 +338,11 @@ cReadSrc loc a ann = MkComp (ReadSrc ann) loc a
 cWriteSnk :: Maybe SourcePos -> a -> GRWTypeAnn ty -> GComp ty a b
 cWriteSnk loc a ann = MkComp (WriteSnk ann) loc a
 
-cReadInternal  :: Maybe SourcePos -> a -> BufId -> ReadType -> GComp ty a b
-cReadInternal  loc a b rt = MkComp (ReadInternal b rt) loc a
+cReadInternal  :: Maybe SourcePos -> a -> BufId -> ReadType -> Maybe Queue -> GComp ty a b
+cReadInternal  loc a b rt mq = MkComp (ReadInternal b rt mq) loc a
 
-cWriteInternal :: Maybe SourcePos -> a -> BufId -> GComp ty a b
-cWriteInternal loc a b = MkComp (WriteInternal b) loc a
+cWriteInternal :: Maybe SourcePos -> a -> BufId -> Maybe Queue -> GComp ty a b
+cWriteInternal loc a b mq = MkComp (WriteInternal b mq) loc a
 
 cStandalone :: Maybe SourcePos -> a -> GComp ty a b -> GComp ty a b
 cStandalone loc a c = MkComp (Standalone c) loc a
@@ -473,18 +468,17 @@ mapCompM_aux on_ty on_exp on_cty g = go
                  Filter e ->
                    do { e' <- on_exp e
                       ; g (cFilter cloc cnfo e') }
-                 ReadSrc b         -> g (cReadSrc cloc cnfo b)
-                 WriteSnk b        -> g (cWriteSnk cloc cnfo b)
-                 ReadInternal b rt -> g (cReadInternal cloc cnfo b rt)
-                 WriteInternal b   -> g (cWriteInternal cloc cnfo b)
+                 ReadSrc b            -> g (cReadSrc cloc cnfo b)
+                 WriteSnk b           -> g (cWriteSnk cloc cnfo b)
+                 ReadInternal b rt mq -> g (cReadInternal cloc cnfo b rt mq)
+                 WriteInternal b mq   -> g (cWriteInternal cloc cnfo b mq)
 
                  Standalone c1 ->
                    do { c1' <- go c1
                       ; g (cStandalone cloc cnfo c1') }
 
                  Mitigate t n1 n2 -> g (cMitigate cloc cnfo t n1 n2)
-                 ActivateTask tid mname -> g (MkComp (ActivateTask tid mname) cloc cnfo)
-                 DeactivateSelf -> g (MkComp DeactivateSelf cloc cnfo)
+                 Sync snfo -> g (cSync cloc cnfo snfo)
              }
 
 mapCallArgM :: Monad m
@@ -587,8 +581,7 @@ compShortName c = go (unComp c)
         go (  WriteInternal   {} ) = "WriteInternal"
         go (  Standalone      {} ) = "Standalone"
         go (  Mitigate        {} ) = "Mitigate"
-        go (  ActivateTask    {} ) = "ActivateTask"
-        go (  DeactivateSelf  {} ) = "DeactivateSelf"
+        go (  Sync            {} ) = "Sync"
 
 
 
@@ -776,9 +769,7 @@ compFVs c = case unComp c of
   WriteSnk {} -> S.empty
   ReadInternal  {} -> S.empty
   WriteInternal {} -> S.empty
-  -- TODO: not sure if the name of an activate is really an FV or not; brain slightly broken ATM
-  ActivateTask _ mname -> maybe S.empty S.singleton mname
-  DeactivateSelf -> S.empty
+  Sync {} -> S.empty
   Standalone c1  -> compFVs c1
 
   Mitigate {} -> S.empty
@@ -827,8 +818,7 @@ compSize c = case unComp c of
   ReadInternal  {} -> 1
   WriteInternal {} -> 1
   Standalone c1  -> compSize c1
-  ActivateTask {} -> 1
-  DeactivateSelf {} -> 1
+  Sync {} -> 1
 
   Mitigate {} -> 1
 

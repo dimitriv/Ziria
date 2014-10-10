@@ -130,19 +130,18 @@ runAutoLUT dflags _ c = autolutC c
         go (WriteSnk mty) =
             pure (WriteSnk mty)
 
-        go (ReadInternal buf tp) =
-            pure (ReadInternal buf tp)
+        go (ReadInternal buf tp mq) =
+            pure (ReadInternal buf tp mq)
 
-        go (WriteInternal buf) =
-            pure (WriteInternal buf)
+        go (WriteInternal buf mq) =
+            pure (WriteInternal buf mq)
 
         go (Standalone c) =
             Standalone <$> autolutC c
 
         go c0@(Mitigate {}) = pure c0
 
-        go c0@(ActivateTask {}) = taskControlAutoLUTBug
-        go c0@(DeactivateSelf {}) = taskControlAutoLUTBug
+        go c0@(Sync {}) = taskControlAutoLUTBug
 
     autolutCallArg :: CallArg (Exp Ty) (Comp a Ty)
                    -> IO (CallArg (Exp Ty) (Comp a Ty))
@@ -276,4 +275,4 @@ runAutoLUT dflags _ c = autolutC c
 
 taskControlAutoLUTBug :: a
 taskControlAutoLUTBug =
-  error "BUG: AutoLUT hit a task start/stop node!"
+  error "BUG: AutoLUT hit a task sync node!"

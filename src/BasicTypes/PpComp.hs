@@ -232,20 +232,17 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
     WriteSnk {} ->
       text "write"
 
-    ReadInternal bid _typ ->
+    ReadInternal bid _typ _mq ->
       text "read_internal[sq]" <> parens (text bid)
-    WriteInternal bid ->
+    WriteInternal bid _mq ->
       text "write_internal[sq]" <> parens (text bid)
 
     Standalone c1 ->
       text "standalone" <> braces (ppComp c1)
 
-    ActivateTask taskid mname ->
-      let name = maybe empty ((text " with FV " <>) . ppName) mname
-      in text "{- activate task " <> int taskid <> name <> text " -}"
+    Sync _snfo ->
+      text "{- sync -}"
 
-    DeactivateSelf ->
-      text "{- deactivate current task -}"
     Mitigate t n1 n2 ->
       int n1 <> text "-mitigate" <> brackets (ppr t) <> text "-" <> int n2
     -- CL
