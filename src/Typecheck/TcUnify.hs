@@ -16,32 +16,21 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
+{-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE GADTs, MultiParamTypeClasses #-}
-
 module TcUnify where
 
-import qualified Data.Map as M
-import Data.IORef
-
-import AstExpr
-import AstComp
-import TcErrors
-import qualified GenSym as GS
-
-import Text.Parsec.Pos
-
-import TcMonad
-
+import Text.Parsec.Pos (SourcePos)
 import Text.PrettyPrint.HughesPJ
-
-import PpExpr
-import PpComp
-import Outputable
-
+import qualified Data.Map as M
 import qualified Data.Set as S
 
-import Data.List ( nub )
-
+import AstComp
+import AstExpr
+import Outputable
+import PpComp ()
+import PpExpr ()
+import TcMonad
 
 {- Unification
  - ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -}
@@ -101,11 +90,14 @@ unify p tya tyb = go tya tyb
     go (TInterval n)(TInterval n')
       | n == n'   = return ()
       | otherwise = unifyErr p tya tyb
-    go (TStruct n1) (TStruct n2)
+    -- TODO: Should we check something about the fields?
+    -- (TStructs are completed internally, so if the names are equal but the
+    -- fields are not then this is a compiler bug, not a type error)
+    go (TStruct n1 _) (TStruct n2 _)
       | n1 == n2  = return ()
       | otherwise = unifyErr p tya tyb
     go TBool TBool = return ()
-    go (TArr n ty1) (TArr m ty2)
+    go (TArray n ty1) (TArray m ty2)
       = unifyALen p tya tyb n m >> go ty1 ty2
     go (TArrow tys1 ty2) (TArrow tys1' ty2')
       | length tys1 /= length tys1'
@@ -134,55 +126,60 @@ unify p tya tyb = go tya tyb
       = updTyEnv [(x,ty)]
 
 
-unifyAll p []         = return ()
-unifyAll p [t]        = return ()
-unifyAll p (t1:t2:ts) = unify p t1 t2 >> unifyAll p (t2:ts)
+unifyAll :: Maybe SourcePos -> [Ty] -> TcM ()
+unifyAll p = go
+  where
+    go []         = return ()
+    go [_]        = return ()
+    go (t1:t2:ts) = unify p t1 t2 >> go (t2:ts)
 
-unifyMany p t1s t2s = mapM (\(t1,t2) -> unify p t1 t2) (zip t1s t2s)
+unifyMany :: Maybe SourcePos -> [Ty] -> [Ty] -> TcM ()
+unifyMany p t1s t2s = mapM_ (\(t1,t2) -> unify p t1 t2) (zip t1s t2s)
 
 
 
 unifyBitWidth :: Maybe SourcePos -> Ty -> Ty -> BitWidth -> BitWidth -> TcM ()
-unifyBitWidth p orig_ty1 orig_ty2 bw1 bw2 = go bw1 bw2
-  where go (BWUnknown bvar) bw
-          = do { benv <- getBWEnv
-               ; case M.lookup bvar benv of
-                   Just bw1 -> go bw1 bw
-                   Nothing  -> goBWVar bvar bw }
-        go bw (BWUnknown bvar)
-          = go (BWUnknown bvar) bw
+unifyBitWidth p orig_ty1 orig_ty2 = go
+  where
+    go (BWUnknown bvar) bw
+      = do { benv <- getBWEnv
+           ; case M.lookup bvar benv of
+               Just bw1 -> go bw1 bw
+               Nothing  -> goBWVar bvar bw }
+    go bw (BWUnknown bvar)
+      = go (BWUnknown bvar) bw
 
-        go b1 b2
-          | b1 == b2
-          = return ()
-          | otherwise
-          = unifyErrGeneric (text "Int width mismatch") p orig_ty1 orig_ty2
+    go b1 b2
+      | b1 == b2
+      = return ()
+      | otherwise
+      = unifyErrGeneric (text "Int width mismatch") p orig_ty1 orig_ty2
 
-        goBWVar bvar1 (BWUnknown bvar2)
-          | bvar1 == bvar2
-          = return ()
-          | otherwise
-          = do { benv <- getBWEnv
-               ; case M.lookup bvar2 benv of
-                   Just bw -> goBWVar bvar1 bw
-                   Nothing -> updBWEnv [(bvar1,BWUnknown bvar2)] }
+    goBWVar bvar1 (BWUnknown bvar2)
+      | bvar1 == bvar2
+      = return ()
+      | otherwise
+      = do { benv <- getBWEnv
+           ; case M.lookup bvar2 benv of
+               Just bw -> goBWVar bvar1 bw
+               Nothing -> updBWEnv [(bvar1,BWUnknown bvar2)] }
 
-        goBWVar bvar1 bw2
-          = updBWEnv [(bvar1,bw2)]
+    goBWVar bvar1 bw2
+      = updBWEnv [(bvar1,bw2)]
 
 
 unifyALen :: Maybe SourcePos -> Ty -> Ty -> NumExpr -> NumExpr -> TcM ()
-unifyALen p orig_ty1 orig_ty2 nm1 nm2 = go nm1 nm2
+unifyALen p orig_ty1 orig_ty2 = go
   where
-    go (NVar n _m) nm2
+    go (NVar n) nm2
       = do { alenv <- getALenEnv
            ; case M.lookup n alenv of
                Just nm1 -> go nm1 nm2
                Nothing  -> goNVar n nm2
            }
 
-    go nm1 (NVar n _m)
-      = go (NVar n _m) nm1
+    go nm1 (NVar n)
+      = go (NVar n) nm1
 
     go (Literal i) (Literal j)
       | i == j
@@ -194,89 +191,72 @@ unifyALen p orig_ty1 orig_ty2 nm1 nm2 = go nm1 nm2
     goNVar nvar1 (Literal i)
       = updALenEnv [(nvar1,Literal i)]
 
-    goNVar nvar1 (NVar nvar2 _m)
+    goNVar nvar1 (NVar nvar2)
       | nvar1 == nvar2 = return ()
       | otherwise
       = do { alenv <- getALenEnv
            ; case M.lookup nvar2 alenv of
                Just nm2 ->
                  -- NB: not goNVar
-                 go (NVar nvar1 undefined) nm2
+                 go (NVar nvar1) nm2
                Nothing ->
-                 updALenEnv [(nvar1,(NVar nvar2 _m))] }
+                 updALenEnv [(nvar1, NVar nvar2)]
+           }
 
+-- | @defaultTy p ty def@ defaults @ty@ to @tdef@ if @ty@ is a type variable
+-- (after zonking).
+--
+-- Returns @ty@ if @ty@ is not a type variable and @def@ otherwise.
+--
+-- Be careful calling this: only call this if you are sure that later
+-- unification equations will not instantiate this type variable.
+defaultTy :: Maybe SourcePos -> Ty -> Ty -> TcM Ty
+defaultTy p ty def = do
+  ty' <- zonkTy ty
+  case ty' of
+    TVar _ -> do unify p ty' def ; return def
+    _      -> return ty'
 
-defaultExpr = mapExpM_aux zonkTy zonk_exp
-  where zonk_exp :: Exp Ty -> TcM (Exp Ty)
-        zonk_exp e
-          | EError {} <- unExp e
-          = do { zty <- zonkTy (info e)
-               ; zty' <-
-                   case zty of
-                    TVar {}
-                      -> do { unify (expLoc e) zty TUnit
-                           ; return TUnit }
-                    _ -> return zty
-               ; return $ e { info = zty' }
-               }
-          | otherwise
-          = return e
-
-defaultComp :: Comp CTy Ty -> TcM (Comp CTy Ty)
-defaultComp = mapCompM_aux zonkTy defaultExpr zonkCTy zonkComp
-
-
-
-
-solveCts :: TcM ()
-solveCts = do getStEnv tcm_in_cts  >>= \cs -> pushErrCtx SolvingInCts  (solve_cts "in"  cs)
-              getStEnv tcm_out_cts >>= \cs -> pushErrCtx SolvingOutCts (solve_cts "out" cs)
-              discardInOutCts
-  where solve_cts str cts
-         = mapM_ (do_solve str) cts >> unify_all cts
-        do_solve str (BaseTyCt p ty tybase)
-          = do { sty <- zonkTy ty
-               ; stybase <- zonkTy tybase
-               ; case sty of
-                   TArr _ sty0 -> unify p stybase sty0
-                   _           -> unify p stybase sty }
-        unify_all []   = return ()
-        unify_all [ct] = return ()
-        unify_all (ct1:ct2:cts)
-          = do { unify (ct_pos ct1) (ct_ty ct1) (ct_ty ct2)
-               ; unify_all (ct2:cts) }
-
-
-instantiateCall :: Ty -> TcM Ty
--- Instantiates the array length variables
--- to fresh variables, to be used in subsequent
--- unifications. Notice that these are only the
--- ones bound by the parameters of the function
-instantiateCall t@(TArrow tas tb)
-  = do { let lvars = gatherPolyVars (tb:tas)
-       ; s <- mapM freshen lvars
-       ; mapTyM (subst_len s) t
-       }
-  where freshen lv
-          = do { lv' <- newALenVar (name lv)
-               ; return (lv, NVar lv' 0) }
-
-        subst_len s (TArr (NVar n _mx) t) =
-             case lookup n s of
-               Nothing  -> return (TArr (NVar n _mx) t)
-               Just ne' -> return (TArr ne' t)
-        subst_len s ty = return ty
-
-instantiateCall other
-  = return other
-
-
-
-gatherPolyVars :: [Ty] -> [Name]
-gatherPolyVars tys = nub $ gather tys []
+-- | Zonk all type variables and default the type of `EError` to `TUnit` when
+-- it's still a type variable.
+defaultExpr :: Exp -> TcM Exp
+defaultExpr = mapExpM zonkTy return zonk_exp
   where
-     gather [] acc = acc
-     gather ((TArr (NVar nm1 _) _):ts) acc
-       = gather ts (nm1:acc)
-     gather (t:ts) acc = gather ts acc
+    zonk_exp :: Exp -> TcM Exp
+    zonk_exp e
+      | EError ty str <- unExp e
+      = do { ty' <- defaultTy (expLoc e) ty TUnit
+           ; return $ eError (expLoc e) (info e) ty' str
+           }
+      | otherwise
+      = return e
 
+defaultComp :: Comp -> TcM Comp
+defaultComp = mapCompM zonkCTy zonkTy return return defaultExpr return
+
+-- | Instantiates the array length variables to fresh variables, to be used in
+-- subsequent unifications.
+--
+-- Notice that these are only the ones bound by the parameters of the function
+instantiateCall :: Ty -> TcM Ty
+instantiateCall = go
+  where
+    go :: Ty -> TcM Ty
+    go t@(TArrow tas tb) = do { let lvars = gatherPolyVars (tb:tas)
+                              ; s <- mapM freshen lvars
+                              ; mapTyM (subst_len s) t
+                              }
+    go other             = return other
+
+    freshen :: LenVar -> TcM (LenVar, NumExpr)
+    freshen lv
+      = do { lv' <- newALenVar lv
+           ; return (lv, NVar lv')
+           }
+
+    subst_len :: [(LenVar, NumExpr)] -> Ty -> TcM Ty
+    subst_len s (TArray (NVar n) t) =
+         case lookup n s of
+           Nothing  -> return (TArray (NVar n) t)
+           Just ne' -> return (TArray ne' t)
+    subst_len _ ty = return ty

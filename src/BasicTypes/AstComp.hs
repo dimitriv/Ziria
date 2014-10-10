@@ -359,8 +359,8 @@ data GComp tc t a b
   deriving (Generic)
 
 data GProg tc t a b
-  = MkProg { globals :: [(GName t,Maybe (GExp t b))]
-           , comp    :: GComp tc t a b
+  = MkProg { globals  :: [(GName t,Maybe (GExp t b))]
+           , progComp :: GComp tc t a b
            }
   deriving (Generic)
 

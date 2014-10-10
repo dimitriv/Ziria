@@ -184,7 +184,7 @@ instance Outputable Ty where
     TBool                  -> text "bool"
     TString                -> text "string"
     TArray (Literal n) ty' -> text "arr" <> brackets (int n) <+> ppr ty'
-    TArray (NVar n m)  ty' -> text "arr" <> brackets (text (show n)) <+> text "(max: " <+> int m <+> text ")" <+> ppr ty'
+    TArray (NVar n)    ty' -> text "arr" <> brackets (text (show n)) <+> ppr ty'
     TArrow tys tyres       -> parens (hsep (punctuate comma (map ppr tys))) <+> text "->" <+> ppr tyres
     TInterval n            -> text "interval" <> brackets (int n)
     TBuff (IntBuf t)       -> parens $ text "INTBUF" <> brackets (ppr t)
@@ -215,7 +215,7 @@ instance Outputable ty => Outputable (GFun ty a) where
 instance Outputable NumExpr where
   ppr ne = case ne of
     Literal i -> int i
-    NVar n m  -> text (show (name n)) <+> (text " (max:") <+> int m <+> text ") "
+    NVar n    -> text (show n) -- TODO: here and elsewhere, are the quotes around the name intentional?
 
 instance Outputable ty => Outputable (GName ty) where
   ppr ix | isEmpty pprTy = ppName ix

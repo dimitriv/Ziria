@@ -16,31 +16,31 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE GADTs, MultiParamTypeClasses #-}
+{-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE RecordWildCards #-}
+module TcErrors (
+    ErrCtx(..)
+  , TyErr(TyErr)
+  , ppTyErr
+  , expActualErr
+  , nonFullAppErr
+  , expectedButFound
+  ) where
 
-module TcErrors where
-
-import AstExpr
-import AstComp
-import PpExpr
-import PpComp
-
-import Text.PrettyPrint.HughesPJ
-import qualified Control.Monad.Error as E
+import Prelude hiding (exp)
 import Text.Parsec.Pos
+import Text.PrettyPrint.HughesPJ
 
-import qualified Text.Parsec as PS
-
+import AstComp
+import AstExpr
 import Outputable
-
-import Data.Maybe ( maybe )
+import PpComp ()
+import PpExpr ()
 
 data ErrCtx
-  = CompErrCtx (Comp () ())
-  | ExprErrCtx (Exp ())
-  | SolvingInCts
-  | SolvingOutCts
-  | GlobalDefs
+  = CompErrCtx SrcComp
+  | ExprErrCtx SrcExp
+  | GlobalDefs -- TODO: Remove once we remove globals
 
 data TyErr
   = TyErr { err_ctxt     :: ErrCtx
@@ -49,12 +49,12 @@ data TyErr
           , err_var_ctxt :: Doc }
 
 ppTyErr :: TyErr -> Doc
-ppTyErr (TyErr ctxt pos msg var_ctxt)
-  = vcat [ msg
-         , pp_ctxt ctxt
+ppTyErr TyErr{..}
+  = vcat [ err_msg
+         , pp_ctxt err_ctxt
          , text "At location:" <+>
-           text (maybe (error "BUG: Unknown location!") show pos)
-         , var_ctxt
+           text (maybe (error "BUG: Unknown location!") show err_pos)
+         , err_var_ctxt
          ]
   where
     pp_ctxt (CompErrCtx c)
@@ -63,28 +63,24 @@ ppTyErr (TyErr ctxt pos msg var_ctxt)
     pp_ctxt (ExprErrCtx e)
       = vcat [ text "When type checking expression:"
              , nest 2 $ ppr e ]
-    pp_ctxt (SolvingInCts)
-      = text "When solving constraints arising from read(s)"
-    pp_ctxt (SolvingOutCts)
-      = text "When solving constraints arising from write(s)"
     pp_ctxt (GlobalDefs)
       = text "" -- Not particularly helpful
 
 
 
-expActualErr :: Ty -> Ty -> Exp a -> Doc
+expActualErr :: Ty -> Ty -> SrcExp -> Doc
 expActualErr exp_ty actual_ty exp
   = vcat [ text "Couldn't match expected type:" <+> ppr exp_ty
          , text "with actual type:            " <+> ppr actual_ty
          , text "for expression:" <+> ppr exp ]
 
-nonFullAppErr :: Comp a b -> Doc
+nonFullAppErr :: SrcComp -> Doc
 nonFullAppErr comp
   = vcat [ text "Computer/transformer not fully applied:"
          , nest 2 $ ppr comp
          ]
 
-expectedButFound :: String -> String -> Comp a b -> Doc
+expectedButFound :: String -> String -> SrcComp -> Doc
 expectedButFound expected found c
   = vcat [ text "Expected" <+> text expected
                            <+> text "but found"

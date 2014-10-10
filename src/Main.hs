@@ -22,10 +22,8 @@ module Main where
 
 import Control.Exception
 import Control.Monad (when, unless, foldM, forM)
-import qualified Data.Map as M
 import Data.Maybe
 import Data.Monoid
-import qualified Language.C.Syntax as C
 import System.Console.GetOpt
 import System.Environment
 import System.Exit (exitFailure)
@@ -33,15 +31,22 @@ import System.IO
 import Text.Parsec
 import Text.PrettyPrint.Mainland
 import Text.Show.Pretty (dumpStr)
+import qualified Data.Map          as M
+import qualified Language.C.Syntax as C
 
+import AstComp
+import CtComp (ctComp)
 import Opts
 import PpComp
 import Rename
+import TcComp
+import TcErrors ( ErrCtx (..) )
+import TcExpr
+import TcMonad
 import qualified BlinkParseComp as NewParser
-import qualified GenSym as GS
+import qualified GenSym         as GS
 
 {-
-import AstComp
 import AutoLUT
 import CardinalityAnalysis
 import CgHeader
@@ -55,28 +60,29 @@ import qualified PassPipeline as PP
 
 import PassFold
 import qualified Outputable -- Qualified so that we don't clash with Mainland
-import TcExpr
-import TcMonad
-import TcErrors ( ErrCtx (..) )
-import TcComp
 import Vectorize
 import Orphans
 
-pprProgInfo :: Comp CTy Ty -> Doc
+-}
+
+{-
+data CompiledProgram = CompiledProgram (Comp CTy Ty) [C.Definition] FilePath
+-}
+
+pprProgInfo :: Comp -> Doc
 pprProgInfo prog =
     (text . show) prog </>
     line <>
     text "type:" </>
     (text . show . compInfo) prog
 
-data CompiledProgram = CompiledProgram (Comp CTy Ty) [C.Definition] FilePath
-
-outputProgram :: Comp CTy Ty -> FilePath -> IO ()
+outputProgram :: Comp -> FilePath -> IO ()
 outputProgram c fn = do
     outHdl <- openFile fn WriteMode
     hPutDoc outHdl $ pprProgInfo c
     hClose outHdl
 
+{-
 outputCompiledProgram :: CompiledProgram -> IO ()
 outputCompiledProgram (CompiledProgram sc cc fn) = do
     outHdl <- openFile fn WriteMode
@@ -87,6 +93,7 @@ outputCompiledProgram (CompiledProgram sc cc fn) = do
     hPutStr outHdl $ show $ ppr cc
     hClose outHdl
 -}
+
 main :: IO ()
 main = failOnException $ do
     hSetBuffering stdout NoBuffering
@@ -120,10 +127,9 @@ main = failOnException $ do
     sym <- GS.initGenSym (getName dflags)
 
     -- putStrLn $ "renamed ... " ++ show prog_renamed
-    return ()
-{-
+
     let cenv     = mkCEnv []
-    let tdef_env = mkTyDefEnv primComplexStructs
+    let tdef_env = mkTyDefEnv []
     let varenv   = mkEnv []
 
     -- Maybe we should combine the two calls to the type checker?
@@ -140,11 +146,11 @@ main = failOnException $ do
 
     -- putStrLn "typechecked dels ..."
 
-    let decl_env = envOfDecls (globals prog_renamed)
+    let decl_env = envOfDecls globals'
 
     (c', unifiers1)
        <- failOnError $
-          runTcM (tyCheckTopComp (comp prog_renamed))
+          runTcM (tyCheckTopComp (progComp prog_renamed))
                  tdef_env
                  decl_env
                  cenv
@@ -152,10 +158,12 @@ main = failOnException $ do
                  GlobalDefs
                  unifiers0
 
-    let in_ty  = inTyOfCTyBase (compInfo c');
-        yld_ty = yldTyOfCTyBase (compInfo c');
+    let in_ty  =  inTyOfCTyBase (ctComp c')
+        yld_ty = yldTyOfCTyBase (ctComp c')
 
     when (isDynFlagSet dflags Debug) $ outputProgram c' outFile
+
+{-
     when (not (isDynFlagSet dflags Debug)) $ do
     dump dflags DumpTypes ".type.dump" $ (text . show) (ppCompTyped c')
 

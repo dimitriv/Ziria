@@ -45,7 +45,7 @@ ctCall t _ = panic $ text "ctCall: Unexpected" <+> ppr t
   Substitutions
 -------------------------------------------------------------------------------}
 
-type Subst = [(GName Ty, NumExpr)]
+type Subst = [(LenVar, NumExpr)]
 
 applyTy :: Subst -> Ty -> Ty
 applyTy s (TArray n  t) = TArray (applyNumExpr s n)   (applyTy s t)
@@ -53,8 +53,8 @@ applyTy s (TArrow ts t) = TArrow (map (applyTy s) ts) (applyTy s t)
 applyTy _ t             = t
 
 applyNumExpr :: Subst -> NumExpr -> NumExpr
-applyNumExpr s (NVar n _) = lookup' n s
-applyNumExpr _ e          = e
+applyNumExpr s (NVar n) = lookup' n s
+applyNumExpr _ e        = e
 
 applyCTy :: Subst -> CTy0 -> CTy0
 applyCTy s (TComp u a b) = TComp (applyTy s u) (applyTy s a) (applyTy s b)
@@ -73,8 +73,8 @@ matchTy (TArrow ts t) (TArrow ts' t') = matchAllTy (zip (t:ts) (t':ts'))
 matchTy _             _               = []
 
 matchNumExpr :: NumExpr -> NumExpr -> Subst
-matchNumExpr (NVar n _) e = [(n, e)]
-matchNumExpr _          _ = []
+matchNumExpr (NVar n) e = [(n, e)]
+matchNumExpr _        _ = []
 
 {-------------------------------------------------------------------------------
   Computation types

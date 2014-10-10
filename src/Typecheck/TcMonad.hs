@@ -16,34 +16,31 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
+{-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE GADTs, MultiParamTypeClasses #-}
-
 module TcMonad where
 
+import Prelude hiding (exp)
+import Control.Applicative hiding (empty)
+import Control.Arrow ((***))
+import Control.Monad.State
+import Text.Parsec.Pos
+import Text.PrettyPrint.HughesPJ
 import qualified Data.Map as M
-import Data.IORef
+import qualified Data.Set as S
 
-import AstExpr
 import AstComp
+import AstExpr
+import Outputable
+import PpExpr (ppName)
 import TcErrors
 import qualified GenSym as GS
-
-import Text.Parsec.Pos
-import Control.Applicative hiding (empty)
-import Control.Monad.State
-
-import Text.PrettyPrint.HughesPJ
-
-import PpExpr (ppName)
-import Outputable
-
-import qualified Data.Set as S
 
 
 isArrowTy :: Ty -> Bool
 isArrowTy t =
   case t of
-    TArrow t1 t2 -> True
+    TArrow _ _ -> True
     _ -> False
 
 
@@ -73,17 +70,17 @@ mkCEnv :: [(String,CTy)] -> CEnv
 mkCEnv = M.fromList
 
 -- maps array lengths to ints
-type ALenEnv = M.Map Name NumExpr
+type ALenEnv = M.Map LenVar NumExpr
 
-mkALenEnv :: [(Name,NumExpr)] -> ALenEnv
+mkALenEnv :: [(LenVar, NumExpr)] -> ALenEnv
 mkALenEnv = M.fromList
 
 -- Maps max array lengths to ints
 -- This is used to store the largest array size used in a function call
 -- When the function is generated, the buffer for the array will use this size
-type AMaxLenEnv = M.Map Name NumExpr
+type AMaxLenEnv = M.Map (GName Ty) NumExpr
 
-mkAMaxLenEnv :: [(Name,NumExpr)] -> AMaxLenEnv
+mkAMaxLenEnv :: [(GName Ty, NumExpr)] -> AMaxLenEnv
 mkAMaxLenEnv = M.fromList
 
 -- maps bitwidth precisions to BitWidths
@@ -103,40 +100,8 @@ data TcMState
              , tcm_alenenv     :: ALenEnv
              , tcm_amaxlenenv  :: AMaxLenEnv
              , tcm_bwenv       :: BWEnv
-
-             , tcm_in_cts   :: [Ct]
-             , tcm_out_cts  :: [Ct]
-
              }
 
-emitInCt :: Maybe SourcePos -> Ty -> Ty -> TcM ()
-emitInCt p ty tbase
-  = updStEnv $ \st -> st { tcm_in_cts = (BaseTyCt p ty tbase) : tcm_in_cts st }
-
-emitOutCt :: Maybe SourcePos -> Ty -> Ty -> TcM ()
-emitOutCt p ty tbase
-  = updStEnv $ \st -> st { tcm_out_cts = (BaseTyCt p ty tbase) : tcm_out_cts st }
-
--- Discard constraints, to be used if you have solved them
-discardInOutCts :: TcM ()
-discardInOutCts
-  = updStEnv $ \st -> st { tcm_out_cts = [], tcm_in_cts = [] }
-
-
--- Note [IO Type constraints]
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~
---
--- We may be reading from the input buffer or writing to the output
--- buffer in many different granularities; recall that this
--- flexibility is useful for vectorization.
---
--- However, we need to know what is the "base" type that we read from
--- and what is the "base" type that we write from, in order to initialize
--- the appropriate drivers.
---
--- We do this by recording all the input types we collect (from ReadSrc)
--- and similarly for output types (from WriteSnk). We finally solve these
--- constraints to figure out the base input type and the base output type.
 
 
 emptyTcMState :: TcMState
@@ -145,8 +110,6 @@ emptyTcMState
              , tcm_alenenv    = mkALenEnv []
              , tcm_amaxlenenv = mkAMaxLenEnv []
              , tcm_bwenv      = mkBWEnv []
-             , tcm_in_cts     = []
-             , tcm_out_cts    = []
              }
 
 
@@ -168,7 +131,7 @@ instance Functor TcM where
       Left err        -> return $ Left err
 
 instance Applicative TcM where
-  pure x = TcM $ \tenv env cenv sym ctxt st -> return (Right (x, st))
+  pure x = TcM $ \_tenv _env _cenv _sym _ctxt st -> return (Right (x, st))
   (TcM f) <*> (TcM x) = TcM $ \tenv env cenv sym ctx st -> do
     fres <- f tenv env cenv sym ctx st
     case fres of
@@ -195,40 +158,43 @@ raiseErr print_vartypes p msg
        ; vartypes_msg <- ppVarTypes print_vartypes ctx
        ; let doc = ppTyErr $ TyErr ctx p msg vartypes_msg
        ; failTcM doc }
-  where ppVarTypes False _
-          = return empty
-        ppVarTypes True (CompErrCtx comp)
-          = pp_vars $ S.elems (compFVs comp)
-        ppVarTypes True (ExprErrCtx exp)
-          = pp_vars $ S.elems (exprFVs exp)
-        ppVarTypes _ _
-          = return empty
+  where
+    ppVarTypes :: Bool -> ErrCtx -> TcM Doc
+    ppVarTypes False _
+      = return empty
+    ppVarTypes True (CompErrCtx comp)
+      = pp_vars $ (S.elems *** S.elems) (compFVs comp)
+    ppVarTypes True (ExprErrCtx exp)
+      = pp_vars $ ([], S.elems (exprFVs exp))
+    ppVarTypes _ _
+      = return empty
 
-        pp_var v
-          = do { res <- firstToSucceed
-                          (lookupCEnv (name v) p >>= (return . Left ))
-                          (lookupEnv  (name v) p >>= (return . Right))
-                ; case res of
-                    Left cty ->
-                      do { zcty <- zonkCTy cty
-                         ; return $ ppName v <+> colon <+> ppr zcty
-                         }
-                    Right ty ->
-                      do { zty <- zonkTy ty
-                         ; return $ ppName v <+> colon <+> ppr zty
-                         }
-               }
+    -- Since error contexts are _source_ level terms, they carry source types
+    --
+    pp_cvar :: GName (Maybe (GCTy SrcTy)) -> TcM Doc
+    pp_cvar v = do
+      cty  <- lookupCEnv (name v) p
+      zcty <- zonkCTy cty
+      return $ ppName v <+> colon <+> ppr zcty
 
-        pp_vars vars
-         = do { docs <- mapM pp_var vars
-              ; return $ vcat [ text "Variable bindings:"
-                              , nest 2 $ vcat docs
-                              ] }
+    pp_var :: GName (Maybe SrcTy) -> TcM Doc
+    pp_var v = do
+      ty  <- lookupEnv (name v) p
+      zty <- zonkTy ty
+      return $ ppName v <+> colon <+> ppr zty
+
+    pp_vars :: ([GName (Maybe (GCTy SrcTy))], [GName (Maybe SrcTy)]) -> TcM Doc
+    pp_vars (cvars, vars)
+     = do { cdocs <- mapM pp_cvar cvars
+          ; docs  <- mapM pp_var  vars
+          ; return $ vcat [ text "Variable bindings:"
+                          , nest 2 $ vcat (cdocs ++ docs)
+                          ] }
 
 raiseErrNoVarCtx :: Maybe SourcePos -> Doc -> TcM a
 raiseErrNoVarCtx = raiseErr False
 
-
+failTcM :: Doc -> TcM a
 failTcM doc
   = TcM $ \_ _ _ _ _ _ -> return $ Left doc
 
@@ -271,7 +237,7 @@ getALenEnv :: TcM ALenEnv
 getALenEnv = getStEnv tcm_alenenv
 setALenEnv :: ALenEnv -> TcM ()
 setALenEnv e = updStEnv (\st -> st { tcm_alenenv = e })
-updALenEnv :: [(Name,NumExpr)] -> TcM ()
+updALenEnv :: [(LenVar, NumExpr)] -> TcM ()
 updALenEnv binds
   = updStEnv $ \st -> st { tcm_alenenv = updBinds binds (tcm_alenenv st) }
 
@@ -280,7 +246,7 @@ getAMaxLenEnv :: TcM AMaxLenEnv
 getAMaxLenEnv = getStEnv tcm_amaxlenenv
 setAMaxLenEnv :: AMaxLenEnv -> TcM ()
 setAMaxLenEnv e = updStEnv (\st -> st { tcm_amaxlenenv = e })
-updAMaxLenEnv :: [(Name,NumExpr)] -> TcM ()
+updAMaxLenEnv :: [(GName Ty, NumExpr)] -> TcM ()
 updAMaxLenEnv binds
   = updStEnv $ \st -> st { tcm_amaxlenenv = updBinds binds (tcm_amaxlenenv st) }
 
@@ -313,9 +279,9 @@ lookupTDefEnv :: String -> Maybe SourcePos -> TcM StructDef
 lookupTDefEnv s pos = getTDefEnv >>= lookupTcM s pos msg
   where msg = text "Unbound type definition:" <+> text s
 
-lookupALenEnv :: Name -> Maybe SourcePos -> TcM NumExpr
+lookupALenEnv :: LenVar -> Maybe SourcePos -> TcM NumExpr
 lookupALenEnv s pos = getALenEnv >>= lookupTcM s pos msg
-  where msg = text "Unbound array length:" <+> ppName s
+  where msg = text "Unbound array length:" <+> text s
 
 
 -- Lifting an IO action
@@ -328,15 +294,20 @@ genSym prefix =
     do { str <- GS.genSymStr sym
        ; return $ Right (prefix ++ str, st) }
 
-extendEnv :: [(String,Ty)] -> TcM a -> TcM a
+extendEnv :: [GName Ty] -> TcM a -> TcM a
 extendEnv binds m
   = TcM $ \tenv env cenv sym ctxt st ->
-            runTcM m tenv (updBinds binds env) cenv sym ctxt st
+            runTcM m tenv (updBinds binds' env) cenv sym ctxt st
+  where
+    binds' = map (\nm -> (name nm, nameTyp nm)) binds
 
-extendCEnv :: [(String,CTy)] -> TcM a -> TcM a
+
+extendCEnv :: [GName CTy] -> TcM a -> TcM a
 extendCEnv binds m
   = TcM $ \tenv env cenv sym ctxt st ->
-            runTcM m tenv env (updBinds binds cenv) sym ctxt st
+            runTcM m tenv env (updBinds binds' cenv) sym ctxt st
+  where
+    binds' = map (\nm -> (name nm, nameTyp nm)) binds
 
 extendTDefEnv :: [(String,StructDef)] -> TcM a -> TcM a
 extendTDefEnv binds m
@@ -379,11 +350,8 @@ newTyVar prefix = genSym prefix
 newBWVar :: String -> TcM BWVar
 newBWVar prefix = genSym prefix
 
-newALenVar :: String -> TcM Name
-newALenVar prefix
-  = do { s <- genSym prefix
-       ; return $ toName s Nothing Nothing
-       }
+newALenVar :: String -> TcM LenVar
+newALenVar prefix = genSym prefix
 
 newTInt_BWUnknown :: TcM Ty
 newTInt_BWUnknown =
@@ -404,26 +372,31 @@ tyVarsOfCTy :: CTy -> S.Set TyVar
 tyVarsOfCTy (CTBase ct0)      = tvs_ct0 ct0
 tyVarsOfCTy (CTArrow tys ct0) = tvs_args tys `S.union` tvs_ct0 ct0
 
+tvs_ct0 :: GCTy0 Ty -> S.Set TyVar
 tvs_ct0 (TTrans a b)  = tyVarsOfTy a `S.union` tyVarsOfTy b
 tvs_ct0 (TComp v a b) = tyVarsOfTy a `S.union` tyVarsOfTy b
                                      `S.union` tyVarsOfTy v
+
+tvs_arg :: CallArg Ty (GCTy0 Ty) -> S.Set TyVar
 tvs_arg (CAExp t)    = tyVarsOfTy t
 tvs_arg (CAComp ct0) = tvs_ct0 ct0
+
+tvs_args :: [CallArg Ty (GCTy0 Ty)] -> S.Set TyVar
 tvs_args = foldl (\s a -> s `S.union` tvs_arg a) S.empty
 
 
 
 checkWith :: Maybe SourcePos -> Bool -> Doc -> TcM ()
-checkWith pos True  err = return ()
+checkWith _   True  _   = return ()
 checkWith pos False err = raiseErr False pos err
 
 
 firstToSucceed :: TcM a -> TcM a -> TcM a
 firstToSucceed m1 m2
   = TcM $ \tenv env cenv sym ctx st ->
-    do { res <- runTcM m1 tenv env cenv sym ctx st
-       ; case res of
-           Left err -> runTcM m2 tenv env cenv sym ctx st
+    do { mres <- runTcM m1 tenv env cenv sym ctx st
+       ; case mres of
+           Left _err -> runTcM m2 tenv env cenv sym ctx st
            Right res -> return (Right res)
        }
 
@@ -444,10 +417,10 @@ zonkTy = mapTyM do_zonk
       = do { bw' <- zonkBitWidth bw
            ; return (TInt bw')
            }
-    do_zonk (TArr n ty)
+    do_zonk (TArray n ty)
       = do { n' <- zonkALen n
              -- NB: No need to recurse, mapTyM will do it for us
-           ; return (TArr n' ty)
+           ; return (TArray n' ty)
            }
     do_zonk ty = return ty
 
@@ -461,10 +434,10 @@ zonkBitWidth (BWUnknown x)
 zonkBitWidth other_bw = return other_bw
 
 zonkALen :: NumExpr -> TcM NumExpr
-zonkALen (NVar n _m)
+zonkALen (NVar n)
   = do { env <- getALenEnv
        ; case M.lookup n env of
-           Nothing -> return (NVar n _m)
+           Nothing -> return $ NVar n
            Just ne -> zonkALen ne
        }
 zonkALen (Literal i)
@@ -509,35 +482,15 @@ zonkCTy cty
            ; return (TTrans a' b')
            }
 
-zonkExpr :: Exp Ty -> TcM (Exp Ty)
--- Zonking
-zonkExpr = mapExpM_aux zonkTy return
+-- | Zonking
+--
+-- NOTE: This used to also default the type of `EError` to `TUnit` when it
+-- was still a free variable. However, we don't do this anymore here but we
+-- do this in `defaultExpr` instead. This is important, because we should have
+-- the invariant that we can zonk at any point during type checking without
+-- changing the result.
+zonkExpr :: Exp -> TcM Exp
+zonkExpr = mapExpM zonkTy return return
 
-  where zonk_exp :: Exp Ty -> TcM (Exp Ty)
-        zonk_exp e
-          | EError {} <- unExp e
-          = do { zty <- zonkTy (info e)
-               ; let zty' = case zty of TVar {} -> TUnit
-                                        _ -> zty
-               ; return $ e { info = zty' }
-               }
-          | otherwise
-          = return e
-
-
-zonkComp :: Comp CTy Ty -> TcM (Comp CTy Ty)
-zonkComp = mapCompM_aux zonkTy zonkExpr zonkCTy zonk_comp
-  -- We can't just use 'return' for zonkComp as we need to zonk the
-  -- actual types that lived in parameters, declarations and structs
-  -- CL
-  where zonk_comp (MkComp (LetHeader nm f c1) loc cty)
-          = do { f' <- mapFunAndTysM zonkTy zonkTy zonkExpr f
-               ; return (cLetHeader loc cty nm f' c1)
-               }
-        --
-        zonk_comp (MkComp (LetFunC nm params locals c1 c2) loc cty)
-          = do { locals' <- mapLocalsAndTysM zonkExpr zonkTy locals
-               ; return (cLetFunC loc cty nm params locals' c1 c2)
-               }
-        zonk_comp c = return c
-
+zonkComp :: Comp -> TcM Comp
+zonkComp = mapCompM zonkCTy zonkTy return return zonkExpr return

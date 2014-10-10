@@ -26,6 +26,7 @@ import Prelude hiding (exp, mapM)
 import Control.Monad (liftM, foldM, when)
 import Control.Monad.State (State, execState, modify)
 import Data.Functor.Identity ( Identity (..) )
+import Data.List (nub)
 import Data.Map (Map)
 import GHC.Generics (Generic)
 import Text.Parsec.Pos
@@ -44,9 +45,17 @@ import Orphans ()
 type TyName  = String
 type FldName = String
 
-type TyVar   = String    -- For now
-type BWVar   = String
-type BufId   = String
+-- | Type variables (ranging over Ty or CTy)
+type TyVar = String
+
+-- | Arrow length variables (ranging over type level naturals)
+type LenVar = String
+
+-- | Bitwidth variables (ranging over type level bitwidth annotations)
+type BWVar = String
+
+-- | Buffer IDs
+type BufId = String
 
 {-------------------------------------------------------------------------------
   Names
@@ -144,6 +153,7 @@ data Ty where
   TArray    :: NumExpr -> Ty -> Ty
   TInt      :: BitWidth -> Ty
   TDouble   :: Ty
+  -- TODO: We could inline GStructDef here?
   TStruct   :: TyName -> [(FldName, Ty)] -> Ty
   TInterval :: Int -> Ty
 
@@ -156,11 +166,8 @@ data Ty where
 data NumExpr where
   Literal :: Int -> NumExpr
 
-  -- NVar: Length to be inferred from the context
-  -- Int parameter denotes the max length seen
-  -- and is used as a return of length function on polymorphic arrays
-  -- to denote the max array size that can occur in the program
-  NVar :: GName Ty -> Int -> NumExpr
+  -- | NVar: Length to be inferred from the context (or polymorphic)
+  NVar :: LenVar -> NumExpr
 
   deriving (Generic, Eq)
 
@@ -292,6 +299,14 @@ data GExp0 t a where
   -- TODO: Maybe merge with `EAssign`.
   EArrWrite :: GExp t a -> GExp t a -> LengthInfo -> GExp t a -> GExp0 t a
 
+  -- | Iterate over an array
+  --
+  -- @EIter ix x earr ebody@ iterates over array @earr@, binding @ix@ to
+  -- the index into the array and @x@ to the value of the array at that index
+  -- at every step.
+  --
+  -- TODO: We don't seem to be creating instances of EIter anywhere in the
+  -- compiler (not in the parser, not anywhere else). Is it obsolete?
   EIter :: GName t -> GName t -> GExp t a -> GExp t a -> GExp0 t a
 
   EFor :: UnrollInfo -> GName t -> GExp t a -> GExp t a -> GExp t a -> GExp0 t a
@@ -340,8 +355,8 @@ data GExp t a
 
 -- Structure definitions
 data GStructDef t
-  = StructDef { struct_name :: String
-              , struct_flds :: [(String,t)] }
+  = StructDef { struct_name :: TyName
+              , struct_flds :: [(FldName,t)] }
   deriving (Generic)
 
 data GFun0 t a where
@@ -796,26 +811,32 @@ funFVs f = case unFun f of
 
 -- | Find free variables in a function definition
 --
--- Note that this is not polymorphic in Ty because we need to inspect the
--- types to find their free variables too.
-funFVsClos :: GFun Ty a -> S.Set (GName Ty)
+-- NOTE: This is not polymorphic in the type because we also collect length
+-- variables in the types of the function parameters and result type.
+funFVsClos :: GFun Ty a -> (S.Set (GName Ty), S.Set LenVar)
 funFVsClos f = case unFun f of
     MkFunDefined _nm params locals body ->
       -- NB: important that we use foldr here instead of foldl
-      (foldr (\(nm,me) s ->
-               let se = case me of
-                     Just e  -> S.union (exprFVsClos e) s
-                     Nothing -> s
-               in se S.\\ (S.singleton nm)) (exprFVsClos body) locals) S.\\
-      (S.fromList $ params ++ (convTy params))
-    MkFunExternal _nm _params _ty -> S.empty
-  where
-    getPolymArrTy nm
-      | TArray (NVar nv _s) _ta <- nameTyp nm = [nv]
-      | otherwise = []
+      ( (foldr (\(nm,me) s ->
+                 let se = case me of
+                       Just e  -> S.union (exprFVsClos e) s
+                       Nothing -> s
+                 in se S.\\ (S.singleton nm)) (exprFVsClos body) locals) S.\\
+        (S.fromList params)
+      , S.fromList $ gatherPolyVars (map nameTyp params)
+      )
+    -- TODO: Can't externals have length variables in their types?
+    MkFunExternal _nm _params _ty -> (S.empty, S.empty)
 
-    convTy (h:t) = (getPolymArrTy h) ++ (convTy t)
-    convTy [] = []
+-- | Find all length variables in a set of types
+--
+-- TODO: Shouldn't we check for length variables in nested array types?
+gatherPolyVars :: [Ty] -> [LenVar]
+gatherPolyVars = nub . gather []
+  where
+    gather acc []                       = acc
+    gather acc (TArray (NVar nm1) _:ts) = gather (nm1:acc) ts
+    gather acc (_                  :ts) = gather acc       ts
 
 {-------------------------------------------------------------------------------
   Substitutions
@@ -831,21 +852,21 @@ substAll :: Monad m => [(GName t, GExp t a)] -> GExp t a -> m (GExp t a)
 substAll substs e = foldM (\x p -> substExp p x) e substs
 
 -- | Substitute lengths through
-substLength :: Monad m => (GName Ty, NumExpr) -> GExp Ty a -> m (GExp Ty a)
+substLength :: Monad m => (LenVar, NumExpr) -> GExp Ty a -> m (GExp Ty a)
 substLength (nm,numexpr) = mapExpM (substLengthTy (nm,numexpr)) return return
 
-substLengthTy :: Monad m => (GName Ty, NumExpr) -> Ty -> m Ty
+substLengthTy :: Monad m => (LenVar, NumExpr) -> Ty -> m Ty
 substLengthTy (nm,numexpr) = mapTyM on_ty
   where
-    on_ty (TArray (NVar nm' _m) t) | nm == nm' = return (TArray numexpr t)
-    on_ty ty_other                             = return ty_other
+    on_ty (TArray (NVar nm') t) | nm == nm' = return (TArray numexpr t)
+    on_ty ty_other                          = return ty_other
 
-substAllLengthTy :: Monad m => [(GName Ty, NumExpr)] -> Ty -> m Ty
+substAllLengthTy :: Monad m => [(LenVar, NumExpr)] -> Ty -> m Ty
 substAllLengthTy substs t = foldM (\x p -> substLengthTy p x) t substs
 
 substAllTyped :: Monad m
               => [(GName Ty, GExp Ty a)]
-              -> [(GName Ty, NumExpr)]
+              -> [(LenVar, NumExpr)]
               -> GExp Ty a
               -> m (GExp Ty a)
 substAllTyped substs len_substs e = do
@@ -902,21 +923,18 @@ binopList :: BinOp -> a -> GExp t a -> [GExp t a] -> GExp t a
 binopList _  _ e0 []       = e0
 binopList op a e0 (e : es) = toExp a $ EBinOp op e (binopList op a e0 es)
 
-{-
-dotDotName :: GName t
-dotDotName = toName "..." Nothing Nothing
+dotDotName :: String
+dotDotName = "..."
 
--- Just for debugging purposes
+-- Just for debugging purposes (and used in error messages)
 unknownTArr :: Ty
-unknownTArr = TArr (NVar dotDotName 0) (TVar (name dotDotName))
+unknownTArr = TArray (NVar dotDotName) (TVar dotDotName)
 
 unknownTArrOfBase :: Ty -> Ty
-unknownTArrOfBase t = TArr (NVar dotDotName 0) t
+unknownTArrOfBase t = TArray (NVar dotDotName) t
 
 unknownTFun :: Int -> Ty
-unknownTFun n = TArrow (replicate n (TVar (name dotDotName)))
-                       (TVar (name dotDotName))
--}
+unknownTFun n = TArrow (replicate n (TVar dotDotName)) (TVar dotDotName)
 
 -- Observations/questions about the following code
 -- (a) Excludes Bit. Not sure why. (TODO)
