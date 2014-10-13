@@ -401,6 +401,7 @@ type Exp       = GExp       Ty ()
 type StructDef = GStructDef Ty
 type Fun0      = GFun0      Ty ()
 type Fun       = GFun       Ty ()
+type EId       = GName      Ty 
 
 {-------------------------------------------------------------------------------
   Specializations of the AST to SrcTy (source level types)

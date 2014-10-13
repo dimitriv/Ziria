@@ -377,6 +377,8 @@ type Comp0       = GComp0 CTy Ty () ()
 type Comp        = GComp  CTy Ty () ()
 type Prog        = GProg  CTy Ty () ()
 
+type CId         = GName  CTy
+
 type ParListView = GParListView CTy Ty () ()
 
 {-------------------------------------------------------------------------------
