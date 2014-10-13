@@ -47,28 +47,32 @@ import Data.Monoid
 import Text.PrettyPrint.Mainland
 
 
-varsBitWidth_ByteAlign :: (Functor m, Monad m) => [VarTy] -> m Int
+import CtExpr
+
+
+varsBitWidth_ByteAlign :: (Functor m, Monad m) => [GName Ty] -> m Int
 varsBitWidth_ByteAlign vartys
-  = do { sizes <- mapM (tyBitWidth_ByteAlign . snd) vartys
+  = do { sizes <- mapM (tyBitWidth_ByteAlign . nameTyp) vartys
        ; return $ sum sizes
        }
 
-varsBitWidth :: (Functor m, Monad m) => Map Name Range -> [VarTy] -> m Int
+varsBitWidth :: (Functor m, Monad m) => Map (GName Ty) Range -> [GName Ty] -> m Int
 varsBitWidth ranges vartys
-  = do { sizes <- mapM (\(v,ty) -> varBitWidth ranges v ty) vartys
+  = do { sizes <- mapM (\v -> varBitWidth ranges v) vartys
        ; return (sum sizes) }
-varBitWidth :: Monad m => Map Name Range -> Name -> Ty -> m Int
-varBitWidth ranges v ty | Just (Range _ h) <- Map.lookup v ranges =
+
+varBitWidth :: Monad m => Map (GName Ty) Range -> GName Ty -> m Int
+varBitWidth ranges v | Just (Range _ h) <- Map.lookup v ranges =
     return $ intLog2 h
   where
     intLog2 :: Integer -> Int
     intLog2 = ceiling . (+1) . logBase 2 . fromIntegral
-varBitWidth _ _ ty = tyBitWidth ty
+varBitWidth _ v = tyBitWidth (nameTyp v)
 
 
 -- If the given expression's value is a variable 'v', then return 'Just v',
 -- otherwise return 'Nothing'.
-expResultVar :: Exp Ty -> Maybe Name
+expResultVar :: Exp -> Maybe (GName Ty)
 expResultVar (MkExp (ESeq _ e2) _ _) = expResultVar e2
 expResultVar (MkExp (EVar v) _ ty)   = Just v
 expResultVar _                       = Nothing
@@ -92,20 +96,20 @@ instance Pretty LUTStats where
         text "lut size in bytes:" <+> ppr (lutTableSize s)
 
 calcLUTStats :: (Functor m, Monad m)
-             => [(Name,Ty)]
-             -> Map Name Range
-             -> Exp Ty
+             => [GName Ty]
+             -> Map (GName Ty) Range
+             -> Exp
              -> m LUTStats
 calcLUTStats locals ranges e = do
     (inVars, outVars, _) <- inOutVars locals ranges e
     inVarsBitWidth       <- varsBitWidth ranges inVars
     outVarsBitWidth      <- varsBitWidth ranges outVars
     let resultInOutVars  =  case expResultVar e of
-                              Just v | v `elem` map fst outVars -> True
+                              Just v | v `elem` outVars -> True
                               _ -> False
     resultBitWidth       <- if resultInOutVars
                             then return 0
-                            else tyBitWidth (info e)
+                            else tyBitWidth (ctExp e)
     let inBitWidth       =  inVarsBitWidth
     let outBitWidth      =  outVarsBitWidth + resultBitWidth
     return LUTStats { lutInBitWidth      = inBitWidth
@@ -126,9 +130,9 @@ calcLUTStats locals ranges e = do
 
 pprLUTStats :: Monad m
             => DynFlags
-            -> [(Name,Ty)]
-            -> Map Name Range
-            -> Exp Ty
+            -> [GName Ty]
+            -> Map (GName Ty) Range
+            -> Exp
             -> m Doc
 pprLUTStats dflags locals ranges e = do
     (inVars, outVars, allVars) <- inOutVars locals ranges e
@@ -188,7 +192,7 @@ instance MonadState LMState LM where
 mIN_OP_COUNT :: Int
 mIN_OP_COUNT = 5
 
-shouldLUT :: DynFlags -> [(Name,Ty)] -> Map Name Range -> Exp Ty -> Either String Bool
+shouldLUT :: DynFlags -> [GName Ty] -> Map (GName Ty) Range -> Exp -> Either String Bool
 shouldLUT dflags locals ranges e = flip evalLM s0 $ do
     stats <- calcLUTStats locals ranges e
     should e
@@ -215,11 +219,11 @@ shouldLUT dflags locals ranges e = flip evalLM s0 $ do
                  , lmHasBPerm = False
                  }
 
-    should :: Exp Ty -> LM ()
+    should :: Exp -> LM ()
     should (MkExp e _ _) =
         go e
 
-    go :: Exp0 Ty -> LM ()
+    go :: Exp0 -> LM ()
     go e@(EVal {})    = return ()
     go e@(EValArr {}) = return ()
     go e@(EVar {})    = return ()
@@ -270,9 +274,9 @@ shouldLUT dflags locals ranges e = flip evalLM s0 $ do
     go (ELet _ _ e1 e2) =
         should e1 >> should e2
 
-    go (ELetRef _ _ty Nothing e2) =
+    go (ELetRef _ Nothing e2) =
         should e2
-    go (ELetRef _ _ty (Just e1) e2) =
+    go (ELetRef _ (Just e1) e2) =
         should e1 >> should e2
 
     go (ESeq e1 e2) =
