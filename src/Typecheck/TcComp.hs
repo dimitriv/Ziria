@@ -17,10 +17,11 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE RankNTypes #-}
 module TcComp (tyCheckTopComp, tyCheckTopDecls, envOfDecls) where
 
 import Control.Applicative
-import Control.Monad (forM)
+import Control.Monad (forM, liftM)
 import Data.Either (partitionEithers)
 import Data.Maybe (fromJust)
 import Text.Parsec.Pos (SourcePos)
@@ -183,18 +184,10 @@ tyCheckComp c
                 ; return (cLetE cloc () x' fi e' c1', cty1)
                 }
 
-           LetERef x (Just e) c1 ->
-             do { (x', xty) <- tyCheckBound x
-                ; (e', ety) <- tyCheckExpr e
-                ; unify cloc xty ety
+           LetERef x me c1 ->
+             do { (x', me') <- tyCheckDecl (x, me)
                 ; (c1', cty1) <- extendEnv [x'] $ tyCheckComp c1
-                ; return (cLetERef cloc () x' (Just e') c1', cty1)
-                }
-
-           LetERef x Nothing c1 ->
-             do { (x',  _)    <- tyCheckBound x
-                ; (c1', cty1) <- extendEnv [x'] $ tyCheckComp c1
-                ; return (cLetERef cloc () x' Nothing c1', cty1)
+                ; return (cLetERef cloc () x' me' c1', cty1)
                 }
 
            LetHeader fn c1 ->
@@ -204,7 +197,7 @@ tyCheckComp c
                 }
 
            LetFunC f params locls c1 c2 ->
-             do { params' <- mapM tyCheckParam params
+             do { params' <- tyCheckCParams params
                 ; let (eparams, cparams) = partitionEithers $ map classify params'
                 ; locls' <- extendEnv eparams $ tyCheckDecls locls
                 -- NB: order in which Env is extended is important here,
@@ -563,15 +556,30 @@ envOfDecls = mkTyEnv . map (\(nm, _) -> (name nm, nameTyp nm))
   Auxiliary
 -------------------------------------------------------------------------------}
 
--- | Translate function formal parameters
+-- | Typecheck telescopes
+--
+-- (See `renameTelescope` for an explanation)
+tyCheckTelescope :: (a -> TcM b)                     -- ^ Type check function
+                 -> (forall x. b -> TcM x -> TcM x)  -- ^ Environment extension
+                 -> [a]
+                 -> TcM [b]
+tyCheckTelescope tc ext = go
+  where
+    go []     = return []
+    go (a:as) = do
+      b  <- tc a
+      bs <- ext b $ go as
+      return (b:bs)
+
+-- | Translate comp function formal parameter
 --
 -- We support type inference (in principle) for expression parameters, although
 -- the parser currently insists on type annotations. We do not support it for
 -- computation parameters (because we don't have a unification infrastructure
 -- for CTy).
-tyCheckParam :: GName (CallArg (Maybe SrcTy) (Maybe (GCTy SrcTy)))
+tyCheckCParam :: GName (CallArg (Maybe SrcTy) (Maybe (GCTy SrcTy)))
              -> TcM (GName (CallArg Ty CTy))
-tyCheckParam nm =
+tyCheckCParam nm =
     case nameTyp nm of
       CAExp t -> do
         (nm', t') <- tyCheckBound nm{nameTyp = t}
@@ -584,23 +592,35 @@ tyCheckParam nm =
         raiseErrNoVarCtx (nameLoc nm) $
           text "Missing type annotation on parameter" <+> ppr nm
 
+-- | Translate a list of comp function formal parameters
+tyCheckCParams :: [GName (CallArg (Maybe SrcTy) (Maybe (GCTy SrcTy)))]
+               -> TcM [GName (CallArg Ty CTy)]
+tyCheckCParams = tyCheckTelescope tyCheckCParam ext
+  where
+    ext :: forall x. GName (CallArg Ty CTy) -> TcM x -> TcM x
+    ext nm = case nameTyp nm of
+      CAExp  t -> extendEnv  [nm{nameTyp = t}]
+      CAComp t -> extendCEnv [nm{nameTyp = t}]
+
+-- | Translate a list of expression function formal parameters
+tyCheckParams :: [GName (Maybe SrcTy)] -> TcM [GName Ty]
+tyCheckParams = tyCheckTelescope (liftM fst . tyCheckBound) (extendEnv . (:[]))
+
+-- | Local variable declaration
+tyCheckDecl :: (GName (Maybe SrcTy), Maybe SrcExp) -> TcM (GName Ty, Maybe Exp)
+tyCheckDecl (x, me) = do
+  (x', xty) <- tyCheckBound x
+  me' <- case me of
+    Nothing -> return Nothing
+    Just e  -> do (e', ety) <- tyCheckExpr e
+                  unify (expLoc e) xty ety
+                  return (Just e')
+  return (x', me')
+
 -- | Declarations of local variables
 tyCheckDecls :: [(GName (Maybe SrcTy), Maybe SrcExp)]
              -> TcM [(GName Ty, Maybe Exp)]
-tyCheckDecls [] = return []
-tyCheckDecls ((x,mb):decls)
-  = do { (x', ty) <- tyCheckBound x
-       ; e' <- ty_check_mb mb ty
-       ; rest <- extendEnv [x'] $ tyCheckDecls decls
-       ; return $ (x',e') : rest
-       }
-  where ty_check_mb Nothing _ty
-          = return Nothing
-        ty_check_mb (Just e) ty
-          = do { (e', ty') <- tyCheckExpr e
-               ; unify (expLoc e) ty ty'
-               ; return (Just e')
-               }
+tyCheckDecls = tyCheckTelescope tyCheckDecl (extendEnv . (:[]) . fst)
 
 -- | Comp fun call arguments
 tyCheckCallArg :: CallArg SrcExp SrcComp -> TcM (CallArg Exp Comp, CallArg Ty CTy)
@@ -619,12 +639,12 @@ tyCheckFun fn =
   do { let floc = funLoc fn
      ; fn' <- case unFun fn of
          MkFunDefined f params decls ebody ->
-           do { (params', paramTys) <- unzip <$> mapM tyCheckBound params
-              ; decls' <- extendEnv params' $ tyCheckDecls decls
+           do { params' <- tyCheckParams params
+              ; decls'  <- extendEnv params' $ tyCheckDecls decls
               ; extendEnv (params' ++ map fst decls') $
                   do { (ebody', retTy) <- tyCheckExpr ebody
 
-                     ; let fty = TArrow paramTys retTy
+                     ; let fty = TArrow (map nameTyp params') retTy
                      ; let f'  = f{nameTyp = fty}
 
                        -- The type of ebody may mention the parameters of
@@ -636,16 +656,16 @@ tyCheckFun fn =
                      }
              }
 
-         MkFunExternal f params resTy -> do
-           do { (params', paramTys) <- unzip <$> mapM tyCheckBound params
+         MkFunExternal f params retTy -> do
+           do { params' <- tyCheckParams params
                 -- Although we don't have a body, the result type may
                 -- refer to the arguments so we need to extend the env
               ; extendEnv params' $
-                  do { resTy' <- trReqTy "external result" floc resTy
-                     ; let fty = TArrow paramTys resTy'
+                  do { retTy' <- trReqTy "external result" floc retTy
+                     ; let fty = TArrow (map nameTyp params') retTy'
                      ; let f'  = f{nameTyp = fty}
                      ; mapFunM zonkTy return zonkExpr $
-                         MkFun (MkFunExternal f' params' resTy') floc ()
+                         MkFun (MkFunExternal f' params' retTy') floc ()
                      }
               }
 
