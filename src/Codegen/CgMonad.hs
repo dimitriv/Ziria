@@ -39,7 +39,7 @@ module CgMonad
   , collectStmts
   , collectStmts_
 
-  , inAllocFrame
+  --, inAllocFrame
 
   , collect
 
@@ -56,8 +56,8 @@ module CgMonad
   , genSym
   , getNames
   , setNames
-  , freshName
-  , nextName
+  --, freshName
+  --, nextName
   , pushName
   , printNames
 
@@ -103,7 +103,7 @@ module CgMonad
   , newHeapAlloc
   , getMaxStackAlloc
 
-  , isArrTy
+  , isArrayTy
   , getTyPutGetInfo
 
   , cgTIntName
@@ -151,7 +151,7 @@ import PpComp
 import PpExpr
 import qualified GenSym as GS
 import CgHeader
-
+import CtComp (ctComp)
 
 instance IfThenElse Bool a where
     ifThenElse True  th _  = th
@@ -258,35 +258,40 @@ type ExpGen = C.Exp
 
 type CompGen = CompKont -> Cg CompInfo
 
-type CompFunGen = [CallArg (Exp Ty) (Comp CTy Ty)] -> CompKont -> Cg CompInfo
+type CompFunGen = [CallArg Exp Comp] -> CompKont -> Cg CompInfo
 
 data CgEnv = CgEnv
     {
-      compFunEnv :: M.Map Name CompFunGen
-      -- Parameterized ST computations
+      -- | Parameterized ST computations
+      compFunEnv :: M.Map (GName CTy) CompFunGen
 
-    , compEnv    :: M.Map Name CompGen
+      -- | TODO: doc
+    , compEnv :: M.Map (GName CTy) CompGen
 
-    , tyDefEnv   :: M.Map TyName StructDef
-      -- Type definitions
+      -- | Type definitions
+    , tyDefEnv :: M.Map TyName StructDef
 
-    , varEnv     :: M.Map Name (Ty, ExpGen)
+      -- | TODO: doc
+    , varEnv :: M.Map (GName Ty) ExpGen
 
-    , funEnv     :: M.Map Name (Name,[(Name,Ty)])
-      -- The environment mapping function symbols
-      -- to real names and closure params
+      -- | The code generator lifts local functions to top-level, introducing
+      -- additional function parameters for any free variables in the (local)
+      -- function body. For each local function we record the mapping from the
+      -- local function name to the unique name of the lifted global fiunction,
+      -- as well as the list of additional "closure" parameters that we
+      -- introduced.
+    , funEnv :: M.Map (GName Ty) (GName Ty, [GName Ty])
 
-    , symEnv     :: GS.Sym
-      -- Reference to a symbol, for gensym'ing
+      -- | Reference to a symbol, for gensym'ing
+    , symEnv :: GS.Sym
 
-    , disableBC  :: Bool -- When true, no bound checks are emitted
-                         -- overriding any user preferences. Useful
-                         -- for external functions that are "trust me"
+      -- | When true, no bound checks are emitted overriding any user
+      -- preferences. Useful for external functions that are "trust me"
+    , disableBC  :: Bool
 
+      -- | This is to be added to global variables, to allow us to link
+      -- multiple Ziria modules in the same C project
     , moduleName :: String
-      -- This is to be added to global variables,
-      -- to allow us to link multiple Ziria modules in the same C project
-
     }
 
 emptyEnv :: GS.Sym -> CgEnv
@@ -317,17 +322,22 @@ data LUTGenInfo
                }
   deriving Show
 
-data CgState = CgState { nameStack :: [Name]
-                       , numAllocs :: Int -- # of heap-allocated variables
-                       , maxStackAlloc :: Int
+data CgState = CgState {
+      nameStack :: [GName CTy]
 
-                         -- Hashed LUT-ted exprs,
-                         -- along with the C variable for the LUT
-                       , lutHashes  :: [(Int,LUTGenInfo)]
+      -- | Number of heap-allocated variables
+    , numAllocs :: Int
 
-                       , structDefs :: [TyName] -- # already defined structs
-                         -- if > than this, then allocate on the heap
-                       }
+      -- | Hashed LUT-ted exprs, along with the C variable for the LUT
+    , maxStackAlloc :: Int
+
+    , lutHashes  :: [(Int,LUTGenInfo)]
+
+      -- | Number of already defined structs
+      --
+      -- if > than this, then allocate on the heap
+    , structDefs :: [TyName]
+    }
   deriving Show
 
 emptyState = CgState [] 0 cMAX_STACK_ALLOC [] []
@@ -474,8 +484,10 @@ inNewBlock_ m = do
     (decls, stms, _) <- inNewBlock m
     return (decls, stms)
 
+{-
+-- TODO: Temporarily disabled
+-- | Execute this action in an allocation frame. Use with moderation!
 inAllocFrame :: Cg a -> Cg a
--- Execute this action in an allocation frame. Use with moderation!
 inAllocFrame action
   = do { idx <- freshName "mem_idx"
        ; heap_context <- getHeapContext
@@ -484,7 +496,7 @@ inAllocFrame action
        ; x <- action
        ; appendStmt [cstm| wpl_restore_free_idx($id:heap_context, $id:(name idx)); |]
        ; return x }
-
+-}
 
 collectDefinitions :: Cg a -> Cg ([C.Definition], a)
 collectDefinitions m = do
@@ -514,10 +526,10 @@ genSym prefix = do
     str       <- liftIO $ GS.genSymStr sym
     return $ prefix ++ str
 
-getNames :: Cg [Name]
+getNames :: Cg [GName CTy]
 getNames = gets nameStack
 
-setNames :: [Name] -> Cg ()
+setNames :: [GName CTy] -> Cg ()
 setNames names' = modify $ \s -> s { nameStack = names' }
 
 
@@ -538,21 +550,26 @@ newHeapAlloc = modify $ \s ->
 getMaxStackAlloc :: Cg Int
 getMaxStackAlloc = gets maxStackAlloc
 
-
+{-
+-- TODO: Temporarily disabled (toName without type no longer possible)
 freshName :: String -> Cg Name
 freshName prefix
   = do { s' <- genSym prefix
        ; return $ toName s' Nothing Nothing
        }
+-}
 
-nextName :: String -> Cg Name
+{-
+-- TODO: Temporarily disabled
+nextName :: String -> Cg (GName CTy)
 nextName prefix = do
   names <- getNames
   case names of
     [] -> freshName prefix
     nm : names' -> setNames names' >> return nm
+-}
 
-pushName :: Name -> Cg ()
+pushName :: GName CTy -> Cg ()
 pushName nm = modify $ \s -> s { nameStack = nm : nameStack s }
 
 printNames :: Cg ()
@@ -641,26 +658,27 @@ appendLabeledBlock i m
        ; appendStmt [cstm|$id:i: { $stms:stms }|] }
 
 
-extendFunEnv :: Name -> CompFunGen -> Cg a -> Cg a
+extendFunEnv :: GName CTy -> CompFunGen -> Cg a -> Cg a
 extendFunEnv nm fn =
     local $ \rho -> rho { compFunEnv = M.insert nm fn (compFunEnv rho) }
 
-extendVarEnv :: [(Name, (Ty, ExpGen))] -> Cg a -> Cg a
+extendVarEnv :: [(GName Ty, ExpGen)] -> Cg a -> Cg a
 -- BUG: This seems wrong: We can't inline a potentially
 -- imperative expression anywhere we want! What is this ExpGen stuff????
 extendVarEnv binds =
     -- We need to bind array lengths of polymorphic array as well
     local $ \rho -> rho { varEnv = M.union (M.fromList (binds ++ convTy binds)) (varEnv rho) }
   where
-    getPolymArrTy :: (Name, (Ty, ExpGen)) -> Maybe (Name, (Ty, ExpGen))
-    getPolymArrTy (n, (TArr (NVar nv s) ta,e))
-      = Just (nv, (tint, [cexp|$id:(name nv)|]))
-    getPolymArrTy _ = Nothing
+    -- NOTE: This is the point where we introduce GNames for LenVars.
+    getPolymArrTy :: (GName Ty, ExpGen) -> Maybe (GName Ty, ExpGen)
+    getPolymArrTy (n, e) = case nameTyp n of
+      TArray (NVar nv) ta -> Just (toName nv Nothing tint, [cexp|$id:nv|])
+      _                   -> Nothing
 
-    convTy :: [(Name, (Ty, ExpGen))] -> [(Name, (Ty, ExpGen))]
+    convTy :: [(GName Ty, ExpGen)] -> [(GName Ty, ExpGen)]
     convTy binds = catMaybes (map getPolymArrTy binds)
 
-extendExpFunEnv :: Name -> (Name,[(Name,Ty)]) -> Cg a -> Cg a
+extendExpFunEnv :: GName Ty -> (GName Ty, [GName Ty]) -> Cg a -> Cg a
 extendExpFunEnv nm bind =
    local $ \rho -> rho { funEnv = M.union (M.fromList [(nm,bind)]) (funEnv rho) }
 
@@ -669,7 +687,7 @@ extendTyDefEnv nm bind =
    local $ \rho -> rho { tyDefEnv = M.union (M.fromList [(nm,bind)]) (tyDefEnv rho) }
 
 
-extendCompEnv :: Name -> CompGen -> Cg a -> Cg a
+extendCompEnv :: GName CTy -> CompGen -> Cg a -> Cg a
 extendCompEnv nm bind =
     local $ \rho -> rho { compEnv = M.insert nm bind (compEnv rho) }
 
@@ -712,14 +730,14 @@ withClonedState cg = do
     put st0
     return ret
 
-lookupCompFunCode :: Name -> Cg CompFunGen
+lookupCompFunCode :: GName CTy -> Cg CompFunGen
 lookupCompFunCode nm = do
     maybe_gen <- asks $ \rho -> M.lookup nm (compFunEnv rho)
     case maybe_gen of
       Nothing  -> fail ("CodeGen: unbound computation function: " ++ show nm)
       Just gen -> return gen
 
-lookupExpFunEnv :: Name -> Cg (Name,[(Name,Ty)])
+lookupExpFunEnv :: GName Ty -> Cg (GName Ty, [GName Ty])
 lookupExpFunEnv nm  = do
     maybe_x <- asks $ \rho -> M.lookup nm (funEnv rho)
     case maybe_x of
@@ -729,12 +747,12 @@ lookupExpFunEnv nm  = do
                           " bound = " ++ show bound ++ " pos = " ++ show (nameLoc nm))
       Just x  -> return x
 
-lookupExpFunEnv_maybe :: Name -> Cg (Maybe (Name,[(Name,Ty)]))
+lookupExpFunEnv_maybe :: GName Ty -> Cg (Maybe (GName Ty, [GName Ty]))
 lookupExpFunEnv_maybe nm  =
     asks $ \rho -> M.lookup nm (funEnv rho)
 
 
-lookupVarEnv :: Name -> Cg (Ty, ExpGen)
+lookupVarEnv :: GName Ty -> Cg ExpGen
 lookupVarEnv nm = do
     maybe_x <- asks $ \rho -> M.lookup nm (varEnv rho)
     case maybe_x of
@@ -748,7 +766,7 @@ lookupVarEnv nm = do
                                      , text ("pos = " ++ show (nameLoc nm)) ]))
       Just x  -> return x
 
-lookupCompCode :: Name -> Cg CompGen
+lookupCompCode :: GName CTy -> Cg CompGen
 lookupCompCode nm = do
     maybe_e <- asks $ \rho -> M.lookup nm (compEnv rho)
     case maybe_e of
@@ -765,13 +783,13 @@ lookupTyDefEnv nm = do
 
 -- Precondition: t is an array type w/ known size
 getLitArrSz :: Ty -> Int
-getLitArrSz (TArr (Literal n) t) = n
-getLitArrSz _                    = error "CodeGen: Got array size of an unresolved array type!"
+getLitArrSz (TArray (Literal n) t) = n
+getLitArrSz _                      = error "CodeGen: Got array size of an unresolved array type!"
 
 getTyPutGetInfo :: Ty -> (String,Int)
 -- Get a description of the type that matches the driver description
 getTyPutGetInfo ty = (buf_typ ty, buf_siz ty)
-  where buf_siz (TArr (Literal n) _) = n
+  where buf_siz (TArray (Literal n) _) = n
         buf_siz (TBuff (IntBuf t)) = buf_siz t
         buf_siz _other     = 1
         buf_typ ty
@@ -782,13 +800,13 @@ getTyPutGetInfo ty = (buf_typ ty, buf_siz ty)
               TBool -> "bit"
 
               -- Complex buffers
-              TStruct nm | nm == complexTyName   -> "complex32"
-              TStruct nm | nm == complex32TyName -> "complex32"
-              TStruct nm | nm == complex16TyName -> "complex16"
-              TStruct nm | nm == complex8TyName  -> "complex8"
+              TStruct nm _ | nm == complexTyName   -> "complex32"
+              TStruct nm _ | nm == complex32TyName -> "complex32"
+              TStruct nm _ | nm == complex16TyName -> "complex16"
+              TStruct nm _ | nm == complex8TyName  -> "complex8"
 
               -- Arrays should be just fine
-              TArr _ bty -> "arr" ++ buf_typ bty
+              TArray _ bty -> "arr" ++ buf_typ bty
 
               TInt bw   -> cgTIntName bw
 
@@ -800,15 +818,15 @@ getTyPutGetInfo ty = (buf_typ ty, buf_siz ty)
                 -> error $ "Code generation does not yet support buffers for type:" ++ show otherty
 
 
-getGetLen :: Comp CTy Ty -> (Int, Int)
+getGetLen :: Comp -> (Int, Int)
 getGetLen c =
-  let (tya, tyb) = case compInfo c of
+  let (tya, tyb) = case ctComp c of
                         CTBase (TComp tv ta tb) -> (ta, tb)
                         CTBase (TTrans ta tb)   -> (ta, tb)
                         _ -> (TUnit, TUnit)
   in
   let buftyp ty = case ty of
-                       (TArr (Literal n) _) -> n
+                       (TArray (Literal n) _) -> n
                        _ -> 1
   in (buftyp tya, buftyp tyb)
 

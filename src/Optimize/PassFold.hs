@@ -39,7 +39,7 @@ import System.CPUTime
 import Text.Printf
 import Text.Parsec.Pos (SourcePos)
 
-import CgLUT ( shouldLUT )
+-- import CgLUT ( shouldLUT )
 import Analysis.Range ( varRanges )
 import Analysis.UseDef ( inOutVars )
 

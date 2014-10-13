@@ -34,10 +34,11 @@ import Text.Show.Pretty (dumpStr)
 import qualified Data.Map          as M
 import qualified Language.C.Syntax as C
 
-import AstExpr
 import AstComp
+import AstExpr
 import CtComp (ctComp)
 import Opts
+import PassFold
 import PpComp
 import Rename
 import TcComp
@@ -59,7 +60,6 @@ import CgProgram ( codeGenProgram )
 import qualified PassPipeline as PP
 
 
-import PassFold
 import qualified Outputable -- Qualified so that we don't clash with Mainland
 import Vectorize
 import Orphans
@@ -109,7 +109,6 @@ main = failOnException $ do
     input <- readFile inFile
 
     -- putStrLn "command line parsed ..."
-
     prog <-
           failOnError $
           do { let st = ()
@@ -163,7 +162,6 @@ main = failOnException $ do
 
     when (isDynFlagSet dflags Debug) $ outputProgram c' outFile
 
-{-
     when (not (isDynFlagSet dflags Debug)) $ do
     dump dflags DumpTypes ".type.dump" $ (text . show) (ppCompTyped c')
 
@@ -172,6 +170,8 @@ main = failOnException $ do
     -- First let us run some small-scale optimizations
     folded <- runFoldPhase dflags sym 1 c'
 
+    return ()
+{-
     -- putStrLn $ "run the fold phase ..." ++ show folded
 
     -- putStrLn $ "proceeding with vectorization ...."
@@ -215,12 +215,15 @@ main = failOnException $ do
     -- putStrLn "post code generation ..."
 
     mapM_ outputCompiledProgram code_names
+-}
   where
+{-
     check_vect_cands cands
       = case cands of
          [c] -> return ()
          []  -> failWithError "Vect failure: non-sensical annotations?"
          _   -> failWithError "Vect failure: too many candidates?"
+-}
 
     runFoldPhase :: DynFlags -> GS.Sym -> Int -> Comp CTy Ty -> IO (Comp CTy Ty)
     -- Fold Phase
@@ -233,6 +236,7 @@ main = failOnException $ do
       | otherwise
       = return c
 
+{-
     runAutoLUTPhase :: DynFlags -> GS.Sym -> Comp CTy Ty -> IO (Comp CTy Ty)
     -- AutoLUTPhase
     runAutoLUTPhase dflags sym c
