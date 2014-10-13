@@ -56,9 +56,11 @@ module CgMonad
   , genSym
   , getNames
   , setNames
-  --, freshName
-  --, nextName
-  , pushName
+
+  , freshName    -- new Ziria-level EId
+  , freshVar     -- new C-level var (just a string)
+  , freshLabel   -- new C-level block id (just a string)
+
   , printNames
 
   , getLUTHashes
@@ -550,27 +552,24 @@ newHeapAlloc = modify $ \s ->
 getMaxStackAlloc :: Cg Int
 getMaxStackAlloc = gets maxStackAlloc
 
-{-
--- TODO: Temporarily disabled (toName without type no longer possible)
-freshName :: String -> Cg Name
-freshName prefix
+
+freshName :: String -> Ty -> Cg EId 
+-- A new name of a given type
+freshName prefix ty
   = do { s' <- genSym prefix
-       ; return $ toName s' Nothing Nothing
+       ; return $ toName s' Nothing ty
        }
--}
 
-{-
--- TODO: Temporarily disabled
-nextName :: String -> Cg (GName CTy)
-nextName prefix = do
-  names <- getNames
-  case names of
-    [] -> freshName prefix
-    nm : names' -> setNames names' >> return nm
--}
+freshLabel :: String -> Cg String
+-- A new C-level label (e.g. block label)
+freshLabel prefix 
+  = genSym prefix
 
-pushName :: GName CTy -> Cg ()
-pushName nm = modify $ \s -> s { nameStack = nm : nameStack s }
+
+freshVar :: String -> Cg String
+-- A new C-level variable 
+freshVar prefix
+  = genSym prefix
 
 printNames :: Cg ()
 printNames = do

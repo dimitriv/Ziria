@@ -63,6 +63,8 @@ import LUTAnalysis
 
 import qualified Data.Hashable as H
 
+import CtExpr 
+
 --  import System.Exit ( exitFailure )
 
 -- XXX TODO
@@ -91,58 +93,59 @@ lutIndexTypeByWidth n
 -- simple shifts, without involving the more expensive
 -- bitArrRead/bitArrWrite library functions.
 
-packIdx :: Map Name Range    -- Ranges
-                  -> [VarTy] -- Variables
-                  -> C.Exp   -- A C expression for the index variable
-                  -> C.Type  -- The actual index type (typically unsigned int)
+packIdx :: Map EId Range   -- Ranges
+                  -> [EId]   -- Variables
+                  -> C.Exp        -- A C expression for the index variable
+                  -> C.Type       -- The actual index type (typically unsigned int)
                   -> Cg ()
 packIdx ranges vs tgt tgt_ty = go vs 0
   where go [] _ = return ()
-        go ((v,ty):vs) pos
-         | isArrTy ty
-         = do { w <- varBitWidth ranges v ty
+        go (v:vs) pos
+         | isArrayTy (nameTyp v)
+         = do { w <- varBitWidth ranges v
               ; let mask = 2^w - 1
-              ; (_,varexp) <- lookupVarEnv v
-              ; z <- genSym "__z"
+              ; varexp <- lookupVarEnv v
+              ; z <- freshVar "__z"
               ; appendDecl $ [cdecl| $ty:tgt_ty * $id:z;|]
               ; appendStmt $ [cstm| $id:z = ($ty:tgt_ty *) $varexp; |]
               ; appendStmt $ [cstm| $tgt |= ((* $id:z) & $int:mask) << $int:pos; |]
               -- ; appendStmt $ [cstm| bitArrWrite((typename BitArrPtr) $varexp, $int:pos, $int:w, $tgt); |]
               ; go vs (pos+w) }
          | otherwise
-         = do { w <- varBitWidth ranges v ty
+         = do { w <- varBitWidth ranges v
               ; let mask = 2^w - 1
-              ; (_,varexp) <- lookupVarEnv v
+              ; varexp <- lookupVarEnv v
               ; appendStmt $ [cstm| $tgt |= ((($ty:tgt_ty) $varexp) & $int:mask) << $int:pos; |]
               -- ; appendStmt $ [cstm| bitArrWrite((typename BitArrPtr) & $varexp, $int:pos, $int:w, $tgt); |]
               ; go vs (pos+w) }
 
-unpackIdx :: [VarTy] -- Variables
-          -> C.Exp   -- A C expression representing the index
-          -> C.Type  -- The index type (typically unsigned int)
+unpackIdx :: [EId] -- Variables
+          -> C.Exp      -- A C expression representing the index
+          -> C.Type     -- The index type (typically unsigned int)
           -> Cg ()
 unpackIdx xs src src_ty = go xs 0
   where go [] _ = return ()
-        go ((v,ty):vs) pos
-         | TArr basety alen <- ty
+        go (v:vs) pos
+         | let ty = nameTyp v
+         , TArray basety alen <- ty
          , let bytesizeof = tySizeOf_C ty
-         = do { (_,varexp) <- lookupVarEnv v
+         = do { varexp <- lookupVarEnv v
               ; w <- tyBitWidth ty
 
               ; let mask = 2^w - 1
 
-              ; tmpname_aux <- freshName "tmp_aux"
-              ; tmpname <- freshName "tmp"
+              ; tmpname_aux <- freshVar "tmp_aux"
+              ; tmpname <- freshVar "tmp"
 
-              ; appendDecl [cdecl| $ty:src_ty $id:(name tmpname_aux) = ($src >> $int:pos); |]
+              ; appendDecl [cdecl| $ty:src_ty $id:tmpname_aux = ($src >> $int:pos); |]
 
-              ; appendDecl [cdecl| $ty:src_ty $id:(name tmpname) = $id:(name tmpname_aux) & $int:mask; |]
-              ; appendStmt [cstm| memcpy((void *) $varexp, (void *) & ($id:(name tmpname)), $bytesizeof);|]
+              ; appendDecl [cdecl| $ty:src_ty $id:tmpname = $id:tmpname_aux & $int:mask; |]
+              ; appendStmt [cstm| memcpy((void *) $varexp, (void *) & ($id:tmpname), $bytesizeof);|]
 
               ; go vs (pos+w) }
          | otherwise
-         = do { (_,varexp) <- lookupVarEnv v
-              ; w <- tyBitWidth ty
+         = do { varexp <- lookupVarEnv v
+              ; w <- tyBitWidth (nameTyp v)
               ; let mask = 2^w - 1
               ; appendStmt $ [cstm| $varexp = (($src >> $int:pos)) & $int:mask; |]
               -- ; appendStmt $ [cstm| bitArrRead($src,$int:pos,$int:w, (typename BitArrPtr) & $varexp); |]
@@ -150,41 +153,42 @@ unpackIdx xs src src_ty = go xs 0
 
 
 
-packByteAligned :: Map Name Range -- Ranges
-               -> [VarTy]         -- Variables
-               -> C.Exp           -- A C expression of type BitArrPtr
+packByteAligned :: Map EId Range -- Ranges
+               -> [EId]            -- Variables
+               -> C.Exp                 -- A C expression of type BitArrPtr
                -> Cg ()
 packByteAligned ranges vs tgt = go vs 0
   where go [] _ = return ()
-        go ((v,ty):vs) pos
-         | isArrTy ty
-         = do { w <- varBitWidth ranges v ty
-              ; (_,varexp) <- lookupVarEnv v
+        go (v:vs) pos
+         | isArrayTy (nameTyp v)
+         = do { w <- varBitWidth ranges v
+              ; varexp <- lookupVarEnv v
               ; appendStmt $ [cstm| bitArrWrite((typename BitArrPtr) $varexp, $int:pos, $int:w, $tgt); |]
               ; go vs (byte_align (pos+w)) } -- Align for next write!
          | otherwise
-         = do { w <- varBitWidth ranges v ty
-              ; (_,varexp) <- lookupVarEnv v
+         = do { w <- varBitWidth ranges v
+              ; varexp <- lookupVarEnv v
               ; appendStmt $ [cstm| bitArrWrite((typename BitArrPtr) & $varexp, $int:pos, $int:w, $tgt); |]
               ; go vs (byte_align (pos+w)) }  -- Align for next write!
 
 byte_align n = ((n+7) `div` 8) * 8
 
-unpackByteAligned :: [VarTy] -- Variables
+unpackByteAligned :: [EId] -- Variables
                    -> C.Exp   -- A C expression of type BitArrPtr
                    -> Cg ()
 unpackByteAligned xs src = go xs 0
   where go [] _ = return ()
-        go ((v,ty):vs) pos
-         | isArrTy ty
-         = do { (_,varexp) <- lookupVarEnv v
+        go (v:vs) pos
+         | let ty = nameTyp v
+         , isArrayTy ty
+         = do { varexp <- lookupVarEnv v
               ; w <- tyBitWidth ty
               ; appendStmt $ [cstm| memcpy((void *) $varexp, (void *) & $src[$int:(pos `div` 8)], $int:(byte_align w `div` 8));|]
               --; appendStmt $ [cstm| bitArrRead($src,$int:pos,$int:w, (typename BitArrPtr) $varexp); |]
               ; go vs (byte_align (pos+w)) } -- Align for next read!
          | otherwise
-         = do { (_,varexp) <- lookupVarEnv v
-              ; w <- tyBitWidth ty
+         = do { varexp <- lookupVarEnv v
+              ; w <- tyBitWidth (nameTyp v)
               ; appendStmt $ [cstm| blink_copy((void *) & $varexp, (void *) & $src[$int:(pos `div` 8)], $int:(byte_align w `div` 8));|]
               --; appendStmt $ [cstm| bitArrRead($src,$int:pos,$int:w, (typename BitArrPtr) & $varexp); |]
               ; go vs (byte_align (pos+w)) } -- Align for next read!
@@ -197,16 +201,17 @@ unpackByteAligned xs src = go xs 0
 -- csrcPathNative dflags = head [ path | CSrcPathNative path <- dflags]
 
 
-codeGenLUTExp_Mock :: DynFlags -> Maybe SourcePos -> Map Name Range -> Exp Ty -> Cg C.Exp
+codeGenLUTExp_Mock :: DynFlags -> Maybe SourcePos 
+                   -> Map EId Range -> Exp -> Cg C.Exp
 codeGenLUTExp_Mock dflags loc r  e
   = do { (inVars, outVars, allVars) <- inOutVars [] r e
-       ; _ <- codeGenExp dflags $ ePrint Nothing TUnit True $
-                               eVal Nothing TString (VString (show loc))
-       ; _ <- codeGenExp dflags $ ePrint Nothing TUnit True $
-                                  eVal Nothing TString (VString "INVARS")
+       ; _ <- codeGenExp dflags $ ePrint Nothing () True $
+                                  eVal Nothing () TString (VString (show loc))
+       ; _ <- codeGenExp dflags $ ePrint Nothing () True $
+                                  eVal Nothing () TString (VString "INVARS")
        ; cg_print_vars dflags inVars
-       ; _ <- codeGenExp dflags $ ePrint Nothing TUnit True $
-                                  eVal Nothing TString (VString "OUTVARS")
+       ; _ <- codeGenExp dflags $ ePrint Nothing () True $
+                                  eVal Nothing () TString (VString "OUTVARS")
        ; r <- codeGenExp dflags e
        ; cg_print_vars dflags outVars
        ; return r
@@ -214,11 +219,11 @@ codeGenLUTExp_Mock dflags loc r  e
 
 
 codeGenLUTExp :: DynFlags
-              -> [(Name,Ty,Maybe (Exp Ty))]
-              -> Map Name Range
-              -> Exp Ty
-              -> Maybe Name -- If set then use this specific name for
-                            -- storing the final result
+              -> [(EId,Maybe Exp)]
+              -> Map EId Range
+              -> Exp
+              -> Maybe EId -- If set then use this specific name for
+                                  -- storing the final result
               -> Cg C.Exp
 codeGenLUTExp dflags locals_ ranges e mb_resname
   = case shouldLUT dflags locals ranges e of
@@ -243,11 +248,11 @@ codeGenLUTExp dflags locals_ ranges e mb_resname
     aBSOLUTE_MAX_LUT_SIZE :: Integer
     aBSOLUTE_MAX_LUT_SIZE = 1024*1024
 
-    locals :: [VarTy]
+    locals :: [EId]
     -- TODO: local initializers are ignored?? Potential bug
-    locals = [(v,ty) | (v,ty,_) <- locals_]
+    locals = [v | (v,_) <- locals_]
 
-    lutIt :: Maybe Name -> Cg C.Exp
+    lutIt :: Maybe EId -> Cg C.Exp
     lutIt mb_resname = do
         (inVars, outVars, allVars) <- inOutVars locals ranges e
 
@@ -258,7 +263,7 @@ codeGenLUTExp dflags locals_ ranges e mb_resname
 
         let resultInOutVars
              | Just v <- expResultVar e
-             , v `elem` map fst outVars = Just v
+             , v `elem` outVars = Just v
              | otherwise = Nothing
 
         let h = H.hash (show e)
@@ -303,36 +308,36 @@ codeGenLUTExp dflags locals_ ranges e mb_resname
 
         genLUTLookup dflags ranges
                         inVars (outVars,resultInOutVars)
-                        clut (info e) mb_resname e
+                        clut (ctExp e) mb_resname e
 
 genLUT :: DynFlags -- ^ Flags
-       -> Map Name Range
-       -> [VarTy]               -- ^ Input variables
-       -> ([VarTy], Maybe Name) -- ^ Output variables + result if not in outvars
-       -> [VarTy]  -- ^ All used variables
-       -> [VarTy]  -- ^ Local variables
-       -> Exp Ty   -- ^ Expression to LUT
+       -> Map EId Range
+       -> [EId]              -- ^ Input variables
+       -> ([EId], Maybe EId) -- ^ Output variables + result if not in outvars
+       -> [EId]  -- ^ All used variables
+       -> [EId]  -- ^ Local variables
+       -> Exp   -- ^ Expression to LUT
        -> Cg LUTGenInfo
 genLUT dflags ranges inVars (outVars, res_in_outvars) allVars locals e = do
     inBitWidth <- varsBitWidth ranges inVars
     cinBitType <- lutIndexTypeByWidth inBitWidth
 
     -- 'clut' is the C variable that will hold the LUT.
-    clut <- genSym "clut"
+    clut <- freshVar "clut"
     -- 'clutentry' is the C variable to hold one entry in the lut
-    clutentry <- genSym "clutentry"
+    clutentry <- freshVar "clutentry"
 
     -- 'cidx' is the C variable that we use to index into the LUT.
-    cidx <- genSym "idx"
+    cidx <- freshVar "idx"
 
     -- 'clutgen' is the generator function for this LUT
-    clutgen <- genSym "clut_gen"
+    clutgen <- freshVar "clut_gen"
 
     (defs, (decls, stms, outBitWidth))
         <- collectDefinitions $
            inNewBlock $
            -- Just use identity code generation environment
-           extendVarEnv [(v, (ty, [cexp|$id:(name v)|])) | (v,ty) <- allVars] $
+           extendVarEnv [(v,[cexp|$id:(name v)|]) | v <- allVars] $
            -- Generate local declarations for all input and output variables
            do { genLocalVarInits dflags allVars
               ; unpackIdx inVars [cexp|$id:cidx |] [cty|unsigned int|]
@@ -349,32 +354,33 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars locals e = do
                                  }|]
                 -- END DEBUG
 
-              ; mapM_ (\(v,_) -> ensureInRange v) inVars
+              ; mapM_ (\v -> ensureInRange v) inVars
               ; ce <- codeGenExp dflags e
               ; (outBitWidth, outVarsWithRes, result_env) <-
-                  if (isJust res_in_outvars || info e == TUnit) then
+                  if (isJust res_in_outvars || ctExp e == TUnit) then
                     do { ow <- varsBitWidth_ByteAlign outVars
                          -- clutentry declaration and initialization to zeros
                          -- clutentry declaration and initialization to zeros
-                       ; let entry_ty = TArr (Literal ow) TBit
+                       ; let entry_ty = TArray (Literal ow) TBit
                        ; g <- codeGenArrVal clutentry entry_ty [VBit False]
                        ; appendDecl g
                        ; return (ow,outVars, []) }
                   else
-                    do { resval <- freshName "res";
-                       ; codeGenDeclGroup (name resval) (info e) >>= appendDecl
-                       ; let outVarsWithRes = outVars++[(resval,info e)]
+                    do { let retty = ctExp e
+                       ; resval <- freshName "res" retty 
+                       ; codeGenDeclGroup (name resval) retty >>= appendDecl
+                       ; let outVarsWithRes = outVars ++ [resval]
                        ; ow <- varsBitWidth_ByteAlign outVarsWithRes
                          -- clutentry declaration and initialization to zeros
-                       ; let entry_ty = TArr (Literal ow) TBit
+                       ; let entry_ty = TArray (Literal ow) TBit
                        ; g <- codeGenArrVal clutentry entry_ty [VBit False]
 
                        ; appendDecl g
-                       ; assignByVal (info e) (info e)
+                       ; assignByVal retty retty
                                 [cexp|$id:(name resval)|] ce
-                       ; reswidth <- tyBitWidth (info e)
+                       ; reswidth <- tyBitWidth retty
                        ; let renv =
-                              [(resval,(info e, [cexp|$id:(name resval)|]))]
+                              [(resval, [cexp|$id:(name resval)|])]
                        ; return (ow, outVarsWithRes, renv) }
               ; extendVarEnv result_env $
                 packByteAligned ranges outVarsWithRes [cexp| $id:clutentry |]
@@ -424,26 +430,26 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars locals e = do
 
   where
     -- Ensure that the given variable is in range
-    ensureInRange :: Name -> Cg ()
+    ensureInRange :: EId -> Cg ()
     ensureInRange v
      | Just (Range l h) <- Map.lookup v ranges
-     = do (_, ce) <- lookupVarEnv v
+     = do ce <- lookupVarEnv v
           appendStmt [cstm|if ($ce < $int:l || $ce > $int:h) { $ce = $int:l; }|]
      | otherwise = return ()
 
 
-print_vars :: [VarTy] -> Exp Ty -> Exp Ty
+print_vars :: [EId] -> Exp -> Exp
 print_vars [] e = e
-print_vars ((v,t):vs) e
-  = let p = eSeq Nothing TUnit
-             (ePrint Nothing TUnit False
-                       (eVal Nothing TString (VString $ name v ++ ":")))
-             (ePrint Nothing TUnit True  (eVar Nothing t v))
-    in eSeq Nothing (info e) p (print_vars vs e)
+print_vars (v:vs) e
+  = let p = eSeq Nothing ()
+             (ePrint Nothing () False
+                       (eVal Nothing () TString (VString $ name v ++ ":")))
+             (ePrint Nothing () True  (eVar Nothing () v))
+    in eSeq Nothing () p (print_vars vs e)
 
-cg_print_vars :: DynFlags -> [VarTy] -> Cg ()
+cg_print_vars :: DynFlags -> [EId] -> Cg ()
 cg_print_vars dflags vs
-  = do { _ <- codeGenExp dflags $ print_vars vs (eVal Nothing TUnit VUnit)
+  = do { _ <- codeGenExp dflags $ print_vars vs (eVal Nothing () TUnit VUnit)
        ; return ()
        }
 
@@ -451,18 +457,18 @@ cg_print_vars dflags vs
 
 
 genLUTLookup :: DynFlags
-             -> Map Name Range
-             -> [VarTy]             -- ^ Input variables
-             -> ([VarTy],Maybe Name)-- ^ Output variables incl. possibly a
+             -> Map EId Range
+             -> [EId]             -- ^ Input variables
+             -> ([EId],Maybe EId)-- ^ Output variables incl. possibly a
                                     --   separate result variable!
              -> C.Exp               -- ^ LUT table
              -> Ty                  -- ^ Expression type
-             -> Maybe Name          -- ^ If set, store the result here
-             -> Exp Ty              -- ^ Original expression (just for debug)
+             -> Maybe EId          -- ^ If set, store the result here
+             -> Exp                 -- ^ Original expression (just for debug)
              -> Cg C.Exp
 genLUTLookup dflags ranges
              inVars (outVars,res_in_outvars) clut ety mb_resname _e = do
-    idx <- genSym "idx"
+    idx <- freshVar "idx"
     appendDecl [cdecl| unsigned int $id:idx; |]
 
     appendStmt [cstm|$id:idx = 0; |]
@@ -475,7 +481,7 @@ genLUTLookup dflags ranges
 
 --           ; cg_print_vars dflags outVars -- debugging
 
-           ; (_,vcexp) <- lookupVarEnv v
+           ; vcexp <- lookupVarEnv v
            ; store_var mb_resname vcexp
            }
            -- DV: used to be ; return vcexp }
@@ -492,20 +498,20 @@ genLUTLookup dflags ranges
         | otherwise
         -> case mb_resname of
              Nothing ->
-               do { res <- freshName "resx"
+               do { res <- freshName "resx" ety
                   ; codeGenDeclGroup (name res) ety >>= appendDecl
-                  ; extendVarEnv [(res,(ety,[cexp|$id:(name res)|]))] $
+                  ; extendVarEnv [(res,[cexp|$id:(name res)|])] $
                     unpackByteAligned (outVars ++
-                       [(res,ety)]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
+                       [res]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
 
 --                  ; cg_print_vars dflags outVars -- debugging
 
                   ; return $ [cexp| $id:(name res) |]
                   }
              Just res ->
-               do { extendVarEnv [(res,(ety,[cexp|$id:(name res)|]))] $
+               do { extendVarEnv [(res,[cexp|$id:(name res)|])] $
                     unpackByteAligned (outVars ++
-                       [(res,ety)]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
+                       [res]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
 
 --                  ; cg_print_vars dflags outVars -- debugging
 
@@ -519,8 +525,8 @@ genLUTLookup dflags ranges
                ; return [cexp|UNIT|]
                }
 
-genLocalVarInits :: DynFlags -> [VarTy] -> Cg ()
+genLocalVarInits :: DynFlags -> [EId] -> Cg ()
 genLocalVarInits dflags vs
-  = do { ds <- mapM (\(v,ty) -> codeGenDeclGroup (name v) ty) vs
+  = do { ds <- mapM (\v -> codeGenDeclGroup (name v) (nameTyp v)) vs
        ; appendDecls ds }
 
