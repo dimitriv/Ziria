@@ -77,8 +77,8 @@ codeGenTyAlg = codeGenTy_qual "calign"
 codeGenTy_val :: Ty -> Cg C.Initializer
 codeGenTy_val (TStruct {}) = do { v <- cg_values [VInt 0] >>= (return . fromJust)
                                 ; return [cinit| { $v } |] }
-codeGenTy_val (TArr {})    = return [cinit| NULL |]
-codeGenTy_val _            = return [cinit| 0 |]
+codeGenTy_val (TArray {})    = return [cinit| NULL |]
+codeGenTy_val _              = return [cinit| 0 |]
 
 
 codeGenTy_qual :: String -- Type qualifiers
@@ -86,11 +86,11 @@ codeGenTy_qual :: String -- Type qualifiers
                -> C.Type
 codeGenTy_qual quals ty =
   case ty of
-    TBit        -> namedCType $ quals ++ " Bit"
-    TBool       -> namedCType $ quals ++ " unsigned char"
-    TArr _n ty' -> codeGenArrTyPtr_qual quals ty
-    TDouble     -> namedCType $ quals ++ " double"
-    TUnit       -> unitTy quals
+    TBit           -> namedCType $ quals ++ " Bit"
+    TBool          -> namedCType $ quals ++ " unsigned char"
+    TArray _n ty'  -> codeGenArrTyPtr_qual quals ty
+    TDouble        -> namedCType $ quals ++ " double"
+    TUnit          -> unitTy quals
 
     -- TODO: Fail here (don't want to generate code for type vars.)!
     -- TODO: Make codeGenTy monadic so we can give some context error location
@@ -113,7 +113,7 @@ codeGenTy_qual quals ty =
     TBuff (ExtBuf _ty) -> [cty|void |]
 
     -- Structs
-    TStruct namety -> namedCType $ quals ++ " " ++ namety
+    TStruct namety _sflds -> namedCType $ quals ++ " " ++ namety
 
     _ -> error $ show (ppr ty) ++ " type not yet supported in codeGenTy"
 
@@ -128,11 +128,11 @@ tyBitWidth TBit                  = return 1 -- NB not 8
 tyBitWidth TBool                 = return 1 -- NB not 8
 tyBitWidth (TInt bw)             = bwBitWidth bw
 tyBitWidth TDouble               = return 64
-tyBitWidth (TArr (Literal n) ty)
+tyBitWidth (TArray (Literal n) ty)
   = do { w <- tyBitWidth ty
        ; return (n*w)
        }
-tyBitWidth t@(TStruct tn)
+tyBitWidth t@(TStruct tn _flds)
   | tn == complexTyName
   = return 64
   | tn == complex8TyName
@@ -156,12 +156,12 @@ tyBitWidth_ByteAlign TBit                  = return 8 -- NB not 1
 tyBitWidth_ByteAlign TBool                 = return 8 -- NB not 1
 tyBitWidth_ByteAlign (TInt bw)             = bwBitWidth bw
 tyBitWidth_ByteAlign TDouble               = return 64
-tyBitWidth_ByteAlign (TArr (Literal n) ty)
+tyBitWidth_ByteAlign (TArray (Literal n) ty)
   = do { w <- tyBitWidth ty
        ; return $ (((n*w) + 7) `div` 8) * 8
        }
 
-tyBitWidth_ByteAlign t@(TStruct tn)
+tyBitWidth_ByteAlign t@(TStruct tn _flds)
   | tn == complexTyName
   = return 64
   | tn == complex8TyName
@@ -181,14 +181,16 @@ tySizeOf TBit       = return $ Just 1
 tySizeOf TBool      = return $ Just 1
 tySizeOf (TInt bw)  = bwBitWidth bw >>= \s -> return $ Just (s `div` 8)
 tySizeOf TDouble    = return $ Just (64 `div` 8)
-tySizeOf (TArr (Literal n) TBit) = return $ Just (getBitArrayByteLength n)
-tySizeOf (TArr (Literal n) ty)
+tySizeOf (TArray (Literal n) TBit) = return $ Just (getBitArrayByteLength n)
+tySizeOf (TArray (Literal n) ty)
   = do { m <- tySizeOf ty
        ; case m of
            Nothing -> return Nothing
            Just s -> return (Just (n*s))
        }
-tySizeOf (TStruct sn)
+tySizeOf (TStruct sn _flds)
+  -- Note from DV (13/10/14): We could get it directly from _flds but
+  -- I am keeping the functionality as it was
   = do { sdef <- lookupTyDefEnv sn
        ; szs  <- mapM (tySizeOf . snd) (struct_flds sdef)
        ; return (sequence szs >>= (return . sum)) }
@@ -204,9 +206,9 @@ tySizeOfCg ty = do { mi <- tySizeOf ty
                    }
 
 tySizeOf_C :: Ty -> C.Exp
-tySizeOf_C (TArr (Literal n) TBit)
+tySizeOf_C (TArray (Literal n) TBit)
  = [cexp| $int:(getBitArrayByteLength n)|]
-tySizeOf_C (TArr (Literal n) t)
+tySizeOf_C (TArray (Literal n) t)
  = [cexp| $int:n * $(tySizeOf_C t) |]
 tySizeOf_C t
  = [cexp| sizeof($ty:(codeGenTy t)) |]
@@ -230,11 +232,11 @@ codeGenArrTyPtr_qual :: String -- Qualifier
                      -> Ty     -- An array type
                      -> C.Type
 codeGenArrTyPtr_qual quals ty
- | TArr (Literal n) t <- ty = aux n t
- | TArr (NVar c n)  t <- ty = aux n t
+ | TArray (Literal {}) t <- ty = aux t
+ | TArray (NVar {})    t <- ty = aux t
  | otherwise
  = error "codeGenArrTyPtr_qual: unexpected non-array type"
- where aux n t
+ where aux t
         | TBit <- t
         = [cty| $ty:(namedCType $ quals ++ " BitArrPtr") |]
         | otherwise
@@ -272,7 +274,7 @@ mAX_STACK_ALLOC = 1024 * 32
 -- Is this type a *struct* represented by pointer?
 isStructPtrType :: Ty -> Cg Bool
 isStructPtrType ty
-  | isArrTy ty
+  | isArrayTy ty
   = return False
   | otherwise
   = tySizeOfCg ty >>= isLargeTy
@@ -293,7 +295,7 @@ codeGenDeclGroup_qual :: String      -- Type qualifiers
 codeGenDeclGroup_qual quals v ty vinit
   = do { alloc_as_ptr <- isStructPtrType ty
        ; case ty of
-            TArr (Literal n) t
+            TArray (Literal n) t
                -> do { s <- tySizeOfCg ty
                      ; alloc_as_ptr <- isLargeTy s
                      ; let vlen       = [cexp|$int:(arr_len t n)|]
@@ -303,10 +305,10 @@ codeGenDeclGroup_qual quals v ty vinit
                      }
 
             -- dynamic allocation for variable-size arrays
-            TArr (NVar siz_nm _) t
+            TArray (NVar siz_nm) t
                -> do { let vlen = case t of
-                                    TBit -> [cexp|($id:(name siz_nm) + 7) >> 3|]
-                                    _    -> [cexp|$id:(name siz_nm)|]
+                                    TBit -> [cexp|($id:siz_nm + 7) >> 3|]
+                                    _    -> [cexp|$id:siz_nm|]
                            tbase = arr_base t
                            tdecl_base = aligned_base t
                      ; arr_decl True v vlen tbase tdecl_base
@@ -348,9 +350,11 @@ codeGenDeclGroup_qual quals v ty vinit
           | alloc_as_ptr
           = do { newHeapAlloc
                ; heap_context <- getHeapContext
-               ; let ig1  = [cdecl| $ty:decl_t *$id:v = ($ty:t *) wpl_alloca($id:heap_context, $len * sizeof($ty:t)); |]
+               ; let ig1  = [cdecl| $ty:decl_t *$id:v = 
+                                       ($ty:t *) wpl_alloca($id:heap_context, $len * sizeof($ty:t)); |]
                      ig2  = [cdecl| $ty:decl_t *$id:v; |]
-                     stmt = [cstm| $id:v = ($ty:t *) wpl_alloca($id:heap_context, $len * sizeof($ty:t)); |]
+                     stmt = [cstm| $id:v = 
+                                       ($ty:t *) wpl_alloca($id:heap_context, $len * sizeof($ty:t)); |]
                ; return (ig1, (ig2, Just stmt))
                }
           | otherwise
@@ -365,9 +369,9 @@ codeGenFieldDeclGroup :: String      -- Id
                       -> C.FieldGroup
 codeGenFieldDeclGroup v ty =
   case ty of
-    TArr (Literal n) t -> arr_decl v (arr_siz t n) (arr_base t)
-    TArr (NVar c n) t  -> arr_decl v (arr_siz t n) (arr_base t)
-    _other             -> [csdecl| $ty:(codeGenTy ty) $id:v; |]
+    TArray (Literal n) t -> arr_decl v (arr_siz t n) (arr_base t)
+    TArray (NVar n) t    -> error "codeGenFieldDeclGroup: struct array field with unknown size!?"
+    _other               -> [csdecl| $ty:(codeGenTy ty) $id:v; |]
 
   where arr_siz TBit n = getBitArrayByteLength n
         arr_siz _    n = n
@@ -401,15 +405,16 @@ initGroupDef ig = C.DecDef ig Data.Loc.noLoc
 
 
 codeGenDeclGlobalGroups :: DynFlags
-                        -> [(Name, Ty, Maybe (Exp Ty))] -> Cg [C.InitGroup]
-codeGenDeclGlobalGroups dflags = mapM $ \(nm, ty, me) ->
-  codeGenDeclGroup (name nm) ty
+                        -> [(GName Ty, Maybe Exp)] -> Cg [C.InitGroup]
+codeGenDeclGlobalGroups dflags = mapM $ \(nm, me) ->
+  codeGenDeclGroup (name nm) (nameTyp nm)
 
 codeGenDeclGlobalDefs :: DynFlags
-                      -> [(Name, Ty, Maybe (Exp Ty))] -> Cg ([C.Definition],[C.Stm])
+                      -> [(GName Ty, Maybe Exp)] -> Cg ([C.Definition],[C.Stm])
 codeGenDeclGlobalDefs dflags defs
- = do { defs_inits <- mapM (\(nm, ty, me) ->
-                      do { (_,(ig,mstm)) <- codeGenDeclGroup_qual "calign" (name nm) ty Nothing
+ = do { defs_inits <- mapM (\(nm, me) ->
+                      do { let ty = nameTyp nm
+                         ; (_,(ig,mstm)) <- codeGenDeclGroup_qual "calign" (name nm) ty Nothing
                          ; let id = C.DecDef ig Data.Loc.noLoc
                          ; case mstm of Nothing   -> return (id,[])
                                         Just init -> return (id,[init]) }) defs
@@ -418,7 +423,7 @@ codeGenDeclGlobalDefs dflags defs
       }
 
 assignByVal :: Ty -> Ty -> C.Exp -> C.Exp -> Cg ()
-assignByVal ty@(TArr (Literal n) TBit) _ ce1 ce2
+assignByVal ty@(TArray (Literal n) TBit) _ ce1 ce2
   | n `mod` 8 == 0
   = if n == 8
     then appendStmt [cstm| *($ce1) = *($ce2); |]
@@ -426,15 +431,15 @@ assignByVal ty@(TArr (Literal n) TBit) _ ce1 ce2
   | otherwise
   = appendStmt [cstm|bitArrRead($ce2,0,$int:n,$ce1);|]
 
-assignByVal ty@(TArr (Literal n) t) _ ce1 ce2 =
+assignByVal ty@(TArray (Literal n) t) _ ce1 ce2 =
     appendStmt [cstm|blink_copy($ce1, $ce2, $int:n*sizeof($ty:(codeGenTy t)));|]
 
-assignByVal ty@(TArr (NVar n m) TBit) _ ce1 ce2
-  =  appendStmt [cstm|bitArrRead($ce2,0,$id:(name n),$ce1);|]
+assignByVal ty@(TArray (NVar n) TBit) _ ce1 ce2
+  =  appendStmt [cstm|bitArrRead($ce2,0,$id:n,$ce1);|]
 
-assignByVal ty@(TArr (NVar n m) t) _ ce1 ce2 =
+assignByVal ty@(TArray (NVar n) t) _ ce1 ce2 =
     appendStmt [cstm|blink_copy($ce1, $ce2,
-                      $id:(name n)*sizeof($ty:(codeGenTy t)));|]
+                      $id:n * sizeof($ty:(codeGenTy t)));|]
 
 assignByVal TDouble TDouble ce1 ce2 =
     appendStmt [cstm|$ce1 = $ce2;|]
@@ -466,10 +471,10 @@ assignByRef ty ce1 ce2 = [cstm| $(ce1) = $(ce2);|]
 
 
 codeGenArrVal :: String -> Ty -> [Val] -> Cg C.InitGroup
-codeGenArrVal name ty@(TArr _ TBit) vals
+codeGenArrVal name ty@(TArray _ TBit) vals
   = do { let mvs = cg_bitvalues vals
        ; return . fst =<< codeGenDeclGroup_qual "" name ty mvs }
-codeGenArrVal name ty@(TArr _ _ty) vals
+codeGenArrVal name ty@(TArray _ _ty) vals
   = do { mvs <- cg_values vals
        ; return . fst =<< codeGenDeclGroup_qual "" name ty mvs }
 codeGenArrVal name _ty vals
