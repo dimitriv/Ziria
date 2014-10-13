@@ -109,7 +109,6 @@ main = failOnException $ do
     input <- readFile inFile
 
     -- putStrLn "command line parsed ..."
-    return ()
 
     prog <-
           failOnError $
