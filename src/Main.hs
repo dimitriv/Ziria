@@ -34,6 +34,7 @@ import Text.Show.Pretty (dumpStr)
 import qualified Data.Map          as M
 import qualified Language.C.Syntax as C
 
+import AstExpr
 import AstComp
 import CtComp (ctComp)
 import Opts
@@ -129,7 +130,7 @@ main = failOnException $ do
     -- putStrLn $ "renamed ... " ++ show prog_renamed
 
     let cenv     = mkCEnv []
-    let tdef_env = mkTyDefEnv []
+    let tdef_env = mkTyDefEnv primComplexStructs
     let varenv   = mkEnv []
 
     -- Maybe we should combine the two calls to the type checker?

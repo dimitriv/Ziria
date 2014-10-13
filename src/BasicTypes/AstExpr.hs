@@ -1098,6 +1098,28 @@ mutates_state e = case unExp e of
   EProj e0 _f     -> mutates_state e0
 
 {-------------------------------------------------------------------------------
+  Built-ins
+-------------------------------------------------------------------------------}
+
+-- | Primitive complex structures
+--
+-- This is necessary for the translation from SrcTy (where structs have names
+-- only) to Ty (where structs are fully defined)
+primComplexStructs :: [(TyName,StructDef)]
+primComplexStructs
+  = [ (complex8TyName,  structDefFrom tcomplex8)
+    , (complex16TyName, structDefFrom tcomplex16)
+    , (complex32TyName, structDefFrom tcomplex32)
+    , (complex64TyName, structDefFrom tcomplex64)
+    ]
+  where
+    -- TODO: This translation back and forth to StructDef is annoying.
+    -- We should inline StructDef in LetStruct.
+    structDefFrom :: Ty -> StructDef
+    structDefFrom (TStruct nm flds) = StructDef nm flds
+    structDefFrom _ = error "Not a struct"
+
+{-------------------------------------------------------------------------------
   PrettyVal instances (used for dumping the AST)
 -------------------------------------------------------------------------------}
 
