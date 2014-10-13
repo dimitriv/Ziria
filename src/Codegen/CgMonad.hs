@@ -39,7 +39,7 @@ module CgMonad
   , collectStmts
   , collectStmts_
 
-  --, inAllocFrame
+  , inAllocFrame
 
   , collect
 
@@ -486,19 +486,18 @@ inNewBlock_ m = do
     (decls, stms, _) <- inNewBlock m
     return (decls, stms)
 
-{-
--- TODO: Temporarily disabled
 -- | Execute this action in an allocation frame. Use with moderation!
 inAllocFrame :: Cg a -> Cg a
 inAllocFrame action
-  = do { idx <- freshName "mem_idx"
+  = do { idx <- freshVar "mem_idx"
        ; heap_context <- getHeapContext
-       ; appendDecl [cdecl| unsigned int $id:(name idx); |]
-       ; appendStmt [cstm| $id:(name idx) = wpl_get_free_idx($id:heap_context); |]
+       ; appendDecl [cdecl| unsigned int $id:idx; |]
+       ; appendStmt 
+           [cstm| $id:idx = wpl_get_free_idx($id:heap_context); |]
        ; x <- action
-       ; appendStmt [cstm| wpl_restore_free_idx($id:heap_context, $id:(name idx)); |]
+       ; appendStmt 
+           [cstm| wpl_restore_free_idx($id:heap_context, $id:idx); |]
        ; return x }
--}
 
 collectDefinitions :: Cg a -> Cg ([C.Definition], a)
 collectDefinitions m = do

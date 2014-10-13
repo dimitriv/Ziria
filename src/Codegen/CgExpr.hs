@@ -43,6 +43,8 @@ import CgMonad
 import CgTypes
 import CgLUT
 
+import CtExpr 
+
 import Text.Parsec.Pos ( SourcePos )
 
 
@@ -70,7 +72,7 @@ cgBoundsCheck :: DynFlags
               -> Maybe SourcePos -> Ty -> C.Exp -> LengthInfo -> Cg ()
 cgBoundsCheck dflags loc arrty cbase linfo
    | isDynFlagSet dflags BoundsCheck
-   , TArr numexpr _ <- arrty
+   , TArray numexpr _ <- arrty
    = do { is_disabled <- isDisabledBC
         ; if is_disabled then return ()
           else let leninfo = case linfo of
@@ -81,7 +83,7 @@ cgBoundsCheck dflags loc arrty cbase linfo
                do { cnumexpr
                         <- case numexpr of
                              Literal m -> return [cexp| $int:m |]
-                             NVar nm _ -> lookupVarEnv nm >>= (return . snd)
+                             NVar nm -> return [cexp| $id:nm|] -- DV: used to be lookupVarEnv nm
                   ; appendStmt $
                     [cstm|bounds_check($cnumexpr, $cbase + $int:(leninfo),$string:spos);|]
                   }
@@ -100,8 +102,8 @@ cgUnOp BwNeg   ce te _ -- NB: BwNeg is polymorphic
   | te == TBit = return [cexp|((~$ce))&1|]
   | otherwise  = return [cexp|(~$ce)|]
 
-cgUnOp ALength ce (TArr (Literal l) _t) _ = return [cexp|$int:l|]
-cgUnOp ALength ce (TArr (NVar c n) _t)  _ = return [cexp|$id:(name c)|]
+cgUnOp ALength ce (TArray (Literal l) _t) _ = return [cexp|$int:l|]
+cgUnOp ALength ce (TArray (NVar c) _t)  _   = return [cexp|$id:c|]
 cgUnOp ALength ce _ _ = fail "codeGenExp: Cannot apply length on non-array!"
 cgUnOp NatExp _ _ _   = fail "codeGenExp: NatExp not supported yet."
 
@@ -117,7 +119,7 @@ cgUnOp (Cast target_ty) ce src_ty _target_ty
       (TInt bw, TInt _)  -> return [cexp|($ty:(namedCType (cgTIntName bw))) $ce |]
 
       -- For complex we must emit a proper function, see _csrc/numerics.h
-      (TStruct tn, TStruct sn)
+      (TStruct tn _flds, TStruct sn _flds')
          | isComplexTy target_ty && isComplexTy src_ty
          , let castfun = sn ++ "_to_" ++ tn
          -> return [cexp|$id:castfun($ce)|]
@@ -129,7 +131,7 @@ cgBinOp :: BinOp
         -> C.Exp -> Ty   -- ce2 and its type
         -> Ty            -- type of (BinOp op ce1 ce2)
         -> Cg C.Exp
-cgBinOp op ce1 t@(TStruct cn) ce2 _ _
+cgBinOp op ce1 t@(TStruct cn _flds) ce2 _ _
   | isComplexTy t
   , let fplus  = cn ++ "_plus"
         fminus = cn ++ "_minus"
@@ -167,53 +169,52 @@ cgBinOp op ce1 _ ce2 _ _ =
         Or    -> return [cexp|$ce1 || $ce2|]
 
 codeGenExp :: DynFlags
-           -> Exp Ty
+           -> Exp
            -> Cg C.Exp
-codeGenExp dflags e0 = go (info e0) (unExp e0)
+codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
   where
-    go :: Ty -> Exp0 Ty -> Cg C.Exp
-    go t (EVal v) = codeGenVal v
+    go :: Ty -> Exp0 -> Cg C.Exp
+    go t (EVal _ v) = codeGenVal v
 
-    go t (EValArr v) = do
+    go t (EValArr _ v) = do
         newName <- genSym ("__local_arr_" ++ getLnNumInStr (expLoc e0))
         -- To avoid stacks being pushed and popped
         -- we make these guys global ...
         -- Used to be:
-        -- appendDecl =<< codeGenArrVal newName (info e0) v
-        appendTopDecl =<< codeGenArrVal newName (info e0) v
+        -- appendDecl =<< codeGenArrVal newName (ctExp e0) v
+        appendTopDecl =<< codeGenArrVal newName (ctExp e0) v
         return [cexp| $id:newName |]
 
     go t (EVar x)
-      = do { (_ty, ce) <- lookupVarEnv x
-           ; return ce }
+      = lookupVarEnv x 
 
     go t (EUnOp op e) = do
         ce <- codeGenExp dflags e
-        cgUnOp op ce (info e) (info e0)
+        cgUnOp op ce (ctExp e) (ctExp e0)
 
     go t (EBinOp op e1 e2) = do
         ce1 <- codeGenExp dflags e1
         ce2 <- codeGenExp dflags e2
-        cgBinOp op ce1 (info e1) ce2 (info e2) (info e0)
+        cgBinOp op ce1 (ctExp e1) ce2 (ctExp e2) (ctExp e0)
 
     go t (EAssign e1 e2) = do
         ce1 <- codeGenExp dflags e1
         ce2 <- codeGenExp dflags e2
-        assignByVal (info e1) (info e2) ce1 ce2
+        assignByVal (ctExp e1) (ctExp e2) ce1 ce2
         return [cexp|UNIT|]
 
     go t (EArrRead e1 e2 r) = do
         ce1 <- codeGenExp dflags e1
         ce2 <- codeGenExp dflags e2
-        cgBoundsCheck dflags (expLoc e0) (info e1) ce2 r
-        codeGenArrRead dflags (info e1) ce1 ce2 r
+        cgBoundsCheck dflags (expLoc e0) (ctExp e1) ce2 r
+        codeGenArrRead dflags (ctExp e1) ce1 ce2 r
 
     go t (EArrWrite e1 e2 l e3) = do
         ce1 <- codeGenExp dflags e1
         ce2 <- codeGenExp dflags e2
         ce3 <- codeGenExp dflags e3
-        cgBoundsCheck dflags (expLoc e0) (info e1) ce2 l
-        codeGenArrWrite dflags (info e1) ce1 ce2 l ce3
+        cgBoundsCheck dflags (expLoc e0) (ctExp e1) ce2 l
+        codeGenArrWrite dflags (ctExp e1) ce1 ce2 l ce3
         return [cexp|UNIT|]
 
     go t (EWhile econd ebody) = do
@@ -223,7 +224,7 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
         -- cebody may be side-effecting; must eval. each iter.
         freshSym <- genSym "__while"
         -- Invariant: info ebody == ()
-        appendDecl  [cdecl|$ty:(codeGenTyAlg $ info ebody) $id:freshSym;|]
+        appendDecl  [cdecl|$ty:(codeGenTyAlg $ ctExp ebody) $id:freshSym;|]
         appendDecls init_decls
         appendDecls body_decls
         appendStmts init_stms
@@ -238,7 +239,7 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
 
     go t (EFor _ui k estart elen ebody) = do
 
-        k_new <- freshName (name k)
+        k_new <- freshName (name k) (ctExp estart)
 
         (init_decls, init_stms, (ceStart, ceLen)) <- inNewBlock $ do
             ceStart <- codeGenExp dflags estart
@@ -246,56 +247,58 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
             return (ceStart, ceLen)
 
         (body_decls, body_stms, cebody) <- inNewBlock $
-            extendVarEnv [(k, (info estart,[cexp|$id:(name k_new)|]))] $
+            extendVarEnv [(k, [cexp|$id:(name k_new)|])] $
             codeGenExp dflags ebody
 
         -- cebody may be side-effecting; must eval. each iter.
         freshSym <- genSym "__for"
         -- Invariant: info ebody == ()
-        appendDecl  [cdecl|$ty:(codeGenTyAlg $ info ebody) $id:freshSym;|]
+        appendDecl  [cdecl|$ty:(codeGenTyAlg $ ctExp ebody) $id:freshSym;|]
         appendDecls init_decls
         appendDecls body_decls
         appendStmts init_stms
-        appendStmt [cstm|for ($ty:(codeGenTy (info estart)) $id:(name k_new) = $ceStart; $id:(name k_new) < ($ceStart + $ceLen); $id:(name k_new)++) {
+        appendStmt [cstm|for ($ty:(codeGenTy (ctExp estart)) $id:(name k_new) = $ceStart; $id:(name k_new) < ($ceStart + $ceLen); $id:(name k_new)++) {
                            $stms:init_stms
                            $stms:body_stms
                            $id:freshSym = $cebody;
                          }|]
         return [cexp|UNIT|]
 
-    -- type(earr) must be "TArr ?n ?t" after typechecking
-    go t (EIter k v earr@(MkExp { info = TArr _ ta}) ebody) = do
-
-        k_new <- freshName (name k)
-        v_new <- freshName (name v)
+    -- type(earr) must be "TArray ?n ?t" after typechecking
+    go t (EIter k v earr ebody) = do
+       
+        let TArray _ ta = ctExp earr
+        
+        k_new <- freshName (name k) tint
+        v_new <- freshName (name v) ta
 
         (init_decls, init_stms, cearr) <-
             inNewBlock $
-            extendVarEnv [ (k, (tint, [cexp|$id:(name k_new)|]))
-                         , (v, (ta,   [cexp|$id:(name v_new)|]))
+            extendVarEnv [ (k, [cexp|$id:(name k_new)|])
+                         , (v, [cexp|$id:(name v_new)|])
                          ] $
             codeGenExp dflags earr
 
         (body_decls, body_stms, cebody) <-
             inNewBlock $
-            extendVarEnv [ (k, (tint, [cexp|$id:(name k_new)|]))
-                         , (v, (ta,   [cexp|$id:(name v_new)|]))
+            extendVarEnv [ (k, [cexp|$id:(name k_new)|])
+                         , (v, [cexp|$id:(name v_new)|])
                          ] $
             codeGenExp dflags ebody
 
         -- cebody may be side-effecting; must eval. each iter.
-        freshSym <- genSym "__iter"
-        -- Invariant: info ebody == ()
-        appendDecl [cdecl|$ty:(codeGenTyAlg $ info ebody) $id:freshSym;|]
+        freshSym <- freshVar "__iter"
+        -- Invariant: ctExp ebody == ()
+        appendDecl [cdecl|$ty:(codeGenTyAlg $ ctExp ebody) $id:freshSym;|]
         appendDecls init_decls
         appendDecls body_decls
 
         appendStmts init_stms
 
-        cupperBound <- case info earr of
-                         TArr (Literal arrSz) _ -> return [cexp|$int:arrSz|]
-                         TArr (NVar nlen m) _   -> return [cexp|$id:(name nlen)|]
-                         _                      -> fail "Iterate has to be over an array!"
+        cupperBound <- case ctExp earr of
+                         TArray (Literal arrSz) _ -> return [cexp|$int:arrSz|]
+                         TArray (NVar nlen) _     -> return [cexp|$id:nlen|]
+                         _                        -> fail "Iterate has to be over an array!"
 
         appendStmt [cstm|for (int $id:(name k_new) = 0; $id:(name k_new) < $cupperBound; $id:(name k_new)++) {
                            $ty:(codeGenTyAlg ta) $id:(name v_new);
@@ -305,48 +308,47 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
 
         return [cexp|UNIT|]
 
-    go t (EIter {}) =
-        fail "Iterate has to be over an array!"
-
     go t (ELet x _fi e1 e2) = do
         x_name <- genSym $ name x ++ getLnNumInStr (expLoc e0)
-        let ty1 = info e1
+        let ty1 = ctExp e1
         d <- case unExp e1 of
                EValArr {} ->
                  return [cdecl|$ty:(codeGenArrTyPtrAlg ty1) $id:(x_name);|]
-               _ -> codeGenDeclGroup x_name (info e1)
+               _ -> codeGenDeclGroup x_name (ctExp e1)
         appendDecl d
 
         ce1 <- codeGenExp dflags e1
 
-        extendVarEnv [(x,(info e1,[cexp|$id:x_name|]))] $
+        extendVarEnv [(x,[cexp|$id:x_name|])] $
           do { case unExp e1 of
                  EValArr {}
                      -> appendStmt [cstm|$id:x_name = $ce1;|]
-                 _ -> do { cx <- go (info e1) (EVar x)
-                         ; assignByVal (info e1) (info e1) cx ce1 }
+                 _ -> do { cx <- go (ctExp e1) (EVar x)
+                         ; assignByVal (ctExp e1) (ctExp e1) cx ce1 }
             ; codeGenExp dflags e2
             }
 
     -- TODO: Is it right that we ignore _ty1 here?
-    go t (ELetRef x _ty1 (Just e1) e2) = do
-        x_name <- genSym $ name x ++ getLnNumInStr (expLoc e0)
+    go t (ELetRef x (Just e1) e2) = do
+        x_name <- freshVar $ name x ++ getLnNumInStr (expLoc e0)
 
-        codeGenDeclGroup x_name (info e1) >>= appendDecl
+        let t1 = ctExp e1 
+
+        codeGenDeclGroup x_name t1 >>= appendDecl
 
         ce1 <- codeGenExp dflags e1
 
-        extendVarEnv [(x,(info e1, [cexp|$id:x_name|]))] $ do
-          cx <- go (info e1) (EVar x)
-          assignByVal (info e1) (info e1) cx ce1
+        extendVarEnv [(x, [cexp|$id:x_name|])] $ do
+          cx <- go t1 (EVar x)
+          assignByVal t1 t1 cx ce1
           codeGenExp dflags e2
 
-    go t (ELetRef x ty1 Nothing e2) = do
-        x_name <- genSym $ name x ++ getLnNumInStr (expLoc e0)
+    go t (ELetRef x Nothing e2) = do
+        x_name <- freshVar $ name x ++ getLnNumInStr (expLoc e0)
 
-        codeGenDeclGroup x_name ty1 >>= appendDecl
+        codeGenDeclGroup x_name (nameTyp x) >>= appendDecl
 
-        extendVarEnv [(x,(ty1,[cexp|$id:x_name|]))] $
+        extendVarEnv [(x,[cexp|$id:x_name|])] $
           codeGenExp dflags e2
 
     go t (ESeq e1 e2) = do
@@ -354,7 +356,7 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
         appendStmt [cstm|$ce1;|]
         codeGenExp dflags e2
 
-    go t ce@(ECall ef@(MkExp { unExp = EVar nef }) eargs) = do
+    go t ce@(ECall nef eargs) = do
 
         -- Here first look if there is a name replacement created due to
         -- possible multiple calls of the same local function
@@ -372,8 +374,8 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
         ceargs <- concat <$> mapM (codeGenArg dflags) eargs
 
         -- Extra closure arguments
-        let closure_args = [MkExp (EVar nm) (expLoc e0) ty
-                                | (nm,ty) <- closure_params]
+        let closure_args = [MkExp (EVar nm) (expLoc e0) ()
+                                | nm <- closure_params]
         cclosure_args <- concat <$> mapM (codeGenArgByRef dflags) closure_args
 
         let cargs = ceargs ++ cclosure_args
@@ -383,21 +385,21 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
         -- retf_<name-of-external-function> when the lookup comes back empty!
         -- This seems bad :-)
 
-        let retTy = info e0
+        let retTy = ctExp e0
 
         -- liftIO $ putStrLn $ "retTy = " ++ show retTy
 
         is_struct_ptr <- isStructPtrType retTy
 
         case retTy of
-          TArr li _ty ->
-           do { newNm <- freshName $ name nef ++ "_" ++ getLnNumInStr (expLoc e0)
-              ; let retNewN = toName ("__retcall_" ++ name newNm) Nothing Nothing
+          TArray li _ty ->
+           do { newNm <- genSym $ name nef ++ "_" ++ getLnNumInStr (expLoc e0)
+              ; let retNewN = toName ("__retcall_" ++ newNm) Nothing retTy
                     cer     = [cexp|$id:(name retNewN)|]
                     clen    = case li of Literal l -> [cexp| $int:l|]
-                                         NVar c _m -> [cexp| $id:(name c)|]
+                                         NVar c    -> [cexp| $id:c|]
               ; appendDecls =<<
-                   codeGenDeclGlobalGroups dflags [(retNewN, retTy, Nothing)]
+                   codeGenDeclGlobalGroups dflags [(retNewN, Nothing)]
 
               ; inAllocFrame $
                 appendStmt [cstm|$(cef)($cer, $clen, $args:cargs);|]
@@ -406,11 +408,11 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
               }
 
           _ | is_struct_ptr
-            -> do { newNm <- freshName $ name nef ++ "_" ++ getLnNumInStr (expLoc e0)
-                  ; let retNewN = toName ("__retcall_" ++ name newNm) Nothing Nothing
+            -> do { newNm <- genSym $ name nef ++ "_" ++ getLnNumInStr (expLoc e0)
+                  ; let retNewN = toName ("__retcall_" ++ newNm) Nothing retTy
                         cer     = [cexp|$id:(name retNewN)|]
                   ; appendDecls =<<
-                       codeGenDeclGlobalGroups dflags [(retNewN, retTy, Nothing)]
+                       codeGenDeclGlobalGroups dflags [(retNewN,Nothing)]
 
                   ; inAllocFrame $
                     appendStmt [cstm|$(cef)($cer, $args:cargs);|]
@@ -420,8 +422,6 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
             | otherwise
            -> return [cexp|$(cef)($args:cargs)|]
 
-    go t (ECall {}) =
-        fail "ECall found but no function!"
 
     go t (EIf e1 e2 e3) = do
         ce1 <- codeGenExp dflags e1
@@ -432,7 +432,7 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
         appendDecls e3_decls
 
         freshSym <- genSym "__if"
-        appendDecl [cdecl|$ty:(codeGenTyAlg $ info e2) $id:freshSym;|]
+        appendDecl [cdecl|$ty:(codeGenTyAlg $ ctExp e2) $id:freshSym;|]
 
         appendStmt [cstm|if ($(ce1)) {
                            $stms:e2_stmts
@@ -448,9 +448,11 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
         return [cexp|UNIT|]
 
     -- BOZIDAR TODO: We need a more graceful exit here...
-    go t (EError str) = do
+    go t (EError ty str) = do
         appendStmts [cstms|printf("RUNTIME ERROR: %s\n", $str);
                            exit(1);|]
+        -- DV: This is not quite right, we need a default value of type ty ... 
+        -- TODO TODO
         return [cexp|UNIT|]
 
     go t (ELUT _ e1) | isDynFlagSet dflags NoLUT =
@@ -468,44 +470,44 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
       -- CgPerm.genPermute dflags e1 e2
 
     go t (EProj e f) =
-      do { b <- isStructPtrType (info e)
+      do { b <- isStructPtrType (ctExp e)
          ; bproj <- isStructPtrType t -- The projection type!
          ; cd <- codeGenExp dflags e
          ; return $
            if b then
-               if (not bproj || isArrTy t)
+               if (not bproj || isArrayTy t)
                then [cexp| $cd->$id:f    |] -- if on stack or is array return the thing
                else [cexp| &($cd->$id:f) |] -- else return the address of it (not on stack and not array)
            else
-               if (not bproj || isArrTy t)
+               if (not bproj || isArrayTy t)
                then [cexp| $cd.$id:f    |] -- if on stack or is array return the thing
                else [cexp| &($cd.$id:f) |] -- else return the address of it (not on stack and not array)
          }
 
 
     go t (EStruct tn tfs) =
-      do { snm <- freshName "__struct"
+      do { snm <- freshName "__struct" t
          ; let csnm = [cexp| $id:(name snm)|]
-         ; appendDecl =<< codeGenDeclGroup (name snm) (TStruct tn)
-         ; b <- isStructPtrType (TStruct tn)
+         ; appendDecl =<< codeGenDeclGroup (name snm) t -- ASSERT t = TStruct tn ...
+         ; b <- isStructPtrType t
 
-         ; extendVarEnv [(snm,(t,csnm))] $
+         ; extendVarEnv [(snm,csnm)] $
            mapM_ (\(fn,fe) -> do { cfe <- codeGenExp dflags fe
-                                 ; fproj <- go (info fe) (EProj (MkExp (EVar snm) (expLoc fe) t) fn)
-                                 ; assignByVal (info fe) (info fe) fproj cfe
+                                 ; fproj <- go (ctExp fe) (EProj (MkExp (EVar snm) (expLoc fe) ()) fn)
+                                 ; assignByVal (ctExp fe) (ctExp fe) fproj cfe
                                  }) tfs
          ; return csnm }
 
-printExp :: Bool -> DynFlags -> Exp Ty -> Cg ()
+printExp :: Bool -> DynFlags -> Exp -> Cg ()
 printExp nl dflags e1 = do
-    go e1 (info e1)
+    go e1 (ctExp e1)
     when nl $ appendStmt [cstm|printf("\n");|]
   where
-    go :: Exp Ty -> Ty -> Cg ()
-    go e (TArr l t) = printArray dflags e cUpperBound t
+    go :: Exp -> Ty -> Cg ()
+    go e (TArray l t) = printArray dflags e cUpperBound t
       where cUpperBound
               | Literal len <- l = [cexp|$exp:len|]
-              | NVar len m  <- l = [cexp|$id:(name len)|]
+              | NVar len    <- l = [cexp|$id:len|]
               | otherwise = error "printExp: unknown upper bound!"
     go e _ = printScalar dflags e
 
@@ -515,27 +517,31 @@ printArray dflags e cupper t
        ; appendStmt [cstm|printBitArrLn($ce, $cupper); |]
        }
   | otherwise
-  = do { pcdeclN <- genSym ("__print_cnt_")
-       ; pvdeclN <- genSym ("__print_val_")
-       ; let pcDeclE  = AstExpr.toExp tint (EVar (toName pcdeclN Nothing Nothing))
-             pvDeclE  = AstExpr.toExp t (EVar (toName pvdeclN Nothing Nothing))
-             pvassign = AstExpr.toExp TUnit $
-                        EAssign pvDeclE (AstExpr.toExp t (EArrRead e pcDeclE LISingleton))
+  = do { pcdeclN <- freshName ("__print_cnt_") tint
+       ; pvdeclN <- freshName ("__print_val_") t
 
-       ; extendVarEnv [(toName pcdeclN Nothing Nothing, (tint, [cexp|$id:(pcdeclN)|]))
-                      ,(toName pvdeclN Nothing Nothing, (t, [cexp|$id:(pvdeclN)|]))] $ do
+       ; let pcdeclN_c = name pcdeclN
+             pvdeclN_c = name pvdeclN
+ 
+       ; let pcDeclE  = eVar Nothing () pcdeclN 
+             pvDeclE  = eVar Nothing () pvdeclN
+             pvAssign = eAssign Nothing ()
+                           pvDeclE (eArrRead Nothing () e pcDeclE LISingleton)
 
-       ; (e1_decls, e1_stms, ce1) <- inNewBlock $ codeGenExp dflags pvassign
+       ; extendVarEnv [(pcdeclN, [cexp|$id:pcdeclN_c|])
+                      ,(pvdeclN, [cexp|$id:pvdeclN_c|])] $ do
+
+       ; (e1_decls, e1_stms, ce1) <- inNewBlock $ codeGenExp dflags pvAssign
        ; (e2_decls, e2_stms, ce2) <- inNewBlock $ printScalar dflags pvDeclE
        ; (e3_decls, e3_stms, ce3) <- inNewBlock $ printScalar dflags
-                                     (eVal Nothing TString (VString ","))
+                                     (eVal Nothing () TString (VString ","))
 
        ; appendDecls e1_decls
        ; appendDecls e2_decls
        ; appendDecls e3_decls
 
-       ; appendStmt [cstm|for(int $id:pcdeclN=0; $id:pcdeclN < $exp:cupper ; $id:pcdeclN++) {
-                            $ty:(codeGenTyAlg t) $id:pvdeclN;
+       ; appendStmt [cstm|for(int $id:pcdeclN_c=0; $id:pcdeclN_c < $exp:cupper ; $id:pcdeclN_c++) {
+                            $ty:(codeGenTyAlg t) $id:pvdeclN_c;
                             $stms:e1_stms
                             $stms:e2_stms
                             $stms:e3_stms
@@ -545,7 +551,7 @@ printArray dflags e cupper t
 printScalar dflags e = do
    ce1 <- codeGenExp dflags e
    appendStmt $
-     case info e of
+     case ctExp e of
        TUnit        -> [cstm|printf("UNIT");      |]
        TBit         -> [cstm| printf("%d", $ce1); |]
        TBool        -> [cstm| printf("%d", $ce1); |]
@@ -561,57 +567,65 @@ printScalar dflags e = do
 -- | Generation of parameter signatures and argument lists
 ------------------------------------------------------------------------------
 
-codeGenParamByRef :: (Name,Ty) -> Cg [C.Param]
-codeGenParamByRef (nm, ty@(TArr (Literal l) _)) = do
-    unused <- freshName ("__unused_")
-    return [cparams|$ty:(codeGenTy ty) $id:(name nm), int $id:(name unused)|]
+codeGenParamByRef :: EId -> Cg [C.Param]
+codeGenParamByRef nm = codegen_param_byref nm (nameTyp nm)
 
-codeGenParamByRef (nm, ty@(TArr (NVar c m) _)) =
-    return [cparams|$ty:(codeGenTy ty) $id:(name nm), int $id:(name c)|]
+codegen_param_byref nm ty@(TArray (Literal l) _) = do
+    unused <- freshVar ("__unused_")
+    return [cparams|$ty:(codeGenTy ty) $id:(name nm), int $id:unused|]
 
-codeGenParamByRef (nm, ty) = do
+codegen_param_byref nm ty@(TArray (NVar c) _) =
+    return [cparams|$ty:(codeGenTy ty) $id:(name nm), int $id:c|]
+
+codegen_param_byref nm ty = do
     return [cparams|$ty:(tyByRef ty) $id:(name nm)|]
   where
     tyByRef :: Ty -> C.Type
     tyByRef ty
-        | isArrTy ty = codeGenTy ty
-        | otherwise  = [cty|$ty:(codeGenTy ty)*|]
+        | isArrayTy ty = codeGenTy ty
+        | otherwise    = [cty|$ty:(codeGenTy ty)*|]
 
-codeGenParamsByRef :: [(Name,Ty)] -> Cg [C.Param]
-codeGenParamsByRef params = concat <$> mapM codeGenParamByRef params
+codeGenParamsByRef :: [EId] -> Cg [C.Param]
+codeGenParamsByRef params 
+  = concat <$> mapM codeGenParamByRef params
 
-codeGenParam :: (Name, Ty) -> Cg [C.Param]
-codeGenParam (nm, ty@(TArr (Literal l) _)) = do
-    unused <- freshName ("__unused_")
-    let pname = getNameWithUniq nm
-    return [cparams|$ty:(codeGenTy ty) $id:pname, int $id:(name unused)|]
+codeGenParam :: EId -> Cg [C.Param]
+codeGenParam nm 
+  = codegen_param nm (nameTyp nm)
 
-codeGenParam (nm, ty@(TArr (NVar c m) _)) =
-    let pname = getNameWithUniq nm
-    in
-    return [cparams|$ty:(codeGenTy ty) $id:pname, int $id:(name c)|]
+codegen_param nm (ty@(TArray (Literal l) _)) = do
+     unused <- freshVar ("__unused_")
+     let pname = getNameWithUniq nm
+     return [cparams|$ty:(codeGenTy ty) $id:pname, int $id:unused|]
 
-codeGenParam (nm, ty)
- = do { b <- isStructPtrType ty
-      ; let pname = getNameWithUniq nm
-      ; return $
-        -- NB: b = False applies to ordinary arrays
-        if b then [cparams|$ty:(codeGenTy ty) * $id:pname |]
-             else [cparams|$ty:(codeGenTy ty) $id:pname  |] }
+codegen_param nm (ty@(TArray (NVar c) _)) =
+     let pname = getNameWithUniq nm
+     in
+     return [cparams|$ty:(codeGenTy ty) $id:pname, int $id:c|]
 
-codeGenParams :: [(Name,Ty)] -> Cg [C.Param]
+codegen_param nm ty
+  = do { b <- isStructPtrType ty
+       ; let pname = getNameWithUniq nm
+       ; return $
+         -- NB: b = False applies to ordinary arrays
+         if b then [cparams|$ty:(codeGenTy ty) * $id:pname |]
+              else [cparams|$ty:(codeGenTy ty) $id:pname  |] 
+       }
+
+codeGenParams :: [EId] -> Cg [C.Param]
 codeGenParams prms = go prms []
   where go [] acc = return []
-        go ((nm,ty@(TArr (NVar c _m) tybase)):rest) acc
-          | c `elem` acc
-          =  do { c' <- do { s <- genSym (name c)
-                           ; return (toName s Nothing Nothing) }
-                ; ps  <- codeGenParam (nm,(TArr (NVar c' _m) tybase))
+        go (nm:rest) acc
+          | ty@(TArray (NVar c) tybase) <- nameTyp nm
+          , c `elem` acc
+          =  do { c' <- freshVar c
+                  -- NB: avoiding binding the same length var twice
+                ; ps  <- codegen_param nm (TArray (NVar c') tybase)
                 ; ps' <- go rest acc
                 ; return (ps ++ ps')
                 }
-          | otherwise
-          = do { ps <- codeGenParam (nm,ty)
+          | ty@(TArray (NVar c) tybase) <- nameTyp nm
+          = do { ps <- codeGenParam nm
                ; ps' <- go rest (c:acc)
                ; return (ps ++ ps') }
         go (other:rest) acc
@@ -621,38 +635,39 @@ codeGenParams prms = go prms []
                }
 
 
-codeGenArg :: DynFlags -> Exp Ty -> Cg [C.Exp]
+codeGenArg :: DynFlags -> Exp -> Cg [C.Exp]
 codeGenArg dflags e = do
     ce   <- codeGenExp dflags e
-    clen <- case info e of
-              TArr (Literal l) _ -> return [[cexp|$int:l|]]
-              TArr (NVar n _)  _ -> return [[cexp|$id:(name n)|]]
-              _                  -> return []
+    clen <- case ctExp e of
+              TArray (Literal l) _ -> return [[cexp|$int:l|]]
+              TArray (NVar n)    _ -> return [[cexp|$id:n|]]
+              _                    -> return []
     return $ ce : clen
 
-codeGenArgByRef :: DynFlags -> Exp Ty -> Cg [C.Exp]
+codeGenArgByRef :: DynFlags -> Exp -> Cg [C.Exp]
 codeGenArgByRef dflags e
-    | isArrTy (info e) = codeGenArg dflags e
+    | isArrayTy (ctExp e) = codeGenArg dflags e
     | otherwise
     = do { ce <- codeGenExp dflags e
          ; case ce of
              C.Var (C.Id {}) _
-              -> do { alloc_as_ptr <- isStructPtrType (info e)
-                    ; if alloc_as_ptr || isArrTy (info e)
+              -> do { alloc_as_ptr <- isStructPtrType (ctExp e)
+                    ; if alloc_as_ptr || isArrayTy (ctExp e)
                       then return [ [cexp|$ce|] ]
                       else return [ [cexp|&$ce|] ]
                     }
              _otherwise -- A bit of a weird case. Create storage and pass addr of storage
-              -> do { new_tmp <- freshName "clos_ref_arg"
-                    ; g <- codeGenDeclGroup (name new_tmp) (info e)
+              -> do { new_tmp <- freshVar "clos_ref_arg"
+                    ; let ety = ctExp e
+                    ; g <- codeGenDeclGroup new_tmp ety
                     ; appendDecl g
-                    ; assignByVal (info e) (info e) [cexp|$id:(name new_tmp)|] ce
-                    ; alloc_as_ptr <- isStructPtrType (info e) -- Pointer?
-                    ; if alloc_as_ptr || isArrTy (info e)
+                    ; assignByVal ety ety [cexp|$id:new_tmp|] ce
+                    ; alloc_as_ptr <- isStructPtrType ety -- Pointer?
+                    ; if alloc_as_ptr || isArrayTy ety
                             -- Already a ptr
-                       then return [ [cexp| $id:(name new_tmp)  |] ]
+                       then return [ [cexp| $id:new_tmp   |] ]
                             -- Otherwise take address
-                       else return [ [cexp| & $id:(name new_tmp)|] ]
+                       else return [ [cexp| & $id:new_tmp |] ]
                     }
          }
 
@@ -662,19 +677,19 @@ codeGenArgByRef dflags e
 
 -- ^ Only declare globals
 codeGenGlobalDeclsOnlyAlg :: DynFlags
-                          -> [(Name, Ty, Maybe (Exp Ty))]
+                          -> [(EId, Maybe Exp)]
                           -> Cg [C.Definition]
-codeGenGlobalDeclsOnlyAlg dflags = mapM $ \(nm, ty, me) ->
-  codeGenDeclDef (name nm) ty
+codeGenGlobalDeclsOnlyAlg dflags = mapM $ \(nm, me) ->
+  codeGenDeclDef (name nm) (nameTyp nm)
 
 -- ^ Only initialize globals
-codeGenGlobalInitsOnly :: DynFlags -> [(Name, Ty, Maybe (Exp Ty))] -> Cg ()
+codeGenGlobalInitsOnly :: DynFlags -> [(EId, Maybe Exp)] -> Cg ()
 codeGenGlobalInitsOnly dflags defs = mapM_ go defs
-  where go :: (Name, Ty, Maybe (Exp Ty)) -> Cg ()
-        go (nm, ty, Just e) = do
+  where go :: (EId, Maybe Exp) -> Cg ()
+        go (nm, Just e) = do
             ce <- codeGenExp dflags e
-            assignByVal (info e) (info e) [cexp|$id:(name nm)|] ce
-        go (_, _, Nothing) = return ()
+            assignByVal (ctExp e) (ctExp e) [cexp|$id:(name nm)|] ce
+        go (_, Nothing) = return ()
 
 ------------------------------------------------------------------------------
 -- | Reading/writing to/from arrays
@@ -686,23 +701,23 @@ codeGenArrRead :: DynFlags
                -> C.Exp      -- ce2
                -> LengthInfo -- rng
                -> Cg C.Exp   -- ce1[ce2...ce2+rng-1]
-codeGenArrRead dflags (TArr _ TBit) ce1 ce2 LISingleton
+codeGenArrRead dflags (TArray _ TBit) ce1 ce2 LISingleton
   = do { res <- genSym "bitres"
        ; codeGenDeclGroup res TBit >>= appendDecl
        ; appendStmt $ [cstm| bitRead($ce1,$ce2,& $id:res); |]
        ; return [cexp| $id:res |] }
-codeGenArrRead dflags (TArr _ TBit) ce1 ce2 (LILength l)
+codeGenArrRead dflags (TArray _ TBit) ce1 ce2 (LILength l)
   = do { res <- genSym "bitarrres"
-       ; codeGenDeclGroup res (TArr (Literal l) TBit) >>= appendDecl
+       ; codeGenDeclGroup res (TArray (Literal l) TBit) >>= appendDecl
        ; appendStmt [cstm| bitArrRead($ce1,$ce2,$int:l,$id:res);  |]
        ; return [cexp| $id:res |] }
-codeGenArrRead dflags (TArr _ tbase) ce1 ce2 LISingleton
+codeGenArrRead dflags (TArray _ tbase) ce1 ce2 LISingleton
   = do { b <- isStructPtrType tbase
        ; return $
          if b then [cexp| &($ce1[$ce2])|]
          else [cexp| $ce1[$ce2]|]
        }
-codeGenArrRead dflags (TArr _ tbase) ce1 ce2 (LILength _)
+codeGenArrRead dflags (TArray _ tbase) ce1 ce2 (LILength _)
   = return [cexp|& ($ce1[$ce2])|]
 codeGenArrRead _ ty _ _ _
   = fail ("codeGenArrRead: non-array type " ++ show ty)
@@ -714,15 +729,15 @@ codeGenArrWrite :: DynFlags
                 -> LengthInfo  -- rng
                 -> C.Exp       -- c3
                 -> Cg ()       -- c1[c2...c2+rng-1] := c3
-codeGenArrWrite dflags (TArr _ TBit) ce1 ce2 LISingleton ce3
+codeGenArrWrite dflags (TArray _ TBit) ce1 ce2 LISingleton ce3
   = appendStmt [cstm| bitWrite($ce1,$ce2,$ce3);|]
-codeGenArrWrite dflags (TArr _ TBit) ce1 ce2 (LILength l) ce3
+codeGenArrWrite dflags (TArray _ TBit) ce1 ce2 (LILength l) ce3
   = appendStmt $ [cstm| bitArrWrite($ce3,$ce2,$int:l,$ce1); |]
-codeGenArrWrite dflags t@(TArr l tbase) ce1 ce2 LISingleton ce3
+codeGenArrWrite dflags t@(TArray l tbase) ce1 ce2 LISingleton ce3
   = do { cread <- codeGenArrRead dflags t ce1 ce2 LISingleton
        ; assignByVal tbase tbase cread ce3 }
 
-codeGenArrWrite dflags (TArr _ ty) ce1 ce2 (LILength l) ce3
+codeGenArrWrite dflags (TArray _ ty) ce1 ce2 (LILength l) ce3
   = appendStmt [cstm| blink_copy((void*)(& $ce1[$ce2]),
                         (void*)($ce3), ($int:l)*sizeof($ty:(codeGenTy ty)));|]
 codeGenArrWrite _ ty _ _ _ _
