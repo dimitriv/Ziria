@@ -176,8 +176,9 @@ tyCheckComp c
                 }
 
            LetE x fi e c1 ->
-             do { (x',  _)    <- tyCheckBound x
-                ; (e',  _)    <- tyCheckExpr e
+             do { (x', xty) <- tyCheckBound x
+                ; (e', ety) <- tyCheckExpr e
+                ; unify cloc xty ety
                 ; (c1', cty1) <- extendEnv [x'] $ tyCheckComp c1
                 ; return (cLetE cloc () x' fi e' c1', cty1)
                 }
