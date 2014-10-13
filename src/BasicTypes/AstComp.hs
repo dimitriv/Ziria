@@ -767,6 +767,12 @@ callArgFVs (CAComp c) = compFVs c
 compFVs_all :: [GComp tc t a b] -> CompFVs tc t
 compFVs_all = (S.unions *** S.unions) . unzip . map compFVs
 
+compCFVs :: GComp tc t a b -> S.Set (GName tc)
+compCFVs = fst . compFVs
+
+compEFVs :: GComp tc t a b -> S.Set (GName t)
+compEFVs = snd . compFVs
+
 {-------------------------------------------------------------------------------
   Substitution
 -------------------------------------------------------------------------------}
