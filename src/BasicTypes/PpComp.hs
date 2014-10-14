@@ -33,6 +33,7 @@ import Text.PrettyPrint.HughesPJ
 
 import AstExpr
 import AstComp
+import {-# SOURCE #-} CtComp (ctComp)
 import PpExpr
 
 import Outputable
@@ -270,10 +271,10 @@ ppCompLoc c =
     Nothing -> empty)
 
 
-ppCompTyped :: (Outputable tc, Outputable t, Outputable a) => GComp tc t a b -> Doc
+ppCompTyped :: GComp CTy Ty a b -> Doc
 ppCompTyped x =
   let p1 = ppComp0 ppCompTyped True False False $ unComp x
-      pty = ppr (compInfo x)
+      pty = ppr (ctComp x)
   in parens (p1 <+> text "::" <+> pty)
 
 ppCompParams :: (Outputable tc, Outputable t) => [GName (CallArg tc t)] -> Doc

@@ -113,10 +113,8 @@ extendParseEnv penv action
 getParseEnv :: BlinkParser ParseCompEnv
 getParseEnv = ask
 
-withPos :: (Maybe SourcePos -> () -> a) -> BlinkParser a
-withPos constr = constr' <$> getPosition
-  where
-    constr' p = constr (Just p) ()
+withPos :: (Maybe SourcePos -> a) -> BlinkParser a
+withPos constr = constr . Just <$> getPosition
 
 bindExtend :: BlinkParser (ParseCompEnv, a) -> (a -> BlinkParser b) -> BlinkParser b
 bindExtend x f = x >>= \(env, a) -> extendParseEnv env $ f a

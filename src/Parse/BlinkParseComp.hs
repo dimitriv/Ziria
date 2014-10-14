@@ -32,6 +32,7 @@ import Text.Parsec.Expr
 
 import AstComp
 import AstExpr
+import AstUnlabelled
 import BlinkParseExpr
 import BlinkLexer
 import BlinkParseM
@@ -69,7 +70,7 @@ parseTopLevel =
         LetDeclComp Nothing nm c | name nm == "main" -> (c:mains, funs)
         _                                            -> (mains, fun:funs)
 
-    cLetDecl' p () d = let (env, f) = cLetDecl p () d in (env, (d, f))
+    cLetDecl' p d = let (env, f) = cLetDecl p d in (env, (d, f))
 
 topLevelSep :: BlinkParser ()
 topLevelSep =
@@ -127,7 +128,7 @@ parseComp =
       , [ lInfix $ withPos cPar <*> opAlwaysPipeline ]
       ]
 
-    cTimes' = uncurry4 .: cTimes
+    cTimes' = uncurry4 . cTimes
 
 -- | A term in a computation expression
 --
@@ -173,14 +174,14 @@ parseCompTerm = choice
     , optional (reserved "seq") >> braces parseCommands
     ] <?> "computation"
   where
-    cReturn' p () = cReturn p () Nothing Nothing AutoInline
-    cEmit'   p () = cEmit   p () Nothing
-    cEmits'  p () = cEmits  p () Nothing
-    cTake1'  p () = cTake1  p () Nothing Nothing
+    cReturn' p = cReturn p Nothing Nothing AutoInline
+    cEmit'   p = cEmit   p Nothing
+    cEmits'  p = cEmits  p Nothing
+    cTake1'  p = cTake1  p Nothing Nothing
 
-    cTake' p () e = do
+    cTake' p e = do
       case evalInt e of
-        Just n  -> return $ cTake p () Nothing Nothing (fromInteger n)
+        Just n  -> return $ cTake p Nothing Nothing (fromInteger n)
         Nothing -> fail "Non-constant argument to takes"
 
 
@@ -206,9 +207,9 @@ timesPref =
     -- NOTE: It doesn't matter that we only have 32-bit iterators here, since
     -- in a 'times' loop the code doesn't get access to the iterator anyway,
     -- so there is no possibility to cast the iterator to a different type.
-    mkTimes p () ui e =
+    mkTimes p ui e =
       let nm = toName "_tmp_count" p (Just tintSrc)
-      in (ui, eVal p () (Just tintSrc) (VInt 0), e, nm)
+      in (ui, eVal p (Just tintSrc) (VInt 0), e, nm)
 
 -- > ("unroll" | "nounroll")? "for" <var-bind> "in" "[" <interval> "]"
 forPref :: BlinkParser (UnrollInfo, SrcExp, SrcExp, GName (Maybe SrcTy))
@@ -216,7 +217,7 @@ forPref =
     (withPos mkFor <*> parseFor (reserved "for") <*> parseVarBind
                    <* reserved "in" <*> brackets genIntervalParser) <?> "for"
   where
-    mkFor _p () ui k (estart, elen) = (ui, estart,elen,k)
+    mkFor _p ui k (estart, elen) = (ui, estart,elen,k)
 
 {-------------------------------------------------------------------------------
   Variable or call
@@ -232,8 +233,8 @@ parseVarOrCall = go <?> "variable or function call"
       let xnm = toName x (Just p) Nothing
       choice [ do notFollowedBy (symbol "(")
                   notFollowedBy (symbol "<-")
-                  return (cVar (Just p) () xnm)
-             , withPos (($ xnm) .: cCall) <*> parseArgs xnm
+                  return (cVar (Just p) xnm)
+             , withPos (($ xnm) . cCall) <*> parseArgs xnm
              ] <?> "variable or function call"
 
 -- | Parse an argument list
@@ -312,7 +313,7 @@ paramsParser :: BlinkParser [GName (Maybe SrcTy)]
 paramsParser = parens $ sepBy paramParser (symbol ",")
   where
     paramParser = withPos mkParam <*> identifier <* colon <*> parseBaseType
-    mkParam p () x ty = toName x p (Just ty)
+    mkParam p x ty = toName x p (Just ty)
 
 -- | Like `parseVarBind` but for computation types
 --
@@ -323,8 +324,8 @@ parseCVarBind = choice
     , parens $ withPos mkNameTy <*> identifier <* symbol ":" <*> parseCompBaseType
     ] <?> "variable binding"
   where
-    mkName   p () i    = toName i p Nothing
-    mkNameTy p () i ty = toName i p (Just (CTBase ty))
+    mkName   p i    = toName i p Nothing
+    mkNameTy p i ty = toName i p (Just (CTBase ty))
 
 -- | Parameters to a (comp) function
 --
@@ -339,7 +340,7 @@ compParamsParser = parens $ sepBy paramParser (symbol ",")
                          , CAComp . Just . CTBase <$> parseCompBaseType
                          ] <?> "computation parameter type"
 
-    mkParam p () x mty = toName x p mty
+    mkParam p x mty = toName x p mty
 
 -- | Computation type
 --
@@ -359,30 +360,30 @@ parseCompBaseType = choice
     mkCTy0 Nothing   ti ty = TTrans ti ty
     mkCTy0 (Just tv) ti ty = TComp tv ti ty
 
-cLetDecl :: Maybe SourcePos -> () -> LetDecl -> (ParseCompEnv, SrcComp -> SrcComp)
-cLetDecl p () (LetDeclERef (xn,  e)) =
-    ([], cLetERef p () xn e)
-cLetDecl p () (LetDeclStruct sdef) =
-    ([], cLetStruct p () sdef)
-cLetDecl p () (LetDeclExternal x params ty) =
-    ([], cLetHeader p () fun)
+cLetDecl :: Maybe SourcePos -> LetDecl -> (ParseCompEnv, SrcComp -> SrcComp)
+cLetDecl p (LetDeclERef (xn,  e)) =
+    ([], cLetERef p xn e)
+cLetDecl p (LetDeclStruct sdef) =
+    ([], cLetStruct p sdef)
+cLetDecl p (LetDeclExternal x params ty) =
+    ([], cLetHeader p fun)
   where
     fn  = toName x p Nothing
     fun = MkFun (MkFunExternal fn params ty) p ()
-cLetDecl p () (LetDeclFunComp h x params (locls, c)) =
-    ([(x, params)], cLetFunC p () x params locls (mkVectComp c h))
-cLetDecl p () (LetDeclFunExpr x params (locls, e)) =
-    ([], cLetHeader p () fun)
+cLetDecl p (LetDeclFunComp h x params (locls, c)) =
+    ([(x, params)], cLetFunC p x params locls (mkVectComp c h))
+cLetDecl p (LetDeclFunExpr x params (locls, e)) =
+    ([], cLetHeader p fun)
   where
     fun = MkFun (MkFunDefined x params locls e) p ()
-cLetDecl p () (LetDeclComp h x c) =
-    ([], cLet p () x (mkVectComp c h))
-cLetDecl p () (LetDeclExpr x e) =
-    ([], cLetE p () x AutoInline e)
+cLetDecl p (LetDeclComp h x c) =
+    ([], cLet p x (mkVectComp c h))
+cLetDecl p (LetDeclExpr x e) =
+    ([], cLetE p x AutoInline e)
 
 mkVectComp :: SrcComp -> Maybe (Int,Int) -> SrcComp
 mkVectComp sc Nothing  = sc
-mkVectComp sc (Just h) = cVectComp (compLoc sc) (compInfo sc) h sc
+mkVectComp sc (Just h) = cVectComp (compLoc sc) h sc
 
 {-------------------------------------------------------------------------------
   Commands
@@ -412,7 +413,7 @@ foldCommands [Right c]    = return c
 foldCommands (Left k:cs)  = k       <$> foldCommands cs
 foldCommands (Right c:cs) = cSeq' c <$> foldCommands cs
   where
-    cSeq' c1 c2 = cSeq (compLoc c2) () c1 c2
+    cSeq' c1 c2 = cSeq (compLoc c2) c1 c2
 
 -- | Commands
 --
@@ -431,12 +432,12 @@ parseCommand = choice
     , (\c -> ([], Right c)) <$> parseComp
     ] <?> "command"
   where
-    cLetDecl' = second Left ..: cLetDecl
-    cBranch'   loc a e c1 = ([], Right $ cBranch loc a e c1 (cunit loc ()))
-    cBindMany' loc a x c  = ([], Left $ \c' -> cBindMany loc a c [(x, c')])
+    cLetDecl' = second Left .: cLetDecl
+    cBranch'   loc e c1 = ([], Right $ cBranch loc e c1 (cunit loc))
+    cBindMany' loc x c  = ([], Left $ \c' -> cBindMany loc c [(x, c')])
 
-cunit :: Maybe SourcePos -> () -> SrcComp
-cunit p () = cReturn p () Nothing Nothing ForceInline (eunit p ())
+cunit :: Maybe SourcePos -> SrcComp
+cunit p = cReturn p Nothing Nothing ForceInline (eunit p)
 
 {-------------------------------------------------------------------------------
   Annotations

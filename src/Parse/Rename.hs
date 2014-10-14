@@ -27,6 +27,7 @@ import Data.Traversable (mapM)
 
 import AstComp
 import AstExpr
+import AstUnlabelled
 import Utils
 import qualified GenSym as GS
 
@@ -237,131 +238,130 @@ instance Rename SrcComp where
   rename c = case unComp c of
       Var nm -> do
         nm' <- renameFree nm
-        return $ cVar cloc cnfo nm'
+        return $ cVar cloc nm'
       BindMany c1 xs_cs -> do
         c1' <- rename c1
         xs_cs' <- renameTelescope renameBind $ xs_cs
-        return $ MkComp (mkBindMany c1' xs_cs') cloc cnfo
+        return $ cBindMany cloc c1' xs_cs'
       Seq c1 c2 -> do
         c1' <- rename c1
         c2' <- rename c2
-        return $ cSeq cloc cnfo c1' c2'
+        return $ cSeq cloc c1' c2'
       Par parInfo c1 c2 -> do
         c1' <- rename c1
         c2' <- rename c2
-        return $ cPar cloc cnfo parInfo c1' c2'
+        return $ cPar cloc parInfo c1' c2'
       Let x c1 c2 -> do
         c1' <- rename c1
         x'  <- renameBound x
         c2' <- extend x x' $ rename c2
-        return $ cLet cloc cnfo x' c1' c2'
+        return $ cLet cloc x' c1' c2'
       LetStruct sdef c1 -> do
         c1'   <- rename c1
         sdef' <- rename sdef
-        return $ cLetStruct cloc cnfo sdef' c1'
+        return $ cLetStruct cloc sdef' c1'
       LetE x fi e c1 -> do
         e'  <- rename e
         x' <- renameBound x
         c1' <- extend x x' $ rename c1
-        return $ cLetE cloc cnfo x' fi e' c1'
+        return $ cLetE cloc x' fi e' c1'
       LetERef nm1 e c1 -> do
         e'   <- mapM rename e
         nm1' <- renameBound nm1
         extend nm1 nm1' $ do
           c1' <- rename c1
-          return $ cLetERef cloc cnfo nm1' e' c1'
+          return $ cLetERef cloc nm1' e' c1'
       LetHeader fun c2 -> do
         fun' <- rename fun
         c2'  <- extend fun fun' $ rename c2
-        return $ cLetHeader cloc cnfo fun' c2'
+        return $ cLetHeader cloc fun' c2'
       LetFunC nm params locals c1 c2 -> do
         nm'     <- renameBound nm
         params' <- renameTelescope renameBound params
         locals' <- extend params params' $ renameTelescope renameLocal locals
         c1'     <- extend params params' $ extend locals locals' $ rename c1
         c2'     <- extend nm nm' $ rename c2
-        return $ cLetFunC cloc cnfo nm' params' locals' c1' c2'
+        return $ cLetFunC cloc nm' params' locals' c1' c2'
       Call nm es -> do
         es' <- mapM rename es
         nm' <- renameFree nm
-        return $ cCall cloc cnfo nm' es'
+        return $ cCall cloc nm' es'
       Emit a e -> do
         a' <- rename a
         e' <- rename e
-        return $ cEmit cloc cnfo a' e'
+        return $ cEmit cloc a' e'
       Return a b fi e -> do
         a' <- rename a
         b' <- rename b
         e' <- rename e
-        return $ cReturn cloc cnfo a' b' fi e'
+        return $ cReturn cloc a' b' fi e'
       Emits a e -> do
         a' <- rename a
         e' <- rename e
-        return $ cEmits cloc cnfo a' e'
+        return $ cEmits cloc a' e'
       Interleave c1 c2 -> do
         c1' <- rename c1
         c2' <- rename c2
-        return $ cInterleave cloc cnfo c1' c2'
+        return $ cInterleave cloc c1' c2'
       Branch e c1 c2 -> do
         e'  <- rename e
         c1' <- rename c1
         c2' <- rename c2
-        return $ cBranch cloc cnfo e' c1' c2'
+        return $ cBranch cloc e' c1' c2'
       Take1 a b -> do
         a' <- rename a
         b' <- rename b
-        return $ cTake1 cloc cnfo a' b'
+        return $ cTake1 cloc a' b'
       Take a b n -> do
         a' <- rename a
         b' <- rename b
-        return $ cTake cloc cnfo a' b' n
+        return $ cTake cloc a' b' n
       Until e c' -> do
         e'  <- rename e
         c'' <- rename c'
-        return $ cUntil cloc cnfo e' c''
+        return $ cUntil cloc e' c''
       While e c' -> do
         e'  <- rename e
         c'' <- rename c'
-        return $ cWhile cloc cnfo e' c''
+        return $ cWhile cloc e' c''
       Times ui e elen nm c' -> do
         e'    <- rename e
         elen' <- rename elen
         nm'   <- renameBound nm
         c''   <- extend nm nm' $ rename c'
-        return $ cTimes cloc cnfo ui e' elen' nm' c''
+        return $ cTimes cloc ui e' elen' nm' c''
       Repeat wdth c' -> do
         c'' <- rename c'
-        return $ cRepeat cloc cnfo wdth c''
+        return $ cRepeat cloc wdth c''
       VectComp wdth c' -> do
         c'' <- rename c'
-        return $ cVectComp cloc cnfo wdth c''
+        return $ cVectComp cloc wdth c''
       Map wdth nm -> do
         nm' <- renameFree nm
-        return $ cMap cloc cnfo wdth nm'
+        return $ cMap cloc wdth nm'
       Filter f -> do
         f' <- renameFree f
-        return $ cFilter cloc cnfo f'
+        return $ cFilter cloc f'
       ReadSrc ann -> do
         ann' <- rename ann
-        return $ cReadSrc cloc cnfo ann'
+        return $ cReadSrc cloc ann'
       WriteSnk ann -> do
         ann' <- rename ann
-        return $ cWriteSnk cloc cnfo ann'
+        return $ cWriteSnk cloc ann'
       ReadInternal a s typ -> do
         a' <- rename a
-        return $ cReadInternal cloc cnfo a' s typ
+        return $ cReadInternal cloc a' s typ
       WriteInternal a s -> do
         a' <- rename a
-        return $ cWriteInternal cloc cnfo a' s
+        return $ cWriteInternal cloc a' s
       Standalone c' -> do
         c'' <- rename c'
-        return $ cStandalone cloc cnfo c''
+        return $ cStandalone cloc c''
       Mitigate ty n1 n2 -> do
         ty' <- rename ty
-        return $ cMitigate cloc cnfo ty' n1 n2
+        return $ cMitigate cloc ty' n1 n2
     where
       cloc = compLoc c
-      cnfo = compInfo c
 
 {-------------------------------------------------------------------------------
   Renaming expressions
@@ -371,96 +371,95 @@ instance Rename SrcExp where
   rename e = case unExp e of
       EVal t v -> do
         t' <- rename t
-        return $ eVal eloc enfo t' v
+        return $ eVal eloc t' v
       EValArr t vs -> do
         t' <- rename t
-        return $ eValArr eloc enfo t' vs
+        return $ eValArr eloc t' vs
       EVar nm -> do
         nm' <- renameFree nm
-        return $ eVar eloc enfo nm'
+        return $ eVar eloc nm'
       EUnOp op e1 -> do
         e1' <- rename e1
-        return $ eUnOp eloc enfo op e1'
+        return $ eUnOp eloc op e1'
       EBinOp op e1 e2 -> do
         e1' <- rename e1
         e2' <- rename e2
-        return $ eBinOp eloc enfo op e1' e2'
+        return $ eBinOp eloc op e1' e2'
       EAssign e1 e2 -> do
         e1' <- rename e1
         e2' <- rename e2
-        return $ eAssign eloc enfo e1' e2'
+        return $ eAssign eloc e1' e2'
       EArrRead e1 e2 r -> do
         e1' <- rename e1
         e2' <- rename e2
-        return $ eArrRead eloc enfo e1' e2' r
+        return $ eArrRead eloc e1' e2' r
       EArrWrite e1 e2 r e3 -> do
         e1' <- rename e1
         e2' <- rename e2
         e3' <- rename e3
-        return $ eArrWrite eloc enfo e1' e2' r e3'
+        return $ eArrWrite eloc e1' e2' r e3'
       EIter nm1 nm2 e1 e2 -> do
         nm1' <- renameBound nm1
         nm2' <- renameBound nm2
         extend [nm2, nm1] [nm2', nm1'] $ do
           e1' <- rename e1
           e2' <- rename e2
-          return $ eIter eloc enfo nm1' nm2' e1' e2'
+          return $ eIter eloc nm1' nm2' e1' e2'
       EFor ui nm1 e1 e2 e3 -> do
         e1' <- rename e1
         e2' <- rename e2
         nm1' <- renameBound nm1
         extend nm1 nm1' $ do
           e3' <- rename e3
-          return $ eFor eloc enfo ui nm1' e1' e2' e3'
+          return $ eFor eloc ui nm1' e1' e2' e3'
       EWhile e1 e2 -> do
         e1' <- rename e1
         e2' <- rename e2
-        return $ eWhile eloc enfo e1' e2'
+        return $ eWhile eloc e1' e2'
       ELet nm1 fi e1 e2 -> do
         e1' <- rename e1
         nm1' <- renameBound nm1
         extend nm1 nm1' $ do
           e2' <- rename e2
-          return $ eLet eloc enfo nm1' fi e1' e2'
+          return $ eLet eloc nm1' fi e1' e2'
       ELetRef nm1 e1 e2 -> do
         e1'  <- mapM rename e1
         nm1' <- renameBound nm1
         extend nm1 nm1' $ do
           e2' <- rename e2
-          return $ eLetRef eloc enfo nm1' e1' e2'
+          return $ eLetRef eloc nm1' e1' e2'
       ESeq e1 e2 -> do
         e1' <- rename e1
         e2' <- rename e2
-        return $ eSeq eloc enfo e1' e2'
+        return $ eSeq eloc e1' e2'
       ECall f es -> do
         f'  <- renameFree f
         es' <- mapM rename es
-        return $ eCall eloc enfo f' es'
+        return $ eCall eloc f' es'
       EIf e1 e2 e3 -> do
         e1' <- rename e1
         e2' <- rename e2
         e3' <- rename e3
-        return $ eIf eloc enfo e1' e2' e3'
+        return $ eIf eloc e1' e2' e3'
       EPrint nl e1 -> do
         e1' <- rename e1
-        return $ ePrint eloc enfo nl e1'
+        return $ ePrint eloc nl e1'
       EError a str -> do
         a' <- rename a
-        return $ eError eloc enfo a' str
+        return $ eError eloc a' str
       ELUT r e1 -> do
         r'  <- mapKeysM renameFree r
         e1' <- rename e1
-        return $ eLUT eloc enfo r' e1'
+        return $ eLUT eloc r' e1'
       EBPerm e1 e2 -> do
         e1' <- rename e1
         e2' <- rename e2
-        return $ eBPerm eloc enfo e1' e2'
+        return $ eBPerm eloc e1' e2'
       EStruct tn tfs -> do
         tfs' <- mapM (\(f,e') -> rename e' >>= \e'' -> return (f,e'')) tfs
-        return $ eStruct eloc enfo tn tfs'
+        return $ eStruct eloc tn tfs'
       EProj e1 fn -> do
         e1' <- rename e1
-        return $ eProj eloc enfo e1' fn
+        return $ eProj eloc e1' fn
     where
       eloc = expLoc e
-      enfo = info e
