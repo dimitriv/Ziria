@@ -16,10 +16,11 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# OPTIONS_GHC -Wall -fno-warn-unused-matches -fno-warn-name-shadowing #-}
+{-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module PassFold where
 
+import Prelude hiding (exp)
 import Control.Applicative
 import Control.Monad.State
 import Data.Functor.Identity
@@ -126,12 +127,12 @@ fold_step :: DynFlags -> Comp -> RwM Comp
 fold_step fgs comp =
   case bindSeqView comp of
 
-    BindView (MkComp (Return _a _b fi e) rloc ()) nm c12 ->
+    BindView (MkComp (Return _a _b fi e) _ ()) nm c12 ->
      do { -- rwMIO $ putStrLn ("Found BindView" ++ compShortName comp)
         ; fold_step fgs c12 >>= \c12' -> rewrite $ cLetE cloc nm fi e c12'
         }
 
-    BindView (MkComp (LetHeader fun@(MkFun (MkFunDefined {}) _ _) c) floc ()) nm c12 ->
+    BindView (MkComp (LetHeader fun@(MkFun (MkFunDefined {}) _ _) c) _ ()) nm c12 ->
         fold_step fgs c12 >>= \c12' ->
           rewrite $ cLetHeader cloc fun (cBindMany cloc c [(nm, c12')])
 
@@ -139,11 +140,11 @@ fold_step fgs comp =
     BindView c nm  c12 ->
      fold_step fgs c12 >>= \c12' -> return $ cBindMany cloc c [(nm, c12')]
 
-    SeqView (MkComp (Return _a _b fi e) rloc ()) c12 ->
+    SeqView (MkComp (Return _a _b fi e) _ ()) c12 ->
       do { -- rwMIO $ putStrLn ("Found BindView" ++ compShortName comp)
          ; let nm = toName ("__fold_unused_" ++ getLnNumInStr cloc)
                            Nothing (ctExp e)
-         ; fold_step fgs c12 >>= \c12' -> rewrite $ cLetE cloc nm fi e c12
+         ; fold_step fgs c12 >>= \c12' -> rewrite $ cLetE cloc nm fi e c12'
          }
 
     _otherwise ->
@@ -165,7 +166,7 @@ float_letfun_repeat_step :: DynFlags -> Comp -> RwM Comp
 --     repeat c
 -- in f(args)
 -- This will give the opportunity to take-emit to kick in and rewrite the whole thing to map!
-float_letfun_repeat_step fgs comp
+float_letfun_repeat_step _fgs comp
     | Repeat wdth rcomp <- unComp comp
     , LetFunC nm params locals cbody ccont <- unComp rcomp
     , null locals
@@ -180,7 +181,7 @@ float_letfun_repeat_step fgs comp
 
 
 float_let_par_step :: DynFlags -> Comp -> RwM Comp
-float_let_par_step fgs comp
+float_let_par_step _fgs comp
     | Par p c1 c2 <- unComp comp
     , LetE x fi e1 c1' <- unComp c1
     = rewrite $ cLetE cloc x fi e1 (cPar cloc p c1' c2)
@@ -207,7 +208,7 @@ push_comp_locals_step :: DynFlags -> Comp -> RwM Comp
 -- let comp f(x) = var ... x <- take ; emit e
 -- ~~~>
 -- let comp f(x) = x <- take; emit (letref locals in e)
-push_comp_locals_step fgs comp
+push_comp_locals_step _fgs comp
     | LetFunC nm params locals cbody ccont <- unComp comp
     , not (null locals)
     , BindMany tk [(x,emt)] <- unComp cbody
@@ -223,7 +224,7 @@ push_comp_locals_step fgs comp
     = return comp
   where
     mk_letrefs :: Maybe SourcePos -> [(GName Ty, Maybe Exp)] -> Exp -> Exp
-    mk_letrefs eloc lcls e = go lcls e
+    mk_letrefs eloc = go
       where
         go [] e = e
         go ((lcl,Nothing):lcls) e
@@ -236,7 +237,7 @@ push_comp_locals_step fgs comp
 
 take_emit_step :: DynFlags -> Comp -> RwM Comp
 -- repeat (x <- take ; emit e) ~~~> let f(x) = e in map(f)
-take_emit_step fgs comp
+take_emit_step _fgs comp
     | Repeat nfo bm <- unComp comp
     , BindMany tk [(x,emt)] <- unComp bm
     , Take1 _a _b <- unComp tk
@@ -298,7 +299,7 @@ inline_step fgs comp
    = inline_step_aux fgs comp
 
 inline_step_aux :: DynFlags -> Comp -> RwM Comp
-inline_step_aux fgs comp
+inline_step_aux _fgs comp
     | Let nm c1 c2 <- unComp comp
     = substComp (nm,c1) c2 >>= rewrite
 
@@ -313,7 +314,7 @@ inline_step_aux fgs comp
     | LetE nm ForceInline e1 c2 <- unComp comp
     = substExpComp (nm,e1) c2 >>= rewrite
 
-    | LetE nm NoInline e1 c2 <- unComp comp
+    | LetE _nm NoInline _e1 _c2 <- unComp comp
     = return comp
 
     | LetE nm AutoInline e1 c2 <- unComp comp
@@ -333,7 +334,7 @@ inline_step_aux fgs comp
              else return c2'
          }
 
-    | LetFunC nm params locals c1 c2 <- unComp comp
+    | LetFunC nm _params _locals _c1 c2 <- unComp comp
     , not (S.member nm (compCFVs c2)) -- Completely unused
     = return c2
 
@@ -372,7 +373,7 @@ is_simpl_expr0 :: Exp0 -> Bool
 is_simpl_expr0 (EVal _ _)       = True
 is_simpl_expr0 (EValArr _ _)    = True
 is_simpl_expr0 (EVar _)         = True
-is_simpl_expr0 (EUnOp u e)      = is_simpl_expr e
+is_simpl_expr0 (EUnOp _ e)      = is_simpl_expr e
 is_simpl_expr0 (EStruct _ fses) = all is_simpl_expr (map snd fses)
 is_simpl_expr0 _                = False
 
@@ -391,9 +392,9 @@ no_lut_inside x
 inline_exp_fun :: (GName Ty, [GName Ty], [(GName Ty, Maybe Exp)], Exp)
                -> Exp -> RwM Exp
 -- True means that it is safe to just get rid of the function
-inline_exp_fun (nm,params,locals,body) e
-  = mapExpM return return replace_call e
-  where replace_call e@(MkExp (ECall nm' args) _ ())
+inline_exp_fun (nm,params,locals,body)
+    = mapExpM return return replace_call
+  where replace_call (MkExp (ECall nm' args) loc ())
 --          | all is_simpl_expr args -- Like what we do for LetE/ELet
           | nm == nm'
           = do { let xs                        = zip params args
@@ -403,8 +404,6 @@ inline_exp_fun (nm,params,locals,body) e
                ; rewrite e'
                }
          where
-            loc = expLoc e
-
             -- arg_subst will return (a) a substitution and (b) some local bindings
             arg_subst :: [(GName Ty, Exp)] -> ([(GName Ty, Exp)], [(GName Ty, Maybe Exp)])
             arg_subst [] = ([],[])
@@ -474,22 +473,23 @@ inline_exp_fun (nm,params,locals,body) e
                           -> [(GName Ty, Maybe Exp)]
                           -> Exp
                           -> RwM Exp
-            mk_local_lets subst len_subst locals e
-              = go locals e >>= substAllTyped subst len_subst
-              where go [] e = return e
-                    go ((x,Nothing):xs) e
-                      = do { e'  <- go xs e
-                           ; ty' <- substAllLengthTy len_subst (nameTyp x)
-                           ; let x' = x { nameTyp = ty' }
-                           ; return $ eLetRef (expLoc e) x' Nothing e'
-                           }
-                    go ((x,Just xe):xs) e
-                      = do { e'  <- go xs e
-                           ; xe' <- substAllTyped subst len_subst xe
-                           ; ty' <- substAllLengthTy len_subst (nameTyp x)
-                           ; let x' = x { nameTyp = ty' }
-                           ; return $ eLetRef (expLoc e) x' (Just xe') e'
-                           }
+            mk_local_lets subst subst_len extended_locals
+                = \e -> go extended_locals e >>= substAllTyped subst subst_len
+              where
+                go [] e = return e
+                go ((x,Nothing):xs) e
+                  = do { e'  <- go xs e
+                       ; ty' <- substAllLengthTy subst_len (nameTyp x)
+                       ; let x' = x { nameTyp = ty' }
+                       ; return $ eLetRef (expLoc e) x' Nothing e'
+                       }
+                go ((x,Just xe):xs) e
+                  = do { e'  <- go xs e
+                       ; xe' <- substAllTyped subst subst_len xe
+                       ; ty' <- substAllLengthTy subst_len (nameTyp x)
+                       ; let x' = x { nameTyp = ty' }
+                       ; return $ eLetRef (expLoc e) x' (Just xe') e'
+                       }
 
         replace_call other = return other
 
@@ -501,26 +501,27 @@ inline_comp_fun (nm,params,cbody) c
        ; -- liftIO $ putStrLn $ "inline_comp_fun (after) = " ++ show r
        ; return r
        }
-  where replace_call :: Comp -> RwM Comp
-        replace_call c@(MkComp (Call nm' args) _ ())
-          | all is_simpl_call_arg args
-          , nm == nm'
-          = do { -- liftIO $ putStrLn "Matching!"
-               ; r <- substAllComp (mk_expr_subst params args) cbody >>= rewrite
-               ; -- liftIO $ putStrLn $ "Substituted =" ++ (show r)
-               ; return r
-               }
-        replace_call other = return other
+  where
+    replace_call :: Comp -> RwM Comp
+    replace_call (MkComp (Call nm' args) _ ())
+      | all is_simpl_call_arg args
+      , nm == nm'
+      = do { -- liftIO $ putStrLn "Matching!"
+           ; r <- substAllComp (mk_expr_subst params args) cbody >>= rewrite
+           ; -- liftIO $ putStrLn $ "Substituted =" ++ (show r)
+           ; return r
+           }
+    replace_call other = return other
 
-        mk_expr_subst :: [GName (CallArg Ty CTy)]
-                      -> [CallArg Exp Comp]
-                      -> [(GName Ty, Exp)]
-        mk_expr_subst [] [] = []
-        mk_expr_subst (nm:ps1) (a:as1)
-          = let CAExp ty = nameTyp nm
-                CAExp e1 = a
-            in (nm{nameTyp = ty}, e1) : mk_expr_subst ps1 as1
-        mk_expr_subst _ _ = error "BUG: inline_comp_fun!"
+    mk_expr_subst :: [GName (CallArg Ty CTy)]
+                  -> [CallArg Exp Comp]
+                  -> [(GName Ty, Exp)]
+    mk_expr_subst [] [] = []
+    mk_expr_subst (p:ps1) (a:as1)
+      = let CAExp ty = nameTyp p
+            CAExp e1 = a
+        in (p{nameTyp = ty}, e1) : mk_expr_subst ps1 as1
+    mk_expr_subst _ _ = error "BUG: inline_comp_fun!"
 
 
 inline_exp_fun_in_comp :: (GName Ty, [GName Ty], [(GName Ty, Maybe Exp)], Exp)
@@ -531,7 +532,7 @@ inline_exp_fun_in_comp fun
 
 purify_step :: DynFlags -> Comp -> RwM Comp
 -- Returns Just if we managed to rewrite
-purify_step fgs comp =
+purify_step _fgs comp =
  do -- rwMIO $ putStrLn "purify_step, comp = "
     -- rwMIO $ print (ppComp comp)
     case isMultiLet_maybe (unComp comp) of
@@ -552,7 +553,7 @@ purify_step fgs comp =
 
 purify_letref_step :: DynFlags -> Comp -> RwM Comp
 -- Returns Just if we managed to rewrite
-purify_letref_step fgs comp =
+purify_letref_step _fgs comp =
  do -- rwMIO $ putStrLn "purify_step, comp = "
     -- rwMIO $ print (ppComp comp)
     case isMultiLetRef_maybe (unComp comp) of
@@ -572,7 +573,7 @@ purify_letref_step fgs comp =
 
 
 ifdead_step :: DynFlags -> Comp -> RwM Comp
-ifdead_step fgs comp
+ifdead_step _fgs comp
   = case unComp comp of
       Branch e c1 c2
         | Just b <- evalBool e
@@ -634,7 +635,7 @@ letfunc_step :: DynFlags -> Comp -> RwM Comp
 --
 -- Which will allow more drastic inlining in the inlining step.
 --
-letfunc_step fgs comp =
+letfunc_step _fgs comp =
   case unComp comp of
     LetFunC nm params locals (MkComp (Return a b _fi e) _ ()) cont
        | Just params' <- mapM from_simpl_call_param params
@@ -669,7 +670,7 @@ letfunc_step fgs comp =
 -- > ~~~>
 -- > let f(i,params) = ... in for i in [e,elen] { cont }
 letfun_times_step :: DynFlags -> Comp -> RwM Comp
-letfun_times_step fgs comp =
+letfun_times_step _fgs comp =
   case unComp comp of
     Times ui e elen i (MkComp (LetHeader def cont) cloc ())
      | MkFun (MkFunDefined f params locals body) floc () <- def
@@ -701,7 +702,7 @@ letfun_times_step fgs comp =
 -- > ~~~>
 -- > c ; ... ; c
 times_unroll_step :: DynFlags -> Comp -> RwM Comp
-times_unroll_step fgs comp = case unComp comp of
+times_unroll_step _fgs comp = case unComp comp of
     Times ui e elen i c
      | EVal _ (VInt n') <- unExp elen
      , let n = fromIntegral n'
@@ -751,39 +752,40 @@ mkMultiLetRefExp []          e = e
 mkMultiLetRefExp ((x,b1):bs) e = eLetRef (expLoc e) x b1 (mkMultiLetRefExp bs e)
 
 isMultiLet_maybe :: Comp0 -> Maybe ([(GName Ty, Exp, ForceInline)], Comp0)
-isMultiLet_maybe comp
-  = go comp []
-  where go (LetE x fi e c) acc = go (unComp c) ((x,e,fi):acc)
-        go (Return _ _ _fu e)  []  = Nothing
-        go (Emit _ e)    []   = Nothing
-        go (Emits _ e)   []   = Nothing
+isMultiLet_maybe = go []
+  where
+    go acc (LetE x fi e c) = go ((x,e,fi):acc) (unComp c)
 
-        go (Return a b fi e) acc   = Just (acc, Return a b fi e)
-              -- We must have some accumulated bindings!
-        go (Emit a e) acc     = Just (acc, Emit a e)
-        go (Emits a e) acc    = Just (acc, Emits a e)
-        go _ _ = Nothing
+    go [] (Return _ _ _ _) = Nothing
+    go [] (Emit _ _)       = Nothing
+    go [] (Emits _ _)      = Nothing
 
+    -- We must have some accumulated bindings!
+    go acc (Return a b fi e) = Just (acc, Return a b fi e)
+    go acc (Emit a e)        = Just (acc, Emit a e)
+    go acc (Emits a e)       = Just (acc, Emits a e)
+    go _   _                 = Nothing
 
 isMultiLetRef_maybe :: Comp0 -> Maybe ([(GName Ty, Maybe Exp)], Comp0)
-isMultiLetRef_maybe comp
-  = go comp []
-  where go (LetERef x e c) acc = go (unComp c) ((x,e):acc)
-        go (Return _ _ _fi e)  []    = Nothing
-        go (Emit a e)    []   = Nothing
-        go (Emits a e)   []   = Nothing
+isMultiLetRef_maybe = go []
+  where
+    go acc (LetERef x e c) = go ((x,e):acc) (unComp c)
 
-        go (Return a b fi e) acc   = Just (acc, Return a b fi e)
-              -- We must have some accumulated bindings!
-        go (Emit a e) acc     = Just (acc, Emit a e)
-        go (Emits a e) acc    = Just (acc, Emits a e)
-        go _ _ = Nothing
+    go [] (Return _ _ _ _) = Nothing
+    go [] (Emit _ _)       = Nothing
+    go [] (Emits _ _)      = Nothing
+
+    -- We must have some accumulated bindings!
+    go acc (Return a b fi e) = Just (acc, Return a b fi e)
+    go acc (Emit a e)        = Just (acc, Emit a e)
+    go acc (Emits a e)       = Just (acc, Emits a e)
+    go _   _                 = Nothing
 
 -- > for cnt in [estart, ebound] { return ebody }
 -- > ~~~>
 -- > return (for cnt in [estart, ebound] ebody)
 elim_times_step :: DynFlags -> Comp -> RwM Comp
-elim_times_step fgs comp =
+elim_times_step _fgs comp =
   case unComp comp of
     Times ui estart ebound cnt (MkComp (Return a b _ ebody) _cloc ()) ->
       rewrite $ cReturn cloc a b AutoInline
@@ -807,7 +809,7 @@ exp_inlining_steps fgs e
  | ELet nm ForceInline e1 e2 <- unExp e
  = substExp (nm,e1) e2 >>= rewrite
 
- | ELet nm NoInline e1 e2 <- unExp e
+ | ELet _nm NoInline _e1 _e2 <- unExp e
  = return e
 
  | ELet nm AutoInline e1 e2 <- unExp e
@@ -823,7 +825,7 @@ exp_inlining_steps fgs e
  = return e
 
 exp_let_push_step :: DynFlags -> TypedExpPass
-exp_let_push_step fgs e
+exp_let_push_step _fgs e
  | ELet nm fi e1 e2 <- unExp e
  , EArrWrite e0 estart0 elen0 erhs <- unExp e2
  , EArrRead evals estart rlen <- unExp erhs
@@ -843,27 +845,24 @@ mk_read_ty base_ty LISingleton  = base_ty
 mk_read_ty base_ty (LILength n) = TArray (Literal n) base_ty
 
 asgn_letref_step :: DynFlags -> TypedExpPass
-asgn_letref_step fgs e
-
-  | EArrWrite e0 estart elen erhs <- unExp e
+asgn_letref_step _fgs exp
+  | EArrWrite e0 estart elen erhs <- unExp exp
   , TArray _ ty <- ctExp e0
   , not (ty == TBit)
    -- It has to be LILength so we can just take a pointer
   , LILength _ <- elen
-  , EVar x <- unExp e0
+  , EVar _ <- unExp e0
    -- Just a simple expression with no side-effects
   , not (mutates_state estart)
   , Just (y, residual_erhs) <- returns_letref_var erhs
-  = substExp (y, eArrRead loc e0 estart elen) residual_erhs >>= rewrite
-  | otherwise = return e
+  = substExp (y, eArrRead (expLoc exp) e0 estart elen) residual_erhs >>= rewrite
+  | otherwise = return exp
   where
-    loc = expLoc e
-
     returns_letref_var :: Exp -> Maybe (GName Ty, Exp)
-    returns_letref_var e = go e []
+    returns_letref_var = go []
 
-    go :: Exp -> [GName Ty] -> Maybe (GName Ty, Exp)
-    go e letrefs
+    go :: [GName Ty] -> Exp -> Maybe (GName Ty, Exp)
+    go letrefs e
      = let loc = expLoc e
        in
        case unExp e of
@@ -873,17 +872,17 @@ asgn_letref_step fgs e
               else Nothing
 
           ELet y fi e1 e2 -> do
-            (w, e2') <- go e2 letrefs
+            (w, e2') <- go letrefs e2
             return (w, eLet loc y fi e1 e2')
 
           ELetRef y Nothing e2 -> do
-            (w, e2') <- go e2 (y:letrefs)
+            (w, e2') <- go (y:letrefs) e2
             if w == y
               then return (w, e2')
               else return (w, eLetRef loc y Nothing e2')
 
           ESeq e1 e2 -> do
-            (w, e2') <- go e2 letrefs
+            (w, e2') <- go letrefs e2
             return (w, eSeq loc e1 e2')
 
           _ -> Nothing
@@ -902,7 +901,7 @@ rest_chain fgs e
 
 
 alength_elim :: DynFlags -> TypedExpPass
-alength_elim fgs e
+alength_elim _fgs e
  | EUnOp ALength e0 <- unExp e
  , (TArray nexp _)  <- ctExp e0
  , let loc = expLoc e
@@ -914,22 +913,21 @@ alength_elim fgs e
 
 
 eval_arith :: DynFlags -> TypedExpPass
-eval_arith fgs e
-  | arith_ty e              -- of arithmetic type
+eval_arith _fgs e
+  | arith_ty (ctExp e)      -- of arithmetic type
   , not (isEVal e)          -- not already a value
   , Just v <- evalArith e   -- evaluate it!
   = rewrite $ eVal (expLoc e) (ctExp e) v
   | otherwise
   = return e
   where
-    arith_ty :: Exp -> Bool
-    arith_ty e = case ctExp e of
-      TInt _  -> True
-      TDouble -> True
-      _       -> False
+    arith_ty :: Ty -> Bool
+    arith_ty (TInt _) = True
+    arith_ty TDouble  = True
+    arith_ty _        = False
 
 subarr_inline_step :: DynFlags -> TypedExpPass
-subarr_inline_step fgs e
+subarr_inline_step _fgs e
   | EArrRead evals estart LISingleton <- unExp e
   , EValArr _ vals <- unExp evals
   , EVal _ (VInt n') <- unExp estart
@@ -959,9 +957,9 @@ subarr_inline_step fgs e
   = return e
 
 proj_inline_step :: DynFlags -> TypedExpPass
-proj_inline_step fgs e
- | EProj e fn <- unExp e
- , EStruct _s fs_es <- unExp e
+proj_inline_step _fgs e
+ | EProj e' fn <- unExp e
+ , EStruct _s fs_es <- unExp e'
  , all (is_simpl_expr . snd) fs_es -- no side effects
  , Just ep <- lookup fn fs_es
  = rewrite ep
@@ -970,7 +968,7 @@ proj_inline_step fgs e
 
 
 for_unroll_step :: DynFlags -> TypedExpPass
-for_unroll_step fgs e
+for_unroll_step _fgs e
   | EFor ui nm estart elen ebody  <- unExp e
   , EVal _ (VInt 0) <- unExp estart
   , EVal _ (VInt n') <- unExp elen
@@ -991,7 +989,7 @@ for_unroll_step fgs e
     mk_eseq_many [x]    = x
     mk_eseq_many (x:xs) = eSeq (expLoc e) x (mk_eseq_many xs)
 
-for_unroll_step fgs e
+for_unroll_step _fgs e
   = return e
 
 
@@ -1055,8 +1053,7 @@ const_fold _ e@(MkExp e0 loc ())
     go (EIf e1 e2 e3) | EVal _ (VBool flag) <- unExp e1 =
         return $ if flag then unExp e2 else unExp e3
 
-    go e0 = Nothing
-        -- pure e0
+    go _ = Nothing
 
 type TypedCompPass = Comp -> RwM Comp
 type TypedExpPass  = Exp  -> RwM Exp
@@ -1141,8 +1138,8 @@ foldExpPasses flags
     ]
 
 runFold :: DynFlags -> GS.Sym -> Comp -> IO Comp
-runFold flags sym comp
-   = do { (comp',mp') <- go (RwStats Map.empty) 0 comp
+runFold flags sym = \comp ->
+     do { (comp',mp') <- go (RwStats Map.empty) 0 comp
 
         ; when (isDynFlagSet flags Verbose) $
           do { putStrLn "Optimizer statistics:"
@@ -1173,17 +1170,18 @@ runFold flags sym comp
    ~~~~~~~~~~~~~~~~~~~~~~~~~ -}
 
 elimMitigsIO :: GS.Sym -> Comp -> IO Comp
-elimMitigsIO sym comp = go comp
-  where go comp = do { r <- runRwM (elimMitigs comp) sym
-                     ; case r of NotRewritten {} -> return comp
-                                 Rewritten comp' -> go comp'
-                     }
+elimMitigsIO sym = go
+  where
+    go comp = do { r <- runRwM (elimMitigs comp) sym
+                 ; case r of NotRewritten {} -> return comp
+                             Rewritten comp' -> go comp'
+                 }
 
 
 frm_mit :: Comp -> Maybe ((Ty,Int,Int), Comp)
 -- returns (mitigator,residual-comp)
 frm_mit c
-    | Par p0 c1 c2 <- unComp c
+    | Par _p0 c1 c2 <- unComp c
     , Mitigate ty i1 i2  <- unComp c2
     = Just ((ty,i1,i2), c1)
 
@@ -1199,7 +1197,7 @@ frm_mit c
 
     -- Special case for code emitted by the vectorizer
     | LetFunC fn prms locs body cont <- unComp c
-    , Call fn' args <- unComp cont
+    , Call fn' _args <- unComp cont
     , fn == fn'
     = case frm_mit body of
         Nothing -> Nothing
@@ -1224,7 +1222,7 @@ frm_mit c
 flm_mit :: Comp -> Maybe ((Ty,Int,Int), Comp)
 -- returns (mitigator,residual-comp)
 flm_mit c
-    | Par p0 c1 c2 <- unComp c
+    | Par _p0 c1 c2 <- unComp c
     , Mitigate ty i1 i2  <- unComp c1
     = Just ((ty,i1,i2), c2)
 
@@ -1240,7 +1238,7 @@ flm_mit c
 
     -- Special case for code emitted by the vectorizer
     | LetFunC fn prms locs body cont <- unComp c
-    , Call fn' args <- unComp cont
+    , Call fn' _args <- unComp cont
     , fn == fn'
     = case flm_mit body of
         Nothing -> Nothing
@@ -1274,8 +1272,8 @@ elimMitigs comp
    mitig c
       | MkComp c0 cloc () <- c
       , Par p c1 c2 <- c0
-      , Just (m1@(ty1,i1,j1),c1') <- frm_mit c1
-      , Just (m2@(ty2,i2,j2),c2') <- flm_mit c2
+      , Just ((ty1,i1,j1),c1') <- frm_mit c1
+      , Just ((ty2,i2,j2),c2') <- flm_mit c2
       , let l = lcm i1 j2
       = do { when (j1 /= i2) $ error "BUG: Mitigation mismatch!"
            ; if (i1 `mod` j2 == 0) || (j2 `mod` i1) == 0 then
@@ -1331,38 +1329,38 @@ elimMitigs comp
         -- throw away useless mitigators!
       | MkComp c0 cloc () <- c
       , Par p c1 c2 <- c0
-      , Just ((ty1,i1,j1),c1') <- frm_mit c1
+      , Just (_,c1') <- frm_mit c1
       , WriteSnk {} <- unComp c2
       = rewrite $ cPar cloc p c1' c2
 
       | MkComp c0 cloc () <- c
       , Par p c1 c2 <- c0
-      , Just ((ty1,i1,j1),c1') <- frm_mit c1
+      , Just (_,c1') <- frm_mit c1
       , WriteInternal {} <- unComp c2
       = rewrite $ cPar cloc p c1' c2
 
       | MkComp c0 cloc () <- c
       , Par p c1 c2 <- c0
-      , Just ((ty2,i2,j2),c2') <- flm_mit c2
+      , Just (_,c2') <- flm_mit c2
       , ReadSrc {} <- unComp c1
       = rewrite $ cPar cloc p c1 c2'
 
       | MkComp c0 cloc () <- c
       , Par p c1 c2 <- c0
-      , Just ((ty2,i2,j2),c2') <- flm_mit c2
+      , Just (_,c2') <- flm_mit c2
       , ReadInternal {} <- unComp c1
       = rewrite $ cPar cloc p c1 c2'
 
       -- trivial mitigators
-      | MkComp c0 cloc () <- c
-      , Par p c1 c2 <- c0
-      , Mitigate ty i1 i2 <- unComp c1
+      | MkComp c0 _cloc () <- c
+      , Par _p c1 c2 <- c0
+      , Mitigate _ty i1 i2 <- unComp c1
       , i1 == i2
       = rewrite c2
 
-      | MkComp c0 cloc () <- c
-      , Par p c1 c2 <- c0
-      , Mitigate ty i1 i2 <- unComp c2
+      | MkComp c0 _cloc () <- c
+      , Par _p c1 c2 <- c0
+      , Mitigate _ty i1 i2 <- unComp c2
       , i1 == i2
       = rewrite c1
 
