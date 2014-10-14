@@ -107,6 +107,33 @@ eWhile :: Maybe SourcePos -> a -> GExp t a -> GExp t a -> GExp t a
 eWhile loc a econd ebody = MkExp (EWhile econd ebody) loc a
 
 {-------------------------------------------------------------------------------
+  Functions
+-------------------------------------------------------------------------------}
+
+mkFunDefined :: Maybe SourcePos -> a
+             -> GName t                       -- ^ name
+             -> [GName t]                     -- ^ params
+             -> [(GName t,Maybe (GExp t a))]  -- ^ locals
+             -> GExp t a                      -- ^ body
+             -> GFun t a
+mkFunDefined loc a nm params locals body = MkFun {
+      unFun   = MkFunDefined nm params locals body
+    , funLoc  = loc
+    , funInfo = a
+    }
+
+mkFunExternal :: Maybe SourcePos -> a
+              -> GName t                       -- ^ name
+              -> [GName t]                     -- ^ params
+              -> t                             -- ^ return type
+              -> GFun t a
+mkFunExternal loc a nm params ret = MkFun {
+      unFun   = MkFunExternal nm params ret
+    , funLoc  = loc
+    , funInfo = a
+    }
+
+{-------------------------------------------------------------------------------
   Computations
 -------------------------------------------------------------------------------}
 

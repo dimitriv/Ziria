@@ -882,22 +882,7 @@ toCompPos :: a -> SourcePos -> GComp0 tc t a b -> GComp tc t a b
 toCompPos a pos c0 = MkComp c0 (Just pos) a
 
 
-data GBindView tc t a b
-  = BindView (GComp tc t a b) (GName t) (GComp tc t a b)
-  | SeqView (GComp tc t a b) (GComp tc t a b)
-  | NotSeqOrBind (GComp tc t a b)
 
-type BindView = GBindView CTy Ty
-
-bindSeqView :: GComp tc t a b -> GBindView tc t a b
-bindSeqView = mk_view
-  where
-    mk_view c@(MkComp (BindMany c1 c2s) cloc cinfo) =
-      case c2s of
-        (nm,c2):rest -> BindView c1 nm (MkComp (mkBindMany c2 rest) cloc cinfo)
-        []           -> NotSeqOrBind c
-    mk_view (MkComp (Seq c1 c2) _cloc _cinfo) = SeqView c1 c2
-    mk_view c = NotSeqOrBind c
 
 -- TODO: The cases for Repeat, VectComp, Interleave and Standalone look
 -- suspicious? Why no +1? Fix or document.

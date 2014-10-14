@@ -369,13 +369,13 @@ cLetDecl p (LetDeclExternal x params ty) =
     ([], cLetHeader p fun)
   where
     fn  = toName x p Nothing
-    fun = MkFun (MkFunExternal fn params ty) p ()
+    fun = mkFunExternal p fn params ty
 cLetDecl p (LetDeclFunComp h x params (locls, c)) =
     ([(x, params)], cLetFunC p x params locls (mkVectComp c h))
 cLetDecl p (LetDeclFunExpr x params (locls, e)) =
     ([], cLetHeader p fun)
   where
-    fun = MkFun (MkFunDefined x params locls e) p ()
+    fun = mkFunDefined p x params locls e
 cLetDecl p (LetDeclComp h x c) =
     ([], cLet p x (mkVectComp c h))
 cLetDecl p (LetDeclExpr x e) =

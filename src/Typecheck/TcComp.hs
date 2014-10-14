@@ -647,7 +647,7 @@ tyCheckFun fn =
                        -- the lengths of the parameters of the function,
                        -- hence it is important to zonk!
                      ; mapFunM zonkTy return zonkExpr $
-                         MkFun (MkFunDefined f' params' decls' ebody') floc ()
+                         mkFunDefined floc f' params' decls' ebody'
                      }
              }
 
@@ -660,7 +660,7 @@ tyCheckFun fn =
                      ; let fty = TArrow (map nameTyp params') retTy'
                      ; let f'  = f{nameTyp = fty}
                      ; mapFunM zonkTy return zonkExpr $
-                         MkFun (MkFunExternal f' params' retTy') floc ()
+                         mkFunExternal floc f' params' retTy'
                      }
               }
 

@@ -36,7 +36,8 @@ import qualified Language.C.Syntax as C
 
 import AstComp
 import AstExpr
-import AstUnlabelled
+import AstLabelled   as Labelled
+import AstUnlabelled as Unlaballed
 import CtComp (ctComp)
 import Opts
 import PassFold

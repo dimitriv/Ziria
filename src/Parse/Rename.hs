@@ -222,17 +222,13 @@ instance Rename SrcFun where
       params' <- renameTelescope renameBound params
       locals' <- extend params params' $ renameTelescope renameLocal locals
       body'   <- extend params params' $ extend locals locals' $ rename body
-      return $ MkFun (MkFunDefined nm' params' locals' body')
-                     (funLoc  fun)
-                     (funInfo fun)
+      return $ mkFunDefined (funLoc fun) nm' params' locals' body'
 
     MkFunExternal nm params retTy -> do
       nm'     <- renameBound nm
       params' <- renameTelescope renameBound params
       retTy'  <- extend params params' $ rename retTy
-      return $ MkFun (MkFunExternal nm' params' retTy')
-                     (funLoc  fun)
-                     (funInfo fun)
+      return $ mkFunExternal (funLoc fun) nm' params' retTy'
 
 instance Rename SrcComp where
   rename c = case unComp c of

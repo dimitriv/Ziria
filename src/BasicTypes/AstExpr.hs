@@ -360,14 +360,14 @@ data GStructDef t
   deriving (Generic)
 
 data GFun0 t a where
-  MkFunDefined  :: GName t                       -- name
-                -> [GName t]                     -- params
-                -> [(GName t,Maybe (GExp t a))]  -- locals
-                -> GExp t a                      -- body
+  MkFunDefined  :: GName t                       -- ^ name
+                -> [GName t]                     -- ^ params
+                -> [(GName t,Maybe (GExp t a))]  -- ^ locals
+                -> GExp t a                      -- ^ body
                 -> GFun0 t a
-  MkFunExternal :: GName t                       -- name
-                -> [GName t]                     -- params
-                -> t                             -- return type
+  MkFunExternal :: GName t                       -- ^ name
+                -> [GName t]                     -- ^ params
+                -> t                             -- ^ return type
                 -> GFun0 t a
   deriving (Generic)
 
