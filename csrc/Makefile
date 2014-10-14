@@ -46,6 +46,8 @@ lutexec: $(OBJ_LUT_ONLY) $(OBJ_LIB) $(OBJ_EXT)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f *.o ./*/*.o
-	rm -f *~
-	rm -f $(EXECUTABLE)
+	-rm -f *.o ./*/*.o
+	-rm -f *~
+	-rm -f $(EXECUTABLE)
+	-rm -f *.out
+
