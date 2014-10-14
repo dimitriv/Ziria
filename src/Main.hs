@@ -39,7 +39,7 @@ import AstExpr
 import AstUnlabelled
 import CtComp (ctComp)
 import Opts
--- import PassFold
+import PassFold
 import PpComp
 import Rename
 import TcComp
