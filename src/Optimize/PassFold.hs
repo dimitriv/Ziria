@@ -17,14 +17,14 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-module PassFold where
+{-# LANGUAGE ScopedTypeVariables, RecordWildCards #-}
+module PassFold (runFold, elimMitigsIO) where
 
 import Prelude hiding (exp)
 import Control.Applicative
 import Control.Monad.State
 import Data.Functor.Identity
-import Data.Maybe ( fromJust, isJust, isNothing )
+import Data.Maybe (fromJust, isJust)
 import System.CPUTime
 import Text.Parsec.Pos (SourcePos)
 import Text.Printf
@@ -103,14 +103,17 @@ printRwStats :: RwStats -> IO ()
 printRwStats mp
   = mapM_ print_one (Map.toList $ getRwStats mp)
   where
-    print_one (pn,(RwStepStats invs rws tm1 tm2))
-      = printf "%20s:%d/%d/%f, %f\n" pn invs rws tm1 tm2
-
+    print_one (pn, RwStepStats{..})
+      = printf "%20s:%d/%d/%f, %f\n" pn rw_invoked
+                                        rw_rewrote
+                                        rw_inv_time
+                                        rw_rew_time
 
 incInvokes :: RwStats -> Double -> String -> RwStats
 incInvokes mp d s = RwStats (Map.alter aux s $ getRwStats mp)
-  where aux Nothing                       = Just (RwStepStats 1 0 d 0)
-        aux (Just (RwStepStats i r d0 t)) = Just (RwStepStats (i+1) r (d0+d) t)
+  where
+    aux Nothing                       = Just (RwStepStats 1 0 d 0)
+    aux (Just (RwStepStats i r d0 t)) = Just (RwStepStats (i+1) r (d0+d) t)
 
 incRewrites :: RwStats -> Double -> String -> RwStats
 incRewrites mp d s = RwStats (Map.alter aux s $ getRwStats mp)
@@ -356,13 +359,6 @@ inline_step_aux _fgs comp
     = return comp
   where
     cloc = compLoc comp
-
-is_arg_to_map :: GName Ty -> Comp -> Bool
-is_arg_to_map nm comp
-  = isNothing (mapCompM return return return return return aux comp)
-  where aux c@(MkComp (Map _ nm') _ ())
-          = if nm == nm' then Nothing else Just c
-        aux other = Just other
 
 -- Just a heuristic for inlining: what are 'simple' expressions that
 -- are safe and likely beneficial to just inline before code generation.
@@ -839,10 +835,6 @@ exp_let_push_step _fgs e
  = return e
 
 
-
-mk_read_ty :: Ty -> LengthInfo -> Ty
-mk_read_ty base_ty LISingleton  = base_ty
-mk_read_ty base_ty (LILength n) = TArray (Literal n) base_ty
 
 asgn_letref_step :: DynFlags -> TypedExpPass
 asgn_letref_step _fgs exp
