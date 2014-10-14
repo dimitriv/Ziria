@@ -22,7 +22,6 @@ module TcComp (tyCheckTopComp, tyCheckTopDecls, envOfDecls) where
 
 import Control.Applicative
 import Control.Monad (forM, liftM)
-import Data.Either (partitionEithers)
 import Data.Maybe (fromJust)
 import Text.Parsec.Pos (SourcePos)
 import Text.PrettyPrint.HughesPJ
@@ -198,7 +197,7 @@ tyCheckComp c
 
            LetFunC f params locls c1 c2 ->
              do { params' <- tyCheckCParams params
-                ; let (eparams, cparams) = partitionEithers $ map classify params'
+                ; let (eparams, cparams) = partitionParams params'
                 ; locls' <- extendEnv eparams $ tyCheckDecls locls
                 -- NB: order in which Env is extended is important here,
                 -- for shadowing
@@ -215,11 +214,6 @@ tyCheckComp c
                       raiseErrNoVarCtx cloc $ nonFullAppErr c1
                 }
               where
-                classify :: GName (CallArg Ty CTy) -> Either (GName Ty) (GName CTy)
-                classify nm = case nameTyp nm of
-                                 CAExp  t -> Left  nm{nameTyp = t}
-                                 CAComp t -> Right nm{nameTyp = t}
-
                 mkFunTy :: [GName (CallArg Ty CTy)] -> CTy0 -> TcM CTy
                 mkFunTy args res = do
                   args' <- forM args $ \nm -> case nameTyp nm of
