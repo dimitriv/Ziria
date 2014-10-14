@@ -802,16 +802,16 @@ compShortName = go . unComp
 data GCompCtxt tc t a b
   = Hole
   | CLet       CompLoc (GName tc) (GComp tc t a b) (GCompCtxt tc t a b)
-  | CLetE      CompLoc (GName t)  ForceInline (GExp t b) (GCompCtxt tc t a b)
-  | CLetERef   CompLoc (GName t)  (Maybe (GExp t b)) (GCompCtxt tc t a b)
-  | CLetHeader CompLoc (GName t)  (GFun t b) (GCompCtxt tc t a b)
+  | CLetE      CompLoc (GName t) ForceInline (GExp t b) (GCompCtxt tc t a b)
+  | CLetERef   CompLoc (GName t) (Maybe (GExp t b)) (GCompCtxt tc t a b)
+  | CLetHeader CompLoc (GFun t b) (GCompCtxt tc t a b)
   | CLetFunC   CompLoc (GName tc) [GName (CallArg t tc)]       -- params
                                   [(GName t,Maybe (GExp t b))] -- locals
                                   (GComp tc t a b)             -- body
                                   (GCompCtxt tc t a b)
   | CLetStruct CompLoc (GStructDef t) (GCompCtxt tc t a b)
 
-type CompCtxt = GCompCtxt CTy Ty
+type CompCtxt = GCompCtxt CTy Ty () ()
 
 
 
