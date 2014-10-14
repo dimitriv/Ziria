@@ -24,6 +24,7 @@ import Prelude hiding (pi, mapM)
 import Control.Arrow ((***))
 import Control.Monad (forM, liftM)
 import Control.Monad.State (State, execState, modify)
+import Data.Either (partitionEithers)
 import Data.Functor.Identity ( Identity (..) )
 import Data.Traversable (mapM)
 import GHC.Generics (Generic)
@@ -791,6 +792,31 @@ substExpComp (nm,e') = mapCompM return return return return (substExp (nm,e')) r
 substAllComp :: Monad m => [(GName t, GExp t b)] -> GComp tc t a b -> m (GComp tc t a b)
 substAllComp []     c = return c
 substAllComp (s:ss) c = substExpComp s =<< substAllComp ss c
+
+{-------------------------------------------------------------------------------
+  Dealing with CallArgs
+-------------------------------------------------------------------------------}
+
+callArg :: (a -> c) -> (b -> c) -> CallArg a b -> c
+callArg f _ (CAExp  a) = f a
+callArg _ g (CAComp b) = g b
+
+partitionCallArgs :: [CallArg a b] -> ([a], [b])
+partitionCallArgs = partitionEithers . map (callArg Left Right)
+
+partitionParams :: [GName (CallArg a b)] -> ([GName a], [GName b])
+partitionParams = partitionEithers . map classify
+  where
+    classify :: GName (CallArg a b) -> Either (GName a) (GName b)
+    classify nm = case nameTyp nm of
+                     CAExp  t -> Left  nm{nameTyp = t}
+                     CAComp t -> Right nm{nameTyp = t}
+
+callArgExp :: CallArg a b -> Maybe a
+callArgExp = callArg Just (const Nothing)
+
+callArgComp :: CallArg a b -> Maybe b
+callArgComp = callArg (const Nothing) Just
 
 {-------------------------------------------------------------------------------
   Utility
