@@ -28,6 +28,8 @@ import Prelude
 import Rebindables
 import Opts
 import AstExpr
+import AstUnlabelled
+
 import AstComp
 import PpComp
 import PpExpr
@@ -91,25 +93,25 @@ retByRef f locals body
    body_ty = ctExp body
    loc     = expLoc body
    retN    = toName ("__retf_" ++ (name f)) Nothing body_ty
-   retE    = eVar (expLoc body) () retN 
+   retE    = eVar (expLoc body) retN 
 
    -- precondition: 'e' returns an array type
    trans_body xs e
      = case unExp e of
          ESeq e1 e2
-           -> lift_ret (eSeq loc () e1) $
+           -> lift_ret (eSeq loc e1) $
               trans_body xs e2
          ELet x fi e1 e2
-           -> lift_ret (eLet loc () x fi e1) $
+           -> lift_ret (eLet loc x fi e1) $
               trans_body (x:xs) e2
          EVar x
            | not (x `elem` xs)
            , x `elem` locals
-           -> DoReuseLcl (x, eVal loc () TUnit VUnit)
+           -> DoReuseLcl (x, eVal loc TUnit VUnit)
          ELUT {}
            -> DoReuseLUT (retN, e) -- don't rewrite the body
          _otherwise
-           -> NoReuseLcl (retN, eAssign loc () retE e)
+           -> NoReuseLcl (retN, eAssign loc retE e)
 
 getClosureVars :: Fun -> Cg [(EId, C.Exp)]
 getClosureVars fdef

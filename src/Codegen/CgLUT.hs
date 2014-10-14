@@ -33,6 +33,7 @@ module CgLUT
 
 import Opts
 import AstExpr
+import AstUnlabelled
 
 import Text.Parsec.Pos
 
@@ -205,13 +206,13 @@ codeGenLUTExp_Mock :: DynFlags -> Maybe SourcePos
                    -> Map EId Range -> Exp -> Cg C.Exp
 codeGenLUTExp_Mock dflags loc r  e
   = do { (inVars, outVars, allVars) <- inOutVars [] r e
-       ; _ <- codeGenExp dflags $ ePrint Nothing () True $
-                                  eVal Nothing () TString (VString (show loc))
-       ; _ <- codeGenExp dflags $ ePrint Nothing () True $
-                                  eVal Nothing () TString (VString "INVARS")
+       ; _ <- codeGenExp dflags $ ePrint Nothing True $
+                                  eVal Nothing TString (VString (show loc))
+       ; _ <- codeGenExp dflags $ ePrint Nothing True $
+                                  eVal Nothing TString (VString "INVARS")
        ; cg_print_vars dflags inVars
-       ; _ <- codeGenExp dflags $ ePrint Nothing () True $
-                                  eVal Nothing () TString (VString "OUTVARS")
+       ; _ <- codeGenExp dflags $ ePrint Nothing True $
+                                  eVal Nothing TString (VString "OUTVARS")
        ; r <- codeGenExp dflags e
        ; cg_print_vars dflags outVars
        ; return r
@@ -441,15 +442,15 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars locals e = do
 print_vars :: [EId] -> Exp -> Exp
 print_vars [] e = e
 print_vars (v:vs) e
-  = let p = eSeq Nothing ()
-             (ePrint Nothing () False
-                       (eVal Nothing () TString (VString $ name v ++ ":")))
-             (ePrint Nothing () True  (eVar Nothing () v))
-    in eSeq Nothing () p (print_vars vs e)
+  = let p = eSeq Nothing
+             (ePrint Nothing False
+                       (eVal Nothing TString (VString $ name v ++ ":")))
+             (ePrint Nothing True  (eVar Nothing v))
+    in eSeq Nothing p (print_vars vs e)
 
 cg_print_vars :: DynFlags -> [EId] -> Cg ()
 cg_print_vars dflags vs
-  = do { _ <- codeGenExp dflags $ print_vars vs (eVal Nothing () TUnit VUnit)
+  = do { _ <- codeGenExp dflags $ print_vars vs (eVal Nothing TUnit VUnit)
        ; return ()
        }
 

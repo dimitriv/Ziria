@@ -33,6 +33,7 @@ module CgExpr
 
 import Opts
 import AstExpr
+import AstUnlabelled 
 import AstComp
 import PpExpr
 import PpComp
@@ -523,10 +524,10 @@ printArray dflags e cupper t
        ; let pcdeclN_c = name pcdeclN
              pvdeclN_c = name pvdeclN
  
-       ; let pcDeclE  = eVar Nothing () pcdeclN 
-             pvDeclE  = eVar Nothing () pvdeclN
-             pvAssign = eAssign Nothing ()
-                           pvDeclE (eArrRead Nothing () e pcDeclE LISingleton)
+       ; let pcDeclE  = eVar Nothing pcdeclN 
+             pvDeclE  = eVar Nothing pvdeclN
+             pvAssign = eAssign Nothing
+                           pvDeclE (eArrRead Nothing e pcDeclE LISingleton)
 
        ; extendVarEnv [(pcdeclN, [cexp|$id:pcdeclN_c|])
                       ,(pvdeclN, [cexp|$id:pvdeclN_c|])] $ do
@@ -534,7 +535,7 @@ printArray dflags e cupper t
        ; (e1_decls, e1_stms, ce1) <- inNewBlock $ codeGenExp dflags pvAssign
        ; (e2_decls, e2_stms, ce2) <- inNewBlock $ printScalar dflags pvDeclE
        ; (e3_decls, e3_stms, ce3) <- inNewBlock $ printScalar dflags
-                                     (eVal Nothing () TString (VString ","))
+                                     (eVal Nothing TString (VString ","))
 
        ; appendDecls e1_decls
        ; appendDecls e2_decls
