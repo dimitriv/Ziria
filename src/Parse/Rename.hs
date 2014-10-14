@@ -27,6 +27,7 @@ import Data.Traversable (mapM)
 
 import AstComp
 import AstExpr
+import AstLabelled
 import Utils
 import qualified GenSym as GS
 

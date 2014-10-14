@@ -44,6 +44,7 @@ import Text.Parsec
 import Text.Parsec.Expr
 
 import AstExpr
+import AstLabelled
 import BlinkLexer
 import BlinkParseM
 import Eval (evalInt)

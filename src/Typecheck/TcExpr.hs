@@ -31,6 +31,7 @@ import Text.Parsec.Pos (SourcePos)
 import Text.PrettyPrint.HughesPJ
 
 import AstExpr
+import AstLabelled
 import Outputable
 import PpExpr ()
 import TcErrors

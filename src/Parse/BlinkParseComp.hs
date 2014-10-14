@@ -32,6 +32,7 @@ import Text.Parsec.Expr
 
 import AstComp
 import AstExpr
+import AstLabelled
 import BlinkParseExpr
 import BlinkLexer
 import BlinkParseM

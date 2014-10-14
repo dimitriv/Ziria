@@ -28,7 +28,6 @@ import AstExpr
 import CtCall
 import CtExpr (ctExp)
 import Outputable
-import PpComp ()
 import Utils
 
 ctComp :: GComp CTy Ty a b -> CTy

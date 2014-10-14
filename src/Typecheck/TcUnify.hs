@@ -27,6 +27,7 @@ import qualified Data.Set as S
 
 import AstComp
 import AstExpr
+import AstLabelled
 import Outputable
 import PpComp ()
 import PpExpr ()

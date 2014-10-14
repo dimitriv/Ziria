@@ -30,6 +30,7 @@ import qualified Data.Set as S
 
 import AstComp
 import AstExpr
+import AstLabelled
 import CtComp (ctComp) -- Used only at very top-level (single call)
 import Outputable
 import PpComp ()

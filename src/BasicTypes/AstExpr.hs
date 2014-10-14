@@ -401,7 +401,7 @@ type Exp       = GExp       Ty ()
 type StructDef = GStructDef Ty
 type Fun0      = GFun0      Ty ()
 type Fun       = GFun       Ty ()
-type EId       = GName      Ty 
+type EId       = GName      Ty
 
 {-------------------------------------------------------------------------------
   Specializations of the AST to SrcTy (source level types)
@@ -411,59 +411,6 @@ type EId       = GName      Ty
 
 type SrcExp = GExp (Maybe SrcTy) ()
 type SrcFun = GFun (Maybe SrcTy) ()
-
-{-------------------------------------------------------------------------------
-  Convenience constructors
--------------------------------------------------------------------------------}
-
-vint :: Int -> Val
--- Auxiliary function for use in the vectorizer
-vint n = VInt (fromIntegral n)
-
-eVal :: Maybe SourcePos -> a -> t -> Val -> GExp t a
-eVal loc a t v = MkExp (EVal t v) loc a
-eValArr :: Maybe SourcePos -> a -> t -> [Val] -> GExp t a
-eValArr loc a t v = MkExp (EValArr t v) loc a
-eVar :: Maybe SourcePos -> a ->  GName t -> GExp t a
-eVar loc a v = MkExp (EVar v) loc a
-eUnOp :: Maybe SourcePos -> a -> GUnOp t -> GExp t a -> GExp t a
-eUnOp loc a o v = MkExp (EUnOp o v) loc a
-eBinOp :: Maybe SourcePos -> a -> BinOp -> GExp t a -> GExp t a -> GExp t a
-eBinOp loc a b x y = MkExp (EBinOp b x y) loc a
-eAssign :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> GExp t a
-eAssign loc a x y = MkExp (EAssign x y) loc a
-eArrRead :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> LengthInfo -> GExp t a
-eArrRead loc a x y l = MkExp (EArrRead x y l) loc a
-eArrWrite :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> LengthInfo -> GExp t a -> GExp t a
-eArrWrite loc a x y l e = MkExp (EArrWrite x y l e) loc a
-eIter :: Maybe SourcePos -> a -> GName t -> GName t -> GExp t a -> GExp t a -> GExp t a
-eIter loc a x y e1 e2 = MkExp (EIter x y e1 e2) loc a
-eFor :: Maybe SourcePos -> a -> UnrollInfo -> GName t -> GExp t a -> GExp t a -> GExp t a -> GExp t a
-eFor loc a ui n e1 e2 e3 = MkExp (EFor ui n e1 e2 e3) loc a
-eLet :: Maybe SourcePos -> a ->  GName t -> ForceInline -> GExp t a -> GExp t a -> GExp t a
-eLet loc a x fi e1 e2 = MkExp (ELet x fi e1 e2) loc a
-eLetRef :: Maybe SourcePos -> a ->  GName t -> Maybe (GExp t a) -> GExp t a -> GExp t a
-eLetRef loc a nm x e = MkExp (ELetRef nm x e) loc a
-eSeq :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> GExp t a
-eSeq loc a e1 e2 = MkExp (ESeq e1 e2) loc a
-eCall :: Maybe SourcePos -> a ->  GName t -> [GExp t a] -> GExp t a
-eCall loc a f es = MkExp (ECall f es) loc a
-eIf :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> GExp t a -> GExp t a
-eIf loc a e1 e2 e3 = MkExp (EIf e1 e2 e3) loc a
-ePrint :: Maybe SourcePos -> a ->  Bool -> GExp t a -> GExp t a
-ePrint loc a b e = MkExp (EPrint b e) loc a
-eError :: Maybe SourcePos -> a -> t -> String -> GExp t a
-eError loc a t s = MkExp (EError t s) loc a
-eLUT :: Maybe SourcePos -> a ->  Map (GName t) Range -> GExp t a -> GExp t a
-eLUT loc a m e = MkExp (ELUT m e) loc a
-eBPerm :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> GExp t a
-eBPerm loc a e1 e2 = MkExp (EBPerm e1 e2) loc a
-eStruct :: Maybe SourcePos -> a ->  TyName -> [(String,GExp t a)] -> GExp t a
-eStruct loc a tn es = MkExp (EStruct tn es) loc a
-eProj :: Maybe SourcePos -> a ->  GExp t a -> String -> GExp t a
-eProj loc a e s = MkExp (EProj e s) loc a
-eWhile :: Maybe SourcePos -> a -> GExp t a -> GExp t a -> GExp t a
-eWhile loc a econd ebody = MkExp (EWhile econd ebody) loc a
 
 {-------------------------------------------------------------------------------
   Built-in types

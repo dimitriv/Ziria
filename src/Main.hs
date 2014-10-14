@@ -36,9 +36,10 @@ import qualified Language.C.Syntax as C
 
 import AstComp
 import AstExpr
+import AstUnlabelled
 import CtComp (ctComp)
 import Opts
-import PassFold
+-- import PassFold
 import PpComp
 import Rename
 import TcComp
@@ -168,7 +169,7 @@ main = failOnException $ do
     -- putStrLn "typechecked program ..."
 
     -- First let us run some small-scale optimizations
-    folded <- runFoldPhase dflags sym 1 c'
+    -- folded <- runFoldPhase dflags sym 1 c'
 
     return ()
 {-
@@ -225,6 +226,7 @@ main = failOnException $ do
          _   -> failWithError "Vect failure: too many candidates?"
 -}
 
+{-
     runFoldPhase :: DynFlags -> GS.Sym -> Int -> Comp CTy Ty -> IO (Comp CTy Ty)
     -- Fold Phase
     runFoldPhase dflags sym i c
@@ -235,6 +237,7 @@ main = failOnException $ do
            ; return c' }
       | otherwise
       = return c
+-}
 
 {-
     runAutoLUTPhase :: DynFlags -> GS.Sym -> Comp CTy Ty -> IO (Comp CTy Ty)
