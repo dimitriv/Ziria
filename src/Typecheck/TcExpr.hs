@@ -31,7 +31,7 @@ import Text.Parsec.Pos (SourcePos)
 import Text.PrettyPrint.HughesPJ
 
 import AstExpr
-import AstLabelled
+import AstUnlabelled
 import Outputable
 import PpExpr ()
 import TcErrors
@@ -96,20 +96,20 @@ tyCheckExpr e
           EVal ann v ->
             do { t <- tyCheckVal v
                ; unifyAnn loc ann t
-               ; return (eVal loc () t v, t)
+               ; return (eVal loc t v, t)
                }
           EValArr _ann a@(h:t) ->
             do { vtys <- mapM tyCheckVal (h:t)
                ; unifyAll loc vtys
                ; let arrty = TArray (Literal (length a)) (head vtys)
-               ; return $ (eValArr loc () arrty a, arrty)
+               ; return $ (eValArr loc arrty a, arrty)
                }
           EValArr _ [] ->
             raiseErrNoVarCtx loc $ text ("Empty value array.")
 
           EVar x ->
             do { (x', ty) <- tyCheckFree x
-               ; return $ (eVar loc () x', ty)
+               ; return $ (eVar loc x', ty)
                }
 
           EUnOp uop e0 ->
@@ -119,19 +119,19 @@ tyCheckExpr e
                ; case uop of
                    Neg ->
                      do { checkWith loc (isScalarTy ty0') msg
-                        ; return (eUnOp loc () Neg e0', ty0')
+                        ; return (eUnOp loc Neg e0', ty0')
                         }
 
                    Not ->
                      do { unify loc ty0' TBool
-                        ; return (eUnOp loc () Not e0', TBool)
+                        ; return (eUnOp loc Not e0', TBool)
                         }
 
                    BwNeg ->
                      do { tint_unknown <- newTInt_BWUnknown
                         ; firstToSucceed (unify loc ty0' tint_unknown)
                                          (unify loc ty0' TBit)
-                        ; return (eUnOp loc () BwNeg e0', ty0')
+                        ; return (eUnOp loc BwNeg e0', ty0')
                         }
 
                    Cast target_ty ->
@@ -150,12 +150,12 @@ tyCheckExpr e
                         ; checkWith loc compat_test $
                           text "Invalid cast from type" <+> ppr ty0' <+> text "to" <+> ppr target_ty
 
-                        ; return (eUnOp loc () (Cast target_ty') e0', target_ty')
+                        ; return (eUnOp loc (Cast target_ty') e0', target_ty')
                         }
 
                    ALength
                      | TArray _ _ <- ty0' -- NB ne is zonked
-                     -> return (eUnOp loc () ALength e0', tint)
+                     -> return (eUnOp loc ALength e0', tint)
                      | TVar _ <- ty0'
                      -> raiseErrNoVarCtx loc $
                         text "Could not resolve array length of:" <+> ppr e0
@@ -177,7 +177,7 @@ tyCheckExpr e
                    -> do { -- liftIO $ putStrLn $ "ty1' = " ++ show ty1'
                          ; checkWith loc (supportsArithTy ty1') msg
                          ; unify loc ty1' ty2'
-                         ; return (eBinOp loc () bop e1' e2', ty1')
+                         ; return (eBinOp loc bop e1' e2', ty1')
                          }
 
                    | isShiftBinOp x -- ShL / ShR
@@ -185,32 +185,32 @@ tyCheckExpr e
                          ; ti2 <- newTInt_BWUnknown
                          ; unify loc ty1' ti1
                          ; unify loc ty2' ti2
-                         ; return (eBinOp loc () bop e1' e2', ti1)
+                         ; return (eBinOp loc bop e1' e2', ti1)
                          }
 
                    | isLogicalBinOp x -- BwAnd / BwOr / BwXor (valid for either int or bit)
                    -> do { ti <- newTInt_BWUnknown
                          ; firstToSucceed (unifyMany loc [ty1',ty1'] [ti,ty2'])
                                           (unifyMany loc [ty1',ty1'] [TBit,ty2'])
-                         ; return (eBinOp loc () bop e1' e2', ty1')
+                         ; return (eBinOp loc bop e1' e2', ty1')
                          }
 
                    | isEqualityBinOp x -- Eq / Neq
                    -> do { checkWith loc (supportsEqTy ty1') msg
                          ; unify loc ty1' ty2'
-                         ; return (eBinOp loc () bop e1' e2', TBool)
+                         ; return (eBinOp loc bop e1' e2', TBool)
                          }
 
                    | isRelBinOp x -- Let / Leq / Gt / Geq
                    -> do { checkWith loc (supportsCmpTy ty1') msg
                          ; unify loc ty1' ty2'
-                         ; return (eBinOp loc () bop e1' e2', TBool)
+                         ; return (eBinOp loc bop e1' e2', TBool)
                          }
 
                    | isBoolBinOp x -- And / Or
                    -> do { unify loc ty1' TBool
                          ; unify loc ty2' TBool
-                         ; return (eBinOp loc () bop e1' e2', TBool)
+                         ; return (eBinOp loc bop e1' e2', TBool)
                          }
                    | otherwise
                    -> error $ "BUG: Forgotten case for operator " ++ show bop ++ " in typeCheckExpr!"
@@ -219,7 +219,7 @@ tyCheckExpr e
             do { (e1', ty1) <- tyCheckExpr e1
                ; (e2', ty2) <- tyCheckExpr e2
                ; unify (expLoc e1') ty1 ty2
-               ; return (eAssign loc () e1' e2', TUnit)
+               ; return (eAssign loc e1' e2', TUnit)
                }
 
           EArrRead earr eix len ->
@@ -232,10 +232,10 @@ tyCheckExpr e
                   TArray _n tbase -> -- TODO: support metavars for array size here
                    case len of
                      LISingleton
-                       -> return (eArrRead loc () earr' eix' LISingleton, tbase)
+                       -> return (eArrRead loc earr' eix' LISingleton, tbase)
 
                      LILength r
-                       -> return (eArrRead loc () earr' eix' (LILength r), TArray (Literal r) tbase)
+                       -> return (eArrRead loc earr' eix' (LILength r), TArray (Literal r) tbase)
 
                   _ -> raiseErrNoVarCtx loc (expActualErr unknownTArr tyarr' earr)
                }
@@ -249,7 +249,7 @@ tyCheckExpr e
                   TArray n TBit ->
                     do { ti <- newTInt_BWUnknown
                        ; unify loc tyix' (TArray n ti)
-                       ; return (eBPerm loc () earr' eix', tyarr')
+                       ; return (eBPerm loc earr' eix', tyarr')
                        }
                   _ -> raiseErrNoVarCtx loc $
                        expActualErr (unknownTArrOfBase TBit) tyarr' earr
@@ -267,7 +267,7 @@ tyCheckExpr e
                     case r of
                       LISingleton
                         -> do { unify loc tbase tyval'
-                              ; return (eArrWrite loc () earr' eix' r eval', TUnit)
+                              ; return (eArrWrite loc earr' eix' r eval', TUnit)
                               }
                       LILength l -> case n of
                         Literal nn | nn < l
@@ -276,7 +276,7 @@ tyCheckExpr e
                                     , text "greater than array size" <+> int nn
                                     ]
                         _ -> do { unify loc (TArray (Literal l) tbase) tyval'
-                                ; return (eArrWrite loc () earr' eix' r eval', TUnit)
+                                ; return (eArrWrite loc earr' eix' r eval', TUnit)
                                 }
                   _ ->
                     raiseErrNoVarCtx loc $
@@ -292,14 +292,14 @@ tyCheckExpr e
 
                (ebody', tybody) <- extendEnv [ix'] $ tyCheckExpr ebody
                unify loc tybody TUnit
-               return (eFor loc () ui ix' estart' elen' ebody', TUnit)
+               return (eFor loc ui ix' estart' elen' ebody', TUnit)
 
           EWhile econd ebody ->
             do (econd', tycond) <- tyCheckExpr econd
                (ebody', tybody) <- tyCheckExpr ebody
                unify loc tycond TBool
                unify loc tybody TUnit
-               return (eWhile loc () econd' ebody', TUnit)
+               return (eWhile loc econd' ebody', TUnit)
 
           EIter ix x earr ebody ->
             do { (ix',   tyix)  <- tyCheckBound ix
@@ -318,7 +318,7 @@ tyCheckExpr e
                            -- typecheck the body, default to tint32
                          ; _tyix' <- defaultTy loc tyix tint32
                          ; unify loc tybody TUnit
-                         ; return (eIter loc () ix' x' earr' ebody', TUnit)
+                         ; return (eIter loc ix' x' earr' ebody', TUnit)
                          }
                    _ -> raiseErrNoVarCtx loc $
                         expActualErr unknownTArr tyarr earr
@@ -329,7 +329,7 @@ tyCheckExpr e
                ; (e1', tye1) <- tyCheckExpr e1
                ; unify loc tyx tye1
                ; (e2', tye2) <- extendEnv [x'] $ tyCheckExpr e2
-               ; return (eLet loc () x' fi e1' e2', tye2)
+               ; return (eLet loc x' fi e1' e2', tye2)
                }
 
           ELetRef x (Just e1) e2 ->
@@ -337,19 +337,19 @@ tyCheckExpr e
                ; (e1', tye1) <- tyCheckExpr e1
                ; unify loc tyx tye1
                ; (e2', tye2) <- extendEnv [x'] $ tyCheckExpr e2
-               ; return (eLetRef loc () x' (Just e1') e2', tye2)
+               ; return (eLetRef loc x' (Just e1') e2', tye2)
                }
 
           ELetRef x Nothing e2 ->
             do { (x',  _)    <- tyCheckBound x
                ; (e2', tye2) <- extendEnv [x'] $ tyCheckExpr e2
-               ; return (eLetRef loc () x' Nothing e2', tye2)
+               ; return (eLetRef loc x' Nothing e2', tye2)
                }
 
           ESeq e1 e2 ->
             do { (e1', _ty1) <- tyCheckExpr e1
                ; (e2', ty2)  <- tyCheckExpr e2
-               ; return (eSeq loc () e1' e2', ty2)
+               ; return (eSeq loc e1' e2', ty2)
                }
 
           ECall f actual ->
@@ -382,7 +382,7 @@ tyCheckExpr e
                           -- unify loc $ zip (tyListOfProd ta) (map info es2')
 
                         ; unifyMany loc formal (map snd actual')
-                        ; return (eCall loc () f' (map fst actual'), res)
+                        ; return (eCall loc f' (map fst actual'), res)
                         }
                    _ -> raiseErrNoVarCtx loc $
                         expActualErr (unknownTFun (length actual')) fty_poly' e
@@ -394,18 +394,18 @@ tyCheckExpr e
                ; (e2', ty2) <- tyCheckExpr e2
                ; unify loc tyb TBool
                ; unify loc ty1 ty2
-               ; return (eIf loc () be' e1' e2', ty1)
+               ; return (eIf loc be' e1' e2', ty1)
                }
 
           EPrint nl e1 ->
             do { (e1', _ty1) <- tyCheckExpr e1
-               ; return (ePrint loc () nl e1', TUnit)
+               ; return (ePrint loc nl e1', TUnit)
                }
 
           EError ann str ->
             do { a <- TVar <$> newTyVar "a"
                ; unifyAnn loc ann a
-               ; return (eError loc () a str, a)
+               ; return (eError loc a str, a)
                }
 
           ELUT _r _e1 ->
@@ -423,7 +423,7 @@ tyCheckExpr e
                     -> do { case lookup fn flds of
                               Nothing -> raiseErrNoVarCtx loc $
                                          text ("Unknown field " ++ fn ++ " projected out of type " ++ nm)
-                              Just fty -> return (eProj loc () e' fn, fty)
+                              Just fty -> return (eProj loc e' fn, fty)
                           }
                   _other -> raiseErrNoVarCtx loc $
                             text "Field projection from non-struct type: " <+> ppr ty'
@@ -444,7 +444,7 @@ tyCheckExpr e
                          text ("Expecting field " ++ f' ++ " but got " ++ f)
 
                ; tfs' <- mapM tc_field (zip tfs (struct_flds struct))
-               ; return (eStruct loc () tn tfs', TStruct tn (struct_flds struct))
+               ; return (eStruct loc tn tfs', TStruct tn (struct_flds struct))
                }
        }
 

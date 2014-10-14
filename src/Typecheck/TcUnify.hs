@@ -27,7 +27,7 @@ import qualified Data.Set as S
 
 import AstComp
 import AstExpr
-import AstLabelled
+import AstUnlabelled
 import Outputable
 import PpComp ()
 import PpExpr ()
@@ -227,7 +227,7 @@ defaultExpr = mapExpM zonkTy return zonk_exp
     zonk_exp e
       | EError ty str <- unExp e
       = do { ty' <- defaultTy (expLoc e) ty TUnit
-           ; return $ eError (expLoc e) (info e) ty' str
+           ; return $ eError (expLoc e) ty' str
            }
       | otherwise
       = return e
