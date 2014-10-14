@@ -326,7 +326,16 @@ void init_putint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *
 		blk->num16_output_buffer = (int16 *)malloc(params->outBufSize * sizeof(int16));
 		blk->num16_output_entries = params->outBufSize;
 		if (params->outType == TY_FILE)
-			blk->num16_output_file = try_open(params->outFileName, "w");
+		{
+			if (params->outFileMode == MODE_BIN)
+			{
+				blk->num16_output_file = try_open(params->outFileName, "wb");
+			}
+			else
+			{
+				blk->num16_output_file = try_open(params->outFileName, "w");
+			}
+		}
 	}
 
 	if (params->outType == TY_MEM)
@@ -498,7 +507,16 @@ void init_putcomplex16(BlinkParams *params, BufContextBlock *blk, HeapContextBlo
 		blk->num16_output_buffer = (int16 *)malloc(2 * params->outBufSize * sizeof(int16));
 		blk->num16_output_entries = params->outBufSize * 2;
 		if (params->outType == TY_FILE)
-			blk->num16_output_file = try_open(params->outFileName, "w");
+		{
+			if (params->outFileMode == MODE_BIN)
+			{
+				blk->num16_output_file = try_open(params->outFileName, "wb");
+			}
+			else
+			{
+				blk->num16_output_file = try_open(params->outFileName, "w");
+			}
+		}
 	}
 
 	if (params->outType == TY_MEM)

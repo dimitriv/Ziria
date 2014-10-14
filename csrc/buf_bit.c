@@ -344,7 +344,16 @@ void init_putbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 		blk->output_buffer = (unsigned char *)malloc(params->outBufSize);
 		blk->output_entries = params->outBufSize * 8;
 		if (params->outType == TY_FILE)
-			blk->output_file = try_open(params->outFileName, "w");
+		{
+			if (params->outFileMode == MODE_BIN)
+			{
+				blk->output_file = try_open(params->outFileName, "wb");
+			}
+			else
+			{
+				blk->output_file = try_open(params->outFileName, "w");
+			}
+		}
 	}
 
 	if (params->outType == TY_MEM)

@@ -301,7 +301,16 @@ void init_putint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *
 		blk->num_output_buffer = (int32 *)malloc(params->outBufSize * sizeof(int32));
 		blk->num_output_entries = params->outBufSize;
 		if (params->outType == TY_FILE)
-			blk->num_output_file = try_open(params->outFileName, "w");
+		{
+			if (params->outFileMode == MODE_BIN)
+			{
+				blk->num_output_file = try_open(params->outFileName, "wb");
+			}
+			else
+			{
+				blk->num_output_file = try_open(params->outFileName, "w");
+			}
+		}
 	}
 
 	if (params->outType == TY_MEM)
@@ -464,7 +473,16 @@ void init_putcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlo
 		blk->num_output_buffer = (int32 *)malloc(2 * params->outBufSize * sizeof(int32));
 		blk->num_output_entries = params->outBufSize * 2;
 		if (params->outType == TY_FILE)
-			blk->num_output_file = try_open(params->outFileName, "w");
+		{
+			if (params->outFileMode == MODE_BIN)
+			{
+				blk->num_output_file = try_open(params->outFileName, "wb");
+			}
+			else
+			{
+				blk->num_output_file = try_open(params->outFileName, "w");
+			}
+		}
 	}
 
 	if (params->outType == TY_MEM)
