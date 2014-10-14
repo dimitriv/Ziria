@@ -212,7 +212,7 @@ void init_getbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 	{
 		memsize_int sz; 
 		char *filebuffer;
-		try_read_filebuffer(hblk, params->inFileName, &filebuffer, &sz);
+		try_read_filebuffer(hblk, params->inFileName, params->inFileMode, &filebuffer, &sz);
 
 		if (params->inFileMode == MODE_BIN)
 		{ 

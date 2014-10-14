@@ -112,7 +112,7 @@ typedef struct _BlinkParams {
 
 FILE * try_open(char *name, char *mode);
 void try_parse_args(BlinkParams *params, int argc, char ** argv);
-void try_read_filebuffer(HeapContextBlock *hblk, char *filename, char **fb, memsize_int *len);
+void try_read_filebuffer(HeapContextBlock *hblk, char *filename, BlinkFileMode mode, char **fb, memsize_int *len);
 
 typedef struct {
   char * param_str;               // Name of param (for parsing)

@@ -100,7 +100,7 @@ void init_getint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *h
 	{
 		memsize_int sz;
 		char *filebuffer;
-		try_read_filebuffer(hblk, params->inFileName, &filebuffer, &sz);
+		try_read_filebuffer(hblk, params->inFileName, params->inFileMode, &filebuffer, &sz);
 
 		// How many bytes the file buffer has * sizeof should be enough
 		blk->num8_input_buffer = (int8 *)try_alloc_bytes(hblk, sz * sizeof(int8));

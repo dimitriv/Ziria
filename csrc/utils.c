@@ -21,7 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "wpl_alloc.h"
-
+#include "params.h"
 
 void bounds_check(memsize_int siz, memsize_int len, char *msg)
 {
@@ -96,7 +96,7 @@ FILE * try_open(char *filename, char *mode)
 }
 
 /* Read the file as a null-terminated string */
-void try_read_filebuffer(HeapContextBlock *hblk, char *filename, char **fb, memsize_int *len)
+void try_read_filebuffer(HeapContextBlock *hblk, char *filename, BlinkFileMode mode, char **fb, memsize_int *len)
 {
 	char *filebuffer;
 	memsize_int sz;
