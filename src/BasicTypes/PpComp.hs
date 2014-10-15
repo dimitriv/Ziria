@@ -286,10 +286,10 @@ ppCompParams params =
 
 -- TODO: Not sure this makes sense anymore, as it used to print the stuff
 -- in labels?
-ppCompTypedVect :: (Outputable tc, Outputable t) => GComp tc t CTy b -> Doc
+ppCompTypedVect :: GComp CTy Ty a b -> Doc
 ppCompTypedVect x =
   let p1  = ppComp0 ppCompTypedVect False True True $ unComp x
-      cty  = compInfo x
+      cty  = ctComp x
       inty  = inTyOfCTyBase cty
       yldty = yldTyOfCTyBase cty
       arity (TArray (Literal n) _) = show n

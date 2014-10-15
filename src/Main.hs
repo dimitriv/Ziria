@@ -72,17 +72,15 @@ import qualified PassPipeline as PP
 import Orphans
 
 
+data CompiledProgram = CompiledProgram Comp [C.Definition] FilePath
 
-{-
-data CompiledProgram = CompiledProgram (Comp CTy Ty) [C.Definition] FilePath
--}
 
 pprProgInfo :: Comp -> Doc
 pprProgInfo prog =
     (text . show) prog </>
     line <>
     text "type:" </>
-    (text . show . compInfo) prog
+    (text . show . ctComp) prog
 
 outputProgram :: Comp -> FilePath -> IO ()
 outputProgram c fn = do
@@ -90,7 +88,6 @@ outputProgram c fn = do
     hPutDoc outHdl $ pprProgInfo c
     hClose outHdl
 
-{-
 outputCompiledProgram :: CompiledProgram -> IO ()
 outputCompiledProgram (CompiledProgram sc cc fn) = do
     outHdl <- openFile fn WriteMode
@@ -100,7 +97,7 @@ outputCompiledProgram (CompiledProgram sc cc fn) = do
     hPutStr outHdl cHeader
     hPutStr outHdl $ show $ ppr cc
     hClose outHdl
--}
+
 
 main :: IO ()
 main = failOnException $ do
@@ -194,6 +191,9 @@ main = failOnException $ do
     -- for experimentation. Hence I am adding some assertions below to
     -- see when this happens (if at all ...)
     check_vect_cands cands
+-}
+    -- DV: replace this this with the commented code above
+    let cands = [ folded ] 
 
     -- Open files!
     let fnames = outFile : ["v"++show i++"_"++outFile | i <- [0..]]
@@ -222,7 +222,7 @@ main = failOnException $ do
     -- putStrLn "post code generation ..."
 
     mapM_ outputCompiledProgram code_names
--}
+
   where
 {-
     check_vect_cands cands
@@ -243,8 +243,8 @@ main = failOnException $ do
       | otherwise
       = return c
 
-{-
-    runAutoLUTPhase :: DynFlags -> GS.Sym -> Comp CTy Ty -> IO (Comp CTy Ty)
+
+    runAutoLUTPhase :: DynFlags -> GS.Sym -> Comp -> IO Comp
     -- AutoLUTPhase
     runAutoLUTPhase dflags sym c
       | isDynFlagSet dflags AutoLUT
@@ -257,22 +257,24 @@ main = failOnException $ do
       | otherwise
       = return c
 
+{-
     runVectorizePhase :: DynFlags
                       -> GS.Sym
                       -> TyDefEnv
                       -> Env
                       -> CEnv
                       -> TcMState
-                      -> Comp CTy Ty
-                      -> IO [Comp CTy Ty]
+                      -> Comp
+                      -> IO [Comp]
     -- Vectorize Phase
     runVectorizePhase dflags sym tdef_env decl_env cenv st c
       | isDynFlagSet dflags Vectorize
       = runDebugVecM dflags c tdef_env decl_env cenv sym st
       | otherwise
       = return [c]
+-}
 
-    runPipelinePhase :: DynFlags -> GS.Sym -> Comp CTy Ty
+    runPipelinePhase :: DynFlags -> GS.Sym -> Comp
                      -> IO PP.PipelineRetPkg
     -- Pipeline Phase
     runPipelinePhase dflags _ c
@@ -283,8 +285,8 @@ main = failOnException $ do
 
     runPostVectorizePhases :: DynFlags
         -> GS.Sym
-        -> (Comp CTy Ty, FilePath)
-        -> IO (Comp CTy Ty, CompCtxt, [(String, Comp CTy Ty)], [Ty], FilePath)
+        -> (Comp, FilePath)
+        -> IO (Comp, CompCtxt, [(String, Comp)], [Ty], FilePath)
     runPostVectorizePhases dflags sym (c,fn) = do
         verbose dflags $
            text "Result in file:" <+> text fn
@@ -303,7 +305,7 @@ main = failOnException $ do
                             , PP.buf_tys = tys }
           <- runPipelinePhase dflags sym lc
         return (lc, comp_ctxt, comp_threads,tys,fn)
--}
+
 
 failOnError :: Show a => IO (Either a b) -> IO b
 failOnError m = do
