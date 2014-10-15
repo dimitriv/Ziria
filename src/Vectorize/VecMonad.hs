@@ -311,8 +311,7 @@ mkVectTy ty wdth
     | otherwise
     = TArray (Literal wdth) ty
 
-
-{- When is a type vectorizable -}
+-- | When is a type vectorizable
 isVectorizable :: Ty -> Bool
 isVectorizable ty
     | isScalarTy ty = True
