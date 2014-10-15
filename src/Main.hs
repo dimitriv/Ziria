@@ -53,7 +53,9 @@ import qualified BlinkParseComp as NewParser
 import qualified GenSym         as GS
 import qualified Outputable -- Qualified so that we don't clash with Mainland
 
-{-
+import CgOpt 
+
+
 import AutoLUT
 import CardinalityAnalysis
 import CgHeader
@@ -65,10 +67,10 @@ import CgProgram ( codeGenProgram )
 import qualified PassPipeline as PP
 
 
-import Vectorize
+-- import Vectorize
 import Orphans
 
--}
+
 
 {-
 data CompiledProgram = CompiledProgram (Comp CTy Ty) [C.Definition] FilePath

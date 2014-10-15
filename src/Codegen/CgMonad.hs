@@ -57,11 +57,17 @@ module CgMonad
   , getNames
   , setNames
 
-  , freshName    -- new Ziria-level EId
-  , freshVar     -- new C-level var (just a string)
-  , freshLabel   -- new C-level block id (just a string)
+  , freshName          -- new Ziria-level EId (typed name)
+  , freshVar           -- new C-level var (just a string)
+  , CLabel, freshLabel -- new C-level block id
 
+    -- TODO: Get rid of the CLabel id management 
+    -- through nameStack ASAP ncluding the next 
+    -- three functions
+  , nextName
+  , pushName 
   , printNames
+
 
   , getLUTHashes
   , setLUTHashes
@@ -325,7 +331,7 @@ data LUTGenInfo
   deriving Show
 
 data CgState = CgState {
-      nameStack :: [GName CTy]
+      nameStack :: [CLabel] 
 
       -- | Number of heap-allocated variables
     , numAllocs :: Int
@@ -527,11 +533,23 @@ genSym prefix = do
     str       <- liftIO $ GS.genSymStr sym
     return $ prefix ++ str
 
-getNames :: Cg [GName CTy]
+
+-- TODO: remove this nameStack management of component ids!
+getNames :: Cg [CLabel]
 getNames = gets nameStack
 
-setNames :: [GName CTy] -> Cg ()
+setNames :: [CLabel] -> Cg ()
 setNames names' = modify $ \s -> s { nameStack = names' }
+
+nextName :: String -> Cg CLabel
+nextName prefix = do
+  names <- getNames
+  case names of
+    [] -> genSym prefix
+    nm : names' -> setNames names' >> return nm
+
+pushName :: CLabel -> Cg ()
+pushName nm = modify $ \s -> s { nameStack = nm : nameStack s }
 
 
 getLUTHashes :: Cg [(Int,LUTGenInfo)]
@@ -559,7 +577,9 @@ freshName prefix ty
        ; return $ toName s' Nothing ty
        }
 
-freshLabel :: String -> Cg String
+type CLabel = String
+
+freshLabel :: String -> Cg CLabel
 -- A new C-level label (e.g. block label)
 freshLabel prefix 
   = genSym prefix
@@ -573,7 +593,7 @@ freshVar prefix
 printNames :: Cg ()
 printNames = do
   names <- getNames
-  liftIO $ mapM_ putStrLn (map name names)
+  liftIO $ mapM_ putStrLn names
 
 printState :: Cg ()
 printState = do

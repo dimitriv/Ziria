@@ -40,6 +40,7 @@ import CgExpr
 import CgLUT
 
 import CgOpt
+import CtComp
 
 import qualified CgSetupThreads as ST
 import qualified PassPipeline as PP
@@ -80,7 +81,7 @@ codeGenContexts
        }
 
 codeGenGlobals :: DynFlags
-               -> [(Name,Ty,Maybe (Exp Ty))]
+               -> [(EId, Maybe Exp)]
                -> Ty -- input type  (must be ext buffer!)
                -> Ty -- output type (must be ext buffer!)
                -> Cg [C.Stm]
@@ -124,10 +125,10 @@ codeGenCompilerGlobals tid tickHdl procHdl mtv ta tb = do
 
 codeGenThread :: DynFlags
               -> String                     -- thread id
-              -> Comp CTy Ty                -- computation to be compiled
+              -> Comp                -- computation to be compiled
               -> Cg ()
 codeGenThread dflags tid c = do
-    (maybe_tv, ta, tb) <- checkCompType (compInfo c)
+    (maybe_tv, ta, tb) <- checkCompType (ctComp c)
     (bta, btb) <- checkInOutFiles ta tb
     withThreadId tid $ do
         mkRuntime (Just ((getName dflags) ++ tid)) $ do
@@ -154,9 +155,9 @@ codeGenThread dflags tid c = do
 
 
 codeGenProgram :: DynFlags                       -- Flags
-               -> [(Name,Ty,Maybe (Exp Ty))]     -- Globals
+               -> [(EId,Maybe Exp)]              -- Globals
                -> CompCtxt                       -- Context
-               -> [(PP.ThreadId, Comp CTy Ty)]   -- Threads
+               -> [(PP.ThreadId, Comp)]   -- Threads
                -> [Ty]                           -- Buftys (Between threads)
                -> (Ty,Ty)                        -- Main input and output type
                -> Cg ()
@@ -164,7 +165,7 @@ codeGenProgram dflags globals shared_ctxt
                tid_cs bufTys (in_ty,yld_ty)
   = withModuleName module_name $
     do { initstms <- codeGenGlobals dflags globals in_ty yld_ty
-       ; extendVarEnv [(nm,(ty,[cexp|$id:(name nm)|])) | (nm,ty,_) <- globals] $
+       ; extendVarEnv [(nm,[cexp|$id:(name nm)|]) | (nm,_) <- globals] $
          do { (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
                 do { forM tid_cs $ \(tid,c) -> codeGenThread dflags tid c
                    ; if pipeline_flag then

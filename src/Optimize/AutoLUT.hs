@@ -35,14 +35,14 @@ import Data.Map (Map)
 import Data.Monoid
 import Text.PrettyPrint.Mainland
 
-runAutoLUT :: forall a . DynFlags -> Sym -> Comp a Ty -> IO (Comp a Ty)
+runAutoLUT :: DynFlags -> Sym -> Comp -> IO Comp
 runAutoLUT dflags _ c = autolutC c
   where
-    autolutC :: Comp a Ty -> IO (Comp a Ty)
+    autolutC :: Comp -> IO Comp
     autolutC (MkComp c loc inf) =
         MkComp <$> go c <*> pure loc <*> pure inf
       where
-        go :: Comp0 a Ty -> IO (Comp0 a Ty)
+        go :: Comp0 -> IO Comp0
         go c@(Var {}) =
             pure c
 
@@ -62,15 +62,15 @@ runAutoLUT dflags _ c = autolutC c
             LetE v fi <$> autolutE e1 <*> autolutC c2
 
         -- CL
-        go (LetERef v t (Just e1) c1) =
+        go (LetERef v (Just e1) c1) =
             autolutE e1 >>= \e1' ->
-            LetERef v t (Just e1') <$> autolutC c1
+            LetERef v (Just e1') <$> autolutC c1
 
-        go (LetERef v t Nothing c1) =
-            LetERef v t Nothing <$> autolutC c1
+        go (LetERef v Nothing c1) =
+            LetERef v Nothing <$> autolutC c1
 
-        go (LetHeader v f c) =
-            LetHeader v <$> autolutF f <*> autolutC c
+        go (LetHeader f c) =
+            LetHeader <$> autolutF f <*> autolutC c
         --
 
         go (LetStruct sdef c) =
@@ -82,14 +82,14 @@ runAutoLUT dflags _ c = autolutC c
         go (Call n es) =
             Call n <$> mapM autolutCallArg es
 
-        go (Emit e) =
-            Emit <$> autolutE e
+        go (Emit t e) =
+            Emit t <$> autolutE e
 
-        go (Emits e) =
-            Emits <$> autolutE e
+        go (Emits t e) =
+            Emits t <$> autolutE e
 
-        go (Return fi e) =
-            Return fi <$> autolutE e
+        go (Return t1 t2 fi e) =
+            Return t1 t2 fi <$> autolutE e
 
         go (Interleave c1 c2) =
             Interleave <$> autolutC c1 <*> autolutC c2
@@ -97,11 +97,11 @@ runAutoLUT dflags _ c = autolutC c
         go (Branch e c1 c2) =
             Branch <$> autolutE e <*> autolutC c1 <*> autolutC c2
 
-        go Take1 =
-            pure Take1
+        go (Take1 t1 t2 ) =
+            pure (Take1 t1 t2)
 
-        go (Take e) =
-            Take <$> autolutE e
+        go (Take t1 t2 n) =
+            pure (Take t1 t2 n)
 
         go (Until e c) =
             Until <$> autolutE e <*> autolutC c
@@ -121,8 +121,8 @@ runAutoLUT dflags _ c = autolutC c
         go (Map p nm) =
             pure (Map p nm)
 
-        go (Filter e) =
-            Filter <$> autolutE e
+        go (Filter f) =
+            pure (Filter f) 
 
         go (ReadSrc mty) =
             pure (ReadSrc mty)
@@ -130,27 +130,27 @@ runAutoLUT dflags _ c = autolutC c
         go (WriteSnk mty) =
             pure (WriteSnk mty)
 
-        go (ReadInternal buf tp) =
-            pure (ReadInternal buf tp)
+        go (ReadInternal t buf tp) =
+            pure (ReadInternal t buf tp)
 
-        go (WriteInternal buf) =
-            pure (WriteInternal buf)
+        go (WriteInternal t buf) =
+            pure (WriteInternal t buf)
 
         go (Standalone c) =
             Standalone <$> autolutC c
 
         go c0@(Mitigate {}) = pure c0
 
-    autolutCallArg :: CallArg (Exp Ty) (Comp a Ty)
-                   -> IO (CallArg (Exp Ty) (Comp a Ty))
+    autolutCallArg :: CallArg Exp Comp
+                   -> IO (CallArg Exp Comp)
     autolutCallArg (CAExp e)  = autolutE e >>= \e' -> return (CAExp e')
     autolutCallArg (CAComp c) = autolutC c >>= \c' -> return (CAComp c')
 
-    autolutE :: Exp Ty -> IO (Exp Ty)
+    autolutE :: Exp -> IO Exp
     autolutE e_ = autoE e_
 
       where
-        ranges :: Map Name Range
+        ranges :: Map EId Range
         ranges = maybe Map.empty id (varRanges e_)
 
         autoE e0@(MkExp _ loc inf) | Right True <- shouldLUT dflags [] ranges e0 = do
@@ -163,7 +163,7 @@ runAutoLUT dflags _ c = autolutC c
         autoE e0@(MkExp e loc inf)
            = MkExp <$> go e <*> pure loc <*> pure inf
           where
-            go :: Exp0 Ty -> IO (Exp0 Ty)
+            go :: Exp0 -> IO Exp0
             go e@(EVal {})    = pure e
             go e@(EValArr {}) = pure e
             go e@(EVar {})    = pure e
@@ -214,19 +214,19 @@ runAutoLUT dflags _ c = autolutC c
             go (ELet v fi e1 e2) =
                 ELet v fi <$> autoE e1 <*> autoE e2
 
-            go (ELetRef v t (Just e1) e2) =
+            go (ELetRef v (Just e1) e2) =
                 autoE e1 >>= \e1' ->
-                ELetRef v t (Just e1') <$> autoE e2
+                ELetRef v (Just e1') <$> autoE e2
 
-            go (ELetRef v t Nothing e2) =
-                ELetRef v t Nothing <$> autoE e2
+            go (ELetRef v Nothing e2) =
+                ELetRef v Nothing <$> autoE e2
 
 
             go (ESeq e1 e2) =
                 ESeq <$> autoE e1 <*> autoE e2
 
             go (ECall f es) =
-                ECall <$> autoE f <*> mapM autoE es
+                ECall f <$> mapM autoE es
 
             go (EIf e1 e2 e3) =
                 EIf <$> autoE e1 <*> autoE e2 <*> autoE e3
@@ -234,7 +234,7 @@ runAutoLUT dflags _ c = autolutC c
             go (EPrint nl e) =
                 EPrint nl <$> autoE e
 
-            go (EError str) = pure e
+            go (EError _t str) = pure e
 
             go (ELUT _ e) =
                 pure $ ELUT ranges e
@@ -246,11 +246,11 @@ runAutoLUT dflags _ c = autolutC c
             go (EStruct tn tfs) = pure e
             go (EProj _ fn)     = pure e
 
-    autolutF :: Fun Ty -> IO (Fun Ty)
+    autolutF :: Fun -> IO Fun
     autolutF f0@(MkFun f loc inf) =
         MkFun <$> go f <*> pure loc <*> pure inf
       where
-        go :: Fun0 Ty -> IO (Fun0 Ty)
+        go :: Fun0 -> IO Fun0
         go (MkFunDefined v params locals body@(MkExp _ loc inf))
           | Right True <- shouldLUT dflags locals' ranges body = do
             verbose dflags $ text "Function autolutted:" </> nest 4 (ppr f0 <> line) <>
@@ -260,9 +260,9 @@ runAutoLUT dflags _ c = autolutC c
             pure $ MkFunDefined v params locals (MkExp (ELUT ranges body) loc inf)
 
           where
-            locals' = [(v,ty) | (v,ty,_) <- locals]
+            locals' = [v | (v,_) <- locals]
 
-            ranges :: Map Name Range
+            ranges :: Map EId Range
             ranges = maybe Map.empty id (varRanges body)
 
         go (MkFunDefined v params locals body) =

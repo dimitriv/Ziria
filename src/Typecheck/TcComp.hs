@@ -103,6 +103,7 @@ tyCheckComp c
                 }
 
            Seq c1 c2 ->
+             -- TODO: potentially enforce that c1 must return ()?
              do { sym <- genSym "_x"
                 ; let nm = toName sym Nothing Nothing
                 ; tyCheckComp $ cBindMany cloc c1 [(nm, c2)]

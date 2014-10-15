@@ -29,6 +29,11 @@ import Rebindables
 import Opts
 import AstExpr
 import AstComp
+import AstUnlabelled
+
+import CtExpr
+import CtComp
+
 import PpComp
 import PpExpr
 import qualified GenSym as GS
@@ -67,46 +72,36 @@ import CgFun
 ------------------------------------------------------------------------------
 
 compGenBind :: DynFlags
-            -> Name
-            -> [(Name,CallArg Ty CTy0)]
-            -> [(Name,Ty,Maybe (Exp Ty))]
-            -> Comp CTy Ty
+            -> GName CTy 
+            -> [GName (CallArg Ty CTy)]
+            -> [(EId,Maybe Exp)]
+            -> Comp
             -> CompFunGen
 compGenBind dflags f params locals c1 args k = do
     appName <- nextName $ "__" ++ (name f) ++ "_"
-    let appId = name appName
+    let appId = appName
 
     -- The environment of locals
-    let localEnv = [(nm,(ty,[cexp|$id:(name nm_fresh)|]))
-                        | (nm,ty,_) <- locals
+    let localEnv = [(nm, [cexp|$id:(name nm_fresh)|])
+                        | (nm,_) <- locals
                         , let nm_fresh = nm { name = appId ++ name nm }]
 
     -- A freshened version of locals that uses the new ids!
     let locals'
-          = [(nm { name = appId ++ name nm },ty,me) | (nm,ty,me) <- locals]
+          = [(nm { name = appId ++ name nm },me) | (nm,me) <- locals]
 
 
-
-    -- Split into computation params/args and expression params/args
-    let split_params [] [] = ([],[],[],[])
-        split_params ((nm,CAExp t):ps1) ((CAExp e):args1)
-            = let (eps1,eargs1,cps1,cargs1) = split_params ps1 args1
-              in ((nm,t):eps1, e:eargs1,cps1,cargs1)
-        split_params ((nm,CAComp ct):ps1) ((CAComp ce):args1)
-            = let (eps1,eargs1,cps1,cargs1) = split_params ps1 args1
-              in (eps1,eargs1,(nm,ct):cps1,ce:cargs1)
-        split_params _ _ = error "BUG: compGenBind!"
-
-    let (eparams,eargs,cparams,cargs) = split_params params args
+    let (eparams,cparams) = partitionParams params
+    let (eargs, cargs)    = partitionCallArgs args
 
     (args_decls, args_stms, code_args) <- inNewBlock $
                                           mapM (codeGenExp dflags) eargs
 
 
-    let eparamsEnv = zipWith (\(nm,ty) cd -> (nm ,(ty,cd))) eparams code_args
+    let eparamsEnv = zip eparams code_args
 
-    let new_c1 = foldl (\xc ((nm,ct),ce) ->
-                  cLet (compLoc c1) (compInfo c1) nm ce xc) c1 (zip cparams cargs)
+    let new_c1 = foldl (\xc (nm,ce) ->
+                  cLet (compLoc c1) nm ce xc) c1 (zip cparams cargs)
 
     pushName appName
 
@@ -126,7 +121,7 @@ compGenBind dflags f params locals c1 args k = do
                     }
 
 mkRepeat :: DynFlags
-         -> Comp CTy Ty
+         -> Comp
          -> CompInfo
          -> CompKont
          -> Cg CompInfo
@@ -143,7 +138,7 @@ mkRepeat dflags c cinfo k =
 mkUntil :: DynFlags
         -> Cg C.Exp
         -> Cg ()
-        -> Comp CTy Ty
+        -> Comp
         -> CompInfo
         -> CompKont
         -> Cg CompInfo
@@ -163,8 +158,8 @@ mkUntil dflags mtest mfinal c cinfo k =
 
 mkWhile :: DynFlags
         -> C.Stm       -- Initialization
-        -> Exp Ty      -- Test
-        -> Comp CTy Ty -- Body
+        -> Exp         -- Test
+        -> Comp -- Body
         -> C.Stm       -- Update
         -> CompInfo    -- Self
         -> CompKont    -- Outer continuation
@@ -174,10 +169,14 @@ mkWhile dflags minit etest cbody mfinal cinfo k
   = mkBranch dflags etest cbody k' cretunit k'' csp
   where
     csp = compLoc cbody
-    cty = compInfo cbody
+    cty = ctComp cbody
     k'  = k { kontDone = doneKont }
     k'' = k { kontDone = doneKont' k }
-    cretunit = MkComp (Return AutoInline (MkExp (EVal VUnit) csp TUnit)) csp cty
+    cretunit = cReturn csp (inTyOfCTyBase cty) 
+                           (yldTyOfCTyBase cty) AutoInline $ 
+               eVal csp TUnit VUnit
+
+    -- MkComp (Return AutoInline (MkExp (EVal VUnit) csp TUnit)) csp cty
     doneKont = do appendStmt mfinal
                   emitCode (compGenInit cinfo)
                   if canTick cinfo
@@ -190,21 +189,21 @@ mkWhile dflags minit etest cbody mfinal cinfo k
 
 
 mkBranch :: DynFlags
-         -> Exp Ty
-         -> Comp CTy Ty  -> CompKont  -- we give each branch his own continuation
-         -> Comp CTy Ty  -> CompKont  -- we give each branch his own continuation
+         -> Exp
+         -> Comp  -> CompKont  -- we give each branch his own continuation
+         -> Comp  -> CompKont  -- we give each branch his own continuation
          -> Maybe SourcePos
          -> Cg CompInfo
 mkBranch dflags e c1 k1 c2 k2 csp
   = do { branchName <- nextName ("__branch_" ++ (getLnNumInStr csp))
-       ; let branch_id = name branchName
+       ; let branch_id = branchName
 
        ; c1info <- codeGenCompTop dflags c1 k1
        ; c2info <- codeGenCompTop dflags c2 k2
        ; (edecls,estmts,ce) <- inNewBlock $ codeGenExp dflags e
 
-       ; branch_var_name <- freshName ("__branch_var_" ++ (getLnNumInStr csp))
-       ; let branch_var = name branch_var_name
+       ; branch_var_name <- freshVar ("__branch_var_" ++ (getLnNumInStr csp))
+       ; let branch_var = branch_var_name
 
        ; appendDecl =<< codeGenDeclVolGroup_init branch_var tint [cexp|0|]
         -- The init function for branch determines the value of
@@ -306,7 +305,7 @@ codeGenFixpoint f k = do
 -- | Read/Write to thread comm. buffers
 ------------------------------------------------------------------------------
 
-readCode :: Comp CTy Ty
+readCode :: Comp
          -> Maybe SourcePos
          -> String
          -> ReadType
@@ -314,8 +313,8 @@ readCode :: Comp CTy Ty
          -> Cg CompInfo
 readCode comp csp buf_id read_type k = do
     rdSrcName <- nextName ("__readsrc_" ++ getLnNumInStr csp)
-    let prefix = name rdSrcName
-    let (CTBase cty0) = compInfo comp
+    let prefix = rdSrcName
+    let (CTBase cty0) = ctComp comp
 
     let yldTy = yldTyOfCTy cty0
     let (bufget_suffix, getLen) = getTyPutGetInfo yldTy
@@ -329,12 +328,12 @@ readCode comp csp buf_id read_type k = do
         buf_id_as_int = read buf_id
 
     yldTmp <- nextName ("__yldarr_" ++ getLnNumInStr csp)
-    let yldTmpName = name yldTmp
+    let yldTmpName = yldTmp
 
     cgIO $ putStrLn $ "readCode! (before): " ++ show yldTy
 
     is_struct_ptr <- isStructPtrType yldTy
-    let yldty_is_pointer = isArrTy yldTy || is_struct_ptr
+    let yldty_is_pointer = isArrayTy yldTy || is_struct_ptr
 
     cgIO $ putStrLn "readCode! (after) "
 
@@ -388,15 +387,15 @@ readCode comp csp buf_id read_type k = do
 
     return (mkCompInfo prefix True)
 
-writeCode :: Comp CTy Ty
+writeCode :: Comp
           -> Maybe SourcePos
           -> String
           -> CompKont
           -> Cg CompInfo
 writeCode comp csp buf_id k = do
-    wrSnkName <- nextName ("__writesrc_" ++ (getLnNumInStr csp))
-    let prefix = name wrSnkName
-        CTBase cty0 = compInfo comp
+    wrSnkName <- nextName ("__writesnk_" ++ (getLnNumInStr csp))
+    let prefix = wrSnkName
+        CTBase cty0 = ctComp comp
         (bufput_suffix, putLen) = getTyPutGetInfo $ yldTyOfCTy cty0
 
     -- Write using the [ts_put] family of functions instead of [buf_put*]
@@ -409,7 +408,7 @@ writeCode comp csp buf_id k = do
 
     let inTy = inTyOfCTy cty0
     is_struct_ptr <- isStructPtrType inTy
-    let inty_is_pointer = isArrTy inTy || is_struct_ptr
+    let inty_is_pointer = isArrayTy inTy || is_struct_ptr
 
     -- cgIO $ putStrLn $ "writeCode (after)"
 
@@ -444,7 +443,7 @@ writeCode comp csp buf_id k = do
     return (mkCompInfo prefix True)
 
 codeGenCompTop :: DynFlags
-               -> Comp CTy Ty
+               -> Comp
                -> CompKont
                -> Cg CompInfo
 codeGenCompTop dflags comp k = do
@@ -459,19 +458,19 @@ codeGenCompTop dflags comp k = do
 ------------------------------------------------------------------------------
 
 codeGenComp :: DynFlags
-            -> Comp CTy Ty
+            -> Comp
             -> CompKont
             -> Cg CompInfo
 codeGenComp dflags comp k =
     go comp
   where
-    go :: Comp CTy Ty -> Cg CompInfo
+    go :: Comp -> Cg CompInfo
 
 
-    go (MkComp (Mitigate bty i1 i2) csp (CTBase cty0)) = do
+    go (MkComp (Mitigate bty i1 i2) csp ()) = do
         -- Assume i1 `mod` i2 = 0
         mitName <- nextName ("__mit_" ++ (getLnNumInStr csp))
-        let prefix = name mitName
+        let prefix = mitName
         let ih = inHdl k
         let yh = yieldHdl k
         let mit_st = prefix ++ "_mit_state"
@@ -486,7 +485,7 @@ codeGenComp dflags comp k =
                   ; appendDecl =<<
                        codeGenDeclVolGroup_init mit_st tint [cexp|$int:d|]
 
-                  ; let arrty = TArr (Literal i1) bty
+                  ; let arrty = TArray (Literal i1) bty
                         leninfo = if i2 == 1 then LISingleton else LILength i2
 
                   ; appendLabeledBlock (tickNmOf prefix) $ do
@@ -527,13 +526,13 @@ codeGenComp dflags comp k =
                   ; appendDecl =<<
                        codeGenDeclVolGroup_init mit_st tint [cexp|0|]
                   ; appendDecl =<<
-                       codeGenDeclVolGroup buf (TArr (Literal i2) bty)
+                       codeGenDeclVolGroup buf (TArray (Literal i2) bty)
 
                     -- trivial tick()
                   ; appendLabeledBlock (tickNmOf prefix) $ do
                            kontConsume k
 
-                  ; let arrty   = TArr (Literal i2) bty
+                  ; let arrty   = TArray (Literal i2) bty
                         leninfo = if i1 == 1 then LISingleton else LILength i1
 
                   ; appendLabeledBlock (processNmOf prefix) $ do
@@ -554,10 +553,10 @@ codeGenComp dflags comp k =
 
                   }
 
-    go (MkComp (Map _p nm) csp (CTBase cty0)) = do
+    go (MkComp (Map _p nm) csp ()) = do
 
         mapName <- nextName ("__map_" ++ (getLnNumInStr csp))
-        let prefix = name mapName
+        let prefix = mapName
 
         let ih = inHdl k
         let yh = yieldHdl k
@@ -567,14 +566,15 @@ codeGenComp dflags comp k =
         -- same way as the in-value. This is not entirely satisfactory, admittedly.
 
         let invalloc  = compLoc comp
-            invalty   = inTyOfCTyBase (compInfo comp)
+            invalty   = inTyOfCTyBase (ctComp comp)
         let invalname = MkName { name    = inValOf ih
                                , uniqId  = inValOf ih
-                               , mbtype  = Just invalty
+                               , nameTyp = invalty
                                , nameLoc = invalloc }
-            invalarg  = MkExp (EVar invalname) invalloc invalty
-        let ecall     = MkExp (ECall (MkExp (EVar nm) invalloc (TArrow {})) [invalarg])
-                        invalloc (yldTyOfCTyBase (compInfo comp))
+            invalarg  = eVar invalloc invalname
+        let ecall     = eCall invalloc nm [invalarg]
+-- MkExp (ECall (MkExp (EVar nm) invalloc (TArrow {})) [invalarg])
+--                         invalloc (yldTyOfCTyBase (ctComp comp))
 
         -- For tick, we are supposed to return consume so we simply emit the
         -- kontConsume code, see Note [kontConsume]
@@ -585,19 +585,19 @@ codeGenComp dflags comp k =
             kontConsume k
 
         appendLabeledBlock (processNmOf prefix) $ do
-            cresult <- extendVarEnv [(invalname, (invalty,[cexp|$id:(name invalname)|]))] $
+            cresult <- extendVarEnv [(invalname, [cexp|$id:(name invalname)|])] $
                        codeGenExp dflags ecall
             appendStmt [cstm|$id:(yldValOf yh) = $cresult;|]
             kontYield k
 
         return (mkCompInfo prefix False)
 
-    go (MkComp (Emits e) csp (CTBase cty0)) = do
+    go c@(MkComp (Emits _ e) csp ()) = do
         emitName <- nextName ("__emits_"  ++ (getLnNumInStr csp))
 
-        let prefix = name emitName
+        let prefix   = emitName
         let stateVar = prefix ++ "_state"
-        let expVar = prefix ++ "_exp"
+        let expVar   = prefix ++ "_exp"
 
         let yh = yieldHdl k
         let dh = doneHdl k
@@ -605,14 +605,14 @@ codeGenComp dflags comp k =
         -- liftIO $ putStrLn $ "info e   = " ++ show (info e)
         -- liftIO $ putStrLn $ "actual e = " ++ show e
 
-        n <- checkArrayIsLiteral (info e)
+        n <- checkArrayIsLiteral (ctExp e)
 
         -- NB: We need to copy the emitted array to local storage here since the
         -- array data is created in a local variable belonging to a function and
         -- we cannot guarantee it will stay there by the time emits is done.
 
         appendDecl =<< codeGenDeclVolGroup_init stateVar tint [cexp|0|]
-        appendDecl =<< codeGenDeclGroup expVar (info e)
+        appendDecl =<< codeGenDeclGroup expVar (ctExp e)
 
 
         appendStmt [cstm|ORIGIN($string:(show csp)); |]
@@ -622,12 +622,12 @@ codeGenComp dflags comp k =
         appendLabeledBlock (tickNmOf prefix) $ do
             if [cexp|$id:stateVar == 0|]
               then do ce <- codeGenExp dflags e
-                      assignByVal (info e) (info e) [cexp|$id:expVar|] ce
+                      assignByVal (ctExp e) (ctExp e) [cexp|$id:expVar|] ce
               else return ()
 
             if [cexp|$id:stateVar < $int:n|]
-              then do ce <- codeGenArrRead dflags (info e) [cexp|$id:expVar|] [cexp|$id:stateVar|] LISingleton
-                      let ty = yldTyOfCTy cty0
+              then do ce <- codeGenArrRead dflags (ctExp e) [cexp|$id:expVar|] [cexp|$id:stateVar|] LISingleton
+                      let ty = yldTyOfCTyBase (ctComp c)
                       assignByVal ty ty [cexp|$id:(yldValOf yh)|] ce
                       appendStmts [cstms|$id:globalWhatIs = YIELD;
                                          ++$id:stateVar;
@@ -647,7 +647,7 @@ codeGenComp dflags comp k =
         return (mkCompInfo prefix True) {compGenInit = codeStmt [cstm|$id:stateVar = 0;|]}
       where
         checkArrayIsLiteral :: Ty -> Cg Int
-        checkArrayIsLiteral (TArr (Literal n) _) =
+        checkArrayIsLiteral (TArray (Literal n) _) =
             return n
         checkArrayIsLiteral _ =
             fail $ "CodeGen error with emits, this should have been picked by the type checker"
@@ -655,8 +655,8 @@ codeGenComp dflags comp k =
     go (MkComp (WriteSnk {}) csp _) = do
         -- NB: ignore the optional type annotation of WriteSnk but use the type of the computation instead.
         wrSnkName <- nextName ("__writesnk_" ++ (getLnNumInStr csp))
-        let prefix = name wrSnkName
-        let (CTBase cty0) = compInfo comp
+        let prefix = wrSnkName
+        let (CTBase cty0) = ctComp comp
 
         let (bufput_suffix, putLen) = getTyPutGetInfo $ inTyOfCTy cty0
         let bufPutF = "buf_put" ++ bufput_suffix
@@ -673,7 +673,7 @@ codeGenComp dflags comp k =
         global_params <- getGlobalParams
 
         appendLabeledBlock (processNmOf prefix) $
-            if isArrTy (inTyOfCTy cty0) then
+            if isArrayTy (inTyOfCTy cty0) then
                 appendStmts [cstms|$id:bufPutF($id:global_params, $id:buf_context, $id:(inValOf ih), $putLen);
                                    $id:globalWhatIs = SKIP;
                                    goto l_IMMEDIATE;
@@ -689,8 +689,8 @@ codeGenComp dflags comp k =
     go (MkComp (ReadSrc {}) csp _) = do
         -- NB: ignore the optional type annotation of WriteSnk but use the type of the computation instead.
         rdSrcName <- nextName ("__readsrc_" ++ (getLnNumInStr csp))
-        let prefix = name rdSrcName
-        let (CTBase cty0) = compInfo comp
+        let prefix = rdSrcName
+        let (CTBase cty0) = ctComp comp
         let yldTy = yldTyOfCTy cty0;
         let (bufget_suffix, getLen) = getTyPutGetInfo $ yldTy
         let bufGetF = "buf_get" ++ bufget_suffix
@@ -699,13 +699,13 @@ codeGenComp dflags comp k =
         let yh = yieldHdl k
 
         -- Allocate our own storage
-
+        -- DV: nextName!?
         yldTmp <- nextName ("__yldarr_" ++ getLnNumInStr csp)
-        let yldTmpName = name yldTmp
+        let yldTmpName = yldTmp
 
         appendStmt [cstm|ORIGIN($string:(show csp)); |]
 
-        if isArrTy yldTy then
+        if isArrayTy yldTy then
           -- Allocate a new array buffer
           do appendDecl =<< codeGenDeclGroup yldTmpName yldTy
              appendLabeledBlock (tickNmOf prefix) $ do
@@ -742,16 +742,16 @@ codeGenComp dflags comp k =
 
 
     -- Write to an internal ThreadSeparator buffer [buf_id].
-    go (MkComp (WriteInternal buf_id) csp his_ty)
+    go (MkComp (WriteInternal _ buf_id) csp ())
       = writeCode comp csp buf_id k
 
 
-    go (MkComp (ReadInternal buf_id tp) csp _) =
+    go (MkComp (ReadInternal _ buf_id tp) csp ()) =
         readCode comp csp buf_id tp k
 
-    go (MkComp (Emit e) csp (CTBase cty0)) = do
+    go (MkComp (Emit _ e) csp ()) = do
         emitName <- nextName ("__emit_" ++ (getLnNumInStr csp))
-        let prefix = name emitName
+        let prefix   = emitName
         let stateVar = prefix ++ "_state"
 
         let yh = yieldHdl k
@@ -804,34 +804,35 @@ codeGenComp dflags comp k =
                                        compGenInit cinfo }
 
     -- CL
-    go (MkComp (LetERef x ty y c2) csp _) = do
-        (cinfo,stms) <- codeGenSharedCtxt dflags False (CLetERef csp x ty y Hole) $
+    go (MkComp (LetERef x y c2) csp _) = do
+        (cinfo,stms) <- codeGenSharedCtxt dflags False (CLetERef csp x y Hole) $
                         codeGenCompTop dflags c2 k
         return $ cinfo { compGenInit = codeStmts stms `mappend`
                                        compGenInit cinfo }
 
-    go (MkComp (LetHeader f fdef c1) csp _)
-      = codeGenSharedCtxt_ dflags False (CLetHeader csp f fdef Hole) $
+    go (MkComp (LetHeader fdef c1) csp _)
+      = codeGenSharedCtxt_ dflags False (CLetHeader csp fdef Hole) $
         codeGenCompTop dflags c1 k
     --
-    go (MkComp (LetFunC f params locals c1 c2) csp _) =
+    go (MkComp (LetFunC f params locals c1 c2) csp ()) =
         codeGenSharedCtxt_ dflags False (CLetFunC csp f params locals c1 Hole) $
         codeGenCompTop dflags c2 k
 
-    go (MkComp (BindMany c1 []) csp _) =
+    go (MkComp (BindMany c1 []) csp ()) =
         codeGenCompTop dflags c1 k
 
-    go cb@(MkComp (BindMany c1 nms_cs) csp (CTBase cty0)) = do
-        c1Name <- freshName ("__bnd_fst_" ++ (getLnNumInStr csp))
-        let c1id = name c1Name
+    go cb@(MkComp (BindMany c1 nms_cs) csp ()) = do
+        let (CTBase cty0) = ctComp cb 
+        c1Name <- freshLabel ("__bnd_fst_" ++ (getLnNumInStr csp))
+        let c1id = c1Name
         bmName <- nextName ("__bind_" ++ (getLnNumInStr csp))
-        let bmNamePref = name bmName
+        let bmNamePref = bmName
 
         let yh = yieldHdl k
         let dh = doneHdl k
 
-        branch_var_name <- freshName ("__branch_var_" ++ (getLnNumInStr csp))
-        let branch_var = name branch_var_name
+        branch_var_name <- freshVar ("__branch_var_" ++ (getLnNumInStr csp))
+        let branch_var = branch_var_name
 
         appendDecl =<< codeGenDeclVolGroup_init branch_var tint [cexp|0|]
 
@@ -854,30 +855,30 @@ codeGenComp dflags comp k =
         -- [num_branches], in order to divert control to the next block in the
         -- Bind chain.
 
-        let go :: String -> Int -> (Comp CTy Ty, Name)
-               -> [(Name, Comp CTy Ty)] -> Cg [CompInfo]
+        let go :: String -> Int -> (Comp, CLabel)
+               -> [(EId, Comp)] -> Cg [CompInfo]
             go branch_var num_branches (c1,c1Name) ((nm,c2):rest) = do
-                let (CTBase cty1) = compInfo c1
+                let (CTBase cty1) = ctComp c1
                 let (Just vTy) = doneTyOfCTy cty1
                 let is_take (Take1 {}) = True
                     is_take _          = False
 
-                new_dh <- freshName ("__dv_tmp_"  ++ (getLnNumInStr csp))
+                new_dh <- freshName ("__dv_tmp_"  ++ (getLnNumInStr csp)) vTy
                 let new_dhval = doneValOf $ name new_dh
                 appendDecl =<<
                     -- Note [Take Optimization]
                     -- If the component is a Take1 then we can simply make
                     -- sure that we return the address of the in value, and
                     -- hence we don't have to declare storage for doneVal.
-                    if is_take (unComp c1) && isArrTy vTy then
+                    if is_take (unComp c1) && isArrayTy vTy then
                        return [cdecl| $ty:(codeGenTyAlg vTy) $id:new_dhval;|]
                     else
                        codeGenDeclGroup new_dhval vTy
 
 
                 let ce = [cexp|$id:new_dhval |]
-                c2Name <- freshName ("__bnd_rest_" ++ (getLnNumInStr csp))
-                rest_info <- extendVarEnv [(nm,(vTy,ce))] $
+                c2Name <- freshLabel ("__bnd_rest_" ++ (getLnNumInStr csp))
+                rest_info <- extendVarEnv [(nm,ce)] $
                              go branch_var num_branches (c2,c2Name) rest
                 let c2info = head rest_info -- rest_info is always nonempty
 
@@ -933,17 +934,18 @@ codeGenComp dflags comp k =
                                    compGenInit c1info
                    }
 
-    go (MkComp (Par parInfo c1 c2) csp (CTBase cty0)) = do
+    go c@(MkComp (Par parInfo c1 c2) csp ()) = do
+        let CTBase cty0 = ctComp c
         c1Name <- nextName ("__par_c1_" ++ (getLnNumInStr csp))
         c2Name <- nextName ("__par_c2_" ++ (getLnNumInStr csp))
-        let c2id = name c2Name
+        let c2id = c2Name
 
-        let CTBase cty1 = compInfo c1
+        let CTBase cty1 = ctComp c1
         let yTy = yldTyOfCTy cty1
 
         -- Allocate intermediate yield buffer
-        new_yh <- freshName ("__yv_tmp_"  ++ (getLnNumInStr csp))
-        let new_yhval = yldValOf $ name new_yh
+        new_yh <- freshVar ("__yv_tmp_"  ++ (getLnNumInStr csp))
+        let new_yhval = yldValOf $ new_yh
 
         b <- isStructPtrType yTy
 
@@ -956,7 +958,7 @@ codeGenComp dflags comp k =
         let yTy_c = codeGenTyAlg yTy
         yv_init <- (codeGenTy_val yTy :: Cg C.Initializer)
         let foo = yv_init
-        let ydecl | (b && not (isArrTy yTy)) -- Not already a pointer
+        let ydecl | (b && not (isArrayTy yTy)) -- Not already a pointer
                   = [cdecl| $ty:yTy_c * $id:new_yhval = NULL; |]
                   | otherwise
                   = [cdecl| $ty:yTy_c $id:new_yhval = $init:yv_init; |]
@@ -967,7 +969,7 @@ codeGenComp dflags comp k =
         let c1YieldKont = appendStmt [cstm|goto $id:(processNmOf c2id);|]
         pushName c1Name
         c1info <- codeGenCompTop dflags c1 $
-                  k { kontYield = c1YieldKont, yieldHdl = name new_yh }
+                  k { kontYield = c1YieldKont, yieldHdl = new_yh }
 
         -- Translate c2
         -- c2ConsumeKont is (return c1_tick()) if c1 can tick, otherwise the current
@@ -980,7 +982,7 @@ codeGenComp dflags comp k =
         -- In handle is yield handle of c1
 
         pushName c2Name
-        c2info <- codeGenCompTop dflags c2 (k { kontConsume = c2ConsumeKont, inHdl = name new_yh})
+        c2info <- codeGenCompTop dflags c2 (k { kontConsume = c2ConsumeKont, inHdl = new_yh})
 
         return $ CompInfo { tickHdl    = if canTick c2info then tickHdl c2info else tickHdl c1info
                           , procHdl    = procHdl c1info
@@ -992,7 +994,8 @@ codeGenComp dflags comp k =
                           }
 
     go (MkComp (Seq c1 c2) csp csinfo) = do
-        unusedName <- freshName ("__unused_" ++ (getLnNumInStr csp))
+        let Just c1_done_ty = doneTyOfCTyBase $ ctComp c1
+        unusedName <- freshName ("__unused_" ++ (getLnNumInStr csp)) c1_done_ty
         codeGenCompTop dflags (MkComp (mkBind c1 (unusedName, c2)) csp csinfo) k
 
     go (MkComp (Var nm) csp _) = do
@@ -1004,9 +1007,9 @@ codeGenComp dflags comp k =
         f <- lookupCompFunCode nm
         f args k
 
-    go (MkComp Take1 csp (CTBase cty0)) = do
+    go c@(MkComp (Take1 _ _) csp ()) = do
         takeName <- nextName ("__take_" ++ (getLnNumInStr csp))
-        let prefix = name takeName
+        let prefix = takeName
 
         let ih = inHdl k
         let dh = doneHdl k
@@ -1018,13 +1021,14 @@ codeGenComp dflags comp k =
         appendLabeledBlock (tickNmOf prefix) $
             kontConsume k
 
+        let inty = inTyOfCTyBase $ ctComp c
+
         appendLabeledBlock (processNmOf prefix) $ do
             -- See Note [Take Optimization]
-            if isArrTy (inTyOfCTy cty0) then
+            if isArrayTy inty then
                appendStmt [cstm|$id:(doneValOf dh) = $id:(inValOf ih);|]
             else
-               assignByVal (inTyOfCTy cty0)
-                           (inTyOfCTy cty0) donevalexp invalofexp
+               assignByVal inty inty donevalexp invalofexp
 
             -- New:
             appendStmt [cstm|$id:(doneValOf dh) = $id:(inValOf ih);|]
@@ -1034,18 +1038,19 @@ codeGenComp dflags comp k =
 
         return (mkCompInfo prefix True)
 
-    go (MkComp (Take (MkExp { unExp = EVal (VInt n) })) csp (CTBase cty0)) = do
+    go c@(MkComp (Take _ _ n) csp ()) = do
         takeName <- nextName ("__take_" ++ (getLnNumInStr csp))
-        let prefix = name takeName
+        let prefix   = takeName
         let stateVar = prefix ++ "_state"
 
         let ih = inHdl k
         let dh = doneHdl k
 
-        (aTy, elemTy) <- checkArrayType (doneTyOfCTy cty0)
-        when (inTyOfCTy cty0 /= elemTy) $
+
+        (aTy, elemTy) <- checkArrayType done_ty
+        when (in_ty /= elemTy) $
             fail $ "Wrong types in takeN: " ++
-                   show (inTyOfCTy cty0) ++ " " ++ show (doneTyOfCTy cty0)
+                   show in_ty ++ " " ++ show done_ty
 
         appendDecl =<< codeGenDeclVolGroup_init stateVar tint [cexp|0|]
 
@@ -1053,7 +1058,8 @@ codeGenComp dflags comp k =
             kontConsume k
 
         appendLabeledBlock (processNmOf prefix) $ do
-            codeGenArrWrite dflags aTy [cexp|$id:(doneValOf dh)|] [cexp|$id:stateVar|] LISingleton [cexp|$id:(inValOf ih)|]
+            codeGenArrWrite dflags aTy [cexp|$id:(doneValOf dh)|] 
+                                       [cexp|$id:stateVar|] LISingleton [cexp|$id:(inValOf ih)|]
 
             appendStmt [cstm|++$id:stateVar;|]
             if [cexp|$id:stateVar < $int:n|]
@@ -1068,20 +1074,23 @@ codeGenComp dflags comp k =
         return (mkCompInfo prefix True)
                    { compGenInit = codeStmt [cstm|$id:stateVar = 0;|] }
       where
-        checkArrayType :: Maybe Ty -> Cg (Ty, Ty)
-        checkArrayType (Just aTy@(TArr _ elemTy)) = return (aTy, elemTy)
-        checkArrayType _ = fail $ "TakeN not supported for these types yet: "  ++
-                                  show (inTyOfCTy cty0) ++ " " ++ show (doneTyOfCTy cty0)
+        done_ty = doneTyOfCTyBase $ ctComp c 
+        in_ty   = inTyOfCTyBase   $ ctComp c
 
-    go (MkComp (Return _ e) csp (CTBase cty0)) = do
+        checkArrayType :: Maybe Ty -> Cg (Ty, Ty)
+        checkArrayType (Just aTy@(TArray _ elemTy)) = return (aTy, elemTy)
+        checkArrayType _ = fail $ "TakeN not supported for these types yet: "  ++
+                                  show in_ty ++ " " ++ show done_ty
+
+    go (MkComp (Return _ _ _ e) csp ()) = do
         retName <-  nextName ("__ret_" ++ (getLnNumInStr csp))
-        let prefix = name retName
+        let prefix = retName
 
         let dh = doneHdl k
 
         appendLabeledBlock (tickNmOf prefix) $ do
             ce <- codeGenExp dflags e
-            assignByVal (info e) (info e) [cexp|$id:(doneValOf dh)|] ce
+            assignByVal (ctExp e) (ctExp e) [cexp|$id:(doneValOf dh)|] ce
             appendStmt [cstm|$id:globalWhatIs = DONE;|]
             kontDone k
 
@@ -1097,45 +1106,47 @@ codeGenComp dflags comp k =
     --   branch_var == 0, and to c2_tick/c2_process if branch_var == 0.
     -- o The init function for branch is the only code that modifies branch_var
     --   (to 0 or 1, depending on the value of [e])
-    go (MkComp (Branch e c1 c2) csp (CTBase cty0)) =
+    go (MkComp (Branch e c1 c2) csp ()) =
         mkBranch dflags e c1 k c2 k csp -- Pass them the same continuation!
 
-    go (MkComp (Repeat wdth c1) csp (CTBase cty0)) = do
-        let (CTBase cty1) = compInfo c1
+    go (MkComp (Repeat wdth c1) csp ()) = do
+        let (CTBase cty1) = ctComp c1
         let (Just vTy) = doneTyOfCTy cty1
-        new_dh <- freshName ("__dv_tmp_"  ++ (getLnNumInStr csp))
+        new_dh <- freshName ("__dv_tmp_"  ++ (getLnNumInStr csp)) vTy
         let new_dhval = doneValOf $ name new_dh
         codeGenDeclGroup new_dhval vTy >>= appendDecl
         codeGenFixpoint (mkRepeat dflags c1) (k { doneHdl = name new_dh})
 
-    go (MkComp (Until e c1) csp (CTBase cty0)) =
+    go (MkComp (Until e c1) csp ()) =
         codeGenFixpoint (mkUntil dflags (codeGenExp dflags e) (return ()) c1) k
 
 
     go (MkComp (VectComp _ c) _ _) = go c  -- Just ignore vectorization annotation if it has survived so far.
 
-    go (MkComp (While e c1) csp (CTBase cty0)) =
+    go (MkComp (While e c1) csp ()) =
         let emptyStm = [cstm|UNIT;|]
         in codeGenFixpoint (mkWhile dflags emptyStm e c1 emptyStm) k
 
 
-    go cb@(MkComp (Times _ui estart elen nm c1@(MkComp { compInfo = CTBase cty_c1})) csp (CTBase cty0)) = do
+    go cb@(MkComp (Times _ui estart elen nm c1) csp ()) = do
+        let CTBase cty_c1 = ctComp c1
+            CTBase cty0   = ctComp cb
         -- @nm@ scopes over @e@ and @c1@, so we need to gensym here to make sure
         -- it maps to a unique C identifier and then bring it into scope below
         -- when we generate code for @e@ and @c1@. We also have to make sure we
         -- initialize the loop counter as part of the component's
         -- initialization.
 
-        nm' <- freshName ("__times_" ++ name nm ++ getLnNumInStr csp)
-        appendDecl [cdecl|$ty:(codeGenTy (info estart)) $id:(name nm') = 0;|]
+        nm' <- freshName ("__times_" ++ name nm ++ getLnNumInStr csp) (nameTyp nm)
+        appendDecl [cdecl|$ty:(codeGenTy (nameTyp nm)) $id:(name nm') = 0;|]
 
         cestart <- codeGenExp dflags estart
 
-        extendVarEnv [(nm,(info estart,[cexp|$id:(name nm')|]))] $ do
+        extendVarEnv [(nm,[cexp|$id:(name nm')|])] $ do
 
-        let efinal = eBinOp csp tint Add elen estart
+        let efinal = eBinOp csp Add elen estart
 
-        let mtest  = MkExp (EBinOp Lt (MkExp (EVar nm) csp tint) efinal) csp TBool
+        let mtest  = eBinOp csp Lt (eVar csp nm) efinal
             mfinal = [cstm|++$id:(name nm');  |]
             minit  = [cstm|$id:(name nm') = $cestart;|]
 
@@ -1144,10 +1155,11 @@ codeGenComp dflags comp k =
         let minits = compGenInit cinfo `mappend` codeStmt minit
         return cinfo { compGenInit = minits }
 
-    go (MkComp (Standalone c1) csp (CTBase cty0)) =
+    go c@(MkComp (Standalone c1) csp ()) = do
+       let CTBase cty0 = ctComp c
        codeGenCompTop dflags c1 k
 
-
+{-
     go (MkComp c _ (CTArrow {})) =
         fail $ "CodeGen error: BUG!!! " ++ show c
 
@@ -1157,6 +1169,7 @@ codeGenComp dflags comp k =
         fail $ "CodeGen error, BUG!! " ++ show c
     go (MkComp c@(Times {}) _ _) =
         fail $ "CodeGen error, BUG!! " ++ show c
+-}
 
     go (MkComp c@(Filter {}) _ _) =
         fail $ "CodeGen error, unimplemented: " ++ show c
@@ -1195,9 +1208,9 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
       --
 
       = do { (e_decls,e_stmts,ce) <- inNewBlock $ codeGenExp dflags e
-           ; let ty = info e
-           ; x_name <- freshName ((name x) ++ "_" ++ (getLnNumInStr csp))
-           ; let x_cname = name x_name
+           ; let ty = ctExp e
+           ; x_name <- freshVar ((name x) ++ "_" ++ (getLnNumInStr csp))
+           ; let x_cname = x_name
 
            ; x_decl <- codeGenDeclGroup x_cname ty
 
@@ -1206,7 +1219,7 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
              else
                 appendDecls (x_decl : e_decls)
 
-           ; (a,stms) <- extendVarEnv [(x, (ty,[cexp|$id:x_cname|]))] $
+           ; (a,stms) <- extendVarEnv [(x, [cexp|$id:x_cname|])] $
                          do { -- cgIO $ putStrLn "before action."
                             ; r <- go ctxt action
                               -- cgIO $ putStrLn "after action."
@@ -1221,11 +1234,11 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
 
     -- CL
     -- TODO: Should we do something with _ty here?
-    go (CLetERef csp x _ty (Just e) ctxt) action
+    go (CLetERef csp x (Just e) ctxt) action
       = do { (e_decls,e_stmts,ce) <- inNewBlock $ codeGenExp dflags e
-           ; let ty = info e
-           ; x_name <- freshName ((name x) ++ "_" ++ (getLnNumInStr csp))
-           ; let x_cname = name x_name
+           ; let ty = ctExp e
+           ; x_name <- freshVar ((name x) ++ "_" ++ (getLnNumInStr csp))
+           ; let x_cname = x_name
 
            ; x_decl <- codeGenDeclGroup x_cname ty
 
@@ -1234,7 +1247,7 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
              else
                 appendDecls (x_decl : e_decls)
 
-           ; (a,stms) <- extendVarEnv [(x, (ty,[cexp|$id:x_cname|]))] $
+           ; (a,stms) <- extendVarEnv [(x, [cexp|$id:x_cname|])] $
                          do { -- cgIO $ putStrLn "before action."
                             ; r <- go ctxt action
                               -- cgIO $ putStrLn "after action."
@@ -1246,18 +1259,18 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
 
            ; return (a,e_stmts ++ asgn_stmts ++ stms)
            }
-    go (CLetERef csp x ty Nothing ctxt) action
-      = do { x_name <- freshName ((name x) ++ "_" ++ (getLnNumInStr csp))
-           ; let x_cname = name x_name
+    go (CLetERef csp x Nothing ctxt) action
+      = do { x_name <- freshVar ((name x) ++ "_" ++ (getLnNumInStr csp))
+           ; let x_cname = x_name
 
-           ; x_decl <- codeGenDeclGroup x_cname ty
+           ; x_decl <- codeGenDeclGroup x_cname (nameTyp x)
 
            ; if emit_global then
                 appendTopDecls [x_decl]
              else
                 appendDecls [x_decl]
 
-           ; res <- extendVarEnv [(x, (ty,[cexp|$id:x_cname|]))] $
+           ; res <- extendVarEnv [(x, [cexp|$id:x_cname|])] $
                     do { -- cgIO $ putStrLn "before action."
                         ; r <- go ctxt action
                          -- cgIO $ putStrLn "after action."
@@ -1270,39 +1283,39 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
       = extendFunEnv f (compGenBind dflags f params locals c1) $
         go ctxt action
 
-    go (CLetHeader csp f (MkFun (MkFunExternal nm ps retTy) _ _) ctxt) action =
+    go (CLetHeader csp (MkFun (MkFunExternal nm ps retTy) _ _) ctxt) action =
         codeGenLetExternalFun retTy
       where
 
-        codeGenLetExternalFun (TArr _ _ ) = do
+        codeGenLetExternalFun (TArray _ _ ) = do
 
-           let retN = "__retf_" ++ name f
+           let retN = "__retf_" ++ name nm
 
            let extNm = "__ext_" ++ name nm
-           let extF = toName ("__ext_" ++ name f) Nothing Nothing
+           let extF = toName ("__ext_" ++ name nm) Nothing (nameTyp nm)
 
            -- We cannot return an array declared within a function.  Instead we
            -- declare a global variable, store the return in it, and use that
            -- pointer as a return value
-           let retN_name = toName retN Nothing Nothing
+           let retN_name = toName retN Nothing retTy
 
-           cparams <- codeGenParams ((retN_name, retTy) : ps)
+           cparams <- codeGenParams (retN_name : ps)
            appendTopDecls [ [cdecl|void $id:(extNm)($params:cparams);|] ]
 
-           extendExpFunEnv f (extF,[]) $ go ctxt action
+           extendExpFunEnv nm (extF,[]) $ go ctxt action
 
         codeGenLetExternalFun _ = do
             cparams <- codeGenParams ps
             let extNm = "__ext_" ++ name nm
-            let extF = toName ("__ext_" ++ name f) Nothing Nothing
+            let extF = toName ("__ext_" ++ name nm) Nothing (nameTyp nm)
 
             appendTopDecls [ [cdecl|$ty:(codeGenTy retTy)
                                            $id:(extNm)($params:cparams);|] ]
-            extendExpFunEnv f (extF,[]) $ go ctxt action
+            extendExpFunEnv nm (extF,[]) $ go ctxt action
 
-    go (CLetHeader csp f fdef@(MkFun (MkFunDefined {}) _ _) ctxt) action =
+    go (CLetHeader csp fdef@(MkFun (MkFunDefined {}) _ _) ctxt) action =
         -- defined CgFun
-        cgFunDefined dflags csp f fdef $ go ctxt action
+        cgFunDefined dflags csp fdef $ go ctxt action
 
     --go (CLetHeader {}) _      = error "BUG: All function kinds covered!"
 

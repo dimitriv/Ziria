@@ -144,12 +144,11 @@ getClosureVars fdef
 
 cgFunDefined :: DynFlags
              -> Maybe SourcePos
-             -> EId      -- Function name
              -> Fun      -- The function definition
              -> Cg a     -- action for the body
              -> Cg a
-cgFunDefined dflags csp f
-             fdef@(MkFun (MkFunDefined nm params fun_locals orig_body) _ fTy)
+cgFunDefined dflags csp 
+             fdef@(MkFun (MkFunDefined f params fun_locals orig_body) _ fTy)
              action
   = do { -- make up a new name for the function
          newNm <- freshName (name f ++ "_" ++ getLnNumInStr csp) (nameTyp f)
@@ -237,7 +236,7 @@ cgFunDefined dflags csp f
        ; extendExpFunEnv f (newNm, closureParams) $ action
        }
 
-cgFunDefined _ _ _ _ _ = error "cgFunDefined: not a FunDefined function!"
+cgFunDefined _ _ _ _ = error "cgFunDefined: not a FunDefined function!"
 
 
 
