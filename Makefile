@@ -18,6 +18,11 @@
 #
 #
 
+all: create-sandbox 
+	cabal install 
+	cp .cabal-sandbox/bin/wplc* . 
+	cp .cabal-sandbox/bin/BlinkDiff* tools/ 
+
 
 create-sandbox:
 	cabal sandbox init
