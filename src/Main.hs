@@ -34,6 +34,7 @@ import Text.Show.Pretty (dumpStr)
 import qualified Data.Map          as M
 import qualified Language.C.Syntax as C
 
+-- TODO: There are a lot of redundant imports here. Enable -Wall in Main.
 import AstComp
 import AstExpr
 import AstLabelled   as Labelled
@@ -48,7 +49,7 @@ import TcErrors ( ErrCtx (..) )
 import TcExpr
 import TcMonad
 import PassPipeline
-import CardinalityAnalysis
+import qualified AstCombinator
 import qualified BlinkParseComp as NewParser
 import qualified GenSym         as GS
 import qualified Outputable -- Qualified so that we don't clash with Mainland

@@ -25,6 +25,7 @@
 -- Maybe we can find a nicer way to do this.
 module CardinalityAnalysis (
     runCardinalityAnalysis
+  , LComp
   , Card(SimplCard)
   , isSimplCard
   ) where
