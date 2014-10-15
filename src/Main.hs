@@ -38,7 +38,8 @@ import qualified Language.C.Syntax as C
 import AstComp
 import AstExpr
 import AstLabelled   as Labelled
-import AstUnlabelled as Unlaballed
+import AstUnlabelled as Unlabelled
+import AstFreeMonad  as AstFreeMonad
 import CtComp (ctComp)
 import Opts
 import PassFold
@@ -49,12 +50,11 @@ import TcErrors ( ErrCtx (..) )
 import TcExpr
 import TcMonad
 import PassPipeline
-import qualified AstCombinator
 import qualified BlinkParseComp as NewParser
 import qualified GenSym         as GS
 import qualified Outputable -- Qualified so that we don't clash with Mainland
 
-import CgOpt 
+import CgOpt
 
 
 import AutoLUT
@@ -193,7 +193,7 @@ main = failOnException $ do
     check_vect_cands cands
 -}
     -- DV: replace this this with the commented code above
-    let cands = [ folded ] 
+    let cands = [ folded ]
 
     -- Open files!
     let fnames = outFile : ["v"++show i++"_"++outFile | i <- [0..]]
