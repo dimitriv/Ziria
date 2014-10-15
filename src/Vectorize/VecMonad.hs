@@ -326,9 +326,11 @@ isBufTy _          = False
   Auxiliary definitions for creating new expressions in the vectorizer
 -------------------------------------------------------------------------------}
 
+-- TODO: Obsolete (replace use of `eadd` with `(.+)`
 eadd :: Exp -> Exp -> Exp
 eadd e1 e2 = toExp () (EBinOp Add e1 e2)
 
+-- TODO: Obsolete (replace use of `emul` with `(.*)`
 emul :: Exp -> Exp -> Exp
 emul e1 e2 = toExp () (EBinOp Mult e1 e2)
 
