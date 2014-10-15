@@ -48,6 +48,7 @@ import TcErrors ( ErrCtx (..) )
 import TcExpr
 import TcMonad
 import PassPipeline
+import CardinalityAnalysis
 import qualified BlinkParseComp as NewParser
 import qualified GenSym         as GS
 import qualified Outputable -- Qualified so that we don't clash with Mainland

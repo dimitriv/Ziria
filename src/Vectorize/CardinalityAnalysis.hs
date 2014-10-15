@@ -16,67 +16,61 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE ScopedTypeVariables #-}
-
+{-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE ScopedTypeVariables, GeneralizedNewtypeDeriving #-}
+-- | Cardinality analysis to drive the vectorizer
+--
+-- TODO: Currently we export all the Card constructors, but only one is used
+-- outside of this  module (SimplCard), along with the isSimplCard check.
+-- Maybe we can find a nicer way to do this.
 module CardinalityAnalysis (
-
     runCardinalityAnalysis
-  , Card ( .. )
+  , Card(SimplCard)
   , isSimplCard
-  , mkSumCard
-  , mkSimplCard
-  , mkIterCard
-  , mkParCard
-  , mkDynamicCard
-) where
+  ) where
 
+import Control.Applicative
+import Control.Monad.State
+import Control.Monad.Reader
 
 import AstExpr
 import AstComp
-import PpComp
-import qualified GenSym as GS
+import AstLabelled
+import CtExpr (ctExp)
 
-import qualified Data.Set as S
-import Control.Applicative
-import Control.Monad.State
+{-------------------------------------------------------------------------------
+  Top-level API
+-------------------------------------------------------------------------------}
 
-import Data.List as M
+-- | Computation labelled with cardinality analysis results
+type LComp = GComp CTy Ty Card ()
 
+-- | Run the cardinality analysis
+runCardinalityAnalysis :: Bool -> Comp -> IO LComp
+runCardinalityAnalysis verbose = runCardM [] . computeCardTop verbose
 
-data CEnvDom = CDomVar String  -- A (computation) variable
-             | CDomFun String  -- A (computation) function
-  deriving Eq
-
-type CEnv = [(CEnvDom,Card)]
-data CardM a = CardM (CEnv -> IO a)
-
-
-cardMIO :: IO a -> CardM a
-cardMIO m = CardM (\_ -> m)
-
+{-------------------------------------------------------------------------------
+  Cardinality
+-------------------------------------------------------------------------------}
 
 data Card
-  =  -- Simple cardinality
+  =  -- | Simple cardinality
      SimplCard (Maybe Int) (Maybe Int)
 
-  | -- Iterated cardinality, such as the one arising from until / repeat
-    -- We might actually statically know the iteration count,
-    -- hence a Maybe Int
-    IterCard (Maybe Int) Card
+    -- | Iterated cardinality, such as the one arising from until / repeat
+    --
+    -- We might actually statically know the iteration count, hence a Maybe Int
+  | IterCard (Maybe Int) Card
 
-    -- Sum of all cardinalities
+    -- | Sum of all cardinalities
   | SumCard [Card]
 
-    -- Underlying cardinalities for (>>>) composition
+    -- | Underlying cardinalities for (>>>) composition
   | ParCard Card Card
 
-    -- Dynamic cardinality, can't tell anything
+    -- | Dynamic cardinality, can't tell anything
   | DynamicCard
-
   deriving ( Show )
-
--- Smart constructors: think later if we need more functionality
-
 
 isSimplCard :: Card -> Bool
 isSimplCard (SimplCard {}) = True
@@ -90,7 +84,6 @@ cardEqual (IterCard (Just i) c1) (IterCard (Just j) c2) = (i==j) && (cardEqual c
 cardEqual (ParCard c1 c2) (ParCard c1' c2') = cardEqual c1 c1' && cardEqual c2 c2'
 cardEqual (SumCard cs) (SumCard cs') = all (\(c,c') -> cardEqual c c') (zip cs cs')
 cardEqual _ _ = False
-
 
 mkSumCard :: [Card] -> Card
 mkSumCard [c] = c
@@ -112,254 +105,229 @@ mkSimplCard :: Int -> Int -> Card
 -- Definitely known input and output cardinalities
 mkSimplCard i j = SimplCard (Just i) (Just j)
 
-mkInSimplCard :: Int -> Card
--- Definitely known input cardinality, unknown output cardinality
-mkInSimplCard i = SimplCard (Just i) Nothing
-
-mkOutSimplCard :: Int -> Card
--- Definitely known output cardinality, unknown input cardinality
-mkOutSimplCard j = SimplCard Nothing (Just j)
-
 mkIterCard :: Maybe Int -> Card -> Card
 mkIterCard (Just 1) c = c
 -- No takes, just convert this to a simpl-card and unknown emits:
-mkIterCard Nothing (SimplCard (Just 0) other) = SimplCard (Just 0) Nothing
+mkIterCard Nothing (SimplCard (Just 0) _other) = SimplCard (Just 0) Nothing
 -- No emits, just convert this to a simpl-card and unknown takes
-mkIterCard Nothing (SimplCard other (Just 0)) = SimplCard Nothing (Just 0)
+mkIterCard Nothing (SimplCard _other (Just 0)) = SimplCard Nothing (Just 0)
 -- Fall back to just IterCard
 mkIterCard m c = IterCard m c
 
 mkParCard :: Card -> Card -> Card
-mkParCard c1 c2
-  = ParCard c1 c2
+mkParCard c1 c2 = ParCard c1 c2
 
 mkDynamicCard :: Card
 mkDynamicCard = DynamicCard
 
-instance Functor CardM where
-  fmap f (CardM c) = CardM $ \env -> fmap f (c env)
+{-------------------------------------------------------------------------------
+  Infrastructure
+-------------------------------------------------------------------------------}
 
-instance Applicative CardM where
-  pure = CardM . const . pure
-  (CardM f) <*> (CardM x) = CardM $ \env -> f env <*> x env
+data CEnvDom = CDomVar String  -- A (computation) variable
+             | CDomFun String  -- A (computation) function
+  deriving Eq
 
-instance Monad CardM where
-  (>>=) m1 m2 =
-    CardM $ \env ->
-      do { res <- runCardM env m1
-         ; runCardM env (m2 res) }
-  return x = CardM $ \_env -> return x
+type CEnv = [(CEnvDom,Card)]
 
-
--- | Auxiliary functions
-extendCardCVarEnv :: Name -> Card -> CardM a -> CardM a
-extendCardCVarEnv nm c (CardM action) =
-  CardM (\env -> action ((CDomVar $ name nm,c):env))
-
-extendCardCFunEnv :: Name -> Card -> CardM a -> CardM a
-extendCardCFunEnv nm c (CardM action) =
-  CardM (\env -> action ((CDomFun $ name nm,c):env))
-
-getCardEnv :: CardM CEnv
-getCardEnv = CardM (\env -> return env)
-
+-- | Cardinality monad
+--
+-- NOTE: We don't actually rely on MonadIO anywhere (though currently we also
+-- ignore the `verbose` argument to `runCardinalityAnalysis`)
+newtype CardM a = CardM (ReaderT CEnv IO a)
+  deriving ( Functor
+           , Applicative
+           , Monad
+           , MonadIO
+           , MonadReader CEnv
+           )
 
 runCardM :: CEnv -> CardM a -> IO a
-runCardM init_env (CardM f) = f init_env
+runCardM init_env (CardM f) = runReaderT f init_env
 
+extendCardCVarEnv :: GName CTy -> Card -> CardM a -> CardM a
+extendCardCVarEnv nm c = local ((CDomVar $ name nm, c) :)
 
--- Compute cardinality of a type checked computation
-computeCardTop :: Bool -> Comp CTy Ty -> CardM (Comp (CTy,Card) Ty)
-computeCardTop verbose ct = computeCard ct
+extendCardCFunEnv :: GName CTy -> Card -> CardM a -> CardM a
+extendCardCFunEnv nm c = local ((CDomFun $ name nm, c) :)
+
+-- | Lookup variable cardinality
+--
+-- NOTE: We do not currently add bindings in the environment for computation
+-- arguments to functions, so this lookup may fail.
+--
+-- TODO: It would be nicer if we _did_ introduce these arguments; see LetFunC.
+lookupVar :: GName CTy -> CardM Card
+lookupVar x = do
+  cenv <- ask
+  case lookup (CDomVar $ name x) cenv of
+    Just card -> return card
+    Nothing   -> return mkDynamicCard
+
+-- | Lookup function cardinality
+--
+-- Functions _must_ always be bound (they cannot be passed as arguments
+-- to other functions, so the fact that we do not extend the environment
+-- with the function parameters in LetFunC does not matter here)
+lookupFun :: GName CTy -> CardM Card
+lookupFun f = do
+  cenv <- ask
+  case lookup (CDomFun $ name f) cenv of
+    Just card -> return card
+    Nothing   -> error $ "Unbound function " ++ name f
+
+{-------------------------------------------------------------------------------
+  The analysis proper
+-------------------------------------------------------------------------------}
+
+computeCardTop :: Bool -> Comp -> CardM LComp
+computeCardTop _verbose = computeCard
   where
-    computeCallArgCard (CAExp e)
-      = return (CAExp e)
-    computeCallArgCard (CAComp c)
-      = do { c' <- computeCard c
-           ; return (CAComp c')
-           }
-    computeCard c = computeCard0 (unComp c)
-      where
-        cty = compInfo c
-        loc = compLoc c
-        computeCard0 :: Comp0 CTy Ty -> CardM (Comp (CTy,Card) Ty)
-        computeCard0  (Var x) =
-          do { cenv <- getCardEnv
-             ; case M.lookup (CDomVar $ name x) cenv of
-                 Just card -> return $ MkComp (Var x) loc (cty,card)
-                 Nothing   -> return $ MkComp (Var x) loc (cty,mkDynamicCard) } -- Or fail?
+    computeCard :: Comp -> CardM LComp
+    computeCard (MkComp c0 loc ()) = case c0 of
+      Var x -> do
+        card <- lookupVar x
+        return $ cVar loc card x
 
-        computeCard0  (BindMany c1 xs_cs)
-          = do { c1' <- computeCard c1
-               ; let xs = map fst xs_cs
-               ; cs' <- mapM (\(_,c) -> computeCard c) xs_cs
-               ; let cards = map (snd . compInfo) (c1':cs')
-                     card = mkSumCard cards
-               ; return $ MkComp (mkBindMany c1' (zip xs cs')) loc (cty,card)
-               }
+      BindMany c1 xs_cs -> do
+        c1' <- computeCard c1
+        let (xs, cs) = unzip xs_cs
+        cs' <- mapM computeCard cs
+        let card = mkSumCard $ map compInfo (c1':cs')
+        return $ cBindMany loc card c1' (zip xs cs')
 
-        computeCard0 (Seq c1 c2)
-          = do { c1' <- computeCard c1
-               ; c2' <- computeCard c2
-               ; let card = mkSumCard [snd (compInfo c1'),snd (compInfo c2')]
-               ; return $ MkComp (Seq c1' c2') loc (cty,card) }
+      Seq c1 c2 -> do
+        c1' <- computeCard c1
+        c2' <- computeCard c2
+        let card = mkSumCard [compInfo c1', compInfo c2']
+        return $ cSeq loc card c1' c2'
 
-        computeCard0  (Par p c1 c2)
-          = do { c1' <- computeCard c1
-               ; c2' <- computeCard c2
-               ; let card = mkParCard (snd (compInfo c1')) (snd (compInfo c2'))
-               ; return $ cPar loc (cty,card) p c1' c2' }
+      Par p c1 c2 -> do
+        c1' <- computeCard c1
+        c2' <- computeCard c2
+        let card = mkParCard (compInfo c1') (compInfo c2')
+        return $ cPar loc card p c1' c2'
 
-        computeCard0  (Let x c1 c2)
-          = do { c1' <- computeCard c1
-               ; c2' <- extendCardCVarEnv x (snd $ compInfo c1') $
-                        computeCard c2
-               ; return $
-                 MkComp (Let x c1' c2') loc (cty, snd $ compInfo c2')
-               }
+      Let x c1 c2 -> do
+        c1' <- computeCard c1
+        c2' <- extendCardCVarEnv x (compInfo c1') $ computeCard c2
+        return $ cLet loc (compInfo c2') x c1' c2'
 
-        computeCard0  (LetE x fi e c1)
-          = do { c1' <- computeCard c1
-               ; return $
-                 MkComp (LetE x fi e c1') loc (cty, snd $ compInfo c1') }
+      LetE x fi e c1 -> do
+        c1' <- computeCard c1
+        return $ cLetE loc (compInfo c1') x fi e c1'
 
-        -- CL
-        computeCard0  (LetERef x ty y c1)
-          = do { c1' <- computeCard c1
-               ; return $
-                 MkComp (LetERef x ty y c1') loc (cty, snd $ compInfo c1') }
+      LetERef x y c1 -> do
+        c1' <- computeCard c1
+        return $ cLetERef loc (compInfo c1') x y c1'
 
-        computeCard0  (LetHeader x fn c1)
-          = do { c1' <- computeCard c1
-               ; return $ MkComp (LetHeader x fn c1') loc (cty, snd $ compInfo c1') }
-        --
+      LetHeader fn c1 -> do
+        c1' <- computeCard c1
+        return $ cLetHeader loc (compInfo c1') fn c1'
 
-        computeCard0  (LetStruct sdef c1)
-          = do { c1' <- computeCard c1
-               ; return $ MkComp (LetStruct sdef c1') loc (cty, snd $ compInfo c1')
-               }
+      LetStruct sdef c1 -> do
+        c1' <- computeCard c1
+        return $ cLetStruct loc (compInfo c1') sdef c1'
 
-        computeCard0  (LetFunC f params locals c1 c2)
-          = do { c1' <- computeCard c1
-               ; c2' <- extendCardCFunEnv f (snd $ compInfo c1') $ computeCard c2
-               ; return $ MkComp (LetFunC f params locals c1' c2') loc (cty, snd $ compInfo c2')
-               }
+      LetFunC f params locals c1 c2 -> do
+        -- TODO: If we extend the environment here with the function arguments,
+        -- change lookupVar and (comment of) lookupEnv.
+        c1' <- computeCard c1
+        c2' <- extendCardCFunEnv f (compInfo c1') $ computeCard c2
+        return $ cLetFunC loc (compInfo c2') f params locals c1' c2'
 
-        computeCard0  (Call f es)
-{-
-          = do { es' <- mapM computeCallArgCard es
-               ; return $ MkComp (Call f es') loc (cty, mkDynamicCard)  -- Unknown, for now
-               }
--}
-          =  do { cenv <- getCardEnv
-                ; es' <- mapM computeCallArgCard es
-                ; case M.lookup (CDomFun $ name f) cenv of
-                   Just card -> return $ MkComp (Call f es') loc (cty,card)
-                   Nothing   -> return $ MkComp (Call f es') loc (cty,mkDynamicCard) -- Or fail?
-                }
+      Call f es -> do
+        card <- lookupFun f
+        es'  <- mapM computeCallArgCard es
+        return $ cCall loc card f es'
 
+      Emit a e ->
+        return $ cEmit loc (mkSimplCard 0 1) a e
 
-        computeCard0  (Emit e)
-          = return $ (MkComp (Emit e) loc (cty, mkSimplCard 0 1))
+      Emits a e ->
+        case ctExp e of
+          TArray (Literal n) _ -> return $ cEmits loc (mkSimplCard 0 n) a e
+          _                    -> error "Type checker bug!"
 
+      Return a b fi e ->
+        return $ cReturn loc (mkSimplCard 0 0) a b fi e
 
-        computeCard0  (Emits e)
-          = case (info e) of
-              TArr (Literal n) _ ->
-                return $ MkComp (Emits e) loc (cty, mkSimplCard 0 n)
-              _ -> error "Type checker bug!"
+      Interleave c1 c2 -> do
+        c1' <- computeCard c1
+        c2' <- computeCard c2
+        -- Can do better? Not sure we care
+        return $ cInterleave loc mkDynamicCard c1' c2'
 
-        computeCard0  (Return fi e)
-          = return $ MkComp (Return fi e) loc (cty, mkSimplCard 0 0)
+      Branch e c1 c2 -> do
+        c1' <- computeCard c1
+        c2' <- computeCard c2
+        let card1 = compInfo c1'
+            card2 = compInfo c2'
+        let card  = if card1 `cardEqual` card2 then card1 else mkDynamicCard
+        return $ cBranch loc card e c1' c2'
 
-        computeCard0  (Interleave c1 c2)
-          = do { c1' <- computeCard c1
-               ; c2' <- computeCard c2
-               ; return $ MkComp (Interleave c1' c2') loc (cty, mkDynamicCard) }
-               -- Can do better? Not sure we care
+      Take1 a b ->
+        return $ cTake1 loc (mkSimplCard 1 0) a b
 
-        computeCard0  (Branch e c1 c2)
-          = do { c1' <- computeCard c1
-               ; c2' <- computeCard c2
-               ; let card1 = snd $ compInfo c1'
-                     card2 = snd $ compInfo c2'
-               ; let card = if card1 `cardEqual` card2
-                            then card1 else mkDynamicCard
-               ; return $ MkComp (Branch e c1' c2') loc (cty, card)
-               }
+      Take a b n ->
+        return $ cTake loc (mkSimplCard n 0) a b n
 
-        computeCard0  Take1
-          = return $ MkComp Take1 loc (cty, mkSimplCard 1 0)
+      Until e c1 -> do
+        -- Don't know how many times to iterate
+        c1' <- computeCard c1
+        let card = mkIterCard Nothing (compInfo c1')
+        return $ cUntil loc card e c1'
 
-        computeCard0 (Take e)
-          = let n = getInt (unExp e)
-            in return $ MkComp (Take e) loc (cty, mkSimplCard n 0)
-          where getInt (EVal (VInt n)) = fromIntegral n
-                getInt _ = error "getInt: can't happen!"
+      While e c1 -> do
+        -- Don't know how many times to iterate
+        c1' <- computeCard c1
+        let card = mkIterCard Nothing (compInfo c1')
+        return $ cWhile loc card e c1'
 
-          -- Take is supposed to work on constants only apparently. See TcComp.
+      Times ui e elen x c1 -> do
+        c1' <- computeCard c1
+        let card = mkIterCard (getInt_maybe $ unExp e) (compInfo c1')
+        return $ cTimes loc card  ui e elen x c1'
 
-        computeCard0 (Until e c1)
-          = do { c1' <- computeCard c1
-               ; let card = mkIterCard Nothing (snd $ compInfo c1')
-               ; return $ MkComp (Until e c1') loc (cty,card) } -- Don't know how many times to iterate
+      Repeat hint c1 -> do
+        c1' <- computeCard c1
+        let card = mkIterCard Nothing (compInfo c1')
+        return $ cRepeat loc card hint c1'
 
-        computeCard0 (While e c1)
-          = do { c1' <- computeCard c1
-               ; let card = mkIterCard Nothing (snd $ compInfo c1')
-               ; return $ MkComp (While e c1') loc (cty,card) } -- Don't know how many times to iterate
+      VectComp hint c1 -> do
+        c1' <- computeCard c1
+        -- It's ok to make a dynamic cardinality as we will not use this information directly
+        return $ cVectComp loc mkDynamicCard  hint c1'
 
-        computeCard0 (Times ui e elen x c1)
-          = do { c1' <- computeCard c1
-               ; let card1 = snd $ compInfo c1'
-                     card  = mkIterCard (getInt_maybe $ unExp e) card1
-               ; return $ MkComp (Times ui e elen x c1') loc (cty,card) }
-          where getInt_maybe (EVal (VInt n)) = Just $ fromIntegral n
-                getInt_maybe _ = Nothing
+      Map w nm ->
+        return $ cMap loc (mkIterCard Nothing $ mkSimplCard 1 1) w nm
 
-        computeCard0 (Repeat hint c1)
-          = do { c1' <- computeCard c1
-               ; let card1 = snd $ compInfo c1'
-                     card  = mkIterCard Nothing card1
-               ; return $ MkComp (Repeat hint c1') loc (cty,card) }
+      Filter e ->
+        return $ cFilter loc (mkIterCard Nothing $ mkDynamicCard) e
 
-        computeCard0 (VectComp hint c1)
-          = do { c1' <- computeCard c1
-               ; return $ MkComp (VectComp hint c1') loc (cty, mkDynamicCard)
-                 -- It's ok to make a dynamic cardinality as we will not use this information directly
-               }
+      ReadSrc mty ->
+        return $ cReadSrc loc (IterCard Nothing (mkSimplCard 0 1)) mty
 
-        computeCard0 (Map w nm)
-          = return $ MkComp (Map w nm) loc (cty, mkIterCard Nothing $ mkSimplCard 1 1)
+      WriteSnk mty ->
+        return $ cWriteSnk loc (IterCard Nothing (mkSimplCard 1 0)) mty
 
-        computeCard0 (Filter e)
-          = return $ MkComp (Filter e) loc (cty, mkIterCard Nothing $ mkDynamicCard)
+      ReadInternal a s tp ->
+        return $ cReadInternal loc (IterCard Nothing (mkSimplCard 0 1)) a s tp
 
-        computeCard0 (ReadSrc mty)
-          = return $
-            MkComp (ReadSrc mty) loc (cty,IterCard Nothing (mkSimplCard 0 1))
-        computeCard0 (WriteSnk mty)
-          = return $
-            MkComp (WriteSnk mty) loc (cty,IterCard Nothing (mkSimplCard 1 0))
+      WriteInternal a s ->
+        return $ cWriteInternal loc (IterCard Nothing (mkSimplCard 1 0)) a s
 
-        computeCard0 (ReadInternal s tp)
-          = return $
-            MkComp (ReadInternal s tp) loc (cty,IterCard Nothing (mkSimplCard 0 1))
-        computeCard0 (WriteInternal s)
-          = return $
-            MkComp (WriteInternal s) loc (cty,IterCard Nothing (mkSimplCard 1 0))
+      Standalone c1 -> do
+        c1' <- computeCard c1
+        return $ cStandalone loc (compInfo c1') c1'
 
-        computeCard0 (Standalone c1)
-          = computeCard c1
+      Mitigate t n1 n2 ->
+        return $ cMitigate loc (mkIterCard Nothing $ mkDynamicCard) t n1 n2
 
-        computeCard0 (Mitigate t n1 n2)
-          = return $ MkComp (Mitigate t n1 n2) loc (cty, mkIterCard Nothing $ mkDynamicCard)
+    computeCallArgCard :: CallArg Exp Comp -> CardM (CallArg Exp LComp)
+    computeCallArgCard (CAExp  e) = return $ CAExp e
+    computeCallArgCard (CAComp c) = CAComp <$> computeCard c
 
-
-runCardinalityAnalysis :: Bool -> Comp CTy Ty -> IO (Comp (CTy,Card) Ty)
-runCardinalityAnalysis verbose comp =
-   runCardM [] (computeCardTop verbose comp)
-
-
-
-
+    getInt_maybe :: Exp0 -> Maybe Int
+    getInt_maybe (EVal _ (VInt n)) = Just $ fromIntegral n
+    getInt_maybe _                 = Nothing
