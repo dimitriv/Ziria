@@ -26,7 +26,7 @@
 
 
 // Called manually from driver
-void initHeapCtxBlock(HeapContextBlock *hblk, unsigned int max_heap_size)
+void initHeapCtxBlock(HeapContextBlock *hblk, memsize_int max_heap_size)
 {
 	//hblk->wpl_heap = NULL;
 	hblk->wpl_heap_siz = max_heap_size;
@@ -34,7 +34,7 @@ void initHeapCtxBlock(HeapContextBlock *hblk, unsigned int max_heap_size)
 }
 
 
-char * try_alloc_bytes(HeapContextBlock *hblk, unsigned int siz)
+char * try_alloc_bytes(HeapContextBlock *hblk, memsize_int siz)
 {
   char *buf = (char *) malloc(siz);
   if (buf == NULL) 
@@ -56,14 +56,14 @@ char * try_alloc_bytes(HeapContextBlock *hblk, unsigned int siz)
 
 
 // Called automtically from Ziria's produced C code
-void wpl_init_heap(HeapContextBlock *hblk, unsigned int max_heap_size)
+void wpl_init_heap(HeapContextBlock *hblk, memsize_int max_heap_size)
 {
   // if (num_of_allocs == 0) return; // we need no heap!
   
   // Here we don't want to redo malloc, but just reset the start pointer
   //hblk->wpl_heap_siz = max_heap_size;
   //hblk->wpl_heap = try_alloc_bytes(hblk, max_heap_size);
-  hblk->wpl_free_idx = CALIGN16((unsigned int)hblk->wpl_heap) - (unsigned int)hblk->wpl_heap;
+	hblk->wpl_free_idx = CALIGN16((memsize_int)hblk->wpl_heap) - (memsize_int)hblk->wpl_heap;
 }
 
 
@@ -73,15 +73,15 @@ unsigned int wpl_get_free_idx(HeapContextBlock *hblk)
 }
 
 // precondition: 16-aligned
-void wpl_restore_free_idx(HeapContextBlock *hblk, unsigned int idx)
+void wpl_restore_free_idx(HeapContextBlock *hblk, memsize_int idx)
 { 
 	hblk->wpl_free_idx = idx;
 }
 
 
-void * wpl_alloca(HeapContextBlock *hblk, unsigned int bytes)
+void * wpl_alloca(HeapContextBlock *hblk, memsize_int bytes)
 {
-  unsigned int allocunit = CALIGN16(bytes);
+	memsize_int allocunit = CALIGN16(bytes);
 
   //printf("Allocating: %d bytes\n", bytes); 
   //printf("wpl_heap_siz: %d bytes\n", wpl_heap_siz); 
@@ -92,7 +92,8 @@ void * wpl_alloca(HeapContextBlock *hblk, unsigned int bytes)
     exit(-1);
   }
 
-  void * ret = (void *)((unsigned long long) hblk->wpl_heap + hblk->wpl_free_idx);
+  // memsize_int is an int type to which we can safely cast 64 bits pointers 
+  void * ret = (void *)((memsize_int)hblk->wpl_heap + hblk->wpl_free_idx);
 
   hblk->wpl_free_idx += allocunit;
 

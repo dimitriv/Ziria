@@ -26,36 +26,6 @@
 #include "mac.h"
 
 
-FILE * try_open(char *filename, char *mode) 
-{
-  FILE *h;
-  h = fopen(filename,mode);
-  if (h == NULL) {
-    fprintf (stderr, "Error: could not open file %s\n", filename);
-    exit(1);
-  }
-  return h;
-}
-
-/* Read the file as a null-terminated string */ 
-void try_read_filebuffer(HeapContextBlock *hblk, char *filename, char **fb, unsigned int *len)
-{
-	char *filebuffer;
-	unsigned int sz;
-
-	FILE *f = try_open(filename,"r");
-	fseek(f, 0L, SEEK_END);
-	sz = ftell(f);
-	fseek(f, 0L, SEEK_SET);
-	filebuffer = try_alloc_bytes(hblk, 2*(sz+1));
-	fread(filebuffer, 1, sz, f);
-	fclose(f);
-	filebuffer[sz] = 0;
-	*fb = filebuffer;
-	*len = sz;
-
-}
-
 Repetitions parse_repeat(char *rp) 
 {
 	Repetitions reps;

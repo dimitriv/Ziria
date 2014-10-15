@@ -12,7 +12,7 @@ fun comp scrambler() {
         scrmbl_st[0:5] := scrmbl_st[1:6];
         scrmbl_st[6] := tmp;
         y := x ^ tmp;
-        print y;
+        -- print y;
       }; 
 
       emit (y)

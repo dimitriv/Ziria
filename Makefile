@@ -18,24 +18,20 @@
 #
 #
 
-GHCFLAGS += -fwarn-incomplete-patterns -Werror
-GHCFLAGS += -isrc:src/Typecheck:src/Codegen:src/Vectorize:src/Parse:src/Optimize:src/Pipeline:src/BasicTypes:src/Utils:src/ComputeType
-GHCFLAGS += -odir obj -hidir obj
 
-ifneq ($(wildcard .cabal-sandbox/*-packages.conf.d),)
-GHCFLAGS += \
-	-no-user-package-db \
-	-package-db $(wildcard .cabal-sandbox/*-packages.conf.d)
-endif
-
-all:
-	ghc $(GHCFLAGS) --make Main -o wplc
-	ghc --make tools/BlinkDiff.hs -o tools/BlinkDiff
-
+create-sandbox:
+	cabal sandbox init
+	cabal install --dependencies-only
 
 clean:
-	rm -rf obj wplc wplc.exe
+	-rm -rf wplc
+	-rm -rf wplc.exe
+	-rm -rf tools/BlinkDiff
+	-rm -rf tools/BlinkDiff.exe
 
+clean-sandbox:
+	-rm -rf .cabal-sandbox
+	-rm -rf dist
 
 test: test-parser test-backend test-lut test-WiFi-all
 test-clean: test-parser-clean test-backend-clean test-lut-clean test-WiFi-all-clean
@@ -64,164 +60,92 @@ test-lut:
 test-lut-clean:
 	make -C tests/lut clean
 
+
+# WiFi tests
+################################################################
+
 test-WiFi-all: test-WiFi test-WiFi-TX test-WiFi-RX
 test-WiFi-all-clean: test-WiFi-clean test-WiFi-TX-clean test-WiFi-RX-clean
 
 test-WiFi:
-	@echo ">>>>>>>>>>>>>>> Backend tests"
-	EXTRAOPTS="--no-exp-fold" make -C code/WiFi/tests
-	@echo "<<<<<<<<<<<<<<< Backend tests"
+	@echo ">>>>>>>>>>>>>>> WiFi tests"
+	make -C code/WiFi/tests
+	@echo "<<<<<<<<<<<<<<< WiFi  tests"
 
 test-WiFi-clean:
 	make -C code/WiFi/tests clean
 
 test-WiFi-TX:
-	@echo ">>>>>>>>>>>>>>> Backend tests"
+	@echo ">>>>>>>>>>>>>>> WiFi TX tests"
 	make -C code/WiFi/transmitter/tests
-	@echo "<<<<<<<<<<<<<<< Backend tests"
+	@echo "<<<<<<<<<<<<<<< WiFi TX tests"
 
 test-WiFi-TX-clean:
 	make -C code/WiFi/transmitter/tests clean
 
 test-WiFi-RX:
-	@echo ">>>>>>>>>>>>>>> Backend tests"
+	@echo ">>>>>>>>>>>>>>> WiFi RX tests"
 	make -C code/WiFi/receiver/tests
-	@echo "<<<<<<<<<<<<<<< Backend tests"
+	@echo "<<<<<<<<<<<<<<< WiFi RX tests"
 
 test-WiFi-RX-clean:
 	make -C code/WiFi/receiver/tests clean
 
 
+# WiFi pedantic tests
+#############################################################
 
-# examples: all
-# 	@echo "*** Examples (with optimization):"
-# 	cd examples; ./runTest s && cd ../
-# 	@echo ""
-# 	@echo "*** Examples (without optimization):"
-# 	cd examples; ./runTestsNoOpt && cd ../
+test-WiFi-pedantic: test-WiFi test-WiFi-TX test-WiFi-RX
+	@echo ">>>>>>>>>>>>>>> Pedantic WiFi tests"
 
-# allclean: clean
-# 	find tests -name '*.wpl.c' | xargs rm -f
-# 	find tests -name '*.wpl.exe' | xargs rm -f
-# 	find tests -name '*.wpl.expanded' | xargs rm -f
-# 	find tests -name '*.wpl.outfile' | xargs rm -f
+	EXTRAOPTS='--no-fold --no-exp-fold' make test-WiFi 
+	EXTRAOPTS='--vectorize'             make test-WiFi
+	EXTRAOPTS='--autolut'               make test-WiFi
+	EXTRAOPTS='--vectorize --autolut'   make test-WiFi
 
-# test-frontend: all
-# 	@echo ""
-# 	@echo "*** Frontend Tests:"
-# 	(cd tests && ./runTests)
+	EXTRAOPTS='--no-exp-fold --no-fold' make test-WiFi-RX
+	EXTRAOPTS='--vectorize'             make test-WiFi-RX
+	EXTRAOPTS='--autolut'               make test-WiFi-RX
+	EXTRAOPTS='--vectorize --autolut'   make test-WiFi-RX
 
-# test-vectorize: all
-# 	@echo ""
-# 	@echo "*** Vectorization Tests:"
-# 	(cd tests/vectorize && ./runTests)
+	EXTRAOPTS='--no-exp-fold --no-fold' make test-WiFi-TX
+	EXTRAOPTS='--vectorize'             make test-WiFi-TX
+	EXTRAOPTS='--autolut'               make test-WiFi-TX
+	EXTRAOPTS='--vectorize --autolut'   make test-WiFi-TX
 
-# test-lut: all
-# 	@echo ""
-# 	@echo "*** LUT Tests:"
-# 	(cd tests/lut && ./runTests)
-
-# test-wifi-tx: all 
-# 	@echo ""
-# 	@echo "*** WiFi Tx Tests (with -x -v):"
-# #	(cd Code/802.11a/transmitter && ../../../scripts/runGCCTests 10000000)
-# 	(cd Code/802.11a/transmitter && ./runTests)
-
-# test-wifi-rx: all 
-# 	@echo ""
-# 	@echo "*** WiFi Rx Tests (with -x -v):"
-# 	(cd Code/802.11a/receiver && ../../../scripts/runDDKTests)
-
-# test-wifi-rx-vector: all 
-# 	@echo ""
-# 	@echo "*** WiFi Vectorized - Rx Tests (with -x -v):"
-# 	(cd Code/802.11a/receiver/vectorized && ../../../../scripts/runDDKTests)
-
-# test-backend: all 
-# 	@echo ""
-# 	@echo "*** Backend Tests (with optimization):"
-# 	(cd tests/backend && ../../scripts/runGCCTests 1000)
-
-# test-pipeline: all
-# 	@echo ""
-# 	@echo "*** Pipeline Tests:"
-# 	(cd tests/pipeline && ../../scripts/runDDKPipeTests)
-
-# test-pipeline-aggressive: all
-# 	@echo ""
-# 	@echo "*** Aggressive Pipeline Tests:"
-# 	(cd tests/pipeline/aggressive && ../../../scripts/runDDKAggrPipeTests)
-
-# test-wifi-rx-pipeline: all 
-# 	@echo ""
-# 	@echo "*** WiFi Pipelined on 2 Cores - Rx Tests (with -x -v):"
-# 	(cd Code/802.11a/receiver/pipelined && ../../../../scripts/runDDKPipeTests)
-
-# test-wifi-rx-vector-pipeline: all 
-# 	@echo ""
-# 	@echo "*** WiFi Vectorized & Pipelined on 2 Cores - Rx Tests (with -x -v):"
-# 	(cd Code/802.11a/receiver/vectorized/pipelined && ../../../../../scripts/runDDKPipeTests)
+test-WiFi-pedantic-clean: test-WiFi-clean test-WiFi-TX-clean test-WiFi-RX-clean
 
 
-# test-wifi-all: test-wifi-tx test-wifi-rx \
-#                test-wifi-rx-vector test-wifi-rx-pipeline test-wifi-rx-vector-pipeline 
+# WiFi performance tests
+#############################################################
 
-# test: all \
-#       test-frontend test-backend test-pipeline test-pipeline-aggressive \
-#       test-wifi-all test-vectorize test-lut
-# 	@echo "Testsuite run completed!"
+test-WiFi-perf-all: test-WiFi-perf test-WiFi-TX-perf test-WiFi-RX-perf
+test-WiFi-perf-all-clean: test-WiFi-perf-clean test-WiFi-TX-perf-clean test-WiFi-RX-perf-clean
 
-# mini-test: all \
-#            test-frontend test-backend test-pipeline test-pipeline-aggressive \
-#            test-wifi-all test-lut
-# 	@echo "Testsuite run completed!"
+test-WiFi-perf:
+	@echo ">>>>>>>>>>>> WiFi performance tests" 
+	make -C code/WiFi/perf > perf.txt
+	cat perf.txt
+	@echo "<<<<<<<<<<<< WiFi performance tests" 
 
-# # No need for this as non-vectorized is run by avect script anyway
-# #test-performance-wifi-rx: all 
-# #	@echo ""
-# #	@echo "*** Test Wifi RX non-vectorized performance:"
-# #	(cd Code/802.11a/receiver/ && ../../../scripts/runDDKTestsPerf)
+test-WiFi-perf-clean:
+	make -C code/WiFi/perf clean
 
-# test-performance-micro: all 
-# 	@echo ""
-# 	@echo "*** Test micro-benchmark performance (results in performance dir):"
-# 	(cd performance && ./runAll)
+test-WiFi-RX-perf:
+	@echo ">>>>>>>>>>>> WiFi RX performance tests" 
+	make -C code/WiFi/receiver/perf > rx-perf.txt
+	cat rx-perf.txt
+	@echo "<<<<<<<<<<<< WiFi RX performance tests" 
 
-# test-performance-wifi-rx-avect: all 
-# 	@echo ""
-# 	@echo "*** Test Wifi RX auto-vectorized performance:"
-# 	(cd Code/802.11a/receiver/ && ../../../scripts/runDDKVectTestsPerf)
+test-WiFi-RX-perf-clean: 
+	make -C code/WiFi/receiver/perf clean
 
-# test-performance-wifi-rx-avect-pipeline: all 
-# 	@echo ""
-# 	@echo "*** Test Wifi RX auto-vectorized & pipelined performance:"
-# 	(cd Code/802.11a/receiver/ && ../../../scripts/runDDKVectPipeTestsPerf)
+test-WiFi-TX-perf:
+	@echo ">>>>>>>>>>>> WiFi TX performance tests" 
+	make -C code/WiFi/transmitter/perf > tx-perf.txt
+	cat tx-perf.txt
+	@echo "<<<<<<<<<<<< WiFi TX performance tests" 
 
-# test-performance-wifi-rx-mvect: all 
-# 	@echo ""
-# 	@echo "*** Test Wifi RX manually-vectorized performance:"
-# 	(cd Code/802.11a/receiver/vectorized/ && ../../../../scripts/runDDKTestsPerf)
+test-WiFi-TX-perf-clean: 
+	make -C code/WiFi/transmitter/perf clean
 
-# test-performance-wifi-tx-avect-alut-pipeline: all
-# 	@echo ""
-# 	@echo "*** Test Wifi TX auto-vectorized aut-lutted pipelined performance:"
-# 	(cd Code/802.11a/transmitter/ && ../../../scripts/runDDKAVectPipeTestsPerf)
-
-# test-performance-wifi-rx-all: all \
-# 	test-performance-wifi-rx-avect \
-# 	test-performance-wifi-rx-mvect test-performance-wifi-rx-avect-pipeline
-# 	@echo "Wifi RX performance testsuite run completed!"
-
-# test-performance: all \
-# 	test-performance-micro test-performance-wifi-rx-avect \
-# 	test-performance-wifi-rx-mvect test-performance-wifi-rx-avect-pipeline
-# 	@echo "Performance testsuite run completed!"
-
-# test-thorough-performance-wifi: all 
-# 	@echo ""
-# 	@echo "*** Thorough performance measurement of WiFi (results in TOP/processedPerfResults.txt):"
-# 	(./scripts/runPerformanceAll)
-
-# test-thorough-performance: all \
-# 	test-thorough-performance-wifi test-performance-micro 
-# 	@echo "Thorough performance suite finished"

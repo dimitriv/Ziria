@@ -247,7 +247,7 @@ BOOLEAN __stdcall go_thread_tx(void * pParam)
 	unsigned char * headerBuf;
 	unsigned char * payloadBuf;
 	uint16 * payloadBuf16;
-	unsigned int payloadSize;
+	memsize_int payloadSize;
 
 
 	// TX always first prepares the buffers in memory
@@ -424,7 +424,7 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 	BlinkFileType inType = params_rx->inType;
 	BlinkFileType outType = params_rx->outType;
 	const long maxOutSize = 4096;
-	unsigned int sampleSize;
+	memsize_int sampleSize;
 
 
 	if (inType != TY_FILE && inType != TY_SORA)
