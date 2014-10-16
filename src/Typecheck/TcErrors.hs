@@ -41,6 +41,7 @@ data ErrCtx
   = CompErrCtx SrcComp
   | ExprErrCtx SrcExp
   | GlobalDefs -- TODO: Remove once we remove globals
+  | InternalTypeChecking -- used when in the vectorizer when generating code
 
 data TyErr
   = TyErr { err_ctxt     :: ErrCtx
@@ -65,6 +66,8 @@ ppTyErr TyErr{..}
              , nest 2 $ ppr e ]
     pp_ctxt (GlobalDefs)
       = text "" -- Not particularly helpful
+    pp_ctxt InternalTypeChecking
+      = text "When type checking compiler generated code:"
 
 
 
