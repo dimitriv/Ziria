@@ -250,7 +250,7 @@ data FreeComp a =
     Var (GName CTy) (FreeComp a)
   | Bind (FreeComp ()) (GName Ty -> FreeComp a)
   | LetE ForceInline (FreeExp ()) (GName Ty -> FreeComp a)
-  | LetERef (Maybe (FreeExp ())) (GName Ty -> FreeComp a)
+  | LetERef (Either (FreeExp ()) Ty) (GName Ty -> FreeComp a)
   | Take1 (FreeComp a)
   | Take Int (FreeComp a)
   | Emit (FreeExp ()) (FreeComp a)
@@ -294,7 +294,7 @@ fVar x = Var x (Pure ())
 fLetE :: ForceInline -> FreeExp () -> FreeComp (GName Ty)
 fLetE fi e = LetE fi e Pure
 
-fLetERef :: Maybe (FreeExp ()) -> FreeComp (GName Ty)
+fLetERef :: Either (FreeExp ()) Ty -> FreeComp (GName Ty)
 fLetERef e = LetERef e Pure
 
 fBind :: FreeComp () -> FreeComp (GName Ty)
@@ -422,14 +422,13 @@ unFree loc = liftM fromJust . go
       nm      <- newName loc (ctExp e')
       Just k' <- go (k nm)
       return $ Just $ cLetE loc nm fi e' k'
-    go (LetERef (Just e) k) = do
+    go (LetERef (Left e) k) = do
       e'      <- unEFree loc e
       nm      <- newName loc (ctExp e')
       Just k' <- go (k nm)
       return $ Just $ cLetERef loc nm (Just e') k'
-    go (LetERef Nothing k) = do
-      a       <- newTyVar
-      nm      <- newName loc a
+    go (LetERef (Right ty) k) = do
+      nm      <- newName loc ty
       Just k' <- go (k nm)
       return $ Just $ cLetERef loc nm Nothing k'
     go (Bind c k) = do
