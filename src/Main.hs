@@ -68,12 +68,13 @@ import CgProgram ( codeGenProgram )
 import qualified PassPipeline as PP
 
 
--- import Vectorize
+import VecMitigators
+
 import Orphans
 
 
-data CompiledProgram = CompiledProgram Comp [C.Definition] FilePath
-
+data CompiledProgram 
+  = CompiledProgram Comp [C.Definition] FilePath
 
 pprProgInfo :: Comp -> Doc
 pprProgInfo prog =
