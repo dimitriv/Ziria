@@ -926,7 +926,7 @@ subarr_inline_step _fgs e
   , EValArr _ vals <- unExp evals
   , EVal _ (VInt n') <- unExp estart
   , let n = fromIntegral n'
-  = rewrite $ eVal (expLoc e) (fromJust $ isArrayTy_maybe $ ctExp e) (vals!!n)
+  = rewrite $ eVal (expLoc e) (ctExp e) (vals!!n)
 
   | EArrRead evals estart (LILength n) <- unExp e
   , EValArr _ vals <- unExp evals
