@@ -166,11 +166,10 @@ allVectMults ra ty_in xin xout = [ (x,y)
                                    else x `mod` y == 0 && x >= y
                                  , good_sizes x y
                               ]
-  where in_vect_bound _ = 256 + 32 -- Increase this slightly above 256 (needed for some rates)
+  where in_vect_bound   = 256 + 32 -- Increase this slightly above 256 (needed for some rates)
         out_vect_bound  = 256 + 32 -- Increase this slightly above 256 (needed for some rates)
         good_sizes x y = xin*x  <= in_vect_bound ty_in &&
                          xout*y <= out_vect_bound
-
 
 -- Delayed result of vectorization
 data DelayedVectRes
@@ -181,75 +180,6 @@ data DelayedVectRes
          }
 
 
-mitigateUp :: Maybe SourcePos -> String
-           -> Ty -> Int -> Int -> VecM (Comp () ())
-mitigateUp loc orig ty lo hi
-  = do { (comp,binds) <- runVecMBnd $
-            do { x  <- newTypedName "x_mt_up" (if lo == 1 then ty else TArr (Literal lo) ty) loc
-               ; i  <- newTypedName "i" tint loc
-               ; let ya_ty = TArr (Literal hi) ty
-               ; ya <- newDeclTypedName "mt_ya_up" ya_ty loc Nothing
-               ; let bnd = hi `div` lo
-               ; let comp = xRepeat $
-                            xSeq $
-                            [ CMD $
-                              xTimes i (0::Int) bnd $
-                              xSeq [ CMD $ x <:- xTake
-                                   , if lo == 1 then
-                                        CMD $ ya .!i .:= x
-                                     else
-                                        CMD $ ya .!(i .* lo, lo) .:= x
-                                   ]
-                            , CMD $ xEmit ya
-                            ]
-               ; return (comp loc)
-               }
-       ; fname <- newVectName ("mitigate_up" ++ orig) loc
-       ; return $
-            cLetFunC loc () fname [] binds comp $
-            cCall loc () fname []
-       }
-
-mitigateDn :: Maybe SourcePos
-           -> String
-           -> Ty -> Int -> Int -> VecM (Comp () ())
-mitigateDn loc orig ty hi lo
-  = do { (comp,binds) <- runVecMBnd $
-             do { x <- newTypedName "x_mt_dn" (TArr (Literal hi) ty) loc
-                ; i <- newTypedName "i" tint loc
-                ; let bnd = hi `div` lo
-                ; let comp = xRepeat $ xSeq $
-                             [ CMD $ x <:- xTake
-                             , if lo == 1
-                               then CMD $ xEmits x
-                               else CMD $
-                                    xTimes i (0::Int) bnd $
-                                      xEmit (x .!(i .* lo, lo))
-                             ]
-                ; return (comp loc)
-                }
-       ; fname <- newVectName ("mitigate_dn" ++ orig) loc
-       ; return $
-            cLetFunC loc () fname [] binds  comp $
-            cCall loc () fname []
-       }
-
-compileMitigs :: GS.Sym -> Comp () () -> IO (Comp () ())
--- Compile away mitigators.
--- TODO: at the moment this is a bit inefficient,
--- better to compile directly in terms of tick and process.
-compileMitigs sym comp
-  = runVecM vec_action sym (VecEnv [] []) (VecState 0 0) >>= (return . fst)
-  where
-    vec_action = mapCompM_ return compile comp
-    compile c
-      | MkComp c0 loc _ <- c
-      , Mitigate ty i1 i2 <- c0
-      = if i1 <= i2
-        then mitigateUp loc "compiled" ty i1 i2
-        else mitigateDn loc "compiled" ty i1 i2
-      | otherwise
-      = return c
 
 matchControl :: (GS.Sym, VecEnv)
              -> [ [DelayedVectRes] ] -> [ [DelayedVectRes] ]
