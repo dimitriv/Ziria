@@ -339,7 +339,7 @@ inline_step_aux _fgs comp
 
     | LetFunC nm _params _locals _c1 c2 <- unComp comp
     , not (S.member nm (compCFVs c2)) -- Completely unused
-    = return c2
+    = rewrite c2
 
     | LetFunC nm params locals c1 c2 <- unComp comp
     -- NB: for now, we only inline LetFunC's with empty local environments

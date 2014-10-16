@@ -646,12 +646,35 @@ compFVs = \c ->
                                         mapM_ unrecordE (map fst ls)
     goComp0 (Call nm _)            = recordC nm
     goComp0 (Times _ _ _ nm _)     = unrecordE nm
-    goComp0 _                      = return ()
+    goComp0 (Map _v nm)            = recordE nm
+    goComp0 (Filter nm)            = recordE nm
+
+    goComp0 (Seq {})               = return ()
+    goComp0 (Par {})               = return ()
+    goComp0 (Emit {})              = return ()
+    goComp0 (LetStruct {})         = return ()
+    goComp0 (Emits {})             = return ()
+    goComp0 (Return {})            = return ()
+    goComp0 (Interleave {})        = return ()
+    goComp0 (Branch {})            = return ()
+    goComp0 (Take1 {})             = return ()
+    goComp0 (Take {})              = return ()
+    goComp0 (Until {})             = return ()
+    goComp0 (While {})             = return ()
+    goComp0 (Repeat {})            = return ()
+    goComp0 (VectComp {})          = return ()
+    goComp0 (ReadSrc {})           = return ()
+    goComp0 (WriteSnk {})          = return ()
+    goComp0 (ReadInternal {})      = return ()
+    goComp0 (WriteInternal {})     = return ()
+    goComp0 (Standalone {})        = return ()
+    goComp0 (Mitigate {})          = return ()
 
     goExp :: GExp t b -> State (CompFVs tc t) (GExp t b)
     goExp e = modify (\(sc, s) -> (sc, S.union (exprFVs e) s)) >> return e
 
-    unrecordE :: GName t -> State (CompFVs tc t) ()
+    recordE, unrecordE :: GName t -> State (CompFVs tc t) ()
+    recordE   nm = modify $ \(sc, s) -> (sc, S.insert nm s)
     unrecordE nm = modify $ \(sc, s) -> (sc, S.delete nm s)
 
     recordC, unrecordC :: GName tc -> State (CompFVs tc t) ()
