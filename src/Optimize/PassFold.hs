@@ -426,16 +426,18 @@ inline_exp_fun (nm,params,locals,body)
             -- consistent with the semantics implemented in CgExpr.
             -- See for example codeGenArrRead in CgExpr.hs
 
-            how_to_inline :: GName Ty -> Exp -> Either (GName Ty, Exp) (GName Ty, Maybe Exp)
-            -- The choice is: either with a substitution (Left) or with a let-binding (Right)
+            how_to_inline :: GName Ty -> Exp 
+                          -> Either (GName Ty, Exp) (GName Ty, Maybe Exp)
+            -- The choice is: either with a substitution (Left), or 
+            --                with a let-binding (Right)
             how_to_inline prm_nm arg
               = if is_simpl_expr arg
                 then Left (prm_nm, arg)
-                else if isArrayTy (nameTyp prm_nm) &&
-                        getArrayTy (nameTyp prm_nm) /= TBit &&
-                        is_array_ref arg
-                     then Left  (prm_nm, arg)
-                     else Right (prm_nm, Just arg)
+                else case isArrayTy_maybe (nameTyp prm_nm) of
+                       Just bty 
+                         | (bty /= TBit && is_array_ref arg)
+                         -> Left (prm_nm, arg)
+                       _otherwise -> Right (prm_nm, Just arg)
 
             is_array_ref (MkExp (EVar _)      _ ()) = True
             is_array_ref (MkExp (EArrRead {}) _ ()) = True
@@ -924,7 +926,7 @@ subarr_inline_step _fgs e
   , EValArr _ vals <- unExp evals
   , EVal _ (VInt n') <- unExp estart
   , let n = fromIntegral n'
-  = rewrite $ eVal (expLoc e) (getArrayTy $ ctExp e) (vals!!n)
+  = rewrite $ eVal (expLoc e) (fromJust $ isArrayTy_maybe $ ctExp e) (vals!!n)
 
   | EArrRead evals estart (LILength n) <- unExp e
   , EValArr _ vals <- unExp evals

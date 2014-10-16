@@ -842,9 +842,15 @@ isArrayTy :: Ty -> Bool
 isArrayTy (TArray _ _) = True
 isArrayTy _          = False
 
-getArrayTy :: Ty -> Ty
-getArrayTy (TArray _n t) = t
-getArrayTy t             = t
+isArrayTy_maybe :: Ty -> Maybe Ty
+-- If an array type, gives you back the type of the elements
+isArrayTy_maybe (TArray _n t) = Just t
+isArrayTy_maybe _other        = Nothing
+
+atomTyOf :: Ty -> Ty 
+-- Give you back the biggest non-array type under this type
+atomTyOf (TArray _ t) = atomTyOf t
+atomTyOf t            = t 
 
 
 expEq :: Eq t => GExp t a -> GExp t a -> Bool
