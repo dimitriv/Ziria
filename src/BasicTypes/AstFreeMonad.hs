@@ -141,6 +141,28 @@ feLift e = ELift e (EPure ())
   Some convenience wrappers around the free expressions
 -------------------------------------------------------------------------------}
 
+-- | Overloading of free expressions
+--
+-- NOTE: We do NOT support overloading for actual Haskell values. We used to
+-- have `ToFreeExp` instances for `Int`, `Bool` and `()`, but the instance for
+-- `Int` is not particularly useful because we'd still to write `(0 :: Int)`
+-- anyway to avoid ambiguity errors, and the instance for `()` is actually
+-- harmful, because if _intended_ to write
+--
+-- > x <- fBind fTake1
+-- > fReturn $ y .:= x
+--
+-- but actually wrote
+--
+-- > x <- fTake1
+-- > fReturn $ y .:= x
+--
+-- then this would still be type correct because x now has `()` type and we
+-- would be assigning `()` to `y`, rather than the value of `x`.
+--
+-- More generally, we don't want to confuse the return type of Haskell values
+-- with Ziria values, which is why we have a `ToFreeExp` instance for `Val`
+-- (Ziria values) but not for Haskell level values.
 class ToFreeExp a where
   toFreeExp :: a -> FreeExp ()
 
@@ -150,14 +172,8 @@ instance ToFreeExp (FreeExp ()) where
 instance ToFreeExp (GName Ty) where
   toFreeExp = feVar
 
-instance ToFreeExp Int where
-  toFreeExp = feVal . VInt . fromIntegral
-
-instance ToFreeExp Bool where
-  toFreeExp = feVal . VBool
-
-instance ToFreeExp () where
-  toFreeExp _ = feVal VUnit
+instance ToFreeExp Val where
+  toFreeExp = feVal
 
 instance ToFreeExp Exp where
   toFreeExp = feLift
@@ -216,14 +232,14 @@ infixl 6 .-
 class XRange a where
  toRange :: a -> (FreeExp (), LengthInfo)
 
-instance XRange Int where
+instance XRange Val where
   toRange a = (toFreeExp a, LISingleton)
 
 instance XRange (GName Ty) where
   toRange a = (toFreeExp a, LISingleton)
 
-instance ToFreeExp a => XRange (a, Int) where
-  toRange (a,b) = (toFreeExp a, LILength b)
+instance (ToFreeExp a, Integral b) => XRange (a, b) where
+  toRange (a,b) = (toFreeExp a, LILength (fromIntegral b))
 
 (.!) :: (ToFreeExp arr, XRange y) => arr -> y -> FreeExp ()
 (.!) earr y = let (xe, li) = toRange y in feArrRead (toFreeExp earr) xe li
@@ -534,23 +550,23 @@ _test' = do
     Left err      -> print err
     Right (c', _) -> print c'
 
-_test :: GName Ty -> GName Ty -> GName Ty -> GName Ty -> Int -> Int -> FreeComp ()
+_test :: GName Ty -> GName Ty -> GName Ty -> GName Ty -> Integer -> Integer -> FreeComp ()
 _test tmp_idx is_empty in_buff in_buff_idx finalin n0 = do
-  if is_empty .= True
+  if is_empty .= VBool True
     then do x <- fBind (fTake1 `returning` tint32)
             fReturn AutoInline $ do
               in_buff     .:= x
-              is_empty    .:= False
-              in_buff_idx .:= (0 :: Int)
-    else fReturn AutoInline ()
-  if finalin .= in_buff_idx .+ n0
+              is_empty    .:= VBool False
+              in_buff_idx .:= VInt 0
+    else fReturn AutoInline VUnit
+  if VInt finalin .= in_buff_idx .+ VInt n0
     then do fReturn ForceInline $ do
-              is_empty .:= True
+              is_empty .:= VBool True
               in_buff  .! (in_buff_idx, n0)
-    else if in_buff_idx .+ n0 .< finalin
+    else if in_buff_idx .+ VInt n0 .< VInt finalin
            then fReturn ForceInline $ do
                   tmp_idx     .:= in_buff_idx
-                  in_buff_idx .:= in_buff_idx .+ n0
+                  in_buff_idx .:= in_buff_idx .+ VInt n0
                   in_buff .! (tmp_idx, n0)
            else -- The only reason this is an error is the lack of memcpy as a
                 -- primitive but probably we will not encounter any such
@@ -559,6 +575,6 @@ _test tmp_idx is_empty in_buff in_buff_idx finalin n0 = do
                    -- Fix this at some point by providing a proper
                    -- computer-level error function
                    _u <- fBind (fError "rewrite_take: unaligned!")
-                   fReturn ForceInline $ in_buff .! (0 :: Int, n0)
+                   fReturn ForceInline $ in_buff .! (VInt 0, n0)
   -- This wasn't in the original example. Just testing array assignment
-  fReturn AutoInline $ in_buff .! (in_buff_idx, n0) .:= (123 :: Int)
+  fReturn AutoInline $ in_buff .! (in_buff_idx, n0) .:= VInt 123
