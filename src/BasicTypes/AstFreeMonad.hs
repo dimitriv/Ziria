@@ -73,6 +73,7 @@ import TcErrors (ErrCtx(InternalTypeChecking))
 import qualified GenSym  as GS
 import qualified TcMonad as TcM
 
+
 {-------------------------------------------------------------------------------
   Free expression monad
 -------------------------------------------------------------------------------}
@@ -322,20 +323,22 @@ fTake1 = Take1 (Pure ())
 fTake :: Int -> FreeComp (GName Ty)
 fTake n = fBind (Take n (Pure ()))
 
-fEmit :: FreeExp () -> FreeComp ()
-fEmit e = Emit e (Pure ())
+fEmit :: ToFreeExp e => e -> FreeComp ()
+fEmit e = Emit (toFreeExp e) (Pure ())
 
-fEmits :: FreeExp () -> FreeComp ()
-fEmits e = Emits e (Pure ())
+fEmits :: ToFreeExp e => e -> FreeComp ()
+fEmits e = Emits (toFreeExp e) (Pure ())
 
 fReturn :: ToFreeExp e => ForceInline -> e -> FreeComp ()
 fReturn fi e = Return fi (toFreeExp e) (Pure ())
 
-fBranch :: FreeExp () -> FreeComp () -> FreeComp () -> FreeComp ()
-fBranch e c1 c2  = Branch e c1 c2 (Pure ())
+fBranch :: ToFreeExp e => e -> FreeComp () -> FreeComp () -> FreeComp ()
+fBranch e c1 c2  = Branch (toFreeExp e) c1 c2 (Pure ())
 
-fTimes :: UnrollInfo -> FreeExp () -> FreeExp () -> (GName Ty -> FreeComp ()) -> FreeComp ()
-fTimes ui estart elen body = Times ui estart elen body (Pure ())
+fTimes :: (ToFreeExp a, ToFreeExp b)
+       => UnrollInfo -> a -> b -> (GName Ty -> FreeComp ()) -> FreeComp ()
+fTimes ui estart elen body = Times ui (toFreeExp estart) 
+                                      (toFreeExp elen) body (Pure ())
 
 fRepeat :: Maybe VectAnn -> FreeComp () -> FreeComp ()
 fRepeat ann body = Repeat ann body (Pure ())
