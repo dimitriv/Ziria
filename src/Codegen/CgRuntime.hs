@@ -38,12 +38,18 @@ import Text.PrettyPrint.Mainland
 import Data.Maybe
 
 
-callInBufInitializer  buf_context heap_context = callExtBufInitializer "get" buf_context heap_context
-callOutBufInitializer buf_context heap_context = callExtBufInitializer "put" buf_context heap_context
+callInBufInitializer  buf_context heap_context 
+  = callExtBufInitializer "get" buf_context heap_context
+callOutBufInitializer buf_context heap_context 
+  = callExtBufInitializer "put" buf_context heap_context
 
-callExtBufInitializer str global_params buf_context heap_context (ExtBuf base_ty) = 
-  let init_typ_spec = "init_" ++ str ++ (fst $ getTyPutGetInfo base_ty)
-  in [cstm| $id:(init_typ_spec)($id:global_params, $id:buf_context, $id:heap_context);|]
+callExtBufInitializer str global_params 
+                          buf_context 
+                          heap_context (ExtBuf base_ty) 
+  = let atom_ty = atomTyOf base_ty
+        init_typ_spec = "init_" ++ str ++ (fst $ getTyPutGetInfo atom_ty)
+    in [cstm| $id:(init_typ_spec)($id:global_params, 
+                                    $id:buf_context, $id:heap_context);|]
 
 callExtBufInitializer _str _global_params _buf_context _heap_context (IntBuf _) 
   = error "BUG: callExtBufInitializer called with IntBuf!" 
@@ -53,11 +59,16 @@ cgExtBufInitsAndFins (TBuff in_bty,TBuff out_bty) mfreshId
        heap_context <- getHeapContext
        global_params <- getGlobalParams
        appendTopDef [cedecl|void $id:(ini_name mfreshId)() {
-                        $stm:(callInBufInitializer global_params buf_context heap_context in_bty)
-                        $stm:(callOutBufInitializer global_params buf_context heap_context out_bty)
+                        $stm:(callInBufInitializer global_params 
+                                                   buf_context 
+                                                   heap_context in_bty)
+                        $stm:(callOutBufInitializer global_params 
+                                                    buf_context 
+                                                    heap_context out_bty)
                         } |]
        appendTopDef [cedecl|void $id:(fin_name mfreshId)() {
-                        $stm:(callOutBufFinalizer global_params buf_context out_bty)
+                        $stm:(callOutBufFinalizer global_params 
+                                                  buf_context out_bty)
                         } |]
   where ini_name mfreshId = "wpl_input_initialize" ++ mfreshId
         fin_name mfreshId = "wpl_output_finalize" ++ mfreshId
@@ -66,7 +77,8 @@ cgExtBufInitsAndFins (ty1,ty2) mfreshId
   = fail $ "BUG: cgExtBufInitsAndFins called with non-TBuff types!"
 
 callOutBufFinalizer global_params buf_context (ExtBuf base_ty) =
-  let finalize_typ_spec = "flush_put" ++ (fst $ getTyPutGetInfo base_ty)
+  let atom_ty = atomTyOf base_ty 
+      finalize_typ_spec = "flush_put" ++ (fst $ getTyPutGetInfo atom_ty)
   in [cstm| $id:(finalize_typ_spec)($id:global_params, $id:buf_context);|]
 
 callOutBufFinalizer _global_params _buf_context (IntBuf _) 
