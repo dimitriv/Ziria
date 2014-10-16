@@ -32,7 +32,7 @@ import Analysis.Range (Range)
   Values
 -------------------------------------------------------------------------------}
 
-vint :: Int -> Val
+vint :: Integral a => a -> Val
 -- Auxiliary function for use in the vectorizer
 vint n = VInt (fromIntegral n)
 
