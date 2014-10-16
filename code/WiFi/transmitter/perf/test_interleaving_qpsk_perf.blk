@@ -21,4 +21,4 @@
 #include "../../const.blk"
 #include "../interleaving.blk"
 
-read[bit] >>> interleaver (M_QPSK) >>> write[bit]
+let comp main = read[bit] >>> interleaver (M_QPSK) >>> write[bit];

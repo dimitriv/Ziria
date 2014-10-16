@@ -19,7 +19,7 @@
 --
 #include "blocks/ReceiverInfinite.blk"
 
-read >>> ReceiverInfinite(HeaderInfo{coding = CR_12; modulation = M_BPSK; len = 0}) >>> write
+let comp main = read >>> ReceiverInfinite(HeaderInfo{coding = CR_12; modulation = M_BPSK; len = 0}) >>> write;
 
 
 

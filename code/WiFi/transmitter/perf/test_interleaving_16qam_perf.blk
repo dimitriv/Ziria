@@ -22,4 +22,4 @@
 #include "../interleaving.blk"
 
 -- NOTE: has not been tested for higher-efficiency encodings
-read[bit] >>> interleaver (M_16QAM) >>> write[bit]
+let comp main = read[bit] >>> interleaver (M_16QAM) >>> write[bit];

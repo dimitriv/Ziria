@@ -20,4 +20,4 @@
 #include "../../const.blk"
 #include "../decoding/DemapQAM64.blk"
 
-read >>> DemapQAM64() >>> write
+let comp main = read >>> DemapQAM64() >>> write;

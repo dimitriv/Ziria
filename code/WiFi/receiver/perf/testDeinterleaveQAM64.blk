@@ -20,4 +20,4 @@
 #include "../../const.blk"
 #include "../decoding/DeinterleaveQAM64.blk"
 
-read >>> DeinterleaveQAM64() >>> write
+let comp main = read >>> DeinterleaveQAM64() >>> write;

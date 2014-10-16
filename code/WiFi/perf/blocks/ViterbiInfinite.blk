@@ -23,7 +23,7 @@
 -- Viterbi decoder works with finite buffer sizes (i.e. 96000 bits)
 -- But we want to test it with very large data inputs
 -- So we make a special version that reinits after 1500B
-let comp ViterbiInfinite(rate:int) = 
+fun comp ViterbiInfinite(rate:int) {
   var nOutput:int16;
   var outViterbi:arr[96000] bit; 
   var itercnt:int := 0;
@@ -56,5 +56,4 @@ let comp ViterbiInfinite(rate:int) =
      }
 
    }
-
-in
+};

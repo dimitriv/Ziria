@@ -20,4 +20,4 @@
 #include "../../const.blk"
 #include "../decoding/DemapBPSK.blk"
 
-read >>> DemapBPSK() >>> write
+let comp main = read >>> DemapBPSK() >>> write;
