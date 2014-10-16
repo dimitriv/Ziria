@@ -450,7 +450,12 @@ mapCompM onCTyp onETyp onCAnn onEAnn onExp f = goComp
                    x'  <- mapNameM onETyp x
                    c'' <- goComp c'
                    return (x', c'')
-       return $ BindMany c1' xs_cs'
+       -- TODO: we normalize at every node in the AST as we go up
+       -- which is not terribly nice. Perhaps we should get rid of
+       -- BindMany, in favor of plain old Bind, and have a 
+       -- bindManyView later on that gives us the functionality 
+       -- we need.
+       return $ mkBindMany c1' xs_cs'
     goComp0 (Seq c1 c2) = do
       c1' <- goComp c1
       c2' <- goComp c2
