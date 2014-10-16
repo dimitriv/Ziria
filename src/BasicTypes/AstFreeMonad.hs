@@ -33,6 +33,7 @@ module AstFreeMonad (
   , FreeComp -- opaque
   , fVar
   , fLetE
+  , fLetERef
   , fBind
   , fTake1
   , fTake
@@ -44,6 +45,10 @@ module AstFreeMonad (
   , fRepeat
   , fError
   , fLift
+    -- ** Type annotations on computations
+  , returning
+  , taking
+  , emitting
     -- * Translation out of the free monad
   , unFreeExp
   , unFreeComp
@@ -51,8 +56,9 @@ module AstFreeMonad (
 
 import Prelude
 import Control.Applicative
-import Control.Monad
+import Control.Monad (liftM, ap, (>=>))
 import Data.Maybe (fromJust)
+import Data.Foldable (forM_)
 import Text.Parsec.Pos (SourcePos)
 
 import AstComp hiding (GComp0(..))
@@ -76,6 +82,7 @@ data FreeExp a =
   | EVar (GName Ty) (FreeExp a)
   | EBinOp BinOp (FreeExp ()) (FreeExp ()) (FreeExp a)
   | EArrRead (FreeExp ()) (FreeExp ()) LengthInfo (FreeExp a)
+  | EArrWrite (FreeExp ()) (FreeExp ()) LengthInfo (FreeExp ()) (FreeExp a)
   | EAssign (FreeExp ()) (FreeExp ()) (FreeExp a)
   | EError String (FreeExp a)
   | ELift Exp (FreeExp a)
@@ -91,15 +98,16 @@ instance Applicative FreeExp where
 
 instance Monad FreeExp where
   return = EPure
-  EVal v            k >>= f = EVal v            (k >>= f)
-  EVar x            k >>= f = EVar x            (k >>= f)
-  EBinOp op e1 e2   k >>= f = EBinOp op e1 e2   (k >>= f)
-  EArrRead arr e li k >>= f = EArrRead arr e li (k >>= f)
-  EAssign x e       k >>= f = EAssign x e       (k >>= f)
-  EError str        k >>= f = EError str        (k >>= f)
-  EAnnot e ty       k >>= f = EAnnot e ty       (k >>= f)
-  ELift e           k >>= f = ELift e           (k >>= f)
-  EPure a             >>= f = f a
+  EVal v                k >>= f = EVal v                (k >>= f)
+  EVar x                k >>= f = EVar x                (k >>= f)
+  EBinOp op e1 e2       k >>= f = EBinOp op e1 e2       (k >>= f)
+  EArrRead arr e li     k >>= f = EArrRead arr e li     (k >>= f)
+  EArrWrite arr e li e' k >>= f = EArrWrite arr e li e' (k >>= f)
+  EAssign x e           k >>= f = EAssign x e           (k >>= f)
+  EError str            k >>= f = EError str            (k >>= f)
+  EAnnot e ty           k >>= f = EAnnot e ty           (k >>= f)
+  ELift e               k >>= f = ELift e               (k >>= f)
+  EPure a                 >>= f = f a
 
 feVal :: Val -> FreeExp ()
 feVal v = EVal v (EPure ())
@@ -111,7 +119,10 @@ feBinOp :: BinOp -> FreeExp () -> FreeExp () -> FreeExp ()
 feBinOp op e1 e2 = EBinOp op e1 e2 (EPure ())
 
 feArrRead :: FreeExp () -> FreeExp () -> LengthInfo -> FreeExp ()
-feArrRead arr e li = EArrRead arr e li (EPure ())
+feArrRead arr estart li = EArrRead arr estart li (EPure ())
+
+feArrWrite :: FreeExp () -> FreeExp () -> LengthInfo -> FreeExp () -> FreeExp ()
+feArrWrite arr estart li e = EArrWrite arr estart li e (EPure ())
 
 feAssign :: FreeExp () -> FreeExp () -> FreeExp ()
 feAssign x e = EAssign x e (EPure ())
@@ -151,8 +162,11 @@ instance ToFreeExp () where
 instance ToFreeExp Exp where
   toFreeExp = feLift
 
+-- | Write to a variable _or_ to an array
 (.:=) :: (ToFreeExp x, ToFreeExp e) => x -> e -> FreeExp ()
-(.:=) x e = feAssign (toFreeExp x) (toFreeExp e)
+(.:=) x e = case toFreeExp x of
+  EArrRead earr start len (EPure ()) -> feArrWrite earr start len (toFreeExp e)
+  _otherwise                         -> feAssign (toFreeExp x)    (toFreeExp e)
 
 (.*) :: (ToFreeExp e1, ToFreeExp e2) => e1 -> e2 -> FreeExp ()
 (.*) e1 e2 = feBinOp Mult (toFreeExp e1) (toFreeExp e2)
@@ -220,8 +234,8 @@ instance ToFreeExp a => XRange (a, Int) where
 
 -- | Free computation monad
 --
--- NOTE: The cases for Bind and LetE scope the variable over the _entire_
--- remaining computation; i.e., something like
+-- NOTE: The cases for Bind, LetE and LetERef scope the variable over the
+-- _entire_ remaining computation; i.e., something like
 --
 -- > let e = expr in (c1 ; c2)
 --
@@ -236,6 +250,7 @@ data FreeComp a =
     Var (GName CTy) (FreeComp a)
   | Bind (FreeComp ()) (GName Ty -> FreeComp a)
   | LetE ForceInline (FreeExp ()) (GName Ty -> FreeComp a)
+  | LetERef (Maybe (FreeExp ())) (GName Ty -> FreeComp a)
   | Take1 (FreeComp a)
   | Take Int (FreeComp a)
   | Emit (FreeExp ()) (FreeComp a)
@@ -244,6 +259,7 @@ data FreeComp a =
   | Branch (FreeExp ()) (FreeComp ()) (FreeComp ()) (FreeComp a)
   | Times UnrollInfo (FreeExp ()) (FreeExp ()) (GName Ty -> FreeComp ()) (FreeComp a)
   | Repeat (Maybe VectAnn) (FreeComp ()) (FreeComp a)
+  | Annot (FreeComp ()) (Maybe Ty) (Maybe Ty) (Maybe Ty) (FreeComp a)
   | Lift Comp (FreeComp a)
   | Pure a
 
@@ -258,6 +274,7 @@ instance Monad FreeComp where
   return = Pure
   Var x            k >>= f = Var x            (k >>= f)
   LetE fi e        k >>= f = LetE fi e        (k >=> f)
+  LetERef e        k >>= f = LetERef e        (k >=> f)
   Bind c           k >>= f = Bind c           (k >=> f)
   Take1            k >>= f = Take1            (k >>= f)
   Take n           k >>= f = Take n           (k >>= f)
@@ -267,6 +284,7 @@ instance Monad FreeComp where
   Branch e c1 c2   k >>= f = Branch e c1 c2   (k >>= f)
   Times ui e1 e2 b k >>= f = Times ui e1 e2 b (k >>= f)
   Repeat ann c     k >>= f = Repeat ann c     (k >>= f)
+  Annot c u a b    k >>= f = Annot c u a b    (k >>= f)
   Lift c           k >>= f = Lift c           (k >>= f)
   Pure a             >>= f = f a
 
@@ -276,11 +294,14 @@ fVar x = Var x (Pure ())
 fLetE :: ForceInline -> FreeExp () -> FreeComp (GName Ty)
 fLetE fi e = LetE fi e Pure
 
+fLetERef :: Maybe (FreeExp ()) -> FreeComp (GName Ty)
+fLetERef e = LetERef e Pure
+
 fBind :: FreeComp () -> FreeComp (GName Ty)
 fBind c = Bind c Pure
 
-fTake1 :: FreeComp (GName Ty)
-fTake1 = fBind (Take1 (Pure ()))
+fTake1 :: FreeComp ()
+fTake1 = Take1 (Pure ())
 
 fTake :: Int -> FreeComp (GName Ty)
 fTake n = fBind (Take n (Pure ()))
@@ -313,6 +334,22 @@ instance IfThenElse (FreeExp ()) (FreeComp ()) where
   ifThenElse = fBranch
 
 {-------------------------------------------------------------------------------
+  Type annotations on computations
+-------------------------------------------------------------------------------}
+
+-- | Annotate the "done type" of a computation
+returning :: FreeComp () -> Ty -> FreeComp ()
+returning c ty = Annot c (Just ty) Nothing Nothing (Pure ())
+
+-- | Annotate the type of the input source
+taking :: FreeComp () -> Ty -> FreeComp ()
+taking c ty = Annot c Nothing (Just ty) Nothing (Pure ())
+
+-- | Annotate the type of the output source
+emitting :: FreeComp () -> Ty -> FreeComp ()
+emitting c ty = Annot c Nothing Nothing (Just ty) (Pure ())
+
+{-------------------------------------------------------------------------------
   Translate back to normal computations
 -------------------------------------------------------------------------------}
 
@@ -338,11 +375,17 @@ unEFree loc = liftM fromJust . go
       Just e2' <- go e2
       k'       <- go k
       return $ eBinOp loc op e1' e2' `mSeq` k'
-    go (EArrRead arr e li k) = do
-      Just arr' <- go arr
-      Just e'   <- go e
-      k'        <- go k
-      return $ eArrRead loc arr' e' li `mSeq` k'
+    go (EArrRead arr estart li k) = do
+      Just arr'    <- go arr
+      Just estart' <- go estart
+      k'           <- go k
+      return $ eArrRead loc arr' estart' li `mSeq` k'
+    go (EArrWrite arr estart li e k) = do
+      Just arr'    <- go arr
+      Just estart' <- go estart
+      Just e'      <- go e
+      k'           <- go k
+      return $ eArrWrite loc arr' estart' li e' `mSeq` k'
     go (EAssign x e k) = do
       Just x' <- go x
       Just e' <- go e
@@ -379,6 +422,16 @@ unFree loc = liftM fromJust . go
       nm      <- newName loc (ctExp e')
       Just k' <- go (k nm)
       return $ Just $ cLetE loc nm fi e' k'
+    go (LetERef (Just e) k) = do
+      e'      <- unEFree loc e
+      nm      <- newName loc (ctExp e')
+      Just k' <- go (k nm)
+      return $ Just $ cLetERef loc nm (Just e') k'
+    go (LetERef Nothing k) = do
+      a       <- newTyVar
+      nm      <- newName loc a
+      Just k' <- go (k nm)
+      return $ Just $ cLetERef loc nm Nothing k'
     go (Bind c k) = do
       Just c' <- go c
       nm      <- newName loc (fromJust . doneTyOfCTyBase . ctComp $ c')
@@ -427,6 +480,14 @@ unFree loc = liftM fromJust . go
       Just body' <- go body
       k'         <- go k
       return $ cRepeat loc ann body' `mSeq` k'
+    go (Annot c mu ma mb k) = do
+      Just c' <- go c
+      let CTBase cty0 = ctComp c'
+      forM_ mu $ unify loc (fromJust (doneTyOfCTy cty0))
+      forM_ ma $ unify loc ( inTyOfCTy cty0)
+      forM_ mb $ unify loc (yldTyOfCTy cty0)
+      k'      <- go k
+      return $ c' `mSeq` k'
     go (Lift c k) = do
       k' <- go k
       return $ c `mSeq` k'
@@ -455,6 +516,8 @@ newTyVar = TVar <$> TcM.newTyVar "_a"
 
 _test' :: IO ()
 _test' = do
+  -- TODO: I'm assigning incorrect types to these variables. I'm not sure
+  -- what the actual ziria snippet in _test is doing.
   let tmp_idx     = toName "tmp_idx"     Nothing tint32
       is_empty    = toName "is_empty"    Nothing TBool
       in_buff     = toName "in_buff"     Nothing tint32
@@ -475,9 +538,9 @@ _test' = do
 _test :: GName Ty -> GName Ty -> GName Ty -> GName Ty -> Int -> Int -> FreeComp ()
 _test tmp_idx is_empty in_buff in_buff_idx finalin n0 = do
   if is_empty .= True
-    then do x <- fTake1
+    then do x <- fBind (fTake1 `returning` tint32)
             fReturn AutoInline $ do
-              in_buff     .:= x .:: tint32
+              in_buff     .:= x
               is_empty    .:= False
               in_buff_idx .:= (0 :: Int)
     else fReturn AutoInline ()
@@ -496,5 +559,7 @@ _test tmp_idx is_empty in_buff in_buff_idx finalin n0 = do
                 do -- Just a dummy return to make code generator happy ...
                    -- Fix this at some point by providing a proper
                    -- computer-level error function
-                   _u <- fError "rewrite_take: unaligned!"
+                   _u <- fBind (fError "rewrite_take: unaligned!")
                    fReturn ForceInline $ in_buff .! (0 :: Int, n0)
+  -- This wasn't in the original example. Just testing array assignment
+  fReturn AutoInline $ in_buff .! (in_buff_idx, n0) .:= (123 :: Int)
