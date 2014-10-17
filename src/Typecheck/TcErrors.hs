@@ -54,7 +54,7 @@ ppTyErr TyErr{..}
   = vcat [ err_msg
          , pp_ctxt err_ctxt
          , text "At location:" <+>
-           text (maybe (error "BUG: Unknown location!") show err_pos)
+           text (maybe "BUG: Unknown location!" show err_pos)
          , err_var_ctxt
          ]
   where

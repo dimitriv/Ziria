@@ -18,7 +18,7 @@
 -}
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE RankNTypes #-}
-module TcComp (tyCheckTopComp, tyCheckTopDecls, envOfDecls) where
+module TcComp (tyCheckComp, tyCheckTopComp, tyCheckTopDecls, envOfDecls) where
 
 import Control.Applicative
 import Control.Monad (forM, liftM)

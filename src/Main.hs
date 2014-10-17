@@ -40,6 +40,7 @@ import AstExpr
 import AstLabelled   as Labelled
 import AstUnlabelled as Unlabelled
 import AstFreeMonad  as AstFreeMonad
+import AstQuasiQuote as AstQuasiQuote
 import CtComp (ctComp)
 import Opts
 import PassFold
@@ -50,7 +51,8 @@ import TcErrors ( ErrCtx (..) )
 import TcExpr
 import TcMonad
 import PassPipeline
-import qualified BlinkParseComp as NewParser
+import BlinkParseComp (parseProgram)
+import BlinkParseM (runBlinkParser)
 import qualified GenSym         as GS
 import qualified Outputable -- Qualified so that we don't clash with Mainland
 
@@ -114,11 +116,7 @@ main = failOnException $ do
     input <- readFile inFile
 
     -- putStrLn "command line parsed ..."
-    prog <-
-          failOnError $
-          do { let st = ()
-                   pm = runParserT NewParser.parseProgram st inFile input
-             ; NewParser.runParseM pm [] }
+    prog <- failOnError $ runBlinkParser parseProgram inFile input
 
     -- pretty-show's `dumpDoc` generates a `Text.PrettyPrint.HughesPJ.Doc`
     -- rather than `Text.PrettyPrint.Mainland.Doc`, so we generate a flat

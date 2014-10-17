@@ -16,7 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE DeriveGeneric, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveGeneric, DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
 {-# OPTIONS_GHC -Wall -fno-warn-unused-do-bind #-}
 -- | Range analysis
 module Analysis.Range
@@ -28,9 +28,11 @@ module Analysis.Range
   ) where
 
 import Control.Applicative
-import Control.Monad.State
 import Control.Monad.Error
+import Control.Monad.State
+import Data.Data (Data)
 import Data.Map (Map)
+import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
 import Text.PrettyPrint.Mainland
 import Text.Show.Pretty (PrettyVal)
@@ -46,7 +48,7 @@ import CtExpr
 -- @Range i j@ means that we know /all/ values in the range will be taken on.
 data Range = RangeTop
            | Range Integer Integer
-  deriving (Generic, Eq, Show)
+  deriving (Generic, Typeable, Data, Eq, Show)
 
 instance Num Range where
     RangeTop    + _           = RangeTop

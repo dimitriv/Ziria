@@ -25,6 +25,7 @@ module BlinkParseM (
   , BlinkParseState
   , BlinkParseM(runParseM)
   , ParseCompEnv
+  , runBlinkParser
     -- * Derived operators
   , debugParse
   , extendParseEnv
@@ -95,6 +96,9 @@ instance MonadReader ParseCompEnv BlinkParseM where
   ask = BlinkParseM (\env -> return env)
   local upd (BlinkParseM f) = BlinkParseM (\env -> f (upd env))
   reader f = BlinkParseM (\env -> return (f env))
+
+runBlinkParser :: BlinkParser a -> SourceName -> String -> IO (Either ParseError a)
+runBlinkParser p src input = runParseM (runParserT p () src input) []
 
 {-------------------------------------------------------------------------------
   Derived operators

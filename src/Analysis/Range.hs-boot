@@ -18,8 +18,12 @@
 -}
 module Analysis.Range where
 
+import Data.Data (Data)
+import Data.Typeable (Typeable)
 import Text.Show.Pretty (PrettyVal)
 
 data Range
 
+instance Typeable Range
+instance Data Range
 instance PrettyVal Range

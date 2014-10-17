@@ -18,7 +18,7 @@
 -}
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, FlexibleInstances #-}
-module Rename (runRenM, rename) where
+module Rename (RenM, runRenM, rename, extend) where
 
 import Prelude hiding (mapM)
 import Control.Applicative
@@ -179,6 +179,10 @@ instance Rename SrcTy where
   rename (SrcTInt bw)           = SrcTInt   <$> rename bw
   rename SrcTDouble             = return SrcTDouble
   rename (SrcTStruct nm)        = return $ SrcTStruct nm
+
+  -- Internal types injected into the source language are used for quasi-quoting
+  -- only, and therefore do not have to be renamed.
+  rename (SrcInject ty)         = return $ SrcInject ty
 
 instance Rename SrcNumExpr where
   rename (SrcLiteral n) = return $ SrcLiteral n

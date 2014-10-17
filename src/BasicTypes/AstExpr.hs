@@ -16,7 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE GADTs, DeriveGeneric, ScopedTypeVariables, RecordWildCards #-}
+{-# LANGUAGE GADTs, DeriveGeneric, DeriveDataTypeable, ScopedTypeVariables, RecordWildCards #-}
 {-# OPTIONS_GHC -Wall #-}
 module AstExpr where
 
@@ -25,9 +25,11 @@ import {-# SOURCE #-} Analysis.Range
 import Prelude hiding (exp, mapM)
 import Control.Monad (liftM, foldM, when)
 import Control.Monad.State (State, execState, modify)
+import Data.Data (Data)
 import Data.Functor.Identity ( Identity (..) )
 import Data.List (nub)
 import Data.Map (Map)
+import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
 import Text.Parsec.Pos
 import Text.PrettyPrint.Mainland
@@ -67,7 +69,7 @@ data GName t
            , nameTyp :: t
            , nameLoc :: Maybe SourcePos
            }
-  deriving (Generic)
+  deriving (Generic, Typeable, Data)
 
 instance Eq (GName t) where
   nm1 == nm2 = (name nm1 == name nm2) && (uniqId nm1 == uniqId nm2)
@@ -112,7 +114,9 @@ data SrcTy where
   SrcTDouble   :: SrcTy
   SrcTStruct   :: TyName -> SrcTy
 
-  deriving (Generic, Eq)
+  SrcInject    :: Ty -> SrcTy
+
+  deriving (Generic, Typeable, Data, Eq)
 
 -- | Bit widths in the source language are _always_ given (unknown bit widths
 -- are only used in the type checker for the types of literals).
@@ -121,7 +125,7 @@ data SrcBitWidth
   | SrcBW16
   | SrcBW32
   | SrcBW64
-  deriving (Generic, Eq, Show)
+  deriving (Generic, Typeable, Data, Eq, Show)
 
 data SrcNumExpr where
   -- | User explicitly specifies the length
@@ -134,7 +138,7 @@ data SrcNumExpr where
   -- We record the the location for the sake of error messages.
   SrcNVar :: SourcePos -> SrcNumExpr
 
-  deriving (Generic, Eq)
+  deriving (Generic, Typeable, Data, Eq)
 
 {-------------------------------------------------------------------------------
   Types in the internal language
@@ -161,7 +165,7 @@ data Ty where
   TArrow :: [Ty] -> Ty -> Ty
   TBuff  :: BufTy -> Ty
 
-  deriving (Generic, Eq)
+  deriving (Generic, Typeable, Data, Eq)
 
 data NumExpr where
   Literal :: Int -> NumExpr
@@ -169,7 +173,7 @@ data NumExpr where
   -- | NVar: Length to be inferred from the context (or polymorphic)
   NVar :: LenVar -> NumExpr
 
-  deriving (Generic, Eq)
+  deriving (Generic, Typeable, Data, Eq)
 
 data BitWidth
   = BW8
@@ -177,7 +181,7 @@ data BitWidth
   | BW32
   | BW64
   | BWUnknown BWVar -- TODO: Why is this not a GName t instead of a BWVar?
-  deriving (Generic, Eq, Show)
+  deriving (Generic, Typeable, Data, Eq, Show)
 
 data BufTy =
     -- | Internal buffer (for parallelization)
@@ -188,7 +192,7 @@ data BufTy =
     -- NOTE: We record the type that the program is reading/writing, _NOT_
     -- its base type (in previous versions we recorded the base type here).
   | ExtBuf { bufty_ty :: Ty }
-  deriving (Generic, Eq)
+  deriving (Generic, Typeable, Data, Eq)
 
 {-------------------------------------------------------------------------------
   Expressions (parameterized by the (Haskell) type of (Ziria) types
@@ -201,7 +205,7 @@ data GUnOp t =
   | BwNeg
   | Cast t   -- Cast to this target type
   | ALength
-  deriving (Generic, Eq)
+  deriving (Generic, Typeable, Data, Eq)
 
 data BinOp =
   -- arithmetic operators
@@ -226,7 +230,7 @@ data BinOp =
   | Geq
   | And
   | Or
-  deriving (Generic, Eq, Show)
+  deriving (Generic, Typeable, Data, Eq, Show)
 
 data Val where
   VBit    :: Bool    -> Val
@@ -235,18 +239,18 @@ data Val where
   VBool   :: Bool    -> Val
   VString :: String  -> Val
   VUnit   :: Val
-  deriving (Generic, Show, Eq)
+  deriving (Generic, Typeable, Data, Show, Eq)
 
 data LengthInfo
      = LISingleton
      | LILength Int -- Invariant: > 0
-  deriving (Generic, Eq)
+  deriving (Generic, Typeable, Data, Eq)
 
 data UnrollInfo
   = Unroll        -- force unroll
   | NoUnroll      -- force no-unroll
   | AutoUnroll    -- do whatever the compiler would do (no annotation)
-  deriving (Generic, Eq)
+  deriving (Generic, Typeable, Data, Eq)
 
 -- If true, the binding should be forced to be inlined.
 -- This is used by e.g. the vectorizer to bind inlinable
@@ -256,7 +260,7 @@ data ForceInline
   = ForceInline   -- Always inline
   | NoInline      -- Never inline
   | AutoInline    -- Let the compiler decide
-  deriving (Generic)
+  deriving (Generic, Typeable, Data)
 
 data GExp0 t a where
   -- | A single value
@@ -345,19 +349,19 @@ data GExp0 t a where
 
   -- | Project field out of a struct
   EProj   :: GExp t a -> FldName -> GExp0 t a
-  deriving Generic
+  deriving (Generic, Typeable, Data)
 
 data GExp t a
   = MkExp { unExp :: GExp0 t a
           , expLoc :: Maybe SourcePos
           , info :: a }
-  deriving (Generic)
+  deriving (Generic, Typeable, Data)
 
 -- Structure definitions
 data GStructDef t
   = StructDef { struct_name :: TyName
               , struct_flds :: [(FldName,t)] }
-  deriving (Generic)
+  deriving (Generic, Typeable, Data)
 
 data GFun0 t a where
   MkFunDefined  :: GName t                       -- ^ name
@@ -369,7 +373,7 @@ data GFun0 t a where
                 -> [GName t]                     -- ^ params
                 -> t                             -- ^ return type
                 -> GFun0 t a
-  deriving (Generic)
+  deriving (Generic, Typeable, Data)
 
 {- TODO plug this in at some point
 data FunDef a body
@@ -383,7 +387,7 @@ data GFun t a
   = MkFun { unFun   :: GFun0 t a
           , funLoc  :: Maybe SourcePos
           , funInfo :: a }
-  deriving (Generic)
+  deriving (Generic, Typeable, Data)
 
 funName :: GFun t a -> GName t
 funName (MkFun (MkFunDefined  nm _ _ _) _ _) = nm
@@ -847,10 +851,10 @@ isArrayTy_maybe :: Ty -> Maybe Ty
 isArrayTy_maybe (TArray _n t) = Just t
 isArrayTy_maybe _other        = Nothing
 
-atomTyOf :: Ty -> Ty 
+atomTyOf :: Ty -> Ty
 -- Give you back the biggest non-array type under this type
 atomTyOf (TArray _ t) = atomTyOf t
-atomTyOf t            = t 
+atomTyOf t            = t
 
 
 expEq :: Eq t => GExp t a -> GExp t a -> Bool

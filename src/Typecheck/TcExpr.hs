@@ -478,6 +478,7 @@ trTy _ (SrcTInt bw)    = do bw' <- trBitWidth bw
 trTy _ SrcTDouble      = return TDouble
 trTy p (SrcTStruct tn) = do sdef <- lookupTDefEnv tn p
                             return $ TStruct tn (struct_flds sdef)
+trTy _ (SrcInject ty)  = return ty
 
 trNumExpr :: Maybe SourcePos -> SrcNumExpr -> TcM NumExpr
 trNumExpr _ (SrcLiteral n) = return $ Literal n

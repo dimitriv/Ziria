@@ -1,10 +1,10 @@
 {-# OPTIONS_GHC -Wall #-}
-{-# LANGUAGE RebindableSyntax, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE RebindableSyntax, FlexibleInstances, MultiParamTypeClasses, QuasiQuotes #-}
 -- | Free monads for convenient construction of AST terms
 --
 -- NOTE: Importing modules will probably want to enable the `RebindableSyntax`
 -- language extension and import `Rebindables` to get if-then-else syntax.
-module AstFreeMonad (
+module AstFreeMonad where {- (
     -- * Free expression monad
     FreeExp -- opaque
   , feVal
@@ -45,6 +45,7 @@ module AstFreeMonad (
   , fRepeat
   , fError
   , fLift
+  , fLiftSrc
     -- ** Type annotations on computations
   , returning
   , taking
@@ -52,25 +53,29 @@ module AstFreeMonad (
     -- * Translation out of the free monad
   , unFreeExp
   , unFreeComp
-  ) where
+  ) where -}
 
 import Prelude
 import Control.Applicative
 import Control.Monad (liftM, ap, (>=>))
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, catMaybes)
 import Data.Foldable (forM_)
-import Text.Parsec.Pos (SourcePos)
+import Text.Parsec.Pos
+import qualified Data.Set as Set
 
-import AstComp hiding (GComp0(..))
-import AstExpr hiding (GExp0(..))
+import AstComp
+import AstExpr
+import AstQuasiQuote
 import AstUnlabelled
 import CtComp (ctComp)
 import CtExpr (ctExp)
 import Rebindables
+import TcComp (tyCheckComp)
+import TcErrors (ErrCtx(InternalTypeChecking))
 import TcMonad (TcM)
 import TcUnify (unify)
-import TcErrors (ErrCtx(InternalTypeChecking))
 import qualified GenSym  as GS
+import qualified Rename  as Ren
 import qualified TcMonad as TcM
 
 
@@ -79,16 +84,16 @@ import qualified TcMonad as TcM
 -------------------------------------------------------------------------------}
 
 data FreeExp a =
-    EVal Val (FreeExp a)
-  | EVar (GName Ty) (FreeExp a)
-  | EBinOp BinOp (FreeExp ()) (FreeExp ()) (FreeExp a)
-  | EArrRead (FreeExp ()) (FreeExp ()) LengthInfo (FreeExp a)
-  | EArrWrite (FreeExp ()) (FreeExp ()) LengthInfo (FreeExp ()) (FreeExp a)
-  | EAssign (FreeExp ()) (FreeExp ()) (FreeExp a)
-  | EError String (FreeExp a)
-  | ELift Exp (FreeExp a)
-  | EAnnot (FreeExp ()) Ty (FreeExp a)
-  | EPure a
+    FEVal Val (FreeExp a)
+  | FEVar (GName Ty) (FreeExp a)
+  | FEBinOp BinOp (FreeExp ()) (FreeExp ()) (FreeExp a)
+  | FEArrRead (FreeExp ()) (FreeExp ()) LengthInfo (FreeExp a)
+  | FEArrWrite (FreeExp ()) (FreeExp ()) LengthInfo (FreeExp ()) (FreeExp a)
+  | FEAssign (FreeExp ()) (FreeExp ()) (FreeExp a)
+  | FEError String (FreeExp a)
+  | FELift Exp (FreeExp a)
+  | FEAnnot (FreeExp ()) Ty (FreeExp a)
+  | FEPure a
 
 instance Functor FreeExp where
   fmap = liftM
@@ -98,45 +103,45 @@ instance Applicative FreeExp where
   (<*>) = ap
 
 instance Monad FreeExp where
-  return = EPure
-  EVal v                k >>= f = EVal v                (k >>= f)
-  EVar x                k >>= f = EVar x                (k >>= f)
-  EBinOp op e1 e2       k >>= f = EBinOp op e1 e2       (k >>= f)
-  EArrRead arr e li     k >>= f = EArrRead arr e li     (k >>= f)
-  EArrWrite arr e li e' k >>= f = EArrWrite arr e li e' (k >>= f)
-  EAssign x e           k >>= f = EAssign x e           (k >>= f)
-  EError str            k >>= f = EError str            (k >>= f)
-  EAnnot e ty           k >>= f = EAnnot e ty           (k >>= f)
-  ELift e               k >>= f = ELift e               (k >>= f)
-  EPure a                 >>= f = f a
+  return = FEPure
+  FEVal v                k >>= f = FEVal v                (k >>= f)
+  FEVar x                k >>= f = FEVar x                (k >>= f)
+  FEBinOp op e1 e2       k >>= f = FEBinOp op e1 e2       (k >>= f)
+  FEArrRead arr e li     k >>= f = FEArrRead arr e li     (k >>= f)
+  FEArrWrite arr e li e' k >>= f = FEArrWrite arr e li e' (k >>= f)
+  FEAssign x e           k >>= f = FEAssign x e           (k >>= f)
+  FEError str            k >>= f = FEError str            (k >>= f)
+  FEAnnot e ty           k >>= f = FEAnnot e ty           (k >>= f)
+  FELift e               k >>= f = FELift e               (k >>= f)
+  FEPure a                 >>= f = f a
 
 feVal :: Val -> FreeExp ()
-feVal v = EVal v (EPure ())
+feVal v = FEVal v (FEPure ())
 
 feVar :: GName Ty -> FreeExp ()
-feVar x = EVar x (EPure ())
+feVar x = FEVar x (FEPure ())
 
 feBinOp :: BinOp -> FreeExp () -> FreeExp () -> FreeExp ()
-feBinOp op e1 e2 = EBinOp op e1 e2 (EPure ())
+feBinOp op e1 e2 = FEBinOp op e1 e2 (FEPure ())
 
 feArrRead :: FreeExp () -> FreeExp () -> LengthInfo -> FreeExp ()
-feArrRead arr estart li = EArrRead arr estart li (EPure ())
+feArrRead arr estart li = FEArrRead arr estart li (FEPure ())
 
 feArrWrite :: FreeExp () -> FreeExp () -> LengthInfo -> FreeExp () -> FreeExp ()
-feArrWrite arr estart li e = EArrWrite arr estart li e (EPure ())
+feArrWrite arr estart li e = FEArrWrite arr estart li e (FEPure ())
 
 feAssign :: FreeExp () -> FreeExp () -> FreeExp ()
-feAssign x e = EAssign x e (EPure ())
+feAssign x e = FEAssign x e (FEPure ())
 
 feError :: String -> FreeExp ()
-feError str = EError str (EPure ())
+feError str = FEError str (FEPure ())
 
 -- | Annotate an expression with a type (@e :: ty@)
 feAnnot :: FreeExp () -> Ty -> FreeExp ()
-feAnnot e ty = EAnnot e ty (EPure ())
+feAnnot e ty = FEAnnot e ty (FEPure ())
 
 feLift :: Exp -> FreeExp ()
-feLift e = ELift e (EPure ())
+feLift e = FELift e (FEPure ())
 
 {-------------------------------------------------------------------------------
   Some convenience wrappers around the free expressions
@@ -182,8 +187,8 @@ instance ToFreeExp Exp where
 -- | Write to a variable _or_ to an array
 (.:=) :: (ToFreeExp x, ToFreeExp e) => x -> e -> FreeExp ()
 (.:=) x e = case toFreeExp x of
-  EArrRead earr start len (EPure ()) -> feArrWrite earr start len (toFreeExp e)
-  _otherwise                         -> feAssign (toFreeExp x)    (toFreeExp e)
+  FEArrRead earr start len (FEPure ()) -> feArrWrite earr start len (toFreeExp e)
+  _otherwise                           -> feAssign (toFreeExp x)    (toFreeExp e)
 
 (.*) :: (ToFreeExp e1, ToFreeExp e2) => e1 -> e2 -> FreeExp ()
 (.*) e1 e2 = feBinOp Mult (toFreeExp e1) (toFreeExp e2)
@@ -264,21 +269,22 @@ instance (ToFreeExp a, Integral b) => XRange (a, b) where
 -- continuation argument (similar to Times), but then they would be less
 -- convenient to use.
 data FreeComp a =
-    Var (GName CTy) (FreeComp a)
-  | Bind (FreeComp ()) (GName Ty -> FreeComp a)
-  | LetE ForceInline (FreeExp ()) (GName Ty -> FreeComp a)
-  | LetERef (Either (FreeExp ()) Ty) (GName Ty -> FreeComp a)
-  | Take1 (FreeComp a)
-  | Take Int (FreeComp a)
-  | Emit (FreeExp ()) (FreeComp a)
-  | Emits (FreeExp ()) (FreeComp a)
-  | Return ForceInline (FreeExp ()) (FreeComp a)
-  | Branch (FreeExp ()) (FreeComp ()) (FreeComp ()) (FreeComp a)
-  | Times UnrollInfo (FreeExp ()) (FreeExp ()) (GName Ty -> FreeComp ()) (FreeComp a)
-  | Repeat (Maybe VectAnn) (FreeComp ()) (FreeComp a)
-  | Annot (FreeComp ()) (Maybe Ty) (Maybe Ty) (Maybe Ty) (FreeComp a)
-  | Lift Comp (FreeComp a)
-  | Pure a
+    FVar (GName CTy) (FreeComp a)
+  | FBind (FreeComp ()) (GName Ty -> FreeComp a)
+  | FLetE ForceInline (FreeExp ()) (GName Ty -> FreeComp a)
+  | FLetERef (Either (FreeExp ()) Ty) (GName Ty -> FreeComp a)
+  | FTake1 (FreeComp a)
+  | FTake Int (FreeComp a)
+  | FEmit (FreeExp ()) (FreeComp a)
+  | FEmits (FreeExp ()) (FreeComp a)
+  | FReturn ForceInline (FreeExp ()) (FreeComp a)
+  | FBranch (FreeExp ()) (FreeComp ()) (FreeComp ()) (FreeComp a)
+  | FTimes UnrollInfo (FreeExp ()) (FreeExp ()) (GName Ty -> FreeComp ()) (FreeComp a)
+  | FRepeat (Maybe VectAnn) (FreeComp ()) (FreeComp a)
+  | FAnnot (FreeComp ()) (Maybe Ty) (Maybe Ty) (Maybe Ty) (FreeComp a)
+  | FLift Comp (FreeComp a)
+  | FLiftSrc SrcComp (FreeComp a)
+  | FPure a
 
 instance Functor FreeComp where
   fmap = liftM
@@ -288,66 +294,70 @@ instance Applicative FreeComp where
   (<*>) = ap
 
 instance Monad FreeComp where
-  return = Pure
-  Var x            k >>= f = Var x            (k >>= f)
-  LetE fi e        k >>= f = LetE fi e        (k >=> f)
-  LetERef e        k >>= f = LetERef e        (k >=> f)
-  Bind c           k >>= f = Bind c           (k >=> f)
-  Take1            k >>= f = Take1            (k >>= f)
-  Take n           k >>= f = Take n           (k >>= f)
-  Emit e           k >>= f = Emit e           (k >>= f)
-  Emits e          k >>= f = Emits e          (k >>= f)
-  Return fi e      k >>= f = Return fi e      (k >>= f)
-  Branch e c1 c2   k >>= f = Branch e c1 c2   (k >>= f)
-  Times ui e1 e2 b k >>= f = Times ui e1 e2 b (k >>= f)
-  Repeat ann c     k >>= f = Repeat ann c     (k >>= f)
-  Annot c u a b    k >>= f = Annot c u a b    (k >>= f)
-  Lift c           k >>= f = Lift c           (k >>= f)
-  Pure a             >>= f = f a
+  return = FPure
+  FVar x            k >>= f = FVar x            (k >>= f)
+  FLetE fi e        k >>= f = FLetE fi e        (k >=> f)
+  FLetERef e        k >>= f = FLetERef e        (k >=> f)
+  FBind c           k >>= f = FBind c           (k >=> f)
+  FTake1            k >>= f = FTake1            (k >>= f)
+  FTake n           k >>= f = FTake n           (k >>= f)
+  FEmit e           k >>= f = FEmit e           (k >>= f)
+  FEmits e          k >>= f = FEmits e          (k >>= f)
+  FReturn fi e      k >>= f = FReturn fi e      (k >>= f)
+  FBranch e c1 c2   k >>= f = FBranch e c1 c2   (k >>= f)
+  FTimes ui e1 e2 b k >>= f = FTimes ui e1 e2 b (k >>= f)
+  FRepeat ann c     k >>= f = FRepeat ann c     (k >>= f)
+  FAnnot c u a b    k >>= f = FAnnot c u a b    (k >>= f)
+  FLift c           k >>= f = FLift c           (k >>= f)
+  FLiftSrc c        k >>= f = FLiftSrc c        (k >>= f)
+  FPure a             >>= f = f a
 
 fVar :: GName CTy -> FreeComp ()
-fVar x = Var x (Pure ())
+fVar x = FVar x (FPure ())
 
 fLetE :: ForceInline -> FreeExp () -> FreeComp (GName Ty)
-fLetE fi e = LetE fi e Pure
+fLetE fi e = FLetE fi e FPure
 
 fLetERef :: Either (FreeExp ()) Ty -> FreeComp (GName Ty)
-fLetERef e = LetERef e Pure
+fLetERef e = FLetERef e FPure
 
 fBind :: FreeComp () -> FreeComp (GName Ty)
-fBind c = Bind c Pure
+fBind c = FBind c FPure
 
 fTake1 :: FreeComp ()
-fTake1 = Take1 (Pure ())
+fTake1 = FTake1 (FPure ())
 
-fTake :: Int -> FreeComp (GName Ty)
-fTake n = fBind (Take n (Pure ()))
+fTake :: Int -> FreeComp ()
+fTake n = FTake n (FPure ())
 
 fEmit :: ToFreeExp e => e -> FreeComp ()
-fEmit e = Emit (toFreeExp e) (Pure ())
+fEmit e = FEmit (toFreeExp e) (FPure ())
 
 fEmits :: ToFreeExp e => e -> FreeComp ()
-fEmits e = Emits (toFreeExp e) (Pure ())
+fEmits e = FEmits (toFreeExp e) (FPure ())
 
 fReturn :: ToFreeExp e => ForceInline -> e -> FreeComp ()
-fReturn fi e = Return fi (toFreeExp e) (Pure ())
+fReturn fi e = FReturn fi (toFreeExp e) (FPure ())
 
 fBranch :: ToFreeExp e => e -> FreeComp () -> FreeComp () -> FreeComp ()
-fBranch e c1 c2  = Branch (toFreeExp e) c1 c2 (Pure ())
+fBranch e c1 c2  = FBranch (toFreeExp e) c1 c2 (FPure ())
 
 fTimes :: (ToFreeExp a, ToFreeExp b)
        => UnrollInfo -> a -> b -> (GName Ty -> FreeComp ()) -> FreeComp ()
-fTimes ui estart elen body = Times ui (toFreeExp estart) 
-                                      (toFreeExp elen) body (Pure ())
+fTimes ui estart elen body = FTimes ui (toFreeExp estart)
+                                       (toFreeExp elen) body (FPure ())
 
 fRepeat :: Maybe VectAnn -> FreeComp () -> FreeComp ()
-fRepeat ann body = Repeat ann body (Pure ())
+fRepeat ann body = FRepeat ann body (FPure ())
 
 fError :: String -> FreeComp ()
 fError str = fReturn AutoInline (feError str)
 
 fLift :: Comp -> FreeComp ()
-fLift c = Lift c (Pure ())
+fLift c = FLift c (FPure ())
+
+fLiftSrc :: SrcComp -> FreeComp ()
+fLiftSrc c = FLiftSrc c (FPure ())
 
 instance IfThenElse (FreeExp ()) (FreeComp ()) where
   ifThenElse = fBranch
@@ -358,15 +368,15 @@ instance IfThenElse (FreeExp ()) (FreeComp ()) where
 
 -- | Annotate the "done type" of a computation
 returning :: FreeComp () -> Ty -> FreeComp ()
-returning c ty = Annot c (Just ty) Nothing Nothing (Pure ())
+returning c ty = FAnnot c (Just ty) Nothing Nothing (FPure ())
 
 -- | Annotate the type of the input source
 taking :: FreeComp () -> Ty -> FreeComp ()
-taking c ty = Annot c Nothing (Just ty) Nothing (Pure ())
+taking c ty = FAnnot c Nothing (Just ty) Nothing (FPure ())
 
 -- | Annotate the type of the output source
 emitting :: FreeComp () -> Ty -> FreeComp ()
-emitting c ty = Annot c Nothing Nothing (Just ty) (Pure ())
+emitting c ty = FAnnot c Nothing Nothing (Just ty) (FPure ())
 
 {-------------------------------------------------------------------------------
   Translate back to normal computations
@@ -382,47 +392,47 @@ unEFree :: Maybe SourcePos -> FreeExp () -> TcM Exp
 unEFree loc = liftM fromJust . go
   where
     go :: FreeExp () -> TcM (Maybe Exp)
-    go (EVal v k) = do
+    go (FEVal v k) = do
       a  <- newTyVar
       k' <- go k
       return $ eVal loc a v `mSeq` k'
-    go (EVar nm k) = do
+    go (FEVar nm k) = do
       k' <- go k
       return $ eVar loc nm `mSeq` k'
-    go (EBinOp op e1 e2 k) = do
+    go (FEBinOp op e1 e2 k) = do
       Just e1' <- go e1
       Just e2' <- go e2
       k'       <- go k
       return $ eBinOp loc op e1' e2' `mSeq` k'
-    go (EArrRead arr estart li k) = do
+    go (FEArrRead arr estart li k) = do
       Just arr'    <- go arr
       Just estart' <- go estart
       k'           <- go k
       return $ eArrRead loc arr' estart' li `mSeq` k'
-    go (EArrWrite arr estart li e k) = do
+    go (FEArrWrite arr estart li e k) = do
       Just arr'    <- go arr
       Just estart' <- go estart
       Just e'      <- go e
       k'           <- go k
       return $ eArrWrite loc arr' estart' li e' `mSeq` k'
-    go (EAssign x e k) = do
+    go (FEAssign x e k) = do
       Just x' <- go x
       Just e' <- go e
       k'      <- go k
       return $ eAssign loc x' e' `mSeq` k'
-    go (EError str k) = do
+    go (FEError str k) = do
       a  <- newTyVar
       k' <- go k
       return $ eError loc a str `mSeq` k'
-    go (EAnnot e ty k) = do
+    go (FEAnnot e ty k) = do
       Just e' <- go e
       k'      <- go k
       unify loc (ctExp e') ty
       return $ e' `mSeq` k'
-    go (ELift e k) = do
+    go (FELift e k) = do
       k' <- go k
       return $ e `mSeq` k'
-    go (EPure ()) =
+    go (FEPure ()) =
       return Nothing
 
     mSeq :: Exp -> Maybe Exp -> Maybe Exp
@@ -433,72 +443,72 @@ unFree :: Maybe SourcePos -> FreeComp () -> TcM Comp
 unFree loc = liftM fromJust . go
   where
     go :: FreeComp () -> TcM (Maybe Comp)
-    go (Var x k) = do
+    go (FVar x k) = do
       k' <- go k
       return $ cVar loc x `mSeq` k'
-    go (LetE fi e k) = do
+    go (FLetE fi e k) = do
       e'      <- unEFree loc e
       nm      <- newName loc (ctExp e')
       Just k' <- go (k nm)
       return $ Just $ cLetE loc nm fi e' k'
-    go (LetERef (Left e) k) = do
+    go (FLetERef (Left e) k) = do
       e'      <- unEFree loc e
       nm      <- newName loc (ctExp e')
       Just k' <- go (k nm)
       return $ Just $ cLetERef loc nm (Just e') k'
-    go (LetERef (Right ty) k) = do
+    go (FLetERef (Right ty) k) = do
       nm      <- newName loc ty
       Just k' <- go (k nm)
       return $ Just $ cLetERef loc nm Nothing k'
-    go (Bind c k) = do
+    go (FBind c k) = do
       Just c' <- go c
       nm      <- newName loc (fromJust . doneTyOfCTyBase . ctComp $ c')
       Just k' <- go (k nm)
       return $ Just $ cBindMany loc c' [(nm, k')]
-    go (Take1 k) = do
+    go (FTake1 k) = do
       a  <- newTyVar
       b  <- newTyVar
       k' <- go k
       return $ cTake1 loc a b `mSeq` k'
-    go (Take n k) = do
+    go (FTake n k) = do
       a  <- newTyVar
       b  <- newTyVar
       k' <- go k
       return $ cTake loc a b n `mSeq` k'
-    go (Emit e k) = do
+    go (FEmit e k) = do
       e' <- unEFree loc e
       a  <- newTyVar
       k' <- go k
       return $ cEmit loc a e' `mSeq` k'
-    go (Emits e k) = do
+    go (FEmits e k) = do
       e' <- unEFree loc e
       a  <- newTyVar
       k' <- go k
       return $ cEmits loc a e' `mSeq` k'
-    go (Return fi e k) = do
+    go (FReturn fi e k) = do
       e' <- unEFree loc e
       a  <- newTyVar
       b  <- newTyVar
       k' <- go k
       return $ cReturn loc a b fi e' `mSeq` k'
-    go (Branch e c1 c2 k) = do
+    go (FBranch e c1 c2 k) = do
       e'       <- unEFree loc e
       Just c1' <- go c1
       Just c2' <- go c2
       k'       <- go k
       return $ cBranch loc e' c1' c2' `mSeq` k'
-    go (Times ui estart elen body k) = do
+    go (FTimes ui estart elen body k) = do
       estart'    <- unEFree loc estart
       elen'      <- unEFree loc elen
       nm         <- newName loc (ctExp estart')
       Just body' <- go (body nm)
       k'         <- go k
       return $ cTimes loc ui estart' elen' nm body' `mSeq` k'
-    go (Repeat ann body k) = do
+    go (FRepeat ann body k) = do
       Just body' <- go body
       k'         <- go k
       return $ cRepeat loc ann body' `mSeq` k'
-    go (Annot c mu ma mb k) = do
+    go (FAnnot c mu ma mb k) = do
       Just c' <- go c
       let CTBase cty0 = ctComp c'
       forM_ mu $ unify loc (fromJust (doneTyOfCTy cty0))
@@ -506,10 +516,16 @@ unFree loc = liftM fromJust . go
       forM_ mb $ unify loc (yldTyOfCTy cty0)
       k'      <- go k
       return $ c' `mSeq` k'
-    go (Lift c k) = do
+    go (FLift c k) = do
       k' <- go k
       return $ c `mSeq` k'
-    go (Pure ()) =
+    go (FLiftSrc c k) = do
+      let env = extractTypeEnv c
+      c'       <- TcM.liftRenM $ Ren.extend env env $ Ren.rename c
+      (c'', _) <- TcM.extendEnv env $ tyCheckComp c'
+      k'       <- go k
+      return $ c'' `mSeq` k'
+    go (FPure ()) =
       return Nothing
 
     mSeq :: Comp -> Maybe Comp -> Maybe Comp
@@ -528,33 +544,45 @@ newName loc ty = do
 newTyVar :: TcM Ty
 newTyVar = TVar <$> TcM.newTyVar "_a"
 
+extractTypeEnv :: SrcComp -> [GName Ty]
+extractTypeEnv = catMaybes . map aux . Set.toList . compEFVs
+  where
+    aux :: GName (Maybe SrcTy) -> Maybe (GName Ty)
+    aux nm | Just (SrcInject ty) <- nameTyp nm = Just nm { nameTyp = ty }
+    aux _ = Nothing
+
 {-------------------------------------------------------------------------------
   Example
 -------------------------------------------------------------------------------}
 
 _test' :: IO ()
 _test' = do
-  -- TODO: I'm assigning incorrect types to these variables. I'm not sure
-  -- what the actual ziria snippet in _test is doing.
-  let tmp_idx     = toName "tmp_idx"     Nothing tint32
-      is_empty    = toName "is_empty"    Nothing TBool
-      in_buff     = toName "in_buff"     Nothing tint32
-      in_buff_idx = toName "in_buff_idx" Nothing tint32
-      c           = _test tmp_idx is_empty in_buff in_buff_idx 1 2
-  sym <- GS.initGenSym ""
-  mc  <- TcM.runTcM (unFreeComp Nothing c)
-                    (TcM.mkTyDefEnv [])
-                    (TcM.mkEnv      [])
-                    (TcM.mkCEnv     [])
-                    sym
-                    InternalTypeChecking
-                    TcM.emptyTcMState
-  case mc of
-    Left err      -> print err
-    Right (c', _) -> print c'
+    go _test1
+    go _test2
+  where
+    go test = do
+      let tmp_idx     = toName "tmp_idx"     Nothing tint32
+          is_empty    = toName "is_empty"    Nothing TBool
+          in_buff     = toName "in_buff"     Nothing (TArray (Literal 16) tint32)
+          in_buff_idx = toName "in_buff_idx" Nothing tint32
 
-_test :: GName Ty -> GName Ty -> GName Ty -> GName Ty -> Integer -> Integer -> FreeComp ()
-_test tmp_idx is_empty in_buff in_buff_idx finalin n0 = do
+      let c = test tmp_idx is_empty in_buff in_buff_idx 1 2
+
+      sym <- GS.initGenSym ""
+      mc  <- TcM.runTcM (unFreeComp Nothing c)
+                        (TcM.mkTyDefEnv [])
+                        (TcM.mkEnv      [])
+                        (TcM.mkCEnv     [])
+                        sym
+                        InternalTypeChecking
+                        TcM.emptyTcMState
+      putStrLn (replicate 80 '-')
+      case mc of
+        Left err      -> print err
+        Right (c', _) -> print c'
+
+_test1 :: GName Ty -> GName Ty -> GName Ty -> GName Ty -> Integer -> Integer -> FreeComp ()
+_test1 tmp_idx is_empty in_buff in_buff_idx finalin n0 = do
   if is_empty .= VBool True
     then do x <- fBind (fTake1 `returning` tint32)
             fReturn AutoInline $ do
@@ -581,3 +609,30 @@ _test tmp_idx is_empty in_buff in_buff_idx finalin n0 = do
                    fReturn ForceInline $ in_buff .! (VInt 0, n0)
   -- This wasn't in the original example. Just testing array assignment
   fReturn AutoInline $ in_buff .! (in_buff_idx, n0) .:= VInt 123
+
+_test2 :: GName Ty -> GName Ty -> GName Ty -> GName Ty -> Integer -> Integer -> FreeComp ()
+_test2 tmp_idx is_empty in_buff in_buff_idx finalin n0 = fLiftSrc [zcomp| {
+    if is_empty == true
+      then { x <- take
+           ; do { in_buff     := x
+                ; is_empty    := false
+                ; in_buff_idx := 0
+                }
+           }
+      else return ()
+  ; if finalin == in_buff_idx + n0
+      then do { is_empty := true
+                -- NOTE: Cannot use n0 for the length
+                -- (source language does not accept variables for lengths)
+              ; return in_buff[tmp_idx,0]
+              }
+      else if in_buff_idx + n0 < finalin
+        then do { tmp_idx     := in_buff_idx
+                ; in_buff_idx := in_buff_idx + n0
+                ; return in_buff[tmp_idx,0]
+                }
+        else do { error "rewrite_take: unaligned"
+                ; return in_buff[0,0]
+                }
+  }
+  |]

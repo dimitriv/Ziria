@@ -16,7 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE GADTs, RankNTypes, DeriveGeneric, ScopedTypeVariables, RecordWildCards #-}
+{-# LANGUAGE GADTs, RankNTypes, DeriveGeneric, DeriveDataTypeable, ScopedTypeVariables, RecordWildCards #-}
 {-# OPTIONS_GHC -Wall #-}
 module AstComp where
 
@@ -24,9 +24,11 @@ import Prelude hiding (pi, mapM)
 import Control.Arrow ((***))
 import Control.Monad (forM, liftM)
 import Control.Monad.State (State, execState, modify)
+import Data.Data (Data)
 import Data.Either (partitionEithers)
 import Data.Functor.Identity ( Identity (..) )
 import Data.Traversable (mapM)
+import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
 import Text.Parsec.Pos
 import Text.Show.Pretty (PrettyVal)
@@ -46,13 +48,13 @@ import PpExpr ()
 data GCTy0 ty where
   TComp :: ty -> ty -> ty -> GCTy0 ty
   TTrans :: ty -> ty -> GCTy0 ty
-  deriving Generic
+  deriving (Generic, Typeable, Data)
 
 data GCTy ty where
   CTBase :: GCTy0 ty -> GCTy ty
   -- Invariant: non-empty list and CTy0 is not arrow
   CTArrow :: [CallArg ty (GCTy0 ty)] -> GCTy0 ty -> GCTy ty
-  deriving Generic
+  deriving (Generic, Typeable, Data)
 
 {-------------------------------------------------------------------------------
   AST parameterized by type (see "AstExpr")
@@ -310,18 +312,18 @@ data GComp0 tc t a b where
   -- > --------------------------
   -- > Mitigate a 1 1 :: ST T a a
   Mitigate :: t -> Int -> Int -> GComp0 tc t a b
-  deriving (Generic)
+  deriving (Generic, Typeable, Data)
 
 data VectAnn = Rigid Bool (Int,Int) -- True == allow mitigations up, False == disallow mitigations up
              | UpTo  Bool (Int,Int)
-  deriving (Generic)
+  deriving (Generic, Typeable, Data)
 
 
 -- Call argument information
 data CallArg a b
   = CAExp  { unCAExp  :: a }
   | CAComp { unCAComp :: b }
-  deriving (Generic)
+  deriving (Generic, Typeable, Data)
 
 -- A view of some Pars as a list
 data GParListView tc t a b
@@ -337,19 +339,19 @@ data PlInfo where
                     -> PlInfo
   NeverPipeline  :: PlInfo
   MaybePipeline  :: PlInfo
-  deriving (Generic)
+  deriving (Generic, Typeable, Data)
 
 data ParInfo
   = ParInfo { plInfo     :: PlInfo
             , inBurstSz  :: Maybe Int
             , outBurstSz :: Maybe Int }
-  deriving (Generic)
+  deriving (Generic, Typeable, Data)
 
 -- See Note [Standalone Reads]
 data ReadType
   = SpinOnEmpty
   | JumpToConsumeOnEmpty
-  deriving (Generic)
+  deriving (Generic, Typeable, Data)
 
 type CompLoc = Maybe SourcePos
 
@@ -357,13 +359,13 @@ data GComp tc t a b
   = MkComp { unComp   :: GComp0 tc t a b
            , compLoc  :: CompLoc
            , compInfo :: a }
-  deriving (Generic)
+  deriving (Generic, Typeable, Data)
 
 data GProg tc t a b
   = MkProg { globals  :: [(GName t,Maybe (GExp t b))]
            , progComp :: GComp tc t a b
            }
-  deriving (Generic)
+  deriving (Generic, Typeable, Data)
 
 {-------------------------------------------------------------------------------
   Specialization of the AST to Ty (internal types)
@@ -452,8 +454,8 @@ mapCompM onCTyp onETyp onCAnn onEAnn onExp f = goComp
                    return (x', c'')
        -- TODO: we normalize at every node in the AST as we go up
        -- which is not terribly nice. Perhaps we should get rid of
-       -- BindMany, in favor of plain old Bind, and have a 
-       -- bindManyView later on that gives us the functionality 
+       -- BindMany, in favor of plain old Bind, and have a
+       -- bindManyView later on that gives us the functionality
        -- we need.
        return $ mkBindMany c1' xs_cs'
     goComp0 (Seq c1 c2) = do

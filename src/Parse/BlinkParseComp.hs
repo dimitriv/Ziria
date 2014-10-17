@@ -21,7 +21,7 @@
              RankNTypes,
              ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wall -Wwarn #-}
-module BlinkParseComp ( parseProgram, runParseM ) where
+module BlinkParseComp (parseProgram, parseComp, parseTopLevel) where
 
 import Control.Applicative ((<$>), (<*>), (<$), (<*), (*>))
 import Control.Arrow (second)
@@ -46,9 +46,9 @@ import Eval (evalInt)
 --
 -- TODO: Update the grammar
 parseProgram :: BlinkParser SrcProg
-parseProgram =
-    join $ mkProg <$ whiteSpace <* cppPragmas AllowFilenameChange
-       <*> declsParser <*> parseTopLevel <* eof
+parseProgram = parseTopLevel $
+    join $ mkProg <$ cppPragmas AllowFilenameChange
+       <*> declsParser <*> parseTopLevelDecls
   where
     mkProg _  ([],     _)  = fail "No main found"
     mkProg _  (_:_:_,  _)  = fail "More than one main found"
@@ -59,11 +59,11 @@ parseProgram =
 -- We return the list of declarations of 'main' separately so that we can
 -- construct a single SrcComp in `parseProgram`.
 --
-parseTopLevel :: BlinkParser ([SrcComp], [SrcComp -> SrcComp])
-parseTopLevel =
+parseTopLevelDecls :: BlinkParser ([SrcComp], [SrcComp -> SrcComp])
+parseTopLevelDecls =
     withPos cLetDecl' <*> parseLetDecl `bindExtend` \d -> append d <$> more
   where
-    more = topLevelSep *> (parseTopLevel <|> return ([], []))
+    more = topLevelSep *> (parseTopLevelDecls <|> return ([], []))
 
     append (decl, fun) (mains, funs) =
       case decl of
@@ -482,3 +482,10 @@ optVectAnn = optionMaybe parseVectAnn
 -- > <comp-ann> ::= "comp" <range>?
 parseCompAnn :: BlinkParser (Maybe (Int, Int))
 parseCompAnn = reserved "comp" *> optionMaybe parseRange
+
+{-------------------------------------------------------------------------------
+  Auxiliary
+-------------------------------------------------------------------------------}
+
+parseTopLevel :: BlinkParser a -> BlinkParser a
+parseTopLevel p = whiteSpace *> p <* eof

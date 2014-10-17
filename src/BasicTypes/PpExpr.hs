@@ -199,6 +199,7 @@ instance Outputable SrcTy where
     SrcTDouble    -> text "double"
     SrcTBool      -> text "bool"
     SrcTStruct nm -> text nm
+    SrcInject  ty -> ppr ty
     SrcTArray (SrcLiteral n) ty' -> text "arr" <> brackets (int n) <+> ppr ty'
     SrcTArray (SrcNVar n)    ty' -> text "arr" <> brackets (text (show n)) <+> ppr ty'
     SrcTArray (SrcNArr n)    ty' -> text "arr" <> brackets (text ("arr " ++ (show n))) <+> ppr ty'

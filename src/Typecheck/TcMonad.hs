@@ -34,6 +34,7 @@ import AstExpr
 import Outputable
 import PpExpr (ppName)
 import TcErrors
+import Rename (RenM, runRenM)
 import qualified GenSym as GS
 
 
@@ -151,6 +152,10 @@ instance Monad TcM where
              Right (a, st') -> runTcM (m2 a) tenv env cenv sym ctxt st'
          }
   return = pure
+
+-- Lifting an IO action
+instance MonadIO TcM where
+  liftIO m = TcM $ \_ _ _ _ _ st -> m >>= \a -> return (Right (a,st))
 
 raiseErr :: Bool -> Maybe SourcePos -> Doc -> TcM a
 raiseErr print_vartypes p msg
@@ -284,15 +289,16 @@ lookupALenEnv s pos = getALenEnv >>= lookupTcM s pos msg
   where msg = text "Unbound array length:" <+> text s
 
 
--- Lifting an IO action
-liftIO :: IO a -> TcM a
-liftIO m = TcM $ \_ _ _ _ _ st -> m >>= \a -> return (Right (a,st))
+-- For internal use
+getSym :: TcM GS.Sym
+getSym = TcM $ \_ _ _ sym _ st -> return (Right (sym, st))
+
 
 genSym :: String -> TcM String
-genSym prefix =
-  TcM $ \_ _ _ sym _ st ->
-    do { str <- GS.genSymStr sym
-       ; return $ Right (prefix ++ str, st) }
+genSym prefix = do
+  sym <- getSym
+  str <- liftIO $ GS.genSymStr sym
+  return (prefix ++ str)
 
 extendEnv :: [GName Ty] -> TcM a -> TcM a
 extendEnv binds m
@@ -494,3 +500,9 @@ zonkExpr = mapExpM zonkTy return return
 
 zonkComp :: Comp -> TcM Comp
 zonkComp = mapCompM zonkCTy zonkTy return return zonkExpr return
+
+-- | Lift the renamer monad to the TcM
+liftRenM :: RenM a -> TcM a
+liftRenM ren = do
+  sym <- getSym
+  liftIO $ runRenM sym ren
