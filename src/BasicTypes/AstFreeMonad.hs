@@ -72,12 +72,10 @@ import CtExpr (ctExp)
 import Rebindables
 import TcComp (tyCheckComp)
 import TcErrors (ErrCtx(InternalTypeChecking))
-import TcMonad (TcM)
+import TcMonad
 import TcUnify (unify)
 import qualified GenSym  as GS
 import qualified Rename  as Ren
-import qualified TcMonad as TcM
-
 
 {-------------------------------------------------------------------------------
   Free expression monad
@@ -383,17 +381,17 @@ emitting c ty = FAnnot c Nothing Nothing (Just ty) (FPure ())
 -------------------------------------------------------------------------------}
 
 unFreeExp :: Maybe SourcePos -> FreeExp () -> TcM Exp
-unFreeExp loc e = TcM.zonkExpr =<< unEFree loc e
+unFreeExp loc e = zonkExpr =<< unEFree loc e
 
 unFreeComp :: Maybe SourcePos -> FreeComp () -> TcM Comp
-unFreeComp loc c = TcM.zonkComp =<< unFree loc c
+unFreeComp loc c = zonkComp =<< unFree loc c
 
 unEFree :: Maybe SourcePos -> FreeExp () -> TcM Exp
 unEFree loc = liftM fromJust . go
   where
     go :: FreeExp () -> TcM (Maybe Exp)
     go (FEVal v k) = do
-      a  <- newTyVar
+      a  <- freshTy "a"
       k' <- go k
       return $ eVal loc a v `mSeq` k'
     go (FEVar nm k) = do
@@ -421,7 +419,7 @@ unEFree loc = liftM fromJust . go
       k'      <- go k
       return $ eAssign loc x' e' `mSeq` k'
     go (FEError str k) = do
-      a  <- newTyVar
+      a  <- freshTy "a"
       k' <- go k
       return $ eError loc a str `mSeq` k'
     go (FEAnnot e ty k) = do
@@ -466,29 +464,29 @@ unFree loc = liftM fromJust . go
       Just k' <- go (k nm)
       return $ Just $ cBindMany loc c' [(nm, k')]
     go (FTake1 k) = do
-      a  <- newTyVar
-      b  <- newTyVar
+      a  <- freshTy "a"
+      b  <- freshTy "b"
       k' <- go k
       return $ cTake1 loc a b `mSeq` k'
     go (FTake n k) = do
-      a  <- newTyVar
-      b  <- newTyVar
+      a  <- freshTy "a"
+      b  <- freshTy "b"
       k' <- go k
       return $ cTake loc a b n `mSeq` k'
     go (FEmit e k) = do
       e' <- unEFree loc e
-      a  <- newTyVar
+      a  <- freshTy "a"
       k' <- go k
       return $ cEmit loc a e' `mSeq` k'
     go (FEmits e k) = do
       e' <- unEFree loc e
-      a  <- newTyVar
+      a  <- freshTy "a"
       k' <- go k
       return $ cEmits loc a e' `mSeq` k'
     go (FReturn fi e k) = do
       e' <- unEFree loc e
-      a  <- newTyVar
-      b  <- newTyVar
+      a  <- freshTy "a"
+      b  <- freshTy "b"
       k' <- go k
       return $ cReturn loc a b fi e' `mSeq` k'
     go (FBranch e c1 c2 k) = do
@@ -521,8 +519,8 @@ unFree loc = liftM fromJust . go
       return $ c `mSeq` k'
     go (FLiftSrc c k) = do
       let env = extractTypeEnv c
-      c'       <- TcM.liftRenM $ Ren.extend env env $ Ren.rename c
-      (c'', _) <- TcM.extendEnv env $ tyCheckComp c'
+      c'       <- liftRenM $ Ren.extend env env $ Ren.rename c
+      (c'', _) <- extendEnv env $ tyCheckComp c'
       k'       <- go k
       return $ c'' `mSeq` k'
     go (FPure ()) =
@@ -538,11 +536,8 @@ unFree loc = liftM fromJust . go
 
 newName :: Maybe SourcePos -> Ty -> TcM (GName Ty)
 newName loc ty = do
-  str <- TcM.genSym "_x"
+  str <- genSym "_x"
   return $ toName ("_x" ++ str) loc ty
-
-newTyVar :: TcM Ty
-newTyVar = TVar <$> TcM.newTyVar "_a"
 
 extractTypeEnv :: SrcComp -> [GName Ty]
 extractTypeEnv = catMaybes . map aux . Set.toList . compEFVs
@@ -569,13 +564,13 @@ _test' = do
       let c = test tmp_idx is_empty in_buff in_buff_idx 1 2
 
       sym <- GS.initGenSym ""
-      mc  <- TcM.runTcM (unFreeComp Nothing c)
-                        (TcM.mkTyDefEnv [])
-                        (TcM.mkEnv      [])
-                        (TcM.mkCEnv     [])
-                        sym
-                        InternalTypeChecking
-                        TcM.emptyTcMState
+      mc  <- runTcM (unFreeComp Nothing c)
+                    (mkTyDefEnv [])
+                    (mkEnv      [])
+                    (mkCEnv     [])
+                    sym
+                    InternalTypeChecking
+                    emptyTcMState
       putStrLn (replicate 80 '-')
       case mc of
         Left err      -> print err

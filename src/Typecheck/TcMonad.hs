@@ -26,7 +26,7 @@
 --   is the error from the second computation. This might be misleading, as
 --   it might mean we might tell the user "cannot unify Foo with Baz" while
 --   we should really say "cannot unify Foo with Bar or Baz"
-{-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
+{-# OPTIONS_GHC -Wall -fno-warn-orphans -Wwarn #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module TcMonad (
     -- * TcM monad
@@ -71,9 +71,11 @@ module TcMonad (
   , checkWith
     -- * Name generation
   , genSym
-  , newTyVar
-  , newALenVar
-  , newTInt_BWUnknown
+    -- * Creating types with type variables
+  , freshTy
+  , freshNumExpr
+  , freshTInt
+  , freshTArray
     -- * Interaction with the renamer
   , liftRenM
     -- * Working with types
@@ -354,6 +356,8 @@ checkWith pos False err = raiseErr False pos err
 
 {-------------------------------------------------------------------------------
   Name generation
+
+  Most of these are for internal use in the fresh* functions.
 -------------------------------------------------------------------------------}
 
 getSym :: TcM GS.Sym
@@ -374,10 +378,27 @@ newBWVar prefix = genSym prefix
 newALenVar :: String -> TcM LenVar
 newALenVar prefix = genSym prefix
 
-newTInt_BWUnknown :: TcM Ty
-newTInt_BWUnknown = do
-    v <- newBWVar "bw"
-    return $ TInt (BWUnknown v)
+{-------------------------------------------------------------------------------
+  Creating types with type variables
+-------------------------------------------------------------------------------}
+
+freshTy :: String -> TcM Ty
+freshTy prefix = TVar <$> newTyVar prefix
+
+freshBitWidth :: String -> TcM BitWidth
+freshBitWidth prefix = BWUnknown <$> newBWVar prefix
+
+freshNumExpr :: String -> TcM NumExpr
+freshNumExpr prefix = NVar <$> newALenVar prefix
+
+freshTInt :: TcM Ty
+freshTInt = TInt <$> freshBitWidth "bw"
+
+freshTArray :: TcM (NumExpr, Ty)
+freshTArray = do
+  n <- freshNumExpr "n"
+  a <- freshTy "a"
+  return (n, a)
 
 {-------------------------------------------------------------------------------
   Zonking

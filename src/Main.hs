@@ -37,10 +37,11 @@ import qualified Language.C.Syntax as C
 -- TODO: There are a lot of redundant imports here. Enable -Wall in Main.
 import AstComp
 import AstExpr
-import AstLabelled   as Labelled
-import AstUnlabelled as Unlabelled
-import AstFreeMonad  as AstFreeMonad
-import AstQuasiQuote as AstQuasiQuote
+import qualified AstLabelled   as Labelled
+import qualified AstUnlabelled as Unlabelled
+import qualified AstFreeMonad  as AstFreeMonad
+import qualified AstQuasiQuote as AstQuasiQuote
+-- import qualified Lint as Lint
 import CtComp (ctComp)
 import Opts
 import PassFold
@@ -75,7 +76,7 @@ import VecMitigators
 import Orphans
 
 
-data CompiledProgram 
+data CompiledProgram
   = CompiledProgram Comp [C.Definition] FilePath
 
 pprProgInfo :: Comp -> Doc

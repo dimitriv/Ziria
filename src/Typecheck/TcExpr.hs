@@ -26,7 +26,6 @@ module TcExpr (
   , unifyAnn
   ) where
 
-import Control.Applicative
 import Text.Parsec.Pos (SourcePos)
 import Text.PrettyPrint.HughesPJ
 
@@ -55,7 +54,7 @@ tyCheckFree nm = do
 -- explicit type annotation
 tyCheckBound :: GName (Maybe SrcTy) -> TcM (GName Ty, Ty)
 tyCheckBound nm = do
-  a <- TVar <$> newTyVar "a"
+  a <- freshTy "a"
   unifyAnn (nameLoc nm) (nameTyp nm) a
   return (nm{nameTyp = a}, a)
 
@@ -64,7 +63,7 @@ tyCheckVal :: Val -> TcM Ty
 tyCheckVal v
   = case v of
       VBit _    -> return TBit
-      VInt _    -> newTInt_BWUnknown
+      VInt _    -> freshTInt
       VDouble _ -> return TDouble
       VBool _   -> return TBool
       VString _ -> return TString
@@ -128,7 +127,7 @@ tyCheckExpr e
                         }
 
                    BwNeg ->
-                     do { tint_unknown <- newTInt_BWUnknown
+                     do { tint_unknown <- freshTInt
                         ; firstToSucceed (unify loc ty0' tint_unknown)
                                          (unify loc ty0' TBit)
                         ; return (eUnOp loc BwNeg e0', ty0')
@@ -181,15 +180,15 @@ tyCheckExpr e
                          }
 
                    | isShiftBinOp x -- ShL / ShR
-                   -> do { ti1 <- newTInt_BWUnknown
-                         ; ti2 <- newTInt_BWUnknown
+                   -> do { ti1 <- freshTInt
+                         ; ti2 <- freshTInt
                          ; unify loc ty1' ti1
                          ; unify loc ty2' ti2
                          ; return (eBinOp loc bop e1' e2', ti1)
                          }
 
                    | isLogicalBinOp x -- BwAnd / BwOr / BwXor (valid for either int or bit)
-                   -> do { ti <- newTInt_BWUnknown
+                   -> do { ti <- freshTInt
                          ; firstToSucceed (unifyMany loc [ty1',ty1'] [ti,ty2'])
                                           (unifyMany loc [ty1',ty1'] [TBit,ty2'])
                          ; return (eBinOp loc bop e1' e2', ty1')
@@ -227,7 +226,7 @@ tyCheckExpr e
                ; (eix',  tyix)  <- tyCheckExpr eix
                ; tyarr' <- zonkTy tyarr
                ; tyix'  <- zonkTy tyix -- TODO: Why is this zonking necessary?
-               ; unify loc tyix' =<< newTInt_BWUnknown
+               ; unify loc tyix' =<< freshTInt
                ; case tyarr' of
                   TArray _n tbase -> -- TODO: support metavars for array size here
                    case len of
@@ -247,7 +246,7 @@ tyCheckExpr e
               ; tyix'  <- zonkTy tyix  -- TODO: Why is this zonking necessary?
               ; case tyarr' of
                   TArray n TBit ->
-                    do { ti <- newTInt_BWUnknown
+                    do { ti <- freshTInt
                        ; unify loc tyix' (TArray n ti)
                        ; return (eBPerm loc earr' eix', tyarr')
                        }
@@ -259,7 +258,7 @@ tyCheckExpr e
            do { (earr', tyarr) <- tyCheckExpr earr
               ; (eval', tyval) <- tyCheckExpr eval
               ; (eix',  tyix)  <- tyCheckExpr eix
-              ; unify loc tyix =<< newTInt_BWUnknown
+              ; unify loc tyix =<< freshTInt
               ; tyarr' <- zonkTy tyarr
               ; tyval' <- zonkTy tyval -- TODO: Why is this zonking necessary?
               ; case tyarr' of
@@ -309,7 +308,7 @@ tyCheckExpr e
                ; case tyarr' of
                    TArray _n tbase ->
                       do { -- ix must range over an int type
-                         ; unify loc tyix =<< newTInt_BWUnknown
+                         ; unify loc tyix =<< freshTInt
                            -- x must range of the base type of the array
                          ; unify loc tyx tbase
                          ; (ebody', tybody) <- extendEnv [ix', x'] $
@@ -403,7 +402,7 @@ tyCheckExpr e
                }
 
           EError ann str ->
-            do { a <- TVar <$> newTyVar "a"
+            do { a <- freshTy "a"
                ; unifyAnn loc ann a
                ; return (eError loc a str, a)
                }
@@ -483,13 +482,10 @@ trTy _ (SrcInject ty)  = return ty
 trNumExpr :: Maybe SourcePos -> SrcNumExpr -> TcM NumExpr
 trNumExpr _ (SrcLiteral n) = return $ Literal n
 trNumExpr p (SrcNArr x)    = do (_x', xt) <- tyCheckFree x
-                                a <- TVar <$> newTyVar "a"
-                                n <- newALenVar "n"
-                                let ne = NVar n
+                                (ne, a) <- freshTArray
                                 unify p xt (TArray ne a)
                                 return ne
-trNumExpr _ (SrcNVar _p')  = do n <- newALenVar "n"
-                                return $ NVar n
+trNumExpr _ (SrcNVar _p')  = freshNumExpr "n"
 
 trBitWidth :: SrcBitWidth -> TcM BitWidth
 trBitWidth SrcBW8  = return BW8

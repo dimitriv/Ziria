@@ -274,7 +274,7 @@ tyCheckComp c
 
            Emit _ e ->
              do { (e', ety) <- tyCheckExpr e
-                ; ta <- TVar <$> newTyVar "a"
+                ; ta <- freshTy "a"
                 ; let ty = CTBase (TComp TUnit ta ety)
                 ; return (cEmit cloc ta e', ty)
                 }
@@ -285,7 +285,7 @@ tyCheckComp c
                 --; liftIO $ putStrLn $ "tcComp, emits ty = " ++ show ty
                 ; case ety' of
                     TArray _ bty ->
-                      do { ta <- TVar <$> newTyVar "a"
+                      do { ta <- freshTy "a"
                          ; let ty = CTBase (TComp TUnit ta bty)
                          ; return (cEmits cloc ta e', ty)
                          }
@@ -294,8 +294,8 @@ tyCheckComp c
 
            Return _ _ fi e ->
              do { (e', ety) <- tyCheckExpr e
-                ; ta <- TVar <$> newTyVar "a"
-                ; tb <- TVar <$> newTyVar "b"
+                ; ta <- freshTy "a"
+                ; tb <- freshTy "b"
                 ; let ty = CTBase (TComp ety ta tb)
                 ; return (cReturn cloc ta tb fi e', ty)
                 }
@@ -353,15 +353,15 @@ tyCheckComp c
                 }
 
            Take1 _ _ ->
-             do { ta <- TVar <$> newTyVar "a"
-                ; tb <- TVar <$> newTyVar "b"
+             do { ta <- freshTy "a"
+                ; tb <- freshTy "b"
                 ; let ty = CTBase (TComp ta ta tb)
                 ; return (cTake1 cloc ta tb, ty)
                 }
 
            Take _ _ n ->
-             do { ta <- TVar <$> newTyVar "a"
-                ; tb <- TVar <$> newTyVar "b"
+             do { ta <- freshTy "a"
+                ; tb <- freshTy "b"
                 ; let to = TArray (Literal n) ta
                 ; let ty = CTBase (TComp to ta tb)
                 ; return (cTake cloc ta tb n, ty)
@@ -410,7 +410,7 @@ tyCheckComp c
                 ; (c1', cty1) <- extendEnv [x'] $ tyCheckComp c1
                 ; case cty1 of
                     CTBase (TComp v a b) ->
-                      do { ti <- newTInt_BWUnknown
+                      do { ti <- freshTInt
                          ; unify cloc tye    ti
                          ; unify cloc tyelen ti -- TODO: This is redundant
                          ; let cTy = CTBase (TComp v a b)
@@ -452,8 +452,8 @@ tyCheckComp c
 
            Map wdth f ->
              do { (f', fty) <- tyCheckFree f
-                ; ta <- TVar <$> newTyVar "a"
-                ; tb <- TVar <$> newTyVar "b"
+                ; ta <- freshTy "a"
+                ; tb <- freshTy "b"
                 ; unify cloc fty (TArrow [ta] tb)
                 ; let cTy = CTBase (TTrans ta tb)
                 ; return (cMap cloc wdth f', cTy)
@@ -461,34 +461,34 @@ tyCheckComp c
 
            Filter f ->
              do { (f', fty) <- tyCheckFree f
-                ; ta <- TVar <$> newTyVar "a"
+                ; ta <- freshTy "a"
                 ; unify cloc fty (TArrow [ta] TBool)
                 ; let cTy = CTBase (TTrans ta ta)
                 ; return (cFilter cloc f', cTy)
                 }
 
            WriteSnk ann ->
-             do { ta <- TVar <$> newTyVar "a"
+             do { ta <- freshTy "a"
                 ; unifyAnn cloc ann ta
                 ; let cty' = CTBase (TTrans ta (TBuff (ExtBuf ta)))
                 ; return (cWriteSnk cloc ta, cty')
                 }
 
            WriteInternal _ bid ->
-             do { ta <- TVar <$> newTyVar "a"
+             do { ta <- freshTy "a"
                 ; let cty' = CTBase (TTrans ta (TBuff (IntBuf ta)))
                 ; return (cWriteInternal cloc ta bid, cty')
                 }
 
            ReadSrc ann ->
-             do { ta <- TVar <$> newTyVar "a"
+             do { ta <- freshTy "a"
                 ; unifyAnn cloc ann ta
                 ; let cty' = CTBase (TTrans (TBuff (ExtBuf ta)) ta)
                 ; return (cReadSrc cloc ta, cty')
                 }
 
            ReadInternal _ bid tp ->
-             do { ta <- TVar <$> newTyVar "a"
+             do { ta <- freshTy "a"
                 ; let cty' = CTBase (TTrans (TBuff (IntBuf ta)) ta)
                 ; return (cReadInternal cloc ta bid tp, cty')
                 }
@@ -508,7 +508,7 @@ tyCheckComp c
                 }
 
            Mitigate _ n1 n2 ->
-             do { ta <- TVar <$> newTyVar "a"
+             do { ta <- freshTy "a"
                 ; let t1 = if n1 == 1 then ta else TArray (Literal n1) ta
                 ; let t2 = if n2 == 1 then ta else TArray (Literal n2) ta
                   -- TODO: Check that n1 divides n2 or n2 divides n1

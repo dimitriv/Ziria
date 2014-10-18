@@ -251,8 +251,8 @@ instantiateCall = go
 
     freshen :: LenVar -> TcM (LenVar, NumExpr)
     freshen lv
-      = do { lv' <- newALenVar lv
-           ; return (lv, NVar lv')
+      = do { ne <- freshNumExpr lv
+           ; return (lv, ne)
            }
 
     subst_len :: [(LenVar, NumExpr)] -> Ty -> TcM Ty
