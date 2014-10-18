@@ -162,7 +162,7 @@ runTcM act tenv env cenv sym ctx st =
       }
 
 firstToSucceed :: TcM a -> TcM a -> TcM a
-firstToSucceed m1 m2 = catchError m1 (\_ -> m2)
+firstToSucceed m1 m2 = get >>= \st -> catchError m1 (\_ -> put st >> m2)
 
 emptyTcMState :: TcMState
 emptyTcMState = TcMState {
