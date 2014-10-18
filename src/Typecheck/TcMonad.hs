@@ -164,9 +164,9 @@ firstToSucceed m1 m2 = catchError m1 (\_ -> m2)
 
 emptyTcMState :: TcMState
 emptyTcMState = TcMState {
-      tcm_tyenv      = mkTyEnv      []
-    , tcm_alenenv    = mkALenEnv    []
-    , tcm_bwenv      = mkBWEnv      []
+      tcm_tyenv   = mkTyEnv   []
+    , tcm_alenenv = mkALenEnv []
+    , tcm_bwenv   = mkBWEnv   []
     }
 
 {-------------------------------------------------------------------------------
