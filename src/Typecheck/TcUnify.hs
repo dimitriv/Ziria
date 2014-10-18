@@ -18,8 +18,29 @@
 -}
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE GADTs, MultiParamTypeClasses #-}
-module TcUnify where
+module TcUnify (
+    -- * Unification
+    unify
+  , unifyMany
+  , unifyAll
+  , unify_cty0
+  , unifyALen
+    -- * Check that types have certain shapes
+  , Hint(..)
+  , unifyTInt
+  , unifyTInt'
+  , unifyTArray
+  , unifyCTBase
+  , unifyTComp
+  , unifyTTrans
+    -- * Defaulting
+  , defaultTy
+  , defaultComp
+    -- * Instantiation
+  , instantiateCall
+  ) where
 
+import Control.Monad hiding (forM_)
 import Text.Parsec.Pos (SourcePos)
 import Text.PrettyPrint.HughesPJ
 import qualified Data.Map as M
@@ -33,8 +54,9 @@ import PpComp ()
 import PpExpr ()
 import TcMonad
 
-{- Unification
- - ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -}
+{-------------------------------------------------------------------------------
+  Unification
+-------------------------------------------------------------------------------}
 
 unifyErrGeneric :: Doc -> Maybe SourcePos -> Ty -> Ty -> TcM ()
 unifyErrGeneric msg pos ty1 ty2
@@ -84,7 +106,7 @@ unify p tya tyb = go tya tyb
     go ty (TVar x) = go (TVar x) ty
     go TUnit TUnit = return ()
     go TBit TBit   = return ()
-    go (TInt bw1) (TInt bw2) = unifyBitWidth p tya tyb bw1 bw2
+    go (TInt bw1) (TInt bw2) = unifyBitWidth p bw1 bw2
     go TDouble TDouble = return ()
     go (TBuff (IntBuf ta))(TBuff (IntBuf tb))    = go ta tb
     go (TBuff (ExtBuf bta)) (TBuff (ExtBuf btb)) = go bta btb
@@ -99,7 +121,7 @@ unify p tya tyb = go tya tyb
       | otherwise = unifyErr p tya tyb
     go TBool TBool = return ()
     go (TArray n ty1) (TArray m ty2)
-      = unifyALen p tya tyb n m >> go ty1 ty2
+      = unifyALen p n m >> go ty1 ty2
     go (TArrow tys1 ty2) (TArrow tys1' ty2')
       | length tys1 /= length tys1'
       = unifyErr p tya tyb
@@ -139,8 +161,8 @@ unifyMany p t1s t2s = mapM_ (\(t1,t2) -> unify p t1 t2) (zip t1s t2s)
 
 
 
-unifyBitWidth :: Maybe SourcePos -> Ty -> Ty -> BitWidth -> BitWidth -> TcM ()
-unifyBitWidth p orig_ty1 orig_ty2 = go
+unifyBitWidth :: Maybe SourcePos -> BitWidth -> BitWidth -> TcM ()
+unifyBitWidth p = go
   where
     go (BWUnknown bvar) bw
       = do { benv <- getBWEnv
@@ -154,7 +176,7 @@ unifyBitWidth p orig_ty1 orig_ty2 = go
       | b1 == b2
       = return ()
       | otherwise
-      = unifyErrGeneric (text "Int width mismatch") p orig_ty1 orig_ty2
+      = raiseErr True p (text "Int width mismatch")
 
     goBWVar bvar1 (BWUnknown bvar2)
       | bvar1 == bvar2
@@ -169,8 +191,8 @@ unifyBitWidth p orig_ty1 orig_ty2 = go
       = updBWEnv [(bvar1,bw2)]
 
 
-unifyALen :: Maybe SourcePos -> Ty -> Ty -> NumExpr -> NumExpr -> TcM ()
-unifyALen p orig_ty1 orig_ty2 = go
+unifyALen :: Maybe SourcePos -> NumExpr -> NumExpr -> TcM ()
+unifyALen p = go
   where
     go (NVar n) nm2
       = do { alenv <- getALenEnv
@@ -186,7 +208,7 @@ unifyALen p orig_ty1 orig_ty2 = go
       | i == j
       = return ()
       | otherwise
-      = unifyErrGeneric (text "Array length mismatch") p orig_ty1 orig_ty2
+      = raiseErr True p (text "Array length mismatch")
 
     -- Invariant: num expression is never an array
     goNVar nvar1 (Literal i)
@@ -203,6 +225,10 @@ unifyALen p orig_ty1 orig_ty2 = go
                Nothing ->
                  updALenEnv [(nvar1, NVar nvar2)]
            }
+
+{-------------------------------------------------------------------------------
+  Defaulting
+-------------------------------------------------------------------------------}
 
 -- | @defaultTy p ty def@ defaults @ty@ to @tdef@ if @ty@ is a type variable
 -- (after zonking).
@@ -235,6 +261,10 @@ defaultExpr = mapExpM zonkTy return zonk_exp
 defaultComp :: Comp -> TcM Comp
 defaultComp = mapCompM zonkCTy zonkTy return return defaultExpr return
 
+{-------------------------------------------------------------------------------
+  Instantiation (of polymorphic functions)
+-------------------------------------------------------------------------------}
+
 -- | Instantiates the array length variables to fresh variables, to be used in
 -- subsequent unifications.
 --
@@ -261,3 +291,85 @@ instantiateCall = go
            Nothing  -> return (TArray (NVar n) t)
            Just ne' -> return (TArray ne' t)
     subst_len _ ty = return ty
+
+{-------------------------------------------------------------------------------
+  Check that types have certain shapes
+
+  We try to avoid generating unification variables where possible.
+-------------------------------------------------------------------------------}
+
+-- Type checking hints (isomorphic with Maybe)
+data Hint a = Check a | Infer
+
+check :: Hint a -> (a -> TcM ()) -> TcM ()
+check Infer     _   = return ()
+check (Check c) act = act c
+
+unifyTInt :: Maybe SourcePos -> Hint BitWidth -> Ty -> TcM BitWidth
+unifyTInt loc annBW = zonkTy >=> go
+  where
+    go (TInt bw) = do
+      check annBW $ unifyBitWidth loc bw
+      return bw
+    go ty = do
+      bw <- case annBW of Infer    -> freshBitWidth "bw"
+                          Check bw -> return bw
+      unify loc ty (TInt bw)
+      return bw
+
+-- Version of unifyTInt where we don't care about the bitwidths
+unifyTInt' :: Maybe SourcePos -> Ty -> TcM ()
+unifyTInt' loc ty = void $ unifyTInt loc Infer ty
+
+unifyTArray :: Maybe SourcePos -> Hint NumExpr -> Hint Ty -> Ty -> TcM (NumExpr, Ty)
+unifyTArray loc annN annA = zonkTy >=> go
+  where
+    go (TArray n a) = do
+      check annN $ unifyALen loc n
+      check annA $ unify loc a
+      return (n, a)
+    go ty = do
+      n <- case annN of Infer   -> freshNumExpr "n"
+                        Check n -> return n
+      a <- case annA of Infer   -> freshTy "a"
+                        Check a -> return a
+      unify loc ty (TArray n a)
+      return (n, a)
+
+unifyCTBase :: Maybe SourcePos
+            -> Hint Ty -> Hint Ty
+            -> CTy -> TcM (Maybe Ty, Ty, Ty)
+unifyCTBase loc annA annB = zonkCTy >=> go
+  where
+    go (CTBase (TComp u a b)) = do
+      check annA $ unify loc a
+      check annB $ unify loc b
+      return (Just u, a, b)
+    go (CTBase (TTrans a b)) = do
+      check annA $ unify loc a
+      check annB $ unify loc b
+      return (Nothing, a, b)
+    go (CTArrow _ _) =
+      raiseErr False loc $
+        text "Computer/transformer not fully applied"
+
+unifyTComp :: Maybe SourcePos
+           -> Hint Ty -> Hint Ty -> Hint Ty
+           -> CTy -> TcM (Ty, Ty, Ty)
+unifyTComp loc annU annA annB cty = do
+    (mu, a, b) <- unifyCTBase loc annA annB cty
+    case mu of
+      Just u  -> do check annU $ unify loc u
+                    return (u, a, b)
+      Nothing -> raiseErr False loc $
+                   text "Expected computer but found transformer"
+
+unifyTTrans :: Maybe SourcePos
+            -> Hint Ty -> Hint Ty
+            -> CTy -> TcM (Ty, Ty)
+unifyTTrans loc annA annB cty = do
+    (mu, a, b) <- unifyCTBase loc annA annB cty
+    case mu of
+      Nothing -> return (a, b)
+      Just _  -> raiseErr False loc $
+                   text "Expected transformer but found computer"

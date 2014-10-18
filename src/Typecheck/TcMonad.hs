@@ -74,8 +74,7 @@ module TcMonad (
     -- * Creating types with type variables
   , freshTy
   , freshNumExpr
-  , freshTInt
-  , freshTArray
+  , freshBitWidth
     -- * Interaction with the renamer
   , liftRenM
     -- * Working with types
@@ -390,15 +389,6 @@ freshBitWidth prefix = BWUnknown <$> newBWVar prefix
 
 freshNumExpr :: String -> TcM NumExpr
 freshNumExpr prefix = NVar <$> newALenVar prefix
-
-freshTInt :: TcM Ty
-freshTInt = TInt <$> freshBitWidth "bw"
-
-freshTArray :: TcM (NumExpr, Ty)
-freshTArray = do
-  n <- freshNumExpr "n"
-  a <- freshTy "a"
-  return (n, a)
 
 {-------------------------------------------------------------------------------
   Zonking

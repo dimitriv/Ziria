@@ -41,7 +41,6 @@ import qualified AstLabelled   as Labelled
 import qualified AstUnlabelled as Unlabelled
 import qualified AstFreeMonad  as AstFreeMonad
 import qualified AstQuasiQuote as AstQuasiQuote
--- import qualified Lint as Lint
 import CtComp (ctComp)
 import Opts
 import PassFold

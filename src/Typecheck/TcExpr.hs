@@ -26,6 +26,7 @@ module TcExpr (
   , unifyAnn
   ) where
 
+import Control.Applicative
 import Text.Parsec.Pos (SourcePos)
 import Text.PrettyPrint.HughesPJ
 
@@ -36,6 +37,7 @@ import PpExpr ()
 import TcErrors
 import TcMonad
 import TcUnify
+import Lint -- We reuse some code from the linter to avoid duplication
 
 {-------------------------------------------------------------------------------
   Variables, values, expressions
@@ -57,17 +59,6 @@ tyCheckBound nm = do
   a <- freshTy "a"
   unifyAnn (nameLoc nm) (nameTyp nm) a
   return (nm{nameTyp = a}, a)
-
--- | Values
-tyCheckVal :: Val -> TcM Ty
-tyCheckVal v
-  = case v of
-      VBit _    -> return TBit
-      VInt _    -> freshTInt
-      VDouble _ -> return TDouble
-      VBool _   -> return TBool
-      VString _ -> return TString
-      VUnit     -> return TUnit
 
 -- | Expressions
 --
@@ -93,12 +84,12 @@ tyCheckExpr e
          case unExp e of
 
           EVal ann v ->
-            do { t <- tyCheckVal v
+            do { t <- lintVal v
                ; unifyAnn loc ann t
                ; return (eVal loc t v, t)
                }
           EValArr _ann a@(h:t) ->
-            do { vtys <- mapM tyCheckVal (h:t)
+            do { vtys <- mapM lintVal (h:t)
                ; unifyAll loc vtys
                ; let arrty = TArray (Literal (length a)) (head vtys)
                ; return $ (eValArr loc arrty a, arrty)
@@ -112,107 +103,18 @@ tyCheckExpr e
                }
 
           EUnOp uop e0 ->
-            do { (e0', ty0) <- tyCheckExpr e0
-               ; ty0' <- zonkTy ty0
-               ; let msg = text "Unary operator type mismatch:" <+> ppr uop
-               ; case uop of
-                   Neg ->
-                     do { checkWith loc (isScalarTy ty0') msg
-                        ; return (eUnOp loc Neg e0', ty0')
-                        }
-
-                   Not ->
-                     do { unify loc ty0' TBool
-                        ; return (eUnOp loc Not e0', TBool)
-                        }
-
-                   BwNeg ->
-                     do { tint_unknown <- freshTInt
-                        ; firstToSucceed (unify loc ty0' tint_unknown)
-                                         (unify loc ty0' TBit)
-                        ; return (eUnOp loc BwNeg e0', ty0')
-                        }
-
-                   Cast target_ty ->
-                     do { target_ty' <- trReqTy "cast" loc target_ty
-                        ; compat_test <-
-                            case (target_ty', ty0') of
-                              (TBit,       TInt _)       -> return True
-                              (TInt _,     TBit)         -> return True
-                              (TDouble,    TInt _)       -> return True
-                              (TInt _p,    TDouble)      -> return True
-                              (TInt _,     TInt _)       -> return True
-                              (TStruct {}, TStruct {})   -> return $ isComplexTy target_ty' && isComplexTy ty0'
-                              -- Otherwise just try to unify
-                              (t1,t2) -> unify loc t1 t2 >> return True
-
-                        ; checkWith loc compat_test $
-                          text "Invalid cast from type" <+> ppr ty0' <+> text "to" <+> ppr target_ty
-
-                        ; return (eUnOp loc (Cast target_ty') e0', target_ty')
-                        }
-
-                   ALength
-                     | TArray _ _ <- ty0' -- NB ne is zonked
-                     -> return (eUnOp loc ALength e0', tint)
-                     | TVar _ <- ty0'
-                     -> raiseErrNoVarCtx loc $
-                        text "Could not resolve array length of:" <+> ppr e0
-                     | otherwise
-                     -> raiseErrNoVarCtx loc (expActualErr unknownTArr ty0' e0)
-
-                   NatExp -> error "typeCheckExpr: NatExp not supported!"
+            do { uop'       <- trUnOp loc uop
+               ; (e0', ty0) <- tyCheckExpr e0
+               ; ty0'       <- lintUnOp loc uop' ty0
+               ; return (eUnOp loc uop' e0', ty0')
                }
 
           EBinOp bop e1 e2 ->
-            do (e1', ty1) <- tyCheckExpr e1
-               (e2', ty2) <- tyCheckExpr e2
-               ty1' <- zonkTy ty1
-               ty2' <- zonkTy ty2
-
-               let msg = text "Binary operator type mismatch:" <+> ppr bop
-               case bop of
-                 x | isArithBinOp x -- Add / Sub / Mult / Div / Rem / Expon
-                   -> do { -- liftIO $ putStrLn $ "ty1' = " ++ show ty1'
-                         ; checkWith loc (supportsArithTy ty1') msg
-                         ; unify loc ty1' ty2'
-                         ; return (eBinOp loc bop e1' e2', ty1')
-                         }
-
-                   | isShiftBinOp x -- ShL / ShR
-                   -> do { ti1 <- freshTInt
-                         ; ti2 <- freshTInt
-                         ; unify loc ty1' ti1
-                         ; unify loc ty2' ti2
-                         ; return (eBinOp loc bop e1' e2', ti1)
-                         }
-
-                   | isLogicalBinOp x -- BwAnd / BwOr / BwXor (valid for either int or bit)
-                   -> do { ti <- freshTInt
-                         ; firstToSucceed (unifyMany loc [ty1',ty1'] [ti,ty2'])
-                                          (unifyMany loc [ty1',ty1'] [TBit,ty2'])
-                         ; return (eBinOp loc bop e1' e2', ty1')
-                         }
-
-                   | isEqualityBinOp x -- Eq / Neq
-                   -> do { checkWith loc (supportsEqTy ty1') msg
-                         ; unify loc ty1' ty2'
-                         ; return (eBinOp loc bop e1' e2', TBool)
-                         }
-
-                   | isRelBinOp x -- Let / Leq / Gt / Geq
-                   -> do { checkWith loc (supportsCmpTy ty1') msg
-                         ; unify loc ty1' ty2'
-                         ; return (eBinOp loc bop e1' e2', TBool)
-                         }
-
-                   | isBoolBinOp x -- And / Or
-                   -> do { unify loc ty1' TBool
-                         ; unify loc ty2' TBool
-                         ; return (eBinOp loc bop e1' e2', TBool)
-                         }
-                   | otherwise
-                   -> error $ "BUG: Forgotten case for operator " ++ show bop ++ " in typeCheckExpr!"
+            do { (e1', ty1) <- tyCheckExpr e1
+               ; (e2', ty2) <- tyCheckExpr e2
+               ; resTy <- lintBinOp loc bop ty1 ty2
+               ; return (eBinOp loc bop e1' e2', resTy)
+               }
 
           EAssign e1 e2 ->
             do { (e1', ty1) <- tyCheckExpr e1
@@ -226,7 +128,7 @@ tyCheckExpr e
                ; (eix',  tyix)  <- tyCheckExpr eix
                ; tyarr' <- zonkTy tyarr
                ; tyix'  <- zonkTy tyix -- TODO: Why is this zonking necessary?
-               ; unify loc tyix' =<< freshTInt
+               ; unifyTInt' loc tyix'
                ; case tyarr' of
                   TArray _n tbase -> -- TODO: support metavars for array size here
                    case len of
@@ -246,7 +148,7 @@ tyCheckExpr e
               ; tyix'  <- zonkTy tyix  -- TODO: Why is this zonking necessary?
               ; case tyarr' of
                   TArray n TBit ->
-                    do { ti <- freshTInt
+                    do { ti <- TInt <$> freshBitWidth "bw"
                        ; unify loc tyix' (TArray n ti)
                        ; return (eBPerm loc earr' eix', tyarr')
                        }
@@ -258,7 +160,7 @@ tyCheckExpr e
            do { (earr', tyarr) <- tyCheckExpr earr
               ; (eval', tyval) <- tyCheckExpr eval
               ; (eix',  tyix)  <- tyCheckExpr eix
-              ; unify loc tyix =<< freshTInt
+              ; unifyTInt' loc tyix
               ; tyarr' <- zonkTy tyarr
               ; tyval' <- zonkTy tyval -- TODO: Why is this zonking necessary?
               ; case tyarr' of
@@ -308,7 +210,7 @@ tyCheckExpr e
                ; case tyarr' of
                    TArray _n tbase ->
                       do { -- ix must range over an int type
-                         ; unify loc tyix =<< freshTInt
+                         ; unifyTInt' loc tyix
                            -- x must range of the base type of the array
                          ; unify loc tyx tbase
                          ; (ebody', tybody) <- extendEnv [ix', x'] $
@@ -482,8 +384,7 @@ trTy _ (SrcInject ty)  = return ty
 trNumExpr :: Maybe SourcePos -> SrcNumExpr -> TcM NumExpr
 trNumExpr _ (SrcLiteral n) = return $ Literal n
 trNumExpr p (SrcNArr x)    = do (_x', xt) <- tyCheckFree x
-                                (ne, a) <- freshTArray
-                                unify p xt (TArray ne a)
+                                (ne, _a) <- unifyTArray p Infer Infer xt
                                 return ne
 trNumExpr _ (SrcNVar _p')  = freshNumExpr "n"
 
@@ -502,3 +403,11 @@ trBitWidth SrcBW64 = return BW64
 trReqTy :: String -> Maybe SourcePos -> Maybe SrcTy -> TcM Ty
 trReqTy _    p (Just ty) = trTy p ty
 trReqTy desc p Nothing   = raiseErrNoVarCtx p $ text ("Missing type for " ++ desc)
+
+trUnOp :: Maybe SourcePos -> GUnOp (Maybe SrcTy) -> TcM (GUnOp Ty)
+trUnOp _ NatExp    = return NatExp
+trUnOp _ Neg       = return Neg
+trUnOp _ Not       = return Not
+trUnOp _ BwNeg     = return BwNeg
+trUnOp p (Cast ty) = Cast <$> trReqTy "cast" p ty
+trUnOp _ ALength   = return ALength

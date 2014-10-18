@@ -127,8 +127,6 @@ data GComp0 tc t a b where
   LetHeader :: GFun t b -> GComp tc t a b -> GComp0 tc t a b
 
   -- | Bind a computation function
-  --
-  -- TODO: Why does this not use GFun?
   LetFunC :: GName tc
           -> [GName (CallArg t tc)]           -- params (could include computation types)
           -> [(GName t,Maybe (GExp t b))]     -- locals

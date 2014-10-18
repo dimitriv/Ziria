@@ -410,7 +410,7 @@ tyCheckComp c
                 ; (c1', cty1) <- extendEnv [x'] $ tyCheckComp c1
                 ; case cty1 of
                     CTBase (TComp v a b) ->
-                      do { ti <- freshTInt
+                      do { ti <- TInt <$> freshBitWidth "bw"
                          ; unify cloc tye    ti
                          ; unify cloc tyelen ti -- TODO: This is redundant
                          ; let cTy = CTBase (TComp v a b)

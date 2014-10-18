@@ -71,7 +71,7 @@ ppTyErr TyErr{..}
 
 
 
-expActualErr :: Ty -> Ty -> SrcExp -> Doc
+expActualErr :: Outputable a => Ty -> Ty -> a -> Doc
 expActualErr exp_ty actual_ty exp
   = vcat [ text "Couldn't match expected type:" <+> ppr exp_ty
          , text "with actual type:            " <+> ppr actual_ty
