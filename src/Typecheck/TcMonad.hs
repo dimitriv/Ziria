@@ -22,6 +22,10 @@
 --   entirely internal
 -- * The section "working with types" feels like it belongs in a different
 --   module.
+-- * In firstToSucceed, when both computations fail the error that is reported
+--   is the error from the second computation. This might be misleading, as
+--   it might mean we might tell the user "cannot unify Foo with Baz" while
+--   we should really say "cannot unify Foo with Bar or Baz"
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module TcMonad (
