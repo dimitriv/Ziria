@@ -30,9 +30,10 @@ module TcUnify (
   , unifyTInt
   , unifyTInt'
   , unifyTArray
-  , unifyCTBase
-  , unifyTComp
-  , unifyTTrans
+  , unifyComp
+  , unifyTrans
+  , unifyCompOrTrans
+  , unifyBase
     -- * Defaulting
   , defaultTy
   , defaultComp
@@ -336,40 +337,49 @@ unifyTArray loc annN annA = zonkTy >=> go
       unify loc ty (TArray n a)
       return (n, a)
 
-unifyCTBase :: Maybe SourcePos
-            -> Hint Ty -> Hint Ty
-            -> CTy -> TcM (Maybe Ty, Ty, Ty)
-unifyCTBase loc annA annB = zonkCTy >=> go
+unifyComp :: Maybe SourcePos
+          -> Hint Ty -> Hint Ty -> Hint Ty
+          -> CTy0 -> TcM (Ty, Ty, Ty)
+unifyComp loc annU annA annB = zonkCTy0 >=> go
   where
-    go (CTBase (TComp u a b)) = do
+    go (TComp u a b) = do
+      check annU $ unify loc u
+      check annA $ unify loc a
+      check annB $ unify loc b
+      return (u, a, b)
+    go (TTrans _ _) =
+      raiseErr False loc $
+        text "Expected computer but found transformer"
+
+unifyTrans :: Maybe SourcePos
+           -> Hint Ty -> Hint Ty
+           -> CTy0 -> TcM (Ty, Ty)
+unifyTrans loc annA annB = zonkCTy0 >=> go
+  where
+    go (TComp _ _ _) = do
+      raiseErr False loc $
+        text "Expected transformer but found computer"
+    go (TTrans a b) = do
+      check annA $ unify loc a
+      check annB $ unify loc b
+      return (a, b)
+
+unifyCompOrTrans :: Maybe SourcePos
+                 -> Hint Ty -> Hint Ty
+                 -> CTy0 -> TcM (Maybe Ty, Ty, Ty)
+unifyCompOrTrans loc annA annB = zonkCTy0 >=> go
+  where
+    go (TComp u a b) = do
       check annA $ unify loc a
       check annB $ unify loc b
       return (Just u, a, b)
-    go (CTBase (TTrans a b)) = do
+    go (TTrans a b) = do
       check annA $ unify loc a
       check annB $ unify loc b
       return (Nothing, a, b)
-    go (CTArrow _ _) =
-      raiseErr False loc $
-        text "Computer/transformer not fully applied"
 
-unifyTComp :: Maybe SourcePos
-           -> Hint Ty -> Hint Ty -> Hint Ty
-           -> CTy -> TcM (Ty, Ty, Ty)
-unifyTComp loc annU annA annB cty = do
-    (mu, a, b) <- unifyCTBase loc annA annB cty
-    case mu of
-      Just u  -> do check annU $ unify loc u
-                    return (u, a, b)
-      Nothing -> raiseErr False loc $
-                   text "Expected computer but found transformer"
-
-unifyTTrans :: Maybe SourcePos
-            -> Hint Ty -> Hint Ty
-            -> CTy -> TcM (Ty, Ty)
-unifyTTrans loc annA annB cty = do
-    (mu, a, b) <- unifyCTBase loc annA annB cty
-    case mu of
-      Nothing -> return (a, b)
-      Just _  -> raiseErr False loc $
-                   text "Expected transformer but found computer"
+unifyBase :: Maybe SourcePos -> CTy -> TcM CTy0
+unifyBase loc = zonkCTy >=> go
+  where
+    go (CTBase cty0) = return cty0
+    go _ = raiseErr False loc $ text "Function not fully applied"

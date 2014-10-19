@@ -50,6 +50,7 @@ import TcComp
 import TcErrors ( ErrCtx (..) )
 import TcExpr
 import TcMonad
+import Lint (zonkLintComp)
 import PassPipeline
 import BlinkParseComp (parseProgram)
 import BlinkParseM (runBlinkParser)
@@ -152,7 +153,7 @@ main = failOnException $ do
 
     (c', unifiers1)
        <- failOnError $
-          runTcM (tyCheckTopComp (progComp prog_renamed))
+          runTcM (zonkLintComp =<< tyCheckTopComp (progComp prog_renamed))
                  tdef_env
                  decl_env
                  cenv

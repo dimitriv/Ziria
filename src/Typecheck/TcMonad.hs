@@ -81,6 +81,7 @@ module TcMonad (
     -- ** Zonking
   , zonkTy
   , zonkCTy
+  , zonkCTy0
   , zonkExpr
   , zonkComp
     -- ** Collecting type variables
@@ -438,12 +439,12 @@ zonkCTy :: CTy -> TcM CTy
 zonkCTy cty
   = case cty of
       CTBase cty0 ->
-         do { cty0' <- zonk_cty0 cty0
+         do { cty0' <- zonkCTy0 cty0
             ; return (CTBase cty0')
             }
       CTArrow ts cty0 ->
          do { ts' <- mapM zonk_arg ts
-            ; cty0' <- zonk_cty0 cty0
+            ; cty0' <- zonkCTy0 cty0
             ; return (CTArrow ts' cty0')
             }
   where
@@ -454,23 +455,23 @@ zonkCTy cty
             }
 
     zonk_arg (CAComp ct)
-       = do { ct' <- zonk_cty0 ct
+       = do { ct' <- zonkCTy0 ct
             ; return (CAComp ct')
             }
 
-    zonk_cty0 :: CTy0 -> TcM CTy0
-    zonk_cty0 (TComp u a b)
-      = do { u' <- zonkTy u
-           ; a' <- zonkTy a
-           ; b' <- zonkTy b
-           ; return (TComp u' a' b')
-           }
+zonkCTy0 :: CTy0 -> TcM CTy0
+zonkCTy0 (TComp u a b)
+  = do { u' <- zonkTy u
+       ; a' <- zonkTy a
+       ; b' <- zonkTy b
+       ; return (TComp u' a' b')
+       }
 
-    zonk_cty0 (TTrans a b)
-      = do { a' <- zonkTy a
-           ; b' <- zonkTy b
-           ; return (TTrans a' b')
-           }
+zonkCTy0 (TTrans a b)
+  = do { a' <- zonkTy a
+       ; b' <- zonkTy b
+       ; return (TTrans a' b')
+       }
 
 -- | Zonking
 --
@@ -479,10 +480,10 @@ zonkCTy cty
 -- do this in `defaultExpr` instead. This is important, because we should have
 -- the invariant that we can zonk at any point during type checking without
 -- changing the result.
-zonkExpr :: Exp -> TcM Exp
+zonkExpr :: GExp Ty a -> TcM (GExp Ty a)
 zonkExpr = mapExpM zonkTy return return
 
-zonkComp :: Comp -> TcM Comp
+zonkComp :: GComp CTy Ty a b -> TcM (GComp CTy Ty a b)
 zonkComp = mapCompM zonkCTy zonkTy return return zonkExpr return
 
 {-------------------------------------------------------------------------------
