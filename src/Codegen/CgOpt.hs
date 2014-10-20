@@ -310,11 +310,11 @@ codeGenFixpoint f k = do
 
 readCode :: Comp CTy Ty
          -> Maybe SourcePos
-         -> String
+         -> Queue
          -> ReadType
          -> CompKont
          -> Cg CompInfo
-readCode comp csp buf_id read_type k = do
+readCode comp csp buf read_type k = do
     rdSrcName <- nextName ("__readsrc_" ++ getLnNumInStr csp)
     let prefix = name rdSrcName
     let (CTBase cty0) = compInfo comp
@@ -327,8 +327,11 @@ readCode comp csp buf_id read_type k = do
 
     let yh = yieldHdl k
 
-    let buf_id_as_int :: Integer
-        buf_id_as_int = read buf_id
+    let buf_id :: String
+        buf_id = case buf of
+          SyncQ qid    -> show qid
+          CommitQ _qid -> error "TODO: readCode for CommitQ!"
+          _            -> error "BUG: readCode called on external queue!"
 
     yldTmp <- nextName ("__yldarr_" ++ getLnNumInStr csp)
     let yldTmpName = name yldTmp
@@ -341,7 +344,7 @@ readCode comp csp buf_id read_type k = do
         appendDecl =<< codeGenDeclGroup yldTmpName yldTy
 
     appendLabeledBlock (tickNmOf prefix) $
-     do { idle_until_nonempty
+     do { idle_until_nonempty buf_id
         ; if yldty_is_pointer
                    -- Memcpy from ThreadSeparator buffer into new array buffer and set pointer
                    then appendStmts [cstms|$id:(bufGetF)($id:buf_id, (char *) $id:yldTmpName);
@@ -383,7 +386,7 @@ readCode comp csp buf_id read_type k = do
 
     return (mkCompInfo prefix True) 
   where
-    idle_until_nonempty =
+    idle_until_nonempty buf_id =
       case read_type of
         SpinOnEmpty -> do
           appendStmt $ [cstm| while (ts_isEmpty($id:buf_id)) {
@@ -401,14 +404,18 @@ readCode comp csp buf_id read_type k = do
 
 writeCode :: Comp CTy Ty
           -> Maybe SourcePos
-          -> String
+          -> Queue
           -> CompKont
           -> Cg CompInfo
-writeCode comp csp buf_id k = do
+writeCode comp csp buf k = do
     wrSnkName <- nextName ("__writesrc_" ++ (getLnNumInStr csp))
     let prefix = name wrSnkName
         CTBase cty0 = compInfo comp
         (bufput_suffix, putLen) = getTyPutGetInfo $ yldTyOfCTy cty0
+        buf_id = case buf of
+          SyncQ qid    -> show qid
+          CommitQ _qid -> error "TODO: writeCode for CommitQ!"
+          _            -> error "BUG: writeCode called on external queue!"
 
     -- Write using the [ts_put] family of functions instead of [buf_put*]
     -- These functions are defined in [csrc/buf_*.h]
@@ -754,11 +761,11 @@ codeGenComp dflags comp k =
 
     -- Write to an internal ThreadSeparator buffer [buf_id].
     -- TODO: add sync code for closing _mq when read/write queue is finished!
-    go (MkComp (WriteInternal buf_id _mq) csp his_ty)
-      = writeCode comp csp buf_id k
+    go (MkComp (WriteInternal q _mq) csp his_ty)
+      = writeCode comp csp q k
 
-    go (MkComp (ReadInternal buf_id tp _mq) csp _) =
-        readCode comp csp buf_id tp k
+    go (MkComp (ReadInternal q tp _mq) csp _) =
+        readCode comp csp q tp k
 
     go (MkComp (Emit e) csp (CTBase cty0)) = do
         emitName <- nextName ("__emit_" ++ (getLnNumInStr csp))

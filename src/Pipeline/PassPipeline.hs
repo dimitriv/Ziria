@@ -153,11 +153,12 @@ pipelineStandalone c =
         (buftys, threads, cs') <- mkSplits cs
         return (inty : outty : buftys, thread : threads, c' : cs')
       where
+        syncQ (TypedBufId qid _) = SyncQ qid
         pi = ParInfo MaybePipeline Nothing Nothing
         inty  = inTyOfCTyBase $ compInfo c
         outty = yldTyOfCTyBase $ compInfo c
-        readq q ity oty = cReadInternal loc (CTBase $ TTrans ity oty) (show q)
-        writeq q ity oty = cWriteInternal loc (CTBase $ TTrans ity oty) (show q)
+        readq q ity oty = cReadInternal loc (CTBase $ TTrans ity oty) (syncQ q)
+        writeq q ity oty = cWriteInternal loc (CTBase $ TTrans ity oty) (syncQ q)
         a >>> b = cPar loc (mkTy (compInfo a) (compInfo b)) pi a b
     mkSplits (c:cs) = do
       (buftys, threads, cs') <- mkSplits cs
@@ -220,7 +221,7 @@ insertBufs :: [Comp CTy Ty] -> [Int] -> ([Ty], [Comp CTy Ty])
 -- ids, and insers read/writes where needed.
 insertBufs [c1] _bids = ([],[c1])
 insertBufs (c1:c2:cs) (bid:bids)
-  = let buf_m   = show bid
+  = let buf_m   = SyncQ bid
         c1cty   = compInfo c1
         c1yldty = yldTyOfCTyBase c1cty
         bufty   = TBuff (IntBuf c1yldty)

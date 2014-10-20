@@ -32,6 +32,7 @@ import Text.PrettyPrint.HughesPJ
 
 import AstExpr
 import AstComp
+import TaskGenTypes (Queue (..))
 import PpExpr
 
 import Outputable
@@ -232,10 +233,18 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
     WriteSnk {} ->
       text "write"
 
-    ReadInternal bid _typ _mq ->
-      text "read_internal[sq]" <> parens (text bid)
-    WriteInternal bid _mq ->
-      text "write_internal[sq]" <> parens (text bid)
+    ReadInternal (SyncQ qid) _typ _mq ->
+      text "read_internal[sq]" <> parens (text $ show qid)
+    ReadInternal (CommitQ qid) _typ _mq ->
+      text "read_internal[cq]" <> parens (text $ show qid)
+    ReadInternal _ _ _ ->
+      error "ReadInternal on external buffer!"
+    WriteInternal (SyncQ qid) _mq ->
+      text "write_internal[sq]" <> parens (text $ show qid)
+    WriteInternal (CommitQ qid) _mq ->
+      text "write_internal[cq]" <> parens (text $ show qid)
+    WriteInternal _ _ ->
+      error "WriteInternal on external buffer!"
 
     Standalone c1 ->
       text "standalone" <> braces (ppComp c1)

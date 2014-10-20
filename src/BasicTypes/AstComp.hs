@@ -135,8 +135,8 @@ data GComp0 ty a b where
   -- What is ReadType? See Note [Standalone Reads]
   -- The extra queue argument contains the queue to be closed, if any, when
   -- the transformer in question dies from an empty queue.
-  ReadInternal  :: BufId -> ReadType -> Maybe Queue -> GComp0 ty a b
-  WriteInternal :: BufId -> Maybe Queue -> GComp0 ty a b
+  ReadInternal  :: Queue -> ReadType -> Maybe Queue -> GComp0 ty a b
+  WriteInternal :: Queue -> Maybe Queue -> GComp0 ty a b
 
   -- Pipelining primitives
   Standalone :: GComp ty a b -> GComp0 ty a b
@@ -338,10 +338,10 @@ cReadSrc loc a ann = MkComp (ReadSrc ann) loc a
 cWriteSnk :: Maybe SourcePos -> a -> GRWTypeAnn ty -> GComp ty a b
 cWriteSnk loc a ann = MkComp (WriteSnk ann) loc a
 
-cReadInternal  :: Maybe SourcePos -> a -> BufId -> ReadType -> Maybe Queue -> GComp ty a b
+cReadInternal  :: Maybe SourcePos -> a -> Queue -> ReadType -> Maybe Queue -> GComp ty a b
 cReadInternal  loc a b rt mq = MkComp (ReadInternal b rt mq) loc a
 
-cWriteInternal :: Maybe SourcePos -> a -> BufId -> Maybe Queue -> GComp ty a b
+cWriteInternal :: Maybe SourcePos -> a -> Queue -> Maybe Queue -> GComp ty a b
 cWriteInternal loc a b mq = MkComp (WriteInternal b mq) loc a
 
 cStandalone :: Maybe SourcePos -> a -> GComp ty a b -> GComp ty a b

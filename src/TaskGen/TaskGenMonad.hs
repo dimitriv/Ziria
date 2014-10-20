@@ -198,9 +198,10 @@ createTaskEx snfo task = do
         killQIn = case (syncCloseUpstream <$> msnfo, isComputer c) of
           (Just True, True) -> Just qin
           _                 -> Nothing
-        -- TODO: read type doesn't really matter probably, but this may not be right
-        reader = cReadInternal loc rbufty (show $ qID qin) SpinOnEmpty killQOut
-        writer = cWriteInternal loc wbufty (show $ qID qout) killQIn
+        -- TODO: read type doesn't really matter,
+        -- so it should probably go away quietly
+        reader = cReadInternal loc rbufty qin SpinOnEmpty killQOut
+        writer = cWriteInternal loc wbufty qout killQIn
 
 -- | Create a new task from a computation and a pair of queues.
 --   The new task will be schedulable 'Anywhere'. To create a task
