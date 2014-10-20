@@ -20,4 +20,5 @@
 
 #include "../modulating.blk"
 
-read[bit] >>> modulate(M_64QAM) >>> write[complex16]
+let comp main = read[bit] >>> modulate(M_64QAM) >>> write[complex16];
+

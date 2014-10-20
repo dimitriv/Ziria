@@ -100,7 +100,7 @@ void init_getint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *h
 	{
 		memsize_int sz;
 		char *filebuffer;
-		try_read_filebuffer(hblk, params->inFileName, &filebuffer, &sz);
+		try_read_filebuffer(hblk, params->inFileName, params->inFileMode, &filebuffer, &sz);
 
 		// How many bytes the file buffer has * sizeof should be enough
 		blk->num8_input_buffer = (int8 *)try_alloc_bytes(hblk, sz * sizeof(int8));
@@ -321,7 +321,16 @@ void init_putint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *h
 		blk->num8_output_buffer = (int8 *)malloc(params->outBufSize * sizeof(int8));
 		blk->num8_output_entries = params->outBufSize;
 		if (params->outType == TY_FILE)
-			blk->num8_output_file = try_open(params->outFileName, "w");
+		{
+			if (params->outFileMode == MODE_BIN)
+			{
+				blk->num8_output_file = try_open(params->outFileName, "wb");
+			}
+			else
+			{
+				blk->num8_output_file = try_open(params->outFileName, "w");
+			}
+		}
 	}
 
 	if (params->outType == TY_MEM)
@@ -492,7 +501,16 @@ void init_putcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBloc
 		blk->num8_output_buffer = (int8 *)malloc(2 * params->outBufSize * sizeof(int8));
 		blk->num8_output_entries = params->outBufSize * 2;
 		if (params->outType == TY_FILE)
-			blk->num8_output_file = try_open(params->outFileName, "w");
+		{
+			if (params->outFileMode == MODE_BIN)
+			{
+				blk->num8_output_file = try_open(params->outFileName, "wb");
+			}
+			else
+			{
+				blk->num8_output_file = try_open(params->outFileName, "w");
+			}
+		}
 	}
 
 	if (params->outType == TY_MEM)

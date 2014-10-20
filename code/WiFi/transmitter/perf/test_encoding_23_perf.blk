@@ -21,4 +21,4 @@
 #include "../../const.blk"
 #include "../encoding.blk"
 
-read[bit] >>> encode(CR_23) >>> write[bit]
+let comp main = read[bit] >>> encode(CR_23) >>> write[bit];

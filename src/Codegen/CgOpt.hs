@@ -787,7 +787,7 @@ codeGenComp dflags comp k =
         -- it never calls the function) when "emit" is the toplevel program
         appendDecl =<< codeGenDeclVolGroup_init stateVar tint [cexp|FALSE|]
 
-        appendStmt [cstm|ORIGIN($string:(show csp)); |]
+        mapM_ appendStmt [cstms| $comment:("/* " ++ show csp ++ " */") |]
 
         appendLabeledBlock (tickNmOf prefix) $
             if [cexp|!$id:stateVar|]

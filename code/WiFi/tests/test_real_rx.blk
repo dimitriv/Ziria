@@ -13,7 +13,7 @@
 #include "../receiver/OFDM/FreqCompensation.blk"
 #include "../receiver/OFDM/FFT.blk"
 #include "../receiver/OFDM/ChannelEqualization.blk"
-#include "../receiver/OFDM/PilotTrack.blk"
+#include "../receiver/OFDM/pilotTrack.blk"
 #include "../receiver/OFDM/GetData.blk"
 
 #ifdef DO_DECODING

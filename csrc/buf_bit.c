@@ -212,7 +212,7 @@ void init_getbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 	{
 		memsize_int sz; 
 		char *filebuffer;
-		try_read_filebuffer(hblk, params->inFileName, &filebuffer, &sz);
+		try_read_filebuffer(hblk, params->inFileName, params->inFileMode, &filebuffer, &sz);
 
 		if (params->inFileMode == MODE_BIN)
 		{ 
@@ -344,7 +344,16 @@ void init_putbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 		blk->output_buffer = (unsigned char *)malloc(params->outBufSize);
 		blk->output_entries = params->outBufSize * 8;
 		if (params->outType == TY_FILE)
-			blk->output_file = try_open(params->outFileName, "w");
+		{
+			if (params->outFileMode == MODE_BIN)
+			{
+				blk->output_file = try_open(params->outFileName, "wb");
+			}
+			else
+			{
+				blk->output_file = try_open(params->outFileName, "w");
+			}
+		}
 	}
 
 	if (params->outType == TY_MEM)

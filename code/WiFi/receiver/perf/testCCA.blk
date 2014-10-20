@@ -19,5 +19,5 @@
 --
 #include "../cca/cca.blk"
 
-read[complex16] >>> {det <- cca(); emit int16(det.noSamples) } >>> write[int16]
+let comp main = read[complex16] >>> {det <- cca(); emit int16(det.noSamples) } >>> write[int16];
 

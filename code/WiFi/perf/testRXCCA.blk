@@ -18,8 +18,9 @@
 --
 --
 #include <externals.blk>
+#include "../const.blk"
 #include "../receiver/cca/cca.blk"
 #include "../receiver/removeDC.blk"
 #include "../receiver/downSample.blk"
 
-read >>> downSample() >>> removeDC() >>> {t<-cca()} >>> write[int]
+let comp main = read >>> downSample() >>> removeDC() >>> {x <- cca(); return (0)} >>> write[int];

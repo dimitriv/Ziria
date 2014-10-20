@@ -20,4 +20,4 @@
 
 #include "../scramble.blk"
 
-read[bit] >>> scrambler() >>> write[bit]
+let comp main = read[bit] >>> scrambler() >>> write[bit];
