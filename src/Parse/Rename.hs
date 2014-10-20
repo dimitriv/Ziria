@@ -18,7 +18,7 @@
 -}
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards, FlexibleInstances #-}
-module Rename (RenM, runRenM, rename, extend) where
+module Rename (RenM, runRenM, renProg, renComp, renExp, extend) where
 
 import Prelude hiding (mapM)
 import Control.Applicative
@@ -81,16 +81,16 @@ _failRenM msg = liftIO $ putStrLn msg >> error "Failure"
   The heart of renaming: renaming variables
 -------------------------------------------------------------------------------}
 
-renameBound :: Rename ty => GName ty -> RenM (GName ty)
-renameBound MkName{..} = do
+renBound :: (ty -> RenM ty) -> GName ty -> RenM (GName ty)
+renBound renty MkName{..} = do
   uniqId'  <- newUniq
-  nameTyp' <- rename nameTyp
+  nameTyp' <- renty nameTyp
   return MkName{uniqId = uniqId', nameTyp = nameTyp', ..}
 
-renameFree :: Rename ty => GName ty -> RenM (GName ty)
-renameFree nm@MkName{..} = do
+renFree :: (ty -> RenM ty) -> GName ty -> RenM (GName ty)
+renFree renty nm@MkName{..} = do
   uniqId'  <- lookupUniq nm
-  nameTyp' <- rename nameTyp
+  nameTyp' <- renty nameTyp
   return MkName{uniqId = uniqId', nameTyp = nameTyp', ..}
 
 {-------------------------------------------------------------------------------
@@ -125,8 +125,8 @@ instance Extend a => Extend [a] where
 -- parameters, where we might have
 --
 -- > fun comp f(arr int x, arr[length(x)] int y) { .. }
-renameTelescope :: Extend a => (a -> RenM a) -> [a] -> RenM [a]
-renameTelescope f = go
+renTelescope :: Extend a => (a -> RenM a) -> [a] -> RenM [a]
+renTelescope f = go
   where
     go []     = return []
     go (x:xs) = do
@@ -135,73 +135,92 @@ renameTelescope f = go
       return (x':xs')
 
 -- | Local variables
-renameLocal :: (GName (Maybe SrcTy), Maybe SrcExp)
+renLocal :: (GName (Maybe SrcTy), Maybe SrcExp)
             -> RenM (GName (Maybe SrcTy), Maybe SrcExp)
-renameLocal (x, me) = do
-    x'  <- renameBound x
-    me' <- mapM rename me -- No recursion!
+renLocal (x, me) = do
+    x'  <- renBound renTyAnn x
+    me' <- mapM renExp me -- No recursion!
     return (x', me')
 
 -- | Monadic bind
-renameBind :: (GName (Maybe SrcTy), SrcComp)
+renBind :: (GName (Maybe SrcTy), SrcComp)
            -> RenM (GName (Maybe SrcTy), SrcComp)
-renameBind (x, c) = do
-    x' <- renameBound x
-    c' <- extend x x' $ rename c
+renBind (x, c) = do
+    x' <- renBound renTyAnn x
+    c' <- extend x x' $ renComp c
     return (x', c')
 
 {-------------------------------------------------------------------------------
   Renaming proper
 -------------------------------------------------------------------------------}
 
+{-
 -- | Renaming does not change the type, just assigns unique IDs to variables.
 class Rename a where
-  rename :: a -> RenM a
+  ren :: a -> RenM a
 
 instance Rename a => Rename (Maybe a) where
-  rename = mapM rename
+  ren = mapM ren
 
 instance (Rename a, Rename b) => Rename (CallArg a b) where
-  rename (CAExp  e) = CAExp  <$> rename e
-  rename (CAComp c) = CAComp <$> rename c
+  ren (CAExp  e) = CAExp  <$> ren e
+  ren (CAComp c) = CAComp <$> ren c
+-}
 
 {-------------------------------------------------------------------------------
   Renaming types
 
-  We have to rename types because types can refer to term variables (length(x)).
+  We have to ren types because types can refer to term variables (length(x)).
 -------------------------------------------------------------------------------}
 
-instance Rename SrcTy where
-  rename SrcTUnit               = return SrcTUnit
-  rename SrcTBit                = return SrcTBit
-  rename SrcTBool               = return SrcTBool
-  rename (SrcTArray numExpr ty) = SrcTArray <$> rename numExpr <*> rename ty
-  rename (SrcTInt bw)           = SrcTInt   <$> rename bw
-  rename SrcTDouble             = return SrcTDouble
-  rename (SrcTStruct nm)        = return $ SrcTStruct nm
+renTyAnn :: Maybe SrcTy -> RenM (Maybe SrcTy)
+renTyAnn Nothing   = return Nothing
+renTyAnn (Just ty) = Just <$> renTy ty
 
-  -- Internal types injected into the source language are used for quasi-quoting
-  -- only, and therefore do not have to be renamed.
-  rename (SrcInject ty)         = return $ SrcInject ty
+renCTyAnn :: Maybe (GCTy SrcTy) -> RenM (Maybe (GCTy SrcTy))
+renCTyAnn Nothing    = return Nothing
+renCTyAnn (Just cty) = Just <$> renCTy cty
 
-instance Rename SrcNumExpr where
-  rename (SrcLiteral n) = return $ SrcLiteral n
-  rename (SrcNArr nm)   = SrcNArr <$> renameFree nm
-  rename (SrcNVar loc)  = return $ SrcNVar loc
+-- Internal types injected into the source language are used for quasi-quoting
+-- only, and therefore do not have to be rend.
+renTy :: SrcTy -> RenM SrcTy
+renTy SrcTUnit               = return SrcTUnit
+renTy SrcTBit                = return SrcTBit
+renTy SrcTBool               = return SrcTBool
+renTy (SrcTArray numExpr ty) = SrcTArray <$> renNumExpr numExpr <*> renTy ty
+renTy (SrcTInt bw)           = SrcTInt   <$> renBitWidth bw
+renTy SrcTDouble             = return SrcTDouble
+renTy (SrcTStruct nm)        = return $ SrcTStruct nm
+renTy (SrcInject ty)         = return $ SrcInject ty
 
-instance Rename SrcBitWidth where
-  rename = return -- (source) bitwidths don't contain variable names
+renNumExpr :: SrcNumExpr -> RenM SrcNumExpr
+renNumExpr (SrcLiteral n) = return $ SrcLiteral n
+renNumExpr (SrcNArr nm)   = SrcNArr <$> renFree renTyAnn nm
+renNumExpr (SrcNVar loc)  = return $ SrcNVar loc
 
-instance Rename ty => Rename (GCTy ty) where
-  rename (CTVar _)          = panicStr "Unexpected type variable in source type"
-  rename (CTComp u a b)     = CTComp  <$> rename u <*> rename a <*> rename b
-  rename (CTTrans a b)      = CTTrans <$> rename a <*> rename b
-  rename (CTArrow args res) = CTArrow <$> mapM rename args <*> rename res
+renBitWidth :: SrcBitWidth -> RenM SrcBitWidth
+renBitWidth = return -- (source) bitwidths don't contain variable names
 
-instance Rename ty => Rename (GStructDef ty) where
-  rename StructDef{..} = do
+renCTy :: GCTy SrcTy -> RenM (GCTy SrcTy)
+renCTy (CTVar _)          = panicStr "Unexpected type variable in source type"
+renCTy (CTComp u a b)     = CTComp  <$> renTy u <*> renTy a <*> renTy b
+renCTy (CTTrans a b)      = CTTrans <$> renTy a <*> renTy b
+renCTy (CTArrow args res) = CTArrow <$> mapM renTyCTy args <*> renCTy res
+
+renTyCTy :: CallArg SrcTy (GCTy SrcTy) -> RenM (CallArg SrcTy (GCTy SrcTy))
+renTyCTy = callArg (liftM CAExp . renTy) (liftM CAComp . renCTy)
+
+renTyCTyAnn :: CallArg (Maybe SrcTy) (Maybe (GCTy SrcTy))
+            -> RenM (CallArg (Maybe SrcTy) (Maybe (GCTy SrcTy)))
+renTyCTyAnn = callArg (liftM CAExp . renTyAnn) (liftM CAComp . renCTyAnn)
+
+renExpComp :: CallArg SrcExp SrcComp -> RenM (CallArg SrcExp SrcComp)
+renExpComp = callArg (liftM CAExp . renExp) (liftM CAComp . renComp)
+
+renStructDef :: GStructDef (Maybe SrcTy) -> RenM (GStructDef (Maybe SrcTy))
+renStructDef StructDef{..} = do
     struct_flds' <- forM struct_flds $ \(fld, ty) -> do
-                      ty' <- rename ty
+                      ty' <- renTyAnn ty
                       return (fld, ty')
     return StructDef { struct_name = struct_name
                      , struct_flds = struct_flds'
@@ -211,152 +230,151 @@ instance Rename ty => Rename (GStructDef ty) where
   Renaming computations
 -------------------------------------------------------------------------------}
 
-instance Rename SrcProg where
-  rename (MkProg globals comp) = do
-    globals' <- renameTelescope renameLocal globals
-    comp'    <- extend globals globals' $ rename comp
+renProg :: SrcProg -> RenM SrcProg
+renProg (MkProg globals comp) = do
+    globals' <- renTelescope renLocal globals
+    comp'    <- extend globals globals' $ renComp comp
     return $ MkProg globals' comp'
 
-instance Rename SrcFun where
-  rename fun = case unFun fun of
+renFun :: SrcFun -> RenM SrcFun
+renFun fun = case unFun fun of
     MkFunDefined nm params locals body -> do
-      nm'     <- renameBound nm
-      params' <- renameTelescope renameBound params
-      locals' <- extend params params' $ renameTelescope renameLocal locals
-      body'   <- extend params params' $ extend locals locals' $ rename body
+      nm'     <- renBound renTyAnn nm
+      params' <- renTelescope (renBound renTyAnn) params
+      locals' <- extend params params' $ renTelescope renLocal locals
+      body'   <- extend params params' $ extend locals locals' $ renExp body
       return $ mkFunDefined (funLoc fun) nm' params' locals' body'
-
     MkFunExternal nm params retTy -> do
-      nm'     <- renameBound nm
-      params' <- renameTelescope renameBound params
-      retTy'  <- extend params params' $ rename retTy
+      nm'     <- renBound renTyAnn nm
+      params' <- renTelescope (renBound renTyAnn) params
+      retTy'  <- extend params params' $ renTyAnn retTy
       return $ mkFunExternal (funLoc fun) nm' params' retTy'
 
-instance Rename SrcComp where
-  rename c = case unComp c of
+renComp :: SrcComp -> RenM SrcComp
+renComp c = case unComp c of
       Var nm -> do
-        nm' <- renameFree nm
+        nm' <- renFree renCTyAnn nm
         return $ cVar cloc nm'
       BindMany c1 xs_cs -> do
-        c1' <- rename c1
-        xs_cs' <- renameTelescope renameBind $ xs_cs
+        c1' <- renComp c1
+        xs_cs' <- renTelescope renBind $ xs_cs
         return $ cBindMany cloc c1' xs_cs'
       Seq c1 c2 -> do
-        c1' <- rename c1
-        c2' <- rename c2
+        c1' <- renComp c1
+        c2' <- renComp c2
         return $ cSeq cloc c1' c2'
       Par parInfo c1 c2 -> do
-        c1' <- rename c1
-        c2' <- rename c2
+        c1' <- renComp c1
+        c2' <- renComp c2
         return $ cPar cloc parInfo c1' c2'
       Let x c1 c2 -> do
-        c1' <- rename c1
-        x'  <- renameBound x
-        c2' <- extend x x' $ rename c2
+        c1' <- renComp c1
+        x'  <- renBound renCTyAnn x
+        c2' <- extend x x' $ renComp c2
         return $ cLet cloc x' c1' c2'
       LetStruct sdef c1 -> do
-        c1'   <- rename c1
-        sdef' <- rename sdef
+        c1'   <- renComp c1
+        sdef' <- renStructDef sdef
         return $ cLetStruct cloc sdef' c1'
       LetE x fi e c1 -> do
-        e'  <- rename e
-        x' <- renameBound x
-        c1' <- extend x x' $ rename c1
+        e'  <- renExp e
+        x'  <- renBound renTyAnn x
+        c1' <- extend x x' $ renComp c1
         return $ cLetE cloc x' fi e' c1'
       LetERef nm1 e c1 -> do
-        e'   <- mapM rename e
-        nm1' <- renameBound nm1
+        e'   <- mapM renExp e
+        nm1' <- renBound renTyAnn nm1
         extend nm1 nm1' $ do
-          c1' <- rename c1
+          c1' <- renComp c1
           return $ cLetERef cloc nm1' e' c1'
       LetHeader fun c2 -> do
-        fun' <- rename fun
-        c2'  <- extend fun fun' $ rename c2
+        fun' <- renFun fun
+        c2'  <- extend fun fun' $ renComp c2
         return $ cLetHeader cloc fun' c2'
       LetFunC nm params locals c1 c2 -> do
-        nm'     <- renameBound nm
-        params' <- renameTelescope renameBound params
-        locals' <- extend params params' $ renameTelescope renameLocal locals
-        c1'     <- extend params params' $ extend locals locals' $ rename c1
-        c2'     <- extend nm nm' $ rename c2
+        nm'     <- renBound renCTyAnn nm
+        params' <- renTelescope (renBound renTyCTyAnn) params
+        locals' <- extend params params' $ renTelescope renLocal locals
+        c1'     <- extend params params' $ extend locals locals' $ renComp c1
+        c2'     <- extend nm nm' $ renComp c2
         return $ cLetFunC cloc nm' params' locals' c1' c2'
       Call nm es -> do
-        es' <- mapM rename es
-        nm' <- renameFree nm
+        es' <- mapM renExpComp es
+        nm' <- renFree renCTyAnn nm
         return $ cCall cloc nm' es'
       Emit a e -> do
-        a' <- rename a
-        e' <- rename e
+        a' <- renTyAnn a
+        e' <- renExp e
         return $ cEmit cloc a' e'
       Return a b fi e -> do
-        a' <- rename a
-        b' <- rename b
-        e' <- rename e
+        a' <- renTyAnn a
+        b' <- renTyAnn b
+        e' <- renExp e
         return $ cReturn cloc a' b' fi e'
       Emits a e -> do
-        a' <- rename a
-        e' <- rename e
+        a' <- renTyAnn a
+        e' <- renExp e
         return $ cEmits cloc a' e'
       Interleave c1 c2 -> do
-        c1' <- rename c1
-        c2' <- rename c2
+        c1' <- renComp c1
+        c2' <- renComp c2
         return $ cInterleave cloc c1' c2'
       Branch e c1 c2 -> do
-        e'  <- rename e
-        c1' <- rename c1
-        c2' <- rename c2
+        e'  <- renExp e
+        c1' <- renComp c1
+        c2' <- renComp c2
         return $ cBranch cloc e' c1' c2'
       Take1 a b -> do
-        a' <- rename a
-        b' <- rename b
+        a' <- renTyAnn a
+        b' <- renTyAnn b
         return $ cTake1 cloc a' b'
       Take a b n -> do
-        a' <- rename a
-        b' <- rename b
+        a' <- renTyAnn a
+        b' <- renTyAnn b
         return $ cTake cloc a' b' n
       Until e c' -> do
-        e'  <- rename e
-        c'' <- rename c'
+        e'  <- renExp e
+        c'' <- renComp c'
         return $ cUntil cloc e' c''
       While e c' -> do
-        e'  <- rename e
-        c'' <- rename c'
+        e'  <- renExp e
+        c'' <- renComp c'
         return $ cWhile cloc e' c''
       Times ui e elen nm c' -> do
-        e'    <- rename e
-        elen' <- rename elen
-        nm'   <- renameBound nm
-        c''   <- extend nm nm' $ rename c'
+        e'    <- renExp e
+        elen' <- renExp elen
+        nm'   <- renBound renTyAnn nm
+        c''   <- extend nm nm' $ renComp c'
         return $ cTimes cloc ui e' elen' nm' c''
       Repeat wdth c' -> do
-        c'' <- rename c'
+        c'' <- renComp c'
         return $ cRepeat cloc wdth c''
       VectComp wdth c' -> do
-        c'' <- rename c'
+        c'' <- renComp c'
         return $ cVectComp cloc wdth c''
       Map wdth nm -> do
-        nm' <- renameFree nm
+        nm' <- renFree renTyAnn nm
         return $ cMap cloc wdth nm'
       Filter f -> do
-        f' <- renameFree f
+        f' <- renFree renTyAnn f
         return $ cFilter cloc f'
       ReadSrc ann -> do
-        ann' <- rename ann
+        ann' <- renTyAnn ann
         return $ cReadSrc cloc ann'
       WriteSnk ann -> do
-        ann' <- rename ann
+        ann' <- renTyAnn ann
         return $ cWriteSnk cloc ann'
       ReadInternal a s typ -> do
-        a' <- rename a
+        a' <- renTyAnn a
         return $ cReadInternal cloc a' s typ
       WriteInternal a s -> do
-        a' <- rename a
+        a' <- renTyAnn a
         return $ cWriteInternal cloc a' s
       Standalone c' -> do
-        c'' <- rename c'
+        c'' <- renComp c'
         return $ cStandalone cloc c''
       Mitigate ty n1 n2 -> do
-        ty' <- rename ty
+        ty' <- renTyAnn ty
         return $ cMitigate cloc ty' n1 n2
     where
       cloc = compLoc c
@@ -365,99 +383,99 @@ instance Rename SrcComp where
   Renaming expressions
 -------------------------------------------------------------------------------}
 
-instance Rename SrcExp where
-  rename e = case unExp e of
+renExp :: SrcExp -> RenM SrcExp
+renExp e = case unExp e of
       EVal t v -> do
-        t' <- rename t
+        t' <- renTyAnn t
         return $ eVal eloc t' v
       EValArr t vs -> do
-        t' <- rename t
+        t' <- renTyAnn t
         return $ eValArr eloc t' vs
       EVar nm -> do
-        nm' <- renameFree nm
+        nm' <- renFree renTyAnn nm
         return $ eVar eloc nm'
       EUnOp op e1 -> do
-        e1' <- rename e1
+        e1' <- renExp e1
         return $ eUnOp eloc op e1'
       EBinOp op e1 e2 -> do
-        e1' <- rename e1
-        e2' <- rename e2
+        e1' <- renExp e1
+        e2' <- renExp e2
         return $ eBinOp eloc op e1' e2'
       EAssign e1 e2 -> do
-        e1' <- rename e1
-        e2' <- rename e2
+        e1' <- renExp e1
+        e2' <- renExp e2
         return $ eAssign eloc e1' e2'
       EArrRead e1 e2 r -> do
-        e1' <- rename e1
-        e2' <- rename e2
+        e1' <- renExp e1
+        e2' <- renExp e2
         return $ eArrRead eloc e1' e2' r
       EArrWrite e1 e2 r e3 -> do
-        e1' <- rename e1
-        e2' <- rename e2
-        e3' <- rename e3
+        e1' <- renExp e1
+        e2' <- renExp e2
+        e3' <- renExp e3
         return $ eArrWrite eloc e1' e2' r e3'
       EIter nm1 nm2 e1 e2 -> do
-        nm1' <- renameBound nm1
-        nm2' <- renameBound nm2
+        nm1' <- renBound renTyAnn nm1
+        nm2' <- renBound renTyAnn nm2
         extend [nm2, nm1] [nm2', nm1'] $ do
-          e1' <- rename e1
-          e2' <- rename e2
+          e1' <- renExp e1
+          e2' <- renExp e2
           return $ eIter eloc nm1' nm2' e1' e2'
       EFor ui nm1 e1 e2 e3 -> do
-        e1' <- rename e1
-        e2' <- rename e2
-        nm1' <- renameBound nm1
+        e1' <- renExp e1
+        e2' <- renExp e2
+        nm1' <- renBound renTyAnn nm1
         extend nm1 nm1' $ do
-          e3' <- rename e3
+          e3' <- renExp e3
           return $ eFor eloc ui nm1' e1' e2' e3'
       EWhile e1 e2 -> do
-        e1' <- rename e1
-        e2' <- rename e2
+        e1' <- renExp e1
+        e2' <- renExp e2
         return $ eWhile eloc e1' e2'
       ELet nm1 fi e1 e2 -> do
-        e1' <- rename e1
-        nm1' <- renameBound nm1
+        e1' <- renExp e1
+        nm1' <- renBound renTyAnn nm1
         extend nm1 nm1' $ do
-          e2' <- rename e2
+          e2' <- renExp e2
           return $ eLet eloc nm1' fi e1' e2'
       ELetRef nm1 e1 e2 -> do
-        e1'  <- mapM rename e1
-        nm1' <- renameBound nm1
+        e1'  <- mapM renExp e1
+        nm1' <- renBound renTyAnn nm1
         extend nm1 nm1' $ do
-          e2' <- rename e2
+          e2' <- renExp e2
           return $ eLetRef eloc nm1' e1' e2'
       ESeq e1 e2 -> do
-        e1' <- rename e1
-        e2' <- rename e2
+        e1' <- renExp e1
+        e2' <- renExp e2
         return $ eSeq eloc e1' e2'
       ECall f es -> do
-        f'  <- renameFree f
-        es' <- mapM rename es
+        f'  <- renFree renTyAnn f
+        es' <- mapM renExp es
         return $ eCall eloc f' es'
       EIf e1 e2 e3 -> do
-        e1' <- rename e1
-        e2' <- rename e2
-        e3' <- rename e3
+        e1' <- renExp e1
+        e2' <- renExp e2
+        e3' <- renExp e3
         return $ eIf eloc e1' e2' e3'
       EPrint nl e1 -> do
-        e1' <- rename e1
+        e1' <- renExp e1
         return $ ePrint eloc nl e1'
       EError a str -> do
-        a' <- rename a
+        a' <- renTyAnn a
         return $ eError eloc a' str
       ELUT r e1 -> do
-        r'  <- mapKeysM renameFree r
-        e1' <- rename e1
+        r'  <- mapKeysM (renFree renTyAnn) r
+        e1' <- renExp e1
         return $ eLUT eloc r' e1'
       EBPerm e1 e2 -> do
-        e1' <- rename e1
-        e2' <- rename e2
+        e1' <- renExp e1
+        e2' <- renExp e2
         return $ eBPerm eloc e1' e2'
       EStruct tn tfs -> do
-        tfs' <- mapM (\(f,e') -> rename e' >>= \e'' -> return (f,e'')) tfs
+        tfs' <- mapM (\(f,e') -> renExp e' >>= \e'' -> return (f,e'')) tfs
         return $ eStruct eloc tn tfs'
       EProj e1 fn -> do
-        e1' <- rename e1
+        e1' <- renExp e1
         return $ eProj eloc e1' fn
     where
       eloc = expLoc e

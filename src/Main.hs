@@ -51,6 +51,7 @@ import TcErrors ( ErrCtx (..) )
 import TcExpr
 import TcMonad
 import Lint (zonkLint)
+import qualified Typecheck as Typecheck
 import PassPipeline
 import BlinkParseComp (parseProgram)
 import BlinkParseM (runBlinkParser)
@@ -126,7 +127,7 @@ main = failOnException $ do
     dump dflags DumpAstPretty ".ast.pretty.dump" $ (text . show) prog
 
     rensym <- GS.initGenSym (getName dflags)
-    prog_renamed <- runRenM rensym (rename prog)
+    prog_renamed <- runRenM rensym (renProg prog)
     sym <- GS.initGenSym (getName dflags)
 
     -- putStrLn $ "renamed ... " ++ show prog_renamed

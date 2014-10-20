@@ -519,7 +519,7 @@ unFree loc = liftM fromJust . go
       return $ c `mSeq` k'
     go (FLiftSrc c k) = do
       let env = extractTypeEnv c
-      c'       <- liftRenM $ Ren.extend env env $ Ren.rename c
+      c'       <- liftRenM $ Ren.extend env env $ Ren.renComp c
       (c'', _) <- extendEnv env $ tyCheckComp c'
       k'       <- go k
       return $ c'' `mSeq` k'
