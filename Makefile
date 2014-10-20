@@ -25,7 +25,7 @@ all: create-sandbox
 
 create-sandbox:
 	cabal sandbox init
-	cabal install --dependencies-only
+	cabal install -j --dependencies-only
 
 clean:
 	-rm -rf wplc
