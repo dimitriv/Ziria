@@ -50,7 +50,7 @@ import TcComp
 import TcErrors ( ErrCtx (..) )
 import TcExpr
 import TcMonad
-import Lint (zonkLintComp)
+import Lint (zonkLint)
 import PassPipeline
 import BlinkParseComp (parseProgram)
 import BlinkParseM (runBlinkParser)
@@ -153,7 +153,7 @@ main = failOnException $ do
 
     (c', unifiers1)
        <- failOnError $
-          runTcM (zonkLintComp =<< tyCheckTopComp (progComp prog_renamed))
+          runTcM (zonkLint =<< tyCheckTopComp (progComp prog_renamed))
                  tdef_env
                  decl_env
                  cenv
@@ -161,8 +161,8 @@ main = failOnException $ do
                  GlobalDefs
                  unifiers0
 
-    let in_ty  =  inTyOfCTyBase (ctComp c')
-        yld_ty = yldTyOfCTyBase (ctComp c')
+    let in_ty  =  inTyOfCTy (ctComp c')
+        yld_ty = yldTyOfCTy (ctComp c')
 
     when (isDynFlagSet dflags Debug) $ outputProgram c' outFile
 

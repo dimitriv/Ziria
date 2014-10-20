@@ -36,6 +36,7 @@ import qualified Data.Set as S
 
 import AstExpr
 import PpExpr ()
+import Utils
 
 {-------------------------------------------------------------------------------
   Comp types
@@ -45,15 +46,14 @@ import PpExpr ()
   comp types include expression types, we parameterize by the expression type.
 -------------------------------------------------------------------------------}
 
-data GCTy0 ty where
-  TComp :: ty -> ty -> ty -> GCTy0 ty
-  TTrans :: ty -> ty -> GCTy0 ty
-  deriving (Generic, Typeable, Data)
+-- | Computation type variables
+type CTyVar = String
 
 data GCTy ty where
-  CTBase :: GCTy0 ty -> GCTy ty
-  -- Invariant: non-empty list and CTy0 is not arrow
-  CTArrow :: [CallArg ty (GCTy0 ty)] -> GCTy0 ty -> GCTy ty
+  CTVar   :: CTyVar -> GCTy ty
+  CTComp  :: ty -> ty -> ty -> GCTy ty
+  CTTrans :: ty -> ty -> GCTy ty
+  CTArrow :: [CallArg ty (GCTy ty)] -> GCTy ty -> GCTy ty
   deriving (Generic, Typeable, Data)
 
 {-------------------------------------------------------------------------------
@@ -371,14 +371,12 @@ data GProg tc t a b
   These types are used everywhere in the compiler except in the front-end.
 -------------------------------------------------------------------------------}
 
-type CTy0        = GCTy0  Ty
-type CTy         = GCTy   Ty
+type CTy   = GCTy   Ty
+type CId   = GName  CTy
 
-type Comp0       = GComp0 CTy Ty () ()
-type Comp        = GComp  CTy Ty () ()
-type Prog        = GProg  CTy Ty () ()
-
-type CId         = GName  CTy
+type Comp0 = GComp0 CTy Ty () ()
+type Comp  = GComp  CTy Ty () ()
+type Prog  = GProg  CTy Ty () ()
 
 type ParListView = GParListView CTy Ty () ()
 
@@ -841,66 +839,47 @@ data GCompCtxt tc t a b
 
 type CompCtxt = GCompCtxt CTy Ty () ()
 
+-- | Type of the input stream
+--
+-- Panics if it's not a computer or transformer
+inTyOfCTy :: CTy -> Ty
+inTyOfCTy (CTComp _ x _) = x
+inTyOfCTy (CTTrans  x _) = x
+inTyOfCTy _ = panicStr "inTyOfCTy: not a computer or transformer"
 
+-- | Type of the output stream
+--
+-- Panics if it's not a computer or transformer
+yldTyOfCTy  :: CTy -> Ty
+yldTyOfCTy (CTComp _ _ x) = x
+yldTyOfCTy (CTTrans  _ x) = x
+yldTyOfCTy _ = panicStr "yldTyOfCTy: not a compute or transformer"
 
-inTyOfCTy   :: CTy0 -> Ty
-inTyOfCTy (TComp _ x _) = x
-inTyOfCTy (TTrans x _)  = x
+-- | Result type (if it's a computer) or Nothing if it's a transformer
+--
+-- Panics if it's not a computer or transformer
+doneTyOfCTy :: CTy -> Maybe Ty
+doneTyOfCTy (CTComp x _ _) = Just x
+doneTyOfCTy (CTTrans  _ _) = Nothing
+doneTyOfCTy _ = panicStr "doneTyOfCTy: not a computer or transformer"
 
-yldTyOfCTy  :: CTy0 -> Ty
-yldTyOfCTy (TComp _ _ x)  = x
-yldTyOfCTy (TTrans _ x)   = x
+-- | Check if something is a computer or transformer
+--
+-- Panics when it sees a type variable
+isCompOrTrans :: CTy -> Bool
+isCompOrTrans (CTComp  {}) = True
+isCompOrTrans (CTTrans {}) = True
+isCompOrTrans (CTArrow {}) = False
+isCompOrTrans (CTVar   {}) = panicStr "isCompOrTrans: type variable"
 
-
-inTyOfCTyBase :: CTy -> Ty
-inTyOfCTyBase (CTBase ct) = inTyOfCTy ct
-inTyOfCTyBase _ = error "inTyOfCTyBase: not a base type!"
-
-yldTyOfCTyBase :: CTy -> Ty
-yldTyOfCTyBase (CTBase ct) = yldTyOfCTy ct
-yldTyOfCTyBase _ = error "yldTyOfCTyBase: not a base type!"
-
-doneTyOfCTyBase :: CTy -> Maybe Ty
-doneTyOfCTyBase (CTBase ct) = doneTyOfCTy ct
-doneTyOfCTyBase _ = error "doneTyOfCTyBase: not a base type!"
-
-
-isCTyBase :: CTy -> Bool
-isCTyBase (CTBase {}) = True
-isCTyBase _ = False
-
-
-doneTyOfCTy :: CTy0 -> Maybe Ty
--- NOTE: transformers have no doneTy
-doneTyOfCTy (TComp x _ _) = Just x
-doneTyOfCTy (TTrans _ _) = Nothing
-
-hasDoneTyBase :: CTy -> Bool
-hasDoneTyBase (CTBase ct) = hasDoneTy ct
-hasDoneTyBase _ = error "hasDoneTyBase: not a base type!"
-
-hasDoneTy :: CTy0 -> Bool
-hasDoneTy cty
-  | Just _ <- doneTyOfCTy cty = True
-  | otherwise                 = False
-
-isCompCTy :: CTy0 -> Bool
-isCompCTy (TComp {}) = True
-isCompCTy _ = False
-
-
--- Composing transformers and computers
-parCompose :: CTy -> CTy -> CTy
-parCompose (CTBase (TTrans t1 _))
-           (CTBase (TTrans _ t3))  = CTBase (TTrans t1 t3)
-parCompose (CTBase (TTrans t1 _))
-           (CTBase (TComp v _ t3)) = CTBase (TComp v t1 t3)
-parCompose (CTBase (TComp v t1 _))
-           (CTBase (TTrans _ t3))  = CTBase (TComp v t1 t3)
-parCompose (CTBase (TComp v t1 _))
-           (CTBase (TComp _ _ t3)) = CTBase (TComp v t1 t3)
-parCompose _ct1 _cty2
-  = error "Type checking bug: revealed in parCompose!"
+-- | Check if something is a computer
+--
+-- Panics when it sees a type variable
+isComputer :: CTy -> Bool
+isComputer (CTComp  {}) = True
+isComputer (CTTrans {}) = False
+isComputer (CTArrow {}) = False
+isComputer (CTVar   {}) = panicStr "isComputer: type variable"
 
 
 toComp :: a -> GComp0 tc t a b -> GComp tc t a b
@@ -962,7 +941,6 @@ instance PrettyVal PlInfo
 instance PrettyVal ReadType
 instance PrettyVal VectAnn
 
-instance PrettyVal t => PrettyVal (GCTy0 t)
 instance PrettyVal t => PrettyVal (GCTy t)
 
 instance (PrettyVal a, PrettyVal b) => PrettyVal (CallArg a b)

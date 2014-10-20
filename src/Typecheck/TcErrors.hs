@@ -37,11 +37,30 @@ import Outputable
 import PpComp ()
 import PpExpr ()
 
-data ErrCtx
-  = CompErrCtx SrcComp
+data ErrCtx =
+    -- | Type checking a computation
+    CompErrCtx SrcComp
+
+    -- | Type checking an expression
   | ExprErrCtx SrcExp
-  | GlobalDefs -- TODO: Remove once we remove globals
-  | InternalTypeChecking -- used when in the vectorizer when generating code
+
+    -- | Linting (type checking) context
+  | LintErrCtx Doc
+
+    -- | Unification context
+    --
+    -- This one is recursive, so that we can show something like
+    --
+    -- > cannot unify t and t'
+    -- > when trying to unify <larger type involving t> and <larger type involving t'>
+    -- > when trying to type check <some expression or computation>
+  | UnifyErrCtx Doc Doc ErrCtx
+
+    -- | Used when in the vectorizer when generating code
+  | InternalTypeChecking
+
+    -- TODO: Remove once we remove globals
+  | GlobalDefs
 
 data TyErr
   = TyErr { err_ctxt     :: ErrCtx
@@ -64,6 +83,14 @@ ppTyErr TyErr{..}
     pp_ctxt (ExprErrCtx e)
       = vcat [ text "When type checking expression:"
              , nest 2 $ ppr e ]
+    pp_ctxt (LintErrCtx e)
+      = vcat [ text "When linting:"
+             , nest 2 $ e ]
+    pp_ctxt (UnifyErrCtx a b ctxt)
+      = vcat [ text "When unifying:"
+             , nest 2 $ a <+> text "and" <+> b
+             , pp_ctxt ctxt
+             ]
     pp_ctxt (GlobalDefs)
       = text "" -- Not particularly helpful
     pp_ctxt InternalTypeChecking

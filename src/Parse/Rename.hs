@@ -192,12 +192,10 @@ instance Rename SrcNumExpr where
 instance Rename SrcBitWidth where
   rename = return -- (source) bitwidths don't contain variable names
 
-instance Rename ty => Rename (GCTy0 ty) where
-  rename (TComp u a b) = TComp  <$> rename u <*> rename a <*> rename b
-  rename (TTrans a b)  = TTrans <$> rename a <*> rename b
-
 instance Rename ty => Rename (GCTy ty) where
-  rename (CTBase ty)        = CTBase  <$> rename ty
+  rename (CTVar _)          = panicStr "Unexpected type variable in source type"
+  rename (CTComp u a b)     = CTComp  <$> rename u <*> rename a <*> rename b
+  rename (CTTrans a b)      = CTTrans <$> rename a <*> rename b
   rename (CTArrow args res) = CTArrow <$> mapM rename args <*> rename res
 
 instance Rename ty => Rename (GStructDef ty) where

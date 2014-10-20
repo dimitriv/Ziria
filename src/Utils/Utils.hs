@@ -2,6 +2,7 @@
 -- | Generic utils
 module Utils (
     panic
+  , panicStr
   , mapKeysM
   ) where
 
@@ -15,6 +16,9 @@ panic :: Doc -> a
 panic err = unsafePerformIO $ do
   print $ text "Panic! The impossible happened!" $$ err
   exitFailure
+
+panicStr :: String -> a
+panicStr = panic . text
 
 mapKeysM :: (Monad m, Ord k2) => (k1 -> m k2) -> Map k1 a -> m (Map k2 a)
 mapKeysM f mp = do

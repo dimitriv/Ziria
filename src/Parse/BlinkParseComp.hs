@@ -325,7 +325,7 @@ parseCVarBind = choice
     ] <?> "variable binding"
   where
     mkName   p i    = toName i p Nothing
-    mkNameTy p i ty = toName i p (Just (CTBase ty))
+    mkNameTy p i ty = toName i p (Just ty)
 
 -- | Parameters to a (comp) function
 --
@@ -336,8 +336,8 @@ compParamsParser :: BlinkParser [GName (CallArg (Maybe SrcTy) (Maybe (GCTy SrcTy
 compParamsParser = parens $ sepBy paramParser (symbol ",")
   where
     paramParser = withPos mkParam <*> identifier <* colon <*> parseType
-    parseType   = choice [ CAExp  . Just          <$> parseBaseType
-                         , CAComp . Just . CTBase <$> parseCompBaseType
+    parseType   = choice [ CAExp  . Just <$> parseBaseType
+                         , CAComp . Just <$> parseCompBaseType
                          ] <?> "computation parameter type"
 
     mkParam p x mty = toName x p mty
@@ -345,9 +345,9 @@ compParamsParser = parens $ sepBy paramParser (symbol ",")
 -- | Computation type
 --
 -- > <comp-base-type> ::= "ST" ("T" | "C" <base-type>) <base-type> <base-type>
-parseCompBaseType :: BlinkParser (GCTy0 SrcTy)
+parseCompBaseType :: BlinkParser (GCTy SrcTy)
 parseCompBaseType = choice
-    [ mkCTy0 <$ reserved "ST" <*> parse_idx <*> parseBaseType <*> parseBaseType
+    [ mkCTy <$ reserved "ST" <*> parse_idx <*> parseBaseType <*> parseBaseType
     , parens parseCompBaseType
     ] <?> "computation type"
   where
@@ -357,8 +357,8 @@ parseCompBaseType = choice
       , parens parse_idx
       ] <?> "computation type index"
 
-    mkCTy0 Nothing   ti ty = TTrans ti ty
-    mkCTy0 (Just tv) ti ty = TComp tv ti ty
+    mkCTy Nothing   ti ty = CTTrans ti ty
+    mkCTy (Just tv) ti ty = CTComp tv ti ty
 
 cLetDecl :: Maybe SourcePos -> LetDecl -> (ParseCompEnv, SrcComp -> SrcComp)
 cLetDecl p (LetDeclERef (xn,  e)) =

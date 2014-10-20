@@ -110,7 +110,7 @@ insertBufs [c1] _bids = ([],[c1])
 insertBufs (c1:c2:cs) (bid:bids)
   = let buf_m   = show bid
         c1cty   = ctComp c1
-        c1yldty = yldTyOfCTyBase c1cty
+        c1yldty = yldTyOfCTy c1cty
         pnfo    = mkParInfo MaybePipeline -- why not 'never'?
 
         c1loc   = compLoc c1

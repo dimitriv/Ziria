@@ -245,7 +245,7 @@ take_emit_step _fgs comp
     , BindMany tk [(x,emt)] <- unComp bm
     , Take1 _a _b <- unComp tk
     , Emit _a e <- unComp emt
-    = do { let xty  = fromJust $ doneTyOfCTyBase (ctComp tk)
+    = do { let xty  = fromJust $ doneTyOfCTy (ctComp tk)
                ety  = ctExp e
                eloc = expLoc e
                fty  = TArrow [xty] ety
@@ -426,15 +426,15 @@ inline_exp_fun (nm,params,locals,body)
             -- consistent with the semantics implemented in CgExpr.
             -- See for example codeGenArrRead in CgExpr.hs
 
-            how_to_inline :: GName Ty -> Exp 
+            how_to_inline :: GName Ty -> Exp
                           -> Either (GName Ty, Exp) (GName Ty, Maybe Exp)
-            -- The choice is: either with a substitution (Left), or 
+            -- The choice is: either with a substitution (Left), or
             --                with a let-binding (Right)
             how_to_inline prm_nm arg
               = if is_simpl_expr arg
                 then Left (prm_nm, arg)
                 else case isArrayTy_maybe (nameTyp prm_nm) of
-                       Just bty 
+                       Just bty
                          | (bty /= TBit && is_array_ref arg)
                          -> Left (prm_nm, arg)
                        _otherwise -> Right (prm_nm, Just arg)
@@ -723,8 +723,8 @@ times_unroll_step _fgs comp = case unComp comp of
                -- equal the the input and output stream types of the original
                -- computation.
                let compTy = ctComp comp
-                   a      =  inTyOfCTyBase compTy
-                   b      = yldTyOfCTyBase compTy
+                   a      =  inTyOfCTy compTy
+                   b      = yldTyOfCTy compTy
                return $ cReturn cloc a b ForceInline (eVal cloc TUnit VUnit)
              Just xs ->
                rewrite $ mk_bind_many xs

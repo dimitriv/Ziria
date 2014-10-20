@@ -144,8 +144,8 @@ codeGenThread dflags tid c = do
         fail $ "Missing read/write? Can't determine input or output type(s)."
 
     checkCompType :: CTy -> Cg (Maybe Ty, Ty, Ty)
-    checkCompType (CTBase (TComp tv ta tb)) = return (Just tv, ta, tb)
-    checkCompType (CTBase (TTrans ta tb))   = return (Nothing, ta, tb)
+    checkCompType (CTComp tv ta tb) = return (Just tv, ta, tb)
+    checkCompType (CTTrans ta tb)   = return (Nothing, ta, tb)
     checkCompType _ = do
         fail $ "CodeGen error, the type of:\n"
                 ++ show c ++ "\n" ++

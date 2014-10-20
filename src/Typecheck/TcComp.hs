@@ -16,7 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS_GHC -Wall -Wwarn #-}
 {-# LANGUAGE RankNTypes #-}
 module TcComp (tyCheckComp, tyCheckTopComp, tyCheckTopDecls, envOfDecls) where
 
@@ -39,6 +39,7 @@ import TcErrors
 import TcExpr
 import TcMonad
 import TcUnify
+import Utils
 
 {-------------------------------------------------------------------------------
   Variables
@@ -87,17 +88,17 @@ tyCheckComp c
            BindMany c1 ((x,c2):rest) ->
              do { (c1', cty1) <- tyCheckComp c1
 
-                ; checkWith (compLoc c1) (hasDoneTyBase cty1) $
+                ; checkWith (compLoc c1) (isComputer cty1) $
                     expectedButFound "computer" "transformer" c1
 
                 ; (x', xty) <- tyCheckBound x
-                ; unify cloc xty (fromJust $ doneTyOfCTyBase cty1)
+                ; unify cloc xty (fromJust $ doneTyOfCTy cty1)
 
                 ; (c', cty0) <- extendEnv [x'] $
                      tyCheckComp (cBindMany cloc c2 rest)
 
-                ; unify cloc ( inTyOfCTyBase cty1) ( inTyOfCTyBase cty0)
-                ; unify cloc (yldTyOfCTyBase cty1) (yldTyOfCTyBase cty0)
+                ; unify cloc ( inTyOfCTy cty1) ( inTyOfCTy cty0)
+                ; unify cloc (yldTyOfCTy cty1) (yldTyOfCTy cty0)
 
                 ; return (cBindMany cloc c1' [(x',c')], cty0)
                 }
@@ -112,33 +113,33 @@ tyCheckComp c
            Par parInfo c1 c2 ->
              do { (c1', cty1) <- tyCheckComp c1
                 ; case cty1 of
-                    CTBase (TTrans a b)  ->
+                    CTTrans a b  ->
                         do { (c2', cty2) <- tyCheckComp c2
                            ; case cty2 of
-                               CTBase (TTrans b' t) ->
+                               CTTrans b' t ->
                                  do { unify cloc b b'
-                                    ; let cTy = CTBase (TTrans a t)
+                                    ; let cTy = CTTrans a t
                                     ; return (cPar cloc parInfo c1' c2', cTy)
                                     }
-                               CTBase (TComp u b' t) ->
+                               CTComp u b' t ->
                                  do { unify cloc b b'
-                                    ; let cTy = CTBase (TComp u a t)
+                                    ; let cTy = CTComp u a t
                                     ; return (cPar cloc parInfo c1' c2', cTy)
                                     }
                                CTArrow _ _
                                  -> raiseErrNoVarCtx cloc (nonFullAppErr c2)
                            }
-                    CTBase (TComp v a b) ->
+                    CTComp v a b ->
                         do { (c2', cty2) <- tyCheckComp c2
                            ; case cty2 of
-                               CTBase (TTrans b' t) ->
+                               CTTrans b' t ->
                                  do { unify cloc b b'
-                                    ; let cTy = CTBase (TComp v a t)
+                                    ; let cTy = CTComp v a t
                                     ; return (cPar cloc parInfo c1' c2', cTy)
                                     }
-                               CTBase (TComp _ _ _) ->
-                                 do { cty1' <- zonkCTy cty1
-                                    ; cty2' <- zonkCTy cty2
+                               CTComp _ _ _ ->
+                                 do { cty1' <- zonk cty1
+                                    ; cty2' <- zonk cty2
                                     ; raiseErrNoVarCtx cloc $
                                       vcat [ text "Computer-Computer (>>>) composition"
                                            , text "Left computer:"
@@ -205,37 +206,22 @@ tyCheckComp c
                 -- for shadowing
                 ; let env = eparams ++ map fst locls'
                 ; (c1', tyc1) <- extendEnv env $ extendCEnv cparams $ tyCheckComp c1
-                ; case tyc1 of
-                    CTBase cty0 ->
-                      do { fty <- mkFunTy params' cty0
-                         ; f' <- tyCheckCBound f fty
-                         ; (c2', tyc2) <- extendCEnv [f'] $ tyCheckComp c2
-                         ; return (cLetFunC cloc f' params' locls' c1' c2', tyc2)
-                         }
-                    CTArrow _ _ ->
-                      raiseErrNoVarCtx cloc $ nonFullAppErr c1
+
+                ; let fty = CTArrow (map nameTyp params') tyc1
+                ; f' <- tyCheckCBound f fty
+                ; (c2', tyc2) <- extendCEnv [f'] $ tyCheckComp c2
+                ; return (cLetFunC cloc f' params' locls' c1' c2', tyc2)
                 }
-              where
-                mkFunTy :: [GName (CallArg Ty CTy)] -> CTy0 -> TcM CTy
-                mkFunTy args res = do
-                  args' <- forM args $ \nm -> case nameTyp nm of
-                    CAExp t ->
-                      return $ CAExp t
-                    CAComp (CTBase t) ->
-                      return $ CAComp t
-                    CAComp (CTArrow _ _) ->
-                      raiseErrNoVarCtx cloc $
-                        text "Higher order computation arguments not supported"
-                  return $ CTArrow args' res
 
            Call f actual ->
              do { (f', fun_ty) <- tyCheckCFree f
-                ; checkWith cloc (not (isCTyBase fun_ty)) $
-                  vcat [ text "Computation " <+> ppr f
-                       , text "applied, but has non-arrow type:" <+>
-                         ppr fun_ty
-                       ]
-                ; let CTArrow formal res = fun_ty
+                ; (formal, res) <- case fun_ty of
+                     CTArrow formal res -> return (formal, res)
+                     _ -> raiseErrNoVarCtx cloc $
+                            vcat [ text "Computation " <+> ppr f
+                                 , text "applied, but has non-arrow type:" <+>
+                                   ppr fun_ty
+                                 ]
 
                 ; checkWith cloc (length formal == length actual) $
                   vcat [ text "Computation function" <+> ppr f
@@ -245,48 +231,40 @@ tyCheckComp c
 
                 ; (actualEs', actualTys') <- unzip <$> mapM tyCheckCallArg actual
 
-                ; let check_call_arg :: ( CallArg Ty CTy0
+                ; let check_call_arg :: ( CallArg Ty CTy
                                         , CallArg SrcExp SrcComp
                                         , CallArg Ty CTy
                                         )
                                      -> TcM ()
                       check_call_arg (CAExp ty, CAExp _arg, CAExp ty')
                         = unify cloc ty ty'
-                      check_call_arg (CAComp ct0, CAComp arg, CAComp cty')
-                        = do { ct0' <- ct_base_of arg cty'
-                             ; unify_cty0 cloc ct0 ct0'
-                             }
+                      check_call_arg (CAComp ct0, CAComp _arg, CAComp ct0')
+                        = unify cloc ct0 ct0'
                       check_call_arg (_,ca,_)
                         = raiseErrNoVarCtx cloc $
                           vcat [ text "Unexpected call argument"
                                , nest 2 $ ppr ca
                                ]
 
-                      ct_base_of :: SrcComp -> CTy -> TcM CTy0
-                      ct_base_of _ (CTBase ctb)
-                        = return ctb
-                      ct_base_of arg _other
-                        = raiseErrNoVarCtx cloc $ nonFullAppErr arg
-
                 ; mapM_ check_call_arg (zip3 formal actual actualTys')
-                ; return (cCall cloc f' actualEs', CTBase res)
+                ; return (cCall cloc f' actualEs', res)
                 }
 
            Emit _ e ->
              do { (e', ety) <- tyCheckExpr e
                 ; ta <- freshTy "a"
-                ; let ty = CTBase (TComp TUnit ta ety)
+                ; let ty = CTComp TUnit ta ety
                 ; return (cEmit cloc ta e', ty)
                 }
 
            Emits _ e ->
              do { (e', ety) <- tyCheckExpr e
-                ; ety' <- zonkTy ety
+                ; ety' <- zonk ety
                 --; liftIO $ putStrLn $ "tcComp, emits ty = " ++ show ty
                 ; case ety' of
                     TArray _ bty ->
                       do { ta <- freshTy "a"
-                         ; let ty = CTBase (TComp TUnit ta bty)
+                         ; let ty = CTComp TUnit ta bty
                          ; return (cEmits cloc ta e', ty)
                          }
                     _ -> raiseErrNoVarCtx cloc (expActualErr unknownTArr ety' e)
@@ -296,7 +274,7 @@ tyCheckComp c
              do { (e', ety) <- tyCheckExpr e
                 ; ta <- freshTy "a"
                 ; tb <- freshTy "b"
-                ; let ty = CTBase (TComp ety ta tb)
+                ; let ty = CTComp ety ta tb
                 ; return (cReturn cloc ta tb fi e', ty)
                 }
 
@@ -311,23 +289,23 @@ tyCheckComp c
                               ]
 
                 ; case cty1 of
-                    CTBase (TTrans a b) ->
+                    CTTrans a b ->
                       do { (c2', cty2) <- tyCheckComp c2
                          ; case cty2 of
-                             CTBase (TTrans a' b') ->
+                             CTTrans a' b' ->
                                 do { unify cloc a a'
                                    ; unify cloc b b'
-                                   ; let cTy = CTBase (TTrans a b)
+                                   ; let cTy = CTTrans a b
                                    ; return (cInterleave cloc c1' c2', cTy)
                                    }
-                             CTBase (TComp _ _ _)
+                             CTComp _ _ _
                                 -> raiseErrNoVarCtx cloc
                                      (err_msg (c1', cty1) (c2', cty2))
                              CTArrow _ _
                                 -> raiseErrNoVarCtx cloc $ nonFullAppErr c2
 
                          }
-                    CTBase (TComp {}) ->
+                    CTComp {} ->
                       do { (c2', cty2) <- tyCheckComp c2
                          ; raiseErrNoVarCtx cloc
                              (err_msg (c1', cty1) (c2', cty2))
@@ -340,14 +318,11 @@ tyCheckComp c
                 ; (c1', cty1) <- tyCheckComp c1
                 ; (c2', cty2) <- tyCheckComp c2
 
-                ; checkWith cloc (isCTyBase cty1) $ nonFullAppErr c1
-                ; checkWith cloc (isCTyBase cty2) $ nonFullAppErr c2
+                ; checkWith cloc (isCompOrTrans cty1) $ nonFullAppErr c1
+                ; checkWith cloc (isCompOrTrans cty2) $ nonFullAppErr c2
 
-                ; let (CTBase cty1') = cty1
-                ; let (CTBase cty2') = cty2
-
-                ; unify_cty0 cloc cty1' cty2'
-                ; unify      cloc tye   TBool
+                ; unify cloc cty1 cty2
+                ; unify cloc tye  TBool
 
                 ; return (cBranch cloc e' c1' c2', cty1)
                 }
@@ -355,7 +330,7 @@ tyCheckComp c
            Take1 _ _ ->
              do { ta <- freshTy "a"
                 ; tb <- freshTy "b"
-                ; let ty = CTBase (TComp ta ta tb)
+                ; let ty = CTComp ta ta tb
                 ; return (cTake1 cloc ta tb, ty)
                 }
 
@@ -363,7 +338,7 @@ tyCheckComp c
              do { ta <- freshTy "a"
                 ; tb <- freshTy "b"
                 ; let to = TArray (Literal n) ta
-                ; let ty = CTBase (TComp to ta tb)
+                ; let ty = CTComp to ta tb
                 ; return (cTake cloc ta tb n, ty)
                 }
 
@@ -371,12 +346,12 @@ tyCheckComp c
              do { (e', t) <- tyCheckExpr e
                 ; (c1', cty1) <- tyCheckComp c1
                 ; case cty1 of
-                    CTBase (TComp v a b) ->
+                    CTComp v a b ->
                       do { unify cloc t TBool
-                         ; let cTy = CTBase (TComp v a b)
+                         ; let cTy = CTComp v a b
                          ; return (cUntil cloc e' c1', cTy)
                          }
-                    CTBase (TTrans _ _) ->
+                    CTTrans _ _ ->
                       raiseErrNoVarCtx cloc $
                       expectedButFound "computer" "transformer" c1
                     CTArrow _ _ ->
@@ -387,12 +362,12 @@ tyCheckComp c
              do { (e', t) <- tyCheckExpr e
                 ; (c1', cty1) <- tyCheckComp c1
                 ; case cty1 of
-                    CTBase (TComp v a b) ->
+                    CTComp v a b ->
                       do { unify cloc t TBool
-                         ; let cTy = CTBase (TComp v a b)
+                         ; let cTy = CTComp v a b
                          ; return (cWhile cloc e' c1', cTy)
                          }
-                    CTBase (TTrans _ _) ->
+                    CTTrans _ _ ->
                       raiseErrNoVarCtx cloc $
                       expectedButFound "computer" "transformer" c1
                     CTArrow _ _ ->
@@ -409,14 +384,14 @@ tyCheckComp c
 
                 ; (c1', cty1) <- extendEnv [x'] $ tyCheckComp c1
                 ; case cty1 of
-                    CTBase (TComp v a b) ->
+                    CTComp v a b ->
                       do { ti <- TInt <$> freshBitWidth "bw"
                          ; unify cloc tye    ti
                          ; unify cloc tyelen ti -- TODO: This is redundant
-                         ; let cTy = CTBase (TComp v a b)
+                         ; let cTy = CTComp v a b
                          ; return (cTimes cloc ui e' elen' x' c1', cTy)
                          }
-                    CTBase (TTrans _ _) ->
+                    CTTrans _ _ ->
                       raiseErrNoVarCtx cloc $
                       expectedButFound "computer" "transformer" c1
                     CTArrow _ _ ->
@@ -426,12 +401,12 @@ tyCheckComp c
            Repeat wdth c1 ->
              do { (c1', cty1) <- tyCheckComp c1
                 ; case cty1 of
-                    CTBase (TComp _v a b) ->
+                    CTComp _v a b ->
                       -- TODO: Shouldn't we unify v with TUnit here?
-                      do { let c1TyNew = CTBase (TTrans a b)
+                      do { let c1TyNew = CTTrans a b
                          ; return (cRepeat cloc wdth c1', c1TyNew)
                          }
-                    CTBase (TTrans _ _) ->
+                    CTTrans _ _ ->
                       raiseErrNoVarCtx cloc $
                       expectedButFound "computer" "transformer" c1
                     CTArrow _ _ ->
@@ -441,9 +416,9 @@ tyCheckComp c
            VectComp wdth c1 ->
              do { (c1', cty1) <- tyCheckComp c1
                 ; case cty1 of
-                    t@(CTBase (TComp {})) ->
+                    t@(CTComp {}) ->
                       return (cVectComp cloc wdth c1', t)
-                    CTBase (TTrans _ _) ->
+                    CTTrans _ _ ->
                       raiseErrNoVarCtx cloc $
                       expectedButFound "computer" "transformer" c1
                     CTArrow _ _ ->
@@ -455,7 +430,7 @@ tyCheckComp c
                 ; ta <- freshTy "a"
                 ; tb <- freshTy "b"
                 ; unify cloc fty (TArrow [ta] tb)
-                ; let cTy = CTBase (TTrans ta tb)
+                ; let cTy = CTTrans ta tb
                 ; return (cMap cloc wdth f', cTy)
                 }
 
@@ -463,33 +438,33 @@ tyCheckComp c
              do { (f', fty) <- tyCheckFree f
                 ; ta <- freshTy "a"
                 ; unify cloc fty (TArrow [ta] TBool)
-                ; let cTy = CTBase (TTrans ta ta)
+                ; let cTy = CTTrans ta ta
                 ; return (cFilter cloc f', cTy)
                 }
 
            WriteSnk ann ->
              do { ta <- freshTy "a"
                 ; unifyAnn cloc ann ta
-                ; let cty' = CTBase (TTrans ta (TBuff (ExtBuf ta)))
+                ; let cty' = CTTrans ta (TBuff (ExtBuf ta))
                 ; return (cWriteSnk cloc ta, cty')
                 }
 
            WriteInternal _ bid ->
              do { ta <- freshTy "a"
-                ; let cty' = CTBase (TTrans ta (TBuff (IntBuf ta)))
+                ; let cty' = CTTrans ta (TBuff (IntBuf ta))
                 ; return (cWriteInternal cloc ta bid, cty')
                 }
 
            ReadSrc ann ->
              do { ta <- freshTy "a"
                 ; unifyAnn cloc ann ta
-                ; let cty' = CTBase (TTrans (TBuff (ExtBuf ta)) ta)
+                ; let cty' = CTTrans (TBuff (ExtBuf ta)) ta
                 ; return (cReadSrc cloc ta, cty')
                 }
 
            ReadInternal _ bid tp ->
              do { ta <- freshTy "a"
-                ; let cty' = CTBase (TTrans (TBuff (IntBuf ta)) ta)
+                ; let cty' = CTTrans (TBuff (IntBuf ta)) ta
                 ; return (cReadInternal cloc ta bid tp, cty')
                 }
 
@@ -498,9 +473,9 @@ tyCheckComp c
            Standalone c1 ->
              do { (c1', cty1) <- tyCheckComp c1
                 ; case cty1 of
-                    CTBase (TTrans _ _) ->
+                    CTTrans _ _ ->
                       return (cStandalone cloc c1', cty1)
-                    CTBase {} ->
+                    CTComp {} ->
                       raiseErrNoVarCtx cloc $
                       expectedButFound "transformer" "computer" c1
                     CTArrow {} ->
@@ -512,7 +487,7 @@ tyCheckComp c
                 ; let t1 = if n1 == 1 then ta else TArray (Literal n1) ta
                 ; let t2 = if n2 == 1 then ta else TArray (Literal n2) ta
                   -- TODO: Check that n1 divides n2 or n2 divides n1
-                ; let cty = CTBase (TTrans t1 t2)
+                ; let cty = CTTrans t1 t2
                 ; return (cMitigate cloc ta n1 n2, cty)
                 }
        }
@@ -528,9 +503,9 @@ tyCheckTopComp c
 
          -- TODO: Is this series of three calls really necessary? defaultComp
          -- already _does_ zonking; seems to me that's the only one we need
-       ; c_zonked       <- zonkComp c_typed
+       ; c_zonked       <- zonk c_typed
        ; c_defaulted    <- defaultComp c_zonked
-       ; c_final_zonked <- zonkComp c_defaulted
+       ; c_final_zonked <- zonk c_defaulted
 
        ; _ <- checkUnresolved c_final_zonked
 
@@ -541,7 +516,7 @@ tyCheckTopDecls :: [(GName (Maybe SrcTy), Maybe SrcExp)]
                 -> TcM [(GName Ty, Maybe Exp)]
 tyCheckTopDecls decls
   = do { tc_decls <- tyCheckDecls decls
-       ; mapLocalsM zonkTy zonkExpr tc_decls
+       ; mapLocalsM zonk zonk tc_decls
        }
 
 -- TODO: Remove once we get rid of locals
@@ -647,7 +622,7 @@ tyCheckFun fn =
                        -- the function, whereas we want it to only mention
                        -- the lengths of the parameters of the function,
                        -- hence it is important to zonk!
-                     ; mapFunM zonkTy return zonkExpr $
+                     ; mapFunM zonk return zonk $
                          mkFunDefined floc f' params' decls' ebody'
                      }
              }
@@ -660,7 +635,7 @@ tyCheckFun fn =
                   do { retTy' <- trReqTy "external result" floc retTy
                      ; let fty = TArrow (map nameTyp params') retTy'
                      ; let f'  = f{nameTyp = fty}
-                     ; mapFunM zonkTy return zonkExpr $
+                     ; mapFunM zonk return zonk $
                          mkFunExternal floc f' params' retTy'
                      }
               }
@@ -694,16 +669,16 @@ checkUnresolved :: Comp -> TcM Comp
 checkUnresolved
     = mapCompM return return return return return comp_combine . findMain
   where
-    comp_combine c
-      | S.null (tyVarsOfCTy (ctComp c))
-      = return c
-      | otherwise
-      = raiseErrNoVarCtx (compLoc c) $
-        vcat [ text "Computation:"
-             , nest 2 $ ppr c
-             , text "has unresolved type:"
-             , nest 2 $ ppr (ctComp c)
-             ]
+    comp_combine c = do
+      let (vars, cvars) = tyVarsOfCTy (ctComp c)
+      if (S.null vars && S.null cvars)
+        then return c
+        else raiseErrNoVarCtx (compLoc c) $
+               vcat [ text "Computation:"
+                    , nest 2 $ ppr c
+                    , text "has unresolved type:"
+                    , nest 2 $ ppr (ctComp c)
+                    ]
 
     -- Descend the context to find the main computation
     findMain :: Comp -> Comp
@@ -720,16 +695,14 @@ checkUnresolved
 -------------------------------------------------------------------------------}
 
 trCTy :: Maybe SourcePos -> GCTy SrcTy -> TcM CTy
-trCTy p (CTBase cty0)      = CTBase  <$> trCTy0 p cty0
-trCTy p (CTArrow args res) = CTArrow <$> mapM (trCA p) args <*> trCTy0 p res
+trCTy _ (CTVar _)          = panicStr "trCTy: unexpected type variable"
+trCTy p (CTComp u a b)     = CTComp  <$> trTy p u <*> trTy p a <*> trTy p b
+trCTy p (CTTrans a b)      = CTTrans <$> trTy p a <*> trTy p b
+trCTy p (CTArrow args res) = CTArrow <$> mapM (trCA p) args <*> trCTy p res
 
-trCTy0 :: Maybe SourcePos -> GCTy0 SrcTy -> TcM CTy0
-trCTy0 p (TComp u a b) = TComp  <$> trTy p u <*> trTy p a <*> trTy p b
-trCTy0 p (TTrans a b)  = TTrans <$> trTy p a <*> trTy p b
-
-trCA :: Maybe SourcePos -> CallArg SrcTy (GCTy0 SrcTy) -> TcM (CallArg Ty CTy0)
-trCA p (CAExp  ty)  = CAExp  <$> trTy   p ty
-trCA p (CAComp cty) = CAComp <$> trCTy0 p cty
+trCA :: Maybe SourcePos -> CallArg SrcTy (GCTy SrcTy) -> TcM (CallArg Ty CTy)
+trCA p (CAExp  ty)  = CAExp  <$> trTy  p ty
+trCA p (CAComp cty) = CAComp <$> trCTy p cty
 
 trStructDef :: Maybe SourcePos -> GStructDef (Maybe SrcTy) -> TcM (GStructDef Ty)
 trStructDef p (StructDef nm flds) = do

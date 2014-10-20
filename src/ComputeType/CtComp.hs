@@ -45,13 +45,13 @@ ctComp0 (LetHeader _ c)      = ctComp c
 ctComp0 (LetFunC _ _ _ _ c2) = ctComp c2
 ctComp0 (LetStruct _ c)      = ctComp c
 ctComp0 (Call f xs)          = ctCall (nameTyp f) (map ctCallArg xs)
-ctComp0 (Emit a e)           = CTBase (TComp TUnit a (ctExp e))
+ctComp0 (Emit a e)           = CTComp TUnit a (ctExp e)
 ctComp0 (Emits a e)          = ctEmits a (ctExp e)
-ctComp0 (Return a b _ e)     = CTBase (TComp (ctExp e) a b)
+ctComp0 (Return a b _ e)     = CTComp (ctExp e) a b
 ctComp0 (Interleave c1 _)    = ctComp c1
 ctComp0 (Branch _ c1 _)      = ctComp c1
-ctComp0 (Take1 a b)          = CTBase (TComp a a b)
-ctComp0 (Take a b n)         = CTBase (TComp (TArray (Literal n) a) a b)
+ctComp0 (Take1 a b)          = CTComp a a b
+ctComp0 (Take a b n)         = CTComp (TArray (Literal n) a) a b
 ctComp0 (Until _ c)          = ctComp c
 ctComp0 (While _ c)          = ctComp c
 ctComp0 (Times _ _ _ _ c)    = ctComp c
@@ -59,10 +59,10 @@ ctComp0 (Repeat _ c)         = ctRepeat (ctComp c)
 ctComp0 (VectComp _ c)       = ctComp c
 ctComp0 (Map _ f)            = ctMap (nameTyp f)
 ctComp0 (Filter f)           = ctFilter (nameTyp f)
-ctComp0 (ReadSrc a)          = CTBase (TTrans (TBuff (ExtBuf a)) a)
-ctComp0 (WriteSnk a)         = CTBase (TTrans a (TBuff (ExtBuf a)))
-ctComp0 (ReadInternal a _ _) = CTBase (TTrans (TBuff (IntBuf a)) a)
-ctComp0 (WriteInternal a _)  = CTBase (TTrans a (TBuff (IntBuf a)))
+ctComp0 (ReadSrc a)          = CTTrans (TBuff (ExtBuf a)) a
+ctComp0 (WriteSnk a)         = CTTrans a (TBuff (ExtBuf a))
+ctComp0 (ReadInternal a _ _) = CTTrans (TBuff (IntBuf a)) a
+ctComp0 (WriteInternal a _)  = CTTrans a (TBuff (IntBuf a))
 ctComp0 (Standalone c)       = ctComp c
 ctComp0 (Mitigate a n1 n2)   = ctMitigate a n1 n2
 
@@ -71,29 +71,29 @@ ctCallArg (CAExp  e) = CAExp  $ ctExp  e
 ctCallArg (CAComp c) = CAComp $ ctComp c
 
 ctEmits :: Ty -> Ty -> CTy
-ctEmits a (TArray _ b) = CTBase (TComp TUnit a b)
+ctEmits a (TArray _ b) = CTComp TUnit a b
 ctEmits _ b = panic $ text "ctEmits: Unexpected" <+> ppr b
 
 ctPar :: CTy -> CTy -> CTy
-ctPar (CTBase (TTrans  a _)) (CTBase (TTrans  _ c)) = CTBase (TTrans  a c)
-ctPar (CTBase (TTrans  a _)) (CTBase (TComp u _ c)) = CTBase (TComp u a c)
-ctPar (CTBase (TComp u a _)) (CTBase (TTrans  _ c)) = CTBase (TComp u a c)
+ctPar (CTTrans  a _) (CTTrans  _ c) = CTTrans  a c
+ctPar (CTTrans  a _) (CTComp u _ c) = CTComp u a c
+ctPar (CTComp u a _) (CTTrans  _ c) = CTComp u a c
 ctPar t t' = panic $ text "ctPar: Unexpected" <+> ppr t <+> text "and" <+> ppr t'
 
 ctRepeat :: CTy -> CTy
-ctRepeat (CTBase (TComp _ a b)) = CTBase (TTrans a b)
+ctRepeat (CTComp _ a b) = CTTrans a b
 ctRepeat t = panic $ text "ctRepeat: Unexpected" <+> ppr t
 
 ctMap :: Ty -> CTy
-ctMap (TArrow [a] b) = CTBase (TTrans a b)
+ctMap (TArrow [a] b) = CTTrans a b
 ctMap t = panic $ text "ctMap: Unexpected" <+> ppr t
 
 ctFilter :: Ty -> CTy
-ctFilter (TArrow [a] TBool) = CTBase (TTrans a a)
+ctFilter (TArrow [a] TBool) = CTTrans a a
 ctFilter t = panic $ text "ctFilter: Unexpected" <+> ppr t
 
 ctMitigate :: Ty -> Int -> Int -> CTy
-ctMitigate a n1 n2 = CTBase (TTrans t1 t2)
+ctMitigate a n1 n2 = CTTrans t1 t2
   where
     t1 = if n1 == 1 then a else TArray (Literal n1) a
     t2 = if n2 == 1 then a else TArray (Literal n2) a

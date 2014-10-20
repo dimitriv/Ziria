@@ -381,10 +381,10 @@ emitting c ty = FAnnot c Nothing Nothing (Just ty) (FPure ())
 -------------------------------------------------------------------------------}
 
 unFreeExp :: Maybe SourcePos -> FreeExp () -> TcM Exp
-unFreeExp loc e = zonkExpr =<< unEFree loc e
+unFreeExp loc e = zonk =<< unEFree loc e
 
 unFreeComp :: Maybe SourcePos -> FreeComp () -> TcM Comp
-unFreeComp loc c = zonkComp =<< unFree loc c
+unFreeComp loc c = zonk =<< unFree loc c
 
 unEFree :: Maybe SourcePos -> FreeExp () -> TcM Exp
 unEFree loc = liftM fromJust . go
@@ -460,7 +460,7 @@ unFree loc = liftM fromJust . go
       return $ Just $ cLetERef loc nm Nothing k'
     go (FBind c k) = do
       Just c' <- go c
-      nm      <- newName loc (fromJust . doneTyOfCTyBase . ctComp $ c')
+      nm      <- newName loc (fromJust . doneTyOfCTy . ctComp $ c')
       Just k' <- go (k nm)
       return $ Just $ cBindMany loc c' [(nm, k')]
     go (FTake1 k) = do
@@ -508,10 +508,10 @@ unFree loc = liftM fromJust . go
       return $ cRepeat loc ann body' `mSeq` k'
     go (FAnnot c mu ma mb k) = do
       Just c' <- go c
-      let CTBase cty0 = ctComp c'
-      forM_ mu $ unify loc (fromJust (doneTyOfCTy cty0))
-      forM_ ma $ unify loc ( inTyOfCTy cty0)
-      forM_ mb $ unify loc (yldTyOfCTy cty0)
+      let cty = ctComp c'
+      forM_ mu $ unify loc (fromJust (doneTyOfCTy cty))
+      forM_ ma $ unify loc ( inTyOfCTy cty)
+      forM_ mb $ unify loc (yldTyOfCTy cty)
       k'      <- go k
       return $ c' `mSeq` k'
     go (FLift c k) = do

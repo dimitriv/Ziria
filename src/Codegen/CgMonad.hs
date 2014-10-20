@@ -61,11 +61,11 @@ module CgMonad
   , freshVar           -- new C-level var (just a string)
   , CLabel, freshLabel -- new C-level block id
 
-    -- TODO: Get rid of the CLabel id management 
-    -- through nameStack ASAP ncluding the next 
+    -- TODO: Get rid of the CLabel id management
+    -- through nameStack ASAP ncluding the next
     -- three functions
   , nextName
-  , pushName 
+  , pushName
   , printNames
 
 
@@ -331,7 +331,7 @@ data LUTGenInfo
   deriving Show
 
 data CgState = CgState {
-      nameStack :: [CLabel] 
+      nameStack :: [CLabel]
 
       -- | Number of heap-allocated variables
     , numAllocs :: Int
@@ -498,10 +498,10 @@ inAllocFrame action
   = do { idx <- freshVar "mem_idx"
        ; heap_context <- getHeapContext
        ; appendDecl [cdecl| unsigned int $id:idx; |]
-       ; appendStmt 
+       ; appendStmt
            [cstm| $id:idx = wpl_get_free_idx($id:heap_context); |]
        ; x <- action
-       ; appendStmt 
+       ; appendStmt
            [cstm| wpl_restore_free_idx($id:heap_context, $id:idx); |]
        ; return x }
 
@@ -570,7 +570,7 @@ getMaxStackAlloc :: Cg Int
 getMaxStackAlloc = gets maxStackAlloc
 
 
-freshName :: String -> Ty -> Cg EId 
+freshName :: String -> Ty -> Cg EId
 -- A new name of a given type
 freshName prefix ty
   = do { s' <- genSym prefix
@@ -581,12 +581,12 @@ type CLabel = String
 
 freshLabel :: String -> Cg CLabel
 -- A new C-level label (e.g. block label)
-freshLabel prefix 
+freshLabel prefix
   = genSym prefix
 
 
 freshVar :: String -> Cg String
--- A new C-level variable 
+-- A new C-level variable
 freshVar prefix
   = genSym prefix
 
@@ -839,9 +839,9 @@ getTyPutGetInfo ty = (buf_typ ty, buf_siz ty)
 getGetLen :: Comp -> (Int, Int)
 getGetLen c =
   let (tya, tyb) = case ctComp c of
-                        CTBase (TComp tv ta tb) -> (ta, tb)
-                        CTBase (TTrans ta tb)   -> (ta, tb)
-                        _ -> (TUnit, TUnit)
+                     CTComp tv ta tb -> (ta, tb)
+                     CTTrans   ta tb -> (ta, tb)
+                     _               -> (TUnit, TUnit) -- TODO: Really? should we panic instead?
   in
   let buftyp ty = case ty of
                        (TArray (Literal n) _) -> n

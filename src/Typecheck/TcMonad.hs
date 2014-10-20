@@ -26,8 +26,8 @@
 --   is the error from the second computation. This might be misleading, as
 --   it might mean we might tell the user "cannot unify Foo with Baz" while
 --   we should really say "cannot unify Foo with Bar or Baz"
-{-# OPTIONS_GHC -Wall -fno-warn-orphans -Wwarn #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleInstances #-}
 module TcMonad (
     -- * TcM monad
     TcM -- opaque
@@ -56,6 +56,11 @@ module TcMonad (
   , mkTyEnv
   , getTyEnv
   , updTyEnv
+    -- ** Computation type variable environment (substitutions)
+  , CTyEnv
+  , mkCTyEnv
+  , getCTyEnv
+  , updCTyEnv
     -- ** Array length variable environment (substitutions)
   , ALenEnv
   , getALenEnv
@@ -65,6 +70,7 @@ module TcMonad (
   , getBWEnv
   , updBWEnv
     -- * Error reporting
+  , getErrCtx
   , pushErrCtx
   , raiseErr
   , raiseErrNoVarCtx
@@ -73,17 +79,14 @@ module TcMonad (
   , genSym
     -- * Creating types with type variables
   , freshTy
+  , freshCTy
   , freshNumExpr
   , freshBitWidth
     -- * Interaction with the renamer
   , liftRenM
     -- * Working with types
     -- ** Zonking
-  , zonkTy
-  , zonkCTy
-  , zonkCTy0
-  , zonkExpr
-  , zonkComp
+  , Zonk(..)
     -- ** Collecting type variables
   , tyVarsOfTy
   , tyVarsOfCTy
@@ -122,6 +125,7 @@ data TcMEnv = TcMEnv {
 
 data TcMState = TcMState {
     tcm_tyenv    :: TyEnv
+  , tcm_ctyenv   :: CTyEnv
   , tcm_alenenv  :: ALenEnv
   , tcm_bwenv    :: BWEnv
   }
@@ -167,6 +171,7 @@ firstToSucceed m1 m2 = get >>= \st -> catchError m1 (\_ -> put st >> m2)
 emptyTcMState :: TcMState
 emptyTcMState = TcMState {
       tcm_tyenv   = mkTyEnv   []
+    , tcm_ctyenv  = mkCTyEnv  []
     , tcm_alenenv = mkALenEnv []
     , tcm_bwenv   = mkBWEnv   []
     }
@@ -260,6 +265,25 @@ updTyEnv binds = modify $ \st -> st {
     }
 
 {-------------------------------------------------------------------------------
+  Computation variable environment (substitutions)
+-------------------------------------------------------------------------------}
+
+-- maps type variables to computation types
+type CTyEnv = M.Map String CTy
+
+mkCTyEnv :: [(String,CTy)] -> CTyEnv
+mkCTyEnv = M.fromList
+
+getCTyEnv :: TcM CTyEnv
+getCTyEnv = gets tcm_ctyenv
+
+updCTyEnv :: [(String,CTy)] -> TcM ()
+updCTyEnv binds = modify $ \st -> st {
+      tcm_ctyenv = updBinds binds (tcm_ctyenv st)
+    }
+
+
+{-------------------------------------------------------------------------------
   Array length variable environment (substitutions)
 -------------------------------------------------------------------------------}
 
@@ -327,13 +351,13 @@ raiseErr print_vartypes p msg = do
     pp_cvar :: GName (Maybe (GCTy SrcTy)) -> TcM Doc
     pp_cvar v = do
       cty  <- lookupCEnv (name v) p
-      zcty <- zonkCTy cty
+      zcty <- zonk cty
       return $ ppName v <+> colon <+> ppr zcty
 
     pp_var :: GName (Maybe SrcTy) -> TcM Doc
     pp_var v = do
       ty  <- lookupEnv (name v) p
-      zty <- zonkTy ty
+      zty <- zonk ty
       return $ ppName v <+> colon <+> ppr zty
 
     pp_vars :: ([GName (Maybe (GCTy SrcTy))], [GName (Maybe SrcTy)]) -> TcM Doc
@@ -370,13 +394,16 @@ genSym prefix = do
   return (prefix ++ str)
 
 newTyVar :: String -> TcM TyVar
-newTyVar prefix = genSym prefix
+newTyVar = genSym
+
+newCTyVar :: String -> TcM CTyVar
+newCTyVar = genSym
 
 newBWVar :: String -> TcM BWVar
-newBWVar prefix = genSym prefix
+newBWVar = genSym
 
 newALenVar :: String -> TcM LenVar
-newALenVar prefix = genSym prefix
+newALenVar = genSym
 
 {-------------------------------------------------------------------------------
   Creating types with type variables
@@ -384,6 +411,9 @@ newALenVar prefix = genSym prefix
 
 freshTy :: String -> TcM Ty
 freshTy prefix = TVar <$> newTyVar prefix
+
+freshCTy :: String -> TcM CTy
+freshCTy prefix = CTVar <$> newCTyVar prefix
 
 freshBitWidth :: String -> TcM BitWidth
 freshBitWidth prefix = BWUnknown <$> newBWVar prefix
@@ -393,98 +423,92 @@ freshNumExpr prefix = NVar <$> newALenVar prefix
 
 {-------------------------------------------------------------------------------
   Zonking
+
+  NOTE: Zonking of expressions and computations _previously_ also defaulted the
+  type of `EError` to `TUnit` when it was still a free variable. However, we
+  don't do this anymore here but we do this in `defaultExpr` instead. This is
+  important, because we should have the invariant that we can zonk at any point
+  during type checking without changing the result.
 -------------------------------------------------------------------------------}
 
-zonkTy :: Ty -> TcM Ty
-zonkTy = mapTyM do_zonk
-  where
-    do_zonk (TVar x)
-      = do { tenv <- getTyEnv
-           ; case M.lookup x tenv of
-                Nothing  -> return (TVar x)
-                Just xty -> zonkTy xty
-           }
-    do_zonk (TInt bw)
-      = do { bw' <- zonkBitWidth bw
-           ; return (TInt bw')
-           }
-    do_zonk (TArray n ty)
-      = do { n' <- zonkALen n
-             -- NB: No need to recurse, mapTyM will do it for us
-           ; return (TArray n' ty)
-           }
-    do_zonk ty = return ty
+class Outputable a => Zonk a where
+  zonk :: a -> TcM a
 
-zonkBitWidth :: BitWidth -> TcM BitWidth
-zonkBitWidth (BWUnknown x)
-  = do { benv <- getBWEnv
-       ; case M.lookup x benv of
-           Just bw -> zonkBitWidth bw
-           Nothing -> return (BWUnknown x)
-       }
-zonkBitWidth other_bw = return other_bw
+instance Zonk Ty where
+  zonk = mapTyM do_zonk
+    where
+      do_zonk (TVar x)
+        = do { tenv <- getTyEnv
+             ; case M.lookup x tenv of
+                  Nothing  -> return (TVar x)
+                  Just xty -> zonk xty
+             }
+      do_zonk (TInt bw)
+        = do { bw' <- zonk bw
+             ; return (TInt bw')
+             }
+      do_zonk (TArray n ty)
+        = do { n' <- zonk n
+               -- NB: No need to recurse, mapTyM will do it for us
+             ; return (TArray n' ty)
+             }
+      do_zonk ty = return ty
 
-zonkALen :: NumExpr -> TcM NumExpr
-zonkALen (NVar n)
-  = do { env <- getALenEnv
-       ; case M.lookup n env of
-           Nothing -> return $ NVar n
-           Just ne -> zonkALen ne
-       }
-zonkALen (Literal i)
-  = return (Literal i)
+instance Zonk BitWidth where
+  zonk (BWUnknown x)
+    = do { benv <- getBWEnv
+         ; case M.lookup x benv of
+             Just bw -> zonk bw
+             Nothing -> return (BWUnknown x)
+         }
+  zonk other_bw = return other_bw
 
+instance Zonk NumExpr where
+  zonk (NVar n)
+    = do { env <- getALenEnv
+         ; case M.lookup n env of
+             Nothing -> return $ NVar n
+             Just ne -> zonk ne
+         }
+  zonk (Literal i)
+    = return (Literal i)
 
-zonkCTy :: CTy -> TcM CTy
-zonkCTy cty
-  = case cty of
-      CTBase cty0 ->
-         do { cty0' <- zonkCTy0 cty0
-            ; return (CTBase cty0')
-            }
-      CTArrow ts cty0 ->
-         do { ts' <- mapM zonk_arg ts
-            ; cty0' <- zonkCTy0 cty0
-            ; return (CTArrow ts' cty0')
-            }
-  where
+instance (Zonk a, Zonk b) => Zonk (CallArg a b) where
+  zonk (CAExp  e) = CAExp  <$> zonk e
+  zonk (CAComp c) = CAComp <$> zonk c
 
-    zonk_arg (CAExp t)
-       = do { t' <- zonkTy t
-            ; return (CAExp t')
-            }
+instance Zonk (GCTy Ty) where
+  zonk (CTVar x)
+    = do { tenv <- getCTyEnv
+         ; case M.lookup x tenv of
+             Nothing  -> return (CTVar x)
+             Just xty -> zonk xty
+         }
 
-    zonk_arg (CAComp ct)
-       = do { ct' <- zonkCTy0 ct
-            ; return (CAComp ct')
-            }
+  zonk (CTComp u a b)
+    = do { u' <- zonk u
+         ; a' <- zonk a
+         ; b' <- zonk b
+         ; return (CTComp u' a' b')
+         }
 
-zonkCTy0 :: CTy0 -> TcM CTy0
-zonkCTy0 (TComp u a b)
-  = do { u' <- zonkTy u
-       ; a' <- zonkTy a
-       ; b' <- zonkTy b
-       ; return (TComp u' a' b')
-       }
+  zonk (CTTrans a b)
+    = do { a' <- zonk a
+         ; b' <- zonk b
+         ; return (CTTrans a' b')
+         }
 
-zonkCTy0 (TTrans a b)
-  = do { a' <- zonkTy a
-       ; b' <- zonkTy b
-       ; return (TTrans a' b')
-       }
+  zonk (CTArrow args res)
+    = do { args' <- mapM zonk args
+         ; res'  <- zonk res
+         ; return (CTArrow args' res')
+         }
 
--- | Zonking
---
--- NOTE: This used to also default the type of `EError` to `TUnit` when it
--- was still a free variable. However, we don't do this anymore here but we
--- do this in `defaultExpr` instead. This is important, because we should have
--- the invariant that we can zonk at any point during type checking without
--- changing the result.
-zonkExpr :: GExp Ty a -> TcM (GExp Ty a)
-zonkExpr = mapExpM zonkTy return return
+instance Zonk t => Zonk (GExp t a) where
+  zonk = mapExpM zonk return return
 
-zonkComp :: GComp CTy Ty a b -> TcM (GComp CTy Ty a b)
-zonkComp = mapCompM zonkCTy zonkTy return return zonkExpr return
+instance (Zonk tc, Zonk t) => Zonk (GComp tc t a b) where
+  zonk = mapCompM zonk zonk return return zonk return
 
 {-------------------------------------------------------------------------------
   Collecting type variables
@@ -499,21 +523,22 @@ tyVarsOfTy t = snd $ runState (mapTyM collect_var t) S.empty
        collect_var ty
         = return ty
 
-tyVarsOfCTy :: CTy -> S.Set TyVar
-tyVarsOfCTy (CTBase ct0)      = tvs_ct0 ct0
-tyVarsOfCTy (CTArrow tys ct0) = tvs_args tys `S.union` tvs_ct0 ct0
+tyVarsOfCTy :: CTy -> (S.Set TyVar, S.Set CTyVar)
+tyVarsOfCTy (CTVar x) =
+    (S.empty, S.singleton x)
+tyVarsOfCTy (CTTrans a b) =
+    (tyVarsOfTy a `S.union` tyVarsOfTy b, S.empty)
+tyVarsOfCTy (CTComp v a b) =
+    (S.unions [tyVarsOfTy a, tyVarsOfTy b, tyVarsOfTy v], S.empty)
+tyVarsOfCTy (CTArrow tys ct0) =
+    tvs_args tys `unionPair` tyVarsOfCTy ct0
 
-tvs_ct0 :: GCTy0 Ty -> S.Set TyVar
-tvs_ct0 (TTrans a b)  = tyVarsOfTy a `S.union` tyVarsOfTy b
-tvs_ct0 (TComp v a b) = tyVarsOfTy a `S.union` tyVarsOfTy b
-                                     `S.union` tyVarsOfTy v
+tvs_arg :: CallArg Ty CTy -> (S.Set TyVar, S.Set CTyVar)
+tvs_arg (CAExp  ty)  = (tyVarsOfTy ty, S.empty)
+tvs_arg (CAComp cty) = tyVarsOfCTy cty
 
-tvs_arg :: CallArg Ty (GCTy0 Ty) -> S.Set TyVar
-tvs_arg (CAExp t)    = tyVarsOfTy t
-tvs_arg (CAComp ct0) = tvs_ct0 ct0
-
-tvs_args :: [CallArg Ty (GCTy0 Ty)] -> S.Set TyVar
-tvs_args = foldl (\s a -> s `S.union` tvs_arg a) S.empty
+tvs_args :: [CallArg Ty CTy] -> (S.Set TyVar, S.Set CTyVar)
+tvs_args = unionsPair . map tvs_arg
 
 {-------------------------------------------------------------------------------
   Interaction with the renamer
@@ -538,3 +563,9 @@ lookupTcM s pos err env
 
 updBinds :: Ord x => [(x,a)] -> M.Map x a -> M.Map x a
 updBinds newbinds binds = M.union (M.fromList newbinds) binds
+
+unionPair :: (Ord a, Ord b) => (S.Set a, S.Set b) -> (S.Set a, S.Set b) -> (S.Set a, S.Set b)
+unionPair (as, bs) (as', bs') = (as `S.union` as', bs `S.union` bs')
+
+unionsPair :: (Ord a, Ord b) => [(S.Set a, S.Set b)] -> (S.Set a, S.Set b)
+unionsPair ss = let (ass, bss) = unzip ss in (S.unions ass, S.unions bss)

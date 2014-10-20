@@ -38,11 +38,14 @@ ctECall (TArrow args res) args' = applyTy (matchAllTy (zip args args')) res
 ctECall t _ = panic $ text "ctECall: Unexpected" <+> ppr t
 
 ctCall :: CTy -> [CallArg Ty CTy] -> CTy
-ctCall (CTArrow args res) args' = CTBase (applyCTy (matchAllCA (zip args args')) res)
+ctCall (CTArrow args res) args' = applyCTy (matchAllCA (zip args args')) res
 ctCall t _ = panic $ text "ctCall: Unexpected" <+> ppr t
 
 {-------------------------------------------------------------------------------
   Substitutions
+
+  NOTE: Any type variables left in the type will (necessarily) be left
+  unsubstituted.
 -------------------------------------------------------------------------------}
 
 type Subst = [(LenVar, NumExpr)]
@@ -56,9 +59,14 @@ applyNumExpr :: Subst -> NumExpr -> NumExpr
 applyNumExpr s (NVar n) = lookup' n s
 applyNumExpr _ e        = e
 
-applyCTy :: Subst -> CTy0 -> CTy0
-applyCTy s (TComp u a b) = TComp (applyTy s u) (applyTy s a) (applyTy s b)
-applyCTy s (TTrans  a b) = TTrans (applyTy s a) (applyTy s b)
+applyCTy :: Subst -> CTy -> CTy
+applyCTy s (CTComp u a b) = CTComp (applyTy s u) (applyTy s a) (applyTy s b)
+applyCTy s (CTTrans  a b) = CTTrans (applyTy s a) (applyTy s b)
+applyCTy s (CTArrow ts t) = CTArrow (map (applyCA s) ts) (applyCTy s t)
+applyCTy _ (CTVar x)      = CTVar x
+
+applyCA :: Subst -> CallArg Ty CTy -> CallArg Ty CTy
+applyCA s = callArg (CAExp . applyTy s) (CAComp . applyCTy s)
 
 {-------------------------------------------------------------------------------
   Expression types
@@ -80,18 +88,18 @@ matchNumExpr _        _ = []
   Computation types
 -------------------------------------------------------------------------------}
 
-matchAllCA :: [(CallArg Ty CTy0, CallArg Ty CTy)] -> Subst
+matchAllCA :: [(CallArg Ty CTy, CallArg Ty CTy)] -> Subst
 matchAllCA = concatMap (uncurry matchCA)
 
-matchCA :: CallArg Ty CTy0 -> CallArg Ty CTy -> Subst
+matchCA :: CallArg Ty CTy -> CallArg Ty CTy -> Subst
 matchCA (CAExp  t) (CAExp  t') = matchTy  t t'
 matchCA (CAComp t) (CAComp t') = matchCTy t t'
 matchCA t t' = panic $ text "matchCA: Unexpected" <+> ppr t <+> text "and" <+> ppr t'
 
-matchCTy :: CTy0 -> CTy -> Subst
-matchCTy (TComp u a b) (CTBase (TComp u' a' b')) = matchAllTy [(u, u'), (a, a'), (b, b')]
-matchCTy (TTrans  a b) (CTBase (TTrans   a' b')) = matchAllTy [(a, a'), (b, b')]
-matchCTy t t' = panic $ text "matchCTy: Unexpected" <+> ppr t <+> text "and" <+> ppr t'
+matchCTy :: CTy -> CTy -> Subst
+matchCTy (CTComp u a b) (CTComp u' a' b') = matchAllTy [(u,u'), (a,a'), (b,b')]
+matchCTy (CTTrans  a b) (CTTrans   a' b') = matchAllTy [(a,a'), (b,b')]
+matchCTy _              _                 = []
 
 {-------------------------------------------------------------------------------
   Auxiliary

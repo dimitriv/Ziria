@@ -65,7 +65,7 @@ tyCheckBound nm = do
 -- TODO: In numerous places (here as well as in TcComp) we do something like
 -- the following:
 --
--- > ty' <- zonkTy ty
+-- > ty' <- zonk ty
 -- > case ty of
 -- >   TArray n tbase -> ...
 -- >   _              -> raiseErrNoVarCtx ..
@@ -126,8 +126,8 @@ tyCheckExpr e
           EArrRead earr eix len ->
             do { (earr', tyarr) <- tyCheckExpr earr
                ; (eix',  tyix)  <- tyCheckExpr eix
-               ; tyarr' <- zonkTy tyarr
-               ; tyix'  <- zonkTy tyix -- TODO: Why is this zonking necessary?
+               ; tyarr' <- zonk tyarr
+               ; tyix'  <- zonk tyix -- TODO: Why is this zonking necessary?
                ; unifyTInt' loc tyix'
                ; case tyarr' of
                   TArray _n tbase -> -- TODO: support metavars for array size here
@@ -144,8 +144,8 @@ tyCheckExpr e
           EBPerm earr eperm ->
            do { (earr', tyarr) <- tyCheckExpr earr
               ; (eix',  tyix)  <- tyCheckExpr eperm
-              ; tyarr' <- zonkTy tyarr
-              ; tyix'  <- zonkTy tyix  -- TODO: Why is this zonking necessary?
+              ; tyarr' <- zonk tyarr
+              ; tyix'  <- zonk tyix  -- TODO: Why is this zonking necessary?
               ; case tyarr' of
                   TArray n TBit ->
                     do { ti <- TInt <$> freshBitWidth "bw"
@@ -161,8 +161,8 @@ tyCheckExpr e
               ; (eval', tyval) <- tyCheckExpr eval
               ; (eix',  tyix)  <- tyCheckExpr eix
               ; unifyTInt' loc tyix
-              ; tyarr' <- zonkTy tyarr
-              ; tyval' <- zonkTy tyval -- TODO: Why is this zonking necessary?
+              ; tyarr' <- zonk tyarr
+              ; tyval' <- zonk tyval -- TODO: Why is this zonking necessary?
               ; case tyarr' of
                   TArray n tbase ->
                     case r of
@@ -206,7 +206,7 @@ tyCheckExpr e
             do { (ix',   tyix)  <- tyCheckBound ix
                ; (x',    tyx)   <- tyCheckBound x
                ; (earr', tyarr) <- tyCheckExpr earr
-               ; tyarr' <- zonkTy tyarr
+               ; tyarr' <- zonk tyarr
                ; case tyarr' of
                    TArray _n tbase ->
                       do { -- ix must range over an int type
@@ -266,7 +266,7 @@ tyCheckExpr e
                   -- This means that if a function type still has unification
                   -- variables in it after type checking the function, then
                   -- the function is indeed polymorphic in these variables.
-               ; fty_poly' <- zonkTy fty_poly
+               ; fty_poly' <- zonk fty_poly
 --               ; liftIO $ putStrLn $ "Before instantiation = " ++ show fty_poly'
                ; fty_inst  <- instantiateCall fty_poly'
 --               ; liftIO $ putStrLn $ "After instantiation = " ++ show fty_inst
@@ -318,7 +318,7 @@ tyCheckExpr e
 
           EProj e1 fn ->
             do { (e', ty1)  <- tyCheckExpr e1
-               ; ty' <- zonkTy ty1
+               ; ty' <- zonk ty1
                ; case ty' of
                   TStruct nm flds
                     -> do { case lookup fn flds of

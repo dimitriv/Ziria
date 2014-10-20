@@ -17,14 +17,13 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall #-}
-{-# LANGUAGE GADTs, MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances, DeriveFunctor, DeriveFoldable #-}
 module TcUnify (
     -- * Unification
-    unify
+    Unify
+  , unify
   , unifyMany
   , unifyAll
-  , unify_cty0
-  , unifyALen
     -- * Check that types have certain shapes
   , Hint(..)
   , unifyTInt
@@ -33,7 +32,6 @@ module TcUnify (
   , unifyComp
   , unifyTrans
   , unifyCompOrTrans
-  , unifyBase
     -- * Defaulting
   , defaultTy
   , defaultComp
@@ -42,6 +40,7 @@ module TcUnify (
   ) where
 
 import Control.Monad hiding (forM_)
+import Data.Foldable (Foldable, forM_)
 import Text.Parsec.Pos (SourcePos)
 import Text.PrettyPrint.HughesPJ
 import qualified Data.Map as M
@@ -54,178 +53,193 @@ import Outputable
 import PpComp ()
 import PpExpr ()
 import TcMonad
+import TcErrors
 
 {-------------------------------------------------------------------------------
-  Unification
+  Public API
 -------------------------------------------------------------------------------}
 
-unifyErrGeneric :: Doc -> Maybe SourcePos -> Ty -> Ty -> TcM ()
-unifyErrGeneric msg pos ty1 ty2
-  = do { zty1 <- zonkTy ty1
-       ; zty2 <- zonkTy ty2
-       ; raiseErr True pos $
-         vcat [ msg
-              , text "Cannot unify type" <+>
-                ppr zty1 <+> text "with" <+> ppr zty2
-              ] }
+unify :: Unify a => Maybe SourcePos -> a -> a -> TcM ()
+unify p a b = do
+  ctx <- getErrCtx
+  pushErrCtx (UnifyErrCtx (ppr a) (ppr b) ctx) $ unify' p a b
 
-unifyErr :: Maybe SourcePos -> Ty -> Ty -> TcM ()
-unifyErr = unifyErrGeneric empty
-
-occCheckErr :: Maybe SourcePos -> Ty -> Ty -> TcM ()
-occCheckErr p = unifyErrGeneric (text "Occurs check error.") p
-
-
-unify_cty0 :: Maybe SourcePos -> CTy0 -> CTy0 -> TcM ()
-unify_cty0 p (TTrans a b) (TTrans a' b')
-  = do { unify p a a'
-       ; unify p b b'
-       }
-unify_cty0 p (TComp v a b) (TComp v' a' b')
-  = do { unify p v v'
-       ; unify p a a'
-       ; unify p b b'
-       }
-unify_cty0 p cty0 cty1
-  = do { zty1 <- zonkCTy (CTBase cty0)
-       ; zty2 <- zonkCTy (CTBase cty1)
-       ; raiseErr True p $
-         vcat [ text "Cannot unify type" <+>
-                ppr zty1 <+> text "with" <+> ppr zty2
-              ]
-       }
-
-
-unify :: Maybe SourcePos -> Ty -> Ty -> TcM ()
-unify p tya tyb = go tya tyb
-  where
-    go (TVar x) ty
-       = do { tenv <- getTyEnv
-            ; case M.lookup x tenv of
-                Just xty -> go xty ty
-                Nothing  -> goTyVar x ty }
-    go ty (TVar x) = go (TVar x) ty
-    go TUnit TUnit = return ()
-    go TBit TBit   = return ()
-    go (TInt bw1) (TInt bw2) = unifyBitWidth p bw1 bw2
-    go TDouble TDouble = return ()
-    go (TBuff (IntBuf ta))(TBuff (IntBuf tb))    = go ta tb
-    go (TBuff (ExtBuf bta)) (TBuff (ExtBuf btb)) = go bta btb
-    go (TInterval n)(TInterval n')
-      | n == n'   = return ()
-      | otherwise = unifyErr p tya tyb
-    -- TODO: Should we check something about the fields?
-    -- (TStructs are completed internally, so if the names are equal but the
-    -- fields are not then this is a compiler bug, not a type error)
-    go (TStruct n1 _) (TStruct n2 _)
-      | n1 == n2  = return ()
-      | otherwise = unifyErr p tya tyb
-    go TBool TBool = return ()
-    go (TArray n ty1) (TArray m ty2)
-      = unifyALen p n m >> go ty1 ty2
-    go (TArrow tys1 ty2) (TArrow tys1' ty2')
-      | length tys1 /= length tys1'
-      = unifyErr p tya tyb
-      | otherwise
-      = goMany tys1 tys1' >> go ty2 ty2'
-
-    go _ _ = unifyErr p tya tyb
-
-    goMany ts1 ts2
-      = mapM (\(t1,t2) -> go t1 t2) (zip ts1 ts2)
-
-    goTyVar x (TVar y)
-      | x == y = return ()
-      | otherwise
-      = do { tenv <- getTyEnv
-           ; case M.lookup y tenv of
-               Just yty -> goTyVar x yty
-               Nothing  -> updTyEnv [(x,(TVar y))]
-           }
-
-    goTyVar x ty
-      | x `S.member` tyVarsOfTy ty
-      = occCheckErr p tya tyb
-      | otherwise
-      = updTyEnv [(x,ty)]
-
-
-unifyAll :: Maybe SourcePos -> [Ty] -> TcM ()
+unifyAll :: Unify a => Maybe SourcePos -> [a] -> TcM ()
 unifyAll p = go
   where
     go []         = return ()
     go [_]        = return ()
     go (t1:t2:ts) = unify p t1 t2 >> go (t2:ts)
 
-unifyMany :: Maybe SourcePos -> [Ty] -> [Ty] -> TcM ()
+unifyMany :: Unify a => Maybe SourcePos -> [a] -> [a] -> TcM ()
 unifyMany p t1s t2s = mapM_ (\(t1,t2) -> unify p t1 t2) (zip t1s t2s)
 
+{-------------------------------------------------------------------------------
+  Unification errors (for internal use)
+-------------------------------------------------------------------------------}
 
+unifyErrGeneric :: Zonk a => Doc -> Maybe SourcePos -> a -> a -> TcM ()
+unifyErrGeneric msg pos ty1 ty2 = do
+    zty1 <- zonk ty1
+    zty2 <- zonk ty2
+    raiseErr True pos $
+      vcat [ msg
+           , text "Cannot unify" <+> ppr zty1 <+> text "with" <+> ppr zty2
+           ]
 
-unifyBitWidth :: Maybe SourcePos -> BitWidth -> BitWidth -> TcM ()
-unifyBitWidth p = go
-  where
-    go (BWUnknown bvar) bw
-      = do { benv <- getBWEnv
-           ; case M.lookup bvar benv of
-               Just bw1 -> go bw1 bw
-               Nothing  -> goBWVar bvar bw }
-    go bw (BWUnknown bvar)
-      = go (BWUnknown bvar) bw
+unifyErr :: Zonk a => Maybe SourcePos -> a -> a -> TcM ()
+unifyErr = unifyErrGeneric empty
 
-    go b1 b2
-      | b1 == b2
-      = return ()
-      | otherwise
-      = raiseErr True p (text "Int width mismatch")
+occCheckErr :: Zonk a => Maybe SourcePos -> a -> a -> TcM ()
+occCheckErr = unifyErrGeneric (text "Occurs check error.")
 
-    goBWVar bvar1 (BWUnknown bvar2)
-      | bvar1 == bvar2
-      = return ()
-      | otherwise
-      = do { benv <- getBWEnv
-           ; case M.lookup bvar2 benv of
-               Just bw -> goBWVar bvar1 bw
-               Nothing -> updBWEnv [(bvar1,BWUnknown bvar2)] }
+{-------------------------------------------------------------------------------
+  Unification proper
+-------------------------------------------------------------------------------}
 
-    goBWVar bvar1 bw2
-      = updBWEnv [(bvar1,bw2)]
+-- | Unification
+class Zonk a => Unify a where
+  unify' :: Maybe SourcePos -> a -> a -> TcM ()
 
+-- | Unification of types
+--
+-- TODO: Should we check something about struct fields?  (TStructs are
+-- completed internally, so if the names are equal but the fields are not then
+-- this is a compiler bug, not a type error)
+instance Unify Ty where
+  unify' p = go
+    where
+      go :: Ty -> Ty -> TcM ()
+      go (TVar x) ty = do { tenv <- getTyEnv
+                          ; case M.lookup x tenv of
+                              Just xty -> go xty ty
+                              Nothing  -> goTyVar x ty
+                          }
+      go ty (TVar x) = go (TVar x) ty
 
-unifyALen :: Maybe SourcePos -> NumExpr -> NumExpr -> TcM ()
-unifyALen p = go
-  where
-    go (NVar n) nm2
-      = do { alenv <- getALenEnv
-           ; case M.lookup n alenv of
-               Just nm1 -> go nm1 nm2
-               Nothing  -> goNVar n nm2
-           }
+      go TUnit          TUnit          = return ()
+      go TBit           TBit           = return ()
+      go TDouble        TDouble        = return ()
+      go TBool          TBool          = return ()
+      go (TInt bw1)     (TInt bw2)     = unify p bw1 bw2
+      go (TArray n ty1) (TArray m ty2) = unify p n m >> go ty1 ty2
 
-    go nm1 (NVar n)
-      = go (NVar n) nm1
+      go (TBuff (IntBuf ta)) (TBuff (IntBuf tb)) = go ta tb
+      go (TBuff (ExtBuf ta)) (TBuff (ExtBuf tb)) = go ta tb
 
-    go (Literal i) (Literal j)
-      | i == j
-      = return ()
-      | otherwise
-      = raiseErr True p (text "Array length mismatch")
+      go (TInterval n1) (TInterval n2) | n1 == n2 = return ()
+      go (TStruct n1 _) (TStruct n2 _) | n1 == n2 = return ()
 
-    -- Invariant: num expression is never an array
-    goNVar nvar1 (Literal i)
-      = updALenEnv [(nvar1,Literal i)]
+      go (TArrow args res) (TArrow args' res') | length args == length args'
+        = do { mapM_ (uncurry go) (zip args args')
+             ; go res res'
+             }
 
-    goNVar nvar1 (NVar nvar2)
-      | nvar1 == nvar2 = return ()
-      | otherwise
-      = do { alenv <- getALenEnv
-           ; case M.lookup nvar2 alenv of
-               Just nm2 ->
-                 -- NB: not goNVar
-                 go (NVar nvar1) nm2
-               Nothing ->
-                 updALenEnv [(nvar1, NVar nvar2)]
-           }
+      go a b = unifyErr p a b
+
+      goTyVar :: TyVar -> Ty -> TcM ()
+      goTyVar x (TVar y)
+        | x == y    = return ()
+        | otherwise = do { tenv <- getTyEnv
+                         ; case M.lookup y tenv of
+                             Just yty -> goTyVar x yty
+                             Nothing  -> updTyEnv [(x, TVar y)]
+                         }
+      goTyVar x ty
+        | x `S.member` tyVarsOfTy ty = occCheckErr p (TVar x) ty
+        | otherwise                  = updTyEnv [(x, ty)]
+
+instance Unify (GCTy Ty) where
+  unify' p = go
+    where
+      go :: GCTy Ty -> GCTy Ty -> TcM ()
+      go (CTVar x) cty = do { tenv <- getCTyEnv
+                            ; case M.lookup x tenv of
+                                Just xty -> go xty cty
+                                Nothing  -> goTyVar x cty
+                            }
+      go cty (CTVar x) = go (CTVar x) cty
+
+      go (CTTrans  a b) (CTTrans   a' b') = unifyMany p [a, b] [a', b']
+      go (CTComp v a b) (CTComp v' a' b') = unifyMany p [v, a, b] [v', a', b']
+
+      go (CTArrow args res) (CTArrow args' res') | length args == length args'
+        = do { mapM_ (uncurry (unify p)) (zip args args')
+             ; go res res'
+             }
+
+      go a b = unifyErr p a b
+
+      goTyVar :: CTyVar -> CTy -> TcM ()
+      goTyVar x (CTVar y)
+        | x == y    = return ()
+        | otherwise = do { tenv <- getCTyEnv
+                         ; case M.lookup y tenv of
+                             Just yty -> goTyVar x yty
+                             Nothing  -> updCTyEnv [(x, CTVar y)]
+                         }
+      goTyVar x cty
+        | x `S.member` snd (tyVarsOfCTy cty) = occCheckErr p (CTVar x) cty
+        | otherwise                          = updCTyEnv [(x, cty)]
+
+instance Unify BitWidth where
+  unify' p = go
+    where
+      go :: BitWidth -> BitWidth -> TcM ()
+      go (BWUnknown bvar) bw = do { benv <- getBWEnv
+                                  ; case M.lookup bvar benv of
+                                      Just bw1 -> go bw1 bw
+                                      Nothing  -> goBWVar bvar bw
+                                  }
+      go bw (BWUnknown bvar) = go (BWUnknown bvar) bw
+
+      go b1 b2
+        | b1 == b2  = return ()
+        | otherwise = raiseErr True p (text "Int width mismatch")
+
+      goBWVar :: BWVar -> BitWidth -> TcM ()
+      goBWVar bvar1 (BWUnknown bvar2)
+        | bvar1 == bvar2 = return ()
+        | otherwise      = do { benv <- getBWEnv
+                              ; case M.lookup bvar2 benv of
+                                  Just bw -> goBWVar bvar1 bw
+                                  Nothing -> updBWEnv [(bvar1, BWUnknown bvar2)]
+                              }
+      -- Occurs check not necessary
+      goBWVar bvar1 bw2 = updBWEnv [(bvar1,bw2)]
+
+instance Unify NumExpr where
+  unify' p = go
+    where
+      go :: NumExpr -> NumExpr -> TcM ()
+      go (NVar n) nm2 = do { alenv <- getALenEnv
+                           ; case M.lookup n alenv of
+                               Just nm1 -> go nm1 nm2
+                               Nothing  -> goNVar n nm2
+                           }
+      go nm1 (NVar n) = go (NVar n) nm1
+
+      go (Literal i) (Literal j)
+        | i == j    = return ()
+        | otherwise = raiseErr True p (text "Array length mismatch")
+
+      goNVar :: LenVar -> NumExpr -> TcM ()
+      goNVar nvar1 (NVar nvar2)
+        | nvar1 == nvar2 = return ()
+        | otherwise      = do { alenv <- getALenEnv
+                              ; case M.lookup nvar2 alenv of
+                                  Just nm2 -> goNVar nvar1 nm2
+                                  Nothing  -> updALenEnv [(nvar1, NVar nvar2)]
+                              }
+      -- Occurs check not necessary
+      goNVar nvar1 (Literal i) = updALenEnv [(nvar1,Literal i)]
+
+instance (Unify a, Unify b) => Unify (CallArg a b) where
+  unify' p = go
+    where
+      go (CAExp  ty)  (CAExp  ty')  = unify p ty  ty'
+      go (CAComp cty) (CAComp cty') = unify p cty cty'
+      go a b = unifyErr p a b
 
 {-------------------------------------------------------------------------------
   Defaulting
@@ -240,7 +254,7 @@ unifyALen p = go
 -- unification equations will not instantiate this type variable.
 defaultTy :: Maybe SourcePos -> Ty -> Ty -> TcM Ty
 defaultTy p ty def = do
-  ty' <- zonkTy ty
+  ty' <- zonk ty
   case ty' of
     TVar _ -> do unify p ty' def ; return def
     _      -> return ty'
@@ -248,10 +262,10 @@ defaultTy p ty def = do
 -- | Zonk all type variables and default the type of `EError` to `TUnit` when
 -- it's still a type variable.
 defaultExpr :: Exp -> TcM Exp
-defaultExpr = mapExpM zonkTy return zonk_exp
+defaultExpr = mapExpM zonk return go
   where
-    zonk_exp :: Exp -> TcM Exp
-    zonk_exp e
+    go :: Exp -> TcM Exp
+    go e
       | EError ty str <- unExp e
       = do { ty' <- defaultTy (expLoc e) ty TUnit
            ; return $ eError (expLoc e) ty' str
@@ -260,7 +274,7 @@ defaultExpr = mapExpM zonkTy return zonk_exp
       = return e
 
 defaultComp :: Comp -> TcM Comp
-defaultComp = mapCompM zonkCTy zonkTy return return defaultExpr return
+defaultComp = mapCompM zonk zonk return return defaultExpr return
 
 {-------------------------------------------------------------------------------
   Instantiation (of polymorphic functions)
@@ -296,25 +310,27 @@ instantiateCall = go
 {-------------------------------------------------------------------------------
   Check that types have certain shapes
 
-  We try to avoid generating unification variables where possible.
+  These functions are a bit more involved than they need to be, because we
+  make an effort to try avoid unification variables where possible.
 -------------------------------------------------------------------------------}
 
--- Type checking hints (isomorphic with Maybe)
+-- | Type checking hints (isomorphic with Maybe)
 data Hint a = Check a | Infer
+  deriving (Functor, Foldable)
 
-check :: Hint a -> (a -> TcM ()) -> TcM ()
-check Infer     _   = return ()
-check (Check c) act = act c
+-- | Analagous to 'maybe'
+hint :: b -> (a -> b) -> Hint a -> b
+hint _ f (Check a) = f a
+hint b _ Infer     = b
 
 unifyTInt :: Maybe SourcePos -> Hint BitWidth -> Ty -> TcM BitWidth
-unifyTInt loc annBW = zonkTy >=> go
+unifyTInt loc annBW = zonk >=> go
   where
     go (TInt bw) = do
-      check annBW $ unifyBitWidth loc bw
+      forM_ annBW $ unify loc bw
       return bw
     go ty = do
-      bw <- case annBW of Infer    -> freshBitWidth "bw"
-                          Check bw -> return bw
+      bw <- hint (freshBitWidth "bw") return annBW
       unify loc ty (TInt bw)
       return bw
 
@@ -323,63 +339,69 @@ unifyTInt' :: Maybe SourcePos -> Ty -> TcM ()
 unifyTInt' loc ty = void $ unifyTInt loc Infer ty
 
 unifyTArray :: Maybe SourcePos -> Hint NumExpr -> Hint Ty -> Ty -> TcM (NumExpr, Ty)
-unifyTArray loc annN annA = zonkTy >=> go
+unifyTArray loc annN annA = zonk >=> go
   where
     go (TArray n a) = do
-      check annN $ unifyALen loc n
-      check annA $ unify loc a
+      forM_ annN $ unify loc n
+      forM_ annA $ unify loc a
       return (n, a)
     go ty = do
-      n <- case annN of Infer   -> freshNumExpr "n"
-                        Check n -> return n
-      a <- case annA of Infer   -> freshTy "a"
-                        Check a -> return a
+      n <- hint (freshNumExpr "n") return annN
+      a <- hint (freshTy      "a") return annA
       unify loc ty (TArray n a)
       return (n, a)
 
 unifyComp :: Maybe SourcePos
           -> Hint Ty -> Hint Ty -> Hint Ty
-          -> CTy0 -> TcM (Ty, Ty, Ty)
-unifyComp loc annU annA annB = zonkCTy0 >=> go
+          -> CTy -> TcM (Ty, Ty, Ty)
+unifyComp loc annU annA annB = zonk >=> go
   where
-    go (TComp u a b) = do
-      check annU $ unify loc u
-      check annA $ unify loc a
-      check annB $ unify loc b
+    go (CTComp u a b) = do
+      forM_ annU $ unify loc u
+      forM_ annA $ unify loc a
+      forM_ annB $ unify loc b
       return (u, a, b)
-    go (TTrans _ _) =
-      raiseErr False loc $
-        text "Expected computer but found transformer"
+    go cty = do
+      u <- hint (freshTy "u") return annU
+      a <- hint (freshTy "a") return annA
+      b <- hint (freshTy "b") return annB
+      unify loc cty (CTComp u a b)
+      return (u, a, b)
 
 unifyTrans :: Maybe SourcePos
            -> Hint Ty -> Hint Ty
-           -> CTy0 -> TcM (Ty, Ty)
-unifyTrans loc annA annB = zonkCTy0 >=> go
+           -> CTy -> TcM (Ty, Ty)
+unifyTrans loc annA annB = zonk >=> go
   where
-    go (TComp _ _ _) = do
-      raiseErr False loc $
-        text "Expected transformer but found computer"
-    go (TTrans a b) = do
-      check annA $ unify loc a
-      check annB $ unify loc b
+    go (CTTrans a b) = do
+      forM_ annA $ unify loc a
+      forM_ annB $ unify loc b
+      return (a, b)
+    go cty = do
+      a <- hint (freshTy "a") return annA
+      b <- hint (freshTy "b") return annB
+      unify loc cty (CTTrans a b)
       return (a, b)
 
+-- | Sadly, we cannot have a unification constraint that somehing must
+-- either be a computer or a transformer, so if we find a type variable here
+-- we must give a type error.
 unifyCompOrTrans :: Maybe SourcePos
                  -> Hint Ty -> Hint Ty
-                 -> CTy0 -> TcM (Maybe Ty, Ty, Ty)
-unifyCompOrTrans loc annA annB = zonkCTy0 >=> go
+                 -> CTy -> TcM (Maybe Ty, Ty, Ty)
+unifyCompOrTrans loc annA annB = zonk >=> go
   where
-    go (TComp u a b) = do
-      check annA $ unify loc a
-      check annB $ unify loc b
+    go (CTComp u a b) = do
+      forM_ annA $ unify loc a
+      forM_ annB $ unify loc b
       return (Just u, a, b)
-    go (TTrans a b) = do
-      check annA $ unify loc a
-      check annB $ unify loc b
+    go (CTTrans a b) = do
+      forM_ annA $ unify loc a
+      forM_ annB $ unify loc b
       return (Nothing, a, b)
-
-unifyBase :: Maybe SourcePos -> CTy -> TcM CTy0
-unifyBase loc = zonkCTy >=> go
-  where
-    go (CTBase cty0) = return cty0
-    go _ = raiseErr False loc $ text "Function not fully applied"
+    go (CTArrow _ _) =
+      raiseErrNoVarCtx loc $
+        text "Expected computer or transformer, but got function"
+    go (CTVar _) =
+      raiseErrNoVarCtx loc $
+        text "Expected computer or transformer, but got type variable (bug?)"

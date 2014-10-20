@@ -42,16 +42,14 @@ import Outputable
   Outputable instances
 -------------------------------------------------------------------------------}
 
-instance Outputable ty => Outputable (GCTy0 ty) where
-  ppr cty = case cty of
-    TComp t1 t2 t3 ->
-      text "ST" <+> parens (text "C" <+> ppr t1) <+> ppr t2 <+> ppr t3
-    TTrans t1 t2 ->
-      text "ST" <+> text "T" <+> ppr t1 <+> ppr t2
-
 instance Outputable ty => Outputable (GCTy ty) where
   ppr cty = case cty of
-    CTBase cty      -> ppr cty
+    CTComp t1 t2 t3 ->
+      text "ST" <+> parens (text "C" <+> ppr t1) <+> ppr t2 <+> ppr t3
+    CTTrans t1 t2 ->
+      text "ST" <+> text "T" <+> ppr t1 <+> ppr t2
+    CTVar x ->
+      text "?" <> text x
     CTArrow tys cty ->
       parens (hsep (punctuate comma (map ppr tys))) <+>
       text "->" <+>
@@ -288,12 +286,12 @@ ppCompParams params =
 -- in labels?
 ppCompTypedVect :: GComp CTy Ty a b -> Doc
 ppCompTypedVect x =
-  let p1  = ppComp0 ppCompTypedVect False True True $ unComp x
-      cty  = ctComp x
-      inty  = inTyOfCTyBase cty
-      yldty = yldTyOfCTyBase cty
+  let p1    = ppComp0 ppCompTypedVect False True True $ unComp x
+      cty   = ctComp x
+      inty  = inTyOfCTy cty
+      yldty = yldTyOfCTy cty
       arity (TArray (Literal n) _) = show n
-      arity _                    = "1"
+      arity _                      = "1"
       ain   = arity inty
       ayld  = arity yldty
 
@@ -332,8 +330,7 @@ instance Outputable t => Outputable (Maybe (GCTy t)) where
   Show instances
 -------------------------------------------------------------------------------}
 
-instance Outputable ty => Show (GCTy0 ty)     where show = render . ppr
-instance Outputable ty => Show (GCTy ty)      where show = render . ppr
+instance Outputable ty => Show (GCTy ty) where show = render . ppr
 
 instance (Outputable tc, Outputable t) => Show (GComp tc t a b) where show = render . ppr
 instance (Outputable tc, Outputable t) => Show (GProg tc t a b) where show = render . ppr
