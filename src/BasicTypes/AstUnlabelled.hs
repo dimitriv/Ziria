@@ -97,7 +97,7 @@ eLUT loc m e = MkExp (ELUT m e) loc ()
 eBPerm :: Maybe SourcePos ->  GExp t () -> GExp t () -> GExp t ()
 eBPerm loc e1 e2 = MkExp (EBPerm e1 e2) loc ()
 
-eStruct :: Maybe SourcePos ->  TyName -> [(String,GExp t ())] -> GExp t ()
+eStruct :: Maybe SourcePos -> t -> [(String,GExp t ())] -> GExp t ()
 eStruct loc tn es = MkExp (EStruct tn es) loc ()
 
 eProj :: Maybe SourcePos ->  GExp t () -> String -> GExp t ()

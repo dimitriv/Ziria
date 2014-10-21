@@ -4,7 +4,7 @@
 --
 -- NOTE: Importing modules will probably want to enable the `RebindableSyntax`
 -- language extension and import `Rebindables` to get if-then-else syntax.
-module AstFreeMonad where {- (
+module AstFreeMonad (
     -- * Free expression monad
     FreeExp -- opaque
   , feVal
@@ -53,7 +53,7 @@ module AstFreeMonad where {- (
     -- * Translation out of the free monad
   , unFreeExp
   , unFreeComp
-  ) where -}
+  ) where
 
 import Prelude
 import Control.Applicative
@@ -281,7 +281,7 @@ data FreeComp a =
   | FRepeat (Maybe VectAnn) (FreeComp ()) (FreeComp a)
   | FAnnot (FreeComp ()) (Maybe Ty) (Maybe Ty) (Maybe Ty) (FreeComp a)
   | FLift Comp (FreeComp a)
-  | FLiftSrc SrcComp (FreeComp a)
+  | FLiftSrc TyDefEnv SrcComp (FreeComp a)
   | FPure a
 
 instance Functor FreeComp where
@@ -307,7 +307,7 @@ instance Monad FreeComp where
   FRepeat ann c     k >>= f = FRepeat ann c     (k >>= f)
   FAnnot c u a b    k >>= f = FAnnot c u a b    (k >>= f)
   FLift c           k >>= f = FLift c           (k >>= f)
-  FLiftSrc c        k >>= f = FLiftSrc c        (k >>= f)
+  FLiftSrc env c    k >>= f = FLiftSrc env c    (k >>= f)
   FPure a             >>= f = f a
 
 fVar :: GName CTy -> FreeComp ()
@@ -354,8 +354,12 @@ fError str = fReturn AutoInline (feError str)
 fLift :: Comp -> FreeComp ()
 fLift c = FLift c (FPure ())
 
-fLiftSrc :: SrcComp -> FreeComp ()
-fLiftSrc c = FLiftSrc c (FPure ())
+-- | For use with the quasi-quoter (which generates source terms)
+--
+-- In order to be able to translate source terms in isolation we need the
+-- definition of any types (structs) that might be used inside the snippet.
+fLiftSrc :: TyDefEnv -> SrcComp -> FreeComp ()
+fLiftSrc tydefenv c = FLiftSrc tydefenv c (FPure ())
 
 instance IfThenElse (FreeExp ()) (FreeComp ()) where
   ifThenElse = fBranch
@@ -517,8 +521,11 @@ unFree loc = liftM fromJust . go
     go (FLift c k) = do
       k' <- go k
       return $ c `mSeq` k'
-    go (FLiftSrc c k) = do
-      c' <- extendEnv (extractTypeEnv c) $ tyCheckComp c
+    go (FLiftSrc env c k) = do
+      c' <- extendTDefEnv' (mkTyDefEnv primComplexStructs) $
+              extendTDefEnv' env $
+                extendEnv (extractTypeEnv c) $
+                  tyCheckComp c
       k' <- go k
       return $ c' `mSeq` k'
     go (FPure ()) =
@@ -608,7 +615,7 @@ _test1 tmp_idx is_empty in_buff in_buff_idx finalin n0 = do
   fReturn AutoInline $ in_buff .! (in_buff_idx, n0) .:= VInt 123
 
 _test2 :: GName Ty -> GName Ty -> GName Ty -> GName Ty -> Integer -> Integer -> FreeComp ()
-_test2 tmp_idx is_empty in_buff in_buff_idx finalin n0 = fLiftSrc [zcomp| {
+_test2 tmp_idx is_empty in_buff in_buff_idx finalin n0 = fLiftSrc (mkTyDefEnv []) [zcomp| {
     if is_empty == true
       then { x <- take
            ; do { in_buff     := x

@@ -41,6 +41,7 @@ module TcMonad (
   , mkTyDefEnv
   , lookupTDefEnv
   , extendTDefEnv
+  , extendTDefEnv'
     -- ** Expression variable binding environment
   , Env
   , mkEnv
@@ -206,12 +207,17 @@ lookupTDefEnv :: String -> Maybe SourcePos -> TcM StructDef
 lookupTDefEnv s pos = getTDefEnv >>= lookupTcM s pos msg
   where msg = text "Unbound type definition:" <+> text s
 
-extendTDefEnv :: StructDef -> TcM a -> TcM a
-extendTDefEnv sdef = local $ \env -> env {
+extendTDefEnv :: [StructDef] -> TcM a -> TcM a
+extendTDefEnv sdefs = local $ \env -> env {
       tcm_tydefenv = updBinds binds (tcm_tydefenv env)
     }
   where
-    binds = [(struct_name sdef, sdef)]
+    binds = map (\sdef -> (struct_name sdef, sdef)) sdefs
+
+extendTDefEnv' :: TyDefEnv -> TcM a -> TcM a
+extendTDefEnv' sdefs = local $ \env -> env {
+      tcm_tydefenv = M.union sdefs (tcm_tydefenv env)
+    }
 
 {-------------------------------------------------------------------------------
   Expression variable binding environment

@@ -345,7 +345,11 @@ data GExp0 t a where
   EBPerm :: GExp t a -> GExp t a -> GExp0 t a
 
   -- | Constructing structs
-  EStruct :: TyName -> [(FldName,GExp t a)] -> GExp0 t a
+  --
+  -- We annotate the EStruct with the "official" definition of the struct
+  -- so that we can lint an EStruct node without the definition of the
+  -- struct having to be in scope.
+  EStruct :: t -> [(FldName,GExp t a)] -> GExp0 t a
 
   -- | Project field out of a struct
   EProj   :: GExp t a -> FldName -> GExp0 t a
@@ -599,10 +603,11 @@ mapExpM onTyp onAnn f = goExp
       e1' <- goExp e1
       e2' <- goExp e2
       return $ EBPerm e1' e2'
-    goExp0 (EStruct tn tfs) = do
-      let do_fld (t,e') = goExp e' >>= \e'' -> return (t,e'')
-      tfs' <- mapM do_fld tfs
-      return $ EStruct tn tfs'
+    goExp0 (EStruct t fields) = do
+      t' <- onTyp t
+      let do_fld (fld,e') = goExp e' >>= \e'' -> return (fld,e'')
+      fields' <- mapM do_fld fields
+      return $ EStruct t' fields'
     goExp0 (EProj e1 fn) = do
       e1' <- goExp e1
       return $ EProj e1' fn
@@ -1021,39 +1026,30 @@ isBoolBinOp _   = False
 -- A super conservative side-effect analysis
 mutates_state :: GExp t a -> Bool
 mutates_state e = case unExp e of
-  EVal _ _              -> False
-  EValArr _ _           -> False
-  EVar _                -> False
-  EUnOp _ e'            -> mutates_state e'
-  EBinOp _ e1 e2        -> any mutates_state [e1,e2]
-  EAssign _e1 _e2       -> True
-
+  EVal _ _                     -> False
+  EValArr _ _                  -> False
+  EVar _                       -> False
+  EUnOp _ e'                   -> mutates_state e'
+  EBinOp _ e1 e2               -> any mutates_state [e1,e2]
+  EAssign _e1 _e2              -> True
   EArrRead e1 e2 LISingleton   -> any mutates_state [e1,e2]
-
   EArrRead e1 e2 (LILength {}) -> any mutates_state [e1,e2]
-
-  EArrWrite _e1 _e2 _r _e3 -> True
-
-  EIter _ _ e1 e2       -> any mutates_state [e1,e2]
-  EFor _ _ e1 e2 e3     -> any mutates_state [e1,e2,e3]
-  EWhile e1 e2          -> any mutates_state [e1,e2]
-
-  ELet _nm _fi e1 e2     -> any mutates_state [e1,e2]
-  ELetRef _nm (Just e1) e2 -> any mutates_state [e1,e2]
-  ELetRef _nm Nothing   e2 -> mutates_state e2
-
-  ESeq e1 e2     -> any mutates_state [e1,e2]
-  ECall _e' _es  -> True
-  EIf e1 e2 e3   -> any mutates_state [e1,e2,e3]
-
-  EPrint _nl _e1 -> True -- See Note [IOEffects]
-  EError _ _     -> True
-
-  ELUT _ e1      -> mutates_state e1
-  EBPerm e1 e2   -> any mutates_state [e1,e2]
-
-  EStruct _tn tfs -> any mutates_state (map snd tfs)
-  EProj e0 _f     -> mutates_state e0
+  EArrWrite _e1 _e2 _r _e3     -> True
+  EIter _ _ e1 e2              -> any mutates_state [e1,e2]
+  EFor _ _ e1 e2 e3            -> any mutates_state [e1,e2,e3]
+  EWhile e1 e2                 -> any mutates_state [e1,e2]
+  ELet _nm _fi e1 e2           -> any mutates_state [e1,e2]
+  ELetRef _nm (Just e1) e2     -> any mutates_state [e1,e2]
+  ELetRef _nm Nothing   e2     -> mutates_state e2
+  ESeq e1 e2                   -> any mutates_state [e1,e2]
+  ECall _e' _es                -> True
+  EIf e1 e2 e3                 -> any mutates_state [e1,e2,e3]
+  EPrint _nl _e1               -> True -- See Note [IOEffects]
+  EError _ _                   -> True
+  ELUT _ e1                    -> mutates_state e1
+  EBPerm e1 e2                 -> any mutates_state [e1,e2]
+  EStruct _ tfs                -> any mutates_state (map snd tfs)
+  EProj e0 _f                  -> mutates_state e0
 
 {-------------------------------------------------------------------------------
   Built-ins
@@ -1065,16 +1061,16 @@ mutates_state e = case unExp e of
 -- only) to Ty (where structs are fully defined)
 primComplexStructs :: [(TyName,StructDef)]
 primComplexStructs
-  = [ (complex8TyName,  structDefFrom tcomplex8)
-    , (complex16TyName, structDefFrom tcomplex16)
-    , (complex32TyName, structDefFrom tcomplex32)
-    , (complex64TyName, structDefFrom tcomplex64)
+  = [ structDefFrom tcomplex8
+    , structDefFrom tcomplex16
+    , structDefFrom tcomplex32
+    , structDefFrom tcomplex64
     ]
   where
     -- TODO: This translation back and forth to StructDef is annoying.
     -- We should inline StructDef in LetStruct.
-    structDefFrom :: Ty -> StructDef
-    structDefFrom (TStruct nm flds) = StructDef nm flds
+    structDefFrom :: Ty -> (TyName, StructDef)
+    structDefFrom (TStruct nm flds) = (nm, StructDef nm flds)
     structDefFrom _ = error "Not a struct"
 
 {-------------------------------------------------------------------------------

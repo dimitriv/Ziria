@@ -144,9 +144,9 @@ instance Outputable ty => Outputable (GExp0 ty a) where
     EBPerm e1 e2     -> text "bperm " <> parens (ppr e1 <> comma <> ppr e2)
     EProj e fn       -> ppr e <> text "." <> text fn
 
-    EStruct tn tfs   ->
+    EStruct t tfs ->
       let ppfe (fn,fe) = text fn <+> text "=" <+> ppr fe
-      in text tn <+> braces (hsep (punctuate comma (map ppfe tfs)))
+      in ppr t <+> braces (hsep (punctuate comma (map ppfe tfs)))
 
     where assign s e1 e2 = e1 <+> text s <+> e2
 
@@ -189,7 +189,7 @@ instance Outputable Ty where
     TInterval n            -> text "interval" <> brackets (int n)
     TBuff (IntBuf t)       -> parens $ text "INTBUF" <> brackets (ppr t)
     TBuff (ExtBuf bt)      -> parens $ text "EXTBUF" <> brackets (text "base=" <> ppr bt)
-    TStruct tyname _       -> text tyname
+    TStruct tyname _       -> text tyname -- NOTE: If we change this to be the full type the instance for EStruct breaks
 
 instance Outputable ty => Outputable (GStructDef ty) where
   -- TODO: Perhaps it would make more sense to show the entire thing

@@ -231,7 +231,7 @@ renComp (MkComp comp0 cloc ()) = case comp0 of
         return $ cLet cloc x' c1' c2'
       LetStruct sdef c1 -> do
         sdef' <- renStructDef cloc sdef
-        c1'   <- extendTDefEnv sdef' $ renComp c1
+        c1'   <- extendTDefEnv [sdef'] $ renComp c1
         return $ cLetStruct cloc sdef' c1'
       LetE x fi e c1 -> do
         e'  <- renExp e
@@ -427,9 +427,10 @@ renExp (MkExp exp0 eloc ()) = case exp0 of
         e1' <- renExp e1
         e2' <- renExp e2
         return $ eBPerm eloc e1' e2'
-      EStruct tn tfs -> do
+      EStruct t tfs -> do
+        t'   <- renReqTy eloc t
         tfs' <- mapM (\(f,e') -> renExp e' >>= \e'' -> return (f,e'')) tfs
-        return $ eStruct eloc tn tfs'
+        return $ eStruct eloc t' tfs'
       EProj e1 fn -> do
         e1' <- renExp e1
         return $ eProj eloc e1' fn

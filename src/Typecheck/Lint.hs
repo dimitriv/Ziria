@@ -35,6 +35,7 @@ import AstExpr
 import Outputable
 import TcMonad
 import TcUnify
+import Utils
 
 {-------------------------------------------------------------------------------
   Top-level API
@@ -279,13 +280,11 @@ lintExp expr@(MkExp exp0 loc _) =
       ti <- TInt <$> freshBitWidth "bw"
       void $ unifyTArray loc (Check n) (Check ti) epermTy
       return earrTy
-    go (EStruct tn flds) = do
-      -- NOTE: Since we want to be able to call the linter at any point and
-      -- on any kind of snippet, we don't want to rely on environments. Hence
-      -- we cannot look up the definition of the struct; we have to assume
-      -- that this is OK.
-      fldTys <- mapM lintExp (map snd flds)
-      return $ TStruct tn (zip (map fst flds) fldTys)
+    go (EStruct t@(TStruct _ tys) flds) = do
+      matchStructFields tys flds
+      return t
+    go (EStruct t _) = do
+      panic $ text "EStruct with non-struct type" <+> ppr t
     go (EProj e fld) = do
       eTy <- zonk =<< lintExp e
       -- Since structs can share field names, we cannot infer a type here
@@ -301,6 +300,25 @@ lintExp expr@(MkExp exp0 loc _) =
           dumpTypeSubstitutions
           raiseErrNoVarCtx loc $
             text "Field projection from non-struct type: " <+> ppr eTy
+
+    -- TODO: This expects the struct fields to be in the same order as they
+    -- are in the type defintion. This seems unnecessary?
+    matchStructFields :: [(FldName, Ty)] -> [(FldName, GExp Ty a)] -> TcM ()
+    matchStructFields [] [] =
+      return ()
+    matchStructFields ((fld, _):_) [] =
+      raiseErrNoVarCtx loc $ text "Missing field" <+> text (show fld)
+    matchStructFields [] ((fld', _):_) =
+      raiseErrNoVarCtx loc $ text "Unexpected field" <+> text (show fld')
+    matchStructFields ((fld, fldTy):tys) ((fld', fldExp):exps) = do
+      unless (fld == fld') $
+        raiseErrNoVarCtx loc $ vcat [
+            text "Unexpected field" <+> text (show fld')
+          , text "Expected field" <+> text (show fld)
+          ]
+      fldTy' <- lintExp fldExp
+      unify (expLoc expr) fldTy fldTy'
+      matchStructFields tys exps
 
 lintComp :: GComp CTy Ty a b -> TcM CTy
 lintComp comp@(MkComp comp0 loc _) =

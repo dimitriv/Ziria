@@ -21,7 +21,6 @@
 {-# LANGUAGE RecordWildCards #-}
 module CtExpr (ctExp) where
 
-import Control.Arrow (second)
 import Text.PrettyPrint.HughesPJ
 
 import AstExpr
@@ -54,7 +53,7 @@ ctExp0 (EPrint _ _)        = TUnit
 ctExp0 (EError ty _)       = ty
 ctExp0 (ELUT _ e)          = ctExp e
 ctExp0 (EBPerm e1 _)       = ctExp e1
-ctExp0 (EStruct tn fs)     = TStruct tn (map (second ctExp) fs)
+ctExp0 (EStruct t _)       = t
 ctExp0 (EProj s f)         = ctProj (ctExp s) f
 
 ctUnOp :: GUnOp Ty -> Ty -> Ty

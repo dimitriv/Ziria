@@ -235,8 +235,8 @@ parseWithVarOnHead = choice
     , withPos mkVar <*> identifier
     ]
   where
-    eStruct' loc "complex" = eStruct loc complex32TyName
-    eStruct' loc tn        = eStruct loc tn
+    eStruct' loc "complex" = eStruct loc (Just (SrcTStruct complex32TyName))
+    eStruct' loc tn        = eStruct loc (Just (SrcTStruct tn))
 
     mkDeref :: Maybe SourcePos -> String -> [SrcExp -> SrcExp] -> SrcExp
     mkDeref p x fs = foldr ($) (mkVar p x) (reverse fs)
