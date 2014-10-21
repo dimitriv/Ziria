@@ -246,7 +246,7 @@ parseVarOrCall = go <?> "variable or function call"
 -- If however `xnm` is a known function we expect a comma-separated list of
 -- as many arguments as the function expect, which can either be computations
 -- `<comp>` or expressions `<expr>`.
-parseArgs :: GName (Maybe (GCTy SrcTy)) -> BlinkParser [CallArg SrcExp SrcComp]
+parseArgs :: GName (Maybe SrcCTy) -> BlinkParser [CallArg SrcExp SrcComp]
 parseArgs xnm = parens $ do
     penv <- ask
     case lookup xnm penv of
@@ -270,7 +270,7 @@ data GLetDecl tc t a b =
   | LetDeclComp (Maybe (Int, Int)) (GName tc) (GComp tc t a b)
   | LetDeclExpr (GName t) (GExp t b)
 
-type LetDecl = GLetDecl (Maybe (GCTy SrcTy)) (Maybe SrcTy) () ()
+type LetDecl = GLetDecl (Maybe SrcCTy) (Maybe SrcTy) () ()
 
 -- | The thing that is being declared in a let-statemnt
 --
@@ -318,7 +318,7 @@ paramsParser = parens $ sepBy paramParser (symbol ",")
 -- | Like `parseVarBind` but for computation types
 --
 -- > <cvar-bind> ::= IDENT | "(" IDENT ":" <comp-base-type> ")"
-parseCVarBind :: BlinkParser (GName (Maybe (GCTy SrcTy)))
+parseCVarBind :: BlinkParser (GName (Maybe SrcCTy))
 parseCVarBind = choice
     [ withPos mkName <*> identifier
     , parens $ withPos mkNameTy <*> identifier <* symbol ":" <*> parseCompBaseType
@@ -332,7 +332,7 @@ parseCVarBind = choice
 -- > <comp-params> ::= "(" (IDENT ":" (<base-type> | <comp-base-type>))*"," ")"
 --
 -- (<base-type> comes from the expr parser; <comp-base-type> is defined here).
-compParamsParser :: BlinkParser [GName (CallArg (Maybe SrcTy) (Maybe (GCTy SrcTy)))]
+compParamsParser :: BlinkParser [GName (CallArg (Maybe SrcTy) (Maybe SrcCTy))]
 compParamsParser = parens $ sepBy paramParser (symbol ",")
   where
     paramParser = withPos mkParam <*> identifier <* colon <*> parseType
@@ -345,7 +345,7 @@ compParamsParser = parens $ sepBy paramParser (symbol ",")
 -- | Computation type
 --
 -- > <comp-base-type> ::= "ST" ("T" | "C" <base-type>) <base-type> <base-type>
-parseCompBaseType :: BlinkParser (GCTy SrcTy)
+parseCompBaseType :: BlinkParser SrcCTy
 parseCompBaseType = choice
     [ mkCTy <$ reserved "ST" <*> parse_idx <*> parseBaseType <*> parseBaseType
     , parens parseCompBaseType

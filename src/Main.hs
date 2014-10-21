@@ -46,12 +46,8 @@ import Opts
 import PassFold
 import PpComp
 import Rename
-import TcComp
-import TcErrors ( ErrCtx (..) )
-import TcExpr
 import TcMonad
-import Lint (zonkLint)
-import qualified Typecheck as Typecheck
+import Typecheck (tyCheckProg)
 import PassPipeline
 import BlinkParseComp (parseProgram)
 import BlinkParseM (runBlinkParser)
@@ -126,41 +122,21 @@ main = failOnException $ do
     dump dflags DumpAst ".ast.dump" $ (text . dumpStr) prog
     dump dflags DumpAstPretty ".ast.pretty.dump" $ (text . show) prog
 
-    rensym <- GS.initGenSym (getName dflags)
-    prog_renamed <- runRenM rensym (renProg prog)
-    sym <- GS.initGenSym (getName dflags)
-
     -- putStrLn $ "renamed ... " ++ show prog_renamed
 
     let cenv     = mkCEnv []
     let tdef_env = mkTyDefEnv primComplexStructs
     let varenv   = mkEnv []
 
-    -- Maybe we should combine the two calls to the type checker?
-    (globals', unifiers0)
-       <- failOnError $
-          runTcM (tyCheckTopDecls (globals prog_renamed))
-                 tdef_env
-                 varenv
-                 cenv
-                 sym
-                 GlobalDefs
-                 emptyTcMState
-
-
-    -- putStrLn "typechecked dels ..."
-
-    let decl_env = envOfDecls globals'
-
-    (c', unifiers1)
-       <- failOnError $
-          runTcM (zonkLint =<< tyCheckTopComp (progComp prog_renamed))
-                 tdef_env
-                 decl_env
-                 cenv
-                 sym
-                 GlobalDefs
-                 unifiers0
+    sym <- GS.initGenSym (getName dflags)
+    (MkProg globals' c', unifiers1) <- failOnError $
+      runTcM (tyCheckProg prog)
+             tdef_env
+             varenv
+             cenv
+             sym
+             TopLevelErrCtx
+             emptyTcMState
 
     let in_ty  =  inTyOfCTy (ctComp c')
         yld_ty = yldTyOfCTy (ctComp c')
@@ -175,7 +151,6 @@ main = failOnException $ do
     -- First let us run some small-scale optimizations
     folded <- runFoldPhase dflags sym 1 c'
 
-    return ()
 {-
     -- putStrLn $ "run the fold phase ..." ++ show folded
 

@@ -387,8 +387,9 @@ type ParListView = GParListView CTy Ty () ()
   to the type checker (which translates from SrcTy to Ty).
 -------------------------------------------------------------------------------}
 
-type SrcComp = GComp (Maybe (GCTy SrcTy)) (Maybe SrcTy) () ()
-type SrcProg = GProg (Maybe (GCTy SrcTy)) (Maybe SrcTy) () ()
+type SrcCTy  = GCTy SrcTy
+type SrcComp = GComp (Maybe SrcCTy) (Maybe SrcTy) () ()
+type SrcProg = GProg (Maybe SrcCTy) (Maybe SrcTy) () ()
 
 {-------------------------------------------------------------------------------
   Smart constructors

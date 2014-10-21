@@ -191,6 +191,10 @@ instance Outputable Ty where
     TBuff (ExtBuf bt)      -> parens $ text "EXTBUF" <> brackets (text "base=" <> ppr bt)
     TStruct tyname _       -> text tyname
 
+instance Outputable ty => Outputable (GStructDef ty) where
+  -- TODO: Perhaps it would make more sense to show the entire thing
+  ppr (StructDef nm _) = text nm
+
 instance Outputable SrcTy where
   ppr ty = case ty of
     SrcTUnit      -> text "()"
@@ -273,6 +277,7 @@ ppParams params =
 
 instance Show (NumExpr) where show = render . ppr
 instance Show Ty        where show = render . ppr
+instance Outputable ty => Show (GStructDef ty) where show = render . ppr
 
 instance Outputable ty => Show (GFun ty a)  where show = render . ppr
 instance Outputable ty => Show (GUnOp ty)   where show = render . ppr

@@ -65,17 +65,17 @@ import qualified Data.Set as Set
 
 import AstComp
 import AstExpr
-import AstQuasiQuote
 import AstUnlabelled
 import CtComp (ctComp)
 import CtExpr (ctExp)
 import Rebindables
-import TcComp (tyCheckComp)
-import TcErrors (ErrCtx(InternalTypeChecking))
+import Typecheck (tyCheckComp)
 import TcMonad
 import TcUnify (unify)
-import qualified GenSym  as GS
-import qualified Rename  as Ren
+
+-- Imports for the example only:
+import qualified GenSym as GS (initGenSym)
+import AstQuasiQuote (zcomp)
 
 {-------------------------------------------------------------------------------
   Free expression monad
@@ -518,11 +518,9 @@ unFree loc = liftM fromJust . go
       k' <- go k
       return $ c `mSeq` k'
     go (FLiftSrc c k) = do
-      let env = extractTypeEnv c
-      c'       <- liftRenM $ Ren.extend env env $ Ren.renComp c
-      (c'', _) <- extendEnv env $ tyCheckComp c'
-      k'       <- go k
-      return $ c'' `mSeq` k'
+      c' <- extendEnv (extractTypeEnv c) $ tyCheckComp c
+      k' <- go k
+      return $ c' `mSeq` k'
     go (FPure ()) =
       return Nothing
 
@@ -539,12 +537,16 @@ newName loc ty = do
   str <- genSym "_x"
   return $ toName ("_x" ++ str) loc ty
 
-extractTypeEnv :: SrcComp -> [GName Ty]
+-- This environment is used by the renamer, which is indexing variables by their
+-- _name_, rather than by their uniqId.
+extractTypeEnv :: SrcComp -> [(String, GName Ty)]
 extractTypeEnv = catMaybes . map aux . Set.toList . compEFVs
   where
-    aux :: GName (Maybe SrcTy) -> Maybe (GName Ty)
-    aux nm | Just (SrcInject ty) <- nameTyp nm = Just nm { nameTyp = ty }
-    aux _ = Nothing
+    aux :: GName (Maybe SrcTy) -> Maybe (String, GName Ty)
+    aux nm | Just (SrcInject ty) <- nameTyp nm =
+      Just (name nm, nm { nameTyp = ty })
+    aux _ =
+      Nothing
 
 {-------------------------------------------------------------------------------
   Example
@@ -569,7 +571,7 @@ _test' = do
                     (mkEnv      [])
                     (mkCEnv     [])
                     sym
-                    InternalTypeChecking
+                    TopLevelErrCtx
                     emptyTcMState
       putStrLn (replicate 80 '-')
       case mc of

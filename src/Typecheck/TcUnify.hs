@@ -35,6 +35,7 @@ module TcUnify (
     -- * Defaulting
   , defaultTy
   , defaultComp
+  , defaultProg
     -- * Instantiation
   , instantiateCall
   ) where
@@ -45,6 +46,7 @@ import Text.Parsec.Pos (SourcePos)
 import Text.PrettyPrint.HughesPJ
 import qualified Data.Map as M
 import qualified Data.Set as S
+import qualified Data.Traversable as Traversable
 
 import AstComp
 import AstExpr
@@ -53,7 +55,6 @@ import Outputable
 import PpComp ()
 import PpExpr ()
 import TcMonad
-import TcErrors
 
 {-------------------------------------------------------------------------------
   Public API
@@ -62,7 +63,7 @@ import TcErrors
 unify :: Unify a => Maybe SourcePos -> a -> a -> TcM ()
 unify p a b = do
   ctx <- getErrCtx
-  pushErrCtx (UnifyErrCtx (ppr a) (ppr b) ctx) $ unify' p a b
+  pushErrCtx (UnifyErrCtx a b ctx) $ unify' p a b
 
 unifyAll :: Unify a => Maybe SourcePos -> [a] -> TcM ()
 unifyAll p = go
@@ -275,6 +276,14 @@ defaultExpr = mapExpM zonk return go
 
 defaultComp :: Comp -> TcM Comp
 defaultComp = mapCompM zonk zonk return return defaultExpr return
+
+defaultProg :: Prog -> TcM Prog
+defaultProg (MkProg globs comp) = do
+  globs' <- forM globs $ \(nm, mexp) -> do
+              mexp' <- Traversable.mapM defaultExpr mexp
+              return (nm, mexp')
+  comp'  <- defaultComp comp
+  return $ MkProg globs' comp'
 
 {-------------------------------------------------------------------------------
   Instantiation (of polymorphic functions)

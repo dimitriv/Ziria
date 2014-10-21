@@ -36,14 +36,13 @@ import Control.Monad.State
 import Opts
 import Utils
 
-import qualified TcMonad as TcM 
-import TcErrors (ErrCtx(InternalTypeChecking))
+import qualified TcMonad as TcM
 
 import Debug.Trace
 
 
-mitigateUp :: Maybe SourcePos 
-           -> String 
+mitigateUp :: Maybe SourcePos
+           -> String
            -> Ty -> Int -> Int -> FreeComp ()
 mitigateUp loc _orig ty lo hi
   = let ya_ty = TArray (Literal hi) ty
@@ -51,15 +50,15 @@ mitigateUp loc _orig ty lo hi
         bnd   = vint (hi `div` lo)
         vlo   = vint lo
     in do { ya <- fLetERef (Right ya_ty)
-          ; fRepeat Nothing $ 
-            fTimes AutoUnroll (vint 0) bnd $ \i -> 
+          ; fRepeat Nothing $
+            fTimes AutoUnroll (vint 0) bnd $ \i ->
                  do { x <- fBind (fTake1 `returning` xa_ty)
-                    ; fReturn ForceInline $ 
-                      if lo == 1 
+                    ; fReturn ForceInline $
+                      if lo == 1
                       then ya .! i .:= x
                       else ya .! (i .* vlo, lo) .:= x
                                -- yikes I have to use both vlo and lo
-                    } 
+                    }
           }
 
 mitigateDn :: Maybe SourcePos
@@ -70,7 +69,7 @@ mitigateDn loc _orig ty hi lo
         bnd   = vint $ hi `div` lo     -- yikes I have to do vint
         vlo   = vint $ lo              -- yikes I have to do vint
     in  do { x <- fBind (fTake1 `returning` xa_ty)
-           ; if lo == 1 
+           ; if lo == 1
              then fEmits x
              else fTimes AutoUnroll (vint 0) bnd $ \i ->
                   fEmit (x .! (i .* vlo, lo))
@@ -83,11 +82,11 @@ compileMitigs :: GS.Sym -> Comp -> IO Comp
 -- better to compile directly in terms of tick and process.
 compileMitigs sym comp
   = mapCompM return return return return return compile comp
-  where 
+  where
     compile c
       | MkComp c0 loc _ <- c
       , Mitigate ty i1 i2 <- c0
-      = tcSplice sym $ 
+      = tcSplice sym $
         if i1 <= i2
         then mitigateUp loc "compiled" ty i1 i2
         else mitigateDn loc "compiled" ty i1 i2
@@ -98,11 +97,11 @@ compileMitigs sym comp
 tcSplice :: GS.Sym -> FreeComp () -> IO Comp
 tcSplice sym fcomp
   = do { mc <- TcM.runTcM (unFreeComp Nothing fcomp)
-                          (TcM.mkTyDefEnv []) 
+                          (TcM.mkTyDefEnv [])
                           (TcM.mkEnv [])
-                          (TcM.mkCEnv []) 
-                          sym 
-                          InternalTypeChecking 
+                          (TcM.mkCEnv [])
+                          sym
+                          TcM.TopLevelErrCtx
                           TcM.emptyTcMState
        ; case mc of
            Left err      -> panic err

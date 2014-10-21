@@ -330,7 +330,7 @@ instance Outputable t => Outputable (Maybe (GCTy t)) where
   Show instances
 -------------------------------------------------------------------------------}
 
-instance Outputable ty => Show (GCTy ty) where show = render . ppr
+instance Outputable ty => Show (GCTy ty)       where show = render . ppr
 
 instance (Outputable tc, Outputable t) => Show (GComp tc t a b) where show = render . ppr
 instance (Outputable tc, Outputable t) => Show (GProg tc t a b) where show = render . ppr

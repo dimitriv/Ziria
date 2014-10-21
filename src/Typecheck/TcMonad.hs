@@ -27,7 +27,7 @@
 --   it might mean we might tell the user "cannot unify Foo with Baz" while
 --   we should really say "cannot unify Foo with Bar or Baz"
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleInstances, ExistentialQuantification, RecordWildCards #-}
 module TcMonad (
     -- * TcM monad
     TcM -- opaque
@@ -44,11 +44,13 @@ module TcMonad (
     -- ** Expression variable binding environment
   , Env
   , mkEnv
+  , getEnv
   , lookupEnv
   , extendEnv
     -- ** Computation variable binding environment
   , CEnv
   , mkCEnv
+  , getCEnv
   , lookupCEnv
   , extendCEnv
     -- ** Type variable environment (substitutions)
@@ -82,14 +84,23 @@ module TcMonad (
   , freshCTy
   , freshNumExpr
   , freshBitWidth
-    -- * Interaction with the renamer
-  , liftRenM
     -- * Working with types
     -- ** Zonking
   , Zonk(..)
     -- ** Collecting type variables
   , tyVarsOfTy
   , tyVarsOfCTy
+    -- * Error handling
+  , ErrCtx(..)
+  , TyErr(TyErr)
+  , ppTyErr
+  , expActualErr
+  , nonFullAppErr
+  , expectedButFound
+    -- * Debugging
+  , dumpTypeSubstitutions
+    -- * Re-exports for convenience
+  , liftIO
   ) where
 
 import Prelude hiding (exp)
@@ -102,13 +113,13 @@ import Text.Parsec.Pos
 import Text.PrettyPrint.HughesPJ
 import qualified Data.Map as M
 import qualified Data.Set as S
+import qualified Data.Traversable as Traversable
 
 import AstComp
 import AstExpr
 import Outputable
 import PpExpr (ppName)
-import TcErrors
-import Rename (RenM, runRenM)
+import PpComp ()
 import qualified GenSym as GS
 
 {-------------------------------------------------------------------------------
@@ -122,6 +133,7 @@ data TcMEnv = TcMEnv {
   , tcm_sym      :: GS.Sym
   , tcm_errctx   :: ErrCtx
   }
+  deriving Show
 
 data TcMState = TcMState {
     tcm_tyenv    :: TyEnv
@@ -129,6 +141,7 @@ data TcMState = TcMState {
   , tcm_alenenv  :: ALenEnv
   , tcm_bwenv    :: BWEnv
   }
+  deriving Show
 
 newtype TcM a = TcM {
     unTcM :: ReaderT TcMEnv (StateT TcMState (ErrorT Doc IO)) a
@@ -193,58 +206,56 @@ lookupTDefEnv :: String -> Maybe SourcePos -> TcM StructDef
 lookupTDefEnv s pos = getTDefEnv >>= lookupTcM s pos msg
   where msg = text "Unbound type definition:" <+> text s
 
-extendTDefEnv :: [(String,StructDef)] -> TcM a -> TcM a
-extendTDefEnv binds = local $ \env -> env {
+extendTDefEnv :: StructDef -> TcM a -> TcM a
+extendTDefEnv sdef = local $ \env -> env {
       tcm_tydefenv = updBinds binds (tcm_tydefenv env)
     }
+  where
+    binds = [(struct_name sdef, sdef)]
 
 {-------------------------------------------------------------------------------
   Expression variable binding environment
 -------------------------------------------------------------------------------}
 
---- maps program variables to types
-type Env = M.Map String Ty
+-- | maps program variables to their binding occurrences
+type Env = M.Map String (GName Ty)
 
-mkEnv :: [(String,Ty)] -> Env
+mkEnv :: [(String, GName Ty)] -> Env
 mkEnv = M.fromList
 
 getEnv :: TcM Env
 getEnv = asks tcm_env
 
-lookupEnv :: String -> Maybe SourcePos -> TcM Ty
-lookupEnv s pos = getEnv >>= lookupTcM s pos msg
+lookupEnv :: String -> Maybe SourcePos -> TcM (GName Ty)
+lookupEnv s pos = do env <- getEnv ; lookupTcM s pos msg env
   where msg = text "Unbound variable:" <+> text s
 
-extendEnv :: [GName Ty] -> TcM a -> TcM a
+extendEnv :: [(String, GName Ty)] -> TcM a -> TcM a
 extendEnv binds = local $ \env -> env {
-      tcm_env = updBinds binds' (tcm_env env)
+      tcm_env = updBinds binds (tcm_env env)
     }
-  where
-    binds' = map (\nm -> (name nm, nameTyp nm)) binds
 
 {-------------------------------------------------------------------------------
   Computation variable binding environment
 -------------------------------------------------------------------------------}
 
--- maps computation variables to computation types
-type CEnv = M.Map String CTy
+-- maps computation variables to their binding occurrences
+type CEnv = M.Map String (GName CTy)
 
-mkCEnv :: [(String,CTy)] -> CEnv
+mkCEnv :: [(String, GName CTy)] -> CEnv
 mkCEnv = M.fromList
 
 getCEnv :: TcM CEnv
 getCEnv = asks tcm_cenv
 
-lookupCEnv :: String -> Maybe SourcePos -> TcM CTy
-lookupCEnv s pos = getCEnv >>= lookupTcM s pos msg
-  where msg = text "Unbound computation variable:" <+> text s
+lookupCEnv :: String -> Maybe SourcePos -> TcM (GName CTy)
+lookupCEnv s pos = do env <- getCEnv ; lookupTcM s pos msg env
+  where msg = text "Unbound computation variable:" <+> ppr s
 
-extendCEnv :: [GName CTy] -> TcM a -> TcM a
+extendCEnv :: [(String, GName CTy)] -> TcM a -> TcM a
 extendCEnv binds = local $ \env -> env {
-      tcm_cenv = updBinds binds' (tcm_cenv env)
+      tcm_cenv = updBinds binds (tcm_cenv env)
     }
-  where
-    binds' = map (\nm -> (name nm, nameTyp nm)) binds
 
 {-------------------------------------------------------------------------------
   Type variable environment (substitutions)
@@ -346,21 +357,17 @@ raiseErr print_vartypes p msg = do
     ppVarTypes _ _
       = return empty
 
-    -- Since error contexts are _source_ level terms, they carry source types
-    --
-    pp_cvar :: GName (Maybe (GCTy SrcTy)) -> TcM Doc
+    pp_cvar :: GName CTy -> TcM Doc
     pp_cvar v = do
-      cty  <- lookupCEnv (name v) p
-      zcty <- zonk cty
+      zcty <- zonk (nameTyp v)
       return $ ppName v <+> colon <+> ppr zcty
 
-    pp_var :: GName (Maybe SrcTy) -> TcM Doc
+    pp_var :: GName Ty -> TcM Doc
     pp_var v = do
-      ty  <- lookupEnv (name v) p
-      zty <- zonk ty
+      zty <- zonk (nameTyp v)
       return $ ppName v <+> colon <+> ppr zty
 
-    pp_vars :: ([GName (Maybe (GCTy SrcTy))], [GName (Maybe SrcTy)]) -> TcM Doc
+    pp_vars :: ([GName CTy], [GName Ty]) -> TcM Doc
     pp_vars (cvars, vars)
      = do { cdocs <- mapM pp_cvar cvars
           ; docs  <- mapM pp_var  vars
@@ -510,6 +517,15 @@ instance Zonk t => Zonk (GExp t a) where
 instance (Zonk tc, Zonk t) => Zonk (GComp tc t a b) where
   zonk = mapCompM zonk zonk return return zonk return
 
+instance (Zonk tc, Zonk t) => Zonk (GProg tc t a b) where
+  zonk (MkProg globs comp) = do
+    globs' <- forM globs $ \(nm, mexp) -> do
+                nm'   <- mapNameM zonk nm
+                mexp' <- Traversable.mapM zonk mexp
+                return (nm', mexp')
+    comp'  <- zonk comp
+    return $ MkProg globs' comp'
+
 {-------------------------------------------------------------------------------
   Collecting type variables
 -------------------------------------------------------------------------------}
@@ -541,14 +557,98 @@ tvs_args :: [CallArg Ty CTy] -> (S.Set TyVar, S.Set CTyVar)
 tvs_args = unionsPair . map tvs_arg
 
 {-------------------------------------------------------------------------------
-  Interaction with the renamer
+  Error handling
 -------------------------------------------------------------------------------}
 
--- | Lift the renamer monad to the TcM
-liftRenM :: RenM a -> TcM a
-liftRenM ren = do
-  sym <- getSym
-  liftIO $ runRenM sym ren
+-- | Error contexts
+--
+-- Error contexts are used to show in what "context" a type error arose.
+--
+-- NOTE: It is important in LintErrCtx and UnifyErrCtx that we don't translate
+-- to a Doc too soon: we want to be able to zonk _at the moment_ that we show
+-- the type error.
+data ErrCtx =
+    -- | Type checking (or linting) a computation
+    forall a b. CompErrCtx (GComp CTy Ty a b)
+
+    -- | Type checking (or linting) an expression
+  | forall a. ExprErrCtx (GExp Ty a)
+
+    -- | Unification context
+    --
+    -- This one is recursive, so that we can show something like
+    --
+    -- > cannot unify t and t'
+    -- > when trying to unify <larger type involving t> and <larger type involving t'>
+    -- > when trying to type check <some expression or computation>
+  | forall a. Zonk a => UnifyErrCtx a a ErrCtx
+
+    -- | Used on the initial call to the type checker
+  | TopLevelErrCtx
+
+instance Show ErrCtx where
+  show = render . pp_ctxt
+
+data TyErr
+  = TyErr { err_ctxt     :: ErrCtx
+          , err_pos      :: Maybe SourcePos
+          , err_msg      :: Doc
+          , err_var_ctxt :: Doc }
+
+ppTyErr :: TyErr -> Doc
+ppTyErr TyErr{..}
+  = vcat [ err_msg
+         , pp_ctxt err_ctxt
+         , text "At location:" <+>
+           text (maybe "BUG: Unknown location!" show err_pos)
+         , err_var_ctxt
+         ]
+
+pp_ctxt :: ErrCtx -> Doc
+pp_ctxt (CompErrCtx c)
+  = vcat [ text "When type checking computation:"
+         , nest 2 $ ppr c ]
+pp_ctxt (ExprErrCtx e)
+  = vcat [ text "When type checking expression:"
+         , nest 2 $ ppr e ]
+pp_ctxt (UnifyErrCtx a b ctxt)
+  = vcat [ text "When unifying:"
+         , nest 2 $ ppr a <+> text "and" <+> ppr b
+         , pp_ctxt ctxt
+         ]
+pp_ctxt TopLevelErrCtx
+  = text "" -- Not particularly helpful
+
+
+
+expActualErr :: Outputable a => Ty -> Ty -> a -> Doc
+expActualErr exp_ty actual_ty exp
+  = vcat [ text "Couldn't match expected type:" <+> ppr exp_ty
+         , text "with actual type:            " <+> ppr actual_ty
+         , text "for expression:" <+> ppr exp ]
+
+nonFullAppErr :: SrcComp -> Doc
+nonFullAppErr comp
+  = vcat [ text "Computer/transformer not fully applied:"
+         , nest 2 $ ppr comp
+         ]
+
+expectedButFound :: String -> String -> SrcComp -> Doc
+expectedButFound expected found c
+  = vcat [ text "Expected" <+> text expected
+                           <+> text "but found"
+                           <+> text found <> colon
+         , nest 2 $ ppr c
+         ]
+
+{-------------------------------------------------------------------------------
+  Debugging
+-------------------------------------------------------------------------------}
+
+dumpTypeSubstitutions :: TcM ()
+dumpTypeSubstitutions = do
+  st <- get
+  liftIO $ print st
 
 {-------------------------------------------------------------------------------
   Auxiliary

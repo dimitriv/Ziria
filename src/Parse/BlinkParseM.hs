@@ -49,7 +49,7 @@ import Text.Parsec
 import Text.Parsec.Expr
 
 import AstExpr (GName, SrcTy)
-import AstComp (CallArg, GCTy)
+import AstComp (CallArg, SrcCTy)
 
 {-------------------------------------------------------------------------------
   The Blink parser monad
@@ -67,8 +67,8 @@ type BlinkParseState = ()
 -- applications: we map (comp) function names to their list of arguments. The
 -- parser uses this to select the expr parser or the comp parser, depending on
 -- the type of the argument.
-type ParseCompEnv = [( GName (Maybe (GCTy SrcTy))
-                     , [GName (CallArg (Maybe SrcTy) (Maybe (GCTy SrcTy)))]
+type ParseCompEnv = [( GName (Maybe SrcCTy)
+                     , [GName (CallArg (Maybe SrcTy) (Maybe SrcCTy))]
                      )]
 
 -- | The parser monad

@@ -33,7 +33,6 @@ import Text.Parsec.Pos (SourcePos)
 import AstComp
 import AstExpr
 import Outputable
-import TcErrors
 import TcMonad
 import TcUnify
 
@@ -41,27 +40,17 @@ import TcUnify
   Top-level API
 -------------------------------------------------------------------------------}
 
-zonkLint :: Lint a => a -> TcM a
-zonkLint e = lint e >> zonk e
-
 class Zonk a => Lint a where
-  lint :: a -> TcM ()
+  lint :: a -> TcM a
+
+instance Lint (GProg CTy Ty a b) where
+  lint prog = lintProg prog >> zonk prog
 
 instance Lint (GComp CTy Ty a b) where
-  lint comp = do
-    ctx <- getErrCtx
-    -- Don't override a type checking context
-    void $ case ctx of
-      CompErrCtx _ -> lintComp comp
-      _            -> pushErrCtx (LintErrCtx (ppr comp)) $ lintComp comp
+  lint comp = lintComp comp >> zonk comp
 
 instance Lint (GExp Ty a) where
-  lint expr = do
-    ctx <- getErrCtx
-    -- Don't override a type checking context
-    void $ case ctx of
-      ExprErrCtx _ -> lintExp expr
-      _            -> pushErrCtx (LintErrCtx (ppr expr)) $ lintExp expr
+  lint expr = lintExp expr >> zonk expr
 
 {-------------------------------------------------------------------------------
   The linter proper
@@ -169,7 +158,8 @@ lintBinOp loc bop = \argTy1 argTy2 -> do
     mismatch = text "Binary operator type mismatch:" <+> ppr bop
 
 lintExp :: GExp Ty a -> TcM Ty
-lintExp (MkExp exp0 loc _) = go exp0
+lintExp expr@(MkExp exp0 loc _) =
+    pushErrCtx (ExprErrCtx expr) $ go exp0
   where
     go :: GExp0 Ty a -> TcM Ty
     go (EVal ty val) = do
@@ -307,12 +297,14 @@ lintExp (MkExp exp0 loc _) = go exp0
                 text ("Unknown field " ++ fld ++ " projected out of type " ++ nm)
             Just fty ->
               return fty
-        _other ->
+        _other -> do
+          dumpTypeSubstitutions
           raiseErrNoVarCtx loc $
             text "Field projection from non-struct type: " <+> ppr eTy
 
 lintComp :: GComp CTy Ty a b -> TcM CTy
-lintComp (MkComp comp0 loc _) = go comp0
+lintComp comp@(MkComp comp0 loc _) =
+    pushErrCtx (CompErrCtx comp) $ go comp0
   where
     go :: GComp0 CTy Ty a b -> TcM CTy
     go (Var c) =
@@ -320,17 +312,18 @@ lintComp (MkComp comp0 loc _) = go comp0
     go (BindMany c []) =
       lintComp c
     go (BindMany c ((x, c'):cs)) = do
+      -- Order here matters. See Note [Type checking order]
       cty1 <- lintComp c
-      cty2 <- go (BindMany c' cs)
       (_, a, b) <- unifyComp loc (Check (nameTyp x)) Infer Infer cty1
+      cty2 <- go (BindMany c' cs)
       void $ unifyCompOrTrans loc (Check a) (Check b) cty2
       return cty2
     go (Seq c1 c2) = do
       cty1 <- lintComp c1
-      cty2 <- lintComp c2
       -- TODO: We might want to insist that c1 returns unit here
       --                         vvvvv
       (_, a, b) <- unifyComp loc Infer Infer Infer cty1
+      cty2 <- lintComp c2
       void $ unifyCompOrTrans loc (Check a) (Check b) cty2
       return cty2
     go (Par _pi c1 c2) = do
@@ -371,7 +364,7 @@ lintComp (MkComp comp0 loc _) = go comp0
       void $ lintFun fun
       lintComp c
     go (LetFunC f args locals body rhs) = do
-      lintLocals loc locals
+      lintLocals locals
       res <- lintComp body
       unify loc (nameTyp f) $ CTArrow (map nameTyp args) res
       lintComp rhs
@@ -469,7 +462,7 @@ lintFun (MkFun fun0 loc _) = go fun0
   where
     go :: GFun0 Ty a -> TcM Ty
     go (MkFunDefined f args locals body) = do
-      lintLocals loc locals
+      lintLocals locals
       res <- lintExp body
       unify loc (nameTyp f) $ TArrow (map nameTyp args) res
       return (nameTyp f)
@@ -477,12 +470,12 @@ lintFun (MkFun fun0 loc _) = go fun0
       unify loc (nameTyp f) $ TArrow (map nameTyp args) res
       return (nameTyp f)
 
-lintLocals :: Maybe SourcePos -> [(GName Ty, Maybe (GExp Ty a))] -> TcM ()
-lintLocals loc = mapM_ (uncurry go)
+lintLocals :: [(GName Ty, Maybe (GExp Ty a))] -> TcM ()
+lintLocals = mapM_ (uncurry go)
   where
     go :: GName Ty -> Maybe (GExp Ty a) -> TcM ()
     go _ Nothing  = return ()
-    go x (Just e) = unify loc (nameTyp x) =<< lintExp e
+    go x (Just e) = unify (nameLoc x) (nameTyp x) =<< lintExp e
 
 lintMitigator :: Maybe SourcePos -> Ty -> Int -> Int -> TcM CTy
 lintMitigator loc a n1 n2 = do
@@ -496,9 +489,57 @@ lintMitigator loc a n1 n2 = do
     toArray 1 = a
     toArray n = TArray (Literal n) a
 
+lintProg :: GProg CTy Ty a b -> TcM CTy
+lintProg (MkProg globs comp) = do
+   lintLocals globs
+   lintComp comp
+
 {-------------------------------------------------------------------------------
   Auxiliary
 -------------------------------------------------------------------------------}
 
 divides :: Int -> Int -> Bool
 n `divides` m = m `mod` n == 0
+
+{-------------------------------------------------------------------------------
+  Note [Order of type checking]
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  In an ideal world the order of type checking would not matter. We would just
+  create unification constraints and solve them in an arbitrary order. Sadly,
+  the world is not ideal. For example, when we a field projection out of a
+  struct
+
+  > x.foo
+
+  or when we add two scalars
+
+  > x + y
+
+  or in a number of other cases, we cannot create a unification constraint, but
+  instead need to know the type of the variable _now_. For example, in
+  EProj we do
+
+  > go (EProj e fld) = do
+  >   eTy <- zonk =<< lintExp e
+  >   -- Since structs can share field names, we cannot infer a type here
+  >   case eTy of
+  >     TStruct nm flds -> ...
+  >     _ -> raiseErrNoVarCtx ...
+
+  this means that we need to make sure to collect as many constraints about 'e'
+  as possible _before_ type checking the projection. For example, consider
+  type checking
+
+  > d <- foo ()
+  > emit d.foo
+
+  If in the case for 'bind' we check the continuation before unifying the type
+  of the bound variable with the result type of the first computation, then
+  at the point where we have to typecheck @d.foo@ we will not yet know the
+  type of @d@ and hence we will give an error message such as
+
+  > Field projection from non-struct type:  ?a17
+  > When type checking expression:
+  >   d.data
+-------------------------------------------------------------------------------}
