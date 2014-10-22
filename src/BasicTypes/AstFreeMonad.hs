@@ -681,5 +681,5 @@ _test2 tmp_idx is_empty in_buff in_buff_idx finalin n0 = fLiftSrc (mkTyDefEnv []
                    }
          else error "rewrite_take: unaligned";
        };
-    return in_buff[tmp_idx,n0];
+    return [forceinline] in_buff[tmp_idx,n0];
   }|]
