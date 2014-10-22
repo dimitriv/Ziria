@@ -665,25 +665,21 @@ _test1 tmp_idx is_empty in_buff in_buff_idx finalin n0 = do
 
 _test2 :: GName Ty -> GName Ty -> GName Ty -> GName Ty -> Integer -> Integer -> FreeComp ()
 _test2 tmp_idx is_empty in_buff in_buff_idx finalin n0 = fLiftSrc (mkTyDefEnv []) [zcomp| {
-    if is_empty == true
-      then { x <- take
-           ; do { in_buff     := x
-                ; is_empty    := false
-                ; in_buff_idx := 0
-                }
-           }
-      else return ()
-  ; if finalin == in_buff_idx + n0
-      then do { is_empty := true
-              ; return in_buff[tmp_idx, n0]
+    if is_empty == true 
+    then { x <- take
+         ; do { in_buff     := x
+              ; is_empty    := false
+              ; in_buff_idx := 0
               }
-      else if in_buff_idx + n0 < finalin
-        then do { tmp_idx     := in_buff_idx
-                ; in_buff_idx := in_buff_idx + n0
-                ; return in_buff[tmp_idx, n0]
-                }
-        else do { error "rewrite_take: unaligned"
-                ; return in_buff[0, n0]
-                }
-  }
-  |]
+         }
+    else return ();
+    do { if finalin == in_buff_idx + n0
+         then is_empty := true
+         else if in_buff_idx + n0 < finalin
+              then { tmp_idx     := in_buff_idx
+                   ; in_buff_idx := in_buff_idx + n0
+                   }
+         else error "rewrite_take: unaligned";
+       };
+    return in_buff[tmp_idx,n0];
+  }|]

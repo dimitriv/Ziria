@@ -106,6 +106,8 @@ blinkStyle =
         "let", "comp", "in", "if", "then", "else", "read", "write"
       , "emit", "emits", "take", "takes", "while", "times", "repeat"
       , "until", "seq", "do", "external", "map", "filter", "fun"
+      , "forceinline", "autoinline", "noinline"
+
 
         -- Expression language keywords
       , "return", "length", "bperm", "for", "lut", "print", "unroll", "nounroll"

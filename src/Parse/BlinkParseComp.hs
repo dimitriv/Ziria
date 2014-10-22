@@ -134,7 +134,7 @@ parseComp =
 --
 -- > term ::=
 -- >     "(" <comp> ")"
--- >   | "return" <expr>"
+-- >   | "return" <inl-ann>? <expr>"
 -- >   | "emit" <expr>
 -- >   | "emits" <expr>
 -- >   | "takes" <expr>
@@ -154,7 +154,7 @@ parseCompTerm :: BlinkParser SrcComp
 parseCompTerm = choice
     [ parens parseComp
 
-    , withPos cReturn'  <* reserved "return" <*> parseExpr
+    , withPos cReturn'  <* reserved "return" <*> optInlAnn <*> parseExpr
     , withPos cEmit'    <* reserved "emit"   <*> parseExpr
     , withPos cEmits'   <* reserved "emits"  <*> parseExpr
     , join $ withPos cTake' <* reserved "takes"  <*> parseExpr
@@ -169,12 +169,15 @@ parseCompTerm = choice
     , withPos cBranch <* reserved "if"   <*> parseExpr
                       <* reserved "then" <*> parseComp
                       <* reserved "else" <*> parseComp
-    , withPos cLetDecl <*> parseLetDecl `bindExtend` \f -> f <$ reserved "in" <*> parseComp
-    , withPos cReturn' <* reservedOp "do" <*> parseStmtBlock
+    , withPos cLetDecl <*> parseLetDecl `bindExtend` \f -> 
+                          f <$ reserved "in" <*> parseComp
+    , withPos cReturn' <* reservedOp "do" <*> 
+                          return AutoInline <*> 
+                          parseStmtBlock
     , optional (reserved "seq") >> braces parseCommands
     ] <?> "computation"
   where
-    cReturn' p = cReturn p Nothing Nothing AutoInline
+    cReturn' p = cReturn p Nothing Nothing
     cEmit'   p = cEmit   p Nothing
     cEmits'  p = cEmits  p Nothing
     cTake1'  p = cTake1  p Nothing Nothing
@@ -459,6 +462,17 @@ parseVectAnn =
     mkVectAnn Nothing   = uncurry Rigid
     mkVectAnn (Just ()) = uncurry UpTo
 
+-- | Inlining annotation
+--
+-- > <inl-ann> ::= "forceinline" | "autoinline" | "noinline" 
+parseInlAnn :: BlinkParser ForceInline
+parseInlAnn = brackets parse_inl_ann
+  where parse_inl_ann 
+          = choice [ try $ reserved "forceinline" >> return ForceInline
+                   , try $ reserved "autoinline"  >> return AutoInline
+                   , try $ reserved "noinline"    >> return NoInline
+                   ] <?> "inline annotation"
+
 -- | Parses just the @[(i,j)]@ annotation
 parseVectAnnFlag :: BlinkParser (Bool, (Int, Int))
 parseVectAnnFlag =
@@ -478,6 +492,10 @@ parseRange = brackets $ mkRange <$> integer <* comma <*> integer
 -- | Shorthand for @<vect-ann>?@
 optVectAnn :: BlinkParser (Maybe VectAnn)
 optVectAnn = optionMaybe parseVectAnn
+
+-- | Shorthand for @<inl-ann>?@
+optInlAnn :: BlinkParser ForceInline
+optInlAnn = maybe AutoInline id <$> optionMaybe parseInlAnn
 
 -- > <comp-ann> ::= "comp" <range>?
 parseCompAnn :: BlinkParser (Maybe (Int, Int))
