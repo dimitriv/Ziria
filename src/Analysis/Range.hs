@@ -40,6 +40,7 @@ import qualified Data.Map as Map
 
 import AstExpr
 import CtExpr
+import Utils
 
 {-------------------------------------------------------------------------------
   Definition of the Range
@@ -143,6 +144,7 @@ arrIdxRange rs = \e len -> liftM fst $ runR (RState rs) (go e len)
           Range l h -> return $ Range (l*k') (h*k'+k'-1)
 
     go _ (LILength _) = return RangeTop
+    go _ (LIMeta   _) = panicStr "arrIdxRange: meta-variable"
 
 {-------------------------------------------------------------------------------
   The range analysis proper

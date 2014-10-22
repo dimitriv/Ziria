@@ -193,6 +193,8 @@ lintExp expr@(MkExp exp0 loc _) =
       case li of
         LISingleton -> unify loc rhsTy a
         LILength m  -> void $ unifyTArray loc (Check (Literal m)) (Check a) rhsTy
+        LIMeta x    -> raiseErrNoVarCtx loc $
+                         text "Unexpected meta-variable" <+> text (show x)
       return TUnit
     go (EArrRead arr idx li) = do
       arrTy <- lintExp arr
@@ -202,6 +204,8 @@ lintExp expr@(MkExp exp0 loc _) =
       case li of
         LISingleton -> return a
         LILength m  -> return $ TArray (Literal m) a
+        LIMeta   x  -> raiseErrNoVarCtx loc $
+                         text "Unexpected meta-variable" <+> text (show x)
     go (EIter ix x earr ebody) = do
       let ixTy = nameTyp ix
       let xTy  = nameTyp x

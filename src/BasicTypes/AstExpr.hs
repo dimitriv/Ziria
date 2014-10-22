@@ -243,6 +243,7 @@ data Val where
 data LengthInfo
      = LISingleton
      | LILength Int -- Invariant: > 0
+     | LIMeta String -- For meta-variables in quasi-quotes only
   deriving (Generic, Typeable, Data, Eq)
 
 data UnrollInfo
@@ -1014,8 +1015,7 @@ mutates_state e = case unExp e of
   EUnOp _ e'                   -> mutates_state e'
   EBinOp _ e1 e2               -> any mutates_state [e1,e2]
   EAssign _e1 _e2              -> True
-  EArrRead e1 e2 LISingleton   -> any mutates_state [e1,e2]
-  EArrRead e1 e2 (LILength {}) -> any mutates_state [e1,e2]
+  EArrRead e1 e2 _li           -> any mutates_state [e1,e2]
   EArrWrite _e1 _e2 _r _e3     -> True
   EIter _ _ e1 e2              -> any mutates_state [e1,e2]
   EFor _ _ e1 e2 e3            -> any mutates_state [e1,e2,e3]

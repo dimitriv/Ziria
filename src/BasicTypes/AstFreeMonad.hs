@@ -53,6 +53,7 @@ module AstFreeMonad (
     -- * Translation out of the free monad
   , unFreeExp
   , unFreeComp
+  , _test'
   ) where
 
 import Prelude
@@ -638,7 +639,7 @@ _test' = do
 _test1 :: GName Ty -> GName Ty -> GName Ty -> GName Ty -> Integer -> Integer -> FreeComp ()
 _test1 tmp_idx is_empty in_buff in_buff_idx finalin n0 = do
   if is_empty .= VBool True
-    then do x <- fBind (fTake1 `returning` tint32)
+    then do x <- fBind (fTake1 `returning` nameTyp in_buff) -- optional type annotation
             fReturn AutoInline $ do
               in_buff     .:= x
               is_empty    .:= VBool False
@@ -661,8 +662,6 @@ _test1 tmp_idx is_empty in_buff in_buff_idx finalin n0 = do
                    -- computer-level error function
                    _u <- fBind (fError "rewrite_take: unaligned!")
                    fReturn ForceInline $ in_buff .! (VInt 0, n0)
-  -- This wasn't in the original example. Just testing array assignment
-  fReturn AutoInline $ in_buff .! (in_buff_idx, n0) .:= VInt 123
 
 _test2 :: GName Ty -> GName Ty -> GName Ty -> GName Ty -> Integer -> Integer -> FreeComp ()
 _test2 tmp_idx is_empty in_buff in_buff_idx finalin n0 = fLiftSrc (mkTyDefEnv []) [zcomp| {
@@ -676,17 +675,15 @@ _test2 tmp_idx is_empty in_buff in_buff_idx finalin n0 = fLiftSrc (mkTyDefEnv []
       else return ()
   ; if finalin == in_buff_idx + n0
       then do { is_empty := true
-                -- NOTE: Cannot use n0 for the length
-                -- (source language does not accept variables for lengths)
-              ; return in_buff[tmp_idx,0]
+              ; return in_buff[tmp_idx, n0]
               }
       else if in_buff_idx + n0 < finalin
         then do { tmp_idx     := in_buff_idx
                 ; in_buff_idx := in_buff_idx + n0
-                ; return in_buff[tmp_idx,0]
+                ; return in_buff[tmp_idx, n0]
                 }
         else do { error "rewrite_take: unaligned"
-                ; return in_buff[0,0]
+                ; return in_buff[0, n0]
                 }
   }
   |]

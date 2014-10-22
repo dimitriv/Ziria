@@ -527,14 +527,15 @@ genIntervalParser = choice
 intervalParser :: BlinkParser (SrcExp, LengthInfo)
 intervalParser = choice
     [ try $ withPos mkStartTo <*> foldIntExpr <* colon <*> foldIntExpr
-    , mkStartLen <$> parseExpr <* comma <*> foldIntExpr
+    , mkStartLen <$> parseExpr <* comma <*> orMetaVar foldIntExpr
     ]
   where
     mkStartTo p from to =
        let len = to - from + 1
        in (eVal p Nothing (vint from), LILength len)
 
-    mkStartLen start len = (start, LILength len)
+    mkStartLen start (Left len) = (start, LILength len)
+    mkStartLen start (Right x)  = (start, LIMeta x)
 
 parseFor :: BlinkParser () -> BlinkParser UnrollInfo
 parseFor for_reserved = choice
@@ -546,6 +547,9 @@ parseFor for_reserved = choice
 {-------------------------------------------------------------------------------
   Utilities
 -------------------------------------------------------------------------------}
+
+orMetaVar :: BlinkParser a -> BlinkParser (Either a String)
+orMetaVar p = (Left <$> try p) <|> (Right <$> identifier)
 
 mkCall :: Maybe SourcePos -> String -> [SrcExp] -> SrcExp
 mkCall p fn args = eCall p (toName fn p Nothing) args

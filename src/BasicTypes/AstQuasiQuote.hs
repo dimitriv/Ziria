@@ -54,14 +54,23 @@ genericQQ src freeVars parser = QuasiQuoter {
         Right e  -> return e
 
     overrideExp :: a -> forall b. Data b => b -> Maybe ExpQ
-    overrideExp a = const Nothing `extQ` overrideMetaExp a
+    overrideExp a = const Nothing `extQ` overrideMetaExp fvs
+                                  `extQ` overrideMetaLI
+      where
+        fvs = Set.toList (freeVars a)
 
-    overrideMetaExp :: a -> SrcExp -> Maybe ExpQ
-    overrideMetaExp a = let fvs = Set.toList (freeVars a) in \e ->
+    overrideMetaExp :: [GName (Maybe SrcTy)] -> SrcExp -> Maybe ExpQ
+    overrideMetaExp fvs e =
       case unExp e of
         EVar nm | any (\nm' -> name nm == name nm') fvs ->
-          Just $ [| toSrcExp $(varE (mkName (name nm))) |]
+          Just [| toSrcExp $(varE (mkName (name nm))) |]
         _ -> Nothing
+
+    overrideMetaLI :: LengthInfo -> Maybe ExpQ
+    overrideMetaLI (LIMeta x) =
+      Just [| LILength (fromIntegral $(varE (mkName x))) |]
+    overrideMetaLI _ =
+      Nothing
 
 -- | Get current position in the source file, but in parsec format
 getPositionQ :: Q SourcePos

@@ -43,6 +43,7 @@ import CgRuntime
 import CgMonad
 import CgTypes
 import CgLUT
+import Utils
 
 import CtExpr 
 
@@ -79,6 +80,7 @@ cgBoundsCheck dflags loc arrty cbase linfo
           else let leninfo = case linfo of
                      LISingleton -> 0
                      LILength n  -> (n-1)
+                     LIMeta _    -> panicStr "cgBoundsCheck: meta-variable"
                    spos = getLnNumInStr loc
                in
                do { cnumexpr
