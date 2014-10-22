@@ -93,7 +93,7 @@ retByRef f locals body
    body_ty = ctExp body
    loc     = expLoc body
    retN    = toName ("__retf_" ++ (name f)) Nothing body_ty
-   retE    = eVar (expLoc body) retN 
+   retE    = eVar (expLoc body) retN
 
    -- precondition: 'e' returns an array type
    trans_body xs e
@@ -117,8 +117,8 @@ getClosureVars :: Fun -> Cg [(EId, C.Exp)]
 getClosureVars fdef
   = do { -- DV: What about length variables? Probably we don't need them
          -- here in accordance with Edsko's plan to just pass the actual
-         -- term variables. 
-       ; let closure_vars_def = S.toList $ fst $ funFVsClos fdef
+         -- term variables.  (#76)
+       ; let closure_vars_def = S.toList $ funFVsClos fdef
        ; let allVars = S.toList $ funFVs fdef
        ; call_fun_infos <- mapM lookupExpFunEnv_maybe allVars
 
@@ -147,7 +147,7 @@ cgFunDefined :: DynFlags
              -> Fun      -- The function definition
              -> Cg a     -- action for the body
              -> Cg a
-cgFunDefined dflags csp 
+cgFunDefined dflags csp
              fdef@(MkFun (MkFunDefined f params fun_locals orig_body) _ fTy)
              action
   = do { -- make up a new name for the function

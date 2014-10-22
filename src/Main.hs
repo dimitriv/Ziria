@@ -136,7 +136,7 @@ main = failOnException $ do
              cenv
              sym
              TopLevelErrCtx
-             emptyTcMState
+             emptyUnifier
 
     let in_ty  =  inTyOfCTy (ctComp c')
         yld_ty = yldTyOfCTy (ctComp c')

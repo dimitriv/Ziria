@@ -18,7 +18,7 @@
 -}
 -- TODOs:
 --
--- * We should remove TcMState from the public API completely, and keep it
+-- * We should remove Unifier from the public API completely, and keep it
 --   entirely internal
 -- * The section "working with types" feels like it belongs in a different
 --   module.
@@ -31,10 +31,13 @@
 module TcMonad (
     -- * TcM monad
     TcM -- opaque
-  , TcMState -- opaque.
   , runTcM
   , firstToSucceed
-  , emptyTcMState
+    -- * Unifiers
+  , Unifier(..)
+  , TyVars(..)
+  , emptyUnifier
+  , unifierDom
     -- * Environments
     -- ** Type definition environment
   , TyDefEnv
@@ -124,6 +127,26 @@ import PpComp ()
 import qualified GenSym as GS
 
 {-------------------------------------------------------------------------------
+  Unifier
+-------------------------------------------------------------------------------}
+
+data Unifier = Unifier {
+    tcm_tyenv    :: TyEnv
+  , tcm_ctyenv   :: CTyEnv
+  , tcm_alenenv  :: ALenEnv
+  , tcm_bwenv    :: BWEnv
+  }
+  deriving Show
+
+unifierDom :: Unifier -> TyVars
+unifierDom Unifier{..} = TyVars {
+      tyVarsTy  = M.keysSet tcm_tyenv
+    , tyVarsCTy = M.keysSet tcm_ctyenv
+    , tyVarsLen = M.keysSet tcm_alenenv
+    , tyVarsBW  = M.keysSet tcm_bwenv
+    }
+
+{-------------------------------------------------------------------------------
   The type checker monad
 -------------------------------------------------------------------------------}
 
@@ -136,23 +159,15 @@ data TcMEnv = TcMEnv {
   }
   deriving Show
 
-data TcMState = TcMState {
-    tcm_tyenv    :: TyEnv
-  , tcm_ctyenv   :: CTyEnv
-  , tcm_alenenv  :: ALenEnv
-  , tcm_bwenv    :: BWEnv
-  }
-  deriving Show
-
 newtype TcM a = TcM {
-    unTcM :: ReaderT TcMEnv (StateT TcMState (ErrorT Doc IO)) a
+    unTcM :: ReaderT TcMEnv (StateT Unifier (ErrorT Doc IO)) a
   }
   deriving ( Functor
            , Applicative
            , Monad
            , MonadIO
            , MonadError Doc
-           , MonadState TcMState
+           , MonadState Unifier
            , MonadReader TcMEnv
            )
 
@@ -166,8 +181,8 @@ runTcM :: TcM a
        -> CEnv
        -> GS.Sym
        -> ErrCtx
-       -> TcMState
-       -> IO (Either Doc (a, TcMState))
+       -> Unifier
+       -> IO (Either Doc (a, Unifier))
 runTcM act tenv env cenv sym ctx st =
     runErrorT (runStateT (runReaderT (unTcM act) readerEnv) st)
   where
@@ -182,8 +197,8 @@ runTcM act tenv env cenv sym ctx st =
 firstToSucceed :: TcM a -> TcM a -> TcM a
 firstToSucceed m1 m2 = get >>= \st -> catchError m1 (\_ -> put st >> m2)
 
-emptyTcMState :: TcMState
-emptyTcMState = TcMState {
+emptyUnifier :: Unifier
+emptyUnifier = Unifier {
       tcm_tyenv   = mkTyEnv   []
     , tcm_ctyenv  = mkCTyEnv  []
     , tcm_alenenv = mkALenEnv []
@@ -268,15 +283,15 @@ extendCEnv binds = local $ \env -> env {
 -------------------------------------------------------------------------------}
 
 -- maps type variables to types
-type TyEnv = M.Map String Ty
+type TyEnv = M.Map TyVar Ty
 
-mkTyEnv :: [(String,Ty)] -> TyEnv
+mkTyEnv :: [(TyVar, Ty)] -> TyEnv
 mkTyEnv = M.fromList
 
 getTyEnv :: TcM TyEnv
 getTyEnv = gets tcm_tyenv
 
-updTyEnv :: [(String,Ty)] -> TcM ()
+updTyEnv :: [(TyVar, Ty)] -> TcM ()
 updTyEnv binds = modify $ \st -> st {
       tcm_tyenv = updBinds binds (tcm_tyenv st)
     }
@@ -286,15 +301,15 @@ updTyEnv binds = modify $ \st -> st {
 -------------------------------------------------------------------------------}
 
 -- maps type variables to computation types
-type CTyEnv = M.Map String CTy
+type CTyEnv = M.Map CTyVar CTy
 
-mkCTyEnv :: [(String,CTy)] -> CTyEnv
+mkCTyEnv :: [(CTyVar, CTy)] -> CTyEnv
 mkCTyEnv = M.fromList
 
 getCTyEnv :: TcM CTyEnv
 getCTyEnv = gets tcm_ctyenv
 
-updCTyEnv :: [(String,CTy)] -> TcM ()
+updCTyEnv :: [(CTyVar, CTy)] -> TcM ()
 updCTyEnv binds = modify $ \st -> st {
       tcm_ctyenv = updBinds binds (tcm_ctyenv st)
     }

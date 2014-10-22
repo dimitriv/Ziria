@@ -27,6 +27,8 @@ import Control.Monad.State (State, execState, modify)
 import Data.Data (Data)
 import Data.Either (partitionEithers)
 import Data.Functor.Identity ( Identity (..) )
+import Data.Monoid
+import Data.Set (Set)
 import Data.Traversable (mapM)
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
@@ -622,7 +624,7 @@ eraseCallArg (CAComp c) = CAComp $ eraseComp c
   Free variables
 -------------------------------------------------------------------------------}
 
-type CompFVs tc t = (S.Set (GName tc), S.Set (GName t))
+type CompFVs tc t = (Set (GName tc), Set (GName t))
 
 -- | Compute the free variables in a computation
 --
@@ -698,11 +700,85 @@ callArgFVs (CAComp c) = compFVs c
 compFVs_all :: [GComp tc t a b] -> CompFVs tc t
 compFVs_all = (S.unions *** S.unions) . unzip . map compFVs
 
-compCFVs :: GComp tc t a b -> S.Set (GName tc)
+compCFVs :: GComp tc t a b -> Set (GName tc)
 compCFVs = fst . compFVs
 
-compEFVs :: GComp tc t a b -> S.Set (GName t)
+compEFVs :: GComp tc t a b -> Set (GName t)
 compEFVs = snd . compFVs
+
+{-------------------------------------------------------------------------------
+  Free _type_ variables
+-------------------------------------------------------------------------------}
+
+data TyVars = TyVars {
+    tyVarsTy  :: Set TyVar
+  , tyVarsCTy :: Set CTyVar
+  , tyVarsLen :: Set LenVar
+  , tyVarsBW  :: Set BWVar
+  }
+
+instance Monoid TyVars where
+  mempty        = TyVars { tyVarsTy  = S.empty
+                         , tyVarsCTy = S.empty
+                         , tyVarsLen = S.empty
+                         , tyVarsBW  = S.empty
+                         }
+  a `mappend` b = TyVars { tyVarsTy  = tyVarsTy  a `S.union` tyVarsTy  b
+                         , tyVarsCTy = tyVarsCTy a `S.union` tyVarsCTy b
+                         , tyVarsLen = tyVarsLen a `S.union` tyVarsLen b
+                         , tyVarsBW  = tyVarsBW  a `S.union` tyVarsBW  b
+                         }
+
+-- | Are two sets of type variables entirely disjoint
+tyVarsDisjoint :: TyVars -> TyVars -> Bool
+tyVarsDisjoint a b = and [
+      disjoint (tyVarsTy  a) (tyVarsTy  b)
+    , disjoint (tyVarsCTy a) (tyVarsCTy b)
+    , disjoint (tyVarsLen a) (tyVarsLen b)
+    , disjoint (tyVarsBW  a) (tyVarsBW  b)
+    ]
+  where
+    disjoint :: Ord a => Set a -> Set a -> Bool
+    disjoint xs ys = S.null (xs `S.intersection` ys)
+
+tyFVs :: Ty -> TyVars
+tyFVs (TVar x)            = mempty { tyVarsTy = S.singleton x }
+tyFVs TUnit               = mempty
+tyFVs TBit                = mempty
+tyFVs TBool               = mempty
+tyFVs TString             = mempty
+tyFVs (TArray n t)        = numExprFVs n `mappend` tyFVs t
+tyFVs (TInt bw)           = bitWidthFVs bw
+tyFVs TDouble             = mempty
+tyFVs (TStruct _ flds)    = mconcat (map (tyFVs . snd) flds)
+tyFVs (TInterval _)       = mempty
+tyFVs (TArrow args res)   = mconcat (map tyFVs (res:args))
+tyFVs (TBuff (IntBuf ty)) = tyFVs ty
+tyFVs (TBuff (ExtBuf ty)) = tyFVs ty
+
+ctyFVs :: CTy -> TyVars
+ctyFVs (CTVar x)          = mempty { tyVarsCTy = S.singleton x }
+ctyFVs (CTComp u a b)     = mconcat (map tyFVs [u, a, b])
+ctyFVs (CTTrans a b)      = mconcat (map tyFVs [a, b])
+ctyFVs (CTArrow args res) = mconcat (ctyFVs res : map caFVs args)
+  where
+    caFVs :: CallArg Ty CTy -> TyVars
+    caFVs = callArg tyFVs ctyFVs
+
+numExprFVs :: NumExpr -> TyVars
+numExprFVs (Literal _) = mempty
+numExprFVs (NVar x)    = mempty { tyVarsLen = S.singleton x }
+
+bitWidthFVs :: BitWidth -> TyVars
+bitWidthFVs BW8  = mempty
+bitWidthFVs BW16 = mempty
+bitWidthFVs BW32 = mempty
+bitWidthFVs BW64 = mempty
+bitWidthFVs (BWUnknown x) = mempty { tyVarsBW = S.singleton x }
+
+-- | Find all length variables in a set of types
+gatherPolyVars :: [Ty] -> [LenVar]
+gatherPolyVars = S.toList . tyVarsLen . mconcat . map tyFVs
 
 {-------------------------------------------------------------------------------
   Substitution

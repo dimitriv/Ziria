@@ -57,24 +57,27 @@ module AstFreeMonad (
 
 import Prelude
 import Control.Applicative
-import Control.Monad (liftM, ap, (>=>))
+import Control.Exception
+import Control.Monad hiding (forM_)
 import Data.Maybe (fromJust, catMaybes)
+import Data.Monoid
 import Data.Foldable (forM_)
 import Text.Parsec.Pos
-import qualified Data.Set as Set
+import qualified Data.Set as S
 
 import AstComp
 import AstExpr
 import AstUnlabelled
 import CtComp (ctComp)
 import CtExpr (ctExp)
+import Lint (lint)
 import Rebindables
-import Typecheck (tyCheckComp)
 import TcMonad
 import TcUnify (unify)
+import Typecheck (tyCheckComp)
+import qualified GenSym as GS
 
 -- Imports for the example only:
-import qualified GenSym as GS (initGenSym)
 import AstQuasiQuote (zcomp)
 
 {-------------------------------------------------------------------------------
@@ -381,14 +384,69 @@ emitting :: FreeComp () -> Ty -> FreeComp ()
 emitting c ty = FAnnot c Nothing Nothing (Just ty) (FPure ())
 
 {-------------------------------------------------------------------------------
-  Translate back to normal computations
+  Top-level entry point to the translation out of the free monad
 -------------------------------------------------------------------------------}
 
-unFreeExp :: Maybe SourcePos -> FreeExp () -> TcM Exp
-unFreeExp loc e = zonk =<< unEFree loc e
+-- | Translate out of the free expression monad
+--
+-- The snippet is translated and linted.
+--
+-- See remark for `unFreeComp` about independent type checking.
+unFreeExp :: GS.Sym -> FreeExp () -> IO Exp
+unFreeExp sym fexp = do
+    result <- runTcM (lint =<< unEFree Nothing fexp)
+                     (mkTyDefEnv [])
+                     (mkEnv [])
+                     (mkCEnv [])
+                     sym
+                     TopLevelErrCtx
+                     emptyUnifier
+    case result of
+      Left err ->
+        throwIO (userError (show err))
+      Right (final, unifiers) -> do
+        let efvs         = exprFVs final
+            tyVarsInEnv  = mconcat (map (tyFVs . nameTyp) (S.toList efvs))
+            udom         = unifierDom unifiers
+        unless (tyVarsInEnv `tyVarsDisjoint` udom) $
+          throwIO (userError ("Invalid type assumptions in snippet"))
+        return final
 
-unFreeComp :: Maybe SourcePos -> FreeComp () -> TcM Comp
-unFreeComp loc c = zonk =<< unFree loc c
+-- | Translate out of the free monad
+--
+-- The snippet is translated to a `Comp` and linted.
+--
+-- NOTE: If type checking the snippet may NOT require unificaiton of any of the
+-- type variables in the free term (expression or computation) variables. This
+-- guarantees that we can typecheck snippets independently. We verify this and
+-- throw an exception if this assumption is violated. (Such free type variables
+-- may exist because we might be rewriting in the body of a polymorphic
+-- function.)
+unFreeComp :: GS.Sym -> FreeComp () -> IO Comp
+unFreeComp sym fcomp = do
+    result <- runTcM (lint =<< unFree Nothing fcomp)
+                     (mkTyDefEnv [])
+                     (mkEnv [])
+                     (mkCEnv [])
+                     sym
+                     TopLevelErrCtx
+                     emptyUnifier
+    case result of
+      Left err ->
+        throwIO (userError (show err))
+      Right (final, unifiers) -> do
+        let (cfvs, efvs) = compFVs final
+            tyVarsInEnv  = mconcat (map (tyFVs . nameTyp) (S.toList efvs))
+                          `mappend`
+                           mconcat (map (ctyFVs  . nameTyp) (S.toList cfvs))
+            udom         = unifierDom unifiers
+        unless (tyVarsInEnv `tyVarsDisjoint` udom) $
+          throwIO (userError ("Invalid type assumptions in snippet"))
+        return final
+
+{-------------------------------------------------------------------------------
+  Translation out of the free monad
+-------------------------------------------------------------------------------}
 
 unEFree :: Maybe SourcePos -> FreeExp () -> TcM Exp
 unEFree loc = liftM fromJust . go
@@ -547,7 +605,7 @@ newName loc ty = do
 -- This environment is used by the renamer, which is indexing variables by their
 -- _name_, rather than by their uniqId.
 extractTypeEnv :: SrcComp -> [(String, GName Ty)]
-extractTypeEnv = catMaybes . map aux . Set.toList . compEFVs
+extractTypeEnv = catMaybes . map aux . S.toList . compEFVs
   where
     aux :: GName (Maybe SrcTy) -> Maybe (String, GName Ty)
     aux nm | Just (SrcInject ty) <- nameTyp nm =
@@ -573,17 +631,9 @@ _test' = do
       let c = test tmp_idx is_empty in_buff in_buff_idx 1 2
 
       sym <- GS.initGenSym ""
-      mc  <- runTcM (unFreeComp Nothing c)
-                    (mkTyDefEnv [])
-                    (mkEnv      [])
-                    (mkCEnv     [])
-                    sym
-                    TopLevelErrCtx
-                    emptyTcMState
+      c'  <- unFreeComp sym c
       putStrLn (replicate 80 '-')
-      case mc of
-        Left err      -> print err
-        Right (c', _) -> print c'
+      print c'
 
 _test1 :: GName Ty -> GName Ty -> GName Ty -> GName Ty -> Integer -> Integer -> FreeComp ()
 _test1 tmp_idx is_empty in_buff in_buff_idx finalin n0 = do

@@ -27,7 +27,6 @@ import Control.Monad (liftM, foldM, when)
 import Control.Monad.State (State, execState, modify)
 import Data.Data (Data)
 import Data.Functor.Identity ( Identity (..) )
-import Data.List (nub)
 import Data.Map (Map)
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
@@ -767,33 +766,16 @@ funFVs f = case unFun f of
   MkFunExternal _nm _params _ty -> S.empty
 
 -- | Find free variables in a function definition
---
--- NOTE: This is not polymorphic in the type because we also collect length
--- variables in the types of the function parameters and result type.
-funFVsClos :: GFun Ty a -> (S.Set (GName Ty), S.Set LenVar)
+funFVsClos :: GFun t a -> S.Set (GName t)
 funFVsClos f = case unFun f of
     MkFunDefined _nm params locals body ->
-      -- NB: important that we use foldr here instead of foldl
-      ( (foldr (\(nm,me) s ->
-                 let se = case me of
-                       Just e  -> S.union (exprFVsClos e) s
-                       Nothing -> s
-                 in se S.\\ (S.singleton nm)) (exprFVsClos body) locals) S.\\
-        (S.fromList params)
-      , S.fromList $ gatherPolyVars (map nameTyp params)
-      )
-    -- TODO: Can't externals have length variables in their types?
-    MkFunExternal _nm _params _ty -> (S.empty, S.empty)
-
--- | Find all length variables in a set of types
---
--- TODO: Shouldn't we check for length variables in nested array types?
-gatherPolyVars :: [Ty] -> [LenVar]
-gatherPolyVars = nub . gather []
-  where
-    gather acc []                       = acc
-    gather acc (TArray (NVar nm1) _:ts) = gather (nm1:acc) ts
-    gather acc (_                  :ts) = gather acc       ts
+      (foldr (\(nm,me) s ->
+               let se = case me of
+                     Just e  -> S.union (exprFVsClos e) s
+                     Nothing -> s
+               in se S.\\ (S.singleton nm)) (exprFVsClos body) locals) S.\\
+      (S.fromList params)
+    MkFunExternal _nm _params _ty -> S.empty
 
 {-------------------------------------------------------------------------------
   Substitutions

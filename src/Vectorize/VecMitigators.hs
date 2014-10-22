@@ -86,25 +86,9 @@ compileMitigs sym comp
     compile c
       | MkComp c0 loc _ <- c
       , Mitigate ty i1 i2 <- c0
-      = tcSplice sym $
+      = unFreeComp sym $
         if i1 <= i2
         then mitigateUp loc "compiled" ty i1 i2
         else mitigateDn loc "compiled" ty i1 i2
       | otherwise
       = return c
-
--- This should be moved to the TcMonad or the linter
-tcSplice :: GS.Sym -> FreeComp () -> IO Comp
-tcSplice sym fcomp
-  = do { mc <- TcM.runTcM (unFreeComp Nothing fcomp)
-                          (TcM.mkTyDefEnv [])
-                          (TcM.mkEnv [])
-                          (TcM.mkCEnv [])
-                          sym
-                          TcM.TopLevelErrCtx
-                          TcM.emptyTcMState
-       ; case mc of
-           Left err      -> panic err
-           Right (c', _) -> return c'
-       }
-
