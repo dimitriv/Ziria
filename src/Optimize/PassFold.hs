@@ -23,10 +23,8 @@ module PassFold (runFold, elimMitigsIO) where
 import Prelude hiding (exp)
 import Control.Applicative
 import Control.Monad.State
-import Data.Functor.Identity
 import Data.Maybe (fromJust, isJust)
 import System.CPUTime
-import Text.Parsec.Pos (SourcePos)
 import Text.Printf
 import qualified Data.Map as Map
 import qualified Data.Set as S
@@ -162,7 +160,7 @@ fold_step fgs comp =
 float_letfun_repeat_step :: DynFlags -> Comp -> RwM Comp
 -- Rewriting of the form:
 --
--- repeat (letfun f(params) = uninitialized-locals ; c in f(args))
+-- repeat (letfun f(params) = c in f(args))
 -- ~~~>
 -- letfun f(params) =
 --     uninitialized-locals;
@@ -171,12 +169,11 @@ float_letfun_repeat_step :: DynFlags -> Comp -> RwM Comp
 -- This will give the opportunity to take-emit to kick in and rewrite the whole thing to map!
 float_letfun_repeat_step _fgs comp
     | Repeat wdth rcomp <- unComp comp
-    , LetFunC nm params locals cbody ccont <- unComp rcomp
-    , null locals
+    , LetFunC nm params cbody ccont <- unComp rcomp
     , Call nm' args <- unComp ccont
     , nm' == nm
     , all is_simpl_call_arg args  -- Not sure this is necessary
-    = rewrite $ cLetFunC cloc nm params locals (cRepeat cloc wdth cbody) ccont
+    = rewrite $ cLetFunC cloc nm params (cRepeat cloc wdth cbody) ccont
     | otherwise
     = return comp
   where
@@ -212,29 +209,21 @@ push_comp_locals_step :: DynFlags -> Comp -> RwM Comp
 -- ~~~>
 -- let comp f(x) = x <- take; emit (letref locals in e)
 push_comp_locals_step _fgs comp
-    | LetFunC nm params locals cbody ccont <- unComp comp
+    | LetFunC nm params cbody_with_locals ccont <- unComp comp
+    , (locals, cbody) <- extractCMutVars cbody_with_locals
     , not (null locals)
     , BindMany tk [(x,emt)] <- unComp cbody
     , Take1 _a' _b' <- unComp tk
     , Emit a e <- unComp emt
-    = do { let comp'  = cLetFunC cloc nm params [] cbody' ccont
+    = do { let comp'  = cLetFunC cloc nm params cbody' ccont
                cbody' = cBindMany cloc tk [(x,emt')]
                emt'   = cEmit cloc a e'
-               e'     = mk_letrefs (expLoc e) locals e
+               e'     = insertEMutVars locals e
          ; rewrite comp'
          }
     | otherwise
     = return comp
   where
-    mk_letrefs :: Maybe SourcePos -> [(GName Ty, Maybe Exp)] -> Exp -> Exp
-    mk_letrefs eloc = go
-      where
-        go [] e = e
-        go ((lcl,Nothing):lcls) e
-          = eLetRef eloc lcl Nothing (go lcls e)
-        go ((lcl,Just einit):lcls) e
-          = eLetRef eloc lcl (Just einit) (go lcls e)
-
     cloc = compLoc comp
 
 
@@ -257,7 +246,7 @@ take_emit_step _fgs comp
                mapcomp = cMap cloc nfo fname
                        -- NB: We pass the nfo thing,
                        -- to preserve vectorization hints!
-               fun = mkFunDefined eloc fname [x] [] e
+               fun = mkFunDefined eloc fname [x] e
 
          ; rewrite letfun
          }
@@ -304,7 +293,7 @@ inline_step fgs comp
 inline_step_aux :: DynFlags -> Comp -> RwM Comp
 inline_step_aux _fgs comp
     | Let nm c1 c2 <- unComp comp
-    = substComp (nm,c1) c2 >>= rewrite
+    = rewrite $ substComp [] [] [(nm,c1)] c2
 
 {- Too much inlining!
     | LetE nm e1 c2 <- unComp comp
@@ -315,19 +304,20 @@ inline_step_aux _fgs comp
     = substExpComp (nm,e1) c2 >>= rewrite
 -}
     | LetE nm ForceInline e1 c2 <- unComp comp
-    = substExpComp (nm,e1) c2 >>= rewrite
+    = rewrite $ substComp [] [(nm,e1)] [] c2
 
     | LetE _nm NoInline _e1 _c2 <- unComp comp
     = return comp
 
     | LetE nm AutoInline e1 c2 <- unComp comp
     , is_simpl_expr e1
-    = substExpComp (nm,e1) c2 >>= rewrite
+    = rewrite $ substComp [] [(nm,e1)] [] c2
 
 
     | LetHeader f@(MkFun (MkFunDefined {}) _ _) c2 <- unComp comp
-    , MkFunDefined nm params locals body <- unFun f -- Defined
-    , no_lut_inside body                            -- Not already lutted body
+    , MkFunDefined nm params body' <- unFun f -- Defined
+    , (locals, body) <- extractEMutVars body'
+    , no_lut_inside body                      -- Not already lutted body
 
     = do { c2' <- inline_exp_fun_in_comp (nm,params,locals,body) c2
            -- Inlining functions not always completely eliminates
@@ -337,13 +327,11 @@ inline_step_aux _fgs comp
              else return c2'
          }
 
-    | LetFunC nm _params _locals _c1 c2 <- unComp comp
+    | LetFunC nm _params _c1 c2 <- unComp comp
     , not (S.member nm (compCFVs c2)) -- Completely unused
     = rewrite c2
 
-    | LetFunC nm params locals c1 c2 <- unComp comp
-    -- NB: for now, we only inline LetFunC's with empty local environments
-    , [] <- locals
+    | LetFunC nm params c1 c2 <- unComp comp
     = do { -- liftIO $ putStrLn $ "Inlining comp fun      = " ++ show nm
          ; c2' <- inline_comp_fun (nm,params,c1) c2
            -- liftIO $
@@ -351,7 +339,7 @@ inline_step_aux _fgs comp
            -- "nm member of rewritten = " ++ show (S.member nm (compFVs c2'))
            -- ; liftIO $ putStrLn $ "LFC-after = " ++ show c2'
          ; if S.member nm (compCFVs c2')
-             then return $ cLetFunC cloc nm params locals c1 c2'
+             then return $ cLetFunC cloc nm params c1 c2'
              else return $ c2'
          }
 
@@ -385,7 +373,7 @@ no_lut_inside x
 
 
 
-inline_exp_fun :: (GName Ty, [GName Ty], [(GName Ty, Maybe Exp)], Exp)
+inline_exp_fun :: (GName Ty, [GName Ty], [MutVar], Exp)
                -> Exp -> RwM Exp
 -- True means that it is safe to just get rid of the function
 inline_exp_fun (nm,params,locals,body)
@@ -396,20 +384,20 @@ inline_exp_fun (nm,params,locals,body)
           = do { let xs                        = zip params args
                      (subst, locals_from_args) = arg_subst xs
                      subst_len                 = len_subst xs
-               ; e' <- mk_local_lets subst subst_len (locals_from_args ++ locals) body
-               ; rewrite e'
+               ; rewrite $ mk_local_lets subst subst_len (locals_from_args ++ locals) body
                }
          where
             -- arg_subst will return (a) a substitution and (b) some local bindings
-            arg_subst :: [(GName Ty, Exp)] -> ([(GName Ty, Exp)], [(GName Ty, Maybe Exp)])
+            arg_subst :: [(GName Ty, Exp)] -> ([(GName Ty, Exp)], [MutVar])
             arg_subst [] = ([],[])
             arg_subst ((prm_nm,arg):rest)
               -- An array of variable size.
               -- Here we must substitute for the size too
               | TArray (NVar siz_nm) _ <- nameTyp prm_nm
               , let (rest_subst, rest_locals) = arg_subst rest
-                -- TODO: this size substitution can (should?) go once we disallow
-                -- direct term-level references to type-level length variables
+                -- TODO: this size substitution can (should?) go once we
+                -- disallow direct term-level references to type-level length
+                -- variables (#76)
               , let siz_bnd = (toName siz_nm Nothing tint, arg_size (ctExp arg))
               = case how_to_inline prm_nm arg of
                   Left bnd  -> (bnd:siz_bnd:rest_subst, rest_locals)
@@ -427,7 +415,7 @@ inline_exp_fun (nm,params,locals,body)
             -- See for example codeGenArrRead in CgExpr.hs
 
             how_to_inline :: GName Ty -> Exp
-                          -> Either (GName Ty, Exp) (GName Ty, Maybe Exp)
+                          -> Either (GName Ty, Exp) MutVar
             -- The choice is: either with a substitution (Left), or
             --                with a let-binding (Right)
             how_to_inline prm_nm arg
@@ -437,7 +425,7 @@ inline_exp_fun (nm,params,locals,body)
                        Just bty
                          | (bty /= TBit && is_array_ref arg)
                          -> Left (prm_nm, arg)
-                       _otherwise -> Right (prm_nm, Just arg)
+                       _otherwise -> Right (MutVar prm_nm (Just arg) (expLoc arg) ())
 
             is_array_ref (MkExp (EVar _)      _ ()) = True
             is_array_ref (MkExp (EArrRead {}) _ ()) = True
@@ -468,26 +456,11 @@ inline_exp_fun (nm,params,locals,body)
 
             mk_local_lets :: [(GName Ty, Exp)]
                           -> [(LenVar, NumExpr)]
-                          -> [(GName Ty, Maybe Exp)]
+                          -> [MutVar]
                           -> Exp
-                          -> RwM Exp
+                          -> Exp
             mk_local_lets subst subst_len extended_locals
-                = \e -> go extended_locals e >>= substAllTyped subst subst_len
-              where
-                go [] e = return e
-                go ((x,Nothing):xs) e
-                  = do { e'  <- go xs e
-                       ; ty' <- substAllLengthTy subst_len (nameTyp x)
-                       ; let x' = x { nameTyp = ty' }
-                       ; return $ eLetRef (expLoc e) x' Nothing e'
-                       }
-                go ((x,Just xe):xs) e
-                  = do { e'  <- go xs e
-                       ; xe' <- substAllTyped subst subst_len xe
-                       ; ty' <- substAllLengthTy subst_len (nameTyp x)
-                       ; let x' = x { nameTyp = ty' }
-                       ; return $ eLetRef (expLoc e) x' (Just xe') e'
-                       }
+                = substExp subst_len subst . insertEMutVars extended_locals
 
         replace_call other = return other
 
@@ -505,7 +478,7 @@ inline_comp_fun (nm,params,cbody) c
       | all is_simpl_call_arg args
       , nm == nm'
       = do { -- liftIO $ putStrLn "Matching!"
-           ; r <- substAllComp (mk_expr_subst params args) cbody >>= rewrite
+           ; r <- rewrite $ substComp [] (mk_expr_subst params args) [] cbody
            ; -- liftIO $ putStrLn $ "Substituted =" ++ (show r)
            ; return r
            }
@@ -522,7 +495,7 @@ inline_comp_fun (nm,params,cbody) c
     mk_expr_subst _ _ = error "BUG: inline_comp_fun!"
 
 
-inline_exp_fun_in_comp :: (GName Ty, [GName Ty], [(GName Ty, Maybe Exp)], Exp)
+inline_exp_fun_in_comp :: (GName Ty, [GName Ty], [MutVar], Exp)
                        -> Comp -> RwM Comp
 inline_exp_fun_in_comp fun
   = mapCompM return return return return (inline_exp_fun fun) return
@@ -635,7 +608,7 @@ letfunc_step :: DynFlags -> Comp -> RwM Comp
 --
 letfunc_step _fgs comp =
   case unComp comp of
-    LetFunC nm params locals (MkComp (Return a b _fi e) _ ()) cont
+    LetFunC nm params (MkComp (Return a b _fi e) _ ()) cont
        | Just params' <- mapM from_simpl_call_param params
        -> do { let fun_ty :: Ty
                    fun_ty = TArrow (map nameTyp params') (ctExp e)
@@ -644,7 +617,7 @@ letfunc_step _fgs comp =
                    f = nm { nameTyp = fun_ty }
 
                    fun :: Fun
-                   fun = mkFunDefined cloc f params' locals e
+                   fun = mkFunDefined cloc f params' e
 
                    replace_call :: Comp -> RwM Comp
                    replace_call (MkComp (Call f' es) xloc ())
@@ -671,10 +644,10 @@ letfun_times_step :: DynFlags -> Comp -> RwM Comp
 letfun_times_step _fgs comp =
   case unComp comp of
     Times ui e elen i (MkComp (LetHeader def cont) cloc ())
-     | MkFun (MkFunDefined f params locals body) floc () <- def
+     | MkFun (MkFunDefined f params body) floc () <- def
      -> do { let fty' = TArrow (map nameTyp (i:params)) (fun_ret_ty (nameTyp f))
                  f'   = f { nameTyp = fty' }
-                 def' = mkFunDefined floc f' (i:params) locals body
+                 def' = mkFunDefined floc f' (i:params) body
                  iexp = eVar cloc i -- The counter variable
            ; cont' <- augment_calls f' iexp cont
            ; rewrite $ cLetHeader cloc def' (cTimes cloc ui e elen i cont')
@@ -710,12 +683,10 @@ times_unroll_step _fgs comp = case unComp comp of
 --         , ui == Unroll -- || (n < 3 && n > 0 && ui == AutoUnroll)
      -> let idxs = [0..n-1]
             comps = replicate n c
-            unrolled = zipWithM (\curr xc ->
-              substExpComp (i, eVal (expLoc e) valTy (vint curr)) xc) idxs comps
+            unrolled = zipWith (\curr xc ->
+              substComp [] [(i, eVal (expLoc e) valTy (vint curr))] [] xc) idxs comps
         in case unrolled of
-             Nothing ->
-               return comp
-             Just [] -> do
+             [] -> do
                -- The loop doesn't get executed at all
                -- (TODO: This case is currently excluded by the @n > 0@ condition)
                -- In this case we just return unit, but we have to find the
@@ -726,7 +697,7 @@ times_unroll_step _fgs comp = case unComp comp of
                    a      =  inTyOfCTy compTy
                    b      = yldTyOfCTy compTy
                return $ cReturn cloc a b ForceInline (eVal cloc TUnit VUnit)
-             Just xs ->
+             xs ->
                rewrite $ mk_bind_many xs
     _ -> return comp
   where
@@ -805,7 +776,7 @@ exp_inlining_steps :: DynFlags -> TypedExpPass
 exp_inlining_steps fgs e
    -- Forced Inline!
  | ELet nm ForceInline e1 e2 <- unExp e
- = substExp (nm,e1) e2 >>= rewrite
+ = rewrite $ substExp [] [(nm,e1)] e2
 
  | ELet _nm NoInline _e1 _e2 <- unExp e
  = return e
@@ -817,7 +788,7 @@ exp_inlining_steps fgs e
       if not (mutates_state e) then rewrite e2
       else return e
    else if is_simpl_expr e1 && not (isDynFlagSet fgs NoExpFold)
-   then substExp (nm,e1) e2 >>= rewrite
+   then rewrite $ substExp [] [(nm,e1)] e2
    else return e
  | otherwise
  = return e
@@ -849,7 +820,7 @@ asgn_letref_step _fgs exp
    -- Just a simple expression with no side-effects
   , not (mutates_state estart)
   , Just (y, residual_erhs) <- returns_letref_var erhs
-  = substExp (y, eArrRead (expLoc exp) e0 estart elen) residual_erhs >>= rewrite
+  = rewrite $ substExp [] [(y, eArrRead (expLoc exp) e0 estart elen)] residual_erhs
   | otherwise = return exp
   where
     returns_letref_var :: Exp -> Maybe (GName Ty, Exp)
@@ -971,8 +942,7 @@ for_unroll_step _fgs e
   = -- liftIO (putStrLn "for_unroll_step, trying ...") >>
     let idxs = [0..n-1]
         exps = replicate n ebody
-        unrolled = zipWith (\curr xe -> runIdentity $
-                                        substExp (nm, eVal (expLoc e) tint (vint curr)) xe) idxs exps
+        unrolled = zipWith (\curr xe -> substExp [] [(nm, eVal (expLoc e) tint (vint curr))] xe) idxs exps
     in case unrolled of
          [] -> return $ eVal (expLoc e) TUnit VUnit
          xs -> rewrite $ mk_eseq_many xs
@@ -1190,18 +1160,18 @@ frm_mit c
         Just (mit,cont') -> Just (mit, cLetHeader cloc fdef cont')
 
     -- Special case for code emitted by the vectorizer
-    | LetFunC fn prms locs body cont <- unComp c
+    | LetFunC fn prms body cont <- unComp c
     , Call fn' _args <- unComp cont
     , fn == fn'
     = case frm_mit body of
         Nothing -> Nothing
-        Just (mit,body') -> Just (mit, cLetFunC cloc fn prms locs body' cont)
+        Just (mit,body') -> Just (mit, cLetFunC cloc fn prms body' cont)
 
     -- fallthrough general case
-    | LetFunC fn prms locs body cont <- unComp c
+    | LetFunC fn prms body cont <- unComp c
     = case frm_mit cont of
         Nothing -> Nothing
-        Just (mit,cont') -> Just (mit, cLetFunC cloc fn prms locs body cont')
+        Just (mit,cont') -> Just (mit, cLetFunC cloc fn prms body cont')
 
     | Let n c1 cont <- unComp c
     = case frm_mit cont of
@@ -1231,18 +1201,18 @@ flm_mit c
         Just (mit,cont') -> Just (mit,cLetHeader cloc fdef cont')
 
     -- Special case for code emitted by the vectorizer
-    | LetFunC fn prms locs body cont <- unComp c
+    | LetFunC fn prms body cont <- unComp c
     , Call fn' _args <- unComp cont
     , fn == fn'
     = case flm_mit body of
         Nothing -> Nothing
-        Just (mit,body') -> Just (mit, cLetFunC cloc fn prms locs body' cont)
+        Just (mit,body') -> Just (mit, cLetFunC cloc fn prms body' cont)
 
     -- fallthrough general case
-    | LetFunC fn prms locs body cont <- unComp c
+    | LetFunC fn prms body cont <- unComp c
     = case flm_mit cont of
         Nothing -> Nothing
-        Just (mit,cont') -> Just (mit, cLetFunC cloc fn prms locs body cont')
+        Just (mit,cont') -> Just (mit, cLetFunC cloc fn prms body cont')
 
 
     | Let n c1 cont <- unComp c

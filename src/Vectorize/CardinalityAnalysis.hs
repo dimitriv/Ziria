@@ -230,12 +230,12 @@ computeCardTop _verbose = computeCard
         c1' <- computeCard c1
         return $ cLetStruct loc (compInfo c1') sdef c1'
 
-      LetFunC f params locals c1 c2 -> do
+      LetFunC f params c1 c2 -> do
         -- TODO: If we extend the environment here with the function arguments,
         -- change lookupVar and (comment of) lookupEnv.
         c1' <- computeCard c1
         c2' <- extendCardCFunEnv f (compInfo c1') $ computeCard c2
-        return $ cLetFunC loc (compInfo c2') f params locals c1' c2'
+        return $ cLetFunC loc (compInfo c2') f params c1' c2'
 
       Call f es -> do
         card <- lookupFun f

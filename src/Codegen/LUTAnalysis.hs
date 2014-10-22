@@ -66,7 +66,7 @@ varBitWidth ranges v | Just (Range _ h) <- Map.lookup v ranges =
     return $ intLog2 h
   where
     intLog2 :: Integer -> Int
-    intLog2 = ceiling . (+1) . logBase 2 . fromIntegral
+    intLog2 = ceiling . (+1) . logBase 2 . (fromIntegral :: Integer -> Double)
 varBitWidth _ v = tyBitWidth (nameTyp v)
 
 
@@ -96,12 +96,10 @@ instance Pretty LUTStats where
         text "lut size in bytes:" <+> ppr (lutTableSize s)
 
 calcLUTStats :: (Functor m, Monad m)
-             => [GName Ty]
-             -> Map (GName Ty) Range
-             -> Exp
-             -> m LUTStats
-calcLUTStats locals ranges e = do
-    (inVars, outVars, _) <- inOutVars locals ranges e
+             => Map (GName Ty) Range
+             -> Exp -> m LUTStats
+calcLUTStats ranges e = do
+    (inVars, outVars, _) <- inOutVars ranges e
     inVarsBitWidth       <- varsBitWidth ranges inVars
     outVarsBitWidth      <- varsBitWidth ranges outVars
     let resultInOutVars  =  case expResultVar e of
@@ -130,22 +128,19 @@ calcLUTStats locals ranges e = do
 
 pprLUTStats :: Monad m
             => DynFlags
-            -> [GName Ty]
             -> Map (GName Ty) Range
-            -> Exp
-            -> m Doc
-pprLUTStats dflags locals ranges e = do
-    (inVars, outVars, allVars) <- inOutVars locals ranges e
+            -> Exp -> m Doc
+pprLUTStats dflags ranges e = do
+    (inVars, outVars, allVars) <- inOutVars ranges e
     return $ text "  input variables:" <+> ppr inVars </>
              text " output variables:" <+> ppr outVars </>
              text "    all variables:" <+> ppr allVars </>
-             text "      locals used:" <+> ppr locals </>
              text "      ranges used:" <+> ppr ranges <>
-             case calcLUTStats locals ranges e of
+             case calcLUTStats ranges e of
                Nothing    -> mempty
                Just stats -> line <>
                              ppr stats </>
-                             text " should be lutted:" <+> pprShouldLUT (shouldLUT dflags locals ranges e)
+                             text " should be lutted:" <+> pprShouldLUT (shouldLUT dflags ranges e)
   where
     pprShouldLUT :: Either String Bool -> Doc
     pprShouldLUT (Left err)    = text "No, because" <+> string err
@@ -192,9 +187,9 @@ instance MonadState LMState LM where
 mIN_OP_COUNT :: Int
 mIN_OP_COUNT = 5
 
-shouldLUT :: DynFlags -> [GName Ty] -> Map (GName Ty) Range -> Exp -> Either String Bool
-shouldLUT dflags locals ranges e = flip evalLM s0 $ do
-    stats <- calcLUTStats locals ranges e
+shouldLUT :: DynFlags -> Map (GName Ty) Range -> Exp -> Either String Bool
+shouldLUT dflags ranges e = flip evalLM s0 $ do
+    stats <- calcLUTStats ranges e
     should e
     s <- get
 

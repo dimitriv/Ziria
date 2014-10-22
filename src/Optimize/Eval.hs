@@ -34,7 +34,6 @@ import AstExpr
 
 class TypeAnn ty where
   valCast :: ty -> Val -> Maybe Val
-  intArrayLen :: ty -> Maybe Int
 
 instance TypeAnn Ty where
   valCast (TInt {}) (VDouble d)  = return (VInt (floor d))
@@ -44,9 +43,6 @@ instance TypeAnn Ty where
   valCast (TInt {}) (VBit True)  = return (VInt 1)
   valCast _         _            = Nothing
 
-  intArrayLen (TArray (Literal n) (TInt _)) = Just n
-  intArrayLen _ = Nothing
-
 instance TypeAnn (Maybe SrcTy) where
   valCast (Just (SrcTInt {})) (VDouble d)  = return (VInt (floor d))
   valCast (Just (SrcTInt {})) (VInt i)     = return (VInt i)
@@ -54,9 +50,6 @@ instance TypeAnn (Maybe SrcTy) where
   valCast (Just (SrcTInt {})) (VBit False) = return (VInt 0)
   valCast (Just (SrcTInt {})) (VBit True)  = return (VInt 1)
   valCast _            _            = Nothing
-
-  intArrayLen (Just (SrcTArray (SrcLiteral n) (SrcTInt _))) = Just n
-  intArrayLen _ = Nothing
 
 {-------------------------------------------------------------------------------
   Simple static evaluation of expressions
@@ -108,10 +101,10 @@ valUnOp _ _ = Nothing
 -- | Execute array initialization code of the form
 --
 -- > ELetRef nm Nothing (ESeq init_loop nm)
-evalArrInt :: TypeAnn ty => GExp ty () -> Maybe [Integer]
+evalArrInt :: Exp -> Maybe [Integer]
 evalArrInt = evalArrInt0 . unExp
 
-evalArrInt0 :: TypeAnn ty => GExp0 ty () -> Maybe [Integer]
+evalArrInt0 :: Exp0 -> Maybe [Integer]
 evalArrInt0 (ELetRef nm Nothing e)
   | Just n     <- intArrayLen (nameTyp nm)
   , ESeq e1 e2 <- unExp e
@@ -124,7 +117,7 @@ evalArrInt0 _ = Nothing
 -- | Execute an array initialization loop of the form
 --
 -- > for k in [low, siz] { arr[k] := eval }
-evalArrInitLoop :: TypeAnn ty => GName ty -> GExp ty () -> Maybe [(Int, Integer)]
+evalArrInitLoop :: GName Ty -> Exp -> Maybe [(Int, Integer)]
 evalArrInitLoop arr loop
   | EFor _ k elow esize ebody            <- unExp loop
   , EVal _ (VInt low)                    <- unExp elow
@@ -136,10 +129,14 @@ evalArrInitLoop arr loop
   , k'   == k
   = let inds = [fromIntegral low .. fromIntegral low + fromIntegral siz - 1]
         loc  = expLoc loop
-        subst_idx i = substExp (k, MkExp (EVal (nameTyp k) (VInt i)) loc ()) eval
+        subst_idx i = substExp [] [(k, MkExp (EVal (nameTyp k) (VInt i)) loc ())] eval
     in forM inds $ \i -> do
-         v <- subst_idx i >>= evalInt
+         v <- evalInt $ subst_idx i
          return (fromInteger i, v)
 
 evalArrInitLoop _ _
   = Nothing
+
+intArrayLen :: Ty -> Maybe Int
+intArrayLen (TArray (Literal n) (TInt _)) = Just n
+intArrayLen _ = Nothing

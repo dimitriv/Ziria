@@ -64,7 +64,7 @@ import LUTAnalysis
 
 import qualified Data.Hashable as H
 
-import CtExpr 
+import CtExpr
 
 --  import System.Exit ( exitFailure )
 
@@ -202,10 +202,10 @@ unpackByteAligned xs src = go xs 0
 -- csrcPathNative dflags = head [ path | CSrcPathNative path <- dflags]
 
 
-codeGenLUTExp_Mock :: DynFlags -> Maybe SourcePos 
+codeGenLUTExp_Mock :: DynFlags -> Maybe SourcePos
                    -> Map EId Range -> Exp -> Cg C.Exp
 codeGenLUTExp_Mock dflags loc r  e
-  = do { (inVars, outVars, allVars) <- inOutVars [] r e
+  = do { (inVars, outVars, allVars) <- inOutVars r e
        ; _ <- codeGenExp dflags $ ePrint Nothing True $
                                   eVal Nothing TString (VString (show loc))
        ; _ <- codeGenExp dflags $ ePrint Nothing True $
@@ -220,14 +220,13 @@ codeGenLUTExp_Mock dflags loc r  e
 
 
 codeGenLUTExp :: DynFlags
-              -> [(EId,Maybe Exp)]
               -> Map EId Range
               -> Exp
               -> Maybe EId -- If set then use this specific name for
                                   -- storing the final result
               -> Cg C.Exp
-codeGenLUTExp dflags locals_ ranges e mb_resname
-  = case shouldLUT dflags locals ranges e of
+codeGenLUTExp dflags ranges e mb_resname
+  = case shouldLUT dflags ranges e of
       Left err ->
         do { verbose dflags $ text "Asked to LUT un-LUTtable expression:" <+> string err </> nest 4 (ppr e)
            ; codeGenExp dflags e }
@@ -236,11 +235,11 @@ codeGenLUTExp dflags locals_ ranges e mb_resname
         do { verbose dflags $
              text "Asked to LUT an expression we wouldn't normally LUT:" </>
              nest 4 (ppr e)
-           ; lutStats <- calcLUTStats locals ranges e
+           ; lutStats <- calcLUTStats ranges e
            ; if lutTableSize lutStats >= aBSOLUTE_MAX_LUT_SIZE
              then do { verbose dflags $
                        text "LUT way too big!" </>
-                         fromJust (pprLUTStats dflags locals ranges e)
+                         fromJust (pprLUTStats dflags ranges e)
                      ; codeGenExp dflags e }
              else lutIt mb_resname }
   where
@@ -249,18 +248,14 @@ codeGenLUTExp dflags locals_ ranges e mb_resname
     aBSOLUTE_MAX_LUT_SIZE :: Integer
     aBSOLUTE_MAX_LUT_SIZE = 1024*1024
 
-    locals :: [EId]
-    -- TODO: local initializers are ignored?? Potential bug
-    locals = [v | (v,_) <- locals_]
-
     lutIt :: Maybe EId -> Cg C.Exp
     lutIt mb_resname = do
-        (inVars, outVars, allVars) <- inOutVars locals ranges e
+        (inVars, outVars, allVars) <- inOutVars ranges e
 
         verbose dflags $
           text "Creating LUT for expression:" </> nest 4 (ppr e) </>
             nest 4 (text "Variable ranges:" </> pprRanges ranges) </>
-               fromJust (pprLUTStats dflags locals ranges e)
+               fromJust (pprLUTStats dflags ranges e)
 
         let resultInOutVars
              | Just v <- expResultVar e
@@ -271,8 +266,7 @@ codeGenLUTExp dflags locals_ ranges e mb_resname
         -- liftIO $ putStrLn $ "Hash = " ++ show (H.hash (show e))
         hs <- getLUTHashes
         let gen_lut_action
-              = genLUT dflags ranges inVars (outVars,resultInOutVars)
-                       allVars locals e
+              = genLUT dflags ranges inVars (outVars,resultInOutVars) allVars e
         clut <-
           if isDynFlagSet dflags NoLUTHashing
           then do { lgi <- gen_lut_action
@@ -316,10 +310,9 @@ genLUT :: DynFlags -- ^ Flags
        -> [EId]              -- ^ Input variables
        -> ([EId], Maybe EId) -- ^ Output variables + result if not in outvars
        -> [EId]  -- ^ All used variables
-       -> [EId]  -- ^ Local variables
        -> Exp   -- ^ Expression to LUT
        -> Cg LUTGenInfo
-genLUT dflags ranges inVars (outVars, res_in_outvars) allVars locals e = do
+genLUT dflags ranges inVars (outVars, res_in_outvars) allVars e = do
     inBitWidth <- varsBitWidth ranges inVars
     cinBitType <- lutIndexTypeByWidth inBitWidth
 
@@ -368,7 +361,7 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars locals e = do
                        ; return (ow,outVars, []) }
                   else
                     do { let retty = ctExp e
-                       ; resval <- freshName "res" retty 
+                       ; resval <- freshName "res" retty
                        ; codeGenDeclGroup (name resval) retty >>= appendDecl
                        ; let outVarsWithRes = outVars ++ [resval]
                        ; ow <- varsBitWidth_ByteAlign outVarsWithRes

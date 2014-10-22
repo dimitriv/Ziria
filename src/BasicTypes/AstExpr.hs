@@ -23,7 +23,7 @@ module AstExpr where
 import {-# SOURCE #-} Analysis.Range
 
 import Prelude hiding (exp, mapM)
-import Control.Monad (liftM, foldM, when)
+import Control.Monad (liftM, when)
 import Control.Monad.State (State, execState, modify)
 import Data.Data (Data)
 import Data.Functor.Identity ( Identity (..) )
@@ -368,14 +368,13 @@ data GStructDef t
   deriving (Generic, Typeable, Data)
 
 data GFun0 t a where
-  MkFunDefined  :: GName t                       -- ^ name
-                -> [GName t]                     -- ^ params
-                -> [(GName t,Maybe (GExp t a))]  -- ^ locals
-                -> GExp t a                      -- ^ body
+  MkFunDefined  :: GName t     -- ^ name
+                -> [GName t]   -- ^ params
+                -> GExp t a    -- ^ body
                 -> GFun0 t a
-  MkFunExternal :: GName t                       -- ^ name
-                -> [GName t]                     -- ^ params
-                -> t                             -- ^ return type
+  MkFunExternal :: GName t     -- ^ name
+                -> [GName t]   -- ^ params
+                -> t           -- ^ return type
                 -> GFun0 t a
   deriving (Generic, Typeable, Data)
 
@@ -394,8 +393,8 @@ data GFun t a
   deriving (Generic, Typeable, Data)
 
 funName :: GFun t a -> GName t
-funName (MkFun (MkFunDefined  nm _ _ _) _ _) = nm
-funName (MkFun (MkFunExternal nm _ _)   _ _) = nm
+funName (MkFun (MkFunDefined  nm _ _) _ _) = nm
+funName (MkFun (MkFunExternal nm _ _) _ _) = nm
 
 {-------------------------------------------------------------------------------
   Specialization of the AST to Ty (internal types)
@@ -625,20 +624,6 @@ mapExpM onTyp onAnn f = goExp
              . mapM (\(n, r) -> do n' <- mapNameM onTyp n ; return (n', r))
              . Map.toList
 
--- | Most general mapping over function and program locals
-mapLocalsM :: forall t t' a a' m. Monad m
-           => (t -> m t')                    -- ^ On types
-           -> (GExp t a -> m (GExp t' a'))   -- ^ On expressions
-           -> [(GName t,  Maybe (GExp t a))] -- ^ Locals
-           -> m [(GName t', Maybe (GExp t' a'))]
-mapLocalsM onTyp onExp = mapM (uncurry aux)
-  where
-    aux :: GName t -> Maybe (GExp t a) -> m (GName t', Maybe (GExp t' a'))
-    aux nm exp = do
-      nm'  <- mapNameM onTyp nm
-      exp' <- mapM onExp exp
-      return (nm', exp')
-
 mapFunM :: forall t t' a a' m. Monad m
         => (t -> m t')                    -- ^ On types
         -> (a -> m a')                    -- ^ On annotations
@@ -654,12 +639,11 @@ mapFunM onTyp onAnn onExp = goFun
       return MkFun{unFun = unFun', funInfo = funInfo', ..}
 
     goFun0 :: GFun0 t a -> m (GFun0 t' a')
-    goFun0 (MkFunDefined nm params locals body) = do
+    goFun0 (MkFunDefined nm params body) = do
       nm'     <- mapNameM onTyp nm
       params' <- mapM (mapNameM onTyp) params
-      locals' <- mapLocalsM onTyp onExp locals
       body'   <- onExp body
-      return $ MkFunDefined nm' params' locals' body'
+      return $ MkFunDefined nm' params' body'
     goFun0 (MkFunExternal nm params ret) = do
       nm'     <- mapNameM onTyp nm
       params' <- mapM (mapNameM onTyp) params
@@ -685,13 +669,6 @@ mapExp onTyp onAnn f = runIdentity . mapExpM (Identity . onTyp)
                                              (Identity . onAnn)
                                              (Identity . f)
 
-mapLocals :: (t -> t')                       -- ^ On types
-          -> (GExp t a -> GExp t' a')        -- ^ On expressions
-          -> [(GName t,  Maybe (GExp t a))]  -- ^ Locals
-          -> [(GName t', Maybe (GExp t' a'))]
-mapLocals onTyp f = runIdentity . mapLocalsM (Identity . onTyp)
-                                             (Identity . f)
-
 mapFun :: (t -> t')                    -- ^ On types
        -> (a -> a')                    -- ^ On annotations
        -> (GExp t a -> (GExp t' a'))   -- ^ On expressions
@@ -710,9 +687,6 @@ eraseExp = mapExp id (const ()) id
 
 eraseFun :: GFun t a -> GFun t ()
 eraseFun = mapFun id (const ()) eraseExp
-
-eraseLocals :: [(GName t, Maybe (GExp t a))] -> [(GName t, Maybe (GExp t ()))]
-eraseLocals = mapLocals id eraseExp
 
 {-------------------------------------------------------------------------------
   Free variables
@@ -756,62 +730,43 @@ exprFVsClos = exprFVs' False
 
 funFVs :: GFun t a -> S.Set (GName t)
 funFVs f = case unFun f of
-  MkFunDefined _nm params locals body ->
-    -- NB: important that we use foldr here instead of foldl
-    (foldr (\(nm,me) s ->
-             let se = case me of
-                   Just e  -> S.union (exprFVs e) s
-                   Nothing -> s
-             in se S.\\ (S.singleton nm)) (exprFVs body) locals) S.\\
-    (S.fromList params)
+  MkFunDefined _nm params body  -> exprFVs body S.\\ S.fromList params
   MkFunExternal _nm _params _ty -> S.empty
 
 -- | Find free variables in a function definition
 funFVsClos :: GFun t a -> S.Set (GName t)
 funFVsClos f = case unFun f of
-    MkFunDefined _nm params locals body ->
-      (foldr (\(nm,me) s ->
-               let se = case me of
-                     Just e  -> S.union (exprFVsClos e) s
-                     Nothing -> s
-               in se S.\\ (S.singleton nm)) (exprFVsClos body) locals) S.\\
-      (S.fromList params)
+    MkFunDefined _nm params body  -> exprFVsClos body S.\\ S.fromList params
     MkFunExternal _nm _params _ty -> S.empty
 
 {-------------------------------------------------------------------------------
   Substitutions
 -------------------------------------------------------------------------------}
 
-substExp :: Monad m => (GName t, GExp t a) -> GExp t a -> m (GExp t a)
-substExp (nm,e') = mapExpM return return go
+substTy :: [(LenVar, NumExpr)] -> Ty -> Ty
+substTy slen = mapTy aux
   where
-    go e | EVar nm' <- unExp e = if nm == nm' then return e' else return e
-         | otherwise           = return e
+    -- mapTy works bottom up: we already substituted in the subtypes (ty)
+    aux (TArray (NVar x) ty) = case lookup x slen of
+                                 Just ne -> TArray ne ty
+                                 Nothing -> TArray (NVar x) ty
+    aux ty                   = ty
 
-substAll :: Monad m => [(GName t, GExp t a)] -> GExp t a -> m (GExp t a)
-substAll substs e = foldM (\x p -> substExp p x) e substs
-
--- | Substitute lengths through
-substLength :: Monad m => (LenVar, NumExpr) -> GExp Ty a -> m (GExp Ty a)
-substLength (nm,numexpr) = mapExpM (substLengthTy (nm,numexpr)) return return
-
-substLengthTy :: Monad m => (LenVar, NumExpr) -> Ty -> m Ty
-substLengthTy (nm,numexpr) = mapTyM on_ty
+-- | Apply substitution to an expression
+--
+-- NOTE: We assume that the substitution _as a whole_ is idempotent. In
+-- particular, we assume that if the expressions in the codomain of the
+-- expression substitution do not mention any of the length variables in
+-- the domain of the type substitution.
+substExp :: [(LenVar, NumExpr)]
+         -> [(GName Ty, GExp Ty a)]
+         -> GExp Ty a -> GExp Ty a
+substExp slen sexp = mapExp (substTy slen) id aux
   where
-    on_ty (TArray (NVar nm') t) | nm == nm' = return (TArray numexpr t)
-    on_ty ty_other                          = return ty_other
-
-substAllLengthTy :: Monad m => [(LenVar, NumExpr)] -> Ty -> m Ty
-substAllLengthTy substs t = foldM (\x p -> substLengthTy p x) t substs
-
-substAllTyped :: Monad m
-              => [(GName Ty, GExp Ty a)]
-              -> [(LenVar, NumExpr)]
-              -> GExp Ty a
-              -> m (GExp Ty a)
-substAllTyped substs len_substs e = do
-    e' <- foldM (\x p -> substLength p x) e len_substs
-    foldM (\x p -> substExp p x) e' substs
+    aux e | EVar x <- unExp e = case lookup x sexp of
+                                  Just e' -> e'
+                                  Nothing -> e
+          | otherwise         = e
 
 {-------------------------------------------------------------------------------
   Utility

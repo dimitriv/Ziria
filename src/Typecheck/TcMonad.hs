@@ -117,7 +117,6 @@ import Text.Parsec.Pos
 import Text.PrettyPrint.HughesPJ
 import qualified Data.Map as M
 import qualified Data.Set as S
-import qualified Data.Traversable as Traversable
 
 import AstComp
 import AstExpr
@@ -539,13 +538,7 @@ instance (Zonk tc, Zonk t) => Zonk (GComp tc t a b) where
   zonk = mapCompM zonk zonk return return zonk return
 
 instance (Zonk tc, Zonk t) => Zonk (GProg tc t a b) where
-  zonk (MkProg globs comp) = do
-    globs' <- forM globs $ \(nm, mexp) -> do
-                nm'   <- mapNameM zonk nm
-                mexp' <- Traversable.mapM zonk mexp
-                return (nm', mexp')
-    comp'  <- zonk comp
-    return $ MkProg globs' comp'
+  zonk (MkProg comp) = MkProg <$> zonk comp
 
 {-------------------------------------------------------------------------------
   Collecting type variables

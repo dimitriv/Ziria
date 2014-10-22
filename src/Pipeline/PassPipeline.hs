@@ -50,8 +50,8 @@ stripLetCtxt = go
             let (ctx,c0) = go c2 in (CLetHeader cloc fun ctx, c0)
           LetHeader fun@(MkFun (MkFunExternal {}) _ _) c2 ->
             let (ctx,c0) = go c2 in (CLetHeader cloc fun ctx,c0)
-          LetFunC nm ps ls c1 c2 ->
-            let (ctx,c0) = go c2 in (CLetFunC cloc nm ps ls c1 ctx, c0)
+          LetFunC nm ps c1 c2 ->
+            let (ctx,c0) = go c2 in (CLetFunC cloc nm ps c1 ctx, c0)
           LetStruct sdef c2 ->
             let (ctx,c0) = go c2 in (CLetStruct cloc sdef ctx, c0)
           _other -> (Hole,c)

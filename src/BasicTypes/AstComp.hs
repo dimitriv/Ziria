@@ -130,10 +130,9 @@ data GComp0 tc t a b where
 
   -- | Bind a computation function
   LetFunC :: GName tc
-          -> [GName (CallArg t tc)]           -- params (could include computation types)
-          -> [(GName t,Maybe (GExp t b))]     -- locals
-          -> GComp tc t a b                   -- body
-          -> GComp tc t a b                   -- rhs
+          -> [GName (CallArg t tc)] -- params (could include computation types)
+          -> GComp tc t a b         -- body
+          -> GComp tc t a b         -- rhs
           -> GComp0 tc t a b
 
   -- | Bind a struct definition
@@ -362,9 +361,7 @@ data GComp tc t a b
   deriving (Generic, Typeable, Data)
 
 data GProg tc t a b
-  = MkProg { globals  :: [(GName t,Maybe (GExp t b))]
-           , progComp :: GComp tc t a b
-           }
+  = MkProg { progComp :: GComp tc t a b }
   deriving (Generic, Typeable, Data)
 
 {-------------------------------------------------------------------------------
@@ -488,13 +485,12 @@ mapCompM onCTyp onETyp onCAnn onEAnn onExp f = goComp
       fun' <- mapFunM onETyp onEAnn onExp fun
       c1'  <- goComp c1
       return $ LetHeader fun' c1'
-    goComp0 (LetFunC nm params locals c1 c2) = do
+    goComp0 (LetFunC nm params c1 c2) = do
       nm'     <- mapNameM onCTyp nm
       params' <- mapM (mapNameM goCallArgT) params
-      locals' <- mapLocalsM onETyp onExp locals
       c1'     <- goComp c1
       c2'     <- goComp c2
-      return $ LetFunC nm' params' locals' c1' c2'
+      return $ LetFunC nm' params' c1' c2'
     goComp0 (Call nm args) = do
       nm'   <- mapNameM onCTyp nm
       args' <- mapM goCallArg args
@@ -641,40 +637,38 @@ compFVs = \c ->
     goComp c = goComp0 (unComp c) >> return c
 
     goComp0 :: GComp0 tc t a b -> State (CompFVs tc t) ()
-    goComp0 (Var nm)               = recordC nm
-    goComp0 (BindMany _ xcs)       = mapM_ unrecordE (map fst xcs)
-    goComp0 (Let nm _ _)           = unrecordC nm
-    goComp0 (LetE nm _ _ _)        = unrecordE nm
-    goComp0 (LetERef nm _ _)       = unrecordE nm
-    goComp0 (LetHeader fun _)      = unrecordE (funName fun)
-    goComp0 (LetFunC nm ps ls _ _) = do unrecordC nm
-                                        mapM_ unrecordCA ps
-                                        mapM_ unrecordE (map fst ls)
-    goComp0 (Call nm _)            = recordC nm
-    goComp0 (Times _ _ _ nm _)     = unrecordE nm
-    goComp0 (Map _v nm)            = recordE nm
-    goComp0 (Filter nm)            = recordE nm
+    goComp0 (Var nm)            = recordC nm
+    goComp0 (BindMany _ xcs)    = mapM_ unrecordE (map fst xcs)
+    goComp0 (Let nm _ _)        = unrecordC nm
+    goComp0 (LetE nm _ _ _)     = unrecordE nm
+    goComp0 (LetERef nm _ _)    = unrecordE nm
+    goComp0 (LetHeader fun _)   = unrecordE (funName fun)
+    goComp0 (LetFunC nm ps _ _) = unrecordC nm >> mapM_ unrecordCA ps
+    goComp0 (Call nm _)         = recordC nm
+    goComp0 (Times _ _ _ nm _)  = unrecordE nm
+    goComp0 (Map _v nm)         = recordE nm
+    goComp0 (Filter nm)         = recordE nm
 
-    goComp0 (Seq {})               = return ()
-    goComp0 (Par {})               = return ()
-    goComp0 (Emit {})              = return ()
-    goComp0 (LetStruct {})         = return ()
-    goComp0 (Emits {})             = return ()
-    goComp0 (Return {})            = return ()
-    goComp0 (Interleave {})        = return ()
-    goComp0 (Branch {})            = return ()
-    goComp0 (Take1 {})             = return ()
-    goComp0 (Take {})              = return ()
-    goComp0 (Until {})             = return ()
-    goComp0 (While {})             = return ()
-    goComp0 (Repeat {})            = return ()
-    goComp0 (VectComp {})          = return ()
-    goComp0 (ReadSrc {})           = return ()
-    goComp0 (WriteSnk {})          = return ()
-    goComp0 (ReadInternal {})      = return ()
-    goComp0 (WriteInternal {})     = return ()
-    goComp0 (Standalone {})        = return ()
-    goComp0 (Mitigate {})          = return ()
+    goComp0 (Seq {})            = return ()
+    goComp0 (Par {})            = return ()
+    goComp0 (Emit {})           = return ()
+    goComp0 (LetStruct {})      = return ()
+    goComp0 (Emits {})          = return ()
+    goComp0 (Return {})         = return ()
+    goComp0 (Interleave {})     = return ()
+    goComp0 (Branch {})         = return ()
+    goComp0 (Take1 {})          = return ()
+    goComp0 (Take {})           = return ()
+    goComp0 (Until {})          = return ()
+    goComp0 (While {})          = return ()
+    goComp0 (Repeat {})         = return ()
+    goComp0 (VectComp {})       = return ()
+    goComp0 (ReadSrc {})        = return ()
+    goComp0 (WriteSnk {})       = return ()
+    goComp0 (ReadInternal {})   = return ()
+    goComp0 (WriteInternal {})  = return ()
+    goComp0 (Standalone {})     = return ()
+    goComp0 (Mitigate {})       = return ()
 
     goExp :: GExp t b -> State (CompFVs tc t) (GExp t b)
     goExp e = modify (\(sc, s) -> (sc, S.union (exprFVs e) s)) >> return e
@@ -784,18 +778,35 @@ gatherPolyVars = S.toList . tyVarsLen . mconcat . map tyFVs
   Substitution
 -------------------------------------------------------------------------------}
 
-substComp :: Monad m => (GName tc, GComp tc t a b) -> GComp tc t a b -> m (GComp tc t a b)
-substComp (nm,c') = mapCompM return return return return return go
+substCTy :: [(LenVar, NumExpr)] -> CTy -> CTy
+substCTy slen = goCTy
   where
-    go c | Var nm' <- unComp c = if nm == nm' then return c' else return c
-         | otherwise           = return c
+    goCTy :: CTy -> CTy
+    goCTy (CTVar x)          = CTVar x
+    goCTy (CTComp u a b)     = CTComp (goTy u) (goTy a) (goTy b)
+    goCTy (CTTrans a b)      = CTTrans (goTy a) (goTy b)
+    goCTy (CTArrow args res) = CTArrow (map goCA args) (goCTy res)
 
-substExpComp :: Monad m => (GName t, GExp t b) -> GComp tc t a b -> m (GComp tc t a b)
-substExpComp (nm,e') = mapCompM return return return return (substExp (nm,e')) return
+    goTy :: Ty -> Ty
+    goTy = substTy slen
 
-substAllComp :: Monad m => [(GName t, GExp t b)] -> GComp tc t a b -> m (GComp tc t a b)
-substAllComp []     c = return c
-substAllComp (s:ss) c = substExpComp s =<< substAllComp ss c
+    goCA :: CallArg Ty CTy -> CallArg Ty CTy
+    goCA = callArg (CAExp . goTy) (CAComp . goCTy)
+
+-- | Apply substitution to a computation
+--
+-- See comments about idempotency in `substExp`.
+substComp :: [(LenVar, NumExpr)]
+          -> [(GName Ty, GExp Ty b)]
+          -> [(GName CTy, GComp CTy Ty a b)]
+          -> GComp CTy Ty a b -> GComp CTy Ty a b
+substComp slen sexp scomp =
+    mapComp (substCTy slen) (substTy slen) id id (substExp slen sexp) aux
+  where
+    aux c | Var x <- unComp c = case lookup x scomp of
+                                  Just c' -> c'
+                                  Nothing -> c
+          | otherwise         = c
 
 {-------------------------------------------------------------------------------
   Dealing with CallArgs
@@ -821,6 +832,118 @@ callArgExp = callArg Just (const Nothing)
 
 callArgComp :: CallArg a b -> Maybe b
 callArgComp = callArg (const Nothing) Just
+
+{-------------------------------------------------------------------------------
+  Bindings contexts
+-------------------------------------------------------------------------------}
+
+-- | Binding context (for multiple threads)
+--
+-- We may have to pipeline under a shared context and CompCtxt simply records
+-- this shared context. We are not really using this context in AstComp but it
+-- seems the right place to define this datatype.
+data GCompCtxt tc t a b
+  = Hole
+  | CLet       CompLoc (GName tc) (GComp tc t a b) (GCompCtxt tc t a b)
+  | CLetE      CompLoc (GName t) ForceInline (GExp t b) (GCompCtxt tc t a b)
+  | CLetERef   CompLoc (GName t) (Maybe (GExp t b)) (GCompCtxt tc t a b)
+  | CLetHeader CompLoc (GFun t b) (GCompCtxt tc t a b)
+  | CLetFunC   CompLoc (GName tc) [GName (CallArg t tc)]       -- params
+                                  (GComp tc t a b)             -- body
+                                  (GCompCtxt tc t a b)
+  | CLetStruct CompLoc (GStructDef t) (GCompCtxt tc t a b)
+
+type CompCtxt = GCompCtxt CTy Ty () ()
+
+{-------------------------------------------------------------------------------
+  Mutable variables
+-------------------------------------------------------------------------------}
+
+-- | Mutable variables (those declared in ELetRef and LetERef)
+data GMutVar t a b = MutVar {
+    mutVar  :: GName t
+  , mutInit :: Maybe (GExp t b)
+  , mutLoc  :: CompLoc
+  , mutInfo :: a
+  }
+type MutVar = GMutVar Ty () ()
+
+-- | Apply substitution to local variables
+substLocal :: [(LenVar, NumExpr)]
+           -> [(GName Ty, GExp Ty b)]
+           -> GMutVar Ty a b -> GMutVar Ty a b
+substLocal slen sexp (MutVar x minit loc info) = MutVar {
+      mutVar  = mapName (substTy slen) x
+    , mutInit = fmap (substExp slen sexp) minit
+    , mutLoc  = loc
+    , mutInfo = info
+    }
+
+setMutVarName :: String -> GMutVar t a b -> GMutVar t a b
+setMutVarName nm mv = mv { mutVar = (mutVar mv) { name = nm } }
+
+-- | Extract local variables from a computation
+--
+-- Invariant:
+--
+-- > uncurry insertCMutVars (extractCMutVars c) == c
+extractCMutVars :: GComp tc t a b -> ([GMutVar t a b], GComp tc t a b)
+extractCMutVars (MkComp (LetERef x minit c) loc info) =
+    let (locals, c') = extractCMutVars c
+    in (MutVar x minit loc info : locals, c')
+extractCMutVars c =
+    ([], c)
+
+-- | Insert locals into a computation
+--
+-- See also `extractMutVars`.
+insertCMutVars :: [GMutVar t a b] -> GComp tc t a b -> GComp tc t a b
+insertCMutVars [] c =
+    c
+insertCMutVars (MutVar x minit loc info:ls) c =
+    MkComp (LetERef x minit (insertCMutVars ls c)) loc info
+
+-- | Extract locals from an expression
+--
+-- Invariant:
+--
+-- > uncurry insertCMutVars (extractCMutVars c) == c
+extractEMutVars :: GExp t a -> ([GMutVar t a a], GExp t a)
+extractEMutVars (MkExp (ELetRef x minit e) loc info) =
+    let (locals, e') = extractEMutVars e
+    in (MutVar x minit loc info : locals, e')
+extractEMutVars e =
+    ([], e)
+
+-- | Insert locals into an expression
+--
+-- See also `extractMutVars`.
+--
+-- NOTE: Locals extracted from a computation can be inserted into an
+-- expression provided that the types of the labels matches.
+insertEMutVars :: [GMutVar t a a] -> GExp t a -> GExp t a
+insertEMutVars [] e =
+    e
+insertEMutVars (MutVar x minit loc info:ls) e =
+    MkExp (ELetRef x minit (insertEMutVars ls e)) loc info
+
+-- | Equivalent of `extractCMutVars` for `GCompCtxt`
+--
+-- NOTE: Since we don't record labels in GCompCtxt (TODO: why not?) the labels
+-- on the locals are unit.
+extractCtxtMutVars :: GCompCtxt tc t a b -> ([GMutVar t () b], GCompCtxt tc t a b)
+extractCtxtMutVars (CLetERef loc x minit ctxt) =
+    let (locals, ctxt') = extractCtxtMutVars ctxt
+    in (MutVar x minit loc () : locals, ctxt')
+extractCtxtMutVars ctxt =
+    ([], ctxt)
+
+-- | Inverse of `extractCtxtMutVars`
+insertCtxtMutVars :: [GMutVar t () b] -> GCompCtxt tc t a b -> GCompCtxt tc t a b
+insertCtxtMutVars [] ctxt =
+    ctxt
+insertCtxtMutVars (MutVar x minit loc ():ls) ctxt =
+    CLetERef loc x minit (insertCtxtMutVars ls ctxt)
 
 {-------------------------------------------------------------------------------
   Utility
@@ -873,7 +996,7 @@ compShortName = go . unComp
     go (LetE            {}) = "LetE"
     go (LetERef         {}) = "LetERef"
     go (LetHeader fun _   ) = "LetHeader(" ++ name (funName fun) ++ ")"
-    go (LetFunC nm _ _ _ _) = "LetFunC(" ++ name nm ++ ")"
+    go (LetFunC nm _ _ _  ) = "LetFunC(" ++ name nm ++ ")"
     go (LetStruct       {}) = "Struct"
     go (Call n _          ) = "Call(" ++ name n ++ ")"
     go (Emit            {}) = "Emit"
@@ -896,25 +1019,6 @@ compShortName = go . unComp
     go (WriteInternal   {}) = "WriteInternal"
     go (Standalone      {}) = "Standalone"
     go (Mitigate        {}) = "Mitigate"
-
--- Just A binding context (for multiple threads)
--- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
--- We may have to pipeline under a shared context and CompCtxt simply
--- records this shared context. We are not really using this context
--- in AstComp but it seems the right place to define this datatype.
-data GCompCtxt tc t a b
-  = Hole
-  | CLet       CompLoc (GName tc) (GComp tc t a b) (GCompCtxt tc t a b)
-  | CLetE      CompLoc (GName t) ForceInline (GExp t b) (GCompCtxt tc t a b)
-  | CLetERef   CompLoc (GName t) (Maybe (GExp t b)) (GCompCtxt tc t a b)
-  | CLetHeader CompLoc (GFun t b) (GCompCtxt tc t a b)
-  | CLetFunC   CompLoc (GName tc) [GName (CallArg t tc)]       -- params
-                                  [(GName t,Maybe (GExp t b))] -- locals
-                                  (GComp tc t a b)             -- body
-                                  (GCompCtxt tc t a b)
-  | CLetStruct CompLoc (GStructDef t) (GCompCtxt tc t a b)
-
-type CompCtxt = GCompCtxt CTy Ty () ()
 
 -- | Type of the input stream
 --
@@ -972,38 +1076,38 @@ toCompPos a pos c0 = MkComp c0 (Just pos) a
 -- suspicious? Why no +1? Fix or document.
 compSize :: GComp tc t a b -> Int
 compSize c = case unComp c of
-  Var _nm                           -> 1
-  BindMany c1 xs_cs                 -> foldr (\(_x,c') _s -> compSize c') (compSize c1) xs_cs
-  Seq c1 c2                         -> 1 + compSize c1 + compSize c2
-  Par _ c1 c2                       -> 1 + compSize c1 + compSize c2
-  Let _nm c1 c2                     -> 1 + compSize c1 + compSize c2
-  LetE _nm _ _e c1                  -> 2 + compSize c1
-  LetERef _nm (Just _) c1           -> 2 + compSize c1
-  LetERef _nm Nothing  c1           -> 2 + compSize c1
-  LetHeader _f c1                   -> 2 + compSize c1
-  LetStruct _sdef c1                -> 1 + compSize c1
-  LetFunC _nm _params _locals c1 c2 -> 1 + compSize c1 + compSize c2
-  Call _nm es                       -> 1 + sum (map callArgSize es)
-  Emit _a _e                        -> 1
-  Emits _ _e                        -> 1
-  Return _ _ _ _e                   -> 1
-  Branch _e c1 c2                   -> 1 + compSize c1 + compSize c2
-  Take1 _ _                         -> 1
-  Take _ _ _                        -> 1
-  Until _e c1                       -> 1 + compSize c1
-  While _e c1                       -> 1 + compSize c1
-  Times _ui _e1 _e2 _nm c1          -> 1 + compSize c1
-  Repeat _ c1                       -> compSize c1
-  VectComp _ c1                     -> compSize c1
-  Map _ _nm                         -> 1
-  Filter _e                         -> 1
-  Interleave c1 c2                  -> compSize c1 + compSize c2
-  ReadSrc  {}                       -> 1
-  WriteSnk {}                       -> 1
-  ReadInternal  {}                  -> 1
-  WriteInternal {}                  -> 1
-  Standalone c1                     -> compSize c1
-  Mitigate {}                       -> 1
+  Var _nm                   -> 1
+  BindMany c1 xs_cs         -> foldr (\(_x,c') _s -> compSize c') (compSize c1) xs_cs
+  Seq c1 c2                 -> 1 + compSize c1 + compSize c2
+  Par _ c1 c2               -> 1 + compSize c1 + compSize c2
+  Let _nm c1 c2             -> 1 + compSize c1 + compSize c2
+  LetE _nm _ _e c1          -> 2 + compSize c1
+  LetERef _nm (Just _) c1   -> 2 + compSize c1
+  LetERef _nm Nothing  c1   -> 2 + compSize c1
+  LetHeader _f c1           -> 2 + compSize c1
+  LetStruct _sdef c1        -> 1 + compSize c1
+  LetFunC _nm _params c1 c2 -> 1 + compSize c1 + compSize c2
+  Call _nm es               -> 1 + sum (map callArgSize es)
+  Emit _a _e                -> 1
+  Emits _ _e                -> 1
+  Return _ _ _ _e           -> 1
+  Branch _e c1 c2           -> 1 + compSize c1 + compSize c2
+  Take1 _ _                 -> 1
+  Take _ _ _                -> 1
+  Until _e c1               -> 1 + compSize c1
+  While _e c1               -> 1 + compSize c1
+  Times _ui _e1 _e2 _nm c1  -> 1 + compSize c1
+  Repeat _ c1               -> compSize c1
+  VectComp _ c1             -> compSize c1
+  Map _ _nm                 -> 1
+  Filter _e                 -> 1
+  Interleave c1 c2          -> compSize c1 + compSize c2
+  ReadSrc  {}               -> 1
+  WriteSnk {}               -> 1
+  ReadInternal  {}          -> 1
+  WriteInternal {}          -> 1
+  Standalone c1             -> compSize c1
+  Mitigate {}               -> 1
 
 callArgSize :: CallArg (GExp t b) (GComp tc t a b) -> Int
 callArgSize (CAExp _)  = 0

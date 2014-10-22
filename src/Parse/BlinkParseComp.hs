@@ -47,12 +47,11 @@ import Eval (evalInt)
 -- TODO: Update the grammar
 parseProgram :: BlinkParser SrcProg
 parseProgram = parseTopLevel $
-    join $ mkProg <$ cppPragmas AllowFilenameChange
-       <*> declsParser <*> parseTopLevelDecls
+    join $ mkProg <$ cppPragmas AllowFilenameChange <*> parseTopLevelDecls
   where
-    mkProg _  ([],     _)  = fail "No main found"
-    mkProg _  (_:_:_,  _)  = fail "More than one main found"
-    mkProg ds ([main], bs) = MkProg ds <$> foldCommands (map Left bs ++ [Right main])
+    mkProg ([],     _)  = fail "No main found"
+    mkProg (_:_:_,  _)  = fail "More than one main found"
+    mkProg ([main], bs) = MkProg <$> foldCommands (map Left bs ++ [Right main])
 
 -- | Parse a list of top level declarations
 --
@@ -79,12 +78,6 @@ topLevelSep =
 cppPragmas :: AllowFilenameChange -> BlinkParser ()
 cppPragmas allowFilenameChange =
     void $ many (cppPragmaLine allowFilenameChange <* whiteSpace)
-
--- | > <decls> ::= (<decl>;)*
---
--- (declParser comes from the expression language)
-declsParser :: BlinkParser [(GName (Maybe SrcTy), Maybe SrcExp)]
-declsParser = declParser `endBy` topLevelSep
 
 -- | Parse a computation expression
 --
@@ -268,8 +261,8 @@ data GLetDecl tc t a b =
     LetDeclERef (GName t, Maybe (GExp t b))
   | LetDeclStruct (GStructDef t)
   | LetDeclExternal String [GName t] t
-  | LetDeclFunComp (Maybe (Int, Int)) (GName tc) [GName (CallArg t tc)] ([(GName t, Maybe (GExp t b))], GComp tc t a b)
-  | LetDeclFunExpr (GName t) [GName t] ([(GName t, Maybe (GExp t b))], GExp t b)
+  | LetDeclFunComp (Maybe (Int, Int)) (GName tc) [GName (CallArg t tc)] (GComp tc t a b)
+  | LetDeclFunExpr (GName t) [GName t] (GExp t b)
   | LetDeclComp (Maybe (Int, Int)) (GName tc) (GComp tc t a b)
   | LetDeclExpr (GName t) (GExp t b)
 
@@ -290,14 +283,11 @@ parseLetDecl = choice
     [ LetDeclERef   <$> declParser
     , LetDeclStruct <$> parseStruct
     , try $ LetDeclExternal <$ reserved "let" <* reserved "external" <*> identifier <*> paramsParser <* symbol ":" <*> (Just <$> parseBaseType)
-    , try $ LetDeclFunComp  <$ reserved "fun" <*> parseCompAnn <*> parseCVarBind <*> compParamsParser <*> body parseCommands
-    , try $ LetDeclFunExpr  <$ reserved "fun"                  <*> parseVarBind  <*> paramsParser     <*> body parseStmts
+    , try $ LetDeclFunComp  <$ reserved "fun" <*> parseCompAnn <*> parseCVarBind <*> compParamsParser <*> braces parseCommands
+    , try $ LetDeclFunExpr  <$ reserved "fun"                  <*> parseVarBind  <*> paramsParser     <*> braces parseStmts
     , try $ LetDeclComp     <$ reserved "let" <*> parseCompAnn <*> parseCVarBind <* symbol "=" <*> parseComp
     , try $ LetDeclExpr     <$ reserved "let"                  <*> parseVarBind  <* symbol "=" <*> parseExpr
     ]
-  where
-    body :: BlinkParser a -> BlinkParser ([(GName (Maybe SrcTy), Maybe SrcExp)], a)
-    body p = braces $ (,) <$> declsParser <*> p
 
 -- > <struct> ::= "struct" IDENT "=" "{" (IDENT ":" <base-type>)*";" "}"
 parseStruct :: BlinkParser (GStructDef (Maybe SrcTy))
@@ -373,12 +363,12 @@ cLetDecl p (LetDeclExternal x params ty) =
   where
     fn  = toName x p Nothing
     fun = mkFunExternal p fn params ty
-cLetDecl p (LetDeclFunComp h x params (locls, c)) =
-    ([(x, params)], cLetFunC p x params locls (mkVectComp c h))
-cLetDecl p (LetDeclFunExpr x params (locls, e)) =
+cLetDecl p (LetDeclFunComp h x params c) =
+    ([(x, params)], cLetFunC p x params (mkVectComp c h))
+cLetDecl p (LetDeclFunExpr x params e) =
     ([], cLetHeader p fun)
   where
-    fun = mkFunDefined p x params locls e
+    fun = mkFunDefined p x params e
 cLetDecl p (LetDeclComp h x c) =
     ([], cLet p x (mkVectComp c h))
 cLetDecl p (LetDeclExpr x e) =

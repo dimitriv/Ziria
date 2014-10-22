@@ -16,7 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE  QuasiQuotes, GADTs, ScopedTypeVariables #-}
+{-# LANGUAGE  QuasiQuotes, GADTs, ScopedTypeVariables, RecordWildCards #-}
 {-# OPTIONS_GHC -fwarn-unused-binds -Werror #-}
 
 module CgExpr
@@ -33,7 +33,7 @@ module CgExpr
 
 import Opts
 import AstExpr
-import AstUnlabelled 
+import AstUnlabelled
 import AstComp
 import PpExpr
 import PpComp
@@ -45,7 +45,7 @@ import CgTypes
 import CgLUT
 import Utils
 
-import CtExpr 
+import CtExpr
 
 import Text.Parsec.Pos ( SourcePos )
 
@@ -189,7 +189,7 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
         return [cexp| $id:newName |]
 
     go t (EVar x)
-      = lookupVarEnv x 
+      = lookupVarEnv x
 
     go t (EUnOp op e) = do
         ce <- codeGenExp dflags e
@@ -269,9 +269,9 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
 
     -- type(earr) must be "TArray ?n ?t" after typechecking
     go t (EIter k v earr ebody) = do
-       
+
         let TArray _ ta = ctExp earr
-        
+
         k_new <- freshName (name k) tint
         v_new <- freshName (name v) ta
 
@@ -335,7 +335,7 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
     go t (ELetRef x (Just e1) e2) = do
         x_name <- freshVar $ name x ++ getLnNumInStr (expLoc e0)
 
-        let t1 = ctExp e1 
+        let t1 = ctExp e1
 
         codeGenDeclGroup x_name t1 >>= appendDecl
 
@@ -395,12 +395,12 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
         is_struct_ptr <- isStructPtrType retTy
 
         newNm <- genSym $ name nef ++ "_" ++ getLnNumInStr (expLoc e0)
-        
+
         let retNewN = toName ("__retcall_" ++ newNm) Nothing retTy
             cer     = [cexp|$id:(name retNewN)|]
 
         appendDecls =<<
-           codeGenDeclGlobalGroups dflags [(retNewN, Nothing)]
+           codeGenDeclGlobalGroups dflags [retNewN]
 
         case retTy of
           TArray li _ty
@@ -414,11 +414,11 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
                appendStmt [cstm|$(cef)($cer, $args:cargs);|]
 
             | otherwise
-           -> inAllocFrame $ 
+           -> inAllocFrame $
               appendStmt [cstm| $cer = $(cef)($args:cargs);|]
-        
-        return [cexp|$cer|]  
-         
+
+        return [cexp|$cer|]
+
 
 
 
@@ -450,7 +450,7 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
     go t (EError ty str) = do
         appendStmts [cstms|printf("RUNTIME ERROR: %s\n", $str);
                            exit(1);|]
-        -- DV: This is not quite right, we need a default value of type ty ... 
+        -- DV: This is not quite right, we need a default value of type ty ...
         -- TODO TODO
         return [cexp|UNIT|]
 
@@ -461,7 +461,7 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
       codeGenLUTExp_Mock dflags (expLoc e1) r e1
 
     go t (ELUT r e1) =
-      codeGenLUTExp dflags [] r e1 Nothing
+      codeGenLUTExp dflags r e1 Nothing
 
     -- TODO: Re-enable permuations, or treat as library function?
     go t (EBPerm e1 e2) =
@@ -521,8 +521,8 @@ printArray dflags e cupper t
 
        ; let pcdeclN_c = name pcdeclN
              pvdeclN_c = name pvdeclN
- 
-       ; let pcDeclE  = eVar Nothing pcdeclN 
+
+       ; let pcDeclE  = eVar Nothing pcdeclN
              pvDeclE  = eVar Nothing pvdeclN
              pvAssign = eAssign Nothing
                            pvDeclE (eArrRead Nothing e pcDeclE LISingleton)
@@ -585,11 +585,11 @@ codegen_param_byref nm ty = do
         | otherwise    = [cty|$ty:(codeGenTy ty)*|]
 
 codeGenParamsByRef :: [EId] -> Cg [C.Param]
-codeGenParamsByRef params 
+codeGenParamsByRef params
   = concat <$> mapM codeGenParamByRef params
 
 codeGenParam :: EId -> Cg [C.Param]
-codeGenParam nm 
+codeGenParam nm
   = codegen_param nm (nameTyp nm)
 
 codegen_param nm (ty@(TArray (Literal l) _)) = do
@@ -608,7 +608,7 @@ codegen_param nm ty
        ; return $
          -- NB: b = False applies to ordinary arrays
          if b then [cparams|$ty:(codeGenTy ty) * $id:pname |]
-              else [cparams|$ty:(codeGenTy ty) $id:pname  |] 
+              else [cparams|$ty:(codeGenTy ty) $id:pname  |]
        }
 
 codeGenParams :: [EId] -> Cg [C.Param]
@@ -682,13 +682,17 @@ codeGenGlobalDeclsOnlyAlg dflags = mapM $ \(nm, me) ->
   codeGenDeclDef (name nm) (nameTyp nm)
 
 -- ^ Only initialize globals
-codeGenGlobalInitsOnly :: DynFlags -> [(EId, Maybe Exp)] -> Cg ()
+codeGenGlobalInitsOnly :: DynFlags -> [MutVar] -> Cg ()
 codeGenGlobalInitsOnly dflags defs = mapM_ go defs
-  where go :: (EId, Maybe Exp) -> Cg ()
-        go (nm, Just e) = do
-            ce <- codeGenExp dflags e
-            assignByVal (ctExp e) (ctExp e) [cexp|$id:(name nm)|] ce
-        go (_, Nothing) = return ()
+  where
+    go :: MutVar -> Cg ()
+    go MutVar{..} =
+      case mutInit of
+        Just e -> do
+          ce <- codeGenExp dflags e
+          assignByVal (ctExp e) (ctExp e) [cexp|$id:(name mutVar)|] ce
+        Nothing ->
+          return ()
 
 ------------------------------------------------------------------------------
 -- | Reading/writing to/from arrays

@@ -16,7 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE  QuasiQuotes, GADTs, ScopedTypeVariables #-}
+{-# LANGUAGE  QuasiQuotes, GADTs, ScopedTypeVariables, RecordWildCards #-}
 
 module CgTypes ( codeGenTy
                , codeGenTy_val
@@ -39,6 +39,7 @@ module CgTypes ( codeGenTy
 
 import Opts
 import AstExpr
+import AstComp
 import PpExpr
 import CgMonad
 
@@ -350,10 +351,10 @@ codeGenDeclGroup_qual quals v ty vinit
           | alloc_as_ptr
           = do { newHeapAlloc
                ; heap_context <- getHeapContext
-               ; let ig1  = [cdecl| $ty:decl_t *$id:v = 
+               ; let ig1  = [cdecl| $ty:decl_t *$id:v =
                                        ($ty:t *) wpl_alloca($id:heap_context, $len * sizeof($ty:t)); |]
                      ig2  = [cdecl| $ty:decl_t *$id:v; |]
-                     stmt = [cstm| $id:v = 
+                     stmt = [cstm| $id:v =
                                        ($ty:t *) wpl_alloca($id:heap_context, $len * sizeof($ty:t)); |]
                ; return (ig1, (ig2, Just stmt))
                }
@@ -404,17 +405,17 @@ initGroupDef :: C.InitGroup -> C.Definition
 initGroupDef ig = C.DecDef ig Data.Loc.noLoc
 
 
-codeGenDeclGlobalGroups :: DynFlags
-                        -> [(GName Ty, Maybe Exp)] -> Cg [C.InitGroup]
-codeGenDeclGlobalGroups dflags = mapM $ \(nm, me) ->
+codeGenDeclGlobalGroups :: DynFlags -> [GName Ty] -> Cg [C.InitGroup]
+codeGenDeclGlobalGroups dflags = mapM $ \nm ->
   codeGenDeclGroup (name nm) (nameTyp nm)
 
 codeGenDeclGlobalDefs :: DynFlags
-                      -> [(GName Ty, Maybe Exp)] -> Cg ([C.Definition],[C.Stm])
+                      -> [MutVar]
+                      -> Cg ([C.Definition],[C.Stm])
 codeGenDeclGlobalDefs dflags defs
- = do { defs_inits <- mapM (\(nm, me) ->
-                      do { let ty = nameTyp nm
-                         ; (_,(ig,mstm)) <- codeGenDeclGroup_qual "calign" (name nm) ty Nothing
+ = do { defs_inits <- mapM (\MutVar{..} ->
+                      do { let ty = nameTyp mutVar
+                         ; (_,(ig,mstm)) <- codeGenDeclGroup_qual "calign" (name mutVar) ty Nothing
                          ; let id = C.DecDef ig Data.Loc.noLoc
                          ; case mstm of Nothing   -> return (id,[])
                                         Just init -> return (id,[init]) }) defs

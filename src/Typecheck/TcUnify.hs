@@ -46,7 +46,6 @@ import Text.Parsec.Pos (SourcePos)
 import Text.PrettyPrint.HughesPJ
 import qualified Data.Map as M
 import qualified Data.Set as S
-import qualified Data.Traversable as Traversable
 
 import AstComp
 import AstExpr
@@ -278,12 +277,7 @@ defaultComp :: Comp -> TcM Comp
 defaultComp = mapCompM zonk zonk return return defaultExpr return
 
 defaultProg :: Prog -> TcM Prog
-defaultProg (MkProg globs comp) = do
-  globs' <- forM globs $ \(nm, mexp) -> do
-              mexp' <- Traversable.mapM defaultExpr mexp
-              return (nm, mexp')
-  comp'  <- defaultComp comp
-  return $ MkProg globs' comp'
+defaultProg (MkProg comp) = MkProg `liftM` defaultComp comp
 
 {-------------------------------------------------------------------------------
   Instantiation (of polymorphic functions)

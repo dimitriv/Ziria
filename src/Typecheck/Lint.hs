@@ -380,8 +380,7 @@ lintComp comp@(MkComp comp0 loc _) =
     go (LetHeader fun c) = do
       void $ lintFun fun
       lintComp c
-    go (LetFunC f args locals body rhs) = do
-      lintLocals locals
+    go (LetFunC f args body rhs) = do
       res <- lintComp body
       unify loc (nameTyp f) $ CTArrow (map nameTyp args) res
       lintComp rhs
@@ -478,21 +477,13 @@ lintFun :: GFun Ty a -> TcM Ty
 lintFun (MkFun fun0 loc _) = go fun0
   where
     go :: GFun0 Ty a -> TcM Ty
-    go (MkFunDefined f args locals body) = do
-      lintLocals locals
+    go (MkFunDefined f args body) = do
       res <- lintExp body
       unify loc (nameTyp f) $ TArrow (map nameTyp args) res
       return (nameTyp f)
     go (MkFunExternal f args res) = do
       unify loc (nameTyp f) $ TArrow (map nameTyp args) res
       return (nameTyp f)
-
-lintLocals :: [(GName Ty, Maybe (GExp Ty a))] -> TcM ()
-lintLocals = mapM_ (uncurry go)
-  where
-    go :: GName Ty -> Maybe (GExp Ty a) -> TcM ()
-    go _ Nothing  = return ()
-    go x (Just e) = unify (nameLoc x) (nameTyp x) =<< lintExp e
 
 lintMitigator :: Maybe SourcePos -> Ty -> Int -> Int -> TcM CTy
 lintMitigator loc a n1 n2 = do
@@ -507,9 +498,7 @@ lintMitigator loc a n1 n2 = do
     toArray n = TArray (Literal n) a
 
 lintProg :: GProg CTy Ty a b -> TcM CTy
-lintProg (MkProg globs comp) = do
-   lintLocals globs
-   lintComp comp
+lintProg (MkProg comp) = lintComp comp
 
 {-------------------------------------------------------------------------------
   Auxiliary

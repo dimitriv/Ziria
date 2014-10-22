@@ -34,7 +34,7 @@ import Control.Applicative
 import Control.Monad.Error
 import Control.Monad.Reader
 import Control.Monad.State
-import Data.List ((\\), foldl', nub)
+import Data.List (foldl', nub)
 import Data.Map (Map)
 import Data.Monoid
 import Data.Set (Set)
@@ -262,13 +262,11 @@ varUseDefs ranges = \e -> do
         go e
 
 inOutVars :: Monad m
-          => [GName Ty]
-          -> Map (GName Ty) Range
-          -> Exp
-          -> m ([GName Ty], [GName Ty], [GName Ty])
-inOutVars locals ranges e = do
+          => Map (GName Ty) Range
+          -> Exp -> m ([GName Ty], [GName Ty], [GName Ty])
+inOutVars ranges e = do
     (modified, impUsed, pureUsed, allVars) <- varUseDefs ranges e
     let inVars, outVars :: [GName Ty]
         inVars  = nub $ impUsed ++ pureUsed
-        outVars = modified \\ locals
+        outVars = modified
     return (inVars, outVars, allVars)

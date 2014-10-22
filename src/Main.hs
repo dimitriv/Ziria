@@ -129,7 +129,7 @@ main = failOnException $ do
     let varenv   = mkEnv []
 
     sym <- GS.initGenSym (getName dflags)
-    (MkProg globals' c', unifiers1) <- failOnError $
+    (MkProg c', unifiers1) <- failOnError $
       runTcM (tyCheckProg prog)
              tdef_env
              varenv
@@ -190,8 +190,7 @@ main = failOnException $ do
     let compile_threads (sc,ctx,tid_cs,bufTys,fn)
           = do { defs <- failOnError $
                          evalCg sym (getStkThreshold dflags) $
-                         codeGenProgram dflags globals'
-                                        ctx tid_cs bufTys (in_ty,yld_ty)
+                         codeGenProgram dflags ctx tid_cs bufTys (in_ty,yld_ty)
                ; return $ CompiledProgram sc defs fn }
     code_names <- forM icands compile_threads
 

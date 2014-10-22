@@ -77,10 +77,7 @@ instance Outputable VectAnn where
   ppr (UpTo _r ann)  = text "<=" <> ppWidth ann
 
 instance (Outputable tc, Outputable t) => Outputable (GProg tc t a b) where
-  ppr p = case p of
-    MkProg globs c ->
-      ppDecls globs $$
-      ppr c
+  ppr (MkProg c) = ppr c
 
 {-------------------------------------------------------------------------------
   Util
@@ -167,14 +164,12 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
          text "in" $$
          ppComp c
     --
-    LetFunC f params locls c1 c2
+    LetFunC f params c1 c2
       | ignorelet || (ignoreexp && not (nested_letfuns c1))
       -> ppComp c2
       | otherwise
       -> text "let comp" <+> ppName f <+>
                            parens (ppCompParams params) <+> text "=" $$
-           (if not ignoreexp then (nest nestingDepth (ppDecls locls))
-            else empty) $$
            nest nestingDepth (ppComp c1) $$
          text "in" $$
          ppComp c2

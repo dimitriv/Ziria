@@ -97,10 +97,10 @@ checkUnresolved
 
     -- Descend the context to find the main computation
     findMain :: Comp -> Comp
-    findMain (MkComp (Let _ _         c) _ _) = findMain c
-    findMain (MkComp (LetStruct _     c) _ _) = findMain c
-    findMain (MkComp (LetE _ _ _      c) _ _) = findMain c
-    findMain (MkComp (LetHeader _     c) _ _) = findMain c
-    findMain (MkComp (LetFunC _ _ _ _ c) _ _) = findMain c
-    findMain (MkComp (LetERef _ _     c) _ _) = findMain c
-    findMain other_c                          = other_c
+    findMain (MkComp (Let _ _       c) _ _) = findMain c
+    findMain (MkComp (LetStruct _   c) _ _) = findMain c
+    findMain (MkComp (LetE _ _ _    c) _ _) = findMain c
+    findMain (MkComp (LetHeader _   c) _ _) = findMain c
+    findMain (MkComp (LetFunC _ _ _ c) _ _) = findMain c
+    findMain (MkComp (LetERef _ _   c) _ _) = findMain c
+    findMain other_c                        = other_c

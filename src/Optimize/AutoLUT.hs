@@ -76,8 +76,8 @@ runAutoLUT dflags _ c = autolutC c
         go (LetStruct sdef c) =
             LetStruct sdef <$> autolutC c
 
-        go (LetFunC v params locals c1 c2) =
-            LetFunC v params locals <$> autolutC c1 <*> autolutC c2
+        go (LetFunC v params c1 c2) =
+            LetFunC v params <$> autolutC c1 <*> autolutC c2
 
         go (Call n es) =
             Call n <$> mapM autolutCallArg es
@@ -122,7 +122,7 @@ runAutoLUT dflags _ c = autolutC c
             pure (Map p nm)
 
         go (Filter f) =
-            pure (Filter f) 
+            pure (Filter f)
 
         go (ReadSrc mty) =
             pure (ReadSrc mty)
@@ -153,9 +153,9 @@ runAutoLUT dflags _ c = autolutC c
         ranges :: Map EId Range
         ranges = maybe Map.empty id (varRanges e_)
 
-        autoE e0@(MkExp _ loc inf) | Right True <- shouldLUT dflags [] ranges e0 = do
+        autoE e0@(MkExp _ loc inf) | Right True <- shouldLUT dflags ranges e0 = do
             verbose dflags $ text "Expression autolutted:" </> nest 4 (ppr e0 <> line) </>
-                             case pprLUTStats dflags [] ranges e0 of
+                             case pprLUTStats dflags ranges e0 of
                                Nothing  -> mempty
                                Just doc -> doc
             pure $ MkExp (ELUT ranges e0) loc inf
@@ -189,7 +189,7 @@ runAutoLUT dflags _ c = autolutC c
             go (EIter i j e1 e2) = do
                 verbose dflags $ text "Cannot autolut loop:" </> nest 4 (ppr e0 <> line) </>
                                  nest 4 (text "Variable ranges:" </> pprRanges ranges) </>
-                                 case pprLUTStats dflags [] ranges e0 of
+                                 case pprLUTStats dflags ranges e0 of
                                    Nothing  -> mempty
                                    Just doc -> doc
                 EIter i j <$> autoE e1 <*> autoE e2
@@ -197,7 +197,7 @@ runAutoLUT dflags _ c = autolutC c
             go (EFor ui i e1 e2 e3) = do
                 verbose dflags $ text "Cannot autolut loop:" </> nest 4 (ppr e0 <> line) </>
                                  nest 4 (text "Variable ranges:" </> pprRanges ranges) </>
-                                 case pprLUTStats dflags [] ranges e0 of
+                                 case pprLUTStats dflags ranges e0 of
                                    Nothing  -> mempty
                                    Just doc -> doc
                 EFor ui i <$> autoE e1 <*> autoE e2 <*> autoE e3
@@ -205,7 +205,7 @@ runAutoLUT dflags _ c = autolutC c
             go (EWhile e1 e2) = do
                 verbose dflags $ text "Cannot autolut loop:" </> nest 4 (ppr e0 <> line) </>
                                  nest 4 (text "Variable ranges:" </> pprRanges ranges) </>
-                                 case pprLUTStats dflags [] ranges e0 of
+                                 case pprLUTStats dflags ranges e0 of
                                    Nothing  -> mempty
                                    Just doc -> doc
                 EWhile <$> autoE e1 <*> autoE e2
@@ -251,22 +251,20 @@ runAutoLUT dflags _ c = autolutC c
         MkFun <$> go f <*> pure loc <*> pure inf
       where
         go :: Fun0 -> IO Fun0
-        go (MkFunDefined v params locals body@(MkExp _ loc inf))
-          | Right True <- shouldLUT dflags locals' ranges body = do
+        go (MkFunDefined v params body@(MkExp _ loc inf))
+          | Right True <- shouldLUT dflags ranges body = do
             verbose dflags $ text "Function autolutted:" </> nest 4 (ppr f0 <> line) <>
-                             case pprLUTStats dflags locals' ranges body of
+                             case pprLUTStats dflags ranges body of
                                Nothing  -> mempty
                                Just doc -> line <> doc
-            pure $ MkFunDefined v params locals (MkExp (ELUT ranges body) loc inf)
+            pure $ MkFunDefined v params (MkExp (ELUT ranges body) loc inf)
 
           where
-            locals' = [v | (v,_) <- locals]
-
             ranges :: Map EId Range
             ranges = maybe Map.empty id (varRanges body)
 
-        go (MkFunDefined v params locals body) =
-            MkFunDefined v params locals <$> autolutE body
+        go (MkFunDefined v params body) =
+            MkFunDefined v params <$> autolutE body
 
         go f@(MkFunExternal {}) =
             pure f

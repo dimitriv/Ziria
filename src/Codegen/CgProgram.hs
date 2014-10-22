@@ -81,7 +81,7 @@ codeGenContexts
        }
 
 codeGenGlobals :: DynFlags
-               -> [(EId, Maybe Exp)]
+               -> [MutVar]
                -> Ty -- input type  (must be ext buffer!)
                -> Ty -- output type (must be ext buffer!)
                -> Cg [C.Stm]
@@ -154,18 +154,18 @@ codeGenThread dflags tid c = do
                 "At location: " ++ show (compLoc c)
 
 
-codeGenProgram :: DynFlags                       -- Flags
-               -> [(EId,Maybe Exp)]              -- Globals
-               -> CompCtxt                       -- Context
+codeGenProgram :: DynFlags                -- Flags
+               -> CompCtxt                -- Context
                -> [(PP.ThreadId, Comp)]   -- Threads
-               -> [Ty]                           -- Buftys (Between threads)
-               -> (Ty,Ty)                        -- Main input and output type
+               -> [Ty]                    -- Buftys (Between threads)
+               -> (Ty,Ty)                 -- Main input and output type
                -> Cg ()
-codeGenProgram dflags globals shared_ctxt
+codeGenProgram dflags shared_ctxt_with_globals
                tid_cs bufTys (in_ty,yld_ty)
   = withModuleName module_name $
-    do { initstms <- codeGenGlobals dflags globals in_ty yld_ty
-       ; extendVarEnv [(nm,[cexp|$id:(name nm)|]) | (nm,_) <- globals] $
+    do { let (globals, shared_ctxt) = extractCtxtMutVars shared_ctxt_with_globals
+       ; initstms <- codeGenGlobals dflags globals in_ty yld_ty
+       ; extendVarEnv [(nm,[cexp|$id:(name nm)|]) | MutVar nm _ _ _ <- globals] $
          do { (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
                 do { forM tid_cs $ \(tid,c) -> codeGenThread dflags tid c
                    ; if pipeline_flag then

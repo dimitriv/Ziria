@@ -19,7 +19,7 @@
 {-# OPTIONS_GHC -Wall -fno-warn-orphans -fno-warn-name-shadowing #-}
 {-# LANGUAGE FlexibleInstances #-}
 -- | Pretty-printing type classes instances
-module PpExpr (nestingDepth, ppName, ppDecls, ppEs) where
+module PpExpr (nestingDepth, ppName, ppEs) where
 
 import Text.PrettyPrint.HughesPJ
 import Text.PrettyPrint.Mainland (Pretty)
@@ -214,9 +214,8 @@ instance Outputable SrcTy where
 
 instance Outputable ty => Outputable (GFun ty a) where
   ppr fn = case unFun fn of
-    MkFunDefined f params decls ebody ->
+    MkFunDefined f params ebody ->
       ppName f <> parens (ppParams params) <+> text "=" $$
-          nest nestingDepth (ppDecls decls) $$
           nest nestingDepth (ppr ebody)
     MkFunExternal f params ty ->
       text (name f) <> parens (ppParams params) <+> text ":" <+> ppr ty
@@ -255,18 +254,6 @@ ppEs f sep eargs = case eargs of
 
 ppName :: GName ty -> Doc
 ppName nm = text (name nm) -- only in debug mode we want this: <> braces (text $ uniqId nm)
-
-ppDecls :: Outputable ty => [(GName ty, Maybe (GExp ty a))] -> Doc
-ppDecls decls =
-  case decls of
-    [] -> empty
-    (x,Just einit) : decls' ->
-      text "var" <+>
-        ppName x <> text ":" <+> ppr (nameTyp x) <+> text ":=" <+> ppr einit <> semi $$
-      ppDecls decls'
-    (x,Nothing) : decls' ->
-      text "var" <+> ppName x <> text ":" <+> ppr (nameTyp x) <> semi $$
-      ppDecls decls'
 
 ppParams :: Outputable ty => [GName ty] -> Doc
 ppParams params =

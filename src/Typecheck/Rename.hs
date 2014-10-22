@@ -201,10 +201,7 @@ renExpComp = callArg (liftM CAExp . renExp) (liftM CAComp . renComp)
 -------------------------------------------------------------------------------}
 
 renProg :: SrcProg -> TcM Prog
-renProg (MkProg gbls comp) = do
-    gbls' <- mapTelescope (recName . fst) renLocal gbls
-    comp' <- recNames (map fst gbls') $ renComp comp
-    return $ MkProg gbls' comp'
+renProg (MkProg comp) = MkProg <$> renComp comp
 
 renComp :: SrcComp -> TcM Comp
 renComp (MkComp comp0 cloc ()) = case comp0 of
@@ -247,13 +244,12 @@ renComp (MkComp comp0 cloc ()) = case comp0 of
         fun' <- renFun fun
         c2'  <- recName (funName fun') $ renComp c2
         return $ cLetHeader cloc fun' c2'
-      LetFunC nm params locals c1 c2 -> do
+      LetFunC nm params c1 c2 -> do
         nm'     <- renCBound nm
         params' <- mapTelescope recCAName renCABound params
-        locals' <- recCANames params' $ mapTelescope (recName . fst) renLocal locals
-        c1'     <- recCANames params' $ recNames (map fst locals') $ renComp c1
+        c1'     <- recCANames params' $ renComp c1
         c2'     <- recCName nm' $ renComp c2
-        return $ cLetFunC cloc nm' params' locals' c1' c2'
+        return $ cLetFunC cloc nm' params' c1' c2'
       Call nm es -> do
         es' <- mapM renExpComp es
         nm' <- renCFree nm
@@ -444,24 +440,16 @@ renUnOp _ ALength   = return ALength
 
 renFun :: SrcFun -> TcM Fun
 renFun (MkFun fun0 floc ()) = case fun0 of
-    MkFunDefined nm params locals body -> do
+    MkFunDefined nm params body -> do
       nm'     <- renBound nm
       params' <- mapTelescope recName renBound params
-      locals' <- recNames params' $ mapTelescope (recName . fst) renLocal locals
-      body'   <- recNames params' $ recNames (map fst locals') $ renExp body
-      return $ mkFunDefined floc nm' params' locals' body'
+      body'   <- recNames params' $ renExp body
+      return $ mkFunDefined floc nm' params' body'
     MkFunExternal nm params retTy -> do
       nm'     <- renBound nm
       params' <- mapTelescope recName renBound params
       retTy'  <- recNames params' $ renReqTy floc retTy
       return $ mkFunExternal floc nm' params' retTy'
-
--- | Local variables
-renLocal :: (GName (Maybe SrcTy), Maybe SrcExp) -> TcM (GName Ty, Maybe Exp)
-renLocal (x, me) = do
-    x'  <- renBound x
-    me' <- mapM renExp me -- No recursion!
-    return (x', me')
 
 -- | The continuation of a monadic bind
 renBind :: (GName (Maybe SrcTy), SrcComp) -> TcM (GName Ty, Comp)

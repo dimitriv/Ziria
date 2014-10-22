@@ -20,7 +20,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RebindableSyntax #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-
+{-# LANGUAGE RecordWildCards #-}
 module CgFun ( cgFunDefined ) where
 
 import Prelude
@@ -148,19 +148,17 @@ cgFunDefined :: DynFlags
              -> Cg a     -- action for the body
              -> Cg a
 cgFunDefined dflags csp
-             fdef@(MkFun (MkFunDefined f params fun_locals orig_body) _ fTy)
+             fdef@(MkFun (MkFunDefined f params orig_body) _ fTy)
              action
-  = do { -- make up a new name for the function
-         newNm <- freshName (name f ++ "_" ++ getLnNumInStr csp) (nameTyp f)
+  = do { let (locals, stripped_body) = extractEMutVars orig_body
+
+         -- make up a new name for the function
+       ; newNm <- freshName (name f ++ "_" ++ getLnNumInStr csp) (nameTyp f)
 
        ; let retTy = ctExp orig_body
+
          -- transform the body if by-ref return
-
-         -- get the 'letref' bound locals
-       ; let (extra_locals, stripped_body) = stripLetRefs orig_body
-       ; let locals = fun_locals ++ extra_locals
-
-       ; ret_by_ref <- retByRef f (map fst locals) stripped_body
+       ; ret_by_ref <- retByRef f (map mutVar locals) stripped_body
 
          -- get the closure variables
        ; closureEnv <- getClosureVars fdef
@@ -176,7 +174,7 @@ cgFunDefined dflags csp
                           in (params', locals, locals , body')
                      RetByRef (DoReuseLcl (ret_lcl, ret_body))
                        -> let params' = ret_lcl : params
-                              locals' = filter (\(n,_) -> not (n == ret_lcl)) locals
+                              locals' = filter (\lcl -> mutVar lcl /= ret_lcl) locals
                               locals_inits = locals
                           in (params', locals', locals_inits, ret_body)
                      RetByRef (DoReuseLUT (ret_n, ret_body))
@@ -186,10 +184,11 @@ cgFunDefined dflags csp
 
        ; let name_uniq pn = (pn,[cexp|$id:(getNameWithUniq pn)|])
              paramsEnv = map name_uniq params'
-             localsEnv = map (name_uniq . fst) locals_defs'
+             localsEnv = map (name_uniq . mutVar) locals_defs'
 
          -- Create an init group of all locals (just declarations)
-       ; let decl_local (nm, _) = codeGenDeclGroup (getNameWithUniq nm) (nameTyp nm)
+       ; let decl_local MutVar{..} =
+               codeGenDeclGroup (getNameWithUniq mutVar) (nameTyp mutVar)
        ; clocals_decls <- mapM decl_local locals_defs'
          -- Create initialization code for locals (just inits)
        ; (c_decls', c_stmts')
@@ -198,7 +197,7 @@ cgFunDefined dflags csp
               extendVarEnv closureEnv $
               extendVarEnv localsEnv  $
               codeGenGlobalInitsOnly dflags $
-              map (\(nm,e) -> (nm { name = getNameWithUniq nm },e)) locals_inits'
+              map (\mv -> setMutVarName (getNameWithUniq (mutVar mv)) mv) locals_inits'
 
 
        ; (cdecls, cstmts, cbody) <-
@@ -210,9 +209,9 @@ cgFunDefined dflags csp
               MkExp (ELUT r body'') _ _
                   | not (isDynFlagSet dflags NoLUT)               -- if it's a body that is lutted
                   , RetByRef (DoReuseLUT (ret_n,_)) <- ret_by_ref -- and here's the return name
-                  -> codeGenLUTExp dflags locals r body'' (Just ret_n { name = getNameWithUniq ret_n })
+                  -> codeGenLUTExp dflags r body'' (Just ret_n { name = getNameWithUniq ret_n })
                   | not (isDynFlagSet dflags NoLUT)
-                  -> codeGenLUTExp dflags locals r body'' Nothing -- the usual thing
+                  -> codeGenLUTExp dflags r body'' Nothing -- the usual thing
 
               _ -> codeGenExp dflags body'
 
@@ -237,18 +236,3 @@ cgFunDefined dflags csp
        }
 
 cgFunDefined _ _ _ _ = error "cgFunDefined: not a FunDefined function!"
-
-
-
-stripLetRefs :: Exp -> ([(EId, Maybe Exp)], Exp)
--- Strip top-level letrefs
-stripLetRefs e = go [] e
-  where go defs e
-          = go0 defs (unExp e)
-          where
-             go0 defs (ELetRef nm Nothing e')
-               = go ((nm,Nothing):defs) e'
-             -- TODO: Should we do something with _ty here?
-             go0 defs (ELetRef nm (Just einit) e')
-               = go ((nm, Just einit):defs) e'
-             go0 defs _other = (reverse defs, e)

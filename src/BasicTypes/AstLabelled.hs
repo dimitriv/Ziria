@@ -113,19 +113,18 @@ eWhile loc a econd ebody = MkExp (EWhile econd ebody) loc a
 mkFunDefined :: Maybe SourcePos -> a
              -> GName t                       -- ^ name
              -> [GName t]                     -- ^ params
-             -> [(GName t,Maybe (GExp t a))]  -- ^ locals
              -> GExp t a                      -- ^ body
              -> GFun t a
-mkFunDefined loc a nm params locals body = MkFun {
-      unFun   = MkFunDefined nm params locals body
+mkFunDefined loc a nm params body = MkFun {
+      unFun   = MkFunDefined nm params body
     , funLoc  = loc
     , funInfo = a
     }
 
 mkFunExternal :: Maybe SourcePos -> a
-              -> GName t                       -- ^ name
-              -> [GName t]                     -- ^ params
-              -> t                             -- ^ return type
+              -> GName t                      -- ^ name
+              -> [GName t]                    -- ^ params
+              -> t                            -- ^ return type
               -> GFun t a
 mkFunExternal loc a nm params ret = MkFun {
       unFun   = MkFunExternal nm params ret
@@ -164,8 +163,8 @@ cLetHeader :: Maybe SourcePos -> a -> GFun t b -> GComp tc t a b -> GComp tc t a
 cLetHeader loc a f c = MkComp (LetHeader f c) loc a
 
 cLetFunC :: Maybe SourcePos -> a -> GName tc -> [(GName (CallArg t tc))]
-         -> [(GName t,Maybe (GExp t b))] -> GComp tc t a b -> GComp tc t a b -> GComp tc t a b
-cLetFunC loc a x args locs c1 c2 = MkComp (LetFunC x args locs c1 c2) loc a
+         -> GComp tc t a b -> GComp tc t a b -> GComp tc t a b
+cLetFunC loc a x args c1 c2 = MkComp (LetFunC x args c1 c2) loc a
 
 cLetStruct :: Maybe SourcePos -> a -> GStructDef t -> GComp tc t a b -> GComp tc t a b
 cLetStruct loc a sd c = MkComp (LetStruct sd c) loc a

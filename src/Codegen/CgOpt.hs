@@ -20,7 +20,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RebindableSyntax #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-
+{-# LANGUAGE RecordWildCards #-}
 module CgOpt where
 
 import Prelude
@@ -74,22 +74,22 @@ import CgFun
 compGenBind :: DynFlags
             -> GName CTy
             -> [GName (CallArg Ty CTy)]
-            -> [(EId,Maybe Exp)]
             -> Comp
             -> CompFunGen
-compGenBind dflags f params locals c1 args k = do
+compGenBind dflags f params c1_with_locals args k = do
+    let (locals, c1) = extractCMutVars c1_with_locals
+
     appName <- nextName $ "__" ++ (name f) ++ "_"
     let appId = appName
 
     -- The environment of locals
-    let localEnv = [(nm, [cexp|$id:(name nm_fresh)|])
-                        | (nm,_) <- locals
-                        , let nm_fresh = nm { name = appId ++ name nm }]
+    let localEnv = [ (mutVar, [cexp|$id:(name nm_fresh)|])
+                   | MutVar{..} <- locals
+                   , let nm_fresh = mutVar { name = appId ++ name mutVar }
+                   ]
 
     -- A freshened version of locals that uses the new ids!
-    let locals'
-          = [(nm { name = appId ++ name nm },me) | (nm,me) <- locals]
-
+    let locals' = map (\mv -> setMutVarName (appId ++ name (mutVar mv)) mv) locals
 
     let (eparams,cparams) = partitionParams params
     let (eargs, cargs)    = partitionCallArgs args
@@ -106,7 +106,7 @@ compGenBind dflags f params locals c1 args k = do
     pushName appName
 
     c1info <- extendVarEnv (eparamsEnv ++ localEnv) $ do
-              codeGenDeclGlobalGroups dflags locals' >>= appendDecls
+              codeGenDeclGlobalGroups dflags (map mutVar locals') >>= appendDecls
               codeGenComp dflags new_c1 k
 
     (local_decls, local_stms) <- inNewBlock_ $
@@ -814,8 +814,8 @@ codeGenComp dflags comp k =
       = codeGenSharedCtxt_ dflags False (CLetHeader csp fdef Hole) $
         codeGenCompTop dflags c1 k
     --
-    go (MkComp (LetFunC f params locals c1 c2) csp ()) =
-        codeGenSharedCtxt_ dflags False (CLetFunC csp f params locals c1 Hole) $
+    go (MkComp (LetFunC f params c1 c2) csp ()) =
+        codeGenSharedCtxt_ dflags False (CLetFunC csp f params c1 Hole) $
         codeGenCompTop dflags c2 k
 
     go (MkComp (BindMany c1 []) csp ()) =
@@ -1279,8 +1279,8 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
            ; return res
            }
     --
-    go (CLetFunC csp f params locals c1 ctxt) action
-      = extendFunEnv f (compGenBind dflags f params locals c1) $
+    go (CLetFunC csp f params c1 ctxt) action
+      = extendFunEnv f (compGenBind dflags f params c1) $
         go ctxt action
 
     go (CLetHeader csp (MkFun (MkFunExternal nm ps retTy) _ _) ctxt) action =
