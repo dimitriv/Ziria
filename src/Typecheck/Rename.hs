@@ -18,7 +18,7 @@
 -}
 -- | Renaming
 --
--- The renamer has a few responsibilities:
+-- The renamer has two responsibilities:
 --
 -- 1. Assigning uniqIds to names
 -- 2. Translating (Maybe) SrcTy and (Maybe) SrcCTy to Ty and CTy. This involves:
@@ -26,7 +26,6 @@
 --       source, primarily to free occurrences of names
 --    b. Adding a unification constraint in the case of 'length(x)' in types
 --       (where we need the type of x to be an array)
---    c.
 {-# OPTIONS_GHC -Wall #-}
 module Rename (renProg, renComp, renExp) where
 

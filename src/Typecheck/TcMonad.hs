@@ -131,10 +131,10 @@ import qualified GenSym as GS
 -------------------------------------------------------------------------------}
 
 data Unifier = Unifier {
-    tcm_tyenv    :: TyEnv
-  , tcm_ctyenv   :: CTyEnv
-  , tcm_alenenv  :: ALenEnv
-  , tcm_bwenv    :: BWEnv
+    tcm_tyenv    :: TyEnv   -- type variables of kind Ty
+  , tcm_ctyenv   :: CTyEnv  -- type variables of kind CTy
+  , tcm_alenenv  :: ALenEnv -- type variables of kind NumExpr
+  , tcm_bwenv    :: BWEnv   -- type variables of kind BitWidth
   }
   deriving Show
 

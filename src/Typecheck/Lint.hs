@@ -17,13 +17,9 @@
    permissions and limitations under the License.
 -}
 -- | Typecheck (and sanity check) core (rather than source)
---
--- TODO: If we define the type checker _in terms_ of the linter
--- (and I think we should), rather than reusing bits of the linter, we don't
--- have to export all the subcomponents of the linter.
 {-# OPTIONS_GHC -Wall -Wwarn #-}
 {-# LANGUAGE FlexibleInstances #-}
-module Lint where -- (Lint(..)) where
+module Lint (lint) where
 
 import Control.Applicative
 import Control.Monad
@@ -297,7 +293,6 @@ lintExp expr@(MkExp exp0 loc _) =
             Just fty ->
               return fty
         _other -> do
-          dumpTypeSubstitutions
           raiseErrNoVarCtx loc $
             text "Field projection from non-struct type: " <+> ppr eTy
 
