@@ -34,7 +34,7 @@
 -- Viterbi decoder works with finite buffer sizes (i.e. 96000 bits)
 -- But we want to test it with very large data inputs
 -- So we make a special version that reinits after 1500B
-let comp DecodeInfinite(h : struct HeaderInfo) =
+fun comp DecodeInfinite(h : struct HeaderInfo) {
   -- +8 is for CRC (4 bits but byte aligned)
   DemapLimit(0) 
   >>> {if (h.modulation == M_BPSK) then 
@@ -49,4 +49,4 @@ let comp DecodeInfinite(h : struct HeaderInfo) =
                 DemapQAM64() >>> DeinterleaveQAM64() 
       }
   |>>>| ViterbiInfinite(h.coding) >>> scrambler()
-in 
+};

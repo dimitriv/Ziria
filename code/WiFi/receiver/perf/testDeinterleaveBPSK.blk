@@ -20,4 +20,4 @@
 #include "../../const.blk"
 #include "../decoding/DeinterleaveBPSK.blk"
 
-read >>> DeinterleaveBPSK() >>> write
+let comp main = read >>> DeinterleaveBPSK() >>> write;

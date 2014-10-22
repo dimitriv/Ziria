@@ -20,4 +20,4 @@
 #include "../../const.blk"
 #include "../decoding/DemapQPSK.blk"
 
-read >>> DemapQPSK() >>> write
+let comp main = read >>> DemapQPSK() >>> write;

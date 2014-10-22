@@ -20,4 +20,4 @@
 #include "../../const.blk"
 #include "../ifft.blk"
 
-read >>> ifft() >>> write
+let comp main = read >>> ifft() >>> write;

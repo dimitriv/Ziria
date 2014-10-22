@@ -20,4 +20,4 @@
 
 #include "../modulating.blk"
 
-read[bit] >>> modulate(M_BPSK) >>> write[complex16]
+let comp main = read[bit] >>> modulate(M_BPSK) >>> write[complex16];

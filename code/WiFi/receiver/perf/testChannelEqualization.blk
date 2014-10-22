@@ -20,7 +20,7 @@
 
 #include "../OFDM/ChannelEqualization.blk"
 
-let comp init() = 
+fun comp init() {
   var params : struct LTECoeffs;
   do {
     for ii in [0,64] {
@@ -28,6 +28,6 @@ let comp init() =
     }
   };
   return params
-in
+};
 
-read >>> seq{params <- init(); ChannelEqualization(params)} >>> write
+let comp main = read >>> seq{params <- init(); ChannelEqualization(params)} >>> write;

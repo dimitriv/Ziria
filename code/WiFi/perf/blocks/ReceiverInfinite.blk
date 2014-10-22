@@ -34,11 +34,11 @@
 
 
 
-let comp receiveBits(hinfo : struct HeaderInfo) = 
+fun comp receiveBits(hinfo : struct HeaderInfo) {
     DecodeInfinite(hinfo) 
-in
+};
 
-let computeParams() =
+fun computeParams() {
    var params : struct LTECoeffs;
 
    for i in [0,64] {
@@ -46,16 +46,14 @@ let computeParams() =
       params.channelCoeffs[i] := complex16{re=1000; im=1000};
    };
    return params
+};
 
-in
+fun comp ReceiverInfinite(hinfo : struct HeaderInfo) {
+  let params = computeParams();
 
-let comp ReceiverInfinite(hinfo : struct HeaderInfo) = 
-
-  let params = computeParams()
-  in 
   (downSample() 
        >>> DataSymbol(0) >>> FFT() >>> ChannelEqualization(params)
        >>> PilotTrack()
        >>> GetData() 
        >>> receiveBits(hinfo))
-in
+};
