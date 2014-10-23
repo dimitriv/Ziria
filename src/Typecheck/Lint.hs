@@ -446,7 +446,10 @@ lintComp comp@(MkComp comp0 loc _) =
       return cty
     go (Repeat _ann c) = do
       cty <- lintComp c
-      (_, a, b) <- unifyComp loc (Check TUnit) Infer Infer cty
+      -- The official typing rule says that the computation must return (),
+      -- but we relax it here so that it's consistent with the typing of
+      -- > c ; c ; c
+      (_, a, b) <- unifyComp loc Infer Infer Infer cty
       return $ CTTrans a b
     go (VectComp _ c) =
       lintComp c
