@@ -45,9 +45,9 @@ import qualified GenSym as GS
 
 import TcExpr ( tyOfParams )
 
-
-
 evalArith :: GExp ty a -> Maybe Val
+-- Postcondition: if this function returns (Just v) then 
+-- v is arithmetic. 
 evalArith e = go (unExp e)
   where go (EVal val) = return val
         go (EBinOp b e1 e2)
@@ -63,6 +63,15 @@ evalArith e = go (unExp e)
           = do { v1 <- evalArith e1
                ; val_unop u v1
                }
+
+        go (EArrRead arr ei LISingleton)
+         | EValArr vals <- unExp arr
+         = do { i <- evalInt ei
+              ; case (vals !! fromIntegral i) of 
+                  v@(VInt _) -> return v
+                  _          -> Nothing 
+              }
+
         go _other = Nothing
 
 val_binop Add  (VInt i1) (VInt i2) = return (VInt $ i1+i2)
