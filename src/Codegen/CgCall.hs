@@ -129,18 +129,23 @@ codegen_call dflags loc retTy cer nef eargs
          TArr li _ty
            | let clen = case li of Literal l -> [cexp| $int:l|]
                                    NVar c _m -> [cexp| $id:(name c)|]
-           -> inAllocFrame $
+           -> when_ (not is_external) inAllocFrame $
               appendStmt [cstm|$(cef)($cer, $clen, $args:cargs);|]
 
          _ | is_struct_ptr
-           -> inAllocFrame $
+           -> when_ (not is_external) inAllocFrame $
               appendStmt [cstm|$(cef)($cer, $args:cargs);|]
 
            | otherwise
-          -> inAllocFrame $ 
+          -> when_ (not is_external) inAllocFrame $ 
              appendStmt [cstm| $cer = $(cef)($args:cargs);|]
        
        return [cexp|$cer|]  
+
+  where when_ :: Bool -> (Cg a -> Cg a) -> Cg a -> Cg a
+        when_ True f  = f 
+        when_ False f = id
+        
 
 
 

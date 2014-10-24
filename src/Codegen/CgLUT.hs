@@ -106,16 +106,30 @@ packIdx ranges vs tgt tgt_ty = go vs 0
               ; z <- genSym "__z"
               ; appendDecl $ [cdecl| $ty:tgt_ty * $id:z;|]
               ; appendStmt $ [cstm| $id:z = ($ty:tgt_ty *) $varexp; |]
-              ; appendStmt $ [cstm| $tgt |= ((* $id:z) & $int:mask) << $int:pos; |]
-              -- ; appendStmt $ [cstm| bitArrWrite((typename BitArrPtr) $varexp, $int:pos, $int:w, $tgt); |]
+
+                 -- appendStmt $ [cstm| $tgt |= ((* $id:z) & $int:mask) << $int:pos; |]
+              ; let rhs = [cexp|((* $id:z) & $int:mask)|] `cExpShL` pos 
+              ; appendStmt $ [cstm| $tgt |= $rhs; |]
               ; go vs (pos+w) }
          | otherwise
          = do { w <- varBitWidth ranges v ty
               ; let mask = 2^w - 1
               ; (_,varexp) <- lookupVarEnv v
-              ; appendStmt $ [cstm| $tgt |= ((($ty:tgt_ty) $varexp) & $int:mask) << $int:pos; |]
-              -- ; appendStmt $ [cstm| bitArrWrite((typename BitArrPtr) & $varexp, $int:pos, $int:w, $tgt); |]
+              -- appendStmt $ [cstm| $tgt |= ((($ty:tgt_ty) $varexp) & $int:mask) << $int:pos; |]
+              ; let rhs = [cexp|(($ty:tgt_ty) $varexp) & $int:mask|] `cExpShL` pos
+              ; appendStmt $ [cstm| $tgt |= $rhs; |]
+
               ; go vs (pos+w) }
+
+cExpShL :: C.Exp -> Int -> C.Exp
+cExpShL ce 0 = ce
+cExpShL ce n = [cexp| $ce << $int:n |]
+
+cExpShR :: C.Exp -> Int -> C.Exp
+cExpShR ce 0 = ce
+cExpShR ce n = [cexp| $ce >> $int:n |]
+
+
 
 unpackIdx :: [VarTy] -- Variables
           -> C.Exp   -- A C expression representing the index
@@ -134,7 +148,9 @@ unpackIdx xs src src_ty = go xs 0
               ; tmpname_aux <- freshName "tmp_aux"
               ; tmpname <- freshName "tmp"
 
-              ; appendDecl [cdecl| $ty:src_ty $id:(name tmpname_aux) = ($src >> $int:pos); |]
+              -- ; appendDecl [cdecl| $ty:src_ty $id:(name tmpname_aux) = ($src >> $int:pos); |]
+
+              ; appendDecl [cdecl| $ty:src_ty $id:(name tmpname_aux) = $(src `cExpShR` pos); |]
 
               ; appendDecl [cdecl| $ty:src_ty $id:(name tmpname) = $id:(name tmpname_aux) & $int:mask; |]
               ; appendStmt [cstm| memcpy((void *) $varexp, (void *) & ($id:(name tmpname)), $bytesizeof);|]
@@ -145,7 +161,6 @@ unpackIdx xs src src_ty = go xs 0
               ; w <- tyBitWidth ty
               ; let mask = 2^w - 1
               ; appendStmt $ [cstm| $varexp = (($src >> $int:pos)) & $int:mask; |]
-              -- ; appendStmt $ [cstm| bitArrRead($src,$int:pos,$int:w, (typename BitArrPtr) & $varexp); |]
               ; go vs (pos+w) }
 
 
@@ -180,13 +195,11 @@ unpackByteAligned xs src = go xs 0
          = do { (_,varexp) <- lookupVarEnv v
               ; w <- tyBitWidth ty
               ; appendStmt $ [cstm| memcpy((void *) $varexp, (void *) & $src[$int:(pos `div` 8)], $int:(byte_align w `div` 8));|]
-              --; appendStmt $ [cstm| bitArrRead($src,$int:pos,$int:w, (typename BitArrPtr) $varexp); |]
               ; go vs (byte_align (pos+w)) } -- Align for next read!
          | otherwise
          = do { (_,varexp) <- lookupVarEnv v
               ; w <- tyBitWidth ty
               ; appendStmt $ [cstm| blink_copy((void *) & $varexp, (void *) & $src[$int:(pos `div` 8)], $int:(byte_align w `div` 8));|]
-              --; appendStmt $ [cstm| bitArrRead($src,$int:pos,$int:w, (typename BitArrPtr) & $varexp); |]
               ; go vs (byte_align (pos+w)) } -- Align for next read!
 
 
