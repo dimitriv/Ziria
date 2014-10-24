@@ -194,8 +194,21 @@ unpackByteAligned xs src = go xs 0
          | isArrTy ty
          = do { (_,varexp) <- lookupVarEnv v
               ; w <- tyBitWidth ty
-              ; appendStmt $ [cstm| memcpy((void *) $varexp, (void *) & $src[$int:(pos `div` 8)], $int:(byte_align w `div` 8));|]
+              ; let bytes_to_copy = byte_align w `div` 8
+              ; case getArrTy ty of
+                  TBit -- a Bit array
+                    | bytes_to_copy == 1 
+                    -> appendStmt $ [cstm| *$varexp = $src[$int:(pos `div` 8)]; |]
+                  _otherwise
+                    -> appendStmt $ [cstm| memcpy((void *) $varexp, (void *) & $src[$int:(pos `div` 8)], $int:bytes_to_copy);|]
               ; go vs (byte_align (pos+w)) } -- Align for next read!
+         | TBit <- ty
+         = do { (_,varexp) <- lookupVarEnv v
+              ; appendStmt $ [cstm| $varexp = $src[$int:(pos `div` 8)]; |]
+              -- ; w <- tyBitWidth ty
+              -- ; appendStmt $ [cstm| blink_copy((void *) & $varexp, (void *) & $src[$int:(pos `div` 8)], $int:(byte_align w `div` 8));|]
+              ; go vs (byte_align (pos+8)) } -- Align for next read!
+
          | otherwise
          = do { (_,varexp) <- lookupVarEnv v
               ; w <- tyBitWidth ty
