@@ -1,0 +1,20 @@
+
+fun initp(p1 : arr[3] int, p2 : arr[3] int) {
+    var p3 : arr[3] int;    
+    nounroll for k in [0,3] {
+        p3[k] := p2[p1[k]];
+    }
+    return p3;
+}
+
+fun comp f() {
+  
+    let p1 = {0,1,2};
+    let p2 = {2,1,0};
+    let p3 = initp(p1,p2);
+
+    emits p3;
+}
+
+let comp main 
+  = read[int] >>> f() >>> write[int]
