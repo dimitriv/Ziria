@@ -102,20 +102,26 @@ test-WiFi-RX-clean:
 test-WiFi-pedantic: test-WiFi test-WiFi-TX test-WiFi-RX
 	@echo ">>>>>>>>>>>>>>> Pedantic WiFi tests"
 
-	EXTRAOPTS='--no-fold --no-exp-fold' make test-WiFi 
-	EXTRAOPTS='--vectorize'             make test-WiFi
-	EXTRAOPTS='--autolut'               make test-WiFi
-	EXTRAOPTS='--vectorize --autolut'   make test-WiFi
+	@echo "EXTRAOPTS=--no-fold --no-exp-fold"
+	EXTRAOPTS='--no-fold --no-exp-fold' make test-WiFi && make test-WiFi-clean
+	EXTRAOPTS='--no-exp-fold --no-fold' make test-WiFi-RX && make test-WiFi-RX-clean 
+	EXTRAOPTS='--no-exp-fold --no-fold' make test-WiFi-TX && make test-WiFi-TX-clean 
 
-	EXTRAOPTS='--no-exp-fold --no-fold' make test-WiFi-RX
-	EXTRAOPTS='--vectorize'             make test-WiFi-RX
-	EXTRAOPTS='--autolut'               make test-WiFi-RX
-	EXTRAOPTS='--vectorize --autolut'   make test-WiFi-RX
+	@echo "EXTRAOPTS=--vectorize"
+	EXTRAOPTS='--vectorize'             make test-WiFi && make test-WiFi-clean
+	EXTRAOPTS='--vectorize'             make test-WiFi-RX && make test-WiFi-RX-clean 
+	EXTRAOPTS='--vectorize'             make test-WiFi-TX && make test-WiFi-TX-clean 
 
-	EXTRAOPTS='--no-exp-fold --no-fold' make test-WiFi-TX
-	EXTRAOPTS='--vectorize'             make test-WiFi-TX
-	EXTRAOPTS='--autolut'               make test-WiFi-TX
-	EXTRAOPTS='--vectorize --autolut'   make test-WiFi-TX
+	@echo "EXTRAOPTS=--autolut"
+	EXTRAOPTS='--autolut'               make test-WiFi && make test-WiFi-clean
+	EXTRAOPTS='--autolut'               make test-WiFi-RX && make test-WiFi-RX-clean 
+	EXTRAOPTS='--autolut'               make test-WiFi-TX && make test-WiFi-TX-clean 
+
+	@echo "EXTRAOPTS=--vectorize --autolut"
+	EXTRAOPTS='--vectorize --autolut'   make test-WiFi && make test-WiFi-clean
+	EXTRAOPTS='--vectorize --autolut'   make test-WiFi-RX && make test-WiFi-RX-clean
+	EXTRAOPTS='--vectorize --autolut'   make test-WiFi-TX && make test-WiFi-TX-clean
+
 
 test-WiFi-pedantic-clean: test-WiFi-clean test-WiFi-TX-clean test-WiFi-RX-clean
 
