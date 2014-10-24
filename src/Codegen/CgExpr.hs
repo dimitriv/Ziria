@@ -42,6 +42,7 @@ import CgRuntime
 import CgMonad
 import CgTypes
 import CgLUT
+import {-# SOURCE #-} CgCall
 
 import Text.Parsec.Pos ( SourcePos )
 
@@ -166,6 +167,23 @@ cgBinOp op ce1 _ ce2 _ _ =
         And   -> return [cexp|$ce1 && $ce2|]
         Or    -> return [cexp|$ce1 || $ce2|]
 
+
+codeGenExpAndStore :: DynFlags
+                   -> (Ty, C.Exp) -- Where to store the result Exp Ty
+                   -> Exp Ty      -- RHS of assignment
+                   -> Cg C.Exp    -- Result of assignment: UNIT always
+codeGenExpAndStore dflags (ty1,ce1) e2
+  | ECall ef@(MkExp { unExp = EVar nef }) eargs <- unExp e2
+  = do { codeGenCall_store dflags (expLoc e2) ty1 ce1 nef eargs
+       ; return [cexp|UNIT|]
+       }
+  | otherwise
+  = do { ce2 <- codeGenExp dflags e2
+       ; assignByVal ty1 (info e2) ce1 ce2
+       ; return [cexp|UNIT|]
+       }
+
+
 codeGenExp :: DynFlags
            -> Exp Ty
            -> Cg C.Exp
@@ -197,10 +215,15 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
         cgBinOp op ce1 (info e1) ce2 (info e2) (info e0)
 
     go t (EAssign e1 e2) = do
+{- 
         ce1 <- codeGenExp dflags e1
         ce2 <- codeGenExp dflags e2
         assignByVal (info e1) (info e2) ce1 ce2
-        return [cexp|UNIT|]
+-}
+        ce1 <- codeGenExp dflags e1
+        codeGenExpAndStore dflags (info e1, ce1) e2
+
+--        return [cexp|UNIT|]
 
     go t (EArrRead e1 e2 r) = do
         ce1 <- codeGenExp dflags e1
@@ -356,63 +379,66 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
 
     go t ce@(ECall ef@(MkExp { unExp = EVar nef }) eargs) = do
 
-        -- Here first look if there is a name replacement created due to
-        -- possible multiple calls of the same local function
-        -- Invariant: ef = EVar nm
 
-        (real_f_name, closure_params) <- lookupExpFunEnv nef
+        codeGenCall_alloc dflags (expLoc e0) (info e0) nef eargs
 
-        let is_external = isPrefixOf "__ext" (name real_f_name)
+        -- -- Here first look if there is a name replacement created due to
+        -- -- possible multiple calls of the same local function
+        -- -- Invariant: ef = EVar nm
 
-        withDisabledBCWhen is_external $ do
+        -- (real_f_name, closure_params) <- lookupExpFunEnv nef
 
-        let cef = [cexp|$id:(name real_f_name)|]
+        -- let is_external = isPrefixOf "__ext" (name real_f_name)
 
-        -- Standard function arguments
-        ceargs <- concat <$> mapM (codeGenArg dflags) eargs
+        -- withDisabledBCWhen is_external $ do
 
-        -- Extra closure arguments
-        let closure_args = [MkExp (EVar nm) (expLoc e0) ty
-                                | (nm,ty) <- closure_params]
-        cclosure_args <- concat <$> mapM (codeGenArgByRef dflags) closure_args
+        -- let cef = [cexp|$id:(name real_f_name)|]
 
-        let cargs = ceargs ++ cclosure_args
+        -- -- Standard function arguments
+        -- ceargs <- concat <$> mapM (codeGenArg dflags) eargs
 
-        -- [external-retf] GS: It seems like we're relying on some very tricky
-        -- invariants here to ensure that cer =
-        -- retf_<name-of-external-function> when the lookup comes back empty!
-        -- This seems bad :-)
+        -- -- Extra closure arguments
+        -- let closure_args = [MkExp (EVar nm) (expLoc e0) ty
+        --                         | (nm,ty) <- closure_params]
+        -- cclosure_args <- concat <$> mapM (codeGenArgByRef dflags) closure_args
 
-        let retTy = info e0
+        -- let cargs = ceargs ++ cclosure_args
 
-        -- liftIO $ putStrLn $ "retTy = " ++ show retTy
+        -- -- [external-retf] GS: It seems like we're relying on some very tricky
+        -- -- invariants here to ensure that cer =
+        -- -- retf_<name-of-external-function> when the lookup comes back empty!
+        -- -- This seems bad :-)
 
-        is_struct_ptr <- isStructPtrType retTy
+        -- let retTy = info e0
 
-        newNm <- freshName $ name nef ++ "_" ++ getLnNumInStr (expLoc e0)
+        -- -- liftIO $ putStrLn $ "retTy = " ++ show retTy
+
+        -- is_struct_ptr <- isStructPtrType retTy
+
+        -- newNm <- freshName $ name nef ++ "_" ++ getLnNumInStr (expLoc e0)
         
-        let retNewN = toName ("__retcall_" ++ name newNm) Nothing Nothing
-            cer     = [cexp|$id:(name retNewN)|]
+        -- let retNewN = toName ("__retcall_" ++ name newNm) Nothing Nothing
+        --     cer     = [cexp|$id:(name retNewN)|]
 
-        appendDecls =<<
-           codeGenDeclGlobalGroups dflags [(retNewN, retTy, Nothing)]
+        -- appendDecls =<<
+        --    codeGenDeclGlobalGroups dflags [(retNewN, retTy, Nothing)]
 
-        case retTy of
-          TArr li _ty
-            | let clen = case li of Literal l -> [cexp| $int:l|]
-                                    NVar c _m -> [cexp| $id:(name c)|]
-            -> inAllocFrame $
-               appendStmt [cstm|$(cef)($cer, $clen, $args:cargs);|]
+        -- case retTy of
+        --   TArr li _ty
+        --     | let clen = case li of Literal l -> [cexp| $int:l|]
+        --                             NVar c _m -> [cexp| $id:(name c)|]
+        --     -> inAllocFrame $
+        --        appendStmt [cstm|$(cef)($cer, $clen, $args:cargs);|]
 
-          _ | is_struct_ptr
-            -> inAllocFrame $
-               appendStmt [cstm|$(cef)($cer, $args:cargs);|]
+        --   _ | is_struct_ptr
+        --     -> inAllocFrame $
+        --        appendStmt [cstm|$(cef)($cer, $args:cargs);|]
 
-            | otherwise
-           -> inAllocFrame $ 
-              appendStmt [cstm| $cer = $(cef)($args:cargs);|]
+        --     | otherwise
+        --    -> inAllocFrame $ 
+        --       appendStmt [cstm| $cer = $(cef)($args:cargs);|]
         
-        return [cexp|$cer|]  
+        -- return [cexp|$cer|]  
          
 
 
@@ -617,40 +643,6 @@ codeGenParams prms = go prms []
                }
 
 
-codeGenArg :: DynFlags -> Exp Ty -> Cg [C.Exp]
-codeGenArg dflags e = do
-    ce   <- codeGenExp dflags e
-    clen <- case info e of
-              TArr (Literal l) _ -> return [[cexp|$int:l|]]
-              TArr (NVar n _)  _ -> return [[cexp|$id:(name n)|]]
-              _                  -> return []
-    return $ ce : clen
-
-codeGenArgByRef :: DynFlags -> Exp Ty -> Cg [C.Exp]
-codeGenArgByRef dflags e
-    | isArrTy (info e) = codeGenArg dflags e
-    | otherwise
-    = do { ce <- codeGenExp dflags e
-         ; case ce of
-             C.Var (C.Id {}) _
-              -> do { alloc_as_ptr <- isStructPtrType (info e)
-                    ; if alloc_as_ptr || isArrTy (info e)
-                      then return [ [cexp|$ce|] ]
-                      else return [ [cexp|&$ce|] ]
-                    }
-             _otherwise -- A bit of a weird case. Create storage and pass addr of storage
-              -> do { new_tmp <- freshName "clos_ref_arg"
-                    ; g <- codeGenDeclGroup (name new_tmp) (info e)
-                    ; appendDecl g
-                    ; assignByVal (info e) (info e) [cexp|$id:(name new_tmp)|] ce
-                    ; alloc_as_ptr <- isStructPtrType (info e) -- Pointer?
-                    ; if alloc_as_ptr || isArrTy (info e)
-                            -- Already a ptr
-                       then return [ [cexp| $id:(name new_tmp)  |] ]
-                            -- Otherwise take address
-                       else return [ [cexp| & $id:(name new_tmp)|] ]
-                    }
-         }
 
 ------------------------------------------------------------------------------
 -- | Declarations and Globals
