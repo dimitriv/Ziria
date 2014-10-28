@@ -286,7 +286,7 @@ GetStatus buf_getbit(BlinkParams *params, BufContextBlock* blk, Bit *x)
 	return GS_SUCCESS;
 }
 
-
+FORCE_INLINE
 GetStatus buf_getarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
 {
 #ifdef STAMP_AT_READ
@@ -425,7 +425,7 @@ void buf_putbit(BlinkParams *params, BufContextBlock* blk, Bit x)
 	}
 }
 
-
+FORCE_INLINE
 void buf_putarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
 {
 	blk->total_out+= vlen;

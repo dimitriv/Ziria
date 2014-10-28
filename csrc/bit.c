@@ -20,12 +20,13 @@
 #include <stdlib.h>
 #include <memory.h>
 
+#include "types.h"
 #include "bit.h"
-
 
 /* Effectively implements:  tgt := src[vstart ... (vstart+vlen-1)] 
  * Precondition: tgt has allocated (vlen+7)/8 bytes already
  ************************************************************************************/
+FORCE_INLINE
 void bitArrRead(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPtr tgt) 
 {
 
@@ -56,6 +57,7 @@ void bitArrRead(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPtr
 /* Effectively implements: tgt[vstart...(vstart+vlen-1)] := src 
  * Precondition: tgt has allocated (vlen+7)/8 bytes already 
  **************************************************************************************/
+FORCE_INLINE
 void bitArrWrite(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPtr tgt)
 {
 	unsigned int sidx = vstart / 8;  // Start index
