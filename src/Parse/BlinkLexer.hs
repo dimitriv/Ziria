@@ -54,20 +54,20 @@ import ZiriaLexerMonad
 -------------------------------------------------------------------------------}
 
 identifier :: BlinkParser String
-identifier = lClass LVarId
+identifier = lClass LVarId <?> "varid"
 
 integer :: BlinkParser Integer
-integer = mkInteger <$> optionMaybe (reservedOp "-") <*> lClass LInteger
+integer = mkInteger <$> optionMaybe (reservedOp "-") <*> (lClass LInteger <?> "integer literal")
   where
     mkInteger :: Maybe () -> String -> Integer
     mkInteger Nothing   str = read str
     mkInteger (Just ()) str = negate (read str)
 
 float :: BlinkParser Double
-float = read <$> lClass LFloat
+float = read <$> (lClass LFloat <?> "float literal")
 
 stringLiteral :: BlinkParser String
-stringLiteral = read <$> lClass LString
+stringLiteral = read <$> (lClass LString <?> "string literal")
 
 {-------------------------------------------------------------------------------
   Parentheses and co
@@ -155,16 +155,16 @@ lClass :: LexemeClass -> BlinkParser String
 lClass c = lSatisfy' $ \c' s -> guard (c' == c) >> return s
 
 lSpecial :: String -> BlinkParser ()
-lSpecial s = lSatisfy' $ \c' s' -> guard (c' == LSpecial && s' == s)
+lSpecial s = (lSatisfy' $ \c' s' -> guard (c' == LSpecial && s' == s)) <?> show s
 
 lReservedOp :: String -> BlinkParser ()
-lReservedOp s = lSatisfy' $ \c' s' -> guard (c' == LReservedOp && s' == s)
+lReservedOp s = (lSatisfy' $ \c' s' -> guard (c' == LReservedOp && s' == s)) <?> show s
 
 lReservedId :: String -> BlinkParser ()
-lReservedId s = lSatisfy' $ \c' s' -> guard (c' == LReservedId && s' == s)
+lReservedId s = (lSatisfy' $ \c' s' -> guard (c' == LReservedId && s' == s)) <?> show s
 
 lVarId :: String -> BlinkParser ()
-lVarId s = lSatisfy' $ \c' s' -> guard (c' == LVarId && s' == s)
+lVarId s = (lSatisfy' $ \c' s' -> guard (c' == LVarId && s' == s)) <?> show s
 
 lFileChange :: BlinkParser String
 lFileChange = lSatisfy' $ \c' s' -> guard (c' == LFileChange) >> return s'
