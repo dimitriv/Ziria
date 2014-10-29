@@ -218,8 +218,11 @@ unpackByteAligned xs src = go xs 0
 
          | otherwise
          = do { (_,varexp) <- lookupVarEnv v
+                -- NEW: 
+              ; assignByVal ty ty varexp [cexp| *(($ty:(codeGenTy ty) *) & $src[$int:(pos `div` 8)])|] 
               ; w <- tyBitWidth ty
-              ; appendStmt $ [cstm| blink_copy((void *) & $varexp, (void *) & $src[$int:(pos `div` 8)], $int:(byte_align w `div` 8));|]
+               
+              -- OLD ; appendStmt $ [cstm| blink_copy((void *) & $varexp, (void *) & $src[$int:(pos `div` 8)], $int:(byte_align w `div` 8));|]
               ; go vs (byte_align (pos+w)) } -- Align for next read!
 
 
