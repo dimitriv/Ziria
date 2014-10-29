@@ -35,10 +35,11 @@ void bounds_check(memsize_int siz, memsize_int len, char *msg)
 
 unsigned long long bytes_copied = 0;
 
+FORCE_INLINE
 void blink_copy(void *dst, void *src, memsize_int siz)
 {
-  bytes_copied += siz;
-  memcpy(dst,src,siz);
+	bytes_copied += siz;
+	memcpy(dst, src, siz);
 }
 
 /**

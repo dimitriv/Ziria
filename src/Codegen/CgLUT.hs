@@ -103,12 +103,19 @@ packIdx ranges vs tgt tgt_ty = go vs 0
          = do { w <- varBitWidth ranges v ty
               ; let mask = 2^w - 1
               ; (_,varexp) <- lookupVarEnv v
-              ; z <- genSym "__z"
-              ; appendDecl $ [cdecl| $ty:tgt_ty * $id:z;|]
-              ; appendStmt $ [cstm| $id:z = ($ty:tgt_ty *) $varexp; |]
 
-                 -- appendStmt $ [cstm| $tgt |= ((* $id:z) & $int:mask) << $int:pos; |]
-              ; let rhs = [cexp|((* $id:z) & $int:mask)|] `cExpShL` pos 
+              -- fast path for <= 1 byte variables
+              ; let (TArr len bty) = ty
+              ; rhs <- 
+                 case (bty, len) of
+                   (TBit, Literal n) | n <= 8 -> 
+                     return $ [cexp|((* $varexp) & $int:mask)|] `cExpShL` pos 
+                   _otherwise -> 
+                     do { z <- genSym "__z"
+                        ; appendDecl $ [cdecl| $ty:tgt_ty * $id:z;|]
+                        ; appendStmt $ [cstm| $id:z = ($ty:tgt_ty *) $varexp; |]
+                        ; return $ [cexp|((* $id:z) & $int:mask)|] `cExpShL` pos
+                        }
               ; appendStmt $ [cstm| $tgt |= $rhs; |]
               ; go vs (pos+w) }
          | otherwise
