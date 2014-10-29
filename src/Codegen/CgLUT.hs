@@ -194,9 +194,9 @@ byte_align n = ((n+7) `div` 8) * 8
 
 unpackByteAligned :: [VarTy] -- Variables
                    -> C.Exp   -- A C expression of type BitArrPtr
-                   -> Cg ()
+                   -> Cg Int  -- Last byte position
 unpackByteAligned xs src = go xs 0
-  where go [] _ = return ()
+  where go [] pos = return (pos `div` 8)
         go ((v,ty):vs) pos
          | isArrTy ty
          = do { (_,varexp) <- lookupVarEnv v
@@ -529,14 +529,26 @@ genLUTLookup dflags ranges
         -> case mb_resname of
              Nothing ->
                do { res <- freshName "resx"
-                  ; codeGenDeclGroup (name res) ety >>= appendDecl
-                  ; extendVarEnv [(res,(ety,[cexp|$id:(name res)|]))] $
-                    unpackByteAligned (outVars ++
-                       [(res,ety)]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
+                    -- if the result variable is an super-byte array we will not allocate space since the LUT
+                    -- contains space for it already, rather we will return the address in the LUT
+                  ; case ety of 
+                      TArr (Literal l) ty | (ty /= TBit || l > 8) ->
+                       do { appendDecl $ [cdecl| $ty:(codeGenTyAlg ety) $id:(name res); |]
+                          ; respos <- unpackByteAligned outVars [cexp| (typename BitArrPtr) $clut[$id:idx]|]
+                          ; appendStmt $ [cstm| $id:(name res) = 
+                                ($ty:(codeGenTy ety)) & $clut[$id:idx][$int:respos]; |] 
+                          ; return $ [cexp| $id:(name res) |]
+                          }
+                      _ -> 
+                       do { codeGenDeclGroup (name res) ety >>= appendDecl
+                          ; extendVarEnv [(res,(ety,[cexp|$id:(name res)|]))] $
+                            unpackByteAligned (outVars ++
+                               [(res,ety)]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
 
---                  ; cg_print_vars dflags outVars -- debugging
+--                           ; cg_print_vars dflags outVars -- debugging
 
-                  ; return $ [cexp| $id:(name res) |]
+                          ; return $ [cexp| $id:(name res) |]
+                          }
                   }
              Just res ->
                do { extendVarEnv [(res,(ety,[cexp|$id:(name res)|]))] $

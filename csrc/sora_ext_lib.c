@@ -1056,10 +1056,19 @@ void __ext_v_or_192(uchar *output, uchar *input1, uchar *input2)
 
 	unsigned __int64 i1, i2;
 
-	vcs *pi1 = (vcs *)input1;
-	vcs *pi2 = (vcs *)input2;
-	vcs *po = (vcs *)output;
-	*po = (vcs)_mm_and_si128(*pi1, *pi2);
+        /* Strangely crashes ... */
+	/* vcs *pi1 = (vcs *)input1; */
+	/* vcs *pi2 = (vcs *)input2; */
+	/* vcs *po = (vcs *)output; */
+	/* *po = (vcs)_mm_and_si128(*pi1, *pi2); */
+
+	i1 = *(unsigned __int64 *)(input1);
+	i2 = *(unsigned __int64 *)(input2);
+	*(unsigned __int64 *)(output) = i1 | i2;
+
+	i1 = *(unsigned __int64 *)(input1+8);
+	i2 = *(unsigned __int64 *)(input2+8);
+	*(unsigned __int64 *)(output+8) = i1 | i2;
 
 	i1 = *(unsigned __int64 *)(input1+16);
 	i2 = *(unsigned __int64 *)(input2+16);
@@ -1094,6 +1103,7 @@ void __ext_v_or(uchar *output, int outlen, uchar *input1, int inlen1, uchar *inp
 	case 288:
 		__ext_v_or_288(output, input1, input2);
 		break;
+
 	default:
 		for (cnt = 0; cnt < (inlen1 + 7) / 8; cnt++) 
 		{
