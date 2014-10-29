@@ -1,0 +1,6 @@
+fun comp test() {
+  x <- take;
+  emit (x+1)
+}
+
+read[int] >>> standalone (repeat test()) >>> write[int]

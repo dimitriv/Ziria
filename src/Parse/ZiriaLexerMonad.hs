@@ -51,7 +51,9 @@ import Control.Applicative
 import Control.Arrow
 import Control.Monad.State
 import Control.Monad.Error
-import Data.Char (ord)
+import Data.Char (ord, isSpace)
+import Data.List (foldl')
+import Data.Maybe (listToMaybe, maybeToList)
 import Data.Word (Word8)
 import qualified Data.Bits
 
@@ -160,12 +162,14 @@ runAlex (Alex act) st = runState (runErrorT act) st
 runAlex' :: Alex Lexeme -> AlexState -> (Lexeme, AlexState)
 runAlex' act st = first convErr $ runAlex act st
   where
-    convErr (Left  _) = L (alex_pos st) LError (hd (alex_inp st))
+    -- TODO: I don't know why alex is reporting the error starting at the
+    -- whitespace before the token. For now we work around it here and report
+    -- the error at the first non-whitespace character.
     convErr (Right a) = a
-
-    hd :: String -> String
-    hd []    = ""
-    hd (x:_) = [x]
+    convErr (Left  _) = let (sp, afterSp) = span isSpace (alex_inp st)
+                            pos           = foldl' alexMove (alex_pos st) sp
+                            err           = maybeToList $ listToMaybe afterSp
+                        in L pos LError err
 
 {-------------------------------------------------------------------------------
   Primitive operations in the Alex monad
@@ -202,7 +206,23 @@ data Lexeme = L AlexPosn         -- position
                 LexemeClass      -- lexeme class
                 String           -- the actual lexeme itself
             | StartOfFile        -- This is the only lexeme without a position
-  deriving (Show)
+
+instance Show Lexeme where
+  show StartOfFile = "start of file"
+  show (L _ c s)   = go (\str -> str ++ " " ++ show s) c
+    where
+      go :: (String -> String) -> LexemeClass -> String
+      go f LInteger    = f "integer"
+      go f LFloat      = f "float"
+      go f LChar       = f "character"
+      go f LString     = f "string"
+      go f LSpecial    = f "symbol"
+      go f LReservedId = f "keyword"
+      go f LReservedOp = f "operator"
+      go f LVarId      = f "variable"
+      go _ LEOF        = "end of file"
+      go f LError      = f "lexical error at character"
+      go f LFileChange = f "file change to"
 
 data LexemeClass
   = LInteger

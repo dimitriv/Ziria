@@ -131,12 +131,9 @@ startOfFile = lSatisfy aux
   Low-level interface to Alex
 -------------------------------------------------------------------------------}
 
--- | This parser succeeds whenever the given predicate returns true when called with
--- parsed `Lexeme`. Same as 'Text.Parsec.Char.satisfy'.
---
--- Adapted from https://github.com/osa1/language-lua/blob/master/src/Text/Parsec/Lexeme.hs.
+-- | The most primitive function to match against a lexeme
 lSatisfy :: (Lexeme -> Maybe a) -> BlinkParser a
-lSatisfy getTok = tokenPrim describeToken nextPos getTok
+lSatisfy getTok = tokenPrim show nextPos getTok
   where
     nextPos :: SourcePos -> Lexeme -> ZiriaStream -> SourcePos
     nextPos pos _tok st =
@@ -171,20 +168,3 @@ lVarId s = lSatisfy' $ \c' s' -> guard (c' == LVarId && s' == s)
 
 lFileChange :: BlinkParser String
 lFileChange = lSatisfy' $ \c' s' -> guard (c' == LFileChange) >> return s'
-
-describeToken :: Lexeme -> String
-describeToken StartOfFile = "start of file"
-describeToken (L _ c s)   = go (\str -> str ++ " " ++ show s) c
-  where
-    go :: (String -> String) -> LexemeClass -> String
-    go f LInteger    = f "integer"
-    go f LFloat      = f "float"
-    go f LChar       = f "character"
-    go f LString     = f "string"
-    go f LSpecial    = f "symbol"
-    go f LReservedId = f "keyword"
-    go f LReservedOp = f "operator"
-    go f LVarId      = f "variable"
-    go _ LEOF        = "end of file"
-    go f LError      = f "lexical error at character"
-    go f LFileChange = f "file change to"
