@@ -25,6 +25,9 @@ module BlinkParseM (
   , BlinkParseState
   , BlinkParseM(runParseM)
   , ParseCompEnv
+  , ZiriaStream
+  , mkZiriaStream
+  , unconsZiriaStream
     -- * Derived operators
   , debugParse
   , extendParseEnv
@@ -42,6 +45,7 @@ module BlinkParseM (
   ) where
 
 import Control.Applicative
+import Control.Arrow (second)
 import Control.Monad.Trans
 import Control.Monad.Reader
 import Text.Parsec
@@ -49,6 +53,31 @@ import Text.Parsec.Expr
 
 import AstExpr (GName, SrcTy)
 import AstComp (CallArg, GCTy0)
+
+import ZiriaLexer
+import ZiriaLexerMonad
+
+{-------------------------------------------------------------------------------
+  Wrapping the lexer state
+-------------------------------------------------------------------------------}
+
+-- | ZiriaStream wraps the lexer state so that we memoize the next token
+data ZiriaStream = ZiriaStream (Lexeme, ZiriaStream)
+
+mkZiriaStream :: String -> ZiriaStream
+mkZiriaStream str = ZiriaStream (StartOfFile, go (mkAlexState str))
+  where
+    go :: AlexState -> ZiriaStream
+    go st = ZiriaStream (second go $ scan st)
+
+unconsZiriaStream :: ZiriaStream -> Maybe (Lexeme, ZiriaStream)
+unconsZiriaStream (ZiriaStream (tok, st')) =
+    case tok of
+      L _ LEOF _ -> Nothing
+      _          -> Just (tok, st')
+
+instance Monad m => Stream ZiriaStream m Lexeme where
+  uncons = return . unconsZiriaStream
 
 {-------------------------------------------------------------------------------
   The Blink parser monad
@@ -63,7 +92,7 @@ type BlinkParseState = ()
 -- We need environment of defined functions to intelligently parse applications
 type ParseCompEnv     = [(GName SrcTy,[(GName SrcTy, CallArg SrcTy (GCTy0 SrcTy))])]
 newtype BlinkParseM a = BlinkParseM { runParseM :: ParseCompEnv -> IO a }
-type BlinkParser a    = ParsecT String BlinkParseState BlinkParseM a
+type BlinkParser a    = ParsecT ZiriaStream BlinkParseState BlinkParseM a
 
 instance Functor BlinkParseM where
   fmap f (BlinkParseM x) = BlinkParseM $ \env -> fmap f (x env)

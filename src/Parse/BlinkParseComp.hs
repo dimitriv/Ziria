@@ -25,7 +25,7 @@ module BlinkParseComp ( parseProgram, runParseM ) where
 
 import Control.Applicative ((<$>), (<*>), (<$), (<*), (*>))
 import Control.Arrow (second)
-import Control.Monad (join, void)
+import Control.Monad (join)
 import Control.Monad.Reader.Class
 import Text.Parsec
 import Text.Parsec.Expr
@@ -45,7 +45,7 @@ import BlinkParseM
 -- TODO: Update the grammar
 parseProgram :: BlinkParser SrcProg
 parseProgram =
-    join $ mkProg <$ whiteSpace <* cppPragmas AllowFilenameChange
+    join $ mkProg <$ startOfFile <* many fileNameChange
        <*> declsParser <*> parseTopLevel <* eof
   where
     mkProg _  ([],     _)  = fail "No main found"
@@ -71,12 +71,7 @@ parseTopLevel =
     cLetDecl' p () d = let (env, f) = cLetDecl p () d in (env, (d, f))
 
 topLevelSep :: BlinkParser ()
-topLevelSep =
-    cppPragmas AllowFilenameChange *> optional semi <* cppPragmas AllowFilenameChange
-
-cppPragmas :: AllowFilenameChange -> BlinkParser ()
-cppPragmas allowFilenameChange =
-    void $ many (cppPragmaLine allowFilenameChange <* whiteSpace)
+topLevelSep = many fileNameChange *> optional semi <* many fileNameChange
 
 -- | > <decls> ::= (<decl>;)*
 --
@@ -168,7 +163,7 @@ parseCompTerm = choice
                       <* reserved "then" <*> parseComp
                       <* reserved "else" <*> parseComp
     , withPos cLetDecl <*> parseLetDecl `bindExtend` \f -> f <$ reserved "in" <*> parseComp
-    , withPos cReturn' <* reservedOp "do" <*> parseStmtBlock
+    , withPos cReturn' <* reserved "do" <*> parseStmtBlock
     , optional (reserved "seq") >> braces parseCommands
     ] <?> "computation"
   where
@@ -221,7 +216,7 @@ parseVarOrCall = go <?> "variable or function call"
       x <- identifier
       let xnm = toName x (Just p) Nothing
       choice [ do notFollowedBy (symbol "(")
-                  notFollowedBy (symbol "<-")
+                  notFollowedBy (reservedOp "<-")
                   return (cVar (Just p) () xnm)
              , withPos (($ xnm) .: cCall) <*> parseArgs xnm
              ] <?> "variable or function call"
@@ -273,11 +268,11 @@ parseLetDecl :: BlinkParser (LetDecl SrcTy)
 parseLetDecl = choice
     [ LetDeclVar <$> declParser
     , LetDeclStruct <$> parseStruct
-    , try $ LetDeclExternal <$ reserved "let" <* reserved "external" <*> identifier <*> paramsParser <* symbol ":" <*> parseBaseType
+    , try $ LetDeclExternal <$ reserved "let" <* reserved "external" <*> identifier <*> paramsParser <* reservedOp ":" <*> parseBaseType
     , try $ LetDeclFunComp  <$ reserved "fun" <*> parseCompAnn <*> parseVarBind <*> compParamsParser <*> body parseCommands
     , try $ LetDeclFunExpr  <$ reserved "fun"                  <*> parseVarBind <*> paramsParser     <*> body parseStmts
-    , try $ LetDeclComp     <$ reserved "let" <*> parseCompAnn <*> parseVarBind <* symbol "=" <*> parseComp
-    , try $ LetDeclExpr     <$ reserved "let"                  <*> parseVarBind <* symbol "=" <*> parseExpr
+    , try $ LetDeclComp     <$ reserved "let" <*> parseCompAnn <*> parseVarBind <* reservedOp "=" <*> parseComp
+    , try $ LetDeclExpr     <$ reserved "let"                  <*> parseVarBind <* reservedOp "=" <*> parseExpr
     ]
   where
     body :: BlinkParser a -> BlinkParser ([(GName SrcTy, SrcTy, Maybe SrcExp)], a)
@@ -288,7 +283,7 @@ parseStruct :: BlinkParser (GStructDef SrcTy)
 parseStruct = do
     reserved "struct"
     x <- identifier
-    symbol "="
+    reservedOp "="
     braces $ StructDef x <$> parseField `sepBy` semi
   where
     parseField = (,) <$> identifier <* colon <*> parseBaseType
@@ -403,7 +398,7 @@ parseCommand = choice
     , try $ withPos cBranch' <* reserved "if"   <*> parseExpr
                              <* reserved "then" <*> parseComp
                              <* notFollowedBy (reserved "else")
-    , try $ withPos cBindMany' <*> parseVarBind <* symbol "<-" <*> parseComp
+    , try $ withPos cBindMany' <*> parseVarBind <* reservedOp "<-" <*> parseComp
     , (\c -> ([], Right c)) <$> parseComp
     ] <?> "command"
   where
@@ -441,7 +436,7 @@ parseVectAnn =
 -- | Parses just the @[(i,j)]@ annotation
 parseVectAnnFlag :: BlinkParser (Bool, (Int, Int))
 parseVectAnnFlag =
-    mkFlag <$> optionMaybe (reserved "!") <*> parseRange
+    mkFlag <$> optionMaybe (reservedOp "!") <*> parseRange
   where
     mkFlag Nothing   v = (True,  v)
     mkFlag (Just ()) v = (False, v)

@@ -21,6 +21,9 @@ Executable wplc
   hs-source-dirs:   src src/BasicTypes src/Codegen src/Optimize src/Parse
                     src/Pipeline src/Typecheck src/Utils src/Vectorize
   main-is:          Main.hs
+  -- TODO: We should use a proper module hierarchy and only have 'src' 
+  -- as the include dir.
+  other-modules:    ZiriaLexer
 
   default-language: Haskell98
 

@@ -30,7 +30,7 @@ import System.Console.GetOpt
 import System.Environment
 import System.Exit (exitFailure)
 import System.IO
-import Text.Parsec
+import Text.Parsec (runParserT)
 import Text.PrettyPrint.Mainland
 import Text.Show.Pretty (dumpStr)
 
@@ -49,6 +49,7 @@ import CgProgram ( codeGenProgram )
 import qualified PassPipeline as PP
 
 import qualified BlinkParseComp as NewParser
+import BlinkParseM (mkZiriaStream)
 
 import PassFold
 import PpComp
@@ -103,9 +104,11 @@ main = failOnException $ do
 
     prog <-
           failOnError $
-          do { let st = ()
-                   pm = runParserT NewParser.parseProgram st inFile input
-             ; NewParser.runParseM pm [] }
+          do { let state  = ()
+                   stream = mkZiriaStream input
+                   parser = runParserT NewParser.parseProgram state inFile stream
+             ; NewParser.runParseM parser []
+             }
 
     -- pretty-show's `dumpDoc` generates a `Text.PrettyPrint.HughesPJ.Doc`
     -- rather than `Text.PrettyPrint.Mainland.Doc`, so we generate a flat

@@ -16,138 +16,175 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
--- As an exception we don't check for missing signatures here because most
--- definitions are simply (near) synonyms for the parsec equivalents.
-{-# OPTIONS_GHC -Wall -fno-warn-missing-signatures #-}
+{-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}
 -- | Lexical analysis
---
--- NOTE: The definition of 'semi' and related functions are non-standard:
--- we allow for CPP pragma lines wherever we allow for a semicolon.
 module BlinkLexer (
-    angles
-  , braces
+    braces
   , brackets
-  , charLiteral
   , colon
   , comma
   , commaSep
   , commaSep1
-  , cppPragmaLine
-  , decimal
-  , dot
+  , fileNameChange
   , float
-  , hexadecimal
   , identifier
+  , identifier'
   , integer
-  , lexeme
-  , natural
-  , naturalOrFloat
-  , octal
-  , operator
   , parens
   , reserved
   , reservedOp
   , semi
+  , startOfFile
   , stringLiteral
   , symbol
-  , whiteSpace
-  , P.AllowFilenameChange(..)
   ) where
 
-import Control.Monad (void)
-import Text.Parsec
+import Control.Applicative
+import Control.Monad
+import Text.Parsec.Prim
+import Text.Parsec.Pos
+import Text.Parsec.Combinator
 
 import BlinkParseM
-import qualified BlinkToken as P
+import ZiriaLexerMonad
 
 {-------------------------------------------------------------------------------
-  Language definitions
+  Identifiers and literals
 -------------------------------------------------------------------------------}
 
-blinkStyle :: P.GenLanguageDef String BlinkParseState BlinkParseM
-blinkStyle =
-    emptyDef { P.commentStart     = "{-"
-             , P.commentEnd       = "-}"
-             , P.commentLine      = "--"
-             , P.nestedComments   = True
-             , P.identStart       = letter
-             , P.identLetter      = alphaNum <|> oneOf "_'"
-             , P.opStart          = oneOf $ map head allops
-             , P.opLetter         = oneOf $ concatMap tail allops
-             , P.reservedNames    = blinkReservedNames
-             , P.reservedOpNames  = allops } -- Why not put all of them in?
+identifier :: BlinkParser String
+identifier = lClass LVarId
+
+integer :: BlinkParser Integer
+integer = mkInteger <$> optionMaybe (reservedOp "-") <*> lClass LInteger
   where
-    allops      = unops ++ binops ++ reservedops
-    reservedops = [":=",":","=","=>","<-"]
+    mkInteger :: Maybe () -> String -> Integer
+    mkInteger Nothing   str = read str
+    mkInteger (Just ()) str = negate (read str)
 
-    emptyDef   :: P.LanguageDef st
-    emptyDef    = P.LanguageDef
-                   { P.commentStart   = ""
-                   , P.commentEnd     = ""
-                   , P.commentLine    = ""
-                   , P.nestedComments = True
-                   , P.identStart     = letter <|> char '_'
-                   , P.identLetter    = alphaNum <|> oneOf "_'"
-                   , P.opStart        = P.opLetter emptyDef
-                   , P.opLetter       = oneOf ":!#$%&*+./<=>?@\\^|-~"
-                   , P.reservedOpNames= []
-                   , P.reservedNames  = []
-                   , P.caseSensitive  = True
-                   }
+float :: BlinkParser Double
+float = read <$> lClass LFloat
 
-    unops  = [ "-", "~" ]
-    binops = [ "**", "*", "/", "%", "+", "-", "<<", ">>", "<"
-             , ">", ">=", "<=", "&", "^", "|", "==", "!=", "&&", "||"
-             , ">>>", "|>>>|"
-             ]
-
-    blinkReservedNames =
-      [ -- Computation language keywords
-        "let", "comp", "in", "if", "then", "else", "read", "write"
-      , "emit", "emits", "take", "takes", "while", "times", "repeat"
-      , "until", "seq", "do", "external", "map", "filter", "fun"
-
-        -- Expression language keywords
-      , "return", "length", "bperm", "for", "lut", "print", "unroll", "nounroll"
-      , "println", "error", "true", "false", "'0", "'1", "while"
-
-        -- Types
-      , "arr", "struct"
-      , "ST", "C", "T"
-      ]
+stringLiteral :: BlinkParser String
+stringLiteral = read <$> lClass LString
 
 {-------------------------------------------------------------------------------
-  Parsec bindings
+  Parentheses and co
 -------------------------------------------------------------------------------}
 
-blinkLexer :: P.GenTokenParser String BlinkParseState BlinkParseM
-blinkLexer = P.makeTokenParser blinkStyle
+parens, braces, brackets :: BlinkParser a -> BlinkParser a
+parens   = between (lSpecial "(") (lSpecial ")")
+braces   = between (lSpecial "{") (lSpecial "}")
+brackets = between (lSpecial "[") (lSpecial "]")
 
-angles         = P.angles         blinkLexer
-braces         = P.braces         blinkLexer
-brackets       = P.brackets       blinkLexer
-charLiteral    = P.charLiteral    blinkLexer
-commaSep       = P.commaSep       blinkLexer
-commaSep1      = P.commaSep1      blinkLexer
-cppPragmaLine  = P.cppPragmaLine  blinkLexer
-decimal        = P.decimal        blinkLexer
-float          = P.float          blinkLexer
-hexadecimal    = P.hexadecimal    blinkLexer
-identifier     = P.identifier     blinkLexer
-integer        = P.integer        blinkLexer
-lexeme         = P.lexeme         blinkLexer
-natural        = P.natural        blinkLexer
-naturalOrFloat = P.naturalOrFloat blinkLexer
-octal          = P.octal          blinkLexer
-operator       = P.operator       blinkLexer
-parens         = P.parens         blinkLexer
-reserved       = P.reserved       blinkLexer
-reservedOp     = P.reservedOp     blinkLexer
-stringLiteral  = P.stringLiteral  blinkLexer
-whiteSpace     = P.whiteSpace     blinkLexer
+colon :: BlinkParser ()
+colon = lReservedOp ":"
 
-colon   = void $ P.colon          blinkLexer
-comma   = void $ P.comma          blinkLexer
-dot     = void $ P.dot            blinkLexer
-semi    = void $ P.semi           blinkLexer
-symbol  = void . P.symbol         blinkLexer
+comma :: BlinkParser ()
+comma = lSpecial ","
+
+semi :: BlinkParser ()
+semi = lSpecial ";"
+
+commaSep, commaSep1 :: BlinkParser a -> BlinkParser [a]
+commaSep  = (`sepBy`  comma)
+commaSep1 = (`sepBy1` comma)
+
+{-------------------------------------------------------------------------------
+  Reserved operators
+-------------------------------------------------------------------------------}
+
+reservedOp :: String -> BlinkParser ()
+reservedOp = lReservedOp
+
+reserved :: String -> BlinkParser ()
+reserved = lReservedId
+
+symbol :: String -> BlinkParser ()
+symbol = lSpecial
+
+-- Type names are sometimes considered identifiers (for example, in the
+-- definition of structs) and sometimes as reserved keywords (for example in
+-- types). For now we just treat these all uniformly as identifiers in the
+-- lexer, and offer a parser that parses a _specific_ identifier.
+identifier' :: String -> BlinkParser ()
+identifier' = lVarId
+
+{-------------------------------------------------------------------------------
+  Position information
+-------------------------------------------------------------------------------}
+
+fileNameChange :: BlinkParser ()
+fileNameChange = do
+    fn  <- lFileChange
+    pos <- getPosition
+    setPosition $ setSourceName pos fn
+
+startOfFile :: BlinkParser ()
+startOfFile = lSatisfy aux
+  where
+    aux StartOfFile = Just ()
+    aux (L _ _ _)   = Nothing
+
+{-------------------------------------------------------------------------------
+  Low-level interface to Alex
+-------------------------------------------------------------------------------}
+
+-- | This parser succeeds whenever the given predicate returns true when called with
+-- parsed `Lexeme`. Same as 'Text.Parsec.Char.satisfy'.
+--
+-- Adapted from https://github.com/osa1/language-lua/blob/master/src/Text/Parsec/Lexeme.hs.
+lSatisfy :: (Lexeme -> Maybe a) -> BlinkParser a
+lSatisfy getTok = tokenPrim describeToken nextPos getTok
+  where
+    nextPos :: SourcePos -> Lexeme -> ZiriaStream -> SourcePos
+    nextPos pos _tok st =
+      case unconsZiriaStream st of
+        Nothing           -> pos
+        Just (tok', _st') -> updatePos tok' pos
+
+    updatePos :: Lexeme -> SourcePos -> SourcePos
+    updatePos (L (AlexPn _ l c) _ _) pos = newPos (sourceName pos) l c
+    updatePos StartOfFile            _   = error "unexpected StartOfFile"
+
+lSatisfy' :: (LexemeClass -> String -> Maybe a) -> BlinkParser a
+lSatisfy' getTok = lSatisfy getTok'
+  where
+    getTok' (L _ c s)   = getTok c s
+    getTok' StartOfFile = Nothing
+
+lClass :: LexemeClass -> BlinkParser String
+lClass c = lSatisfy' $ \c' s -> guard (c' == c) >> return s
+
+lSpecial :: String -> BlinkParser ()
+lSpecial s = lSatisfy' $ \c' s' -> guard (c' == LSpecial && s' == s)
+
+lReservedOp :: String -> BlinkParser ()
+lReservedOp s = lSatisfy' $ \c' s' -> guard (c' == LReservedOp && s' == s)
+
+lReservedId :: String -> BlinkParser ()
+lReservedId s = lSatisfy' $ \c' s' -> guard (c' == LReservedId && s' == s)
+
+lVarId :: String -> BlinkParser ()
+lVarId s = lSatisfy' $ \c' s' -> guard (c' == LVarId && s' == s)
+
+lFileChange :: BlinkParser String
+lFileChange = lSatisfy' $ \c' s' -> guard (c' == LFileChange) >> return s'
+
+describeToken :: Lexeme -> String
+describeToken StartOfFile = "start of file"
+describeToken (L _ c s)   = go (\str -> str ++ " " ++ show s) c
+  where
+    go :: (String -> String) -> LexemeClass -> String
+    go f LInteger    = f "integer"
+    go f LFloat      = f "float"
+    go f LChar       = f "character"
+    go f LString     = f "string"
+    go f LSpecial    = f "symbol"
+    go f LReservedId = f "keyword"
+    go f LReservedOp = f "operator"
+    go f LVarId      = f "variable"
+    go _ LEOF        = "end of file"
+    go f LError      = f "lexical error at character"
+    go f LFileChange = f "file change to"
