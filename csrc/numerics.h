@@ -28,7 +28,13 @@ typedef __int64 num64;
 
 #define calign __declspec(align(16))
 #define cthread __declspec(thread)
+
+// INLINE_COMPILATION only defined in Wrapper.cpp
+#ifdef INLINE_COMPILATION 
 #define FORCE_INLINE __forceinline
+#else 
+#define FORCE_INLINE 
+#endif
 
 #else
 ////////////////////////////////////////////////
@@ -39,7 +45,15 @@ typedef long long int num64;
 
 #define calign
 #define cthread
+
+#ifdef INLINE_COMPILATION
 #define FORCE_INLINE __inline
+#define FINL __inline
+#else 
+#define FORCE_INLINE 
+#define FINL 
+#endif
+
 ////////////////////////////////////////////////
 
 #endif

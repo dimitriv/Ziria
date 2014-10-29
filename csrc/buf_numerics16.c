@@ -224,6 +224,7 @@ GetStatus _buf_getarrint16(BlinkParams *params, BufContextBlock *blk, int16 *x, 
 	return GS_EOF;
 }
 
+FORCE_INLINE
 GetStatus buf_getarrint16(BlinkParams *params, BufContextBlock *blk, int16 *x, unsigned int vlen)
 {
 #ifdef STAMP_AT_READ
@@ -276,6 +277,7 @@ GetStatus buf_getcomplex16(BlinkParams *params, BufContextBlock *blk, complex16 
 	return GS_EOF;
 }
 
+FORCE_INLINE
 GetStatus buf_getarrcomplex16(BlinkParams *params, BufContextBlock *blk, complex16 *x, unsigned int vlen)
 {
 #ifdef STAMP_AT_READ
@@ -472,7 +474,7 @@ void _buf_putarrint16(BlinkParams *params, BufContextBlock *blk, int16 *x, unsig
 }
 
 
-
+FORCE_INLINE
 void buf_putarrint16(BlinkParams *params, BufContextBlock *blk, int16 *x, unsigned int vlen)
 {
 	blk->total_out += vlen;
@@ -573,6 +575,7 @@ void buf_putcomplex16(BlinkParams *params, BufContextBlock *blk, struct complex1
 
 }
 
+FORCE_INLINE
 void buf_putarrcomplex16(BlinkParams *params, BufContextBlock *blk, struct complex16 *x, unsigned int vlen)
 {
 	blk->total_out += vlen;
@@ -580,7 +583,12 @@ void buf_putarrcomplex16(BlinkParams *params, BufContextBlock *blk, struct compl
 	write_time_stamp(params);
 #endif
 
-	if (params->outType == TY_DUMMY || params->outType == TY_FILE || params->outType == TY_MEM)
+	if (params->outType == TY_DUMMY)
+	{
+		return;
+	}
+
+	if (params->outType == TY_FILE || params->outType == TY_MEM)
 	{
 		_buf_putarrint16(params, blk, (int16 *)x, vlen * 2);
 	}

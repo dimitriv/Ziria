@@ -29,6 +29,9 @@ module CgExpr
 
   , codeGenGlobalDeclsOnlyAlg
   , codeGenGlobalInitsOnly
+  
+  , ArrIdx ( .. ) 
+
   ) where
 
 import Opts
@@ -223,13 +226,13 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
       , let ii2 :: Int = fromIntegral i2
       = do { ce1 <- codeGenExp dflags e1
            ; cgBoundsCheck dflags (expLoc e0) (info e1) [cexp| $int:ii2|] r
-           ; codeGenArrRead dflags (info e1) ce1 (Left ii2) r }
+           ; codeGenArrRead dflags (info e1) ce1 (AIdxStatic ii2) r }
 
     go t (EArrRead e1 e2 r) = do
         ce1 <- codeGenExp dflags e1
         ce2 <- codeGenExp dflags e2
         cgBoundsCheck dflags (expLoc e0) (info e1) ce2 r
-        codeGenArrRead dflags (info e1) ce1 (Right ce2) r
+        codeGenArrRead dflags (info e1) ce1 (AIdxCExp ce2) r
 
     go t (EArrWrite e1 e2 l e3) = do
         ce1 <- codeGenExp dflags e1
@@ -668,14 +671,21 @@ codeGenGlobalInitsOnly dflags defs = mapM_ go defs
 -- | Reading/writing to/from arrays
 ------------------------------------------------------------------------------
 
-cexp_of_idx :: Either Int C.Exp -> C.Exp
-cexp_of_idx (Left i)   = [cexp| $int:i|]
-cexp_of_idx (Right ce) = ce
+data ArrIdx 
+  = AIdxCExp C.Exp      -- A C expression index
+  | AIdxStatic Int      -- A statically known index 
+  | AIdxMult Int C.Exp  -- A statically known multiple of unknown C.Exp
+
+
+cexp_of_idx :: ArrIdx -> C.Exp
+cexp_of_idx (AIdxStatic i)   = [cexp| $int:i|]
+cexp_of_idx (AIdxCExp ce)    = ce
+cexp_of_idx (AIdxMult i ce)  = [cexp| $int:i*$ce|]
 
 codeGenArrRead :: DynFlags
                -> Ty
                -> C.Exp              -- ce1
-               -> (Either Int C.Exp) -- ce2 or static index
+               -> ArrIdx             -- ce2 or static index
                -> LengthInfo -- rng
                -> Cg C.Exp   -- ce1[ce2...ce2+rng-1]
 codeGenArrRead dflags (TArr _ TBit) ce1 mb_ce2 LISingleton
@@ -688,11 +698,15 @@ codeGenArrRead dflags (TArr _ TBit) ce1 mb_ce2 (LILength l)
   = do { res <- genSym "bitarrres"
        ; codeGenDeclGroup res (TArr (Literal l) TBit) >>= appendDecl
        ; case mb_ce2 of 
-           Left i 
+           AIdxStatic i 
              | i `mod` 8 == 0 && l == 8 
              -> appendStmt $ [cstm| * $id:res = $ce1[$int:(i `div` 8)];|]
+           AIdxMult i ce2
+             | i >= 8 && i `mod` 8 == 0 && l == 8
+             -> appendStmt $ [cstm| * $id:res = $ce1[$int:(i `div` 8)*$ce2]; |]
            _otherwise
-             -> appendStmt [cstm| bitArrRead($ce1,$(cexp_of_idx mb_ce2),$int:l,$id:res); |]
+             -> appendStmt [cstm| 
+                   bitArrRead($ce1,$(cexp_of_idx mb_ce2),$int:l,$id:res); |]
        ; return [cexp| $id:res |] 
        }
 
@@ -722,7 +736,7 @@ codeGenArrWrite dflags (TArr _ TBit) ce1 ce2 LISingleton ce3
 codeGenArrWrite dflags (TArr _ TBit) ce1 ce2 (LILength l) ce3
   = appendStmt $ [cstm| bitArrWrite($ce3,$ce2,$int:l,$ce1); |]
 codeGenArrWrite dflags t@(TArr l tbase) ce1 ce2 LISingleton ce3
-  = do { cread <- codeGenArrRead dflags t ce1 (Right ce2) LISingleton
+  = do { cread <- codeGenArrRead dflags t ce1 (AIdxCExp ce2) LISingleton
        ; assignByVal tbase tbase cread ce3 }
 
 codeGenArrWrite dflags (TArr _ ty) ce1 ce2 (LILength l) ce3

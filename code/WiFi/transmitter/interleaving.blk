@@ -110,7 +110,7 @@ fun comp interleaver_m16qam() {
 -- will miss the LUTing opportunity
 --    emits perm(ids2[0,192], perm(ids1[0,192], x));
 --    do { y := perm(ids1[0,192], x) };
-    emits perm(ids3[0,192], x);
+    emits perm_192(ids3[0,192], x);
   }
 }
 
@@ -127,7 +127,7 @@ fun comp interleaver_m64qam() {
 -- will miss the LUTing opportunity
 --    emits perm(ids2[0,288], perm(ids1[0,288], x));
 --    do { y := perm(ids1[0,288], x) };
-    emits perm(ids3[0,288], x);
+    emits perm_288(ids3[0,288], x);
   }
 }
 

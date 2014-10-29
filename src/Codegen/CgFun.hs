@@ -213,10 +213,10 @@ cgFunDefined dflags csp f
        ; closure_params <- codeGenParamsByRef closureParams
        ; cparams <- codeGenParams params'
 
-       ; appendTopDecl [cdecl|$ty:(codeGenTy (info body'))
+       ; appendTopDecl [cdecl|$ty:(codeGenTy_qual "" (info body'))
                                  $id:(name newNm)($params:(cparams++closure_params));|]
 
-       ; appendTopDef [cedecl|$ty:(codeGenTy (info body'))
+       ; appendTopDef [cedecl|$ty:(codeGenTy_qual "" (info body'))
                                  $id:(name newNm)($params:(cparams++closure_params)) {
                                 $decls:c_decls'         // Define things needed for locals
                                 $decls:clocals_decls    // Define locals

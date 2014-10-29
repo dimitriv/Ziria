@@ -495,7 +495,7 @@ codeGenComp dflags comp k =
                            cres <- codeGenArrRead dflags
                                                   arrty
                                                   [cexp|$id:(inValOf ih)|]
-                                                  (Right [cexp|$id:mit_st*$int:i2|])
+                                                  (AIdxMult i2 [cexp|$id:mit_st|])
                                                   leninfo
                            -- NB: cres may contain mit_st variable, which will be mutated
                            -- hence it is really important that we set yldVal and /then/
@@ -510,7 +510,7 @@ codeGenComp dflags comp k =
                         cres <- codeGenArrRead
                                       dflags
                                       arrty [cexp|$id:(inValOf ih)|]
-                                            (Left 0)
+                                            (AIdxStatic 0)
                                             leninfo
 
                         appendStmt [cstm|$id:(yldValOf yh) = $cres;|]
@@ -627,7 +627,9 @@ codeGenComp dflags comp k =
 
             if [cexp|$id:stateVar < $int:n|]
               then do ce <- codeGenArrRead dflags 
-                               (info e) [cexp|$id:expVar|] (Right [cexp|$id:stateVar|]) LISingleton
+                               (info e) [cexp|$id:expVar|] 
+                               (AIdxCExp [cexp|$id:stateVar|]) LISingleton
+
                       let ty = yldTyOfCTy cty0
                       assignByVal ty ty [cexp|$id:(yldValOf yh)|] ce
                       appendStmts [cstms|$id:globalWhatIs = YIELD;

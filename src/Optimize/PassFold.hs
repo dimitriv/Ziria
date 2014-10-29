@@ -1191,6 +1191,19 @@ frm_mit c
       Nothing -> Nothing
       Just (mit,cont') -> Just (mit,cLet loc () n c1 cont')
 
+  | LetE n f e cont <- unComp c
+  , let loc = compLoc c
+  = case frm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLetE loc () n f e cont')
+
+  | LetERef n t me cont <- unComp c
+  , let loc = compLoc c
+  = case frm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLetERef loc () n t me cont')
+
+
   | otherwise
   = Nothing
 
@@ -1236,16 +1249,26 @@ flm_mit c
       Nothing -> Nothing
       Just (mit,cont') -> Just (mit,cLet loc () n c1 cont')
 
+  | LetE n f e cont <- unComp c
+  , let loc = compLoc c
+  = case flm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLetE loc () n f e cont')
+
+  | LetERef n t me cont <- unComp c
+  , let loc = compLoc c
+  = case flm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLetERef loc () n t me cont')
+
   | otherwise
   = Nothing
-
 
 
 elimMitigs :: Comp () () -> RwM (Comp () ())
 -- Vectorizer-specific
 elimMitigs comp
-  = mapCompM_ return mitig comp
-
+  = mapCompM_ return mitig comp 
   where
    mitig c
       | MkComp c0 cloc _ <- c
