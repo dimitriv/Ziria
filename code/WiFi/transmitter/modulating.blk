@@ -55,27 +55,46 @@ fun modulate_qpsk_lut (x : arr[2] bit) {
       };
   return outi
 }
+
+fun modulate_qpsk_lut_v2 (x : arr[2] bit) {
+  var outi : complex16;
+
+      if (x[0] == bit(0) && x[1] == bit(1)) then { 
+         outi := complex16{re=-qpsk_mod_11a;im=qpsk_mod_11a};
+      } else {
+        if (x[0] == bit(0) && x[1] == bit(0)) then { 
+          outi := complex16{re=-qpsk_mod_11a; im=-qpsk_mod_11a};
+        } else {
+          if (x[0] == bit(1) && x[1] == bit(1)) then { 
+            outi := complex16{re=qpsk_mod_11a;im=qpsk_mod_11a};
+          } else { 
+            outi := complex16{re=qpsk_mod_11a;im=-qpsk_mod_11a};
+          }
+        } 
+      };
+  return outi
+}
   
 
 
 fun comp modulate_qpsk () {
-var outa : arr[4] complex16;
-var outi : arr[4] int16;
-
-seq{
-  do{
-    outa[0] := complex16{re=-qpsk_mod_11a;im=qpsk_mod_11a};
-    outa[1] := complex16{re=-qpsk_mod_11a; im=-qpsk_mod_11a};
-    outa[2] := complex16{re=qpsk_mod_11a;im=qpsk_mod_11a};
-    outa[3] := complex16{re=qpsk_mod_11a;im=-qpsk_mod_11a}
-  }; 
 
   repeat [8, 4] {
     (x : arr[2] bit) <- takes 2;
-    emit outa[int32(modulate_qpsk_lut(x))];
+    emit (
+      if (x[0] == bit(0) && x[1] == bit(1)) then
+         complex16{re=-qpsk_mod_11a;im=qpsk_mod_11a}
+      else
+        if (x[0] == bit(0) && x[1] == bit(0)) then 
+          complex16{re=-qpsk_mod_11a; im=-qpsk_mod_11a}
+        else
+          if (x[0] == bit(1) && x[1] == bit(1)) then 
+            complex16{re=qpsk_mod_11a;im=qpsk_mod_11a}
+          else
+            complex16{re=qpsk_mod_11a;im=-qpsk_mod_11a}
+      )
   }
 
-}
 }
 
 
