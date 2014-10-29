@@ -933,11 +933,32 @@ int16 __ext_sumi16(int16* x, int __unused_21)
 
 ///// SSE bit operations
 
-
+/*
+FORCE_INLINE
 void __ext_v_or(uchar *output, int outlen, uchar *input1, int inlen1, uchar *input2, int inlen2)
 {
+
+
+	ASSERT(inlen1 <= 128);
+
+	vcs *pi1 = (vcs*)input1;
+	vcs *pi2 = (vcs *)input2;
+	int bytelen1 = inlen1 / 8 + ((inlen1 % 8) > 0);  // 96/8 = 12
+
+
+	vcs res = (vcs)_mm_or_si128(*pi1, *pi2);
+
+	memcpy(output, & res, bytelen1);
+}
+*/
+
+/*
+FORCE_INLINE
+void __ext_v_or(uchar *output, int outlen, uchar *input1, int inlen1, uchar *input2, int inlen2)
+{
+
 	int cnt = 0;
-	int bytelen1 = inlen1 / 8 + ((inlen1 % 8) > 0);
+	int bytelen1 = inlen1 / 8 + ((inlen1 % 8) > 0);  // 96/8 = 12
 	vcs *pi1 = (vcs *)input1;
 	vcs *pi2 = (vcs *)input2;
 	vcs *po = (vcs *)output;
@@ -949,6 +970,7 @@ void __ext_v_or(uchar *output, int outlen, uchar *input1, int inlen1, uchar *inp
 		pi2++;
 		po++;
 		cnt += 16;
+		exit(-3);
 	}
 
 	while (cnt <= bytelen1)
@@ -958,6 +980,132 @@ void __ext_v_or(uchar *output, int outlen, uchar *input1, int inlen1, uchar *inp
 	}
 	outlen = inlen1;
 }
+
+*/
+
+/*
+FORCE_INLINE
+void __ext_v_or(uchar *output, int outlen, uchar *input1, int inlen1, uchar *input2, int inlen2)
+{
+	int cnt64, cnt32, cnt8;
+	int bytelen = inlen1 / 8 + ((inlen1 % 8) > 0);
+
+	for (cnt64 = 0; (cnt64 + 8) <= bytelen; cnt64 += 8) {
+		unsigned __int64 i1 = *(unsigned __int64 *)input1;
+		unsigned __int64 i2 = *(unsigned __int64 *)input2;
+		*(unsigned __int64 *)output = i1 | i2;
+		input1 += 8;
+		input2 += 8;
+		output += 8;
+	}
+
+	for (cnt32 = 0; cnt32 + 4 <= bytelen - cnt64; cnt32 += 4) {
+		unsigned __int32 i1 = *(unsigned __int32 *)input1;
+		unsigned __int32 i2 = *(unsigned __int32 *)input2;
+		*(unsigned __int32 *)output = i1 | i2;
+		input1 += 4;
+		input2 += 4;
+		output += 4;
+	}
+
+	for (cnt8 = 0; cnt8 < bytelen - cnt32; cnt8++) {
+		unsigned char i1 = *(unsigned char *)input1;
+		unsigned char i2 = *(unsigned char *)input2;
+		*(unsigned char *)output = i1 | i2;
+		input1 += 1;
+		input2 += 1;
+		output += 1;
+	}
+
+}
+*/
+
+FORCE_INLINE
+void __ext_v_or_48(uchar *output, uchar *input1, uchar *input2)
+{
+	unsigned __int32 i1, i2;
+	unsigned __int16 j1, j2;
+
+	i1 = *(unsigned __int32 *)input1;
+	i2 = *(unsigned __int32 *)input2;
+	*(unsigned __int32 *)output = i1 | i2;
+
+	j1 = *(unsigned __int16 *)(input1 + 4);
+	j2 = *(unsigned __int16 *)(input2 + 4);
+	*(unsigned __int16 *)(output + 4) = j1 | j2;
+}
+
+FORCE_INLINE
+void __ext_v_or_96(uchar *output, uchar *input1, uchar *input2)
+{
+	unsigned __int64 i1, i2;
+	unsigned __int32 j1, j2;
+
+	i1 = *(unsigned __int64 *)input1;
+	i2 = *(unsigned __int64 *)input2;
+	*(unsigned __int64 *)output = i1 | i2;
+
+	j1 = *(unsigned __int32 *)(input1 + 8);
+	j2 = *(unsigned __int32 *)(input2 + 8);
+	*(unsigned __int32 *)(output + 8) = j1 | j2;
+}
+
+FORCE_INLINE
+void __ext_v_or_192(uchar *output, uchar *input1, uchar *input2)
+{
+
+	unsigned __int64 i1, i2;
+
+	vcs *pi1 = (vcs *)input1;
+	vcs *pi2 = (vcs *)input2;
+	vcs *po = (vcs *)output;
+	*po = (vcs)_mm_and_si128(*pi1, *pi2);
+
+	i1 = *(unsigned __int64 *)(input1+16);
+	i2 = *(unsigned __int64 *)(input2+16);
+	*(unsigned __int64 *)(output+16) = i1 | i2;
+
+
+}
+
+FORCE_INLINE
+void __ext_v_or_288(uchar *output, uchar *input1, uchar *input2)
+{
+	__ext_v_or_192(output, input1, input2);
+	__ext_v_or_96(output + 24, input1 + 24, input2 + 24);
+
+}
+
+
+FORCE_INLINE
+void __ext_v_or(uchar *output, int outlen, uchar *input1, int inlen1, uchar *input2, int inlen2) 
+{
+	int cnt;
+	switch (inlen1) {
+	case 48:
+		__ext_v_or_48(output, input1, input2);
+		break;
+	case 96:
+		__ext_v_or_96(output, input1, input2);
+		break;
+	case 192:
+		__ext_v_or_192(output, input1, input2);
+		break;
+	case 288:
+		__ext_v_or_288(output, input1, input2);
+		break;
+	default:
+		for (cnt = 0; cnt < (inlen1 + 7) / 8; cnt++) 
+		{
+			output[cnt] = input1[cnt] | input2[cnt];
+		}
+		return;
+	}
+	return;
+
+}
+
+
 
 
 void __ext_v_and(uchar *output, int outlen, uchar *input1, int inlen1, uchar *input2, int inlen2)
