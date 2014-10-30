@@ -147,80 +147,61 @@ fun comp modulate_16qam () {
 
 
 fun comp modulate_64qam () {
-  var re:int16;
-  var im:int16;
-  var outc : complex16; 
-
 
   repeat <= [12, 2] {
     x <- takes 6;
-    do {
 
-      if (x[0] == '0 && x[1] == '0 && x[2] == '0) then {
-         re := -7*qam64_mod_11a
-      } else {
-        if (x[0] == '0 && x[1] == '0 && x[2] == '1) then {
-          re := -5*qam64_mod_11a
-   	} else {
-          if (x[0] == '0 && x[1] == '1 && x[2] == '1) then {
-            re := -3*qam64_mod_11a
-	  } else {
-            if (x[0] == '0 && x[1] == '1 && x[2] == '0) then {
-              re := -1*qam64_mod_11a
-	    } else {
-              if (x[0] == '1 && x[1] == '1 && x[2] == '0) then {
-                re := qam64_mod_11a
-  	      } else {
-                if (x[0] == '1 && x[1] == '1 && x[2] == '1) then {
-                  re := 3*qam64_mod_11a
-    	        } else {
-                  if (x[0] == '1 && x[1] == '0 && x[2] == '1) then {
-                    re := 5*qam64_mod_11a
-     	          } else {
-                    re := 7*qam64_mod_11a
-		  }
-		}
-	      }
-	    }
-	  }
-	}
-      };
+    let re = 
+      if (x[0] == '0 && x[1] == '0 && x[2] == '0) then
+         (-7*qam64_mod_11a)
+      else
+      if (x[0] == '0 && x[1] == '0 && x[2] == '1) then
+         (-5*qam64_mod_11a)
+      else
+      if (x[0] == '0 && x[1] == '1 && x[2] == '1) then
+         (-3*qam64_mod_11a)
+      else 
+      if (x[0] == '0 && x[1] == '1 && x[2] == '0) then 
+         (-1*qam64_mod_11a)
+      else 
+      if (x[0] == '1 && x[1] == '1 && x[2] == '0) then
+         qam64_mod_11a
+      else
+      if (x[0] == '1 && x[1] == '1 && x[2] == '1) then
+         3*qam64_mod_11a
+      else
+      if (x[0] == '1 && x[1] == '0 && x[2] == '1) then
+         5*qam64_mod_11a
+      else 
+         7*qam64_mod_11a;
 
-      if (x[3] == '0 && x[4] == '0 && x[5] == '0) then {
-         im := -7*qam64_mod_11a
-      } else {
-        if (x[3] == '0 && x[4] == '0 && x[5] == '1) then {
-          im := -5*qam64_mod_11a
-   	} else {
-          if (x[3] == '0 && x[4] == '1 && x[5] == '1) then {
-            im := -3*qam64_mod_11a
-	  } else {
-            if (x[3] == '0 && x[4] == '1 && x[5] == '0) then {
-              im := -1*qam64_mod_11a
-	    } else {
-              if (x[3] == '1 && x[4] == '1 && x[5] == '0) then {
-                im := qam64_mod_11a
-  	      } else {
-                if (x[3] == '1 && x[4] == '1 && x[5] == '1) then {
-                  im := 3*qam64_mod_11a
-    	        } else {
-                  if (x[3] == '1 && x[4] == '0 && x[5] == '1) then {
-                    im := 5*qam64_mod_11a
-     	          } else {
-                    im := 7*qam64_mod_11a
-		  }
-		}
-	      }
-	    }
-	  }
-	}
-      };
+     let im = 
+       if (x[3] == '0 && x[4] == '0 && x[5] == '0) then 
+         -7*qam64_mod_11a
+       else 
+       if (x[3] == '0 && x[4] == '0 && x[5] == '1) then 
+          -5*qam64_mod_11a
+       else 
+       if (x[3] == '0 && x[4] == '1 && x[5] == '1) then 
+          -3*qam64_mod_11a
+       else 
+       if (x[3] == '0 && x[4] == '1 && x[5] == '0) then 
+          -1*qam64_mod_11a
+       else 
+       if (x[3] == '1 && x[4] == '1 && x[5] == '0) then 
+         qam64_mod_11a
+       else 
+       if (x[3] == '1 && x[4] == '1 && x[5] == '1) then 
+         3*qam64_mod_11a
+       else 
+       if (x[3] == '1 && x[4] == '0 && x[5] == '1) then 
+         5*qam64_mod_11a
+       else 
+         7*qam64_mod_11a;
 
-      outc := complex16{re=re; im=im};
-    };
-
-    emit outc
+     emit (complex16{re=re; im=im});
   }
+		  
 } 
 
 
@@ -229,12 +210,12 @@ fun comp modulate_64qam () {
 fun comp modulate(m : int) {
   if (m == M_BPSK) then 
     modulate_bpsk()
+  else 
+  if (m == M_QPSK) then 
+    modulate_qpsk()
   else
-    if (m == M_QPSK) then
-      modulate_qpsk()
-    else
-      if (m == M_16QAM) then
-      	modulate_16qam()
-      else
-      	modulate_64qam()
+  if (m == M_16QAM) then 
+    modulate_16qam()
+  else
+    modulate_64qam()
 }
