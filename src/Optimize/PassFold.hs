@@ -401,6 +401,20 @@ no_lut_inside x
 
 
 
+-- if e then return e1 else return e2 ~~> return (if e then e1 else e2)
+if_return_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
+if_return_step dynflags comp
+  | Branch eguard c1 c2 <- unComp comp
+  , Return f1 e1 <- unComp c1
+  , Return f2 e2 <- unComp c2
+  -- , f1 == f2
+  , let cty  = compInfo comp
+  , let cloc = compLoc comp
+  , Just dty <- doneTyOfCTyBase (compInfo comp)
+  = rewrite $ cReturn (compLoc comp) (compInfo comp) f1 (eIf (compLoc comp) dty eguard e1 e2)
+  | otherwise
+  = return comp
+
 
 
 inline_exp_fun :: (Name,[(Name,Ty)],[(Name,Ty,Maybe (Exp Ty))],Exp Ty)
@@ -1094,6 +1108,7 @@ foldCompPasses flags
 
 
     , ("ifdead"             , ifdead_step flags             )
+    , ("if-return-step",   if_return_step flags)
 
     -- Don't use: not wrong but does not play nicely with LUT
     --  , ("float-top-letref"   , float_top_letref_step flags )

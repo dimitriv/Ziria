@@ -230,6 +230,7 @@ rewrite_takes in_buff     -- Input buffer name (of size finalin)
 -}
        ; x <- newTypedName "x" (TArr (Literal finalin) tbase) loc
        ; u <- newTypedName "u" TUnit loc
+
        ; let c =
                xSeq [ CMD $
                       if is_empty .= True then
@@ -244,7 +245,10 @@ rewrite_takes in_buff     -- Input buffer name (of size finalin)
                          xSeq [ CMD $ is_empty .:= True
                               , CMD $ xReturn ForceInline (in_buff .! (in_buff_idx,n0))
                               ]
-                       else if ((in_buff_idx .+ n0) .< finalin) then
+                       else 
+                           -- I am commenting out the conditional below because it should only 
+                           -- be enabled with a flag (like the --bounds-check flag). TODO.
+                           -- if ((in_buff_idx .+ n0) .< finalin) then
                                xSeq [ CMD $ tmp_idx .:= in_buff_idx
                                     , CMD $ in_buff_idx .:= (in_buff_idx .+ n0)
                                     , CMD $ xReturn ForceInline (in_buff .! (tmp_idx,n0))
@@ -253,12 +257,15 @@ rewrite_takes in_buff     -- Input buffer name (of size finalin)
                                  -- lack of memcpy as a primitive but
                                  -- probably we will not encountere any such
                                  -- misaligned annotations.
+                           {- 
                             else xSeq [ CMD $ u <:- xError "rewrite_take: unaligned!"
                                         -- Just a dummy return to make code generator happy ...
                                         -- Fix this at some point by providing a proper
                                         -- computer-level error function
                                       , CMD $ xReturn ForceInline (in_buff .!(0::Int,n0))
                                       ]
+                            -}
+
                      ] loc
 --       ; liftIO $ putStrLn "rewrite_takes,3"
 --       ; liftIO $ putStrLn $ "c = " ++ show c
@@ -289,14 +296,16 @@ rewrite_emits out_buf     -- buffer where we store the output
                         , CMD $ out_buf_idx .:= (0::Int)
                         , CMD $ xEmit out_buf
                         ]
-              else if (out_buf_idx .+ n .< finalout ) then
+              else 
+                -- commenting out this as it should be enabled with --bounds-check really, and only then.
+                -- if (out_buf_idx .+ n .< finalout ) then
                    xSeq [ CMD $
                           case e_or_es of
                             Left {}  -> out_buf .! out_buf_idx .:= x
                             Right {} -> out_buf .! (out_buf_idx, n) .:= x
                         , CMD $ out_buf_idx .:= (out_buf_idx .+ n)
                         ]
-              else xError "rewrite_emit: unaligned!"
+               -- else xError "rewrite_emit: unaligned!"
       ; return (comp loc)
       }
 
