@@ -30,9 +30,8 @@ FORCE_INLINE
 void bitArrRead(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPtr tgt) 
 {
 
-	unsigned int sidx = vstart >> 3;    // Index of first relevant byte
-	unsigned char off = vstart & 7;    // Offset
-
+  	unsigned int sidx = vstart >> 3;    // Index of first relevant byte
+  	unsigned char off = vstart & 7;    // Offset
 
 	if (off == 0 && vlen == 8) {
 	  *tgt = src[sidx];
@@ -42,7 +41,7 @@ void bitArrRead(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPtr
 	unsigned char ffo = 8 - off;       // Reverse offset
 
 	unsigned int vend = vstart+vlen-1; // Index of last bit to be included
-	unsigned int eidx = vend >> 8;      // Index of last relevant byte
+	unsigned int eidx = vend >> 3;      // Index of last relevant byte
 
 	int i;
 	unsigned char carry;
@@ -68,8 +67,8 @@ void bitArrRead(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPtr
 FORCE_INLINE
 void bitArrWrite(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPtr tgt)
 {
-	unsigned int sidx = vstart >> 3;  // Start index
-	unsigned char off = vstart & 7;  // Offset (width of carry)
+  	unsigned int sidx = vstart >> 3;  // Start index
+  	unsigned char off = vstart & 7;  // Offset (width of carry)
 
 	if (off == 0 && vlen == 8) {
 	  tgt[sidx] = *src;
