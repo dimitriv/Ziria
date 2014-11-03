@@ -17,6 +17,9 @@
 -- permissions and limitations under the License.
 --
 --
+
+-- Run the same code as Sora's implementation
+#define SORA_COMPAT
 #include <externals.blk>
 #include "../const.blk"
 #include "../receiver/cca/cca.blk"
