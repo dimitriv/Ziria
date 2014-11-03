@@ -1,0 +1,34 @@
+fun comp viterbi() { 
+  var nOutput:int16;
+  var outViterbi:arr[8] int := {0, 0, 0, 0, 0, 0, 0, 0}; 
+  var outa : arr[256] int;
+
+  var cnt :int := 0;
+
+-- repeat {
+ repeat[288,256] {
+
+    (svalue:arr[48] int8) <- takes 48;
+   
+     do{
+       cnt := cnt + 1;
+       nOutput := 8
+     };
+
+     do {
+       println cnt;
+     };
+
+     for i in [0, nOutput/8] {
+       do {outViterbi[0] := cnt};
+       emits outViterbi[i*8,8];
+     }
+
+   }
+
+}
+
+
+
+
+let comp main = read >>> viterbi() >>> write;
