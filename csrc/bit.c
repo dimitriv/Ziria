@@ -30,15 +30,23 @@ FORCE_INLINE
 void bitArrRead(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPtr tgt) 
 {
 
-	unsigned int sidx = vstart / 8;    // Index of first relevant byte
-	unsigned char off = vstart % 8;    // Offset
+	unsigned int sidx = vstart >> 3;    // Index of first relevant byte
+	unsigned char off = vstart & 7;    // Offset
+
+
+	if (off == 0 && vlen == 8) {
+	  *tgt = src[sidx];
+	  return;
+	}
+
 	unsigned char ffo = 8 - off;       // Reverse offset
 
 	unsigned int vend = vstart+vlen-1; // Index of last bit to be included
-	unsigned int eidx = vend / 8;      // Index of last relevant byte
+	unsigned int eidx = vend >> 8;      // Index of last relevant byte
 
 	int i;
 	unsigned char carry;
+
 
 	carry = src[eidx] << ffo; 
 
@@ -60,16 +68,23 @@ void bitArrRead(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPtr
 FORCE_INLINE
 void bitArrWrite(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPtr tgt)
 {
-	unsigned int sidx = vstart / 8;  // Start index
-	unsigned char off = vstart % 8;  // Offset (width of carry)
+	unsigned int sidx = vstart >> 3;  // Start index
+	unsigned char off = vstart & 7;  // Offset (width of carry)
+
+	if (off == 0 && vlen == 8) {
+	  tgt[sidx] = *src;
+	  return;
+	}
+
 	unsigned char ffo = 8 - off;     // Opposite of offset 
-	unsigned int n    = vlen % 8;       // #bits used in the last byte of src
+	unsigned int n    = vlen & 7;       // #bits used in the last byte of src
 
 	unsigned int res = n + off; // total # of bits we have to patch in the end
 
 	unsigned int i;
 	unsigned char carry;
 	unsigned char mask = ~ 0;       // 1111111
+
 
 	/* First carry is whatever was already in the "off" part of target */ 
 	carry = tgt[sidx] & (mask >> ffo);
