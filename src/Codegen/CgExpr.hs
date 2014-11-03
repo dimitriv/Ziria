@@ -238,18 +238,18 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
       | (EVal (VInt i2)) <- unExp e2
       , let ii2 :: Int = fromIntegral i2
       = do { ce1 <- codeGenExp dflags e1
-           ; ce3 <- codeGenExp dflags e3
+           -- ; ce3 <- codeGenExp dflags e3
            ; cgBoundsCheck dflags (expLoc e0) (info e1) [cexp| $int:ii2|] l
-           ; codeGenArrWrite dflags (info e1) ce1 (AIdxStatic ii2) l ce3
+           ; codeGenArrWrite_stored dflags (info e1) ce1 (AIdxStatic ii2) l e3
            ; return [cexp|UNIT|]
            }
 
     go t (EArrWrite e1 e2 l e3) = do
         ce1 <- codeGenExp dflags e1
         ce2 <- codeGenExp dflags e2
-        ce3 <- codeGenExp dflags e3
+        -- ce3 <- codeGenExp dflags e3
         cgBoundsCheck dflags (expLoc e0) (info e1) ce2 l
-        codeGenArrWrite dflags (info e1) ce1 (AIdxCExp ce2) l ce3
+        codeGenArrWrite_stored dflags (info e1) ce1 (AIdxCExp ce2) l e3
         return [cexp|UNIT|]
 
     go t (EWhile econd ebody) = do
@@ -733,6 +733,29 @@ codeGenArrRead _ ty _ _ _
   = fail ("codeGenArrRead: non-array type " ++ show ty)
 
 
+
+codeGenArrWrite_stored :: DynFlags
+                -> Ty
+                -> C.Exp       -- c1
+                -> ArrIdx      -- c2
+                -> LengthInfo  -- rng
+                -> Exp Ty      -- c3
+                -> Cg ()       -- c1[c2...c2+rng-1] := c3
+codeGenArrWrite_stored dflags t@(TArr _ ty) ce1 mb_ce2 range e3
+  | ty /= TBit
+  = do { cread <- codeGenArrRead dflags t ce1 mb_ce2 range
+       ; let tres = case range of 
+                      LISingleton -> ty
+                      LILength l  -> TArr (Literal l) ty
+       ; _unit_always <- codeGenExpAndStore dflags (tres,cread) e3
+       ; return ();
+       }
+  | otherwise
+  = do { ce3 <- codeGenExp dflags e3 
+       ; codeGenArrWrite dflags t ce1 mb_ce2 range ce3
+       }
+codeGenArrWrite_stored dflags _t ce1 mb_ce2 range e3
+  = fail ("codeGenArrWrite: non-array type " ++ show _t)
 
 codeGenArrWrite :: DynFlags
                 -> Ty
