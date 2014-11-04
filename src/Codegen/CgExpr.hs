@@ -598,7 +598,7 @@ printScalar dflags e = do
 
 codeGenParamByRef :: (Name,Ty) -> Cg [C.Param]
 codeGenParamByRef (nm, ty@(TArr (Literal l) _)) = do
-    unused <- freshName ("__unused_")
+    unused <- freshName ("__prm_by_ref_unused_")
     return [cparams|$ty:(codeGenTy ty) $id:(name nm), int $id:(name unused)|]
 
 codeGenParamByRef (nm, ty@(TArr (NVar c m) _)) =
@@ -617,7 +617,7 @@ codeGenParamsByRef params = concat <$> mapM codeGenParamByRef params
 
 codeGenParam :: (Name, Ty) -> Cg [C.Param]
 codeGenParam (nm, ty@(TArr (Literal l) _)) = do
-    unused <- freshName ("__unused_")
+    unused <- freshName ("__prm_unused_")
     let pname = getNameWithUniq nm
     return [cparams|$ty:(codeGenTy ty) $id:pname, int $id:(name unused)|]
 

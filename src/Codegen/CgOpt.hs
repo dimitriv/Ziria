@@ -996,7 +996,7 @@ codeGenComp dflags comp k =
                           }
 
     go (MkComp (Seq c1 c2) csp csinfo) = do
-        unusedName <- freshName ("__unused_" ++ (getLnNumInStr csp))
+        unusedName <- freshName ("__seq_unused_" ++ (getLnNumInStr csp))
         codeGenCompTop dflags (MkComp (mkBind c1 (unusedName, c2)) csp csinfo) k
 
     go (MkComp (Var nm) csp _) = do
