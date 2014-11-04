@@ -774,6 +774,107 @@ elim_times_step fgs comp =
 
 
 
+
+elim_automapped_mitigs :: DynFlags -> TypedCompPass
+elim_automapped_mitigs dflags c
+  | MkComp c0 cloc _ <- c          
+  , Par p c1 c2 <- c0
+  , Par p c11 c12 <- unComp c1 
+  , LetHeader _f fun (MkComp (Map v f) _ _) <- unComp c12  -- (c1 - map f) - c2 
+  , Mitigate ty1 i1 j1 <- unComp c11
+  , Mitigate ty2 i2 j2 <- unComp c2           -- (c11' -- mitigate(i2,j2) -- map f) - mitigate(i2,j2) - c2'
+  , i1 >= j1 && i2 <= j2                      -- down mit and up mit
+  , let d1 = i1 `div` j1
+  , let d2 = j2 `div` i2 
+  , d1 == d2                                  -- exactly the same rate 
+  , _f == f
+  = rewrite_mit_map dflags ty1 (i1,j1) ty2 (i2,j2) (_f, fun) 
+
+  | MkComp c0 cloc _ <- c          
+  , Par p c1 c2 <- c0
+  , Par p c21 c22 <- unComp c2
+  , LetHeader _f fun (MkComp (Map v f) _ _) <- unComp c21  -- c1 - (map f - c2)
+  , Mitigate ty1 i1 j1 <- unComp c1      -- (c11' -- mitigate(i1,j1) -- map f) - c2 
+  , Mitigate ty2 i2 j2 <- unComp c22     -- (c11' -- mitigate(i2,j2) -- map f) - mitigate(i2,j2) - c2'
+  , i1 >= j1 && i2 <= j2                      -- down mit and up mit
+  , let d1 = i1 `div` j1
+  , let d2 = j2 `div` i2 
+  , d1 == d2                                  -- exactly the same rate 
+  , _f == f
+  = rewrite_mit_map dflags ty1 (i1,j1) ty2 (i2,j2) (_f, fun) 
+
+  | otherwise
+  = return c 
+
+
+
+rewrite_mit_map :: DynFlags -> Ty -> (Int,Int) -> Ty -> (Int,Int) -> (Name, Fun Ty) -> RwM (Comp CTy Ty)
+-- Precondition:  i1 `div` j1 == j2 `div` i2 
+rewrite_mit_map fgs ty1 (i1,j1) ty2 (i2,j2) (f_name, fun)
+  = do { let rng1 = if j1 == 1 then LISingleton else LILength j1
+       ; let rng2 = if i2 == 1 then LISingleton else LILength i2
+       ; let d = i1 `div` j1 
+       ; let floc = funLoc fun 
+
+         -- input variable
+       ; x <- genSym "x"
+       ; let x_ty   = TArr (Literal i1) ty1   -- input type
+       ; let x_name = toName x floc (Just x_ty)
+       ; let x_exp  = eVar floc x_ty x_name
+
+         -- output variable
+       ; y <- genSym "y"
+       ; let y_ty   = TArr (Literal j2) ty2      -- output type
+       ; let y_name = toName y floc (Just y_ty)
+       ; let y_exp  = eVar floc y_ty y_name
+
+         -- name of new map function
+       ; new_f <- genSym "auto_map_mit"
+       ; let f_ty = TArrow [x_ty] y_ty
+       ; let new_f_name = toName new_f floc (Just f_ty) 
+
+         -- type of original map function 
+       ; let f_orig_ty@(TArrow [fun_in_ty] fun_ret_ty) = funInfo fun
+
+
+         -- new counter 
+       ; i <- genSym "i"
+       ; let i_name = toName i floc (Just tint)   
+       ; let i_exp  = eVar floc tint i_name 
+
+         -- zero and 'd'
+       ; let ezero = eVal floc tint (vint 0)
+       ; let e_d   = eVal floc tint (vint d)
+   
+       
+       ; let new_body = eSeq floc y_ty 
+                         (eFor floc TUnit AutoUnroll i_name ezero e_d ekernel) -- do the for loop
+                         y_exp                                                 -- and return y
+
+             write_idx = eBinOp floc tint Mult (eVal floc tint (vint i2)) i_exp
+             read_idx  = eBinOp floc tint Mult (eVal floc tint (vint j1)) i_exp
+
+             earrrd    = eArrRead floc fun_in_ty x_exp read_idx rng1
+             ekernel   = eArrWrite floc TUnit y_exp write_idx rng2 $ 
+                            eCall floc fun_ret_ty (eVar floc f_orig_ty f_name) [earrrd]
+
+      ; let new_trans_ty = CTBase (TTrans x_ty y_ty)
+
+      ; let new_mapper = cMap floc new_trans_ty Nothing new_f_name
+      ; let new_fun = MkFun (MkFunDefined new_f_name [(x_name,x_ty)] [(y_name,y_ty,Nothing)] new_body) floc f_ty
+
+      ; rewrite $ 
+         (cLetHeader floc new_trans_ty f_name fun $   -- original function 
+            cLetHeader floc new_trans_ty new_f_name new_fun new_mapper)
+       }
+        
+
+
+
+
+
+
+
 arrinit_step :: DynFlags -> TypedExpPass
 -- Statically initialize as many arrays as possible
 arrinit_step _fgs e1
@@ -1110,6 +1211,8 @@ foldCompPasses flags
     , ("ifdead"             , ifdead_step flags             )
     , ("if-return-step",   if_return_step flags)
 
+   ,  ("elim-automapped-mitigs", elim_automapped_mitigs flags)
+
     -- Don't use: not wrong but does not play nicely with LUT
     --  , ("float-top-letref"   , float_top_letref_step flags )
 
@@ -1163,6 +1266,10 @@ elimMitigsIO sym comp = go comp
                      ; case r of NotRewritten {} -> return comp
                                  Rewritten comp' -> go comp'
                      }
+
+
+
+
 
 
 frm_mit :: Comp () () -> Maybe ((Ty,Int,Int), Comp () ())
@@ -1340,7 +1447,6 @@ elimMitigs comp
                                 (cPar cloc () pnever (cMitigate cloc () ty2 l j2) c2')
              else return c
            }
-
 
         -- throw away useless mitigators!
       | MkComp c0 cloc _ <- c
