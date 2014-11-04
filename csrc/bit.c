@@ -33,6 +33,38 @@ void bitArrRead(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPtr
   	unsigned int sidx = vstart >> 3;    // Index of first relevant byte
   	unsigned char off = vstart & 7;    // Offset
 
+	// Fast path for aligned short reads
+	if (off == 0) {
+		if (vlen <= 8) {
+			tgt[0] = src[sidx];
+			return;
+		}
+		if (vlen <= 16) {
+			*((int16 *)tgt) = *((int16 *)&src[sidx]);
+			return;
+		}
+		if (vlen <= 24) {
+			*((int16 *)tgt) = *((int16 *)&src[sidx]);
+			tgt[2] = src[sidx + 2];
+			return;
+		}
+		if (vlen <= 32) {
+			*(int32 *)tgt = *(int32 *)&src[sidx];
+			return;
+		}
+		if (vlen <= 40) {
+			*(int32 *) tgt = *(int32 *)&src[sidx];
+			tgt[4] = src[sidx + 4];
+			return;
+		}
+		if (vlen <= 48) {
+			*(int32 *)tgt = *(int32 *)&src[sidx];
+			*(int16 *)&tgt[4] = *(int16 *)&src[sidx+4];
+			return;
+		}
+	}
+
+
 	if (off == 0 && vlen & 7 == 0) {
 		for (int i = 0; i < vlen / 8; i++)
 			tgt[i] = src[sidx + i];
