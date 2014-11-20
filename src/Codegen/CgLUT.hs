@@ -103,12 +103,19 @@ packIdx ranges vs tgt tgt_ty = go vs 0
          = do { w <- varBitWidth ranges v ty
               ; let mask = 2^w - 1
               ; (_,varexp) <- lookupVarEnv v
-              ; z <- genSym "__z"
-              ; appendDecl $ [cdecl| $ty:tgt_ty * $id:z;|]
-              ; appendStmt $ [cstm| $id:z = ($ty:tgt_ty *) $varexp; |]
 
-                 -- appendStmt $ [cstm| $tgt |= ((* $id:z) & $int:mask) << $int:pos; |]
-              ; let rhs = [cexp|((* $id:z) & $int:mask)|] `cExpShL` pos 
+              -- fast path for <= 1 byte variables
+              ; let (TArr len bty) = ty
+              ; rhs <- 
+                 case (bty, len) of
+                   (TBit, Literal n) | n <= 8 -> 
+                     return $ [cexp|((* $varexp) & $int:mask)|] `cExpShL` pos 
+                   _otherwise -> 
+                     do { z <- genSym "__z"
+                        ; appendDecl $ [cdecl| $ty:tgt_ty * $id:z;|]
+                        ; appendStmt $ [cstm| $id:z = ($ty:tgt_ty *) $varexp; |]
+                        ; return $ [cexp|((* $id:z) & $int:mask)|] `cExpShL` pos
+                        }
               ; appendStmt $ [cstm| $tgt |= $rhs; |]
               ; go vs (pos+w) }
          | otherwise
@@ -187,9 +194,9 @@ byte_align n = ((n+7) `div` 8) * 8
 
 unpackByteAligned :: [VarTy] -- Variables
                    -> C.Exp   -- A C expression of type BitArrPtr
-                   -> Cg ()
+                   -> Cg Int  -- Last byte position
 unpackByteAligned xs src = go xs 0
-  where go [] _ = return ()
+  where go [] pos = return (pos `div` 8)
         go ((v,ty):vs) pos
          | isArrTy ty
          = do { (_,varexp) <- lookupVarEnv v
@@ -211,8 +218,11 @@ unpackByteAligned xs src = go xs 0
 
          | otherwise
          = do { (_,varexp) <- lookupVarEnv v
+                -- NEW: 
+              ; assignByVal ty ty varexp [cexp| *(($ty:(codeGenTy ty) *) & $src[$int:(pos `div` 8)])|] 
               ; w <- tyBitWidth ty
-              ; appendStmt $ [cstm| blink_copy((void *) & $varexp, (void *) & $src[$int:(pos `div` 8)], $int:(byte_align w `div` 8));|]
+               
+              -- OLD ; appendStmt $ [cstm| blink_copy((void *) & $varexp, (void *) & $src[$int:(pos `div` 8)], $int:(byte_align w `div` 8));|]
               ; go vs (byte_align (pos+w)) } -- Align for next read!
 
 
@@ -519,14 +529,26 @@ genLUTLookup dflags ranges
         -> case mb_resname of
              Nothing ->
                do { res <- freshName "resx"
-                  ; codeGenDeclGroup (name res) ety >>= appendDecl
-                  ; extendVarEnv [(res,(ety,[cexp|$id:(name res)|]))] $
-                    unpackByteAligned (outVars ++
-                       [(res,ety)]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
+                    -- if the result variable is an super-byte array we will not allocate space since the LUT
+                    -- contains space for it already, rather we will return the address in the LUT
+                  ; case ety of 
+                      TArr (Literal l) ty | (ty /= TBit || l > 8) ->
+                       do { appendDecl $ [cdecl| $ty:(codeGenTyAlg ety) $id:(name res); |]
+                          ; respos <- unpackByteAligned outVars [cexp| (typename BitArrPtr) $clut[$id:idx]|]
+                          ; appendStmt $ [cstm| $id:(name res) = 
+                                ($ty:(codeGenTy ety)) & $clut[$id:idx][$int:respos]; |] 
+                          ; return $ [cexp| $id:(name res) |]
+                          }
+                      _ -> 
+                       do { codeGenDeclGroup (name res) ety >>= appendDecl
+                          ; extendVarEnv [(res,(ety,[cexp|$id:(name res)|]))] $
+                            unpackByteAligned (outVars ++
+                               [(res,ety)]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
 
---                  ; cg_print_vars dflags outVars -- debugging
+--                           ; cg_print_vars dflags outVars -- debugging
 
-                  ; return $ [cexp| $id:(name res) |]
+                          ; return $ [cexp| $id:(name res) |]
+                          }
                   }
              Just res ->
                do { extendVarEnv [(res,(ety,[cexp|$id:(name res)|]))] $

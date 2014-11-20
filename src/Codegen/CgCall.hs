@@ -38,6 +38,7 @@ import CgLUT
 
 import Text.Parsec.Pos ( SourcePos )
 
+import Control.Monad (when, unless)
 
 import Control.Applicative
 import Control.Monad (when)
@@ -71,8 +72,9 @@ codeGenCall_alloc dflags loc retTy nef eargs
        ; let retNewN = toName ("__retcall_" ++ name newNm) Nothing Nothing
              cer     = [cexp|$id:(name retNewN)|]
 
-       ; appendDecls =<<
-           codeGenDeclGlobalGroups dflags [(retNewN, retTy, Nothing)]
+       ; unless (retTy == TUnit) $ 
+           appendDecls =<<
+              codeGenDeclGlobalGroups dflags [(retNewN, retTy, Nothing)]
 
        ; codegen_call dflags loc retTy cer nef eargs 
        }
@@ -136,11 +138,16 @@ codegen_call dflags loc retTy cer nef eargs
            -> when_ (not is_external) inAllocFrame $
               appendStmt [cstm|$(cef)($cer, $args:cargs);|]
 
-           | otherwise
+         TUnit
+           -> when_ (not is_external) inAllocFrame $ 
+              appendStmt [cstm| $(cef)($args:cargs);|]
+
+         _otherwise
           -> when_ (not is_external) inAllocFrame $ 
              appendStmt [cstm| $cer = $(cef)($args:cargs);|]
        
-       return [cexp|$cer|]  
+       return (if retTy == TUnit then [cexp|UNIT|] else [cexp|$cer|])
+
 
   where when_ :: Bool -> (Cg a -> Cg a) -> Cg a -> Cg a
         when_ True f  = f 

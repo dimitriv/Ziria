@@ -595,7 +595,7 @@ seqToBindAux c
   | Seq c1 c2 <- unComp c
   , let cloc = compLoc c
   , let cty  = compInfo c
-  = do { nm <- genSym "__unused_"
+  = do { nm <- genSym "__seq_from_bnd_unused_"
        ; return $ MkComp (mkBind c1 (toName nm Nothing Nothing,c2)) cloc cty }
   | otherwise
   = return c

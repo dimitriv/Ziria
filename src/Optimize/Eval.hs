@@ -145,60 +145,27 @@ evalArrInitLoop (nm,arr) exp
 evalArrInitLoop nm exp
   = return Nothing
 
--- case mapM (\i -> substExp (k, MkExp (EVal (VInt i))  eval) inds of
---       Nothing   -> return Nothing -- One of the values could not evaluate
---       Just vals -> do { mapM (\(val,i) -> writeArray arr i val) (zip vals inds)
---                       ; return (Just ()) }
-
---   | otherwise
---   = return Nothing
-
-{-
-
-let inds = [low:low+siz-1] -- Indices
-    in
-    case mapM (\i -> substAll (k,EVal (VInt i)) eval) inds of
-      Nothing   -> return Nothing -- One of the values could not evaluate
-      Just vals -> do { mapM (\(val,i) -> writeArray arr i val) (zip vals inds)
-                      ; return (Just ()) }
--}
-
--- evalArrInit :: [Name,IORef [Int]] -> Exp Ty -> IO (Maybe [Int])
--- -- Evaluate array initialization loops statically
--- evalArrInit env exp = evalArrInit0 env (unExp exp)
--- evalArrInit0 (Var nm)
---   | Just ref <- lookup env nm
---   = do { contents <- readIORef ref
---        ; return $ Just contents }
---   | Nothing
---   = return Nothing
-
--- evalArrInit (ESeq e1 e2)
---   = do { evalUnit e1
---        ; evalArrInt e2 }
-
--- evalArrInt0 (ELetRef nm nfo e)
---   | Left (TArr _ TInt) <- nfo
---   = do { arr <- newIORef Int 0
---        ; evalArrUnit ((nm,arref):env) e }
---   | otherwise
---   = return Nothing
-
--- evalArrUnit (EIter nm lower size e)
---   | EVal (VInt l) <- unExp lower
---   , EVal (VInt s) <- unExp size
---   = let es = replicate s e
---         is = [l..(l+s-1)]
---         substs = zip (repeat nm) is
---         es' = zipWith (\(s,e) -> substAll s e) subst es
---     in mapM evalUnit es'
--- evalArrUnit env (EArrWrite earr eind eval)
---   | (EVar nm) <- unExp earr
---   , Just arref <- lookup nm env
---   , (EVal (VInt i)) <- eind
---   , Just r <- evalInt eval
---   = do { writeIORef ........... }
 
 
--- evalArrUnit _ = return Nothing
+evalBool :: GExp ty a -> Maybe Bool
+-- A quite incomplete boolean evaluator
+evalBool e 
+  | (EBinOp Eq e1 e2) <- unExp e
+  , Just i1 <- evalInt e1
+  , Just i2 <- evalInt e2
+  = Just (i1 == i2)
+  | (EVal (VBool b)) <- unExp e
+  = Just b
+  | (EUnOp Neg e1) <- unExp e
+  , Just b <- evalBool e1
+  = Just (not b)
+  | (EBinOp And e1 e2) <- unExp e
+  , Just b1 <- evalBool e1
+  , Just b2 <- evalBool e2
+  = Just (b1 && b2)
+  | otherwise
+  = Nothing 
+
+
+  
 

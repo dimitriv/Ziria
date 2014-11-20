@@ -21,20 +21,20 @@
 
 fun comp scrambler() {
 var scrmbl_st: arr[7] bit := {'1,'1,'1,'1,'1,'1,'1}; 
-var tmp: bit;
+-- var tmp: bit;
 var y:bit;
   
   repeat <= [8,8] seq{
     x <- take;
     
+    var tmp : bit;
     do{
       tmp := (scrmbl_st[3] ^ scrmbl_st[0]);
       scrmbl_st[0:5] := scrmbl_st[1:6];
       scrmbl_st[6] := tmp;
-      y := x ^ tmp
     }; 
 
-    emit (y)
+    emit (x^tmp)
   }
 }
 

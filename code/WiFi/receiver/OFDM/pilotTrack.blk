@@ -123,6 +123,7 @@ fun comp PilotTrack() {
 
      -- Calculate the subsequent phase shift
      do {
+#ifndef SORA_COMPAT
        -- Store last 4 values of each pilot
        -- TODO: Convert this into the follwoing, when compiler gets support for parsing it
        -- pilot_hist[0,4*PILOT_AVG-1] := pilot_hist[1,4*PILOT_AVG-1];
@@ -142,7 +143,12 @@ fun comp PilotTrack() {
        th[1] := int32(atan2_int16( s2.im, s2.re));
        th[2] := int32(atan2_int16( s3.im, s3.re));
        th[3] := int32(atan2_int16( -s4.im, -s4.re));
-
+#else
+       th[0] := int32(atan2_int16( p1.im, p1.re));
+       th[1] := int32(atan2_int16( p2.im, p2.re));
+       th[2] := int32(atan2_int16( p3.im, p3.re));
+       th[3] := int32(atan2_int16( -p4.im, -p4.re));
+#endif
        symbol_count := symbol_count + 1;
        if (symbol_count >= 127) then {
           symbol_count := 0

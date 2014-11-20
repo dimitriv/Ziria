@@ -17,6 +17,9 @@
    permissions and limitations under the License.
 */
 
+
+#define INLINE_COMPILATION 1
+
 #include "sora_ip.c"
 #include "sora_ext_lib.c"
 #include "sora_ext_viterbi.c"

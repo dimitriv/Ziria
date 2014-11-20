@@ -1,0 +1,19 @@
+fun comp test() {
+var y : arr[24] bit;
+  times 416 {
+    (x1 : arr[12] bit) <- takes 12;
+    (x2 : arr[12] bit) <- takes 12;
+    do {
+      --println x1;
+      --println x2;
+      y[0, 12] := x1;
+      y[12, 12] := x2;
+      y[0, 12] := x1;
+      --println y;
+    };
+    emits y;
+  }
+};
+
+let comp main = read >>> test() >>> write
+

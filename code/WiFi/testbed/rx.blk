@@ -1,4 +1,6 @@
-#define LTS_ACCURATE
+-- Not needed anymore. We use SORA_COMPAT to force the old code, otherwise is the best RX we have
+--#define LTS_ACCURATE
+
 --#define RADIO
 #define DO_DECODING
 --#define FAST

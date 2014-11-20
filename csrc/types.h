@@ -33,6 +33,11 @@ typedef num16 int16;
 typedef num32 int32;
 typedef num64 int64;
 
+// FORCE_INLINE defined in numerics.h
+/* #ifndef FINL */
+/* #define FINL FORCE_INLINE  */
+/* #endif  */
+
 #ifdef SORA_PLATFORM
 
 typedef unsigned __int8  uint8;
@@ -51,7 +56,6 @@ typedef unsigned __int64 memsize_int;
 
 #else
 
-#define FINL 
 
 #define PSORA_UTHREAD_PROC void
 

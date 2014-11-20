@@ -20,4 +20,4 @@
 #include "../../perf/blocks/ViterbiInfinite.blk"
 
 
-let comp main = read >>> ViterbiInfinite(CR_12) >>> write;
+let comp main = read >>> ViterbiInfinite(CR_12,M_BPSK) >>> write;

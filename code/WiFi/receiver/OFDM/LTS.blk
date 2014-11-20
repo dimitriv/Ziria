@@ -116,6 +116,7 @@ seq{
      preamble := xp[16-shift,64];
      delayedPreamble := xp[80-shift,64];
 
+#ifndef SORA_COMPAT
      -- Very simple AGC
      -- This is slow, but it is only a single number.
      -- Roughly on Sora-MIMO:
@@ -146,7 +147,7 @@ seq{
        v_shift_right_complex16(preamble,preamble,-agc_shift);
        v_shift_right_complex16(delayedPreamble,delayedPreamble,-agc_shift);
      }
-
+#endif
 
      let corr = v_correlate(preamble, delayedPreamble) 
      -- TODO: cfo is currently not used, but add AGC if you want to start using it.
@@ -171,7 +172,7 @@ seq{
      -- always in the same range, regardless of RX power
      -- In particular, the range of symbols after qeualized FFT seems to be +- 2000
 
-#ifdef LTS_ACCURATE
+#ifndef SORA_COMPAT
      delayedFftdata := sora_fft(delayedPreamble);
      v_add_complex16(params.channelCoeffs, calcCoeff(fftdata), calcCoeff(delayedFftdata));
      --v_shift_right_complex16(params.channelCoeffs,params.channelCoeffs,1);
@@ -185,11 +186,13 @@ seq{
      -- We use simple LTS as comparison to Sora 
      -- since this is what Sora does by default
      params.channelCoeffs := calcCoeff(fftdata);
+     {- No AGC in Sora:
      if (agc_shift > 0) then {
        v_shift_left_complex16(params.channelCoeffs,params.channelCoeffs,agc_shift);
      } else {
        v_shift_right_complex16(params.channelCoeffs,params.channelCoeffs,-agc_shift);
      }
+     -}
 #endif
      return (params)
    }

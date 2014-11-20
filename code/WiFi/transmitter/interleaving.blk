@@ -110,7 +110,7 @@ fun comp interleaver_m16qam() {
 -- will miss the LUTing opportunity
 --    emits perm(ids2[0,192], perm(ids1[0,192], x));
 --    do { y := perm(ids1[0,192], x) };
-    emits perm(ids3[0,192], x);
+    emits perm_192(ids3[0,192], x);
   }
 }
 
@@ -121,13 +121,13 @@ fun comp interleaver_m64qam() {
   let ids2 = intlv_perm2(M_64QAM) in
   let ids3 = fuse_perm(ids1,ids2) in
 
-  repeat [144, 144]{
+  repeat [288, 288]{
     (x : arr[288] bit) <- takes 288;
 -- We break it in two because heavy inlining done by the compiler
 -- will miss the LUTing opportunity
 --    emits perm(ids2[0,288], perm(ids1[0,288], x));
 --    do { y := perm(ids1[0,288], x) };
-    emits perm(ids3[0,288], x);
+    emits perm_288(ids3[0,288], x);
   }
 }
 

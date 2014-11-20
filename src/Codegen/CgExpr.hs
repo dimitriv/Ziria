@@ -29,6 +29,9 @@ module CgExpr
 
   , codeGenGlobalDeclsOnlyAlg
   , codeGenGlobalInitsOnly
+  
+  , ArrIdx ( .. ) 
+
   ) where
 
 import Opts
@@ -223,20 +226,30 @@ codeGenExp dflags e0 = go (info e0) (unExp e0)
       , let ii2 :: Int = fromIntegral i2
       = do { ce1 <- codeGenExp dflags e1
            ; cgBoundsCheck dflags (expLoc e0) (info e1) [cexp| $int:ii2|] r
-           ; codeGenArrRead dflags (info e1) ce1 (Left ii2) r }
+           ; codeGenArrRead dflags (info e1) ce1 (AIdxStatic ii2) r }
 
     go t (EArrRead e1 e2 r) = do
         ce1 <- codeGenExp dflags e1
         ce2 <- codeGenExp dflags e2
         cgBoundsCheck dflags (expLoc e0) (info e1) ce2 r
-        codeGenArrRead dflags (info e1) ce1 (Right ce2) r
+        codeGenArrRead dflags (info e1) ce1 (AIdxCExp ce2) r
+
+    go t (EArrWrite e1 e2 l e3) 
+      | (EVal (VInt i2)) <- unExp e2
+      , let ii2 :: Int = fromIntegral i2
+      = do { ce1 <- codeGenExp dflags e1
+           -- ; ce3 <- codeGenExp dflags e3
+           ; cgBoundsCheck dflags (expLoc e0) (info e1) [cexp| $int:ii2|] l
+           ; codeGenArrWrite_stored dflags (info e1) ce1 (AIdxStatic ii2) l e3
+           ; return [cexp|UNIT|]
+           }
 
     go t (EArrWrite e1 e2 l e3) = do
         ce1 <- codeGenExp dflags e1
         ce2 <- codeGenExp dflags e2
-        ce3 <- codeGenExp dflags e3
+        -- ce3 <- codeGenExp dflags e3
         cgBoundsCheck dflags (expLoc e0) (info e1) ce2 l
-        codeGenArrWrite dflags (info e1) ce1 ce2 l ce3
+        codeGenArrWrite_stored dflags (info e1) ce1 (AIdxCExp ce2) l e3
         return [cexp|UNIT|]
 
     go t (EWhile econd ebody) = do
@@ -585,7 +598,7 @@ printScalar dflags e = do
 
 codeGenParamByRef :: (Name,Ty) -> Cg [C.Param]
 codeGenParamByRef (nm, ty@(TArr (Literal l) _)) = do
-    unused <- freshName ("__unused_")
+    unused <- freshName ("__prm_by_ref_unused_")
     return [cparams|$ty:(codeGenTy ty) $id:(name nm), int $id:(name unused)|]
 
 codeGenParamByRef (nm, ty@(TArr (NVar c m) _)) =
@@ -604,7 +617,7 @@ codeGenParamsByRef params = concat <$> mapM codeGenParamByRef params
 
 codeGenParam :: (Name, Ty) -> Cg [C.Param]
 codeGenParam (nm, ty@(TArr (Literal l) _)) = do
-    unused <- freshName ("__unused_")
+    unused <- freshName ("__prm_unused_")
     let pname = getNameWithUniq nm
     return [cparams|$ty:(codeGenTy ty) $id:pname, int $id:(name unused)|]
 
@@ -668,14 +681,21 @@ codeGenGlobalInitsOnly dflags defs = mapM_ go defs
 -- | Reading/writing to/from arrays
 ------------------------------------------------------------------------------
 
-cexp_of_idx :: Either Int C.Exp -> C.Exp
-cexp_of_idx (Left i)   = [cexp| $int:i|]
-cexp_of_idx (Right ce) = ce
+data ArrIdx 
+  = AIdxCExp C.Exp      -- A C expression index
+  | AIdxStatic Int      -- A statically known index 
+  | AIdxMult Int C.Exp  -- A statically known multiple of unknown C.Exp
+
+
+cexp_of_idx :: ArrIdx -> C.Exp
+cexp_of_idx (AIdxStatic i)   = [cexp| $int:i|]
+cexp_of_idx (AIdxCExp ce)    = ce
+cexp_of_idx (AIdxMult i ce)  = [cexp| $int:i*$ce|]
 
 codeGenArrRead :: DynFlags
                -> Ty
                -> C.Exp              -- ce1
-               -> (Either Int C.Exp) -- ce2 or static index
+               -> ArrIdx             -- ce2 or static index
                -> LengthInfo -- rng
                -> Cg C.Exp   -- ce1[ce2...ce2+rng-1]
 codeGenArrRead dflags (TArr _ TBit) ce1 mb_ce2 LISingleton
@@ -688,11 +708,15 @@ codeGenArrRead dflags (TArr _ TBit) ce1 mb_ce2 (LILength l)
   = do { res <- genSym "bitarrres"
        ; codeGenDeclGroup res (TArr (Literal l) TBit) >>= appendDecl
        ; case mb_ce2 of 
-           Left i 
+           AIdxStatic i 
              | i `mod` 8 == 0 && l == 8 
              -> appendStmt $ [cstm| * $id:res = $ce1[$int:(i `div` 8)];|]
+           AIdxMult i ce2
+             | i >= 8 && i `mod` 8 == 0 && l == 8
+             -> appendStmt $ [cstm| * $id:res = $ce1[$int:(i `div` 8)*$ce2]; |]
            _otherwise
-             -> appendStmt [cstm| bitArrRead($ce1,$(cexp_of_idx mb_ce2),$int:l,$id:res); |]
+             -> appendStmt [cstm| 
+                   bitArrRead($ce1,$(cexp_of_idx mb_ce2),$int:l,$id:res); |]
        ; return [cexp| $id:res |] 
        }
 
@@ -710,23 +734,55 @@ codeGenArrRead _ ty _ _ _
 
 
 
+codeGenArrWrite_stored :: DynFlags
+                -> Ty
+                -> C.Exp       -- c1
+                -> ArrIdx      -- c2
+                -> LengthInfo  -- rng
+                -> Exp Ty      -- c3
+                -> Cg ()       -- c1[c2...c2+rng-1] := c3
+codeGenArrWrite_stored dflags t@(TArr _ ty) ce1 mb_ce2 range e3
+  | ty /= TBit
+  = do { cread <- codeGenArrRead dflags t ce1 mb_ce2 range
+       ; let tres = case range of 
+                      LISingleton -> ty
+                      LILength l  -> TArr (Literal l) ty
+       ; _unit_always <- codeGenExpAndStore dflags (tres,cread) e3
+       ; return ();
+       }
+  | otherwise
+  = do { ce3 <- codeGenExp dflags e3 
+       ; codeGenArrWrite dflags t ce1 mb_ce2 range ce3
+       }
+codeGenArrWrite_stored dflags _t ce1 mb_ce2 range e3
+  = fail ("codeGenArrWrite: non-array type " ++ show _t)
+
 codeGenArrWrite :: DynFlags
                 -> Ty
                 -> C.Exp       -- c1
-                -> C.Exp       -- c2
+                -> ArrIdx      -- c2
                 -> LengthInfo  -- rng
                 -> C.Exp       -- c3
                 -> Cg ()       -- c1[c2...c2+rng-1] := c3
-codeGenArrWrite dflags (TArr _ TBit) ce1 ce2 LISingleton ce3
-  = appendStmt [cstm| bitWrite($ce1,$ce2,$ce3);|]
-codeGenArrWrite dflags (TArr _ TBit) ce1 ce2 (LILength l) ce3
-  = appendStmt $ [cstm| bitArrWrite($ce3,$ce2,$int:l,$ce1); |]
-codeGenArrWrite dflags t@(TArr l tbase) ce1 ce2 LISingleton ce3
-  = do { cread <- codeGenArrRead dflags t ce1 (Right ce2) LISingleton
+codeGenArrWrite dflags (TArr _ TBit) ce1 mb_ce2 LISingleton ce3
+  = appendStmt [cstm| bitWrite($ce1,$(cexp_of_idx mb_ce2),$ce3);|]
+
+codeGenArrWrite dflags (TArr _ TBit) ce1 (AIdxStatic idx) (LILength l) ce3
+  | idx `mod` 8 == 0 && l == 8
+  = appendStmt $ [cstm| $ce1[$int:(idx `div` 8)] = * $ce3; |]
+codeGenArrWrite dflags (TArr _ TBit) ce1 (AIdxMult n cidx) (LILength l) ce3
+  | n `mod` 8 == 0 && (n >= 8) && l == 8
+  = appendStmt $ [cstm| $ce1[$int:(n `div` 8) * $cidx] = * $ce3; |]
+
+codeGenArrWrite dflags (TArr _ TBit) ce1 mb_ce2 (LILength l) ce3
+  = appendStmt $ [cstm| bitArrWrite($ce3,$(cexp_of_idx mb_ce2),$int:l,$ce1); |]
+
+codeGenArrWrite dflags t@(TArr l tbase) ce1 mb_ce2 LISingleton ce3
+  = do { cread <- codeGenArrRead dflags t ce1 mb_ce2 LISingleton
        ; assignByVal tbase tbase cread ce3 }
 
-codeGenArrWrite dflags (TArr _ ty) ce1 ce2 (LILength l) ce3
-  = appendStmt [cstm| blink_copy((void*)(& $ce1[$ce2]),
+codeGenArrWrite dflags (TArr _ ty) ce1 mb_ce2 (LILength l) ce3
+  = appendStmt [cstm| blink_copy((void*)(& $ce1[$(cexp_of_idx mb_ce2)]),
                         (void*)($ce3), ($int:l)*sizeof($ty:(codeGenTy ty)));|]
 codeGenArrWrite _ ty _ _ _ _
   = fail ("codeGenArrWrite: non-array type " ++ show ty)
