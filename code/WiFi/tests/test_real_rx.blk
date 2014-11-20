@@ -92,7 +92,7 @@ repeat{
        >>> PilotTrack() 
        >>> GetData()
 #ifdef DO_DECODING
-       >>> receiveBits()
+       >>> seq { receiveBits() ; return () }
 #endif
   }
 }
