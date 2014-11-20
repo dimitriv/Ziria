@@ -176,11 +176,8 @@ parseTerm = choice
 --
 -- NOTE: We wrap this in a 'try' always to avoid confusion with bracketed
 -- expression/types.
---
--- TODO: The odd place of 'withPos' here is for legacy reasons.
--- We should move it.
 parseUnit :: (Maybe SourcePos -> () -> a) -> BlinkParser a
-parseUnit f = try $ do symbol "(" ; withPos f <* symbol ")"
+parseUnit f = try $ withPos f <* (symbol "(" >> symbol ")")
 
 {-------------------------------------------------------------------------------
   Values
