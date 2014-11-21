@@ -254,7 +254,7 @@ parseVarOrCall = go <?> "variable or function call"
       choice [ do notFollowedBy (symbol "(")
                   notFollowedBy (reservedOp "<-")
                   return (cVar (Just p) xnm)
-             , withPos (\p -> cCall p xnm) <*> parseArgs xnm
+             , withPos (\pos -> cCall pos xnm) <*> parseArgs xnm
              ] <?> "variable or function call"
 
 -- | Parse an argument list
