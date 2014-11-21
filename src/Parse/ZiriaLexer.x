@@ -53,8 +53,8 @@ $symchar   = [$symbol \:]
 $nl        = [\n\r]
 
 @reservedid = 
-  '0|'1|C|ST|T|arr|comp|do|else|emit|emits|error|external|false|filter|for|fun|
-  if|in|length|let|map|not|nounroll|print|println|read|repeat|return|seq|
+  '0|'1|C|ST|T|arr|autoinline|comp|do|else|emit|emits|error|external|false|filter|for|forceinline|fun|
+  if|in|length|let|map|not|noinline|nounroll|print|println|read|repeat|return|seq|
   standalone|struct|take|takes|then|times|true|unroll|until|var|while|write 
 
 @reservedop =

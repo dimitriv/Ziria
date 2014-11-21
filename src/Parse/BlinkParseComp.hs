@@ -147,7 +147,7 @@ parseCompTerm :: BlinkParser SrcComp
 parseCompTerm = choice
     [ parens parseComp
 
-    , withPos cReturn'  <* reserved "return" <*> parseExpr
+    , withPos cReturn <*> optInlAnn <* reserved "return" <*> parseExpr
     , withPos cEmit     <* reserved "emit"   <*> parseExpr
     , withPos cEmits    <* reserved "emits"  <*> parseExpr
     , withPos cTake     <* reserved "takes"  <*> parseExpr
@@ -159,15 +159,13 @@ parseCompTerm = choice
 
     , parseVarOrCall
 
-    , withPos cBranch <* reserved "if"   <*> parseExpr
-                      <* reserved "then" <*> parseComp
-                      <* reserved "else" <*> parseComp
+    , withPos cBranch  <* reserved "if"   <*> parseExpr
+                       <* reserved "then" <*> parseComp
+                       <* reserved "else" <*> parseComp
     , withPos cLetDecl <*> parseLetDecl `bindExtend` \f -> f <$ reserved "in" <*> parseComp
-    , withPos cReturn' <* reserved "do" <*> parseStmtBlock
+    , withPos cReturn <*> return AutoInline <* reserved "do" <*> parseStmtBlock
     , optional (reserved "seq") >> braces parseCommands
     ] <?> "computation"
-  where
-    cReturn' = ($ AutoInline) .: cReturn
 
 {-------------------------------------------------------------------------------
   Operators (used to build parseComp)
@@ -452,6 +450,14 @@ parseRange = brackets $ mkRange <$> integer <* comma <*> integer
 -- | Shorthand for @<vect-ann>?@
 optVectAnn :: BlinkParser (Maybe VectAnn)
 optVectAnn = optionMaybe parseVectAnn
+
+optInlAnn :: BlinkParser ForceInline
+optInlAnn = choice 
+   [ try (reserved "noinline") >> return NoInline
+   , try (reserved "forceinline") >> return ForceInline
+   , try (reserved "autoinline") >> return AutoInline
+   , return AutoInline 
+   ]
 
 -- > <comp-ann> ::= "comp" <range>?
 parseCompAnn :: BlinkParser (Maybe (Int, Int))

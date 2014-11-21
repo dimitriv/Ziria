@@ -1,0 +1,25 @@
+
+
+let comp h1 = 
+   seq { (x:int) <- take
+       ; forceinline return x
+       }
+
+let comp h2 = 
+   seq { (x:int) <- take
+       ; autoinline return x
+       }
+
+let comp h3 = 
+   seq { (x:int) <- take
+       ; noinline return x
+       }
+
+
+let comp main
+  = read >>> seq { y <- h1; z <- h2; w <- h3; return () } >>> write[int]
+
+
+
+
+
