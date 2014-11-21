@@ -102,27 +102,50 @@ packIdx :: Map EId Range   -- Ranges
 packIdx ranges vs tgt tgt_ty = go vs 0
   where go [] _ = return ()
         go (v:vs) pos
-         | isArrayTy (nameTyp v)
+         | let ty = nameTyp v
+         , isArrayTy ty
          = do { w <- varBitWidth ranges v
               ; let mask = 2^w - 1
+
               ; varexp <- lookupVarEnv v
-              ; z <- freshVar "__z"
-              ; appendDecl $ [cdecl| $ty:tgt_ty * $id:z;|]
-              ; appendStmt $ [cstm| $id:z = ($ty:tgt_ty *) $varexp; |]
-              ; appendStmt $ [cstm| $tgt |= ((* $id:z) & $int:mask) << $int:pos; |]
-              -- ; appendStmt $ [cstm| bitArrWrite((typename BitArrPtr) $varexp, $int:pos, $int:w, $tgt); |]
+
+              -- fast path for <= 1 byte variables
+              ; let (TArray len bty) = ty
+              ; rhs <- 
+                 case (bty, len) of
+                   (TBit, Literal n) | n <= 8 -> 
+                     return $ [cexp|((* $varexp) & $int:mask)|] `cExpShL` pos 
+                   _otherwise -> 
+                     do { z <- genSym "__z"
+                        ; appendDecl $ [cdecl| $ty:tgt_ty * $id:z;|]
+                        ; appendStmt $ [cstm| $id:z = ($ty:tgt_ty *) $varexp; |]
+                        ; return $ [cexp|((* $id:z) & $int:mask)|] `cExpShL` pos
+                        }
+              ; appendStmt $ [cstm| $tgt |= $rhs; |]
               ; go vs (pos+w) }
          | otherwise
          = do { w <- varBitWidth ranges v
               ; let mask = 2^w - 1
+
               ; varexp <- lookupVarEnv v
-              ; appendStmt $ [cstm| $tgt |= ((($ty:tgt_ty) $varexp) & $int:mask) << $int:pos; |]
-              -- ; appendStmt $ [cstm| bitArrWrite((typename BitArrPtr) & $varexp, $int:pos, $int:w, $tgt); |]
+              -- appendStmt $ [cstm| $tgt |= ((($ty:tgt_ty) $varexp) & $int:mask) << $int:pos; |]
+              ; let rhs = [cexp|(($ty:tgt_ty) $varexp) & $int:mask|] `cExpShL` pos
+              ; appendStmt $ [cstm| $tgt |= $rhs; |]
+
               ; go vs (pos+w) }
 
-unpackIdx :: [EId] -- Variables
-          -> C.Exp      -- A C expression representing the index
-          -> C.Type     -- The index type (typically unsigned int)
+cExpShL :: C.Exp -> Int -> C.Exp
+cExpShL ce 0 = ce
+cExpShL ce n = [cexp| $ce << $int:n |]
+
+cExpShR :: C.Exp -> Int -> C.Exp
+cExpShR ce 0 = ce
+cExpShR ce n = [cexp| $ce >> $int:n |]
+
+
+unpackIdx :: [EId]   -- Variables
+          -> C.Exp   -- A C expression representing the index
+          -> C.Type  -- The index type (typically unsigned int)
           -> Cg ()
 unpackIdx xs src src_ty = go xs 0
   where go [] _ = return ()
@@ -138,7 +161,7 @@ unpackIdx xs src src_ty = go xs 0
               ; tmpname_aux <- freshVar "tmp_aux"
               ; tmpname <- freshVar "tmp"
 
-              ; appendDecl [cdecl| $ty:src_ty $id:tmpname_aux = ($src >> $int:pos); |]
+              ; appendDecl [cdecl| $ty:src_ty $id:tmpname_aux = $(src `cExpShR` pos); |]
 
               ; appendDecl [cdecl| $ty:src_ty $id:tmpname = $id:tmpname_aux & $int:mask; |]
               ; appendStmt [cstm| memcpy((void *) $varexp, (void *) & ($id:tmpname), $bytesizeof);|]
@@ -149,7 +172,6 @@ unpackIdx xs src src_ty = go xs 0
               ; w <- tyBitWidth (nameTyp v)
               ; let mask = 2^w - 1
               ; appendStmt $ [cstm| $varexp = (($src >> $int:pos)) & $int:mask; |]
-              -- ; appendStmt $ [cstm| bitArrRead($src,$int:pos,$int:w, (typename BitArrPtr) & $varexp); |]
               ; go vs (pos+w) }
 
 
@@ -176,30 +198,37 @@ byte_align n = ((n+7) `div` 8) * 8
 
 unpackByteAligned :: [EId] -- Variables
                    -> C.Exp   -- A C expression of type BitArrPtr
-                   -> Cg ()
+                   -> Cg Int  -- Last byte position
 unpackByteAligned xs src = go xs 0
-  where go [] _ = return ()
+  where go [] pos = return (pos `div` 8)
         go (v:vs) pos
          | let ty = nameTyp v
-         , isArrayTy ty
+         , Just base <- isArrayTy_maybe ty
          = do { varexp <- lookupVarEnv v
               ; w <- tyBitWidth ty
-              ; appendStmt $ [cstm| memcpy((void *) $varexp, (void *) & $src[$int:(pos `div` 8)], $int:(byte_align w `div` 8));|]
-              --; appendStmt $ [cstm| bitArrRead($src,$int:pos,$int:w, (typename BitArrPtr) $varexp); |]
+              ; let bytes_to_copy = byte_align w `div` 8
+              ; case base of
+                  TBit -- a Bit array
+                    | bytes_to_copy == 1 
+                    -> appendStmt $ [cstm| *$varexp = $src[$int:(pos `div` 8)]; |]
+                  _otherwise
+                    -> appendStmt $ [cstm| memcpy((void *) $varexp, (void *) & $src[$int:(pos `div` 8)], $int:bytes_to_copy);|]
               ; go vs (byte_align (pos+w)) } -- Align for next read!
-         | otherwise
+         | TBit <- nameTyp v
          = do { varexp <- lookupVarEnv v
-              ; w <- tyBitWidth (nameTyp v)
-              ; appendStmt $ [cstm| blink_copy((void *) & $varexp, (void *) & $src[$int:(pos `div` 8)], $int:(byte_align w `div` 8));|]
-              --; appendStmt $ [cstm| bitArrRead($src,$int:pos,$int:w, (typename BitArrPtr) & $varexp); |]
+              ; appendStmt $ [cstm| $varexp = $src[$int:(pos `div` 8)]; |]
+              -- ; w <- tyBitWidth ty
+              -- ; appendStmt $ [cstm| blink_copy((void *) & $varexp, (void *) & $src[$int:(pos `div` 8)], $int:(byte_align w `div` 8));|]
+              ; go vs (byte_align (pos+8)) } -- Align for next read!
+
+         | otherwise
+         = do { let ty = nameTyp v
+              ; varexp <- lookupVarEnv v
+                -- NEW: 
+              ; assignByVal ty ty varexp [cexp| *(($ty:(codeGenTy ty) *) & $src[$int:(pos `div` 8)])|] 
+              ; w <- tyBitWidth ty               
+              -- OLD ; appendStmt $ [cstm| blink_copy((void *) & $varexp, (void *) & $src[$int:(pos `div` 8)], $int:(byte_align w `div` 8));|]
               ; go vs (byte_align (pos+w)) } -- Align for next read!
-
-
--- csrcPathPosix :: DynFlags -> FilePath
--- csrcPathPosix dflags = head [ path | CSrcPathPosix path <- dflags]
-
--- csrcPathNative :: DynFlags -> FilePath
--- csrcPathNative dflags = head [ path | CSrcPathNative path <- dflags]
 
 
 codeGenLUTExp_Mock :: DynFlags -> Maybe SourcePos
@@ -286,20 +315,6 @@ codeGenLUTExp dflags ranges e mb_resname
                         ; setLUTHashes $ (h,clut_gen_info):hs
                         ; return $ lgi_lut_var clut_gen_info
                         }
-
-
-{-
-        _ <- codeGenExp dflags $ ePrint Nothing TUnit True $
-                                 eVal Nothing TString (VString (show (expLoc e)))
-
-        _ <- codeGenExp dflags $ ePrint Nothing TUnit True $
-                                 eVal Nothing TString (VString "INVARS")
-
-        cg_print_vars dflags inVars
-
-        _ <- codeGenExp dflags $ ePrint Nothing TUnit True $
-                                 eVal Nothing TString (VString "OUTVARS")
--}
 
         genLUTLookup dflags ranges
                         inVars (outVars,resultInOutVars)
@@ -493,21 +508,33 @@ genLUTLookup dflags ranges
         -> case mb_resname of
              Nothing ->
                do { res <- freshName "resx" ety
-                  ; codeGenDeclGroup (name res) ety >>= appendDecl
-                  ; extendVarEnv [(res,[cexp|$id:(name res)|])] $
-                    unpackByteAligned (outVars ++
-                       [res]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
+                    -- if the result variable is an super-byte array we will not allocate space since the LUT
+                    -- contains space for it already, rather we will return the address in the LUT
+                  ; case ety of 
+                      TArray (Literal l) ty | (ty /= TBit || l > 8) ->
+                       do { appendDecl $ [cdecl| $ty:(codeGenTyAlg ety) $id:(name res); |]
+                          ; respos <- unpackByteAligned outVars [cexp| (typename BitArrPtr) $clut[$id:idx]|]
+                          ; appendStmt $ [cstm| $id:(name res) = 
+                                ($ty:(codeGenTy ety)) & $clut[$id:idx][$int:respos]; |] 
+                          ; return $ [cexp| $id:(name res) |]
+                          }
+                      _ -> 
+                       do { codeGenDeclGroup (name res) ety >>= appendDecl
+                          ; extendVarEnv [(res,[cexp|$id:(name res)|])] $
+                            unpackByteAligned (outVars ++
+                               [res]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
 
---                  ; cg_print_vars dflags outVars -- debugging
+--                        ; cg_print_vars dflags outVars -- debugging
 
-                  ; return $ [cexp| $id:(name res) |]
+                          ; return $ [cexp| $id:(name res) |]
+                          }
                   }
              Just res ->
                do { extendVarEnv [(res,[cexp|$id:(name res)|])] $
                     unpackByteAligned (outVars ++
                        [res]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
 
---                  ; cg_print_vars dflags outVars -- debugging
+--                ; cg_print_vars dflags outVars -- debugging
 
                   ; return $ [cexp|UNIT|]
                   }

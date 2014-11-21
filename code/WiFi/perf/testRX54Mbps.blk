@@ -17,6 +17,9 @@
 -- permissions and limitations under the License.
 --
 --
+
+-- Run the same code as Sora's implementation
+#define SORA_COMPAT
 #include "blocks/ReceiverInfinite.blk"
 
 let comp main = read >>> ReceiverInfinite(HeaderInfo{coding = CR_34; modulation = M_64QAM; len = 0}) >>> write;

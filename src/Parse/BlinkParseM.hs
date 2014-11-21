@@ -25,7 +25,9 @@ module BlinkParseM (
   , BlinkParseState
   , BlinkParseM(runParseM)
   , ParseCompEnv
-  , runBlinkParser
+  , ZiriaStream
+  , mkZiriaStream
+  , unconsZiriaStream
     -- * Derived operators
   , debugParse
   , extendParseEnv
@@ -43,6 +45,7 @@ module BlinkParseM (
   ) where
 
 import Control.Applicative
+import Control.Arrow (second)
 import Control.Monad.Trans
 import Control.Monad.Reader
 import Text.Parsec
@@ -50,6 +53,31 @@ import Text.Parsec.Expr
 
 import AstExpr (GName, SrcTy)
 import AstComp (CallArg, SrcCTy)
+
+import ZiriaLexer
+import ZiriaLexerMonad
+
+{-------------------------------------------------------------------------------
+  Wrapping the lexer state
+-------------------------------------------------------------------------------}
+
+-- | ZiriaStream wraps the lexer state so that we memoize the next token
+data ZiriaStream = ZiriaStream (Lexeme, ZiriaStream)
+
+mkZiriaStream :: String -> ZiriaStream
+mkZiriaStream str = ZiriaStream (StartOfFile, go (mkAlexState str))
+  where
+    go :: AlexState -> ZiriaStream
+    go st = ZiriaStream (second go $ scan st)
+
+unconsZiriaStream :: ZiriaStream -> Maybe (Lexeme, ZiriaStream)
+unconsZiriaStream (ZiriaStream (tok, st')) =
+    case tok of
+      L _ LEOF _ -> Nothing
+      _          -> Just (tok, st')
+
+instance Monad m => Stream ZiriaStream m Lexeme where
+  uncons = return . unconsZiriaStream
 
 {-------------------------------------------------------------------------------
   The Blink parser monad
@@ -74,7 +102,7 @@ type ParseCompEnv = [( GName (Maybe SrcCTy)
 -- | The parser monad
 newtype BlinkParseM a = BlinkParseM { runParseM :: ParseCompEnv -> IO a }
 
-type BlinkParser a = ParsecT String BlinkParseState BlinkParseM a
+type BlinkParser a    = ParsecT ZiriaStream BlinkParseState BlinkParseM a
 
 instance Functor BlinkParseM where
   fmap f (BlinkParseM x) = BlinkParseM $ \env -> fmap f (x env)
@@ -97,8 +125,6 @@ instance MonadReader ParseCompEnv BlinkParseM where
   local upd (BlinkParseM f) = BlinkParseM (\env -> f (upd env))
   reader f = BlinkParseM (\env -> return (f env))
 
-runBlinkParser :: BlinkParser a -> SourceName -> String -> IO (Either ParseError a)
-runBlinkParser p src input = runParseM (runParserT p () src input) []
 
 {-------------------------------------------------------------------------------
   Derived operators

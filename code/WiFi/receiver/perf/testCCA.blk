@@ -17,6 +17,9 @@
 -- permissions and limitations under the License.
 --
 --
+
+-- Run the same code as Sora's implementation
+#define SORA_COMPAT
 #include "../cca/cca.blk"
 
 let comp main = read[complex16] >>> {det <- cca(); emit int16(det.noSamples) } >>> write[int16];

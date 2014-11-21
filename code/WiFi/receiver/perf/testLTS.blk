@@ -17,6 +17,9 @@
 -- permissions and limitations under the License.
 --
 --
+
+-- Run the same code as Sora's implementation
+#define SORA_COMPAT
 #include "../OFDM/LTS.blk"
 
 let comp main = read >>> repeat{LTS(3, 1000); emit 0} >>> write[int16];

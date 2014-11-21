@@ -21,11 +21,11 @@
              RankNTypes,
              ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wall -Wwarn #-}
-module BlinkParseComp (parseProgram, parseComp, parseTopLevel) where
+module BlinkParseComp (parseProgram, parseComp, parseTopLevel, runParseM) where
 
 import Control.Applicative ((<$>), (<*>), (<$), (<*), (*>))
 import Control.Arrow (second)
-import Control.Monad (join, void)
+import Control.Monad (join)
 import Control.Monad.Reader.Class
 import Text.Parsec
 import Text.Parsec.Expr
@@ -46,8 +46,9 @@ import Eval (evalInt)
 --
 -- TODO: Update the grammar
 parseProgram :: BlinkParser SrcProg
-parseProgram = parseTopLevel $
-    join $ mkProg <$ cppPragmas AllowFilenameChange <*> parseTopLevelDecls
+parseProgram =
+    join $ mkProg <$ startOfFile <* many fileNameChange
+       <*> parseTopLevel <* eof
   where
     mkProg ([],     _)  = fail "No main found"
     mkProg (_:_:_,  _)  = fail "More than one main found"
@@ -58,11 +59,11 @@ parseProgram = parseTopLevel $
 -- We return the list of declarations of 'main' separately so that we can
 -- construct a single SrcComp in `parseProgram`.
 --
-parseTopLevelDecls :: BlinkParser ([SrcComp], [SrcComp -> SrcComp])
-parseTopLevelDecls =
+parseTopLevel :: BlinkParser ([SrcComp], [SrcComp -> SrcComp])
+parseTopLevel =
     withPos cLetDecl' <*> parseLetDecl `bindExtend` \d -> append d <$> more
   where
-    more = topLevelSep *> (parseTopLevelDecls <|> return ([], []))
+    more = topLevelSep *> (parseTopLevel <|> return ([], []))
 
     append (decl, fun) (mains, funs) =
       case decl of
@@ -72,12 +73,37 @@ parseTopLevelDecls =
     cLetDecl' p d = let (env, f) = cLetDecl p d in (env, (d, f))
 
 topLevelSep :: BlinkParser ()
-topLevelSep =
-    cppPragmas AllowFilenameChange *> optional semi <* cppPragmas AllowFilenameChange
+topLevelSep = many fileNameChange *> optional semi <* many fileNameChange
 
-cppPragmas :: AllowFilenameChange -> BlinkParser ()
-cppPragmas allowFilenameChange =
-    void $ many (cppPragmaLine allowFilenameChange <* whiteSpace)
+
+-- parseProgram :: BlinkParser SrcProg
+-- parseProgram = parseTopLevel $
+--     join $ mkProg <$ cppPragmas AllowFilenameChange <*> parseTopLevelDecls
+--   where
+--     mkProg ([],     _)  = fail "No main found"
+--     mkProg (_:_:_,  _)  = fail "More than one main found"
+--     mkProg ([main], bs) = MkProg <$> foldCommands (map Left bs ++ [Right main])
+
+-- -- | Parse a list of top level declarations
+-- --
+-- -- We return the list of declarations of 'main' separately so that we can
+-- -- construct a single SrcComp in `parseProgram`.
+-- --
+-- parseTopLevelDecls :: BlinkParser ([SrcComp], [SrcComp -> SrcComp])
+-- parseTopLevelDecls =
+--     withPos cLetDecl' <*> parseLetDecl `bindExtend` \d -> append d <$> more
+--   where
+--     more = topLevelSep *> (parseTopLevelDecls <|> return ([], []))
+
+--     append (decl, fun) (mains, funs) =
+--       case decl of
+--         LetDeclComp Nothing nm c | name nm == "main" -> (c:mains, funs)
+--         _                                            -> (mains, fun:funs)
+
+--     cLetDecl' p d = let (env, f) = cLetDecl p d in (env, (d, f))
+
+-- topLevelSep :: BlinkParser ()
+-- topLevelSep = many fileNameChange *> optional semi <* many fileNameChange
 
 -- | Parse a computation expression
 --
@@ -163,10 +189,8 @@ parseCompTerm = choice
                       <* reserved "then" <*> parseComp
                       <* reserved "else" <*> parseComp
     , withPos cLetDecl <*> parseLetDecl `bindExtend` \f -> 
-                          f <$ reserved "in" <*> parseComp
-    , withPos cReturn' <* reservedOp "do" <*> 
-                          return AutoInline <*> 
-                          parseStmtBlock
+                              f <$ reserved "in" <*> parseComp
+    , withPos cReturn' <* reserved "do" <*> return AutoInline <*> parseStmtBlock
     , optional (reserved "seq") >> braces parseCommands
     ] <?> "computation"
   where
@@ -228,9 +252,9 @@ parseVarOrCall = go <?> "variable or function call"
       x <- identifier
       let xnm = toName x (Just p) Nothing
       choice [ do notFollowedBy (symbol "(")
-                  notFollowedBy (symbol "<-")
+                  notFollowedBy (reservedOp "<-")
                   return (cVar (Just p) xnm)
-             , withPos (($ xnm) . cCall) <*> parseArgs xnm
+             , withPos (\p -> cCall p xnm) <*> parseArgs xnm
              ] <?> "variable or function call"
 
 -- | Parse an argument list
@@ -282,11 +306,11 @@ parseLetDecl :: BlinkParser LetDecl
 parseLetDecl = choice
     [ LetDeclERef   <$> declParser
     , LetDeclStruct <$> parseStruct
-    , try $ LetDeclExternal <$ reserved "let" <* reserved "external" <*> identifier <*> paramsParser <* symbol ":" <*> (Just <$> parseBaseType)
+    , try $ LetDeclExternal <$ reserved "let" <* reserved "external" <*> identifier <*> paramsParser <* reservedOp ":" <*> (Just <$> parseBaseType)
     , try $ LetDeclFunComp  <$ reserved "fun" <*> parseCompAnn <*> parseCVarBind <*> compParamsParser <*> braces parseCommands
-    , try $ LetDeclFunExpr  <$ reserved "fun"                  <*> parseVarBind  <*> paramsParser     <*> braces parseStmts
-    , try $ LetDeclComp     <$ reserved "let" <*> parseCompAnn <*> parseCVarBind <* symbol "=" <*> parseComp
-    , try $ LetDeclExpr     <$ reserved "let"                  <*> parseVarBind  <* symbol "=" <*> parseExpr
+    , try $ LetDeclFunExpr  <$ reserved "fun"                  <*> parseVarBind <*> paramsParser     <*> braces parseStmts
+    , try $ LetDeclComp     <$ reserved "let" <*> parseCompAnn <*> parseCVarBind <* reservedOp "=" <*> parseComp
+    , try $ LetDeclExpr     <$ reserved "let"                  <*> parseVarBind <* reservedOp "=" <*> parseExpr
     ]
 
 -- > <struct> ::= "struct" IDENT "=" "{" (IDENT ":" <base-type>)*";" "}"
@@ -294,7 +318,7 @@ parseStruct :: BlinkParser (GStructDef (Maybe SrcTy))
 parseStruct = do
     reserved "struct"
     x <- identifier
-    symbol "="
+    reservedOp "="
     braces $ StructDef x <$> parseField `sepBy` semi
   where
     parseField = (,) <$> identifier <* colon <*> (Just <$> parseBaseType)
@@ -421,7 +445,7 @@ parseCommand = choice
     , try $ withPos cBranch' <* reserved "if"   <*> parseExpr
                              <* reserved "then" <*> parseComp
                              <* notFollowedBy (reserved "else")
-    , try $ withPos cBindMany' <*> parseVarBind <* symbol "<-" <*> parseComp
+    , try $ withPos cBindMany' <*> parseVarBind <* reservedOp "<-" <*> parseComp
     , (\c -> ([], Right c)) <$> parseComp
     ] <?> "command"
   where
@@ -466,7 +490,7 @@ parseInlAnn = brackets parse_inl_ann
 -- | Parses just the @[(i,j)]@ annotation
 parseVectAnnFlag :: BlinkParser (Bool, (Int, Int))
 parseVectAnnFlag =
-    mkFlag <$> optionMaybe (reserved "!") <*> parseRange
+    mkFlag <$> optionMaybe (reservedOp "!") <*> parseRange
   where
     mkFlag Nothing   v = (True,  v)
     mkFlag (Just ()) v = (False, v)
@@ -491,9 +515,3 @@ optInlAnn = maybe AutoInline id <$> optionMaybe parseInlAnn
 parseCompAnn :: BlinkParser (Maybe (Int, Int))
 parseCompAnn = reserved "comp" *> optionMaybe parseRange
 
-{-------------------------------------------------------------------------------
-  Auxiliary
--------------------------------------------------------------------------------}
-
-parseTopLevel :: BlinkParser a -> BlinkParser a
-parseTopLevel p = whiteSpace *> p <* eof

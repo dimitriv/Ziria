@@ -53,7 +53,7 @@ module AstFreeMonad (
     -- * Translation out of the free monad
   , unFreeExp
   , unFreeComp
-  , _test'
+--  , _test'
   ) where
 
 import Prelude
@@ -79,7 +79,7 @@ import Typecheck (tyCheckComp)
 import qualified GenSym as GS
 
 -- Imports for the example only:
-import AstQuasiQuote (zcomp)
+-- import AstQuasiQuote (zcomp)
 
 {-------------------------------------------------------------------------------
   Free expression monad
@@ -618,6 +618,7 @@ extractTypeEnv = catMaybes . map aux . S.toList . compEFVs
   Example
 -------------------------------------------------------------------------------}
 
+{- 
 _test' :: IO ()
 _test' = do
     go _test1
@@ -663,6 +664,9 @@ _test1 tmp_idx is_empty in_buff in_buff_idx finalin n0 = do
                    _u <- fBind (fError "rewrite_take: unaligned!")
                    fReturn ForceInline $ in_buff .! (VInt 0, n0)
 
+-}
+
+{- AstQuasiQote needs to be brought up to speed ... 
 _test2 :: GName Ty -> GName Ty -> GName Ty -> GName Ty -> Integer -> Integer -> FreeComp ()
 _test2 tmp_idx is_empty in_buff in_buff_idx finalin n0 = fLiftSrc (mkTyDefEnv []) [zcomp| {
     if is_empty == true 
@@ -683,3 +687,6 @@ _test2 tmp_idx is_empty in_buff in_buff_idx finalin n0 = fLiftSrc (mkTyDefEnv []
        };
     return [forceinline] in_buff[tmp_idx,n0];
   }|]
+
+
+-}

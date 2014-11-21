@@ -64,6 +64,7 @@ import Control.Monad.IO.Class (MonadIO(..))
 
 import Data.List ( nub )
 
+import Eval ( evalBool ) 
 
 import CgFun
 
@@ -494,7 +495,7 @@ codeGenComp dflags comp k =
                            cres <- codeGenArrRead dflags
                                                   arrty
                                                   [cexp|$id:(inValOf ih)|]
-                                                  [cexp|$id:mit_st*$int:i2|]
+                                                  (AIdxMult i2 [cexp|$id:mit_st|])
                                                   leninfo
                            -- NB: cres may contain mit_st variable, which will be mutated
                            -- hence it is really important that we set yldVal and /then/
@@ -509,7 +510,7 @@ codeGenComp dflags comp k =
                         cres <- codeGenArrRead
                                       dflags
                                       arrty [cexp|$id:(inValOf ih)|]
-                                            [cexp|0|]
+                                            (AIdxStatic 0)
                                             leninfo
 
                         appendStmt [cstm|$id:(yldValOf yh) = $cres;|]
@@ -538,7 +539,7 @@ codeGenComp dflags comp k =
                   ; appendLabeledBlock (processNmOf prefix) $ do
                            -- buff[mit_st,leninfo] := in_val
                            codeGenArrWrite dflags arrty [cexp|$id:buf|]
-                                                        [cexp|$id:mit_st*$int:i1|]
+                                                        (AIdxMult i1 [cexp|$id:mit_st|])
                                                         leninfo
                                                         [cexp|$id:(inValOf ih)|]
                            appendStmt [cstm| $id:mit_st++;|]
@@ -626,7 +627,10 @@ codeGenComp dflags comp k =
               else return ()
 
             if [cexp|$id:stateVar < $int:n|]
-              then do ce <- codeGenArrRead dflags (ctExp e) [cexp|$id:expVar|] [cexp|$id:stateVar|] LISingleton
+              then do ce <- codeGenArrRead dflags 
+                               (ctExp e) [cexp|$id:expVar|] 
+                               (AIdxCExp [cexp|$id:stateVar|]) LISingleton
+
                       let ty = yldTyOfCTy (ctComp c)
                       assignByVal ty ty [cexp|$id:(yldValOf yh)|] ce
                       appendStmts [cstms|$id:globalWhatIs = YIELD;
@@ -995,7 +999,7 @@ codeGenComp dflags comp k =
 
     go (MkComp (Seq c1 c2) csp csinfo) = do
         let Just c1_done_ty = doneTyOfCTy $ ctComp c1
-        unusedName <- freshName ("__unused_" ++ (getLnNumInStr csp)) c1_done_ty
+        unusedName <- freshName ("__seq_unused_" ++ (getLnNumInStr csp)) c1_done_ty
         codeGenCompTop dflags (MkComp (mkBind c1 (unusedName, c2)) csp csinfo) k
 
     go (MkComp (Var nm) csp _) = do
@@ -1058,8 +1062,8 @@ codeGenComp dflags comp k =
             kontConsume k
 
         appendLabeledBlock (processNmOf prefix) $ do
-            codeGenArrWrite dflags aTy [cexp|$id:(doneValOf dh)|]
-                                       [cexp|$id:stateVar|] LISingleton [cexp|$id:(inValOf ih)|]
+            codeGenArrWrite dflags aTy [cexp|$id:(doneValOf dh)|] 
+                                       (AIdxCExp [cexp|$id:stateVar|]) LISingleton [cexp|$id:(inValOf ih)|]
 
             appendStmt [cstm|++$id:stateVar;|]
             if [cexp|$id:stateVar < $int:n|]
@@ -1106,8 +1110,13 @@ codeGenComp dflags comp k =
     --   branch_var == 0, and to c2_tick/c2_process if branch_var == 0.
     -- o The init function for branch is the only code that modifies branch_var
     --   (to 0 or 1, depending on the value of [e])
-    go (MkComp (Branch e c1 c2) csp ()) =
-        mkBranch dflags e c1 k c2 k csp -- Pass them the same continuation!
+    go (MkComp (Branch e c1 c2) csp ()) 
+       | Just True <- evalBool e
+       = codeGenCompTop dflags c1 k
+       | Just False <- evalBool e
+       = codeGenCompTop dflags c2 k
+       | otherwise
+       = mkBranch dflags e c1 k c2 k csp -- Pass them the same continuation!
 
     go (MkComp (Repeat wdth c1) csp ()) = do
         let cty1 = ctComp c1

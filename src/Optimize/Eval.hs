@@ -18,7 +18,7 @@
 -}
 {-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -Wall #-}
-module Eval (evalArith, evalInt, evalArrInt) where
+module Eval (evalArith, evalInt, evalArrInt, evalBool) where
 
 import Control.Monad (forM)
 import Data.Array
@@ -66,6 +66,14 @@ evalArith e = go (unExp e)
                                  valCast ty v1
     go (EUnOp u e1)         = do v1 <- evalArith e1
                                  valUnOp u v1
+
+    go (EArrRead arr ei LISingleton)
+     | EValArr _t vals <- unExp arr
+     = do i <- evalInt ei
+          case (vals !! fromIntegral i) of 
+            v@(VInt _) -> return v
+            _          -> Nothing
+
     go _other               = Nothing
 
 evalInt :: TypeAnn ty => GExp ty a -> Maybe Integer
@@ -99,8 +107,8 @@ valUnOp _ _ = Nothing
 -------------------------------------------------------------------------------}
 
 -- | Execute array initialization code of the form
---
 -- > ELetRef nm Nothing (ESeq init_loop nm)
+
 evalArrInt :: Exp -> Maybe [Integer]
 evalArrInt = evalArrInt0 . unExp
 
@@ -112,7 +120,8 @@ evalArrInt0 (ELetRef nm Nothing e)
   , nm' == nm
   = do values <- evalArrInitLoop nm e1
        return $ elems $ array (0, n - 1) values
-evalArrInt0 _ = Nothing
+evalArrInt0 _other = Nothing
+
 
 -- | Execute an array initialization loop of the form
 --
@@ -129,7 +138,8 @@ evalArrInitLoop arr loop
   , k'   == k
   = let inds = [fromIntegral low .. fromIntegral low + fromIntegral siz - 1]
         loc  = expLoc loop
-        subst_idx i = substExp [] [(k, MkExp (EVal (nameTyp k) (VInt i)) loc ())] eval
+        subst_idx i = substExp [] 
+                         [(k, MkExp (EVal (nameTyp k) (VInt i)) loc ())] eval
     in forM inds $ \i -> do
          v <- evalInt $ subst_idx i
          return (fromInteger i, v)
@@ -140,3 +150,23 @@ evalArrInitLoop _ _
 intArrayLen :: Ty -> Maybe Int
 intArrayLen (TArray (Literal n) (TInt _)) = Just n
 intArrayLen _ = Nothing
+
+
+evalBool :: TypeAnn ty => GExp ty a -> Maybe Bool
+-- A quite incomplete boolean evaluator
+evalBool e 
+  | (EBinOp Eq e1 e2) <- unExp e
+  , Just i1 <- evalInt e1
+  , Just i2 <- evalInt e2
+  = Just (i1 == i2)
+  | (EVal _ (VBool b)) <- unExp e
+  = Just b
+  | (EUnOp Neg e1) <- unExp e
+  , Just b <- evalBool e1
+  = Just (not b)
+  | (EBinOp And e1 e2) <- unExp e
+  , Just b1 <- evalBool e1
+  , Just b2 <- evalBool e2
+  = Just (b1 && b2)
+  | otherwise
+  = Nothing 

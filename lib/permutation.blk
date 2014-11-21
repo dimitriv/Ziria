@@ -49,9 +49,8 @@ fun perm8(p : arr[8] int, iarr : arr[8] bit, oarr : arr bit) {
 
 fun perm(p : arr int, iarr : arr bit) {
   var oarr    : arr[length(p)] bit;
-  var oarrtmp : arr[length(p)] bit;
   var iarr1 : arr[8] bit;
-
+  var oarrtmp : arr[length(p)] bit;
   zero_bit(oarr);
   zero_bit(oarrtmp);
 
@@ -65,4 +64,70 @@ fun perm(p : arr int, iarr : arr bit) {
 
   return oarr;
 }
+
+
+fun perm8_288(p : arr[8] int, iarr : arr[8] bit) {
+  var oarr : arr[288] bit;
+  var set : bool; 
+  for j in [0,length(oarr)] {
+    set := false;
+    for i in [0,8] {
+       if j == p[i] then {
+           oarr[j] := iarr[i]; 
+           set := true;
+       }
+    };
+    if (not set) then { oarr[j] := '0; };
+  }
+  return oarr;
+}
+
+fun perm_288(p : arr[288] int, iarr : arr[288] bit) {
+  var oarr    : arr[length(p)] bit;
+  var iarr1 : arr[8] bit;
+  zero_bit(oarr);
+
+
+  unroll for j in [0,length(p)/8] {
+     let p1 = p[j*8,8];
+     iarr1 := iarr[j*8,8];
+     oarr := v_or(oarr,perm8_288(p1,iarr1));
+  }
+
+  return oarr;
+}
+
+
+fun perm8_192(p : arr[8] int, iarr : arr[8] bit) {
+  var oarr : arr[192] bit;
+  var set : bool; 
+  for j in [0,length(oarr)] {
+    set := false;
+    for i in [0,8] {
+       if j == p[i] then {
+           oarr[j] := iarr[i]; 
+           set := true;
+       }
+    };
+    if (not set) then { oarr[j] := '0; };
+  }
+  return oarr;
+}
+
+fun perm_192(p : arr[192] int, iarr : arr[192] bit) {
+  var oarr    : arr[length(p)] bit;
+  var iarr1 : arr[8] bit;
+  zero_bit(oarr);
+
+
+  unroll for j in [0,length(p)/8] {
+     let p1 = p[j*8,8];
+     iarr1 := iarr[j*8,8];
+     oarr := v_or(oarr,perm8_192(p1,iarr1));
+  }
+
+  return oarr;
+}
+
+
 

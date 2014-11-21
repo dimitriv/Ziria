@@ -19,7 +19,7 @@
 -- | Compute the types of expressions
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE RecordWildCards #-}
-module CtExpr (ctExp) where
+module CtExpr (ctExp, ctFun) where
 
 import Text.PrettyPrint.HughesPJ
 
@@ -82,3 +82,11 @@ ctArrRead ty _ = panic $ text "ctExp0:" <+> ppr ty
 ctProj :: Ty -> FldName -> Ty
 ctProj (TStruct _ fs) n = lookup' n fs
 ctProj t _ = panic $ text "ctProj:" <+> ppr t
+
+
+ctFun :: Fun -> Ty
+ctFun fun 
+  = case unFun fun of 
+      MkFunDefined nm _ _ -> nameTyp nm
+      MkFunExternal nm _ _ -> nameTyp nm
+

@@ -19,6 +19,7 @@
 {-# LANGUAGE  QuasiQuotes, GADTs, ScopedTypeVariables, RecordWildCards #-}
 
 module CgTypes ( codeGenTy
+               , codeGenTy_qual
                , codeGenTy_val
                , codeGenTyAlg
                , codeGenArrTyPtr

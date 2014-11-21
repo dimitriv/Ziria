@@ -20,24 +20,65 @@
 #include <stdlib.h>
 #include <memory.h>
 
+#include "types.h"
 #include "bit.h"
-
 
 /* Effectively implements:  tgt := src[vstart ... (vstart+vlen-1)] 
  * Precondition: tgt has allocated (vlen+7)/8 bytes already
  ************************************************************************************/
+FORCE_INLINE
 void bitArrRead(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPtr tgt) 
 {
 
-	unsigned int sidx = vstart / 8;    // Index of first relevant byte
-	unsigned char off = vstart % 8;    // Offset
+  	unsigned int sidx = vstart >> 3;    // Index of first relevant byte
+  	unsigned char off = vstart & 7;    // Offset
+
+	// Fast path for aligned short reads
+	if (off == 0) {
+		if (vlen <= 8) {
+			tgt[0] = src[sidx];
+			return;
+		}
+		if (vlen <= 16) {
+			*((int16 *)tgt) = *((int16 *)&src[sidx]);
+			return;
+		}
+		if (vlen <= 24) {
+			*((int16 *)tgt) = *((int16 *)&src[sidx]);
+			tgt[2] = src[sidx + 2];
+			return;
+		}
+		if (vlen <= 32) {
+			*(int32 *)tgt = *(int32 *)&src[sidx];
+			return;
+		}
+		if (vlen <= 40) {
+			*(int32 *) tgt = *(int32 *)&src[sidx];
+			tgt[4] = src[sidx + 4];
+			return;
+		}
+		if (vlen <= 48) {
+			*(int32 *)tgt = *(int32 *)&src[sidx];
+			*(int16 *)&tgt[4] = *(int16 *)&src[sidx+4];
+			return;
+		}
+	}
+
+
+	if (off == 0 && vlen & 7 == 0) {
+		for (int i = 0; i < vlen / 8; i++)
+			tgt[i] = src[sidx + i];
+		return;
+	}
+
 	unsigned char ffo = 8 - off;       // Reverse offset
 
 	unsigned int vend = vstart+vlen-1; // Index of last bit to be included
-	unsigned int eidx = vend / 8;      // Index of last relevant byte
+	unsigned int eidx = vend >> 3;      // Index of last relevant byte
 
 	int i;
 	unsigned char carry;
+
 
 	carry = src[eidx] << ffo; 
 
@@ -56,12 +97,44 @@ void bitArrRead(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPtr
 /* Effectively implements: tgt[vstart...(vstart+vlen-1)] := src 
  * Precondition: tgt has allocated (vlen+7)/8 bytes already 
  **************************************************************************************/
+FORCE_INLINE
 void bitArrWrite(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPtr tgt)
 {
-	unsigned int sidx = vstart / 8;  // Start index
-	unsigned char off = vstart % 8;  // Offset (width of carry)
+  	unsigned int sidx = vstart >> 3;  // Start index
+  	unsigned char off = vstart & 7;  // Offset (width of carry)
+
+	// Fast copy for aligned pointers
+	if (off == 0 && vlen & 7 == 0) {
+		for (int i = 0; i < vlen / 8; i++)
+			tgt[sidx + i] = src[i];
+		return;
+	}
+
+	// Specialized code for width smaller 16 that can be aligned, since they are frequent
+	// Note, this is guaranteed to access only one tgt mem location 
+	// and requires only one copy
+	if (off + vlen <= 16) {
+		unsigned short * src16 = (unsigned short *)src;
+		unsigned short * tgt16 = (unsigned short *)(tgt + sidx);
+		unsigned short mask16 = ~0;       // 111111111111111
+
+		if (off == 0) 
+		{
+			// Having this branch separately saves 2% on TX48
+			tgt16[0] = (tgt16[0] & (mask16 << vlen))
+				| (src16[0] & (mask16 >> (16 - vlen)));
+		}
+		else
+		{
+			tgt16[0] = (tgt16[0] & (mask16 << (vlen + off)))
+				| ((src16[0] & (mask16 >> (16 - vlen))) << off)
+				| (tgt16[0] & (mask16 >> (16 - off)));
+		}
+		return;
+	}
+
 	unsigned char ffo = 8 - off;     // Opposite of offset 
-	unsigned int n    = vlen % 8;       // #bits used in the last byte of src
+	unsigned int n    = vlen & 7;       // #bits used in the last byte of src
 
 	unsigned int res = n + off; // total # of bits we have to patch in the end
 
@@ -69,27 +142,51 @@ void bitArrWrite(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPt
 	unsigned char carry;
 	unsigned char mask = ~ 0;       // 1111111
 
+
 	/* First carry is whatever was already in the "off" part of target */ 
-	carry = tgt[sidx] & (mask >> ffo);
+	if (ffo == 8)
+	{
+		carry = 0;
+	}
+	else
+	{
+		carry = tgt[sidx] & (mask >> ffo);
+	}
 
 	for (i = 0; i < vlen/8; i++)
 	{
-		tgt[sidx+i] = (src[i] << off) | carry;
-		carry = src[i] >> ffo;
+		if (ffo == 8)
+		{
+			tgt[sidx + i] = src[i];
+		}
+		else
+		{
+			tgt[sidx + i] = (src[i] << off) | carry;
+			carry = src[i] >> ffo;
+		}
 	}
 
 	// patch target with whatever is needed in the end
 	if (res)
 	{ 
-		unsigned char hsrc   = src[i] & (mask >> (8-n));
-		unsigned char loval  = (hsrc << off) | carry;
-		unsigned int lowidth = (res>8)?8:res;
-		unsigned char hival  = hsrc >> ffo;
-		unsigned int hiwidth = (res>8)?(res-8):0;
+		unsigned char hsrc = src[i] & (mask >> (8 - n));
+		unsigned char loval = (hsrc << off) | carry;
+		unsigned int lowidth = (res>8) ? 8 : res;
+		unsigned char hival = hsrc >> ffo;
+		unsigned int hiwidth = (res>8) ? (res - 8) : 0;
 
-		tgt[sidx+i] = (tgt[sidx+i] & (mask << lowidth)) | loval;
-		if (hiwidth) 
-			tgt[sidx+i+1] = (tgt[sidx+i+1] & (mask << hiwidth)) | hival;
+		if (lowidth < 8)
+		{
+			tgt[sidx + i] = (tgt[sidx + i] & (mask << lowidth)) | loval;
+		}
+		else
+		{
+			tgt[sidx + i] = loval;
+		}
+		if (hiwidth)
+		{
+			tgt[sidx + i + 1] = (tgt[sidx + i + 1] & (mask << hiwidth)) | hival;
+		}
 	}
 }
 

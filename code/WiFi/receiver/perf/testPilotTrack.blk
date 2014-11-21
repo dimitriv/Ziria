@@ -18,6 +18,8 @@
 --
 --
 
+-- Run the same code as Sora's implementation
+#define SORA_COMPAT
 #include "../OFDM/PilotTrack.blk"
 
 let comp main = read >>> PilotTrack() >>> write;

@@ -16,7 +16,7 @@ import AstComp
 import AstUnlabelled
 import BlinkParseExpr (parseExpr)
 import BlinkParseComp (parseComp, parseTopLevel)
-import BlinkParseM (BlinkParser, runBlinkParser)
+import BlinkParseM (BlinkParser, runParseM)
 
 {-------------------------------------------------------------------------------
   Quasi-quoters
@@ -48,7 +48,7 @@ genericQQ src freeVars parser = QuasiQuoter {
     parseQ str = do
       pos <- getPositionQ
       let parser' = setPosition pos >> parser
-      me <- runIO $ runBlinkParser parser' src str
+      me <- runIO $ runParseM parser' src str
       case me of
         Left err -> fail (show err)
         Right e  -> return e

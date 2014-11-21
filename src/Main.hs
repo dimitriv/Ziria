@@ -28,7 +28,7 @@ import System.Console.GetOpt
 import System.Environment
 import System.Exit (exitFailure)
 import System.IO
-import Text.Parsec
+import Text.Parsec (runParserT)
 import Text.PrettyPrint.Mainland
 import Text.Show.Pretty (dumpStr)
 import qualified Data.Map          as M
@@ -40,7 +40,8 @@ import AstExpr
 import qualified AstLabelled   as Labelled
 import qualified AstUnlabelled as Unlabelled
 import qualified AstFreeMonad  as AstFreeMonad
-import qualified AstQuasiQuote as AstQuasiQuote
+-- TODO: Re-enable me
+-- import qualified AstQuasiQuote as AstQuasiQuote
 import CtComp (ctComp)
 import Opts
 import PassFold
@@ -50,7 +51,6 @@ import TcMonad
 import Typecheck (tyCheckProg)
 import PassPipeline
 import BlinkParseComp (parseProgram)
-import BlinkParseM (runBlinkParser)
 import qualified GenSym         as GS
 import qualified Outputable -- Qualified so that we don't clash with Mainland
 
@@ -67,6 +67,8 @@ import CgProgram ( codeGenProgram )
 
 import qualified PassPipeline as PP
 
+import qualified BlinkParseComp as NewParser
+import BlinkParseM (mkZiriaStream)
 
 import VecMitigators
 
@@ -114,7 +116,15 @@ main = failOnException $ do
     input <- readFile inFile
 
     -- putStrLn "command line parsed ..."
-    prog <- failOnError $ runBlinkParser parseProgram inFile input
+    prog <-
+          failOnError $
+          do { let state  = ()
+                   stream = mkZiriaStream input
+                   parser = runParserT NewParser.parseProgram state 
+                                                              inFile 
+                                                              stream
+             ; NewParser.runParseM parser []
+             }
 
     -- pretty-show's `dumpDoc` generates a `Text.PrettyPrint.HughesPJ.Doc`
     -- rather than `Text.PrettyPrint.Mainland.Doc`, so we generate a flat

@@ -6,9 +6,13 @@ module Utils (
   , panicStr
   , mapKeysM
   , mapTelescope
+  , parsePragmaLine
   ) where
 
+import Control.Applicative
+import Control.Monad
 import Data.Map (Map)
+import Data.Maybe (listToMaybe)
 import Text.PrettyPrint.HughesPJ
 import System.IO.Unsafe (unsafePerformIO)
 import System.Exit
@@ -51,3 +55,48 @@ mapTelescope ext tc = go
       b  <- tc a
       bs <- ext b $ go as
       return (b:bs)
+
+parsePragmaLine :: String -> Maybe (Int, String, Maybe Int)
+parsePragmaLine = maybeReadM $
+    (,,) <$ expectString "#" <*> readsM <*> readsM <*> optional readsM
+
+{-------------------------------------------------------------------------------
+  Monadic interface to ReadS
+-------------------------------------------------------------------------------}
+
+maybeReadM :: ReadsM a -> String -> Maybe a
+maybeReadM parser = listToMaybe . map fst . runReadsM parser
+
+readsM :: Read a => ReadsM a
+readsM = ReadsM reads
+
+expectString :: String -> ReadsM ()
+expectString = \str -> ReadsM (str `isPrefixOf`)
+  where
+    isPrefixOf :: String -> String -> [((), String)]
+    []     `isPrefixOf` ys     = return ((), ys)
+    _      `isPrefixOf` []     = []
+    (x:xs) `isPrefixOf` (y:ys) = guard (x == y) >> xs `isPrefixOf` ys
+
+-- | Monadic wrapper around ReadS
+newtype ReadsM a = ReadsM { runReadsM :: ReadS a }
+
+instance Functor ReadsM where
+  fmap = liftM
+
+instance Applicative ReadsM where
+  pure  = return
+  (<*>) = ap
+
+instance Alternative ReadsM where
+  empty = mzero
+  (<|>) = mplus
+
+instance Monad ReadsM where
+  return a = ReadsM $ \str -> [(a, str)]
+  x >>= f  = ReadsM $ \str -> concatMap (\(a, str') -> runReadsM (f a) str')
+                                        (runReadsM x str)
+
+instance MonadPlus ReadsM where
+  mzero     = ReadsM $ \_   -> []
+  mplus a b = ReadsM $ \str -> runReadsM a str ++ runReadsM b str

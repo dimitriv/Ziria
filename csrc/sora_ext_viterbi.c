@@ -34,6 +34,7 @@ int16 code_rate = CR_12;
 size_t TRELLIS_DEPTH = 256;
 uchar *m_outbuf = NULL;
 
+FORCE_INLINE
 int __ext_viterbi_brick_init_fast(int32 frame_len, int16 code_r, int16 depth) {
 	ob_count = 0;
 	m_viterbi.Reset();
@@ -51,6 +52,7 @@ int __ext_viterbi_brick_init_fast(int32 frame_len, int16 code_r, int16 depth) {
 }
 
 
+FORCE_INLINE
 int16 __ext_viterbi_brick_decode_fast(char* intInput, int len1, uchar* bit, int len2)
 {
 	static const int trellis_prefix = 6; 	 // 6 bit zero prefix
@@ -143,6 +145,7 @@ int16 __ext_viterbi_brick_decode_fast(char* intInput, int len1, uchar* bit, int 
 
 
 
+FORCE_INLINE
 int __ext_viterbiSig11a_brick_init_fast(int32 frame_len, int16 code_r, int16 depth) {
 	ob_count = 0;
 	m_viterbi.Reset();
@@ -160,6 +163,7 @@ int __ext_viterbiSig11a_brick_init_fast(int32 frame_len, int16 code_r, int16 dep
 }
 
 
+FORCE_INLINE
 int16 __ext_viterbiSig11a_brick_decode_fast(char* intInput, int len1, uchar* bit, int len2)
 {
 	static const int state_size = 64;

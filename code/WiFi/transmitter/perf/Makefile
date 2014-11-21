@@ -43,7 +43,7 @@ all: $(TGTS)
 
 %.perf: %.out 
 	./$< --input=dummy \
-	     --dummy-samples=100000000 \
+	     --dummy-samples=1000000000 \
              --output=dummy
 
 clean:

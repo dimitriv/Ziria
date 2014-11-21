@@ -1,5 +1,4 @@
-{-
-   Copyright (c) Microsoft Corporation
+{- Copyright (c) Microsoft Corporation
    All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
@@ -22,7 +21,7 @@
              TypeSynonymInstances,
              FlexibleInstances,
              ScopedTypeVariables #-}
-{-# OPTIONS_GHC -Wall -Wwarn #-}
+{-# OPTIONS_GHC -Wall #-}
 module BlinkParseExpr (
     -- * Top-level parsers
     parseExpr
@@ -155,12 +154,11 @@ parseExpr =
 -- >   | "if" <expr> "then" <expr> "else" <expr>
 parseTerm :: BlinkParser SrcExp
 parseTerm = choice
-    [ parens $ choice [ try parseExpr
-                      , withPos eVal' <*> (VUnit <$ whiteSpace)
-                      ]
-    , withPos eLet' <* reserved "let" <*> parseVarBind
-                    <* symbol "="     <*> parseExpr
-                    <* reserved "in"  <*> parseExpr
+    [ parseUnit mkUnit
+    , parens parseExpr
+    , withPos eLet' <* reserved   "let" <*> parseVarBind
+                    <* reservedOp "="   <*> parseExpr
+                    <* reserved   "in"  <*> parseExpr
     , withPos eLetRef' <*> declParser <* reserved "in" <*> parseExpr
     , withPos eIf <* reserved "if"   <*> parseExpr
                   <* reserved "then" <*> parseExpr
@@ -169,9 +167,17 @@ parseTerm = choice
     , parseWithVarOnHead
     ] <?> "expression"
   where
-    eVal'    p        = eVal    p Nothing
     eLet'    p x      = eLet    p x AutoInline
     eLetRef' p (x, e) = eLetRef p x e
+
+    mkUnit p = eVal p (Just SrcTUnit) VUnit
+
+-- Parse "()"
+--
+-- NOTE: We wrap this in a 'try' always to avoid confusion with bracketed
+-- expression/types.
+parseUnit :: (Maybe SourcePos -> a) -> BlinkParser a
+parseUnit f = try $ withPos f <* (symbol "(" >> symbol ")")
 
 {-------------------------------------------------------------------------------
   Values
@@ -201,9 +207,6 @@ parseValue = choice
 -- >   | FLOAT
 -- >   | STRING
 -- >   | INT
---
--- TODO: We currently allow for whitespace for the unit value. Is that
--- really what we want?
 parseScalarValue :: BlinkParser Val
 parseScalarValue = choice
     [ try $ parens parseScalarValue
@@ -211,11 +214,13 @@ parseScalarValue = choice
     , VBool False <$ reserved "false"
     , VBit  False <$ reserved "'0"
     , VBit  True  <$ reserved "'1"
-    , VUnit       <$ parens whiteSpace
+    , parseUnit mkUnit
     , try $ VDouble <$> float
     , try $ VString <$> stringLiteral
     , VInt <$> integer
     ]
+  where
+    mkUnit _ = VUnit
 
 {-------------------------------------------------------------------------------
   Variables with optional suffix
@@ -245,14 +250,14 @@ parseWithVarOnHead = choice
 --
 -- > IDENT "=" <expr>
 parseInit :: BlinkParser (String, SrcExp)
-parseInit = (,) <$> identifier <* symbol "=" <*> parseExpr
+parseInit = (,) <$> identifier <* reservedOp "=" <*> parseExpr
 
 -- | Variable index (struct or array field)
 --
 -- > "." IDENT | "[" <range> "]"
 parseDerefSuffix :: BlinkParser (SrcExp -> SrcExp)
 parseDerefSuffix = choice
-    [ withPos eProj'    <* symbol "." <*> identifier
+    [ withPos eProj'    <* reservedOp "." <*> identifier
     , withPos eArrRead' <*> brackets rangeParser
     ]
   where
@@ -273,7 +278,7 @@ declParser :: BlinkParser (GName (Maybe SrcTy), Maybe SrcExp)
 declParser =
     withPos mkDecl <* reserved "var" <*> identifier
                    <* colon <*> parseBaseType
-                   <*> optionMaybe (symbol ":=" *> parseExpr)
+                   <*> optionMaybe (reservedOp ":=" *> parseExpr)
   where
     mkDecl p x ty mbinit = (toName x p (Just ty), mbinit)
 
@@ -304,23 +309,23 @@ declParser =
 -- a constant integer at compile time.
 parseBaseType :: BlinkParser SrcTy
 parseBaseType = choice
-    [ SrcTUnit         <$ parens whiteSpace
-    , SrcTBit          <$ reserved "bit"
+    [ parseUnit mkUnit
+    , SrcTBit          <$ identifier' "bit"
 
-    , SrcTInt SrcBW32  <$ reserved "int"
-    , SrcTInt SrcBW8   <$ reserved "int8"
-    , SrcTInt SrcBW16  <$ reserved "int16"
-    , SrcTInt SrcBW32  <$ reserved "int32"
-    , SrcTInt SrcBW64  <$ reserved "int64"
+    , SrcTInt SrcBW32  <$ identifier' "int"
+    , SrcTInt SrcBW8   <$ identifier' "int8"
+    , SrcTInt SrcBW16  <$ identifier' "int16"
+    , SrcTInt SrcBW32  <$ identifier' "int32"
+    , SrcTInt SrcBW64  <$ identifier' "int64"
 
-    , SrcTDouble       <$ reserved "double"
-    , SrcTBool         <$ reserved "bool"
+    , SrcTDouble       <$ identifier' "double"
+    , SrcTBool         <$ identifier' "bool"
 
-    , SrcTStruct complex32TyName <$ reserved "complex"
-    , SrcTStruct complex8TyName  <$ reserved "complex8"
-    , SrcTStruct complex16TyName <$ reserved "complex16"
-    , SrcTStruct complex32TyName <$ reserved "complex32"
-    , SrcTStruct complex64TyName <$ reserved "complex64"
+    , SrcTStruct complex32TyName <$ identifier' "complex"
+    , SrcTStruct complex8TyName  <$ identifier' "complex8"
+    , SrcTStruct complex16TyName <$ identifier' "complex16"
+    , SrcTStruct complex32TyName <$ identifier' "complex32"
+    , SrcTStruct complex64TyName <$ identifier' "complex64"
 
     , SrcTStruct <$ reserved "struct" <*> identifier <?> "struct name"
     , reserved "arr" *> arrLength
@@ -346,6 +351,8 @@ parseBaseType = choice
                             in SrcTArray (SrcNArr nm) t
 
     mkInferred p t = SrcTArray (SrcNVar (fromJust p)) t
+
+    mkUnit _ = SrcTUnit
 
 {-------------------------------------------------------------------------------
   Statements
@@ -394,8 +401,8 @@ type Statement = Either (SrcExp -> SrcExp) SrcExp
 -- >   <simple-stmt>
 parseStmt :: BlinkParser Statement
 parseStmt = choice
-    [ join $ withPos eLet' <* reserved "let" <*> parseVarBind
-                           <* symbol "=" <*> parseExpr
+    [ join $ withPos eLet' <* reserved   "let" <*> parseVarBind
+                           <* reservedOp "="   <*> parseExpr
                            <*> optionMaybe (reserved "in" *> parseStmt)
     , join $ withPos eLetRef' <*> declParser
                               <*> optionMaybe (reserved "in" *> parseStmt)
@@ -445,9 +452,9 @@ parseSimpleStmt = choice
 
     , try $ withPos mkCall <*> identifier <*> parens (parseExpr `sepBy` comma)
     , withPos mkAssign <*> identifier
-                       <*> many (withPos eProj' <* symbol "." <*> identifier)
+                       <*> many (withPos eProj' <* reservedOp "." <*> identifier)
                        <*> optionMaybe (brackets rangeParser)
-                       <*  symbol ":="
+                       <*  reservedOp ":="
                        <*> parseExpr
     ] <?> "statement"
   where
@@ -488,7 +495,7 @@ foldIntExpr = do
 parseVarBind :: BlinkParser (GName (Maybe SrcTy))
 parseVarBind = choice
     [ withPos mkName <*> identifier
-    , parens $ withPos mkNameTy <*> identifier <* symbol ":" <*> parseBaseType
+    , parens $ withPos mkNameTy <*> identifier <* reservedOp ":" <*> parseBaseType
     ] <?> "variable binding"
   where
     mkName   p i    = toName i p Nothing

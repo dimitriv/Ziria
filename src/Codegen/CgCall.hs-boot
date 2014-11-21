@@ -1,4 +1,4 @@
-/* 
+{- 
    Copyright (c) Microsoft Corporation
    All rights reserved. 
 
@@ -15,31 +15,30 @@
 
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
-*/
+-}
+
+module CgCall
+  ( codeGenCall_alloc
+  , codeGenCall_store
+  ) where
+
+import Opts
+import AstExpr
+import CgMonad
+import Text.Parsec.Pos
+
+import qualified Language.C.Syntax as C
 
 
-#define INLINE_COMPILATION 1
+codeGenCall_alloc :: DynFlags
+                  -> Maybe SourcePos
+                  -> Ty 
+                  -> GName Ty 
+                  -> [Exp] -> Cg C.Exp
 
-#include "sora_ip.c"
-#include "sora_ext_lib.c"
-#include "sora_ext_viterbi.c"
-#include "params.c"
-#include "bit.c"
-#include "wpl_alloc.c"
-#include "numerics.c"
-#include "buf_bit.c"
-#include "buf_numerics8.c"
-#include "buf_numerics16.c"
-#include "buf_numerics32.c"
-#include "sora_threads.c"
-#include "sora_thread_queues.c"
-#include "ext_arr.c"
-#include "ext_math.c"
-//Sora only supports debugPlot lib in WIN32 and this is the fast 64-bit version
-//#include "sora_ext_visual.c"
-#include "sora_radio.c"
-#include "utils.c"
-#include "driver.c"
-#include "test.c"
-
-
+codeGenCall_store :: DynFlags
+                  -> Maybe SourcePos
+                  -> Ty 
+                  -> C.Exp
+                  -> GName Ty
+                  -> [Exp] -> Cg ()

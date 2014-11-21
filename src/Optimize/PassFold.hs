@@ -32,8 +32,8 @@ import qualified Data.Set as S
 import AstComp
 import AstExpr
 import AstUnlabelled
-import CtComp (ctComp)
-import CtExpr (ctExp)
+import CtComp ( ctComp )
+import CtExpr ( ctExp  )
 import Eval
 import Opts
 import PpComp ()
@@ -371,6 +371,18 @@ no_lut_inside x
 
 
 
+-- if e then return e1 else return e2 ~~> return (if e then e1 else e2)
+if_return_step :: DynFlags -> Comp -> RwM Comp
+if_return_step _dflags comp
+  | Branch eguard c1 c2 <- unComp comp
+  , Return a b   f1 e1  <- unComp c1
+  , Return _a _b _f2 e2 <- unComp c2
+  -- , f1 == f2
+  , let cloc = compLoc comp
+  = rewrite $ cReturn cloc a b f1 $
+              eIf cloc eguard e1 e2
+  | otherwise
+  = return comp
 
 
 inline_exp_fun :: (GName Ty, [GName Ty], [MutVar], Exp)
@@ -564,13 +576,6 @@ ifdead_step _fgs comp
 
       _otherwise -> return comp
   where
-    -- TODO, convert this to a proper evaluator
-    evalBool :: Exp -> Maybe Bool
-    evalBool (MkExp (EBinOp Eq (MkExp (EVal _ (VInt i)) _ ())
-                               (MkExp (EVal _ (VInt j)) _ ())) _ ())
-       = Just (i==j)
-    evalBool (MkExp (EVal _ (VBool b)) _ ()) = Just b
-    evalBool _ = Nothing
 
     eneg :: Exp -> Exp
     eneg e = eUnOp (expLoc e) Neg e
@@ -763,6 +768,105 @@ elim_times_step _fgs comp =
     _ -> return comp
   where
     cloc = compLoc comp
+
+
+
+
+elim_automapped_mitigs :: DynFlags -> TypedCompPass
+elim_automapped_mitigs dflags c
+  | MkComp c0 _cloc _ <- c          
+  , Par _p c1 c2 <- c0
+  , Par _p c11 c12 <- unComp c1 
+  , LetHeader fun (MkComp (Map _v f) _ _) <- unComp c12  -- (c1 - map f) - c2 
+  , Mitigate ty1 i1 j1 <- unComp c11
+  , Mitigate ty2 i2 j2 <- unComp c2           -- (c11' -- mitigate(i2,j2) -- map f) - mitigate(i2,j2) - c2'
+  , i1 >= j1 && i2 <= j2                      -- down mit and up mit
+  , let d1 = i1 `div` j1
+  , let d2 = j2 `div` i2 
+  , d1 == d2                                  -- exactly the same rate 
+  , funName fun == f
+  = rewrite_mit_map dflags ty1 (i1,j1) ty2 (i2,j2) (f, fun) 
+
+  | MkComp c0 _cloc _ <- c
+  , Par _p c1 c2 <- c0
+  , Par _p c21 c22 <- unComp c2
+  , LetHeader fun (MkComp (Map _v f) _ _) <- unComp c21  -- c1 - (map f - c2)
+  , Mitigate ty1 i1 j1 <- unComp c1      -- (c11' -- mitigate(i1,j1) -- map f) - c2 
+  , Mitigate ty2 i2 j2 <- unComp c22     -- (c11' -- mitigate(i2,j2) -- map f) - mitigate(i2,j2) - c2'
+  , i1 >= j1 && i2 <= j2                      -- down mit and up mit
+  , let d1 = i1 `div` j1
+  , let d2 = j2 `div` i2 
+  , d1 == d2                                  -- exactly the same rate 
+  , funName fun == f
+  = rewrite_mit_map dflags ty1 (i1,j1) ty2 (i2,j2) (f, fun) 
+
+  | otherwise
+  = return c 
+
+
+
+rewrite_mit_map :: DynFlags -> Ty -> (Int,Int) -> Ty -> (Int,Int) -> (EId, Fun) -> RwM Comp
+-- Precondition:  i1 `div` j1 == j2 `div` i2 
+rewrite_mit_map _fgs ty1 (i1,j1) ty2 (i2,j2) (f_name, fun)
+  = do { let rng1 = if j1 == 1 then LISingleton else LILength j1
+       ; let rng2 = if i2 == 1 then LISingleton else LILength i2
+       ; let d = i1 `div` j1 
+       ; let floc = funLoc fun 
+
+         -- input variable
+       ; x <- genSym "x"
+       ; let x_ty   = TArray (Literal i1) ty1   -- input type
+       ; let x_name = toName x floc x_ty
+       ; let x_exp  = eVar floc x_name
+
+         -- output variable
+       ; y <- genSym "y"
+       ; let y_ty   = TArray (Literal j2) ty2      -- output type
+       ; let y_name = toName y floc y_ty
+       ; let y_exp  = eVar floc y_name
+
+         -- name of new map function
+       ; new_f <- genSym "auto_map_mit"
+       ; let f_ty = TArrow [x_ty] y_ty
+       ; let new_f_name = toName new_f floc f_ty 
+
+
+         -- new counter 
+       ; i <- genSym "i"
+       ; let i_name = toName i floc tint   
+       ; let i_exp  = eVar floc i_name 
+
+         -- zero and 'd'
+       ; let ezero = eVal floc tint (vint (0 :: Int))
+       ; let e_d   = eVal floc tint (vint d)
+   
+       
+       ; let new_body 
+               = eLetRef floc y_name Nothing $
+                 eSeq floc 
+                  (eFor floc AutoUnroll i_name ezero e_d ekernel) 
+                  -- do the for loop
+                  y_exp -- and return y
+
+             write_idx = eBinOp floc Mult (eVal floc tint (vint i2)) i_exp
+             read_idx  = eBinOp floc Mult (eVal floc tint (vint j1)) i_exp
+
+             earrrd    = eArrRead floc x_exp read_idx rng1
+             ekernel   = eArrWrite floc y_exp write_idx rng2 $ 
+                         eCall floc f_name [earrrd]
+
+      ; let new_mapper = cMap floc Nothing new_f_name
+      ; let new_fun = MkFun (MkFunDefined new_f_name [x_name] new_body) floc ()
+
+      ; rewrite $ 
+        cLetHeader floc fun $   -- original function 
+        cLetHeader floc new_fun new_mapper
+      }
+        
+
+
+
+
 
 
 
@@ -1083,6 +1187,9 @@ foldCompPasses flags
 
 
     , ("ifdead"             , ifdead_step flags             )
+    , ("if-return-step",   if_return_step flags)
+
+   ,  ("elim-automapped-mitigs", elim_automapped_mitigs flags)
 
     -- Don't use: not wrong but does not play nicely with LUT
     --  , ("float-top-letref"   , float_top_letref_step flags )
@@ -1145,85 +1252,115 @@ elimMitigsIO sym = go
 frm_mit :: Comp -> Maybe ((Ty,Int,Int), Comp)
 -- returns (mitigator,residual-comp)
 frm_mit c
-    | Par _p0 c1 c2 <- unComp c
-    , Mitigate ty i1 i2  <- unComp c2
-    = Just ((ty,i1,i2), c1)
+  | Par _p0 c1 c2 <- unComp c
+  , Mitigate ty i1 i2  <- unComp c2
+  = Just ((ty,i1,i2), c1)
 
-    | Par p0 c1 c2 <- unComp c
-    = case frm_mit c2 of
-        Nothing -> Nothing
-        Just (mit,c2') -> Just (mit, cPar cloc p0 c1 c2')
+  | Par p0 c1 c2 <- unComp c
+  = case frm_mit c2 of
+      Nothing -> Nothing
+      Just (mit,c2') -> Just (mit, cPar (compLoc c) p0 c1 c2')
 
-    | LetHeader fdef@(MkFun (MkFunDefined {}) _ ()) cont <- unComp c -- Needed because of AutoMaps! Yikes!
-    = case frm_mit cont of
-        Nothing -> Nothing
-        Just (mit,cont') -> Just (mit, cLetHeader cloc fdef cont')
+  | LetHeader fdef@(MkFun (MkFunDefined {}) _ _) cont <- unComp c 
+    -- Needed because of AutoMaps! Yikes!
+  , let loc = compLoc c
+  = case frm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLetHeader loc fdef cont')
 
-    -- Special case for code emitted by the vectorizer
-    | LetFunC fn prms body cont <- unComp c
-    , Call fn' _args <- unComp cont
-    , fn == fn'
-    = case frm_mit body of
-        Nothing -> Nothing
-        Just (mit,body') -> Just (mit, cLetFunC cloc fn prms body' cont)
+  -- Special case for code emitted by the vectorizer
+  | LetFunC fn prms body cont <- unComp c
+  , Call fn' _args <- unComp cont
+  , fn == fn'
+  , let loc = compLoc c
+  = case frm_mit body of
+      Nothing -> Nothing
+      Just (mit,body') -> Just (mit, cLetFunC loc fn prms body' cont)
 
-    -- fallthrough general case
-    | LetFunC fn prms body cont <- unComp c
-    = case frm_mit cont of
-        Nothing -> Nothing
-        Just (mit,cont') -> Just (mit, cLetFunC cloc fn prms body cont')
+  -- fallthrough general case
+  | LetFunC fn prms body cont <- unComp c
+  , let loc = compLoc c
+  = case frm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLetFunC loc fn prms body cont')
 
-    | Let n c1 cont <- unComp c
-    = case frm_mit cont of
-        Nothing -> Nothing
-        Just (mit,cont') -> Just (mit, cLet cloc n c1 cont')
+  | Let n c1 cont <- unComp c
+  , let loc = compLoc c
+  = case frm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLet loc n c1 cont')
 
-    | otherwise
-    = Nothing
-  where
-    cloc = compLoc c
+  | LetE n f e cont <- unComp c
+  , let loc = compLoc c
+  = case frm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLetE loc n f e cont')
+
+  | LetERef n me cont <- unComp c
+  , let loc = compLoc c
+  = case frm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLetERef loc n me cont')
+
+
+  | otherwise
+  = Nothing
 
 flm_mit :: Comp -> Maybe ((Ty,Int,Int), Comp)
 -- returns (mitigator,residual-comp)
 flm_mit c
-    | Par _p0 c1 c2 <- unComp c
-    , Mitigate ty i1 i2  <- unComp c1
-    = Just ((ty,i1,i2), c2)
+  | Par _p0 c1 c2 <- unComp c
+  , Mitigate ty i1 i2  <- unComp c1
+  = Just ((ty,i1,i2), c2)
 
-    | Par p0 c1 c2 <- unComp c
-    = case flm_mit c1 of
-        Nothing -> Nothing
-        Just (mit,c1') -> Just (mit, cPar cloc p0 c1' c2)
+  | Par p0 c1 c2 <- unComp c
+  = case flm_mit c1 of
+      Nothing -> Nothing
+      Just (mit,c1') -> Just (mit, cPar (compLoc c) p0 c1' c2)
 
-    | LetHeader fdef@(MkFun (MkFunDefined {}) _ ()) cont <- unComp c
-    = case flm_mit cont of
-        Nothing -> Nothing
-        Just (mit,cont') -> Just (mit,cLetHeader cloc fdef cont')
+  | LetHeader fdef@(MkFun (MkFunDefined {}) _ _) cont <- unComp c
+  , let loc = compLoc c
+  = case flm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit, cLetHeader loc fdef cont')
 
-    -- Special case for code emitted by the vectorizer
-    | LetFunC fn prms body cont <- unComp c
-    , Call fn' _args <- unComp cont
-    , fn == fn'
-    = case flm_mit body of
-        Nothing -> Nothing
-        Just (mit,body') -> Just (mit, cLetFunC cloc fn prms body' cont)
+  -- Special case for code emitted by the vectorizer
+  | LetFunC fn prms body cont <- unComp c
+  , Call fn' _ <- unComp cont
+  , fn == fn'
+  , let loc = compLoc c
+  = case flm_mit body of
+      Nothing -> Nothing
+      Just (mit,body') -> Just (mit, cLetFunC loc fn prms body' cont)
 
-    -- fallthrough general case
-    | LetFunC fn prms body cont <- unComp c
-    = case flm_mit cont of
-        Nothing -> Nothing
-        Just (mit,cont') -> Just (mit, cLetFunC cloc fn prms body cont')
+  -- fallthrough general case
+  | LetFunC fn prms body cont <- unComp c
+  , let loc = compLoc c
+  = case flm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLetFunC loc fn prms body cont')
 
+  | Let n c1 cont <- unComp c
+  , let loc = compLoc c
+  = case flm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLet loc n c1 cont')
 
-    | Let n c1 cont <- unComp c
-    = case flm_mit cont of
-        Nothing -> Nothing
-        Just (mit,cont') -> Just (mit, cLet cloc n c1 cont')
+  | LetE n f e cont <- unComp c
+  , let loc = compLoc c
+  = case flm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLetE loc n f e cont')
 
-    | otherwise
-    = Nothing
-  where
-    cloc = compLoc c
+  | LetERef n me cont <- unComp c
+  , let loc = compLoc c
+  = case flm_mit cont of
+      Nothing -> Nothing
+      Just (mit,cont') -> Just (mit,cLetERef loc n me cont')
+
+  | otherwise
+  = Nothing
+
 
 
 
@@ -1231,7 +1368,6 @@ elimMitigs :: Comp -> RwM Comp
 -- Vectorizer-specific
 elimMitigs comp
   = mapCompM return return return return return mitig comp
-
   where
    mitig c
       | MkComp c0 cloc () <- c
@@ -1288,7 +1424,6 @@ elimMitigs comp
                                 (cPar cloc pnever (cMitigate cloc ty2 l j2) c2')
              else return c
            }
-
 
         -- throw away useless mitigators!
       | MkComp c0 cloc () <- c
