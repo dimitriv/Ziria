@@ -27,6 +27,14 @@ fun sum_complex16(a : arr complex16) {
   return s;    
 }
 
+fun sum_complex16_complex32(a : arr complex16) { 
+  var s : complex32 := complex32{re=0;im=0};
+  for i in [0,length(a)] {
+    s := s + complex32(a[i])
+  };
+  return s;    
+}
+
 fun sum_int16(a : arr int16) { 
   var s : int16 := 0;
   for i in [0,length(a)] {
@@ -35,3 +43,10 @@ fun sum_int16(a : arr int16) {
   return s;    
 }
 
+fun sum_int16_int32(a : arr int16) { 
+  var s : int32 := 0;
+  for i in [0,length(a)] {
+    s := s + int32(a[i])
+  };
+  return s;    
+}
