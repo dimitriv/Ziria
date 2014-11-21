@@ -173,11 +173,12 @@ parseCompTerm :: BlinkParser SrcComp
 parseCompTerm = choice
     [ parens parseComp
 
-    , withPos cReturn'  <* reserved "return" <*> optInlAnn <*> parseExpr
+    , withPos cReturn' <*> optInlAnn <* reserved "return" <*> parseExpr
     , withPos cEmit'    <* reserved "emit"   <*> parseExpr
     , withPos cEmits'   <* reserved "emits"  <*> parseExpr
     , join $ withPos cTake' <* reserved "takes"  <*> parseExpr
     , withPos cFilter   <* reserved "filter" <*> parseVarBind
+
     , withPos cReadSrc  <* reserved "read"   <*> optTypeAnn
     , withPos cWriteSnk <* reserved "write"  <*> optTypeAnn
     , withPos cMap      <* reserved "map"    <*> optVectAnn <*> parseVarBind
@@ -190,7 +191,7 @@ parseCompTerm = choice
                       <* reserved "else" <*> parseComp
     , withPos cLetDecl <*> parseLetDecl `bindExtend` \f -> 
                               f <$ reserved "in" <*> parseComp
-    , withPos cReturn' <* reserved "do" <*> return AutoInline <*> parseStmtBlock
+    , withPos cReturn' <*> return AutoInline <* reserved "do" <*> parseStmtBlock
     , optional (reserved "seq") >> braces parseCommands
     ] <?> "computation"
   where
@@ -476,16 +477,6 @@ parseVectAnn =
     mkVectAnn Nothing   = uncurry Rigid
     mkVectAnn (Just ()) = uncurry UpTo
 
--- | Inlining annotation
---
--- > <inl-ann> ::= "forceinline" | "autoinline" | "noinline" 
-parseInlAnn :: BlinkParser ForceInline
-parseInlAnn = brackets parse_inl_ann
-  where parse_inl_ann 
-          = choice [ try $ reserved "forceinline" >> return ForceInline
-                   , try $ reserved "autoinline"  >> return AutoInline
-                   , try $ reserved "noinline"    >> return NoInline
-                   ] <?> "inline annotation"
 
 -- | Parses just the @[(i,j)]@ annotation
 parseVectAnnFlag :: BlinkParser (Bool, (Int, Int))
@@ -508,8 +499,14 @@ optVectAnn :: BlinkParser (Maybe VectAnn)
 optVectAnn = optionMaybe parseVectAnn
 
 -- | Shorthand for @<inl-ann>?@
+-- > <inl-ann> ::= "forceinline" | "autoinline" | "noinline" 
 optInlAnn :: BlinkParser ForceInline
-optInlAnn = maybe AutoInline id <$> optionMaybe parseInlAnn
+optInlAnn = choice 
+   [ try (reserved "noinline") >> return NoInline
+   , try (reserved "forceinline") >> return ForceInline
+   , try (reserved "autoinline") >> return AutoInline
+   , return AutoInline 
+   ]
 
 -- > <comp-ann> ::= "comp" <range>?
 parseCompAnn :: BlinkParser (Maybe (Int, Int))

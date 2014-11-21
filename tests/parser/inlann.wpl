@@ -2,17 +2,17 @@
 
 let comp h1 = 
    seq { (x:int) <- take
-       ; return [forceinline] x
+       ; forceinline return x
        }
 
 let comp h2 = 
    seq { (x:int) <- take
-       ; return [autoinline] x
+       ; autoinline return x
        }
 
 let comp h3 = 
    seq { (x:int) <- take
-       ; return [noinline] x
+       ; noinline return x
        }
 
 
