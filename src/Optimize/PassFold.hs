@@ -23,7 +23,7 @@ module PassFold (runFold, elimMitigsIO) where
 import Prelude hiding (exp)
 import Control.Applicative
 import Control.Monad.State
-import Data.Maybe (fromJust, isJust)
+import Data.Maybe ( isJust )
 import System.CPUTime
 import Text.Printf
 import qualified Data.Map as Map
@@ -32,7 +32,6 @@ import qualified Data.Set as S
 import AstComp
 import AstExpr
 import AstUnlabelled
-import CtComp ( ctComp )
 import CtExpr ( ctExp  )
 import Eval
 import Opts
@@ -232,9 +231,9 @@ take_emit_step :: DynFlags -> Comp -> RwM Comp
 take_emit_step _fgs comp
     | Repeat nfo bm <- unComp comp
     , BindMany tk [(x,emt)] <- unComp bm
-    , Take1 _a _b <- unComp tk
-    , Emit _a e <- unComp emt
-    = do { let xty  = fromJust $ doneTyOfCTy (ctComp tk)
+    , Take1 ain _b <- unComp tk
+    , Emit _a e    <- unComp emt
+    = do { let xty  = ain
                ety  = ctExp e
                eloc = expLoc e
                fty  = TArrow [xty] ety
@@ -682,28 +681,16 @@ times_unroll_step _fgs comp = case unComp comp of
     Times ui e elen i c
      | EVal _ (VInt n') <- unExp elen
      , let n = fromIntegral n'
+     , n > 0 
      , EVal valTy (VInt 0) <- unExp e
-     , (n < 3 && n > 0 && ui == AutoUnroll) || ui == Unroll
+     , (n < 3 && ui == AutoUnroll) || (ui == Unroll)
 -- BOZIDAR: this will currently fail perf test for TX/test_encoding_34
 --         , ui == Unroll -- || (n < 3 && n > 0 && ui == AutoUnroll)
      -> let idxs = [0..n-1]
             comps = replicate n c
             unrolled = zipWith (\curr xc ->
               substComp [] [(i, eVal (expLoc e) valTy (vint curr))] [] xc) idxs comps
-        in case unrolled of
-             [] -> do
-               -- The loop doesn't get executed at all
-               -- (TODO: This case is currently excluded by the @n > 0@ condition)
-               -- In this case we just return unit, but we have to find the
-               -- right input and output stream types, which we set to be
-               -- equal the the input and output stream types of the original
-               -- computation.
-               let compTy = ctComp comp
-                   a      =  inTyOfCTy compTy
-                   b      = yldTyOfCTy compTy
-               return $ cReturn cloc a b ForceInline (eVal cloc TUnit VUnit)
-             xs ->
-               rewrite $ mk_bind_many xs
+        in rewrite $ mk_bind_many unrolled
     _ -> return comp
   where
     mk_bind_many :: [Comp] -> Comp
