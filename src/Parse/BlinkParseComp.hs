@@ -195,14 +195,14 @@ parseCompTerm = choice
     , optional (reserved "seq") >> braces parseCommands
     ] <?> "computation"
   where
-    cReturn' p = cReturn p Nothing Nothing
-    cEmit'   p = cEmit   p Nothing
-    cEmits'  p = cEmits  p Nothing
-    cTake1'  p = cTake1  p Nothing Nothing
+    cReturn' p = cReturn p SrcTyUnknown SrcTyUnknown
+    cEmit'   p = cEmit   p SrcTyUnknown
+    cEmits'  p = cEmits  p SrcTyUnknown
+    cTake1'  p = cTake1  p SrcTyUnknown SrcTyUnknown
 
     cTake' p e = do
       case evalInt e of
-        Just n  -> return $ cTake p Nothing Nothing (fromInteger n)
+        Just n  -> return $ cTake p SrcTyUnknown SrcTyUnknown (fromInteger n)
         Nothing -> fail "Non-constant argument to takes"
 
 
@@ -221,7 +221,7 @@ opAlwaysPipeline :: BlinkParser ParInfo
 opAlwaysPipeline = mkParInfo (AlwaysPipeline 0 0) <$ reservedOp "|>>>|"
 
 -- > ("unroll" | "nounroll")? "times" <expr>
-timesPref :: BlinkParser (UnrollInfo, SrcExp, SrcExp, GName (Maybe SrcTy))
+timesPref :: BlinkParser (UnrollInfo, SrcExp, SrcExp, GName SrcTy)
 timesPref =
     (withPos mkTimes <*> parseFor (reserved "times") <*> parseExpr) <?> "times"
   where
@@ -229,11 +229,11 @@ timesPref =
     -- in a 'times' loop the code doesn't get access to the iterator anyway,
     -- so there is no possibility to cast the iterator to a different type.
     mkTimes p ui e =
-      let nm = toName "_tmp_count" p (Just tintSrc)
-      in (ui, eVal p (Just tintSrc) (VInt 0), e, nm)
+      let nm = toName "_tmp_count" p tintSrc
+      in (ui, eVal p tintSrc (VInt 0), e, nm)
 
 -- > ("unroll" | "nounroll")? "for" <var-bind> "in" "[" <interval> "]"
-forPref :: BlinkParser (UnrollInfo, SrcExp, SrcExp, GName (Maybe SrcTy))
+forPref :: BlinkParser (UnrollInfo, SrcExp, SrcExp, GName SrcTy)
 forPref =
     (withPos mkFor <*> parseFor (reserved "for") <*> parseVarBind
                    <* reserved "in" <*> brackets genIntervalParser) <?> "for"
@@ -251,7 +251,7 @@ parseVarOrCall = go <?> "variable or function call"
     go = do
       p <- getPosition
       x <- identifier
-      let xnm = toName x (Just p) Nothing
+      let xnm = toName x (Just p) SrcCTyUnknown
       choice [ do notFollowedBy (symbol "(")
                   notFollowedBy (reservedOp "<-")
                   return (cVar (Just p) xnm)
@@ -267,7 +267,7 @@ parseVarOrCall = go <?> "variable or function call"
 -- If however `xnm` is a known function we expect a comma-separated list of
 -- as many arguments as the function expect, which can either be computations
 -- `<comp>` or expressions `<expr>`.
-parseArgs :: GName (Maybe SrcCTy) -> BlinkParser [CallArg SrcExp SrcComp]
+parseArgs :: GName SrcCTy -> BlinkParser [CallArg SrcExp SrcComp]
 parseArgs xnm = parens $ do
     penv <- ask
     case lookup xnm penv of
@@ -291,7 +291,7 @@ data GLetDecl tc t a b =
   | LetDeclComp (Maybe (Int, Int)) (GName tc) (GComp tc t a b)
   | LetDeclExpr (GName t) (GExp t b)
 
-type LetDecl = GLetDecl (Maybe SrcCTy) (Maybe SrcTy) () ()
+type LetDecl = GLetDecl SrcCTy SrcTy () ()
 
 -- | The thing that is being declared in a let-statemnt
 --
@@ -307,7 +307,7 @@ parseLetDecl :: BlinkParser LetDecl
 parseLetDecl = choice
     [ LetDeclERef   <$> declParser
     , LetDeclStruct <$> parseStruct
-    , try $ LetDeclExternal <$ reserved "let" <* reserved "external" <*> identifier <*> paramsParser <* reservedOp ":" <*> (Just <$> parseBaseType)
+    , try $ LetDeclExternal <$ reserved "let" <* reserved "external" <*> identifier <*> paramsParser <* reservedOp ":" <*> parseBaseType
     , try $ LetDeclFunComp  <$ reserved "fun" <*> parseCompAnn <*> parseCVarBind <*> compParamsParser <*> braces parseCommands
     , try $ LetDeclFunExpr  <$ reserved "fun"                  <*> parseVarBind <*> paramsParser     <*> braces parseStmts
     , try $ LetDeclComp     <$ reserved "let" <*> parseCompAnn <*> parseCVarBind <* reservedOp "=" <*> parseComp
@@ -315,47 +315,48 @@ parseLetDecl = choice
     ]
 
 -- > <struct> ::= "struct" IDENT "=" "{" (IDENT ":" <base-type>)*";" "}"
-parseStruct :: BlinkParser (GStructDef (Maybe SrcTy))
+parseStruct :: BlinkParser (GStructDef SrcTy)
 parseStruct = do
     reserved "struct"
     x <- identifier
     reservedOp "="
     braces $ StructDef x <$> parseField `sepBy` semi
   where
-    parseField = (,) <$> identifier <* colon <*> (Just <$> parseBaseType)
+    parseField = (,) <$> identifier <* colon <*> parseBaseType
 
 -- | Parameters to a (non-comp) function
 --
 -- > <params> ::= "(" (IDENT ":" <base-type>)*"," ")"
-paramsParser :: BlinkParser [GName (Maybe SrcTy)]
+paramsParser :: BlinkParser [GName SrcTy]
 paramsParser = parens $ sepBy paramParser (symbol ",")
   where
     paramParser = withPos mkParam <*> identifier <* colon <*> parseBaseType
-    mkParam p x ty = toName x p (Just ty)
+    mkParam p x ty = toName x p ty
 
 -- | Like `parseVarBind` but for computation types
 --
 -- > <cvar-bind> ::= IDENT | "(" IDENT ":" <comp-base-type> ")"
-parseCVarBind :: BlinkParser (GName (Maybe SrcCTy))
+parseCVarBind :: BlinkParser (GName SrcCTy)
 parseCVarBind = choice
     [ withPos mkName <*> identifier
-    , parens $ withPos mkNameTy <*> identifier <* symbol ":" <*> parseCompBaseType
+    , parens $ 
+      withPos mkNameTy <*> identifier <* symbol ":" <*> parseCompBaseType
     ] <?> "variable binding"
   where
-    mkName   p i    = toName i p Nothing
-    mkNameTy p i ty = toName i p (Just ty)
+    mkName   p i    = toName i p SrcCTyUnknown
+    mkNameTy p i ty = toName i p ty
 
 -- | Parameters to a (comp) function
 --
 -- > <comp-params> ::= "(" (IDENT ":" (<base-type> | <comp-base-type>))*"," ")"
 --
 -- (<base-type> comes from the expr parser; <comp-base-type> is defined here).
-compParamsParser :: BlinkParser [GName (CallArg (Maybe SrcTy) (Maybe SrcCTy))]
+compParamsParser :: BlinkParser [GName (CallArg SrcTy SrcCTy)]
 compParamsParser = parens $ sepBy paramParser (symbol ",")
   where
     paramParser = withPos mkParam <*> identifier <* colon <*> parseType
-    parseType   = choice [ CAExp  . Just <$> parseBaseType
-                         , CAComp . Just <$> parseCompBaseType
+    parseType   = choice [ CAExp  <$> parseBaseType
+                         , CAComp <$> parseCompBaseType
                          ] <?> "computation parameter type"
 
     mkParam p x mty = toName x p mty
@@ -375,8 +376,8 @@ parseCompBaseType = choice
       , parens parse_idx
       ] <?> "computation type index"
 
-    mkCTy Nothing   ti ty = CTTrans ti ty
-    mkCTy (Just tv) ti ty = CTComp tv ti ty
+    mkCTy Nothing   ti ty = SrcCTyKnown $ CTTrans ti ty
+    mkCTy (Just tv) ti ty = SrcCTyKnown $ CTComp tv ti ty
 
 cLetDecl :: Maybe SourcePos -> LetDecl -> (ParseCompEnv, SrcComp -> SrcComp)
 cLetDecl p (LetDeclERef (xn,  e)) =
@@ -386,7 +387,7 @@ cLetDecl p (LetDeclStruct sdef) =
 cLetDecl p (LetDeclExternal x params ty) =
     ([], cLetHeader p fun)
   where
-    fn  = toName x p Nothing
+    fn  = toName x p SrcTyUnknown
     fun = mkFunExternal p fn params ty
 cLetDecl p (LetDeclFunComp h x params c) =
     ([(x, params)], cLetFunC p x params (mkVectComp c h))
@@ -455,7 +456,7 @@ parseCommand = choice
     cBindMany' loc x c  = ([], Left $ \c' -> cBindMany loc c [(x, c')])
 
 cunit :: Maybe SourcePos -> SrcComp
-cunit p = cReturn p Nothing Nothing ForceInline (eunit p)
+cunit p = cReturn p SrcTyUnknown SrcTyUnknown ForceInline (eunit p)
 
 {-------------------------------------------------------------------------------
   Annotations
@@ -464,8 +465,11 @@ cunit p = cReturn p Nothing Nothing ForceInline (eunit p)
 -- | Optional type annotation
 --
 -- > <type-ann> ::= "[" <base-type> "]"
-optTypeAnn :: BlinkParser (Maybe SrcTy)
-optTypeAnn = optionMaybe (brackets parseBaseType)
+optTypeAnn :: BlinkParser SrcTy
+optTypeAnn = mkTypeAnn <$> optionMaybe (brackets parseBaseType)
+  where 
+    mkTypeAnn Nothing  = SrcTyUnknown
+    mkTypeAnn (Just t) = t
 
 -- | Vectorization annotation
 --

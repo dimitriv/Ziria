@@ -208,9 +208,13 @@ instance Outputable SrcTy where
     SrcTBool      -> text "bool"
     SrcTStruct nm -> text nm
     SrcInject  ty -> ppr ty
-    SrcTArray (SrcLiteral n) ty' -> text "arr" <> brackets (int n) <+> ppr ty'
-    SrcTArray (SrcNVar n)    ty' -> text "arr" <> brackets (text (show n)) <+> ppr ty'
-    SrcTArray (SrcNArr n)    ty' -> text "arr" <> brackets (text ("arr " ++ (show n))) <+> ppr ty'
+    SrcTyUnknown  -> empty 
+    SrcTArray (SrcLiteral n) ty' 
+      -> text "arr" <> brackets (int n) <+> ppr ty'
+    SrcTArray (SrcNVar n) ty' 
+      -> text "arr" <> brackets (text (show n)) <+> ppr ty'
+    SrcTArray (SrcNArr n) ty' 
+      -> text "arr" <> brackets (text ("arr " ++ (show n))) <+> ppr ty'
 
 instance Outputable ty => Outputable (GFun ty a) where
   ppr fn = case unFun fn of
@@ -223,17 +227,14 @@ instance Outputable ty => Outputable (GFun ty a) where
 instance Outputable NumExpr where
   ppr ne = case ne of
     Literal i -> int i
-    NVar n    -> text (show n) -- TODO: here and elsewhere, are the quotes around the name intentional?
+    NVar n    -> text (show n)
+    -- TODO: here and elsewhere, are the quotes around the name intentional?
 
 instance Outputable ty => Outputable (GName ty) where
   ppr ix | isEmpty pprTy = ppName ix
          | otherwise     = parens (ppName ix <+> char ':' <+> pprTy)
     where
       pprTy = ppr (nameTyp ix)
-
-instance Outputable (Maybe SrcTy) where
-  ppr Nothing  = empty
-  ppr (Just t) = ppr t
 
 {-------------------------------------------------------------------------------
   Utility

@@ -170,7 +170,7 @@ parseTerm = choice
     eLet'    p x      = eLet    p x AutoInline
     eLetRef' p (x, e) = eLetRef p x e
 
-    mkUnit p = eVal p (Just SrcTUnit) VUnit
+    mkUnit p = eValSrc p VUnit
 
 -- Parse "()"
 --
@@ -188,12 +188,9 @@ parseUnit f = try $ withPos f <* (symbol "(" >> symbol ")")
 -- > <value> ::= <scalar-value> | "{" <scalar-value>*"," "}"
 parseValue :: BlinkParser SrcExp
 parseValue = choice
-    [ withPos eVal'    <*> parseScalarValue
-    , withPos eValArr' <*> braces (sepBy parseScalarValue comma)
+    [ withPos eValSrc    <*> parseScalarValue
+    , withPos eValArrSrc <*> braces (sepBy parseScalarValue comma)
     ] <?> "value"
-  where
-    eVal'    p = eVal    p Nothing
-    eValArr' p = eValArr p Nothing
 
 -- | Scalar values
 --
@@ -240,8 +237,8 @@ parseWithVarOnHead = choice
     , withPos mkVar <*> identifier
     ]
   where
-    eStruct' loc "complex" = eStruct loc (Just (SrcTStruct complex32TyName))
-    eStruct' loc tn        = eStruct loc (Just (SrcTStruct tn))
+    eStruct' loc "complex" = eStruct loc (SrcTStruct complex32TyName)
+    eStruct' loc tn        = eStruct loc (SrcTStruct tn)
 
     mkDeref :: Maybe SourcePos -> String -> [SrcExp -> SrcExp] -> SrcExp
     mkDeref p x fs = foldr ($) (mkVar p x) (reverse fs)
@@ -265,7 +262,7 @@ parseDerefSuffix = choice
     eArrRead' loc (y, l) x = eArrRead loc x y l
 
 mkVar :: Maybe SourcePos -> String -> SrcExp
-mkVar p x = eVar p (toName x p Nothing)
+mkVar p x = eVar p (toName x p SrcTyUnknown)
 
 {-------------------------------------------------------------------------------
   Declarations and types
@@ -274,13 +271,13 @@ mkVar p x = eVar p (toName x p Nothing)
 -- | Declarations
 --
 -- <decl> ::= "var" IDENT ":" <base-type> (":=" <expr>)?
-declParser :: BlinkParser (GName (Maybe SrcTy), Maybe SrcExp)
+declParser :: BlinkParser (GName SrcTy, Maybe SrcExp)
 declParser =
     withPos mkDecl <* reserved "var" <*> identifier
                    <* colon <*> parseBaseType
                    <*> optionMaybe (reservedOp ":=" *> parseExpr)
   where
-    mkDecl p x ty mbinit = (toName x p (Just ty), mbinit)
+    mkDecl p x ty mbinit = (toName x p ty, mbinit)
 
 -- | Base types
 --
@@ -347,7 +344,7 @@ parseBaseType = choice
 
     mkFixed _ (Left n)  t = let i = fromIntegral n
                             in SrcTArray (SrcLiteral i) t
-    mkFixed p (Right x) t = let nm = toName x p Nothing
+    mkFixed p (Right x) t = let nm = toName x p SrcTyUnknown
                             in SrcTArray (SrcNArr nm) t
 
     mkInferred p t = SrcTArray (SrcNVar (fromJust p)) t
@@ -466,11 +463,11 @@ parseSimpleStmt = choice
 
     eFor'   p ui k (estart, elen) = eFor   p ui k estart elen
     eProj'  p s e                 = eProj  p e s
-    eError' p                     = eError p Nothing
+    eError' p                     = eError p SrcTyUnknown
 
     -- Print a series of expression; @b@ argument indicates whether we a newline
     makePrint b p (h:t) = eSeq p (ePrint p False h) (makePrint b p t)
-    makePrint b p []    = ePrint p b (eVal p Nothing (VString ""))
+    makePrint b p []    = ePrint p b (eValSrc p (VString ""))
 
     mkAssign p x ds Nothing rhs =
       eAssign p (foldr ($) (mkVar p x) ds) rhs
@@ -492,14 +489,15 @@ foldIntExpr = do
 -- | Variable with optional type annotation
 --
 -- > <var-bind> ::= IDENT | "(" IDENT ":" <base-type> ")"
-parseVarBind :: BlinkParser (GName (Maybe SrcTy))
+parseVarBind :: BlinkParser (GName SrcTy)
 parseVarBind = choice
     [ withPos mkName <*> identifier
-    , parens $ withPos mkNameTy <*> identifier <* reservedOp ":" <*> parseBaseType
+    , parens $ withPos mkNameTy <*> 
+               identifier <* reservedOp ":" <*> parseBaseType
     ] <?> "variable binding"
   where
-    mkName   p i    = toName i p Nothing
-    mkNameTy p i ty = toName i p (Just ty)
+    mkName   p i    = toName i p SrcTyUnknown
+    mkNameTy p i ty = toName i p ty
 
 -- | Range
 --
@@ -524,7 +522,7 @@ genIntervalParser = choice
   where
     mkStartTo p from to =
       let len = to - from + 1
-      in (eVal p Nothing (vint from), eVal p Nothing (vint len))
+      in (eValSrc p (vint from), eValSrc p (vint len))
 
     mkStartLen start len = (start, len)
 
@@ -539,7 +537,7 @@ intervalParser = choice
   where
     mkStartTo p from to =
        let len = to - from + 1
-       in (eVal p Nothing (vint from), LILength len)
+       in (eValSrc p (vint from), LILength len)
 
     mkStartLen start (Left len) = (start, LILength len)
     mkStartLen start (Right x)  = (start, LIMeta x)
@@ -559,10 +557,10 @@ orMetaVar :: BlinkParser a -> BlinkParser (Either a String)
 orMetaVar p = (Left <$> try p) <|> (Right <$> identifier)
 
 mkCall :: Maybe SourcePos -> String -> [SrcExp] -> SrcExp
-mkCall p fn args = eCall p (toName fn p Nothing) args
+mkCall p fn args = eCall p (toName fn p SrcTyUnknown) args
 
 eunit :: Maybe SourcePos ->  SrcExp
-eunit p = eVal p Nothing VUnit
+eunit p = eValSrc p VUnit
 
 -- | Create either a cast or a call since they share the same source syntax
 mkCallOrCast :: Monad m => Maybe SourcePos -> String -> [SrcExp] -> m SrcExp
@@ -584,8 +582,15 @@ mkCallOrCast p x args
 
   | otherwise        = return $ mkCall p x args
   where
-    cast t = eUnOp p (Cast (Just t))
+    cast t = eUnOp p (Cast t)
 
 assertSingleton :: Monad m => [t] -> (t -> a) -> m a
 assertSingleton [e] action = return (action e)
 assertSingleton _x _action = fail "Expecting only one argument!"
+
+
+eValSrc :: Maybe SourcePos -> Val -> SrcExp 
+eValSrc p v = eVal p SrcTyUnknown v
+
+eValArrSrc :: Maybe SourcePos -> [Val] -> SrcExp
+eValArrSrc p vs = eValArr p SrcTyUnknown vs

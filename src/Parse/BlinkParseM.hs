@@ -95,9 +95,7 @@ type BlinkParseState = ()
 -- applications: we map (comp) function names to their list of arguments. The
 -- parser uses this to select the expr parser or the comp parser, depending on
 -- the type of the argument.
-type ParseCompEnv = [( GName (Maybe SrcCTy)
-                     , [GName (CallArg (Maybe SrcTy) (Maybe SrcCTy))]
-                     )]
+type ParseCompEnv = [( GName SrcCTy, [GName (CallArg SrcTy SrcCTy)])]
 
 -- | The parser monad
 newtype BlinkParseM a = BlinkParseM { runParseM :: ParseCompEnv -> IO a }

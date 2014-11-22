@@ -43,12 +43,12 @@ instance TypeAnn Ty where
   valCast (TInt {}) (VBit True)  = return (VInt 1)
   valCast _         _            = Nothing
 
-instance TypeAnn (Maybe SrcTy) where
-  valCast (Just (SrcTInt {})) (VDouble d)  = return (VInt (floor d))
-  valCast (Just (SrcTInt {})) (VInt i)     = return (VInt i)
-  valCast (Just (SrcTDouble)) (VInt d)     = return (VDouble (fromIntegral d))
-  valCast (Just (SrcTInt {})) (VBit False) = return (VInt 0)
-  valCast (Just (SrcTInt {})) (VBit True)  = return (VInt 1)
+instance TypeAnn SrcTy where
+  valCast (SrcTInt {}) (VDouble d)  = return (VInt (floor d))
+  valCast (SrcTInt {}) (VInt i)     = return (VInt i)
+  valCast (SrcTDouble) (VInt d)     = return (VDouble (fromIntegral d))
+  valCast (SrcTInt {}) (VBit False) = return (VInt 0)
+  valCast (SrcTInt {}) (VBit True)  = return (VInt 1)
   valCast _            _            = Nothing
 
 {-------------------------------------------------------------------------------

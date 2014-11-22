@@ -112,8 +112,12 @@ data SrcTy where
   SrcTInt      :: SrcBitWidth -> SrcTy
   SrcTDouble   :: SrcTy
   SrcTStruct   :: TyName -> SrcTy
-
+ 
+  -- Just useful for the embedding 
   SrcInject    :: Ty -> SrcTy
+
+  -- We record the absense of a type annotation here
+  SrcTyUnknown :: SrcTy
 
   deriving (Generic, Typeable, Data, Eq)
 
@@ -131,7 +135,7 @@ data SrcNumExpr where
   SrcLiteral :: Int -> SrcNumExpr
 
   -- | NArr: Length is the same as the length of the array of the given name
-  SrcNArr :: GName (Maybe SrcTy) -> SrcNumExpr
+  SrcNArr :: GName SrcTy -> SrcNumExpr
 
   -- | User doesn't specify array length.
   -- We record the the location for the sake of error messages.
@@ -416,8 +420,8 @@ type EId       = GName      Ty
   These types are only used in the parser and as input to the renamer.
 -------------------------------------------------------------------------------}
 
-type SrcExp = GExp (Maybe SrcTy) ()
-type SrcFun = GFun (Maybe SrcTy) ()
+type SrcExp = GExp SrcTy ()
+type SrcFun = GFun SrcTy ()
 
 {-------------------------------------------------------------------------------
   Built-in types

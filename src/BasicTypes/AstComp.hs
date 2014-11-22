@@ -386,9 +386,11 @@ type ParListView = GParListView CTy Ty () ()
   to the type checker (which translates from SrcTy to Ty).
 -------------------------------------------------------------------------------}
 
-type SrcCTy  = GCTy SrcTy
-type SrcComp = GComp (Maybe SrcCTy) (Maybe SrcTy) () ()
-type SrcProg = GProg (Maybe SrcCTy) (Maybe SrcTy) () ()
+data SrcCTy = SrcCTyUnknown | SrcCTyKnown (GCTy SrcTy)
+  deriving (Generic, Typeable, Data)
+
+type SrcComp = GComp SrcCTy SrcTy () ()
+type SrcProg = GProg SrcCTy SrcTy () ()
 
 {-------------------------------------------------------------------------------
   Smart constructors
@@ -1129,6 +1131,8 @@ instance (PrettyVal a, PrettyVal b) => PrettyVal (CallArg a b)
 instance (PrettyVal tc, PrettyVal t, PrettyVal a, PrettyVal b) => PrettyVal (GComp0 tc t a b)
 instance (PrettyVal tc, PrettyVal t, PrettyVal a, PrettyVal b) => PrettyVal (GComp tc t a b)
 instance (PrettyVal tc, PrettyVal t, PrettyVal a, PrettyVal b) => PrettyVal (GProg tc t a b)
+
+instance PrettyVal SrcCTy
 
 -- Note [Standalone reads]
 -- ~~~~~~~~~~~~~~~~~~~~~~~

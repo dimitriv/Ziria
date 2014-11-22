@@ -317,9 +317,10 @@ nested_letfuns c =
              | Let {}     <- unComp c = Nothing
              | otherwise              = Just c
 
-instance Outputable t => Outputable (Maybe (GCTy t)) where
-  ppr Nothing  = empty
-  ppr (Just t) = ppr t
+
+instance Outputable SrcCTy where 
+  ppr SrcCTyUnknown      = empty
+  ppr (SrcCTyKnown gcty) = ppr gcty 
 
 {-------------------------------------------------------------------------------
   Show instances
@@ -332,3 +333,5 @@ instance (Outputable tc, Outputable t) => Show (GProg tc t a b) where show = ren
 
 instance (Outputable tc, Outputable t) => Show (GComp0 tc t a b) where
   show = render . ppComp0 ppr False False False
+
+instance Show SrcCTy where show = render . ppr 

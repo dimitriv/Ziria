@@ -608,8 +608,8 @@ newName loc ty = do
 extractTypeEnv :: SrcComp -> [(String, GName Ty)]
 extractTypeEnv = catMaybes . map aux . S.toList . compEFVs
   where
-    aux :: GName (Maybe SrcTy) -> Maybe (String, GName Ty)
-    aux nm | Just (SrcInject ty) <- nameTyp nm =
+    aux :: GName SrcTy -> Maybe (String, GName Ty)
+    aux nm | SrcInject ty <- nameTyp nm =
       Just (name nm, nm { nameTyp = ty })
     aux _ =
       Nothing

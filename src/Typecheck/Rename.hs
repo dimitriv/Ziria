@@ -58,13 +58,13 @@ genRenBound onTy nm = do
     nameTyp' <- onTy (nameLoc nm) (nameTyp nm)
     return nm{uniqId = uniqId', nameTyp = nameTyp'}
 
-renBound :: GName (Maybe SrcTy) -> TcM (GName Ty)
+renBound :: GName SrcTy -> TcM (GName Ty)
 renBound = genRenBound renTyAnn
 
-renCBound :: GName (Maybe SrcCTy) -> TcM (GName CTy)
+renCBound :: GName SrcCTy -> TcM (GName CTy)
 renCBound = genRenBound renCTyAnn
 
-renCABound :: GName (CallArg (Maybe SrcTy) (Maybe SrcCTy))
+renCABound :: GName (CallArg SrcTy SrcCTy)
            -> TcM (GName (CallArg Ty CTy))
 renCABound = genRenBound renTyCTyAnn
 
@@ -73,10 +73,10 @@ genRenFree lookupTy nm = do
     nm' <- lookupTy nm
     return nm{uniqId = uniqId nm', nameTyp = nameTyp nm'}
 
-renFree :: GName (Maybe SrcTy) -> TcM (GName Ty)
+renFree :: GName SrcTy -> TcM (GName Ty)
 renFree = genRenFree $ \nm -> lookupEnv (name nm) (nameLoc nm)
 
-renCFree :: GName (Maybe SrcCTy) -> TcM (GName CTy)
+renCFree :: GName SrcCTy -> TcM (GName CTy)
 renCFree = genRenFree $ \nm -> lookupCEnv (name nm) (nameLoc nm)
 
 {-------------------------------------------------------------------------------
@@ -119,10 +119,9 @@ recCANames params = let (names, cnames) = partitionParams params
   Renaming types
 -------------------------------------------------------------------------------}
 
--- Internal types injected into the source language are used for quasi-quoting
--- only, and therefore do not have to be rend.
-renTy :: Maybe SourcePos -> SrcTy -> TcM Ty
-renTy p = go
+
+renReqTy :: Maybe SourcePos -> SrcTy -> TcM Ty
+renReqTy p = go
   where
     go SrcTUnit               = return TUnit
     go SrcTBit                = return TBit
@@ -132,15 +131,22 @@ renTy p = go
     go SrcTDouble             = return TDouble
     go (SrcTStruct tn)        = do sdef <- lookupTDefEnv tn p
                                    return $ TStruct tn (struct_flds sdef)
+
+    -- Internal types injected into the source language are used for
+    -- quasi-quoting only, and therefore do not have to be rend.
     go (SrcInject ty)         = return ty
 
-renCTy :: Maybe SourcePos -> SrcCTy -> TcM CTy
-renCTy p = go
+    go SrcTyUnknown           = panicStr "renReqTy: unknown type"
+
+renReqGCTy :: Maybe SourcePos -> GCTy SrcTy -> TcM CTy
+renReqGCTy p = go
   where
     go (CTVar _)          = panicStr "Unexpected type variable in source type"
-    go (CTComp u a b)     = CTComp  <$> renTy p u <*> renTy p a <*> renTy p b
-    go (CTTrans a b)      = CTTrans <$> renTy p a <*> renTy p b
-    go (CTArrow args res) = CTArrow <$> mapM (renTyCTy p) args <*> go res
+    go (CTComp u a b)     = CTComp  <$> 
+                            renReqTy p u <*> renReqTy p a <*> renReqTy p b
+    go (CTTrans a b)      = CTTrans <$> renReqTy p a <*> renReqTy p b
+    go (CTArrow args res) = CTArrow <$> 
+                            mapM (renTyCTy p) args <*> go res
 
 renNumExpr :: Maybe SourcePos -> SrcNumExpr -> TcM NumExpr
 renNumExpr _ (SrcLiteral n) = return $ Literal n
@@ -156,7 +162,7 @@ renBitWidth SrcBW16 = return BW16
 renBitWidth SrcBW32 = return BW32
 renBitWidth SrcBW64 = return BW64
 
-renStructDef :: Maybe SourcePos -> GStructDef (Maybe SrcTy) -> TcM StructDef
+renStructDef :: Maybe SourcePos -> GStructDef SrcTy -> TcM StructDef
 renStructDef p (StructDef nm flds) = do
     flds' <- forM flds $ \(fld, ty) -> do
                ty' <- renReqTy p ty
@@ -165,35 +171,26 @@ renStructDef p (StructDef nm flds) = do
                      , struct_flds = flds'
                      }
 
-renTyAnn :: Maybe SourcePos -> Maybe SrcTy -> TcM Ty
-renTyAnn _ Nothing   = freshTy "a"
-renTyAnn p (Just ty) = renTy p ty
+renTyAnn :: Maybe SourcePos -> SrcTy -> TcM Ty
+renTyAnn _ SrcTyUnknown = freshTy "a"
+renTyAnn p ty           = renReqTy p ty
 
-renCTyAnn :: Maybe SourcePos -> Maybe SrcCTy -> TcM CTy
-renCTyAnn _ Nothing    = freshCTy "c"
-renCTyAnn p (Just cty) = renCTy p cty
+renCTyAnn :: Maybe SourcePos -> SrcCTy -> TcM CTy
+renCTyAnn _ SrcCTyUnknown    = freshCTy "c"
+renCTyAnn p (SrcCTyKnown ct) = renReqGCTy p ct
 
--- | This is called in places where the parser guarantees a type annotation
-renReqTy :: Maybe SourcePos -> Maybe SrcTy -> TcM Ty
-renReqTy _ Nothing   = panicStr "renReqTy: missing type annotation"
-renReqTy p (Just ty) = renTy p ty
 
 {-------------------------------------------------------------------------------
   Dealing with CallArg
 -------------------------------------------------------------------------------}
 
-renTyCTy :: Maybe SourcePos
-         -> CallArg SrcTy SrcCTy
-         -> TcM (CallArg Ty CTy)
-renTyCTy p = callArg (liftM CAExp . renTy p) (liftM CAComp . renCTy p)
+renTyCTy :: Maybe SourcePos -> CallArg SrcTy (GCTy SrcTy) -> TcM (CallArg Ty CTy)
+renTyCTy p = callArg (liftM CAExp . renReqTy p) (liftM CAComp . renReqGCTy p)
 
-renTyCTyAnn :: Maybe SourcePos
-            -> CallArg (Maybe SrcTy) (Maybe SrcCTy)
-            -> TcM (CallArg Ty CTy)
+renTyCTyAnn :: Maybe SourcePos -> CallArg SrcTy SrcCTy -> TcM (CallArg Ty CTy)
 renTyCTyAnn p = callArg (liftM CAExp . renTyAnn p) (liftM CAComp . renCTyAnn p)
 
-renExpComp :: CallArg SrcExp SrcComp
-           -> TcM (CallArg Exp Comp)
+renExpComp :: CallArg SrcExp SrcComp -> TcM (CallArg Exp Comp)
 renExpComp = callArg (liftM CAExp . renExp) (liftM CAComp . renComp)
 
 {-------------------------------------------------------------------------------
@@ -430,7 +427,7 @@ renExp (MkExp exp0 eloc ()) = case exp0 of
         e1' <- renExp e1
         return $ eProj eloc e1' fn
 
-renUnOp :: Maybe SourcePos -> GUnOp (Maybe SrcTy) -> TcM UnOp
+renUnOp :: Maybe SourcePos -> GUnOp SrcTy -> TcM UnOp
 renUnOp _ NatExp    = return NatExp
 renUnOp _ Neg       = return Neg
 renUnOp _ Not       = return Not
@@ -452,7 +449,7 @@ renFun (MkFun fun0 floc ()) = case fun0 of
       return $ mkFunExternal floc nm' params' retTy'
 
 -- | The continuation of a monadic bind
-renBind :: (GName (Maybe SrcTy), SrcComp) -> TcM (GName Ty, Comp)
+renBind :: (GName SrcTy, SrcComp) -> TcM (GName Ty, Comp)
 renBind (x, c) = do
     x' <- renBound x
     c' <- recName x' $ renComp c
