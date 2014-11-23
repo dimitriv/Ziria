@@ -242,16 +242,16 @@ computeCardTop _verbose = computeCard
         es'  <- mapM computeCallArgCard es
         return $ cCall loc card f es'
 
-      Emit a e ->
-        return $ cEmit loc (mkSimplCard 0 1) a e
+      Emit e ->
+        return $ cEmit loc (mkSimplCard 0 1) e
 
-      Emits a e ->
+      Emits e ->
         case ctExp e of
-          TArray (Literal n) _ -> return $ cEmits loc (mkSimplCard 0 n) a e
+          TArray (Literal n) _ -> return $ cEmits loc (mkSimplCard 0 n) e
           _                    -> error "Type checker bug!"
 
-      Return a b fi e ->
-        return $ cReturn loc (mkSimplCard 0 0) a b fi e
+      Return fi e ->
+        return $ cReturn loc (mkSimplCard 0 0) fi e
 
       Interleave c1 c2 -> do
         c1' <- computeCard c1
@@ -267,11 +267,11 @@ computeCardTop _verbose = computeCard
         let card  = if card1 `cardEqual` card2 then card1 else mkDynamicCard
         return $ cBranch loc card e c1' c2'
 
-      Take1 a b ->
-        return $ cTake1 loc (mkSimplCard 1 0) a b
+      Take1 a ->
+        return $ cTake1 loc (mkSimplCard 1 0) a
 
-      Take a b n ->
-        return $ cTake loc (mkSimplCard n 0) a b n
+      Take a n ->
+        return $ cTake loc (mkSimplCard n 0) a n
 
       Until e c1 -> do
         -- Don't know how many times to iterate

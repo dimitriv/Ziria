@@ -420,23 +420,22 @@ tcComp comp@(MkComp comp0 loc _) =
       tcMitigator loc a n1 n2
 
     -- DV: Typing those in more restrictive ways 
-    go (Emit _a e) = do
+    go (Emit e) = do
       b <- tcExp e
-      return $ CTComp TUnit TVoid b                  -- DV
-    go (Emits _a e) = do
+      return $ CTComp TUnit TVoid b                  
+    go (Emits e) = do
       ety <- tcExp e
       (_n, b) <- unifyTArray loc Infer Infer ety
-      return $ CTComp TUnit TVoid b                  -- DV
-    go (Return _a _b _fi e) = do
+      return $ CTComp TUnit TVoid b                  
+    go (Return _fi e) = do
       u <- tcExp e
-      return $ CTComp u TVoid TVoid                  -- DV
-    go (Take1 a _b) = do 
-      return $ CTComp a a TVoid                      -- DV 
-    go (Take a _b n) = do
-      return $ CTComp (TArray (Literal n) a) a TVoid -- DV 
+      return $ CTComp u TVoid TVoid                  
+    go (Take1 a) = do 
+      return $ CTComp a a TVoid                       
+    go (Take a n) = do
+      return $ CTComp (TArray (Literal n) a) a TVoid  
 
     -- DV: Combining the types of those here in less restrictive ways
-
     go (BindMany c []) =
       tcComp c
     go (BindMany c ((x, c'):cs)) = do

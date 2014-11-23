@@ -172,7 +172,7 @@ mkWhile dflags minit etest cbody mfinal cinfo k
     csp = compLoc cbody
     k'  = k { kontDone = doneKont }
     k'' = k { kontDone = doneKont' k }
-    cretunit = cReturn csp TVoid TVoid AutoInline $
+    cretunit = cReturn csp AutoInline $
                eVal csp TUnit VUnit
 
     -- MkComp (Return AutoInline (MkExp (EVal VUnit) csp TUnit)) csp cty
@@ -584,7 +584,7 @@ codeGenComp dflags comp k =
 
         return (mkCompInfo prefix False)
 
-    go c@(MkComp (Emits _ e) csp ()) = do
+    go c@(MkComp (Emits e) csp ()) = do
         emitName <- nextName ("__emits_"  ++ (getLnNumInStr csp))
 
         let prefix   = emitName
@@ -741,7 +741,7 @@ codeGenComp dflags comp k =
     go (MkComp (ReadInternal ty buf_id tp) csp ()) =
         readCode ty csp buf_id tp k
 
-    go (MkComp (Emit _ e) csp ()) = do
+    go (MkComp (Emit e) csp ()) = do
         emitName <- nextName ("__emit_" ++ (getLnNumInStr csp))
         let prefix   = emitName
         let stateVar = prefix ++ "_state"
@@ -995,7 +995,7 @@ codeGenComp dflags comp k =
         f <- lookupCompFunCode nm
         f args k
 
-    go c@(MkComp (Take1 inty _) csp ()) = do
+    go c@(MkComp (Take1 inty) csp ()) = do
         takeName <- nextName ("__take_" ++ (getLnNumInStr csp))
         let prefix = takeName
 
@@ -1024,7 +1024,7 @@ codeGenComp dflags comp k =
 
         return (mkCompInfo prefix True)
 
-    go c@(MkComp (Take elemTy _ n) csp ()) = do
+    go c@(MkComp (Take elemTy n) csp ()) = do
         takeName <- nextName ("__take_" ++ (getLnNumInStr csp))
         let prefix   = takeName
         let stateVar = prefix ++ "_state"
@@ -1056,7 +1056,7 @@ codeGenComp dflags comp k =
         return (mkCompInfo prefix True)
                    { compGenInit = codeStmt [cstm|$id:stateVar = 0;|] }
 
-    go (MkComp (Return _ _ _ e) csp ()) = do
+    go (MkComp (Return _ e) csp ()) = do
         retName <-  nextName ("__ret_" ++ (getLnNumInStr csp))
         let prefix = retName
 

@@ -145,31 +145,31 @@ data GComp0 tc t a b where
   --
   -- >         e :: b
   -- > -----------------------
-  -- > emit e :: ST (C ()) a b
+  -- > emit e :: ST (C ()) TVoid b
   --
   -- Since the argument to `emit` does not determine `a`, we add it an an extra
   -- parameter to `Emit`.
-  Emit :: t -> GExp t b -> GComp0 tc t a b
+  Emit :: GExp t b -> GComp0 tc t a b
 
   -- | Emit an array of values to the output stream
   --
   -- >      e :: arr[n] b
   -- > ------------------------
-  -- > emits e :: ST (C ()) a b
+  -- > emits e :: ST (C ()) TVoid b
   --
   -- Since the argument to `emits` does not determine `a`, we add it an an extra
   -- parameter to `Emit`.
-  Emits :: t -> GExp t b -> GComp0 tc t a b
+  Emits :: GExp t b -> GComp0 tc t a b
 
   -- | Return a value
   --
   -- >         e :: u
   -- > ------------------------
-  -- > return e :: ST (C u) a b
+  -- > return e :: ST (C u) TVoid TVoid
   --
   -- Since the argument to `return` does not determine `a` and `b` we add these
   -- as extra arguments.
-  Return :: t -> t -> ForceInline -> GExp t b -> GComp0 tc t a b
+  Return :: ForceInline -> GExp t b -> GComp0 tc t a b
 
   -- | Interleave
   --
@@ -187,18 +187,18 @@ data GComp0 tc t a b where
   -- | Take a value from the input stream
   --
   -- > --------------------
-  -- > take :: ST (C a) a b
+  -- > take :: ST (C a) a TVoid
   --
   -- Since `take` has no arguments we record both `a` and `b` as parameters.
-  Take1 :: t -> t -> GComp0 tc t a b
+  Take1 :: t -> GComp0 tc t a b
 
   -- | Take multiple values from the input stream
   --
   -- > --------------------------------
-  -- > takes n :: ST (C (arr[n] a)) a b
+  -- > takes n :: ST (C (arr[n] a)) a TVoid
   --
   -- Since `takes` has no arguments we record both `a` and `b` as parameters.
-  Take :: t -> t -> Int -> GComp0 tc t a b
+  Take :: t -> Int -> GComp0 tc t a b
 
   -- | Iteration
   --
@@ -497,19 +497,15 @@ mapCompM onCTyp onETyp onCAnn onEAnn onExp f = goComp
       nm'   <- mapNameM onCTyp nm
       args' <- mapM goCallArg args
       return $ Call nm' args'
-    goComp0 (Emit a e) = do
-      a' <- onETyp a
+    goComp0 (Emit e) = do
       e' <- onExp e
-      return $ Emit a' e'
-    goComp0 (Return a b fi e) = do
-      a' <- onETyp a
-      b' <- onETyp b
+      return $ Emit e'
+    goComp0 (Return fi e) = do
       e' <- onExp e
-      return $ Return a' b' fi e'
-    goComp0 (Emits a e) = do
-      a' <- onETyp a
+      return $ Return fi e'
+    goComp0 (Emits e) = do
       e' <- onExp e
-      return $ Emits a' e'
+      return $ Emits e'
     goComp0 (Interleave c1 c2) = do
       c1' <- goComp c1
       c2' <- goComp c2
@@ -519,14 +515,12 @@ mapCompM onCTyp onETyp onCAnn onEAnn onExp f = goComp
       c1' <- goComp c1
       c2' <- goComp c2
       return $ Branch e' c1' c2'
-    goComp0 (Take1 a b) = do
+    goComp0 (Take1 a) = do
       a' <- onETyp a
-      b' <- onETyp b
-      return $ Take1 a' b'
-    goComp0 (Take a b n) = do
+      return $ Take1 a'
+    goComp0 (Take a n) = do
       a' <- onETyp a
-      b' <- onETyp b
-      return $ Take a' b' n
+      return $ Take a' n
     goComp0 (Until e c1) = do
       e'  <- onExp e
       c1' <- goComp c1
@@ -1092,12 +1086,12 @@ compSize c = case unComp c of
   LetStruct _sdef c1        -> 1 + compSize c1
   LetFunC _nm _params c1 c2 -> 1 + compSize c1 + compSize c2
   Call _nm es               -> 1 + sum (map callArgSize es)
-  Emit _a _e                -> 1
-  Emits _ _e                -> 1
-  Return _ _ _ _e           -> 1
+  Emit {}                   -> 1
+  Emits {}                  -> 1
+  Return {}                 -> 1
   Branch _e c1 c2           -> 1 + compSize c1 + compSize c2
-  Take1 _ _                 -> 1
-  Take _ _ _                -> 1
+  Take1 {}                  -> 1
+  Take {}                   -> 1
   Until _e c1               -> 1 + compSize c1
   While _e c1               -> 1 + compSize c1
   Times _ui _e1 _e2 _nm c1  -> 1 + compSize c1

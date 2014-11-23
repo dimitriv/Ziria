@@ -172,14 +172,14 @@ cLetStruct loc sd c = MkComp (LetStruct sd c) loc ()
 cCall :: Maybe SourcePos -> GName tc -> [CallArg (GExp t ()) (GComp tc t () ())] -> GComp tc t () ()
 cCall loc x es = MkComp (Call x es) loc ()
 
-cEmit :: Maybe SourcePos -> t -> GExp t () -> GComp tc t () ()
-cEmit loc t e = MkComp (Emit t e) loc ()
+cEmit :: Maybe SourcePos -> GExp t () -> GComp tc t () ()
+cEmit loc e = MkComp (Emit e) loc ()
 
-cEmits :: Maybe SourcePos -> t -> GExp t () -> GComp tc t () ()
-cEmits loc t e = MkComp (Emits t e) loc ()
+cEmits :: Maybe SourcePos -> GExp t () -> GComp tc t () ()
+cEmits loc e = MkComp (Emits e) loc ()
 
-cReturn :: Maybe SourcePos -> t -> t -> ForceInline -> GExp t () -> GComp tc t () ()
-cReturn loc t t' fi e = MkComp (Return t t' fi e) loc ()
+cReturn :: Maybe SourcePos -> ForceInline -> GExp t () -> GComp tc t () ()
+cReturn loc fi e = MkComp (Return fi e) loc ()
 
 cInterleave :: Maybe SourcePos -> GComp tc t () () -> GComp tc t () () -> GComp tc t () ()
 cInterleave loc c1 c2 = MkComp (Interleave c1 c2) loc ()
@@ -187,11 +187,11 @@ cInterleave loc c1 c2 = MkComp (Interleave c1 c2) loc ()
 cBranch :: Maybe SourcePos -> GExp t () -> GComp tc t () () -> GComp tc t () () -> GComp tc t () ()
 cBranch loc e c1 c2 = MkComp (Branch e c1 c2) loc ()
 
-cTake1 :: Maybe SourcePos -> t -> t -> GComp tc t () ()
-cTake1 loc t t' = MkComp (Take1 t t') loc ()
+cTake1 :: Maybe SourcePos -> t -> GComp tc t () ()
+cTake1 loc t = MkComp (Take1 t) loc ()
 
-cTake :: Maybe SourcePos -> t -> t -> Int -> GComp tc t () ()
-cTake loc t t' n = MkComp (Take t t' n) loc ()
+cTake :: Maybe SourcePos -> t -> Int -> GComp tc t () ()
+cTake loc t n = MkComp (Take t n) loc ()
 
 cUntil :: Maybe SourcePos -> GExp t () -> GComp tc t () () -> GComp tc t () ()
 cUntil loc e c = MkComp (Until e c) loc ()

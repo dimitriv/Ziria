@@ -195,14 +195,14 @@ parseCompTerm = choice
     , optional (reserved "seq") >> braces parseCommands
     ] <?> "computation"
   where
-    cReturn' p = cReturn p SrcTyUnknown SrcTyUnknown
-    cEmit'   p = cEmit   p SrcTyUnknown
-    cEmits'  p = cEmits  p SrcTyUnknown
-    cTake1'  p = cTake1  p SrcTyUnknown SrcTyUnknown
+    cReturn' p = cReturn p 
+    cEmit'   p = cEmit   p
+    cEmits'  p = cEmits  p
+    cTake1'  p = cTake1  p SrcTyUnknown 
 
     cTake' p e = do
       case evalInt e of
-        Just n  -> return $ cTake p SrcTyUnknown SrcTyUnknown (fromInteger n)
+        Just n  -> return $ cTake p SrcTyUnknown (fromInteger n)
         Nothing -> fail "Non-constant argument to takes"
 
 
@@ -456,7 +456,7 @@ parseCommand = choice
     cBindMany' loc x c  = ([], Left $ \c' -> cBindMany loc c [(x, c')])
 
 cunit :: Maybe SourcePos -> SrcComp
-cunit p = cReturn p SrcTyUnknown SrcTyUnknown ForceInline (eunit p)
+cunit p = cReturn p ForceInline (eunit p)
 
 {-------------------------------------------------------------------------------
   Annotations

@@ -251,19 +251,15 @@ renComp (MkComp comp0 cloc ()) = case comp0 of
         es' <- mapM renExpComp es
         nm' <- renCFree nm
         return $ cCall cloc nm' es'
-      Emit a e -> do
-        a' <- renTyAnn cloc a
+      Emit e -> do
         e' <- renExp e
-        return $ cEmit cloc a' e'
-      Return a b fi e -> do
-        a' <- renTyAnn cloc a
-        b' <- renTyAnn cloc b
+        return $ cEmit cloc e'
+      Return fi e -> do
         e' <- renExp e
-        return $ cReturn cloc a' b' fi e'
-      Emits a e -> do
-        a' <- renTyAnn cloc a
+        return $ cReturn cloc fi e'
+      Emits e -> do
         e' <- renExp e
-        return $ cEmits cloc a' e'
+        return $ cEmits cloc e'
       Interleave c1 c2 -> do
         c1' <- renComp c1
         c2' <- renComp c2
@@ -273,14 +269,12 @@ renComp (MkComp comp0 cloc ()) = case comp0 of
         c1' <- renComp c1
         c2' <- renComp c2
         return $ cBranch cloc e' c1' c2'
-      Take1 a b -> do
+      Take1 a -> do
         a' <- renTyAnn cloc a
-        b' <- renTyAnn cloc b
-        return $ cTake1 cloc a' b'
-      Take a b n -> do
+        return $ cTake1 cloc a'
+      Take a n -> do
         a' <- renTyAnn cloc a
-        b' <- renTyAnn cloc b
-        return $ cTake cloc a' b' n
+        return $ cTake cloc a' n
       Until e c' -> do
         e'  <- renExp e
         c'' <- renComp c'

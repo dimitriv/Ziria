@@ -127,7 +127,7 @@ fold_step :: DynFlags -> Comp -> RwM Comp
 fold_step fgs comp =
   case bindSeqView comp of
 
-    BindView (MkComp (Return _a _b fi e) _ ()) nm c12 ->
+    BindView (MkComp (Return fi e) _ ()) nm c12 ->
      do { -- rwMIO $ putStrLn ("Found BindView" ++ compShortName comp)
         ; fold_step fgs c12 >>= \c12' -> rewrite $ cLetE cloc nm fi e c12'
         }
@@ -140,7 +140,7 @@ fold_step fgs comp =
     BindView c nm  c12 ->
      fold_step fgs c12 >>= \c12' -> return $ cBindMany cloc c [(nm, c12')]
 
-    SeqView (MkComp (Return _a _b fi e) _ ()) c12 ->
+    SeqView (MkComp (Return fi e) _ ()) c12 ->
       do { -- rwMIO $ putStrLn ("Found BindView" ++ compShortName comp)
          ; let nm = toName ("__fold_unused_" ++ getLnNumInStr cloc)
                            Nothing (ctExp e)
@@ -212,11 +212,11 @@ push_comp_locals_step _fgs comp
     , (locals, cbody) <- extractCMutVars cbody_with_locals
     , not (null locals)
     , BindMany tk [(x,emt)] <- unComp cbody
-    , Take1 _a' _b' <- unComp tk
-    , Emit a e <- unComp emt
+    , Take1 {} <- unComp tk
+    , Emit e <- unComp emt
     = do { let comp'  = cLetFunC cloc nm params cbody' ccont
                cbody' = cBindMany cloc tk [(x,emt')]
-               emt'   = cEmit cloc a e'
+               emt'   = cEmit cloc e'
                e'     = insertEMutVars locals e
          ; rewrite comp'
          }
@@ -231,8 +231,8 @@ take_emit_step :: DynFlags -> Comp -> RwM Comp
 take_emit_step _fgs comp
     | Repeat nfo bm <- unComp comp
     , BindMany tk [(x,emt)] <- unComp bm
-    , Take1 ain _b <- unComp tk
-    , Emit _a e    <- unComp emt
+    , Take1 ain <- unComp tk
+    , Emit e    <- unComp emt
     = do { let xty  = ain
                ety  = ctExp e
                eloc = expLoc e
@@ -374,11 +374,11 @@ no_lut_inside x
 if_return_step :: DynFlags -> Comp -> RwM Comp
 if_return_step _dflags comp
   | Branch eguard c1 c2 <- unComp comp
-  , Return a b   f1 e1  <- unComp c1
-  , Return _a _b _f2 e2 <- unComp c2
+  , Return f1 e1  <- unComp c1
+  , Return _f2 e2 <- unComp c2
   -- , f1 == f2
   , let cloc = compLoc comp
-  = rewrite $ cReturn cloc a b f1 $
+  = rewrite $ cReturn cloc f1 $
               eIf cloc eguard e1 e2
   | otherwise
   = return comp
@@ -518,14 +518,14 @@ purify_step _fgs comp =
  do -- rwMIO $ putStrLn "purify_step, comp = "
     -- rwMIO $ print (ppComp comp)
     case isMultiLet_maybe (unComp comp) of
-      Just (binds, Return a b fi e) ->
-        rewrite $ cReturn cloc a b fi (mkMultiLetExp (reverse binds) e)
+      Just (binds, Return fi e) ->
+        rewrite $ cReturn cloc fi (mkMultiLetExp (reverse binds) e)
 
-      Just (binds, Emit a e) ->
-        rewrite $ cEmit cloc a (mkMultiLetExp (reverse binds) e)
+      Just (binds, Emit e) ->
+        rewrite $ cEmit cloc (mkMultiLetExp (reverse binds) e)
 
-      Just (binds, Emits a e) ->
-        rewrite $ cEmits cloc a (mkMultiLetExp (reverse binds) e)
+      Just (binds, Emits e) ->
+        rewrite $ cEmits cloc (mkMultiLetExp (reverse binds) e)
 
       _otherwise ->
         return comp
@@ -539,14 +539,14 @@ purify_letref_step _fgs comp =
  do -- rwMIO $ putStrLn "purify_step, comp = "
     -- rwMIO $ print (ppComp comp)
     case isMultiLetRef_maybe (unComp comp) of
-      Just (binds, Return a b fi e) ->
-        rewrite $ cReturn cloc a b fi (mkMultiLetRefExp (reverse binds) e)
+      Just (binds, Return fi e) ->
+        rewrite $ cReturn cloc fi (mkMultiLetRefExp (reverse binds) e)
 
-      Just (binds, Emit a e) ->
-        rewrite $ cEmit cloc a (mkMultiLetRefExp (reverse binds) e)
+      Just (binds, Emit e) ->
+        rewrite $ cEmit cloc (mkMultiLetRefExp (reverse binds) e)
 
-      Just (binds, Emits a e) ->
-        rewrite $ cEmits cloc a (mkMultiLetRefExp (reverse binds) e)
+      Just (binds, Emits e) ->
+        rewrite $ cEmits cloc (mkMultiLetRefExp (reverse binds) e)
 
       _otherwise ->
         return comp
@@ -612,7 +612,7 @@ letfunc_step :: DynFlags -> Comp -> RwM Comp
 --
 letfunc_step _fgs comp =
   case unComp comp of
-    LetFunC nm params (MkComp (Return a b _fi e) _ ()) cont
+    LetFunC nm params (MkComp (Return _fi e) _ ()) cont
        | Just params' <- mapM from_simpl_call_param params
        -> do { let fun_ty :: Ty
                    fun_ty = TArrow (map nameTyp params') (ctExp e)
@@ -628,7 +628,7 @@ letfunc_step _fgs comp =
                      | uniqId f == uniqId f'
                      = let es'  = map unCAExp es
                            call = eCall xloc f es'
-                       in rewrite $ cReturn xloc a b AutoInline call
+                       in rewrite $ cReturn xloc AutoInline call
                    replace_call other = return other
 
                    purify_calls :: Comp -> RwM Comp
@@ -717,30 +717,30 @@ isMultiLet_maybe = go []
   where
     go acc (LetE x fi e c) = go ((x,e,fi):acc) (unComp c)
 
-    go [] (Return _ _ _ _) = Nothing
-    go [] (Emit _ _)       = Nothing
-    go [] (Emits _ _)      = Nothing
+    go [] (Return {}) = Nothing
+    go [] (Emit {})   = Nothing
+    go [] (Emits {})  = Nothing
 
     -- We must have some accumulated bindings!
-    go acc (Return a b fi e) = Just (acc, Return a b fi e)
-    go acc (Emit a e)        = Just (acc, Emit a e)
-    go acc (Emits a e)       = Just (acc, Emits a e)
-    go _   _                 = Nothing
+    go acc c@(Return {}) = Just (acc,c)
+    go acc c@(Emit {})   = Just (acc,c)
+    go acc c@(Emits {})  = Just (acc,c)
+    go _   _             = Nothing
 
 isMultiLetRef_maybe :: Comp0 -> Maybe ([(GName Ty, Maybe Exp)], Comp0)
 isMultiLetRef_maybe = go []
   where
     go acc (LetERef x e c) = go ((x,e):acc) (unComp c)
 
-    go [] (Return _ _ _ _) = Nothing
-    go [] (Emit _ _)       = Nothing
-    go [] (Emits _ _)      = Nothing
+    go [] (Return {}) = Nothing
+    go [] (Emit {})   = Nothing
+    go [] (Emits {})  = Nothing
 
     -- We must have some accumulated bindings!
-    go acc (Return a b fi e) = Just (acc, Return a b fi e)
-    go acc (Emit a e)        = Just (acc, Emit a e)
-    go acc (Emits a e)       = Just (acc, Emits a e)
-    go _   _                 = Nothing
+    go acc c@(Return {}) = Just (acc,c)
+    go acc c@(Emit {})   = Just (acc,c)
+    go acc c@(Emits {})  = Just (acc,c)
+    go _   _             = Nothing
 
 -- > for cnt in [estart, ebound] { return ebody }
 -- > ~~~>
@@ -748,8 +748,8 @@ isMultiLetRef_maybe = go []
 elim_times_step :: DynFlags -> Comp -> RwM Comp
 elim_times_step _fgs comp =
   case unComp comp of
-    Times ui estart ebound cnt (MkComp (Return a b _ ebody) _cloc ()) ->
-      rewrite $ cReturn cloc a b AutoInline
+    Times ui estart ebound cnt (MkComp (Return _ ebody) _cloc ()) ->
+      rewrite $ cReturn cloc AutoInline
                   (eFor cloc ui cnt estart ebound ebody)
 
     _ -> return comp

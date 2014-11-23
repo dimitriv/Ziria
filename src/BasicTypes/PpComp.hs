@@ -175,13 +175,13 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
          ppComp c2
     Call f eargs ->
       ppName f <+> parens (ppEs ppr comma eargs)
-    Emit _ e
+    Emit e
       | ignoreexp -> text "emit ..."
       | otherwise -> text "emit" <+> ppr e
-    Emits _ e
+    Emits e
       | ignoreexp -> text "emits ..."
       | otherwise -> text "emits" <+> ppr e
-    Return _ _ _ e
+    Return _ e
       | ignoreexp -> text "return ..."
       | otherwise -> text "return" <+> ppr e
     Interleave c1 c2 ->
@@ -190,9 +190,9 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
       text "if" <+> ppr e $$
       text "then" <+> ppComp c1 $$
       text "else" <+> ppComp c2
-    Take1 _ _ ->
+    Take1 {} ->
       text "take"
-    Take _ _ n ->
+    Take _ n ->
       text "takes" <+> int n
     Until e c ->
       text "until" <+> parens (ppr e) <+> ppComp c

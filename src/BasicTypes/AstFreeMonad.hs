@@ -528,30 +528,24 @@ unFree loc = liftM fromJust . go
       return $ Just $ cBindMany loc c' [(nm, k')]
     go (FTake1 k) = do
       a  <- freshTy "a"
-      b  <- freshTy "b"
       k' <- go k
-      return $ cTake1 loc a b `mSeq` k'
+      return $ cTake1 loc a `mSeq` k'
     go (FTake n k) = do
       a  <- freshTy "a"
-      b  <- freshTy "b"
       k' <- go k
-      return $ cTake loc a b n `mSeq` k'
+      return $ cTake loc a n `mSeq` k'
     go (FEmit e k) = do
       e' <- unEFree loc e
-      a  <- freshTy "a"
       k' <- go k
-      return $ cEmit loc a e' `mSeq` k'
+      return $ cEmit loc e' `mSeq` k'
     go (FEmits e k) = do
       e' <- unEFree loc e
-      a  <- freshTy "a"
       k' <- go k
-      return $ cEmits loc a e' `mSeq` k'
+      return $ cEmits loc e' `mSeq` k'
     go (FReturn fi e k) = do
       e' <- unEFree loc e
-      a  <- freshTy "a"
-      b  <- freshTy "b"
       k' <- go k
-      return $ cReturn loc a b fi e' `mSeq` k'
+      return $ cReturn loc fi e' `mSeq` k'
     go (FBranch e c1 c2 k) = do
       e'       <- unEFree loc e
       Just c1' <- go c1

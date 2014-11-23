@@ -82,14 +82,14 @@ runAutoLUT dflags _ c = autolutC c
         go (Call n es) =
             Call n <$> mapM autolutCallArg es
 
-        go (Emit t e) =
-            Emit t <$> autolutE e
+        go (Emit e) =
+            Emit <$> autolutE e
 
-        go (Emits t e) =
-            Emits t <$> autolutE e
+        go (Emits e) =
+            Emits <$> autolutE e
 
-        go (Return t1 t2 fi e) =
-            Return t1 t2 fi <$> autolutE e
+        go (Return fi e) =
+            Return fi <$> autolutE e
 
         go (Interleave c1 c2) =
             Interleave <$> autolutC c1 <*> autolutC c2
@@ -97,11 +97,11 @@ runAutoLUT dflags _ c = autolutC c
         go (Branch e c1 c2) =
             Branch <$> autolutE e <*> autolutC c1 <*> autolutC c2
 
-        go (Take1 t1 t2 ) =
-            pure (Take1 t1 t2)
+        go (Take1 t1) =
+            pure (Take1 t1)
 
-        go (Take t1 t2 n) =
-            pure (Take t1 t2 n)
+        go (Take t1 n) =
+            pure (Take t1 n)
 
         go (Until e c) =
             Until <$> autolutE e <*> autolutC c
