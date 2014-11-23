@@ -159,7 +159,6 @@ import PpComp
 import PpExpr
 import qualified GenSym as GS
 import CgHeader
-import CtComp (ctComp)
 
 instance IfThenElse Bool a where
     ifThenElse True  th _  = th
@@ -836,17 +835,6 @@ getTyPutGetInfo ty = (buf_typ ty, buf_siz ty)
                 -> error $ "Code generation does not yet support buffers for type:" ++ show otherty
 
 
-getGetLen :: Comp -> (Int, Int)
-getGetLen c =
-  let (tya, tyb) = case ctComp c of
-                     CTComp tv ta tb -> (ta, tb)
-                     CTTrans   ta tb -> (ta, tb)
-                     _               -> (TUnit, TUnit) -- TODO: Really? should we panic instead?
-  in
-  let buftyp ty = case ty of
-                       (TArray (Literal n) _) -> n
-                       _ -> 1
-  in (buftyp tya, buftyp tyb)
 
 
 cgTIntName :: BitWidth -> String

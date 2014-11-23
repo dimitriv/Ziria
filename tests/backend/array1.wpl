@@ -2,7 +2,7 @@ fun comp stc() {
 var x:arr[2] int;
 var y:arr[4] int;
 
-seq{
+seq {
 --   (a : int) <- take;
 --   (b : int) <- take;
    a <- take;

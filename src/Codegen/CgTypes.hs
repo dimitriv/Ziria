@@ -197,6 +197,7 @@ tySizeOf (TStruct sn _flds)
        ; szs  <- mapM (tySizeOf . snd) (struct_flds sdef)
        ; return (sequence szs >>= (return . sum)) }
 
+tySizeOf TVoid  = return $ Just 0
 tySizeOf _other = return Nothing
 
 tySizeOfCg :: Ty -> Cg Int

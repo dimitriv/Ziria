@@ -34,7 +34,7 @@ import qualified Data.Set as S
 import AstComp
 import AstExpr
 import CtComp (ctComp)
-import Lint (lint)
+import Tc ( tc )
 import Outputable
 import Rename
 import TcMonad
@@ -48,7 +48,7 @@ tyCheckProg :: SrcProg -> TcM Prog
 tyCheckProg prog_src = do
   prog_ren <- renProg prog_src
   -- liftIO $ putStrLn $ "Renamed: " ++ show prog_ren
-  prog_tc  <- lint prog_ren
+  prog_tc  <- tc prog_ren
   prog_def <- defaultProg prog_tc
   void $ checkUnresolved (progComp prog_def)
   return prog_def
@@ -62,10 +62,10 @@ envOfDecls = mkEnv . map (\(nm, _) -> (name nm, nm))
 -------------------------------------------------------------------------------}
 
 tyCheckComp :: SrcComp -> TcM Comp
-tyCheckComp = renComp >=> lint
+tyCheckComp = renComp >=> tc
 
 tyCheckExpr :: SrcExp -> TcM Exp
-tyCheckExpr = renExp >=> lint
+tyCheckExpr = renExp >=> tc
 
 {-------------------------------------------------------------------------------
   Auxiliary: check for unresolved type variables

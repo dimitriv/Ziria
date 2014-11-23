@@ -71,7 +71,7 @@ import AstExpr
 import AstUnlabelled
 import CtComp (ctComp)
 import CtExpr (ctExp)
-import Lint (lint)
+import Tc ( tc )
 import Rebindables
 import TcMonad
 import TcUnify (unify)
@@ -395,7 +395,7 @@ emitting c ty = FAnnot c Nothing Nothing (Just ty) (FPure ())
 -- See remark for `unFreeComp` about independent type checking.
 unFreeExp :: GS.Sym -> FreeExp () -> IO Exp
 unFreeExp sym fexp = do
-    result <- runTcM (lint =<< unEFree Nothing fexp)
+    result <- runTcM (tc =<< unEFree Nothing fexp)
                      (mkTyDefEnv [])
                      (mkEnv [])
                      (mkCEnv [])
@@ -425,7 +425,7 @@ unFreeExp sym fexp = do
 -- function.)
 unFreeComp :: GS.Sym -> FreeComp () -> IO Comp
 unFreeComp sym fcomp = do
-    result <- runTcM (lint =<< unFree Nothing fcomp)
+    result <- runTcM (tc =<< unFree Nothing fcomp)
                      (mkTyDefEnv [])
                      (mkEnv [])
                      (mkCEnv [])

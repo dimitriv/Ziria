@@ -124,8 +124,9 @@ codeGenCompilerGlobals tid tickHdl procHdl mtv ta tb = do
 
 
 codeGenThread :: DynFlags
-              -> String                     -- thread id
-              -> Comp                -- computation to be compiled
+              -> String  -- thread id
+              -> Comp    -- computation (split) to be compiled
+                         -- already including the right read/write buffers
               -> Cg ()
 codeGenThread dflags tid c = do
     (maybe_tv, ta, tb) <- checkCompType (ctComp c)

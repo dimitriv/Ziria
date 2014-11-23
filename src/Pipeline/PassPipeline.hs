@@ -33,7 +33,7 @@ import Control.Monad.State
 import AstComp
 import AstExpr
 import AstUnlabelled
-import CtComp (ctComp)
+import CtComp ( ctParMid )
 import PpComp ()
 
 -- | Find the CompContext of a computation
@@ -109,8 +109,7 @@ insertBufs :: [Comp] -> [Int] -> ([Ty], [Comp])
 insertBufs [c1] _bids = ([],[c1])
 insertBufs (c1:c2:cs) (bid:bids)
   = let buf_m   = show bid
-        c1cty   = ctComp c1
-        c1yldty = yldTyOfCTy c1cty
+        c1yldty = ctParMid c1 c2
         pnfo    = mkParInfo MaybePipeline -- why not 'never'?
 
         c1loc   = compLoc c1

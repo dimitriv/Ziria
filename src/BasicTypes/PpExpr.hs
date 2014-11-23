@@ -194,6 +194,7 @@ instance Outputable Ty where
     TBuff (IntBuf t)       -> parens $ text "INTBUF" <> brackets (ppr t)
     TBuff (ExtBuf bt)      -> parens $ text "EXTBUF" <> brackets (text "base=" <> ppr bt)
     TStruct tyname _       -> text tyname -- NOTE: If we change this to be the full type the instance for EStruct breaks
+    TVoid                  -> text "void"
 
 instance Outputable ty => Outputable (GStructDef ty) where
   -- TODO: Perhaps it would make more sense to show the entire thing

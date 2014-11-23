@@ -19,7 +19,7 @@
 -- | Typecheck (and sanity check) core (rather than source)
 {-# OPTIONS_GHC -Wall -Wwarn #-}
 {-# LANGUAGE FlexibleInstances #-}
-module Lint (lint) where
+module Tc ( tc ) where
 
 import Control.Applicative
 import Control.Monad
@@ -37,24 +37,24 @@ import Utils
   Top-level API
 -------------------------------------------------------------------------------}
 
-class Zonk a => Lint a where
-  lint :: a -> TcM a
+class Zonk a => Tc a where
+  tc :: a -> TcM a
 
-instance Lint (GProg CTy Ty a b) where
-  lint prog = lintProg prog >> zonk prog
+instance Tc (GProg CTy Ty a b) where
+  tc prog = tcProg prog >> zonk prog
 
-instance Lint (GComp CTy Ty a b) where
-  lint comp = lintComp comp >> zonk comp
+instance Tc (GComp CTy Ty a b) where
+  tc comp = tcComp comp >> zonk comp
 
-instance Lint (GExp Ty a) where
-  lint expr = lintExp expr >> zonk expr
+instance Tc (GExp Ty a) where
+  tc expr = tcExp expr >> zonk expr
 
 {-------------------------------------------------------------------------------
-  The linter proper
+  The tcer proper
 -------------------------------------------------------------------------------}
 
-lintVal :: Val -> TcM Ty
-lintVal = go
+tcVal :: Val -> TcM Ty
+tcVal = go
   where
     go (VBit _)    = return TBit
     go (VInt _)    = TInt <$> freshBitWidth "bw"
@@ -68,8 +68,8 @@ lintVal = go
 -- TODO: The case for Neg is dubious: we should not check isScalarTy until all
 -- unification constraints have been applied (where some of those constraints
 -- might not be known at this point). See also comments for 'isScalarTy'.
-lintUnOp :: Maybe SourcePos -> GUnOp Ty -> Ty -> TcM Ty
-lintUnOp loc uop = zonk >=> go uop
+tcUnOp :: Maybe SourcePos -> GUnOp Ty -> Ty -> TcM Ty
+tcUnOp loc uop = zonk >=> go uop
   where
     go Neg argTy = do
       let msg = text "Expected scalar type but got" <+> ppr argTy
@@ -101,8 +101,8 @@ lintUnOp loc uop = zonk >=> go uop
     go NatExp _argTy =
       error "typeCheckExpr: NatExp not supported!"
 
-lintBinOp :: Maybe SourcePos -> BinOp -> Ty -> Ty -> TcM Ty
-lintBinOp loc bop = \argTy1 argTy2 -> do
+tcBinOp :: Maybe SourcePos -> BinOp -> Ty -> Ty -> TcM Ty
+tcBinOp loc bop = \argTy1 argTy2 -> do
     argTy1' <- zonk argTy1
     argTy2' <- zonk argTy2
     case () of
@@ -112,7 +112,7 @@ lintBinOp loc bop = \argTy1 argTy2 -> do
       () | isEqualityBinOp bop -> goEquality argTy1' argTy2'
       () | isRelBinOp      bop -> goRel      argTy1' argTy2'
       () | isBoolBinOp     bop -> goBool     argTy1' argTy2'
-      () -> error $ "BUG: Forgot operator " ++ show bop ++ " in lintBinOp!"
+      () -> error $ "BUG: Forgot operator " ++ show bop ++ " in tcBinOp!"
   where
     -- Add / Sub / Mult / Div / Rem / Expon
     goArith argTy1 argTy2 = do
@@ -154,40 +154,40 @@ lintBinOp loc bop = \argTy1 argTy2 -> do
 
     mismatch = text "Binary operator type mismatch:" <+> ppr bop
 
-lintExp :: GExp Ty a -> TcM Ty
-lintExp expr@(MkExp exp0 loc _) =
+tcExp :: GExp Ty a -> TcM Ty
+tcExp expr@(MkExp exp0 loc _) =
     pushErrCtx (ExprErrCtx expr) $ go exp0
   where
     go :: GExp0 Ty a -> TcM Ty
     go (EVal ty val) = do
-      ty' <- lintVal val
+      ty' <- tcVal val
       unify loc ty ty'
       return ty
     go (EValArr _ []) = do
       raiseErrNoVarCtx loc $ text "Empty array constant"
     go (EValArr ty vals) = do
-      tys <- mapM lintVal vals
+      tys <- mapM tcVal vals
       unifyAll loc tys
       void $ unifyTArray loc (Check (Literal (length vals))) (Check (head tys)) ty
       return ty
     go (EVar x) =
       return (nameTyp x)
     go (EUnOp uop e) = do
-      ty <- lintExp e
-      lintUnOp loc uop ty
+      ty <- tcExp e
+      tcUnOp loc uop ty
     go (EBinOp bop e1 e2) = do
-      ty1 <- lintExp e1
-      ty2 <- lintExp e2
-      lintBinOp loc bop ty1 ty2
+      ty1 <- tcExp e1
+      ty2 <- tcExp e2
+      tcBinOp loc bop ty1 ty2
     go (EAssign e1 e2) = do
-      ty1 <- lintExp e1
-      ty2 <- lintExp e2
+      ty1 <- tcExp e1
+      ty2 <- tcExp e2
       unify loc ty1 ty2
       return TUnit
     go (EArrWrite arr idx li rhs) = do
-      arrTy <- lintExp arr
-      idxTy <- lintExp idx
-      rhsTy <- lintExp rhs
+      arrTy <- tcExp arr
+      idxTy <- tcExp idx
+      rhsTy <- tcExp rhs
       unifyTInt' loc idxTy
       (_n, a) <- unifyTArray loc Infer Infer arrTy
       case li of
@@ -197,8 +197,8 @@ lintExp expr@(MkExp exp0 loc _) =
                          text "Unexpected meta-variable" <+> text (show x)
       return TUnit
     go (EArrRead arr idx li) = do
-      arrTy <- lintExp arr
-      idxTy <- lintExp idx
+      arrTy <- tcExp arr
+      idxTy <- tcExp idx
       unifyTInt' loc idxTy
       (_n, a) <- unifyTArray loc Infer Infer arrTy
       case li of
@@ -209,8 +209,8 @@ lintExp expr@(MkExp exp0 loc _) =
     go (EIter ix x earr ebody) = do
       let ixTy = nameTyp ix
       let xTy  = nameTyp x
-      earrTy  <- lintExp earr
-      ebodyTy <- lintExp ebody
+      earrTy  <- tcExp earr
+      ebodyTy <- tcExp ebody
       void $ unifyTArray loc Infer (Check xTy) earrTy
       unifyTInt' loc ixTy
       unify loc ebodyTy TUnit
@@ -220,62 +220,62 @@ lintExp expr@(MkExp exp0 loc _) =
     go (EFor _ui x estart elen ebody) = do
       let xTy = nameTyp x
       unifyTInt' loc xTy
-      estartTy <- lintExp estart
-      elenTy   <- lintExp elen
-      ebodyTy  <- lintExp ebody
+      estartTy <- tcExp estart
+      elenTy   <- tcExp elen
+      ebodyTy  <- tcExp ebody
       unifyAll loc [xTy, estartTy, elenTy]
       unify loc ebodyTy TUnit
       -- If type of x is not known after typecheck the body, default to tint32
       _ <- defaultTy loc xTy tint32
       return TUnit
     go (EWhile econd ebody) = do
-      econdTy <- lintExp econd
-      ebodyTy <- lintExp ebody
+      econdTy <- tcExp econd
+      ebodyTy <- tcExp ebody
       unify loc econdTy TBool
       unify loc ebodyTy TUnit
       return TUnit
     go (ELet x _fi e1 e2) = do
       let xTy = nameTyp x
-      e1Ty <- lintExp e1
+      e1Ty <- tcExp e1
       unify loc xTy e1Ty
-      lintExp e2
+      tcExp e2
     go (ELetRef x (Just e1) e2) = do
       let xTy = nameTyp x
-      e1Ty <- lintExp e1
+      e1Ty <- tcExp e1
       unify loc xTy e1Ty
-      lintExp e2
+      tcExp e2
     go (ELetRef _x Nothing e2) =
-      lintExp e2
+      tcExp e2
     go (ESeq e1 e2) = do
       -- TODO: We might want to insist that e1 has type TUnit
-      void $ lintExp e1
-      lintExp e2
+      void $ tcExp e1
+      tcExp e2
     go (ECall f args) = do
       -- The types of functions are always known before we call them
       -- (otherwise would not be able to call 'instantiateCall' here)
       fTy    <- instantiateCall =<< zonk (nameTyp f)
-      actual <- mapM lintExp args
+      actual <- mapM tcExp args
       res    <- freshTy "b"
       unify loc fTy $ TArrow actual res
       return res
     go (EIf be e1 e2) = do
-      beTy <- lintExp be
-      e1Ty <- lintExp e1
-      e2Ty <- lintExp e2
+      beTy <- tcExp be
+      e1Ty <- tcExp e1
+      e2Ty <- tcExp e2
       unify loc beTy TBool
       unify loc e1Ty e2Ty
       return e1Ty
     go (EPrint _ e) = do
-      void $ lintExp e
+      void $ tcExp e
       return TUnit
     go (EError t _) =
       return t
     go (ELUT _ e) =
       -- TODO: Should we check anything about the types in the ranges?
-      lintExp e
+      tcExp e
     go (EBPerm earr eperm) = do
-      earrTy  <- lintExp earr
-      epermTy <- lintExp eperm
+      earrTy  <- tcExp earr
+      epermTy <- tcExp eperm
       (n, _)  <- unifyTArray loc Infer (Check TBit) earrTy
       ti <- TInt <$> freshBitWidth "bw"
       void $ unifyTArray loc (Check n) (Check ti) epermTy
@@ -286,7 +286,7 @@ lintExp expr@(MkExp exp0 loc _) =
     go (EStruct t _) = do
       panic $ text "EStruct with non-struct type" <+> ppr t
     go (EProj e fld) = do
-      eTy <- zonk =<< lintExp e
+      eTy <- zonk =<< tcExp e
       -- Since structs can share field names, we cannot infer a type here
       case eTy of
         TStruct nm flds ->
@@ -315,143 +315,86 @@ lintExp expr@(MkExp exp0 loc _) =
             text "Unexpected field" <+> text (show fld')
           , text "Expected field" <+> text (show fld)
           ]
-      fldTy' <- lintExp fldExp
+      fldTy' <- tcExp fldExp
       unify (expLoc expr) fldTy fldTy'
       matchStructFields tys exps
 
-lintComp :: GComp CTy Ty a b -> TcM CTy
-lintComp comp@(MkComp comp0 loc _) =
+tcComp :: GComp CTy Ty a b -> TcM CTy
+tcComp comp@(MkComp comp0 loc _) =
     pushErrCtx (CompErrCtx comp) $ go comp0
   where
     go :: GComp0 CTy Ty a b -> TcM CTy
     go (Var c) =
       return (nameTyp c)
-    go (BindMany c []) =
-      lintComp c
-    go (BindMany c ((x, c'):cs)) = do
-      -- Order here matters. See Note [Type checking order]
-      cty1 <- lintComp c
-      (_, a, b) <- unifyComp loc (Check (nameTyp x)) Infer Infer cty1
-      cty2 <- go (BindMany c' cs)
-      void $ unifyCompOrTrans loc (Check a) (Check b) cty2
-      return cty2
-    go (Seq c1 c2) = do
-      cty1 <- lintComp c1
-      -- TODO: We might want to insist that c1 returns unit here
-      --                         vvvvv
-      (_, a, b) <- unifyComp loc Infer Infer Infer cty1
-      cty2 <- lintComp c2
-      void $ unifyCompOrTrans loc (Check a) (Check b) cty2
-      return cty2
-    go (Par _pi c1 c2) = do
-      cty1 <- lintComp c1
-      cty2 <- lintComp c2
-      (mu1, a, b) <- unifyCompOrTrans loc Infer Infer cty1
-      case mu1 of
-        Just u -> do -- c1 is a computer
-          (_, c) <- unifyTrans loc (Check b) Infer cty2
-          return $ CTComp u a c
-        Nothing -> do -- c1 is a transformer
-          (mu2, _, c) <- unifyCompOrTrans loc (Check b) Infer cty2
-          case mu2 of
-            Just u -> -- c2 is a computer
-              return $ CTComp u a c
-            Nothing ->
-              return $ CTTrans a c
+
     go (Let x c1 c2) = do
-      cty1 <- lintComp c1
+      cty1 <- tcComp c1
       -- Important to check c1 before comparing to the type of x, because
       -- that might be a type variable.
       (mu, a, b) <- unifyCompOrTrans loc Infer Infer cty1
       case mu of
         Nothing -> void $ unifyTrans loc (Check a) (Check b) (nameTyp x)
         Just u  -> void $ unifyComp loc (Check u) (Check a) (Check b) (nameTyp x)
-      lintComp c2
+      tcComp c2
     go (LetE x _fi e c) = do
-      ety <- lintExp e
+      ety <- tcExp e
       unify loc (nameTyp x) ety
-      lintComp c
+      tcComp c
     go (LetERef x (Just e) c) = do
-      ety <- lintExp e
+      ety <- tcExp e
       unify loc (nameTyp x) ety
-      lintComp c
+      tcComp c
     go (LetERef _x Nothing c) = do
-      lintComp c
+      tcComp c
     go (LetHeader fun c) = do
-      void $ lintFun fun
-      lintComp c
+      void $ tcFun fun
+      tcComp c
     go (LetFunC f args body rhs) = do
-      res <- lintComp body
-      unify loc (nameTyp f) $ CTArrow (map nameTyp args) res
-      lintComp rhs
+      res <- tcComp body
+      void $ ctyJoin loc (nameTyp f) $ CTArrow (map nameTyp args) res
+      tcComp rhs
     go (LetStruct _ c) =
-      lintComp c
+      tcComp c
     go (Call f args) = do
       -- TODO: Why don't we need to instantiate here? Don't we support
       -- polymorphism in comp functions?
       fTy    <- zonk (nameTyp f)
       actual <- forM args $ \arg -> case arg of
-                  CAExp  e -> CAExp  <$> lintExp e
-                  CAComp c -> CAComp <$> lintComp c
+                  CAExp  e -> CAExp  <$> tcExp e
+                  CAComp c -> CAComp <$> tcComp c
       res    <- freshCTy "b"
-      unify loc fTy $ CTArrow actual res
+      void $ ctyJoin loc fTy $ CTArrow actual res
       return res
-    go (Emit a e) = do
-      b <- lintExp e
-      return $ CTComp TUnit a b
-    go (Emits a e) = do
-      ety <- lintExp e
-      (_n, b) <- unifyTArray loc Infer Infer ety
-      return $ CTComp TUnit a b
-    go (Return a b _fi e) = do
-      u <- lintExp e
-      return $ CTComp u a b
-    go (Interleave c1 c2) = do
-      cty1 <- lintComp c1
-      cty2 <- lintComp c2
-      (a, b) <- unifyTrans loc Infer Infer cty1
-      void $ unifyTrans loc (Check a) (Check b) cty2
-      return cty1
-    go (Branch e c1 c2) = do
-      ety  <- lintExp e
-      cty1 <- lintComp c1
-      cty2 <- lintComp c2
-      unify loc ety TBool
-      unify loc cty1 cty2
-      return cty1
-    go (Take1 a b) = do
-      return $ CTComp a a b
-    go (Take a b n) = do
-      return $ CTComp (TArray (Literal n) a) a b
+
     go (Until e c) = do
-      ety <- lintExp e
-      cty <- lintComp c
+      ety <- tcExp e
+      cty <- tcComp c
       unify loc ety TBool
       void $ unifyComp loc Infer Infer Infer cty
       return cty
     go (While e c) = do
-      ety <- lintExp e
-      cty <- lintComp c
+      ety <- tcExp e
+      cty <- tcComp c
       unify loc ety TBool
       void $ unifyComp loc Infer Infer Infer cty
       return cty
     go (Times _ui estart elen x c) = do
-      estartTy <- lintExp estart
-      elenTy   <- lintExp elen
-      cty      <- lintComp c
+      estartTy <- tcExp estart
+      elenTy   <- tcExp elen
+      cty      <- tcComp c
       void $ unifyTInt loc Infer (nameTyp x)
       unifyAll loc [estartTy, elenTy, nameTyp x]
       void $ unifyComp loc Infer Infer Infer cty
       return cty
     go (Repeat _ann c) = do
-      cty <- lintComp c
+      cty <- tcComp c
       -- The official typing rule says that the computation must return (),
       -- but we relax it here so that it's consistent with the typing of
       -- > c ; c ; c
       (_, a, b) <- unifyComp loc Infer Infer Infer cty
       return $ CTTrans a b
     go (VectComp _ c) =
-      lintComp c
+      tcComp c
     go (Map _ f) = do
       a <- freshTy "a"
       b <- freshTy "b"
@@ -472,24 +415,87 @@ lintComp comp@(MkComp comp0 loc _) =
     go (WriteInternal a _bid) =
       return $ CTTrans a (TBuff (IntBuf a))
     go (Standalone c) =
-      lintComp c
+      tcComp c
     go (Mitigate a n1 n2) =
-      lintMitigator loc a n1 n2
+      tcMitigator loc a n1 n2
 
-lintFun :: GFun Ty a -> TcM Ty
-lintFun (MkFun fun0 loc _) = go fun0
+    -- DV: Typing those in more restrictive ways 
+    go (Emit _a e) = do
+      b <- tcExp e
+      return $ CTComp TUnit TVoid b                  -- DV
+    go (Emits _a e) = do
+      ety <- tcExp e
+      (_n, b) <- unifyTArray loc Infer Infer ety
+      return $ CTComp TUnit TVoid b                  -- DV
+    go (Return _a _b _fi e) = do
+      u <- tcExp e
+      return $ CTComp u TVoid TVoid                  -- DV
+    go (Take1 a _b) = do 
+      return $ CTComp a a TVoid                      -- DV 
+    go (Take a _b n) = do
+      return $ CTComp (TArray (Literal n) a) a TVoid -- DV 
+
+    -- DV: Combining the types of those here in less restrictive ways
+
+    go (BindMany c []) =
+      tcComp c
+    go (BindMany c ((x, c'):cs)) = do
+      -- Order here matters. See Note [Type checking order]
+      cty1 <- tcComp c
+      (_, a, b) <- unifyComp loc (Check (nameTyp x)) Infer Infer cty1
+      cty2 <- go (BindMany c' cs)
+      unifyCompOrTrans_CTy loc (Check a) (Check b) cty2
+    go (Seq c1 c2) = do
+      cty1 <- tcComp c1
+      -- TODO: We might want to insist that c1 returns unit here
+      --                         vvvvv
+      (_, a, b) <- unifyComp loc Infer Infer Infer cty1
+      cty2 <- tcComp c2
+      unifyCompOrTrans_CTy loc (Check a) (Check b) cty2
+    go (Par _pi c1 c2) = do
+      cty1 <- tcComp c1
+      cty2 <- tcComp c2
+      (mu1, a, b) <- unifyCompOrTrans loc Infer Infer cty1
+      case mu1 of
+        Just u -> do -- c1 is a computer
+          (_, c) <- unifyTrans loc (Check b) Infer cty2
+          return $ CTComp u a c
+        Nothing -> do -- c1 is a transformer
+          (mu2, _, c) <- unifyCompOrTrans loc (Check b) Infer cty2
+          case mu2 of
+            Just u -> -- c2 is a computer
+              return $ CTComp u a c
+            Nothing ->
+              return $ CTTrans a c
+
+    go (Interleave c1 c2) = do
+      cty1 <- tcComp c1
+      cty2 <- tcComp c2
+      (a, b) <- unifyTrans loc Infer Infer cty1
+      unifyTrans_CTy loc (Check a) (Check b) cty2
+
+    go (Branch e c1 c2) = do
+      ety  <- tcExp e
+      cty1 <- tcComp c1
+      cty2 <- tcComp c2
+      unify loc ety TBool
+      ctyJoin loc cty1 cty2
+
+
+tcFun :: GFun Ty a -> TcM Ty
+tcFun (MkFun fun0 loc _) = go fun0
   where
     go :: GFun0 Ty a -> TcM Ty
     go (MkFunDefined f args body) = do
-      res <- lintExp body
+      res <- tcExp body
       unify loc (nameTyp f) $ TArrow (map nameTyp args) res
       return (nameTyp f)
     go (MkFunExternal f args res) = do
       unify loc (nameTyp f) $ TArrow (map nameTyp args) res
       return (nameTyp f)
 
-lintMitigator :: Maybe SourcePos -> Ty -> Int -> Int -> TcM CTy
-lintMitigator loc a n1 n2 = do
+tcMitigator :: Maybe SourcePos -> Ty -> Int -> Int -> TcM CTy
+tcMitigator loc a n1 n2 = do
     unless (n1 `divides` n2 || n2 `divides` n1) $
       raiseErrNoVarCtx loc $
              text "Invalid mitigator arguments"
@@ -500,8 +506,8 @@ lintMitigator loc a n1 n2 = do
     toArray 1 = a
     toArray n = TArray (Literal n) a
 
-lintProg :: GProg CTy Ty a b -> TcM CTy
-lintProg (MkProg comp) = lintComp comp
+tcProg :: GProg CTy Ty a b -> TcM CTy
+tcProg (MkProg comp) = tcComp comp
 
 {-------------------------------------------------------------------------------
   Auxiliary
@@ -530,7 +536,7 @@ n `divides` m = m `mod` n == 0
   EProj we do
 
   > go (EProj e fld) = do
-  >   eTy <- zonk =<< lintExp e
+  >   eTy <- zonk =<< tcExp e
   >   -- Since structs can share field names, we cannot infer a type here
   >   case eTy of
   >     TStruct nm flds -> ...

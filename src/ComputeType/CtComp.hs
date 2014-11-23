@@ -19,7 +19,7 @@
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE RecordWildCards #-}
 -- | Compute the type of computations
-module CtComp (ctComp) where
+module CtComp ( ctComp, ctParMid, ctDoneTyOfComp ) where
 
 import Text.PrettyPrint.HughesPJ
 
@@ -29,14 +29,15 @@ import CtCall
 import CtExpr (ctExp)
 import Outputable
 import Utils
+import Data.Maybe ( fromJust )
 
 ctComp :: GComp CTy Ty a b -> CTy
 ctComp MkComp{..} = ctComp0 unComp
 
 ctComp0 :: GComp0 CTy Ty a b -> CTy
 ctComp0 (Var nm)             = nameTyp nm
-ctComp0 (BindMany _ xcs)     = ctComp (snd (last xcs))
-ctComp0 (Seq _ c2)           = ctComp c2
+ctComp0 (BindMany c0 xcs)    = ctBind $ map ctComp (c0 : map snd xcs)
+ctComp0 (Seq c1 c2)          = ctBind $ map ctComp [c1,c2]
 ctComp0 (Par _ c1 c2)        = ctPar (ctComp c1) (ctComp c2)
 ctComp0 (Let _ _ c2)         = ctComp c2
 ctComp0 (LetE _ _ _ c)       = ctComp c
@@ -45,13 +46,13 @@ ctComp0 (LetHeader _ c)      = ctComp c
 ctComp0 (LetFunC _ _ _ c2)   = ctComp c2
 ctComp0 (LetStruct _ c)      = ctComp c
 ctComp0 (Call f xs)          = ctCall (nameTyp f) (map ctCallArg xs)
-ctComp0 (Emit a e)           = CTComp TUnit a (ctExp e)
-ctComp0 (Emits a e)          = ctEmits a (ctExp e)
-ctComp0 (Return a b _ e)     = CTComp (ctExp e) a b
+ctComp0 (Emit _a e)          = CTComp TUnit TVoid (ctExp e)
+ctComp0 (Emits _a e)         = ctEmits TVoid (ctExp e)
+ctComp0 (Return _a _b _ e)   = CTComp (ctExp e) TVoid TVoid
 ctComp0 (Interleave c1 _)    = ctComp c1
 ctComp0 (Branch _ c1 _)      = ctComp c1
-ctComp0 (Take1 a b)          = CTComp a a b
-ctComp0 (Take a b n)         = CTComp (TArray (Literal n) a) a b
+ctComp0 (Take1 a _b)         = CTComp a a TVoid
+ctComp0 (Take a _b n)        = CTComp (TArray (Literal n) a) a TVoid
 ctComp0 (Until _ c)          = ctComp c
 ctComp0 (While _ c)          = ctComp c
 ctComp0 (Times _ _ _ _ c)    = ctComp c
@@ -78,7 +79,23 @@ ctPar :: CTy -> CTy -> CTy
 ctPar (CTTrans  a _) (CTTrans  _ c) = CTTrans  a c
 ctPar (CTTrans  a _) (CTComp u _ c) = CTComp u a c
 ctPar (CTComp u a _) (CTTrans  _ c) = CTComp u a c
-ctPar t t' = panic $ text "ctPar: Unexpected" <+> ppr t <+> text "and" <+> ppr t'
+ctPar t t' = panic $ 
+             text "ctPar: Unexpected" <+> ppr t <+> text "and" <+> ppr t'
+
+ctBind :: [CTy] -> CTy 
+ctBind [] = panic $ text "ctBind: empty bind?"
+ctBind cts 
+  = case last cts of
+       CTComp v _ _ -> CTComp v ax bx
+       CTTrans _ _  -> CTTrans ax bx 
+       ct -> panic $ 
+             text "ctBind: Unexpected non-base computation type" <+> ppr ct
+  where ax = join_many $ map inTyOfCTy cts
+        bx = join_many $ map yldTyOfCTy cts
+        join_many [t] = t
+        join_many (t1:t2:ts) = join_many (ctJoin t1 t2 : ts)
+        join_many _ = panic $ text "join_many: empty list!"
+
 
 ctRepeat :: CTy -> CTy
 ctRepeat (CTComp _ a b) = CTTrans a b
@@ -97,3 +114,30 @@ ctMitigate a n1 n2 = CTTrans t1 t2
   where
     t1 = if n1 == 1 then a else TArray (Literal n1) a
     t2 = if n2 == 1 then a else TArray (Literal n2) a
+
+
+ctParMid :: Comp -> Comp -> Ty
+-- Give the type of the queue in the middle of a par
+ctParMid c1 c2 = ctJoin y1 i2
+  where cty1 = ctComp c1
+        cty2 = ctComp c2 
+        y1   = yldTyOfCTy cty1
+        i2   = inTyOfCTy cty2
+
+ctJoin :: Ty -> Ty -> Ty 
+-- Pre-condition: the two types are joinable
+ctJoin TVoid t = t
+ctJoin t TVoid = t
+ctJoin t t'   
+  | t == t' 
+  = t
+  | otherwise
+  = panic $ text "ctJoin: Incompatible types!" <+> ppr t <+> text "and" <+> ppr t'
+
+
+ctDoneTyOfComp :: Comp -> Ty 
+-- Pre-condition: the computer is an ST (C v) a b
+ctDoneTyOfComp comp
+  = fromJust $ doneTyOfCTy (ctComp comp)
+
+

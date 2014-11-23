@@ -751,6 +751,8 @@ tyFVs (TInterval _)       = mempty
 tyFVs (TArrow args res)   = mconcat (map tyFVs (res:args))
 tyFVs (TBuff (IntBuf ty)) = tyFVs ty
 tyFVs (TBuff (ExtBuf ty)) = tyFVs ty
+tyFVs TVoid               = mempty
+
 
 ctyFVs :: CTy -> TyVars
 ctyFVs (CTVar x)          = mempty { tyVarsCTy = S.singleton x }

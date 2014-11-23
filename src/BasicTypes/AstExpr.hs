@@ -168,6 +168,8 @@ data Ty where
   TArrow :: [Ty] -> Ty -> Ty
   TBuff  :: BufTy -> Ty
 
+  TVoid  :: Ty
+
   deriving (Generic, Typeable, Data, Eq)
 
 data NumExpr where
@@ -497,6 +499,8 @@ mapTyM f = go
                                 f $ TBuff (IntBuf bt')
     go (TBuff (ExtBuf bt)) = do bt' <- go bt
                                 f $ TBuff (ExtBuf bt')
+
+    go TVoid               = f $ TVoid 
 
 mapNameM :: Monad m => (t -> m t') -> GName t -> m (GName t')
 mapNameM onTyp MkName{..} = do
@@ -861,7 +865,7 @@ isScalarTy t =
     TArray {}    -> False
     TArrow {}    -> False
     TBuff {}     -> False
-
+    TVoid {}     -> False
 
 
 -- Does this type support arithmetic operations?

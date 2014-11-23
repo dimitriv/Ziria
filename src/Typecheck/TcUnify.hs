@@ -32,6 +32,13 @@ module TcUnify (
   , unifyComp
   , unifyTrans
   , unifyCompOrTrans
+
+  , unifyComp_CTy
+  , unifyTrans_CTy
+  , unifyCompOrTrans_CTy
+
+  , ctyJoin 
+
     -- * Defaulting
   , defaultTy
   , defaultComp
@@ -54,6 +61,8 @@ import Outputable
 import PpComp ()
 import PpExpr ()
 import TcMonad
+
+import Utils ( panicStr )
 
 {-------------------------------------------------------------------------------
   Public API
@@ -78,7 +87,7 @@ unifyMany p t1s t2s = mapM_ (\(t1,t2) -> unify p t1 t2) (zip t1s t2s)
   Unification errors (for internal use)
 -------------------------------------------------------------------------------}
 
-unifyErrGeneric :: Zonk a => Doc -> Maybe SourcePos -> a -> a -> TcM ()
+unifyErrGeneric :: Zonk a => Doc -> Maybe SourcePos -> a -> a -> TcM x
 unifyErrGeneric msg pos ty1 ty2 = do
     zty1 <- zonk ty1
     zty2 <- zonk ty2
@@ -87,10 +96,10 @@ unifyErrGeneric msg pos ty1 ty2 = do
            , text "Cannot unify" <+> ppr zty1 <+> text "with" <+> ppr zty2
            ]
 
-unifyErr :: Zonk a => Maybe SourcePos -> a -> a -> TcM ()
+unifyErr :: Zonk a => Maybe SourcePos -> a -> a -> TcM x
 unifyErr = unifyErrGeneric empty
 
-occCheckErr :: Zonk a => Maybe SourcePos -> a -> a -> TcM ()
+occCheckErr :: Zonk a => Maybe SourcePos -> a -> a -> TcM x
 occCheckErr = unifyErrGeneric (text "Occurs check error.")
 
 {-------------------------------------------------------------------------------
@@ -135,6 +144,10 @@ instance Unify Ty where
              ; go res res'
              }
 
+      go TVoid TVoid = return ()
+      go TVoid _b    = panicStr "Unifier cannot possibly meet TVoid!"
+      go _a TVoid    = panicStr "Unifier cannot possibly meet TVoid!" 
+
       go a b = unifyErr p a b
 
       goTyVar :: TyVar -> Ty -> TcM ()
@@ -146,9 +159,74 @@ instance Unify Ty where
                              Nothing  -> updTyEnv [(x, TVar y)]
                          }
       goTyVar x ty
-        | x `S.member` tyVarsOfTy ty = occCheckErr p (TVar x) ty
+        | x `S.member` tyVarsOfTy ty 
+        = occCheckErr p (TVar x) ty
+        | TVoid <- ty
+        = panicStr "Unifier cannot possibly meet TVoid!" 
         | otherwise                  = updTyEnv [(x, ty)]
 
+
+tyJoin :: Maybe SourcePos -> Ty -> Ty -> TcM Ty
+tyJoin _ TVoid ty  = return ty
+tyJoin _ ty TVoid  = return ty
+tyJoin loc ty1 ty2 = unify loc ty1 ty2 >> return ty1
+
+tyJoinWithHint :: Maybe SourcePos -> Hint Ty -> Ty -> TcM Ty
+tyJoinWithHint _loc Infer t     = return t
+tyJoinWithHint loc (Check t) t' = tyJoin loc t t'
+
+
+ctyJoin :: Maybe SourcePos -> CTy -> CTy -> TcM CTy 
+ctyJoin p = go 
+  where 
+      go :: GCTy Ty -> GCTy Ty -> TcM CTy
+      go (CTVar x) cty = do { tenv <- getCTyEnv
+                            ; case M.lookup x tenv of
+                                Just xty -> go xty cty
+                                Nothing  -> goTyVar x cty
+                            }
+      go cty (CTVar x) = go (CTVar x) cty
+
+      go (CTTrans  a b) (CTTrans   a' b') 
+        = do ax <- tyJoin p a a' 
+             bx <- tyJoin p b b' 
+             return $ CTTrans ax bx
+
+      go (CTComp v a b) (CTComp v' a' b')
+        = do ax <- tyJoin p a a' 
+             bx <- tyJoin p b b' 
+             unify p v v'
+             return $ CTComp v ax bx
+
+      go (CTArrow args res) (CTArrow args' res') 
+        | length args == length args'
+        = do argsx <- mapM (uncurry (callArgJoin p)) (zip args args')
+             resx  <- go res res'
+             return $ CTArrow argsx resx
+
+      go a b = unifyErr p a b
+
+      goTyVar :: CTyVar -> CTy -> TcM CTy
+      goTyVar x (CTVar y)
+        | x == y    = return (CTVar y)
+        | otherwise = do { tenv <- getCTyEnv
+                         ; case M.lookup y tenv of
+                             Just yty -> goTyVar x yty
+                             Nothing  -> do updCTyEnv [(x, CTVar y)]  
+                                            return (CTVar y)
+                         }
+      goTyVar x cty
+        | x `S.member` snd (tyVarsOfCTy cty) 
+        = occCheckErr p (CTVar x) cty
+        | otherwise                          
+        = updCTyEnv [(x, cty)] >> return cty
+
+callArgJoin :: Maybe SourcePos -> CallArg Ty CTy -> CallArg Ty CTy -> TcM (CallArg Ty CTy)
+callArgJoin p (CAExp ty) (CAExp ty')     = unify p ty ty' >> return (CAExp ty)
+callArgJoin p (CAComp cty) (CAComp cty') = ctyJoin p cty cty' >>= (return . CAComp)
+callArgJoin p a b = unifyErr p a b
+
+{- 
 instance Unify (GCTy Ty) where
   unify' p = go
     where
@@ -181,6 +259,9 @@ instance Unify (GCTy Ty) where
       goTyVar x cty
         | x `S.member` snd (tyVarsOfCTy cty) = occCheckErr p (CTVar x) cty
         | otherwise                          = updCTyEnv [(x, cty)]
+
+
+-}
 
 instance Unify BitWidth where
   unify' p = go
@@ -240,6 +321,7 @@ instance (Unify a, Unify b) => Unify (CallArg a b) where
       go (CAExp  ty)  (CAExp  ty')  = unify p ty  ty'
       go (CAComp cty) (CAComp cty') = unify p cty cty'
       go a b = unifyErr p a b
+
 
 {-------------------------------------------------------------------------------
   Defaulting
@@ -360,16 +442,17 @@ unifyComp :: Maybe SourcePos
 unifyComp loc annU annA annB = zonk >=> go
   where
     go (CTComp u a b) = do
-      forM_ annU $ unify loc u
-      forM_ annA $ unify loc a
-      forM_ annB $ unify loc b
-      return (u, a, b)
+      u' <- tyJoinWithHint loc annU u
+      a' <- tyJoinWithHint loc annA a 
+      b' <- tyJoinWithHint loc annB b
+      return (u', a', b')
     go cty = do
       u <- hint (freshTy "u") return annU
       a <- hint (freshTy "a") return annA
       b <- hint (freshTy "b") return annB
-      unify loc cty (CTComp u a b)
-      return (u, a, b)
+      CTComp ux ax bx <- ctyJoin loc cty (CTComp u a b)
+      return (ux, ax, bx)
+
 
 unifyTrans :: Maybe SourcePos
            -> Hint Ty -> Hint Ty
@@ -377,14 +460,14 @@ unifyTrans :: Maybe SourcePos
 unifyTrans loc annA annB = zonk >=> go
   where
     go (CTTrans a b) = do
-      forM_ annA $ unify loc a
-      forM_ annB $ unify loc b
-      return (a, b)
+      a' <- tyJoinWithHint loc annA a 
+      b' <- tyJoinWithHint loc annB b
+      return (a', b')
     go cty = do
       a <- hint (freshTy "a") return annA
       b <- hint (freshTy "b") return annB
-      unify loc cty (CTTrans a b)
-      return (a, b)
+      CTTrans ax bx <- ctyJoin loc cty (CTTrans a b)
+      return (ax, bx)
 
 -- | Sadly, we cannot have a unification constraint that somehing must
 -- either be a computer or a transformer, so if we find a type variable here
@@ -395,16 +478,40 @@ unifyCompOrTrans :: Maybe SourcePos
 unifyCompOrTrans loc annA annB = zonk >=> go
   where
     go (CTComp u a b) = do
-      forM_ annA $ unify loc a
-      forM_ annB $ unify loc b
-      return (Just u, a, b)
+      a' <- tyJoinWithHint loc annA a 
+      b' <- tyJoinWithHint loc annB b 
+      return (Just u, a', b')
     go (CTTrans a b) = do
-      forM_ annA $ unify loc a
-      forM_ annB $ unify loc b
-      return (Nothing, a, b)
+      a' <- tyJoinWithHint loc annA a 
+      b' <- tyJoinWithHint loc annB b 
+      return (Nothing, a', b')
     go (CTArrow _ _) =
       raiseErrNoVarCtx loc $
         text "Expected computer or transformer, but got function"
     go (CTVar _) =
       raiseErrNoVarCtx loc $
         text "Expected computer or transformer, but got type variable (bug?)"
+
+unifyCompOrTrans_CTy :: Maybe SourcePos
+                 -> Hint Ty -> Hint Ty
+                 -> CTy -> TcM CTy
+unifyCompOrTrans_CTy loc annA annB cty
+  = do (nm,a,b) <- unifyCompOrTrans loc annA annB cty
+       case nm of 
+          Nothing -> return $ CTTrans a b 
+          Just v  -> return $ CTComp v a b
+
+unifyTrans_CTy :: Maybe SourcePos
+              -> Hint Ty -> Hint Ty
+              -> CTy -> TcM CTy
+unifyTrans_CTy loc annA annB cty
+  = do (a,b) <- unifyTrans loc annA annB cty
+       return $ CTTrans a b
+
+unifyComp_CTy :: Maybe SourcePos
+          -> Hint Ty -> Hint Ty -> Hint Ty
+          -> CTy -> TcM CTy
+unifyComp_CTy loc annU annA annB cty
+  = do (u,a,b) <- unifyComp loc annU annA annB cty
+       return $ CTComp u a b
+
