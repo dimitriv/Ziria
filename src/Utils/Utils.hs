@@ -7,6 +7,7 @@ module Utils (
   , mapKeysM
   , mapTelescope
   , parsePragmaLine
+  , uncurry4 
   ) where
 
 import Control.Applicative
@@ -100,3 +101,12 @@ instance Monad ReadsM where
 instance MonadPlus ReadsM where
   mzero     = ReadsM $ \_   -> []
   mplus a b = ReadsM $ \str -> runReadsM a str ++ runReadsM b str
+
+
+
+{-------------------------------------------------------------------------------
+  Generic auxiliary
+-------------------------------------------------------------------------------}
+
+uncurry4 :: (a -> b -> c -> d -> z) -> (a, b, c, d) -> z
+uncurry4 fun (a, b, c, d) = fun a b c d

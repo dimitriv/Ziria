@@ -40,6 +40,9 @@ import AstExpr
 import qualified AstLabelled   as Labelled
 import qualified AstUnlabelled as Unlabelled
 import qualified AstFreeMonad  as AstFreeMonad
+
+
+import qualified AstFM as AstFM
 -- TODO: Re-enable me
 -- import qualified AstQuasiQuote as AstQuasiQuote
 import CtComp (ctComp)

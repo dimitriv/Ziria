@@ -24,7 +24,6 @@
 module BlinkParseComp (parseProgram, parseComp, parseTopLevel, runParseM) where
 
 import Control.Applicative ((<$>), (<*>), (<$), (<*), (*>))
-import Control.Arrow (second)
 import Control.Monad (join)
 import Control.Monad.Reader.Class
 import Text.Parsec
@@ -37,6 +36,8 @@ import BlinkParseExpr
 import BlinkLexer
 import BlinkParseM
 import Eval (evalInt)
+
+import Utils ( uncurry4 )
 
 {-------------------------------------------------------------------------------
   Top-level
@@ -443,15 +444,16 @@ foldCommands (Right c:cs) = cSeq' c <$> foldCommands cs
 -- >   | <comp>
 parseCommand :: BlinkParser (ParseCompEnv, Command)
 parseCommand = choice
-    [ try $ withPos cLetDecl' <*> parseLetDecl <* notFollowedBy (reserved "in")
-    , try $ withPos cBranch' <* reserved "if"   <*> parseExpr
-                             <* reserved "then" <*> parseComp
-                             <* notFollowedBy (reserved "else")
+    [ try $ withPos cLetDecl' <*> parseLetDecl   <* notFollowedBy (reserved "in")
+    , try $ withPos cBranch'  <* reserved "if"   <*> parseExpr
+                              <* reserved "then" <*> parseComp
+                              <* notFollowedBy (reserved "else")
     , try $ withPos cBindMany' <*> parseVarBind <* reservedOp "<-" <*> parseComp
     , (\c -> ([], Right c)) <$> parseComp
     ] <?> "command"
   where
-    cLetDecl' = second Left .: cLetDecl
+    cLetDecl' loc decl = (env, Left k)  -- Used to be: second Left .: cLetDecl
+      where (env,k) = cLetDecl loc decl
     cBranch'   loc e c1 = ([], Right $ cBranch loc e c1 (cunit loc))
     cBindMany' loc x c  = ([], Left $ \c' -> cBindMany loc c [(x, c')])
 

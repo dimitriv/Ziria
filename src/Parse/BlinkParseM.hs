@@ -38,10 +38,6 @@ module BlinkParseM (
   , xPrefix
   , lInfix
   , sepsBy
-    -- * Generic utils
-  , uncurry4
-  , (.:)
-  , (..:)
   ) where
 
 import Control.Applicative
@@ -169,17 +165,3 @@ sepsBy []     _  = return []
 sepsBy [p]    _  = (:[]) <$> p
 sepsBy (p:ps) op = (:) <$> p <* op <*> sepsBy ps op
 
-{-------------------------------------------------------------------------------
-  Generic auxiliary
-
-  TODO: This should probably move to a seperate Utils module.
--------------------------------------------------------------------------------}
-
-uncurry4 :: (a -> b -> c -> d -> z) -> (a, b, c, d) -> z
-uncurry4 fun (a, b, c, d) = fun a b c d
-
-(.:) :: (y -> z) -> (a -> b -> y) -> a -> b -> z
-(.:) fun' fun a b = fun' (fun a b)
-
-(..:) :: (y -> z) -> (a -> b -> c -> y) -> a -> b -> c -> z
-(..:) fun' fun a b c = fun' (fun a b c)
