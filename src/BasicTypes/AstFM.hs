@@ -37,39 +37,14 @@ import Prelude
 
 import Control.Applicative
 
--- import Control.Exception
--- import Control.Monad hiding (forM_)
--- import Data.Maybe (fromJust, catMaybes)
--- import Data.Monoid
--- import Data.Foldable (forM_)
-
 import Text.Parsec.Pos
--- import qualified Data.Set as S
 
 import AstComp
 import AstExpr
 import AstUnlabelled
-
 import CtComp ( ctDoneTyOfComp )
-
--- import Tc ( tc )
--- import TcMonad
--- import TcUnify (unify)
--- import Typecheck (tyCheckComp)
 import qualified GenSym as GS
-
 import Rebindables
-{- 
-import CtExpr ( ctExp )
-import Rebindables
-import Utils ( uncurry4 )
--}
-
-
-
-
--- Imports for the example only:
--- import AstQuasiQuote (zcomp)
 
 
 {------------------------------------------------------------------------------
@@ -196,7 +171,7 @@ interpE p fe  = go (toFExp fe)
   Statements
 -------------------------------------------------------------------------------}
 
- data FStmt s where 
+data FStmt s where 
   FEArrWrite :: FExp -> FExp -> LengthInfo -> FExp -> FStmt s -> FStmt s
   FEAssign   :: FExp -> FExp -> FStmt s -> FStmt s
   FEReturn   :: v -> FStmt v
