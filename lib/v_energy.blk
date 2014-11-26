@@ -1,0 +1,37 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#pragma once 
+
+-- Calculate the energy of a given complex16 vector
+-- We also normalize input by shift (typically, shift = log2(length(x)))
+fun v_energy_complex16(x:arr complex16, shift : int) {
+var xs : arr[length(x)] complex16;
+var re32 : arr[length(x)] int;
+var im32 : arr[length(x)] int;
+var energy : int := 0;
+
+   v_shift_right_complex16(xs, x, shift);
+   v_conj_mul_complex16_int32(re32, im32, xs, xs);
+   for i in [0, length(x)] {
+     energy := energy + re32[i] + im32[i];
+   }
+
+   return energy;
+};

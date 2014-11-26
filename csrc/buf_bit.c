@@ -388,10 +388,9 @@ void init_putbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 void buf_putbit(BlinkParams *params, BufContextBlock* blk, Bit x)
 {
 #ifndef STAMP_AT_READ
-	write_time_stamp();
+	write_time_stamp(params);
 #endif
 	blk->total_out++;
-	write_time_stamp(params);
 
 	if (params->outType == TY_IP)
 	{

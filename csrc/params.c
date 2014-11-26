@@ -215,7 +215,7 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
        init_inRepeat },
      { "--latency-sampling=",
 	   "--latency-sampling=0|1|2|...",
-	   "Number of writes over which the latency is measured (0 - no latency measurements)",
+	   "Number of read/writes (edit STAMP_AT_READ to choose between reads/writes) over which the latency is measured (0 - no latency measurements)",
 	   "0",
 	   init_LatencySampling },
      { "--latency-CDF-size=",
