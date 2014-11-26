@@ -90,9 +90,8 @@ class FValy v where
 
 instance FValy Bool where toVal b = VBool b
 
-
--- instance FValy Int      where toVal i = VInt $ fromIntegral i
--- instance FValy Integer  where toVal i = VInt $ fromIntegral i
+instance FValy Int      where toVal i = VInt $ fromIntegral i
+instance FValy Integer  where toVal i = VInt $ fromIntegral i
 instance FValy ()   where toVal _ = VUnit
 instance FValy Val  where toVal v = v
 
@@ -115,22 +114,6 @@ instance FExpy ()         where toFExp _ = FEVal TUnit VUnit
 -- Instance for annotated values
 instance FValy v => FExpy (v ::: Ty) where 
   toFExp (v ::: t) = FEVal t (toVal v)
-
-
-{- 
-type family FDflt a :: Constraint where
-   FDflt FExp = ()
-   FDflt EId  = ()
-   FDflt Exp  = ()
-   FDflt Bool = ()
-   FDflt ()   = ()
-   FDflt (v ::: Ty) = FDflt v
-   FDflt a    = (a ~ Int) 
--}
-
--- This is the defaulting case 
-
-default ( Double )
 
 -- Convenience combinators
 (.*) :: (FExpy e1, FExpy e2) => e1 -> e2 -> FExp
@@ -213,9 +196,7 @@ interpE p fe  = go (toFExp fe)
   Statements
 -------------------------------------------------------------------------------}
 
- 
--- Statements
-data FStmt s where 
+ data FStmt s where 
   FEArrWrite :: FExp -> FExp -> LengthInfo -> FExp -> FStmt s -> FStmt s
   FEAssign   :: FExp -> FExp -> FStmt s -> FStmt s
   FEReturn   :: v -> FStmt v
@@ -301,7 +282,7 @@ instance Bindable Void where
   genexp _ 
     = error "Bindable: Cannot bind result of transformer (Void)"
 
-data Zr v where 
+data Zr v where
  FTakeOne  :: Ty -> Zr EId
  FTakeMany :: Ty -> Int -> Zr EId 
  FEmit     :: FExpy v => v -> Zr ()
@@ -322,7 +303,6 @@ data Zr v where
  FTimes    :: (FExpy e1, FExpy e2) 
            => UnrollInfo -> e1 -> e2 -> (EId -> Zr ()) -> Zr ()
  
-
 
 
 instance Monad Zr where
@@ -347,7 +327,8 @@ instance Monad Zr where
 interpC :: Bindable v => GS.Sym -> Maybe SourcePos -> Zr v -> IO Comp
 interpC sym loc = go
   where 
-    go :: forall v. Bindable v => Zr v -> IO Comp -- Polymorphic recursion
+    -- NB: requires polymorphic recursion
+    go :: forall v. Bindable v => Zr v -> IO Comp 
     go (FTakeOne t)    = return $ cTake1 loc t
     go (FTakeMany t i) = return $ cTake loc t i
     go (FEmit e)       = return $ cEmit loc (interpE loc e)
@@ -363,7 +344,6 @@ interpC sym loc = go
         BndResB nm farg -> do c2 <- go (f farg)
                               return $ cBindMany loc c1 [(nm,c2)]
         BndResU farg    -> cSeq loc c1 <$> go (f farg)
-
     go (FRepeat v stc)   = cRepeat loc v <$> go stc
     go (FParA p st1 st2) = do c1 <- go st1 
                               c2 <- go st2
@@ -371,7 +351,6 @@ interpC sym loc = go
     go (FParB p st1 st2) = do c1 <- go st1 
                               c2 <- go st2
                               return $ cPar loc p c1 c2
-
     go (FLetE fi x ty fe k) = do
        nm <- gen_name_pref sym x ty
        c <- go (k nm)
@@ -394,7 +373,6 @@ interpC sym loc = go
        c <- go (k nm) 
        return $ cTimes loc ui e1 e2 nm c
  
-
 
 {-------------------------------------------------------------------------------
   Computation API
@@ -430,7 +408,8 @@ fexec = FExec
 ftimes :: (FExpy e1, FExpy e2) => e1 -> e2 -> (EId -> Zr ()) -> Zr ()
 ftimes = FTimes AutoUnroll
 
-flete :: (Bindable v, FExpy e) => ForceInline -> (String ::: Ty ::= e) -> (EId -> Zr v) -> Zr v
+flete :: (Bindable v, FExpy e) 
+      => ForceInline -> (String ::: Ty ::= e) -> (EId -> Zr v) -> Zr v
 flete fi (x ::: t ::= e) = FLetE fi x t (toFExp e)
 
 
@@ -490,6 +469,7 @@ data I = I Int
 instance FExpy I where toFExp (I i) = toFExp i
 
 
+-- An example, like those typically found in the vectorizer
 _test1 :: Int -> Int -> Zr FExp
 _test1 finalin n0 
   = let tarr = TArray (Literal finalin) tint
