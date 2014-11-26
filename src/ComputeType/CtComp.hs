@@ -76,9 +76,12 @@ ctEmits a (TArray _ b) = CTComp TUnit a b
 ctEmits _ b = panic $ text "ctEmits: Unexpected" <+> ppr b
 
 ctPar :: CTy -> CTy -> CTy
-ctPar (CTTrans  a _) (CTTrans  _ c) = CTTrans  a c
-ctPar (CTTrans  a _) (CTComp u _ c) = CTComp u a c
-ctPar (CTComp u a _) (CTTrans  _ c) = CTComp u a c
+ctPar (CTTrans  a m1) (CTTrans  m2 c) = 
+  case ctJoin m1 m2 of _ -> CTTrans  a c
+ctPar (CTTrans  a m1) (CTComp u m2 c) = 
+  case ctJoin m1 m2 of _ -> CTComp u a c
+ctPar (CTComp u a m1) (CTTrans  m2 c) = 
+  case ctJoin m1 m2 of _ -> CTComp u a c
 ctPar t t' = panic $ 
              text "ctPar: Unexpected" <+> ppr t <+> text "and" <+> ppr t'
 
