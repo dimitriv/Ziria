@@ -142,6 +142,17 @@ main = failOnException $ do
     let varenv   = mkEnv []
 
     sym <- GS.initGenSym (getName dflags)
+
+{- Testing the AstFM ........... -}
+
+    -- test1_comp <- AstFM.interpC sym Nothing (AstFM._test1 24 8)
+    -- putStrLn $ (show $ Outputable.ppr test1_comp)
+    -- exitFailure   
+
+{- End Testing the AstFM ............. -} 
+
+
+
     (MkProg c', unifiers1) <- failOnError $
       runTcM (tyCheckProg prog)
              tdef_env

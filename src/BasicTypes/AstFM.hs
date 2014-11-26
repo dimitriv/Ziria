@@ -1,9 +1,30 @@
+{-
+   Copyright (c) Microsoft Corporation
+   All rights reserved.
+
+   Licensed under the Apache License, Version 2.0 (the ""License""); you
+   may not use this file except in compliance with the License. You may
+   obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+   THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+   CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+   LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+   A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+
+   See the Apache Version 2.0 License for specific language governing
+   permissions and limitations under the License.
+-}
+
 {-# OPTIONS_GHC -Wall #-}
 
 {-# LANGUAGE RebindableSyntax, 
              FlexibleInstances, 
              MultiParamTypeClasses, QuasiQuotes, GADTs, 
              TypeFamilies, TypeOperators, ExistentialQuantification,
+             FunctionalDependencies, FlexibleContexts,
+             ExtendedDefaultRules, 
              EmptyDataDecls #-}
 
 -- | Free monads for convenient construction of AST terms
@@ -37,11 +58,14 @@ import CtComp ( ctDoneTyOfComp )
 -- import Typecheck (tyCheckComp)
 import qualified GenSym as GS
 
+import Rebindables
 {- 
 import CtExpr ( ctExp )
 import Rebindables
 import Utils ( uncurry4 )
 -}
+
+
 
 
 -- Imports for the example only:
@@ -65,9 +89,10 @@ class FValy v where
   toVal :: v -> Val
 
 instance FValy Bool where toVal b = VBool b
-instance FValy Int      where toVal i = VInt $ fromIntegral i
-instance FValy Integer  where toVal i = VInt $ fromIntegral i
 
+
+-- instance FValy Int      where toVal i = VInt $ fromIntegral i
+-- instance FValy Integer  where toVal i = VInt $ fromIntegral i
 instance FValy ()   where toVal _ = VUnit
 instance FValy Val  where toVal v = v
 
@@ -78,10 +103,11 @@ class FExpy a where
 -- Annotations 
 data v ::: t = v ::: t 
     
-instance FExpy FExp       where toFExp   = id
-instance FExpy (GName Ty) where toFExp   = FEVar 
-instance FExpy Exp        where toFExp   = FELift 
+instance FExpy FExp where toFExp   = id
+instance FExpy EId  where toFExp   = FEVar 
+instance FExpy Exp  where toFExp   = FELift 
 instance FExpy Bool       where toFExp b = FEVal TBool (VBool b)
+
 instance FExpy Int        where toFExp i = FEVal tint (VInt $ fromIntegral i)
 instance FExpy Integer    where toFExp i = FEVal tint (VInt $ fromIntegral i)
 
@@ -89,6 +115,22 @@ instance FExpy ()         where toFExp _ = FEVal TUnit VUnit
 -- Instance for annotated values
 instance FValy v => FExpy (v ::: Ty) where 
   toFExp (v ::: t) = FEVal t (toVal v)
+
+
+{- 
+type family FDflt a :: Constraint where
+   FDflt FExp = ()
+   FDflt EId  = ()
+   FDflt Exp  = ()
+   FDflt Bool = ()
+   FDflt ()   = ()
+   FDflt (v ::: Ty) = FDflt v
+   FDflt a    = (a ~ Int) 
+-}
+
+-- This is the defaulting case 
+
+default ( Double )
 
 -- Convenience combinators
 (.*) :: (FExpy e1, FExpy e2) => e1 -> e2 -> FExp
@@ -113,7 +155,18 @@ instance FValy v => FExpy (v ::: Ty) where
 (.+) e1 e2 = FEBinOp Add (toFExp e1) (toFExp e2)
 
 (.-) :: (FExpy e1, FExpy e2) => e1 -> e2 -> FExp
-(.-) e1 e2 = FEBinOp Add (toFExp e1) (toFExp e2)
+(.-) e1 e2 = FEBinOp Sub (toFExp e1) (toFExp e2)
+
+
+instance Num FExp where
+  fromInteger i = FEVal tint (VInt i)
+  (+) = FEBinOp Add 
+  (-) = FEBinOp Sub
+  (*) = FEBinOp Mult
+  negate = error "todo"
+  abs    = error "todo"
+  signum = error "todo"
+
 
 infixl 7 .*
 infixl 7 ./
@@ -210,7 +263,6 @@ interpS_aux p on_ret = go
 -------------------------------------------------------------------------------}
 
 data Void -- empty
-data ZTy  -- domain of Ziria types
 
 data BndRes v = BndResB EId v | BndResU v 
 
@@ -262,14 +314,15 @@ data Zr v where
  -- Like return but for statements
  FExec     :: Bindable v => FStmt v  -> Zr v
 
- FLetE    :: FExpy e 
-          => ForceInline -> (String ::: Ty) -> e -> (EId -> Zr v) -> Zr v
- FLetERef :: FExpy e 
-          => (String ::: Ty) -> Maybe e -> (EId -> Zr v) -> Zr v
- FBranch  :: FExpy e => e -> Zr v -> Zr v -> Zr v
- FTimes   :: (FExpy e1, FExpy e2) 
-          => UnrollInfo -> e1 -> e2 -> (EId -> Zr ()) -> Zr ()
+ FLetE     :: Bindable v
+           => ForceInline -> String -> Ty -> FExp -> (EId -> Zr v) -> Zr v
+ FLetERef  :: (Bindable v)
+           => String -> Ty -> Maybe FExp -> (EId -> Zr v) -> Zr v
+ FBranch   :: (Bindable v, FExpy e) => e -> Zr v -> Zr v -> Zr v
+ FTimes    :: (FExpy e1, FExpy e2) 
+           => UnrollInfo -> e1 -> e2 -> (EId -> Zr ()) -> Zr ()
  
+
 
 
 instance Monad Zr where
@@ -286,13 +339,11 @@ instance Monad Zr where
   (>>=) (FExec stms)  f         = FBind (FExec stms) f
   (>>=) (FTimes ui fe1 fe2 k) f = FBind (FTimes ui fe1 fe2 k) f
 
-  -- Floating Let/Letrefs/Branches just /only/ because it's easier 
-  -- otherwise we would have to introduce a Bindable instance.
-  (>>=) (FLetE fi sty fe k) f   = FLetE fi sty fe (\v -> k v >>= f)
-  (>>=) (FLetERef sty me k) f   = FLetERef sty me (\v -> k v >>= f)
-  (>>=) (FBranch e c1 c2) f     = FBranch e (c1 >>= f) (c2 >>= f) 
+  (>>=) (FLetE fi x ty fe k) f  = FBind (FLetE fi x ty fe k) f 
+  (>>=) (FLetERef x ty me k) f  = FBind (FLetERef x ty me k) f
+  (>>=) (FBranch e c1 c2) f     = FBind (FBranch e c1 c2) f
 
- 
+
 interpC :: Bindable v => GS.Sym -> Maybe SourcePos -> Zr v -> IO Comp
 interpC sym loc = go
   where 
@@ -321,14 +372,14 @@ interpC sym loc = go
                               c2 <- go st2
                               return $ cPar loc p c1 c2
 
-    go (FLetE fi (x ::: ty) fe k) = do
+    go (FLetE fi x ty fe k) = do
        nm <- gen_name_pref sym x ty
        c <- go (k nm)
-       let e = interpE loc $ toFExp fe
+       let e = interpE loc fe
        return $ cLetE loc nm fi e c
-    go (FLetERef (x ::: ty) mfe k) = do
+    go (FLetERef x ty mfe k) = do
        nm <- gen_name_pref sym x ty
-       let me = fmap (interpE loc . toFExp ) mfe
+       let me = fmap (interpE loc) mfe
        c <- go (k nm) 
        return $ cLetERef loc nm me c
     go (FBranch fe s1 s2) = do 
@@ -349,89 +400,59 @@ interpC sym loc = go
   Computation API
 -------------------------------------------------------------------------------}
 
+ftake :: Ty -> Zr EId
+ftake = FTakeOne
+
+ftakes :: Ty -> Int -> Zr EId
+ftakes = FTakeMany 
+
+femit :: FExpy v => v -> Zr ()
+femit = FEmit
+
+femits :: FExpy v => v -> Zr ()
+femits = FEmits
+
+freturn :: ForceInline -> v -> Zr v
+freturn = FReturn 
+
+class ArrComp a b c | a b -> c where 
+  (>->) :: ParInfo -> Zr a -> Zr b -> Zr c
+
+instance Bindable v => ArrComp Void v v where (>->) = FParA 
+instance Bindable v => ArrComp v Void v where (>->) = FParB
+
+frepeat :: Zr () -> Zr Void
+frepeat = FRepeat Nothing
+
+fexec :: Bindable v => FStmt v -> Zr v
+fexec = FExec 
+
+ftimes :: (FExpy e1, FExpy e2) => e1 -> e2 -> (EId -> Zr ()) -> Zr ()
+ftimes = FTimes AutoUnroll
+
+flete :: (Bindable v, FExpy e) => ForceInline -> (String ::: Ty ::= e) -> (EId -> Zr v) -> Zr v
+flete fi (x ::: t ::= e) = FLetE fi x t (toFExp e)
 
 
+instance Bindable v => IfThenElse FExp (Zr v) where
+  ifThenElse = FBranch
 
-{------------ DV this is almost working .......
+ferror :: Ty -> String -> Zr ()
+ferror t str = do _x <- freturn _aI (FEError t str)
+                  return ()
 
-data FComp a 
-  = FComp0 FComp0                    (GName Ty -> FComp a)
-  | FLetE ForceInline String Ty FExp (GName Ty -> FComp a) -- String there for debug purposes only
-  | FLetERef String Ty (Maybe FExp)  (GName Ty -> FComp a) -- String there for debug purposes only
-  | FPure a
+data b ::= e = b ::= e
 
-data FComp0 
-  = FVar CId                                          
-  | FTake1 Ty                                       
-  | FTake Ty Int                                    
-  | FEmit FExp                                      
-  | FEmits FExp                                     
-  | FReturn ForceInline FExp                        
-  | FStmts (MStmt ())                               
-  | FLift Comp                                      
-  | forall b. FBranch FExp (FComp b) (FComp b)         
-  | forall b. FTimes UnrollInfo FExp FExp (GName Ty -> FComp b)        
-  | forall b. FRepeat (Maybe VectAnn) (FComp b)
-  | forall b c. FPar (FComp b) (FComp c)
-  -- It's convenient to just have naked statements here ...
-  | FCEArrWrite FExp FExp LengthInfo FExp
-  | FCEAssign FExp FExp
+class MutBind c where
+  mutbind :: c -> (String,Ty,Maybe FExp)
+instance MutBind (String ::: Ty) where
+  mutbind (x ::: t) = (x,t,Nothing)
+instance FExpy e => MutBind (String ::: Ty ::= e) where
+  mutbind (x ::: t ::= e) = (x,t, Just $ toFExp e)
 
-
-instance Monad FComp where
-  return a = FPure a
-  (FPure a)     >>= f = f a 
-  (FComp0 c0 k) >>= f = FComp0 c0 (\n -> k n >>= f)
-  (FLetE fi s t fe k) >>= f = FLetE fi s t fe (\n -> k n >>= f)
-  (FLetERef s t me k) >>= f = FLetERef s t me (\n -> k n >>= f)
- 
--- API 
-type FComp a = FComp EId
-
-fTakeOne :: Ty -> FComp a 
-fTakeOne ty = FComp0 (FTake1 ty) FPure
-
-fTakeMany :: Ty -> Int -> FComp a
-fTakeMany ty i = FComp0 (FTake ty i) FPure
-
-fVar :: GName CTy -> FComp a
-fVar x = FComp0 (FVar x) FPure
-
-fEmit :: FExpy e => e -> FComp a
-fEmit e = FComp0 (FEmit (toFExp e)) FPure
-
-fEmits :: FExpy e => e -> FComp a
-fEmits e = FComp0 (FEmits (toFExp e)) FPure
-
-fBranch :: FExpy e => e -> FComp a -> FComp a -> FComp a
-fBranch e c1 c2 = FComp0 (FBranch (toFExp e) c1 c2) (const $ FPure (error "bomb!"))
-
-instance IfThenElse FExp (FComp a) where
-  ifThenElse = fBranch
-
-fRet :: FExpy e => ForceInline -> e -> FComp ()
-fRet fi e = FComp0 (FReturn fi (toFExp e)) (const $ FPure ())
-
-fTimes :: (FExpy a, FExpy b)
-       => UnrollInfo -> a -> b -> (GName Ty -> FComp a) -> FComp a
-fTimes ui estart elen body = FComp0 (FTimes ui fs fl body) FPure
-  where fs = toFExp estart
-        fl = toFExp elen 
-
-fRepeat :: Maybe VectAnn -> FComp a -> FComp a
-fRepeat ann body = FComp0 (FRepeat ann body) FPure
-
-fLetE :: FExpy e => ForceInline -> String -> Ty -> e -> FComp a
-fLetE fi s ty e = FLetE fi s ty (toFExp e) FPure
-
-fLetERef :: String -> Ty -> FComp a
-fLetERef s ty = FLetERef s ty Nothing FPure
-
-fError :: Ty -> String -> FComp ()
-fError t str = fRet AutoInline (FEError t str)
-
-fExec :: MStmt () -> FComp a 
-fExec stms = FComp0 (FStmts stms) FPure
+fleteref :: (Bindable v, MutBind c) => c -> (EId -> Zr v) -> Zr v
+fleteref c = FLetERef x t mb
+  where (x,t,mb) = mutbind c
 
 
 _aI,_fI,_nI :: ForceInline 
@@ -439,640 +460,56 @@ _aI = AutoInline
 _fI = ForceInline
 _nI = NoInline
 
--- Overload statements to be commands too
-class Cmd a where 
- toCmd :: Either (FExp,FExp,LengthInfo,FExp) (FExp,FExp) -> a 
 
-instance Cmd (MStmt a) where 
- toCmd (Left (earr,start,len,rhs)) 
-   = Free $ FEArrWrite earr start len rhs (Pure (error "bomb!"))
- toCmd (Right (elhs,erhs))
-   = Free $ FEAssign elhs erhs (Pure (error "bomb!"))
+{-------------------------------------------------------------------------------
+  Command API
+-------------------------------------------------------------------------------}
+class Cmd s where 
+  fromStmt :: FStmt () -> s ()
 
-instance Cmd (FComp a) where
- toCmd (Left bundle)  = FComp0 (uncurry4 FCEArrWrite bundle) (const $ FPure (error "Bomb!"))
- toCmd (Right bundle) = FComp0 (uncurry FCEAssign bundle)    (const $ FPure (error "Bomb!"))
+-- A command is either a statement or a statement lifted into computations
+instance Cmd FStmt where fromStmt s = s 
+instance Cmd Zr    where fromStmt s = fexec s 
 
--- | Write to a variable _or_ to an array
-(.:=) :: (Cmd s, FExpy x, FExpy e) => x -> e -> s
-(.:=) x e 
-  = case toFExp x of
-      FEArrRead earr start len 
-        -> let fearr  = toFExp earr
-               fstart = toFExp start
-           in toCmd (Left (fearr,fstart,len,frhs))
-      fx -> toCmd (Right (fx,frhs))
-  where frhs = toFExp e
+(.:=) :: (Cmd s, FExpy x, FExpy e) => x -> e -> s ()
+(.:=) x e = fromStmt stm
+  where 
+    stm = case toFExp x of
+           FEArrRead earr start len 
+             | let fearr  = toFExp earr
+                   fstart = toFExp start
+             -> FEArrWrite fearr fstart len frhs (return ())
+           fx -> FEAssign fx frhs (return ())
+    frhs = toFExp e
+
 
 infix  1 .:=
 
 
-
-_test1 :: GName Ty -> GName Ty 
-       -> GName Ty -> GName Ty 
-       -> Integer -> Integer -> FComp ()
-_test1 tmp_idx is_empty in_buff in_buff_idx finalin n0 = do
-
-  if is_empty .= True
-    then do x <- fTakeOne (nameTyp in_buff)
-            in_buff     .:= x
-            is_empty    .:= False
-            in_buff_idx .:= (0::Int)
-    else fRet _aI ()
-
-  if finalin .= in_buff_idx .+ n0
-    then do fExec $ is_empty .:= True
-            fRet _fI $ in_buff  .! (in_buff_idx :+ n0)
-    else if in_buff_idx .+ n0 .< finalin
-         then do tmp_idx     .:= in_buff_idx
-                 in_buff_idx .:= in_buff_idx .+ n0
-                 fRet _fI $ in_buff .! (tmp_idx :+ n0)
-         else do fError TUnit "rewrite_take: unaligned"
-                 fRet _fI $ in_buff .! ((0::Int) :+ n0)
-
-
-
-newName :: GS.Sym -> String -> Maybe SourcePos -> Ty -> IO EId
-newName sym orig loc ty = do
-  suff <- GS.genSymStr sym
-  return $ toName (orig ++ "_free_" ++ suff) loc ty
-
-
------------------- almost-working ---------------}
-
-
-{- DV: TODO-TODO-TODO
- - ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-interpFComp :: GS.Sym -> Maybe SourcePos -> FComp a -> IO (Maybe Comp)
-interpFComp sym p m = go m 
- where
-   go (FLetE fi x ty fe k) = do
-     e' <- interpFExp p e
-     nm <- newName p x ty
-     Just comp <- go (k nm)
-     return $ Just $ cLetE p nm fi e' comp
-
-     
-     
-
-unFree :: Maybe SourcePos -> FreeComp () -> TcM Comp
-unFree loc = liftM fromJust . go
-  where
-    go :: FreeComp () -> TcM (Maybe Comp)
-    go (FVar x k) = do
-      k' <- go k
-      return $ cVar loc x `mSeq` k'
-    go (FLetE fi e k) = do
-      e'      <- unEFree loc e
-      nm      <- newName loc (ctExp e')
-      Just k' <- go (k nm)
-      return $ Just $ cLetE loc nm fi e' k'
-    go (FLetERef (Left e) k) = do
-      e'      <- unEFree loc e
-      nm      <- newName loc (ctExp e')
-      Just k' <- go (k nm)
-      return $ Just $ cLetERef loc nm (Just e') k'
-    go (FLetERef (Right ty) k) = do
-      nm      <- newName loc ty
-      Just k' <- go (k nm)
-      return $ Just $ cLetERef loc nm Nothing k'
-    go (FBind c k) = do
-      Just c' <- go c
-      nm      <- newName loc (fromJust . doneTyOfCTy . ctComp $ c')
-      Just k' <- go (k nm)
-      return $ Just $ cBindMany loc c' [(nm, k')]
-    go (FTake1 k) = do
-      a  <- freshTy "a"
-      k' <- go k
-      return $ cTake1 loc a `mSeq` k'
-    go (FTake n k) = do
-      a  <- freshTy "a"
-      k' <- go k
-      return $ cTake loc a n `mSeq` k'
-    go (FEmit e k) = do
-      e' <- unEFree loc e
-      k' <- go k
-      return $ cEmit loc e' `mSeq` k'
-    go (FEmits e k) = do
-      e' <- unEFree loc e
-      k' <- go k
-      return $ cEmits loc e' `mSeq` k'
-    go (FReturn fi e k) = do
-      e' <- unEFree loc e
-      k' <- go k
-      return $ cReturn loc fi e' `mSeq` k'
-    go (FBranch e c1 c2 k) = do
-      e'       <- unEFree loc e
-      Just c1' <- go c1
-      Just c2' <- go c2
-      k'       <- go k
-      return $ cBranch loc e' c1' c2' `mSeq` k'
-    go (FTimes ui estart elen body k) = do
-      estart'    <- unEFree loc estart
-      elen'      <- unEFree loc elen
-      nm         <- newName loc (ctExp estart')
-      Just body' <- go (body nm)
-      k'         <- go k
-      return $ cTimes loc ui estart' elen' nm body' `mSeq` k'
-    go (FRepeat ann body k) = do
-      Just body' <- go body
-      k'         <- go k
-      return $ cRepeat loc ann body' `mSeq` k'
-    go (FAnnot c mu ma mb k) = do
-      Just c' <- go c
-      let cty = ctComp c'
-      forM_ mu $ unify loc (fromJust (doneTyOfCTy cty))
-      forM_ ma $ unify loc ( inTyOfCTy cty)
-      forM_ mb $ unify loc (yldTyOfCTy cty)
-      k'      <- go k
-      return $ c' `mSeq` k'
-    go (FLift c k) = do
-      k' <- go k
-      return $ c `mSeq` k'
-    go (FLiftSrc env c k) = do
-      c' <- extendTDefEnv' (mkTyDefEnv primComplexStructs) $
-              extendTDefEnv' env $
-                extendEnv (extractTypeEnv c) $
-                  tyCheckComp c
-      k' <- go k
-      return $ c' `mSeq` k'
-    go (FPure ()) =
-      return Nothing
-
-    mSeq :: Comp -> Maybe Comp -> Maybe Comp
-    mSeq c Nothing   = Just $ c
-    mSeq c (Just c') = Just $ cSeq loc c c'
-
-
-
--}
-
-
-
-
-
-
-{-
-
-
-{-------------------------------------------------------------------------------
-  Some convenience wrappers around the free expressions
--------------------------------------------------------------------------------}
-
--- | Overloading of free expressions
---
--- NOTE: We do NOT support overloading for actual Haskell values. We used to
--- have `ToFreeExp` instances for `Int`, `Bool` and `()`, but the instance for
--- `Int` is not particularly useful because we'd still to write `(0 :: Int)`
--- anyway to avoid ambiguity errors, and the instance for `()` is actually
--- harmful, because if _intended_ to write
---
--- > x <- fBind fTake1
--- > fReturn $ y .:= x
---
--- but actually wrote
---
--- > x <- fTake1
--- > fReturn $ y .:= x
---
--- then this would still be type correct because x now has `()` type and we
--- would be assigning `()` to `y`, rather than the value of `x`.
---
--- More generally, we don't want to confuse the return type of Haskell values
--- with Ziria values, which is why we have a `ToFreeExp` instance for `Val`
--- (Ziria values) but not for Haskell level values.
-
-{-------------------------------------------------------------------------------
-  Free computation monad
--------------------------------------------------------------------------------}
-
--- | Free computation monad
---
--- NOTE: The cases for Bind, LetE and LetERef scope the variable over the
--- _entire_ remaining computation; i.e., something like
---
--- > let e = expr in (c1 ; c2)
---
--- It is not possible to construct something of the form
---
--- > (let e = expr in c1) ; c2
---
--- If that is undesirable we have to give both constructors an additional
--- continuation argument (similar to Times), but then they would be less
--- convenient to use.
-data FreeComp a =
-    FVar (GName CTy) (FreeComp a)
-  | FBind (FreeComp ()) (GName Ty -> FreeComp a)
-  | FLetE ForceInline (FreeExp ()) (GName Ty -> FreeComp a)
-  | FLetERef (Either (FreeExp ()) Ty) (GName Ty -> FreeComp a)
-  | FTake1 (FreeComp a)
-  | FTake Int (FreeComp a)
-  | FEmit (FreeExp ()) (FreeComp a)
-  | FEmits (FreeExp ()) (FreeComp a)
-  | FReturn ForceInline (FreeExp ()) (FreeComp a)
-  | FBranch (FreeExp ()) (FreeComp ()) (FreeComp ()) (FreeComp a)
-  | FTimes UnrollInfo (FreeExp ()) (FreeExp ()) (GName Ty -> FreeComp ()) (FreeComp a)
-  | FRepeat (Maybe VectAnn) (FreeComp ()) (FreeComp a)
-  | FAnnot (FreeComp ()) (Maybe Ty) (Maybe Ty) (Maybe Ty) (FreeComp a)
-  | FLift Comp (FreeComp a)
-  | FLiftSrc TyDefEnv SrcComp (FreeComp a)
-  | FPure a
-
-instance Functor FreeComp where
-  fmap = liftM
-
-instance Applicative FreeComp where
-  pure  = return
-  (<*>) = ap
-
-instance Monad FreeComp where
-  return = FPure
-  FVar x            k >>= f = FVar x            (k >>= f)
-  FLetE fi e        k >>= f = FLetE fi e        (k >=> f)
-  FLetERef e        k >>= f = FLetERef e        (k >=> f)
-  FBind c           k >>= f = FBind c           (k >=> f)
-  FTake1            k >>= f = FTake1            (k >>= f)
-  FTake n           k >>= f = FTake n           (k >>= f)
-  FEmit e           k >>= f = FEmit e           (k >>= f)
-  FEmits e          k >>= f = FEmits e          (k >>= f)
-  FReturn fi e      k >>= f = FReturn fi e      (k >>= f)
-  FBranch e c1 c2   k >>= f = FBranch e c1 c2   (k >>= f)
-  FTimes ui e1 e2 b k >>= f = FTimes ui e1 e2 b (k >>= f)
-  FRepeat ann c     k >>= f = FRepeat ann c     (k >>= f)
-  FAnnot c u a b    k >>= f = FAnnot c u a b    (k >>= f)
-  FLift c           k >>= f = FLift c           (k >>= f)
-  FLiftSrc env c    k >>= f = FLiftSrc env c    (k >>= f)
-  FPure a             >>= f = f a
-
-fVar :: GName CTy -> FreeComp ()
-fVar x = FVar x (FPure ())
-
-fLetE :: ForceInline -> FreeExp () -> FreeComp (GName Ty)
-fLetE fi e = FLetE fi e FPure
-
-fLetERef :: Either (FreeExp ()) Ty -> FreeComp (GName Ty)
-fLetERef e = FLetERef e FPure
-
-fBind :: FreeComp () -> FreeComp (GName Ty)
-fBind c = FBind c FPure
-
-fTake1 :: FreeComp ()
-fTake1 = FTake1 (FPure ())
-
-fTake :: Int -> FreeComp ()
-fTake n = FTake n (FPure ())
-
-fEmit :: ToFreeExp e => e -> FreeComp ()
-fEmit e = FEmit (toFreeExp e) (FPure ())
-
-fEmits :: ToFreeExp e => e -> FreeComp ()
-fEmits e = FEmits (toFreeExp e) (FPure ())
-
-fReturn :: ToFreeExp e => ForceInline -> e -> FreeComp ()
-fReturn fi e = FReturn fi (toFreeExp e) (FPure ())
-
-fBranch :: ToFreeExp e => e -> FreeComp () -> FreeComp () -> FreeComp ()
-fBranch e c1 c2  = FBranch (toFreeExp e) c1 c2 (FPure ())
-
-fTimes :: (ToFreeExp a, ToFreeExp b)
-       => UnrollInfo -> a -> b -> (GName Ty -> FreeComp ()) -> FreeComp ()
-fTimes ui estart elen body = FTimes ui (toFreeExp estart)
-                                       (toFreeExp elen) body (FPure ())
-
-fRepeat :: Maybe VectAnn -> FreeComp () -> FreeComp ()
-fRepeat ann body = FRepeat ann body (FPure ())
-
-fError :: String -> FreeComp ()
-fError str = fReturn AutoInline (feError str)
-
-fLift :: Comp -> FreeComp ()
-fLift c = FLift c (FPure ())
-
--- | For use with the quasi-quoter (which generates source terms)
---
--- In order to be able to translate source terms in isolation we need the
--- definition of any types (structs) that might be used inside the snippet.
-fLiftSrc :: TyDefEnv -> SrcComp -> FreeComp ()
-fLiftSrc tydefenv c = FLiftSrc tydefenv c (FPure ())
-
-instance IfThenElse (FreeExp ()) (FreeComp ()) where
-  ifThenElse = fBranch
-
-{-------------------------------------------------------------------------------
-  Type annotations on computations
--------------------------------------------------------------------------------}
-
--- | Annotate the "done type" of a computation
-returning :: FreeComp () -> Ty -> FreeComp ()
-returning c ty = FAnnot c (Just ty) Nothing Nothing (FPure ())
-
--- | Annotate the type of the input source
-taking :: FreeComp () -> Ty -> FreeComp ()
-taking c ty = FAnnot c Nothing (Just ty) Nothing (FPure ())
-
--- | Annotate the type of the output source
-emitting :: FreeComp () -> Ty -> FreeComp ()
-emitting c ty = FAnnot c Nothing Nothing (Just ty) (FPure ())
-
-{-------------------------------------------------------------------------------
-  Top-level entry point to the translation out of the free monad
--------------------------------------------------------------------------------}
-
--- | Translate out of the free expression monad
---
--- The snippet is translated and linted.
---
--- See remark for `unFreeComp` about independent type checking.
-unFreeExp :: GS.Sym -> FreeExp () -> IO Exp
-unFreeExp sym fexp = do
-    result <- runTcM (tc =<< unEFree Nothing fexp)
-                     (mkTyDefEnv [])
-                     (mkEnv [])
-                     (mkCEnv [])
-                     sym
-                     TopLevelErrCtx
-                     emptyUnifier
-    case result of
-      Left err ->
-        throwIO (userError (show err))
-      Right (final, unifiers) -> do
-        let efvs         = exprFVs final
-            tyVarsInEnv  = mconcat (map (tyFVs . nameTyp) (S.toList efvs))
-            udom         = unifierDom unifiers
-        unless (tyVarsInEnv `tyVarsDisjoint` udom) $
-          throwIO (userError ("Invalid type assumptions in snippet"))
-        return final
-
--- | Translate out of the free monad
---
--- The snippet is translated to a `Comp` and linted.
---
--- NOTE: If type checking the snippet may NOT require unificaiton of any of the
--- type variables in the free term (expression or computation) variables. This
--- guarantees that we can typecheck snippets independently. We verify this and
--- throw an exception if this assumption is violated. (Such free type variables
--- may exist because we might be rewriting in the body of a polymorphic
--- function.)
-unFreeComp :: GS.Sym -> FreeComp () -> IO Comp
-unFreeComp sym fcomp = do
-    result <- runTcM (tc =<< unFree Nothing fcomp)
-                     (mkTyDefEnv [])
-                     (mkEnv [])
-                     (mkCEnv [])
-                     sym
-                     TopLevelErrCtx
-                     emptyUnifier
-    case result of
-      Left err ->
-        throwIO (userError (show err))
-      Right (final, unifiers) -> do
-        let (cfvs, efvs) = compFVs final
-            tyVarsInEnv  = mconcat (map (tyFVs . nameTyp) (S.toList efvs))
-                          `mappend`
-                           mconcat (map (ctyFVs  . nameTyp) (S.toList cfvs))
-            udom         = unifierDom unifiers
-        unless (tyVarsInEnv `tyVarsDisjoint` udom) $
-          throwIO (userError ("Invalid type assumptions in snippet"))
-        return final
-
-{-------------------------------------------------------------------------------
-  Translation out of the free monad
--------------------------------------------------------------------------------}
-
-unEFree :: Maybe SourcePos -> FreeExp () -> TcM Exp
-unEFree loc = liftM fromJust . go
-  where
-    go :: FreeExp () -> TcM (Maybe Exp)
-    go (FEVal v k) = do
-      a  <- freshTy "a"
-      k' <- go k
-      return $ eVal loc a v `mSeq` k'
-    go (FEVar nm k) = do
-      k' <- go k
-      return $ eVar loc nm `mSeq` k'
-    go (FEBinOp op e1 e2 k) = do
-      Just e1' <- go e1
-      Just e2' <- go e2
-      k'       <- go k
-      return $ eBinOp loc op e1' e2' `mSeq` k'
-    go (FEArrRead arr estart li k) = do
-      Just arr'    <- go arr
-      Just estart' <- go estart
-      k'           <- go k
-      return $ eArrRead loc arr' estart' li `mSeq` k'
-    go (FEArrWrite arr estart li e k) = do
-      Just arr'    <- go arr
-      Just estart' <- go estart
-      Just e'      <- go e
-      k'           <- go k
-      return $ eArrWrite loc arr' estart' li e' `mSeq` k'
-    go (FEAssign x e k) = do
-      Just x' <- go x
-      Just e' <- go e
-      k'      <- go k
-      return $ eAssign loc x' e' `mSeq` k'
-    go (FEError str k) = do
-      a  <- freshTy "a"
-      k' <- go k
-      return $ eError loc a str `mSeq` k'
-    go (FEAnnot e ty k) = do
-      Just e' <- go e
-      k'      <- go k
-      unify loc (ctExp e') ty
-      return $ e' `mSeq` k'
-    go (FELift e k) = do
-      k' <- go k
-      return $ e `mSeq` k'
-    go (FEPure ()) =
-      return Nothing
-
-    mSeq :: Exp -> Maybe Exp -> Maybe Exp
-    mSeq e Nothing   = Just $ e
-    mSeq e (Just e') = Just $ eSeq loc e e'
-
-unFree :: Maybe SourcePos -> FreeComp () -> TcM Comp
-unFree loc = liftM fromJust . go
-  where
-    go :: FreeComp () -> TcM (Maybe Comp)
-    go (FVar x k) = do
-      k' <- go k
-      return $ cVar loc x `mSeq` k'
-    go (FLetE fi e k) = do
-      e'      <- unEFree loc e
-      nm      <- newName loc (ctExp e')
-      Just k' <- go (k nm)
-      return $ Just $ cLetE loc nm fi e' k'
-    go (FLetERef (Left e) k) = do
-      e'      <- unEFree loc e
-      nm      <- newName loc (ctExp e')
-      Just k' <- go (k nm)
-      return $ Just $ cLetERef loc nm (Just e') k'
-    go (FLetERef (Right ty) k) = do
-      nm      <- newName loc ty
-      Just k' <- go (k nm)
-      return $ Just $ cLetERef loc nm Nothing k'
-    go (FBind c k) = do
-      Just c' <- go c
-      nm      <- newName loc (fromJust . doneTyOfCTy . ctComp $ c')
-      Just k' <- go (k nm)
-      return $ Just $ cBindMany loc c' [(nm, k')]
-    go (FTake1 k) = do
-      a  <- freshTy "a"
-      k' <- go k
-      return $ cTake1 loc a `mSeq` k'
-    go (FTake n k) = do
-      a  <- freshTy "a"
-      k' <- go k
-      return $ cTake loc a n `mSeq` k'
-    go (FEmit e k) = do
-      e' <- unEFree loc e
-      k' <- go k
-      return $ cEmit loc e' `mSeq` k'
-    go (FEmits e k) = do
-      e' <- unEFree loc e
-      k' <- go k
-      return $ cEmits loc e' `mSeq` k'
-    go (FReturn fi e k) = do
-      e' <- unEFree loc e
-      k' <- go k
-      return $ cReturn loc fi e' `mSeq` k'
-    go (FBranch e c1 c2 k) = do
-      e'       <- unEFree loc e
-      Just c1' <- go c1
-      Just c2' <- go c2
-      k'       <- go k
-      return $ cBranch loc e' c1' c2' `mSeq` k'
-    go (FTimes ui estart elen body k) = do
-      estart'    <- unEFree loc estart
-      elen'      <- unEFree loc elen
-      nm         <- newName loc (ctExp estart')
-      Just body' <- go (body nm)
-      k'         <- go k
-      return $ cTimes loc ui estart' elen' nm body' `mSeq` k'
-    go (FRepeat ann body k) = do
-      Just body' <- go body
-      k'         <- go k
-      return $ cRepeat loc ann body' `mSeq` k'
-    go (FAnnot c mu ma mb k) = do
-      Just c' <- go c
-      let cty = ctComp c'
-      forM_ mu $ unify loc (fromJust (doneTyOfCTy cty))
-      forM_ ma $ unify loc ( inTyOfCTy cty)
-      forM_ mb $ unify loc (yldTyOfCTy cty)
-      k'      <- go k
-      return $ c' `mSeq` k'
-    go (FLift c k) = do
-      k' <- go k
-      return $ c `mSeq` k'
-    go (FLiftSrc env c k) = do
-      c' <- extendTDefEnv' (mkTyDefEnv primComplexStructs) $
-              extendTDefEnv' env $
-                extendEnv (extractTypeEnv c) $
-                  tyCheckComp c
-      k' <- go k
-      return $ c' `mSeq` k'
-    go (FPure ()) =
-      return Nothing
-
-    mSeq :: Comp -> Maybe Comp -> Maybe Comp
-    mSeq c Nothing   = Just $ c
-    mSeq c (Just c') = Just $ cSeq loc c c'
-
-{-------------------------------------------------------------------------------
-  Auxiliary
--------------------------------------------------------------------------------}
-
-newName :: Maybe SourcePos -> Ty -> TcM (GName Ty)
-newName loc ty = do
-  str <- genSym "_x"
-  return $ toName ("_x" ++ str) loc ty
-
--- This environment is used by the renamer, which is indexing variables by their
--- _name_, rather than by their uniqId.
-extractTypeEnv :: SrcComp -> [(String, GName Ty)]
-extractTypeEnv = catMaybes . map aux . S.toList . compEFVs
-  where
-    aux :: GName SrcTy -> Maybe (String, GName Ty)
-    aux nm | SrcInject ty <- nameTyp nm =
-      Just (name nm, nm { nameTyp = ty })
-    aux _ =
-      Nothing
-
--}
-
-{-------------------------------------------------------------------------------
-  Example
--------------------------------------------------------------------------------}
-
-{- 
-_test' :: IO ()
-_test' = do
-    go _test1
-    go _test2
-  where
-    go test = do
-      let tmp_idx     = toName "tmp_idx"     Nothing tint32
-          is_empty    = toName "is_empty"    Nothing TBool
-          in_buff     = toName "in_buff"     Nothing (TArray (Literal 16) tint32)
-          in_buff_idx = toName "in_buff_idx" Nothing tint32
-
-      let c = test tmp_idx is_empty in_buff in_buff_idx 1 2
-
-      sym <- GS.initGenSym ""
-      c'  <- unFreeComp sym c
-      putStrLn (replicate 80 '-')
-      print c'
-
-_test1 :: GName Ty -> GName Ty -> GName Ty -> GName Ty -> Integer -> Integer -> FreeComp ()
-_test1 tmp_idx is_empty in_buff in_buff_idx finalin n0 = do
-  if is_empty .= VBool True
-    then do x <- fBind (fTake1 `returning` nameTyp in_buff) -- optional type annotation
-            fReturn AutoInline $ do
-              in_buff     .:= x
-              is_empty    .:= VBool False
-              in_buff_idx .:= VInt 0
-    else fReturn AutoInline VUnit
-  if VInt finalin .= in_buff_idx .+ VInt n0
-    then do fReturn ForceInline $ do
-              is_empty .:= VBool True
-              in_buff  .! (in_buff_idx, n0)
-    else if in_buff_idx .+ VInt n0 .< VInt finalin
-           then fReturn ForceInline $ do
-                  tmp_idx     .:= in_buff_idx
-                  in_buff_idx .:= in_buff_idx .+ VInt n0
-                  in_buff .! (tmp_idx, n0)
-           else -- The only reason this is an error is the lack of memcpy as a
-                -- primitive but probably we will not encounter any such
-                -- misaligned annotations.
-                do -- Just a dummy return to make code generator happy ...
-                   -- Fix this at some point by providing a proper
-                   -- computer-level error function
-                   _u <- fBind (fError "rewrite_take: unaligned!")
-                   fReturn ForceInline $ in_buff .! (VInt 0, n0)
-
--}
-
-{- AstQuasiQote needs to be brought up to speed ... 
-_test2 :: GName Ty -> GName Ty -> GName Ty -> GName Ty -> Integer -> Integer -> FreeComp ()
-_test2 tmp_idx is_empty in_buff in_buff_idx finalin n0 = fLiftSrc (mkTyDefEnv []) [zcomp| {
-    if is_empty == true 
-    then { x <- take
-         ; do { in_buff     := x
-              ; is_empty    := false
-              ; in_buff_idx := 0
-              }
-         }
-    else return ();
-    do { if finalin == in_buff_idx + n0
-         then is_empty := true
-         else if in_buff_idx + n0 < finalin
-              then { tmp_idx     := in_buff_idx
-                   ; in_buff_idx := in_buff_idx + n0
-                   }
-         else error "rewrite_take: unaligned";
-       };
-    return [forceinline] in_buff[tmp_idx,n0];
-  }|]
-
-
--}
+data I = I Int
+instance FExpy I where toFExp (I i) = toFExp i
+
+
+_test1 :: Int -> Int -> Zr FExp
+_test1 finalin n0 
+  = let tarr = TArray (Literal finalin) tint
+    in 
+    fleteref ("tmp_idx"  ::: tint ) $ \tmp_idx  ->
+    fleteref ("is_empty" ::: TBool) $ \is_empty ->
+    fleteref ("in_buff"  ::: tarr ) $ \in_buff  ->
+    flete _aI ("in_buff_idx" ::: tint ::= I(0)) $ \in_buff_idx ->
+    do if is_empty .= True
+          then do x <- ftake (nameTyp in_buff)
+                  in_buff     .:= x
+                  is_empty    .:= False
+                  in_buff_idx .:= I(0)
+          else freturn _aI ()
+       if finalin .= in_buff_idx .+ n0
+        then do fexec $ is_empty .:= True
+                freturn _fI $ (in_buff  .! (in_buff_idx :+ n0))
+        else if in_buff_idx .+ n0 .< finalin
+             then do tmp_idx     .:= in_buff_idx
+                     in_buff_idx .:= in_buff_idx .+ n0
+                     freturn _fI $ in_buff .! (tmp_idx :+ n0)
+             else do ferror TUnit "rewrite_take: unaligned"
+                     freturn _fI $ in_buff .! (I(0) :+ n0)
