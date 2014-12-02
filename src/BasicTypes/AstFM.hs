@@ -67,7 +67,10 @@ instance FValy Bool where toVal b = VBool b
 
 instance FValy Int      where toVal i = VInt $ fromIntegral i
 instance FValy Integer  where toVal i = VInt $ fromIntegral i
-instance FValy ()   where toVal _ = VUnit
+
+-- Removing that to avoid confusion with meta-language unit 
+-- instance FValy ()   where toVal _ = VUnit
+
 instance FValy Val  where toVal v = v
 
 -- Expression-like things
@@ -262,7 +265,7 @@ data Zr v where
  FTakeMany :: Ty -> Int -> Zr EId 
  FEmit     :: FExpy v => v -> Zr ()
  FEmits    :: FExpy v => v -> Zr ()
- FReturn   :: ForceInline -> v -> Zr v
+ FReturn   :: Bindable v => ForceInline -> v -> Zr v
  FBind     :: Bindable v => Zr v -> (v -> Zr w) -> Zr w
  FParA     :: Bindable v => ParInfo -> Zr Void -> Zr v     -> Zr v
  FParB     :: Bindable v => ParInfo -> Zr v    -> Zr Void  -> Zr v
@@ -277,14 +280,18 @@ data Zr v where
  FBranch   :: (Bindable v, FExpy e) => e -> Zr v -> Zr v -> Zr v
  FTimes    :: (FExpy e1, FExpy e2) 
            => UnrollInfo -> e1 -> e2 -> (EId -> Zr ()) -> Zr ()
- 
+
+ FPure     :: v -> Zr v
 
 
 instance Monad Zr where
-  return e                      = FReturn AutoInline e
+  return e                      = FPure e 
   (>>=) (FTakeOne t)  f         = FBind (FTakeOne t) f
   (>>=) (FTakeMany t i) f       = FBind (FTakeMany t i) f
-  (>>=) (FReturn _ v) f         = f v
+
+  (>>=) (FPure v) f             = f v 
+
+  (>>=) (FReturn fi v) f        = FBind (FReturn fi v) f
   (>>=) (FEmit v) f             = FBind (FEmit v) f
   (>>=) (FEmits v) f            = FBind (FEmits v) f
   (>>=) (FBind m g)   f         = FBind m (\v -> g v >>= f)
@@ -303,7 +310,8 @@ interpC :: Bindable v => GS.Sym -> Maybe SourcePos -> Zr v -> IO Comp
 interpC sym loc = go
   where 
     -- NB: requires polymorphic recursion
-    go :: forall v. Bindable v => Zr v -> IO Comp 
+    go :: forall v. Bindable v => Zr v -> IO Comp
+    go (FPure e)       = return $ cReturn loc AutoInline (genexp e)
     go (FTakeOne t)    = return $ cTake1 loc t
     go (FTakeMany t i) = return $ cTake loc t i
     go (FEmit e)       = return $ cEmit loc (interpE loc e)
@@ -365,7 +373,7 @@ femit = FEmit
 femits :: FExpy v => v -> Zr ()
 femits = FEmits
 
-freturn :: ForceInline -> v -> Zr v
+freturn :: Bindable v => ForceInline -> v -> Zr v
 freturn = FReturn 
 
 class ArrComp a b c | a b -> c where 
