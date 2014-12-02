@@ -223,7 +223,9 @@ interpS_aux p on_ret = go
 
 data Void -- empty
 
-data BndRes v = BndResB EId v | BndResU v 
+data BndRes v = BndResB { bnd_res_id :: EId 
+                        , bnd_res_val :: v } 
+              | BndResU { bnd_res_val :: v }
 
 gen_name :: GS.Sym -> Ty -> IO EId
 gen_name sym ty = gen_name_pref sym "" ty 
@@ -286,11 +288,10 @@ data Zr v where
 
 instance Monad Zr where
   return e                      = FPure e 
+  (>>=) (FPure v) f             = f v
+
   (>>=) (FTakeOne t)  f         = FBind (FTakeOne t) f
   (>>=) (FTakeMany t i) f       = FBind (FTakeMany t i) f
-
-  (>>=) (FPure v) f             = f v 
-
   (>>=) (FReturn fi v) f        = FBind (FReturn fi v) f
   (>>=) (FEmit v) f             = FBind (FEmit v) f
   (>>=) (FEmits v) f            = FBind (FEmits v) f
@@ -311,7 +312,9 @@ interpC sym loc = go
   where 
     -- NB: requires polymorphic recursion
     go :: forall v. Bindable v => Zr v -> IO Comp
-    go (FPure e)       = return $ cReturn loc AutoInline (genexp e)
+    go (FPure _e)      = error "FPure!?" 
+                         -- FPure in isolation is just bad.
+
     go (FTakeOne t)    = return $ cTake1 loc t
     go (FTakeMany t i) = return $ cTake loc t i
     go (FEmit e)       = return $ cEmit loc (interpE loc e)
@@ -323,10 +326,15 @@ interpC sym loc = go
       c1 <- go st1
       let t = ctDoneTyOfComp c1
       bnd <- genbnd sym t
-      case bnd of
-        BndResB nm farg -> do c2 <- go (f farg)
-                              return $ cBindMany loc c1 [(nm,c2)]
-        BndResU farg    -> cSeq loc c1 <$> go (f farg)
+      let fc2 = f (bnd_res_val bnd)
+      case (fc2,bnd) of 
+        -- If continuation is pure then just return c1 
+        -- Invariant: we must be returning whatever c1 returns
+        (FPure {},_)     -> return c1
+        (_,BndResB nm _) -> do c2 <- go fc2 
+                               return $ cBindMany loc c1 [(nm,c2)]
+        (_,BndResU _)    -> cSeq loc c1 <$> go fc2
+
     go (FRepeat v stc)   = cRepeat loc v <$> go stc
     go (FParA p st1 st2) = do c1 <- go st1 
                               c2 <- go st2
