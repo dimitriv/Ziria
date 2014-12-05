@@ -29,7 +29,7 @@ echo $1
 echo "Preprocessing..."
 echo $TOP/lib
 #gcc -x c -P -E $1 >$1.expanded
-gcc -I $TOP/lib -w -x c -E $1 >$1.expanded
+gcc $DEFINES -I $TOP/lib -w -x c -E $1 >$1.expanded
 
 
 echo "Running WPL compiler..."
