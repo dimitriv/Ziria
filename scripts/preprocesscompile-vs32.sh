@@ -1,4 +1,3 @@
-#!/bin/bash
 # 
 # Copyright (c) Microsoft Corporation
 # All rights reserved. 
@@ -19,6 +18,7 @@
 #
 #
 
+#!/bin/bash
 
 set -e
 
@@ -26,11 +26,25 @@ export TOP=$(cd $(dirname $0)/.. && pwd -P)
 source $TOP/scripts/common.sh
 
 echo $1
-# echo "Preprocessing..."
+#echo "Preprocessing..."
 #gcc -x c -P -E $1 >$1.expanded
 gcc $DEFINES -I $TOP/lib -w -x c -E $1 >$1.expanded
 
 
-echo "Running WPL compiler..."
+#echo "Running WPL compiler..."
 $WPLC $WPLCFLAGS $EXTRAOPTS -i $1.expanded -o $1.c
 cp $1.c $TOP/csrc/test.c
+
+
+#echo "Compiling C code (VS) ..."
+pushd . && cd $TOP/csrc/CompilerVS && ./build32.bat && popd
+
+
+if [[ $# -ge 2 ]]
+then
+   # cp -f is sometimes not sufficient on cygwin
+   rm -f $2
+   cp -f $TOP/csrc/CompilerVS/CompilerVS13/Win32/Debug/CompilerVS13.exe $2
+fi
+
+

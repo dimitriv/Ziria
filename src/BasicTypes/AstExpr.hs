@@ -793,9 +793,17 @@ isEVal e
 isEVal _
   = False
 
+isStructTy :: Ty -> Bool
+isStructTy (TStruct _ _) = True
+isStructTy _             = False
+
+-- User-defined structure (as oppose to Ziria native structs such as complex numbers)
+isUserStructTy :: Ty -> Bool
+isUserStructTy t = (isStructTy t) && not (isComplexTy t)
+
 isArrayTy :: Ty -> Bool
 isArrayTy (TArray _ _) = True
-isArrayTy _          = False
+isArrayTy _            = False
 
 isArrayTy_maybe :: Ty -> Maybe Ty
 -- If an array type, gives you back the type of the elements

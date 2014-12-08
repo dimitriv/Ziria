@@ -72,7 +72,7 @@ unsigned int parse_dbg_int8(char *dbg_buf, int8 *target)
 	return i; // total number of entries
 }
 
-void init_getint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
+void init_getint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
 	blk->size_in = 8;
 	blk->total_in = 0;
@@ -234,10 +234,10 @@ GetStatus buf_getarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, uns
 	return _buf_getarrint8(params, blk, x, vlen);
 }
 
-void init_getcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
+void init_getcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
 	// we just need to initialize the input buffer in the same way
-	init_getint8(params, blk, hblk);                              
+	init_getint8(params, blk, hblk, unit_size*2);                              
 	blk->size_in = 16;
 
 	// since we will be doing this in integer granularity
@@ -311,7 +311,7 @@ void fprint_arrint8(BufContextBlock *blk, FILE *f, int8 *val, unsigned int vlen)
 }
 
 
-void init_putint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
+void init_putint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
 	blk->size_out = 8;
 	blk->total_out = 0;
@@ -491,7 +491,7 @@ void flush_putint8(BlinkParams *params, BufContextBlock *blk)
 }
 
 
-void init_putcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
+void init_putcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
 	blk->size_out = 16;
 	blk->total_out = 0;

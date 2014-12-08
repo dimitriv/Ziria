@@ -78,6 +78,9 @@
     <ClCompile Include="..\sora_ext_viterbi.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\buf_chunk.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\bit.h">

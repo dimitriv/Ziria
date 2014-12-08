@@ -72,7 +72,7 @@ unsigned int parse_dbg_int16(char *dbg_buf, int16 *target)
   return i; // total number of entries
 }
 
-void init_getint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
+void init_getint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
 	blk->size_in = 16;
 	blk->total_in = 0;
@@ -234,10 +234,10 @@ GetStatus buf_getarrint16(BlinkParams *params, BufContextBlock *blk, int16 *x, u
 	return _buf_getarrint16(params, blk, x, vlen);
 }
 
-void init_getcomplex16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
+void init_getcomplex16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
 	// we just need to initialize the input buffer in the same way
-	init_getint16(params, blk, hblk);
+	init_getint16(params, blk, hblk, unit_size*2);
 	// Change the values that differ in complex
 	blk->size_in = 32;
 
@@ -318,7 +318,7 @@ void fprint_arrint16(BufContextBlock *blk, FILE *f, int16 *val, unsigned int vle
 	}
 }
 
-void init_putint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
+void init_putint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
 	blk->size_out = 16;
 	blk->total_out = 0;
@@ -496,7 +496,7 @@ void flush_putint16(BlinkParams *params, BufContextBlock *blk)
 	}
 }
 
-void init_putcomplex16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
+void init_putcomplex16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
 #ifndef STAMP_AT_READ
 	write_time_stamp(params);

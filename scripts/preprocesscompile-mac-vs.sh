@@ -34,7 +34,7 @@ echo $1
 echo `pwd`
 #echo "Preprocessing..."
 #gcc -x c -P -E $1 >$1.expanded
-gcc -I $TOP/lib -w -x c -E $1 >$2.expanded
+gcc $DEFINES -I $TOP/lib -w -x c -E $1 >$2.expanded
 
 
 #echo "Running WPL compiler..."

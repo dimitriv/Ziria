@@ -111,7 +111,6 @@ module CgMonad
   , newHeapAlloc
   , getMaxStackAlloc
 
-  , isArrayTy
   , getTyPutGetInfo
 
   , cgTIntName
@@ -133,6 +132,7 @@ import Control.Monad.Error
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Writer
+import Data.Char (toUpper)
 import Data.DList (DList)
 import qualified Data.DList as DL
 import Data.Monoid
@@ -615,10 +615,17 @@ appendStructDef tyname sdef
   = do { sdefs <- gets structDefs
        ; if tyname `elem` sdefs then return ()
          else do { modify $ \s -> s { structDefs = tyname : (structDefs s) }
-                 ; appendTopDecl sdef
+                 ; appendTopDefs [cunit|
+$esc:("#ifndef " ++ define)
+$esc:("#define " ++ define)
+$decl:sdef;
+$esc:("#endif")
+|]
                  }
        }
-
+  where
+    define :: String
+    define = "STRUCT_" ++ map toUpper tyname
 
 appendTopDecl :: C.InitGroup -> Cg ()
 appendTopDecl newDecl =
@@ -829,6 +836,9 @@ getTyPutGetInfo ty = (buf_typ ty, buf_siz ty)
 
               -- internal synchronization queue buffers
               (TBuff (IntBuf t)) -> buf_typ t
+
+              -- Arbitrary structure - we use generic buffer read/write called buf_getchunk/buf_puchunk
+              TStruct nm _ -> "chunk"
 
               -- Others ... Not sure how well-supported they are
               otherty

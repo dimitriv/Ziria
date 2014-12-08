@@ -1,0 +1,26 @@
+struct cca_info = { f1 : int; f2 : int } 
+
+fun comp f() {
+  var y : struct cca_info;
+
+ repeat{
+ (x : struct cca_info) <- take;
+  
+ do {y.f1 := x.f1 + 1};
+ do {y.f2 := x.f2 + 1};
+
+ emit y;
+ }
+}
+
+fun comp fa() {
+ repeat{
+ (x : arr[4] struct cca_info) <- takes 4;
+  
+ emit x;
+ }
+}
+
+
+let comp main = read[struct cca_info] >>> f() |>>>| fa() >>> write
+

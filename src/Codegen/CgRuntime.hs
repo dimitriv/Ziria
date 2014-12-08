@@ -38,6 +38,7 @@ import Text.PrettyPrint.Mainland
 import Data.Maybe
 
 
+
 callInBufInitializer  buf_context heap_context 
   = callExtBufInitializer "get" buf_context heap_context
 callOutBufInitializer buf_context heap_context 
@@ -49,7 +50,7 @@ callExtBufInitializer str global_params
   = let atom_ty = atomTyOf base_ty
         init_typ_spec = "init_" ++ str ++ (fst $ getTyPutGetInfo atom_ty)
     in [cstm| $id:(init_typ_spec)($id:global_params, 
-                                    $id:buf_context, $id:heap_context);|]
+                                    $id:buf_context, $id:heap_context, $(tySizeOf_C atom_ty));|]
 
 callExtBufInitializer _str _global_params _buf_context _heap_context (IntBuf _) 
   = error "BUG: callExtBufInitializer called with IntBuf!" 
