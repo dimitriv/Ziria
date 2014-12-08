@@ -146,6 +146,17 @@ void buf_putarrbit(BlinkParams *params, BufContextBlock *blk, BitArrPtr x, unsig
 void flush_putbit(BlinkParams *params, BufContextBlock *blk);
 
 
+
+void init_getchunk(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size);
+GetStatus buf_getchunk(BlinkParams *params, BufContextBlock *blk, void *x);
+GetStatus buf_getarrchunk(BlinkParams *params, BufContextBlock *blk, void *x, unsigned int vlen);
+void init_putchunk(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size);
+void buf_putchunk(BlinkParams *params, BufContextBlock *blk, void *x);
+void buf_putarrchunk(BlinkParams *params, BufContextBlock *blk, void *x, unsigned int vlen);
+void flush_putchunk(BlinkParams *params, BufContextBlock *blk);
+
+
+
 void init_getint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size);
 GetStatus buf_getint32(BlinkParams *params, BufContextBlock *blk, int32 *x);
 GetStatus buf_getarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsigned int vlen);

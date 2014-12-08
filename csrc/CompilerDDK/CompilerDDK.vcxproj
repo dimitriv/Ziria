@@ -101,6 +101,7 @@
   <ItemGroup>
     <ClCompile Include="..\bit.c" />
     <ClCompile Include="..\buf_bit.c" />
+    <ClCompile Include="..\buf_chunk.c" />
     <ClCompile Include="..\buf_numerics16.c" />
     <ClCompile Include="..\buf_numerics32.c" />
     <ClCompile Include="..\buf_numerics8.c" />

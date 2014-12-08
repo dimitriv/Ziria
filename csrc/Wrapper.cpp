@@ -28,6 +28,7 @@
 #include "wpl_alloc.c"
 #include "numerics.c"
 #include "buf_bit.c"
+#include "buf_chunk.c"
 #include "buf_numerics8.c"
 #include "buf_numerics16.c"
 #include "buf_numerics32.c"
