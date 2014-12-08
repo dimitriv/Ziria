@@ -68,7 +68,7 @@ unsigned int parse_dbg_int32(char *dbg_buf, num32 *target)
   return i; // total number of entries
 }
 
-void init_getint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
+void init_getint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
 	blk->size_in = 32;
 	blk->total_in = 0;
@@ -225,12 +225,12 @@ GetStatus buf_getarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, u
 	return _buf_getarrint32(params, blk, x, vlen);
 }
 
-void init_getcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
+void init_getcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
 	if (params->inType == TY_DUMMY || params->inType == TY_FILE || params->inType == TY_MEM)
 	{
 		// we just need to initialize the input buffer in the same way
-		init_getint32(params, blk, hblk);                              // we just need to initialize the input buffer in the same way
+		init_getint32(params, blk, hblk, unit_size*2);                              // we just need to initialize the input buffer in the same way
 
 		// Change the values that differ in complex
 		blk->size_in = 32;
@@ -291,7 +291,7 @@ void fprint_arrint32(BufContextBlock *blk, FILE *f, int32 *val, unsigned int vle
 }
 
 
-void init_putint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
+void init_putint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
 	blk->size_out = 32;
 	blk->total_out = 0;
@@ -461,7 +461,7 @@ void flush_putint32(BlinkParams *params, BufContextBlock *blk)
 }
 
 
-void init_putcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk)
+void init_putcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
 	blk->size_out = 64;
 	blk->total_out = 0;

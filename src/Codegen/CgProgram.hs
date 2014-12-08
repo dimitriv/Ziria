@@ -92,7 +92,6 @@ codeGenGlobals dflags globals inty outty
       ; appendTopDefs defs
       ; (decls, stms) <- inNewBlock_ $ codeGenGlobalInitsOnly dflags globals
       ; appendTopDecls decls
-      ; cgExtBufInitsAndFins (inty,outty) (getName dflags)
       ; return (initstms ++ stms) }
 
 codeGenWPLGlobalInit :: [C.Stm] -> String -> Cg ()
@@ -186,6 +185,8 @@ codeGenProgram dflags globals shared_ctxt
                         -- the main function
                         appendTopDefs $ ST.thread_setup_shim module_name
                    }
+               -- Emit buf init and fins (once all C types are defined)
+             ; cgExtBufInitsAndFins (in_ty,yld_ty) (getName dflags)
                -- Finally emit wpl_global_init()
              ; lut_init_stms <- getLUTHashes >>=
                                    (return . map (lgi_lut_gen . snd))

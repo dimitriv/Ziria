@@ -43,7 +43,7 @@ callOutBufInitializer buf_context heap_context = callExtBufInitializer "put" buf
 
 callExtBufInitializer str global_params buf_context heap_context (ExtBuf base_ty) = 
   let init_typ_spec = "init_" ++ str ++ (fst $ getTyPutGetInfo base_ty)
-  in [cstm| $id:(init_typ_spec)($id:global_params, $id:buf_context, $id:heap_context);|]
+  in [cstm| $id:(init_typ_spec)($id:global_params, $id:buf_context, $id:heap_context, $(tySizeOf_C base_ty));|]
 
 callExtBufInitializer _str _global_params _buf_context _heap_context (IntBuf _) 
   = error "BUG: callExtBufInitializer called with IntBuf!" 

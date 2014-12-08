@@ -803,6 +803,9 @@ getTyPutGetInfo ty = (buf_typ ty, buf_siz ty)
               -- internal synchronization queue buffers
               (TBuff (IntBuf t)) -> buf_typ t
 
+              -- Arbitrary structure - we use generic buffer read/write called buf_getchunk/buf_puchunk
+              TStruct nm -> "chunk"
+
               -- Others ... Not sure how well-supported they are
               otherty
                 -> error $ "Code generation does not yet support buffers for type:" ++ show otherty

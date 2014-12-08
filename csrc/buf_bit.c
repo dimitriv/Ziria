@@ -184,7 +184,7 @@ unsigned int parse_dbg_bit(char *dbg_buf, BitArrPtr target)
 	return c;
 }
 
-void init_getbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hblk)
+void init_getbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hblk, size_t unit_size)
 {
 	blk->size_in = 1;
 	blk->total_in = 0;
@@ -334,7 +334,7 @@ GetStatus buf_getarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, 
 }
 
 
-void init_putbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hblk)
+void init_putbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hblk, size_t unit_size)
 {
 	blk->size_out = 1;
 	blk->total_out = 0;
