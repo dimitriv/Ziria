@@ -644,6 +644,14 @@ isEVal e
 isEVal _
   = False
 
+isStructTy :: Ty -> Bool
+isStructTy (TStruct _) = True
+isStructTy _           = False
+
+-- User-defined structure (as oppose to Ziria native structs such as complex numbers)
+isUserStructTy :: Ty -> Bool
+isUserStructTy t = (isStructTy t) && not (isComplexTy t)
+
 isArrTy :: Ty -> Bool
 isArrTy (TArr _ _) = True
 isArrTy _          = False

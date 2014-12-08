@@ -41,13 +41,13 @@
 
 void resetBufCtxBlock(BufContextBlock *blk)
 {
-	blk->input_idx = 0;
-	blk->input_repetitions = 1;
-	blk->input_dummy_samples = 0;
-	blk->fst = 1;
-	blk->output_idx = 0;
+	blk->bit_input_idx = 0;
+	blk->bit_input_repetitions = 1;
+	blk->bit_input_dummy_samples = 0;
+	blk->bit_fst = 1;
+	blk->bit_output_idx = 0;
 	blk->chunk_input_idx = 0;
-	blk->chunk_input_repeats = 1;
+	blk->chunk_input_repetitions = 1;
 	blk->chunk_input_dummy_samples = 0;
 	blk->chunk_fst = 1;
 	blk->chunk_output_idx = 0;
@@ -90,9 +90,9 @@ void initBufCtxBlock(BufContextBlock *blk)
 
 void fprint_bit(BufContextBlock* blk, FILE *f, Bit val)
 {
-	if (blk->fst) {
+	if (blk->bit_fst) {
 		fprintf(f,"%d",val);
-		blk->fst = 0;
+		blk->bit_fst = 0;
 	}
 	else
 		fprintf(f,",%d",val);
@@ -191,7 +191,7 @@ void init_getbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 
 	if (params->inType == TY_DUMMY)
 	{
-		blk->max_dummy_samples = params->dummySamples;
+		blk->bit_max_dummy_samples = params->dummySamples;
 	}
 
 	if (params->inType == TY_MEM)
@@ -203,8 +203,8 @@ void init_getbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 		}
 		else
 		{
-			blk->input_buffer = (BitArrPtr)blk->mem_input_buf;
-			blk->input_entries = 8 * blk->mem_input_buf_size;
+			blk->bit_input_buffer = (BitArrPtr)blk->mem_input_buf;
+			blk->bit_input_entries = 8 * blk->mem_input_buf_size;
 		}
 	}
 
@@ -216,13 +216,13 @@ void init_getbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 
 		if (params->inFileMode == MODE_BIN)
 		{ 
-			blk->input_buffer = (BitArrPtr)filebuffer;
-			blk->input_entries = 8 * sz;
+			blk->bit_input_buffer = (BitArrPtr)filebuffer;
+			blk->bit_input_entries = 8 * sz;
 		}
 		else 
 		{
-			blk->input_buffer = (BitArrPtr)try_alloc_bytes(hblk, sz);
-			blk->input_entries = parse_dbg_bit(filebuffer, blk->input_buffer);
+			blk->bit_input_buffer = (BitArrPtr)try_alloc_bytes(hblk, sz);
+			blk->bit_input_entries = parse_dbg_bit(filebuffer, blk->bit_input_buffer);
 		}
 	}
 
@@ -258,30 +258,30 @@ GetStatus buf_getbit(BlinkParams *params, BufContextBlock* blk, Bit *x)
 
 	if (params->inType == TY_DUMMY)
 	{
-		if (blk->input_dummy_samples >= blk->max_dummy_samples && params->dummySamples != INF_REPEAT)
+		if (blk->bit_input_dummy_samples >= blk->bit_max_dummy_samples && params->dummySamples != INF_REPEAT)
 		{
 			return GS_EOF;
 		}
-		blk->input_dummy_samples++;
+		blk->bit_input_dummy_samples++;
 		// No real need to do this, and it slows down substantially
 		//*x = 0;
 		return GS_SUCCESS;
 	}
 
 	// If we reached the end of the input buffer 
-	if (blk->input_idx >= blk->input_entries)
+	if (blk->bit_input_idx >= blk->bit_input_entries)
 	{
 		// If no more repetitions are allowed 
-		if (params->inFileRepeats != INF_REPEAT && blk->input_repetitions >= params->inFileRepeats)
+		if (params->inFileRepeats != INF_REPEAT && blk->bit_input_repetitions >= params->inFileRepeats)
 		{
 			return GS_EOF;
 		}
 		// Otherwise we set the index to 0 and increase repetition count
-		blk->input_idx = 0;
-		blk->input_repetitions++;
+		blk->bit_input_idx = 0;
+		blk->bit_input_repetitions++;
 	}
 
-	bitRead(blk->input_buffer, blk->input_idx++, x);
+	bitRead(blk->bit_input_buffer, blk->bit_input_idx++, x);
 
 	return GS_SUCCESS;
 }
@@ -304,32 +304,32 @@ GetStatus buf_getarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, 
 
 	if (params->inType == TY_DUMMY)
 	{
-		if (blk->input_dummy_samples >= blk->max_dummy_samples && params->dummySamples != INF_REPEAT)
+		if (blk->bit_input_dummy_samples >= blk->bit_max_dummy_samples && params->dummySamples != INF_REPEAT)
 		{
 			return GS_EOF;
 		}
-		blk->input_dummy_samples += vlen;
+		blk->bit_input_dummy_samples += vlen;
 		// No real need to do this, and it slows down substantially
 		//memset(x,0,(vlen+7)/8);
 		return GS_SUCCESS;
 	}
 
-	if (blk->input_idx + vlen > blk->input_entries)
+	if (blk->bit_input_idx + vlen > blk->bit_input_entries)
 	{
-		if (params->inFileRepeats != INF_REPEAT && blk->input_repetitions >= params->inFileRepeats)
+		if (params->inFileRepeats != INF_REPEAT && blk->bit_input_repetitions >= params->inFileRepeats)
 		{
-			if (blk->input_idx != blk->input_entries)
+			if (blk->bit_input_idx != blk->bit_input_entries)
 				fprintf(stderr, "Warning: Unaligned data in input file, ignoring final get()!\n");
 			return GS_EOF;
 		}
 		// Otherwise ignore trailing part of the file, not clear what that part may contain ...
-		blk->input_idx = 0;
-		blk->input_repetitions++;
+		blk->bit_input_idx = 0;
+		blk->bit_input_repetitions++;
 	}
 	
-	bitArrRead(blk->input_buffer, blk->input_idx, vlen, x);
+	bitArrRead(blk->bit_input_buffer, blk->bit_input_idx, vlen, x);
 
-	blk->input_idx += vlen;
+	blk->bit_input_idx += vlen;
 	return GS_SUCCESS;
 }
 
@@ -341,17 +341,17 @@ void init_putbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 
 	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
 	{
-		blk->output_buffer = (unsigned char *)malloc(params->outBufSize);
-		blk->output_entries = params->outBufSize * 8;
+		blk->bit_output_buffer = (unsigned char *)malloc(params->outBufSize);
+		blk->bit_output_entries = params->outBufSize * 8;
 		if (params->outType == TY_FILE)
 		{
 			if (params->outFileMode == MODE_BIN)
 			{
-				blk->output_file = try_open(params->outFileName, "wb");
+				blk->bit_output_file = try_open(params->outFileName, "wb");
 			}
 			else
 			{
-				blk->output_file = try_open(params->outFileName, "w");
+				blk->bit_output_file = try_open(params->outFileName, "w");
 			}
 		}
 	}
@@ -365,8 +365,8 @@ void init_putbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 		}
 		else
 		{
-			blk->output_buffer = (unsigned char*) blk->mem_output_buf;
-			blk->output_entries = blk->mem_output_buf_size * 8;
+			blk->bit_output_buffer = (unsigned char*)blk->mem_output_buf;
+			blk->bit_output_entries = blk->mem_output_buf_size * 8;
 		}
 	}
 
@@ -405,21 +405,21 @@ void buf_putbit(BlinkParams *params, BufContextBlock* blk, Bit x)
 
 	if (params->outType == TY_MEM)
 	{
-		bitWrite(blk->output_buffer, blk->output_idx++, x);
+		bitWrite(blk->bit_output_buffer, blk->bit_output_idx++, x);
 	}
 
 	if (params->outType == TY_FILE)
 	{
 		if (params->outFileMode == MODE_DBG)
-			fprint_bit(blk, blk->output_file, x);
+			fprint_bit(blk, blk->bit_output_file, x);
 		else 
 		{
-			if (blk->output_idx == blk->output_entries)
+			if (blk->bit_output_idx == blk->bit_output_entries)
 			{
-				fwrite(blk->output_buffer, blk->output_entries / 8, 1, blk->output_file);
-				blk->output_idx = 0;
+				fwrite(blk->bit_output_buffer, blk->bit_output_entries / 8, 1, blk->bit_output_file);
+				blk->bit_output_idx = 0;
 			}
-			bitWrite(blk->output_buffer, blk->output_idx++, x);
+			bitWrite(blk->bit_output_buffer, blk->bit_output_idx++, x);
 		}
 	}
 }
@@ -444,35 +444,35 @@ void buf_putarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, unsig
 
 	if (params->outType == TY_MEM)
 	{
-		bitArrWrite(x, blk->output_idx, vlen, blk->output_buffer);
-		blk->output_idx += vlen;
+		bitArrWrite(x, blk->bit_output_idx, vlen, blk->bit_output_buffer);
+		blk->bit_output_idx += vlen;
 	}
 
 	if (params->outType == TY_FILE)
 	{
 		if (params->outFileMode == MODE_DBG) 
-			fprint_arrbit(blk, blk->output_file, x, vlen);
+			fprint_arrbit(blk, blk->bit_output_file, x, vlen);
 		else
 		{ 
-			if (blk->output_idx + vlen >= blk->output_entries)
+			if (blk->bit_output_idx + vlen >= blk->bit_output_entries)
 			{
 				// first write the first (output_entries - output_idx) entries
-				unsigned int m = blk->output_entries - blk->output_idx;
+				unsigned int m = blk->bit_output_entries - blk->bit_output_idx;
 
-				bitArrWrite(x, blk->output_idx, m, blk->output_buffer);
+				bitArrWrite(x, blk->bit_output_idx, m, blk->bit_output_buffer);
 
 				// then flush the buffer
-				fwrite(blk->output_buffer, blk->output_entries / 8, 1, blk->output_file);
+				fwrite(blk->bit_output_buffer, blk->bit_output_entries / 8, 1, blk->bit_output_file);
 
 				// then write the rest
 				// BOZIDAR: Here we used to have bitArrRead but I believe it was wrong
-				bitArrWrite(x, m, vlen - m, blk->output_buffer);
-				blk->output_idx = vlen - m;
+				bitArrWrite(x, m, vlen - m, blk->bit_output_buffer);
+				blk->bit_output_idx = vlen - m;
 			}
 			else
 			{
-				bitArrWrite(x, blk->output_idx, vlen, blk->output_buffer);
-				blk->output_idx += vlen;
+				bitArrWrite(x, blk->bit_output_idx, vlen, blk->bit_output_buffer);
+				blk->bit_output_idx += vlen;
 			}
 		}
 	}
@@ -482,10 +482,10 @@ void flush_putbit(BlinkParams *params, BufContextBlock* blk)
 	if (params->outType == TY_FILE)
 	{
 		if (params->outFileMode == MODE_BIN) {
-			fwrite(blk->output_buffer, 1, (blk->output_idx + 7) / 8, blk->output_file);
-			blk->output_idx = 0;
+			fwrite(blk->bit_output_buffer, 1, (blk->bit_output_idx + 7) / 8, blk->bit_output_file);
+			blk->bit_output_idx = 0;
 		}
-		fclose(blk->output_file);
+		fclose(blk->bit_output_file);
 	}
 } 
 

@@ -683,10 +683,16 @@ codeGenComp dflags comp k =
                                    goto l_IMMEDIATE;
                                   |]
             else
-                appendStmts [cstms|$id:bufPutF($id:global_params, $id:buf_context, $id:(inValOf ih));
-                                   $id:globalWhatIs = SKIP;
-                                   goto l_IMMEDIATE;
-                                  |]
+              if isUserStructTy (inTyOfCTy cty0) then
+                  appendStmts [cstms|$id:bufPutF($id:global_params, $id:buf_context, (void *) (&$id:(inValOf ih)));
+                                     $id:globalWhatIs = SKIP;
+                                     goto l_IMMEDIATE;
+                                    |]
+              else
+                  appendStmts [cstms|$id:bufPutF($id:global_params, $id:buf_context, $id:(inValOf ih));
+                                     $id:globalWhatIs = SKIP;
+                                     goto l_IMMEDIATE;
+                                    |]
 
         return (mkCompInfo prefix False)
 

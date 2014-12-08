@@ -67,8 +67,8 @@
     <NMakeOutput>$(ProjectDir)target\i386\CompilerDDK.exe</NMakeOutput>
     <NMakePreprocessorDefinitions>WIN64;_DEBUG;$(NMakePreprocessorDefinitions);SORA_PLATFORM;USER_MODE;WINDDK</NMakePreprocessorDefinitions>
     <IncludePath>$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSDK_IncludePath);C:\SoraSDK2.0\inc\brick;C:\SoraSDK2.0\inc;C:\SoraSDK2.0\src\bb\dot11a;C:\SoraSDK2.0\src\bb\dot11a\inc;C:\SoraSDK2.0\src\bb\brick11\src;C:\SoraSDK2.0\src\util\src;$(DDK_INC_PATH)</IncludePath>
-    <NMakeBuildCommandLine>$(SolutionDir)compile.bat $(ProjectDir) /b chk x86 WXP</NMakeBuildCommandLine>
-    <NMakeReBuildCommandLine>$(SolutionDir)compile.bat $(ProjectDir) /r chk x86 WXP</NMakeReBuildCommandLine>
+    <NMakeBuildCommandLine>$(SolutionDir)compile.bat $(ProjectDir) /b chk x64 WIN7</NMakeBuildCommandLine>
+    <NMakeReBuildCommandLine>$(SolutionDir)compile.bat $(ProjectDir) /r chk x64 WIN7</NMakeReBuildCommandLine>
     <NMakeCleanCommandLine>echo $(ProjectDir)</NMakeCleanCommandLine>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">

@@ -32,37 +32,32 @@ typedef enum __GetStatus {
 
 typedef struct _BufContextBlock { 
 	// Bit buffers
-	BitArrPtr input_buffer;
-	unsigned int input_entries;
-	unsigned int input_idx;
-	unsigned int input_repetitions;
-	unsigned int input_dummy_samples;
-	unsigned int max_dummy_samples;
+	BitArrPtr bit_input_buffer;
+	unsigned int bit_input_entries;
+	unsigned int bit_input_idx;
+	unsigned int bit_input_repetitions;
+	unsigned int bit_input_dummy_samples;
+	unsigned int bit_max_dummy_samples;
 
-	int fst;
-	unsigned char * output_buffer;
-	unsigned int output_entries;
-	unsigned int output_idx;
-	FILE *output_file;
+	int bit_fst;
+	unsigned char * bit_output_buffer;
+	unsigned int bit_output_entries;
+	unsigned int bit_output_idx;
+	FILE *bit_output_file;
 
 
 	// Byte buffer
-	/* A buffer of elements, each element of size chunk_siz */
-	char *chunk_input_buffer;
-	unsigned int chunk_input_siz;
+	/* A buffer of elements, each element of size chunk_size */
+	void *chunk_input_buffer;
+	size_t chunk_size;
 	unsigned int chunk_input_entries;
 	unsigned int chunk_input_idx;
-	unsigned int chunk_input_repeats;
-
+	unsigned int chunk_input_repetitions;
 	unsigned int chunk_input_dummy_samples;
 	unsigned int chunk_max_dummy_samples;
 
-	void(*parse_chunk_dbg)(char *buf, void *chunk);
-	void(*print_chunk_dbg)(FILE *f, void *chunk);
-
 	int chunk_fst;
-	char *chunk_output_buffer;
-	unsigned int chunk_output_siz;
+	void  * chunk_output_buffer;
 	unsigned int chunk_output_entries;
 	unsigned int chunk_output_idx;
 	FILE *chunk_output_file;

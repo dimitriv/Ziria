@@ -45,6 +45,16 @@ all: $(TGTS)
 	EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PP) $< $@
 #	$(PP) $< $@
 
+
+# Special name prefix for programs that need binary inputs and outputs
+# These are required to test struct-related I/O drivers which only support binary format
+bin_%.outfile: bin_%.out bin_%.infile
+	./$< --input=file \
+             --input-file-name=bin_$*.infile \
+             --input-file-mode=bin \
+             --output-file-name=$@ \
+             --output-file-mode=bin
+
 %.outfile: %.out %.infile
 	./$< --input=file \
              --input-file-name=$*.infile \

@@ -45,12 +45,13 @@
 
 void init_getchunk(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hblk, size_t unit_size)
 {
-	blk->size_in = 1;
+	blk->size_in = unit_size*8;
 	blk->total_in = 0;
+	blk->chunk_size = unit_size;
 
 	if (params->inType == TY_DUMMY)
 	{
-		blk->max_dummy_samples = params->dummySamples;
+		blk->chunk_max_dummy_samples = params->dummySamples;
 	}
 
 	if (params->inType == TY_MEM)
@@ -62,8 +63,8 @@ void init_getchunk(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *
 		}
 		else
 		{
-			blk->input_buffer = (BitArrPtr)blk->mem_input_buf;
-			blk->input_entries = 8 * blk->mem_input_buf_size;
+			blk->chunk_input_buffer = blk->mem_input_buf;
+			blk->chunk_input_entries = blk->mem_input_buf_size / unit_size;
 		}
 	}
 
@@ -75,8 +76,8 @@ void init_getchunk(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *
 
 		if (params->inFileMode == MODE_BIN)
 		{ 
-			blk->input_buffer = (BitArrPtr)filebuffer;
-			blk->input_entries = 8 * sz;
+			blk->chunk_input_buffer = (void *)filebuffer;
+			blk->chunk_input_entries = sz / unit_size;
 		}
 		else 
 		{
@@ -117,30 +118,31 @@ GetStatus buf_getchunk(BlinkParams *params, BufContextBlock* blk, void *x)
 
 	if (params->inType == TY_DUMMY)
 	{
-		if (blk->input_dummy_samples >= blk->max_dummy_samples && params->dummySamples != INF_REPEAT)
+		if (blk->chunk_input_dummy_samples >= blk->chunk_max_dummy_samples && params->dummySamples != INF_REPEAT)
 		{
 			return GS_EOF;
 		}
-		blk->input_dummy_samples++;
+		blk->chunk_input_dummy_samples++;
 		// No real need to do this, and it slows down substantially
 		//*x = 0;
 		return GS_SUCCESS;
 	}
 
 	// If we reached the end of the input buffer 
-	if (blk->input_idx >= blk->input_entries)
+	if (blk->chunk_input_idx >= blk->chunk_input_entries)
 	{
 		// If no more repetitions are allowed 
-		if (params->inFileRepeats != INF_REPEAT && blk->input_repetitions >= params->inFileRepeats)
+		if (params->inFileRepeats != INF_REPEAT && blk->chunk_input_repetitions >= params->inFileRepeats)
 		{
 			return GS_EOF;
 		}
 		// Otherwise we set the index to 0 and increase repetition count
-		blk->input_idx = 0;
-		blk->input_repetitions++;
+		blk->chunk_input_idx = 0;
+		blk->chunk_input_repetitions++;
 	}
 
-	//bitRead(blk->input_buffer, blk->input_idx++, x);
+	memcpy(x, (void*)((char *)blk->chunk_input_buffer + blk->chunk_input_idx * blk->chunk_size), blk->chunk_size);
+	blk->chunk_input_idx++;
 
 	return GS_SUCCESS;
 }
@@ -163,54 +165,56 @@ GetStatus buf_getarrchunk(BlinkParams *params, BufContextBlock* blk, void *x, un
 
 	if (params->inType == TY_DUMMY)
 	{
-		if (blk->input_dummy_samples >= blk->max_dummy_samples && params->dummySamples != INF_REPEAT)
+		if (blk->chunk_input_dummy_samples >= blk->chunk_max_dummy_samples && params->dummySamples != INF_REPEAT)
 		{
 			return GS_EOF;
 		}
-		blk->input_dummy_samples += vlen;
+		blk->chunk_input_dummy_samples += vlen;
 		// No real need to do this, and it slows down substantially
 		//memset(x,0,(vlen+7)/8);
 		return GS_SUCCESS;
 	}
 
-	if (blk->input_idx + vlen > blk->input_entries)
+	if (blk->chunk_input_idx + vlen > blk->chunk_input_entries)
 	{
-		if (params->inFileRepeats != INF_REPEAT && blk->input_repetitions >= params->inFileRepeats)
+		if (params->inFileRepeats != INF_REPEAT && blk->chunk_input_repetitions >= params->inFileRepeats)
 		{
-			if (blk->input_idx != blk->input_entries)
+			if (blk->chunk_input_idx != blk->chunk_input_entries)
 				fprintf(stderr, "Warning: Unaligned data in input file, ignoring final get()!\n");
 			return GS_EOF;
 		}
 		// Otherwise ignore trailing part of the file, not clear what that part may contain ...
-		blk->input_idx = 0;
-		blk->input_repetitions++;
+		blk->chunk_input_idx = 0;
+		blk->chunk_input_repetitions++;
 	}
 	
-	//bitArrRead(blk->input_buffer, blk->input_idx, vlen, x);
+	memcpy(x, (void*)((char *)blk->chunk_input_buffer + blk->chunk_input_idx * blk->chunk_size), vlen * blk->chunk_size);
+	blk->chunk_input_idx += vlen;
 
-	blk->input_idx += vlen;
 	return GS_SUCCESS;
 }
 
 
 void init_putchunk(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hblk, size_t unit_size)
 {
-	blk->size_out = 1;
+	blk->size_out = 8*unit_size;
 	blk->total_out = 0;
+	blk->chunk_size = unit_size;
 
 	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
 	{
-		blk->output_buffer = (unsigned char *)malloc(params->outBufSize);
-		blk->output_entries = params->outBufSize * 8;
+		blk->chunk_output_buffer = (unsigned char *)malloc(params->outBufSize);
+		blk->chunk_output_entries = params->outBufSize / unit_size;
 		if (params->outType == TY_FILE)
 		{
 			if (params->outFileMode == MODE_BIN)
 			{
-				blk->output_file = try_open(params->outFileName, "wb");
+				blk->chunk_output_file = try_open(params->outFileName, "wb");
 			}
 			else
 			{
-				blk->output_file = try_open(params->outFileName, "w");
+				fprintf(stderr, "Error: chunk I/O does not support DBG mode!\n");
+				exit(1);
 			}
 		}
 	}
@@ -224,8 +228,8 @@ void init_putchunk(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *
 		}
 		else
 		{
-			blk->output_buffer = (unsigned char*) blk->mem_output_buf;
-			blk->output_entries = blk->mem_output_buf_size * 8;
+			blk->chunk_output_buffer = blk->mem_output_buf;
+			blk->chunk_output_entries = blk->mem_output_buf_size / unit_size;
 		}
 	}
 
@@ -265,6 +269,8 @@ void buf_putchunk(BlinkParams *params, BufContextBlock* blk, void *x)
 	if (params->outType == TY_MEM)
 	{
 		//bitWrite(blk->output_buffer, blk->output_idx++, x);
+		memcpy((void*)((char *)blk->chunk_output_buffer + blk->chunk_output_idx * blk->chunk_size), x, blk->chunk_size);
+		blk->chunk_output_idx ++;
 	}
 
 	if (params->outType == TY_FILE)
@@ -276,12 +282,13 @@ void buf_putchunk(BlinkParams *params, BufContextBlock* blk, void *x)
 		}
 		else 
 		{
-			if (blk->output_idx == blk->output_entries)
+			if (blk->chunk_output_idx == blk->chunk_output_entries)
 			{
-				fwrite(blk->output_buffer, blk->output_entries / 8, 1, blk->output_file);
-				blk->output_idx = 0;
+				fwrite(blk->chunk_output_buffer, blk->chunk_output_entries * blk->chunk_size, 1, blk->chunk_output_file);
+				blk->chunk_output_idx = 0;
 			}
-			//bitWrite(blk->output_buffer, blk->output_idx++, x);
+			memcpy((void*)((char *)blk->chunk_output_buffer + blk->chunk_output_idx * blk->chunk_size), x, blk->chunk_size);
+			blk->chunk_output_idx++;
 		}
 	}
 }
@@ -306,8 +313,8 @@ void buf_putarrchunk(BlinkParams *params, BufContextBlock* blk, void *x, unsigne
 
 	if (params->outType == TY_MEM)
 	{
-//		bitArrWrite(x, blk->output_idx, vlen, blk->output_buffer);
-		blk->output_idx += vlen;
+		memcpy((void*)((char *)blk->chunk_output_buffer + blk->chunk_output_idx * blk->chunk_size), x, blk->chunk_size * vlen);
+		blk->chunk_output_idx += vlen;
 	}
 
 	if (params->outType == TY_FILE)
@@ -319,25 +326,23 @@ void buf_putarrchunk(BlinkParams *params, BufContextBlock* blk, void *x, unsigne
 		}
 		else
 		{ 
-			if (blk->output_idx + vlen >= blk->output_entries)
+			if (blk->chunk_output_idx + vlen >= blk->chunk_output_entries)
 			{
 				// first write the first (output_entries - output_idx) entries
-				unsigned int m = blk->output_entries - blk->output_idx;
+				unsigned int m = blk->chunk_output_entries - blk->chunk_output_idx;
 
 				//bitArrWrite(x, blk->output_idx, m, blk->output_buffer);
+				memcpy((void*)((char *)blk->chunk_output_buffer + m * blk->chunk_size), x, blk->chunk_size * vlen);
 
 				// then flush the buffer
-				fwrite(blk->output_buffer, blk->output_entries / 8, 1, blk->output_file);
+				fwrite(blk->chunk_output_buffer, blk->chunk_output_entries * blk->chunk_size, 1, blk->chunk_output_file);
 
-				// then write the rest
-				// BOZIDAR: Here we used to have bitArrRead but I believe it was wrong
-				//bitArrWrite(x, m, vlen - m, blk->output_buffer);
-				blk->output_idx = vlen - m;
+				blk->chunk_output_idx = vlen - m;
 			}
 			else
 			{
-				//bitArrWrite(x, blk->output_idx, vlen, blk->output_buffer);
-				blk->output_idx += vlen;
+				memcpy((void*)((char *)blk->chunk_output_buffer + blk->chunk_output_idx * blk->chunk_size), x, blk->chunk_size * vlen);
+				blk->chunk_output_idx += vlen;
 			}
 		}
 	}
@@ -347,10 +352,10 @@ void flush_putchunk(BlinkParams *params, BufContextBlock* blk)
 	if (params->outType == TY_FILE)
 	{
 		if (params->outFileMode == MODE_BIN) {
-			fwrite(blk->output_buffer, 1, (blk->output_idx + 7) / 8, blk->output_file);
-			blk->output_idx = 0;
+			fwrite(blk->chunk_output_buffer, blk->chunk_output_idx * blk->chunk_size, 1, blk->chunk_output_file);
+			blk->chunk_output_idx = 0;
 		}
-		fclose(blk->output_file);
+		fclose(blk->chunk_output_file);
 	}
 } 
 
