@@ -61,7 +61,10 @@ import CgOpt
 
 
 import AutoLUT
-import CardinalityAnalysis
+
+-- New cardinality analysis
+import Card 
+-- to go away: import CardinalityAnalysis
 import CgHeader
 import CgMonad
 import CgOpt
