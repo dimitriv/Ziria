@@ -20,7 +20,7 @@
 {-# LANGUAGE ScopedTypeVariables, GeneralizedNewtypeDeriving #-}
 
 -- | Cardinality analysis to drive the vectorizer
-module Card (
+module CardAnalysis (
      Card
    , CAlpha (..)
    , LComp

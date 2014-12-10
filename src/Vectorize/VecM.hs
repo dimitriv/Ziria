@@ -22,14 +22,19 @@ module VecM where
 
 import Control.Applicative
 import Control.Monad.Reader
+
 import Text.Parsec.Pos (SourcePos)
 
 import AstComp
 import AstExpr
 
-import Card 
+import CardAnalysis
 import CtComp
 import Utils 
+
+import Outputable
+import Text.PrettyPrint.HughesPJ
+
 
 import qualified GenSym as GS
 
@@ -41,25 +46,24 @@ import qualified GenSym as GS
 
 data CFunBind = CFunBind {
     cfun_params :: [(GName (CallArg Ty CTy))]
-  , cfun_body   :: LComp
-  }
+  , cfun_body   :: LComp }
 
 data VecEnv = VecEnv {
-    cvar_binds :: [(CId, LComp)]
-  , cfun_binds :: [(CId, CFunBind)]
-  }
+    venv_sym        :: GS.Sym 
+  , venv_cvar_binds :: [(CId, LComp)]
+  , venv_cfun_binds :: [(CId, CFunBind)] }
 
-newtype VecM a = VecM (ReaderT (GS.Sym, VecEnv) IO a)
+
+newtype VecM a = VecM (ReaderT VecEnv IO a)
   deriving ( Functor
            , Applicative
            , Monad
            , MonadIO
-           , MonadReader (GS.Sym, VecEnv)
+           , MonadReader VecEnv
            )
 
-runVecM :: VecM a -> GS.Sym -> VecEnv -> IO a
-runVecM (VecM act) sym env
-  = runReaderT act (sym, env)
+runVecM :: VecM a -> VecEnv -> IO a
+runVecM (VecM act) venv = runReaderT act venv
 
 
 {-------------------------------------------------------------------------------
@@ -67,7 +71,7 @@ runVecM (VecM act) sym env
 -------------------------------------------------------------------------------}
 
 newVectUniq :: VecM String
-newVectUniq = liftIO . GS.genSymStr =<< asks fst
+newVectUniq = liftIO . GS.genSymStr =<< asks venv_sym 
 
 newVectGName :: String -> ty -> Maybe SourcePos -> VecM (GName ty)
 newVectGName nm ty loc = do
@@ -79,28 +83,29 @@ newVectGName nm ty loc = do
 -------------------------------------------------------------------------------}
 
 getVecEnv :: VecM VecEnv
-getVecEnv = ask >>= \(_,env) -> return env
+getVecEnv = ask
 
 extendCVarBind :: CId 
                -> LComp -> VecM a -> VecM a
 extendCVarBind nm comp 
-  = local $ \(sym,env) -> (sym, add_bind env)
-  where add_bind env = env { cvar_binds = (nm,comp) : cvar_binds env }
+  = local $ add_bind
+  where 
+    add_bind env = env { venv_cvar_binds = (nm,comp) : venv_cvar_binds env }
                   
 extendCFunBind :: CId
                -> [GName (CallArg Ty CTy)]
                -> LComp
                -> VecM a -> VecM a
 extendCFunBind nm params cbody 
-  = local $ \(sym, env) -> (sym, add_bind env)
+  = local $ add_bind
   where new_bnd = (nm, CFunBind params cbody)
-        add_bind env = env { cfun_binds = new_bnd : cfun_binds env }
+        add_bind env = env { venv_cfun_binds = new_bnd : venv_cfun_binds env }
 
 getCVarBinds :: VecM [(CId, LComp)]
-getCVarBinds = asks $ cvar_binds . snd
+getCVarBinds = asks venv_cvar_binds
 
 getCFunBinds :: VecM [(CId, CFunBind)]
-getCFunBinds = asks $ cfun_binds . snd
+getCFunBinds = asks venv_cfun_binds
 
 lookupCVarBind :: CId -> VecM LComp
 lookupCVarBind nm = do
@@ -219,26 +224,56 @@ vResMatch vs = do
 -------------------------------------------------------------------------------}
 
 -- | Give back a vectorized version of a type
--- NB: If wdth == 1 we return exactly the same type, /not/ a 
--- 1-element array. 
--- Precondition: it must be (isVectorizable ty)
+-- Some notes: 
+--   * If wdth == 1 we return exactly the same type ty, not a 1-element array.
+--   * If ty = TVoid we do not return an array, just TVoid.
+-- Precondition: it must be (isVectorizable ty). TVoid isVectorizable.
 mkVectTy :: Ty -> Int -> Ty
 mkVectTy ty wdth
-    | not (isVectorizable ty)
-    = panicStr $ "VecM: non-vectorizable type " ++ show ty
-    | wdth == 1 = ty
-    | otherwise
-    = TArray (Literal wdth) ty
+  | not (isVectorizable ty)
+  = panicStr $ "VecM: non-vectorizable type " ++ show ty
+  | wdth == 1 
+  = ty
+  | TVoid <- ty
+  = TVoid
+  | otherwise
+  = TArray (Literal wdth) ty
 
 -- | When is a type vectorizable
--- Not vectorizing arrays for the moment (because we do not support
--- arrays of naked arrays and we have not thought enough about
--- coarsening or braking up arrays) but that's about all the
--- restrictions we impose really.
+-- Not vectorizing arrays for the moment because we do not support
+-- arrays of naked arrays we need to think through coarsening and
+-- breaking up of arrays (TODO). 
 isVectorizable :: Ty -> Bool
 isVectorizable ty
-    | TArray {} <- ty 
-    = False  
-    | otherwise
-    = True
+  | TArray {} <- ty -- TODO: revisit this
+  = False  
+  | otherwise = True
 
+
+{-------------------------------------------------------------------------------
+  Vectorization utilities
+-------------------------------------------------------------------------------}
+
+
+-- | Computes least array or primitive type from the two, used for mitigators
+-- NB: No arrays of length 1
+gcd_ty :: Ty -> Ty -> Ty 
+gcd_ty TVoid t = t 
+gcd_ty t TVoid = t
+gcd_ty (TArray (Literal l1) t1) 
+       (TArray (Literal l2) t2)
+  = assert "gcd_ty" (t1 == t2) $
+    let n = gcd l1 l2 
+    in if n > 1 then TArray (Literal n) t1 else t1
+
+gcd_ty t (TArray _ t') = assert "gcd_ty" (t == t') t
+gcd_ty (TArray _ t') t = assert "gcd_ty" (t == t') t
+
+gcd_ty t t' 
+  = panic $ text "gcd_ty: types are non-joinable!" <+> 
+            ppr t <+> text "and" <+> ppr t'
+
+gcdTys :: [Ty] -> Ty
+gcdTys xs = go (head xs) (tail xs)
+  where go t []       = t 
+        go t (t1:t1s) = go (gcd_ty t t1) t1s

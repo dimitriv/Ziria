@@ -63,7 +63,7 @@ import CgOpt
 import AutoLUT
 
 -- New cardinality analysis and new vectorizer
-import Card 
+import CardAnalysis
 import VecM 
 
 import CgHeader

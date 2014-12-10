@@ -20,37 +20,213 @@ module Vectorize where
 
 import AstExpr
 import AstComp
-import AstCombinator
+import AstFM
 
 import PpComp
 import Outputable
 import qualified GenSym as GS
-
 import Text.Parsec.Pos
-
 import qualified Data.Set as S
 import Control.Monad.State
-
 import Data.List as M
-
 import Data.Functor.Identity
 
 import Opts
 
-import CardinalityAnalysis
+-- Cardinality analysis and vectorization imports
+import CardAnalysis
+import VecM
+
 
 import VecMonad
-import VecScaleUp    -- Up-vectorization
-import VecScaleDn    -- Down-vectorization
-import VecScaleForce -- Force vectorization
+-- import VecScaleUp    -- Up-vectorization
+-- import VecScaleDn    -- Down-vectorization
+-- import VecScaleForce -- Force vectorization
 
 import TcMonad
 import TcComp
 import TcErrors ( ErrCtx (..) )
-
 import PassFold ( elimMitigsIO )
-
 import Debug.Trace
+
+{-------------------------------------------------------------------------------
+  Delayed results of vectorization
+-------------------------------------------------------------------------------}
+
+-- | Delayed vectorization result
+data DelayedVectRes
+   = DVR { dvr_comp       :: IO Comp -- Delayed result
+         , dvr_vres       :: VectRes -- Information about the result
+         , dvr_orig_tyin  :: Ty      -- Original (pre-vect) in  type
+         , dvr_orig_tyout :: Ty      -- Original (pre-vect) out type
+         }
+
+-- | Lift an operation on VectRes to be on a DelayedVectRes
+lift_dvr :: (VectRes -> a) -> DelayedVectRes -> a
+lift_dvr f = f . dvr_vres
+
+-- | Utility of delayed vectorization
+dvResUtil :: DelayedVectRes -> Double
+dvResUtil = lift_dvr vResUtil
+
+-- | Keep a result with maximal utility for each group by vResEqQ
+keepGroupMaximals :: [DelayedVectRes] -> [DelayedVectRes]
+keepGroupMaximals xs = map getMaximal (groups x)
+  where groups = groupBy' $ vResEqC <| dvr_vres
+
+-- | Return a result with maximal utility
+getMaximal :: [DelayedVectRes] -> DelayedVectRes
+getMaximal = maximumBy $ compare <| dvResUtil 
+
+
+{-------------------------------------------------------------------------------
+  Matching on the control path
+-------------------------------------------------------------------------------}
+
+-- | Match vectorization candidates composed on the control path (bind).
+--
+-- For a set of components c1..cn this function accepts the
+-- vectorization candidates for each ci and creates the set of
+-- vectorization candidates for matching them in the control path. For
+-- example:
+-- 
+-- [ [vc11,vc12], [vc21,vc22] ] 
+--     ~~>
+-- [ [vc11,vc21], [vc11,vc22], [vc12,vc21], [vc11,vc22] ]
+-- 
+-- assuming that for each group in the resulting list the input types
+-- of all components are joinable and the output types are also all
+-- joinable.
+-- 
+-- NB: 'matchControl' may introduce mitigators to make sure that
+-- queues match.  These mitigate between the ``greatest common
+-- divisor'' type of all input types and each individual input type,
+-- and similarly between each individual output type and the
+-- ``greatest common divisor'' type of all output types.  See VecM.hs
+-- for the definition of gcdTys.
+matchControl :: [ [DelayedVectRes] ] -> [ [DelayedVectRes] ]
+matchControl bcands 
+  = map mitigate $ Utils.cross_prod bcands 
+  where
+    mitigate :: [DelayedVectRes] -> [DelayedVectRes]
+    mitigate vcs = map (mitigate_one ty_in ty_out) vcs
+      -- Compute "the" common input type and "the" common output type
+      where ty_in  = gcdTys $ map (vect_in_ty  . dvr_vres) vcs
+            ty_out = gcdTys $ map (vect_out_ty . dvr_vres) vcs
+    -- Mitigate from the expected input type (exp_tin) and to the 
+    -- expected output type (exp_tout)
+    mitigate_one exp_tin exp_tout dvr
+      = dvr { dvr_comp = new_dvr_comp, dvr_vres = vres_new } 
+      where 
+       vect_tin     = vec_in_ty vres
+       vect_tout    = vec_out_ty vres
+       new_dvr_comp = do
+          comp <- dvr_comp dvr
+          return $ (exp_tin,vect_tin) `mitIn` comp `mitOut` (vect_tout,exp_tout)
+       vres_new = (dvr_vres dvr) { vec_in_ty = exp_tin, vec_out_ty = exp_tout }
+
+-- | Mitigate by creating a Mitigate node (maybe) node between tin1 ~> tin2
+-- Pre-condition: tin1 is a ``type divisor'' of tin2 or vice-versa.
+-- Result is a mitigating (ST T tin1 tin2) transformer.  
+mkMit :: Ty -> Ty -> Maybe Comp 
+mkMit tin1 tin2
+    -- If the two types are equal no need for mitigation
+  | tin1 == tin2 = Nothing
+    -- If one is array but other non-array then the latter must be 
+    -- the base type of the former.  
+    -- We must up-mitigate: 1 ~> len
+  | not (isArrayTy tin1)
+  , TArray (Literal len) tbase <- tin2
+  = assert (tbase == tin1) $ 
+    return $ cMitigate loc () tbase 1 len
+    -- Symmetric to previous case 
+  | not (isArrayTy tin2)
+  , TArray (Literal len) tbase <- tin1
+  = assert (tbase == tin2) $
+    return $ cMitigate loc () tbase len 1
+    -- If both types are arrays (of different lenghts) let's mitigate 
+  | TArray (Literal len1) tbase1 <- tin1
+  , TArray (Literal len2) tbase2 <- tin2
+  = assert (tbase1 == tbase2) $ 
+    return $ cMitigate loc () tbase1 len1 len2
+  | otherwise
+  = panic $ text "mkMit: can't mitigate:" <+> 
+            ppr tin1 <+> text "~>" ppr tin2
+
+-- | (gty,ty) `mitIn` comp
+-- Mitigates in the input type of comp
+mitIn :: (Ty,Ty) -> Comp -> Comp
+mitIn (gty,ty) comp
+  | Just m <- mkMit gty ty
+  = cPar (compLoc comp) (mkParInfo NeverPipeline) m comp
+  | otherwise = comp
+
+-- | comp `mitOut` (ty,gty)
+-- Mitigates on the output type of comp, symmetrically to before. 
+mitOut :: Comp -> (Ty,Ty) -> Comp 
+mitOut comp ty gty
+  | Just m <- mkMit ty gty
+  = cPar (compLoc comp) (mkParInfo NeverPipeline) comp m
+  | otherwise = comp
+
+{-------------------------------------------------------------------------------
+  Matching on the data path
+-------------------------------------------------------------------------------}
+
+-- | Match vectorization candidates composed on the data path
+matchData :: ParInfo
+          -> Maybe SourcePos
+          -> [ DelayedVectRes ] -> [ DelayedVectRes ] -> [ DelayedVectRes ]
+matchData p loc xs ys 
+  = cross_comb (mitigatePar p loc) xs ys
+
+mitigatePar :: ParInfo
+            -> Maybe SourcePos
+            -> DelayedVectRes
+            -> DelayedVectRes
+            -> Maybe DelayedVectRes
+mitigatePar pnfo loc dp1 dp2 = do
+  vres <- mk_vres (dvr_vres dp1) (dvr_vres dp2)
+  return $ 
+  DVR { dvr_comp = mk_par (dvr_comp dp1) (dvr_comp dp2)
+      , dvr_vres = vres
+      , dvr_orig_tyin  = dvr_orig_tyin  dp1
+      , dvr_orig_tyout = dvr_orig_tyout dp2 }
+  where
+    mk_par ioc1 ioc2 = do
+      c1 <- ioc1
+      c2 <- ioc2 
+      return $ cPar loc () pnfo c1 c2   
+    -- non joinable => just fail
+    mk_vres r1 r2
+      | Nothing <- ctJoin_maybe (vect_out_ty r1) (vect_in_ty r2)
+      = Nothing  
+    -- both non-vect => non-vect
+    mk_vres (NotVect t1 _t2) (NotVect _s1 s2) = return $ NotVect t1 s2
+    -- joinable and one didVect => Didvect 
+    mk_vres r1 r2 
+      = let u = chooseParUtility r1 r2 
+        in return $ DidVect (vect_in_ty r1) (vect_out_ty r2) u 
+
+
+
+*************************** 
+
+
+{-------------------------------------------------------------------------------
+  Scaling factors
+-------------------------------------------------------------------------------}
+
+-- | Scaling factors correspond to "modes of vectorization"
+-- 
+--
+--
+--
+--
+--
+--
+
+
 
 data VectScaleFact
   = -- Scale up factor
@@ -171,295 +347,7 @@ allVectMults ra ty_in xin xout = [ (x,y)
         good_sizes x y = xin*x  <= in_vect_bound ty_in &&
                          xout*y <= out_vect_bound
 
--- Delayed result of vectorization
-data DelayedVectRes
-   = DVR { dvr_comp :: IO (Comp () ())
-         , dvr_vres :: VectRes
-         , dvr_orig_tyin  :: Ty -- original (pre-vect) in type
-         , dvr_orig_tyout :: Ty -- original (pre-vect) out type
-         }
 
-
-
-matchControl :: (GS.Sym, VecEnv)
-             -> [ [DelayedVectRes] ] -> [ [DelayedVectRes] ]
--- For a set of blocks c1...cn
--- This function accepts the vectorization candidates for each one
--- and tries to match them so that input and output vectorizations
--- agree -- or can be mitigated to match.
--- E.g.
---   [ [vc11,vc12], [vc21,vc22] ]
---   ~~~>
---   [ [vc11,vc21], [vc11,vc22], [vc12,vc21], [vc11,vc22] ]
--- in the case where all queues match up
-matchControl (sym,venv) bcands
-  = let cands = go [] bcands []
-    in map mitigate cands
-  where
-    go acc ([]:_) k
-      = error "Can't happen! Empty vectorization result!"
-    go acc ([c1]:crest) k
-      = go (c1:acc) crest k
-    go acc ((c1:c1s):crest) k
-      = go (c1:acc) crest (go acc (c1s:crest) k)
-    go acc [] k
-      = (reverse acc) : k
-
-    mitigate :: [DelayedVectRes] -> [DelayedVectRes]
-    mitigate vcs =
-      let ain  = gcd_in vcs
-          aout = gcd_out vcs
-      in map (mitigate_one ain aout) vcs
-
-    gcd_in vcs =
-      let ins =
-            concat $ map (\dvr ->
-              case dvr_vres dvr of
-                NoVect            -> [1]
-                DidVect 0 _ util  -> []
-                DidVect ic _ util -> [ic]
-            ) vcs
-      in gcd_many ins
-
-    gcd_out vcs =
-      let outs =
-            concat $ map (\dvr ->
-              case dvr_vres dvr of
-                NoVect            -> [1]
-                DidVect _ 0 util  -> []
-                DidVect _ oc util -> [oc]
-            ) vcs
-      in gcd_many outs
-
-    gcd_many [a1] = a1
-    gcd_many (a1:a2:as) = gcd_many (gcd a1 a2 : as)
-    gcd_many [] = 0
-
-    -- Could be empty only in the exceptional case where they are all
-    -- filtered out because they are zero
-
-    mitigate_one ain aout
-                 dvr@(DVR { dvr_comp = mk_comp
-                          , dvr_vres = vres
-                          , dvr_orig_tyin  = tin
-                          , dvr_orig_tyout = tout
-                          })
-      | NoVect <- vres
-      = dvr
-      | DidVect cin cout u <- vres
-      = let mk_comp' =
-              do { comp <- vecMIO $ mk_comp
-
-{-
-                 ; vecMIO $ do { putStrLn "mitigate_one"
-                               ; putStrLn $ "ain  = " ++ show ain
-                               ; putStrLn $ "aout = " ++ show aout
-                               ; putStrLn $ "cin  = " ++ show cin
-                               ; putStrLn $ "cout = " ++ show cout
-                               -- ; putStrLn $ "comp = " ++ show comp
-                               }
--}
-                 ; let loc = compLoc comp
-                 ; c'  <- mk_in comp cin ain tin
-                 ; c'' <- mk_out c' cout aout tout
-                 ; return c''
-                 }
-
-        in dvr { dvr_comp = inCurrentEnv (sym,venv) mk_comp'
-               , dvr_vres = DidVect ain aout u -- (u - mitig_util)
-               }
-
-      | otherwise
-      = error "mitigate_one: Can't happen!"
-
-
-mk_in c cin ain tin
-  | cin == 0 || ain == cin
-    -- no need for mitigation
-  = return c
-  | otherwise
-  , let loc = compLoc c
-  = do { -- m <- mitigateUp loc "_bnd" tin ain cin
-       ; let m = cMitigate loc () tin ain cin
-       ; return $
-         cPar loc () (mkParInfo NeverPipeline) m c
-       }
-
-mk_out c cout aout tout
-  | cout == 0 || aout == cout
-  = return c
-  | otherwise
-  , let loc = compLoc c
-  = do { -- m <- mitigateDn loc "_bnd" tout cout aout
-       ; let m = cMitigate loc () tout cout aout
-       ; return $
-         cPar loc () (mkParInfo NeverPipeline) c m
-       }
-
-
-matchData :: (GS.Sym, VecEnv)
-          -> ParInfo
-          -> Maybe SourcePos
-          -> [ DelayedVectRes ]
-          -> [ DelayedVectRes ]
-          -> [ DelayedVectRes ]
-matchData (sym,venv) p loc xs ys = go_left_top xs ys
-  where
-    go_left_top xs ys        = -- trace "go_left"  $
-                               go_left xs ys
-    go_right_top xs ys       = -- trace "go_right" $
-                               go_right xs ys
-
-    go_left [vc1] vcs2       = -- trace ("A" ++ (show $ length vcs2)) $
-                               lchoose vc1 vcs2 []
-
-    go_left (vc1:vcs1) vcs2  = -- trace "B" $
-                               lchoose vc1 vcs2 (go_right_top vcs1 vcs2)
-    go_left [] _             = error "go_left"
-    go_right vcs1 [vc2]      = rchoose vcs1 vc2 []
-    go_right vcs1 (vc2:vcs2) = rchoose vcs1 vc2 (go_left_top vcs1 vcs2)
-    go_right _ []            = error "go_right"
-
-    lchoose vc1 [vc2] k
-      | Just vcs <- mitigatePar (sym,venv) p loc vc1 vc2
-      = vcs : k
-      | otherwise
-      = k
-    lchoose vc1 (vc2:vc2s) k
-      | Just vcs <- -- trace ("foo" ++ show (length vc2s)) $
-             mitigatePar (sym,venv) p loc vc1 vc2
-      = -- trace "lchoose(1)" $
-        vcs : lchoose vc1 vc2s k
-      | otherwise
-      = -- trace "lchoose(2)" $
-        lchoose vc1 vc2s k
-
-    lchoose _ [] _ = error "lchoose"
-
-    rchoose [vc1] vc2 k
-      | Just vcs <- mitigatePar (sym,venv) p loc vc1 vc2
-      = vcs : k
-      | otherwise
-      = k
-    rchoose (vc1:vc1s) vc2 k
-      | Just vcs <- mitigatePar (sym,venv) p loc vc1 vc2
-      = vcs : rchoose vc1s vc2 k
-      | otherwise
-      = rchoose vc1s vc2 k
-
-    rchoose [] _ _ = error "rchoose"
-
-
-pruneMaximal :: [ DelayedVectRes ] -> [ DelayedVectRes ]
-pruneMaximal xs
-  = -- first group by VectRes in-out
-    let groups
-          = groupBy (\vr1 vr2 ->
-              vectResQueueEq (dvr_vres vr1) (dvr_vres vr2)) $
-            sortBy (\vr1 vr2 ->
-              vectResQueueComp (dvr_vres vr1) (dvr_vres vr2)) $
-            xs
-    in
-    -- and for each group pick the maximal
-    map filter_maximal groups
-
-  where filter_maximal xs = runIdentity (filterMaximal xs)
-
-
-filterMaximal :: Monad m => [ DelayedVectRes ] -> m DelayedVectRes
-filterMaximal cs
-  = case cs of
-      []     -> fail "Empty vectorization choices!"
-      (c:cs) -> return $ go c cs
-  where go c []      = c
-        go c (c':cs) = if vectResUtil (dvr_vres c) < vectResUtil (dvr_vres c')
-                       then go c' cs
-                       else go c cs
-
-
-mitigatePar :: (GS.Sym, VecEnv)
-            -> ParInfo
-            -> Maybe SourcePos
-            -> DelayedVectRes
-            -> DelayedVectRes
-            -> Maybe DelayedVectRes
-mitigatePar (sym,venv) pnfo loc dp1 dp2
- = -- trace ("mitigatePar:" ++ show loc) $
-   case (dvr_vres dp1, dvr_vres dp2) of
-     (NoVect,NoVect) ->
-        Just $
-        DVR { dvr_comp = mk_par dp1 dp2
-            , dvr_vres = NoVect
-            , dvr_orig_tyin  = dvr_orig_tyin dp1
-            , dvr_orig_tyout = dvr_orig_tyout dp2
-            }
-
-
-     -- Treat NoVect as DidVect 1 1
-     (v1@NoVect, v2@(DidVect cin cout u))
-        | let t1 = dvr_orig_tyout dp1
-        , let t2 = if cin > 1
-                   then TArr (Literal cin) (dvr_orig_tyin dp2)
-                   else dvr_orig_tyin dp2
-        , t1 == t2
-        , let u = chooseParUtility (vectResUtil v1)
-                                   (vectResUtil v2) (cin,cin)
-        -> Just $
-             DVR { dvr_comp = mk_par dp1 dp2
-                 , dvr_vres = DidVect 1 cout u
-                 , dvr_orig_tyin  = dvr_orig_tyin dp1
-                 , dvr_orig_tyout = dvr_orig_tyout dp2
-                 }
-
-        | otherwise
-          -- TODO: make this more flexible in the future
-        -> Nothing
-
-     (v1@(DidVect cin cout u), v2@NoVect)
-
-        | let t2 = dvr_orig_tyin dp2
-        , let t1 = if cout > 1
-                   then TArr (Literal cin) (dvr_orig_tyout dp1)
-                   else dvr_orig_tyout dp1
-        , t1 == t2
-        , let u = chooseParUtility (vectResUtil v1)
-                                   (vectResUtil v2) (cout,cout)
-        -> Just $
-             DVR { dvr_comp = mk_par dp1 dp2
-                 , dvr_vres = DidVect cin 1 u
-                 , dvr_orig_tyin  = dvr_orig_tyin dp1
-                 , dvr_orig_tyout = dvr_orig_tyout dp2
-                 }
-
-        | otherwise
-          -- TODO: make this more flexible in the future
-        -> Nothing
-
-     (DidVect ci co u1, DidVect ci' co' u2)
-       | co == ci' || co == 0 || ci' == 0
-       -> let m = if co > 0 then co else ci'
-              u = chooseParUtility u1 u2 (m,m)
-          in Just $
-               DVR { dvr_comp = mk_par dp1 dp2
-                   , dvr_vres = DidVect ci co' u
-                   , dvr_orig_tyin  = dvr_orig_tyin dp1
-                   , dvr_orig_tyout = dvr_orig_tyout dp2
-                   }
-
-{- NO PAR MITIGATION!
-       | co `mod` ci' == 0 -- divisible
-       -> mitPars (sym,venv) pnfo loc ci co u1 dp1 ci' co' u2 dp2
--}
-       | otherwise
-       -> Nothing
-
-  where
-    -- No mitigation
-    mk_par dp1 dp2
-      = do { p1 <- dvr_comp dp1
-           ; p2 <- dvr_comp dp2
-           ; return $ cPar loc () pnfo p1 p2
-           }
 
 
 mitUpDn :: RateAction -> Maybe SourcePos -> DelayedVectRes -> [ DelayedVectRes ]

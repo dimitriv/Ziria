@@ -4,18 +4,24 @@
 module Utils (
     panic
   , panicStr
+  , assert 
   , mapKeysM
   , mapTelescope
   , parsePragmaLine
   , uncurry4 
+  , groupBy'
+  , (<|) 
+  , cross_prod
+  , cross_comb
+  , gcd_many
   ) where
 
 import Control.Applicative
 import Control.Monad
 import Data.Map (Map)
-import Data.Maybe (listToMaybe)
+import Data.Maybe ( listToMaybe )
 import Text.PrettyPrint.HughesPJ
-import System.IO.Unsafe (unsafePerformIO)
+import System.IO.Unsafe ( unsafePerformIO )
 import System.Exit
 import qualified Data.Map as Map
 
@@ -26,6 +32,12 @@ panic err = unsafePerformIO $ do
 
 panicStr :: String -> a
 panicStr = panic . text
+
+
+assert :: String -> Bool -> a -> a 
+assert _msg True x  = x
+assert msg False _x = panicStr msg
+
 
 mapKeysM :: (Monad m, Ord k2) => (k1 -> m k2) -> Map k1 a -> m (Map k2 a)
 mapKeysM f mp = do
@@ -110,3 +122,51 @@ instance MonadPlus ReadsM where
 
 uncurry4 :: (a -> b -> c -> d -> z) -> (a, b, c, d) -> z
 uncurry4 fun (a, b, c, d) = fun a b c d
+
+
+-- | Data.List.groupBy does not merge non-consecutive equivalence
+-- groups so we provide our own function that does exactly this.
+groupBy' :: (a -> a -> Bool) -> [a] -> [[a]]
+groupBy' f xs = go xs []
+ where 
+   go [] groups  = groups
+   go (y:ys) groups = go ys (ginsert y groups)
+
+   ginsert x [] = [[x]] -- create new singleton group
+   ginsert x (g1:gs) 
+     | f x (head g1) 
+     = (x:g1):gs -- insert into g1
+     | otherwise -- or else insert somewhere in gs or in the end
+     = g1:(ginsert x gs)
+
+
+-- | Composing two functions
+(<|) :: (a -> a -> b) -> (c -> a) -> c -> c -> b 
+(<|) f g x y = f (g x) (g y)
+
+
+
+-- | Cross-product of two lists
+-- E.g. if xs = [ [a1,a2], [b1,b2,b3] ] 
+-- then cross_prod xs = [ [a1,b1], [a1,b2], [a1,b3], [a2,b1], [a2,b2], [a2,b3] ]
+cross_prod :: [[a]] -> [[a]]
+cross_prod = go [] [] 
+  where
+    go acc k []               = reverse acc : k
+    go _acc _k ([]:_)         = panicStr "cross_prod: empty candidate list!"
+    go acc k ([c1]:crest)     = go (c1:acc) k crest 
+    go acc k ((c1:c1s):crest) = go (c1:acc) (go acc k (c1s:crest)) crest
+
+cross_comb :: (a -> b -> Maybe c) -> [a] -> [b] -> [c]
+cross_comb f xs ys 
+  = [ c | x <- xs
+        , y <- ys 
+        , c <- f' x y ]
+  where f' a b = maybe [] (:[]) (f a b)
+
+-- | GCD of many integers
+gcd_many :: [Int] -> Int
+gcd_many [a]        = a
+gcd_many (a1:a2:as) = gcd_many (gcd a1 a2 : as)
+gcd_many []         = error "gcd_many: empty list!"
+
