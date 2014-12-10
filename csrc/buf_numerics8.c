@@ -294,7 +294,7 @@ GetStatus buf_getarrcomplex8(BlinkParams *params, BufContextBlock *blk, complex8
 
 void fprint_int8(BufContextBlock *blk, FILE *f, int8 val)
 {
-	if (blk->num8_fst)
+	if (blk->num8_fst == 1)
 	{
 		fprintf(f, "%d", val);
 		blk->num8_fst = 0;

@@ -274,7 +274,7 @@ GetStatus buf_getarrcomplex32(BlinkParams *params, BufContextBlock *blk, complex
 
 void fprint_int32(BufContextBlock *blk, FILE *f, int32 val)
 {
-	if (blk->num_fst)
+	if (blk->num_fst == 1)
 	{
 		fprintf(f,"%d",val);
 		blk->num_fst = 0;

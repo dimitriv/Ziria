@@ -90,7 +90,7 @@ void initBufCtxBlock(BufContextBlock *blk)
 
 void fprint_bit(BufContextBlock* blk, FILE *f, Bit val)
 {
-	if (blk->bit_fst) {
+	if (blk->bit_fst == 1) {
 		fprintf(f,"%d",val);
 		blk->bit_fst = 0;
 	}

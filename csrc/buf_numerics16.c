@@ -302,7 +302,7 @@ GetStatus buf_getarrcomplex16(BlinkParams *params, BufContextBlock *blk, complex
 
 void fprint_int16(BufContextBlock *blk, FILE *f, int16 val)
 {
-	if (blk->num16_fst)
+	if (blk->num16_fst == 1)
 	{
 		fprintf(f,"%d",val);
 		blk->num16_fst = 0;
