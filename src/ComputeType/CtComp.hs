@@ -19,7 +19,12 @@
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE RecordWildCards #-}
 -- | Compute the type of computations
-module CtComp ( ctComp, ctParMid, ctDoneTyOfComp ) where
+module CtComp ( ctComp
+              , ctParMid
+              , ctDoneTyOfComp
+              , ctJoin_mb
+              , ctJoinMany_mb
+              , ctJoin ) where
 
 import Text.PrettyPrint.HughesPJ
 
@@ -29,7 +34,9 @@ import CtCall
 import CtExpr (ctExp)
 import Outputable
 import Utils
-import Data.Maybe ( fromJust )
+import Data.Maybe ( fromJust, fromMaybe )
+
+import Control.Monad ( foldM )
 
 ctComp :: GComp CTy Ty a b -> CTy
 ctComp MkComp{..} = ctComp0 unComp
@@ -127,15 +134,23 @@ ctParMid c1 c2 = ctJoin y1 i2
         y1   = yldTyOfCTy cty1
         i2   = inTyOfCTy cty2
 
+ctJoin_mb :: Ty -> Ty -> Maybe Ty 
+ctJoin_mb TVoid t = return t
+ctJoin_mb t TVoid = return t
+ctJoin_mb t t'
+  | t == t'   = return t
+  | otherwise = Nothing
+
 ctJoin :: Ty -> Ty -> Ty 
 -- Pre-condition: the two types are joinable
-ctJoin TVoid t = t
-ctJoin t TVoid = t
-ctJoin t t'   
-  | t == t' 
-  = t
-  | otherwise
-  = panic $ text "ctJoin: Incompatible types!" <+> ppr t <+> text "and" <+> ppr t'
+ctJoin t1 t2 = fromMaybe err (ctJoin_mb t1 t2)
+  where 
+    err = panic $ 
+          text "ctJoin: Incompatible types!" <+> 
+          ppr t1 <+> text "and" <+> ppr t2
+
+ctJoinMany_mb :: [Ty] -> Maybe Ty
+ctJoinMany_mb ts = foldM ctJoin_mb (head ts) (tail ts)
 
 
 ctDoneTyOfComp :: Comp -> Ty 

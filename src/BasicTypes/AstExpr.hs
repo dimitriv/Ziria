@@ -810,6 +810,10 @@ isArrayTy_maybe :: Ty -> Maybe Ty
 isArrayTy_maybe (TArray _n t) = Just t
 isArrayTy_maybe _other        = Nothing
 
+isBufTy :: Ty -> Bool
+isBufTy (TBuff {}) = True
+isBufTy _          = False
+
 atomTyOf :: Ty -> Ty
 -- Give you back the biggest non-array type under this type
 atomTyOf (TArray _ t) = atomTyOf t

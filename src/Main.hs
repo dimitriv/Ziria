@@ -62,9 +62,10 @@ import CgOpt
 
 import AutoLUT
 
--- New cardinality analysis
+-- New cardinality analysis and new vectorizer
 import Card 
--- to go away: import CardinalityAnalysis
+import VecM 
+
 import CgHeader
 import CgMonad
 import CgOpt
