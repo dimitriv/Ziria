@@ -139,6 +139,7 @@ void init_putbit(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hb
 void buf_putbit(BlinkParams *params, BufContextBlock *blk, Bit x);
 void buf_putarrbit(BlinkParams *params, BufContextBlock *blk, BitArrPtr x, unsigned int vlen);
 void flush_putbit(BlinkParams *params, BufContextBlock *blk);
+void reset_putbit(BlinkParams *params, BufContextBlock *blk);
 
 
 
@@ -149,6 +150,7 @@ void init_putchunk(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *
 void buf_putchunk(BlinkParams *params, BufContextBlock *blk, void *x);
 void buf_putarrchunk(BlinkParams *params, BufContextBlock *blk, void *x, unsigned int vlen);
 void flush_putchunk(BlinkParams *params, BufContextBlock *blk);
+void reset_putchunk(BlinkParams *params, BufContextBlock *blk);
 
 
 
@@ -159,6 +161,7 @@ void init_putint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *
 void buf_putint32(BlinkParams *params, BufContextBlock *blk, int32 x);
 void buf_putarrint32(BlinkParams *params, BufContextBlock *blk, int32 * x, unsigned int vlen);
 void flush_putint32(BlinkParams *params, BufContextBlock *blk);
+void reset_putint32(BlinkParams *params, BufContextBlock *blk);
 
 
 void init_getcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size);
@@ -168,6 +171,7 @@ void init_putcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlo
 void buf_putcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex32 x);
 void buf_putarrcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex32 *x, unsigned int vlen);
 void flush_putcomplex32(BlinkParams *params, BufContextBlock *blk);
+void reset_putcomplex32(BlinkParams *params, BufContextBlock *blk);
 
 
 unsigned int parse_dbg_int16(char *dbg_buf, int16 *target);
@@ -178,6 +182,7 @@ void init_putint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *
 void buf_putint16(BlinkParams *params, BufContextBlock *blk, int16 x);
 void buf_putarrint16(BlinkParams *params, BufContextBlock *blk, int16 * x, unsigned int vlen);
 void flush_putint16(BlinkParams *params, BufContextBlock *blk);
+void reset_putint16(BlinkParams *params, BufContextBlock *blk);
 
 
 void init_getcomplex16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size);
@@ -187,7 +192,7 @@ void init_putcomplex16(BlinkParams *params, BufContextBlock *blk, HeapContextBlo
 void buf_putcomplex16(BlinkParams *params, BufContextBlock *blk, struct complex16 x);
 void buf_putarrcomplex16(BlinkParams *params, BufContextBlock *blk, struct complex16 *x, unsigned int vlen);
 void flush_putcomplex16(BlinkParams *params, BufContextBlock *blk);
-
+void reset_putcomplex16(BlinkParams *params, BufContextBlock *blk);
 
 
 void init_getint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size);
@@ -197,6 +202,7 @@ void init_putint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *h
 void buf_putint8(BlinkParams *params, BufContextBlock *blk, int8 x);
 void buf_putarrint8(BlinkParams *params, BufContextBlock *blk, int8 * x, unsigned int vlen);
 void flush_putint8(BlinkParams *params, BufContextBlock *blk);
+void reset_putint8(BlinkParams *params, BufContextBlock *blk);
 
 
 void init_getcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size);
@@ -206,6 +212,7 @@ void init_putcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBloc
 void buf_putcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 x);
 void buf_putarrcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 *x, unsigned int vlen);
 void flush_putcomplex8(BlinkParams *params, BufContextBlock *blk);
+void reset_putcomplex8(BlinkParams *params, BufContextBlock *blk);
 
 
 

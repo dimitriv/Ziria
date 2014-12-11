@@ -477,18 +477,26 @@ void buf_putarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, unsig
 		}
 	}
 }
-void flush_putbit(BlinkParams *params, BufContextBlock* blk)
+
+void reset_putbit(BlinkParams *params, BufContextBlock* blk)
 {
 	if (params->outType == TY_FILE)
 	{
 		if (params->outFileMode == MODE_BIN) {
 			fwrite(blk->bit_output_buffer, 1, (blk->bit_output_idx + 7) / 8, blk->bit_output_file);
-			blk->bit_output_idx = 0;
 		}
+	}
+	blk->bit_output_idx = 0;
+}
+
+void flush_putbit(BlinkParams *params, BufContextBlock* blk)
+{
+	reset_putbit(params, blk);
+	if (params->outType == TY_FILE)
+	{
 		fclose(blk->bit_output_file);
 	}
-} 
-
+}
 
 
 

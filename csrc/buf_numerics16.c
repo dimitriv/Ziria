@@ -490,17 +490,26 @@ void _flush_putint16(BlinkParams *params, BufContextBlock *blk, size_t size)
 	{
 		if (params->outFileMode == MODE_BIN) {
 			fwrite(blk->num16_output_buffer, size, blk->num16_output_idx, blk->num16_output_file);
-			blk->num16_output_idx = 0;
 		}
-		fclose(blk->num16_output_file);
 	}
+	blk->num16_output_idx = 0;
 }
-
 
 void flush_putint16(BlinkParams *params, BufContextBlock *blk)
 {
 	_flush_putint16(params, blk, sizeof(int16));
+	if (params->outType == TY_FILE)
+	{
+		fclose(blk->num16_output_file);
+	}
 }
+
+void reset_putint16(BlinkParams *params, BufContextBlock *blk)
+{
+	_flush_putint16(params, blk, sizeof(int16));
+}
+
+
 
 
 void init_putcomplex16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
@@ -612,6 +621,15 @@ void buf_putarrcomplex16(BlinkParams *params, BufContextBlock *blk, struct compl
 }
 
 void flush_putcomplex16(BlinkParams *params, BufContextBlock *blk)
+{
+	_flush_putint16(params, blk, sizeof(complex16));
+	if (params->outType == TY_FILE)
+	{
+		fclose(blk->num16_output_file);
+	}
+}
+
+void reset_putcomplex16(BlinkParams *params, BufContextBlock *blk)
 {
 	_flush_putint16(params, blk, sizeof(complex16));
 }

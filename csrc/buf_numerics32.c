@@ -454,13 +454,21 @@ void _flush_putint32(BlinkParams *params, BufContextBlock *blk, size_t size)
 	{
 		if (params->outFileMode == MODE_BIN) {
 			fwrite(blk->num_output_buffer, size, blk->num_output_idx, blk->num_output_file);
-			blk->num_output_idx = 0;
 		}
+	}
+	blk->num_output_idx = 0;
+}
+
+void flush_putint32(BlinkParams *params, BufContextBlock *blk)
+{
+	_flush_putint32(params, blk, sizeof(int32));
+	if (params->outType == TY_FILE)
+	{
 		fclose(blk->num_output_file);
 	}
 }
 
-void flush_putint32(BlinkParams *params, BufContextBlock *blk)
+void reset_putint32(BlinkParams *params, BufContextBlock *blk)
 {
 	_flush_putint32(params, blk, sizeof(int32));
 }
@@ -550,6 +558,15 @@ void buf_putarrcomplex32(BlinkParams *params, BufContextBlock *blk, struct compl
 	}
 }
 void flush_putcomplex32(BlinkParams *params, BufContextBlock *blk)
+{
+	_flush_putint32(params, blk, sizeof(complex32));
+	if (params->outType == TY_FILE)
+	{
+		fclose(blk->num_output_file);
+	}
+}
+
+void reset_putcomplex32(BlinkParams *params, BufContextBlock *blk)
 {
 	_flush_putint32(params, blk, sizeof(complex32));
 }

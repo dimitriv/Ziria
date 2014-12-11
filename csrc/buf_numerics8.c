@@ -484,17 +484,26 @@ void _flush_putint8(BlinkParams *params, BufContextBlock *blk, size_t size)
 	{
 		if (params->outFileMode == MODE_BIN) {
 			fwrite(blk->num8_output_buffer, size, blk->num8_output_idx, blk->num8_output_file);
-			blk->num8_output_idx = 0;
 		}
-		fclose(blk->num8_output_file);
 	}
+	blk->num8_output_idx = 0;
 }
 
 
 void flush_putint8(BlinkParams *params, BufContextBlock *blk)
 {
 	_flush_putint8(params, blk, sizeof(int8));
+	if (params->outType == TY_FILE)
+	{
+		fclose(blk->num8_output_file);
+	}
 }
+
+void reset_putint8(BlinkParams *params, BufContextBlock *blk)
+{
+	_flush_putint8(params, blk, sizeof(int8));
+}
+
 
 
 void init_putcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
@@ -590,4 +599,14 @@ void buf_putarrcomplex8(BlinkParams *params, BufContextBlock *blk, struct comple
 void flush_putcomplex8(BlinkParams *params, BufContextBlock *blk)
 {
 	_flush_putint8(params, blk, sizeof(complex8));
+	if (params->outType == TY_FILE)
+	{
+		fclose(blk->num8_output_file);
+	}
 }
+
+void reset_putcomplex8(BlinkParams *params, BufContextBlock *blk)
+{
+	_flush_putint8(params, blk, sizeof(complex8));
+}
+
