@@ -305,3 +305,6 @@ code/WiFi/testbed/samples/*
 *.ast.dump
 *.ast.dump.ground
 dist
+
+# Temporary storage for perf results
+code/WiFi/perf_results
