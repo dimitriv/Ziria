@@ -71,6 +71,9 @@ void resetBufCtxBlock(BufContextBlock *blk)
 	blk->total_out = 0;
 	blk->size_in = 0;
 	blk->size_out = 0;
+
+	blk->buf_input_callback = NULL;
+	blk->buf_output_callback = NULL;
 }
 
 

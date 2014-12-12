@@ -114,6 +114,12 @@ typedef struct _BufContextBlock {
 	FILE *num_output_file;
 
 
+	// All buffers - callback functions for TY_MEM 
+	// These functions are called to replenish buffers, if needed, when they are empty.
+	void(*buf_input_callback) ();
+	void(*buf_output_callback) ();
+
+
 	// Buffers for memory input and output
 	// This essentially points to the same location as <type>_input/output_buffer
 	// but it is type-agnostic
