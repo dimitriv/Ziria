@@ -1,7 +1,7 @@
 struct cca_info = { f1 : int; f2 : int } 
 
 fun comp f() {
-  var y : struct cca_info;
+ var y : struct cca_info;
 
  repeat{
  (x : struct cca_info) <- take;
@@ -14,9 +14,21 @@ fun comp f() {
 }
 
 fun comp fa() {
+ var y : arr[4] struct cca_info;
+
  repeat{
  (x : arr[4] struct cca_info) <- takes 4;
-  
+
+{-  
+ do {
+   for i in [0, 4] {
+     y[i].f1 := x[i].f1;
+     y[i].f2 := x[i].f2
+   };
+ };
+ emit y;
+-}
+
  emit x;
  }
 }

@@ -71,8 +71,12 @@ cgExtBufInitsAndFins (TBuff in_bty,TBuff out_bty) mfreshId
                         $stm:(callOutBufFinalizer global_params 
                                                   buf_context out_bty)
                         } |]
+       appendTopDef [cedecl|void $id:(reset_name mfreshId)() {
+                        $stm:(callOutBufReset global_params buf_context out_bty)
+                        } |]
   where ini_name mfreshId = "wpl_input_initialize" ++ mfreshId
         fin_name mfreshId = "wpl_output_finalize" ++ mfreshId
+        reset_name mfreshId = "wpl_output_reset" ++ mfreshId
 
 cgExtBufInitsAndFins (ty1,ty2) mfreshId
   = fail $ "BUG: cgExtBufInitsAndFins called with non-TBuff types!"
@@ -84,6 +88,13 @@ callOutBufFinalizer global_params buf_context (ExtBuf base_ty) =
 
 callOutBufFinalizer _global_params _buf_context (IntBuf _) 
   = error "BUG: callOutBufFinalizer called with IntBuf!" 
+
+callOutBufReset global_params buf_context (ExtBuf base_ty) =
+  let finalize_typ_spec = "reset_put" ++ (fst $ getTyPutGetInfo base_ty)
+  in [cstm| $id:(finalize_typ_spec)($id:global_params, $id:buf_context);|]
+
+callOutBufReset _global_params _buf_context (IntBuf _) 
+  = error "BUG: callOutBufReset called with IntBuf!" 
 
    
 mkRuntime :: Maybe String   -- | Optional unique suffix for name generation

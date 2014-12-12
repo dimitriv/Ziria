@@ -347,14 +347,23 @@ void buf_putarrchunk(BlinkParams *params, BufContextBlock* blk, void *x, unsigne
 		}
 	}
 }
-void flush_putchunk(BlinkParams *params, BufContextBlock* blk)
+
+void reset_putchunk(BlinkParams *params, BufContextBlock* blk)
 {
 	if (params->outType == TY_FILE)
 	{
 		if (params->outFileMode == MODE_BIN) {
 			fwrite(blk->chunk_output_buffer, blk->chunk_output_idx * blk->chunk_size, 1, blk->chunk_output_file);
-			blk->chunk_output_idx = 0;
 		}
+	}
+	blk->chunk_output_idx = 0;
+}
+
+void flush_putchunk(BlinkParams *params, BufContextBlock* blk)
+{
+	reset_putchunk(params, blk);
+	if (params->outType == TY_FILE)
+	{
 		fclose(blk->chunk_output_file);
 	}
 } 
