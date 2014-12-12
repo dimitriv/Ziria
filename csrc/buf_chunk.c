@@ -131,22 +131,22 @@ GetStatus buf_getchunk(BlinkParams *params, BufContextBlock* blk, void *x)
 	// If we reached the end of the input buffer 
 	if (blk->chunk_input_idx >= blk->chunk_input_entries)
 	{
-		// If no more repetitions are allowed 
-		if (params->inFileRepeats != INF_REPEAT && blk->chunk_input_repetitions >= params->inFileRepeats)
+		// If a call-back is provided, call it and check whether it provided more data
+		if (blk->buf_input_callback != NULL)
 		{
-			// If a call-back is provided, call it and check whether it provided more data
-			if (blk->buf_input_callback != NULL)
-			{
-				(*blk->buf_input_callback)();
-			}
+			(*blk->buf_input_callback)();
+		}
+		if (blk->chunk_input_idx >= blk->chunk_input_entries)
+		{
+			// If no more repetitions are allowed 
 			if (params->inFileRepeats != INF_REPEAT && blk->chunk_input_repetitions >= params->inFileRepeats)
 			{
 				return GS_EOF;
 			}
+			// Otherwise we set the index to 0 and increase repetition count
+			blk->chunk_input_idx = 0;
+			blk->chunk_input_repetitions++;
 		}
-		// Otherwise we set the index to 0 and increase repetition count
-		blk->chunk_input_idx = 0;
-		blk->chunk_input_repetitions++;
 	}
 
 	memcpy(x, (void*)((char *)blk->chunk_input_buffer + blk->chunk_input_idx * blk->chunk_size), blk->chunk_size);
@@ -185,24 +185,23 @@ GetStatus buf_getarrchunk(BlinkParams *params, BufContextBlock* blk, void *x, un
 
 	if (blk->chunk_input_idx + vlen > blk->chunk_input_entries)
 	{
-		if (params->inFileRepeats != INF_REPEAT && blk->chunk_input_repetitions >= params->inFileRepeats)
+		// If a call-back is provided, call it and check whether it provided more data
+		if (blk->buf_input_callback != NULL)
 		{
-			if (blk->chunk_input_idx != blk->chunk_input_entries)
-				fprintf(stderr, "Warning: Unaligned data in input file, ignoring final get()!\n");
-
-			// If a call-back is provided, call it and check whether it provided more data
-			if (blk->buf_input_callback != NULL)
-			{
-				(*blk->buf_input_callback)();
-			}
+			(*blk->buf_input_callback)();
+		}
+		if (blk->chunk_input_idx + vlen > blk->chunk_input_entries)
+		{
 			if (params->inFileRepeats != INF_REPEAT && blk->chunk_input_repetitions >= params->inFileRepeats)
 			{
+				if (blk->chunk_input_idx != blk->chunk_input_entries)
+					fprintf(stderr, "Warning: Unaligned data in input file, ignoring final get()!\n");
 				return GS_EOF;
 			}
+			// Otherwise ignore trailing part of the file, not clear what that part may contain ...
+			blk->chunk_input_idx = 0;
+			blk->chunk_input_repetitions++;
 		}
-		// Otherwise ignore trailing part of the file, not clear what that part may contain ...
-		blk->chunk_input_idx = 0;
-		blk->chunk_input_repetitions++;
 	}
 	
 	memcpy(x, (void*)((char *)blk->chunk_input_buffer + blk->chunk_input_idx * blk->chunk_size), vlen * blk->chunk_size);
