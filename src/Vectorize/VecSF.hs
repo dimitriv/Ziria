@@ -126,32 +126,32 @@ data CtxForVect
   | CtxExistsCompRight
 
 -- | Compute SFUD scale factor
-compSFUD :: CAlpha -> CAlpha -> Maybe SFUD
-compSFUD CAUnknown _    = Nothing 
-compSFUD (CAMultOf _) _ = Nothing
-compSFUD (CAStatic i) (CAStatic j)
+compSFUD :: (CAlpha,CAlpha) -> Maybe SFUD
+compSFUD (CAUnknown,_)  = Nothing 
+compSFUD (CAMultOf _,_) = Nothing
+compSFUD (CAStatic i,CAStatic j)
   = return $ SFUD { sfud_in = i, sfud_out = Left (compSFKnown j) }
-compSFUD (CAStatic i) _
+compSFUD (CAStatic i,_)
   = return $ SFUD { sfud_in = i, sfud_out = Right compSFUnknown  }
 
 -- | Compute SFDU scale factor
-compSFDU :: CAlpha -> CAlpha -> Maybe SFDU
-compSFDU _ CAUnknown    = Nothing
-compSFDU _ (CAMultOf _) = Nothing
-compSFDU (CAStatic i) (CAStatic j)
+compSFDU :: (CAlpha,CAlpha) -> Maybe SFDU
+compSFDU (_,CAUnknown)  = Nothing
+compSFDU (_,CAMultOf _) = Nothing
+compSFDU (CAStatic i, CAStatic j)
   = return $ SFDU { sfdu_out = j, sfdu_in = Left (compSFKnown i) }
-compSFDU _ (CAStatic j) 
+compSFDU (_,CAStatic j)
   = return $ SFDU { sfdu_out = j, sfdu_in = Right compSFUnknown  }
 
 -- | Compute SFDD scale factor
-compSFDD :: CAlpha -> CAlpha -> Maybe SFDD
-compSFDD (CAStatic i) (CAStatic j)
+compSFDD :: (CAlpha,CAlpha) -> Maybe SFDD
+compSFDD (CAStatic i,CAStatic j)
   = return $ SFDD_InOut { sfdd_in = compSFKnown i, sfdd_out = compSFKnown j }
-compSFDD (CAStatic i) _ 
+compSFDD (CAStatic i,_)
   = return $ SFDD_In { sfdd_in = compSFKnown i }
-compSFDD _ (CAStatic j)
+compSFDD (_,CAStatic j)
   = return $ SFDD_Out { sfdd_out = compSFKnown j }
-compSFDD _ _ 
+compSFDD (_,_) 
   = Nothing
 
 compSFKnown :: Int -> SFKnown
