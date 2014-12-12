@@ -90,7 +90,8 @@ callOutBufFinalizer _global_params _buf_context (IntBuf _)
   = error "BUG: callOutBufFinalizer called with IntBuf!" 
 
 callOutBufReset global_params buf_context (ExtBuf base_ty) =
-  let finalize_typ_spec = "reset_put" ++ (fst $ getTyPutGetInfo base_ty)
+  let atom_ty = atomTyOf base_ty 
+      finalize_typ_spec = "reset_put" ++ (fst $ getTyPutGetInfo atom_ty)
   in [cstm| $id:(finalize_typ_spec)($id:global_params, $id:buf_context);|]
 
 callOutBufReset _global_params _buf_context (IntBuf _) 
