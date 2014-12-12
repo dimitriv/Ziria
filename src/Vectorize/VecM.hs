@@ -27,6 +27,7 @@ import Text.Parsec.Pos (SourcePos)
 
 import AstComp
 import AstExpr
+import AstUnlabelled
 
 import CardAnalysis
 import CtComp
@@ -35,6 +36,7 @@ import Utils
 import Outputable
 import Text.PrettyPrint.HughesPJ
 
+import Data.List 
 
 import qualified GenSym as GS
 
@@ -240,15 +242,182 @@ mkVectTy ty wdth
   = TArray (Literal wdth) ty
 
 -- | When is a type vectorizable
--- Not vectorizing arrays for the moment because we do not support
--- arrays of naked arrays we need to think through coarsening and
--- breaking up of arrays (TODO). 
+-- Not vectorizing arrays. Two reasons for this:
+-- (a) It is quite likely that if a programmer is using arrays
+--     already in his streams then he has a good understanding of the
+--     cost model of his application and it may not make sense for the
+--     compiler to try and change this.
+-- (b) It is also slightly more tedious to implement, since we have to
+--     flatten nested arrays, copy out sub-arrays etc. Doable but tedious.
+-- To summarize, the benefits are quite questionable to justify the
+-- implementation effort.
 isVectorizable :: Ty -> Bool
 isVectorizable ty
-  | TArray {} <- ty -- TODO: revisit this
-  = False  
+  | TArray {} <- ty
+  = False 
   | otherwise = True
 
+
+{-------------------------------------------------------------------------------
+  Delayed results of vectorization
+-------------------------------------------------------------------------------}
+
+-- | Delayed vectorization result
+data DelayedVectRes
+   = DVR { dvr_comp       :: IO Comp -- Delayed result
+         , dvr_vres       :: VectRes -- Information about the result
+         , dvr_orig_tyin  :: Ty -- Original (pre-vect) in  type (TODO:needed?)
+         , dvr_orig_tyout :: Ty -- Original (pre-vect) out type (TODO:needed?)
+         }
+
+-- | Lift an operation on VectRes to be on a DelayedVectRes
+lift_dvr :: (VectRes -> a) -> DelayedVectRes -> a
+lift_dvr f = f . dvr_vres
+
+-- | Utility of delayed vectorization
+dvResUtil :: DelayedVectRes -> Double
+dvResUtil = lift_dvr vResUtil
+
+-- | Keep a result with maximal utility for each group by vResEqQ
+keepGroupMaximals :: [DelayedVectRes] -> [DelayedVectRes]
+keepGroupMaximals xs = map getMaximal (groups xs)
+  where groups = groupBy' $ vResEqQ <| dvr_vres
+
+-- | Return a result with maximal utility
+getMaximal :: [DelayedVectRes] -> DelayedVectRes
+getMaximal = maximumBy $ compare <| dvResUtil 
+
+
+{-------------------------------------------------------------------------------
+  Matching on the control path
+-------------------------------------------------------------------------------}
+
+-- | Match vectorization candidates composed on the control path (bind).
+--
+-- For a set of components c1..cn this function accepts the
+-- vectorization candidates for each ci and creates the set of
+-- vectorization candidates for matching them in the control path. For
+-- example:
+-- 
+-- [ [vc11,vc12], [vc21,vc22] ] 
+--     ~~>
+-- [ [vc11,vc21], [vc11,vc22], [vc12,vc21], [vc11,vc22] ]
+-- 
+-- assuming that for each group in the resulting list the input types
+-- of all components are joinable and the output types are also all
+-- joinable.
+-- 
+-- NB: 'matchControl' may introduce mitigators to make sure that
+-- queues match.  These mitigate between the ``greatest common
+-- divisor'' type of all input types and each individual input type,
+-- and similarly between each individual output type and the
+-- ``greatest common divisor'' type of all output types.  See VecM.hs
+-- for the definition of gcdTys.
+matchControl :: [ [DelayedVectRes] ] -> [ [DelayedVectRes] ]
+matchControl bcands 
+  = map mitigate $ Utils.cross_prod bcands 
+  where
+    mitigate :: [DelayedVectRes] -> [DelayedVectRes]
+    mitigate vcs = map (mitigate_one ty_in ty_out) vcs
+      -- Compute "the" common input type and "the" common output type
+      where ty_in  = gcdTys $ map (vect_in_ty  . dvr_vres) vcs
+            ty_out = gcdTys $ map (vect_out_ty . dvr_vres) vcs
+    -- Mitigate from the expected input type (exp_tin) and to the 
+    -- expected output type (exp_tout)
+    mitigate_one exp_tin exp_tout dvr
+      = dvr { dvr_comp = new_dvr_comp, dvr_vres = vres_new } 
+      where 
+       vect_tin     = vect_in_ty  $ dvr_vres dvr
+       vect_tout    = vect_out_ty $ dvr_vres dvr
+       new_dvr_comp = do
+          comp <- dvr_comp dvr
+          return $ (exp_tin,vect_tin) `mitIn` comp `mitOut` (vect_tout,exp_tout)
+       vres_new = (dvr_vres dvr) { vect_in_ty = exp_tin, vect_out_ty = exp_tout }
+
+-- | Mitigate by creating a Mitigate node (maybe) node between tin1 ~> tin2
+-- Pre-condition: tin1 is a ``type divisor'' of tin2 or vice-versa.
+-- Result is a mitigating (ST T tin1 tin2) transformer.  
+mkMit :: Maybe SourcePos -> Ty -> Ty -> Maybe Comp 
+mkMit loc tin1 tin2
+    -- If the two types are equal no need for mitigation
+  | tin1 == tin2 = Nothing
+    -- If one is array but other non-array then the latter must be 
+    -- the base type of the former.  
+    -- We must up-mitigate: 1 ~> len
+  | not (isArrayTy tin1)
+  , TArray (Literal len) tbase <- tin2
+  = assert "mkMit" (tbase == tin1) $ 
+    return $ cMitigate loc tbase 1 len
+    -- Symmetric to previous case 
+  | not (isArrayTy tin2)
+  , TArray (Literal len) tbase <- tin1
+  = assert "mkMit" (tbase == tin2) $
+    return $ cMitigate loc tbase len 1
+    -- If both types are arrays (of different lenghts) let's mitigate 
+  | TArray (Literal len1) tbase1 <- tin1
+  , TArray (Literal len2) tbase2 <- tin2
+  = assert "mkMit" (tbase1 == tbase2) $
+    return $ cMitigate loc tbase1 len1 len2
+  | otherwise
+  = panic $ text "mkMit: can't mitigate:" <+> 
+            ppr tin1 <+> text "~>" <+> ppr tin2
+
+-- | (gty,ty) `mitIn` comp
+-- Mitigates in the input type of comp
+mitIn :: (Ty,Ty) -> Comp -> Comp
+mitIn (gty,ty) comp
+  | let loc = compLoc comp
+  , Just m <- mkMit loc gty ty
+  = cPar loc pnever m comp
+  | otherwise = comp
+
+-- | comp `mitOut` (ty,gty)
+-- Mitigates on the output type of comp, symmetrically to `mitIn' above.
+mitOut :: Comp -> (Ty,Ty) -> Comp 
+mitOut comp (ty,gty)
+  | let loc = compLoc comp
+  , Just m <- mkMit loc ty gty
+  = cPar loc pnever comp m
+  | otherwise = comp
+
+{-------------------------------------------------------------------------------
+  Matching on the data path
+-------------------------------------------------------------------------------}
+
+-- | Match vectorization candidates composed on the data path
+matchData :: ParInfo
+          -> Maybe SourcePos
+          -> [ DelayedVectRes ] -> [ DelayedVectRes ] -> [ DelayedVectRes ]
+matchData p loc xs ys 
+  = cross_comb (mitigatePar p loc) xs ys
+
+mitigatePar :: ParInfo
+            -> Maybe SourcePos
+            -> DelayedVectRes
+            -> DelayedVectRes
+            -> Maybe DelayedVectRes
+mitigatePar pnfo loc dp1 dp2 = do
+  vres <- mk_vres (dvr_vres dp1) (dvr_vres dp2)
+  return $ 
+    DVR { dvr_comp = mk_par (dvr_comp dp1) (dvr_comp dp2)
+        , dvr_vres = vres
+        , dvr_orig_tyin  = dvr_orig_tyin  dp1
+        , dvr_orig_tyout = dvr_orig_tyout dp2 }
+  where
+    mk_par ioc1 ioc2 = do
+      c1 <- ioc1
+      c2 <- ioc2 
+      return $ cPar loc pnfo c1 c2   
+    -- non joinable => just fail
+    mk_vres r1 r2
+      | Nothing <- ctJoin_mb (vect_out_ty r1) (vect_in_ty r2)
+      = Nothing  
+    -- both non-vect => non-vect
+    mk_vres (NotVect t1 _t2) (NotVect _s1 s2) = return $ NotVect t1 s2
+    -- joinable and one didVect => Didvect 
+    mk_vres r1 r2 
+      = let u = chooseParUtility r1 r2 
+        in return $ DidVect (vect_in_ty r1) (vect_out_ty r2) u 
 
 {-------------------------------------------------------------------------------
   Vectorization utilities
@@ -277,3 +446,4 @@ gcdTys :: [Ty] -> Ty
 gcdTys xs = go (head xs) (tail xs)
   where go t []       = t 
         go t (t1:t1s) = go (gcd_ty t t1) t1s
+
