@@ -134,7 +134,15 @@ GetStatus buf_getchunk(BlinkParams *params, BufContextBlock* blk, void *x)
 		// If no more repetitions are allowed 
 		if (params->inFileRepeats != INF_REPEAT && blk->chunk_input_repetitions >= params->inFileRepeats)
 		{
-			return GS_EOF;
+			// If a call-back is provided, call it and check whether it provided more data
+			if (blk->buf_input_callback != NULL)
+			{
+				(*blk->buf_input_callback)();
+			}
+			if (params->inFileRepeats != INF_REPEAT && blk->chunk_input_repetitions >= params->inFileRepeats)
+			{
+				return GS_EOF;
+			}
 		}
 		// Otherwise we set the index to 0 and increase repetition count
 		blk->chunk_input_idx = 0;
@@ -181,7 +189,16 @@ GetStatus buf_getarrchunk(BlinkParams *params, BufContextBlock* blk, void *x, un
 		{
 			if (blk->chunk_input_idx != blk->chunk_input_entries)
 				fprintf(stderr, "Warning: Unaligned data in input file, ignoring final get()!\n");
-			return GS_EOF;
+
+			// If a call-back is provided, call it and check whether it provided more data
+			if (blk->buf_input_callback != NULL)
+			{
+				(*blk->buf_input_callback)();
+			}
+			if (params->inFileRepeats != INF_REPEAT && blk->chunk_input_repetitions >= params->inFileRepeats)
+			{
+				return GS_EOF;
+			}
 		}
 		// Otherwise ignore trailing part of the file, not clear what that part may contain ...
 		blk->chunk_input_idx = 0;
@@ -271,6 +288,12 @@ void buf_putchunk(BlinkParams *params, BufContextBlock* blk, void *x)
 		//bitWrite(blk->output_buffer, blk->output_idx++, x);
 		memcpy((void*)((char *)blk->chunk_output_buffer + blk->chunk_output_idx * blk->chunk_size), x, blk->chunk_size);
 		blk->chunk_output_idx ++;
+
+		// If a call-back is provided, call it now
+		if (blk->buf_output_callback != NULL)
+		{
+			(*blk->buf_output_callback)();
+		}
 	}
 
 	if (params->outType == TY_FILE)
@@ -315,6 +338,12 @@ void buf_putarrchunk(BlinkParams *params, BufContextBlock* blk, void *x, unsigne
 	{
 		memcpy((void*)((char *)blk->chunk_output_buffer + blk->chunk_output_idx * blk->chunk_size), x, blk->chunk_size * vlen);
 		blk->chunk_output_idx += vlen;
+
+		// If a call-back is provided, call it now
+		if (blk->buf_output_callback != NULL)
+		{
+			(*blk->buf_output_callback)();
+		}
 	}
 
 	if (params->outType == TY_FILE)
