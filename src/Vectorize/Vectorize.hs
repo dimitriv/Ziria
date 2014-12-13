@@ -81,100 +81,38 @@ computeVectTop dfs x = do
       in
       case unComp comp of 
 
-        Var x -> lookupCVarBind x >>= go vctx
+        Var x 
+          -> lookupCVarBind x >>= go vctx
 
         BindMany c1 xs_cs 
-         | Just sf <- vcard >>= compSFDD
-         = do vss <- getVecEnv >>= doVectCompDD dfs comp sf
-              return $ self : vss
-         | otherwise
-         = do let css = c1 : map snd xs_cs
-                  xs  = map fst xs_cs 
-                  -- Step 1: vectorize css
-              vss <- mapM (go vctx) css
-              -- Step 2: form candidates (lazily)
-              let ress = matchControl (map keepGroupMaximals vss)
-                  builder = \(c:cs) -> cBindMany loc c (zip xs cs)
-              when (null ress) $ liftIO $ do 
+          | Just sf <- vcard >>= compSFDD
+          -> do vss <- getVecEnv >>= doVectCompDD dfs comp sf
+                return $ self : vss
+          | otherwise
+          -> do let css = c1 : map snd xs_cs
+                    xs  = map fst xs_cs 
+
+                -- Step 1: vectorize css
+                vss <- mapM (go vctx) css
+
+                -- Step 2: form candidates (lazily)
+                let ress = matchControl (map keepGroupMaximals vss)
+              
+                when (null ress) $ liftIO $ do 
                     putStrLn "WARNING: BindMany empty vectorization:"
-                    print $ ppr comp
-              -- Step 3: build for each candidate in ress a BindMany
-              return $ keepGroupMaximals $ map (mkBindDVR builder) ress
-                   pruneMaximal $ map (mkBindDelayedVRes builder) ress
+                    verbose dfs $ ppr comp
 
+                -- Step 3: build for each candidate in ress a BindMany
+                return $ keepGroupMaximals $
+                         map (\(vc:vcs) -> mitigateBind loc vc xs vcs) ress
+       
+        Par p c1 c2
+          -> do let is_c1 = isComputer (ctComp c1)
+                    is_c2 = isComputer (ctComp c2)
+                    ctx1  = if is_c2 then CtxExistsCompRight else vctx
+                    ctx2  = if is_c1 then CtxExistsCompLeft  else vctx
 
-
-  ***************** HERE 
-
-        
-
-    go ra comp =
-        let (cty,card) = compInfo comp
-            loc        = compLoc comp
-            tyin       = inTyOfCTyBase cty
-            tyout      = yldTyOfCTyBase cty
-            self_no_vect =
-              DVR { dvr_comp       = return (eraseComp comp)
-                  , dvr_vres       = NoVect
-                  , dvr_orig_tyin  = tyin
-                  , dvr_orig_tyout = tyout }
-
-        in
-        case unComp comp of
-          Var x -> lookupCVarBind x >>= computeVect ra
-          BindMany c1 xs_cs
-            | SimplCard (Just cin) (Just cout) <- card
-            , isVectorizable tyin  || cin  == 0
-            , isVectorizable tyout || cout == 0
-            -> do { let sf = compVectScaleFactDn ra cin cout
-                  ; (gs,venv) <- getVecEnv
-                  ; let vss = doVectComp gs venv comp sf
-                  ; let self = self_no_vect { dvr_vres = mkNoVect cin cout }
-                  ; return $ self : vss
-                  }
-
-            | otherwise
-            -> do { let css = c1 : map snd xs_cs
-                  ; let xs  = map fst xs_cs
-
-                    -- Step 1: vectorize css
-                  ; vss <- mapM (computeVect ra) css
-
-{-
-                  ; vecMIO $
-                    do { putStrLn "(Bind) vss, lengths of each cand. set."
-                       ; mapM (\(c,vs) -> do { -- putStrLn $ "** Computation is = " ++ show c
-                                               putStrLn $ "** Candidates     = " ++ show (length vs)
-                                             }) (zip css vss)
-                       }
--}
-
-                    -- Step 2: form candidates (lazily)
-                  ; env <- getVecEnv
-                  ; let ress = matchControl env (map pruneMaximal vss)
-
-                  ; let builder = \(c:cs) -> cBindMany loc () c (zip xs cs)
-
-{-
-                  ; vecMIO $
-                    mapM (\dvr-> putStrLn $ "DVR vres=" ++
-                                         show (dvr_vres dvr))
-                         (map (mkBindDelayedVRes builder) ress)
-                  ; vecMIO $
-                    putStrLn $
-                    "(Bind) Length of ress = " ++ show (length ress)
--}
-
-                  ; when (null ress) $ vecMIO $
-                    do { putStrLn "WARNING: BindMany empty vectorization:"
-                       ; print $ ppr comp }
-
-
-                    -- Step 3: build for each candidate in ress a BindMany
-                  ; return $
-                    pruneMaximal $ map (mkBindDelayedVRes builder) ress
-
-                  }
+******************
 
 
           Par p c1 c2
@@ -1327,13 +1265,6 @@ vectorizeWithHint (finalin,finalout) c
 
 
 
-liftDVR :: (Comp () () -> Comp () ())
-        -> DelayedVectRes
-        -> DelayedVectRes
--- Simply transform the computation inside a delayed DVR without
--- touching anything else.
-liftDVR f dvr
-  = dvr { dvr_comp = dvr_comp dvr >>= (return . f) }
 
 
 mkBindDelayedVRes :: ([Comp () ()] -> Comp () ())

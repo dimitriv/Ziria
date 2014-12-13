@@ -37,6 +37,7 @@ import Outputable
 import Text.PrettyPrint.HughesPJ
 
 import Data.List 
+import Data.Maybe ( fromJust )
 
 import qualified GenSym as GS
 
@@ -264,11 +265,9 @@ isVectorizable ty
 
 -- | Delayed vectorization result
 data DelayedVectRes
-   = DVR { dvr_comp       :: IO Comp -- Delayed result
-         , dvr_vres       :: VectRes -- Information about the result
-         , dvr_orig_tyin  :: Ty -- Original (pre-vect) in  type (TODO:needed?)
-         , dvr_orig_tyout :: Ty -- Original (pre-vect) out type (TODO:needed?)
-         }
+   = DVR { dvr_comp       :: IO Comp   -- Delayed result
+         , dvr_vres       :: VectRes } -- Information about the result
+
 
 -- | Lift an operation on VectRes to be on a DelayedVectRes
 lift_dvr :: (VectRes -> a) -> DelayedVectRes -> a
@@ -286,6 +285,9 @@ keepGroupMaximals xs = map getMaximal (groups xs)
 -- | Return a result with maximal utility
 getMaximal :: [DelayedVectRes] -> DelayedVectRes
 getMaximal = maximumBy $ compare <| dvResUtil 
+
+lift_dvr_comp :: (Comp -> Comp) -> DelayedVectRes -> DelayedVectRes
+lift_dvr_comp f dvr = dvr { dvr_comp = f <$> dvr_comp dvr }
 
 
 {-------------------------------------------------------------------------------
@@ -332,7 +334,32 @@ matchControl bcands
        new_dvr_comp = do
           comp <- dvr_comp dvr
           return $ (exp_tin,vect_tin) `mitIn` comp `mitOut` (vect_tout,exp_tout)
-       vres_new = (dvr_vres dvr) { vect_in_ty = exp_tin, vect_out_ty = exp_tout }
+       vres_new = (dvr_vres dvr) {vect_in_ty = exp_tin, vect_out_ty = exp_tout}
+
+
+mitigateBind :: Maybe SourcePos
+             -> DelayedVectRes
+             -> [EId] -> [DelayedVectRes]
+             -> DelayedVectRes
+mitigateBind loc dvr1 xs dvrs
+  = DVR { dvr_comp = do
+            c1 <- dvr_comp dvr1
+            cs <- mapM dvr_comp dvrs
+            return $ cBindMany loc c1 (zip xs cs)
+        , dvr_vres = bind_vres (dvr1:dvrs) }
+  where
+     bind_vres ds
+       | [] <- filter (didVect . dvr_vres) ds
+       = NotVect vtin vtout
+       | otherwise
+       = DidVect vtin vtout u
+       where
+          vds   = map dvr_vres ds
+          u     = chooseBindUtility vds
+          vtin  = fromJust $ ctJoinMany_mb $ map vect_in_ty  vds
+          vtout = fromJust $ ctJoinMany_mb $ map vect_out_ty vds
+
+
 
 -- | Mitigate by creating a Mitigate node (maybe) node between tin1 ~> tin2
 -- Pre-condition: tin1 is a ``type divisor'' of tin2 or vice-versa.
@@ -400,9 +427,7 @@ mitigatePar pnfo loc dp1 dp2 = do
   vres <- mk_vres (dvr_vres dp1) (dvr_vres dp2)
   return $ 
     DVR { dvr_comp = mk_par (dvr_comp dp1) (dvr_comp dp2)
-        , dvr_vres = vres
-        , dvr_orig_tyin  = dvr_orig_tyin  dp1
-        , dvr_orig_tyout = dvr_orig_tyout dp2 }
+        , dvr_vres = vres }
   where
     mk_par ioc1 ioc2 = do
       c1 <- ioc1
