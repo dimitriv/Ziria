@@ -286,8 +286,8 @@ keepGroupMaximals xs = map getMaximal (groups xs)
 getMaximal :: [DelayedVectRes] -> DelayedVectRes
 getMaximal = maximumBy $ compare <| dvResUtil 
 
-lift_dvr_comp :: (Comp -> Comp) -> DelayedVectRes -> DelayedVectRes
-lift_dvr_comp f dvr = dvr { dvr_comp = f <$> dvr_comp dvr }
+liftCompDVR :: Monad m => (Comp -> Comp) -> DelayedVectRes -> m DelayedVectRes
+liftCompDVR f dvr = return $ dvr { dvr_comp = f <$> dvr_comp dvr }
 
 
 {-------------------------------------------------------------------------------
@@ -309,14 +309,14 @@ lift_dvr_comp f dvr = dvr { dvr_comp = f <$> dvr_comp dvr }
 -- of all components are joinable and the output types are also all
 -- joinable.
 -- 
--- NB: 'matchControl' may introduce mitigators to make sure that
+-- NB: 'cross_prod_mit' may introduce mitigators to make sure that
 -- queues match.  These mitigate between the ``greatest common
 -- divisor'' type of all input types and each individual input type,
 -- and similarly between each individual output type and the
 -- ``greatest common divisor'' type of all output types.  See VecM.hs
 -- for the definition of gcdTys.
-matchControl :: [ [DelayedVectRes] ] -> [ [DelayedVectRes] ]
-matchControl bcands 
+cross_prod_mit :: [ [DelayedVectRes] ] -> [ [DelayedVectRes] ]
+cross_prod_mit bcands 
   = map mitigate $ Utils.cross_prod bcands 
   where
     mitigate :: [DelayedVectRes] -> [DelayedVectRes]
@@ -337,11 +337,12 @@ matchControl bcands
        vres_new = (dvr_vres dvr) {vect_in_ty = exp_tin, vect_out_ty = exp_tout}
 
 
-mitigateBind :: Maybe SourcePos
-             -> DelayedVectRes
-             -> [EId] -> [DelayedVectRes]
-             -> DelayedVectRes
-mitigateBind loc dvr1 xs dvrs
+
+combineCtrl :: Maybe SourcePos
+            -> DelayedVectRes
+            -> [EId] -> [DelayedVectRes]
+            -> DelayedVectRes
+combineCtrl loc dvr1 xs dvrs
   = DVR { dvr_comp = do
             c1 <- dvr_comp dvr1
             cs <- mapM dvr_comp dvrs
@@ -412,10 +413,10 @@ mitOut comp (ty,gty)
 -------------------------------------------------------------------------------}
 
 -- | Match vectorization candidates composed on the data path
-matchData :: ParInfo
-          -> Maybe SourcePos
-          -> [ DelayedVectRes ] -> [ DelayedVectRes ] -> [ DelayedVectRes ]
-matchData p loc xs ys 
+conbineData :: ParInfo
+            -> Maybe SourcePos
+            -> [ DelayedVectRes ] -> [ DelayedVectRes ] -> [ DelayedVectRes ]
+conbineData p loc xs ys 
   = cross_comb (mitigatePar p loc) xs ys
 
 mitigatePar :: ParInfo

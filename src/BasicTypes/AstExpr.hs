@@ -94,6 +94,9 @@ toName s mpos typ =
 updNameId :: String -> GName t -> GName t
 updNameId uid nm = nm { uniqId = uid }
 
+updNameTy :: GName t -> u -> GName u
+updNameTy (MkName n i _ l) utyp = MkName n i utyp l
+
 getNameWithUniq :: GName t -> String
 getNameWithUniq nm = name nm ++ "_blk" ++ uniqId nm
 

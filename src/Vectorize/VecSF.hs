@@ -159,7 +159,10 @@ compSFKnown i
   = SFKnown {
        sf_other       = i
      , sf_other_divs  = divs_of i
-     , sf_other_mults = multsUpTo vECT_MULT_BOUND }
+     , sf_other_mults 
+           -- Artificially restrict the search space to sensible arrays
+         = filter (\(m1,m2) -> m1*m2*i <= vECT_ARRAY_BOUND) $
+           multsUpTo vECT_MULT_BOUND }
   where 
     divs_of n = if n > 0 then divsOf n else []
 
@@ -167,7 +170,10 @@ compSFUnknown :: SFUnknown
 compSFUnknown = SFUnknown [1..vECT_MULT_BOUND]
 
 -- | Bound for multiplicities of vectorization
-vECT_MULT_BOUND = 128 
+vECT_MULT_BOUND  = 128 
+
+-- | Bound for input/output array sizes
+vECT_ARRAY_BOUND = 288
 
 -- | Pairs that multiply to a number not higher than the bound
 multsUpTo :: Int -> [(Int,Int)]
