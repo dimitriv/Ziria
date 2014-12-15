@@ -1,0 +1,11 @@
+fun f() {
+  let (a : int32) = 1; 
+  let (b : int32) = 2 in return 0;
+}
+
+fun comp g() {
+  let (c : int32) = 3;
+  let (d : int32) = 4 in return 0;
+}
+
+let comp main = read[int] >>> write[int]
