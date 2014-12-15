@@ -274,9 +274,11 @@ parseVarOrCall = go <?> "variable or function call"
 parseArgs :: GName SrcCTy -> BlinkParser [CallArg SrcExp SrcComp]
 parseArgs xnm = parens $ do
     penv <- ask
-    case lookup xnm penv of
-      Just argInfo -> map (parseArg . nameTyp) argInfo `sepsBy` comma
-      Nothing      -> (CAExp <$> parseExpr) `sepBy`  comma
+    let spec = case lookup xnm penv of
+                 Just argInfo -> map (parseArg . nameTyp) argInfo
+                              ++ repeat (CAExp <$> parseExpr)
+                 Nothing      -> repeat (CAExp <$> parseExpr)
+    spec `sepsBy` comma
   where
     parseArg :: CallArg t tc -> BlinkParser (CallArg SrcExp SrcComp)
     parseArg (CAExp  _) = CAExp  <$> parseExpr

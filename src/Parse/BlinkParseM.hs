@@ -161,7 +161,14 @@ lInfix op = Infix op AssocLeft
 
 -- | Variant on `sepBy` that takes a list of parsers rather than repeating one
 sepsBy :: Stream s m t => [ParsecT s u m a] -> ParsecT s u m sep -> ParsecT s u m [a]
-sepsBy []     _  = return []
-sepsBy [p]    _  = (:[]) <$> p
-sepsBy (p:ps) op = (:) <$> p <* op <*> sepsBy ps op
+sepsBy ps sep = choice [sepsBy1 ps sep, return []]
 
+-- | Variant on `sepBy1` that takes a list of parsers rather than repeating one
+sepsBy1 :: Stream s m t => [ParsecT s u m a] -> ParsecT s u m sep -> ParsecT s u m [a]
+sepsBy1 []     _   = return []
+sepsBy1 (p:ps) sep = (:) <$> p <*> manys (map (sep >>) ps)
+
+-- | Variant on `many` that takes a list of parsers rather than repeating one
+manys :: Stream s m t => [ParsecT s u m a] -> ParsecT s u m [a]
+manys []     = return []
+manys (p:ps) = choice [(:) <$> p <*> manys ps, return []]

@@ -1,0 +1,9 @@
+fun f(a : int, b : int) {
+  return a;
+}
+
+fun g() {
+  return f(1);
+}
+
+let comp main = read[int] >>> return g() >>> write[int]
