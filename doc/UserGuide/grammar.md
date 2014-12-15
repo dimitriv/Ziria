@@ -245,8 +245,7 @@ And terms are:
   | IDENT ("." IDENT | "[" <range> "]")*  -- struct or array index
   | IDENT "(" <expr>*"," ")"              -- function call or cast
   | IDENT                                 -- variable
-  | "let" <var-bind> "=" <expr> "in" <expr>
-  | <decl> "in" <expr>
+  | <elet-decl> "in" <expr>
   | "if" <expr> "then" <expr> "else" <expr>
 
 <var-bind> ::= IDENT | "(" IDENT ":" <base-type> ")"
@@ -265,6 +264,10 @@ And terms are:
   | FLOAT
   | STRING
   | INT
+
+<elet-decl> ::=
+  | <decl>
+  | "let" <var-bind> "=" <expr>
 ```
 
 Now, in addition to the expressions and terms, Blink provides support for "imperative" blocks of statements.
@@ -274,8 +277,10 @@ Now, in addition to the expressions and terms, Blink provides support for "imper
 <stmts> ::= <stmt>*";"
 
 <stmt> ::=
-    "let" <var-bind> "=" <expr> ("in" <stmt>)?
-  | <decl> ("in" <stmt>)?
+    <elet-decl>
+  | <simple-stmt>
+
+<simple-stmt> ::=
   | ("unroll" | "nounroll")? "for" <var-bind> "in" "[" <interval> "]" <stmt-block>
   | "while" "(" <expr> ")" <stmt-block>
   | "if" <expr> "then" <stmt-block> ("else" <stmt-block>)?
@@ -283,6 +288,7 @@ Now, in addition to the expressions and terms, Blink provides support for "imper
   | "print" <expr>*","
   | "println" <expr>*","
   | "error" STRING
+  | <elet-decl> "in" <expr>
   | FUNCNAME "(" <expr>*"," ")"
   | VARNAME ("." IDENT)* ("[" <range> "]")? ":=" <expr>
 ```

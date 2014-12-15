@@ -149,17 +149,13 @@ parseExpr =
 -- >   | IDENT ("." IDENT | "[" <range> "]")*  -- struct or array index
 -- >   | IDENT "(" <expr>*"," ")"              -- function call or cast
 -- >   | IDENT                                 -- variable
--- >   | "let" <var-bind> "=" <expr> "in" <expr>
--- >   | <decl> "in" <expr>
+-- >   | <elet-decl> "in" <expr>
 -- >   | "if" <expr> "then" <expr> "else" <expr>
 parseTerm :: BlinkParser SrcExp
 parseTerm = choice
     [ parseUnit mkUnit
     , parens parseExpr
-    , withPos eLet' <* reserved   "let" <*> parseVarBind
-                    <* reservedOp "="   <*> parseExpr
-                    <* reserved   "in"  <*> parseExpr
-    , withPos eLetRef' <*> declParser <* reserved "in" <*> parseExpr
+    , withPos eLetDecl <*> parseELetDecl <* reserved "in" <*> parseExpr
     , withPos eIf <* reserved "if"   <*> parseExpr
                   <* reserved "then" <*> parseExpr
                   <* reserved "else" <*> parseExpr
@@ -167,9 +163,6 @@ parseTerm = choice
     , parseWithVarOnHead
     ] <?> "expression"
   where
-    eLet'    p x      = eLet    p x AutoInline
-    eLetRef' p (x, e) = eLetRef p x e
-
     mkUnit p = eValSrc p VUnit
 
 -- Parse "()"
@@ -392,32 +385,18 @@ type Statement = Either (SrcExp -> SrcExp) SrcExp
 
 -- | Statements
 --
+-- Comparable to `parseCommand`.
+--
 -- > <stmt> ::=
--- >     "let" <var-bind> "=" <expr> ("in" <stmt>)?
--- >   | <decl> ("in" <stmt>)?
--- >   <simple-stmt>
+-- >     <elet-decl>
+-- >   | <simple-stmt>
 parseStmt :: BlinkParser Statement
 parseStmt = choice
-    [ join $ withPos eLet' <* reserved   "let" <*> parseVarBind
-                           <* reservedOp "="   <*> parseExpr
-                           <*> optionMaybe (reserved "in" *> parseStmt)
-    , join $ withPos eLetRef' <*> declParser
-                              <*> optionMaybe (reserved "in" *> parseStmt)
-
+    [ try $ withPos eLetDecl' <*> parseELetDecl <* notFollowedBy (reserved "in")
     , Right <$> parseSimpleStmt
     ] <?> "statement"
   where
-    eLet' p x e (Just s) = do
-      s' <- stmtToExp s
-      return . Right $ eLet p x AutoInline e s'
-    eLet' p x e Nothing =
-      return . Left $ \m -> eLet p x AutoInline e m
-
-    eLetRef' p (x, e) (Just s) = do
-      s' <- stmtToExp s
-      return . Right $ eLetRef p x e s'
-    eLetRef' p (x, e) Nothing = do
-      return . Left $ \m -> eLetRef p x e m
+    eLetDecl' p = Left . eLetDecl p
 
 -- | "Simple" statements (that do not expect a continuation)
 --
@@ -429,6 +408,7 @@ parseStmt = choice
 -- > | "print" <expr>*","
 -- > | "println" <expr>*","
 -- > | "error" STRING
+-- > | <elet-decl> "in" <expr>
 -- > | IDENT "(" <expr>*"," ")"
 -- > | IDENT ("." IDENT)* ("[" <range> "]")? ":=" <expr>
 parseSimpleStmt :: BlinkParser SrcExp
@@ -446,6 +426,8 @@ parseSimpleStmt = choice
     , withPos (makePrint False) <* reserved "print"   <*> parseExpr `sepBy` comma
     , withPos (makePrint True)  <* reserved "println" <*> parseExpr `sepBy` comma
     , withPos eError'           <* reserved "error"   <*> stringLiteral
+
+    , withPos eLetDecl <*> parseELetDecl <* reserved "in" <*> parseSimpleStmt
 
     , try $ withPos mkCall <*> identifier <*> parens (parseExpr `sepBy` comma)
     , withPos mkAssign <*> identifier
@@ -475,6 +457,39 @@ parseSimpleStmt = choice
       eArrWrite p (foldr ($) (mkVar p x) ds) estart len rhs
 
 {-------------------------------------------------------------------------------
+  Let statements
+
+  This is the equivalent of GLetDecl and co in the comp parser.
+-------------------------------------------------------------------------------}
+
+data GELetDecl t a =
+    ELetDeclERef    (GName t, Maybe (GExp t a))
+--  | ELetDeclFunExpr (GName t) [GName t] (GExp t a)
+  | ELetDeclExpr    (GName t) (GExp t a)
+
+type ELetDecl = GELetDecl SrcTy ()
+
+-- | Local declarations in the expression language
+--
+-- Comparable to `parseLetDecl`.
+--
+-- > <elet-decl> ::=
+-- >   | <decl>
+-- >   | "let" <var-bind> "=" <expr>
+parseELetDecl :: BlinkParser ELetDecl
+parseELetDecl = choice
+    [ ELetDeclERef <$> declParser
+    , ELetDeclExpr <$ reserved "let" <*> parseVarBind <* reservedOp "=" <*> parseExpr
+    ]
+
+-- | Smart constructor for GELetDecl
+--
+-- Comparable to `cLetDecl`.
+eLetDecl :: Maybe SourcePos -> ELetDecl -> SrcExp -> SrcExp
+eLetDecl p (ELetDeclERef (xn, e)) = eLetRef p xn e
+eLetDecl p (ELetDeclExpr x e)     = eLet p x AutoInline e
+
+{-------------------------------------------------------------------------------
   Small parsers
 -------------------------------------------------------------------------------}
 
@@ -492,7 +507,7 @@ foldIntExpr = do
 parseVarBind :: BlinkParser (GName SrcTy)
 parseVarBind = choice
     [ withPos mkName <*> identifier
-    , parens $ withPos mkNameTy <*> 
+    , parens $ withPos mkNameTy <*>
                identifier <* reservedOp ":" <*> parseBaseType
     ] <?> "variable binding"
   where
@@ -588,8 +603,7 @@ assertSingleton :: Monad m => [t] -> (t -> a) -> m a
 assertSingleton [e] action = return (action e)
 assertSingleton _x _action = fail "Expecting only one argument!"
 
-
-eValSrc :: Maybe SourcePos -> Val -> SrcExp 
+eValSrc :: Maybe SourcePos -> Val -> SrcExp
 eValSrc p v = eVal p SrcTyUnknown v
 
 eValArrSrc :: Maybe SourcePos -> [Val] -> SrcExp

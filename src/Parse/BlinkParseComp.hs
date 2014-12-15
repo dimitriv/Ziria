@@ -286,6 +286,8 @@ parseArgs xnm = parens $ do
 
 {-------------------------------------------------------------------------------
   Let statements
+
+  This is the equivalent of GELetDecl and co in the expression parser.
 -------------------------------------------------------------------------------}
 
 data GLetDecl tc t a b =
@@ -300,6 +302,8 @@ data GLetDecl tc t a b =
 type LetDecl = GLetDecl SrcCTy SrcTy () ()
 
 -- | The thing that is being declared in a let-statemnt
+--
+-- Comparable to `parseELetDecl`.
 --
 -- > <let-decl> ::=
 -- >   | <decl>
@@ -385,9 +389,12 @@ parseCompBaseType = choice
     mkCTy Nothing   ti ty = SrcCTyKnown $ CTTrans ti ty
     mkCTy (Just tv) ti ty = SrcCTyKnown $ CTComp tv ti ty
 
+-- | Smart constructor for LetDecl
+--
+-- Comparable to `eLetDecl`.
 cLetDecl :: Maybe SourcePos -> LetDecl -> (ParseCompEnv, SrcComp -> SrcComp)
-cLetDecl p (LetDeclERef (xn,  e)) =
-    ([], cLetERef p xn e)
+cLetDecl p (LetDeclERef (x, e)) =
+    ([], cLetERef p x e)
 cLetDecl p (LetDeclStruct sdef) =
     ([], cLetStruct p sdef)
 cLetDecl p (LetDeclExternal x params ty) =
@@ -442,14 +449,15 @@ foldCommands (Right c:cs) = cSeq' c <$> foldCommands cs
 
 -- | Commands
 --
+-- Comparable to `parseStmt`.
+--
 -- > <command> ::=
 -- >     <let-decl>
--- >   | "if" <expr> "then" <comp>
 -- >   | <var-bind> "<-" <comp>
 -- >   | <comp>
 parseCommand :: BlinkParser (ParseCompEnv, Command)
 parseCommand = choice
-    [ try $ withPos cLetDecl' <*> parseLetDecl   <* notFollowedBy (reserved "in")
+    [ try $ withPos cLetDecl'  <*> parseLetDecl <* notFollowedBy (reserved "in")
     , try $ withPos cBindMany' <*> parseVarBind <* reservedOp "<-" <*> parseComp
     , (\c -> ([], Right c)) <$> parseComp
     ] <?> "command"
