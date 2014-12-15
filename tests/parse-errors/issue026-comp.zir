@@ -1,0 +1,6 @@
+fun comp f() {
+  if(true);
+  return 0;
+}
+
+let comp main = read[int] >>> write[int]
