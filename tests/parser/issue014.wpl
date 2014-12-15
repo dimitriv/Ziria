@@ -1,0 +1,11 @@
+fun comp f() {
+  let comp A = 
+    if true then {
+      return ();
+    }
+    in
+
+  return 0;
+}
+
+let comp main = read[int] >>> write[int]

@@ -187,24 +187,27 @@ parseCompTerm = choice
 
     , parseVarOrCall
 
-    , withPos cBranch <* reserved "if"   <*> parseExpr
-                      <* reserved "then" <*> parseComp
-                      <* reserved "else" <*> parseComp
-    , withPos cLetDecl <*> parseLetDecl `bindExtend` \f -> 
+    , withPos cBranch' <* reserved "if"   <*> parseExpr
+                       <* reserved "then" <*> parseComp
+                       <*> optionMaybe (reserved "else" *> parseComp)
+    , withPos cLetDecl <*> parseLetDecl `bindExtend` \f ->
                               f <$ reserved "in" <*> parseComp
     , withPos cReturn' <*> return AutoInline <* reserved "do" <*> parseStmtBlock
     , optional (reserved "seq") >> braces parseCommands
     ] <?> "computation"
   where
-    cReturn' p = cReturn p 
+    cReturn' p = cReturn p
     cEmit'   p = cEmit   p
     cEmits'  p = cEmits  p
-    cTake1'  p = cTake1  p SrcTyUnknown 
+    cTake1'  p = cTake1  p SrcTyUnknown
 
     cTake' p e = do
       case evalInt e of
         Just n  -> return $ cTake p SrcTyUnknown (fromInteger n)
         Nothing -> fail "Non-constant argument to takes"
+
+    cBranch' p cond true (Just false) = cBranch p cond true false
+    cBranch' p cond true Nothing      = cBranch p cond true (cunit p)
 
 
 {-------------------------------------------------------------------------------
@@ -340,7 +343,7 @@ paramsParser = parens $ sepBy paramParser (symbol ",")
 parseCVarBind :: BlinkParser (GName SrcCTy)
 parseCVarBind = choice
     [ withPos mkName <*> identifier
-    , parens $ 
+    , parens $
       withPos mkNameTy <*> identifier <* symbol ":" <*> parseCompBaseType
     ] <?> "variable binding"
   where
@@ -445,16 +448,12 @@ foldCommands (Right c:cs) = cSeq' c <$> foldCommands cs
 parseCommand :: BlinkParser (ParseCompEnv, Command)
 parseCommand = choice
     [ try $ withPos cLetDecl' <*> parseLetDecl   <* notFollowedBy (reserved "in")
-    , try $ withPos cBranch'  <* reserved "if"   <*> parseExpr
-                              <* reserved "then" <*> parseComp
-                              <* notFollowedBy (reserved "else")
     , try $ withPos cBindMany' <*> parseVarBind <* reservedOp "<-" <*> parseComp
     , (\c -> ([], Right c)) <$> parseComp
     ] <?> "command"
   where
     cLetDecl' loc decl = (env, Left k)  -- Used to be: second Left .: cLetDecl
       where (env,k) = cLetDecl loc decl
-    cBranch'   loc e c1 = ([], Right $ cBranch loc e c1 (cunit loc))
     cBindMany' loc x c  = ([], Left $ \c' -> cBindMany loc c [(x, c')])
 
 cunit :: Maybe SourcePos -> SrcComp
@@ -469,7 +468,7 @@ cunit p = cReturn p ForceInline (eunit p)
 -- > <type-ann> ::= "[" <base-type> "]"
 optTypeAnn :: BlinkParser SrcTy
 optTypeAnn = mkTypeAnn <$> optionMaybe (brackets parseBaseType)
-  where 
+  where
     mkTypeAnn Nothing  = SrcTyUnknown
     mkTypeAnn (Just t) = t
 
@@ -505,13 +504,13 @@ optVectAnn :: BlinkParser (Maybe VectAnn)
 optVectAnn = optionMaybe parseVectAnn
 
 -- | Shorthand for @<inl-ann>?@
--- > <inl-ann> ::= "forceinline" | "autoinline" | "noinline" 
+-- > <inl-ann> ::= "forceinline" | "autoinline" | "noinline"
 optInlAnn :: BlinkParser ForceInline
-optInlAnn = choice 
-   [ try (reserved "noinline") >> return NoInline
-   , try (reserved "forceinline") >> return ForceInline
-   , try (reserved "autoinline") >> return AutoInline
-   , return AutoInline 
+optInlAnn = choice
+   [ NoInline    <$ reserved "noinline"
+   , ForceInline <$ reserved "forceinline"
+   , AutoInline  <$ reserved "autoinline"
+   , return AutoInline
    ]
 
 -- > <comp-ann> ::= "comp" <range>?
