@@ -23,6 +23,14 @@ all: create-sandbox
 	cp .cabal-sandbox/bin/wplc* .
 	cp .cabal-sandbox/bin/BlinkDiff* tools/
 
+# intentionally no dependency on create-sandbox here, so that we can run
+# `make quick`. Need to make sure to initialize the sandbox first and run
+# `cabal configure`.
+quick:
+	cabal build
+	cp dist/build/wplc/wplc .
+	cp dist/build/BlinkDiff/BlinkDiff tools/
+
 create-sandbox:
 	cabal sandbox init
 	cabal install --dependencies-only
@@ -159,3 +167,4 @@ test-WiFi-TX-perf:
 test-WiFi-TX-perf-clean: 
 	make -C code/WiFi/transmitter/perf clean
 
+# vi:set noexpandtab:
