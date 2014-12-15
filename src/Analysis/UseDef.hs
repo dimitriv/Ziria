@@ -223,6 +223,8 @@ varUseDefs ranges = \e -> do
         extendVars [v] $ do
           insertUseDefs v vs_e1
           Set.delete v <$> go e2
+    go0 (ELetHeader _ _) =
+        error "varUseDefs.go0: ELetHeader"
     -- For ESeq we throw away the variables used to calculate the pure part of
     -- 'e1'.
     go0 (ESeq e1 e2) = do

@@ -134,6 +134,11 @@ instance Outputable ty => Outputable (GExp0 ty a) where
       text "in" $$
       ppr e2
 
+    ELetHeader fn e2 ->
+      text "fun" <+> ppr fn $$
+      text "in" $$
+      ppr e2
+
     ESeq e1 e2       -> ppr e1 <> semi $$ ppr e2
     ECall f eargs    -> ppr f <> parens (ppEs ppr comma eargs)
     EIf be e1 e2     -> text "if" <+> ppr be <+> text "{" $$
@@ -209,12 +214,12 @@ instance Outputable SrcTy where
     SrcTBool      -> text "bool"
     SrcTStruct nm -> text nm
     SrcInject  ty -> ppr ty
-    SrcTyUnknown  -> empty 
-    SrcTArray (SrcLiteral n) ty' 
+    SrcTyUnknown  -> empty
+    SrcTArray (SrcLiteral n) ty'
       -> text "arr" <> brackets (int n) <+> ppr ty'
-    SrcTArray (SrcNVar n) ty' 
+    SrcTArray (SrcNVar n) ty'
       -> text "arr" <> brackets (text (show n)) <+> ppr ty'
-    SrcTArray (SrcNArr n) ty' 
+    SrcTArray (SrcNArr n) ty'
       -> text "arr" <> brackets (text ("arr " ++ (show n))) <+> ppr ty'
 
 instance Outputable ty => Outputable (GFun ty a) where

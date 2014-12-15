@@ -142,10 +142,10 @@ renReqGCTy :: Maybe SourcePos -> GCTy SrcTy -> TcM CTy
 renReqGCTy p = go
   where
     go (CTVar _)          = panicStr "Unexpected type variable in source type"
-    go (CTComp u a b)     = CTComp  <$> 
+    go (CTComp u a b)     = CTComp  <$>
                             renReqTy p u <*> renReqTy p a <*> renReqTy p b
     go (CTTrans a b)      = CTTrans <$> renReqTy p a <*> renReqTy p b
-    go (CTArrow args res) = CTArrow <$> 
+    go (CTArrow args res) = CTArrow <$>
                             mapM (renTyCTy p) args <*> go res
 
 renNumExpr :: Maybe SourcePos -> SrcNumExpr -> TcM NumExpr
@@ -386,6 +386,10 @@ renExp (MkExp exp0 eloc ()) = case exp0 of
         recName nm1' $ do
           e2' <- renExp e2
           return $ eLetRef eloc nm1' e1' e2'
+      ELetHeader fun e2 -> do
+        fun' <- renFun fun
+        e2'  <- recName (funName fun') $ renExp e2
+        return $ eLetHeader eloc fun' e2'
       ESeq e1 e2 -> do
         e1' <- renExp e1
         e2' <- renExp e2

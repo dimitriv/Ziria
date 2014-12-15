@@ -221,6 +221,8 @@ runAutoLUT dflags _ c = autolutC c
             go (ELetRef v Nothing e2) =
                 ELetRef v Nothing <$> autoE e2
 
+            go (ELetHeader _ _) =
+                error "runAutoLUT.autolutE.go: ELetHeader"
 
             go (ESeq e1 e2) =
                 ESeq <$> autoE e1 <*> autoE e2

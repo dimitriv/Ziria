@@ -17,7 +17,7 @@
    permissions and limitations under the License.
 -}
 -- | Typecheck (and sanity check) core (rather than source)
-{-# OPTIONS_GHC -Wall -Wwarn #-}
+{-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE FlexibleInstances #-}
 module Tc ( tc ) where
 
@@ -246,6 +246,9 @@ tcExp expr@(MkExp exp0 loc _) =
       tcExp e2
     go (ELetRef _x Nothing e2) =
       tcExp e2
+    go (ELetHeader fun e2) = do
+      void $ tcFun fun
+      tcExp e2
     go (ESeq e1 e2) = do
       -- TODO: We might want to insist that e1 has type TUnit
       void $ tcExp e1
@@ -419,21 +422,21 @@ tcComp comp@(MkComp comp0 loc _) =
     go (Mitigate a n1 n2) =
       tcMitigator loc a n1 n2
 
-    -- DV: Typing those in more restrictive ways 
+    -- DV: Typing those in more restrictive ways
     go (Emit e) = do
       b <- tcExp e
-      return $ CTComp TUnit TVoid b                  
+      return $ CTComp TUnit TVoid b
     go (Emits e) = do
       ety <- tcExp e
       (_n, b) <- unifyTArray loc Infer Infer ety
-      return $ CTComp TUnit TVoid b                  
+      return $ CTComp TUnit TVoid b
     go (Return _fi e) = do
       u <- tcExp e
-      return $ CTComp u TVoid TVoid                  
-    go (Take1 a) = do 
-      return $ CTComp a a TVoid                       
+      return $ CTComp u TVoid TVoid
+    go (Take1 a) = do
+      return $ CTComp a a TVoid
     go (Take a n) = do
-      return $ CTComp (TArray (Literal n) a) a TVoid  
+      return $ CTComp (TArray (Literal n) a) a TVoid
 
     -- DV: Combining the types of those here in less restrictive ways
     go (BindMany c []) =

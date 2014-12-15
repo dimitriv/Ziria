@@ -115,8 +115,8 @@ data SrcTy where
   SrcTInt      :: SrcBitWidth -> SrcTy
   SrcTDouble   :: SrcTy
   SrcTStruct   :: TyName -> SrcTy
- 
-  -- Just useful for the embedding 
+
+  -- Just useful for the embedding
   SrcInject    :: Ty -> SrcTy
 
   -- We record the absense of a type annotation here
@@ -333,6 +333,9 @@ data GExp0 t a where
   -- | Potentially initialized read/write variable
   ELetRef :: GName t -> Maybe (GExp t a) -> GExp t a -> GExp0 t a
 
+  -- | Local function definitions
+  ELetHeader :: GFun t a -> GExp t a -> GExp0 t a
+
   ESeq :: GExp t a -> GExp t a -> GExp0 t a
   ECall :: GName t -> [GExp t a] -> GExp0 t a
   EIf :: GExp t a -> GExp t a -> GExp t a -> GExp0 t a
@@ -503,7 +506,7 @@ mapTyM f = go
     go (TBuff (ExtBuf bt)) = do bt' <- go bt
                                 f $ TBuff (ExtBuf bt')
 
-    go TVoid               = f $ TVoid 
+    go TVoid               = f $ TVoid
 
 mapNameM :: Monad m => (t -> m t') -> GName t -> m (GName t')
 mapNameM onTyp MkName{..} = do
@@ -586,6 +589,10 @@ mapExpM onTyp onAnn f = goExp
       e1'  <- goExp e1
       e2'  <- goExp e2
       return $ ELetRef nm1' (Just e1') e2'
+    goExp0 (ELetHeader fun e2) = do
+      fun' <- mapFunM onTyp onAnn goExp fun
+      e2'  <- goExp e2
+      return $ ELetHeader fun' e2'
     goExp0 (ESeq e1 e2) = do
       e1' <- goExp e1
       e2' <- goExp e2
@@ -1001,8 +1008,9 @@ mutates_state e = case unExp e of
   ELet _nm _fi e1 e2           -> any mutates_state [e1,e2]
   ELetRef _nm (Just e1) e2     -> any mutates_state [e1,e2]
   ELetRef _nm Nothing   e2     -> mutates_state e2
+  ELetHeader _f e2             -> mutates_state e2  -- See Note [Local funs]
   ESeq e1 e2                   -> any mutates_state [e1,e2]
-  ECall _e' _es                -> True
+  ECall _e' _es                -> True -- See Note [Local funs]
   EIf e1 e2 e3                 -> any mutates_state [e1,e2,e3]
   EPrint _nl _e1               -> True -- See Note [IOEffects]
   EError _ _                   -> True
@@ -1191,4 +1199,11 @@ Q:
    'x' is typically considered out of scope in typical programming
    languages.  But need not, i.e. it is in scope in hybrid type systems.
 
+Note [Local funs]
+~~~~~~~~~~~~~~~~~
+
+For the mutates_state analysis we don't have to check the function body
+because if we ever call it, we always return true (see case for ECall). If we
+change this definition for ECall we might have to do something different for
+local functions.
 -}

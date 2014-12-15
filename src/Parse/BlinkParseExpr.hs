@@ -29,6 +29,7 @@ module BlinkParseExpr (
   , parseBaseType
   , parseStmtBlock
   , parseStmts
+  , paramsParser
     -- * Utilities
   , parseFor
   , parseVarBind
@@ -464,7 +465,7 @@ parseSimpleStmt = choice
 
 data GELetDecl t a =
     ELetDeclERef    (GName t, Maybe (GExp t a))
---  | ELetDeclFunExpr (GName t) [GName t] (GExp t a)
+  | ELetDeclFunExpr (GName t) [GName t] (GExp t a)
   | ELetDeclExpr    (GName t) (GExp t a)
 
 type ELetDecl = GELetDecl SrcTy ()
@@ -479,15 +480,27 @@ type ELetDecl = GELetDecl SrcTy ()
 parseELetDecl :: BlinkParser ELetDecl
 parseELetDecl = choice
     [ ELetDeclERef <$> declParser
-    , ELetDeclExpr <$ reserved "let" <*> parseVarBind <* reservedOp "=" <*> parseExpr
+    , ELetDeclFunExpr <$ reserved "fun" <*> parseVarBind <*> paramsParser <*> braces parseStmts
+    , ELetDeclExpr    <$ reserved "let" <*> parseVarBind <* reservedOp "=" <*> parseExpr
     ]
+
+-- | Parameters to a (non-comp) function
+--
+-- > <params> ::= "(" (IDENT ":" <base-type>)*"," ")"
+paramsParser :: BlinkParser [GName SrcTy]
+paramsParser = parens $ sepBy paramParser (symbol ",")
+  where
+    paramParser = withPos mkParam <*> identifier <* colon <*> parseBaseType
+    mkParam p x ty = toName x p ty
+
 
 -- | Smart constructor for GELetDecl
 --
 -- Comparable to `cLetDecl`.
 eLetDecl :: Maybe SourcePos -> ELetDecl -> SrcExp -> SrcExp
-eLetDecl p (ELetDeclERef (xn, e)) = eLetRef p xn e
-eLetDecl p (ELetDeclExpr x e)     = eLet p x AutoInline e
+eLetDecl p (ELetDeclERef (xn, e))   = eLetRef p xn e
+eLetDecl p (ELetDeclExpr x e)       = eLet p x AutoInline e
+eLetDecl p (ELetDeclFunExpr x ps e) = eLetHeader p (mkFunDefined p x ps e)
 
 {-------------------------------------------------------------------------------
   Small parsers

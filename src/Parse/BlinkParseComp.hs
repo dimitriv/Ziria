@@ -334,15 +334,6 @@ parseStruct = do
   where
     parseField = (,) <$> identifier <* colon <*> parseBaseType
 
--- | Parameters to a (non-comp) function
---
--- > <params> ::= "(" (IDENT ":" <base-type>)*"," ")"
-paramsParser :: BlinkParser [GName SrcTy]
-paramsParser = parens $ sepBy paramParser (symbol ",")
-  where
-    paramParser = withPos mkParam <*> identifier <* colon <*> parseBaseType
-    mkParam p x ty = toName x p ty
-
 -- | Like `parseVarBind` but for computation types
 --
 -- > <cvar-bind> ::= IDENT | "(" IDENT ":" <comp-base-type> ")"
