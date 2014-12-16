@@ -163,11 +163,11 @@ parseComp =
 -- >   | "write" <type-ann>?
 -- >   | "map" <vect-ann>? <var-bind>
 -- >   | "take"
--- >   | <var-or-call>
 -- >   | "if" <expr> "then" <comp> "else" <comp>
 -- >   | <let-decl> "in" <comp>
 -- >   | "do" <stmt-block>
 -- >   | "seq"? "{" <commands> "}"
+-- >   | <var-or-call>
 --
 -- `<stmt_block>` comes from the expression language.
 parseCompTerm :: BlinkParser SrcComp
@@ -185,8 +185,6 @@ parseCompTerm = choice
     , withPos cMap      <* reserved "map"    <*> optVectAnn <*> parseVarBind
     , withPos cTake1'   <* reserved "take"
 
-    , parseVarOrCall
-
     , withPos cBranch' <* reserved "if"   <*> parseExpr
                        <* reserved "then" <*> parseComp
                        <*> optionMaybe (reserved "else" *> parseComp)
@@ -194,6 +192,8 @@ parseCompTerm = choice
                               f <$ reserved "in" <*> parseComp
     , withPos cReturn' <*> return AutoInline <* reserved "do" <*> parseStmtBlock
     , optional (reserved "seq") >> braces parseCommands
+
+    , parseVarOrCall
     ] <?> "computation"
   where
     cReturn' p = cReturn p

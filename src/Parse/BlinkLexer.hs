@@ -40,7 +40,7 @@ module BlinkLexer (
   , symbol
   ) where
 
-import Control.Applicative
+import Control.Applicative hiding ((<|>))
 import Control.Monad
 import Text.Parsec.Prim
 import Text.Parsec.Pos
@@ -53,8 +53,11 @@ import ZiriaLexerMonad
   Identifiers and literals
 -------------------------------------------------------------------------------}
 
+-- | Identifiers
+--
+-- Note that we allow reserved keywords to be used as identifiers as well (#40)
 identifier :: BlinkParser String
-identifier = lClass LVarId <?> "varid"
+identifier = (lClass LVarId <|> lClass LReservedId) <?> "varid"
 
 integer :: BlinkParser Integer
 integer = mkInteger <$> optionMaybe (reservedOp "-") <*> (lClass LInteger <?> "integer literal")

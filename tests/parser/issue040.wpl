@@ -1,0 +1,6 @@
+fun f() {
+  let fun = 5; // Reuse "fun" as identifier
+  return 0;
+}
+
+let comp main = read[int] >>> write[int]
