@@ -76,36 +76,6 @@ parseTopLevel =
 topLevelSep :: BlinkParser ()
 topLevelSep = many fileNameChange *> optional semi <* many fileNameChange
 
-
--- parseProgram :: BlinkParser SrcProg
--- parseProgram = parseTopLevel $
---     join $ mkProg <$ cppPragmas AllowFilenameChange <*> parseTopLevelDecls
---   where
---     mkProg ([],     _)  = fail "No main found"
---     mkProg (_:_:_,  _)  = fail "More than one main found"
---     mkProg ([main], bs) = MkProg <$> foldCommands (map Left bs ++ [Right main])
-
--- -- | Parse a list of top level declarations
--- --
--- -- We return the list of declarations of 'main' separately so that we can
--- -- construct a single SrcComp in `parseProgram`.
--- --
--- parseTopLevelDecls :: BlinkParser ([SrcComp], [SrcComp -> SrcComp])
--- parseTopLevelDecls =
---     withPos cLetDecl' <*> parseLetDecl `bindExtend` \d -> append d <$> more
---   where
---     more = topLevelSep *> (parseTopLevelDecls <|> return ([], []))
-
---     append (decl, fun) (mains, funs) =
---       case decl of
---         LetDeclComp Nothing nm c | name nm == "main" -> (c:mains, funs)
---         _                                            -> (mains, fun:funs)
-
---     cLetDecl' p d = let (env, f) = cLetDecl p d in (env, (d, f))
-
--- topLevelSep :: BlinkParser ()
--- topLevelSep = many fileNameChange *> optional semi <* many fileNameChange
-
 -- | Parse a computation expression
 --
 -- > <comp> ::=
