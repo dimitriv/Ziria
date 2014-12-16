@@ -1,7 +1,0 @@
-fun f(x : int, y : int) {
-  let a1 = {0, 1};
-  let a2 = {x, y};
-  return 0; 
-}
-
-let comp main = read[int] >>> write[int]
