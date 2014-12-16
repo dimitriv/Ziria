@@ -19,9 +19,10 @@
 {-# LANGUAGE GADTs, TemplateHaskell,
              MultiParamTypeClasses,
              RankNTypes,
-             ScopedTypeVariables #-}
+             ScopedTypeVariables,
+             FlexibleInstances #-}
 {-# OPTIONS_GHC -Wall -Wwarn #-}
-module BlinkParseComp (parseProgram, parseComp, parseTopLevel, runParseM) where
+module BlinkParseComp (parseProgram, parseComp, runParseM) where
 
 import Control.Applicative ((<$>), (<*>), (<$), (<*), (*>))
 import Control.Monad (join)
@@ -47,31 +48,20 @@ import Utils ( uncurry4 )
 --
 -- TODO: Update the grammar
 parseProgram :: BlinkParser SrcProg
-parseProgram =
-    join $ mkProg <$ startOfFile <* many fileNameChange
-       <*> parseTopLevel <* eof
+parseProgram = startOfFile <* many fileNameChange *> parseTopLevel <* eof
+
+parseTopLevel :: BlinkParser SrcProg
+parseTopLevel = MkProg <$>
+    (foldCommands =<< extractMain [] =<< (parseLetDecl `extSepEndBy1` topLevelSep))
   where
-    mkProg ([],     _)  = fail "No main found"
-    mkProg (_:_:_,  _)  = fail "More than one main found"
-    mkProg ([main], bs) = MkProg <$> foldCommands (map Left bs ++ [Right main])
-
--- | Parse a list of top level declarations
---
--- We return the list of declarations of 'main' separately so that we can
--- construct a single SrcComp in `parseProgram`.
---
-parseTopLevel :: BlinkParser ([SrcComp], [SrcComp -> SrcComp])
-parseTopLevel =
-    withPos cLetDecl' <*> parseLetDecl `bindExtend` \d -> append d <$> more
-  where
-    more = topLevelSep *> (parseTopLevel <|> return ([], []))
-
-    append (decl, fun) (mains, funs) =
-      case decl of
-        LetDeclComp Nothing nm c | name nm == "main" -> (c:mains, funs)
-        _                                            -> (mains, fun:funs)
-
-    cLetDecl' p d = let (env, f) = cLetDecl p d in (env, (d, f))
+    extractMain :: [LetDecl] -> [LetDecl] -> BlinkParser [Command]
+    extractMain _   []     = fail "No main found"
+    extractMain acc (d:ds) =
+      case d of
+        LetDeclComp _p Nothing nm c | name nm == "main" ->
+          return $ map CmdDecl (reverse acc ++ ds) ++ [CmdComp c]
+        _ ->
+          extractMain (d:acc) ds
 
 topLevelSep :: BlinkParser ()
 topLevelSep = many fileNameChange *> optional semi <* many fileNameChange
@@ -158,8 +148,9 @@ parseCompTerm = choice
     , withPos cBranch' <* reserved "if"   <*> parseExpr
                        <* reserved "then" <*> parseComp
                        <*> optionMaybe (reserved "else" *> parseComp)
-    , withPos cLetDecl <*> parseLetDecl `bindExtend` \f ->
-                              f <$ reserved "in" <*> parseComp
+
+    , parseLetDecl `extBind` \d -> cLetDecl d <$ reserved "in" <*> parseComp
+
     , withPos cReturn' <*> return AutoInline <* reserved "do" <*> parseStmtBlock
     , optional (reserved "seq") >> braces parseCommands
 
@@ -178,7 +169,6 @@ parseCompTerm = choice
 
     cBranch' p cond true (Just false) = cBranch p cond true false
     cBranch' p cond true Nothing      = cBranch p cond true (cunit p)
-
 
 {-------------------------------------------------------------------------------
   Operators (used to build parseComp)
@@ -255,21 +245,87 @@ parseArgs xnm = parens $ do
     parseArg (CAComp _) = CAComp <$> parseComp
 
 {-------------------------------------------------------------------------------
-  Let statements
-
-  This is the equivalent of GELetDecl and co in the expression parser.
+  Commands
 -------------------------------------------------------------------------------}
 
+-- | Commands
+--
+-- This is the equivalent to `Statement` in the expr parser.
+data Command = CmdDecl LetDecl | CmdBind Bind | CmdComp SrcComp
+
+-- | Binding site
+data Bind = Bind (Maybe SourcePos) (GName SrcTy) SrcComp
+
+-- | Declarations
+--
+-- This is the equivalent of `GELetDecl` and co in the expression parser.
 data GLetDecl tc t a b =
-    LetDeclERef (GName t, Maybe (GExp t b))
-  | LetDeclStruct (GStructDef t)
-  | LetDeclExternal String [GName t] t
-  | LetDeclFunComp (Maybe (Int, Int)) (GName tc) [GName (CallArg t tc)] (GComp tc t a b)
-  | LetDeclFunExpr (GName t) [GName t] (GExp t b)
-  | LetDeclComp (Maybe (Int, Int)) (GName tc) (GComp tc t a b)
-  | LetDeclExpr (GName t) (GExp t b)
+    LetDeclERef     (Maybe SourcePos) (GName t, Maybe (GExp t b))
+  | LetDeclStruct   (Maybe SourcePos) (GStructDef t)
+  | LetDeclExternal (Maybe SourcePos) String [GName t] t
+  | LetDeclFunComp  (Maybe SourcePos) (Maybe (Int, Int)) (GName tc) [GName (CallArg t tc)] (GComp tc t a b)
+  | LetDeclFunExpr  (Maybe SourcePos) (GName t) [GName t] (GExp t b)
+  | LetDeclComp     (Maybe SourcePos) (Maybe (Int, Int)) (GName tc) (GComp tc t a b)
+  | LetDeclExpr     (Maybe SourcePos) (GName t) (GExp t b)
 
 type LetDecl = GLetDecl SrcCTy SrcTy () ()
+
+-- | Commands
+--
+-- Comparable to `parseStmt`.
+--
+-- > <command> ::=
+-- >     <let-decl>
+-- >   | <var-bind> "<-" <comp>
+-- >   | <comp>
+parseCommand :: BlinkParser Command
+parseCommand = choice
+    [ try $ CmdDecl <$> parseLetDecl <* notFollowedBy (reserved "in")
+    , try $ CmdBind <$> parseBind
+    , CmdComp <$> parseComp
+    ] <?> "command"
+
+-- | A list of commands
+--
+-- Technically speaking, we cannot give a context free grammar here because the
+-- parser for function calls depends on the functions that are in scope.
+-- However, we ignore this in the documentation where we simply say
+--
+-- > <commands> ::= (<command> ";")*
+--
+-- The last <command> must be a computation.
+parseCommands :: BlinkParser SrcComp
+parseCommands = foldCommands =<< (parseCommand `extSepEndBy1` optional semi)
+
+-- | > `x <- comp`
+parseBind :: BlinkParser Bind
+parseBind = withPos Bind <*> parseVarBind <* reservedOp "<-" <*> parseComp
+
+-- | Fold a list of commands into a single computation, attempting to give an
+-- intelligible error if the last command is not a computation (#53, #56).
+foldCommands :: [Command] -> BlinkParser SrcComp
+foldCommands = go
+  where
+    go []             = error "This cannot happen"
+    go [CmdDecl d]    = declError d
+    go [CmdBind b]    = bindError b
+    go [CmdComp c]    = return c
+    go (CmdDecl d:cs) = cLetDecl d <$> go cs
+    go (CmdBind b:cs) = cBind    b <$> go cs
+    go (CmdComp c:cs) = cSeq'    c <$> go cs
+
+    cSeq' c1 c2 = cSeq (compLoc c2) c1 c2
+    cBind (Bind p x c1) c2 = cBindMany p c1 [(x, c2)]
+
+    declError decl = fail $ unlines [
+        "A block must end on a computation, it cannot end on a declaration."
+      , "The declaration for " ++ show (letDeclName decl) ++ " appears unused?"
+      ]
+
+    bindError (Bind _ x _) = fail $ unlines [
+        "A block must end on a computation, it cannot end on a bind."
+      , "Try removing the '" ++ show x ++ " <-' part perhaps?"
+      ]
 
 -- | The thing that is being declared in a let-statemnt
 --
@@ -285,14 +341,20 @@ type LetDecl = GLetDecl SrcCTy SrcTy () ()
 -- >   | "let" <var-bind> "=" <expr>
 parseLetDecl :: BlinkParser LetDecl
 parseLetDecl = choice
-    [ LetDeclERef   <$> declParser
-    , LetDeclStruct <$> parseStruct
-    , try $ LetDeclExternal <$ reserved "let" <* reserved "external" <*> identifier <*> paramsParser <* reservedOp ":" <*> parseBaseType
-    , try $ LetDeclFunComp  <$ reserved "fun" <*> parseCompAnn <*> parseCVarBind <*> compParamsParser <*> braces parseCommands
-    , try $ LetDeclFunExpr  <$ reserved "fun"                  <*> parseVarBind <*> paramsParser     <*> braces parseStmts
-    , try $ LetDeclComp     <$ reserved "let" <*> parseCompAnn <*> parseCVarBind <* reservedOp "=" <*> parseComp
-    , try $ LetDeclExpr     <$ reserved "let"                  <*> parseVarBind <* reservedOp "=" <*> parseExpr
+    [ withPos LetDeclERef     <*> declParser
+    , withPos LetDeclStruct   <*> parseStruct
+    , withPos LetDeclExternal <*  prefExt  <*> identifier    <*> paramsParser     <* reservedOp ":" <*> parseBaseType
+    , withPos LetDeclFunComp  <*> prefFunC <*> parseCVarBind <*> compParamsParser <*> braces parseCommands
+    , withPos LetDeclFunExpr  <*  prefFun  <*> parseVarBind  <*> paramsParser     <*> braces parseStmts
+    , withPos LetDeclComp     <*> prefLetC <*> parseCVarBind <* reservedOp "=" <*> parseComp
+    , withPos LetDeclExpr     <*  prefLet  <*> parseVarBind  <* reservedOp "=" <*> parseExpr
     ]
+  where
+    prefExt  = try $ reserved "let" *> reserved "external"
+    prefFunC = try $ reserved "fun" *> reserved "comp" *> optionMaybe parseRange
+    prefFun  = reserved "fun"
+    prefLetC = try $ reserved "let" *> reserved "comp" *> optionMaybe parseRange
+    prefLet  = reserved "let"
 
 -- > <struct> ::= "struct" IDENT "=" "{" (IDENT ":" <base-type>)*";" "}"
 parseStruct :: BlinkParser (GStructDef SrcTy)
@@ -353,82 +415,63 @@ parseCompBaseType = choice
 -- | Smart constructor for LetDecl
 --
 -- Comparable to `eLetDecl`.
-cLetDecl :: Maybe SourcePos -> LetDecl -> (ParseCompEnv, SrcComp -> SrcComp)
-cLetDecl p (LetDeclERef (x, e)) =
-    ([], cLetERef p x e)
-cLetDecl p (LetDeclStruct sdef) =
-    ([], cLetStruct p sdef)
-cLetDecl p (LetDeclExternal x params ty) =
-    ([], cLetHeader p fun)
+cLetDecl :: LetDecl -> SrcComp -> SrcComp
+cLetDecl (LetDeclStruct   p sdef)     = cLetStruct p sdef
+cLetDecl (LetDeclERef     p (x, e))   = cLetERef   p x e
+cLetDecl (LetDeclExpr     p x e)      = cLetE      p x AutoInline e
+cLetDecl (LetDeclComp     p h x c)    = cLet       p x    (mkVectComp c h)
+cLetDecl (LetDeclFunComp  p h x ps c) = cLetFunC   p x ps (mkVectComp c h)
+cLetDecl (LetDeclFunExpr  p fn ps e)  = cLetHeader p (mkFunDefined  p fn ps e)
+cLetDecl (LetDeclExternal p x ps ty)  = cLetHeader p (mkFunExternal p fn ps ty)
   where
-    fn  = toName x p SrcTyUnknown
-    fun = mkFunExternal p fn params ty
-cLetDecl p (LetDeclFunComp h x params c) =
-    ([(x, params)], cLetFunC p x params (mkVectComp c h))
-cLetDecl p (LetDeclFunExpr x params e) =
-    ([], cLetHeader p fun)
-  where
-    fun = mkFunDefined p x params e
-cLetDecl p (LetDeclComp h x c) =
-    ([], cLet p x (mkVectComp c h))
-cLetDecl p (LetDeclExpr x e) =
-    ([], cLetE p x AutoInline e)
+    fn = toName x p SrcTyUnknown
 
 mkVectComp :: SrcComp -> Maybe (Int,Int) -> SrcComp
 mkVectComp sc Nothing  = sc
 mkVectComp sc (Just h) = cVectComp (compLoc sc) h sc
 
-{-------------------------------------------------------------------------------
-  Commands
--------------------------------------------------------------------------------}
-
-type Command = Either (SrcComp -> SrcComp) SrcComp
-
--- | A list of commands
---
--- Technically speaking, we cannot give a context free grammar here because the
--- parser for function calls depends on the functions that are in scope.
--- However, we ignore this in the documentation where we simply say
---
--- > <commands> ::= (<command> ";")*
---
--- The last <command> must be a computation.
-parseCommands :: BlinkParser SrcComp
-parseCommands = foldCommands =<< go
-  where
-    go   = parseCommand `bindExtend` \c -> (c:) <$> more
-    more = optional semi *> (go <|> return [])
-
-foldCommands :: [Command] -> BlinkParser SrcComp
-foldCommands []           = error "This cannot happen"
-foldCommands [Left _]     = fail "last statement in a seq block should be a computation"
-foldCommands [Right c]    = return c
-foldCommands (Left k:cs)  = k       <$> foldCommands cs
-foldCommands (Right c:cs) = cSeq' c <$> foldCommands cs
-  where
-    cSeq' c1 c2 = cSeq (compLoc c2) c1 c2
-
--- | Commands
---
--- Comparable to `parseStmt`.
---
--- > <command> ::=
--- >     <let-decl>
--- >   | <var-bind> "<-" <comp>
--- >   | <comp>
-parseCommand :: BlinkParser (ParseCompEnv, Command)
-parseCommand = choice
-    [ try $ withPos cLetDecl'  <*> parseLetDecl <* notFollowedBy (reserved "in")
-    , try $ withPos cBindMany' <*> parseVarBind <* reservedOp "<-" <*> parseComp
-    , (\c -> ([], Right c)) <$> parseComp
-    ] <?> "command"
-  where
-    cLetDecl' loc decl = (env, Left k)  -- Used to be: second Left .: cLetDecl
-      where (env,k) = cLetDecl loc decl
-    cBindMany' loc x c  = ([], Left $ \c' -> cBindMany loc c [(x, c')])
-
 cunit :: Maybe SourcePos -> SrcComp
 cunit p = cReturn p ForceInline (eunit p)
+
+letDeclName :: LetDecl -> String
+letDeclName (LetDeclERef _ (nm, _))     = show nm
+letDeclName (LetDeclStruct _ sdef)      = struct_name sdef
+letDeclName (LetDeclExternal _ nm _ _)  = nm
+letDeclName (LetDeclFunComp _ _ nm _ _) = show nm
+letDeclName (LetDeclFunExpr _ nm _ _)   = show nm
+letDeclName (LetDeclComp _ _ nm _)      = show nm
+letDeclName (LetDeclExpr _ nm _)        = show nm
+
+{-------------------------------------------------------------------------------
+  Dealing with the environment extension necessary to parse calls to
+  computation functions
+-------------------------------------------------------------------------------}
+
+class ExtractParseEnv a where
+  extractParseEnv :: a -> ParseCompEnv
+
+instance ExtractParseEnv LetDecl where
+  extractParseEnv (LetDeclFunComp _ _ x ps _) = [(x, ps)]
+  extractParseEnv _                           = []
+
+instance ExtractParseEnv Command where
+  extractParseEnv (CmdDecl decl) = extractParseEnv decl
+  extractParseEnv _              = []
+
+-- | Like `>>=`, but extend the environment with new bindings
+extBind :: ExtractParseEnv a
+        => BlinkParser a -> (a -> BlinkParser b) -> BlinkParser b
+extBind x f = x >>= \a -> extendParseEnv (extractParseEnv a) $ f a
+
+infixl 1 `extBind`  -- Same precedence as (>>=)
+
+-- | Like `sepEndBy1`, but using environment extention
+extSepEndBy1 :: ExtractParseEnv a
+          => BlinkParser a -> BlinkParser () -> BlinkParser [a]
+extSepEndBy1 p sep = go
+  where
+    go   = p `extBind` \a -> (a:) <$> more
+    more = sep *> (go <|> return [])
 
 {-------------------------------------------------------------------------------
   Annotations
@@ -452,7 +495,6 @@ parseVectAnn =
   where
     mkVectAnn Nothing   = uncurry Rigid
     mkVectAnn (Just ()) = uncurry UpTo
-
 
 -- | Parses just the @[(i,j)]@ annotation
 parseVectAnnFlag :: BlinkParser (Bool, (Int, Int))
@@ -483,8 +525,3 @@ optInlAnn = choice
    , AutoInline  <$ reserved "autoinline"
    , return AutoInline
    ]
-
--- > <comp-ann> ::= "comp" <range>?
-parseCompAnn :: BlinkParser (Maybe (Int, Int))
-parseCompAnn = reserved "comp" *> optionMaybe parseRange
-

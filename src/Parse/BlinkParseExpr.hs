@@ -156,7 +156,7 @@ parseTerm :: BlinkParser SrcExp
 parseTerm = choice
     [ parseUnit mkUnit
     , parens parseExpr
-    , withPos eLetDecl <*> parseELetDecl <* reserved "in" <*> parseExpr
+    , eLetDecl <$> parseELetDecl <* reserved "in" <*> parseExpr
     , withPos eIf <* reserved "if"   <*> parseExpr
                   <* reserved "then" <*> parseExpr
                   <* reserved "else" <*> parseExpr
@@ -367,22 +367,7 @@ parseStmtBlock = choice
 -- This follows the structure of `parseCommands` fairly closely, except that
 -- we not record any bindings in the expression parser.
 parseStmts :: BlinkParser SrcExp
-parseStmts =
-    foldStatements =<< parseStmt `sepEndBy1` optional semi
-  where
-    foldStatements :: [Statement] -> BlinkParser SrcExp
-    foldStatements []  = error "This cannot happen"
-    foldStatements [s] = stmtToExp s
-    foldStatements (Right s:ss) = eSeq' s <$> foldStatements ss
-    foldStatements (Left  k:ss) = k       <$> foldStatements ss
-
-    eSeq' s1 s2 = eSeq (expLoc s2) s1 s2
-
-stmtToExp :: Statement -> BlinkParser SrcExp
-stmtToExp (Left  _) = fail "Last statement in a block must be an expression"
-stmtToExp (Right s) = return s
-
-type Statement = Either (SrcExp -> SrcExp) SrcExp
+parseStmts = foldStatements =<< parseStmt `sepEndBy1` optional semi
 
 -- | Statements
 --
@@ -393,11 +378,9 @@ type Statement = Either (SrcExp -> SrcExp) SrcExp
 -- >   | <simple-stmt>
 parseStmt :: BlinkParser Statement
 parseStmt = choice
-    [ try $ withPos eLetDecl' <*> parseELetDecl <* notFollowedBy (reserved "in")
-    , Right <$> parseSimpleStmt
+    [ try $ StmtDecl <$> parseELetDecl <* notFollowedBy (reserved "in")
+    , StmtExp <$> parseSimpleStmt
     ] <?> "statement"
-  where
-    eLetDecl' p = Left . eLetDecl p
 
 -- | "Simple" statements (that do not expect a continuation)
 --
@@ -428,7 +411,7 @@ parseSimpleStmt = choice
     , withPos (makePrint True)  <* reserved "println" <*> parseExpr `sepBy` comma
     , withPos eError'           <* reserved "error"   <*> stringLiteral
 
-    , withPos eLetDecl <*> parseELetDecl <* reserved "in" <*> parseSimpleStmt
+    , eLetDecl <$> parseELetDecl <* reserved "in" <*> parseSimpleStmt
 
     , try $ withPos mkCall <*> identifier <*> parens (parseExpr `sepBy` comma)
     , withPos mkAssign <*> identifier
@@ -458,17 +441,48 @@ parseSimpleStmt = choice
       eArrWrite p (foldr ($) (mkVar p x) ds) estart len rhs
 
 {-------------------------------------------------------------------------------
-  Let statements
-
-  This is the equivalent of GLetDecl and co in the comp parser.
+  Statements
 -------------------------------------------------------------------------------}
 
+-- | Statements
+--
+-- This is the equivalent to `Command` in the comp parser.
+data Statement = StmtDecl ELetDecl | StmtExp SrcExp
+
+-- | Local declarations
+--
+-- This is the equivalent of `LetDecl` in the comp parser.
 data GELetDecl t a =
-    ELetDeclERef    (GName t, Maybe (GExp t a))
-  | ELetDeclFunExpr (GName t) [GName t] (GExp t a)
-  | ELetDeclExpr    (GName t) (GExp t a)
+    ELetDeclERef    (Maybe SourcePos) (GName t, Maybe (GExp t a))
+  | ELetDeclFunExpr (Maybe SourcePos) (GName t) [GName t] (GExp t a)
+  | ELetDeclExpr    (Maybe SourcePos) (GName t) (GExp t a)
 
 type ELetDecl = GELetDecl SrcTy ()
+
+foldStatements :: [Statement] -> BlinkParser SrcExp
+foldStatements = go
+  where
+    go []  = error "This cannot happen"
+    go [s] = stmtToExp s
+    go (StmtExp  e:ss) = eSeq' e    <$> go ss
+    go (StmtDecl d:ss) = eLetDecl d <$> go ss
+
+    eSeq' s1 s2 = eSeq (expLoc s2) s1 s2
+
+stmtToExp :: Statement -> BlinkParser SrcExp
+stmtToExp (StmtExp  e) = return e
+stmtToExp (StmtDecl d) = fail $ unlines [
+      "A block must end on an expression, it cannot end on a declaration."
+    , "The declaration for " ++ show (eletDeclName d) ++ " appears unused?"
+    ]
+
+-- | Smart constructor for GELetDecl
+--
+-- Comparable to `cLetDecl`.
+eLetDecl :: ELetDecl -> SrcExp -> SrcExp
+eLetDecl (ELetDeclERef    p (xn, e)) = eLetRef    p xn e
+eLetDecl (ELetDeclExpr    p x e)     = eLet       p x AutoInline e
+eLetDecl (ELetDeclFunExpr p x ps e)  = eLetHeader p (mkFunDefined p x ps e)
 
 -- | Local declarations in the expression language
 --
@@ -479,9 +493,9 @@ type ELetDecl = GELetDecl SrcTy ()
 -- >   | "let" <var-bind> "=" <expr>
 parseELetDecl :: BlinkParser ELetDecl
 parseELetDecl = choice
-    [ ELetDeclERef <$> declParser
-    , ELetDeclFunExpr <$ reserved "fun" <*> parseVarBind <*> paramsParser <*> braces parseStmts
-    , ELetDeclExpr    <$ reserved "let" <*> parseVarBind <* reservedOp "=" <*> parseExpr
+    [ withPos ELetDeclERef    <*> declParser
+    , withPos ELetDeclFunExpr <* reserved "fun" <*> parseVarBind <*> paramsParser <*> braces parseStmts
+    , withPos ELetDeclExpr    <* reserved "let" <*> parseVarBind <* reservedOp "=" <*> parseExpr
     ]
 
 -- | Parameters to a (non-comp) function
@@ -493,14 +507,10 @@ paramsParser = parens $ sepBy paramParser (symbol ",")
     paramParser = withPos mkParam <*> identifier <* colon <*> parseBaseType
     mkParam p x ty = toName x p ty
 
-
--- | Smart constructor for GELetDecl
---
--- Comparable to `cLetDecl`.
-eLetDecl :: Maybe SourcePos -> ELetDecl -> SrcExp -> SrcExp
-eLetDecl p (ELetDeclERef (xn, e))   = eLetRef p xn e
-eLetDecl p (ELetDeclExpr x e)       = eLet p x AutoInline e
-eLetDecl p (ELetDeclFunExpr x ps e) = eLetHeader p (mkFunDefined p x ps e)
+eletDeclName :: ELetDecl -> String
+eletDeclName (ELetDeclERef    _ (nm, _)) = show nm
+eletDeclName (ELetDeclFunExpr _ nm _ _)  = show nm
+eletDeclName (ELetDeclExpr    _ nm _)    = show nm
 
 {-------------------------------------------------------------------------------
   Small parsers
@@ -512,7 +522,6 @@ foldIntExpr = do
   case evalInt e of
     Just i  -> return $ fromIntegral i
     Nothing -> parserFail "Non-constant array length expression."
-
 
 -- | Variable with optional type annotation
 --

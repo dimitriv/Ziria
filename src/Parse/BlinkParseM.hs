@@ -33,7 +33,6 @@ module BlinkParseM (
   , extendParseEnv
   , getParseEnv
   , withPos
-  , bindExtend
     -- * Generic auxiliary parsers
   , xPrefix
   , lInfix
@@ -139,11 +138,6 @@ getParseEnv = ask
 
 withPos :: (Maybe SourcePos -> a) -> BlinkParser a
 withPos constr = constr . Just <$> getPosition
-
-bindExtend :: BlinkParser (ParseCompEnv, a) -> (a -> BlinkParser b) -> BlinkParser b
-bindExtend x f = x >>= \(env, a) -> extendParseEnv env $ f a
-
-infixl 1 `bindExtend`  -- Same precedence as (>>=)
 
 {-------------------------------------------------------------------------------
   Generic auxiliary parsers
