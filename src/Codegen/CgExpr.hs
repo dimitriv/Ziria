@@ -387,9 +387,6 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
         extendVarEnv [(x,[cexp|$id:x_name|])] $
           codeGenExp dflags e2
 
-    go t (ELetHeader _ _) =
-        error "codeGenExp.go: ELetHeader"
-
     go t (ESeq e1 e2) = do
         ce1 <- codeGenExp dflags e1
         appendStmt [cstm|$ce1;|]

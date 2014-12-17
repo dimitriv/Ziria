@@ -467,9 +467,8 @@ data Statement = StmtDecl ELetDecl | StmtExp SrcExp
 --
 -- This is the equivalent of `LetDecl` in the comp parser.
 data GELetDecl t a =
-    ELetDeclERef    (Maybe SourcePos) (GName t, Maybe (GExp t a))
-  | ELetDeclFunExpr (Maybe SourcePos) (GName t) [GName t] (GExp t a)
-  | ELetDeclExpr    (Maybe SourcePos) (GName t) (GExp t a)
+    ELetDeclERef (Maybe SourcePos) (GName t, Maybe (GExp t a))
+  | ELetDeclExpr (Maybe SourcePos) (GName t) (GExp t a)
 
 type ELetDecl = GELetDecl SrcTy ()
 
@@ -494,9 +493,8 @@ stmtToExp (StmtDecl d) = fail $ unlines [
 --
 -- Comparable to `cLetDecl`.
 eLetDecl :: ELetDecl -> SrcExp -> SrcExp
-eLetDecl (ELetDeclERef    p (xn, e)) = eLetRef    p xn e
-eLetDecl (ELetDeclExpr    p x e)     = eLet       p x AutoInline e
-eLetDecl (ELetDeclFunExpr p x ps e)  = eLetHeader p (mkFunDefined p x ps e)
+eLetDecl (ELetDeclERef p (xn, e)) = eLetRef    p xn e
+eLetDecl (ELetDeclExpr p x e)     = eLet       p x AutoInline e
 
 -- | Local declarations in the expression language
 --
@@ -508,7 +506,6 @@ eLetDecl (ELetDeclFunExpr p x ps e)  = eLetHeader p (mkFunDefined p x ps e)
 parseELetDecl :: BlinkParser ELetDecl
 parseELetDecl = choice
     [ withPos ELetDeclERef    <*> declParser
-    , withPos ELetDeclFunExpr <* reserved "fun" <*> parseVarBind <*> paramsParser <*> braces parseStmts
     , withPos ELetDeclExpr    <* reserved "let" <*> parseVarBind <* reservedOp "=" <*> parseExpr
     ]
 
@@ -522,9 +519,8 @@ paramsParser = parens $ sepBy paramParser (symbol ",")
     mkParam p x ty = toName x p ty
 
 eletDeclName :: ELetDecl -> String
-eletDeclName (ELetDeclERef    _ (nm, _)) = show nm
-eletDeclName (ELetDeclFunExpr _ nm _ _)  = show nm
-eletDeclName (ELetDeclExpr    _ nm _)    = show nm
+eletDeclName (ELetDeclERef _ (nm, _)) = show nm
+eletDeclName (ELetDeclExpr _ nm _)    = show nm
 
 {-------------------------------------------------------------------------------
   Small parsers

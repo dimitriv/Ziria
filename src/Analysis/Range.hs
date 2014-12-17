@@ -244,9 +244,6 @@ erange (MkExp (ELetRef v e1 e2) _ _) = do
     setRange v r
     erange e2
 
-erange (MkExp (ELetHeader _ _) _ _) = do
-    error "erange: ELetHeader"
-
 -- For ESeq we throw away the variables used to calculate the pure part of
 -- 'e1'.
 erange (MkExp (ESeq e1 e2) _ _) = do

@@ -76,9 +76,6 @@ eLet loc x fi e1 e2 = MkExp (ELet x fi e1 e2) loc ()
 eLetRef :: Maybe SourcePos ->  GName t -> Maybe (GExp t ()) -> GExp t () -> GExp t ()
 eLetRef loc nm x e = MkExp (ELetRef nm x e) loc ()
 
-eLetHeader :: Maybe SourcePos -> GFun t () -> GExp t () -> GExp t ()
-eLetHeader loc fun e = MkExp (ELetHeader fun e) loc ()
-
 eSeq :: Maybe SourcePos ->  GExp t () -> GExp t () -> GExp t ()
 eSeq loc e1 e2 = MkExp (ESeq e1 e2) loc ()
 

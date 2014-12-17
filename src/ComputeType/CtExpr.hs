@@ -46,7 +46,6 @@ ctExp0 (EFor _ _ _ _ _)    = TUnit
 ctExp0 (EWhile _ _)        = TUnit
 ctExp0 (ELet _ _ _ e2)     = ctExp e2
 ctExp0 (ELetRef _ _ e2)    = ctExp e2
-ctExp0 (ELetHeader _ e2)   = ctExp e2
 ctExp0 (ESeq _ e2)         = ctExp e2
 ctExp0 (ECall f xs)        = ctECall (nameTyp f) (map ctExp xs)
 ctExp0 (EIf _ a _)         = ctExp a

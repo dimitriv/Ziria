@@ -246,9 +246,6 @@ tcExp expr@(MkExp exp0 loc _) =
       tcExp e2
     go (ELetRef _x Nothing e2) =
       tcExp e2
-    go (ELetHeader fun e2) = do
-      void $ tcFun fun
-      tcExp e2
     go (ESeq e1 e2) = do
       -- TODO: We might want to insist that e1 has type TUnit
       void $ tcExp e1

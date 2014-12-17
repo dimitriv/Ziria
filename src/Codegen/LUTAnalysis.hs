@@ -274,9 +274,6 @@ shouldLUT dflags ranges e = flip evalLM s0 $ do
     go (ELetRef _ (Just e1) e2) =
         should e1 >> should e2
 
-    go (ELetHeader _ _) =
-        error "shouldLUT: ELetHeader"
-
     go (ESeq e1 e2) =
         should e1 >> should e2
 

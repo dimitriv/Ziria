@@ -386,10 +386,6 @@ renExp (MkExp exp0 eloc ()) = case exp0 of
         recName nm1' $ do
           e2' <- renExp e2
           return $ eLetRef eloc nm1' e1' e2'
-      ELetHeader fun e2 -> do
-        fun' <- renFun fun
-        e2'  <- recName (funName fun') $ renExp e2
-        return $ eLetHeader eloc fun' e2'
       ESeq e1 e2 -> do
         e1' <- renExp e1
         e2' <- renExp e2

@@ -333,9 +333,6 @@ data GExp0 t a where
   -- | Potentially initialized read/write variable
   ELetRef :: GName t -> Maybe (GExp t a) -> GExp t a -> GExp0 t a
 
-  -- | Local function definitions
-  ELetHeader :: GFun t a -> GExp t a -> GExp0 t a
-
   ESeq :: GExp t a -> GExp t a -> GExp0 t a
   ECall :: GName t -> [GExp t a] -> GExp0 t a
   EIf :: GExp t a -> GExp t a -> GExp t a -> GExp0 t a
@@ -589,10 +586,6 @@ mapExpM onTyp onAnn f = goExp
       e1'  <- goExp e1
       e2'  <- goExp e2
       return $ ELetRef nm1' (Just e1') e2'
-    goExp0 (ELetHeader fun e2) = do
-      fun' <- mapFunM onTyp onAnn goExp fun
-      e2'  <- goExp e2
-      return $ ELetHeader fun' e2'
     goExp0 (ESeq e1 e2) = do
       e1' <- goExp e1
       e2' <- goExp e2
@@ -1008,7 +1001,6 @@ mutates_state e = case unExp e of
   ELet _nm _fi e1 e2           -> any mutates_state [e1,e2]
   ELetRef _nm (Just e1) e2     -> any mutates_state [e1,e2]
   ELetRef _nm Nothing   e2     -> mutates_state e2
-  ELetHeader _f e2             -> mutates_state e2  -- See Note [Local funs]
   ESeq e1 e2                   -> any mutates_state [e1,e2]
   ECall _e' _es                -> True -- See Note [Local funs]
   EIf e1 e2 e3                 -> any mutates_state [e1,e2,e3]

@@ -134,11 +134,6 @@ instance Outputable ty => Outputable (GExp0 ty a) where
       text "in" $$
       ppr e2
 
-    ELetHeader fn e2 ->
-      text "fun" <+> ppr fn $$
-      text "in" $$
-      ppr e2
-
     ESeq e1 e2       -> ppr e1 <> semi $$ ppr e2
     ECall f eargs    -> ppr f <> parens (ppEs ppr comma eargs)
     EIf be e1 e2     -> text "if" <+> ppr be <+> text "{" $$
