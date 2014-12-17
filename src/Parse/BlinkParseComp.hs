@@ -22,7 +22,7 @@
              ScopedTypeVariables,
              FlexibleInstances #-}
 {-# OPTIONS_GHC -Wall -Wwarn #-}
-module BlinkParseComp (parseProgram, parseComp, runParseM) where
+module BlinkParseComp (parseProgram, parseCmdComp, runParseM) where
 
 import Control.Applicative ((<$>), (<*>), (<$), (<*), (*>))
 import Control.Monad (join)
@@ -92,8 +92,8 @@ topLevelSep = many fileNameChange *> optional semi <* many fileNameChange
 -- TODOs:
 -- * Is the relative precedence of `>>>` and `|>>>|` intended?
 -- * We don't have any tests at all for 'standalone'. Is it obsolete?
-parseComp :: BlinkParser SrcComp
-parseComp =
+parseCmdComp :: BlinkParser SrcComp
+parseCmdComp =
     buildExpressionParser table parseCompTerm
   where
     table =
@@ -109,6 +109,10 @@ parseComp =
       ]
 
     cTimes' = uncurry4 . cTimes
+
+-- | See discussion of `parseStmtExp'`
+parseCmdComp' :: BlinkParser SrcComp
+parseCmdComp' = cmdToComp =<< parseCommand
 
 -- | A term in a computation expression
 --
@@ -132,7 +136,7 @@ parseComp =
 -- `<stmt_block>` comes from the expression language.
 parseCompTerm :: BlinkParser SrcComp
 parseCompTerm = choice
-    [ parens parseComp
+    [ parens parseCmdComp
 
     , withPos cReturn' <*> optInlAnn <* reserved "return" <*> parseExpr
     , withPos cEmit'    <* reserved "emit"   <*> parseExpr
@@ -146,10 +150,10 @@ parseCompTerm = choice
     , withPos cTake1'   <* reserved "take"
 
     , withPos cBranch' <* reserved "if"   <*> parseExpr
-                       <* reserved "then" <*> parseComp
-                       <*> optionMaybe (reserved "else" *> parseComp)
+                       <* reserved "then" <*> parseCmdComp
+                       <*> optionMaybe (reserved "else" *> parseCmdComp)
 
-    , parseLetDecl `extBind` \d -> cLetDecl d <$ reserved "in" <*> parseComp
+    , parseLetDecl `extBind` \d -> cLetDecl d <$ reserved "in" <*> parseCmdComp'
 
     , withPos cReturn' <*> return AutoInline <* reserved "do" <*> parseStmtBlock
     , optional (reserved "seq") >> braces parseCommands
@@ -171,7 +175,7 @@ parseCompTerm = choice
     cBranch' p cond true Nothing      = cBranch p cond true (cunit p)
 
 {-------------------------------------------------------------------------------
-  Operators (used to build parseComp)
+  Operators (used to build parseCmdComp)
 
   These are not assigned non-terminals of their own in the grammar.
 -------------------------------------------------------------------------------}
@@ -242,7 +246,7 @@ parseArgs xnm = parens $ do
   where
     parseArg :: CallArg t tc -> BlinkParser (CallArg SrcExp SrcComp)
     parseArg (CAExp  _) = CAExp  <$> parseExpr
-    parseArg (CAComp _) = CAComp <$> parseComp
+    parseArg (CAComp _) = CAComp <$> parseCmdComp
 
 {-------------------------------------------------------------------------------
   Commands
@@ -282,7 +286,7 @@ parseCommand :: BlinkParser Command
 parseCommand = choice
     [ try $ CmdDecl <$> parseLetDecl <* notFollowedBy (reserved "in")
     , try $ CmdBind <$> parseBind
-    , CmdComp <$> parseComp
+    , CmdComp <$> parseCmdComp
     ] <?> "command"
 
 -- | A list of commands
@@ -299,7 +303,7 @@ parseCommands = foldCommands =<< (parseCommand `extSepEndBy1` optional semi)
 
 -- | > `x <- comp`
 parseBind :: BlinkParser Bind
-parseBind = withPos Bind <*> parseVarBind <* reservedOp "<-" <*> parseComp
+parseBind = withPos Bind <*> parseVarBind <* reservedOp "<-" <*> parseCmdComp
 
 -- | Fold a list of commands into a single computation, attempting to give an
 -- intelligible error if the last command is not a computation (#53, #56).
@@ -307,15 +311,20 @@ foldCommands :: [Command] -> BlinkParser SrcComp
 foldCommands = go
   where
     go []             = error "This cannot happen"
-    go [CmdDecl d]    = declError d
-    go [CmdBind b]    = bindError b
-    go [CmdComp c]    = return c
+    go [c]            = cmdToComp c
     go (CmdDecl d:cs) = cLetDecl d <$> go cs
     go (CmdBind b:cs) = cBind    b <$> go cs
     go (CmdComp c:cs) = cSeq'    c <$> go cs
 
     cSeq' c1 c2 = cSeq (compLoc c2) c1 c2
     cBind (Bind p x c1) c2 = cBindMany p c1 [(x, c2)]
+
+cmdToComp :: Command -> BlinkParser SrcComp
+cmdToComp = go
+  where
+    go (CmdDecl d) = declError d
+    go (CmdBind b) = bindError b
+    go (CmdComp c) = return c
 
     declError decl = fail $ unlines [
         "A block must end on a computation, it cannot end on a declaration."
@@ -346,7 +355,7 @@ parseLetDecl = choice
     , withPos LetDeclExternal <*  prefExt  <*> identifier    <*> paramsParser     <* reservedOp ":" <*> parseBaseType
     , withPos LetDeclFunComp  <*> prefFunC <*> parseCVarBind <*> compParamsParser <*> braces parseCommands
     , withPos LetDeclFunExpr  <*  prefFun  <*> parseVarBind  <*> paramsParser     <*> braces parseStmts
-    , withPos LetDeclComp     <*> prefLetC <*> parseCVarBind <* reservedOp "=" <*> parseComp
+    , withPos LetDeclComp     <*> prefLetC <*> parseCVarBind <* reservedOp "=" <*> parseCmdComp
     , withPos LetDeclExpr     <*  prefLet  <*> parseVarBind  <* reservedOp "=" <*> parseExpr
     ]
   where

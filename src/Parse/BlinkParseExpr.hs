@@ -357,7 +357,7 @@ parseBaseType = choice
 parseStmtBlock :: BlinkParser SrcExp
 parseStmtBlock = choice
   [ braces parseStmts
-  , stmtToExp =<< parseStmt
+  , parseStmtExp'
   ] <?> "statement block"
 
 -- | A list of commands
@@ -379,7 +379,7 @@ parseStmts = foldStatements =<< parseStmt `sepEndBy1` optional semi
 parseStmt :: BlinkParser Statement
 parseStmt = choice
     [ try $ StmtDecl <$> parseELetDecl <* notFollowedBy (reserved "in")
-    , StmtExp <$> parseSimpleStmt
+    , StmtExp <$> parseStmtExp
     ] <?> "statement"
 
 -- | "Simple" statements (that do not expect a continuation)
@@ -395,8 +395,8 @@ parseStmt = choice
 -- > | <elet-decl> "in" <expr>
 -- > | IDENT "(" <expr>*"," ")"
 -- > | IDENT ("." IDENT)* ("[" <range> "]")? ":=" <expr>
-parseSimpleStmt :: BlinkParser SrcExp
-parseSimpleStmt = choice
+parseStmtExp :: BlinkParser SrcExp
+parseStmtExp = choice
     [ withPos eFor'  <*> parseFor (reserved "for") <*> parseVarBind
                      <* reserved "in" <*> brackets genIntervalParser
                      <*> (parseStmtBlock <?> "for loop body")
@@ -411,7 +411,7 @@ parseSimpleStmt = choice
     , withPos (makePrint True)  <* reserved "println" <*> parseExpr `sepBy` comma
     , withPos eError'           <* reserved "error"   <*> stringLiteral
 
-    , eLetDecl <$> parseELetDecl <* reserved "in" <*> parseSimpleStmt
+    , eLetDecl <$> parseELetDecl <* reserved "in" <*> parseStmtBlock
 
     , try $ withPos mkCall <*> identifier <*> parens (parseExpr `sepBy` comma)
     , withPos mkAssign <*> identifier
@@ -439,6 +439,20 @@ parseSimpleStmt = choice
       eAssign p (foldr ($) (mkVar p x) ds) rhs
     mkAssign p x ds (Just (estart, len)) rhs =
       eArrWrite p (foldr ($) (mkVar p x) ds) estart len rhs
+
+-- We could define parseStmtExp' = parseStmtExp, but we use the below definition
+-- to get better error messages. For example, both
+--
+-- > let x = 5
+--
+-- (as the last statement in a block) and
+--
+-- > let x = 5 in let y = 5;
+--
+-- (whether or not it is the last statement in a block) will now yield the
+-- same error message.
+parseStmtExp' :: BlinkParser SrcExp
+parseStmtExp' = stmtToExp =<< parseStmt
 
 {-------------------------------------------------------------------------------
   Statements
