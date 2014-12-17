@@ -1,0 +1,7 @@
+fun f() {
+  var i : int; 
+  let s = 5 in let t = s; 
+  i := t; 
+}
+
+let comp main = read[int] >>> write[int]

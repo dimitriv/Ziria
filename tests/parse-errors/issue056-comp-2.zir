@@ -1,0 +1,6 @@
+fun comp f() {
+  let s = 5 in let t = s; 
+  return t; 
+}
+
+let comp main = read[int] >>> write[int]
