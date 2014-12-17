@@ -19,10 +19,10 @@
 --
 #pragma once 
 
-let external permutatew1313(x:arr[4] complex16, y:arr[4] complex16) : ()
+fun external permutatew1313(x:arr[4] complex16, y:arr[4] complex16) : ()
 
 
-let external interleave_loww(x:arr[4] complex16, y:arr[4] complex16, z:arr[4] complex16) : ()
+fun external interleave_loww(x:arr[4] complex16, y:arr[4] complex16, z:arr[4] complex16) : ()
 
 
 fun interleave_aux(x:arr[4] complex16, y:arr[4] complex16) {

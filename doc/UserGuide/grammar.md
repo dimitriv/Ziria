@@ -95,7 +95,7 @@ either be computations `<comp>` or expressions `<expr>`.
 <let-decl> ::=
   | <decl>
   | <struct>
-  | "let" "external" IDENT <params> ":" <base-type>
+  | "fun" "external" IDENT <params> ":" <base-type>
   | "fun" <comp-ann> <cvar-bind> <comp-params> "{" <decl>* <commands> "}"
   | "fun" <var-bind> <params> "{" <decl>* <stmts> "}"
   | "let" <comp-ann> <cvar-bind> "=" <comp>

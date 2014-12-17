@@ -343,7 +343,7 @@ cmdToComp = go
 -- > <let-decl> ::=
 -- >   | <decl>
 -- >   | <struct>
--- >   | "let" "external" IDENT <params> ":" <base-type>
+-- >   | "fun" "external" IDENT <params> ":" <base-type>
 -- >   | "fun" <comp-ann> <cvar-bind> <comp-params> "{" <decl>* <commands> "}"
 -- >   | "fun" <var-bind> <params> "{" <decl>* <stmts> "}"
 -- >   | "let" <comp-ann> <cvar-bind> "=" <comp>
@@ -359,7 +359,7 @@ parseLetDecl = choice
     , withPos LetDeclExpr     <*  prefLet  <*> parseVarBind  <* reservedOp "=" <*> parseExpr
     ]
   where
-    prefExt  = try $ reserved "let" *> reserved "external"
+    prefExt  = try $ reserved "fun" *> reserved "external"
     prefFunC = try $ reserved "fun" *> reserved "comp" *> optionMaybe parseRange
     prefFun  = reserved "fun"
     prefLetC = try $ reserved "let" *> reserved "comp" *> optionMaybe parseRange
