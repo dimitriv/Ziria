@@ -17,12 +17,13 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall #-}
-{-# LANGUAGE ScopedTypeVariables, RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables, RecordWildCards, GeneralizedNewtypeDeriving #-}
 module PassFold (runFold, elimMitigsIO) where
 
 import Prelude hiding (exp)
 import Control.Applicative
 import Control.Monad.State
+import Control.Monad.Reader
 import Data.Maybe ( isJust )
 import System.CPUTime
 import Text.Printf
@@ -39,49 +40,33 @@ import PpComp ()
 import PpExpr ()
 import qualified GenSym as GS
 
-{- A Rewritting monad
-   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -}
+{-------------------------------------------------------------------------------
+  Rewriting monad
+-------------------------------------------------------------------------------}
 
-data RewriteRes a = NotRewritten a | Rewritten a
+data IsRewritten = NotRewritten | Rewritten
 
-newtype RwM a = RwM { runRwM :: GS.Sym -> IO (RewriteRes a) }
+-- The rewriting monad keeps track of whether any rewriting actually happened
+newtype RwM a = RwM { unRwM :: StateT IsRewritten (ReaderT GS.Sym IO) a }
+  deriving (Functor, Applicative, Monad)
 
-instance Monad RwM where
- (RwM m) >>= f = RwM $ \sym ->
-        do { r <- m sym
-           ; case r of
-               NotRewritten c -> runRwM (f c) sym
-               Rewritten c    ->
-                 do { r' <- runRwM (f c) sym
-                    ; case r' of
-                        NotRewritten c2 -> return (Rewritten c2)
-                        Rewritten c2    -> return (Rewritten c2)
-                    }
-           }
-
- return a = RwM (\_sym -> return (NotRewritten a))
-
-instance Functor RwM where
-    fmap f x = x >>= return . f
-
-instance Applicative RwM where
-    pure   = return
-    (<*>)  = ap
+runRwM :: RwM a -> GS.Sym -> IO (a, IsRewritten)
+runRwM act = runReaderT (runStateT (unRwM act) NotRewritten)
 
 rewrite :: a -> RwM a
-rewrite a = RwM (\_sym -> return (Rewritten a))
-
-rwMIO :: IO a -> RwM a
-rwMIO m = RwM (\_sym -> m >>= (return . NotRewritten))
-
-instance MonadIO RwM where
-  liftIO = rwMIO
+rewrite a = RwM $ do
+    put Rewritten
+    return a
 
 genSym :: String -> RwM String
-genSym prefix =
-  RwM $ \gs ->
-    do { str' <- GS.genSymStr gs
-       ; return (NotRewritten $ prefix ++ str') }
+genSym prefix = RwM $ do
+    gs   <- ask
+    str' <- liftIO $ GS.genSymStr gs
+    return (prefix ++ str')
+
+{-------------------------------------------------------------------------------
+  TODO: Not yet cleaned up
+-------------------------------------------------------------------------------}
 
 
 {- Rewriter statistics
@@ -681,7 +666,7 @@ times_unroll_step _fgs comp = case unComp comp of
     Times ui e elen i c
      | EVal _ (VInt n') <- unExp elen
      , let n = fromIntegral n'
-     , n > 0 
+     , n > 0
      , EVal valTy (VInt 0) <- unExp e
      , (n < 3 && ui == AutoUnroll) || (ui == Unroll)
 -- BOZIDAR: this will currently fail perf test for TX/test_encoding_34
@@ -761,44 +746,44 @@ elim_times_step _fgs comp =
 
 elim_automapped_mitigs :: DynFlags -> TypedCompPass
 elim_automapped_mitigs dflags c
-  | MkComp c0 _cloc _ <- c          
+  | MkComp c0 _cloc _ <- c
   , Par _p c1 c2 <- c0
-  , Par _p c11 c12 <- unComp c1 
-  , LetHeader fun (MkComp (Map _v f) _ _) <- unComp c12  -- (c1 - map f) - c2 
+  , Par _p c11 c12 <- unComp c1
+  , LetHeader fun (MkComp (Map _v f) _ _) <- unComp c12  -- (c1 - map f) - c2
   , Mitigate ty1 i1 j1 <- unComp c11
   , Mitigate ty2 i2 j2 <- unComp c2           -- (c11' -- mitigate(i2,j2) -- map f) - mitigate(i2,j2) - c2'
   , i1 >= j1 && i2 <= j2                      -- down mit and up mit
   , let d1 = i1 `div` j1
-  , let d2 = j2 `div` i2 
-  , d1 == d2                                  -- exactly the same rate 
+  , let d2 = j2 `div` i2
+  , d1 == d2                                  -- exactly the same rate
   , funName fun == f
-  = rewrite_mit_map dflags ty1 (i1,j1) ty2 (i2,j2) (f, fun) 
+  = rewrite_mit_map dflags ty1 (i1,j1) ty2 (i2,j2) (f, fun)
 
   | MkComp c0 _cloc _ <- c
   , Par _p c1 c2 <- c0
   , Par _p c21 c22 <- unComp c2
   , LetHeader fun (MkComp (Map _v f) _ _) <- unComp c21  -- c1 - (map f - c2)
-  , Mitigate ty1 i1 j1 <- unComp c1      -- (c11' -- mitigate(i1,j1) -- map f) - c2 
+  , Mitigate ty1 i1 j1 <- unComp c1      -- (c11' -- mitigate(i1,j1) -- map f) - c2
   , Mitigate ty2 i2 j2 <- unComp c22     -- (c11' -- mitigate(i2,j2) -- map f) - mitigate(i2,j2) - c2'
   , i1 >= j1 && i2 <= j2                      -- down mit and up mit
   , let d1 = i1 `div` j1
-  , let d2 = j2 `div` i2 
-  , d1 == d2                                  -- exactly the same rate 
+  , let d2 = j2 `div` i2
+  , d1 == d2                                  -- exactly the same rate
   , funName fun == f
-  = rewrite_mit_map dflags ty1 (i1,j1) ty2 (i2,j2) (f, fun) 
+  = rewrite_mit_map dflags ty1 (i1,j1) ty2 (i2,j2) (f, fun)
 
   | otherwise
-  = return c 
+  = return c
 
 
 
 rewrite_mit_map :: DynFlags -> Ty -> (Int,Int) -> Ty -> (Int,Int) -> (EId, Fun) -> RwM Comp
--- Precondition:  i1 `div` j1 == j2 `div` i2 
+-- Precondition:  i1 `div` j1 == j2 `div` i2
 rewrite_mit_map _fgs ty1 (i1,j1) ty2 (i2,j2) (f_name, fun)
   = do { let rng1 = if j1 == 1 then LISingleton else LILength j1
        ; let rng2 = if i2 == 1 then LISingleton else LILength i2
-       ; let d = i1 `div` j1 
-       ; let floc = funLoc fun 
+       ; let d = i1 `div` j1
+       ; let floc = funLoc fun
 
          -- input variable
        ; x <- genSym "x"
@@ -815,23 +800,23 @@ rewrite_mit_map _fgs ty1 (i1,j1) ty2 (i2,j2) (f_name, fun)
          -- name of new map function
        ; new_f <- genSym "auto_map_mit"
        ; let f_ty = TArrow [x_ty] y_ty
-       ; let new_f_name = toName new_f floc f_ty 
+       ; let new_f_name = toName new_f floc f_ty
 
 
-         -- new counter 
+         -- new counter
        ; i <- genSym "i"
-       ; let i_name = toName i floc tint   
-       ; let i_exp  = eVar floc i_name 
+       ; let i_name = toName i floc tint
+       ; let i_exp  = eVar floc i_name
 
          -- zero and 'd'
        ; let ezero = eVal floc tint (vint (0 :: Int))
        ; let e_d   = eVal floc tint (vint d)
-   
-       
-       ; let new_body 
+
+
+       ; let new_body
                = eLetRef floc y_name Nothing $
-                 eSeq floc 
-                  (eFor floc AutoUnroll i_name ezero e_d ekernel) 
+                 eSeq floc
+                  (eFor floc AutoUnroll i_name ezero e_d ekernel)
                   -- do the for loop
                   y_exp -- and return y
 
@@ -839,17 +824,17 @@ rewrite_mit_map _fgs ty1 (i1,j1) ty2 (i2,j2) (f_name, fun)
              read_idx  = eBinOp floc Mult (eVal floc tint (vint j1)) i_exp
 
              earrrd    = eArrRead floc x_exp read_idx rng1
-             ekernel   = eArrWrite floc y_exp write_idx rng2 $ 
+             ekernel   = eArrWrite floc y_exp write_idx rng2 $
                          eCall floc f_name [earrrd]
 
       ; let new_mapper = cMap floc Nothing new_f_name
       ; let new_fun = MkFun (MkFunDefined new_f_name [x_name] new_body) floc ()
 
-      ; rewrite $ 
-        cLetHeader floc fun $   -- original function 
+      ; rewrite $
+        cLetHeader floc fun $   -- original function
         cLetHeader floc new_fun new_mapper
       }
-        
+
 
 
 
@@ -1127,16 +1112,16 @@ runPasses sym = go False
     go b mp ((pn,p):ps) comp
         = do { st <- getCPUTime
 --             ; printf "Pass: %10s" pn
-             ; r <- runRwM (p comp) sym
+             ; (comp', rewritten) <- runRwM (p comp) sym
              ; en <- getCPUTime
              ; let diff = fromIntegral (en - st) / (10 ^ (12 :: Integer))
              ; let mp' = incInvokes mp diff pn
-             ; case r of
-                 NotRewritten _c
+             ; case rewritten of
+                 NotRewritten
                    -> do { -- printf "... not rewritten :-( \n"
                            go b mp' ps comp
                          }
-                 Rewritten comp'
+                 Rewritten
                    -> do { -- printf "... rewritten     :-) \n"
                            -- ; printf "comp = %s\n" (show comp)
                            go True (incRewrites mp' diff pn) ((pn,p):ps) comp'
@@ -1230,9 +1215,10 @@ runFold flags sym = \comp ->
 elimMitigsIO :: GS.Sym -> Comp -> IO Comp
 elimMitigsIO sym = go
   where
-    go comp = do { r <- runRwM (elimMitigs comp) sym
-                 ; case r of NotRewritten {} -> return comp
-                             Rewritten comp' -> go comp'
+    go comp = do { (comp', rewritten) <- runRwM (elimMitigs comp) sym
+                 ; case rewritten of
+                     NotRewritten -> return comp
+                     Rewritten    -> go comp'
                  }
 
 
@@ -1248,7 +1234,7 @@ frm_mit c
       Nothing -> Nothing
       Just (mit,c2') -> Just (mit, cPar (compLoc c) p0 c1 c2')
 
-  | LetHeader fdef@(MkFun (MkFunDefined {}) _ _) cont <- unComp c 
+  | LetHeader fdef@(MkFun (MkFunDefined {}) _ _) cont <- unComp c
     -- Needed because of AutoMaps! Yikes!
   , let loc = compLoc c
   = case frm_mit cont of
