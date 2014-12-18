@@ -223,7 +223,7 @@ foldCompPasses flags
     [ ("fold"          , passFold        )
     , ("purify"        , passPurify      )
     , ("purify-letref" , passPurifyLetRef)
-    , ("elim-times"    , elim_times_step   )
+    , ("elim-times"    , passElimTimes   )
     , ("letfunc"       , letfunc_step      )
     , ("letfun-times"  , letfun_times_step )
     , ("times-unroll"  , times_unroll_step )
@@ -317,26 +317,40 @@ passPurify = TypedCompPass $ \cloc comp ->
       _otherwise ->
         return comp
 
+-- | Translate computation-level `LetERef` to expression level `LetRef`
 passPurifyLetRef :: TypedCompPass
 passPurifyLetRef = TypedCompPass $ \cloc comp -> do
     case cCollectLetERefs comp of
       Just (binds, comp') | Return fi e <- unComp comp' -> do
-        logStep "purifyLetRef/return" cloc
+        logStep "purify-letref/return" cloc
           [step| var binds in return e ~~> return (var binds in e) |]
         rewrite $ cReturn cloc fi (eApplyLetERefs binds e)
 
       Just (binds, comp') | Emit e <- unComp comp' -> do
-        logStep "purifyLetRef/emit" cloc
+        logStep "purify-letref/emit" cloc
           [step| var binds in emit e ~~> emit (var binds in e) |]
         rewrite $ cEmit cloc (eApplyLetERefs binds e)
 
       Just (binds, comp') | Emits e <- unComp comp' -> do
-        logStep "purifyLetRef/emits" cloc
+        logStep "purify-letref/emits" cloc
           [step| var binds in emits e ~~> emits (var binds in e) |]
         rewrite $ cEmits cloc (eApplyLetERefs binds e)
 
       _otherwise ->
         return comp
+
+-- | Translate computation-level `Times` to expression level `For`
+passElimTimes :: TypedCompPass
+passElimTimes = TypedCompPass $ \cloc comp ->
+    case unComp comp of
+      Times ui estart ebound cnt (MkComp (Return _ ebody) _cloc ()) -> do
+        logStep "elim-times" cloc
+          [step| for cnt in (estart, ebound) return {..}
+             ~~> return (for cnt in (estart, ebound) {..} |]
+        rewrite $ cReturn cloc AutoInline
+                    (eFor cloc ui cnt estart ebound ebody)
+
+      _ -> return comp
 
 {-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
@@ -846,17 +860,6 @@ times_unroll_step = TypedCompPass $ \cloc comp -> do
 
 
 
--- > for cnt in [estart, ebound] { return ebody }
--- > ~~~>
--- > return (for cnt in [estart, ebound] ebody)
-elim_times_step :: TypedCompPass
-elim_times_step = TypedCompPass $ \cloc comp -> do
-    case unComp comp of
-      Times ui estart ebound cnt (MkComp (Return _ ebody) _cloc ()) ->
-        rewrite $ cReturn cloc AutoInline
-                    (eFor cloc ui cnt estart ebound ebody)
-
-      _ -> return comp
 
 
 

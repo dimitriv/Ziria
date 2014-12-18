@@ -1,0 +1,10 @@
+fun comp f() {
+  var x : int := 0;
+  a <- take;
+  for y in [1, a] do {
+     x := x + y;
+  }
+  emit x;
+}
+
+let comp main = read[int] >>> repeat f() >>> write[int]
