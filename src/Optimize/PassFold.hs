@@ -29,6 +29,7 @@ import Data.Maybe (isJust)
 import Data.Monoid
 import System.CPUTime
 import Text.Parsec.Pos (SourcePos)
+import Text.PrettyPrint.HughesPJ
 import Text.Printf
 import qualified Data.Map as Map
 import qualified Data.Set as S
@@ -39,6 +40,7 @@ import AstUnlabelled
 import CtExpr ( ctExp  )
 import Eval
 import Opts
+import Outputable
 import PassFoldDebug
 import PpComp ()
 import PpExpr ()
@@ -218,8 +220,8 @@ foldCompPasses flags
   = []
   | otherwise
   = -- Standard good things
-    [ ("fold"          , fold_step         )
-    , ("purify"        , purify_step       )
+    [ ("fold"          , passFold         )
+    , ("purify"        , passPurify       )
     , ("purify-letref" , purify_letref_step)
     , ("elim-times"    , elim_times_step   )
     , ("letfunc"       , letfunc_step      )
@@ -256,7 +258,7 @@ foldExpPasses flags
   Comp passes
 -------------------------------------------------------------------------------}
 
--- | Just a single step of converting a return to a let
+-- | Convert `return` to `let`
 --
 -- NOTE: We have to manually the entire bind structure, because although the
 -- rewriting will happen at every node in the AST, there may only be a single
@@ -264,14 +266,14 @@ foldExpPasses flags
 -- 'seq' nodes though. This is rather subtle, and fold_step is the _only_ pass
 -- that actually does this. I'm not sure if there are other subtle bugs due to
 -- this.
-fold_step :: TypedCompPass
-fold_step = TypedCompPass $ \_ -> go
+passFold :: TypedCompPass
+passFold = TypedCompPass $ \_ -> go
   where
     go comp = do
       let cloc = compLoc comp
       case bindSeqView comp of
         BindView nm (MkComp (Return fi e) _ ()) c12 -> do
-          logStep "fold_step/bind" cloc [step| nm <- return e ; .. ~~> let nm = e in .. |]
+          logStep "fold/bind" cloc [step| nm <- return e ; .. ~~> let nm = e in .. |]
           c12' <- go c12
           rewrite $ cLetE cloc nm fi e c12'
 
@@ -281,7 +283,7 @@ fold_step = TypedCompPass $ \_ -> go
 
         SeqView (MkComp (Return fi e) _ ()) c12 -> do
           let nm = mkUniqNm cloc (ctExp e)
-          logStep "fold_step/seq" cloc [step| return e ; .. ~~> let nm = e in .. |]
+          logStep "fold/seq" cloc [step| return e ; .. ~~> let nm = e in .. |]
           c12' <- go c12
           rewrite $ cLetE cloc nm fi e c12'
 
@@ -290,6 +292,25 @@ fold_step = TypedCompPass $ \_ -> go
 
     mkUniqNm :: Maybe SourcePos -> Ty -> GName Ty
     mkUniqNm loc tp = toName ("__fold_unused_" ++ getLnNumInStr loc) loc tp
+
+-- | Translate computation-level `LetE` to expression level `Let`
+passPurify :: TypedCompPass
+passPurify = TypedCompPass $ \cloc comp ->
+    case cCollectLetExps comp of
+      Just (binds, comp') | Return fi e <- unComp comp' -> do
+        logStep "purify/return" cloc [step| let binds in return e ~~> return (let binds in e) |]
+        rewrite $ cReturn cloc fi (eApplyLetExps binds e)
+
+      Just (binds, comp') | Emit e <- unComp comp' -> do
+        logStep "purify/emit" cloc [step| let binds in emit e ~~> emit (let binds in e) |]
+        rewrite $ cEmit cloc (eApplyLetExps binds e)
+
+      Just (binds, comp') | Emits e <- unComp comp' -> do
+        logStep "purify/emits" cloc [step| let binds in emits e ~~> emits (let binds in e) |]
+        rewrite $ cEmits cloc (eApplyLetExps binds e)
+
+      _otherwise ->
+        return comp
 
 {-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
@@ -641,23 +662,6 @@ inline_exp_fun_in_comp fun
   = mapCompM return return return return (inline_exp_fun fun) return
 
 
-purify_step :: TypedCompPass
--- Returns Just if we managed to rewrite
-purify_step = TypedCompPass $ \cloc comp ->
-    -- rwMIO $ putStrLn "purify_step, comp = "
-    -- rwMIO $ print (ppComp comp)
-    case isMultiLet_maybe (unComp comp) of
-      Just (binds, Return fi e) ->
-        rewrite $ cReturn cloc fi (mkMultiLetExp (reverse binds) e)
-
-      Just (binds, Emit e) ->
-        rewrite $ cEmit cloc (mkMultiLetExp (reverse binds) e)
-
-      Just (binds, Emits e) ->
-        rewrite $ cEmits cloc (mkMultiLetExp (reverse binds) e)
-
-      _otherwise ->
-        return comp
 
 
 
@@ -829,28 +833,11 @@ times_unroll_step = TypedCompPass $ \cloc comp -> do
 
 
 
-mkMultiLetExp :: [(GName Ty, Exp, ForceInline)] -> Exp -> Exp
-mkMultiLetExp []             e = e
-mkMultiLetExp ((x,e1,fi):bs) e = eLet (expLoc e) x fi e1 (mkMultiLetExp bs e)
 
 mkMultiLetRefExp :: [(GName Ty, Maybe Exp)] -> Exp -> Exp
 mkMultiLetRefExp []          e = e
 mkMultiLetRefExp ((x,b1):bs) e = eLetRef (expLoc e) x b1 (mkMultiLetRefExp bs e)
 
-isMultiLet_maybe :: Comp0 -> Maybe ([(GName Ty, Exp, ForceInline)], Comp0)
-isMultiLet_maybe = go []
-  where
-    go acc (LetE x fi e c) = go ((x,e,fi):acc) (unComp c)
-
-    go [] (Return {}) = Nothing
-    go [] (Emit {})   = Nothing
-    go [] (Emits {})  = Nothing
-
-    -- We must have some accumulated bindings!
-    go acc c@(Return {}) = Just (acc,c)
-    go acc c@(Emit {})   = Just (acc,c)
-    go acc c@(Emits {})  = Just (acc,c)
-    go _   _             = Nothing
 
 isMultiLetRef_maybe :: Comp0 -> Maybe ([(GName Ty, Maybe Exp)], Comp0)
 isMultiLetRef_maybe = go []
@@ -1473,9 +1460,6 @@ elimMitigs comp
 
 {-------------------------------------------------------------------------------
   Some view patterns
-
-  TODO: I think the readability of some of the passes could be improved if
-  we introduced more views like these.
 -------------------------------------------------------------------------------}
 
 data BindView
@@ -1483,6 +1467,8 @@ data BindView
   | SeqView Comp Comp
   | NotSeqOrBind Comp
 
+-- | Decompose the AST `BindMany` constructors into single `BindView` nodes
+-- so that we can consider each in turn
 bindSeqView :: Comp -> BindView
 bindSeqView = mk_view
   where
@@ -1492,6 +1478,40 @@ bindSeqView = mk_view
         []           -> NotSeqOrBind c
     mk_view (MkComp (Seq c1 c2) _cloc ()) = SeqView c1 c2
     mk_view c = NotSeqOrBind c
+
+newtype LetExps = LetExps [(Maybe SourcePos, GName Ty, ForceInline, Exp)]
+
+-- | Collect multiple (consecutive, top-level) `LetE`-bindings
+--
+-- Returns `Nothing` if no top-level `LetEs` were found
+cCollectLetExps :: Comp -> Maybe (LetExps, Comp)
+cCollectLetExps = \comp -> do
+    let (ls, suffix) = go comp
+    guard $ not (null ls)
+    return (LetExps ls, suffix)
+  where
+    go comp = case unComp comp of
+      LetE nm fi e c' -> let (ls, suffix) = go c'
+                         in ((compLoc comp, nm, fi, e) : ls, suffix)
+      _               -> ([], comp)
+
+-- | Add a series of let-bindings to an expression
+eApplyLetExps :: LetExps -> Exp -> Exp
+eApplyLetExps = \(LetExps ls) -> go ls
+  where
+    go []                     c = c
+    go ((cloc, nm, fi, e):ls) c = eLet cloc nm fi e (go ls c)
+
+{-------------------------------------------------------------------------------
+  Outputable instances for the view patterns, above
+
+  Useful for debugging
+-------------------------------------------------------------------------------}
+
+instance Outputable LetExps where
+  ppr (LetExps ls) = hsep (punctuate comma (map aux ls))
+    where
+      aux (_, nm, _, e) = ppr nm <+> text "=" <+> ppr e
 
 {-------------------------------------------------------------------------------
   Auxiliary

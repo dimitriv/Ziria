@@ -1,0 +1,13 @@
+fun comp f(a : int) {
+  let x = 1 in emit x;
+  let y = {2, 3} in emits y; 
+  let z = a in return a; 
+}
+
+fun comp g() {
+  a <- take;
+  b <- f(a);
+  emit b;
+}
+
+let comp main = read[int] >>> repeat g() >>> write[int]
