@@ -1,0 +1,8 @@
+fun comp f() {
+  for i in [0, 2] {
+    a <- take;
+    emit (a + 10 + i);
+  }
+}
+
+let comp main = read[int] >>> f() >>> write[int];

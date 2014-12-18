@@ -226,7 +226,7 @@ foldCompPasses flags
     , ("elim-times"    , passElimTimes   )
     , ("letfunc"       , passLetFunc     )
     , ("letfun-times"  , passLetFunTimes )
-    , ("times-unroll"  , times_unroll_step )
+    , ("times-unroll"  , passTimesUnroll )
     , ("inline"        , inline_step       )
 
     -- More aggressive optimizations
@@ -423,6 +423,36 @@ passLetFunTimes = TypedCompPass $ \_cloc comp ->
           | uniqId f' == uniqId f
           = rewrite $ eCall xloc f' (iexp:es)
         replace_ecall other = return other
+
+-- | Loop unrolling
+passTimesUnroll :: TypedCompPass
+passTimesUnroll = TypedCompPass $ \cloc comp -> do
+    let unused :: GName Ty
+        unused = toName ("__unroll_unused_" ++ getLnNumInStr cloc) Nothing TUnit
+
+        mk_bind_many :: [Comp] -> Comp
+        mk_bind_many []     = error "times_unroll_step: can't happen!"
+        mk_bind_many [x]    = x
+        mk_bind_many (x:xs) = cBindMany (compLoc x) x [(unused, mk_bind_many xs)]
+
+    case unComp comp of
+      Times ui e elen i c
+       | EVal _ (VInt n) <- unExp elen
+       , n > 0
+       , EVal valTy (VInt 0) <- unExp e
+       , (n < 3 && ui == AutoUnroll) || (ui == Unroll)
+-- BOZIDAR: this will currently fail perf test for TX/test_encoding_34
+--         , ui == Unroll -- || (n < 3 && n > 0 && ui == AutoUnroll)
+       -> do
+         logStep "times-unroll" cloc
+           [step| for i in [0, elen] { body } ~~> body ; .. ; body |]
+
+         let subst i' = substComp [] [(i, eVal (expLoc e) valTy (vint i'))] [] c
+             unrolled = map subst [0..n-1]
+
+         rewrite $ mk_bind_many unrolled
+      _ ->
+        return comp
 
 {-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
@@ -818,36 +848,6 @@ ifdead_step = TypedCompPass $ \cloc comp -> do
 
 
 
--- | Loop unrolling
---
--- > for i in [0,n] { c }
--- > ~~~>
--- > c ; ... ; c
-times_unroll_step :: TypedCompPass
-times_unroll_step = TypedCompPass $ \cloc comp -> do
-    let unused :: GName Ty
-        unused = toName ("__unroll_unused_" ++ getLnNumInStr cloc) Nothing TUnit
-
-        mk_bind_many :: [Comp] -> Comp
-        mk_bind_many []     = error "times_unroll_step: can't happen!"
-        mk_bind_many [x]    = x
-        mk_bind_many (x:xs) = cBindMany (compLoc x) x [(unused, mk_bind_many xs)]
-
-    case unComp comp of
-      Times ui e elen i c
-       | EVal _ (VInt n') <- unExp elen
-       , let n = fromIntegral n'
-       , n > 0
-       , EVal valTy (VInt 0) <- unExp e
-       , (n < 3 && ui == AutoUnroll) || (ui == Unroll)
--- BOZIDAR: this will currently fail perf test for TX/test_encoding_34
---         , ui == Unroll -- || (n < 3 && n > 0 && ui == AutoUnroll)
-       -> let idxs = [0..n-1]
-              comps = replicate n c
-              unrolled = zipWith (\curr xc ->
-                substComp [] [(i, eVal (expLoc e) valTy (vint curr))] [] xc) idxs comps
-          in rewrite $ mk_bind_many unrolled
-      _ -> return comp
 
 
 

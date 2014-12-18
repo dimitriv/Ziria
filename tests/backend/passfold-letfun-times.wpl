@@ -1,0 +1,12 @@
+fun comp f() {
+  for i in [0, 10] {
+    fun g(a : int) {
+      return (i + a);
+    }
+
+    x <- take;
+    emit g(x);
+  }
+}
+
+let comp main = read[int] >>> repeat f() >>> write[int]
