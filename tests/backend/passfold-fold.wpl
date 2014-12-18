@@ -1,0 +1,8 @@
+fun comp f() {
+  x <- take;
+  y <- return x;
+  return 999;
+  emit (y + 1);
+}
+
+let comp main = read[int] >>> repeat f() >>> write[int]

@@ -26,3 +26,6 @@ class Outputable a where
 
 instance Outputable String where
   ppr = text
+
+pretty :: Outputable a => a -> String
+pretty = show . ppr

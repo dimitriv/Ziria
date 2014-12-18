@@ -16,20 +16,20 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# OPTIONS_GHC -Wall #-}
-{-# LANGUAGE ScopedTypeVariables, RecordWildCards, GeneralizedNewtypeDeriving, MultiWayIf #-}
+{-# OPTIONS_GHC -Wall -Wwarn #-}
+{-# LANGUAGE ScopedTypeVariables, RecordWildCards, GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes #-}
 module PassFold (runFold, elimMitigsIO) where
 
 import Prelude hiding (exp)
-import Control.Arrow (second)
 import Control.Applicative
-import Control.Monad.State
+import Control.Arrow (second)
 import Control.Monad.Reader
-import Data.Maybe ( isJust )
+import Control.Monad.State
+import Data.Maybe (isJust)
 import Data.Monoid
 import System.CPUTime
-import Text.Printf
 import Text.Parsec.Pos (SourcePos)
+import Text.Printf
 import qualified Data.Map as Map
 import qualified Data.Set as S
 
@@ -39,6 +39,7 @@ import AstUnlabelled
 import CtExpr ( ctExp  )
 import Eval
 import Opts
+import PassFoldDebug
 import PpComp ()
 import PpExpr ()
 import qualified GenSym as GS
@@ -69,6 +70,15 @@ genSym prefix = RwM $ do
 
 getDynFlags :: RwM DynFlags
 getDynFlags = RwM $ snd `liftM` ask
+
+logStep :: String -> Maybe SourcePos -> String -> RwM ()
+logStep pass pos str = do
+    flags <- getDynFlags
+    when (isDynFlagSet flags DebugFold) $ RwM $ do
+      liftIO $ putStrLn $ pass ++ ": " ++ ppr' pos ++ "\n  " ++ str
+  where
+    ppr' (Just p) = show p ++ ": "
+    ppr' Nothing  = ""
 
 {-------------------------------------------------------------------------------
   Rewriting statistics
@@ -243,45 +253,51 @@ foldExpPasses flags
     ]
 
 {-------------------------------------------------------------------------------
+  Comp passes
+-------------------------------------------------------------------------------}
+
+-- | Just a single step of converting a return to a let
+--
+-- NOTE: We have to manually the entire bind structure, because although the
+-- rewriting will happen at every node in the AST, there may only be a single
+-- bind node for a sequence of binds. The same is not true for a sequence of
+-- 'seq' nodes though. This is rather subtle, and fold_step is the _only_ pass
+-- that actually does this. I'm not sure if there are other subtle bugs due to
+-- this.
+fold_step :: TypedCompPass
+fold_step = TypedCompPass $ \_ -> go
+  where
+    go comp = do
+      let cloc = compLoc comp
+      case bindSeqView comp of
+        BindView nm (MkComp (Return fi e) _ ()) c12 -> do
+          logStep "fold_step/bind" cloc [step| nm <- return e ; .. ~~> let nm = e in .. |]
+          c12' <- go c12
+          rewrite $ cLetE cloc nm fi e c12'
+
+        BindView nm c c12 -> do
+          c12' <- go c12
+          return $ cBindMany cloc c [(nm, c12')]
+
+        SeqView (MkComp (Return fi e) _ ()) c12 -> do
+          let nm = mkUniqNm cloc (ctExp e)
+          logStep "fold_step/seq" cloc [step| return e ; .. ~~> let nm = e in .. |]
+          c12' <- go c12
+          rewrite $ cLetE cloc nm fi e c12'
+
+        _otherwise -> do
+          return comp
+
+    mkUniqNm :: Maybe SourcePos -> Ty -> GName Ty
+    mkUniqNm loc tp = toName ("__fold_unused_" ++ getLnNumInStr loc) loc tp
+
+{-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
 -------------------------------------------------------------------------------}
 
 {- The main rewriter individual steps
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -}
 
-fold_step :: TypedCompPass
--- Just a single step of converting a return to a let
-fold_step = TypedCompPass $ \_ -> go
-  where
-    go comp =
-        case bindSeqView comp of
-          BindView (MkComp (Return fi e) _ ()) nm c12 ->
-           do { -- rwMIO $ putStrLn ("Found BindView" ++ compShortName comp)
-              ; go c12 >>= \c12' -> rewrite $ cLetE cloc nm fi e c12'
-              }
-
-          BindView (MkComp (LetHeader fun@(MkFun (MkFunDefined {}) _ _) c) _ ()) nm c12 ->
-              go c12 >>= \c12' ->
-                rewrite $ cLetHeader cloc fun (cBindMany cloc c [(nm, c12')])
-
-          -- Don't forget to go inside!
-          BindView c nm  c12 ->
-            go c12 >>= \c12' -> return $ cBindMany cloc c [(nm, c12')]
-
-          SeqView (MkComp (Return fi e) _ ()) c12 ->
-            do { -- rwMIO $ putStrLn ("Found BindView" ++ compShortName comp)
-               ; let nm = toName ("__fold_unused_" ++ getLnNumInStr cloc)
-                                 Nothing (ctExp e)
-               ; go c12 >>= \c12' -> rewrite $ cLetE cloc nm fi e c12'
-               }
-
-          _otherwise ->
-             do { -- rwMIO $ putStrLn "fold_step not kicking in for term = "
-                  -- ; rwMIO $ print (ppCompAst comp)
-                  return comp
-                }
-      where
-        cloc = compLoc comp
 
 float_letfun_repeat_step :: TypedCompPass
 -- Rewriting of the form:
@@ -1463,7 +1479,7 @@ elimMitigs comp
 -------------------------------------------------------------------------------}
 
 data BindView
-  = BindView Comp (GName Ty) Comp
+  = BindView (GName Ty) Comp Comp
   | SeqView Comp Comp
   | NotSeqOrBind Comp
 
@@ -1472,7 +1488,7 @@ bindSeqView = mk_view
   where
     mk_view c@(MkComp (BindMany c1 c2s) cloc ()) =
       case c2s of
-        (nm,c2):rest -> BindView c1 nm (MkComp (mkBindMany c2 rest) cloc ())
+        (nm,c2):rest -> BindView nm c1 (MkComp (mkBindMany c2 rest) cloc ())
         []           -> NotSeqOrBind c
     mk_view (MkComp (Seq c1 c2) _cloc ()) = SeqView c1 c2
     mk_view c = NotSeqOrBind c

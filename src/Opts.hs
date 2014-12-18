@@ -44,6 +44,7 @@ data DynFlag =
   | CSrcPathNative FilePath
   | Name String
   | Debug
+  | DebugFold
   | StdoutDump
   | BoundsCheck
 
@@ -134,6 +135,7 @@ options =
 
      -- Boolean flags
      , Option ['d']     ["debug"]               (NoArg Debug)         "debug"
+     , Option []        ["debug-fold"]          (NoArg DebugFold)     "debug-fold"
      , Option ['x']     ["optimize"]            (NoArg Opt)           "optimize"
      , Option ['v']     ["verbose"]             (NoArg Verbose)       "verbose"
      , Option ['a']     ["bounds-check"]        (NoArg BoundsCheck)   "bounds check"
