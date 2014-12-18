@@ -225,7 +225,7 @@ foldCompPasses flags
     , ("purify-letref" , passPurifyLetRef)
     , ("elim-times"    , passElimTimes   )
     , ("letfunc"       , passLetFunc     )
-    , ("letfun-times"  , letfun_times_step )
+    , ("letfun-times"  , passLetFunTimes )
     , ("times-unroll"  , times_unroll_step )
     , ("inline"        , inline_step       )
 
@@ -345,8 +345,8 @@ passElimTimes = TypedCompPass $ \cloc comp ->
     case unComp comp of
       Times ui estart ebound cnt (MkComp (Return _ ebody) _cloc ()) -> do
         logStep "elim-times" cloc
-          [step| for cnt in (estart, ebound) return {..}
-             ~~> return (for cnt in (estart, ebound) {..} |]
+          [step| for cnt in [estart, ebound] return {..}
+             ~~> return (for cnt in [estart, ebound] {..} |]
         rewrite $ cReturn cloc AutoInline
                     (eFor cloc ui cnt estart ebound ebody)
 
@@ -371,8 +371,8 @@ passLetFunc = TypedCompPass $ \cloc comp' -> do
                nm' :: GName Ty
                nm' = nm { nameTyp = fun_ty }
 
-               fundef :: Fun
-               fundef = mkFunDefined cloc nm' params' e
+               def' :: Fun
+               def' = mkFunDefined cloc nm' params' e
 
                replace_call :: Comp -> RwM Comp
                replace_call (MkComp (Call nm'' es) xloc ())
@@ -386,9 +386,43 @@ passLetFunc = TypedCompPass $ \cloc comp' -> do
                purify_calls = mapCompM return return return return return replace_call
 
            cont' <- purify_calls cont
-           rewrite $ cLetHeader cloc fundef cont'
+           rewrite $ cLetHeader cloc def' cont'
       _ ->
         return comp'
+
+-- | Lift expression function definitions out of computation loops
+passLetFunTimes :: TypedCompPass
+passLetFunTimes = TypedCompPass $ \_cloc comp ->
+    case unComp comp of
+      Times ui e elen i (MkComp (LetHeader def cont) cloc ())
+        | MkFun (MkFunDefined f params body) floc () <- def
+         -> do
+           logStep "letfun-times" cloc
+             [step| for i in [e, elen] { fun f(..) { .. } ; .. }
+                ~~> fun f(i, ..) { .. } ; for i in [e, elen] { .. } |]
+
+           let fty' = TArrow (map nameTyp (i:params)) (fun_ret_ty (nameTyp f))
+               f'   = f { nameTyp = fty' }
+               def' = mkFunDefined floc f' (i:params) body
+               iexp = eVar cloc i -- The counter variable
+           cont' <- augment_calls f' iexp cont
+           rewrite $ cLetHeader cloc def' (cTimes cloc ui e elen i cont')
+
+      _otherwise -> return comp
+
+  where
+    fun_ret_ty :: Ty -> Ty
+    fun_ret_ty (TArrow _ r) = r
+    fun_ret_ty  _           = error "Function not having an arrow type!?"
+
+    augment_calls :: GName Ty -> Exp -> Comp -> RwM Comp
+    augment_calls f' iexp =
+        mapCompM return return return return replace_ecall return
+      where
+        replace_ecall (MkExp (ECall f es) xloc ())
+          | uniqId f' == uniqId f
+          = rewrite $ eCall xloc f' (iexp:es)
+        replace_ecall other = return other
 
 {-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
@@ -783,36 +817,6 @@ ifdead_step = TypedCompPass $ \cloc comp -> do
 
 
 
-
--- > for i in [e,elen] { let f(params) = ... in cont }
--- > ~~~>
--- > let f(i,params) = ... in for i in [e,elen] { cont }
-letfun_times_step :: TypedCompPass
-letfun_times_step = TypedCompPass $ \_cloc comp ->
-    case unComp comp of
-      Times ui e elen i (MkComp (LetHeader def cont) cloc ())
-       | MkFun (MkFunDefined f params body) floc () <- def
-       -> do { let fty' = TArrow (map nameTyp (i:params)) (fun_ret_ty (nameTyp f))
-                   f'   = f { nameTyp = fty' }
-                   def' = mkFunDefined floc f' (i:params) body
-                   iexp = eVar cloc i -- The counter variable
-             ; cont' <- augment_calls f' iexp cont
-             ; rewrite $ cLetHeader cloc def' (cTimes cloc ui e elen i cont')
-             }
-      _otherwise -> return comp
-
-  where
-    fun_ret_ty :: Ty -> Ty
-    fun_ret_ty (TArrow _ r) = r
-    fun_ret_ty  _           = error "Function not having an arrow type!?"
-
-    augment_calls :: GName Ty -> Exp -> Comp -> RwM Comp
-    augment_calls f' iexp = mapCompM return return return return replace_ecall return
-      where
-        replace_ecall (MkExp (ECall f es) xloc ())
-          | uniqId f' == uniqId f
-          = rewrite $ eCall xloc f' (iexp:es)
-        replace_ecall other = return other
 
 -- | Loop unrolling
 --
