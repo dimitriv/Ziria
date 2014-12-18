@@ -232,10 +232,13 @@ instance Outputable NumExpr where
     -- TODO: here and elsewhere, are the quotes around the name intentional?
 
 instance Outputable ty => Outputable (GName ty) where
+  ppr ix = ppName ix
+  {- TODO: Under which circumstances do we want to show a name with its type?
   ppr ix | isEmpty pprTy = ppName ix
          | otherwise     = parens (ppName ix <+> char ':' <+> pprTy)
     where
       pprTy = ppr (nameTyp ix)
+  -}
 
 {-------------------------------------------------------------------------------
   Utility

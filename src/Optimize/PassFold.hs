@@ -224,7 +224,7 @@ foldCompPasses flags
     , ("purify"        , passPurify      )
     , ("purify-letref" , passPurifyLetRef)
     , ("elim-times"    , passElimTimes   )
-    , ("letfunc"       , letfunc_step      )
+    , ("letfunc"       , passLetFunc     )
     , ("letfun-times"  , letfun_times_step )
     , ("times-unroll"  , times_unroll_step )
     , ("inline"        , inline_step       )
@@ -295,7 +295,7 @@ passFold = TypedCompPass $ \_ -> go
     mkUniqNm :: Maybe SourcePos -> Ty -> GName Ty
     mkUniqNm loc tp = toName ("__fold_unused_" ++ getLnNumInStr loc) loc tp
 
--- | Translate computation-level `LetE` to expression level `Let`
+-- | Translate computation level `LetE` to expression level `Let`
 passPurify :: TypedCompPass
 passPurify = TypedCompPass $ \cloc comp ->
     case cCollectLetEs comp of
@@ -317,7 +317,7 @@ passPurify = TypedCompPass $ \cloc comp ->
       _otherwise ->
         return comp
 
--- | Translate computation-level `LetERef` to expression level `LetRef`
+-- | Translate computation level `LetERef` to expression level `LetRef`
 passPurifyLetRef :: TypedCompPass
 passPurifyLetRef = TypedCompPass $ \cloc comp -> do
     case cCollectLetERefs comp of
@@ -339,7 +339,7 @@ passPurifyLetRef = TypedCompPass $ \cloc comp -> do
       _otherwise ->
         return comp
 
--- | Translate computation-level `Times` to expression level `For`
+-- | Translate computation level `Times` to expression level `For`
 passElimTimes :: TypedCompPass
 passElimTimes = TypedCompPass $ \cloc comp ->
     case unComp comp of
@@ -351,6 +351,44 @@ passElimTimes = TypedCompPass $ \cloc comp ->
                     (eFor cloc ui cnt estart ebound ebody)
 
       _ -> return comp
+
+-- | Translate computation functions to expression functions
+--
+-- This will allow more drastic inlining in the inlining step.
+passLetFunc :: TypedCompPass
+passLetFunc = TypedCompPass $ \cloc comp' -> do
+    case unComp comp' of
+      LetFunC nm params (MkComp (Return _fi e) _ ()) cont
+        | Just params' <- mapM fromSimplCallParam params
+         -> do
+           logStep "letfunc" cloc
+             [step| fun comp nm(..) { return {..} } in .. nm(..)
+                ~~> fun nm(..) {..} in .. return(nm(..)) .. |]
+
+           let fun_ty :: Ty
+               fun_ty = TArrow (map nameTyp params') (ctExp e)
+
+               nm' :: GName Ty
+               nm' = nm { nameTyp = fun_ty }
+
+               fundef :: Fun
+               fundef = mkFunDefined cloc nm' params' e
+
+               replace_call :: Comp -> RwM Comp
+               replace_call (MkComp (Call nm'' es) xloc ())
+                 | uniqId nm' == uniqId nm''
+                 = let es'  = map unCAExp es
+                       call = eCall xloc nm' es'
+                   in rewrite $ cReturn xloc AutoInline call
+               replace_call other = return other
+
+               purify_calls :: Comp -> RwM Comp
+               purify_calls = mapCompM return return return return return replace_call
+
+           cont' <- purify_calls cont
+           rewrite $ cLetHeader cloc fundef cont'
+      _ ->
+        return comp'
 
 {-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
@@ -398,11 +436,6 @@ float_let_par_step = TypedCompPass $ \cloc comp -> if
 is_simpl_call_arg :: CallArg Exp Comp -> Bool
 is_simpl_call_arg (CAExp e) = is_simpl_expr e
 is_simpl_call_arg _         = False
-
-from_simpl_call_param :: GName (CallArg Ty CTy) -> Maybe (GName Ty)
-from_simpl_call_param nm =
-  case nameTyp nm of CAExp  t -> Just nm{nameTyp = t}
-                     CAComp _ -> Nothing
 
 push_comp_locals_step :: TypedCompPass
 -- let comp f(x) = var ... x <- take ; emit e
@@ -750,47 +783,6 @@ ifdead_step = TypedCompPass $ \cloc comp -> do
 
 
 
-letfunc_step :: TypedCompPass
--- Rewriting of the form:
---
---   letfunc f(..) = return e
---   in ... f(...)
---
---   ~~>
---
---   let f(..) = e
---   in ... return (f(..)) ...
---
--- Which will allow more drastic inlining in the inlining step.
---
-letfunc_step = TypedCompPass $ \cloc comp -> do
-    case unComp comp of
-      LetFunC nm params (MkComp (Return _fi e) _ ()) cont
-         | Just params' <- mapM from_simpl_call_param params
-         -> do { let fun_ty :: Ty
-                     fun_ty = TArrow (map nameTyp params') (ctExp e)
-
-                     f :: GName Ty
-                     f = nm { nameTyp = fun_ty }
-
-                     fun :: Fun
-                     fun = mkFunDefined cloc f params' e
-
-                     replace_call :: Comp -> RwM Comp
-                     replace_call (MkComp (Call f' es) xloc ())
-                       | uniqId f == uniqId f'
-                       = let es'  = map unCAExp es
-                             call = eCall xloc f es'
-                         in rewrite $ cReturn xloc AutoInline call
-                     replace_call other = return other
-
-                     purify_calls :: Comp -> RwM Comp
-                     purify_calls = mapCompM return return return return return replace_call
-
-               ; cont' <- purify_calls cont
-               ; rewrite $ cLetHeader cloc fun cont' -- Same type!
-               }
-      _ -> return comp
 
 -- > for i in [e,elen] { let f(params) = ... in cont }
 -- > ~~~>
@@ -1519,6 +1511,12 @@ eApplyLetERefs = \(LetERefs ls) -> go ls
   where
     go []                e' = e'
     go ((loc, nm, e):ls) e' = eLetRef loc nm e (go ls e')
+
+fromSimplCallParam :: GName (CallArg Ty CTy) -> Maybe (GName Ty)
+fromSimplCallParam nm =
+  case nameTyp nm of
+    CAExp  t -> Just nm{nameTyp = t}
+    CAComp _ -> Nothing
 
 {-------------------------------------------------------------------------------
   Outputable instances for the view patterns, above
