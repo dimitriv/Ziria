@@ -77,7 +77,7 @@ logStep :: String -> Maybe SourcePos -> String -> RwM ()
 logStep pass pos str = do
     flags <- getDynFlags
     when (isDynFlagSet flags DebugFold) $ RwM $ do
-      liftIO $ putStrLn $ pass ++ ": " ++ ppr' pos ++ "\n  " ++ str
+      liftIO $ putStrLn $ "* " ++ pass ++ ": " ++ ppr' pos ++ "\n" ++ str
   where
     ppr' (Just p) = show p ++ ": "
     ppr' Nothing  = ""
@@ -220,9 +220,9 @@ foldCompPasses flags
   = []
   | otherwise
   = -- Standard good things
-    [ ("fold"          , passFold         )
-    , ("purify"        , passPurify       )
-    , ("purify-letref" , purify_letref_step)
+    [ ("fold"          , passFold        )
+    , ("purify"        , passPurify      )
+    , ("purify-letref" , passPurifyLetRef)
     , ("elim-times"    , elim_times_step   )
     , ("letfunc"       , letfunc_step      )
     , ("letfun-times"  , letfun_times_step )
@@ -273,7 +273,8 @@ passFold = TypedCompPass $ \_ -> go
       let cloc = compLoc comp
       case bindSeqView comp of
         BindView nm (MkComp (Return fi e) _ ()) c12 -> do
-          logStep "fold/bind" cloc [step| nm <- return e ; .. ~~> let nm = e in .. |]
+          logStep "fold/bind" cloc
+            [step| nm <- return e ; .. ~~> let nm = e in .. |]
           c12' <- go c12
           rewrite $ cLetE cloc nm fi e c12'
 
@@ -283,7 +284,8 @@ passFold = TypedCompPass $ \_ -> go
 
         SeqView (MkComp (Return fi e) _ ()) c12 -> do
           let nm = mkUniqNm cloc (ctExp e)
-          logStep "fold/seq" cloc [step| return e ; .. ~~> let nm = e in .. |]
+          logStep "fold/seq" cloc
+            [step| return e ; .. ~~> let nm = e in .. |]
           c12' <- go c12
           rewrite $ cLetE cloc nm fi e c12'
 
@@ -296,18 +298,42 @@ passFold = TypedCompPass $ \_ -> go
 -- | Translate computation-level `LetE` to expression level `Let`
 passPurify :: TypedCompPass
 passPurify = TypedCompPass $ \cloc comp ->
-    case cCollectLetExps comp of
+    case cCollectLetEs comp of
       Just (binds, comp') | Return fi e <- unComp comp' -> do
-        logStep "purify/return" cloc [step| let binds in return e ~~> return (let binds in e) |]
-        rewrite $ cReturn cloc fi (eApplyLetExps binds e)
+        logStep "purify/return" cloc
+          [step| let binds in return e ~~> return (let binds in e) |]
+        rewrite $ cReturn cloc fi (eApplyLetEs binds e)
 
       Just (binds, comp') | Emit e <- unComp comp' -> do
-        logStep "purify/emit" cloc [step| let binds in emit e ~~> emit (let binds in e) |]
-        rewrite $ cEmit cloc (eApplyLetExps binds e)
+        logStep "purify/emit" cloc
+          [step| let binds in emit e ~~> emit (let binds in e) |]
+        rewrite $ cEmit cloc (eApplyLetEs binds e)
 
       Just (binds, comp') | Emits e <- unComp comp' -> do
-        logStep "purify/emits" cloc [step| let binds in emits e ~~> emits (let binds in e) |]
-        rewrite $ cEmits cloc (eApplyLetExps binds e)
+        logStep "purify/emits" cloc
+          [step| let binds in emits e ~~> emits (let binds in e) |]
+        rewrite $ cEmits cloc (eApplyLetEs binds e)
+
+      _otherwise ->
+        return comp
+
+passPurifyLetRef :: TypedCompPass
+passPurifyLetRef = TypedCompPass $ \cloc comp -> do
+    case cCollectLetERefs comp of
+      Just (binds, comp') | Return fi e <- unComp comp' -> do
+        logStep "purifyLetRef/return" cloc
+          [step| var binds in return e ~~> return (var binds in e) |]
+        rewrite $ cReturn cloc fi (eApplyLetERefs binds e)
+
+      Just (binds, comp') | Emit e <- unComp comp' -> do
+        logStep "purifyLetRef/emit" cloc
+          [step| var binds in emit e ~~> emit (var binds in e) |]
+        rewrite $ cEmit cloc (eApplyLetERefs binds e)
+
+      Just (binds, comp') | Emits e <- unComp comp' -> do
+        logStep "purifyLetRef/emits" cloc
+          [step| var binds in emits e ~~> emits (var binds in e) |]
+        rewrite $ cEmits cloc (eApplyLetERefs binds e)
 
       _otherwise ->
         return comp
@@ -665,23 +691,6 @@ inline_exp_fun_in_comp fun
 
 
 
-purify_letref_step :: TypedCompPass
--- Returns Just if we managed to rewrite
-purify_letref_step = TypedCompPass $ \cloc comp -> do
-    -- rwMIO $ putStrLn "purify_step, comp = "
-    -- rwMIO $ print (ppComp comp)
-    case isMultiLetRef_maybe (unComp comp) of
-      Just (binds, Return fi e) ->
-        rewrite $ cReturn cloc fi (mkMultiLetRefExp (reverse binds) e)
-
-      Just (binds, Emit e) ->
-        rewrite $ cEmit cloc (mkMultiLetRefExp (reverse binds) e)
-
-      Just (binds, Emits e) ->
-        rewrite $ cEmits cloc (mkMultiLetRefExp (reverse binds) e)
-
-      _otherwise ->
-        return comp
 
 
 
@@ -834,25 +843,8 @@ times_unroll_step = TypedCompPass $ \cloc comp -> do
 
 
 
-mkMultiLetRefExp :: [(GName Ty, Maybe Exp)] -> Exp -> Exp
-mkMultiLetRefExp []          e = e
-mkMultiLetRefExp ((x,b1):bs) e = eLetRef (expLoc e) x b1 (mkMultiLetRefExp bs e)
 
 
-isMultiLetRef_maybe :: Comp0 -> Maybe ([(GName Ty, Maybe Exp)], Comp0)
-isMultiLetRef_maybe = go []
-  where
-    go acc (LetERef x e c) = go ((x,e):acc) (unComp c)
-
-    go [] (Return {}) = Nothing
-    go [] (Emit {})   = Nothing
-    go [] (Emits {})  = Nothing
-
-    -- We must have some accumulated bindings!
-    go acc c@(Return {}) = Just (acc,c)
-    go acc c@(Emit {})   = Just (acc,c)
-    go acc c@(Emits {})  = Just (acc,c)
-    go _   _             = Nothing
 
 -- > for cnt in [estart, ebound] { return ebody }
 -- > ~~~>
@@ -1479,28 +1471,51 @@ bindSeqView = mk_view
     mk_view (MkComp (Seq c1 c2) _cloc ()) = SeqView c1 c2
     mk_view c = NotSeqOrBind c
 
-newtype LetExps = LetExps [(Maybe SourcePos, GName Ty, ForceInline, Exp)]
+newtype LetEs = LetEs [(Maybe SourcePos, GName Ty, ForceInline, Exp)]
 
--- | Collect multiple (consecutive, top-level) `LetE`-bindings
+-- | Collect multiple top-level consecutive `LetE` bindings
 --
--- Returns `Nothing` if no top-level `LetEs` were found
-cCollectLetExps :: Comp -> Maybe (LetExps, Comp)
-cCollectLetExps = \comp -> do
+-- Returns `Nothing` if no top-level `LetE`s were found
+cCollectLetEs :: Comp -> Maybe (LetEs, Comp)
+cCollectLetEs = \comp -> do
     let (ls, suffix) = go comp
     guard $ not (null ls)
-    return (LetExps ls, suffix)
+    return (LetEs ls, suffix)
   where
     go comp = case unComp comp of
       LetE nm fi e c' -> let (ls, suffix) = go c'
                          in ((compLoc comp, nm, fi, e) : ls, suffix)
       _               -> ([], comp)
 
--- | Add a series of let-bindings to an expression
-eApplyLetExps :: LetExps -> Exp -> Exp
-eApplyLetExps = \(LetExps ls) -> go ls
+-- | Add a series of `LetE` bindings to an expression
+eApplyLetEs :: LetEs -> Exp -> Exp
+eApplyLetEs = \(LetEs ls) -> go ls
   where
-    go []                     c = c
-    go ((cloc, nm, fi, e):ls) c = eLet cloc nm fi e (go ls c)
+    go []                    e' = e'
+    go ((loc, nm, fi, e):ls) e' = eLet loc nm fi e (go ls e')
+
+newtype LetERefs = LetERefs [(Maybe SourcePos, GName Ty, Maybe Exp)]
+
+-- | Collect multiple top-level consecutive `LetERef` bindings
+--
+-- Returns `Nothing` if no top-level `LetERef`s were found
+cCollectLetERefs :: Comp -> Maybe (LetERefs, Comp)
+cCollectLetERefs = \comp -> do
+    let (ls, suffix) = go comp
+    guard $ not (null ls)
+    return (LetERefs ls, suffix)
+  where
+    go comp = case unComp comp of
+      LetERef nm e c' -> let (ls, suffix) = go c'
+                         in ((compLoc comp, nm, e) : ls, suffix)
+      _               -> ([], comp)
+
+-- | Add a series of `LetERef` bindings to an expression
+eApplyLetERefs :: LetERefs -> Exp -> Exp
+eApplyLetERefs = \(LetERefs ls) -> go ls
+  where
+    go []                e' = e'
+    go ((loc, nm, e):ls) e' = eLetRef loc nm e (go ls e')
 
 {-------------------------------------------------------------------------------
   Outputable instances for the view patterns, above
@@ -1508,10 +1523,16 @@ eApplyLetExps = \(LetExps ls) -> go ls
   Useful for debugging
 -------------------------------------------------------------------------------}
 
-instance Outputable LetExps where
-  ppr (LetExps ls) = hsep (punctuate comma (map aux ls))
+instance Outputable LetEs where
+  ppr (LetEs ls) = hsep (punctuate comma (map aux ls))
     where
       aux (_, nm, _, e) = ppr nm <+> text "=" <+> ppr e
+
+instance Outputable LetERefs where
+  ppr (LetERefs ls) = hsep (punctuate comma (map aux ls))
+    where
+      aux (_, nm, Nothing) = ppr nm
+      aux (_, nm, Just e)  = ppr nm <+> text "=" <+> ppr e
 
 {-------------------------------------------------------------------------------
   Auxiliary

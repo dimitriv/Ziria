@@ -1,0 +1,36 @@
+fun comp f1(a : int) {
+  var x : int;
+  do { x := a ; return x } 
+}
+
+fun comp f2(a : int) {
+  var x : int := a;
+  return x;
+}
+
+-- emit cannot take a statement block as argument
+fun comp f3() {
+  var x : int := 1;
+  emit x;
+}
+
+-- emits cannot take a statement block as argument
+fun comp f4() {
+  var x : arr[2] int := {2, 3};
+  emits x;
+}
+
+fun comp test() {
+  a1 <- take;
+  a2 <- f1(a1);
+  emit a2;
+
+  b1 <- take;
+  b2 <- f2(b1);
+  emit b2;
+
+  f3();
+  f4();
+}
+
+let comp main = read[int] >>> repeat test() >>> write[int];

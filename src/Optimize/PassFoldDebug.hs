@@ -25,31 +25,43 @@ module PassFoldDebug (
     step
   ) where
 
-import Control.Monad
-import Language.Haskell.TH
+import Control.Monad (liftM)
+import Data.Char (isAlphaNum)
+import Data.Function (on)
+import Data.List (groupBy)
+import Language.Haskell.TH hiding (ppr)
 import Language.Haskell.TH.Quote
+import Text.PrettyPrint.HughesPJ (text, hcat)
 
 import Outputable
 
 step :: QuasiQuoter
 step = QuasiQuoter {
-      quoteExp  = aux [] . words
+      quoteExp  = aux [] . split
     , quotePat  = undefined
     , quoteType = undefined
     , quoteDec  = undefined
     }
   where
     aux :: [Q Exp] -> [String] -> Q Exp
-    aux acc [] = [| unwords $(listE (reverse acc)) |]
+    aux acc [] = [| show (hcat $(listE (reverse acc))) |]
     aux acc (x:xs) = do
       inScope <- simpleInScope x
       case inScope of
-        Just nm -> aux ([| pretty $(varE nm) |] : acc) xs
-        Nothing -> aux ([| x |] : acc) xs
+        Just nm -> aux ([| ppr $(varE nm) |] : acc) xs
+        Nothing -> aux ([| text x |] : acc) xs
 
 {-------------------------------------------------------------------------------
   Auxiliary
 -------------------------------------------------------------------------------}
+
+-- | Kind of like `words`, but given @"(x)"@, it will return
+--
+-- > ["(", "x", ")"]
+--
+-- (so it doesn't just split at whitespace)
+split :: String -> [String]
+split = groupBy ((==) `on` isAlphaNum)
 
 -- | Check if value is in scope and is not a function
 simpleInScope :: String -> Q (Maybe Name)
