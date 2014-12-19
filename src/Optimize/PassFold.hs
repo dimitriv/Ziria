@@ -276,12 +276,12 @@ foldExpPasses flags
 
 -- | Convert `return` to `let`
 --
--- NOTE: We have to manually the entire bind structure, because although the
--- rewriting will happen at every node in the AST, there may only be a single
--- bind node for a sequence of binds. The same is not true for a sequence of
--- 'seq' nodes though. This is rather subtle, and fold_step is the _only_ pass
--- that actually does this. I'm not sure if there are other subtle bugs due to
--- this.
+-- NOTE: We have to manually traverse the entire bind structure, because
+-- although the rewriting will happen at every node in the AST, there may only
+-- be a single bind node for a sequence of binds. The same is not true for a
+-- sequence of 'seq' nodes though. This is rather subtle, and fold_step is the
+-- _only_ pass that actually does this. I'm not sure if there are other subtle
+-- bugs due to this.
 passFold :: TypedCompPass
 passFold = TypedCompPass $ \_ -> go
   where
