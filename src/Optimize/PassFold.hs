@@ -246,16 +246,16 @@ foldCompPasses flags
     , ("inline"        , passInline      )
 
     -- More aggressive optimizations
-    , ("push-comp-locals"       , passPushCompLocals   )
-    , ("take-emit"              , passTakeEmit         )
-    , ("float-letfun-repeat"    , passFloatLetFunRepeat)
-    , ("float-let-par"          , passFloatLetPar      )
-    , ("ifdead"                 , passIfDead           )
-    , ("if-return-step"         , if_return_step          )
-    , ("elim-automapped-mitigs" , elim_automapped_mitigs  )
+    , ("push-comp-locals"       , passPushCompLocals      )
+    , ("take-emit"              , passTakeEmit            )
+    , ("float-letfun-repeat"    , passFloatLetFunRepeat   )
+    , ("float-let-par"          , passFloatLetPar         )
+    , ("ifdead"                 , passIfDead              )
+    , ("if-return"              , passIfReturn            )
+    , ("elim-automapped-mitigs" , passElimAutomappedMitigs)
 
     -- Don't use: not wrong but does not play nicely with LUT
-    --  , ("float-top-letref"   , float_top_letref_step )
+    --  , ("float-top-letref"   , passFloatTopLetRef )
     ]
 
 foldExpPasses :: DynFlags -> [(String,TypedExpPass)]
@@ -713,92 +713,26 @@ passIfDead = TypedCompPass $ \cloc comp -> do
        = j /= j'
     impliesBoolNeg _ _ = False
 
-{-------------------------------------------------------------------------------
-  TODO: Not yet cleaned up
--------------------------------------------------------------------------------}
-
-{- The main rewriter individual steps
-   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -}
-
-
-{-
-
-Not wrong, by evil, we lose the letref-structure and LUT can't do a
-very good job!
-
-float_top_letref_step :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
-float_top_letref_step fgs comp
-  | LetFun nm f c <- unComp comp
-  , MkFunDefined nm params locals body <- unFun f
-  , let (extra_locals,rem_body) = strip_letrefs body
-  , not (null extra_locals)
-  = do { let f' = f { unFun = fdef' }
-             fdef' = MkFunDefined nm params (locals ++ extra_locals) rem_body
-       ; rewrite $
-         cLetFun (compLoc comp) (compInfo comp) nm f' c
-       }
-  | otherwise
-  = return comp
-  where strip_letrefs e = go [] e
-        go defs e
-          = go0 defs (unExp e)
-          where
-             go0 defs (ELetRef nm (Left ty) e')
-               = go ((nm,ty,Nothing):defs) e'
-             go0 defs (ELetRef nm (Right einit) e')
-               = go ((nm, info einit, Just einit):defs) e'
-             go0 defs _other = (reverse defs, e)
--}
-
-
-
-
-
--- if e then return e1 else return e2 ~~> return (if e then e1 else e2)
-if_return_step :: TypedCompPass
-if_return_step = TypedCompPass $ \_cloc comp -> if
+-- | Translate computation-level conditional to expression-level conditional
+passIfReturn :: TypedCompPass
+passIfReturn = TypedCompPass $ \_cloc comp -> if
     | Branch eguard c1 c2 <- unComp comp
       , Return f1 e1  <- unComp c1
       , Return _f2 e2 <- unComp c2
    -- , f1 == f2
       , let cloc = compLoc comp
-     -> rewrite $ cReturn cloc f1 $
-                  eIf cloc eguard e1 e2
+     -> do
+       logStep "if-return" cloc
+         [step| if eguard then { return .. } else { return .. }
+            ~~> return (if eguard then .. else ..) |]
+       rewrite $ cReturn cloc f1 $ eIf cloc eguard e1 e2
+
     | otherwise
      -> return comp
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-elim_automapped_mitigs :: TypedCompPass
-elim_automapped_mitigs = TypedCompPass $ \_cloc c -> if
+-- TODO: Add logStep and corresponding test case.
+passElimAutomappedMitigs :: TypedCompPass
+passElimAutomappedMitigs = TypedCompPass $ \_cloc c -> if
   | MkComp c0 _cloc _ <- c
     , Par _p c1 c2 <- c0
     , Par _p c11 c12 <- unComp c1
@@ -827,6 +761,79 @@ elim_automapped_mitigs = TypedCompPass $ \_cloc c -> if
 
   | otherwise
    -> return c
+
+{-------------------------------------------------------------------------------
+  TODO: Not yet cleaned up
+-------------------------------------------------------------------------------}
+
+{- The main rewriter individual steps
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -}
+
+
+{-
+
+Not wrong, by evil, we lose the letref-structure and LUT can't do a
+very good job!
+
+passFloatTopLetRef :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
+passFloatTopLetRef fgs comp
+  | LetFun nm f c <- unComp comp
+  , MkFunDefined nm params locals body <- unFun f
+  , let (extra_locals,rem_body) = strip_letrefs body
+  , not (null extra_locals)
+  = do { let f' = f { unFun = fdef' }
+             fdef' = MkFunDefined nm params (locals ++ extra_locals) rem_body
+       ; rewrite $
+         cLetFun (compLoc comp) (compInfo comp) nm f' c
+       }
+  | otherwise
+  = return comp
+  where strip_letrefs e = go [] e
+        go defs e
+          = go0 defs (unExp e)
+          where
+             go0 defs (ELetRef nm (Left ty) e')
+               = go ((nm,ty,Nothing):defs) e'
+             go0 defs (ELetRef nm (Right einit) e')
+               = go ((nm, info einit, Just einit):defs) e'
+             go0 defs _other = (reverse defs, e)
+-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

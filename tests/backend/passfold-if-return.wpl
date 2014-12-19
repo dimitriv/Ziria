@@ -1,0 +1,16 @@
+fun comp f() {
+  a <- take;
+
+  if (a == 1) then {
+    return 3;
+  } else {
+    return 2;
+  }
+}
+
+fun comp g() {
+  a <- f();
+  emit a;
+}
+
+let comp main = read[int] >>> repeat g() >>> write[int];
