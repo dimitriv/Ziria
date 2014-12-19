@@ -1,0 +1,18 @@
+var x : int := 0;
+
+fun f() {
+  x := x + 1;
+  return x;
+}
+
+fun g(a : int) {
+  return a + 1;
+}
+
+
+fun comp test() {
+  x <- take;
+  emit g(f() + x);
+}
+
+let comp main = read[int] >>> test() >>> write[int]
