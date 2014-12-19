@@ -61,7 +61,9 @@ step = QuasiQuoter {
 --
 -- (so it doesn't just split at whitespace)
 split :: String -> [String]
-split = groupBy ((==) `on` isAlphaNum)
+split = groupBy ((==) `on` isIdent)
+  where
+    isIdent c = isAlphaNum c || c == '\''
 
 -- | Check if value is in scope and is not a function
 simpleInScope :: String -> Q (Maybe Name)

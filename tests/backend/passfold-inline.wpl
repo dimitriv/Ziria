@@ -1,0 +1,53 @@
+-- inline/LetE/AutoInline
+fun comp f1() {
+  let a = 1;
+
+  emit 2; -- Avoid purify/emit 
+  emit a;
+}
+
+-- inline/Let
+fun comp f2() {
+  let comp myTake = take;
+
+  a <- myTake;
+  emit a;
+}
+
+-- inline/LetHeader
+fun comp f3() {
+  fun g3(a : int) {
+    return a + 3;
+  }
+
+  emit g3(4);
+}
+
+-- inline/LetHeader (cannot eliminate completely)
+fun comp f4() {
+  fun g4(a : int) {
+    return a + 5;
+  }
+
+  emit g4(6);
+  map g4;
+}
+
+-- inline/LetFunC
+fun comp f5() {
+  fun comp g5(a : int) {
+    emit a;
+  }
+
+  g5(7);
+}
+
+fun comp test() {
+  f1();
+  f2();
+  f3();
+  f5();
+  f4();
+}
+
+let comp main = read[int] >>> test() >>> write[int]
