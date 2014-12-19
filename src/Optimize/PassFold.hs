@@ -274,7 +274,8 @@ foldExpPasses flags
   Comp passes: standard optimizations
 -------------------------------------------------------------------------------}
 
--- | Convert `return` to `let`
+-- | Convert `return` to `let`, and remove function definitions from the RHS
+-- of binds.
 --
 -- NOTE: We have to manually traverse the entire bind structure, because
 -- although the rewriting will happen at every node in the AST, there may only
@@ -289,10 +290,17 @@ passFold = TypedCompPass $ \_ -> go
       let cloc = compLoc comp
       case bindSeqView comp of
         BindView nm (MkComp (Return fi e) _ ()) c12 -> do
-          logStep "fold/bind" cloc
+          logStep "fold/bind-return" cloc
             [step| nm <- return e ; .. ~~> let nm = e in .. |]
           c12' <- go c12
           rewrite $ cLetE cloc nm fi e c12'
+
+        BindView nm (MkComp (LetHeader fdef c) _ ()) c12 -> do
+          logStep "fold/bind-header" cloc
+            [step| nm <- fun f(..) { .. } in ..
+               ~~> fun f(..) { .. } in nm <- .. |]
+          c12' <- go c12
+          rewrite $ cLetHeader cloc fdef (cBindMany cloc c [(nm, c12')])
 
         BindView nm c c12 -> do
           c12' <- go c12

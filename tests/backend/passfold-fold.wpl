@@ -1,8 +1,9 @@
 fun comp f() {
   x <- take;
   y <- return x;
+  z <- fun g(x : int) { return x; } in return g(x);
   return 999;
-  emit (y + 1);
+  emit (y + z + 1);
 }
 
 let comp main = read[int] >>> repeat f() >>> write[int]
