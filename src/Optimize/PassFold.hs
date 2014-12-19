@@ -246,7 +246,7 @@ foldCompPasses flags
     , ("inline"        , passInline      )
 
     -- More aggressive optimizations
-    , ("push-comp-locals"       , push_comp_locals_step   )
+    , ("push-comp-locals"       , passPushCompLocals   )
     , ("take-emit"              , take_emit_step          )
     , ("float-letfun-repeat"    , float_letfun_repeat_step)
     , ("float-let-par-step"     , float_let_par_step      )
@@ -271,7 +271,7 @@ foldExpPasses flags
     ]
 
 {-------------------------------------------------------------------------------
-  Comp passes
+  Comp passes: standard optimizations
 -------------------------------------------------------------------------------}
 
 -- | Convert `return` to `let`
@@ -314,21 +314,21 @@ passFold = TypedCompPass $ \_ -> go
 -- | Translate computation level `LetE` to expression level `Let`
 passPurify :: TypedCompPass
 passPurify = TypedCompPass $ \cloc comp ->
-    case cCollectLetEs comp of
+    case extractCLetEs comp of
       Just (binds, comp') | Return fi e <- unComp comp' -> do
         logStep "purify/return" cloc
           [step| let binds in return e ~~> return (let binds in e) |]
-        rewrite $ cReturn cloc fi (eApplyLetEs binds e)
+        rewrite $ cReturn cloc fi (insertELetEs binds e)
 
       Just (binds, comp') | Emit e <- unComp comp' -> do
         logStep "purify/emit" cloc
           [step| let binds in emit e ~~> emit (let binds in e) |]
-        rewrite $ cEmit cloc (eApplyLetEs binds e)
+        rewrite $ cEmit cloc (insertELetEs binds e)
 
       Just (binds, comp') | Emits e <- unComp comp' -> do
         logStep "purify/emits" cloc
           [step| let binds in emits e ~~> emits (let binds in e) |]
-        rewrite $ cEmits cloc (eApplyLetEs binds e)
+        rewrite $ cEmits cloc (insertELetEs binds e)
 
       _otherwise ->
         return comp
@@ -336,21 +336,21 @@ passPurify = TypedCompPass $ \cloc comp ->
 -- | Translate computation level `LetERef` to expression level `LetRef`
 passPurifyLetRef :: TypedCompPass
 passPurifyLetRef = TypedCompPass $ \cloc comp -> do
-    case cCollectLetERefs comp of
+    case extractCMutVars' comp of
       Just (binds, comp') | Return fi e <- unComp comp' -> do
         logStep "purify-letref/return" cloc
           [step| var binds in return e ~~> return (var binds in e) |]
-        rewrite $ cReturn cloc fi (eApplyLetERefs binds e)
+        rewrite $ cReturn cloc fi (insertEMutVars' binds e)
 
       Just (binds, comp') | Emit e <- unComp comp' -> do
         logStep "purify-letref/emit" cloc
           [step| var binds in emit e ~~> emit (var binds in e) |]
-        rewrite $ cEmit cloc (eApplyLetERefs binds e)
+        rewrite $ cEmit cloc (insertEMutVars' binds e)
 
       Just (binds, comp') | Emits e <- unComp comp' -> do
         logStep "purify-letref/emits" cloc
           [step| var binds in emits e ~~> emits (var binds in e) |]
-        rewrite $ cEmits cloc (eApplyLetERefs binds e)
+        rewrite $ cEmits cloc (insertEMutVars' binds e)
 
       _otherwise ->
         return comp
@@ -509,8 +509,8 @@ passInline = TypedCompPass $ \cloc comp' -> if
       , (locals, body) <- extractEMutVars body'
       , no_lut_inside body
      -> do
-       -- Inlining functions not always completely eliminates
-       -- them (e.g. args to map, or non-simple arguments).
+       -- Inlining functions not always completely eliminates them (e.g. args
+       -- to map, or non-simple arguments).
 
        (c2', didRewrite) <- recordLocalRewrite $
          inline_exp_fun_in_comp (nm,params,locals,body) c2
@@ -535,6 +535,10 @@ passInline = TypedCompPass $ \cloc comp' -> if
 
     | LetFunC nm params c1 c2 <- unComp comp'
      -> do
+       -- Like expression functions, computation functions cannot always be
+       -- completely eliminated. Mostly this happens when they are given
+       -- non-simple arguments.
+
        (c2', didRewrite) <- recordLocalRewrite $
          inline_comp_fun (nm,params,c1) c2
 
@@ -552,6 +556,30 @@ passInline = TypedCompPass $ \cloc comp' -> if
     | otherwise
      -> return comp'
 
+{-------------------------------------------------------------------------------
+  Comp passes: more aggressive optimizations
+-------------------------------------------------------------------------------}
+
+-- | Lift mutable variable bindings over `take`
+passPushCompLocals :: TypedCompPass
+passPushCompLocals = TypedCompPass $ \cloc comp' -> if
+    | LetFunC nm params cbody_with_locals ccont <- unComp comp'
+      , Just (locals, cbody) <- extractCMutVars' cbody_with_locals
+      , BindMany tk [(x,emt)] <- unComp cbody
+      , Take1 {} <- unComp tk
+      , Emit e <- unComp emt
+     -> do
+       logStep "push-comp-locals" cloc
+         [step| fun comp nm(..) { var locals ; x <- take ; emit .. }
+            ~~> fun comp nm(..) { x <- take ; var locals ; emit .. } |]
+
+       let cbody' = cBindMany cloc tk [(x,emt')]
+           emt'   = cEmit cloc e'
+           e'     = insertEMutVars' locals e
+       rewrite $ cLetFunC cloc nm params cbody' ccont
+
+    | otherwise
+     -> return comp'
 
 {-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
@@ -596,29 +624,7 @@ float_let_par_step = TypedCompPass $ \cloc comp -> if
 
 
 
-is_simpl_call_arg :: CallArg Exp Comp -> Bool
-is_simpl_call_arg (CAExp e) = is_simpl_expr e
-is_simpl_call_arg _         = False
 
-push_comp_locals_step :: TypedCompPass
--- let comp f(x) = var ... x <- take ; emit e
--- ~~~>
--- let comp f(x) = x <- take; emit (letref locals in e)
-push_comp_locals_step = TypedCompPass $ \cloc comp -> if
-    | LetFunC nm params cbody_with_locals ccont <- unComp comp
-      , (locals, cbody) <- extractCMutVars cbody_with_locals
-      , not (null locals)
-      , BindMany tk [(x,emt)] <- unComp cbody
-      , Take1 {} <- unComp tk
-      , Emit e <- unComp emt
-     -> do { let comp'  = cLetFunC cloc nm params cbody' ccont
-                 cbody' = cBindMany cloc tk [(x,emt')]
-                 emt'   = cEmit cloc e'
-                 e'     = insertEMutVars locals e
-           ; rewrite comp'
-           }
-    | otherwise
-     -> return comp
 
 
 take_emit_step :: TypedCompPass
@@ -1371,13 +1377,20 @@ bindSeqView = mk_view
     mk_view (MkComp (Seq c1 c2) _cloc ()) = SeqView c1 c2
     mk_view c = NotSeqOrBind c
 
+fromSimplCallParam :: GName (CallArg Ty CTy) -> Maybe (GName Ty)
+fromSimplCallParam nm =
+  case nameTyp nm of
+    CAExp  t -> Just nm{nameTyp = t}
+    CAComp _ -> Nothing
+
+
 newtype LetEs = LetEs [(Maybe SourcePos, GName Ty, ForceInline, Exp)]
 
 -- | Collect multiple top-level consecutive `LetE` bindings
 --
 -- Returns `Nothing` if no top-level `LetE`s were found
-cCollectLetEs :: Comp -> Maybe (LetEs, Comp)
-cCollectLetEs = \comp -> do
+extractCLetEs :: Comp -> Maybe (LetEs, Comp)
+extractCLetEs = \comp -> do
     let (ls, suffix) = go comp
     guard $ not (null ls)
     return (LetEs ls, suffix)
@@ -1388,40 +1401,26 @@ cCollectLetEs = \comp -> do
       _               -> ([], comp)
 
 -- | Add a series of `LetE` bindings to an expression
-eApplyLetEs :: LetEs -> Exp -> Exp
-eApplyLetEs = \(LetEs ls) -> go ls
+insertELetEs :: LetEs -> Exp -> Exp
+insertELetEs = \(LetEs ls) -> go ls
   where
     go []                    e' = e'
     go ((loc, nm, fi, e):ls) e' = eLet loc nm fi e (go ls e')
 
-newtype LetERefs = LetERefs [(Maybe SourcePos, GName Ty, Maybe Exp)]
+newtype LetERefs = LetERefs [MutVar]
 
 -- | Collect multiple top-level consecutive `LetERef` bindings
 --
 -- Returns `Nothing` if no top-level `LetERef`s were found
-cCollectLetERefs :: Comp -> Maybe (LetERefs, Comp)
-cCollectLetERefs = \comp -> do
-    let (ls, suffix) = go comp
-    guard $ not (null ls)
-    return (LetERefs ls, suffix)
-  where
-    go comp = case unComp comp of
-      LetERef nm e c' -> let (ls, suffix) = go c'
-                         in ((compLoc comp, nm, e) : ls, suffix)
-      _               -> ([], comp)
+extractCMutVars' :: Comp -> Maybe (LetERefs, Comp)
+extractCMutVars' c =
+    case extractCMutVars c of
+      ([], _)  -> Nothing
+      (vs, c') -> Just (LetERefs vs, c')
 
 -- | Add a series of `LetERef` bindings to an expression
-eApplyLetERefs :: LetERefs -> Exp -> Exp
-eApplyLetERefs = \(LetERefs ls) -> go ls
-  where
-    go []                e' = e'
-    go ((loc, nm, e):ls) e' = eLetRef loc nm e (go ls e')
-
-fromSimplCallParam :: GName (CallArg Ty CTy) -> Maybe (GName Ty)
-fromSimplCallParam nm =
-  case nameTyp nm of
-    CAExp  t -> Just nm{nameTyp = t}
-    CAComp _ -> Nothing
+insertEMutVars' :: LetERefs -> Exp -> Exp
+insertEMutVars' (LetERefs vs) = insertEMutVars vs
 
 {-------------------------------------------------------------------------------
   Some simple analyses
@@ -1439,6 +1438,10 @@ is_simpl_expr = go . unExp
     go (EUnOp _ e)      = is_simpl_expr e
     go (EStruct _ fses) = all is_simpl_expr (map snd fses)
     go _                = False
+
+is_simpl_call_arg :: CallArg Exp Comp -> Bool
+is_simpl_call_arg (CAExp e) = is_simpl_expr e
+is_simpl_call_arg _         = False
 
 no_lut_inside :: Exp -> Bool
 no_lut_inside x = isJust (mapExpM return return elut_nothing x)
@@ -1551,20 +1554,13 @@ inline_exp_fun (nm,params,locals,body)
 
 inline_comp_fun :: (GName CTy, [GName (CallArg Ty CTy)], Comp) -> Comp -> RwM Comp
 inline_comp_fun (nm,params,cbody) c = do
-    -- liftIO $ putStrLn $ "inline_comp_fun (before) = " ++ show c
-    r <- mapCompM return return return return return replace_call c
-    -- liftIO $ putStrLn $ "inline_comp_fun (after) = " ++ show r
-    return r
+    mapCompM return return return return return replace_call c
   where
     replace_call :: Comp -> RwM Comp
     replace_call (MkComp (Call nm' args) _ ())
       | all is_simpl_call_arg args
       , nm == nm'
-      = do -- liftIO $ putStrLn "Matching!"
-           r <- rewrite $ substComp [] (mk_expr_subst params args) [] cbody
-           -- liftIO $ putStrLn $ "Substituted =" ++ (show r)
-           return r
-
+      = rewrite $ substComp [] (mk_expr_subst params args) [] cbody
     replace_call other = return other
 
     mk_expr_subst :: [GName (CallArg Ty CTy)]
@@ -1591,8 +1587,10 @@ instance Outputable LetEs where
 instance Outputable LetERefs where
   ppr (LetERefs ls) = hsep (punctuate comma (map aux ls))
     where
-      aux (_, nm, Nothing) = ppr nm
-      aux (_, nm, Just e)  = ppr nm <+> text "=" <+> ppr e
+      aux MutVar{..} =
+        case mutInit of
+          Nothing -> ppr mutVar
+          Just e  -> ppr mutVar <+> text "=" <+> ppr e
 
 {-------------------------------------------------------------------------------
   Auxiliary

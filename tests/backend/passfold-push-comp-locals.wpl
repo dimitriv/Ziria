@@ -1,0 +1,14 @@
+fun comp f(c : int) {
+  var x : int;
+  a <- take;
+  b <- do { x := a ; return x }
+  emit (b + c); 
+}
+
+fun comp test() {
+  var x : arr[2] int;
+  do { x[0] := 123; }
+  f(x[0]);
+}
+
+let comp main = read[int] >>> test() >>> write[int]

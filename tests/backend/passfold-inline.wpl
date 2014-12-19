@@ -42,12 +42,26 @@ fun comp f5() {
   g5(7);
 }
 
+-- inline/LetFunC (unable to eliminate completely)
+fun comp f6() {
+  fun comp g6(a : int) {
+    emit a;
+  }
+
+  var x : arr[2] int;
+  do { x[0] := 8; }
+
+  g6(9);
+  g6(x[0]);
+}
+
 fun comp test() {
   f1();
   f2();
   f3();
   f5();
-  f4();
+  f6();
+  f4(); -- last because it uses 'map' 
 }
 
 let comp main = read[int] >>> test() >>> write[int]
