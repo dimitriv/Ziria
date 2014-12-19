@@ -1,0 +1,19 @@
+fun comp f() {
+  var x : int := 0;
+
+  fun g() {
+    x := x + 1;
+    return x;
+  }
+
+  repeat {
+    fun comp h(a : int) {
+      b <- take;
+      emit (a + b); 
+    }
+
+    h(g()); -- non-simple argument, so g cannot be inlined
+  }
+}
+
+let comp main = read[int] >>> f() >>> write[int]

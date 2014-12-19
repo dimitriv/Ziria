@@ -247,8 +247,8 @@ foldCompPasses flags
 
     -- More aggressive optimizations
     , ("push-comp-locals"       , passPushCompLocals   )
-    , ("take-emit"              , passTakeEmit          )
-    , ("float-letfun-repeat"    , float_letfun_repeat_step)
+    , ("take-emit"              , passTakeEmit         )
+    , ("float-letfun-repeat"    , passFloatLetFunRepeat)
     , ("float-let-par-step"     , float_let_par_step      )
     , ("ifdead"                 , ifdead_step             )
     , ("if-return-step"         , if_return_step          )
@@ -611,6 +611,25 @@ passTakeEmit = TypedCompPass $ \cloc comp -> if
     | otherwise
      -> return comp
 
+-- | Let computation functions out of repeat loops.
+--
+-- This will give the opportunity to take-emit to kick in and rewrite the whole
+-- thing to map!
+passFloatLetFunRepeat :: TypedCompPass
+passFloatLetFunRepeat = TypedCompPass $ \cloc comp' -> if
+    | Repeat wdth rcomp <- unComp comp'
+      , LetFunC nm params cbody ccont <- unComp rcomp
+      , Call nm' _args <- unComp ccont
+      , nm' == nm
+     -> do
+       logStep "float-letfun-repeat" cloc
+         [step| repeat { fun comp nm(..) { .. } in nm(..) }
+            ~~> fun comp nm(..) { repeat { .. } } in nm(..) } |]
+
+       rewrite $ cLetFunC cloc nm params (cRepeat cloc wdth cbody) ccont
+    | otherwise
+     -> return comp'
+
 {-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
 -------------------------------------------------------------------------------}
@@ -619,25 +638,6 @@ passTakeEmit = TypedCompPass $ \cloc comp -> if
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -}
 
 
-float_letfun_repeat_step :: TypedCompPass
--- Rewriting of the form:
---
--- repeat (letfun f(params) = c in f(args))
--- ~~~>
--- letfun f(params) =
---     uninitialized-locals;
---     repeat c
--- in f(args)
--- This will give the opportunity to take-emit to kick in and rewrite the whole thing to map!
-float_letfun_repeat_step = TypedCompPass $ \cloc comp -> if
-    | Repeat wdth rcomp <- unComp comp
-      , LetFunC nm params cbody ccont <- unComp rcomp
-      , Call nm' args <- unComp ccont
-      , nm' == nm
-      , all is_simpl_call_arg args  -- Not sure this is necessary
-     -> rewrite $ cLetFunC cloc nm params (cRepeat cloc wdth cbody) ccont
-    | otherwise
-     -> return comp
 
 
 
