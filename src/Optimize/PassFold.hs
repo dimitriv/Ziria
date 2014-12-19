@@ -247,7 +247,7 @@ foldCompPasses flags
 
     -- More aggressive optimizations
     , ("push-comp-locals"       , passPushCompLocals   )
-    , ("take-emit"              , take_emit_step          )
+    , ("take-emit"              , passTakeEmit          )
     , ("float-letfun-repeat"    , float_letfun_repeat_step)
     , ("float-let-par-step"     , float_let_par_step      )
     , ("ifdead"                 , ifdead_step             )
@@ -581,6 +581,36 @@ passPushCompLocals = TypedCompPass $ \cloc comp' -> if
     | otherwise
      -> return comp'
 
+-- | Turn explicit `take`/`emit` loop into application of `map`
+passTakeEmit :: TypedCompPass
+passTakeEmit = TypedCompPass $ \cloc comp -> if
+    | Repeat nfo bm <- unComp comp
+      , BindMany tk [(x,emt)] <- unComp bm
+      , Take1 ain <- unComp tk
+      , Emit e    <- unComp emt
+     -> do
+       let xty  = ain
+           ety  = ctExp e
+           eloc = expLoc e
+           fty  = TArrow [xty] ety
+
+       fname <- do fr <- genSym "auto_map_"
+                   return $ toName fr eloc fty
+
+       logStep "take-emit" cloc
+         [step| repeat { x <- take ; emit .. }
+             ~~> let fname(x) = { .. } in map fname } |]
+
+       let letfun  = cLetHeader cloc fun mapcomp
+           mapcomp = cMap cloc nfo fname
+                   -- NB: We pass the nfo thing,
+                   -- to preserve vectorization hints!
+           fun = mkFunDefined eloc fname [x] e
+       rewrite letfun
+
+    | otherwise
+     -> return comp
+
 {-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
 -------------------------------------------------------------------------------}
@@ -627,31 +657,6 @@ float_let_par_step = TypedCompPass $ \cloc comp -> if
 
 
 
-take_emit_step :: TypedCompPass
--- repeat (x <- take ; emit e) ~~~> let f(x) = e in map(f)
-take_emit_step = TypedCompPass $ \cloc comp -> if
-    | Repeat nfo bm <- unComp comp
-      , BindMany tk [(x,emt)] <- unComp bm
-      , Take1 ain <- unComp tk
-      , Emit e    <- unComp emt
-     -> do { let xty  = ain
-                 ety  = ctExp e
-                 eloc = expLoc e
-                 fty  = TArrow [xty] ety
-
-           ; fname <- do { fr <- genSym "auto_map_"
-                         ; return $ toName fr eloc fty }
-
-           ; let letfun  = cLetHeader cloc fun mapcomp
-                 mapcomp = cMap cloc nfo fname
-                         -- NB: We pass the nfo thing,
-                         -- to preserve vectorization hints!
-                 fun = mkFunDefined eloc fname [x] e
-
-           ; rewrite letfun
-           }
-    | otherwise
-     -> return comp
 
 {-
 

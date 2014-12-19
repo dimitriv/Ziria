@@ -1,0 +1,11 @@
+fun comp f() {
+  var x : int := 0;
+
+  repeat {
+    a <- take;
+    b <- do { x := x + a ; return x }
+    emit b;
+  }
+}
+
+let comp main = read[int] >>> f() >>> write[int]
