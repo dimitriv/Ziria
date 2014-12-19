@@ -1,0 +1,39 @@
+fun comp f() {
+  a <- take;
+  if (true) then {
+    emit a + 1;
+  } else {
+    emit a + 2;
+  }
+
+  b <- take;
+  if (false) then {
+    emit b + 3;
+  } else {
+    emit b + 4;
+  }
+
+  c <- take;
+  if (c == 1) then {
+    if (c == 1) then {
+      emit c + 5;
+    } else {
+      emit c + 6;
+    }
+  } else {
+    emit c + 7;
+  }
+
+  d <- take;
+  if (d == 1) then {
+    if (d == 2) then {
+      emit d + 8;
+    } else {
+      emit d + 9;
+    }
+  } else {
+    emit d + 10;
+  }
+}
+
+let comp main = read[int] >>> f() >>> write[int]
