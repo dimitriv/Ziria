@@ -249,7 +249,7 @@ foldCompPasses flags
     , ("push-comp-locals"       , passPushCompLocals   )
     , ("take-emit"              , passTakeEmit         )
     , ("float-letfun-repeat"    , passFloatLetFunRepeat)
-    , ("float-let-par-step"     , float_let_par_step      )
+    , ("float-let-par"          , passFloatLetPar      )
     , ("ifdead"                 , ifdead_step             )
     , ("if-return-step"         , if_return_step          )
     , ("elim-automapped-mitigs" , elim_automapped_mitigs  )
@@ -630,6 +630,26 @@ passFloatLetFunRepeat = TypedCompPass $ \cloc comp' -> if
     | otherwise
      -> return comp'
 
+-- | Float let out of parallel composition
+passFloatLetPar :: TypedCompPass
+passFloatLetPar = TypedCompPass $ \cloc comp -> if
+    | Par p c1 c2 <- unComp comp
+      , LetE x fi e1 c1' <- unComp c1
+     -> do
+       logStep "float-let-par/left" cloc
+         [step| (let x = .. in ..) >>> .. ~~> let x = .. in (.. >>> ..) |]
+       rewrite $ cLetE cloc x fi e1 (cPar cloc p c1' c2)
+
+    | Par p c1 c2 <- unComp comp
+      , LetE x fi e2 c2' <- unComp c2
+     -> do
+       logStep "float-let-par/right" cloc
+         [step| .. >>> (let x = .. in ..) ~~> let x = .. in (.. >>> ..) |]
+       rewrite $ cLetE cloc x fi e2 (cPar cloc p c1 c2')
+
+    | otherwise
+     -> return comp
+
 {-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
 -------------------------------------------------------------------------------}
@@ -641,16 +661,6 @@ passFloatLetFunRepeat = TypedCompPass $ \cloc comp' -> if
 
 
 
-float_let_par_step :: TypedCompPass
-float_let_par_step = TypedCompPass $ \cloc comp -> if
-    | Par p c1 c2 <- unComp comp
-      , LetE x fi e1 c1' <- unComp c1
-     -> rewrite $ cLetE cloc x fi e1 (cPar cloc p c1' c2)
-    | Par p c1 c2 <- unComp comp
-      , LetE x fi e2 c2' <- unComp c2
-     -> rewrite $ cLetE cloc x fi e2 (cPar cloc p c1 c2')
-    | otherwise
-     -> return comp
 
 
 
