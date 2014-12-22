@@ -263,7 +263,7 @@ foldExpPasses flags
   | isDynFlagSet flags NoFold || isDynFlagSet flags NoExpFold
   = []
   | otherwise
-  = [ ("for-unroll"         , for_unroll_step   )
+  = [ ("for-unroll"         , passForUnroll   )
     , ("exp-inlining-steps" , exp_inlining_steps)
     , ("asgn-letref-step"   , asgn_letref_step  )
     , ("exp_let_push_step"  , exp_let_push_step )
@@ -771,6 +771,29 @@ passElimAutomappedMitigs = TypedCompPass $ \_cloc c -> if
    -> return c
 
 {-------------------------------------------------------------------------------
+  Expression passes
+-------------------------------------------------------------------------------}
+
+passForUnroll :: TypedExpPass
+passForUnroll = TypedExpPass $ \eloc e -> do
+    let mk_eseq_many :: [Exp] -> Exp
+        mk_eseq_many []     = eVal eloc TUnit VUnit
+        mk_eseq_many [x]    = x
+        mk_eseq_many (x:xs) = eSeq (expLoc x) x (mk_eseq_many xs)
+
+    if | EFor ui nm estart elen ebody <- unExp e
+         , EVal _ (VInt 0) <- unExp estart
+         , EVal _ (VInt n) <- unExp elen
+         , (n < 8 && n > 0 && ui == AutoUnroll) || ui == Unroll
+        -> do
+          let subst i' = substExp [] [(nm, eVal eloc tint (vint i'))] ebody
+              unrolled = map subst [0..n-1]
+          rewrite $ mk_eseq_many unrolled
+
+       | otherwise
+        -> return e
+
+{-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
 -------------------------------------------------------------------------------}
 
@@ -1081,27 +1104,6 @@ proj_inline_step = TypedExpPass $ \_ e -> if
    -> return e
 
 
-for_unroll_step :: TypedExpPass
-for_unroll_step = TypedExpPass $ \_ e -> if
-  | EFor ui nm estart elen ebody  <- unExp e
-    , EVal _ (VInt 0) <- unExp estart
-    , EVal _ (VInt n') <- unExp elen
-    , let n = fromIntegral n'
-    , (n < 8 && n > 0 && ui == AutoUnroll) || ui == Unroll
-   -> -- liftIO (putStrLn "for_unroll_step, trying ...") >>
-      let idxs = [0..n-1]
-          exps = replicate n ebody
-          unrolled = zipWith (\curr xe -> substExp [] [(nm, eVal (expLoc e) tint (vint curr))] xe) idxs exps
-      in case unrolled of
-           [] -> return $ eVal (expLoc e) TUnit VUnit
-           xs -> rewrite $ mk_eseq_many xs
-  | otherwise
-   -> return e
-  where
-    mk_eseq_many :: [Exp] -> Exp
-    mk_eseq_many []     = error "for_unroll_step: can't happen!"
-    mk_eseq_many [x]    = x
-    mk_eseq_many (x:xs) = eSeq (expLoc x) x (mk_eseq_many xs)
 
 
 
