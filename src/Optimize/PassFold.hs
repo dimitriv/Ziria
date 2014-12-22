@@ -461,9 +461,9 @@ passTimesUnroll = TypedCompPass $ \cloc comp -> do
 
     case unComp comp of
       Times ui e elen i c
-       | EVal _ (VInt n) <- unExp elen
-       , n > 0
-       , EVal valTy (VInt 0) <- unExp e
+       | EVal valTy (VInt 0) <- unExp e
+       , EVal _     (VInt n) <- unExp elen
+       , n > 0 -- NOTE: We don't unroll even if explicitly requested
        , (n < 3 && ui == AutoUnroll) || (ui == Unroll)
 -- BOZIDAR: this will currently fail perf test for TX/test_encoding_34
 --         , ui == Unroll -- || (n < 3 && n > 0 && ui == AutoUnroll)
@@ -782,11 +782,11 @@ passForUnroll = TypedExpPass $ \eloc e -> do
         mk_eseq_many (x:xs) = eSeq (expLoc x) x (mk_eseq_many xs)
 
     if | EFor ui nm estart elen ebody <- unExp e
-         , EVal _ (VInt 0) <- unExp estart
-         , EVal _ (VInt n) <- unExp elen
+         , EVal valTy (VInt 0) <- unExp estart
+         , EVal _     (VInt n) <- unExp elen
          , (n < 8 && n > 0 && ui == AutoUnroll) || ui == Unroll
         -> do
-          let subst i' = substExp [] [(nm, eVal eloc tint (vint i'))] ebody
+          let subst i' = substExp [] [(nm, eVal eloc valTy (vint i'))] ebody
               unrolled = map subst [0..n-1]
           rewrite $ mk_eseq_many unrolled
 

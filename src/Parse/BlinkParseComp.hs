@@ -190,8 +190,8 @@ opAlwaysPipeline = mkParInfo (AlwaysPipeline 0 0) <$ reservedOp "|>>>|"
 
 -- > ("unroll" | "nounroll")? "times" <expr>
 timesPref :: BlinkParser (UnrollInfo, SrcExp, SrcExp, GName SrcTy)
-timesPref =
-    (withPos mkTimes <*> parseFor (reserved "times") <*> parseExpr) <?> "times"
+timesPref = try
+    ((withPos mkTimes <*> parseFor (reserved "times") <*> parseExpr) <?> "times")
   where
     -- NOTE: It doesn't matter that we only have 32-bit iterators here, since
     -- in a 'times' loop the code doesn't get access to the iterator anyway,
@@ -202,9 +202,9 @@ timesPref =
 
 -- > ("unroll" | "nounroll")? "for" <var-bind> "in" "[" <interval> "]"
 forPref :: BlinkParser (UnrollInfo, SrcExp, SrcExp, GName SrcTy)
-forPref =
-    (withPos mkFor <*> parseFor (reserved "for") <*> parseVarBind
-                   <* reserved "in" <*> brackets genIntervalParser) <?> "for"
+forPref = try
+    ((withPos mkFor <*> parseFor (reserved "for") <*> parseVarBind
+                    <* reserved "in" <*> brackets genIntervalParser) <?> "for")
   where
     mkFor _p ui k (estart, elen) = (ui, estart,elen,k)
 
