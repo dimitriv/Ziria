@@ -156,7 +156,7 @@ parseTerm :: BlinkParser SrcExp
 parseTerm = choice
     [ parseUnit mkUnit
     , parens parseExpr
-    , eLetDecl <$> parseELetDecl <* reserved "in" <*> parseExpr
+    , eLetDecl <$> parseELetDecl <* reserved "in" <*> parseExprOrStmts
     , withPos eIf <* reserved "if"   <*> parseExpr
                   <* reserved "then" <*> parseExpr
                   <* reserved "else" <*> parseExpr
@@ -359,6 +359,24 @@ parseStmtBlock = choice
   [ braces parseStmts
   , parseStmtExp'
   ] <?> "statement block"
+
+-- | Expression-or-block
+--
+-- In the expression language we make a distinction between expressions proper
+-- (no side effects) and statements. This distinction is there for programmer
+-- clarity only, it is not preserved internally; for instance, `PassFold` will
+-- create ASTs that cannot be written in the surface syntax.
+--
+-- However, the expression language does allow for the declaration of mutable
+-- variables even inside expressions; it is somewhat strange to allow this but
+-- not to allow side effects in the RHS of these bindings. Hence, whenever we
+-- have an "in" inside expressions, we follow by an `parseExprOrStmts`: either
+-- an expression (without side effects), or a statement block inside braces.
+parseExprOrStmts :: BlinkParser SrcExp
+parseExprOrStmts = choice
+  [ braces parseStmts
+  , parseExpr
+  ] <?> "expression or statement block"
 
 -- | A list of commands
 --
