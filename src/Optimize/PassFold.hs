@@ -17,7 +17,7 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall -Wwarn #-}
-{-# LANGUAGE ScopedTypeVariables, RecordWildCards, GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes #-}
+{-# LANGUAGE ScopedTypeVariables, RecordWildCards, GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes, DeriveGeneric #-}
 module PassFold (runFold, elimMitigsIO) where
 
 import Prelude hiding (exp)
@@ -27,10 +27,12 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Data.Maybe (isJust)
 import Data.Monoid
+import GHC.Generics
 import System.CPUTime
 import Text.Parsec.Pos (SourcePos)
 import Text.PrettyPrint.HughesPJ
 import Text.Printf
+import Text.Show.Pretty (PrettyVal)
 import qualified Data.Map as Map
 import qualified Data.Set as S
 
@@ -263,9 +265,9 @@ foldExpPasses flags
   | isDynFlagSet flags NoFold || isDynFlagSet flags NoExpFold
   = []
   | otherwise
-  = [ ("for-unroll"   , passForUnroll   )
+  = [ ("for-unroll"   , passForUnroll  )
     , ("exp-inlining" , passExpInlining)
-    , ("asgn-letref"  , asgn_letref_step  )
+    , ("asgn-letref"  , passAsgnLetRef )
     , ("exp-let-push" , exp_let_push_step )
     , ("rest-chain"   , rest_chain        )
     ]
@@ -774,6 +776,7 @@ passElimAutomappedMitigs = TypedCompPass $ \_cloc c -> if
   Expression passes
 -------------------------------------------------------------------------------}
 
+-- | Loop unrolling
 passForUnroll :: TypedExpPass
 passForUnroll = TypedExpPass $ \eloc e -> do
     let mk_eseq_many :: [Exp] -> Exp
@@ -793,6 +796,7 @@ passForUnroll = TypedExpPass $ \eloc e -> do
        | otherwise
         -> return e
 
+-- | Inline let bindings
 passExpInlining :: TypedExpPass
 passExpInlining = TypedExpPass $ \eloc e -> do
   fgs <- getDynFlags
@@ -823,6 +827,84 @@ passExpInlining = TypedExpPass $ \eloc e -> do
 
      | otherwise
       -> return e
+
+-- | If we have an assignment to a fresh array variable @y@ to a slice of an
+-- array @x@, we can instead do all operations on @x@ directly.
+--
+-- NOTE: This will create assignment nodes in the AST that have array-reads
+-- as left-hand sides; for instance,
+--
+-- > x[2,3] := var y : arr[3] int in { y := {11, 12, 13} ; return y };
+--
+-- will result in an assignment
+--
+-- > x[2,3] := {11, 12, 13}
+--
+-- which is NOT an array assignment, but rather a normal assignment with an
+-- array read as the LHS. Similarly,
+--
+-- > x[2,3] := var y : arr[3] int in { y[0] := 11 ; y[1] := 12 ; y[2] := 13 ; return y };
+--
+-- will result in assignments
+--
+-- > x[2,3][0] := 11
+-- > x[2,3][1] := 12
+-- > x[2,3][2] := 13
+--
+-- This seems to cause no trouble in the code generator at the moment, but
+-- that's a little surprising. Have added the above examples as test cases
+-- in tests/backend.
+passAsgnLetRef :: TypedExpPass
+passAsgnLetRef = TypedExpPass $ \eloc exp -> if
+  | EArrWrite e0 estart elen erhs <- unExp exp
+    , TArray _ ty <- ctExp e0
+    , not (ty == TBit)
+     -- It has to be LILength so we can just take a pointer
+    , LILength n <- elen
+    , EVar x <- unExp e0
+     -- Just a simple expression with no side-effects
+    , not (mutates_state estart)
+    , Just (y, residual_erhs) <- returns_letref_var erhs
+   -> do
+     let exp' = substExp [] [(y, eArrRead (expLoc exp) e0 estart elen)] residual_erhs
+
+     logStep "asgn-letref" eloc
+       [step| x[estart, n] := var y in { ... y ... ; return y }
+          ~~> { ... x[estart, n] ... } |]
+
+     rewrite exp'
+  | otherwise
+   ->
+     return exp
+  where
+    returns_letref_var :: Exp -> Maybe (GName Ty, Exp)
+    returns_letref_var = go []
+
+    go :: [GName Ty] -> Exp -> Maybe (GName Ty, Exp)
+    go letrefs e =
+       case unExp e of
+          EVar v ->
+            if v `elem` letrefs
+              then Just (v, eVal loc TUnit VUnit)
+              else Nothing
+
+          ELet y fi e1 e2 -> do
+            (w, e2') <- go letrefs e2
+            return (w, eLet loc y fi e1 e2')
+
+          ELetRef y Nothing e2 -> do
+            (w, e2') <- go (y:letrefs) e2
+            if w == y
+              then return (w, e2')
+              else return (w, eLetRef loc y Nothing e2')
+
+          ESeq e1 e2 -> do
+            (w, e2') <- go letrefs e2
+            return (w, eSeq loc e1 e2')
+
+          _ -> Nothing
+       where
+         loc = expLoc e
 
 {-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
@@ -987,49 +1069,6 @@ exp_let_push_step = TypedExpPass $ \_ e -> if
 
 
 
-asgn_letref_step :: TypedExpPass
-asgn_letref_step = TypedExpPass $ \_ exp -> if
-  | EArrWrite e0 estart elen erhs <- unExp exp
-    , TArray _ ty <- ctExp e0
-    , not (ty == TBit)
-     -- It has to be LILength so we can just take a pointer
-    , LILength _ <- elen
-    , EVar _ <- unExp e0
-     -- Just a simple expression with no side-effects
-    , not (mutates_state estart)
-    , Just (y, residual_erhs) <- returns_letref_var erhs
-   -> rewrite $ substExp [] [(y, eArrRead (expLoc exp) e0 estart elen)] residual_erhs
-  | otherwise
-   -> return exp
-  where
-    returns_letref_var :: Exp -> Maybe (GName Ty, Exp)
-    returns_letref_var = go []
-
-    go :: [GName Ty] -> Exp -> Maybe (GName Ty, Exp)
-    go letrefs e
-     = let loc = expLoc e
-       in
-       case unExp e of
-          EVar v ->
-            if v `elem` letrefs
-              then Just (v, eVal loc TUnit VUnit)
-              else Nothing
-
-          ELet y fi e1 e2 -> do
-            (w, e2') <- go letrefs e2
-            return (w, eLet loc y fi e1 e2')
-
-          ELetRef y Nothing e2 -> do
-            (w, e2') <- go (y:letrefs) e2
-            if w == y
-              then return (w, e2')
-              else return (w, eLetRef loc y Nothing e2')
-
-          ESeq e1 e2 -> do
-            (w, e2') <- go letrefs e2
-            return (w, eSeq loc e1 e2')
-
-          _ -> Nothing
 
 -- NOTE: There was a (seemingly outdated) comment above `proj_inline_step` that
 --
@@ -1441,6 +1480,7 @@ fromSimplCallParam nm =
 
 
 newtype LetEs = LetEs [(Maybe SourcePos, GName Ty, ForceInline, Exp)]
+  deriving (Generic)
 
 -- | Collect multiple top-level consecutive `LetE` bindings
 --
@@ -1464,6 +1504,7 @@ insertELetEs = \(LetEs ls) -> go ls
     go ((loc, nm, fi, e):ls) e' = eLet loc nm fi e (go ls e')
 
 newtype LetERefs = LetERefs [MutVar]
+  deriving (Generic)
 
 -- | Collect multiple top-level consecutive `LetERef` bindings
 --
@@ -1634,6 +1675,9 @@ inline_comp_fun (nm,params,cbody) c = do
 
   Useful for debugging
 -------------------------------------------------------------------------------}
+
+instance PrettyVal LetEs
+instance PrettyVal LetERefs
 
 instance Outputable LetEs where
   ppr (LetEs ls) = hsep (punctuate comma (map aux ls))
