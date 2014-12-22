@@ -1,0 +1,7 @@
+fun f(a : int) {
+  let x = 5;
+  let y = - a;
+  return y; 
+}
+
+let comp main = read[int] >>> map f >>> write[int]

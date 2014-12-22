@@ -263,11 +263,11 @@ foldExpPasses flags
   | isDynFlagSet flags NoFold || isDynFlagSet flags NoExpFold
   = []
   | otherwise
-  = [ ("for-unroll"         , passForUnroll   )
-    , ("exp-inlining-steps" , exp_inlining_steps)
-    , ("asgn-letref-step"   , asgn_letref_step  )
-    , ("exp_let_push_step"  , exp_let_push_step )
-    , ("rest-chain"         , rest_chain        )
+  = [ ("for-unroll"   , passForUnroll   )
+    , ("exp-inlining" , passExpInlining)
+    , ("asgn-letref"  , asgn_letref_step  )
+    , ("exp-let-push" , exp_let_push_step )
+    , ("rest-chain"   , rest_chain        )
     ]
 
 {-------------------------------------------------------------------------------
@@ -793,6 +793,37 @@ passForUnroll = TypedExpPass $ \eloc e -> do
        | otherwise
         -> return e
 
+passExpInlining :: TypedExpPass
+passExpInlining = TypedExpPass $ \eloc e -> do
+  fgs <- getDynFlags
+
+  if | ELet nm ForceInline e1 e2 <- unExp e
+      -> rewrite $ substExp [] [(nm,e1)] e2 -- Forced Inline!
+
+     | ELet _nm NoInline _e1 _e2 <- unExp e
+      -> return e
+
+     | ELet nm AutoInline e1 e2 <- unExp e
+      ->
+       if nm `S.notMember` exprFVs e2
+         then if not (mutates_state e1)
+                then do
+                  logStep "exp-inlining/unused" eloc
+                    [step| Eliminating binding for nm |]
+                  rewrite e2
+                else
+                  return e
+         else if is_simpl_expr e1 && not (isDynFlagSet fgs NoExpFold)
+                then do
+                  logStep "exp-inlining/subst" eloc
+                    [step| Inlining binding for nm |]
+                  rewrite $ substExp [] [(nm,e1)] e2
+                else
+                  return e
+
+     | otherwise
+      -> return e
+
 {-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
 -------------------------------------------------------------------------------}
@@ -939,28 +970,6 @@ arrinit_step = TypedExpPass $ \_ e1 -> case evalArrInt e1 of
     Nothing   -> return e1
     Just vals -> rewrite $ eValArr (expLoc e1) (ctExp e1) (map VInt vals)
 
-exp_inlining_steps :: TypedExpPass
-exp_inlining_steps = TypedExpPass $ \_ e -> do
-  fgs <- getDynFlags
-
-  if | ELet nm ForceInline e1 e2 <- unExp e
-      -> rewrite $ substExp [] [(nm,e1)] e2 -- Forced Inline!
-
-     | ELet _nm NoInline _e1 _e2 <- unExp e
-      -> return e
-
-     | ELet nm AutoInline e1 e2 <- unExp e
-       , let fvs = exprFVs e2
-       , let b = nm `S.member` fvs
-      -> if not b then
-            if not (mutates_state e) then rewrite e2
-            else return e
-         else if is_simpl_expr e1 && not (isDynFlagSet fgs NoExpFold)
-         then rewrite $ substExp [] [(nm,e1)] e2
-         else return e
-
-     | otherwise
-      -> return e
 
 exp_let_push_step :: TypedExpPass
 exp_let_push_step = TypedExpPass $ \_ e -> if
