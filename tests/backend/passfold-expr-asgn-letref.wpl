@@ -1,0 +1,21 @@
+fun f1() {
+  var x : arr[10] int; 
+  x[2,3] := var y : arr[3] int in { y := {11, 12, 13} ; return y };
+  return x[4];
+}
+
+fun f2() {
+  var x : arr[10] int; 
+  x[2,3] := var y : arr[3] int in { y[0] := 11 ; y[1] := 12 ; y[2] := 13 ; return y };
+  return x[4];
+}
+
+fun comp test() {
+  a1 <- take;
+  emit a1 + f1(); 
+  
+  a2 <- take;
+  emit a2 + f2(); 
+}
+
+let comp main = read[int] >>> test() >>> write[int];
