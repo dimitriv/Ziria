@@ -344,16 +344,23 @@ defaultTy p ty def = do
 -- | Zonk all type variables and default the type of `EError` to `TUnit` when
 -- it's still a type variable.
 defaultExpr :: Exp -> TcM Exp
-defaultExpr = mapExpM zonk return go
+defaultExpr = mapExpM goTy return goExp
   where
-    go :: Exp -> TcM Exp
-    go e
+    goExp :: Exp -> TcM Exp
+    goExp e
       | EError ty str <- unExp e
       = do { ty' <- defaultTy (expLoc e) ty TUnit
            ; return $ eError (expLoc e) ty' str
            }
       | otherwise
       = return e
+
+    goTy :: Ty -> TcM Ty
+    goTy ty = do
+      ty' <- zonk ty
+      case ty' of
+        TInt (BWUnknown _) -> do unify Nothing ty' tint32 ; return tint32
+        _                  -> return ty'
 
 defaultComp :: Comp -> TcM Comp
 defaultComp = mapCompM zonk zonk return return defaultExpr return
