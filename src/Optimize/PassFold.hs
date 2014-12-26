@@ -25,6 +25,7 @@ import Control.Applicative
 import Control.Arrow (second)
 import Control.Monad.Reader
 import Control.Monad.State
+import Data.List
 import Data.Maybe (isJust)
 import Data.Monoid
 import GHC.Generics
@@ -41,6 +42,7 @@ import AstExpr
 import AstUnlabelled
 import CtExpr ( ctExp  )
 import Eval
+import Interpreter
 import Opts
 import Outputable
 import PassFoldDebug
@@ -197,16 +199,12 @@ runPasses (sym, flags) = go False
     go b mp [] comp =
       return (b, comp, mp)
     go b mp ((pn,p):ps) comp = do
---    printf "Pass: %10s" pn
       ((comp', rewritten), time) <- measure $ runRwM (p comp) (sym, flags)
       let mp' = incInvokes mp time pn
       case rewritten of
         NotRewritten -> do
-          -- printf "... not rewritten :-( \n"
-          go b mp' ps comp
+          go b mp' ps comp'
         Rewritten -> do
-          -- printf "... rewritten     :-) \n"
-          -- ; printf "comp = %s\n" (show comp)
           go True (incRewrites mp' time pn) ((pn,p):ps) comp'
 
 -- | Perform folding (run all standard passes)
@@ -238,7 +236,8 @@ foldCompPasses flags
   = []
   | otherwise
   = -- Standard good things
-    [ ("fold"          , passFold        )
+    [ ("interpret"     , passInterpret )
+    , ("fold"          , passFold        )
     , ("purify"        , passPurify      )
     , ("purify-letref" , passPurifyLetRef)
     , ("elim-times"    , passElimTimes   )
@@ -771,6 +770,28 @@ passElimAutomappedMitigs = TypedCompPass $ \_cloc c -> if
 
   | otherwise
    -> return c
+
+-- Interpret any let expressions explicitly marked as such
+--
+-- TODO: Instead of explicitly marking these, we may want to infer when we
+-- want to do this.
+passInterpret :: TypedCompPass
+passInterpret = TypedCompPass $ \cloc c -> if
+    | LetE nm fi e1 e2 <- unComp c
+      , "eval_" `isPrefixOf` name nm
+     -> do
+      let (me1', prints) = evaluate e1
+      unless (null prints) $ logStep "interpret: debug prints" cloc prints
+      case me1' of
+        Right e1' -> do
+          logStep "interpret" cloc [step| e1 ~~> e1' |]
+          -- We use 'return' rather than 'rewrite' so that we don't attempt to
+          -- write the binding again
+          return $ cLetE cloc nm fi e1' e2
+        Left err ->
+          fail $ "Interpreter error: " ++ err
+    | otherwise
+     -> return c
 
 {-------------------------------------------------------------------------------
   Expression passes

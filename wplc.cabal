@@ -51,7 +51,8 @@ Executable wplc
     pretty-show            >= 1.6   && < 1.7,
     syb                    >= 0.4   && < 0.5,
     -- template-haskell is bundled with ghc; don't insist on a version
-    template-haskell
+    template-haskell,
+    ghc-prim
 
   -- Process 1.1 doesn't build with GHC 7.8
   if impl(ghc >= 7.8)
