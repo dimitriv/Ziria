@@ -383,7 +383,7 @@ assign p lhs rhs = do
 
 -- | The runtime currently leaves the initial value for unassigned variables
 -- unspecified (https://github.com/dimitriv/Ziria/issues/79). This means that
--- we are free to specifiy whatever we wish in the interpret -- here we pick
+-- we are free to specify whatever we wish in the interpret -- here we pick
 -- sensible defaults.
 initialExp :: Maybe SourcePos -> Ty -> Exp
 initialExp p ty =
