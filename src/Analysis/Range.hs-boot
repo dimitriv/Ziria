@@ -27,3 +27,5 @@ data Range
 instance Typeable Range
 instance Data Range
 instance PrettyVal Range
+instance Eq Range
+instance Ord Range

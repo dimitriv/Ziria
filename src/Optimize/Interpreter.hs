@@ -32,8 +32,14 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Interpreter (
+    -- * Interpretations of expressions
     Prints
   , evaluate
+  , provable
+  , implies
+    -- ** Convenience
+  , mkNotExp
+  , mkOrExp
   ) where
 
 import Control.Applicative
@@ -52,6 +58,7 @@ import qualified Data.Map as Map
 
 import AstExpr
 import AstUnlabelled
+import CtExpr
 
 {-------------------------------------------------------------------------------
   Top-level API
@@ -59,26 +66,72 @@ import AstUnlabelled
 
 type Prints = String
 
+-- | (Partial) evaluation of an expression
 evaluate :: Exp -> (Either String Exp, Prints)
-evaluate e = head $ runEval cfg (interpret e)
+evaluate e = head $ evalEval (interpret e) cfg initState
   where
-     cfg = EvalConfig { evalPartial = True }
+     cfg = EvalConfig {
+         evalPartial = True
+       , evalGuess   = False
+       }
+
+-- | (Full) evaluation of expressions, guessing values for boolean expressions
+approximate :: Exp -> [Exp]
+approximate e =
+    [ e' | (Right e', _prints) <- evalEval (interpret e) cfg initState ]
+  where
+    cfg = EvalConfig {
+        evalPartial = False
+      , evalGuess   = True
+      }
+
+-- | Satisfiability check for expressions of type Bool
+--
+-- NOTE: This only makes sense for expressions of type Bool and should not be
+-- called on other expressions.
+satisfiable :: Exp -> Bool
+satisfiable = any isTrue . approximate
+  where
+    isTrue :: Exp -> Bool
+    isTrue e | EVal TBool (VBool True) <- unExp e = True
+    isTrue _                                      = False
+
+-- | Provability of boolean expressions
+--
+-- NOTE: This only makes sense for expressions of type Bool and should not be
+-- called on other expressions.
+provable :: Exp -> Bool
+provable = not . satisfiable . mkNotExp
+
+-- | Does one expression imply another?
+--
+-- NOTE: This only makes sense for expressions of type Bool and should not be
+-- called on other expressions.
+implies :: Exp -> Exp -> Bool
+implies a b = provable (mkNotExp a `mkOrExp` b)
 
 {-------------------------------------------------------------------------------
   Interpreter monad
 -------------------------------------------------------------------------------}
 
 data EvalState = EvalState {
+    -- Locally bound variables (let or letref)
     evalMemory :: Map String Exp
+
+    -- Guesses made during satisfiability checking
+  , evalGuesses :: Map Exp Exp
   }
+  deriving Show
 
 initState :: EvalState
 initState = EvalState {
-    evalMemory = Map.empty
+    evalMemory  = Map.empty
+  , evalGuesses = Map.empty
   }
 
 data EvalConfig = EvalConfig {
     evalPartial :: Bool
+  , evalGuess   :: Bool
   }
 
 -- | The evaluator monad
@@ -90,18 +143,29 @@ data EvalConfig = EvalConfig {
 -- 3. State: Locally bound vars and writes to locally bound vars
 -- 4. WriterT: Any debug prints executed by the program
 -- 5. []: Non-determinism arising from guessing values
-newtype Eval a = Eval (ErrorT String (RWST EvalConfig Prints EvalState []) a)
+newtype Eval a = Eval {
+      unEval :: ErrorT String (RWST EvalConfig Prints EvalState []) a
+    }
   deriving ( Functor
            , Applicative
            , Monad
            , MonadError String
            )
 
--- | Run the interpreter
---
--- If we are doing partial evaluation the list is guaranteed to be a singleton.
-runEval :: EvalConfig -> Eval a -> [(Either String a, Prints)]
-runEval cfg (Eval act) = evalRWST (runErrorT act) cfg initState
+-- We don't want the Alternative instance from ErrorT
+-- (in fact, I don't think ErrorT should even introduce a MonadPlus instance..)
+instance Alternative Eval where
+  empty   = mkEval $ \_cfg _st -> []
+  f <|> g = mkEval $ \cfg st -> runEval f cfg st <|> runEval g cfg st
+
+runEval :: Eval a -> EvalConfig -> EvalState -> [(Either String a, EvalState, Prints)]
+runEval = runRWST . runErrorT . unEval
+
+evalEval :: Eval a -> EvalConfig -> EvalState -> [(Either String a, Prints)]
+evalEval = evalRWST . runErrorT . unEval
+
+mkEval :: (EvalConfig -> EvalState -> [(Either String a, EvalState, Prints)]) -> Eval a
+mkEval = Eval . ErrorT . RWST
 
 readVar :: String -> Eval (Maybe Exp)
 readVar x = Eval $ gets $ Map.lookup x . evalMemory
@@ -123,20 +187,29 @@ writeVar x v = Eval $ do
       (Nothing, _)   -> throwError $ "Variable " ++ x ++ " not in scope"
 
 partiallyEvaluated :: a -> Eval a
-partiallyEvaluated x = Eval $ do
-  partial <- asks evalPartial
+partiallyEvaluated x = do
+  partial <- Eval $ asks evalPartial
   if partial then return x
-             else mzero
+             else empty
 
 cannotEvaluate :: String -> Eval a
-cannotEvaluate msg = Eval $ do
-  partial <- asks evalPartial
+cannotEvaluate msg = do
+  partial <- Eval $ asks evalPartial
   if partial then throwError msg
-             else mzero
+             else empty
 
 logPrint :: Bool -> String -> Eval ()
 logPrint True  str = Eval $ tell (str ++ "\n")
 logPrint False str = Eval $ tell str
+
+-- | Run the guess algorithm if we could not fully evaluate the expression.
+--
+-- This does NOT execute the error handler for errors thrown by throwError.
+guessIfUnevaluated :: (Exp -> Eval Exp) -> (Exp -> Eval Exp)
+guessIfUnevaluated f e = mkEval $ \cfg st ->
+  case runEval (f e) cfg st of
+    [] | evalGuess cfg -> runEval (guess e) cfg st
+    result             -> result
 
 {-------------------------------------------------------------------------------
   The interpreter proper
@@ -145,7 +218,7 @@ logPrint False str = Eval $ tell str
 -- | Interpreter for the expression language
 
 interpret :: Exp -> Eval Exp
-interpret e = go (unExp e)
+interpret e = guessIfUnevaluated (go . unExp) e
   where
     go :: Exp0 -> Eval Exp
 
@@ -723,3 +796,50 @@ splitListOn f = go []
     go _      []                    = Nothing
     go before (x:after) | f x       = Just (reverse before, x, after)
                         | otherwise = go (x:before) after
+
+{-------------------------------------------------------------------------------
+  Guessing (for satisfiability checking)
+-------------------------------------------------------------------------------}
+
+-- | Guess the value for expressions
+--
+-- See http://www.well-typed.com/blog/2014/12/simple-smt-solver/ for a
+-- discussion of this approach.
+guess :: Exp -> Eval Exp
+guess e = do
+  previous <- previousGuess e
+  case previous of
+    Just e' -> return e'
+    Nothing ->
+     case ctExp e of
+       TBool -> recordGuess e eTrue <|> recordGuess e eFalse
+       ty    -> cannotEvaluate $ "Cannot guess values for type " ++ pretty ty
+  where
+    eloc = expLoc e
+
+    eTrue, eFalse :: Exp
+    eTrue  = eVal eloc TBool (VBool True)
+    eFalse = eVal eloc TBool (VBool False)
+
+-- | Check if we made a previous guess
+previousGuess :: Exp -> Eval (Maybe Exp)
+previousGuess e = Eval $ gets (Map.lookup (eraseLoc e) . evalGuesses)
+
+-- | Record a guess
+--
+-- Returns the guess that was recorded
+recordGuess :: Exp -> Exp -> Eval Exp
+recordGuess e e' = Eval $ do
+  st <- get
+  put $ st { evalGuesses = Map.insert (eraseLoc e) e' (evalGuesses st) }
+  return e'
+
+{-------------------------------------------------------------------------------
+  Constructing expressions (for convenience)
+-------------------------------------------------------------------------------}
+
+mkNotExp :: Exp -> Exp
+mkNotExp e = eUnOp (expLoc e) Not e
+
+mkOrExp :: Exp -> Exp -> Exp
+mkOrExp e e' = eBinOp (expLoc e) Or e e'

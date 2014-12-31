@@ -664,24 +664,23 @@ passIfDead :: TypedCompPass
 passIfDead = TypedCompPass $ \cloc comp -> do
     case unComp comp of
       Branch e c1 c2
-        | Just b <- evalBool e
-        -> do
-          if b then do logStep "ifdead/constant" cloc
-                         [step| if true then c else .. ~~> c |]
-                       rewrite $ c1
-               else do logStep "ifdead/constant" cloc
-                         [step| if false then .. else c ~~> c |]
-                       rewrite $ c2
-
+        | provable e -> do
+           logStep "ifdead/provable/true" cloc
+             [step| if true then c else .. ~~> c |]
+           rewrite $ c1
+        | provable (mkNotExp e) -> do
+           logStep "ifdead/provable/false" cloc
+             [step| if false then .. else c ~~> c |]
+           rewrite $ c2
       Branch e (MkComp (Branch e' c1 c2) _ ()) c3
-        | e `impliesBool` e'
+        | e `implies` e'
         -> do
           logStep "ifdead/left/implies" cloc
             [step| if e then {if e' then c else c'} else c''
                ~~> if e c else c'' |]
           rewrite $ cBranch cloc e c1 c3
 
-        | e `impliesBoolNeg` e'
+        | e `implies` mkNotExp e'
         -> do
           logStep "ifdead/left/implies-neg" cloc
             [step| if e then {if e' then c else c'} else c''
@@ -689,14 +688,14 @@ passIfDead = TypedCompPass $ \cloc comp -> do
           rewrite $ cBranch cloc e c2 c3
 
       Branch e c1 (MkComp (Branch e' c2 c3) _ ())
-        | eneg e `impliesBool` e'
+        | mkNotExp e `implies` e'
         -> do
           logStep "ifdead/right/implies" cloc
             [step| if e then c else {if e' then c' else c''}
                ~~> if e then c else c' |]
           rewrite $ cBranch cloc e c1 c2
 
-        | eneg e `impliesBoolNeg` e'
+        | mkNotExp e `implies` mkNotExp e'
         -> do
           logStep "ifdead/right/implies-neg" cloc
             [step| if e then c else {if e' then c' else c''}
@@ -704,23 +703,6 @@ passIfDead = TypedCompPass $ \cloc comp -> do
           rewrite $ cBranch cloc e c1 c3
 
       _otherwise -> return comp
-  where
-    eneg :: Exp -> Exp
-    eneg e = eUnOp (expLoc e) Neg e
-
-    impliesBool :: Exp -> Exp -> Bool
-    impliesBool (MkExp (EBinOp Eq e  (MkExp (EVal _ (VInt j )) _ ())) _ ())
-                (MkExp (EBinOp Eq e' (MkExp (EVal _ (VInt j')) _ ())) _ ())
-       | e `expEq` e'
-       = j == j'
-    impliesBool _ _ = False
-
-    impliesBoolNeg :: Exp -> Exp -> Bool
-    impliesBoolNeg (MkExp (EBinOp Eq e  (MkExp (EVal _ (VInt j )) _ ())) _ ())
-                   (MkExp (EBinOp Eq e' (MkExp (EVal _ (VInt j')) _ ())) _ ())
-       | e `expEq` e'
-       = j /= j'
-    impliesBoolNeg _ _ = False
 
 -- | Translate computation-level conditional to expression-level conditional
 passIfReturn :: TypedCompPass

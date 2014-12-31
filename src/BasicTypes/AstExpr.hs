@@ -173,7 +173,7 @@ data Ty where
 
   TVoid  :: Ty
 
-  deriving (Generic, Typeable, Data, Eq)
+  deriving (Generic, Typeable, Data, Eq, Ord)
 
 data NumExpr where
   Literal :: Int -> NumExpr
@@ -181,7 +181,7 @@ data NumExpr where
   -- | NVar: Length to be inferred from the context (or polymorphic)
   NVar :: LenVar -> NumExpr
 
-  deriving (Generic, Typeable, Data, Eq)
+  deriving (Generic, Typeable, Data, Eq, Ord)
 
 data BitWidth
   = BW8
@@ -189,7 +189,7 @@ data BitWidth
   | BW32
   | BW64
   | BWUnknown BWVar -- TODO: Why is this not a GName t instead of a BWVar?
-  deriving (Generic, Typeable, Data, Eq, Show)
+  deriving (Generic, Typeable, Data, Eq, Ord, Show)
 
 data BufTy =
     -- | Internal buffer (for parallelization)
@@ -200,7 +200,7 @@ data BufTy =
     -- NOTE: We record the type that the program is reading/writing, _NOT_
     -- its base type (in previous versions we recorded the base type here).
   | ExtBuf { bufty_ty :: Ty }
-  deriving (Generic, Typeable, Data, Eq)
+  deriving (Generic, Typeable, Data, Eq, Ord)
 
 {-------------------------------------------------------------------------------
   Expressions (parameterized by the (Haskell) type of (Ziria) types
@@ -213,7 +213,7 @@ data GUnOp t =
   | BwNeg
   | Cast t   -- Cast to this target type
   | ALength
-  deriving (Generic, Typeable, Data, Eq)
+  deriving (Generic, Typeable, Data, Eq, Ord)
 
 data BinOp =
   -- arithmetic operators
@@ -238,7 +238,7 @@ data BinOp =
   | Geq
   | And
   | Or
-  deriving (Generic, Typeable, Data, Eq, Show)
+  deriving (Generic, Typeable, Data, Show, Eq, Ord)
 
 data Val where
   VBit    :: Bool    -> Val
@@ -247,19 +247,19 @@ data Val where
   VBool   :: Bool    -> Val
   VString :: String  -> Val
   VUnit   :: Val
-  deriving (Generic, Typeable, Data, Show, Eq)
+  deriving (Generic, Typeable, Data, Show, Eq, Ord)
 
 data LengthInfo
      = LISingleton
      | LILength Int -- Invariant: > 0
      | LIMeta String -- For meta-variables in quasi-quotes only
-  deriving (Generic, Typeable, Data, Eq)
+  deriving (Generic, Typeable, Data, Eq, Ord)
 
 data UnrollInfo
   = Unroll        -- force unroll
   | NoUnroll      -- force no-unroll
   | AutoUnroll    -- do whatever the compiler would do (no annotation)
-  deriving (Generic, Typeable, Data, Eq)
+  deriving (Generic, Typeable, Data, Eq, Ord)
 
 -- If true, the binding should be forced to be inlined.
 -- This is used by e.g. the vectorizer to bind inlinable
@@ -269,7 +269,7 @@ data ForceInline
   = ForceInline   -- Always inline
   | NoInline      -- Never inline
   | AutoInline    -- Let the compiler decide
-  deriving (Generic, Typeable, Data)
+  deriving (Generic, Typeable, Data, Eq, Ord)
 
 data GExp0 t a where
   -- | A single value
@@ -360,13 +360,13 @@ data GExp0 t a where
 
   -- | Project field out of a struct
   EProj   :: GExp t a -> FldName -> GExp0 t a
-  deriving (Generic, Typeable, Data)
+  deriving (Generic, Typeable, Data, Eq, Ord)
 
 data GExp t a
   = MkExp { unExp :: GExp0 t a
           , expLoc :: Maybe SourcePos
           , info :: a }
-  deriving (Generic, Typeable, Data)
+  deriving (Generic, Typeable, Data, Eq, Ord)
 
 -- Structure definitions
 data GStructDef t
@@ -696,6 +696,15 @@ eraseExp = mapExp id (const ()) id
 
 eraseFun :: GFun t a -> GFun t ()
 eraseFun = mapFun id (const ()) eraseExp
+
+-- | Remove all location annotations
+--
+-- This is on Exp rather than GExp because we cannot completely remove all
+-- location annotations from SrcTys
+eraseLoc :: Exp -> Exp
+eraseLoc = mapExp id -- types don't change
+                  id -- annotations don't change
+                  (\e -> e { expLoc = Nothing }) -- delete locations
 
 {-------------------------------------------------------------------------------
   Free variables

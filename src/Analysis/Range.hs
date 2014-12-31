@@ -49,7 +49,7 @@ import Utils
 -- @Range i j@ means that we know /all/ values in the range will be taken on.
 data Range = RangeTop
            | Range Integer Integer
-  deriving (Generic, Typeable, Data, Eq, Show)
+  deriving (Generic, Typeable, Data, Eq, Ord, Show)
 
 instance Num Range where
     RangeTop    + _           = RangeTop
