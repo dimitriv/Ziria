@@ -211,7 +211,7 @@ interpret e = go (unExp e)
       b' <- interpret b
       applyBinOp eloc op a' b'
 
-    -- Special case for force-inlining (TODO)
+    -- Special case for force-inlining
     --
     -- (This is necessary because if the expression has side effects we cannot
     -- evaluate it strictly when force-inlining is specified)
