@@ -68,11 +68,9 @@ evalArith e = go (unExp e)
                                  valUnOp u v1
 
     go (EArrRead arr ei LISingleton)
-     | EValArr _t vals <- unExp arr
+     | EValArr vals <- unExp arr
      = do i <- evalInt ei
-          case (vals !! fromIntegral i) of 
-            v@(VInt _) -> return v
-            _          -> Nothing
+          evalArith (vals !! fromIntegral i)
 
     go _other               = Nothing
 
@@ -138,7 +136,7 @@ evalArrInitLoop arr loop
   , k'   == k
   = let inds = [fromIntegral low .. fromIntegral low + fromIntegral siz - 1]
         loc  = expLoc loop
-        subst_idx i = substExp [] 
+        subst_idx i = substExp []
                          [(k, MkExp (EVal (nameTyp k) (VInt i)) loc ())] eval
     in forM inds $ \i -> do
          v <- evalInt $ subst_idx i
@@ -154,7 +152,7 @@ intArrayLen _ = Nothing
 
 evalBool :: TypeAnn ty => GExp ty a -> Maybe Bool
 -- A quite incomplete boolean evaluator
-evalBool e 
+evalBool e
   | (EBinOp Eq e1 e2) <- unExp e
   , Just i1 <- evalInt e1
   , Just i2 <- evalInt e2
@@ -169,4 +167,4 @@ evalBool e
   , Just b2 <- evalBool e2
   = Just (b1 && b2)
   | otherwise
-  = Nothing 
+  = Nothing

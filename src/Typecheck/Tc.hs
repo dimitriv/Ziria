@@ -163,13 +163,12 @@ tcExp expr@(MkExp exp0 loc _) =
       ty' <- tcVal val
       unify loc ty ty'
       return ty
-    go (EValArr _ []) = do
+    go (EValArr []) = do
       raiseErrNoVarCtx loc $ text "Empty array constant"
-    go (EValArr ty vals) = do
-      tys <- mapM tcVal vals
+    go (EValArr vals) = do
+      tys <- mapM tcExp vals
       unifyAll loc tys
-      void $ unifyTArray loc (Check (Literal (length vals))) (Check (head tys)) ty
-      return ty
+      return $ TArray (Literal (length vals)) (head tys)
     go (EVar x) =
       return (nameTyp x)
     go (EUnOp uop e) = do

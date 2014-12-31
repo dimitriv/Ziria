@@ -155,23 +155,22 @@ interpret e = go (unExp e)
 
     -- Arrays
 
-    go (EValArr _ _) =
-      -- TODO: EValArr really shouldn't be a value; it should take Exps as
-      -- arguments (#28, #37)
-      return e
+    go (EValArr elems) = do
+      elems' <- mapM interpret elems
+      return $ eValArr eloc elems'
     go (EArrRead arr ix li) = do
       arr' <- interpret arr
       ix'  <- interpret ix
       case (unExp arr', unExp ix', li) of
         -- Both array and index in normal form: array index
-        (EValArr (TArray _ ty) vs, EVal _ (VInt i), LISingleton) ->
+        (EValArr vs, EVal _ (VInt i), LISingleton) ->
           case splitListAt i vs of
-            Just (_, y, _) -> return $ eVal eloc ty y
+            Just (_, y, _) -> return y
             Nothing        -> throwError $ "Out of bounds"
         -- Both array and index in normal form: array slice
-        (EValArr (TArray _ ty) vs, EVal _ (VInt i), LILength len) ->
+        (EValArr vs, EVal _ (VInt i), LILength len) ->
           case sliceListAt i len vs of
-            Just (_, ys, _) -> return $ eValArr eloc (TArray (Literal len) ty) ys
+            Just (_, ys, _) -> return $ eValArr eloc ys
             Nothing         -> throwError $ "Out of bounds"
         -- Not in normal form. Leave uninterpreted
         _ ->
@@ -332,14 +331,11 @@ assign p lhs rhs = do
     updateArray f ix arr =
         case (unExp arr, unExp ix) of
           -- Array and index in normal form
-          (EValArr ty@(TArray _ ty') vs, EVal _ (VInt i)) ->
+          (EValArr vs, EVal _ (VInt i)) ->
             case splitListAt i vs of
               Just (xs, y, zs) -> do
-                let val = eVal eloc ty' y
-                val' <- f val
-                case unExp val' of
-                  EVal _ y' -> return $ eValArr eloc ty (xs ++ [y'] ++ zs)
-                  _         -> cannotEvaluate "Due to #28, #37 cannot construct array with non-value elements"
+                y' <- f y
+                return $ eValArr eloc (xs ++ [y'] ++ zs)
               Nothing ->
                 throwError "Out of bounds"
           -- Not in normal form
@@ -352,14 +348,14 @@ assign p lhs rhs = do
     updateSlice f ix len arr =
         case (unExp arr, unExp ix) of
           -- Array and index in normal form
-          (EValArr ty@(TArray _ ty') vs, EVal _ (VInt i)) ->
+          (EValArr vs, EVal _ (VInt i)) ->
             case sliceListAt i len vs of
               Just (xs, ys, zs) -> do
-                let slice = eValArr eloc (TArray (Literal len) ty') ys
+                let slice = eValArr eloc ys
                 slice' <- f slice
                 case unExp slice' of
-                  EValArr _ ys' -> return $ eValArr eloc ty (xs ++ ys' ++ zs)
-                  _             -> error "Cannot happen"
+                  EValArr ys' -> return $ eValArr eloc (xs ++ ys' ++ zs)
+                  _           -> error "Cannot happen"
               Nothing ->
                 throwError "Out of bounds"
           -- Not in normal form
@@ -393,21 +389,18 @@ initialExp :: Maybe SourcePos -> Ty -> Exp
 initialExp p ty =
     case ty of
       TArray (NVar _)    _   -> error "initialExp: length variable"
-      TArray (Literal n) ty' -> eValArr p ty $ replicate n (initialVal ty')
+      TArray (Literal n) ty' -> eValArr p    $ replicate n (initialExp p ty')
       TStruct _ fields       -> eStruct p ty $ map initialField fields
-      _                      -> eVal p ty $ initialVal ty
+      TUnit                  -> eVal    p ty $ VUnit
+      TBit                   -> eVal    p ty $ VBit    False
+      TBool                  -> eVal    p ty $ VBool   False
+      TString                -> eVal    p ty $ VString ""
+      TDouble                -> eVal    p ty $ VDouble 0
+      (TInt _)               -> eVal    p ty $ VInt    0
+      _                      -> error $ "initialExp: unsupported " ++ pretty ty
   where
     initialField :: (FldName, Ty) -> (FldName, Exp)
     initialField (fldName, ty') = (fldName, initialExp p ty')
-
-initialVal :: Ty -> Val
-initialVal TUnit    = VUnit
-initialVal TBit     = VBit    False
-initialVal TBool    = VBool   False
-initialVal TString  = VString ""
-initialVal TDouble  = VDouble 0
-initialVal (TInt _) = VInt    0
-initialVal ty       = error $ "initialValue: unsupported " ++ pretty ty
 
 -- | Smart constructor for binary operators
 applyBinOp :: Maybe SourcePos -> BinOp -> Exp -> Exp -> Eval Exp
@@ -423,8 +416,8 @@ applyBinOp p op a b =
 applyUnOp :: Maybe SourcePos -> UnOp -> Exp -> Eval Exp
 applyUnOp p ALength a =
     case unExp a of
-      EValArr _ vals -> return $ eVal p tint32 (VInt (toInteger (length vals)))
-      _              -> partiallyEvaluated $ eUnOp p ALength a
+      EValArr vals -> return $ eVal p tint32 (VInt (toInteger (length vals)))
+      _            -> partiallyEvaluated $ eUnOp p ALength a
 applyUnOp p op a =
     let evald = do a' <- expToDyn a
                    dynToExp p $ zUnOp op `dynApply` a'

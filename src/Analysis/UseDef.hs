@@ -154,8 +154,9 @@ varUseDefs ranges = \e -> do
     go0 :: Exp0 -> UDM VarSet
     go0 (EVal _ _) =
         return mempty
-    go0 (EValArr _ _) =
-        return mempty
+    go0 (EValArr elems) = do
+        us <- mapM go elems
+        return $ mconcat us
     go0 (EVar v) = do
         insertUseFree v
         lookupVarDef v

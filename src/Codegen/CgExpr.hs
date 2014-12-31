@@ -199,7 +199,17 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
     go :: Ty -> Exp0 -> Cg C.Exp
     go t (EVal _ v) = codeGenVal v
 
-    go t (EValArr _ v) = do
+    go t (EValArr elems) = do
+        -- TODO: This is temporary. We used to support only constant arrays.
+        -- We relaxed the AST to allow for array values with non-constant
+        -- values, but have not yet updated codegen.
+        let fromVals :: [Exp] -> Cg [Val]
+            fromVals []                           = return []
+            fromVals (e:es) | EVal _ v <- unExp e = do vs' <- fromVals es
+                                                       return (v:vs')
+                            | otherwise           = fail "codeGenExp: non-value array"
+        v <- fromVals elems
+
         newName <- genSym ("__local_arr_" ++ getLnNumInStr (expLoc e0))
         -- To avoid stacks being pushed and popped
         -- we make these guys global ...

@@ -80,7 +80,7 @@ instance Outputable Val where
 instance Outputable ty => Outputable (GExp0 ty a) where
   ppr e = case e of
     EVal _ v        -> ppr v
-    EValArr _ v     -> text "{" <> pprArr v <> text "}"
+    EValArr v       -> text "{" <> pprArr v <> text "}"
     EVar x          -> ppName x
     EUnOp op e      -> ppr op <> parens (ppr e)
     EBinOp op e1 e2 -> ppr e1 <> ppr op <> ppr e2
@@ -246,7 +246,7 @@ instance Outputable ty => Outputable (GName ty) where
   Many of these are used in the Comp pretty-printer too.
 -------------------------------------------------------------------------------}
 
-pprArr :: [Val] -> Doc
+pprArr :: Outputable ty => [GExp ty a] -> Doc
 pprArr (h:[]) = ppr h
 pprArr (h:t)  = ppr h <> comma <+> pprArr t
 pprArr []     = empty

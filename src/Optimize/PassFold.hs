@@ -1070,8 +1070,12 @@ rewrite_mit_map ty1 (i1,j1) ty2 (i2,j2) (f_name, fun)
 arrinit_step :: TypedExpPass
 -- Statically initialize as many arrays as possible
 arrinit_step = TypedExpPass $ \_ e1 -> case evalArrInt e1 of
-    Nothing   -> return e1
-    Just vals -> rewrite $ eValArr (expLoc e1) (ctExp e1) (map VInt vals)
+    Nothing   ->
+      return e1
+    Just vals -> do
+      let TArray _ ty = ctExp e1
+          vInt i = eVal (expLoc e1) ty (VInt i)
+      rewrite $ eValArr (expLoc e1) (map vInt vals)
 
 
 exp_let_push_step :: TypedExpPass
@@ -1135,16 +1139,16 @@ eval_arith = TypedExpPass $ \_ e -> if
 subarr_inline_step :: TypedExpPass
 subarr_inline_step = TypedExpPass $ \_ e -> if
   | EArrRead evals estart LISingleton <- unExp e
-    , EValArr _ vals <- unExp evals
+    , EValArr vals <- unExp evals
     , EVal _ (VInt n') <- unExp estart
     , let n = fromIntegral n'
-   -> rewrite $ eVal (expLoc e) (ctExp e) (vals!!n)
+   -> rewrite $ vals!!n
 
   | EArrRead evals estart (LILength n) <- unExp e
-    , EValArr _ vals <- unExp evals
+    , EValArr vals <- unExp evals
     , EVal _ (VInt s') <- unExp estart
     , let s = fromIntegral s'
-   -> rewrite $ eValArr (expLoc e) (ctExp e) (take n $ drop s vals)
+   -> rewrite $ eValArr (expLoc e) (take n $ drop s vals)
 
     -- x[0,length(x)] == x
   | EArrRead evals estart (LILength n) <- unExp e
@@ -1551,7 +1555,7 @@ is_simpl_expr = go . unExp
   where
     go :: Exp0 -> Bool
     go (EVal _ _)       = True
-    go (EValArr _ _)    = True
+    go (EValArr elems)  = all is_simpl_expr elems
     go (EVar _)         = True
     go (EUnOp _ e)      = is_simpl_expr e
     go (EStruct _ fses) = all is_simpl_expr (map snd fses)

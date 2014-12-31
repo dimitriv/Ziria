@@ -161,7 +161,8 @@ erange (MkExp (EVal _ (VInt i)) _ _) =
 erange (MkExp (EVal _ _) _ _) =
     return RangeTop
 
-erange (MkExp (EValArr _ _) _ _) =
+erange (MkExp (EValArr elems) _ _) = do
+    mapM erange elems
     return RangeTop
 
 erange (MkExp (EVar v) _ _) =

@@ -278,9 +278,7 @@ data GExp0 t a where
   EVal :: t -> Val -> GExp0 t a
 
   -- | An array value
-  --
-  -- We record the type of the array value (see also `EVal`).
-  EValArr :: t -> [Val] -> GExp0 t a
+  EValArr :: [GExp t a] -> GExp0 t a
 
   EVar :: GName t -> GExp0 t a
   EUnOp :: GUnOp t -> GExp t a -> GExp0 t a
@@ -529,9 +527,9 @@ mapExpM onTyp onAnn f = goExp
     goExp0 (EVal t v) = do
       t' <- onTyp t
       return $ EVal t' v
-    goExp0 (EValArr t varr) = do
-      t' <- onTyp t
-      return $ EValArr t' varr
+    goExp0 (EValArr elems) = do
+      elems' <- mapM goExp elems
+      return $ EValArr elems'
     goExp0 (EVar x) = do
       x' <- mapNameM onTyp x
       return $ EVar x'
@@ -988,7 +986,7 @@ isBoolBinOp _   = False
 mutates_state :: GExp t a -> Bool
 mutates_state e = case unExp e of
   EVal _ _                     -> False
-  EValArr _ _                  -> False
+  EValArr elems                -> any mutates_state elems
   EVar _                       -> False
   EUnOp _ e'                   -> mutates_state e'
   EBinOp _ e1 e2               -> any mutates_state [e1,e2]

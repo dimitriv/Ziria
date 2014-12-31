@@ -182,8 +182,8 @@ parseUnit f = try $ withPos f <* (symbol "(" >> symbol ")")
 -- > <value> ::= <scalar-value> | "{" <scalar-value>*"," "}"
 parseValue :: BlinkParser SrcExp
 parseValue = choice
-    [ withPos eValSrc    <*> parseScalarValue
-    , withPos eValArrSrc <*> braces (sepBy parseScalarValue comma)
+    [ withPos eValSrc <*> parseScalarValue
+    , withPos eValArr <*> braces (sepBy parseExpr comma)
     ] <?> "value"
 
 -- | Scalar values
@@ -656,6 +656,3 @@ assertSingleton _x _action = fail "Expecting only one argument!"
 
 eValSrc :: Maybe SourcePos -> Val -> SrcExp
 eValSrc p v = eVal p SrcTyUnknown v
-
-eValArrSrc :: Maybe SourcePos -> [Val] -> SrcExp
-eValArrSrc p vs = eValArr p SrcTyUnknown vs
