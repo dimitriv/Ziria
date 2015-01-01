@@ -34,6 +34,28 @@ fun comp f() {
   } else {
     emit d + 10;
   }
+
+  e <- take;
+  if (e == 1) then {
+    emit e + 11;
+  } else {
+    if (e != 1) then {
+      emit e + 12;
+    } else {
+      emit e + 13;
+    }
+  }
+
+  f <- take;
+  if (f > 1) then {
+    emit f + 14;
+  } else {
+    if (f == 2) then {
+      emit f + 15;
+    } else {
+      emit f + 16;
+    }
+  }
 }
 
 let comp main = read[int] >>> f() >>> write[int]

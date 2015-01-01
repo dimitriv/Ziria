@@ -34,12 +34,17 @@
 module Interpreter (
     -- * Interpretations of expressions
     Prints
-  , evaluate
+  , evalPartial
+  , evalFull
+  , evalInt
+  , evalBool
   , provable
   , implies
     -- ** Convenience
-  , mkNotExp
-  , mkOrExp
+  , eNot
+  , eOr
+  , eTrue
+  , eFalse
   ) where
 
 import Control.Applicative
@@ -47,14 +52,16 @@ import Control.Monad.Error
 import Control.Monad.RWS hiding (Any)
 import Data.Bits hiding (bit)
 import Data.Int
-import Data.Map (Map)
 import Data.List (intercalate)
+import Data.Map (Map)
 import Data.Maybe
+import Data.Set (Set)
 import GHC.Prim (Any)
 import Outputable
 import Text.Parsec.Pos (SourcePos)
 import Unsafe.Coerce (unsafeCoerce)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 import AstExpr
 import AstUnlabelled
@@ -67,13 +74,38 @@ import CtExpr
 type Prints = String
 
 -- | (Partial) evaluation of an expression
-evaluate :: Exp -> (Either String Exp, Prints)
-evaluate e = head $ evalEval (interpret e) cfg initState
+evalPartial :: Exp -> (Either String Exp, Prints)
+evalPartial e = head $ evalEval (interpret e) cfg initState
   where
      cfg = EvalConfig {
-         evalPartial = True
-       , evalGuess   = False
+         enablePartial  = True
+       , enableGuessing = False
        }
+
+-- | (Full) evaluation of an expression
+evalFull :: Exp -> (Either String Exp, Prints)
+evalFull e = head $ evalEval (interpret e) cfg initState
+  where
+    cfg = EvalConfig {
+        enablePartial  = False
+      , enableGuessing = False
+      }
+
+-- | Evaluate an expression to an integer
+evalInt :: Exp -> (Either String Integer, Prints)
+evalInt e = case evalFull e of
+  (Left err, prints)              -> (Left err, prints)
+  (Right e', prints)
+    | EVal _ (VInt i) <- unExp e' -> (Right i, prints)
+    | otherwise                   -> (Left "Not an integer", prints)
+
+-- | Evaluate an expression to a boolean
+evalBool :: Exp -> (Either String Bool, Prints)
+evalBool e = case evalFull e of
+  (Left err, prints)               -> (Left err, prints)
+  (Right e', prints)
+    | EVal _ (VBool b) <- unExp e' -> (Right b, prints)
+    | otherwise                    -> (Left "Not an integer", prints)
 
 -- | (Full) evaluation of expressions, guessing values for boolean expressions
 approximate :: Exp -> [Exp]
@@ -81,8 +113,8 @@ approximate e =
     [ e' | (Right e', _prints) <- evalEval (interpret e) cfg initState ]
   where
     cfg = EvalConfig {
-        evalPartial = False
-      , evalGuess   = True
+        enablePartial  = False
+      , enableGuessing = True
       }
 
 -- | Satisfiability check for expressions of type Bool
@@ -101,14 +133,14 @@ satisfiable = any isTrue . approximate
 -- NOTE: This only makes sense for expressions of type Bool and should not be
 -- called on other expressions.
 provable :: Exp -> Bool
-provable = not . satisfiable . mkNotExp
+provable = not . satisfiable . eNot
 
 -- | Does one expression imply another?
 --
 -- NOTE: This only makes sense for expressions of type Bool and should not be
 -- called on other expressions.
 implies :: Exp -> Exp -> Bool
-implies a b = provable (mkNotExp a `mkOrExp` b)
+implies a b = provable (eNot a `eOr` b)
 
 {-------------------------------------------------------------------------------
   Interpreter monad
@@ -118,20 +150,25 @@ data EvalState = EvalState {
     -- Locally bound variables (let or letref)
     evalMemory :: Map String Exp
 
-    -- Guesses made during satisfiability checking
-  , evalGuesses :: Map Exp Exp
+    -- Guesses made during satisfiability checking for generic boolean-valued
+    -- expressions
+  , evalGuessesBool :: Map Exp Exp
+
+    -- Guesses made about the range of integer-valued expressions
+  , evalGuessesInt :: Map Exp IntDomain
   }
   deriving Show
 
 initState :: EvalState
 initState = EvalState {
-    evalMemory  = Map.empty
-  , evalGuesses = Map.empty
+    evalMemory      = Map.empty
+  , evalGuessesBool = Map.empty
+  , evalGuessesInt  = Map.empty
   }
 
 data EvalConfig = EvalConfig {
-    evalPartial :: Bool
-  , evalGuess   :: Bool
+    enablePartial  :: Bool
+  , enableGuessing :: Bool
   }
 
 -- | The evaluator monad
@@ -152,11 +189,15 @@ newtype Eval a = Eval {
            , MonadError String
            )
 
--- We don't want the Alternative instance from ErrorT
+-- We don't want the MonadPlus instance from ErrorT
 -- (in fact, I don't think ErrorT should even introduce a MonadPlus instance..)
+instance MonadPlus Eval where
+  mzero       = mkEval $ \_cfg _st -> []
+  f `mplus` g = mkEval $ \cfg st -> runEval f cfg st <|> runEval g cfg st
+
 instance Alternative Eval where
-  empty   = mkEval $ \_cfg _st -> []
-  f <|> g = mkEval $ \cfg st -> runEval f cfg st <|> runEval g cfg st
+  empty = mzero
+  (<|>) = mplus
 
 runEval :: Eval a -> EvalConfig -> EvalState -> [(Either String a, EvalState, Prints)]
 runEval = runRWST . runErrorT . unEval
@@ -188,15 +229,13 @@ writeVar x v = Eval $ do
 
 partiallyEvaluated :: a -> Eval a
 partiallyEvaluated x = do
-  partial <- Eval $ asks evalPartial
-  if partial then return x
-             else empty
+  guard =<< Eval (asks enablePartial)
+  return x
 
 cannotEvaluate :: String -> Eval a
 cannotEvaluate msg = do
-  partial <- Eval $ asks evalPartial
-  if partial then throwError msg
-             else empty
+  guard =<< Eval (asks enablePartial)
+  throwError msg
 
 logPrint :: Bool -> String -> Eval ()
 logPrint True  str = Eval $ tell (str ++ "\n")
@@ -208,8 +247,8 @@ logPrint False str = Eval $ tell str
 guessIfUnevaluated :: (Exp -> Eval Exp) -> (Exp -> Eval Exp)
 guessIfUnevaluated f e = mkEval $ \cfg st ->
   case runEval (f e) cfg st of
-    [] | evalGuess cfg -> runEval (guess e) cfg st
-    result             -> result
+    [] | enableGuessing cfg -> runEval (guess e) cfg st
+    result                  -> result
 
 {-------------------------------------------------------------------------------
   The interpreter proper
@@ -806,40 +845,134 @@ splitListOn f = go []
 -- See http://www.well-typed.com/blog/2014/12/simple-smt-solver/ for a
 -- discussion of this approach.
 guess :: Exp -> Eval Exp
+guess e | Just (lhs, op, rhs) <- isComparison e = do
+    dom <- previousGuessInt lhs
+    let assumeTrue = do
+          let dom' = intersectIntDomains dom (mkIntDomain op rhs)
+          guard $ not (emptyIntDomain dom')
+          recordGuessInt lhs dom'
+          return eTrue
+        assumeFalse = do
+          let dom' = intersectIntDomains dom (mkIntDomain (negBinOp op) rhs)
+          guard $ not (emptyIntDomain dom')
+          recordGuessInt lhs dom'
+          return eFalse
+    assumeTrue `mplus` assumeFalse
 guess e = do
-  previous <- previousGuess e
-  case previous of
-    Just e' -> return e'
-    Nothing ->
-     case ctExp e of
-       TBool -> recordGuess e eTrue <|> recordGuess e eFalse
-       ty    -> cannotEvaluate $ "Cannot guess values for type " ++ pretty ty
+    previous <- previousGuessBool e
+    case previous of
+      Just e' -> return e'
+      Nothing ->
+       case ctExp e of
+         TBool -> recordGuessBool e eTrue `mplus` recordGuessBool e eFalse
+         ty    -> cannotEvaluate $ "Cannot guess values for type " ++ pretty ty
+
+previousGuessBool :: Exp -> Eval (Maybe Exp)
+previousGuessBool e = Eval $
+    gets $ Map.lookup (eraseLoc e)
+         . evalGuessesBool
+
+recordGuessBool :: Exp -> Exp -> Eval Exp
+recordGuessBool e e' = Eval $ do
+    st <- get
+    put $ st {
+        evalGuessesBool = Map.insert (eraseLoc e) e' (evalGuessesBool st)
+      }
+    return e'
+
+previousGuessInt :: Exp -> Eval IntDomain
+previousGuessInt e = Eval $
+    gets $ Map.findWithDefault fullIntDomain (eraseLoc e)
+         . evalGuessesInt
+
+recordGuessInt :: Exp -> IntDomain -> Eval ()
+recordGuessInt e dom = Eval $ do
+    st <- get
+    put $ st {
+        evalGuessesInt = Map.insert (eraseLoc e) dom (evalGuessesInt st)
+      }
+
+isComparison :: Exp -> Maybe (Exp, BinOp, Integer)
+isComparison e
+    | EBinOp op lhs rhs <- unExp e
+    , EVal _ (VInt i)   <- unExp rhs
+    , op `elem` comparisonOps
+    = Just (lhs, op, i)
   where
-    eloc = expLoc e
+    comparisonOps = [Eq, Neq, Lt, Gt, Leq, Geq]
+isComparison _ = Nothing
 
-    eTrue, eFalse :: Exp
-    eTrue  = eVal eloc TBool (VBool True)
-    eFalse = eVal eloc TBool (VBool False)
+negBinOp :: BinOp -> BinOp
+negBinOp Eq  = Neq
+negBinOp Neq = Eq
+negBinOp Lt  = Geq
+negBinOp Gt  = Leq
+negBinOp Leq = Gt
+negBinOp Geq = Lt
+negBinOp _   = error "negBinOp: invalid bin op"
 
--- | Check if we made a previous guess
-previousGuess :: Exp -> Eval (Maybe Exp)
-previousGuess e = Eval $ gets (Map.lookup (eraseLoc e) . evalGuesses)
+{-------------------------------------------------------------------------------
+  Integer domains
+-------------------------------------------------------------------------------}
 
--- | Record a guess
+-- | Integer domains
 --
--- Returns the guess that was recorded
-recordGuess :: Exp -> Exp -> Eval Exp
-recordGuess e e' = Eval $ do
-  st <- get
-  put $ st { evalGuesses = Map.insert (eraseLoc e) e' (evalGuesses st) }
-  return e'
+-- An integer domain describes our current approximation for an integer.  Let
+-- @d@ be an integer domain, and @x@ be an integer; then if @x `in` d@..
+data IntDomain = IntDomain {
+      intDomLower :: Maybe Integer   -- ^ .. @intDomLower d <= x@
+    , intDomUpper :: Maybe Integer   -- ^ .. @x <= intDomUpper d@
+    , intDomHoles :: Set Integer     -- ^ .. @x `notElem` intDomHoles d@
+    }
+    deriving (Eq, Show)
+
+fullIntDomain :: IntDomain
+fullIntDomain = IntDomain {
+      intDomLower = Nothing
+    , intDomUpper = Nothing
+    , intDomHoles = Set.empty
+    }
+
+emptyIntDomain :: IntDomain -> Bool
+emptyIntDomain d =
+    fromMaybe False $ aux (intDomHoles d) <$> intDomLower d <*> intDomUpper d
+  where
+    aux holes lo hi = lo > hi || (lo == hi && lo `Set.member` holes)
+
+intersectIntDomains :: IntDomain -> IntDomain -> IntDomain
+intersectIntDomains d d' = IntDomain {
+      intDomLower = case (intDomLower d, intDomLower d') of
+                      (Nothing, Nothing) -> Nothing
+                      (Just l,  Nothing) -> Just l
+                      (Nothing, Just l') -> Just l'
+                      (Just l,  Just l') -> Just (l `max` l')
+    , intDomUpper = case (intDomUpper d, intDomUpper d') of
+                      (Nothing, Nothing) -> Nothing
+                      (Just l,  Nothing) -> Just l
+                      (Nothing, Just l') -> Just l'
+                      (Just l,  Just l') -> Just (l `min` l')
+    , intDomHoles = intDomHoles d `Set.union` intDomHoles d'
+    }
+
+mkIntDomain :: BinOp -> Integer -> IntDomain
+mkIntDomain Eq  n = IntDomain (Just n)       (Just n)       Set.empty
+mkIntDomain Leq n = IntDomain Nothing        (Just n)       Set.empty
+mkIntDomain Geq n = IntDomain (Just n)       Nothing        Set.empty
+mkIntDomain Lt  n = IntDomain Nothing        (Just (n - 1)) Set.empty
+mkIntDomain Gt  n = IntDomain (Just (n + 1)) Nothing        Set.empty
+mkIntDomain Neq n = IntDomain Nothing        Nothing        (Set.singleton n)
+mkIntDomain _   _ = error "mkIntDomain: Invalid operator"
 
 {-------------------------------------------------------------------------------
   Constructing expressions (for convenience)
 -------------------------------------------------------------------------------}
 
-mkNotExp :: Exp -> Exp
-mkNotExp e = eUnOp (expLoc e) Not e
+eNot :: Exp -> Exp
+eNot e = eUnOp (expLoc e) Not e
 
-mkOrExp :: Exp -> Exp -> Exp
-mkOrExp e e' = eBinOp (expLoc e) Or e e'
+eOr :: Exp -> Exp -> Exp
+eOr e e' = eBinOp (expLoc e) Or e e'
+
+eTrue, eFalse :: Exp
+eTrue  = eVal Nothing TBool (VBool True)
+eFalse = eVal Nothing TBool (VBool False)

@@ -668,7 +668,7 @@ passIfDead = TypedCompPass $ \cloc comp -> do
            logStep "ifdead/provable/true" cloc
              [step| if true then c else .. ~~> c |]
            rewrite $ c1
-        | provable (mkNotExp e) -> do
+        | provable (eNot e) -> do
            logStep "ifdead/provable/false" cloc
              [step| if false then .. else c ~~> c |]
            rewrite $ c2
@@ -680,7 +680,7 @@ passIfDead = TypedCompPass $ \cloc comp -> do
                ~~> if e c else c'' |]
           rewrite $ cBranch cloc e c1 c3
 
-        | e `implies` mkNotExp e'
+        | e `implies` eNot e'
         -> do
           logStep "ifdead/left/implies-neg" cloc
             [step| if e then {if e' then c else c'} else c''
@@ -688,14 +688,14 @@ passIfDead = TypedCompPass $ \cloc comp -> do
           rewrite $ cBranch cloc e c2 c3
 
       Branch e c1 (MkComp (Branch e' c2 c3) _ ())
-        | mkNotExp e `implies` e'
+        | eNot e `implies` e'
         -> do
           logStep "ifdead/right/implies" cloc
             [step| if e then c else {if e' then c' else c''}
                ~~> if e then c else c' |]
           rewrite $ cBranch cloc e c1 c2
 
-        | mkNotExp e `implies` mkNotExp e'
+        | eNot e `implies` eNot e'
         -> do
           logStep "ifdead/right/implies-neg" cloc
             [step| if e then c else {if e' then c' else c''}
@@ -762,7 +762,7 @@ passInterpret = TypedCompPass $ \cloc c -> if
     | LetE nm fi e1 e2 <- unComp c
       , "eval_" `isPrefixOf` name nm
      -> do
-      let (me1', prints) = evaluate e1
+      let (me1', prints) = evalPartial e1
       unless (null prints) $ logStep "interpret: debug prints" cloc prints
       case me1' of
         Right e1' -> do
