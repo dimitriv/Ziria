@@ -395,13 +395,7 @@ emitting c ty = FAnnot c Nothing Nothing (Just ty) (FPure ())
 -- See remark for `unFreeComp` about independent type checking.
 unFreeExp :: GS.Sym -> FreeExp () -> IO Exp
 unFreeExp sym fexp = do
-    result <- runTcM (tc =<< unEFree Nothing fexp)
-                     (mkTyDefEnv [])
-                     (mkEnv [])
-                     (mkCEnv [])
-                     sym
-                     TopLevelErrCtx
-                     emptyUnifier
+    result <- runTcM' (tc =<< unEFree Nothing fexp) sym
     case result of
       Left err ->
         throwIO (userError (show err))
@@ -425,13 +419,7 @@ unFreeExp sym fexp = do
 -- function.)
 unFreeComp :: GS.Sym -> FreeComp () -> IO Comp
 unFreeComp sym fcomp = do
-    result <- runTcM (tc =<< unFree Nothing fcomp)
-                     (mkTyDefEnv [])
-                     (mkEnv [])
-                     (mkCEnv [])
-                     sym
-                     TopLevelErrCtx
-                     emptyUnifier
+    result <- runTcM' (tc =<< unFree Nothing fcomp) sym
     case result of
       Left err ->
         throwIO (userError (show err))
@@ -575,10 +563,9 @@ unFree loc = liftM fromJust . go
       k' <- go k
       return $ c `mSeq` k'
     go (FLiftSrc env c k) = do
-      c' <- extendTDefEnv' (mkTyDefEnv primComplexStructs) $
-              extendTDefEnv' env $
-                extendEnv (extractTypeEnv c) $
-                  tyCheckComp c
+      c' <- extendTDefEnv' env $
+              extendEnv (extractTypeEnv c) $
+                tyCheckComp c
       k' <- go k
       return $ c' `mSeq` k'
     go (FPure ()) =
@@ -612,7 +599,7 @@ extractTypeEnv = catMaybes . map aux . S.toList . compEFVs
   Example
 -------------------------------------------------------------------------------}
 
-{- 
+{-
 _test' :: IO ()
 _test' = do
     go _test1
@@ -660,10 +647,10 @@ _test1 tmp_idx is_empty in_buff in_buff_idx finalin n0 = do
 
 -}
 
-{- AstQuasiQote needs to be brought up to speed ... 
+{- AstQuasiQote needs to be brought up to speed ...
 _test2 :: GName Ty -> GName Ty -> GName Ty -> GName Ty -> Integer -> Integer -> FreeComp ()
 _test2 tmp_idx is_empty in_buff in_buff_idx finalin n0 = fLiftSrc (mkTyDefEnv []) [zcomp| {
-    if is_empty == true 
+    if is_empty == true
     then { x <- take
          ; do { in_buff     := x
               ; is_empty    := false

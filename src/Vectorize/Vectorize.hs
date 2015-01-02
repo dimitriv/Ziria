@@ -34,10 +34,10 @@ import Data.Functor.Identity
 
 import Opts
 
-import CardAnalysis -- Cardinality analysis 
+import CardAnalysis -- Cardinality analysis
 import VecM         -- Vectorizer monad and infrastructure
 import VecSF        -- Vectorization scale factors
-import CtComp 
+import CtComp
 
 import PassFold ( elimMitigsIO )
 import Debug.Trace
@@ -60,17 +60,17 @@ vect_card (SimplCard ain aout) tin tout
 -- | Emit a warning when we encounter an empty vectorization result
 warn_empty_vect :: DynFlags -> LComp -> [DelayedVectRes] -> String -> VecM ()
 warn_empty_vect dfs comp ress origin
-  =  when (null ress) $ liftIO $ do 
+  =  when (null ress) $ liftIO $ do
        print $ text "WARNING: empty vectorization" <+> braces (text origin)
        verbose dfs $ ppr comp
 
 vectRdWr :: (Ty -> Comp) -> Ty -> [ DelayedVectRes ]
-vectRdWr builder ty 
+vectRdWr builder ty
   | isVectorizable ty
   -> let vcs = map (\n ->
           let vty = mkVectTy ty n
           in DVR { dvr_comp = return (builder vty)
-                 , dvr_vres = DidVect vty vty } ) [2..vECT_ARR_BOUND] 
+                 , dvr_vres = DidVect vty vty } ) [2..vECT_ARR_BOUND]
      in return $ self : vcs
   | otherwise -> return [ self ]
 
@@ -78,21 +78,21 @@ vectRdWr builder ty
 -- NB: not adding `self'
 vectIterComp :: (Comp -> Comp) -> Card -> LComp -> VecM [DelayedVectRes]
 vectIterComp builder vc c
-  | Just sf <- vcard >>= compSFDD 
-  -> do env <- getVecEnv 
+  | Just sf <- vcard >>= compSFDD
+  -> do env <- getVecEnv
         vss <- doVectCompDD env dfs c sf
-        mapM (liftCompDVR builder) vss 
-  | otherwise -> return [] 
+        mapM (liftCompDVR builder) vss
+  | otherwise -> return []
 
 computeVectTop :: DynFlags -> LComp -> VecM [DelayedVectRes]
-computeVectTop dfs x = do 
+computeVectTop dfs x = do
   verbose dfs $
    text "Vectorizer, traversing" <+> text (compShortName lcomp) <+> text "{"
   go CtxUnrestricted x
   verbose dfs $ text "} Vectorizer, finished."
-  where 
+  where
     go :: CtxForVect -> LComp -> VecM [DelayedVectRes]
-    go vctx comp = 
+    go vctx comp =
       let card  = compInfo comp
           loc   = compLoc comp
           cty   = ctComp comp
@@ -108,20 +108,20 @@ computeVectTop dfs x = do
         Var x -> lookupCVarBind x >>= go vctx
 
         BindMany c1 xs_cs
-          | Just sf <- vcard >>= compSFDD 
-          -> do env <- getVecEnv 
+          | Just sf <- vcard >>= compSFDD
+          -> do env <- getVecEnv
                 vss <- doVectCompDD env dfs comp sf
                 return $ self : vss
-          | otherwise -> do 
+          | otherwise -> do
             let css = c1 : map snd xs_cs
-                xs  = map fst xs_cs 
+                xs  = map fst xs_cs
             vss <- mapM (go vctx) css
             let ress = cross_prod_mit $ map keepGroupMaximals vss
             warn_if_empty ress "BindMany"
             return $ keepGroupMaximals $
                      map (\(vc:vcs) -> combineCtrl loc vc xs vcs) ress
 
-        Par p c1 c2 -> do 
+        Par p c1 c2 -> do
           let is_c1 = isComputer (ctComp c1)
               is_c2 = isComputer (ctComp c2)
               ctx1  = if is_c2 then CtxExistsCompRight else vctx
@@ -132,20 +132,20 @@ computeVectTop dfs x = do
           warn_if_empty ress "Par"
           return ress
 
-        LetStruct sdef c2 -> do 
+        LetStruct sdef c2 -> do
           vcs2 <- go vctx c2
           mapM (liftCompDVR (cLetStruct loc sdef)) vcs2
 
-        Let x c1 c2 -> 
+        Let x c1 c2 ->
           -- Safe to ignore 'c1' as the vectorizer effectively inlined
-          -- computations, look at Var and Call nodes. 
+          -- computations, look at Var and Call nodes.
           extendCVarBind x c1 (go vctx c2)
 
-        LetHeader fdef c1 -> do 
+        LetHeader fdef c1 -> do
           vcs1 <- go vctx c1
           map (liftCompDVR $ cLetHeader loc fdef) vcs1
 
-        LetE x fi e c1 -> do 
+        LetE x fi e c1 -> do
           vcs1 <- go vctx c1
           map (liftCompDVR $ cLetE loc x fi e) vcs1
 
@@ -153,13 +153,13 @@ computeVectTop dfs x = do
           -- Safe to ignore the function as it will be effectively inlined
           extendCFunBind f params c1 $ go vctx c2
 
-        Call f es -> do 
+        Call f es -> do
           CFunBind { cfun_params = prms, cfun_body = bdy } <- lookupCFunBind f
           vbdys <- go vctx bdy
           -- It's not very efficient to create a zillion typed names
           -- so let us create one and set its type each time.
           vf <- newVectGName "_VECT" undefined loc
-          let mk_vect_call vbd 
+          let mk_vect_call vbd
                 = cLetFunC loc () vf_typed prms vbd (cCall loc vf_typed es)
                 where vf_typed = updNameTy vf (ctComp vbd)
           mapM (liftCompDVR mk_vect_call) vbdys
@@ -179,13 +179,13 @@ computeVectTop dfs x = do
                    let vtin  = vect_in_ty  $ dvr_vres dvr1
                        vtout = vect_out_ty $ dvr_vres dvr1
                        vres  = if any (didVect . dvr_vres) [dvr1,dvr2]
-                               then DidVect vtin vtout 
+                               then DidVect vtin vtout
                                else NotVect vtin vtout
                    in
                    DVR { dvr_comp = do { c1' <- dvr_comp dvr1
-                                       ; c2' <- dvr_comp dvr2 
+                                       ; c2' <- dvr_comp dvr2
                                        ; return $ cBranch loc e c1' c2' }
-                       ; dvr_vres = vres } ) ress 
+                       ; dvr_vres = vres } ) ress
                 warn_if_empty branch_cands "Branch"
                 return branch_cands
 
@@ -193,24 +193,24 @@ computeVectTop dfs x = do
 
         -- Reading and writing internal or external buffers
         ReadSrc ty       -> return $ vectRdWr (cReadSrc       loc) ty
-        WriteSnk ty      -> return $ vectRdWr (cWriteSnk      loc) ty 
+        WriteSnk ty      -> return $ vectRdWr (cWriteSnk      loc) ty
         ReadInternal ty  -> return $ vectRdWr (cReadInternal  loc) ty
         WriteInternal ty -> return $ vectRdWr (cWriteInternal loc) ty
 
         Return _fi _e    -> return [ self ]
 
         -- Iterated computers
-        Until e c -> do 
+        Until e c -> do
           vss <- vectIterComp (cUntil loc e) vcard c
-          return (self : vss) 
-        While e c -> do 
+          return (self : vss)
+        While e c -> do
           vss <- vectIterComp (cWhile loc e) vcard c
-          return (self : vss) 
-        Times ui e elen c -> do 
+          return (self : vss)
+        Times ui e elen c -> do
           vss <- vectIterComp (cTimes loc ui e elen) vcard c
-          return (self : vss) 
+          return (self : vss)
 
- 
+
 
 
 **********
@@ -1116,11 +1116,9 @@ all_eq (x:y:xs) = (x==y) && all_eq (y:xs)
 
 runDebugVecM :: DynFlags
              -> Comp CTy Ty
-             -> TyDefEnv
-             -> Env
-             -> CEnv
-             -> GS.Sym -> TcMState -> IO [Comp CTy Ty]
-runDebugVecM dflags comp tenv env cenv sym unifiers
+             -> GS.Sym
+             -> IO [Comp CTy Ty]
+runDebugVecM dflags comp sym
   = let verbose = isDynFlagSet dflags Verbose
     in
     do { -- First run cardinality analysis
@@ -1147,15 +1145,14 @@ runDebugVecM dflags comp tenv env cenv sym unifiers
                              else -- compile them away
                                   compileMitigs sym vc_opt_mit
 
-                     ; res <- runTcM (tyCheckTopComp vc)
-                                  tenv env cenv sym GlobalDefs unifiers
+                     ; res <- runTcM' (tyCheckTopComp vc) sym
                      ; case res of
                          Left err
                           -> do { putStrLn "Type error in vectorization result."
                                 ; print err
                                 ; print (ppr vc)
                                 ; error "Vectorization bug!" }
-                         Right (tcv,_st)
+                         Right (tcv, _unifiers)
                           -> return tcv
                      }
         ; mapM do_one [vs_maxi]

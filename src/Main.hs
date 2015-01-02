@@ -64,7 +64,7 @@ import AutoLUT
 
 -- New cardinality analysis and new vectorizer
 import CardAnalysis
-import VecM 
+import VecM
 import VecSF
 
 import CgHeader
@@ -128,8 +128,8 @@ main = failOnException $ do
           failOnError $
           do { let state  = ()
                    stream = mkZiriaStream input
-                   parser = runParserT NewParser.parseProgram state 
-                                                              inFile 
+                   parser = runParserT NewParser.parseProgram state
+                                                              inFile
                                                               stream
              ; NewParser.runParseM parser []
              }
@@ -142,31 +142,17 @@ main = failOnException $ do
 
     -- putStrLn $ "renamed ... " ++ show prog_renamed
 
-    let cenv     = mkCEnv []
-    let tdef_env = mkTyDefEnv primComplexStructs
-    let varenv   = mkEnv []
-
     sym <- GS.initGenSym (getName dflags)
 
 {- Testing the AstFM ........... -}
 
     -- test1_comp <- AstFM.interpC sym Nothing (AstFM._test1 24 8)
     -- putStrLn $ (show $ Outputable.ppr test1_comp)
-    -- exitFailure   
+    -- exitFailure
 
-{- End Testing the AstFM ............. -} 
+{- End Testing the AstFM ............. -}
 
-
-
-    (MkProg c', unifiers1) <- failOnError $
-      runTcM (tyCheckProg prog)
-             tdef_env
-             varenv
-             cenv
-             sym
-             TopLevelErrCtx
-             emptyUnifier
-
+    (MkProg c', _unifier) <- failOnError $ runTcM' (tyCheckProg prog) sym
     let in_ty  =  inTyOfCTy (ctComp c')
         yld_ty = yldTyOfCTy (ctComp c')
 
@@ -185,8 +171,7 @@ main = failOnException $ do
 
     -- putStrLn $ "proceeding with vectorization ...."
 
-    cands <- runVectorizePhase dflags sym tdef_env decl_env cenv unifiers1 $
-             folded
+    cands <- runVectorizePhase dflags sym folded
 
     -- The vectorizer returns a list of candidate
     -- vectorizations. But I think that if it is empty then this
@@ -262,18 +247,11 @@ main = failOnException $ do
       = return c
 
 {-
-    runVectorizePhase :: DynFlags
-                      -> GS.Sym
-                      -> TyDefEnv
-                      -> Env
-                      -> CEnv
-                      -> TcMState
-                      -> Comp
-                      -> IO [Comp]
     -- Vectorize Phase
-    runVectorizePhase dflags sym tdef_env decl_env cenv st c
+    runVectorizePhase :: DynFlags -> GS.Sym -> Comp -> IO [Comp]
+    runVectorizePhase dflags sym c
       | isDynFlagSet dflags Vectorize
-      = runDebugVecM dflags c tdef_env decl_env cenv sym st
+      = runDebugVecM dflags c sym
       | otherwise
       = return [c]
 -}
