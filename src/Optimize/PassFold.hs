@@ -309,7 +309,7 @@ passFold = TypedCompPass $ \_ -> go
         SeqView (MkComp (Return fi e) _ ()) c12 -> do
           let nm = mkUniqNm cloc (ctExp e)
           logStep "fold/seq" cloc
-            [step| return e ; .. ~~> let nm = e in .. |]
+            [step| return .. ; .. ~~> let nm = .. in .. |]
           c12' <- go c12
           rewrite $ cLetE cloc nm fi e c12'
 
@@ -325,17 +325,17 @@ passPurify = TypedCompPass $ \cloc comp ->
     case extractCLetEs comp of
       Just (binds, comp') | Return fi e <- unComp comp' -> do
         logStep "purify/return" cloc
-          [step| let binds in return e ~~> return (let binds in e) |]
+          [step| let binds in return .. ~~> return (let binds in ..) |]
         rewrite $ cReturn cloc fi (insertELetEs binds e)
 
       Just (binds, comp') | Emit e <- unComp comp' -> do
         logStep "purify/emit" cloc
-          [step| let binds in emit e ~~> emit (let binds in e) |]
+          [step| let binds in emit .. ~~> emit (let binds in ..) |]
         rewrite $ cEmit cloc (insertELetEs binds e)
 
       Just (binds, comp') | Emits e <- unComp comp' -> do
         logStep "purify/emits" cloc
-          [step| let binds in emits e ~~> emits (let binds in e) |]
+          [step| let binds in emits .. ~~> emits (let binds in ..) |]
         rewrite $ cEmits cloc (insertELetEs binds e)
 
       _otherwise ->
@@ -347,17 +347,17 @@ passPurifyLetRef = TypedCompPass $ \cloc comp -> do
     case extractCMutVars' comp of
       Just (binds, comp') | Return fi e <- unComp comp' -> do
         logStep "purify-letref/return" cloc
-          [step| var binds in return e ~~> return (var binds in e) |]
+          [step| var binds in return .. ~~> return (var binds in ..) |]
         rewrite $ cReturn cloc fi (insertEMutVars' binds e)
 
       Just (binds, comp') | Emit e <- unComp comp' -> do
         logStep "purify-letref/emit" cloc
-          [step| var binds in emit e ~~> emit (var binds in e) |]
+          [step| var binds in emit .. ~~> emit (var binds in ..) |]
         rewrite $ cEmit cloc (insertEMutVars' binds e)
 
       Just (binds, comp') | Emits e <- unComp comp' -> do
         logStep "purify-letref/emits" cloc
-          [step| var binds in emits e ~~> emits (var binds in e) |]
+          [step| var binds in emits .. ~~> emits (var binds in ..) |]
         rewrite $ cEmits cloc (insertEMutVars' binds e)
 
       _otherwise ->
@@ -1677,7 +1677,7 @@ instance PrettyVal LetERefs
 instance Outputable LetEs where
   ppr (LetEs ls) = hsep (punctuate comma (map aux ls))
     where
-      aux (_, nm, _, e) = ppr nm <+> text "=" <+> ppr e
+      aux (_, nm, _, _e) = ppr nm <+> text "=" <+> text ".." -- ppr e
 
 instance Outputable LetERefs where
   ppr (LetERefs ls) = hsep (punctuate comma (map aux ls))
@@ -1685,7 +1685,7 @@ instance Outputable LetERefs where
       aux MutVar{..} =
         case mutInit of
           Nothing -> ppr mutVar
-          Just e  -> ppr mutVar <+> text "=" <+> ppr e
+          Just _e -> ppr mutVar <+> text "=" <+> text ".." -- ppr e
 
 {-------------------------------------------------------------------------------
   Auxiliary
