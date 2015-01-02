@@ -99,12 +99,12 @@ parseExpr =
   where
     table =
       [
-        [ Prefix $ withPos eUnOp  <*> (Neg     <$ reservedOp "-")
-        , Prefix $ withPos eUnOp  <*> (Not     <$ reserved   "not")
-        , Prefix $ withPos eUnOp  <*> (BwNeg   <$ reservedOp "~")
+        [ Prefix $ withPos eUnOp' <*> (Neg     <$ reservedOp "-")
+        , Prefix $ withPos eUnOp' <*> (Not     <$ reserved   "not")
+        , Prefix $ withPos eUnOp' <*> (BwNeg   <$ reservedOp "~")
         ]
 
-      , [ Prefix $ withPos eUnOp  <*> (ALength <$ reserved   "length") ]
+      , [ Prefix $ withPos eUnOp' <*> (ALength <$ reserved   "length") ]
 
       , [ lInfix $ withPos eBinOp <*> (Expon   <$ reservedOp "**")
         , lInfix $ withPos eBinOp <*> (Mult    <$ reservedOp "*")
@@ -648,7 +648,7 @@ mkCallOrCast p x args
 
   | otherwise        = return $ mkCall p x args
   where
-    cast t = eUnOp p (Cast t)
+    cast t = eUnOp' p (Cast t)
 
 assertSingleton :: Monad m => [t] -> (t -> a) -> m a
 assertSingleton [e] action = return (action e)
@@ -656,3 +656,17 @@ assertSingleton _x _action = fail "Expecting only one argument!"
 
 eValSrc :: Maybe SourcePos -> Val -> SrcExp
 eValSrc p v = eVal p SrcTyUnknown v
+
+-- | Push unary operators inside where possible
+--
+-- This is primarily used to avoid parsing "-1" as the application of the
+-- unary negation operator to the literal "1", but could be extended if we
+-- wish to "optimize" other constructors too. In a way this is a tiny little
+-- evaluator.
+eUnOp' :: Maybe SourcePos -> GUnOp t -> GExp t () -> GExp t ()
+eUnOp' p op e =
+    case (op, unExp e) of
+      (Neg, EVal ty (VInt i)) -> eVal eloc ty (VInt (negate i))
+      _                       -> eUnOp p op e
+  where
+    eloc = expLoc e
