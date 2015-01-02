@@ -266,7 +266,7 @@ foldExpPasses flags
     , ("exp-inlining" , passExpInlining)
     , ("asgn-letref"  , passAsgnLetRef )
     , ("eval-elet"    , passEvalELet   )
-    , ("exp-let-push" , exp_let_push_step )
+    , ("exp-let-push" , passExpLetPush )
     , ("rest-chain"   , rest_chain        )
     ]
 
@@ -291,7 +291,7 @@ passFold = TypedCompPass $ \_ -> go
       case bindSeqView comp of
         BindView nm (MkComp (Return fi e) _ ()) c12 -> do
           logStep "fold/bind-return" cloc
-            [step| nm <- return e ; .. ~~> let nm = e in .. |]
+            [step| nm <- return .. ~~> let nm =  .. |]
           c12' <- go c12
           rewrite $ cLetE cloc nm fi e c12'
 
@@ -922,6 +922,24 @@ passEvalELet = TypedExpPass $ \eloc e -> if
     | otherwise
      -> return e
 
+-- | Push a let into an array-write with an array-read as RHS
+passExpLetPush :: TypedExpPass
+passExpLetPush = TypedExpPass $ \eloc e -> if
+    | ELet nm fi e1 e2 <- unExp e
+      , EArrWrite e0 estart0 elen0 erhs <- unExp e2
+      , EArrRead evals estart rlen <- unExp erhs
+      , let fvs = foldr (S.union . exprFVs) S.empty [e0, estart0, evals]
+      , not (nm `S.member` fvs)
+     -> do
+       logStep "exp-let-push" eloc
+         [step| let nm = .. in e0[..] := evals[..]
+            ~~> e0[..] := evals[let nm = .. in ..] |]
+       let estart' = eLet (expLoc estart) nm fi e1 estart
+       rewrite $ eArrWrite (expLoc e2) e0 estart0 elen0
+               $ eArrRead (expLoc erhs) evals estart' rlen
+    | otherwise
+     -> return e
+
 {-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
 -------------------------------------------------------------------------------}
@@ -1064,19 +1082,6 @@ rewrite_mit_map ty1 (i1,j1) ty2 (i2,j2) (f_name, fun)
 
 
 
-exp_let_push_step :: TypedExpPass
-exp_let_push_step = TypedExpPass $ \_ e -> if
- | ELet nm fi e1 e2 <- unExp e
-   , EArrWrite e0 estart0 elen0 erhs <- unExp e2
-   , EArrRead evals estart rlen <- unExp erhs
-   , let fvs = foldr (S.union . exprFVs) S.empty [e0, estart0, evals]
-   , not (nm `S.member` fvs)
-  -> let estart' = eLet (expLoc estart) nm fi e1 estart
-     in rewrite $
-        eArrWrite (expLoc e2) e0 estart0 elen0 $
-        eArrRead (expLoc erhs) evals estart' rlen
- | otherwise
-  -> return e
 
 
 
