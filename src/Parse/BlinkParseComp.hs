@@ -36,7 +36,7 @@ import AstUnlabelled
 import BlinkParseExpr
 import BlinkLexer
 import BlinkParseM
-import Eval (evalInt)
+import Interpreter (evalSrcInt)
 
 import Utils ( uncurry4 )
 
@@ -167,9 +167,9 @@ parseCompTerm = choice
     cTake1'  p = cTake1  p SrcTyUnknown
 
     cTake' p e = do
-      case evalInt e of
-        Just n  -> return $ cTake p SrcTyUnknown (fromInteger n)
-        Nothing -> fail "Non-constant argument to takes"
+      case evalSrcInt e of
+        (Right n,   _prints) -> return $ cTake p SrcTyUnknown (fromInteger n)
+        (Left _err, _prints) -> fail "Non-constant argument to takes"
 
     cBranch' p cond true (Just false) = cBranch p cond true false
     cBranch' p cond true Nothing      = cBranch p cond true (cunit p)

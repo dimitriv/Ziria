@@ -47,7 +47,7 @@ import AstExpr
 import AstUnlabelled
 import BlinkLexer
 import BlinkParseM
-import Eval (evalInt)
+import Interpreter (evalSrcInt)
 
 {-------------------------------------------------------------------------------
   Expressions
@@ -548,9 +548,9 @@ eletDeclName (ELetDeclExpr _ nm _)    = show nm
 foldIntExpr :: BlinkParser Int
 foldIntExpr = do
   e <- parseExpr <?> "expression"
-  case evalInt e of
-    Just i  -> return $ fromIntegral i
-    Nothing -> parserFail "Non-constant array length expression."
+  case evalSrcInt e of
+    (Right i,   _prints) -> return $ fromIntegral i
+    (Left _err, _prints) -> parserFail "Non-constant array length expression."
 
 -- | Variable with optional type annotation
 --

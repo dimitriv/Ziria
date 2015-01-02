@@ -25,7 +25,6 @@ import Control.Applicative
 import Control.Arrow (second)
 import Control.Monad.Reader
 import Control.Monad.State
-import Data.List
 import Data.Maybe (isJust)
 import Data.Monoid
 import GHC.Generics
@@ -41,7 +40,6 @@ import AstComp
 import AstExpr
 import AstUnlabelled
 import CtExpr ( ctExp  )
-import Eval
 import Interpreter
 import Opts
 import Outputable
@@ -236,8 +234,7 @@ foldCompPasses flags
   = []
   | otherwise
   = -- Standard good things
-    [ ("interpret"     , passInterpret )
-    , ("fold"          , passFold        )
+    [ ("fold"          , passFold        )
     , ("purify"        , passPurify      )
     , ("purify-letref" , passPurifyLetRef)
     , ("elim-times"    , passElimTimes   )
@@ -245,6 +242,7 @@ foldCompPasses flags
     , ("letfun-times"  , passLetFunTimes )
     , ("times-unroll"  , passTimesUnroll )
     , ("inline"        , passInline      )
+    , ("eval-lete"     , passEvalLetE    )
 
     -- More aggressive optimizations
     , ("push-comp-locals"       , passPushCompLocals      )
@@ -267,6 +265,7 @@ foldExpPasses flags
   = [ ("for-unroll"   , passForUnroll  )
     , ("exp-inlining" , passExpInlining)
     , ("asgn-letref"  , passAsgnLetRef )
+    , ("eval-elet"    , passEvalELet   )
     , ("exp-let-push" , exp_let_push_step )
     , ("rest-chain"   , rest_chain        )
     ]
@@ -753,25 +752,21 @@ passElimAutomappedMitigs = TypedCompPass $ \_cloc c -> if
   | otherwise
    -> return c
 
--- Interpret any let expressions explicitly marked as such
---
--- TODO: Instead of explicitly marking these, we may want to infer when we
--- want to do this.
-passInterpret :: TypedCompPass
-passInterpret = TypedCompPass $ \cloc c -> if
+-- | Partially evaluate LHS of let bindings
+passEvalLetE :: TypedCompPass
+passEvalLetE = TypedCompPass $ \cloc c -> if
     | LetE nm fi e1 e2 <- unComp c
-      , "eval_" `isPrefixOf` name nm
      -> do
-      let (me1', prints) = evalPartial e1
-      unless (null prints) $ logStep "interpret: debug prints" cloc prints
-      case me1' of
-        Right e1' -> do
-          logStep "interpret" cloc [step| e1 ~~> e1' |]
+      case evalPartial e1 of
+        (Right e1', prints) -> do
+          unless (null prints) $ logStep "eval-lete: debug prints" cloc prints
+          logStep "eval-lete" cloc [step| e1 ~~> e1' |]
           -- We use 'return' rather than 'rewrite' so that we don't attempt to
           -- write the binding again
           return $ cLetE cloc nm fi e1' e2
-        Left err ->
-          fail $ "Interpreter error: " ++ err
+        (Left _err, _prints) ->
+          -- Cannot evaluate. Leave unchanged
+          return $ c
     | otherwise
      -> return c
 
@@ -908,6 +903,24 @@ passAsgnLetRef = TypedExpPass $ \eloc exp -> if
           _ -> Nothing
        where
          loc = expLoc e
+
+-- | Partially evaluate LHS of let bindings
+passEvalELet :: TypedExpPass
+passEvalELet = TypedExpPass $ \eloc e -> if
+    | ELet nm fi e1 e2 <- unExp e
+     -> do
+      case evalPartial e1 of
+        (Right e1', prints) -> do
+          unless (null prints) $ logStep "eval-elet: debug prints" eloc prints
+          logStep "eval-elet" eloc [step| e1 ~~> e1' |]
+          -- We use 'return' rather than 'rewrite' so that we don't attempt to
+          -- write the binding again
+          return $ eLet eloc nm fi e1' e2
+        (Left _err, _prints) ->
+          -- Cannot evaluate. Leave unchanged
+          return $ e
+    | otherwise
+     -> return e
 
 {-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
@@ -1049,15 +1062,6 @@ rewrite_mit_map ty1 (i1,j1) ty2 (i2,j2) (f_name, fun)
 
 
 
-arrinit_step :: TypedExpPass
--- Statically initialize as many arrays as possible
-arrinit_step = TypedExpPass $ \_ e1 -> case evalArrInt e1 of
-    Nothing   ->
-      return e1
-    Just vals -> do
-      let TArray _ ty = ctExp e1
-          vInt i = eVal (expLoc e1) ty (VInt i)
-      rewrite $ eValArr (expLoc e1) (map vInt vals)
 
 
 exp_let_push_step :: TypedExpPass
@@ -1084,9 +1088,7 @@ exp_let_push_step = TypedExpPass $ \_ e -> if
 rest_chain :: TypedExpPass
 rest_chain = mconcat [
       alength_elim
-    , eval_arith
     , const_fold
-    , arrinit_step
     , subarr_inline_step
     , proj_inline_step
     ]
@@ -1103,20 +1105,6 @@ alength_elim = TypedExpPass $ \_ e -> if
     numexp_to_exp loc (Literal i) = eVal loc tint (vint i)
     numexp_to_exp loc (NVar nm)   = eVar loc (toName nm Nothing tint)
 
-
-eval_arith :: TypedExpPass
-eval_arith = TypedExpPass $ \_ e -> if
-  | arith_ty (ctExp e)      -- of arithmetic type
-    , not (isEVal e)          -- not already a value
-    , Just v <- evalArith e   -- evaluate it!
-   -> rewrite $ eVal (expLoc e) (ctExp e) v
-  | otherwise
-   -> return e
-  where
-    arith_ty :: Ty -> Bool
-    arith_ty (TInt _) = True
-    arith_ty TDouble  = True
-    arith_ty _        = False
 
 subarr_inline_step :: TypedExpPass
 subarr_inline_step = TypedExpPass $ \_ e -> if

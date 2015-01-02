@@ -64,7 +64,7 @@ import Control.Monad.IO.Class (MonadIO(..))
 
 import Data.List ( nub )
 
-import Eval ( evalBool ) 
+import Interpreter ( evalBool )
 
 import CgFun
 
@@ -453,7 +453,7 @@ codeGenCompTop dflags comp k = do
 ------------------------------------------------------------------------------
 
 codeGenComp :: DynFlags
-            -> Comp 
+            -> Comp
             -> CompKont
             -> Cg CompInfo
 codeGenComp dflags comp k =
@@ -562,7 +562,7 @@ codeGenComp dflags comp k =
         -- not entirely satisfactory, admittedly.
 
         let invalloc = csp
-            TArrow [invalty] _ = nameTyp nm 
+            TArrow [invalty] _ = nameTyp nm
         let invalname = MkName { name    = inValOf ih
                                , uniqId  = inValOf ih
                                , nameTyp = invalty
@@ -619,8 +619,8 @@ codeGenComp dflags comp k =
               else return ()
 
             if [cexp|$id:stateVar < $int:n|]
-              then do ce <- codeGenArrRead dflags 
-                               (ctExp e) [cexp|$id:expVar|] 
+              then do ce <- codeGenArrRead dflags
+                               (ctExp e) [cexp|$id:expVar|]
                                (AIdxCExp [cexp|$id:stateVar|]) LISingleton
 
                       assignByVal yldTy yldTy [cexp|$id:(yldValOf yh)|] ce
@@ -935,7 +935,7 @@ codeGenComp dflags comp k =
         c2Name <- nextName ("__par_c2_" ++ (getLnNumInStr csp))
         let c2id = c2Name
 
-        let yTy  = ctParMid c1 c2 
+        let yTy  = ctParMid c1 c2
 
         -- Allocate intermediate yield buffer
         new_yh <- freshVar ("__yv_tmp_"  ++ (getLnNumInStr csp))
@@ -988,7 +988,7 @@ codeGenComp dflags comp k =
                           }
 
     go (MkComp (Seq c1 c2) csp csinfo) = do
-        let dty = ctDoneTyOfComp c1 
+        let dty = ctDoneTyOfComp c1
         unusedName <- freshName ("__seq_unused_" ++ (getLnNumInStr csp)) dty
         codeGenCompTop dflags (MkComp (mkBind c1 (unusedName, c2)) csp csinfo) k
 
@@ -1046,7 +1046,7 @@ codeGenComp dflags comp k =
             kontConsume k
 
         appendLabeledBlock (processNmOf prefix) $ do
-            codeGenArrWrite dflags aTy [cexp|$id:(doneValOf dh)|] 
+            codeGenArrWrite dflags aTy [cexp|$id:(doneValOf dh)|]
                                        (AIdxCExp [cexp|$id:stateVar|]) LISingleton [cexp|$id:(inValOf ih)|]
 
             appendStmt [cstm|++$id:stateVar;|]
@@ -1086,16 +1086,16 @@ codeGenComp dflags comp k =
     --   branch_var == 0, and to c2_tick/c2_process if branch_var == 0.
     -- o The init function for branch is the only code that modifies branch_var
     --   (to 0 or 1, depending on the value of [e])
-    go (MkComp (Branch e c1 c2) csp ()) 
-       | Just True <- evalBool e
+    go (MkComp (Branch e c1 c2) csp ())
+       | (Right True, []) <- evalBool e
        = codeGenCompTop dflags c1 k
-       | Just False <- evalBool e
+       | (Right False, []) <- evalBool e
        = codeGenCompTop dflags c2 k
        | otherwise
        = mkBranch dflags e c1 k c2 k csp -- Pass them the same continuation!
 
     go (MkComp (Repeat wdth c1) csp ()) = do
-        let vTy = ctDoneTyOfComp c1 
+        let vTy = ctDoneTyOfComp c1
         new_dh <- freshName ("__dv_tmp_"  ++ (getLnNumInStr csp)) vTy
         let new_dhval = doneValOf $ name new_dh
         codeGenDeclGroup new_dhval vTy >>= appendDecl

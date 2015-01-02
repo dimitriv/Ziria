@@ -40,6 +40,9 @@ module Interpreter (
   , evalBool
   , provable
   , implies
+    -- * Interpretation of source expressions
+  , evalSrcInt
+  , evalSrcBool
     -- ** Convenience
   , eNot
   , eOr
@@ -58,6 +61,7 @@ import Data.Maybe
 import Data.Set (Set)
 import GHC.Prim (Any)
 import Outputable
+import System.IO.Unsafe (unsafePerformIO)
 import Text.Parsec.Pos (SourcePos)
 import Unsafe.Coerce (unsafeCoerce)
 import qualified Data.Map as Map
@@ -65,7 +69,10 @@ import qualified Data.Set as Set
 
 import AstExpr
 import AstUnlabelled
-import CtExpr
+import CtExpr (ctExp)
+import GenSym (initGenSym)
+import TcMonad (runTcM')
+import Typecheck (tyCheckExpr)
 
 {-------------------------------------------------------------------------------
   Top-level API
@@ -83,6 +90,8 @@ evalPartial e = head $ evalEval (interpret e) cfg initState
        }
 
 -- | (Full) evaluation of an expression
+--
+-- The result of full evaluation should either be an EVal, EValArr or EStruct.
 evalFull :: Exp -> (Either String Exp, Prints)
 evalFull e = head $ evalEval (interpret e) cfg initState
   where
@@ -106,6 +115,36 @@ evalBool e = case evalFull e of
   (Right e', prints)
     | EVal _ (VBool b) <- unExp e' -> (Right b, prints)
     | otherwise                    -> (Left "Not an integer", prints)
+
+-- | Evaluate a source expression to an integer
+--
+-- The evaluator needs type information to work. When we are evaluating
+-- source expressions, it's easier to type check the expression and then
+-- evaluate it, rather than parametrize the type checker so that it can work
+-- with source expressions directly.
+--
+-- The type checker runs in the I/O monad to generate symbols. However, if we
+-- are evaluating a standalone source expression to an integer, then the
+-- evaluation is independent of the symbols we pick. Hence, it is sound to use
+-- unsafePerformIO here.
+evalSrcInt :: SrcExp -> (Either String Integer, Prints)
+evalSrcInt e = unsafePerformIO $ do
+    sym <- initGenSym "evalSrcInt"
+    me' <- runTcM' (tyCheckExpr e) sym
+    case me' of
+      Left  err     -> return (Left ("Type error: " ++ show err), [])
+      Right (e', _) -> return $ evalInt e'
+
+-- | Evaluate a source expression to a boolean
+--
+-- See comments for `evalSrcInt`.
+evalSrcBool :: SrcExp -> (Either String Bool, Prints)
+evalSrcBool e = unsafePerformIO $ do
+    sym <- initGenSym "evalSrcBool"
+    me' <- runTcM' (tyCheckExpr e) sym
+    case me' of
+      Left  err     -> return (Left ("Type error: " ++ show err), [])
+      Right (e', _) -> return $ evalBool e'
 
 -- | (Full) evaluation of expressions, guessing values for boolean expressions
 approximate :: Exp -> [Exp]
