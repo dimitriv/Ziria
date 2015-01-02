@@ -1,0 +1,21 @@
+fun f(a : arr[3] int) {
+  return length(a);
+}
+
+fun g(a : arr int) {
+  return length(a);
+}
+
+fun comp test() {
+  a <- take;
+  emit a;
+  emit f({1, 1, 1});
+  emit g({1});
+  emit g({1, 2});
+  emit g({1, 2, 3});
+  emit g({1, 2, 3, 4});
+  emit g({1, 2, 3, 4, 5});
+  emit a;
+} 
+
+let comp main = read[int] >>> test() >>> write[int];

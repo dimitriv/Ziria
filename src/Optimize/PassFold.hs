@@ -940,6 +940,17 @@ passExpLetPush = TypedExpPass $ \eloc e -> if
     | otherwise
      -> return e
 
+-- | Eliminate length(arr) calls for arrays of statically known length
+passALengthElim :: TypedExpPass
+passALengthElim = TypedExpPass $ \eloc e -> if
+    | EUnOp ALength e0 <- unExp e
+      , TArray (Literal i) _ <- ctExp e0
+     -> do
+       logStep "alength-elim" eloc [step| length(..) ~~> i |]
+       rewrite $ eVal eloc tint (vint i)
+    | otherwise
+     -> return e
+
 {-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
 -------------------------------------------------------------------------------}
@@ -1092,23 +1103,12 @@ rewrite_mit_map ty1 (i1,j1) ty2 (i2,j2) (f_name, fun)
 -- performance so I am keeping it commented for now:
 rest_chain :: TypedExpPass
 rest_chain = mconcat [
-      alength_elim
+      passALengthElim
     , const_fold
     , subarr_inline_step
     , proj_inline_step
     ]
 
-alength_elim :: TypedExpPass
-alength_elim = TypedExpPass $ \_ e -> if
-  | EUnOp ALength e0 <- unExp e
-    , (TArray nexp _)  <- ctExp e0
-    , let loc = expLoc e
-   -> rewrite $ numexp_to_exp loc nexp
-  | otherwise
-   -> return e
-  where
-    numexp_to_exp loc (Literal i) = eVal loc tint (vint i)
-    numexp_to_exp loc (NVar nm)   = eVar loc (toName nm Nothing tint)
 
 
 subarr_inline_step :: TypedExpPass
@@ -1549,8 +1549,6 @@ no_lut_inside x = isJust (mapExpM return return elut_nothing x)
 
 {-------------------------------------------------------------------------------
   Inlining auxiliary
-
-  TODO: These are not yet reviewed.
 -------------------------------------------------------------------------------}
 
 inline_exp_fun_in_comp :: (GName Ty, [GName Ty], [MutVar], Exp)
