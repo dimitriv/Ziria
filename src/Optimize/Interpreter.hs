@@ -346,7 +346,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
             Nothing         -> throwError $ "Out of bounds"
         -- Not in normal form. Leave uninterpreted
         _ ->
-          partiallyEvaluated $ eArrRead eloc arr' ix' LISingleton
+          partiallyEvaluated $ eArrRead eloc arr' ix' li
 
     -- Array permutation
 
