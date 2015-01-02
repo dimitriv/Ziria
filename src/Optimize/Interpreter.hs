@@ -80,25 +80,45 @@ import Typecheck (tyCheckExpr)
 
 type Prints = String
 
+-- | Interpreter mode
+--
+-- Note that only `EvalApprox` is non-deterministic; `EvalPartial` and
+-- `EvalFull` both result in precisely one answer (which may be an error).
+data EvalMode =
+    -- | Partial evaluation
+    --
+    -- Free variables will be left unchanged, where possible.
+    --
+    -- > a + 2 * 3 ~~> a + 6
+    EvalPartial
+
+    -- | Full evaluation
+    --
+    -- Free variables in the expression will result in an error.
+  | EvalFull
+
+    -- | Approximation
+    --
+    -- For use in satisfiability checking.
+    --
+    -- > if a then 1 else 2 ~~> [1, 2]
+  | EvalApprox
+
 -- | (Partial) evaluation of an expression
 evalPartial :: Exp -> (Either String Exp, Prints)
-evalPartial e = head $ evalEval (interpret e) cfg initState
+evalPartial e = head' $ evalEval (interpret e) EvalPartial initState
   where
-     cfg = EvalConfig {
-         enablePartial  = True
-       , enableGuessing = False
-       }
+    head' []    = error "evalPartial: unexpected empty list"
+    head' (x:_) = x
 
 -- | (Full) evaluation of an expression
 --
 -- The result of full evaluation should either be an EVal, EValArr or EStruct.
 evalFull :: Exp -> (Either String Exp, Prints)
-evalFull e = head $ evalEval (interpret e) cfg initState
+evalFull e = head' $ evalEval (interpret e) EvalFull initState
   where
-    cfg = EvalConfig {
-        enablePartial  = False
-      , enableGuessing = False
-      }
+    head' []    = error "evalFull: unexpected empty list"
+    head' (x:_) = x
 
 -- | Evaluate an expression to an integer
 evalInt :: Exp -> (Either String Integer, Prints)
@@ -149,12 +169,9 @@ evalSrcBool e = unsafePerformIO $ do
 -- | (Full) evaluation of expressions, guessing values for boolean expressions
 approximate :: Exp -> [Exp]
 approximate e =
-    [ e' | (Right e', _prints) <- evalEval (interpret e) cfg initState ]
-  where
-    cfg = EvalConfig {
-        enablePartial  = False
-      , enableGuessing = True
-      }
+    [ e'
+    | (Right e', _prints) <- evalEval (interpret e) EvalApprox initState
+    ]
 
 -- | Satisfiability check for expressions of type Bool
 --
@@ -205,11 +222,6 @@ initState = EvalState {
   , evalGuessesInt  = Map.empty
   }
 
-data EvalConfig = EvalConfig {
-    enablePartial  :: Bool
-  , enableGuessing :: Bool
-  }
-
 -- | The evaluator monad
 --
 -- The evaluator monad keeps track of a lot of things:
@@ -220,7 +232,7 @@ data EvalConfig = EvalConfig {
 -- 4. WriterT: Any debug prints executed by the program
 -- 5. []: Non-determinism arising from guessing values
 newtype Eval a = Eval {
-      unEval :: ErrorT String (RWST EvalConfig Prints EvalState []) a
+      unEval :: ErrorT String (RWST EvalMode Prints EvalState []) a
     }
   deriving ( Functor
            , Applicative
@@ -231,20 +243,20 @@ newtype Eval a = Eval {
 -- We don't want the MonadPlus instance from ErrorT
 -- (in fact, I don't think ErrorT should even introduce a MonadPlus instance..)
 instance MonadPlus Eval where
-  mzero       = mkEval $ \_cfg _st -> []
-  f `mplus` g = mkEval $ \cfg st -> runEval f cfg st <|> runEval g cfg st
+  mzero       = mkEval $ \_mode _st -> []
+  f `mplus` g = mkEval $ \mode st -> runEval f mode st <|> runEval g mode st
 
 instance Alternative Eval where
   empty = mzero
   (<|>) = mplus
 
-runEval :: Eval a -> EvalConfig -> EvalState -> [(Either String a, EvalState, Prints)]
+runEval :: Eval a -> EvalMode -> EvalState -> [(Either String a, EvalState, Prints)]
 runEval = runRWST . runErrorT . unEval
 
-evalEval :: Eval a -> EvalConfig -> EvalState -> [(Either String a, Prints)]
+evalEval :: Eval a -> EvalMode -> EvalState -> [(Either String a, Prints)]
 evalEval = evalRWST . runErrorT . unEval
 
-mkEval :: (EvalConfig -> EvalState -> [(Either String a, EvalState, Prints)]) -> Eval a
+mkEval :: (EvalMode -> EvalState -> [(Either String a, EvalState, Prints)]) -> Eval a
 mkEval = Eval . ErrorT . RWST
 
 readVar :: String -> Eval (Maybe Exp)
@@ -266,15 +278,24 @@ writeVar x v = Eval $ do
       (Just _, mem') -> put st { evalMemory = mem' }
       (Nothing, _)   -> throwError $ "Variable " ++ x ++ " not in scope"
 
+getMode :: Eval EvalMode
+getMode = Eval ask
+
 partiallyEvaluated :: a -> Eval a
 partiallyEvaluated x = do
-  guard =<< Eval (asks enablePartial)
-  return x
+  mode <- getMode
+  case mode of
+    EvalPartial -> return x
+    EvalFull    -> throwError "Free variables"
+    EvalApprox  -> mzero
 
 cannotEvaluate :: String -> Eval a
 cannotEvaluate msg = do
-  guard =<< Eval (asks enablePartial)
-  throwError msg
+  mode <- getMode
+  case mode of
+    EvalPartial -> throwError msg
+    EvalFull    -> throwError "Free variables"
+    EvalApprox  -> mzero
 
 logPrint :: Bool -> String -> Eval ()
 logPrint True  str = Eval $ tell (str ++ "\n")
@@ -284,9 +305,9 @@ logPrint False str = Eval $ tell str
 --
 -- This does NOT execute the error handler for errors thrown by throwError.
 guessIfUnevaluated :: (Exp -> Eval Exp) -> (Exp -> Eval Exp)
-guessIfUnevaluated f e = mkEval $ \cfg st ->
-  case runEval (f e) cfg st of
-    [] | enableGuessing cfg -> runEval (guess e) cfg st
+guessIfUnevaluated f e = mkEval $ \mode st ->
+  case runEval (f e) mode st of
+    [] | EvalApprox <- mode -> runEval (guess e) mode st
     result                  -> result
 
 {-------------------------------------------------------------------------------
