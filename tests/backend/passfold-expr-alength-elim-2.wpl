@@ -1,0 +1,5 @@
+fun f(a : arr int) {
+  return length(a);
+}
+
+let comp main = read[arr[3] int] >>> map f >>> write[int];

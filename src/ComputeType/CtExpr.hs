@@ -32,9 +32,12 @@ import Utils
 ctExp :: GExp Ty a -> Ty
 ctExp MkExp{..} = ctExp0 unExp
 
+-- | Compute the type of an expression
+--
+-- NOTE: Arrays must be non-empty so it's safe to take @(head elems)@
 ctExp0 :: GExp0 Ty a -> Ty
-ctExp0 (EVal    ty _)      = ty
-ctExp0 (EValArr ty _)      = ty
+ctExp0 (EVal ty _)         = ty
+ctExp0 (EValArr elems)     = TArray (Literal (length elems)) (ctExp (head elems))
 ctExp0 (EVar nm)           = nameTyp nm
 ctExp0 (EUnOp op a)        = ctUnOp op (ctExp a)
 ctExp0 (EBinOp op a b)     = ctBinOp op (ctExp a) (ctExp b)

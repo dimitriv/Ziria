@@ -37,10 +37,11 @@ module TcUnify (
   , unifyTrans_CTy
   , unifyCompOrTrans_CTy
 
-  , ctyJoin 
+  , ctyJoin
 
     -- * Defaulting
   , defaultTy
+  , defaultExpr
   , defaultComp
   , defaultProg
     -- * Instantiation
@@ -146,7 +147,7 @@ instance Unify Ty where
 
       go TVoid TVoid = return ()
       go TVoid _b    = panicStr "Unifier cannot possibly meet TVoid!"
-      go _a TVoid    = panicStr "Unifier cannot possibly meet TVoid!" 
+      go _a TVoid    = panicStr "Unifier cannot possibly meet TVoid!"
 
       go a b = unifyErr p a b
 
@@ -159,10 +160,10 @@ instance Unify Ty where
                              Nothing  -> updTyEnv [(x, TVar y)]
                          }
       goTyVar x ty
-        | x `S.member` tyVarsOfTy ty 
+        | x `S.member` tyVarsOfTy ty
         = occCheckErr p (TVar x) ty
         | TVoid <- ty
-        = panicStr "Unifier cannot possibly meet TVoid!" 
+        = panicStr "Unifier cannot possibly meet TVoid!"
         | otherwise                  = updTyEnv [(x, ty)]
 
 
@@ -176,9 +177,9 @@ tyJoinWithHint _loc Infer t     = return t
 tyJoinWithHint loc (Check t) t' = tyJoin loc t t'
 
 
-ctyJoin :: Maybe SourcePos -> CTy -> CTy -> TcM CTy 
-ctyJoin p = go 
-  where 
+ctyJoin :: Maybe SourcePos -> CTy -> CTy -> TcM CTy
+ctyJoin p = go
+  where
       go :: GCTy Ty -> GCTy Ty -> TcM CTy
       go (CTVar x) cty = do { tenv <- getCTyEnv
                             ; case M.lookup x tenv of
@@ -187,18 +188,18 @@ ctyJoin p = go
                             }
       go cty (CTVar x) = go (CTVar x) cty
 
-      go (CTTrans  a b) (CTTrans   a' b') 
-        = do ax <- tyJoin p a a' 
-             bx <- tyJoin p b b' 
+      go (CTTrans  a b) (CTTrans   a' b')
+        = do ax <- tyJoin p a a'
+             bx <- tyJoin p b b'
              return $ CTTrans ax bx
 
       go (CTComp v a b) (CTComp v' a' b')
-        = do ax <- tyJoin p a a' 
-             bx <- tyJoin p b b' 
+        = do ax <- tyJoin p a a'
+             bx <- tyJoin p b b'
              unify p v v'
              return $ CTComp v ax bx
 
-      go (CTArrow args res) (CTArrow args' res') 
+      go (CTArrow args res) (CTArrow args' res')
         | length args == length args'
         = do argsx <- mapM (uncurry (callArgJoin p)) (zip args args')
              resx  <- go res res'
@@ -212,13 +213,13 @@ ctyJoin p = go
         | otherwise = do { tenv <- getCTyEnv
                          ; case M.lookup y tenv of
                              Just yty -> goTyVar x yty
-                             Nothing  -> do updCTyEnv [(x, CTVar y)]  
+                             Nothing  -> do updCTyEnv [(x, CTVar y)]
                                             return (CTVar y)
                          }
       goTyVar x cty
-        | x `S.member` snd (tyVarsOfCTy cty) 
+        | x `S.member` snd (tyVarsOfCTy cty)
         = occCheckErr p (CTVar x) cty
-        | otherwise                          
+        | otherwise
         = updCTyEnv [(x, cty)] >> return cty
 
 callArgJoin :: Maybe SourcePos -> CallArg Ty CTy -> CallArg Ty CTy -> TcM (CallArg Ty CTy)
@@ -226,7 +227,7 @@ callArgJoin p (CAExp ty) (CAExp ty')     = unify p ty ty' >> return (CAExp ty)
 callArgJoin p (CAComp cty) (CAComp cty') = ctyJoin p cty cty' >>= (return . CAComp)
 callArgJoin p a b = unifyErr p a b
 
-{- 
+{-
 instance Unify (GCTy Ty) where
   unify' p = go
     where
@@ -344,16 +345,23 @@ defaultTy p ty def = do
 -- | Zonk all type variables and default the type of `EError` to `TUnit` when
 -- it's still a type variable.
 defaultExpr :: Exp -> TcM Exp
-defaultExpr = mapExpM zonk return go
+defaultExpr = mapExpM goTy return goExp
   where
-    go :: Exp -> TcM Exp
-    go e
+    goExp :: Exp -> TcM Exp
+    goExp e
       | EError ty str <- unExp e
       = do { ty' <- defaultTy (expLoc e) ty TUnit
            ; return $ eError (expLoc e) ty' str
            }
       | otherwise
       = return e
+
+    goTy :: Ty -> TcM Ty
+    goTy ty = do
+      ty' <- zonk ty
+      case ty' of
+        TInt (BWUnknown _) -> do unify Nothing ty' tint32 ; return tint32
+        _                  -> return ty'
 
 defaultComp :: Comp -> TcM Comp
 defaultComp = mapCompM zonk zonk return return defaultExpr return
@@ -443,7 +451,7 @@ unifyComp loc annU annA annB = zonk >=> go
   where
     go (CTComp u a b) = do
       u' <- tyJoinWithHint loc annU u
-      a' <- tyJoinWithHint loc annA a 
+      a' <- tyJoinWithHint loc annA a
       b' <- tyJoinWithHint loc annB b
       return (u', a', b')
     go cty = do
@@ -460,7 +468,7 @@ unifyTrans :: Maybe SourcePos
 unifyTrans loc annA annB = zonk >=> go
   where
     go (CTTrans a b) = do
-      a' <- tyJoinWithHint loc annA a 
+      a' <- tyJoinWithHint loc annA a
       b' <- tyJoinWithHint loc annB b
       return (a', b')
     go cty = do
@@ -478,12 +486,12 @@ unifyCompOrTrans :: Maybe SourcePos
 unifyCompOrTrans loc annA annB = zonk >=> go
   where
     go (CTComp u a b) = do
-      a' <- tyJoinWithHint loc annA a 
-      b' <- tyJoinWithHint loc annB b 
+      a' <- tyJoinWithHint loc annA a
+      b' <- tyJoinWithHint loc annB b
       return (Just u, a', b')
     go (CTTrans a b) = do
-      a' <- tyJoinWithHint loc annA a 
-      b' <- tyJoinWithHint loc annB b 
+      a' <- tyJoinWithHint loc annA a
+      b' <- tyJoinWithHint loc annB b
       return (Nothing, a', b')
     go (CTArrow _ _) =
       raiseErrNoVarCtx loc $
@@ -497,8 +505,8 @@ unifyCompOrTrans_CTy :: Maybe SourcePos
                  -> CTy -> TcM CTy
 unifyCompOrTrans_CTy loc annA annB cty
   = do (nm,a,b) <- unifyCompOrTrans loc annA annB cty
-       case nm of 
-          Nothing -> return $ CTTrans a b 
+       case nm of
+          Nothing -> return $ CTTrans a b
           Just v  -> return $ CTComp v a b
 
 unifyTrans_CTy :: Maybe SourcePos

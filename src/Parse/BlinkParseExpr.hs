@@ -47,7 +47,7 @@ import AstExpr
 import AstUnlabelled
 import BlinkLexer
 import BlinkParseM
-import Eval (evalInt)
+import Interpreter (evalSrcInt)
 
 {-------------------------------------------------------------------------------
   Expressions
@@ -99,12 +99,12 @@ parseExpr =
   where
     table =
       [
-        [ Prefix $ withPos eUnOp  <*> (Neg     <$ reservedOp "-")
-        , Prefix $ withPos eUnOp  <*> (Not     <$ reserved   "not")
-        , Prefix $ withPos eUnOp  <*> (BwNeg   <$ reservedOp "~")
+        [ Prefix $ withPos eUnOp' <*> (Neg     <$ reservedOp "-")
+        , Prefix $ withPos eUnOp' <*> (Not     <$ reserved   "not")
+        , Prefix $ withPos eUnOp' <*> (BwNeg   <$ reservedOp "~")
         ]
 
-      , [ Prefix $ withPos eUnOp  <*> (ALength <$ reserved   "length") ]
+      , [ Prefix $ withPos eUnOp' <*> (ALength <$ reserved   "length") ]
 
       , [ lInfix $ withPos eBinOp <*> (Expon   <$ reservedOp "**")
         , lInfix $ withPos eBinOp <*> (Mult    <$ reservedOp "*")
@@ -156,7 +156,7 @@ parseTerm :: BlinkParser SrcExp
 parseTerm = choice
     [ parseUnit mkUnit
     , parens parseExpr
-    , eLetDecl <$> parseELetDecl <* reserved "in" <*> parseExpr
+    , eLetDecl <$> parseELetDecl <* reserved "in" <*> parseExprOrStmts
     , withPos eIf <* reserved "if"   <*> parseExpr
                   <* reserved "then" <*> parseExpr
                   <* reserved "else" <*> parseExpr
@@ -182,8 +182,8 @@ parseUnit f = try $ withPos f <* (symbol "(" >> symbol ")")
 -- > <value> ::= <scalar-value> | "{" <scalar-value>*"," "}"
 parseValue :: BlinkParser SrcExp
 parseValue = choice
-    [ withPos eValSrc    <*> parseScalarValue
-    , withPos eValArrSrc <*> braces (sepBy parseScalarValue comma)
+    [ withPos eValSrc <*> parseScalarValue
+    , withPos eValArr <*> braces (sepBy parseExpr comma)
     ] <?> "value"
 
 -- | Scalar values
@@ -360,6 +360,24 @@ parseStmtBlock = choice
   , parseStmtExp'
   ] <?> "statement block"
 
+-- | Expression-or-block
+--
+-- In the expression language we make a distinction between expressions proper
+-- (no side effects) and statements. This distinction is there for programmer
+-- clarity only, it is not preserved internally; for instance, `PassFold` will
+-- create ASTs that cannot be written in the surface syntax.
+--
+-- However, the expression language does allow for the declaration of mutable
+-- variables even inside expressions; it is somewhat strange to allow this but
+-- not to allow side effects in the RHS of these bindings. Hence, whenever we
+-- have an "in" inside expressions, we follow by an `parseExprOrStmts`: either
+-- an expression (without side effects), or a statement block inside braces.
+parseExprOrStmts :: BlinkParser SrcExp
+parseExprOrStmts = choice
+  [ braces parseStmts
+  , parseExpr
+  ] <?> "expression or statement block"
+
 -- | A list of commands
 --
 -- > <stmts> ::= <stmt>*";"
@@ -432,8 +450,9 @@ parseStmtExp = choice
     eError' p                     = eError p SrcTyUnknown
 
     -- Print a series of expression; @b@ argument indicates whether we a newline
-    makePrint b p (h:t) = eSeq p (ePrint p False h) (makePrint b p t)
-    makePrint b p []    = ePrint p b (eValSrc p (VString ""))
+    makePrint b p []     = ePrint p b (eValSrc p (VString ""))
+    makePrint b p [x]    = ePrint p b x
+    makePrint b p (x:xs) = eSeq p (ePrint p False x) (makePrint b p xs)
 
     mkAssign p x ds Nothing rhs =
       eAssign p (foldr ($) (mkVar p x) ds) rhs
@@ -529,9 +548,9 @@ eletDeclName (ELetDeclExpr _ nm _)    = show nm
 foldIntExpr :: BlinkParser Int
 foldIntExpr = do
   e <- parseExpr <?> "expression"
-  case evalInt e of
-    Just i  -> return $ fromIntegral i
-    Nothing -> parserFail "Non-constant array length expression."
+  case evalSrcInt e of
+    (Right i,   _prints) -> return $ fromIntegral i
+    (Left _err, _prints) -> parserFail "Non-constant array length expression."
 
 -- | Variable with optional type annotation
 --
@@ -629,7 +648,7 @@ mkCallOrCast p x args
 
   | otherwise        = return $ mkCall p x args
   where
-    cast t = eUnOp p (Cast t)
+    cast t = eUnOp' p (Cast t)
 
 assertSingleton :: Monad m => [t] -> (t -> a) -> m a
 assertSingleton [e] action = return (action e)
@@ -638,5 +657,16 @@ assertSingleton _x _action = fail "Expecting only one argument!"
 eValSrc :: Maybe SourcePos -> Val -> SrcExp
 eValSrc p v = eVal p SrcTyUnknown v
 
-eValArrSrc :: Maybe SourcePos -> [Val] -> SrcExp
-eValArrSrc p vs = eValArr p SrcTyUnknown vs
+-- | Push unary operators inside where possible
+--
+-- This is primarily used to avoid parsing "-1" as the application of the
+-- unary negation operator to the literal "1", but could be extended if we
+-- wish to "optimize" other constructors too. In a way this is a tiny little
+-- evaluator.
+eUnOp' :: Maybe SourcePos -> GUnOp t -> GExp t () -> GExp t ()
+eUnOp' p op e =
+    case (op, unExp e) of
+      (Neg, EVal ty (VInt i)) -> eVal eloc ty (VInt (negate i))
+      _                       -> eUnOp p op e
+  where
+    eloc = expLoc e

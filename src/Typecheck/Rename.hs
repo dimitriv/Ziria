@@ -329,9 +329,9 @@ renExp (MkExp exp0 eloc ()) = case exp0 of
       EVal t v -> do
         t' <- renTyAnn eloc t
         return $ eVal eloc t' v
-      EValArr t vs -> do
-        t' <- renTyAnn eloc t
-        return $ eValArr eloc t' vs
+      EValArr vs -> do
+        vs' <- mapM renExp vs
+        return $ eValArr eloc vs'
       EVar nm -> do
         nm' <- renFree nm
         return $ eVar eloc nm'

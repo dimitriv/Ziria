@@ -49,7 +49,7 @@ import Utils
 -- @Range i j@ means that we know /all/ values in the range will be taken on.
 data Range = RangeTop
            | Range Integer Integer
-  deriving (Generic, Typeable, Data, Eq, Show)
+  deriving (Generic, Typeable, Data, Eq, Ord, Show)
 
 instance Num Range where
     RangeTop    + _           = RangeTop
@@ -161,7 +161,8 @@ erange (MkExp (EVal _ (VInt i)) _ _) =
 erange (MkExp (EVal _ _) _ _) =
     return RangeTop
 
-erange (MkExp (EValArr _ _) _ _) =
+erange (MkExp (EValArr elems) _ _) = do
+    mapM erange elems
     return RangeTop
 
 erange (MkExp (EVar v) _ _) =

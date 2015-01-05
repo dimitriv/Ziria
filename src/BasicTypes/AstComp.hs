@@ -864,6 +864,8 @@ data GMutVar t a b = MutVar {
   , mutLoc  :: CompLoc
   , mutInfo :: a
   }
+  deriving (Generic)
+
 type MutVar = GMutVar Ty () ()
 
 -- | Apply substitution to local variables
@@ -1123,6 +1125,8 @@ instance PrettyVal VectAnn
 instance PrettyVal t => PrettyVal (GCTy t)
 
 instance (PrettyVal a, PrettyVal b) => PrettyVal (CallArg a b)
+
+instance (PrettyVal t, PrettyVal a, PrettyVal b) => PrettyVal (GMutVar t a b)
 
 instance (PrettyVal tc, PrettyVal t, PrettyVal a, PrettyVal b) => PrettyVal (GComp0 tc t a b)
 instance (PrettyVal tc, PrettyVal t, PrettyVal a, PrettyVal b) => PrettyVal (GComp tc t a b)

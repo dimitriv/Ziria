@@ -27,5 +27,8 @@ class Outputable a where
 instance Outputable String where
   ppr = text
 
+instance Outputable Int where
+  ppr = integer . fromIntegral
+
 pretty :: Outputable a => a -> String
 pretty = show . ppr

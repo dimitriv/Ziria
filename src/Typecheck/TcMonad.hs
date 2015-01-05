@@ -32,6 +32,7 @@ module TcMonad (
     -- * TcM monad
     TcM -- opaque
   , runTcM
+  , runTcM'
   , firstToSucceed
     -- * Unifiers
   , Unifier(..)
@@ -192,6 +193,16 @@ runTcM act tenv env cenv sym ctx st =
       , tcm_sym      = sym
       , tcm_errctx   = ctx
       }
+
+-- | Variation on runTcM that picks default environments
+runTcM' :: TcM a -> GS.Sym -> IO (Either Doc (a, Unifier))
+runTcM' act sym =
+    runTcM act (mkTyDefEnv primComplexStructs)
+               (mkEnv [])
+               (mkCEnv [])
+               sym
+               TopLevelErrCtx
+               emptyUnifier
 
 firstToSucceed :: TcM a -> TcM a -> TcM a
 firstToSucceed m1 m2 = get >>= \st -> catchError m1 (\_ -> put st >> m2)

@@ -43,8 +43,8 @@ vint n = VInt (fromIntegral n)
 eVal :: Maybe SourcePos -> t -> Val -> GExp t ()
 eVal loc t v = MkExp (EVal t v) loc ()
 
-eValArr :: Maybe SourcePos -> t -> [Val] -> GExp t ()
-eValArr loc t v = MkExp (EValArr t v) loc ()
+eValArr :: Maybe SourcePos -> [GExp t ()] -> GExp t ()
+eValArr loc v = MkExp (EValArr v) loc ()
 
 eVar :: Maybe SourcePos ->  GName t -> GExp t ()
 eVar loc v = MkExp (EVar v) loc ()

@@ -36,9 +36,9 @@ import AstExpr
 import AstComp
 import AstLabelled
 import CtExpr ( ctExp )
-import Eval ( evalInt )
+import Interpreter (evalInt)
 
-import Opts 
+import Opts
 
 {-------------------------------------------------------------------------------
   Top-level API
@@ -50,19 +50,19 @@ type LComp = GComp CTy Ty Card ()
 
 -- | Run the cardinality analysis
 runCardAnal :: DynFlags -> Comp -> IO LComp
-runCardAnal dflags 
+runCardAnal dflags
   = runCardM [] . computeCard dflags
 
 {-------------------------------------------------------------------------------
   Cardinality data types
 -------------------------------------------------------------------------------}
 
-data Card 
-  = -- | Cardinality of a "simple computer". 
-    -- A simple computer is a computer that does not 
+data Card
+  = -- | Cardinality of a "simple computer".
+    -- A simple computer is a computer that does not
     -- contain any uses of ">>>"
     SCard CAlpha -- input  alpha
-          CAlpha -- output alpha 
+          CAlpha -- output alpha
   | OCard
 
 data CAlpha
@@ -72,18 +72,18 @@ data CAlpha
 
 -- | Construct a cardinality
 scard :: Int -> Int -> Card
-scard i j = SCard (CAStatic i) (CAStatic j) 
+scard i j = SCard (CAStatic i) (CAStatic j)
 ocard :: Card
 ocard = OCard
 
 
--- | Sum two alphas 
-aplus :: CAlpha -> CAlpha -> CAlpha 
+-- | Sum two alphas
+aplus :: CAlpha -> CAlpha -> CAlpha
 aplus (CAStatic n1) (CAStatic n2) = CAStatic (n1+n2)
-aplus (CAStatic n1) (CAMultOf n2) 
+aplus (CAStatic n1) (CAMultOf n2)
   | n1 `mod` n2 == 0              = CAMultOf n2
-  | otherwise                     = CAUnknown 
-aplus (CAMultOf n1) (CAMultOf n2) 
+  | otherwise                     = CAUnknown
+aplus (CAMultOf n1) (CAMultOf n2)
   | let n = gcd n1 n2
   , n > 1
   = CAMultOf n
@@ -94,7 +94,7 @@ aplus x y = aplus y x
 
 -- | Sum two cardinalities
 cplus :: Card -> Card -> Card
-cplus (SCard ain aout) 
+cplus (SCard ain aout)
       (SCard ain' aout') = SCard (ain `aplus` ain') (aout `aplus` aout')
 cplus (SCard {}) OCard   = ocard
 cplus OCard _            = ocard
@@ -107,19 +107,19 @@ cplus_many cs = foldl cplus (head cs) (tail cs)
 
 -- | Multiply an alpha with a second argument that describes how many
 -- times to iterate
--- 
+--
 -- Either a fixed number of times, or an unknown number of times or a
 -- multiple of a fixed number
-atimes :: CAlpha -> CAlpha -> CAlpha 
-atimes ca cb = go cb 
-  where 
+atimes :: CAlpha -> CAlpha -> CAlpha
+atimes ca cb = go cb
+  where
     go (CAStatic j) = atimes_static ca j
     go CAUnknown    = atimes_unknown ca
-    go (CAMultOf j) = atimes_mult ca j 
+    go (CAMultOf j) = atimes_mult ca j
 
     atimes_static (CAStatic i) j = CAStatic (i*j)
     atimes_static (CAMultOf i) j = CAMultOf (i*j)
-    atimes_static CAUnknown _    = CAUnknown 
+    atimes_static CAUnknown _    = CAUnknown
 
     atimes_unknown (CAStatic 0)  = CAStatic 0
     atimes_unknown (CAMultOf i)  = CAMultOf i
@@ -131,7 +131,7 @@ atimes ca cb = go cb
 
 -- | Multiply a cardinality with an argument specifying how many times
 --   to iterate.
-ctimes :: Card -> CAlpha -> Card 
+ctimes :: Card -> CAlpha -> Card
 ctimes (SCard ain aout) how_many
   = SCard (ain `atimes` how_many) (aout `atimes` how_many)
 ctimes OCard _j = ocard
@@ -140,7 +140,7 @@ ctimes OCard _j = ocard
 ajoin :: CAlpha -> CAlpha -> CAlpha
 ajoin CAUnknown _  = CAUnknown
 ajoin _ CAUnknown  = CAUnknown
-ajoin (CAStatic i) (CAStatic j) 
+ajoin (CAStatic i) (CAStatic j)
   | i == j         = CAStatic i
   | otherwise      = CAUnknown
 ajoin (CAStatic i) (CAMultOf j)
@@ -153,11 +153,11 @@ ajoin (CAMultOf i) (CAMultOf j)
 ajoin x y = ajoin y x
 
 
--- | Join two cardinalities 
+-- | Join two cardinalities
 cjoin :: Card -> Card -> Card
 cjoin OCard _ = ocard
 cjoin _ OCard = ocard
-cjoin (SCard ain aout) (SCard bin bout) 
+cjoin (SCard ain aout) (SCard bin bout)
   = SCard (ain `ajoin` bin) (aout `ajoin` bout)
 
 
@@ -170,7 +170,7 @@ isSimplCard_mb _other           = Nothing
   Infrastructure
 -------------------------------------------------------------------------------}
 
-data CEnvDom 
+data CEnvDom
   = CDomVar CId -- A (computation) variable
   | CDomFun CId -- A (computation) function
   deriving Eq
@@ -181,7 +181,7 @@ type CEnv = [(CEnvDom,Card)]
 --
 -- NOTE: We don't actually rely on MonadIO anywhere
 -- nor do we use the DynFlags. But I am keeping them
--- here for ease of debugging. 
+-- here for ease of debugging.
 
 newtype CardM a = CardM (ReaderT CEnv IO a)
   deriving ( Functor
@@ -192,15 +192,15 @@ newtype CardM a = CardM (ReaderT CEnv IO a)
            )
 
 runCardM :: CEnv -> CardM a -> IO a
-runCardM init_env (CardM f) 
+runCardM init_env (CardM f)
   = runReaderT f init_env
 
 extendCVarEnv :: CId -> Card -> CardM a -> CardM a
-extendCVarEnv nm c 
+extendCVarEnv nm c
   = local ((CDomVar nm, c) :)
 
 extendCFunEnv :: CId -> Card -> CardM a -> CardM a
-extendCFunEnv nm c 
+extendCFunEnv nm c
   = local ((CDomFun nm, c) :)
 
 -- | Lookup variable cardinality
@@ -225,7 +225,7 @@ lookupFun f = do
 -------------------------------------------------------------------------------}
 
 computeCard :: DynFlags -> Comp -> CardM LComp
-computeCard _dflags = go 
+computeCard _dflags = go
   where
     go :: Comp -> CardM LComp
     go (MkComp c0 loc ()) = case c0 of
@@ -284,7 +284,7 @@ computeCard _dflags = go
         return $ cCall loc card f es'
 
       Emit e      -> return $ cEmit   loc (scard 0 1) e
-      Emits e     -> return $ cEmits  loc (emits_card $ ctExp e) e 
+      Emits e     -> return $ cEmits  loc (emits_card $ ctExp e) e
       Return fi e -> return $ cReturn loc (scard 0 0) fi e
       Take1 a     -> return $ cTake1  loc (scard 1 0) a
       Take a n    -> return $ cTake   loc (scard n 0) a n
@@ -333,8 +333,8 @@ computeCard _dflags = go
       WriteSnk mty -> return $ cWriteSnk loc ocard mty
       ReadInternal a s tp -> return $ cReadInternal loc ocard a s tp
       WriteInternal a s -> return $ cWriteInternal loc ocard a s
-      Standalone c1 -> do 
-        c1' <- go c1 
+      Standalone c1 -> do
+        c1' <- go c1
         return $ cStandalone loc (compInfo c1') c1'
       Mitigate t n1 n2  -> return $ cMitigate loc ocard t n1 n2
 
@@ -342,16 +342,16 @@ computeCard _dflags = go
     go_callarg (CAExp  e) = return $ CAExp e
     go_callarg (CAComp c) = CAComp <$> go c
 
-    getint_calpha :: Exp -> CAlpha 
+    getint_calpha :: Exp -> CAlpha
     getint_calpha e
-      | Just j <- evalInt e
+      | (Right j, []) <- evalInt e
       = CAStatic $ fromIntegral j
-      | otherwise = CAUnknown 
+      | otherwise = CAUnknown
 
     -- extend environment for callargs: use ocard (unknown)
     -- as approximation of actual cardinality of argument
-    cargs_extend [] m = m 
-    cargs_extend (pm:pms) m 
+    cargs_extend [] m = m
+    cargs_extend (pm:pms) m
       | MkName nm uid (CAComp cty) loc <- pm
       , let pm' = MkName nm uid cty loc
       = extendCVarEnv pm' ocard $ cargs_extend pms m

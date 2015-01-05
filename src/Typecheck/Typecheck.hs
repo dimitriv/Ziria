@@ -21,8 +21,6 @@
 module Typecheck (
     -- * Top-level
     tyCheckProg
-  , envOfDecls
-    -- * Not top-level (for use by AstFreeMonad primarily)
   , tyCheckComp
   , tyCheckExpr
   ) where
@@ -34,14 +32,17 @@ import qualified Data.Set as S
 import AstComp
 import AstExpr
 import CtComp (ctComp)
-import Tc ( tc )
+import Tc (tc)
 import Outputable
 import Rename
 import TcMonad
-import TcUnify (defaultProg)
+import TcUnify
 
 {-------------------------------------------------------------------------------
-  Top-level
+  Top-level entry to the type-checker
+
+  These are not recursive -- we do a SINGLE call at the end to default
+  type variables.
 -------------------------------------------------------------------------------}
 
 tyCheckProg :: SrcProg -> TcM Prog
@@ -53,19 +54,11 @@ tyCheckProg prog_src = do
   void $ checkUnresolved (progComp prog_def)
   return prog_def
 
--- TODO: Remove once we get rid of locals
-envOfDecls :: [(GName Ty, Maybe Exp)] -> Env
-envOfDecls = mkEnv . map (\(nm, _) -> (name nm, nm))
-
-{-------------------------------------------------------------------------------
-  Not top-level (for use by AstFreeMonad primarily)
--------------------------------------------------------------------------------}
-
 tyCheckComp :: SrcComp -> TcM Comp
-tyCheckComp = renComp >=> tc
+tyCheckComp = renComp >=> tc >=> defaultComp
 
 tyCheckExpr :: SrcExp -> TcM Exp
-tyCheckExpr = renExp >=> tc
+tyCheckExpr = renExp >=> tc >=> defaultExpr
 
 {-------------------------------------------------------------------------------
   Auxiliary: check for unresolved type variables

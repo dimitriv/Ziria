@@ -1,0 +1,8 @@
+fun f(a:arr int) {
+  var c : arr[2] complex16 := {complex16{re=0; im=0}, complex16{re=0; im=0}};
+  return 0;
+} 
+
+let comp main = read[int] >>> emit f({1,2}) >>> write[int]
+
+

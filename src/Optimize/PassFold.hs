@@ -17,7 +17,7 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall -Wwarn #-}
-{-# LANGUAGE ScopedTypeVariables, RecordWildCards, GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes #-}
+{-# LANGUAGE ScopedTypeVariables, RecordWildCards, GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes, DeriveGeneric #-}
 module PassFold (runFold, elimMitigsIO) where
 
 import Prelude hiding (exp)
@@ -27,10 +27,12 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Data.Maybe (isJust)
 import Data.Monoid
+import GHC.Generics
 import System.CPUTime
 import Text.Parsec.Pos (SourcePos)
 import Text.PrettyPrint.HughesPJ
 import Text.Printf
+import Text.Show.Pretty (PrettyVal)
 import qualified Data.Map as Map
 import qualified Data.Set as S
 
@@ -38,7 +40,7 @@ import AstComp
 import AstExpr
 import AstUnlabelled
 import CtExpr ( ctExp  )
-import Eval
+import Interpreter
 import Opts
 import Outputable
 import PassFoldDebug
@@ -195,16 +197,12 @@ runPasses (sym, flags) = go False
     go b mp [] comp =
       return (b, comp, mp)
     go b mp ((pn,p):ps) comp = do
---    printf "Pass: %10s" pn
       ((comp', rewritten), time) <- measure $ runRwM (p comp) (sym, flags)
       let mp' = incInvokes mp time pn
       case rewritten of
         NotRewritten -> do
-          -- printf "... not rewritten :-( \n"
-          go b mp' ps comp
+          go b mp' ps comp'
         Rewritten -> do
-          -- printf "... rewritten     :-) \n"
-          -- ; printf "comp = %s\n" (show comp)
           go True (incRewrites mp' time pn) ((pn,p):ps) comp'
 
 -- | Perform folding (run all standard passes)
@@ -244,6 +242,7 @@ foldCompPasses flags
     , ("letfun-times"  , passLetFunTimes )
     , ("times-unroll"  , passTimesUnroll )
     , ("inline"        , passInline      )
+    , ("eval-lete"     , passEvalLetE    )
 
     -- More aggressive optimizations
     , ("push-comp-locals"       , passPushCompLocals      )
@@ -263,11 +262,12 @@ foldExpPasses flags
   | isDynFlagSet flags NoFold || isDynFlagSet flags NoExpFold
   = []
   | otherwise
-  = [ ("for-unroll"         , for_unroll_step   )
-    , ("exp-inlining-steps" , exp_inlining_steps)
-    , ("asgn-letref-step"   , asgn_letref_step  )
-    , ("exp_let_push_step"  , exp_let_push_step )
-    , ("rest-chain"         , rest_chain        )
+  = [ ("for-unroll"   , passForUnroll  )
+    , ("exp-inlining" , passExpInlining)
+    , ("asgn-letref"  , passAsgnLetRef )
+    , ("eval-elet"    , passEvalELet   )
+    , ("exp-let-push" , passExpLetPush )
+    , ("rest-chain"   , rest_chain        )
     ]
 
 {-------------------------------------------------------------------------------
@@ -291,7 +291,7 @@ passFold = TypedCompPass $ \_ -> go
       case bindSeqView comp of
         BindView nm (MkComp (Return fi e) _ ()) c12 -> do
           logStep "fold/bind-return" cloc
-            [step| nm <- return e ; .. ~~> let nm = e in .. |]
+            [step| nm <- return .. ~~> let nm =  .. |]
           c12' <- go c12
           rewrite $ cLetE cloc nm fi e c12'
 
@@ -309,7 +309,7 @@ passFold = TypedCompPass $ \_ -> go
         SeqView (MkComp (Return fi e) _ ()) c12 -> do
           let nm = mkUniqNm cloc (ctExp e)
           logStep "fold/seq" cloc
-            [step| return e ; .. ~~> let nm = e in .. |]
+            [step| return .. ; .. ~~> let nm = .. in .. |]
           c12' <- go c12
           rewrite $ cLetE cloc nm fi e c12'
 
@@ -325,17 +325,17 @@ passPurify = TypedCompPass $ \cloc comp ->
     case extractCLetEs comp of
       Just (binds, comp') | Return fi e <- unComp comp' -> do
         logStep "purify/return" cloc
-          [step| let binds in return e ~~> return (let binds in e) |]
+          [step| let binds in return .. ~~> return (let binds in ..) |]
         rewrite $ cReturn cloc fi (insertELetEs binds e)
 
       Just (binds, comp') | Emit e <- unComp comp' -> do
         logStep "purify/emit" cloc
-          [step| let binds in emit e ~~> emit (let binds in e) |]
+          [step| let binds in emit .. ~~> emit (let binds in ..) |]
         rewrite $ cEmit cloc (insertELetEs binds e)
 
       Just (binds, comp') | Emits e <- unComp comp' -> do
         logStep "purify/emits" cloc
-          [step| let binds in emits e ~~> emits (let binds in e) |]
+          [step| let binds in emits .. ~~> emits (let binds in ..) |]
         rewrite $ cEmits cloc (insertELetEs binds e)
 
       _otherwise ->
@@ -347,17 +347,17 @@ passPurifyLetRef = TypedCompPass $ \cloc comp -> do
     case extractCMutVars' comp of
       Just (binds, comp') | Return fi e <- unComp comp' -> do
         logStep "purify-letref/return" cloc
-          [step| var binds in return e ~~> return (var binds in e) |]
+          [step| var binds in return .. ~~> return (var binds in ..) |]
         rewrite $ cReturn cloc fi (insertEMutVars' binds e)
 
       Just (binds, comp') | Emit e <- unComp comp' -> do
         logStep "purify-letref/emit" cloc
-          [step| var binds in emit e ~~> emit (var binds in e) |]
+          [step| var binds in emit .. ~~> emit (var binds in ..) |]
         rewrite $ cEmit cloc (insertEMutVars' binds e)
 
       Just (binds, comp') | Emits e <- unComp comp' -> do
         logStep "purify-letref/emits" cloc
-          [step| var binds in emits e ~~> emits (var binds in e) |]
+          [step| var binds in emits .. ~~> emits (var binds in ..) |]
         rewrite $ cEmits cloc (insertEMutVars' binds e)
 
       _otherwise ->
@@ -461,9 +461,9 @@ passTimesUnroll = TypedCompPass $ \cloc comp -> do
 
     case unComp comp of
       Times ui e elen i c
-       | EVal _ (VInt n) <- unExp elen
-       , n > 0
-       , EVal valTy (VInt 0) <- unExp e
+       | EVal valTy (VInt 0) <- unExp e
+       , EVal _     (VInt n) <- unExp elen
+       , n > 0 -- NOTE: We don't unroll even if explicitly requested
        , (n < 3 && ui == AutoUnroll) || (ui == Unroll)
 -- BOZIDAR: this will currently fail perf test for TX/test_encoding_34
 --         , ui == Unroll -- || (n < 3 && n > 0 && ui == AutoUnroll)
@@ -663,24 +663,23 @@ passIfDead :: TypedCompPass
 passIfDead = TypedCompPass $ \cloc comp -> do
     case unComp comp of
       Branch e c1 c2
-        | Just b <- evalBool e
-        -> do
-          if b then do logStep "ifdead/constant" cloc
-                         [step| if true then c else .. ~~> c |]
-                       rewrite $ c1
-               else do logStep "ifdead/constant" cloc
-                         [step| if false then .. else c ~~> c |]
-                       rewrite $ c2
-
+        | provable e -> do
+           logStep "ifdead/provable/true" cloc
+             [step| if true then c else .. ~~> c |]
+           rewrite $ c1
+        | provable (eNot e) -> do
+           logStep "ifdead/provable/false" cloc
+             [step| if false then .. else c ~~> c |]
+           rewrite $ c2
       Branch e (MkComp (Branch e' c1 c2) _ ()) c3
-        | e `impliesBool` e'
+        | e `implies` e'
         -> do
           logStep "ifdead/left/implies" cloc
             [step| if e then {if e' then c else c'} else c''
                ~~> if e c else c'' |]
           rewrite $ cBranch cloc e c1 c3
 
-        | e `impliesBoolNeg` e'
+        | e `implies` eNot e'
         -> do
           logStep "ifdead/left/implies-neg" cloc
             [step| if e then {if e' then c else c'} else c''
@@ -688,14 +687,14 @@ passIfDead = TypedCompPass $ \cloc comp -> do
           rewrite $ cBranch cloc e c2 c3
 
       Branch e c1 (MkComp (Branch e' c2 c3) _ ())
-        | eneg e `impliesBool` e'
+        | eNot e `implies` e'
         -> do
           logStep "ifdead/right/implies" cloc
             [step| if e then c else {if e' then c' else c''}
                ~~> if e then c else c' |]
           rewrite $ cBranch cloc e c1 c2
 
-        | eneg e `impliesBoolNeg` e'
+        | eNot e `implies` eNot e'
         -> do
           logStep "ifdead/right/implies-neg" cloc
             [step| if e then c else {if e' then c' else c''}
@@ -703,23 +702,6 @@ passIfDead = TypedCompPass $ \cloc comp -> do
           rewrite $ cBranch cloc e c1 c3
 
       _otherwise -> return comp
-  where
-    eneg :: Exp -> Exp
-    eneg e = eUnOp (expLoc e) Neg e
-
-    impliesBool :: Exp -> Exp -> Bool
-    impliesBool (MkExp (EBinOp Eq e  (MkExp (EVal _ (VInt j )) _ ())) _ ())
-                (MkExp (EBinOp Eq e' (MkExp (EVal _ (VInt j')) _ ())) _ ())
-       | e `expEq` e'
-       = j == j'
-    impliesBool _ _ = False
-
-    impliesBoolNeg :: Exp -> Exp -> Bool
-    impliesBoolNeg (MkExp (EBinOp Eq e  (MkExp (EVal _ (VInt j )) _ ())) _ ())
-                   (MkExp (EBinOp Eq e' (MkExp (EVal _ (VInt j')) _ ())) _ ())
-       | e `expEq` e'
-       = j /= j'
-    impliesBoolNeg _ _ = False
 
 -- | Translate computation-level conditional to expression-level conditional
 passIfReturn :: TypedCompPass
@@ -769,6 +751,205 @@ passElimAutomappedMitigs = TypedCompPass $ \_cloc c -> if
 
   | otherwise
    -> return c
+
+-- | Partially evaluate LHS of let bindings
+passEvalLetE :: TypedCompPass
+passEvalLetE = TypedCompPass $ \cloc c -> if
+    | LetE nm fi e1 e2 <- unComp c
+     -> do
+      case evalPartial e1 of
+        (Right e1', prints) -> do
+          unless (null prints) $ logStep "eval-lete: debug prints" cloc prints
+          logStep "eval-lete" cloc [step| e1 ~~> e1' |]
+          -- We use 'return' rather than 'rewrite' so that we don't attempt to
+          -- write the binding again
+          return $ cLetE cloc nm fi e1' e2
+        (Left _err, _prints) ->
+          -- Cannot evaluate. Leave unchanged
+          return $ c
+    | otherwise
+     -> return c
+
+{-------------------------------------------------------------------------------
+  Expression passes
+-------------------------------------------------------------------------------}
+
+-- | Loop unrolling
+passForUnroll :: TypedExpPass
+passForUnroll = TypedExpPass $ \eloc e -> do
+    let mk_eseq_many :: [Exp] -> Exp
+        mk_eseq_many []     = eVal eloc TUnit VUnit
+        mk_eseq_many [x]    = x
+        mk_eseq_many (x:xs) = eSeq (expLoc x) x (mk_eseq_many xs)
+
+    if | EFor ui nm estart elen ebody <- unExp e
+         , EVal valTy (VInt 0) <- unExp estart
+         , EVal _     (VInt n) <- unExp elen
+         , (n < 8 && n > 0 && ui == AutoUnroll) || ui == Unroll
+        -> do
+          let subst i' = substExp [] [(nm, eVal eloc valTy (vint i'))] ebody
+              unrolled = map subst [0..n-1]
+          rewrite $ mk_eseq_many unrolled
+
+       | otherwise
+        -> return e
+
+-- | Inline let bindings
+passExpInlining :: TypedExpPass
+passExpInlining = TypedExpPass $ \eloc e -> do
+  fgs <- getDynFlags
+
+  if | ELet nm ForceInline e1 e2 <- unExp e
+      -> rewrite $ substExp [] [(nm,e1)] e2 -- Forced Inline!
+
+     | ELet _nm NoInline _e1 _e2 <- unExp e
+      -> return e
+
+     | ELet nm AutoInline e1 e2 <- unExp e
+      ->
+       if nm `S.notMember` exprFVs e2
+         then if not (mutates_state e1)
+                then do
+                  logStep "exp-inlining/unused" eloc
+                    [step| Eliminating binding for nm |]
+                  rewrite e2
+                else
+                  return e
+         else if is_simpl_expr e1 && not (isDynFlagSet fgs NoExpFold)
+                then do
+                  logStep "exp-inlining/subst" eloc
+                    [step| Inlining binding for nm |]
+                  rewrite $ substExp [] [(nm,e1)] e2
+                else
+                  return e
+
+     | otherwise
+      -> return e
+
+-- | If we have an assignment to a fresh array variable @y@ to a slice of an
+-- array @x@, we can instead do all operations on @x@ directly.
+--
+-- NOTE: This will create assignment nodes in the AST that have array-reads
+-- as left-hand sides; for instance,
+--
+-- > x[2,3] := var y : arr[3] int in { y := {11, 12, 13} ; return y };
+--
+-- will result in an assignment
+--
+-- > x[2,3] := {11, 12, 13}
+--
+-- which is NOT an array assignment, but rather a normal assignment with an
+-- array read as the LHS. Similarly,
+--
+-- > x[2,3] := var y : arr[3] int in { y[0] := 11 ; y[1] := 12 ; y[2] := 13 ; return y };
+--
+-- will result in assignments
+--
+-- > x[2,3][0] := 11
+-- > x[2,3][1] := 12
+-- > x[2,3][2] := 13
+--
+-- This seems to cause no trouble in the code generator at the moment, but
+-- that's a little surprising. Have added the above examples as test cases
+-- in tests/backend.
+passAsgnLetRef :: TypedExpPass
+passAsgnLetRef = TypedExpPass $ \eloc exp -> if
+  | EArrWrite e0 estart elen erhs <- unExp exp
+    , TArray _ ty <- ctExp e0
+    , not (ty == TBit)
+     -- It has to be LILength so we can just take a pointer
+    , LILength n <- elen
+    , EVar x <- unExp e0
+     -- Just a simple expression with no side-effects
+    , not (mutates_state estart)
+    , Just (y, residual_erhs) <- returns_letref_var erhs
+   -> do
+     let exp' = substExp [] [(y, eArrRead (expLoc exp) e0 estart elen)] residual_erhs
+
+     logStep "asgn-letref" eloc
+       [step| x[estart, n] := var y in { ... y ... ; return y }
+          ~~> { ... x[estart, n] ... } |]
+
+     rewrite exp'
+  | otherwise
+   ->
+     return exp
+  where
+    returns_letref_var :: Exp -> Maybe (GName Ty, Exp)
+    returns_letref_var = go []
+
+    go :: [GName Ty] -> Exp -> Maybe (GName Ty, Exp)
+    go letrefs e =
+       case unExp e of
+          EVar v ->
+            if v `elem` letrefs
+              then Just (v, eVal loc TUnit VUnit)
+              else Nothing
+
+          ELet y fi e1 e2 -> do
+            (w, e2') <- go letrefs e2
+            return (w, eLet loc y fi e1 e2')
+
+          ELetRef y Nothing e2 -> do
+            (w, e2') <- go (y:letrefs) e2
+            if w == y
+              then return (w, e2')
+              else return (w, eLetRef loc y Nothing e2')
+
+          ESeq e1 e2 -> do
+            (w, e2') <- go letrefs e2
+            return (w, eSeq loc e1 e2')
+
+          _ -> Nothing
+       where
+         loc = expLoc e
+
+-- | Partially evaluate LHS of let bindings
+passEvalELet :: TypedExpPass
+passEvalELet = TypedExpPass $ \eloc e -> if
+    | ELet nm fi e1 e2 <- unExp e
+     -> do
+      case evalPartial e1 of
+        (Right e1', prints) -> do
+          unless (null prints) $ logStep "eval-elet: debug prints" eloc prints
+          logStep "eval-elet" eloc [step| e1 ~~> e1' |]
+          -- We use 'return' rather than 'rewrite' so that we don't attempt to
+          -- write the binding again
+          return $ eLet eloc nm fi e1' e2
+        (Left _err, _prints) ->
+          -- Cannot evaluate. Leave unchanged
+          return $ e
+    | otherwise
+     -> return e
+
+-- | Push a let into an array-write with an array-read as RHS
+passExpLetPush :: TypedExpPass
+passExpLetPush = TypedExpPass $ \eloc e -> if
+    | ELet nm fi e1 e2 <- unExp e
+      , EArrWrite e0 estart0 elen0 erhs <- unExp e2
+      , EArrRead evals estart rlen <- unExp erhs
+      , let fvs = foldr (S.union . exprFVs) S.empty [e0, estart0, evals]
+      , not (nm `S.member` fvs)
+     -> do
+       logStep "exp-let-push" eloc
+         [step| let nm = .. in e0[..] := evals[..]
+            ~~> e0[..] := evals[let nm = .. in ..] |]
+       let estart' = eLet (expLoc estart) nm fi e1 estart
+       rewrite $ eArrWrite (expLoc e2) e0 estart0 elen0
+               $ eArrRead (expLoc erhs) evals estart' rlen
+    | otherwise
+     -> return e
+
+-- | Eliminate length(arr) calls for arrays of statically known length
+passALengthElim :: TypedExpPass
+passALengthElim = TypedExpPass $ \eloc e -> if
+    | EUnOp ALength e0 <- unExp e
+      , TArray (Literal i) _ <- ctExp e0
+     -> do
+       logStep "alength-elim" eloc [step| length(..) ~~> i |]
+       rewrite $ eVal eloc tint (vint i)
+    | otherwise
+     -> return e
 
 {-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
@@ -910,94 +1091,11 @@ rewrite_mit_map ty1 (i1,j1) ty2 (i2,j2) (f_name, fun)
 
 
 
-arrinit_step :: TypedExpPass
--- Statically initialize as many arrays as possible
-arrinit_step = TypedExpPass $ \_ e1 -> case evalArrInt e1 of
-    Nothing   -> return e1
-    Just vals -> rewrite $ eValArr (expLoc e1) (ctExp e1) (map VInt vals)
-
-exp_inlining_steps :: TypedExpPass
-exp_inlining_steps = TypedExpPass $ \_ e -> do
-  fgs <- getDynFlags
-
-  if | ELet nm ForceInline e1 e2 <- unExp e
-      -> rewrite $ substExp [] [(nm,e1)] e2 -- Forced Inline!
-
-     | ELet _nm NoInline _e1 _e2 <- unExp e
-      -> return e
-
-     | ELet nm AutoInline e1 e2 <- unExp e
-       , let fvs = exprFVs e2
-       , let b = nm `S.member` fvs
-      -> if not b then
-            if not (mutates_state e) then rewrite e2
-            else return e
-         else if is_simpl_expr e1 && not (isDynFlagSet fgs NoExpFold)
-         then rewrite $ substExp [] [(nm,e1)] e2
-         else return e
-
-     | otherwise
-      -> return e
-
-exp_let_push_step :: TypedExpPass
-exp_let_push_step = TypedExpPass $ \_ e -> if
- | ELet nm fi e1 e2 <- unExp e
-   , EArrWrite e0 estart0 elen0 erhs <- unExp e2
-   , EArrRead evals estart rlen <- unExp erhs
-   , let fvs = foldr (S.union . exprFVs) S.empty [e0, estart0, evals]
-   , not (nm `S.member` fvs)
-  -> let estart' = eLet (expLoc estart) nm fi e1 estart
-     in rewrite $
-        eArrWrite (expLoc e2) e0 estart0 elen0 $
-        eArrRead (expLoc erhs) evals estart' rlen
- | otherwise
-  -> return e
 
 
 
-asgn_letref_step :: TypedExpPass
-asgn_letref_step = TypedExpPass $ \_ exp -> if
-  | EArrWrite e0 estart elen erhs <- unExp exp
-    , TArray _ ty <- ctExp e0
-    , not (ty == TBit)
-     -- It has to be LILength so we can just take a pointer
-    , LILength _ <- elen
-    , EVar _ <- unExp e0
-     -- Just a simple expression with no side-effects
-    , not (mutates_state estart)
-    , Just (y, residual_erhs) <- returns_letref_var erhs
-   -> rewrite $ substExp [] [(y, eArrRead (expLoc exp) e0 estart elen)] residual_erhs
-  | otherwise
-   -> return exp
-  where
-    returns_letref_var :: Exp -> Maybe (GName Ty, Exp)
-    returns_letref_var = go []
 
-    go :: [GName Ty] -> Exp -> Maybe (GName Ty, Exp)
-    go letrefs e
-     = let loc = expLoc e
-       in
-       case unExp e of
-          EVar v ->
-            if v `elem` letrefs
-              then Just (v, eVal loc TUnit VUnit)
-              else Nothing
 
-          ELet y fi e1 e2 -> do
-            (w, e2') <- go letrefs e2
-            return (w, eLet loc y fi e1 e2')
-
-          ELetRef y Nothing e2 -> do
-            (w, e2') <- go (y:letrefs) e2
-            if w == y
-              then return (w, e2')
-              else return (w, eLetRef loc y Nothing e2')
-
-          ESeq e1 e2 -> do
-            (w, e2') <- go letrefs e2
-            return (w, eSeq loc e1 e2')
-
-          _ -> Nothing
 
 -- NOTE: There was a (seemingly outdated) comment above `proj_inline_step` that
 --
@@ -1005,54 +1103,27 @@ asgn_letref_step = TypedExpPass $ \_ exp -> if
 -- performance so I am keeping it commented for now:
 rest_chain :: TypedExpPass
 rest_chain = mconcat [
-      alength_elim
-    , eval_arith
+      passALengthElim
     , const_fold
-    , arrinit_step
     , subarr_inline_step
     , proj_inline_step
     ]
 
-alength_elim :: TypedExpPass
-alength_elim = TypedExpPass $ \_ e -> if
-  | EUnOp ALength e0 <- unExp e
-    , (TArray nexp _)  <- ctExp e0
-    , let loc = expLoc e
-   -> rewrite $ numexp_to_exp loc nexp
-  | otherwise
-   -> return e
-  where
-    numexp_to_exp loc (Literal i) = eVal loc tint (vint i)
-    numexp_to_exp loc (NVar nm)   = eVar loc (toName nm Nothing tint)
 
-
-eval_arith :: TypedExpPass
-eval_arith = TypedExpPass $ \_ e -> if
-  | arith_ty (ctExp e)      -- of arithmetic type
-    , not (isEVal e)          -- not already a value
-    , Just v <- evalArith e   -- evaluate it!
-   -> rewrite $ eVal (expLoc e) (ctExp e) v
-  | otherwise
-   -> return e
-  where
-    arith_ty :: Ty -> Bool
-    arith_ty (TInt _) = True
-    arith_ty TDouble  = True
-    arith_ty _        = False
 
 subarr_inline_step :: TypedExpPass
 subarr_inline_step = TypedExpPass $ \_ e -> if
   | EArrRead evals estart LISingleton <- unExp e
-    , EValArr _ vals <- unExp evals
+    , EValArr vals <- unExp evals
     , EVal _ (VInt n') <- unExp estart
     , let n = fromIntegral n'
-   -> rewrite $ eVal (expLoc e) (ctExp e) (vals!!n)
+   -> rewrite $ vals!!n
 
   | EArrRead evals estart (LILength n) <- unExp e
-    , EValArr _ vals <- unExp evals
+    , EValArr vals <- unExp evals
     , EVal _ (VInt s') <- unExp estart
     , let s = fromIntegral s'
-   -> rewrite $ eValArr (expLoc e) (ctExp e) (take n $ drop s vals)
+   -> rewrite $ eValArr (expLoc e) (take n $ drop s vals)
 
     -- x[0,length(x)] == x
   | EArrRead evals estart (LILength n) <- unExp e
@@ -1081,27 +1152,6 @@ proj_inline_step = TypedExpPass $ \_ e -> if
    -> return e
 
 
-for_unroll_step :: TypedExpPass
-for_unroll_step = TypedExpPass $ \_ e -> if
-  | EFor ui nm estart elen ebody  <- unExp e
-    , EVal _ (VInt 0) <- unExp estart
-    , EVal _ (VInt n') <- unExp elen
-    , let n = fromIntegral n'
-    , (n < 8 && n > 0 && ui == AutoUnroll) || ui == Unroll
-   -> -- liftIO (putStrLn "for_unroll_step, trying ...") >>
-      let idxs = [0..n-1]
-          exps = replicate n ebody
-          unrolled = zipWith (\curr xe -> substExp [] [(nm, eVal (expLoc e) tint (vint curr))] xe) idxs exps
-      in case unrolled of
-           [] -> return $ eVal (expLoc e) TUnit VUnit
-           xs -> rewrite $ mk_eseq_many xs
-  | otherwise
-   -> return e
-  where
-    mk_eseq_many :: [Exp] -> Exp
-    mk_eseq_many []     = error "for_unroll_step: can't happen!"
-    mk_eseq_many [x]    = x
-    mk_eseq_many (x:xs) = eSeq (expLoc x) x (mk_eseq_many xs)
 
 
 
@@ -1430,6 +1480,7 @@ fromSimplCallParam nm =
 
 
 newtype LetEs = LetEs [(Maybe SourcePos, GName Ty, ForceInline, Exp)]
+  deriving (Generic)
 
 -- | Collect multiple top-level consecutive `LetE` bindings
 --
@@ -1453,6 +1504,7 @@ insertELetEs = \(LetEs ls) -> go ls
     go ((loc, nm, fi, e):ls) e' = eLet loc nm fi e (go ls e')
 
 newtype LetERefs = LetERefs [MutVar]
+  deriving (Generic)
 
 -- | Collect multiple top-level consecutive `LetERef` bindings
 --
@@ -1478,7 +1530,7 @@ is_simpl_expr = go . unExp
   where
     go :: Exp0 -> Bool
     go (EVal _ _)       = True
-    go (EValArr _ _)    = True
+    go (EValArr elems)  = all is_simpl_expr elems
     go (EVar _)         = True
     go (EUnOp _ e)      = is_simpl_expr e
     go (EStruct _ fses) = all is_simpl_expr (map snd fses)
@@ -1497,8 +1549,6 @@ no_lut_inside x = isJust (mapExpM return return elut_nothing x)
 
 {-------------------------------------------------------------------------------
   Inlining auxiliary
-
-  TODO: These are not yet reviewed.
 -------------------------------------------------------------------------------}
 
 inline_exp_fun_in_comp :: (GName Ty, [GName Ty], [MutVar], Exp)
@@ -1624,10 +1674,13 @@ inline_comp_fun (nm,params,cbody) c = do
   Useful for debugging
 -------------------------------------------------------------------------------}
 
+instance PrettyVal LetEs
+instance PrettyVal LetERefs
+
 instance Outputable LetEs where
   ppr (LetEs ls) = hsep (punctuate comma (map aux ls))
     where
-      aux (_, nm, _, e) = ppr nm <+> text "=" <+> ppr e
+      aux (_, nm, _, _e) = ppr nm <+> text "=" <+> text ".." -- ppr e
 
 instance Outputable LetERefs where
   ppr (LetERefs ls) = hsep (punctuate comma (map aux ls))
@@ -1635,7 +1688,7 @@ instance Outputable LetERefs where
       aux MutVar{..} =
         case mutInit of
           Nothing -> ppr mutVar
-          Just e  -> ppr mutVar <+> text "=" <+> ppr e
+          Just _e -> ppr mutVar <+> text "=" <+> text ".." -- ppr e
 
 {-------------------------------------------------------------------------------
   Auxiliary

@@ -308,3 +308,6 @@ dist
 
 # Temporary storage for perf results
 code/WiFi/perf_results
+
+# Disabled unit tests
+*.disabled

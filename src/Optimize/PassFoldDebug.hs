@@ -32,6 +32,7 @@ import Data.List (groupBy)
 import Language.Haskell.TH hiding (ppr)
 import Language.Haskell.TH.Quote
 import Text.PrettyPrint.HughesPJ (text, hcat)
+-- import qualified Text.Show.Pretty as PrettyShow
 
 import Outputable
 
@@ -48,6 +49,7 @@ step = QuasiQuoter {
     aux acc (x:xs) = do
       inScope <- simpleInScope x
       case inScope of
+        -- can use PrettyShow.dumpDoc instead of ppr to see the actual AST
         Just nm -> aux ([| ppr $(varE nm) |] : acc) xs
         Nothing -> aux ([| text x |] : acc) xs
 
@@ -63,7 +65,7 @@ step = QuasiQuoter {
 split :: String -> [String]
 split = groupBy ((==) `on` isIdent)
   where
-    isIdent c = isAlphaNum c || c == '\''
+    isIdent c = isAlphaNum c || c == '\'' || c == '_'
 
 -- | Check if value is in scope and is not a function
 simpleInScope :: String -> Q (Maybe Name)
