@@ -139,41 +139,38 @@ incRewrites mp d s = RwStats (Map.alter aux s $ getRwStats mp)
   Top-level: definition of a pass, and infrastructure to run passes
 -------------------------------------------------------------------------------}
 
--- | A computation pass is defined only on each node of computations;
--- it gets lifted to the whole computation in `runTypedCompPass`.
---
--- We pass in the location of the computation as a separate argument for
--- convenience.
-newtype TypedCompPass = TypedCompPass (Maybe SourcePos -> Comp -> RwM Comp)
+-- | Transformations on Comp terms
+data TypedCompPass =
+    TypedCompBottomUp (Maybe SourcePos -> Comp -> RwM Comp)
 
--- | An expression pass is defined only on each node of expressions;
--- it gets lifted to the whole computation in `runTypedExpPass`.
-newtype TypedExpPass = TypedExpPass (Maybe SourcePos -> Exp -> RwM Exp)
+-- | Transformations on Exp terms
+data TypedExpPass =
+    TypedExpBottomUp (Maybe SourcePos -> Exp -> RwM Exp)
 
 -- | Note: when composing passes you compose their action _on each node_, not
 -- on the tree as a whole.
 instance Monoid TypedCompPass where
-  mempty = TypedCompPass $ \_cloc comp ->
+  mempty = TypedCompBottomUp $ \_cloc comp ->
     return comp
-  TypedCompPass f `mappend` TypedCompPass g = TypedCompPass $ \cloc comp -> do
+  TypedCompBottomUp f `mappend` TypedCompBottomUp g = TypedCompBottomUp $ \cloc comp -> do
     comp' <- f cloc comp
     g (compLoc comp') comp'
 
 instance Monoid TypedExpPass where
-  mempty = TypedExpPass $ \_eloc exp ->
+  mempty = TypedExpBottomUp $ \_eloc exp ->
     return exp
-  TypedExpPass f `mappend` TypedExpPass g = TypedExpPass $ \eloc exp -> do
+  TypedExpBottomUp f `mappend` TypedExpBottomUp g = TypedExpBottomUp $ \eloc exp -> do
     exp' <- f eloc exp
     g (expLoc exp') exp'
 
 runTypedCompPass :: TypedCompPass -> Comp -> RwM Comp
-runTypedCompPass (TypedCompPass f) =
+runTypedCompPass (TypedCompBottomUp f) =
     mapCompM return return return return return f'
   where
     f' comp = f (compLoc comp) comp
 
 runTypedExpPass :: TypedExpPass -> Comp -> RwM Comp
-runTypedExpPass (TypedExpPass f) =
+runTypedExpPass (TypedExpBottomUp f) =
     mapCompM return return return return (mapExpM return return f') return
   where
     f' exp = f (expLoc exp) exp
@@ -284,7 +281,7 @@ foldExpPasses flags
 -- _only_ pass that actually does this. I'm not sure if there are other subtle
 -- bugs due to this.
 passFold :: TypedCompPass
-passFold = TypedCompPass $ \_ -> go
+passFold = TypedCompBottomUp $ \_ -> go
   where
     go comp = do
       let cloc = compLoc comp
@@ -321,7 +318,7 @@ passFold = TypedCompPass $ \_ -> go
 
 -- | Translate computation level `LetE` to expression level `Let`
 passPurify :: TypedCompPass
-passPurify = TypedCompPass $ \cloc comp ->
+passPurify = TypedCompBottomUp $ \cloc comp ->
     case extractCLetEs comp of
       Just (binds, comp') | Return fi e <- unComp comp' -> do
         logStep "purify/return" cloc
@@ -343,7 +340,7 @@ passPurify = TypedCompPass $ \cloc comp ->
 
 -- | Translate computation level `LetERef` to expression level `LetRef`
 passPurifyLetRef :: TypedCompPass
-passPurifyLetRef = TypedCompPass $ \cloc comp -> do
+passPurifyLetRef = TypedCompBottomUp $ \cloc comp -> do
     case extractCMutVars' comp of
       Just (binds, comp') | Return fi e <- unComp comp' -> do
         logStep "purify-letref/return" cloc
@@ -365,7 +362,7 @@ passPurifyLetRef = TypedCompPass $ \cloc comp -> do
 
 -- | Translate computation level `Times` to expression level `For`
 passElimTimes :: TypedCompPass
-passElimTimes = TypedCompPass $ \cloc comp ->
+passElimTimes = TypedCompBottomUp $ \cloc comp ->
     case unComp comp of
       Times ui estart ebound cnt (MkComp (Return _ ebody) _cloc ()) -> do
         logStep "elim-times" cloc
@@ -380,7 +377,7 @@ passElimTimes = TypedCompPass $ \cloc comp ->
 --
 -- This will allow more drastic inlining in the inlining step.
 passLetFunc :: TypedCompPass
-passLetFunc = TypedCompPass $ \cloc comp' -> do
+passLetFunc = TypedCompBottomUp $ \cloc comp' -> do
     case unComp comp' of
       LetFunC nm params (MkComp (Return _fi e) _ ()) cont
         | Just params' <- mapM fromSimplCallParam params
@@ -416,7 +413,7 @@ passLetFunc = TypedCompPass $ \cloc comp' -> do
 
 -- | Lift expression function definitions out of computation loops
 passLetFunTimes :: TypedCompPass
-passLetFunTimes = TypedCompPass $ \_cloc comp ->
+passLetFunTimes = TypedCompBottomUp $ \_cloc comp ->
     case unComp comp of
       Times ui e elen i (MkComp (LetHeader def cont) cloc ())
         | MkFun (MkFunDefined f params body) floc () <- def
@@ -450,7 +447,7 @@ passLetFunTimes = TypedCompPass $ \_cloc comp ->
 
 -- | Loop unrolling
 passTimesUnroll :: TypedCompPass
-passTimesUnroll = TypedCompPass $ \cloc comp -> do
+passTimesUnroll = TypedCompBottomUp $ \cloc comp -> do
     let unused :: GName Ty
         unused = toName ("__unroll_unused_" ++ getLnNumInStr cloc) Nothing TUnit
 
@@ -480,7 +477,7 @@ passTimesUnroll = TypedCompPass $ \cloc comp -> do
 
 -- | Inlining of the various let bindings
 passInline :: TypedCompPass
-passInline = TypedCompPass $ \cloc comp' -> if
+passInline = TypedCompBottomUp $ \cloc comp' -> if
     | Let nm c1 c2 <- unComp comp'
      -> do
        logStep "inline/Let" cloc
@@ -570,7 +567,7 @@ passInline = TypedCompPass $ \cloc comp' -> if
 
 -- | Lift mutable variable bindings over `take`
 passPushCompLocals :: TypedCompPass
-passPushCompLocals = TypedCompPass $ \cloc comp' -> if
+passPushCompLocals = TypedCompBottomUp $ \cloc comp' -> if
     | LetFunC nm params cbody_with_locals ccont <- unComp comp'
       , Just (locals, cbody) <- extractCMutVars' cbody_with_locals
       , BindMany tk [(x,emt)] <- unComp cbody
@@ -591,7 +588,7 @@ passPushCompLocals = TypedCompPass $ \cloc comp' -> if
 
 -- | Turn explicit `take`/`emit` loop into application of `map`
 passTakeEmit :: TypedCompPass
-passTakeEmit = TypedCompPass $ \cloc comp -> if
+passTakeEmit = TypedCompBottomUp $ \cloc comp -> if
     | Repeat nfo bm <- unComp comp
       , BindMany tk [(x,emt)] <- unComp bm
       , Take1 ain <- unComp tk
@@ -624,7 +621,7 @@ passTakeEmit = TypedCompPass $ \cloc comp -> if
 -- This will give the opportunity to take-emit to kick in and rewrite the whole
 -- thing to map!
 passFloatLetFunRepeat :: TypedCompPass
-passFloatLetFunRepeat = TypedCompPass $ \cloc comp' -> if
+passFloatLetFunRepeat = TypedCompBottomUp $ \cloc comp' -> if
     | Repeat wdth rcomp <- unComp comp'
       , LetFunC nm params cbody ccont <- unComp rcomp
       , Call nm' _args <- unComp ccont
@@ -640,7 +637,7 @@ passFloatLetFunRepeat = TypedCompPass $ \cloc comp' -> if
 
 -- | Float let out of parallel composition
 passFloatLetPar :: TypedCompPass
-passFloatLetPar = TypedCompPass $ \cloc comp -> if
+passFloatLetPar = TypedCompBottomUp $ \cloc comp -> if
     | Par p c1 c2 <- unComp comp
       , LetE x fi e1 c1' <- unComp c1
      -> do
@@ -660,7 +657,7 @@ passFloatLetPar = TypedCompPass $ \cloc comp -> if
 
 -- | Eliminate unreachable conditional branches
 passIfDead :: TypedCompPass
-passIfDead = TypedCompPass $ \cloc comp -> do
+passIfDead = TypedCompBottomUp $ \cloc comp -> do
     case unComp comp of
       Branch e c1 c2
         | provable e -> do
@@ -705,7 +702,7 @@ passIfDead = TypedCompPass $ \cloc comp -> do
 
 -- | Translate computation-level conditional to expression-level conditional
 passIfReturn :: TypedCompPass
-passIfReturn = TypedCompPass $ \_cloc comp -> if
+passIfReturn = TypedCompBottomUp $ \_cloc comp -> if
     | Branch eguard c1 c2 <- unComp comp
       , Return f1 e1  <- unComp c1
       , Return _f2 e2 <- unComp c2
@@ -722,7 +719,7 @@ passIfReturn = TypedCompPass $ \_cloc comp -> if
 
 -- TODO: Add logStep and corresponding test case.
 passElimAutomappedMitigs :: TypedCompPass
-passElimAutomappedMitigs = TypedCompPass $ \_cloc c -> if
+passElimAutomappedMitigs = TypedCompBottomUp $ \_cloc c -> if
   | MkComp c0 _cloc _ <- c
     , Par _p c1 c2 <- c0
     , Par _p c11 c12 <- unComp c1
@@ -754,7 +751,7 @@ passElimAutomappedMitigs = TypedCompPass $ \_cloc c -> if
 
 -- | Partially evaluate LHS of let bindings
 passEvalLetE :: TypedCompPass
-passEvalLetE = TypedCompPass $ \cloc c -> if
+passEvalLetE = TypedCompBottomUp $ \cloc c -> if
     | LetE nm fi e1 e2 <- unComp c
      -> do
       case evalPartial e1 of
@@ -776,7 +773,7 @@ passEvalLetE = TypedCompPass $ \cloc c -> if
 
 -- | Loop unrolling
 passForUnroll :: TypedExpPass
-passForUnroll = TypedExpPass $ \eloc e -> do
+passForUnroll = TypedExpBottomUp $ \eloc e -> do
     let mk_eseq_many :: [Exp] -> Exp
         mk_eseq_many []     = eVal eloc TUnit VUnit
         mk_eseq_many [x]    = x
@@ -796,7 +793,7 @@ passForUnroll = TypedExpPass $ \eloc e -> do
 
 -- | Inline let bindings
 passExpInlining :: TypedExpPass
-passExpInlining = TypedExpPass $ \eloc e -> do
+passExpInlining = TypedExpBottomUp $ \eloc e -> do
   fgs <- getDynFlags
 
   if | ELet nm ForceInline e1 e2 <- unExp e
@@ -853,7 +850,7 @@ passExpInlining = TypedExpPass $ \eloc e -> do
 -- that's a little surprising. Have added the above examples as test cases
 -- in tests/backend.
 passAsgnLetRef :: TypedExpPass
-passAsgnLetRef = TypedExpPass $ \eloc exp -> if
+passAsgnLetRef = TypedExpBottomUp $ \eloc exp -> if
   | EArrWrite e0 estart elen erhs <- unExp exp
     , TArray _ ty <- ctExp e0
     , not (ty == TBit)
@@ -906,7 +903,7 @@ passAsgnLetRef = TypedExpPass $ \eloc exp -> if
 
 -- | Partially evaluate LHS of let bindings
 passEvalELet :: TypedExpPass
-passEvalELet = TypedExpPass $ \eloc e -> if
+passEvalELet = TypedExpBottomUp $ \eloc e -> if
     | ELet nm fi e1 e2 <- unExp e
      -> do
       case evalPartial e1 of
@@ -924,7 +921,7 @@ passEvalELet = TypedExpPass $ \eloc e -> if
 
 -- | Push a let into an array-write with an array-read as RHS
 passExpLetPush :: TypedExpPass
-passExpLetPush = TypedExpPass $ \eloc e -> if
+passExpLetPush = TypedExpBottomUp $ \eloc e -> if
     | ELet nm fi e1 e2 <- unExp e
       , EArrWrite e0 estart0 elen0 erhs <- unExp e2
       , EArrRead evals estart rlen <- unExp erhs
@@ -942,7 +939,7 @@ passExpLetPush = TypedExpPass $ \eloc e -> if
 
 -- | Eliminate length(arr) calls for arrays of statically known length
 passALengthElim :: TypedExpPass
-passALengthElim = TypedExpPass $ \eloc e -> if
+passALengthElim = TypedExpBottomUp $ \eloc e -> if
     | EUnOp ALength e0 <- unExp e
       , TArray (Literal i) _ <- ctExp e0
      -> do
@@ -1112,7 +1109,7 @@ rest_chain = mconcat [
 
 
 subarr_inline_step :: TypedExpPass
-subarr_inline_step = TypedExpPass $ \_ e -> if
+subarr_inline_step = TypedExpBottomUp $ \_ e -> if
   | EArrRead evals estart LISingleton <- unExp e
     , EValArr vals <- unExp evals
     , EVal _ (VInt n') <- unExp estart
@@ -1142,7 +1139,7 @@ subarr_inline_step = TypedExpPass $ \_ e -> if
    -> return e
 
 proj_inline_step :: TypedExpPass
-proj_inline_step = TypedExpPass $ \_ e -> if
+proj_inline_step = TypedExpBottomUp $ \_ e -> if
   | EProj e' fn <- unExp e
     , EStruct _s fs_es <- unExp e'
     , all (is_simpl_expr . snd) fs_es -- no side effects
@@ -1157,7 +1154,7 @@ proj_inline_step = TypedExpPass $ \_ e -> if
 
 
 const_fold :: TypedExpPass
-const_fold = TypedExpPass $ \loc e ->
+const_fold = TypedExpBottomUp $ \loc e ->
     case go (unExp e) of
       Nothing -> return e
       Just e' -> rewrite $ MkExp e' loc ()
