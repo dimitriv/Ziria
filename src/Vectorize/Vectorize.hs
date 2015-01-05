@@ -50,12 +50,18 @@ import Debug.Trace
 -- | For non-vectorizable input or output type we convert the
 -- corresponding CAlpha to CAUnknown so that we can still vectorize in
 -- the other queue (output or input, respectively).
+-- Postcondition: one of input or output CAlpha is not CAUnknown.
 vect_card :: Card -> Ty -> Ty -> Maybe (CAlpha,CAlpha)
 vect_card OCard ty1 ty2 = Nothing
 vect_card (SimplCard ain aout) tin tout
-  = return (fix_alpha tin ain, fix_alpha tout aout)
+  = case (ain', aout') of
+      (CAUnknown, CAUnknown) -> Nothing
+      _otherwise -> return (ain',aout')
   where fix_alpha t a | not (isVectorizable t) = CAUnknown
-                      | otherwise              = aa
+                      | otherwise              = a
+        ain'  = fix_alpha tin ain
+        aout' = fix_alpha tout aout
+        
 
 -- | Emit a warning when we encounter an empty vectorization result
 warn_empty_vect :: DynFlags -> LComp -> [DelayedVectRes] -> String -> VecM ()
