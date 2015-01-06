@@ -22,6 +22,7 @@ import AstExpr
 import AstComp
 import AstFM
 import AstUnlabelled
+import qualified AstLabelled as ASTL
 
 import PpComp
 import Outputable
@@ -216,25 +217,30 @@ computeVectTop dfs x = do
           vss <- vectIterComp (cTimes loc ui e elen) vcard c
           return (self : vss)
 
+        VectComp (finalin,finalout) c1
+          | not (isComputer cty)
+          -> vecMFail $ vcat [ text "Vectorization annotation on non-simple-computer."
+                             , text "At location:" <+> text (maybe error show loc) ]
+          | otherwise 
+          -> do vc <- vectWithHint (finalin,finalout) c1
+                return [self, vc]
 
+        -- Dealing with nested annotations
+        -- NB: treat nested annotations on simple computers under
+        -- 'Repeat' the same way as 'rigid' (but mitigate-able)
+        -- annotations. 
+        Repeat Nothing (MkComp (VectComp hint c1) _ _)
+          -> go vctx (ASTL.cRepeat loc (cty,card) (Just (Rigid True hint)) c1)
+        Repeat (Just {}) (MkComp (VectComp {}) _ _)
+           -> vecMFail $ vcat [ text "Nested vectorization annotations not supported."
+                              , text "At location:" <+> text (maybe error show loc)
+                              ]
 
-
-**********
-
-          VectComp (finalin,finalout) c1
-            -> do { vc <- vectorizeWithHint (finalin,finalout) c1
-                  ; let self = self_no_vect
-                  ; let vect =
-                         DVR { dvr_comp  = return vc
-                             , dvr_vres  = DidVect finalin finalout minUtil
-                             , dvr_orig_tyin  = tyin
-                             , dvr_orig_tyout = tyout }
-                  ; return $ [vect] -- No self, FORCE this!
-                  }
-
-          -- Treat nested annotations exactly the same as repeat
-          Repeat Nothing (MkComp (VectComp hint c1) _ _)
-            -> computeVect ra (cRepeat loc (cty,card) (Just (Rigid True hint)) c1)
+        Repeat (Just (Rigid f (finalin, finalout)) c1)
+          -> do vc <- vectWithhint (finalin,finalout) c1 -- Rigidly vectorize computer
+                return $ mitUpDn_Maybe f vctx loc vc
+        
+****************
 
           Repeat (Just (Rigid f (finalin, finalout))) c1
             -> do { vc <- vectorizeWithHint (finalin,finalout) c1

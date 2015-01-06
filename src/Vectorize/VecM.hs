@@ -39,12 +39,14 @@ import Text.PrettyPrint.HughesPJ
 import Data.List 
 import Data.Maybe ( fromJust )
 
+import System.Exit
+
 import qualified GenSym as GS
 
 
-{-------------------------------------------------------------------------------
+{-------------------------------------------------------------------------
   Vectorizer monad
--------------------------------------------------------------------------------}
+-------------------------------------------------------------------------}
 
 
 data CFunBind = CFunBind {
@@ -68,10 +70,15 @@ newtype VecM a = VecM (ReaderT VecEnv IO a)
 runVecM :: VecM a -> VecEnv -> IO a
 runVecM (VecM act) venv = runReaderT act venv
 
+vecMFail :: Doc -> VecM a
+vecMFail msg
+  = liftIO $ do putStrLn "Vectorization failure!"
+                print msg
+                exitFailure
 
-{-------------------------------------------------------------------------------
+{-------------------------------------------------------------------------
   Generating names
--------------------------------------------------------------------------------}
+-------------------------------------------------------------------------}
 
 newVectUniq :: VecM String
 newVectUniq = liftIO . GS.genSymStr =<< asks venv_sym 
@@ -81,9 +88,9 @@ newVectGName nm ty loc = do
     str <- newVectUniq
     return $ (toName (nm ++ "_" ++ str) loc ty) {uniqId = "_v" ++ str}
 
-{-------------------------------------------------------------------------------
+{-------------------------------------------------------------------------
   Accessing the environment
--------------------------------------------------------------------------------}
+-------------------------------------------------------------------------}
 
 getVecEnv :: VecM VecEnv
 getVecEnv = ask
@@ -125,9 +132,9 @@ lookupCFunBind nm = do
        Nothing  -> panicStr $ "VecM: unbound cfun bind: " ++ show nm
 
 
-{-------------------------------------------------------------------------------
+{-------------------------------------------------------------------------
   Vectorization utilities
--------------------------------------------------------------------------------}
+-------------------------------------------------------------------------}
 
 {- Note [Utility] 
    ~~~~~~~~~~~~~~
@@ -165,9 +172,9 @@ chooseParUtility vr1 vr2 = u1 + u2 + util tmid
 minUtil :: Double
 minUtil = log 0.1
 
-{-------------------------------------------------------------------------------
+{-------------------------------------------------------------------------
   Vectorization results
--------------------------------------------------------------------------------}
+-------------------------------------------------------------------------}
 
 {- Note [VectorizationResult]
    ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -187,8 +194,8 @@ data VectRes =
 
      -- Vectorization did happen
    | DidVect { 
-        vect_in_ty  :: Ty       -- not necessarily equal to original in_ty
-      , vect_out_ty :: Ty       -- not necessarily equal to original out_ty
+        vect_in_ty  :: Ty     -- not necessarily equal to original in_ty
+      , vect_out_ty :: Ty     -- not necessarily equal to original out_ty
       , vect_util   :: Double } -- utility of this vectorization
 
  deriving Show
@@ -222,9 +229,9 @@ vResMatch vs = do
    then return $ DidVect inty yldty u
    else return $ NotVect inty yldty
 
-{-------------------------------------------------------------------------------
+{-------------------------------------------------------------------------
   Vectorization and types
--------------------------------------------------------------------------------}
+-------------------------------------------------------------------------}
 
 -- | Give back a vectorized version of a type
 -- Some notes: 
@@ -259,9 +266,9 @@ isVectorizable ty
   | otherwise = True
 
 
-{-------------------------------------------------------------------------------
+{-------------------------------------------------------------------------
   Delayed results of vectorization
--------------------------------------------------------------------------------}
+-------------------------------------------------------------------------}
 
 -- | Delayed vectorization result
 data DelayedVectRes
@@ -290,9 +297,9 @@ liftCompDVR :: Monad m => (Comp -> Comp) -> DelayedVectRes -> m DelayedVectRes
 liftCompDVR f dvr = return $ dvr { dvr_comp = f <$> dvr_comp dvr }
 
 
-{-------------------------------------------------------------------------------
+{-------------------------------------------------------------------------
   Matching on the control path
--------------------------------------------------------------------------------}
+-------------------------------------------------------------------------}
 
 -- | Match vectorization candidates composed on the control path (bind).
 --
@@ -333,8 +340,10 @@ cross_prod_mit bcands
        vect_tout    = vect_out_ty $ dvr_vres dvr
        new_dvr_comp = do
           comp <- dvr_comp dvr
-          return $ (exp_tin,vect_tin) `mitIn` comp `mitOut` (vect_tout,exp_tout)
-       vres_new = (dvr_vres dvr) {vect_in_ty = exp_tin, vect_out_ty = exp_tout}
+          return $ 
+            (exp_tin,vect_tin) `mitIn` comp `mitOut` (vect_tout,exp_tout)
+       vres_new = (dvr_vres dvr) { vect_in_ty  = exp_tin
+                                 , vect_out_ty = exp_tout }
 
 
 
@@ -362,7 +371,8 @@ combineCtrl loc dvr1 xs dvrs
 
 
 
--- | Mitigate by creating a Mitigate node (maybe) node between tin1 ~> tin2
+-- | Mitigate by creating a Mitigate node (maybe) node between 
+--   tin1 ~> tin2
 -- Pre-condition: tin1 is a ``type divisor'' of tin2 or vice-versa.
 -- Result is a mitigating (ST T tin1 tin2) transformer.  
 mkMit :: Maybe SourcePos -> Ty -> Ty -> Maybe Comp 
@@ -408,14 +418,14 @@ mitOut comp (ty,gty)
   = cPar loc pnever comp m
   | otherwise = comp
 
-{-------------------------------------------------------------------------------
+{-------------------------------------------------------------------------
   Matching on the data path
--------------------------------------------------------------------------------}
+-------------------------------------------------------------------------}
 
 -- | Match vectorization candidates composed on the data path
 conbineData :: ParInfo
             -> Maybe SourcePos
-            -> [ DelayedVectRes ] -> [ DelayedVectRes ] -> [ DelayedVectRes ]
+            -> [DelayedVectRes] -> [DelayedVectRes] -> [DelayedVectRes]
 conbineData p loc xs ys 
   = cross_comb (mitigatePar p loc) xs ys
 
@@ -445,12 +455,13 @@ mitigatePar pnfo loc dp1 dp2 = do
       = let u = chooseParUtility r1 r2 
         in return $ DidVect (vect_in_ty r1) (vect_out_ty r2) u 
 
-{-------------------------------------------------------------------------------
+{-------------------------------------------------------------------------
   Vectorization utilities
--------------------------------------------------------------------------------}
+-------------------------------------------------------------------------}
 
 
--- | Computes least array or primitive type from the two, used for mitigators
+-- | Computes least array or primitive type from the two, used for
+-- mitigators 
 -- NB: No arrays of length 1
 gcd_ty :: Ty -> Ty -> Ty 
 gcd_ty TVoid t = t 
