@@ -776,6 +776,7 @@ passForUnroll = TypedExpBottomUp $ \eloc e -> do
          , EVal _     (VInt n) <- unExp elen
          , (n < 8 && n > 0 && ui == AutoUnroll) || ui == Unroll
         -> do
+          logStep "for-unroll" eloc [step| Unrolling loop |]
           let subst i' = substExp [] [(nm, eVal eloc valTy (vint i'))] ebody
               unrolled = map subst [0..n-1]
           rewrite $ mk_eseq_many unrolled
@@ -789,7 +790,9 @@ passExpInlining = TypedExpBottomUp $ \eloc e -> do
   fgs <- getDynFlags
 
   if | ELet nm ForceInline e1 e2 <- unExp e
-      -> rewrite $ substExp [] [(nm,e1)] e2 -- Forced Inline!
+      -> do
+        logStep "exp-inlining" eloc [step| Inlining nm |]
+        rewrite $ substExp [] [(nm,e1)] e2 -- Forced Inline!
 
      | ELet _nm NoInline _e1 _e2 <- unExp e
       -> return e
