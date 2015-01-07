@@ -31,7 +31,7 @@ fun perm8(p : arr[8] int, iarr : arr[8] bit) {
 }
 
 fun vector_or(a1 : arr[48] bit, a2 : arr[48] bit) {
-  var res : arr[48] bit;
+  var res : arr[48] bit := zeros;
   for i in [0,48]
     res[i] := a1[i] | a2[i];
   return res;
@@ -42,7 +42,7 @@ fun perm(p : arr[48] int, iarr : arr[48] bit) {
   var oarr    : arr[48] bit := zeros;
   var oarrtmp : arr[48] bit := zeros;
 
-  var iarr1 : arr[8] bit;
+  var iarr1 : arr[8] bit := {'0, '0, '0, '0, '0, '0, '0, '0};
 
   for j in [0,6] {
      let p1 = p[j*8,8];
