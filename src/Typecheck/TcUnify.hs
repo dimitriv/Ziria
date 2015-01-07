@@ -337,15 +337,22 @@ instance (Unify a, Unify b) => Unify (CallArg a b) where
 -- unification equations will not instantiate this type variable.
 defaultTy :: Maybe SourcePos -> Ty -> Ty -> TcM Ty
 defaultTy p ty def = do
-  ty' <- zonk ty
-  case ty' of
-    TVar _ -> do unify p ty' def ; return def
-    _      -> return ty'
+    ty' <- zonk ty
+    case ty' of
+      TVar _ -> do unify p ty' def ; return def
+      _      -> return ty'
+
+defaultBitWidths :: Ty -> TcM Ty
+defaultBitWidths ty = do
+    ty' <- zonk ty
+    case ty' of
+      TInt (BWUnknown _) -> do unify Nothing ty' tint32 ; return tint32
+      _                  -> return ty'
 
 -- | Zonk all type variables and default the type of `EError` to `TUnit` when
 -- it's still a type variable.
 defaultExpr :: Exp -> TcM Exp
-defaultExpr = mapExpM goTy return goExp
+defaultExpr = mapExpM defaultBitWidths return goExp
   where
     goExp :: Exp -> TcM Exp
     goExp e
@@ -356,15 +363,8 @@ defaultExpr = mapExpM goTy return goExp
       | otherwise
       = return e
 
-    goTy :: Ty -> TcM Ty
-    goTy ty = do
-      ty' <- zonk ty
-      case ty' of
-        TInt (BWUnknown _) -> do unify Nothing ty' tint32 ; return tint32
-        _                  -> return ty'
-
 defaultComp :: Comp -> TcM Comp
-defaultComp = mapCompM zonk zonk return return defaultExpr return
+defaultComp = mapCompM zonk defaultBitWidths return return defaultExpr return
 
 defaultProg :: Prog -> TcM Prog
 defaultProg (MkProg comp) = MkProg `liftM` defaultComp comp
