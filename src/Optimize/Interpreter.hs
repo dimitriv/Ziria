@@ -574,10 +574,14 @@ interpret e = guessIfUnevaluated (go . unExp) e
       go (ELetRef x (Just (initialExp eloc (nameTyp x))) e2)
     go (EAssign lhs rhs) = do
       rhs' <- interpret rhs
-      assign eloc lhs rhs'
+      didAssign <- assign lhs rhs'
+      if didAssign then return $ eVal eloc TUnit VUnit
+                   else partiallyEvaluated $ eAssign eloc lhs rhs'
     go (EArrWrite arr ix len rhs) = do
       rhs' <- interpret rhs
-      assign eloc (eArrRead eloc arr ix len) rhs'
+      didAssign <- assign (eArrRead eloc arr ix len) rhs'
+      if didAssign then return $ eVal eloc TUnit VUnit
+                   else partiallyEvaluated $ eArrWrite eloc arr ix len rhs'
 
     -- Control flow
 
@@ -676,11 +680,10 @@ interpret e = guessIfUnevaluated (go . unExp) e
 -- | Assignment
 --
 -- (Auxiliary to `interpret`)
-assign :: Maybe SourcePos -> Exp -> Exp -> Eval Exp
-assign = \p lhs rhs -> do
-    didAssign <- deref (unExp lhs) $ \_ -> expValue rhs
-    if didAssign then return $ eVal p TUnit VUnit
-                 else partiallyEvaluated $ eAssign p lhs rhs
+--
+-- Returns whether the assignment was successful
+assign :: Exp -> Exp -> Eval Bool
+assign = \lhs rhs -> deref (unExp lhs) $ \_ -> expValue rhs
   where
     -- `deref` gives the semantics of a derefercing expression by describing
     -- how a function on values is interpreted as a state update
