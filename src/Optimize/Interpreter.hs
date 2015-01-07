@@ -604,7 +604,12 @@ interpret e = guessIfUnevaluated (go . unExp) e
           e2' <- interpret e2
           partiallyEvaluated $ eLetRef eloc x (Just e1') e2'
     go (ELetRef x Nothing e2) =
-      go (ELetRef x (Just (initialExp eloc (nameTyp x))) e2)
+      case initialExp eloc (nameTyp x) of
+        Just def -> go (ELetRef x (Just def) e2)
+        Nothing  -> do -- We cannot construct a default value for this type
+                       -- (perhaps because it's a length-polymorphic array)
+                       e2' <- interpret e2
+                       partiallyEvaluated $ eLetRef eloc x Nothing e2'
     go (EAssign lhs rhs) = do
       rhs' <- interpret rhs
       didAssign <- assign lhs rhs'
@@ -793,22 +798,21 @@ assign = \lhs rhs -> deref (unExp lhs) $ \_ -> expValue rhs
 -- unspecified (https://github.com/dimitriv/Ziria/issues/79). This means that
 -- we are free to specify whatever we wish in the interpret -- here we pick
 -- sensible defaults.
-initialExp :: Maybe SourcePos -> Ty -> Exp
-initialExp p ty =
+initialExp :: Maybe SourcePos -> Ty -> Maybe Exp
+initialExp p = \ty ->
     case ty of
-      TArray (NVar _)    _   -> error "initialExp: length variable"
-      TArray (Literal n) ty' -> eValArr p    $ replicate n (initialExp p ty')
-      TStruct _ fields       -> eStruct p ty $ map initialField fields
-      TUnit                  -> eVal    p ty $ VUnit
-      TBit                   -> eVal    p ty $ VBit    False
-      TBool                  -> eVal    p ty $ VBool   False
-      TString                -> eVal    p ty $ VString ""
-      TDouble                -> eVal    p ty $ VDouble 0
-      (TInt _)               -> eVal    p ty $ VInt    0
-      _                      -> error $ "initialExp: unsupported " ++ pretty ty
+      TArray (Literal n) ty' -> eValArr p    <$> replicateM n (initialExp p ty')
+      TStruct _ fields       -> eStruct p ty <$> mapM initialField fields
+      TUnit                  -> return $ eVal p ty $ VUnit
+      TBit                   -> return $ eVal p ty $ VBit    False
+      TBool                  -> return $ eVal p ty $ VBool   False
+      TString                -> return $ eVal p ty $ VString ""
+      TDouble                -> return $ eVal p ty $ VDouble 0
+      (TInt _)               -> return $ eVal p ty $ VInt    0
+      _                      -> Nothing
   where
-    initialField :: (FldName, Ty) -> (FldName, Exp)
-    initialField (fldName, ty') = (fldName, initialExp p ty')
+    initialField :: (FldName, Ty) -> Maybe (FldName, Exp)
+    initialField (fldName, ty) = do e <- initialExp p ty ; return (fldName, e)
 
 -- | Smart constructor for binary operators
 applyBinOp :: Maybe SourcePos -> BinOp -> Exp -> Exp -> Eval Exp
