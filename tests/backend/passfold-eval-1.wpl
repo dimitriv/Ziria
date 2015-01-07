@@ -1,4 +1,8 @@
 fun comp test() {
+  
+  -- Simply tests for the interpreter. Each of these let bindings should be
+  -- simplified to a constant value.
+
   let eval_1  = 1
   let eval_2  = { 2, 3 }
   let eval_3  = 2 + 2 

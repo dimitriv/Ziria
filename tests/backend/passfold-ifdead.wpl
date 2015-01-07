@@ -56,6 +56,14 @@ fun comp f() {
       emit f + 16;
     }
   }
+
+  -- Test that we don't remove side effects
+  var x : int := 0;
+  if (var y : int := 1 in { x := y ; return true }) then {
+    emit x + 10;
+  } else {
+    emit x + 20;
+  }
 }
 
 let comp main = read[int] >>> f() >>> write[int]

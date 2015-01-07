@@ -4,16 +4,19 @@
 module Utils (
     panic
   , panicStr
-  , assert 
+  , assert
   , mapKeysM
   , mapTelescope
   , parsePragmaLine
-  , uncurry4 
+  , uncurry4
   , groupBy'
-  , (<|) 
+  , (<|)
   , cross_prod
   , cross_comb
   , gcd_many
+  , splitListAt
+  , sliceListAt
+  , splitListOn
   ) where
 
 import Control.Applicative
@@ -34,7 +37,7 @@ panicStr :: String -> a
 panicStr = panic . text
 
 
-assert :: String -> Bool -> a -> a 
+assert :: String -> Bool -> a -> a
 assert _msg True x  = x
 assert msg False _x = panicStr msg
 
@@ -128,39 +131,39 @@ uncurry4 fun (a, b, c, d) = fun a b c d
 -- groups so we provide our own function that does exactly this.
 groupBy' :: (a -> a -> Bool) -> [a] -> [[a]]
 groupBy' f xs = go xs []
- where 
+ where
    go [] groups  = groups
    go (y:ys) groups = go ys (ginsert y groups)
 
    ginsert x [] = [[x]] -- create new singleton group
-   ginsert x (g1:gs) 
-     | f x (head g1) 
+   ginsert x (g1:gs)
+     | f x (head g1)
      = (x:g1):gs -- insert into g1
      | otherwise -- or else insert somewhere in gs or in the end
      = g1:(ginsert x gs)
 
 
 -- | Composing two functions
-(<|) :: (a -> a -> b) -> (c -> a) -> c -> c -> b 
+(<|) :: (a -> a -> b) -> (c -> a) -> c -> c -> b
 (<|) f g x y = f (g x) (g y)
 
 
 
 -- | Cross-product of two lists
--- E.g. if xs = [ [a1,a2], [b1,b2,b3] ] 
+-- E.g. if xs = [ [a1,a2], [b1,b2,b3] ]
 -- then cross_prod xs = [ [a1,b1], [a1,b2], [a1,b3], [a2,b1], [a2,b2], [a2,b3] ]
 cross_prod :: [[a]] -> [[a]]
-cross_prod = go [] [] 
+cross_prod = go [] []
   where
     go acc k []               = reverse acc : k
     go _acc _k ([]:_)         = panicStr "cross_prod: empty candidate list!"
-    go acc k ([c1]:crest)     = go (c1:acc) k crest 
+    go acc k ([c1]:crest)     = go (c1:acc) k crest
     go acc k ((c1:c1s):crest) = go (c1:acc) (go acc k (c1s:crest)) crest
 
 cross_comb :: (a -> b -> Maybe c) -> [a] -> [b] -> [c]
-cross_comb f xs ys 
+cross_comb f xs ys
   = [ c | x <- xs
-        , y <- ys 
+        , y <- ys
         , c <- f' x y ]
   where f' a b = maybe [] (:[]) (f a b)
 
@@ -169,4 +172,36 @@ gcd_many :: [Int] -> Int
 gcd_many [a]        = a
 gcd_many (a1:a2:as) = gcd_many (gcd a1 a2 : as)
 gcd_many []         = error "gcd_many: empty list!"
+
+{-------------------------------------------------------------------------------
+  Isolating elements in a list
+-------------------------------------------------------------------------------}
+
+splitListAt :: Integer -> [a] -> Maybe ([a], a, [a])
+splitListAt = go []
+  where
+    go _      _ []        = Nothing
+    go before 0 (x:after) = Just (reverse before, x, after)
+    go before n (x:after) = go (x:before) (n-1) after
+
+-- Slice a list.
+--
+-- @sliceListAt n len@ isolates a chunk of length @len@ at position @n@.
+--
+-- > sliceListAt 3 2 [0..9] == Just ([0..2], [3, 4], [5..9])
+sliceListAt :: Integer -> Int -> [a] -> Maybe ([a], [a], [a])
+sliceListAt = go [] []
+  where
+    go  before  slice  0  0 after     = Just (reverse before, reverse slice, after)
+    go _before _slice  0 _n []        = Nothing
+    go  before  slice  0  n (x:after) = go before (x:slice) 0 (n-1) after
+    go _before _slice _m _n []        = Nothing
+    go  before  slice  m  n (x:after) = go (x:before) slice (m-1) n after
+
+splitListOn :: (a -> Bool) -> [a] -> Maybe ([a], a, [a])
+splitListOn f = go []
+  where
+    go _      []                    = Nothing
+    go before (x:after) | f x       = Just (reverse before, x, after)
+                        | otherwise = go (x:before) after
 

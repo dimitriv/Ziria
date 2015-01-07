@@ -1,0 +1,11 @@
+fun comp test() {
+  a <- take;
+
+  -- Tests that the evaluator subsumes the old constant folding pass
+
+  emit a + 1 * 2;
+  emit a + 0;
+  emit a * 1;
+}
+
+let comp main = read[int] >>> repeat test() >>> write[int];

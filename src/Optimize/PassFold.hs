@@ -75,10 +75,13 @@ genSym prefix = RwM $ do
 getDynFlags :: RwM DynFlags
 getDynFlags = RwM $ snd `liftM` ask
 
+debugFold :: RwM Bool
+debugFold = (`isDynFlagSet` DebugFold) <$> getDynFlags
+
 logStep :: String -> Maybe SourcePos -> String -> RwM ()
 logStep pass pos str = do
-    flags <- getDynFlags
-    when (isDynFlagSet flags DebugFold) $ RwM $ do
+    shouldLog <- debugFold
+    when shouldLog $ RwM $ do
       liftIO $ putStrLn $ "* " ++ pass ++ ": " ++ ppr' pos ++ "\n" ++ str
   where
     ppr' (Just p) = show p ++ ": "
@@ -141,11 +144,16 @@ incRewrites mp d s = RwStats (Map.alter aux s $ getRwStats mp)
 
 -- | Transformations on Comp terms
 data TypedCompPass =
+    -- | Apply the pass on each node of the tree in bottom-up fashion
     TypedCompBottomUp (Maybe SourcePos -> Comp -> RwM Comp)
 
 -- | Transformations on Exp terms
 data TypedExpPass =
+    -- | Apply the pass on each node of the tree in bototm-up fashion
     TypedExpBottomUp (Maybe SourcePos -> Exp -> RwM Exp)
+
+    -- | The pass does its own traversal of the tree.
+  | TypedExpManual (Exp -> RwM Exp)
 
 -- | Note: when composing passes you compose their action _on each node_, not
 -- on the tree as a whole.
@@ -174,6 +182,9 @@ runTypedExpPass (TypedExpBottomUp f) =
     mapCompM return return return return (mapExpM return return f') return
   where
     f' exp = f (expLoc exp) exp
+runTypedExpPass (TypedExpManual f) =
+    -- We apply the function to each expression, but we don't use mapExpM
+    mapCompM return return return return f return
 
 -- | Run a set of passes
 --
@@ -239,7 +250,6 @@ foldCompPasses flags
     , ("letfun-times"  , passLetFunTimes )
     , ("times-unroll"  , passTimesUnroll )
     , ("inline"        , passInline      )
-    , ("eval-lete"     , passEvalLetE    )
 
     -- More aggressive optimizations
     , ("push-comp-locals"       , passPushCompLocals      )
@@ -262,8 +272,8 @@ foldExpPasses flags
   = [ ("for-unroll"   , passForUnroll  )
     , ("exp-inlining" , passExpInlining)
     , ("asgn-letref"  , passAsgnLetRef )
-    , ("eval-elet"    , passEvalELet   )
     , ("exp-let-push" , passExpLetPush )
+    , ("eval"         , passEval       )
     , ("rest-chain"   , rest_chain        )
     ]
 
@@ -749,24 +759,6 @@ passElimAutomappedMitigs = TypedCompBottomUp $ \_cloc c -> if
   | otherwise
    -> return c
 
--- | Partially evaluate LHS of let bindings
-passEvalLetE :: TypedCompPass
-passEvalLetE = TypedCompBottomUp $ \cloc c -> if
-    | LetE nm fi e1 e2 <- unComp c
-     -> do
-      case evalPartial e1 of
-        (Right e1', prints) -> do
-          unless (null prints) $ logStep "eval-lete: debug prints" cloc prints
-          logStep "eval-lete" cloc [step| e1 ~~> e1' |]
-          -- We use 'return' rather than 'rewrite' so that we don't attempt to
-          -- write the binding again
-          return $ cLetE cloc nm fi e1' e2
-        (Left _err, _prints) ->
-          -- Cannot evaluate. Leave unchanged
-          return $ c
-    | otherwise
-     -> return c
-
 {-------------------------------------------------------------------------------
   Expression passes
 -------------------------------------------------------------------------------}
@@ -901,24 +893,6 @@ passAsgnLetRef = TypedExpBottomUp $ \eloc exp -> if
        where
          loc = expLoc e
 
--- | Partially evaluate LHS of let bindings
-passEvalELet :: TypedExpPass
-passEvalELet = TypedExpBottomUp $ \eloc e -> if
-    | ELet nm fi e1 e2 <- unExp e
-     -> do
-      case evalPartial e1 of
-        (Right e1', prints) -> do
-          unless (null prints) $ logStep "eval-elet: debug prints" eloc prints
-          logStep "eval-elet" eloc [step| e1 ~~> e1' |]
-          -- We use 'return' rather than 'rewrite' so that we don't attempt to
-          -- write the binding again
-          return $ eLet eloc nm fi e1' e2
-        (Left _err, _prints) ->
-          -- Cannot evaluate. Leave unchanged
-          return $ e
-    | otherwise
-     -> return e
-
 -- | Push a let into an array-write with an array-read as RHS
 passExpLetPush :: TypedExpPass
 passExpLetPush = TypedExpBottomUp $ \eloc e -> if
@@ -947,6 +921,29 @@ passALengthElim = TypedExpBottomUp $ \eloc e -> if
        rewrite $ eVal eloc tint (vint i)
     | otherwise
      -> return e
+
+passEval :: TypedExpPass
+passEval = TypedExpManual eval
+  where
+    eval :: Exp -> RwM Exp
+    eval e = case evalPartial e of
+        (Right e', prints) -> do
+          unless (null prints) $ logStep "eval: debug prints" eloc (format prints)
+          shouldLog <- debugFold
+          when (shouldLog && e /= e') $ logStep "eval" eloc [step| e ~~> e' |]
+          -- We use 'return' rather than 'rewrite' so that we don't attempt to
+          -- write the binding again
+          return e'
+        (Left _err, _prints) ->
+          -- Cannot evaluate. Leave unchanged
+          return $ e
+      where
+        eloc = expLoc e
+
+    format :: [(Bool, Value)] -> String
+    format []              = ""
+    format ((True,  v):vs) = show v ++ "\n" ++ format vs
+    format ((False, v):vs) = show v         ++ format vs
 
 {-------------------------------------------------------------------------------
   TODO: Not yet cleaned up
@@ -1101,7 +1098,6 @@ rewrite_mit_map ty1 (i1,j1) ty2 (i2,j2) (f_name, fun)
 rest_chain :: TypedExpPass
 rest_chain = mconcat [
       passALengthElim
-    , const_fold
     , subarr_inline_step
     , proj_inline_step
     ]
@@ -1152,66 +1148,6 @@ proj_inline_step = TypedExpBottomUp $ \_ e -> if
 
 
 
-
-const_fold :: TypedExpPass
-const_fold = TypedExpBottomUp $ \loc e ->
-    case go (unExp e) of
-      Nothing -> return e
-      Just e' -> rewrite $ MkExp e' loc ()
-  where
-    go :: Exp0 -> Maybe Exp0
-    go (EBinOp Add e1 e2) | EVal _ (VInt 0) <- unExp e1 =
-        return $ unExp e2
-
-    go (EBinOp Add e1 e2) | EVal _ (VInt 0) <- unExp e2 =
-        return $ unExp e1
-
-    go (EBinOp Add e1 e2) | EVal a   (VInt i1) <- unExp e1
-                          , EVal _a' (VInt i2) <- unExp e2 =
-        return $ EVal a (VInt (i1+i2))
-
-    go (EBinOp Sub e1 e2) | EVal a   (VInt i1) <- unExp e1
-                          , EVal _a' (VInt i2) <- unExp e2 =
-        return $ EVal a (VInt (i1-i2))
-
-    go (EBinOp Mult e1 e2) | EVal _ (VInt 1) <- unExp e1 =
-        return $ unExp e2
-
-    go (EBinOp Mult e1 e2) | EVal _ (VInt 1) <- unExp e2 =
-        return $ unExp e1
-
-    go (EBinOp Mult e1 e2) | EVal a  (VInt i1) <- unExp e1
-                           , EVal _a' (VInt i2) <- unExp e2 =
-        return $ EVal a (VInt (i1*i2))
-
-    go (EBinOp Div e1 e2) | EVal a   (VInt i1) <- unExp e1
-                          , EVal _a' (VInt i2) <- unExp e2 =
-        return $ EVal a (VInt (i1 `quot` i2))
-
-    go (EBinOp Rem e1 e2) | EVal a  (VInt i1) <- unExp e1
-                          , EVal _a' (VInt i2) <- unExp e2 =
-        return $ EVal a (VInt (i1 `rem` i2))
-
-    go (EBinOp Eq e1 e2) | EVal _ (VInt i1) <- unExp e1
-                         , EVal _ (VInt i2) <- unExp e2 =
-        return $ if i1 == i2 then EVal TBool (VBool True) else EVal TBool (VBool False)
-
-    go (EBinOp Neq e1 e2) | EVal _ (VInt i1) <- unExp e1
-                          , EVal _ (VInt i2) <- unExp e2 =
-        return $ if i1 /= i2 then EVal TBool (VBool True) else EVal TBool (VBool False)
-
-    go (EBinOp Lt e1 e2) | EVal _ (VInt i1) <- unExp e1
-                         , EVal _ (VInt i2) <- unExp e2 =
-        return $ if i1 < i2 then EVal TBool (VBool True) else EVal TBool (VBool False)
-
-    go (EBinOp Gt e1 e2) | EVal _ (VInt i1) <- unExp e1
-                         , EVal _ (VInt i2) <- unExp e2 =
-        return $ if i1 > i2 then EVal TBool (VBool True) else EVal TBool (VBool False)
-
-    go (EIf e1 e2 e3) | EVal _ (VBool flag) <- unExp e1 =
-        return $ if flag then unExp e2 else unExp e3
-
-    go _ = Nothing
 
 
 

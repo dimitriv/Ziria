@@ -3,6 +3,9 @@ fun comp test() {
   b <- take;
   c <- take;
 
+  -- These are tests that we could simplify if we did symbolic evaluation
+  -- For now, we don't.
+  
   let eval_1 = a + b;
   let eval_2 = var x : complex in {
                    x.re := b;
