@@ -311,8 +311,12 @@ data EvalMode =
 
 -- | Evaluation state
 data EvalState = EvalState {
-    -- | Locally bound variables (let or letref)
-    _evalMemory :: Map String Value
+    -- | Let-bound variables (immutable)
+    _evalLets :: Map String Value
+
+
+    -- | Letref-bound variables (mutable)
+  , _evalLetRefs :: Map String Value
 
     -- | Guesses about boolean-valued expressions
     --
@@ -326,8 +330,11 @@ data EvalState = EvalState {
   }
   deriving Show
 
-evalMemory :: L.Lens EvalState (Map String Value)
-evalMemory f st = (\x -> st { _evalMemory = x }) <$> f (_evalMemory st)
+evalLets :: L.Lens EvalState (Map String Value)
+evalLets f st = (\x -> st { _evalLets = x }) <$> f (_evalLets st)
+
+evalLetRefs :: L.Lens EvalState (Map String Value)
+evalLetRefs f st = (\x -> st { _evalLetRefs = x }) <$> f (_evalLetRefs st)
 
 evalGuessesBool :: L.Lens EvalState (Map Exp Bool)
 evalGuessesBool f st = (\x -> st { _evalGuessesBool = x}) <$> f (_evalGuessesBool st)
@@ -337,7 +344,8 @@ evalGuessesInt f st = (\x -> st { _evalGuessesInt = x}) <$> f (_evalGuessesInt s
 
 initState :: EvalState
 initState = EvalState {
-    _evalMemory      = Map.empty
+    _evalLets        = Map.empty
+  , _evalLetRefs     = Map.empty
   , _evalGuessesBool = Map.empty
   , _evalGuessesInt  = Map.empty
   }
@@ -400,21 +408,37 @@ onZero act handler = mkEval $ \mode st ->
   Primitive operations in the evaluator monad
 -------------------------------------------------------------------------------}
 
-readVar :: GName ty -> Eval (Maybe Value)
-readVar x = L.getSt $ evalMemory . L.mapAt (uniqId x)
+-- | Read a variable
+--
+-- (Either let-bound or letref bound)
+readVar :: GName Ty -> Eval (Maybe Value)
+readVar x = do
+  mLetBound <- L.getSt $ evalLets . L.mapAt (uniqId x)
+  case mLetBound of
+    Just letBound -> return $ Just letBound
+    Nothing       -> L.getSt $ evalLetRefs . L.mapAt (uniqId x)
 
-extendScope :: GName ty -> Value -> Eval a -> Eval a
-extendScope x initVal act = do
-    L.modifySt evalMemory $ Map.insert (uniqId x) initVal
+extendScope :: L.Lens EvalState (Map String Value)  -- ^ Scope to extend
+            -> GName Ty                             -- ^ Variable to introduce
+            -> Value                                -- ^ Initial value
+            -> Eval a -> Eval a
+extendScope scope x initVal act = do
+    -- Check if variable already in scope (if this happens it's a compiler bug)
+    mCurrentValue <- readVar x
+    case mCurrentValue of
+      Nothing -> return ()
+      Just _  -> throwError $ "Variable " ++ pretty x ++ " already in scope"
+
+    L.modifySt scope $ Map.insert (uniqId x) initVal
     a <- act
-    L.modifySt evalMemory $ Map.delete (uniqId x)
+    L.modifySt scope $ Map.delete (uniqId x)
     return a
 
 -- | Write a variable
 --
 -- The caller should verify that the variable is in scope.
-writeVar :: GName ty -> Value -> Eval ()
-writeVar x v = L.modifySt evalMemory $ Map.insert (uniqId x) v
+writeVar :: GName Ty -> Value -> Eval ()
+writeVar x v = L.modifySt evalLetRefs $ Map.insert (uniqId x) v
 
 -- | Indicate that we could only partially evaluate an AST constructor
 --
@@ -443,16 +467,25 @@ guessIfUnevaluated f e = do
 -- conservatively assume that the value of all variables and all previously
 -- guessed values (during non-deterministic evaluation) as now no longer
 -- accurate.
+--
+-- Note that let-bound variables never need to be invalidated: once we know
+-- that a let-bound variable evaluated to a specific value, future statements
+-- can never invalidate that.
 invalidateAssumptions :: Eval ()
-invalidateAssumptions = put initState
+invalidateAssumptions = do
+    L.putSt evalLetRefs     Map.empty
+    L.putSt evalGuessesBool Map.empty
+    L.putSt evalGuessesInt  Map.empty
 
 -- | Invalidate all assumptions about a particular variable
 --
 -- We conservatively remove all guesses. We could instead only remove those
 -- guesses for expressions that mention the variable.
-invalidateAssumptionsFor :: GName ty -> Eval ()
+--
+-- See also comments for `invalidateAssumptions`.
+invalidateAssumptionsFor :: GName Ty -> Eval ()
 invalidateAssumptionsFor x = do
-    L.modifySt evalMemory $ Map.delete (uniqId x)
+    L.modifySt evalLetRefs $ Map.delete (uniqId x)
     L.putSt evalGuessesBool Map.empty
     L.putSt evalGuessesInt  Map.empty
 
@@ -551,7 +584,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
       e1' <- interpret e1
       case expValue e1' of
         Just v1' ->
-          extendScope x v1' $ interpret e2
+          extendScope evalLets x v1' $ interpret e2
         Nothing -> do
           e2' <- interpret e2
           partiallyEvaluated $ eLet eloc x fi e1' e2'
@@ -559,7 +592,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
       e1' <- interpret e1
       case expValue e1' of
         Just v1' -> do
-          (e2', xDeleted) <- extendScope x v1' $ do
+          (e2', xDeleted) <- extendScope evalLetRefs x v1' $ do
             e2'      <- interpret e2
             xDeleted <- isNothing <$> readVar x
             return (e2', xDeleted)
@@ -598,23 +631,24 @@ interpret e = guessIfUnevaluated (go . unExp) e
           interpret (if b then iftrue else iffalse)
         -- Condition not in normal form
         _ -> do
-          -- We cannot evaluate the branches, because that would mean having to
-          -- bifurcate the evaluation at this point. Instead, we conservatively
-          -- just declare that after this conditional the state of the memory
-          -- is unknown. We could do slightly better if we checked that both
-          -- branches are "pure".
+          -- We don't know which of the two branches will be executed, so we
+          -- cannot execute any of its effects. Therefore we invalidate
+          -- assumptions, so that any variables occurring in the branches will
+          -- be considered free and cannot be assigned to.
           invalidateAssumptions
-          partiallyEvaluated $ eIf eloc cond' iftrue iffalse
+          iftrue'  <- interpret iftrue
+          iffalse' <- interpret iffalse
+          partiallyEvaluated $ eIf eloc cond' iftrue' iffalse'
     go (EFor ui x start len body) = do
       start' <- interpret start
       len'   <- interpret len
-      case (unExp start', unExp len') of
+      fullEv <- case (unExp start', unExp len') of
         -- Start and length both in normal form
         (EVal ty (VInt start''), EVal _ (VInt len'')) -> do
           let loop n | n == start'' + len'' =
                 return True
               loop n = do
-                body' <- extendScope x (ValueScalar eloc ty (VInt n)) $
+                body' <- extendScope evalLets x (ValueScalar eloc ty (VInt n)) $
                            interpret body
                 -- Only when we can fully evaluate the body of the loop do we
                 -- continue. If not, we give up completely (alternatively, we
@@ -623,15 +657,16 @@ interpret e = guessIfUnevaluated (go . unExp) e
                   EVal TUnit VUnit -> loop (n + 1)
                   _otherwise       -> return False
 
-          fullyEvaluated <- loop start''
-          if fullyEvaluated
-            then return $ eVal eloc TUnit VUnit
-            else do invalidateAssumptions
-                    partiallyEvaluated $ eFor eloc ui x start' len' body
+          loop start''
         -- Bounds not in normal form. We cannot evaluate the body.
         _ -> do
-          invalidateAssumptions
-          partiallyEvaluated $ eFor eloc ui x start' len' body
+          return False
+      if fullEv
+        then return $ eVal eloc TUnit VUnit
+        else do -- See comments for conditionals
+                invalidateAssumptions
+                body' <- interpret body
+                partiallyEvaluated $ eFor eloc ui x start' len' body'
     go (EWhile cond body) = do
       let loop = do
             cond' <- interpret cond
@@ -646,10 +681,13 @@ interpret e = guessIfUnevaluated (go . unExp) e
               -- Condition not in normal form
               _ ->
                 return False
-      fullyEvaluated <- loop
-      if fullyEvaluated then return $ eVal eloc TUnit VUnit
-                        else do invalidateAssumptions
-                                partiallyEvaluated $ eWhile eloc cond body
+      fullEv <- loop
+      if fullEv then return $ eVal eloc TUnit VUnit
+                else do -- See comments for conditionals
+                        invalidateAssumptions
+                        cond' <- interpret cond
+                        body' <- interpret body
+                        partiallyEvaluated $ eWhile eloc cond' body'
     go (EIter _ _ _ _) =
       throwError "EIter unsupported"
 
