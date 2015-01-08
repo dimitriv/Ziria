@@ -94,7 +94,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module Interpreter {- (
+module Interpreter (
     -- * Values
     Value(..)
   , expValue
@@ -118,7 +118,7 @@ module Interpreter {- (
   , eOr
   , eTrue
   , eFalse
-  ) -} where
+  ) where
 
 import Control.Applicative
 import Control.Arrow (second)
@@ -512,19 +512,22 @@ interpret e = guessIfUnevaluated (go . unExp) e
     go (EArrRead arr ix li) = do
       arr' <- interpret arr
       ix'  <- interpret ix
-      case (unExp arr', unExp ix', li) of
+      case (ctExp arr', unExp arr', unExp ix', li) of
         -- Both array and index in normal form: array index
-        (EValArr vs, EVal _ (VInt i), LISingleton) ->
+        (_ty, EValArr vs, EVal _ (VInt i), LISingleton) ->
           case splitListAt i vs of
             Just (_, y, _) -> return y
             Nothing        -> throwError $ "Out of bounds"
+        -- "Full" slice
+        (TArray (Literal m) _, _, EVal _ (VInt 0), LILength n) | m == n ->
+          return $ arr'
         -- Both array and index in normal form: array slice
-        (EValArr vs, EVal _ (VInt i), LILength len) ->
+        (_ty, EValArr vs, EVal _ (VInt i), LILength len) ->
           case sliceListAt i len vs of
             Just (_, ys, _) -> return $ eValArr eloc ys
             Nothing         -> throwError $ "Out of bounds"
         -- Not in normal form. Leave uninterpreted
-        _ ->
+        _otherwise ->
           partiallyEvaluated $ eArrRead eloc arr' ix' li
 
     -- Array permutation
@@ -616,10 +619,23 @@ interpret e = guessIfUnevaluated (go . unExp) e
       if didAssign then return $ eVal eloc TUnit VUnit
                    else partiallyEvaluated $ eAssign eloc lhs rhs'
     go (EArrWrite arr ix len rhs) = do
+      ix'  <- interpret ix  -- If LHS has side effects, this may be wrong
       rhs' <- interpret rhs
-      didAssign <- assign (eArrRead eloc arr ix len) rhs'
-      if didAssign then return $ eVal eloc TUnit VUnit
-                   else partiallyEvaluated $ eArrWrite eloc arr ix len rhs'
+      case (ctExp arr, unExp ix', len) of
+        -- Replace the entire array
+        (TArray (Literal m) _, EVal _ (VInt 0), LILength n) | m == n -> do
+          didAssign <- assign arr rhs'
+          if didAssign then return $ eVal eloc TUnit VUnit
+                       else partiallyEvaluated $ eAssign eloc arr rhs'
+        -- Replace an element or a slice
+        --
+        -- We call 'assign' with a different LHS here, but if the assignment
+        -- fails we don't rewrite to this form because codegen seems to do
+        -- something slightly differently?
+        _otherwise -> do
+          didAssign <- assign (eArrRead eloc arr ix len) rhs'
+          if didAssign then return $ eVal eloc TUnit VUnit
+                       else partiallyEvaluated $ eArrWrite eloc arr ix len rhs'
 
     -- Control flow
 
@@ -833,6 +849,8 @@ applyBinOp p op a b =
 
 -- | Smart constructor for unary operators
 applyUnOp :: Maybe SourcePos -> UnOp -> Exp -> Eval Exp
+applyUnOp p ALength a | TArray (Literal i) _ <- ctExp a =
+    return $ eVal p tint32 (VInt (toInteger i))
 applyUnOp p ALength a =
     case unExp a of
       EValArr vals -> return $ eVal p tint32 (VInt (toInteger (length vals)))

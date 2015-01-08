@@ -914,17 +914,6 @@ passExpLetPush = TypedExpBottomUp $ \eloc e -> if
     | otherwise
      -> return e
 
--- | Eliminate length(arr) calls for arrays of statically known length
-passALengthElim :: TypedExpPass
-passALengthElim = TypedExpBottomUp $ \eloc e -> if
-    | EUnOp ALength e0 <- unExp e
-      , TArray (Literal i) _ <- ctExp e0
-     -> do
-       logStep "alength-elim" eloc [step| length(..) ~~> i |]
-       rewrite $ eVal eloc tint (vint i)
-    | otherwise
-     -> return e
-
 passEval :: TypedExpPass
 passEval = TypedExpManual eval
   where
@@ -1100,42 +1089,12 @@ rewrite_mit_map ty1 (i1,j1) ty2 (i2,j2) (f_name, fun)
 -- performance so I am keeping it commented for now:
 rest_chain :: TypedExpPass
 rest_chain = mconcat [
-      passALengthElim
-    , subarr_inline_step
-    , proj_inline_step
+    {-  subarr_inline_step
+    ,-} proj_inline_step
     ]
 
 
 
-subarr_inline_step :: TypedExpPass
-subarr_inline_step = TypedExpBottomUp $ \_ e -> if
-  | EArrRead evals estart LISingleton <- unExp e
-    , EValArr vals <- unExp evals
-    , EVal _ (VInt n') <- unExp estart
-    , let n = fromIntegral n'
-   -> rewrite $ vals!!n
-
-  | EArrRead evals estart (LILength n) <- unExp e
-    , EValArr vals <- unExp evals
-    , EVal _ (VInt s') <- unExp estart
-    , let s = fromIntegral s'
-   -> rewrite $ eValArr (expLoc e) (take n $ drop s vals)
-
-    -- x[0,length(x)] == x
-  | EArrRead evals estart (LILength n) <- unExp e
-    , EVal _ (VInt 0) <- unExp estart
-    , TArray (Literal m) _ <- ctExp evals
-    , n == m
-   -> rewrite evals
-
-  | EArrWrite eval_tgt estart (LILength n) erhs <- unExp e
-    , EVal _ (VInt 0) <- unExp estart
-    , TArray (Literal m) _ <- ctExp eval_tgt
-    , n == m
-   -> rewrite $ eAssign (expLoc e) eval_tgt erhs
-
-  | otherwise
-   -> return e
 
 proj_inline_step :: TypedExpPass
 proj_inline_step = TypedExpBottomUp $ \_ e -> if
