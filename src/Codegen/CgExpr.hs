@@ -207,7 +207,7 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
             fromVals []                           = return []
             fromVals (e:es) | EVal _ v <- unExp e = do vs' <- fromVals es
                                                        return (v:vs')
-                            | otherwise           = fail "codeGenExp: non-value array"
+                            | otherwise           = fail $ "codeGenExp: non-value array, containing: " ++ show e
         v <- fromVals elems
 
         newName <- genSym ("__local_arr_" ++ getLnNumInStr (expLoc e0))
