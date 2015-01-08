@@ -167,7 +167,7 @@ computeVectTop dfs x = do
           -- so let us create one and set its type each time.
           vf <- newVectGName "_VECT" undefined loc
           let mk_vect_call vbd
-                = cLetFunC loc () vf_typed prms vbd (cCall loc vf_typed es)
+                = cLetFunC loc vf_typed prms vbd (cCall loc vf_typed es)
                 where vf_typed = updNameTy vf (ctComp vbd)
           mapM (liftCompDVR mk_vect_call) vbdys
 
@@ -219,8 +219,8 @@ computeVectTop dfs x = do
 
         VectComp (finalin,finalout) c1
           | not (isComputer cty)
-          -> vecMFail $ vcat [ text "Vectorization annotation on non-simple-computer."
-                             , text "At location:" <+> text (maybe error show loc) ]
+          -> vecMFail loc $ 
+             text "Vectorization annotation on non-simple-computer."
           | otherwise 
           -> do vc <- vectWithHint (finalin,finalout) c1
                 return [self, vc]
@@ -232,12 +232,11 @@ computeVectTop dfs x = do
         Repeat Nothing (MkComp (VectComp hint c1) _ _)
           -> go vctx (ASTL.cRepeat loc (cty,card) (Just (Rigid True hint)) c1)
         Repeat (Just {}) (MkComp (VectComp {}) _ _)
-           -> vecMFail $ vcat [ text "Nested vectorization annotations not supported."
-                              , text "At location:" <+> text (maybe error show loc)
-                              ]
+           -> vecMFail loc $ 
+              text "Nested vectorization annotations not supported."
 
         Repeat (Just (Rigid f (finalin, finalout)) c1)
-          -> do vc <- vectWithhint (finalin,finalout) c1 -- Rigidly vectorize computer
+          -> do vc <- vectWithHint (finalin,finalout) c1 -- Rigidly vectorize computer
                 return $ mitUpDn_Maybe f vctx loc vc
         
 ****************

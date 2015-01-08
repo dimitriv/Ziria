@@ -70,11 +70,14 @@ newtype VecM a = VecM (ReaderT VecEnv IO a)
 runVecM :: VecM a -> VecEnv -> IO a
 runVecM (VecM act) venv = runReaderT act venv
 
-vecMFail :: Doc -> VecM a
-vecMFail msg
-  = liftIO $ do putStrLn "Vectorization failure!"
-                print msg
-                exitFailure
+vecMFail :: Maybe SourcePos -> Doc -> VecM a
+vecMFail loc msg
+  = liftIO $ 
+    do print $ vcat [ text "Vectorization failure!"
+                    , text "Reason  :" <+> msg 
+                    , text "Location:" <+> text (maybe (error "BUG") show loc) ]
+       exitFailure
+
 
 {-------------------------------------------------------------------------
   Generating names
