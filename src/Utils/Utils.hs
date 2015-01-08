@@ -14,6 +14,7 @@ module Utils (
   , cross_prod
   , cross_comb
   , gcd_many
+  , none
   , splitListAt
   , sliceListAt
   , splitListOn
@@ -172,6 +173,10 @@ gcd_many :: [Int] -> Int
 gcd_many [a]        = a
 gcd_many (a1:a2:as) = gcd_many (gcd a1 a2 : as)
 gcd_many []         = error "gcd_many: empty list!"
+
+-- | Check that none of the elements in the list satisfy the predicate
+none :: (a -> Bool) -> [a] -> Bool
+none p xs = not (any p xs)
 
 {-------------------------------------------------------------------------------
   Isolating elements in a list

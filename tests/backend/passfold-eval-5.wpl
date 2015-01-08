@@ -1,0 +1,38 @@
+-- Test that the evaluator does not lose side effects
+--
+-- NOTE: Since we don't have a surface syntax for something like
+--
+-- > (complex { re = f(); im = f() }).re
+--
+-- (or similar for arrays), and since inlining in the expression languages only
+-- inlines "simple" expressions, the evaluator currently does not actually get
+-- a chance to "forget" these side effects. Nonetheless, it is important that
+-- we get this right, so this test will make sure that we don't mess up if in
+-- the future some other optimization can generate syntax trees like the one
+-- above.
+--
+-- We should also have a similar check for arrays, something like
+--
+-- > let eval_2 = let x = { f(), f() } in x[0]; 
+--
+-- but since code gen does not deal with non-constant arrays yet, we omit it
+-- for now.
+var x : int := 0;
+
+fun f() {
+  x := x + 1;
+  return x;
+}
+
+fun comp test() {
+  a <- take;
+
+  let eval_1 = let x = complex { re = f(); im = f() } in x.re;
+
+  emit a;
+  emit eval_1;
+  emit x;
+  emit a;
+}
+
+let comp main = read[int] >>> test() >>> write[int];

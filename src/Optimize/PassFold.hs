@@ -26,7 +26,6 @@ import Control.Arrow (second)
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Maybe (isJust)
-import Data.Monoid
 import GHC.Generics
 import System.CPUTime
 import Text.Parsec.Pos (SourcePos)
@@ -155,22 +154,6 @@ data TypedExpPass =
     -- | The pass does its own traversal of the tree.
   | TypedExpManual (Exp -> RwM Exp)
 
--- | Note: when composing passes you compose their action _on each node_, not
--- on the tree as a whole.
-instance Monoid TypedCompPass where
-  mempty = TypedCompBottomUp $ \_cloc comp ->
-    return comp
-  TypedCompBottomUp f `mappend` TypedCompBottomUp g = TypedCompBottomUp $ \cloc comp -> do
-    comp' <- f cloc comp
-    g (compLoc comp') comp'
-
-instance Monoid TypedExpPass where
-  mempty = TypedExpBottomUp $ \_eloc exp ->
-    return exp
-  TypedExpBottomUp f `mappend` TypedExpBottomUp g = TypedExpBottomUp $ \eloc exp -> do
-    exp' <- f eloc exp
-    g (expLoc exp') exp'
-
 runTypedCompPass :: TypedCompPass -> Comp -> RwM Comp
 runTypedCompPass (TypedCompBottomUp f) =
     mapCompM return return return return return f'
@@ -274,7 +257,6 @@ foldExpPasses flags
     , ("asgn-letref"  , passAsgnLetRef )
     , ("exp-let-push" , passExpLetPush )
     , ("eval"         , passEval       )
-    , ("rest-chain"   , rest_chain        )
     ]
 
 {-------------------------------------------------------------------------------
@@ -759,6 +741,35 @@ passElimAutomappedMitigs = TypedCompBottomUp $ \_cloc c -> if
   | otherwise
    -> return c
 
+{-
+
+Not wrong, by evil, we lose the letref-structure and LUT can't do a
+very good job!
+
+passFloatTopLetRef :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
+passFloatTopLetRef fgs comp
+  | LetFun nm f c <- unComp comp
+  , MkFunDefined nm params locals body <- unFun f
+  , let (extra_locals,rem_body) = strip_letrefs body
+  , not (null extra_locals)
+  = do { let f' = f { unFun = fdef' }
+             fdef' = MkFunDefined nm params (locals ++ extra_locals) rem_body
+       ; rewrite $
+         cLetFun (compLoc comp) (compInfo comp) nm f' c
+       }
+  | otherwise
+  = return comp
+  where strip_letrefs e = go [] e
+        go defs e
+          = go0 defs (unExp e)
+          where
+             go0 defs (ELetRef nm (Left ty) e')
+               = go ((nm,ty,Nothing):defs) e'
+             go0 defs (ELetRef nm (Right einit) e')
+               = go ((nm, info einit, Just einit):defs) e'
+             go0 defs _other = (reverse defs, e)
+-}
+
 {-------------------------------------------------------------------------------
   Expression passes
 -------------------------------------------------------------------------------}
@@ -938,79 +949,8 @@ passEval = TypedExpManual eval
     format ((False, v):vs) = show v         ++ format vs
 
 {-------------------------------------------------------------------------------
-  TODO: Not yet cleaned up
+  Rewriting mitigators
 -------------------------------------------------------------------------------}
-
-{- The main rewriter individual steps
-   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -}
-
-
-{-
-
-Not wrong, by evil, we lose the letref-structure and LUT can't do a
-very good job!
-
-passFloatTopLetRef :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
-passFloatTopLetRef fgs comp
-  | LetFun nm f c <- unComp comp
-  , MkFunDefined nm params locals body <- unFun f
-  , let (extra_locals,rem_body) = strip_letrefs body
-  , not (null extra_locals)
-  = do { let f' = f { unFun = fdef' }
-             fdef' = MkFunDefined nm params (locals ++ extra_locals) rem_body
-       ; rewrite $
-         cLetFun (compLoc comp) (compInfo comp) nm f' c
-       }
-  | otherwise
-  = return comp
-  where strip_letrefs e = go [] e
-        go defs e
-          = go0 defs (unExp e)
-          where
-             go0 defs (ELetRef nm (Left ty) e')
-               = go ((nm,ty,Nothing):defs) e'
-             go0 defs (ELetRef nm (Right einit) e')
-               = go ((nm, info einit, Just einit):defs) e'
-             go0 defs _other = (reverse defs, e)
--}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 rewrite_mit_map :: Ty -> (Int,Int) -> Ty -> (Int,Int) -> (EId, Fun) -> RwM Comp
 -- Precondition:  i1 `div` j1 == j2 `div` i2
@@ -1070,55 +1010,7 @@ rewrite_mit_map ty1 (i1,j1) ty2 (i2,j2) (f_name, fun)
         cLetHeader floc new_fun new_mapper
       }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
--- NOTE: There was a (seemingly outdated) comment above `proj_inline_step` that
---
--- This leads to too much inlining and seems to have unstable effects to
--- performance so I am keeping it commented for now:
-rest_chain :: TypedExpPass
-rest_chain = mconcat [
-    {-  subarr_inline_step
-    ,-} proj_inline_step
-    ]
-
-
-
-
-proj_inline_step :: TypedExpPass
-proj_inline_step = TypedExpBottomUp $ \_ e -> if
-  | EProj e' fn <- unExp e
-    , EStruct _s fs_es <- unExp e'
-    , all (is_simpl_expr . snd) fs_es -- no side effects
-    , Just ep <- lookup fn fs_es
-   -> rewrite ep
-  | otherwise
-   -> return e
-
-
-
-
-
-
-
-
-
-
-
-{- Elimination of mitigators
-   ~~~~~~~~~~~~~~~~~~~~~~~~~ -}
-
+-- | Elimination of mitigators
 elimMitigsIO :: DynFlags -> GS.Sym -> Comp -> IO Comp
 elimMitigsIO flags sym = go
   where
@@ -1240,9 +1132,6 @@ flm_mit c
 
   | otherwise
   = Nothing
-
-
-
 
 elimMitigs :: Comp -> RwM Comp
 -- Vectorizer-specific

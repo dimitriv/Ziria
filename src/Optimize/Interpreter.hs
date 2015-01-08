@@ -514,7 +514,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
       ix'  <- interpret ix
       case (ctExp arr', unExp arr', unExp ix', li) of
         -- Both array and index in normal form: array index
-        (_ty, EValArr vs, EVal _ (VInt i), LISingleton) ->
+        (_ty, EValArr vs, EVal _ (VInt i), LISingleton) | none mutates_state vs ->
           case splitListAt i vs of
             Just (_, y, _) -> return y
             Nothing        -> throwError $ "Out of bounds"
@@ -522,7 +522,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
         (TArray (Literal m) _, _, EVal _ (VInt 0), LILength n) | m == n ->
           return $ arr'
         -- Both array and index in normal form: array slice
-        (_ty, EValArr vs, EVal _ (VInt i), LILength len) ->
+        (_ty, EValArr vs, EVal _ (VInt i), LILength len) | none mutates_state vs ->
           case sliceListAt i len vs of
             Just (_, ys, _) -> return $ eValArr eloc ys
             Nothing         -> throwError $ "Out of bounds"
@@ -550,7 +550,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
       struct' <- interpret struct
       case unExp struct' of
         -- In normal form
-        EStruct _ fields ->
+        EStruct _ fields | none (mutates_state . snd) fields ->
           case splitListOn ((== fld) . fst) fields of
             Just (_, (_, y), _) -> return y
             Nothing             -> throwError $ "Unknown field"
