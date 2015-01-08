@@ -831,30 +831,6 @@ passExpInlining = TypedExpBottomUp $ \eloc e -> do
 
 -- | If we have an assignment to a fresh array variable @y@ to a slice of an
 -- array @x@, we can instead do all operations on @x@ directly.
---
--- NOTE: This will create assignment nodes in the AST that have array-reads
--- as left-hand sides; for instance,
---
--- > x[2,3] := var y : arr[3] int in { y := {11, 12, 13} ; return y };
---
--- will result in an assignment
---
--- > x[2,3] := {11, 12, 13}
---
--- which is NOT an array assignment, but rather a normal assignment with an
--- array read as the LHS. Similarly,
---
--- > x[2,3] := var y : arr[3] int in { y[0] := 11 ; y[1] := 12 ; y[2] := 13 ; return y };
---
--- will result in assignments
---
--- > x[2,3][0] := 11
--- > x[2,3][1] := 12
--- > x[2,3][2] := 13
---
--- This seems to cause no trouble in the code generator at the moment, but
--- that's a little surprising. Have added the above examples as test cases
--- in tests/backend.
 passAsgnLetRef :: TypedExpPass
 passAsgnLetRef = TypedExpBottomUp $ \eloc exp -> if
   | EArrWrite e0 estart elen erhs <- unExp exp
