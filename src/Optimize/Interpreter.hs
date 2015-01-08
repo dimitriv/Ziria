@@ -716,6 +716,8 @@ interpret e = guessIfUnevaluated (go . unExp) e
 
     go (ECall fn args) = do
       args' <- mapM interpret args
+      -- We don't know the state of mutable variables after a function call
+      invalidateAssumptions
       partiallyEvaluated $ eCall eloc fn args'
 
     -- Misc
