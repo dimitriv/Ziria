@@ -115,6 +115,14 @@ fun comp test() {
                     return x[0,3]; -- Simplify RHS
                   }
 
+  -- Test assigning an array without default values to an array with defaults
+  
+  let eval_27 = var x : arr[5] int := { 29, 30, 31, 32, 33 } in {
+                    var y : arr[3] int;
+                    x[1, 3] := y;
+                    return x;
+                  }
+
   emit  eval_1;
   emits eval_2;
   emit  eval_3;
@@ -144,6 +152,7 @@ fun comp test() {
   emit  eval_24;
   emit  eval_25;
   emits eval_26;
+  emits eval_27;
 
   emit a;
 }

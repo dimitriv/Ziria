@@ -116,8 +116,6 @@ module Interpreter (
     -- * Convenience
   , eNot
   , eOr
-  , eTrue
-  , eFalse
   ) where
 
 import Control.Applicative
@@ -142,7 +140,7 @@ import AstExpr
 import AstUnlabelled
 import CtExpr (ctExp)
 import GenSym (initGenSym)
-import SparseArray
+import SparseArray (SparseArray)
 import TcMonad (runTcM')
 import Typecheck (tyCheckExpr)
 import Utils
@@ -169,11 +167,12 @@ expValue e = go (unExp e)
   where
     go :: Exp0 -> Maybe Value
     go (EVal    ty val)  = return $ ValueScalar eloc ty val
-    go (EValArr    elms) = mkArray     <$> mapM expValue elms
+    go (EValArr    elms) = do let def = arrayDefault eloc $ ctExp (head elms)
+                              mkArray def <$> mapM expValue elms
     go (EStruct ty flds) = mkStruct ty <$> mapM (second' expValue) flds
     go _                 = Nothing
 
-    mkArray     = ValueArray  eloc . SA.newListArray
+    mkArray def = ValueArray eloc . SA.newListArray def
     mkStruct ty = ValueStruct eloc ty
 
     eloc = expLoc e
@@ -186,6 +185,12 @@ valueExp (ValueScalar p ty val)  = eVal    p ty val
 valueExp (ValueArray  p    vals) = eValArr p    (map valueExp (SA.getElems vals))
 valueExp (ValueStruct p ty vals) = eStruct p ty (map (second valueExp) vals)
 
+vTrue :: Maybe SourcePos -> Value
+vTrue p = ValueScalar p TBool (VBool True)
+
+vFalse :: Maybe SourcePos -> Value
+vFalse p = ValueScalar p TBool (VBool False)
+
 {-------------------------------------------------------------------------------
   Main entry points
 -------------------------------------------------------------------------------}
@@ -197,21 +202,24 @@ type Prints = [(Bool, Value)]
 evalFull :: Exp -> (Either String Value, Prints)
 evalFull e = aux $ evalEval (interpret e) EvalFull initState
   where
-    aux [(Right e', prints)] | Just v' <- expValue e' = (Right v', prints)
-    aux [(Left err, prints)]                          = (Left err, prints)
+    aux [(Right (EvaldFull v), prints)] = (Right v,  prints)
+    aux [(Left err, prints)]            = (Left err, prints)
     aux _ = error "evalFull: the impossible happened"
 
 -- | (Partial) evaluation of an expression
 evalPartial :: Exp -> (Either String Exp, Prints)
 evalPartial e = aux $ evalEval (interpret e) EvalPartial initState
   where
-    aux [e'] = e'
-    aux _    = error "evalPartial: the impossible happened"
+    aux [(Right e', prints)] = (Right (unEvald e'), prints)
+    aux [(Left err, prints)] = (Left err, prints)
+    aux _ = error "evalPartial: the impossible happened"
 
 -- | (Full) evaluation of expressions, guessing values for boolean expressions
 evalNonDet :: Exp -> [Exp]
 evalNonDet e =
-    [ e' | (Right e', _prints) <- evalEval (interpret e) EvalNonDet initState ]
+    [ unEvald e'
+    | (Right e', _prints) <- evalEval (interpret e) EvalNonDet initState
+    ]
 
 {-------------------------------------------------------------------------------
   Specializations of `evalFull`
@@ -380,14 +388,14 @@ newtype Eval a = Eval {
 -- from the top-level `ErrorT` monad.
 instance MonadPlus Eval where
   mzero       = mkEval $ \_mode _st -> []
-  f `mplus` g = mkEval $ \mode st -> runEval f mode st <|> runEval g mode st
+  f `mplus` g = mkEval $ \mode st -> runEvald f mode st <|> runEvald g mode st
 
 instance Alternative Eval where
   empty = mzero
   (<|>) = mplus
 
-runEval :: Eval a -> EvalMode -> EvalState -> [(Either String a, EvalState, Prints)]
-runEval = runRWST . runErrorT . unEval
+runEvald :: Eval a -> EvalMode -> EvalState -> [(Either String a, EvalState, Prints)]
+runEvald = runRWST . runErrorT . unEval
 
 evalEval :: Eval a -> EvalMode -> EvalState -> [(Either String a, Prints)]
 evalEval = evalRWST . runErrorT . unEval
@@ -406,8 +414,8 @@ logPrint newline val = Eval $ tell [(newline, val)]
 -- (Does NOT run the second action if the first one results an error).
 onZero :: Eval a -> Eval a -> Eval a
 onZero act handler = mkEval $ \mode st ->
-  case runEval act mode st of
-    []     -> runEval handler mode st
+  case runEvald act mode st of
+    []     -> runEvald handler mode st
     result -> result
 
 {-------------------------------------------------------------------------------
@@ -452,16 +460,20 @@ writeVar x v = L.modifySt evalLetRefs $ Map.insert (uniqId x) v
 -- partial evaluation, this is just `return`; during full evaluation this is
 -- an error, and during non-deterministic evaluation this results in an
 -- empty list of results.
-partiallyEvaluated :: a -> Eval a
-partiallyEvaluated x = do
+evaldPart :: Exp -> Eval Evald
+evaldPart x = do
   mode <- getMode
   case mode of
-    EvalPartial -> return x
+    EvalPartial -> return $ EvaldPart x
     EvalFull    -> throwError "Free variables"
     EvalNonDet  -> mzero
 
+-- | Indicate that we managed to fully evaluate an expression
+evaldFull :: Value -> Eval Evald
+evaldFull = return . EvaldFull
+
 -- | Run the guess algorithm if we could not fully evaluate the expression.
-guessIfUnevaluated :: (Exp -> Eval Exp) -> (Exp -> Eval Exp)
+guessIfUnevaluated :: (Exp -> Eval Evald) -> (Exp -> Eval Evald)
 guessIfUnevaluated f e = do
   mode <- getMode
   case mode of EvalNonDet -> f e `onZero` guess e
@@ -496,83 +508,121 @@ invalidateAssumptionsFor x = do
     L.putSt evalGuessesInt  Map.empty
 
 {-------------------------------------------------------------------------------
+  The result of interpretation is either a value or an expression. We try to
+  avoid marshaling back and forth between these two types whenever possible.
+-------------------------------------------------------------------------------}
+
+data Evald = EvaldFull Value | EvaldPart Exp
+
+unEvald :: Evald -> Exp
+unEvald (EvaldFull v) = valueExp v
+unEvald (EvaldPart e) = e
+
+partitionEvalds :: [Evald] -> Either [Value] [Exp]
+partitionEvalds = go []
+  where
+    -- Prefer to return all values, only returning all expressions if we have to
+    go :: [Value] -> [Evald] -> Either [Value] [Exp]
+    go acc []               = Left (reverse acc)
+    go acc (EvaldFull v:es) = go (v:acc) es
+    go acc (EvaldPart e:es) = Right $ reverse (map valueExp acc)
+                                   ++ e : map unEvald es
+
+{-------------------------------------------------------------------------------
   The interpreter proper
 -------------------------------------------------------------------------------}
 
 -- | Interpreter for the expression language
-
-interpret :: Exp -> Eval Exp
+interpret :: Exp -> Eval Evald
 interpret e = guessIfUnevaluated (go . unExp) e
   where
-    go :: Exp0 -> Eval Exp
+    go :: Exp0 -> Eval Evald
 
     -- Values
 
-    go (EVal _ _) = return e
+    go (EVal ty val) =
+      evaldFull $ ValueScalar eloc ty val
 
     -- Arrays
 
     go (EValArr elems) = do
-      elems' <- mapM interpret elems
-      return $ eValArr eloc elems'
+      elemsEvald <- mapM interpret elems
+      case partitionEvalds elemsEvald of
+        Left elems' -> do
+          let def = arrayDefault eloc $ ctExp (head elems)
+          evaldFull $ ValueArray eloc (SA.newListArray def elems')
+        Right elems' ->
+          evaldPart $ eValArr eloc elems'
     go (EArrRead arr ix li) = do
-      arr' <- interpret arr
-      ix'  <- interpret ix
-      case (ctExp arr', unExp arr', unExp ix', li) of
-        -- Both array and index in normal form: array index
-        (_ty, EValArr vs, EVal _ (VInt i), LISingleton) | none mutates_state vs ->
-          case splitListAt i vs of
-            Just (_, y, _) -> return y
-            Nothing        -> throwError $ "Out of bounds"
-        -- "Full" slice
-        (TArray (Literal m) _, _, EVal _ (VInt 0), LILength n) | m == n ->
-          return $ arr'
-        -- Both array and index in normal form: array slice
-        (_ty, EValArr vs, EVal _ (VInt i), LILength len) | none mutates_state vs ->
-          case sliceListAt i len vs of
-            Just (_, ys, _) -> return $ eValArr eloc ys
-            Nothing         -> throwError $ "Out of bounds"
-        -- Not in normal form. Leave uninterpreted
+      arrEvald <- interpret arr
+      ixEvald  <- interpret ix
+      case (arrEvald, ixEvald) of
+        -- We only select elements from fully known arrays. See comment for
+        -- EProj about optimizing element selection from known arrays with
+        -- non-value elements
+        (EvaldFull (ValueArray _ elems), EvaldFull (ValueScalar _ _ (VInt i))) ->
+          case li of
+            LISingleton ->
+              if 0 <= i && i < toInteger (SA.size elems)
+                then evaldFull $ SA.unsafeReadArray (fromInteger i) elems
+                else throwError "Out of bounds"
+            LILength len ->
+              if 0 <= i && i + toInteger len <= toInteger (SA.size elems)
+                then evaldFull $ ValueArray eloc
+                               $ SA.unsafeSlice (fromInteger i) len elems
+                else throwError "Out of bounds"
+            LIMeta _ ->
+              error "Unexpected meta variable"
+        -- "Full" slice (capturing the entire array)
+        (EvaldPart arr', EvaldFull (ValueScalar _ _ (VInt 0)))
+          | TArray (Literal m) _ <- ctExp arr'
+          , LILength n           <- li
+          , m == n -> evaldPart $ arr'
         _otherwise ->
-          partiallyEvaluated $ eArrRead eloc arr' ix' li
+          evaldPart $ eArrRead eloc (unEvald arrEvald) (unEvald ixEvald) li
 
     -- Array permutation
 
     go (EBPerm e1 e2) = do
-      e1' <- interpret e1
-      e2' <- interpret e2
+      e1Evald <- interpret e1
+      e2Evald <- interpret e2
       -- TODO: We should attempt to execute the permutation.
-      partiallyEvaluated $ eBPerm eloc e1' e2'
+      evaldPart $ eBPerm eloc (unEvald e1Evald) (unEvald e2Evald)
 
     -- Structs
 
     go (EStruct ty fields) = do
-      let interpretField (fldName, fld) = do
-            fld' <- interpret fld
-            return (fldName, fld')
-      fields' <- mapM interpretField fields
-      return $ eStruct eloc ty fields'
+      let (fieldNames, fieldDefs) = unzip fields
+      fieldDefsEvald <- mapM interpret fieldDefs
+      case partitionEvalds fieldDefsEvald of
+        Left fieldDefs' ->
+          evaldFull $ ValueStruct eloc ty (zip fieldNames fieldDefs')
+        Right fieldDefs' ->
+          evaldPart $ eStruct eloc ty (zip fieldNames fieldDefs')
     go (EProj struct fld) = do
-      struct' <- interpret struct
-      case unExp struct' of
-        -- In normal form
-        EStruct _ fields | none (mutates_state . snd) fields ->
+      structEvald <- interpret struct
+      -- We _could_ potentially also optimize projections out of known structs
+      -- with non-value fields, but we have to be careful in that case that we
+      -- do not lose side effects, and anyway that optimization is less useful.
+      case structEvald of
+        EvaldFull (ValueStruct _ _ fields) ->
           case splitListOn ((== fld) . fst) fields of
-            Just (_, (_, y), _) -> return y
+            Just (_, (_, y), _) -> evaldFull y
             Nothing             -> throwError $ "Unknown field"
-        -- Not in normal form
-        _ ->
-          partiallyEvaluated $ eProj eloc struct' fld
+        EvaldFull _ ->
+          error "Type error"
+        EvaldPart struct' ->
+          evaldPart $ eProj eloc struct' fld
 
     -- Simple operators
 
     go (EUnOp  op a) = do
-      a' <- interpret a
-      applyUnOp eloc op a'
+      aEvald <- interpret a
+      applyUnOp eloc op aEvald
     go (EBinOp op a b) = do
-      a' <- interpret a
-      b' <- interpret b
-      applyBinOp eloc op a' b'
+      aEvald <- interpret a
+      bEvald <- interpret b
+      applyBinOp eloc op aEvald bEvald
 
     -- Special case for force-inlining
     --
@@ -587,24 +637,28 @@ interpret e = guessIfUnevaluated (go . unExp) e
     go (EVar x) = do
       mv <- readVar x
       case mv of
-        Just v  -> return (valueExp v)
-        Nothing -> partiallyEvaluated $ eVar eloc x
+        Just v  -> evaldFull v
+        Nothing -> evaldPart $ eVar eloc x
     go (ELet x fi e1 e2) = do
-      e1' <- interpret e1
-      case expValue e1' of
-        Just v1' ->
-          extendScope evalLets x v1' $ interpret e2
-        Nothing -> do
+      e1Evald <- interpret e1
+      case e1Evald of
+        EvaldFull v1 ->
+          extendScope evalLets x v1 $ interpret e2
+        EvaldPart e1' -> do
           e2' <- interpret e2
-          partiallyEvaluated $ eLet eloc x fi e1' e2'
+          -- We could potentially remove the let binding here if e2' is fully
+          -- evaluated (this can only happen if it does not actually use the
+          -- let-bound variable) and e1' is side effect free.
+          evaldPart $ eLet eloc x fi e1' (unEvald e2')
     go (ELetRef x (Just e1) e2) = do
-      e1' <- interpret e1
-      case expValue e1' of
-        Just v1' -> do
+      e1Evald <- interpret e1
+      case e1Evald of
+        EvaldFull v1' -> do
           interpretLetRef eloc x v1' e2
-        Nothing -> do
-          e2' <- interpret e2
-          partiallyEvaluated $ eLetRef eloc x (Just e1') e2'
+        EvaldPart e1' -> do
+          e2Evald <- interpret e2
+          -- See comments for `ELet`
+          evaldPart $ eLetRef eloc x (Just e1') (unEvald e2Evald)
     go (ELetRef x Nothing e2) =
       case initialVal eloc (nameTyp x) of
         Just v1' ->
@@ -613,46 +667,71 @@ interpret e = guessIfUnevaluated (go . unExp) e
           -- We cannot construct a default value for this type
           -- (perhaps because it's a length-polymorphic array)
           e2' <- interpret e2
-          partiallyEvaluated $ eLetRef eloc x Nothing e2'
+          -- See comments for `ELet`
+          evaldPart $ eLetRef eloc x Nothing (unEvald e2')
     go (EAssign lhs rhs) = do
-      rhs' <- interpret rhs
-      didAssign <- assign lhs rhs'
-      if didAssign then return $ eVal eloc TUnit VUnit
-                   else partiallyEvaluated $ eAssign eloc lhs rhs'
+      -- TODO: Check that we want to evaluate the RHS before the LHS
+      rhsEvald      <- interpret rhs
+      (x, lhsEvald) <- interpretDerefExp lhs
+      didAssign <- case (lhsEvald, rhsEvald) of
+        (Left derefExp, EvaldFull rhs') -> assign derefExp rhs'
+        _otherwise                      -> return False
+      if didAssign
+        then evaldFull $ ValueScalar eloc TUnit VUnit
+        else do
+          invalidateAssumptionsFor x
+          evaldPart $ eAssign eloc (unDeref lhsEvald) (unEvald rhsEvald)
     go (EArrWrite arr ix len rhs) = do
-      ix'  <- interpret ix  -- If LHS has side effects, this may be wrong
-      rhs' <- interpret rhs
-      case (ctExp arr, unExp ix', len) of
-        -- Replace the entire array
-        (TArray (Literal m) _, EVal _ (VInt 0), LILength n) | m == n -> do
-          didAssign <- assign arr rhs'
-          if didAssign then return $ eVal eloc TUnit VUnit
-                       else partiallyEvaluated $ eAssign eloc arr rhs'
-        -- Replace an element or a slice
-        --
-        -- We call 'assign' with a different LHS here, but if the assignment
-        -- fails we don't rewrite to this form because codegen seems to do
-        -- something slightly differently?
-        _otherwise -> do
-          didAssign <- assign (eArrRead eloc arr ix len) rhs'
-          if didAssign then return $ eVal eloc TUnit VUnit
-                       else partiallyEvaluated $ eArrWrite eloc arr ix len rhs'
+      -- TODO: Ideally we should just call
+      --
+      -- > go (EAssign (eArrRead eloc arr ix len) rhs)
+      --
+      -- but this does not work because this would translate all EArrWrite
+      -- nodes to EAssign nodes and this causes a change in semantics due to a
+      -- bug in code generation (#88). Instead, we attempt to do the assignment,
+      -- and if this fails we leave the node an an EArrWrite.
+      rhsEvald      <- interpret rhs
+      (x, lhsEvald) <- interpretDerefExp (eArrRead eloc arr ix len)
+      didAssign <- case (lhsEvald, rhsEvald) of
+        (Left derefExp, EvaldFull rhs') -> assign derefExp rhs'
+        _otherwise                      -> return False
+      if didAssign
+        then evaldFull $ ValueScalar eloc TUnit VUnit
+        else do
+          invalidateAssumptionsFor x
+          -- Strip off the top-level EArrRead again (not that we should not
+          -- _re-evaluate_ the LHS because that may duplicate side effects)
+          case unExp (unDeref lhsEvald) of
+            EArrRead arr' ix' len' ->
+              -- Special optimizations
+              case (ctExp arr, unExp ix', len') of
+                (TArray (Literal m) _, EVal _ (VInt 0), LILength n) | m == n ->
+                  evaldPart $ eAssign eloc arr' (unEvald rhsEvald)
+                _otherwise ->
+                  evaldPart $ eArrWrite eloc arr' ix' len' (unEvald rhsEvald)
+            _otherwise ->
+              error "the impossible happened"
 
     -- Control flow
 
     go (ESeq e1 e2) = do
-      e1' <- interpret e1
-      e2' <- interpret e2
-      case unExp e1' of
-        EVal TUnit VUnit -> return e2'
-        _                -> partiallyEvaluated $ eSeq eloc e1' e2'
+      e1Evald <- interpret e1
+      e2Evald <- interpret e2
+      case e1Evald of
+        EvaldFull (ValueScalar _ _ VUnit) ->
+          return e2Evald
+        _otherwise ->
+          -- We could omit e1 completely if we manage to reduce e2 to a value
+          -- independent of e1, and e1 is side effect free.
+          evaldPart $ eSeq eloc (unEvald e1Evald) (unEvald e2Evald)
     go (EIf cond iftrue iffalse) = do
-      cond' <- interpret cond
-      case unExp cond' of
-        EVal _ (VBool b) ->
+      condEvald <- interpret cond
+      case condEvald of
+        EvaldFull (ValueScalar _ _ (VBool b)) ->
           interpret (if b then iftrue else iffalse)
-        -- Condition not in normal form
-        _ -> do
+        EvaldFull _ ->
+          error "interpret: type error (condition not a boolean)"
+        EvaldPart cond' -> do
           -- We don't know which of the two branches will be executed, so we
           -- cannot execute any of its effects. Therefore we invalidate
           -- assumptions, so that any variables occurring in the branches will
@@ -660,96 +739,102 @@ interpret e = guessIfUnevaluated (go . unExp) e
           invalidateAssumptions
           iftrue'  <- interpret iftrue
           iffalse' <- interpret iffalse
-          partiallyEvaluated $ eIf eloc cond' iftrue' iffalse'
+          evaldPart $ eIf eloc cond' (unEvald iftrue') (unEvald iffalse')
     go (EFor ui x start len body) = do
-      start' <- interpret start
-      len'   <- interpret len
-      fullEv <- case (unExp start', unExp len') of
-        -- Start and length both in normal form
-        (EVal ty (VInt start''), EVal _ (VInt len'')) -> do
-          let loop n | n == start'' + len'' =
+      startEvald <- interpret start
+      lenEvald   <- interpret len
+      fullEv <- case (startEvald, lenEvald) of
+        (EvaldFull (ValueScalar _ ty (VInt start')),
+         EvaldFull (ValueScalar _ _  (VInt len'))) -> do
+          let loop n | n == start' + len' =
                 return True
               loop n = do
-                body' <- extendScope evalLets x (ValueScalar eloc ty (VInt n)) $
-                           interpret body
+                bodyEvald <-
+                  extendScope evalLets x (ValueScalar eloc ty (VInt n)) $
+                    interpret body
                 -- Only when we can fully evaluate the body of the loop do we
                 -- continue. If not, we give up completely (alternatively, we
                 -- could choose to do loop unrolling here).
-                case unExp body' of
-                  EVal TUnit VUnit -> loop (n + 1)
-                  _otherwise       -> return False
+                case bodyEvald of
+                  EvaldFull (ValueScalar _ _ VUnit) ->
+                    loop (n + 1)
+                  _otherwise ->
+                    return False
 
-          loop start''
-        -- Bounds not in normal form. We cannot evaluate the body.
-        _ -> do
+          loop start'
+        _otherwise -> -- Start or length not fully evaluated
           return False
       if fullEv
-        then return $ eVal eloc TUnit VUnit
+        then evaldFull $ ValueScalar eloc TUnit VUnit
         else do -- See comments for conditionals
                 invalidateAssumptions
-                body' <- interpret body
-                partiallyEvaluated $ eFor eloc ui x start' len' body'
+                bodyEvald <- interpret body
+                evaldPart $ eFor eloc ui x (unEvald startEvald)
+                                           (unEvald lenEvald)
+                                           (unEvald bodyEvald)
     go (EWhile cond body) = do
       let loop = do
-            cond' <- interpret cond
-            case unExp cond' of
-              EVal TBool (VBool False) ->
+            condEvald <- interpret cond
+            case condEvald of
+              EvaldFull (ValueScalar _ _ (VBool False)) ->
                 return True
-              EVal TBool (VBool True) -> do
-                body' <- interpret body
-                case unExp body' of
-                  EVal TUnit VUnit -> loop
-                  _                -> return False -- See comments for `For`
-              -- Condition not in normal form
-              _ ->
+              EvaldFull (ValueScalar _ _ (VBool True)) -> do
+                bodyEvald <- interpret body
+                case bodyEvald of
+                  EvaldFull (ValueScalar _ _ VUnit) ->
+                    loop
+                  _otherwise ->
+                    return False -- See comments for `EFor`
+              _otherwise -> -- Condition not fully evaluated
                 return False
       fullEv <- loop
-      if fullEv then return $ eVal eloc TUnit VUnit
+      if fullEv then evaldFull $ ValueScalar eloc TUnit VUnit
                 else do -- See comments for conditionals
                         invalidateAssumptions
-                        cond' <- interpret cond
-                        body' <- interpret body
-                        partiallyEvaluated $ eWhile eloc cond' body'
+                        condEvald <- interpret cond
+                        bodyEvald <- interpret body
+                        evaldPart $ eWhile eloc (unEvald condEvald)
+                                                (unEvald bodyEvald)
     go (EIter _ _ _ _) =
       throwError "EIter unsupported"
 
     -- Functions
 
     go (ECall fn args) = do
-      args' <- mapM interpret args
+      argsEvald <- mapM interpret args
       -- We don't know the state of mutable variables after a function call
       invalidateAssumptions
-      partiallyEvaluated $ eCall eloc fn args'
+      evaldPart $ eCall eloc fn (map unEvald argsEvald)
 
     -- Misc
 
     go (EPrint newline e1) = do
-      e1' <- interpret e1
-      case expValue e1' of
-        Just v1' -> do
+      e1Evald <- interpret e1
+      case e1Evald of
+        EvaldFull v1' -> do
           logPrint newline v1'
-          return $ eVal eloc TUnit VUnit
-        Nothing  ->
-          partiallyEvaluated $ ePrint eloc newline e1'
+          evaldFull $ ValueScalar eloc TUnit VUnit
+        EvaldPart e1' ->
+          evaldPart $ ePrint eloc newline e1'
     go (EError ty str) =
-      partiallyEvaluated $ eError eloc ty str
+      evaldPart $ eError eloc ty str
     go (ELUT _ _) =
       throwError "Unexpected LUT during interpretation"
 
     eloc :: Maybe SourcePos
     eloc = expLoc e
 
-interpretLetRef :: Maybe SourcePos -> GName Ty -> Value -> Exp -> Eval Exp
+interpretLetRef :: Maybe SourcePos -> GName Ty -> Value -> Exp -> Eval Evald
 interpretLetRef eloc x v1 e2 = do
-    (e2', xDeleted) <- extendScope evalLetRefs x v1 $ do
-      e2'      <- interpret e2
+    (e2Evald, xDeleted) <- extendScope evalLetRefs x v1 $ do
+      e2Evald  <- interpret e2
       xDeleted <- isNothing <$> readVar x
-      return (e2', xDeleted)
+      return (e2Evald, xDeleted)
     -- If at any point x was (or might have been) assigned a not
     -- statically known value, we cannot remove the binding site.
     if xDeleted
-      then partiallyEvaluated $ eLetRef eloc x (Just (valueExp v1)) e2'
-      else return e2'
+      then evaldPart $ eLetRef eloc x (Just (valueExp v1)) (unEvald e2Evald)
+      else return e2Evald
 
 -- | The runtime currently leaves the initial value for unassigned variables
 -- unspecified (https://github.com/dimitriv/Ziria/issues/79). This means that
@@ -771,132 +856,217 @@ initialVal p = \ty ->
     initialField :: (FldName, Ty) -> Maybe (FldName, Value)
     initialField (fldName, ty) = do e <- initialVal p ty ; return (fldName, e)
 
+-- | Specialization of `initialVal` specifically for the default values in
+-- arrays; since we can create defaults for all types that we allow to store
+-- inside arrays, this does not return a Maybe.
+arrayDefault :: Maybe SourcePos -> Ty -> Value
+arrayDefault p = fromJust . initialVal p
+
 -- | Smart constructor for binary operators
-applyBinOp :: Maybe SourcePos -> BinOp -> Exp -> Exp -> Eval Exp
-applyBinOp p op a b =
-    case (op, unExp a, unExp b) of
-      (Add,  _, EVal _ (VInt 0)) -> return a
-      (Mult, _, EVal _ (VInt 1)) -> return a
-      (Add,  EVal _ (VInt 0), _) -> return b
-      (Mult, EVal _ (VInt 1), _) -> return b
-      _otherwise -> do
-        let evald = do
-              a' <- expToDyn a
-              b' <- expToDyn b
-              dynToExp p $ zBinOp op `dynApply` a' `dynApply` b'
-        case evald of
-          Just e  -> return $ e
-          Nothing -> partiallyEvaluated $ eBinOp p op a b
+applyBinOp :: Maybe SourcePos -> BinOp -> Evald -> Evald -> Eval Evald
+applyBinOp p op (EvaldFull v) (EvaldFull v') = do
+    let applied = do a <- valueToDyn v
+                     b <- valueToDyn v'
+                     dynToValue p $ zBinOp op `dynApply` a `dynApply` b
+    case applied of
+      Just result -> evaldFull result
+      Nothing     -> error $ "applyBinOp: type error in ("
+                          ++ show v ++ " " ++ show op ++ " " ++ show v'
+                          ++ ")"
+applyBinOp p op a b = case (op, a, b) of
+    (Add,  _, EvaldFull (ValueScalar _ _ (VInt 0))) -> return a
+    (Mult, _, EvaldFull (ValueScalar _ _ (VInt 1))) -> return a
+    (Add,  EvaldFull (ValueScalar _ _ (VInt 0)), _) -> return b
+    (Mult, EvaldFull (ValueScalar _ _ (VInt 1)), _) -> return b
+    _otherwise ->
+      evaldPart $ eBinOp p op (unEvald a) (unEvald b)
 
 -- | Smart constructor for unary operators
-applyUnOp :: Maybe SourcePos -> UnOp -> Exp -> Eval Exp
-applyUnOp p ALength a | TArray (Literal i) _ <- ctExp a =
-    return $ eVal p tint32 (VInt (toInteger i))
-applyUnOp p ALength a =
-    case unExp a of
-      EValArr vals -> return $ eVal p tint32 (VInt (toInteger (length vals)))
-      _            -> partiallyEvaluated $ eUnOp p ALength a
-applyUnOp p op a =
-    let evald = do a' <- expToDyn a
-                   dynToExp p $ zUnOp op `dynApply` a'
-    in case evald of
-         Just e  -> return $ e
-         Nothing -> partiallyEvaluated $ eUnOp p op a
+applyUnOp :: Maybe SourcePos -> UnOp -> Evald -> Eval Evald
+applyUnOp p op (EvaldFull v) = case (op, v) of
+    -- Special case for ALength, because it is a polymorphic operation and
+    -- we don't support it in our Dynamic framework
+    (ALength, ValueArray _ vs) ->
+      evaldFull $ ValueScalar p tint32 (VInt (toInteger (SA.size vs)))
+    (ALength, _) ->
+      error $ "applyUnOp: type error in length("
+           ++ show v
+           ++ ")"
+    _otherwise -> do
+      let applied = do a <- valueToDyn v
+                       dynToValue p $ zUnOp op `dynApply` a
+      case applied of
+        Just result -> evaldFull result
+        Nothing     -> error $ "applyUnOp: type error in ("
+                            ++ show op ++ " " ++ show v
+                            ++ ")"
+applyUnOp p op (EvaldPart e) = case (op, ctExp e) of
+    -- Specific optimizations
+    (ALength, TArray (Literal i) _) ->
+      evaldFull $ ValueScalar p tint32 (VInt (toInteger i))
+    (ALength, TArray (NVar _) _) ->
+      evaldPart $ eUnOp p ALength e
+    (ALength, _) ->
+      error $ "applyUnOp: type error in length(" ++ show e ++ ")"
+    _otherwise ->
+      evaldPart $ eUnOp p op e
 
 {-------------------------------------------------------------------------------
   Assignment
 -------------------------------------------------------------------------------}
 
-{-
-data Updated a =
-    Updated a
-  | InsufficientStaticInfo
-  | ProgramError String
-  deriving (Functor)
--}
+data FullyEvaldDerefExp =
+    DerefVar          (Maybe SourcePos) (GName Ty)
+  | DerefArrayElement (Maybe SourcePos) FullyEvaldDerefExp Int
+  | DerefArraySlice   (Maybe SourcePos) FullyEvaldDerefExp Int Int
+  | DerefStructField  (Maybe SourcePos) FullyEvaldDerefExp FldName
+
+unDeref :: Either FullyEvaldDerefExp Exp -> Exp
+unDeref (Right e)        = e
+unDeref (Left  derefExp) = go derefExp
+  where
+    go :: FullyEvaldDerefExp -> Exp
+    go (DerefVar p x) =
+      eVar p x
+    go (DerefArrayElement p arr i) =
+      eArrRead p (go arr) (eVal p tint32 (vint i)) LISingleton
+    go (DerefArraySlice p arr i len) =
+      eArrRead p (go arr) (eVal p tint32 (vint i)) (LILength len)
+    go (DerefStructField p struct fld) =
+      eProj p (go struct) fld
+
+-- | Interpret a dereferencing expression (i.e., the LHS of an assignment)
+--
+-- Returns the fully or partially evaluated dereferencing expression, as well
+-- as the "main variable"; i.e., for @x[0].y[5]...@  we return @x@.
+--
+-- TODO: The order of evaluation here (in case of side effects) is important
+-- and should be verified against the semantics.
+interpretDerefExp :: Exp -> Eval (GName Ty, Either FullyEvaldDerefExp Exp)
+interpretDerefExp e = go0 (unExp e)
+  where
+    go0 :: Exp0 -> Eval (GName Ty, Either FullyEvaldDerefExp Exp)
+    go0 (EVar x) =
+      return (x, Left $ DerefVar eloc x)
+    go0 (EArrRead arr ix LISingleton) = do
+      (x, arrEvald) <- interpretDerefExp arr
+      ixEvald       <- interpret ix
+      case (arrEvald, ixEvald) of
+        (Left derefExp, EvaldFull (ValueScalar _ _ (VInt i))) ->
+          return (x, Left $ DerefArrayElement eloc derefExp (fromInteger i))
+        (Left _derefExp, EvaldFull _) ->
+          error "interpretDerefExp: type error"
+        _otherwise ->
+          return (x, Right $ eArrRead eloc (unDeref arrEvald)
+                                           (unEvald ixEvald)
+                                           LISingleton)
+    go0 (EArrRead arr ix (LILength len)) = do
+      (x, arrEvald) <- interpretDerefExp arr
+      ixEvald       <- interpret ix
+      case (arrEvald, ixEvald) of
+        (Left derefExp, EvaldFull (ValueScalar _ _ (VInt i))) ->
+          return (x, Left $ DerefArraySlice eloc derefExp (fromInteger i) len)
+        (Left _derefExp, EvaldFull _) ->
+          error "interpretDerefExp: type error"
+        _otherwise ->
+          return (x, Right $ eArrRead eloc (unDeref arrEvald)
+                                           (unEvald ixEvald)
+                                           (LILength len))
+    go0 (EArrRead _ _ (LIMeta _)) =
+      error "interpretDerefExp: Unexpected metavariable"
+    go0 (EProj struct fld) = do
+      (x, structEvald) <- interpretDerefExp struct
+      case structEvald of
+        Left derefExp ->
+          return (x, Left $ DerefStructField eloc derefExp fld)
+        _otherwise ->
+          return (x, Right $ eProj eloc (unDeref structEvald) fld)
+    go0 _ =
+      error "interpretDerefExp: invalid deferencing expression"
+
+    eloc = expLoc e
 
 -- | Assignment
 --
 -- (Auxiliary to `interpret`)
 --
 -- Returns whether the assignment was successful
-assign :: Exp -> Exp -> Eval Bool
-assign = \lhs rhs -> deref (unExp lhs) $ \_ -> expValue rhs
+assign :: FullyEvaldDerefExp -> Value -> Eval Bool
+assign = \lhs rhs -> deref lhs (\_ -> return rhs)
   where
     -- `deref` gives the semantics of a derefercing expression by describing
     -- how a function on values is interpreted as a state update
-    deref :: Exp0 -> (Value -> Maybe Value) -> Eval Bool
-    deref (EVar x) f = do
-        mOld <- readVar x
-        case mOld of
-          Just old ->
-            case f old of
-              Just new -> do
-                writeVar x new
-                return True
-              Nothing -> do
-                -- Failed to assign (insufficient static info to interpret LHS)
-                invalidateAssumptionsFor x
-                return False
-          Nothing  -> do
-            -- Not a local variable, or removed by `invalidateAssumptions`
-            invalidateAssumptionsFor x
-            return False
-    deref (EArrRead arr ix LISingleton) f = do
-        ix' <- interpret ix
-        deref (unExp arr) $ updateArray ix' f
-    deref (EArrRead arr ix (LILength n)) f = do
-        ix' <- interpret ix
-        deref (unExp arr) $ updateSlice ix' n f
-    deref (EProj struct fld) f =
-        deref (unExp struct) $ updateStruct fld f
-    deref _ _ =
-        error "Invalid derefencing expression"
+    deref :: FullyEvaldDerefExp -> (Value -> Eval Value) -> Eval Bool
+    deref (DerefVar _ x) f = do
+      mOld <- readVar x
+      case mOld of
+        Just old -> do
+          writeVar x =<< f old
+          return True
+        Nothing  -> do
+          -- Not a local variable, or removed by `invalidateAssumptions`
+          return False
+    deref (DerefArrayElement p arr ix) f = do
+      deref arr $ updateArray p ix f
+    deref (DerefArraySlice p arr ix len) f = do
+      deref arr $ updateSlice p ix len f
+    deref (DerefStructField _p struct fld) f =
+      deref struct $ updateStruct fld f
 
     -- Given a function that updates an element, construct a function that
     -- updates the array at a particular index
-    updateArray :: Exp -> (Value -> Maybe Value) -> (Value -> Maybe Value)
-    updateArray ix f arr =
-      case (arr, unExp ix) of
-        (ValueArray eloc vs, EVal _ (VInt i)) -> do
-          if 0 <= i && i < toInteger (SA.size vs)
+    updateArray :: Maybe SourcePos
+                -> Int
+                -> (Value -> Eval Value) -> (Value -> Eval Value)
+    updateArray p i f arr =
+      case arr of
+        ValueArray eloc vs -> do
+          if 0 <= i && i < SA.size vs
             then do
-              y' <- f $ SA.readArray (fromInteger i) vs
-              return $ ValueArray eloc (SA.writeArray (fromInteger i) y' vs)
+              let y = SA.unsafeReadArray i vs
+              y' <- f y
+              return $ ValueArray eloc (SA.unsafeWriteArray i y' vs)
             else
-              Nothing
-        _ ->
-          Nothing
+              throwError $ "Array index out of bounds at position " ++ show p
+        _otherwise ->
+          error "updateArray: type error"
 
     -- Given a function that updates a slice, construct a function that updates
     -- the whole array
-    updateSlice :: Exp -> Int -> (Value -> Maybe Value) -> (Value -> Maybe Value)
-    updateSlice ix len f arr =
-      case (arr, unExp ix) of
-        (ValueArray eloc vs, EVal _ (VInt i)) -> do
-          if 0 <= i && i + toInteger len <= toInteger (SA.size vs)
+    updateSlice :: Maybe SourcePos
+                -> Int -> Int
+                -> (Value -> Eval Value) -> (Value -> Eval Value)
+    updateSlice p i len f arr =
+      case arr of
+        ValueArray eloc vs -> do
+          if 0 <= i && i + len <= (SA.size vs)
             then do
-              updated <- f $ ValueArray eloc (SA.slice (fromInteger i) len vs)
+              let slice = SA.unsafeSlice i len vs
+              updated <- f $ ValueArray eloc slice
               case updated of
-                ValueArray _ slice' ->
-                  return $ ValueArray eloc (SA.update (fromInteger i) slice' vs)
+                ValueArray _ slice' | SA.size slice == SA.size slice' ->
+                  return $ ValueArray eloc (SA.unsafeUpdate i slice' vs)
                 _  ->
-                  Nothing
+                  -- TODO: Is a length mismatch between the two arrays
+                  -- really a type error?
+                  error "updateSlice: type error"
             else
-              Nothing
-        _ -> Nothing
+              throwError $ "Array index out of bounds at position " ++ show p
+        _otherwise ->
+          error "updateSlice: type error"
 
     -- Given a function that updates an element, construct a function that
     -- updates a particular field of the struct
-    updateStruct :: FldName -> (Value -> Maybe Value) -> (Value -> Maybe Value)
+    updateStruct :: FldName
+                 -> (Value -> Eval Value) -> (Value -> Eval Value)
     updateStruct fld f struct =
       case struct of
         ValueStruct eloc ty flds
           | Just (xs, (_fld, y), zs) <- splitListOn ((== fld) . fst) flds -> do
               y' <- f y
               return $ ValueStruct eloc ty (xs ++ [(fld, y')] ++ zs)
-        _ -> Nothing
-
+        _otherwise ->
+          error "updateStruct: type error"
 
 {-------------------------------------------------------------------------------
   Since the interpreter works with dynamically typed values, we provide some
@@ -933,7 +1103,7 @@ instance Show Dynamic where
       "Dynamic [" ++ intercalate "," (map (uncurry aux) vs) ++ "]"
     where
       aux :: Ty -> Any -> String
-      aux ty val = case dynToExp' Nothing ty val of
+      aux ty val = case dynToScalar' ty val of
                      Just e  -> pretty e      ++ " :: " ++ pretty ty
                      Nothing -> "<<dynamic>>" ++ " :: " ++ pretty ty
 
@@ -1132,38 +1302,43 @@ zUnOp (Cast ty) = case ty of
   Conversion between expressions and dynamic values
 -------------------------------------------------------------------------------}
 
-expToDyn :: Exp -> Maybe Dynamic
-expToDyn e
-  | EVal TUnit       VUnit       <- unExp e = Just $ toDyn ()
-  | EVal TBit        (VBit b)    <- unExp e = Just $ toDyn (Bit b)
-  | EVal TBool       (VBool b)   <- unExp e = Just $ toDyn b
-  | EVal TString     (VString s) <- unExp e = Just $ toDyn s
-  | EVal (TInt BW8)  (VInt i)    <- unExp e = Just $ toDyn (fromInteger i :: Int8)
-  | EVal (TInt BW16) (VInt i)    <- unExp e = Just $ toDyn (fromInteger i :: Int16)
-  | EVal (TInt BW32) (VInt i)    <- unExp e = Just $ toDyn (fromInteger i :: Int32)
-  | EVal (TInt BW64) (VInt i)    <- unExp e = Just $ toDyn (fromInteger i :: Int64)
-  | EVal TDouble     (VDouble d) <- unExp e = Just $ toDyn d
-expToDyn _ = Nothing
+valueToDyn :: Value -> Maybe Dynamic
+valueToDyn (ValueScalar _ ty val) = Just (scalarToDyn ty val)
+valueToDyn _                      = Nothing
 
-dynToExp :: Maybe SourcePos -> Dynamic -> Maybe Exp
-dynToExp p (Dynamic [(ty, val)]) = dynToExp' p ty val
-dynToExp _ _                     = Nothing
+dynToValue :: Maybe SourcePos -> Dynamic -> Maybe Value
+dynToValue p dyn = uncurry (ValueScalar p) <$> dynToScalar dyn
+
+scalarToDyn :: Ty -> Val -> Dynamic
+scalarToDyn TUnit       VUnit       = toDyn ()
+scalarToDyn TBit        (VBit b)    = toDyn (Bit b)
+scalarToDyn TBool       (VBool b)   = toDyn b
+scalarToDyn TString     (VString s) = toDyn s
+scalarToDyn (TInt BW8)  (VInt i)    = toDyn (fromInteger i :: Int8)
+scalarToDyn (TInt BW16) (VInt i)    = toDyn (fromInteger i :: Int16)
+scalarToDyn (TInt BW32) (VInt i)    = toDyn (fromInteger i :: Int32)
+scalarToDyn (TInt BW64) (VInt i)    = toDyn (fromInteger i :: Int64)
+scalarToDyn TDouble     (VDouble d) = toDyn d
+scalarToDyn _           _           = error "scalarToDyn: type error"
+
+dynToScalar :: Dynamic -> Maybe (Ty, Val)
+dynToScalar (Dynamic [(ty, x)]) = do val <- dynToScalar' ty x
+                                     return (ty, val)
+dynToScalar _                   = Nothing
 
 -- | Internal auxiliary
-dynToExp' :: Maybe SourcePos -> Ty -> Any -> Maybe Exp
-dynToExp' p ty val = do
-    val' <- case ty of
-              TUnit     -> Just $ VUnit
-              TBit      -> Just $ VBit    (bit (unsafeCoerce val))
-              TBool     -> Just $ VBool   (unsafeCoerce val)
-              TString   -> Just $ VString (unsafeCoerce val)
-              TInt BW8  -> Just $ VInt    (toInteger (unsafeCoerce val :: Int8))
-              TInt BW16 -> Just $ VInt    (toInteger (unsafeCoerce val :: Int16))
-              TInt BW32 -> Just $ VInt    (toInteger (unsafeCoerce val :: Int32))
-              TInt BW64 -> Just $ VInt    (toInteger (unsafeCoerce val :: Int64))
-              TDouble   -> Just $ VDouble (unsafeCoerce val)
-              _         -> Nothing
-    return $ eVal p ty val'
+dynToScalar' :: Ty -> Any -> Maybe Val
+dynToScalar' ty val = case ty of
+    TUnit     -> Just $ VUnit
+    TBit      -> Just $ VBit    (bit (unsafeCoerce val))
+    TBool     -> Just $ VBool   (unsafeCoerce val)
+    TString   -> Just $ VString (unsafeCoerce val)
+    TInt BW8  -> Just $ VInt    (toInteger (unsafeCoerce val :: Int8))
+    TInt BW16 -> Just $ VInt    (toInteger (unsafeCoerce val :: Int16))
+    TInt BW32 -> Just $ VInt    (toInteger (unsafeCoerce val :: Int32))
+    TInt BW64 -> Just $ VInt    (toInteger (unsafeCoerce val :: Int64))
+    TDouble   -> Just $ VDouble (unsafeCoerce val)
+    _         -> Nothing
 
 {-------------------------------------------------------------------------------
   Guessing (for satisfiability checking)
@@ -1173,32 +1348,34 @@ dynToExp' p ty val = do
 --
 -- See http://www.well-typed.com/blog/2014/12/simple-smt-solver/ for a
 -- discussion of this approach.
-guess :: Exp -> Eval Exp
+guess :: Exp -> Eval Evald
 guess e | Just (lhs, op, rhs) <- isComparison e = do
     dom <- L.getSt $ evalGuessesInt . L.mapAtDef fullIntDomain (eraseLoc lhs)
     let assumeTrue = do
           let dom' = intersectIntDomains dom (mkIntDomain op rhs)
           guard $ not (emptyIntDomain dom')
           L.putSt (evalGuessesInt . L.mapAt (eraseLoc lhs)) (Just dom')
-          return eTrue
+          evaldFull $ vTrue (expLoc lhs)
         assumeFalse = do
           let dom' = intersectIntDomains dom (mkIntDomain (negBinOp op) rhs)
           guard $ not (emptyIntDomain dom')
           L.putSt (evalGuessesInt . L.mapAt (eraseLoc lhs)) (Just dom')
-          return eFalse
+          evaldFull $ vFalse (expLoc lhs)
     assumeTrue `mplus` assumeFalse
 guess e | TBool <- ctExp e = do
     previous <- L.getSt $ evalGuessesBool . L.mapAt (eraseLoc e)
     case previous of
-      Just b  ->
-        return $ if b then eTrue else eFalse
+      Just True  ->
+        evaldFull $ vTrue (expLoc e)
+      Just False ->
+        evaldFull $ vTrue (expLoc e)
       Nothing -> do
         let assumeTrue = do
               L.putSt (evalGuessesBool . L.mapAt (eraseLoc e)) (Just True)
-              return eTrue
+              evaldFull $ vTrue (expLoc e)
             assumeFalse = do
               L.putSt (evalGuessesBool . L.mapAt (eraseLoc e)) (Just False)
-              return eFalse
+              evaldFull $ vFalse (expLoc e)
         assumeTrue `mplus` assumeFalse
 guess _e = mzero
 
@@ -1282,7 +1459,3 @@ eNot e = eUnOp (expLoc e) Not e
 
 eOr :: Exp -> Exp -> Exp
 eOr e e' = eBinOp (expLoc e) Or e e'
-
-eTrue, eFalse :: Exp
-eTrue  = eVal Nothing TBool (VBool True)
-eFalse = eVal Nothing TBool (VBool False)

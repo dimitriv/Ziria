@@ -20,7 +20,6 @@
 --
 -- This provides constant time access read and write and constant time array
 -- slicing, as well as efficient storage (only non-default elements are stored)
--- as
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -46,7 +45,6 @@ module SparseArray (
   , unsafeUpdate
   ) where
 
-import Control.Arrow (first)
 import Data.Maybe (fromMaybe)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IM
@@ -60,6 +58,7 @@ data SparseArray a = SA {
      , saSize   :: !Int
      , saDef    :: a
      }
+   deriving Show
 
 instance Eq a => Eq (SparseArray a) where
   arr1 == arr2 = getElems arr1 == getElems arr2
@@ -74,12 +73,12 @@ newArray :: Int -> a -> SparseArray a
 newArray saSize saDef = SA{ saElems = IM.empty, saOffset = 0, .. }
 
 -- | /O(n)/ Construct from a list
-newListArray :: [a] -> SparseArray a
-newListArray as = SA {
+newListArray :: a -> [a] -> SparseArray a
+newListArray def as = SA {
       saElems  = IM.fromDistinctAscList (zip [0..] as)
     , saOffset = 0
     , saSize   = length as
-    , saDef    = error "fromList: no default"
+    , saDef    = def
     }
 
 -- | /O(min(n,W))/  Read an element from a mutable array
@@ -141,7 +140,12 @@ size = saSize
 -- NOTE: Elements equal to the default are NOT included in the result list
 -- (see `getElems` if this is not desired)
 toList :: SparseArray a -> [(Int, a)]
-toList SA{..} = map (first (\i -> i - saOffset)) $ IM.toList saElems
+toList SA{..} = map adjustIndex
+              $ filter inRange
+              $ IM.toList saElems
+  where
+    adjustIndex (i, a) = (i - saOffset, a)
+    inRange     (i, _) = i >= saOffset && i < saOffset + saSize
 
 {-------------------------------------------------------------------------------
   Vector-like features
@@ -174,7 +178,7 @@ unsafeSlice i n parent = SA{ saElems  = saElems parent
 -- for the equality constraint).
 update :: Eq a => Int -> SparseArray a -> SparseArray a -> SparseArray a
 update i arr2 arr1
---    | saDef arr1 /= saDef arr2  = error "update: unequal defaults"
+    | saDef arr1 /= saDef arr2  = error "update: unequal defaults"
     | i < 0                     = error "update: negative index"
     | i + size arr2 > size arr1 = error "update: out of bounds"
     | otherwise                 = unsafeUpdate i arr2 arr1

@@ -913,9 +913,9 @@ passEval = TypedExpManual eval
           -- We use 'return' rather than 'rewrite' so that we don't attempt to
           -- write the binding again
           return e'
-        (Left _err, _prints) ->
-          -- Cannot evaluate. Leave unchanged
-          return $ e
+        (Left err, _prints) ->
+          -- Error during interpretation indicates program error
+          fail $ "Program failure during evaluation: " ++ err
       where
         eloc = expLoc e
 
