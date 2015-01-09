@@ -142,10 +142,12 @@ import AstExpr
 import AstUnlabelled
 import CtExpr (ctExp)
 import GenSym (initGenSym)
+import SparseArray
 import TcMonad (runTcM')
 import Typecheck (tyCheckExpr)
 import Utils
-import qualified Lens as L
+import qualified Lens        as L
+import qualified SparseArray as SA
 
 {-------------------------------------------------------------------------------
   Values
@@ -155,8 +157,9 @@ import qualified Lens as L
 -- and for structs consisting of values
 data Value =
     ValueScalar (Maybe SourcePos) Ty Val
-  | ValueArray  (Maybe SourcePos) [Value]
+  | ValueArray  (Maybe SourcePos) (SparseArray Value)
   | ValueStruct (Maybe SourcePos) Ty [(FldName, Value)]
+  deriving Eq
 
 instance Show Value where
   show = show . valueExp
@@ -166,9 +169,12 @@ expValue e = go (unExp e)
   where
     go :: Exp0 -> Maybe Value
     go (EVal    ty val)  = return $ ValueScalar eloc ty val
-    go (EValArr    elms) = ValueArray  eloc    <$> mapM expValue elms
-    go (EStruct ty flds) = ValueStruct eloc ty <$> mapM (second' expValue) flds
+    go (EValArr    elms) = mkArray     <$> mapM expValue elms
+    go (EStruct ty flds) = mkStruct ty <$> mapM (second' expValue) flds
     go _                 = Nothing
+
+    mkArray     = ValueArray  eloc . SA.newListArray
+    mkStruct ty = ValueStruct eloc ty
 
     eloc = expLoc e
 
@@ -177,7 +183,7 @@ expValue e = go (unExp e)
 
 valueExp :: Value -> Exp
 valueExp (ValueScalar p ty val)  = eVal    p ty val
-valueExp (ValueArray  p    vals) = eValArr p    (map valueExp vals)
+valueExp (ValueArray  p    vals) = eValArr p    (map valueExp (SA.getElems vals))
 valueExp (ValueStruct p ty vals) = eStruct p ty (map (second valueExp) vals)
 
 {-------------------------------------------------------------------------------
@@ -595,24 +601,19 @@ interpret e = guessIfUnevaluated (go . unExp) e
       e1' <- interpret e1
       case expValue e1' of
         Just v1' -> do
-          (e2', xDeleted) <- extendScope evalLetRefs x v1' $ do
-            e2'      <- interpret e2
-            xDeleted <- isNothing <$> readVar x
-            return (e2', xDeleted)
-          -- If at any point x was (or might have been) assigned a not
-          -- statically known value, we cannot remove the binding site.
-          if xDeleted then partiallyEvaluated $ eLetRef eloc x (Just e1') e2'
-                      else return e2'
+          interpretLetRef eloc x v1' e2
         Nothing -> do
           e2' <- interpret e2
           partiallyEvaluated $ eLetRef eloc x (Just e1') e2'
     go (ELetRef x Nothing e2) =
-      case initialExp eloc (nameTyp x) of
-        Just def -> go (ELetRef x (Just def) e2)
-        Nothing  -> do -- We cannot construct a default value for this type
-                       -- (perhaps because it's a length-polymorphic array)
-                       e2' <- interpret e2
-                       partiallyEvaluated $ eLetRef eloc x Nothing e2'
+      case initialVal eloc (nameTyp x) of
+        Just v1' ->
+          interpretLetRef eloc x v1' e2
+        Nothing -> do
+          -- We cannot construct a default value for this type
+          -- (perhaps because it's a length-polymorphic array)
+          e2' <- interpret e2
+          partiallyEvaluated $ eLetRef eloc x Nothing e2'
     go (EAssign lhs rhs) = do
       rhs' <- interpret rhs
       didAssign <- assign lhs rhs'
@@ -738,6 +739,82 @@ interpret e = guessIfUnevaluated (go . unExp) e
     eloc :: Maybe SourcePos
     eloc = expLoc e
 
+interpretLetRef :: Maybe SourcePos -> GName Ty -> Value -> Exp -> Eval Exp
+interpretLetRef eloc x v1 e2 = do
+    (e2', xDeleted) <- extendScope evalLetRefs x v1 $ do
+      e2'      <- interpret e2
+      xDeleted <- isNothing <$> readVar x
+      return (e2', xDeleted)
+    -- If at any point x was (or might have been) assigned a not
+    -- statically known value, we cannot remove the binding site.
+    if xDeleted
+      then partiallyEvaluated $ eLetRef eloc x (Just (valueExp v1)) e2'
+      else return e2'
+
+-- | The runtime currently leaves the initial value for unassigned variables
+-- unspecified (https://github.com/dimitriv/Ziria/issues/79). This means that
+-- we are free to specify whatever we wish in the interpret -- here we pick
+-- sensible defaults.
+initialVal :: Maybe SourcePos -> Ty -> Maybe Value
+initialVal p = \ty ->
+    case ty of
+      TArray (Literal n) ty' -> ValueArray p . SA.newArray n <$> initialVal p ty'
+      TStruct _ fields       -> ValueStruct p ty <$> mapM initialField fields
+      TUnit                  -> return $ ValueScalar p ty $ VUnit
+      TBit                   -> return $ ValueScalar p ty $ VBit    False
+      TBool                  -> return $ ValueScalar p ty $ VBool   False
+      TString                -> return $ ValueScalar p ty $ VString ""
+      TDouble                -> return $ ValueScalar p ty $ VDouble 0
+      (TInt _)               -> return $ ValueScalar p ty $ VInt    0
+      _                      -> Nothing
+  where
+    initialField :: (FldName, Ty) -> Maybe (FldName, Value)
+    initialField (fldName, ty) = do e <- initialVal p ty ; return (fldName, e)
+
+-- | Smart constructor for binary operators
+applyBinOp :: Maybe SourcePos -> BinOp -> Exp -> Exp -> Eval Exp
+applyBinOp p op a b =
+    case (op, unExp a, unExp b) of
+      (Add,  _, EVal _ (VInt 0)) -> return a
+      (Mult, _, EVal _ (VInt 1)) -> return a
+      (Add,  EVal _ (VInt 0), _) -> return b
+      (Mult, EVal _ (VInt 1), _) -> return b
+      _otherwise -> do
+        let evald = do
+              a' <- expToDyn a
+              b' <- expToDyn b
+              dynToExp p $ zBinOp op `dynApply` a' `dynApply` b'
+        case evald of
+          Just e  -> return $ e
+          Nothing -> partiallyEvaluated $ eBinOp p op a b
+
+-- | Smart constructor for unary operators
+applyUnOp :: Maybe SourcePos -> UnOp -> Exp -> Eval Exp
+applyUnOp p ALength a | TArray (Literal i) _ <- ctExp a =
+    return $ eVal p tint32 (VInt (toInteger i))
+applyUnOp p ALength a =
+    case unExp a of
+      EValArr vals -> return $ eVal p tint32 (VInt (toInteger (length vals)))
+      _            -> partiallyEvaluated $ eUnOp p ALength a
+applyUnOp p op a =
+    let evald = do a' <- expToDyn a
+                   dynToExp p $ zUnOp op `dynApply` a'
+    in case evald of
+         Just e  -> return $ e
+         Nothing -> partiallyEvaluated $ eUnOp p op a
+
+{-------------------------------------------------------------------------------
+  Assignment
+-------------------------------------------------------------------------------}
+
+{-
+data Updated a =
+    Updated a
+  | InsufficientStaticInfo
+  | ProgramError String
+  deriving (Functor)
+-}
+
 -- | Assignment
 --
 -- (Auxiliary to `interpret`)
@@ -781,24 +858,32 @@ assign = \lhs rhs -> deref (unExp lhs) $ \_ -> expValue rhs
     updateArray :: Exp -> (Value -> Maybe Value) -> (Value -> Maybe Value)
     updateArray ix f arr =
       case (arr, unExp ix) of
-        (ValueArray eloc vs, EVal _ (VInt i))
-          | Just (xs, y, zs) <- splitListAt i vs -> do
-              y' <- f y
-              return $ ValueArray eloc (xs ++ [y'] ++ zs)
-        _ -> Nothing
+        (ValueArray eloc vs, EVal _ (VInt i)) -> do
+          if 0 <= i && i < toInteger (SA.size vs)
+            then do
+              y' <- f $ SA.readArray (fromInteger i) vs
+              return $ ValueArray eloc (SA.writeArray (fromInteger i) y' vs)
+            else
+              Nothing
+        _ ->
+          Nothing
 
     -- Given a function that updates a slice, construct a function that updates
     -- the whole array
     updateSlice :: Exp -> Int -> (Value -> Maybe Value) -> (Value -> Maybe Value)
     updateSlice ix len f arr =
       case (arr, unExp ix) of
-        (ValueArray eloc vs, EVal _ (VInt i))
-          | Just (xs, ys, zs) <- sliceListAt i len vs -> do
-              let slice = ValueArray eloc ys
-              slice' <- f slice
-              case slice' of
-                ValueArray _ ys' -> return $ ValueArray eloc (xs ++ ys' ++ zs)
-                _                -> Nothing
+        (ValueArray eloc vs, EVal _ (VInt i)) -> do
+          if 0 <= i && i + toInteger len <= toInteger (SA.size vs)
+            then do
+              updated <- f $ ValueArray eloc (SA.slice (fromInteger i) len vs)
+              case updated of
+                ValueArray _ slice' ->
+                  return $ ValueArray eloc (SA.update (fromInteger i) slice' vs)
+                _  ->
+                  Nothing
+            else
+              Nothing
         _ -> Nothing
 
     -- Given a function that updates an element, construct a function that
@@ -812,57 +897,6 @@ assign = \lhs rhs -> deref (unExp lhs) $ \_ -> expValue rhs
               return $ ValueStruct eloc ty (xs ++ [(fld, y')] ++ zs)
         _ -> Nothing
 
--- | The runtime currently leaves the initial value for unassigned variables
--- unspecified (https://github.com/dimitriv/Ziria/issues/79). This means that
--- we are free to specify whatever we wish in the interpret -- here we pick
--- sensible defaults.
-initialExp :: Maybe SourcePos -> Ty -> Maybe Exp
-initialExp p = \ty ->
-    case ty of
-      TArray (Literal n) ty' -> eValArr p    <$> replicateM n (initialExp p ty')
-      TStruct _ fields       -> eStruct p ty <$> mapM initialField fields
-      TUnit                  -> return $ eVal p ty $ VUnit
-      TBit                   -> return $ eVal p ty $ VBit    False
-      TBool                  -> return $ eVal p ty $ VBool   False
-      TString                -> return $ eVal p ty $ VString ""
-      TDouble                -> return $ eVal p ty $ VDouble 0
-      (TInt _)               -> return $ eVal p ty $ VInt    0
-      _                      -> Nothing
-  where
-    initialField :: (FldName, Ty) -> Maybe (FldName, Exp)
-    initialField (fldName, ty) = do e <- initialExp p ty ; return (fldName, e)
-
--- | Smart constructor for binary operators
-applyBinOp :: Maybe SourcePos -> BinOp -> Exp -> Exp -> Eval Exp
-applyBinOp p op a b =
-    case (op, unExp a, unExp b) of
-      (Add,  _, EVal _ (VInt 0)) -> return a
-      (Mult, _, EVal _ (VInt 1)) -> return a
-      (Add,  EVal _ (VInt 0), _) -> return b
-      (Mult, EVal _ (VInt 1), _) -> return b
-      _otherwise -> do
-        let evald = do
-              a' <- expToDyn a
-              b' <- expToDyn b
-              dynToExp p $ zBinOp op `dynApply` a' `dynApply` b'
-        case evald of
-          Just e  -> return $ e
-          Nothing -> partiallyEvaluated $ eBinOp p op a b
-
--- | Smart constructor for unary operators
-applyUnOp :: Maybe SourcePos -> UnOp -> Exp -> Eval Exp
-applyUnOp p ALength a | TArray (Literal i) _ <- ctExp a =
-    return $ eVal p tint32 (VInt (toInteger i))
-applyUnOp p ALength a =
-    case unExp a of
-      EValArr vals -> return $ eVal p tint32 (VInt (toInteger (length vals)))
-      _            -> partiallyEvaluated $ eUnOp p ALength a
-applyUnOp p op a =
-    let evald = do a' <- expToDyn a
-                   dynToExp p $ zUnOp op `dynApply` a'
-    in case evald of
-         Just e  -> return $ e
-         Nothing -> partiallyEvaluated $ eUnOp p op a
 
 {-------------------------------------------------------------------------------
   Since the interpreter works with dynamically typed values, we provide some
