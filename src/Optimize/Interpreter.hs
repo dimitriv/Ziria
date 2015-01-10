@@ -95,6 +95,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE GADTs #-}
 module Interpreter (
     -- * Values
     Complex(..)
@@ -125,6 +126,7 @@ import Control.Arrow (second)
 import Control.Monad.Error
 import Control.Monad.RWS.Strict hiding (Any)
 import Data.Bits hiding (bit)
+import Data.Functor.Identity
 import Data.Int
 import Data.Map.Strict (Map)
 import Data.Maybe
@@ -362,25 +364,24 @@ vFalse = MkValue (ValueBool False)
 {-------------------------------------------------------------------------------
   Main entry points
 -------------------------------------------------------------------------------}
---
+
 -- | Any prints of statically known values we execute during interpretation
 type Prints = [(Bool, Value)]
 
 -- | (Full) evaluation of an expression
 evalFull :: Exp -> (Either String Value, Prints)
-evalFull e = aux $ evalEval (interpret e) EvalFull initState
+evalFull e = aux . runIdentity $ evalEval (interpret e) EvalFull initState
   where
-    aux [(Right (EvaldFull v), prints)] = (Right v,  prints)
-    aux [(Left err, prints)]            = (Left err, prints)
-    aux _ = error "evalFull: the impossible happened"
+    aux (Right (EvaldFull v), prints) = (Right v,  prints)
+    aux (Right (EvaldPart _), _)      = error "the impossible happened"
+    aux (Left  err,           prints) = (Left err, prints)
 
 -- | (Partial) evaluation of an expression
 evalPartial :: Exp -> (Either String Exp, Prints)
-evalPartial e = aux $ evalEval (interpret e) EvalPartial initState
+evalPartial e = aux . runIdentity $ evalEval (interpret e) EvalPartial initState
   where
-    aux [(Right e', prints)] = (Right (unEvald e'), prints)
-    aux [(Left err, prints)] = (Left err, prints)
-    aux _ = error "evalPartial: the impossible happened"
+    aux (Right e', prints) = (Right (unEvald e'), prints)
+    aux (Left err, prints) = (Left err, prints)
 
 -- | (Full) evaluation of expressions, guessing values for boolean expressions
 evalNonDet :: Exp -> [Exp]
@@ -474,31 +475,30 @@ implies a b = provable (eNot a `eOr` b)
 -------------------------------------------------------------------------------}
 
 -- | Interpreter mode
-data EvalMode =
+data EvalMode m where
     -- | Partial evaluation
     --
     -- Free variables will be left unchanged, where possible.
     --
     -- > a + 2 * 3 ~~> a + 6
-    EvalPartial
+    EvalPartial :: EvalMode Identity
 
     -- | Full evaluation
     --
     -- Free variables in the expression will result in an error.
-  | EvalFull
+    EvalFull :: EvalMode Identity
 
     -- | Approximation
     --
     -- For use in satisfiability checking.
     --
     -- > if a then 1 else 2 ~~> [1, 2]
-  | EvalNonDet
+    EvalNonDet :: EvalMode []
 
 -- | Evaluation state
 data EvalState = EvalState {
     -- | Let-bound variables (immutable)
     _evalLets :: !(Map String Value)
-
 
     -- | Letref-bound variables (mutable)
   , _evalLetRefs :: !(Map String Value)
@@ -545,8 +545,8 @@ initState = EvalState {
 -- 4. S:  Locally bound vars and writes to locally bound vars, and guesses for
 --        non-deterministic evaluation
 -- 5. []: Non-determinism arising from guessing values
-newtype Eval a = Eval {
-      unEval :: ErrorT String (RWST EvalMode Prints EvalState []) a
+newtype Eval m a = Eval {
+      unEval :: ErrorT String (RWST (EvalMode m) Prints EvalState m) a
     }
   deriving ( Functor
            , Applicative
@@ -557,33 +557,33 @@ newtype Eval a = Eval {
 
 -- | We want the `MonadPlus` arising from the underlying list monad, not
 -- from the top-level `ErrorT` monad.
-instance MonadPlus Eval where
+instance MonadPlus (Eval []) where
   mzero       = mkEval $ \_mode _st -> []
   f `mplus` g = mkEval $ \mode st -> runEvald f mode st <|> runEvald g mode st
 
-instance Alternative Eval where
+instance Alternative (Eval []) where
   empty = mzero
   (<|>) = mplus
 
-runEvald :: Eval a -> EvalMode -> EvalState -> [(Either String a, EvalState, Prints)]
+runEvald :: Eval m a -> EvalMode m -> EvalState -> m (Either String a, EvalState, Prints)
 runEvald = runRWST . runErrorT . unEval
 
-evalEval :: Eval a -> EvalMode -> EvalState -> [(Either String a, Prints)]
+evalEval :: Monad m => Eval m a -> EvalMode m -> EvalState -> m (Either String a, Prints)
 evalEval = evalRWST . runErrorT . unEval
 
-mkEval :: (EvalMode -> EvalState -> [(Either String a, EvalState, Prints)]) -> Eval a
+mkEval :: (EvalMode m -> EvalState -> m (Either String a, EvalState, Prints)) -> Eval m a
 mkEval = Eval . ErrorT . RWST
 
-getMode :: Eval EvalMode
+getMode :: Monad m => Eval m (EvalMode m)
 getMode = Eval ask
 
-logPrint :: Bool -> Value -> Eval ()
+logPrint :: Monad m => Bool -> Value -> Eval m ()
 logPrint newline val = Eval $ tell [(newline, val)]
 
 -- | Run the second action only if the first one results zero results
 --
 -- (Does NOT run the second action if the first one results an error).
-onZero :: Eval a -> Eval a -> Eval a
+onZero :: Eval [] a -> Eval [] a -> Eval [] a
 onZero act handler = mkEval $ \mode st ->
   case runEvald act mode st of
     []     -> runEvald handler mode st
@@ -596,17 +596,18 @@ onZero act handler = mkEval $ \mode st ->
 -- | Read a variable
 --
 -- (Either let-bound or letref bound)
-readVar :: GName Ty -> Eval (Maybe Value)
+readVar :: Monad m => GName Ty -> Eval m (Maybe Value)
 readVar x = do
   mLetBound <- L.getSt $ evalLets . L.mapAt (uniqId x)
   case mLetBound of
     Just letBound -> return $ Just letBound
     Nothing       -> L.getSt $ evalLetRefs . L.mapAt (uniqId x)
 
-extendScope :: L.Lens EvalState (Map String Value)  -- ^ Scope to extend
+extendScope :: Monad m
+            => L.Lens EvalState (Map String Value)  -- ^ Scope to extend
             -> GName Ty                             -- ^ Variable to introduce
             -> Value                                -- ^ Initial value
-            -> Eval a -> Eval a
+            -> Eval m a -> Eval m a
 extendScope scope x v act = do
     -- Check if variable already in scope (if this happens it's a compiler bug)
     mCurrentValue <- readVar x
@@ -622,7 +623,7 @@ extendScope scope x v act = do
 -- | Write a variable
 --
 -- The caller should verify that the variable is in scope.
-writeVar :: GName Ty -> Value -> Eval ()
+writeVar :: Monad m => GName Ty -> Value -> Eval m ()
 writeVar x v = L.modifySt evalLetRefs $ Map.insert (uniqId x) v
 
 -- | Indicate that we could only partially evaluate an AST constructor
@@ -631,7 +632,7 @@ writeVar x v = L.modifySt evalLetRefs $ Map.insert (uniqId x) v
 -- partial evaluation, this is just `return`; during full evaluation this is
 -- an error, and during non-deterministic evaluation this results in an
 -- empty list of results.
-evaldPart :: Exp -> Eval Evald
+evaldPart :: Monad m => Exp -> Eval m Evald
 evaldPart x = do
   mode <- getMode
   case mode of
@@ -640,11 +641,11 @@ evaldPart x = do
     EvalNonDet  -> mzero
 
 -- | Indicate that we managed to fully evaluate an expression
-evaldFull :: Value -> Eval Evald
+evaldFull :: Monad m => Value -> Eval m Evald
 evaldFull = return . EvaldFull
 
 -- | Run the guess algorithm if we could not fully evaluate the expression.
-guessIfUnevaluated :: (Exp -> Eval Evald) -> (Exp -> Eval Evald)
+guessIfUnevaluated :: Monad m => (Exp -> Eval m Evald) -> (Exp -> Eval m Evald)
 guessIfUnevaluated f e = do
   mode <- getMode
   case mode of EvalNonDet -> f e `onZero` guess e
@@ -660,7 +661,7 @@ guessIfUnevaluated f e = do
 -- Note that let-bound variables never need to be invalidated: once we know
 -- that a let-bound variable evaluated to a specific value, future statements
 -- can never invalidate that.
-invalidateAssumptions :: Eval ()
+invalidateAssumptions :: Monad m => Eval m ()
 invalidateAssumptions = do
     L.putSt evalLetRefs     Map.empty
     L.putSt evalGuessesBool Map.empty
@@ -672,7 +673,7 @@ invalidateAssumptions = do
 -- guesses for expressions that mention the variable.
 --
 -- See also comments for `invalidateAssumptions`.
-invalidateAssumptionsFor :: GName Ty -> Eval ()
+invalidateAssumptionsFor :: Monad m => GName Ty -> Eval m ()
 invalidateAssumptionsFor x = do
     L.modifySt evalLetRefs $ Map.delete (uniqId x)
     L.putSt evalGuessesBool Map.empty
@@ -744,10 +745,10 @@ evaldBool e = Right $ unEvald e
 -------------------------------------------------------------------------------}
 
 -- | Interpreter for the expression language
-interpret :: Exp -> Eval Evald
+interpret :: forall m. Monad m => Exp -> Eval m Evald
 interpret e = guessIfUnevaluated (go . unExp) e
   where
-    go :: Exp0 -> Eval Evald
+    go :: Exp0 -> Eval m Evald
 
     -- Values
 
@@ -1019,11 +1020,12 @@ interpret e = guessIfUnevaluated (go . unExp) e
     eloc :: Maybe SourcePos
     eloc = expLoc e
 
-interpretLetRef :: Maybe SourcePos -> GName Ty -> Value -> Exp -> Eval Evald
+interpretLetRef :: Monad m
+                => Maybe SourcePos -> GName Ty -> Value -> Exp -> Eval m Evald
 interpretLetRef eloc x v1 e2 = do
     (e2Evald, xDeleted) <- extendScope evalLetRefs x v1 $ do
       e2Evald  <- interpret e2
-      xDeleted <- isNothing <$> readVar x
+      xDeleted <- isNothing `liftM` readVar x
       return (e2Evald, xDeleted)
     -- If at any point x was (or might have been) assigned a not
     -- statically known value, we cannot remove the binding site.
@@ -1032,7 +1034,8 @@ interpretLetRef eloc x v1 e2 = do
       else return e2Evald
 
 -- | Smart constructor for binary operators
-applyBinOp :: Maybe SourcePos -> BinOp -> Evald -> Evald -> Eval Evald
+applyBinOp :: Monad m
+           => Maybe SourcePos -> BinOp -> Evald -> Evald -> Eval m Evald
 applyBinOp _ op (EvaldFull a) (EvaldFull b) = do
     case applyBinaryOp (zBinOp op) a b of
       Just result -> evaldFull result
@@ -1047,7 +1050,7 @@ applyBinOp p op a b = case (op, evaldInt a, evaldInt b) of
     _otherwise        -> evaldPart $ eBinOp p op (unEvald a) (unEvald b)
 
 -- | Smart constructor for unary operators
-applyUnOp :: Maybe SourcePos -> UnOp -> Evald -> Eval Evald
+applyUnOp :: Monad m => Maybe SourcePos -> UnOp -> Evald -> Eval m Evald
 applyUnOp _ op (EvaldFull a) = do
     case applyUnaryOp (zUnOp op) a of
       Just result -> evaldFull result
@@ -1096,10 +1099,11 @@ unDeref (Left  derefExp) = go derefExp
 --
 -- TODO: The order of evaluation here (in case of side effects) is important
 -- and should be verified against the semantics.
-interpretDerefExp :: Exp -> Eval (GName Ty, Either FullyEvaldDerefExp Exp)
+interpretDerefExp :: forall m. Monad m
+                  => Exp -> Eval m (GName Ty, Either FullyEvaldDerefExp Exp)
 interpretDerefExp e = go0 (unExp e)
   where
-    go0 :: Exp0 -> Eval (GName Ty, Either FullyEvaldDerefExp Exp)
+    go0 :: Exp0 -> Eval m (GName Ty, Either FullyEvaldDerefExp Exp)
     go0 (EVar x) =
       return (x, Left $ DerefVar eloc x)
     go0 (EArrRead arr ix LISingleton) = do
@@ -1141,12 +1145,12 @@ interpretDerefExp e = go0 (unExp e)
 -- (Auxiliary to `interpret`)
 --
 -- Returns whether the assignment was successful
-assign :: FullyEvaldDerefExp -> Value -> Eval Bool
+assign :: forall m. Monad m => FullyEvaldDerefExp -> Value -> Eval m Bool
 assign = \lhs rhs -> deref lhs (\_ -> return rhs)
   where
     -- `deref` gives the semantics of a derefercing expression by describing
     -- how a function on values is interpreted as a state update
-    deref :: FullyEvaldDerefExp -> (Value -> Eval Value) -> Eval Bool
+    deref :: FullyEvaldDerefExp -> (Value -> Eval m Value) -> Eval m Bool
     deref (DerefVar _ x) f = do
       mOld <- readVar x
       case mOld of
@@ -1167,7 +1171,7 @@ assign = \lhs rhs -> deref lhs (\_ -> return rhs)
     -- updates the array at a particular index
     updateArray :: Maybe SourcePos
                 -> Int
-                -> (Value -> Eval Value) -> (Value -> Eval Value)
+                -> (Value -> Eval m Value) -> (Value -> Eval m Value)
     updateArray p i f arr =
       case arr of
         MkValue (ValueArray vs) eloc -> do
@@ -1185,7 +1189,7 @@ assign = \lhs rhs -> deref lhs (\_ -> return rhs)
     -- the whole array
     updateSlice :: Maybe SourcePos
                 -> Int -> Int
-                -> (Value -> Eval Value) -> (Value -> Eval Value)
+                -> (Value -> Eval m Value) -> (Value -> Eval m Value)
     updateSlice p i len f arr =
       case arr of
         MkValue (ValueArray vs) eloc -> do
@@ -1208,7 +1212,7 @@ assign = \lhs rhs -> deref lhs (\_ -> return rhs)
     -- Given a function that updates an element, construct a function that
     -- updates a particular field of the struct
     updateStruct :: FldName
-                 -> (Value -> Eval Value) -> (Value -> Eval Value)
+                 -> (Value -> Eval m Value) -> (Value -> Eval m Value)
     updateStruct fld f struct =
       case struct of
         MkValue (ValueStruct ty flds) eloc -> do
@@ -1508,7 +1512,7 @@ zUnOp (Cast ty) = zCast ty
 --
 -- See http://www.well-typed.com/blog/2014/12/simple-smt-solver/ for a
 -- discussion of this approach.
-guess :: Exp -> Eval Evald
+guess :: Exp -> Eval [] Evald
 guess e | Just (lhs, op, rhs) <- isComparison e = do
     dom <- L.getSt $ evalGuessesInt . L.mapAtDef fullIntDomain (eraseLoc lhs)
     let assumeTrue = do
