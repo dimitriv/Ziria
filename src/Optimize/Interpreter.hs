@@ -124,15 +124,12 @@ import Control.Monad.Error
 import Control.Monad.RWS hiding (Any)
 import Data.Bits hiding (bit)
 import Data.Int
-import Data.List (intercalate)
 import Data.Map (Map)
 import Data.Maybe
 import Data.Set (Set)
-import GHC.Prim (Any)
 import Outputable
 import System.IO.Unsafe (unsafePerformIO)
 import Text.Parsec.Pos (SourcePos)
-import Unsafe.Coerce (unsafeCoerce)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
@@ -151,45 +148,107 @@ import qualified SparseArray as SA
   Values
 -------------------------------------------------------------------------------}
 
--- | Generalization of `Val` that also allows for arrays consisting of values
--- and for structs consisting of values
-data Value =
-    ValueScalar (Maybe SourcePos) Ty Val
-  | ValueArray  (Maybe SourcePos) (SparseArray Value)
-  | ValueStruct (Maybe SourcePos) Ty [(FldName, Value)]
+-- | Values
+--
+-- Generalization of values that allows for arrays and structs containing
+-- values as well as scalars. Moreover, we represent integers by their actual
+-- fixed bitwidth representation rather than the arbitrary precision integers
+-- used by `Val`.
+data Value0 =
+    ValueBit    Bool
+  | ValueInt8   Int8
+  | ValueInt16  Int16
+  | ValueInt32  Int32
+  | ValueInt64  Int64
+  | ValueDouble Double
+  | ValueBool   Bool
+  | ValueString String
+  | ValueUnit
+  | ValueArray  (SparseArray Value)
+  | ValueStruct Ty [(FldName, Value)]
+  deriving Eq
+
+data Value = MkValue {
+     unValue  :: Value0
+   , valueLoc :: Maybe SourcePos
+   }
   deriving Eq
 
 instance Show Value where
   show = show . valueExp
 
 expValue :: Exp -> Maybe Value
-expValue e = go (unExp e)
+expValue e = (\v0 -> MkValue v0 (expLoc e)) <$> go (unExp e)
   where
-    go :: Exp0 -> Maybe Value
-    go (EVal    ty val)  = return $ ValueScalar eloc ty val
-    go (EValArr    elms) = do let def = arrayDefault eloc $ ctExp (head elms)
-                              mkArray def <$> mapM expValue elms
-    go (EStruct ty flds) = mkStruct ty <$> mapM (second' expValue) flds
-    go _                 = Nothing
+    go :: Exp0 -> Maybe Value0
+    go (EVal TBit        (VBit b))    = return $ ValueBit    b
+    go (EVal (TInt BW8)  (VInt i))    = return $ ValueInt8   (fromInteger i)
+    go (EVal (TInt BW16) (VInt i))    = return $ ValueInt16  (fromInteger i)
+    go (EVal (TInt BW32) (VInt i))    = return $ ValueInt32  (fromInteger i)
+    go (EVal (TInt BW64) (VInt i))    = return $ ValueInt64  (fromInteger i)
+    go (EVal TDouble     (VDouble d)) = return $ ValueDouble d
+    go (EVal TBool       (VBool b))   = return $ ValueBool   b
+    go (EVal TString     (VString s)) = return $ ValueString s
+    go (EVal TUnit       VUnit)       = return $ ValueUnit
+    go (EValArr elems@(x:_)) = do let def = initScalar (expLoc e) $ ctExp x
+                                  mkArray def <$> mapM expValue elems
+    go (EStruct ty flds)     = mkStruct ty <$> mapM (second' expValue) flds
+    go _                     = Nothing
 
-    mkArray def = ValueArray eloc . SA.newListArray def
-    mkStruct ty = ValueStruct eloc ty
-
-    eloc = expLoc e
-
-    second' :: Monad m => (a -> m b) -> (c, a) -> m (c, b)
-    second' f (c, a) = do b <- f a ; return (c, b)
+    mkArray def = ValueArray . SA.newListArray def
+    mkStruct ty = ValueStruct ty
 
 valueExp :: Value -> Exp
-valueExp (ValueScalar p ty val)  = eVal    p ty val
-valueExp (ValueArray  p    vals) = eValArr p    (map valueExp (SA.getElems vals))
-valueExp (ValueStruct p ty vals) = eStruct p ty (map (second valueExp) vals)
+valueExp v = MkExp (go (unValue v)) (valueLoc v) ()
+  where
+    go :: Value0 -> Exp0
+    go (ValueBit    b)       = EVal TBit        (VBit b)
+    go (ValueInt8   i)       = EVal (TInt BW8)  (VInt (toInteger i))
+    go (ValueInt16  i)       = EVal (TInt BW16) (VInt (toInteger i))
+    go (ValueInt32  i)       = EVal (TInt BW32) (VInt (toInteger i))
+    go (ValueInt64  i)       = EVal (TInt BW64) (VInt (toInteger i))
+    go (ValueDouble d)       = EVal TDouble     (VDouble d)
+    go (ValueBool   b)       = EVal TBool       (VBool   b)
+    go (ValueString s)       = EVal TString     (VString s)
+    go ValueUnit             = EVal TUnit       VUnit
+    go (ValueArray elems)    = EValArr (map valueExp (SA.getElems elems))
+    go (ValueStruct ty flds) = EStruct ty (map (second valueExp) flds)
+
+-- | The runtime currently leaves the initial value for unassigned variables
+-- unspecified (https://github.com/dimitriv/Ziria/issues/79). This means that
+-- we are free to specify whatever we wish in the interpret -- here we pick
+-- sensible defaults.
+initVal :: Maybe SourcePos -> Ty -> Maybe Value
+initVal p ty = (\v0 -> MkValue v0 p) <$> go ty
+  where
+    go TBit        = return $ ValueBit    False
+    go (TInt BW8)  = return $ ValueInt8   0
+    go (TInt BW16) = return $ ValueInt16  0
+    go (TInt BW32) = return $ ValueInt32  0
+    go (TInt BW64) = return $ ValueInt64  0
+    go TDouble     = return $ ValueDouble 0
+    go TBool       = return $ ValueBool   False
+    go TString     = return $ ValueString ""
+    go TUnit       = return $ ValueUnit
+    go (TArray (Literal n) ty') = ValueArray . SA.newArray n <$> initVal p ty'
+    go (TStruct _ flds)         = ValueStruct ty <$> mapM initFld flds
+    go _                        = Nothing
+
+    initFld :: (FldName, Ty) -> Maybe (FldName, Value)
+    initFld = second' (initVal p)
+
+-- | Specialization of `initVal` for scalars
+--
+-- If we are sure that the type must be a scalar type we are justified in
+-- stripping of the `Maybe`
+initScalar :: Maybe SourcePos -> Ty -> Value
+initScalar p = fromJust . initVal p
 
 vTrue :: Maybe SourcePos -> Value
-vTrue p = ValueScalar p TBool (VBool True)
+vTrue = MkValue (ValueBool True)
 
 vFalse :: Maybe SourcePos -> Value
-vFalse p = ValueScalar p TBool (VBool False)
+vFalse = MkValue (ValueBool False)
 
 {-------------------------------------------------------------------------------
   Main entry points
@@ -240,16 +299,19 @@ evalNonDet e =
 -- | Evaluate an expression to an integer
 evalInt :: Exp -> (Either String Integer, Prints)
 evalInt e = case evalFull e of
-    (Right (ValueScalar _ _ (VInt i)) , prints) -> (Right i               , prints)
+    (Right (MkValue (ValueInt8  i) _) , prints) -> (Right (toInteger i)   , prints)
+    (Right (MkValue (ValueInt16 i) _) , prints) -> (Right (toInteger i)   , prints)
+    (Right (MkValue (ValueInt32 i) _) , prints) -> (Right (toInteger i)   , prints)
+    (Right (MkValue (ValueInt64 i) _) , prints) -> (Right (toInteger i)   , prints)
     (Right _                          , prints) -> (Left "Not an integer" , prints)
     (Left  err                        , prints) -> (Left err              , prints)
 
 -- | Evaluate an expression to a boolean
 evalBool :: Exp -> (Either String Bool, Prints)
 evalBool e = case evalFull e of
-    (Right (ValueScalar _ _ (VBool b)) , prints) -> (Right b               , prints)
-    (Right _                           , prints) -> (Left "Not an boolean" , prints)
-    (Left  err                         , prints) -> (Left err              , prints)
+    (Right (MkValue (ValueBool b) _) , prints) -> (Right b               , prints)
+    (Right _                         , prints) -> (Left "Not an boolean" , prints)
+    (Left  err                       , prints) -> (Left err              , prints)
 
 -- | Evaluate a source expression to an integer
 evalSrcInt :: SrcExp -> (Either String Integer, Prints)
@@ -436,14 +498,14 @@ extendScope :: L.Lens EvalState (Map String Value)  -- ^ Scope to extend
             -> GName Ty                             -- ^ Variable to introduce
             -> Value                                -- ^ Initial value
             -> Eval a -> Eval a
-extendScope scope x initVal act = do
+extendScope scope x v act = do
     -- Check if variable already in scope (if this happens it's a compiler bug)
     mCurrentValue <- readVar x
     case mCurrentValue of
       Nothing -> return ()
       Just _  -> throwError $ "Variable " ++ pretty x ++ " already in scope"
 
-    L.modifySt scope $ Map.insert (uniqId x) initVal
+    L.modifySt scope $ Map.insert (uniqId x) v
     a <- act
     L.modifySt scope $ Map.delete (uniqId x)
     return a
@@ -528,6 +590,29 @@ partitionEvalds = go []
     go acc (EvaldPart e:es) = Right $ reverse (map valueExp acc)
                                    ++ e : map unEvald es
 
+evaldArray :: Evald -> Either (SparseArray Value) Exp
+evaldArray (EvaldFull (MkValue (ValueArray arr) _)) = Left arr
+evaldArray e = Right $ unEvald e
+
+evaldStruct :: Evald -> Either (Ty, [(FldName, Value)]) Exp
+evaldStruct (EvaldFull (MkValue (ValueStruct ty flds) _)) = Left (ty, flds)
+evaldStruct e = Right $ unEvald e
+
+evaldInt :: Evald -> Either Integer Exp
+evaldInt (EvaldFull (MkValue (ValueInt8  i) _)) = Left (toInteger i)
+evaldInt (EvaldFull (MkValue (ValueInt16 i) _)) = Left (toInteger i)
+evaldInt (EvaldFull (MkValue (ValueInt32 i) _)) = Left (toInteger i)
+evaldInt (EvaldFull (MkValue (ValueInt64 i) _)) = Left (toInteger i)
+evaldInt e = Right $ unEvald e
+
+evaldUnit :: Evald -> Bool
+evaldUnit (EvaldFull (MkValue ValueUnit _)) = True
+evaldUnit _ = False
+
+evaldBool :: Evald -> Either Bool Exp
+evaldBool (EvaldFull (MkValue (ValueBool b) _)) = Left b
+evaldBool e = Right $ unEvald e
+
 {-------------------------------------------------------------------------------
   The interpreter proper
 -------------------------------------------------------------------------------}
@@ -540,8 +625,8 @@ interpret e = guessIfUnevaluated (go . unExp) e
 
     -- Values
 
-    go (EVal ty val) =
-      evaldFull $ ValueScalar eloc ty val
+    go (EVal _ _) =
+      evaldFull $ fromJust (expValue e)
 
     -- Arrays
 
@@ -549,18 +634,18 @@ interpret e = guessIfUnevaluated (go . unExp) e
       elemsEvald <- mapM interpret elems
       case partitionEvalds elemsEvald of
         Left elems' -> do
-          let def = arrayDefault eloc $ ctExp (head elems)
-          evaldFull $ ValueArray eloc (SA.newListArray def elems')
+          let def = initScalar eloc $ ctExp (head elems)
+          evaldFull $ MkValue (ValueArray (SA.newListArray def elems')) eloc
         Right elems' ->
           evaldPart $ eValArr eloc elems'
     go (EArrRead arr ix li) = do
       arrEvald <- interpret arr
       ixEvald  <- interpret ix
-      case (arrEvald, ixEvald) of
+      case (evaldArray arrEvald, evaldInt ixEvald) of
         -- We only select elements from fully known arrays. See comment for
         -- EProj about optimizing element selection from known arrays with
         -- non-value elements
-        (EvaldFull (ValueArray _ elems), EvaldFull (ValueScalar _ _ (VInt i))) ->
+        (Left elems, Left i) ->
           case li of
             LISingleton ->
               if 0 <= i && i < toInteger (SA.size elems)
@@ -568,13 +653,15 @@ interpret e = guessIfUnevaluated (go . unExp) e
                 else throwError "Out of bounds"
             LILength len ->
               if 0 <= i && i + toInteger len <= toInteger (SA.size elems)
-                then evaldFull $ ValueArray eloc
-                               $ SA.unsafeSlice (fromInteger i) len elems
-                else throwError "Out of bounds"
+                then do
+                  let slice = ValueArray (SA.unsafeSlice (fromInteger i) len elems)
+                  evaldFull $ MkValue slice eloc
+                else
+                  throwError "Out of bounds"
             LIMeta _ ->
               error "Unexpected meta variable"
         -- "Full" slice (capturing the entire array)
-        (EvaldPart arr', EvaldFull (ValueScalar _ _ (VInt 0)))
+        (Right arr', Left 0)
           | TArray (Literal m) _ <- ctExp arr'
           , LILength n           <- li
           , m == n -> evaldPart $ arr'
@@ -595,8 +682,9 @@ interpret e = guessIfUnevaluated (go . unExp) e
       let (fieldNames, fieldDefs) = unzip fields
       fieldDefsEvald <- mapM interpret fieldDefs
       case partitionEvalds fieldDefsEvald of
-        Left fieldDefs' ->
-          evaldFull $ ValueStruct eloc ty (zip fieldNames fieldDefs')
+        Left fieldDefs' -> do
+          let struct = ValueStruct ty (zip fieldNames fieldDefs')
+          evaldFull $ MkValue struct eloc
         Right fieldDefs' ->
           evaldPart $ eStruct eloc ty (zip fieldNames fieldDefs')
     go (EProj struct fld) = do
@@ -604,19 +692,17 @@ interpret e = guessIfUnevaluated (go . unExp) e
       -- We _could_ potentially also optimize projections out of known structs
       -- with non-value fields, but we have to be careful in that case that we
       -- do not lose side effects, and anyway that optimization is less useful.
-      case structEvald of
-        EvaldFull (ValueStruct _ _ fields) ->
+      case evaldStruct structEvald of
+        Left (_ty, fields) ->
           case splitListOn ((== fld) . fst) fields of
             Just (_, (_, y), _) -> evaldFull y
             Nothing             -> throwError $ "Unknown field"
-        EvaldFull _ ->
-          error "Type error"
-        EvaldPart struct' ->
+        Right struct' ->
           evaldPart $ eProj eloc struct' fld
 
     -- Simple operators
 
-    go (EUnOp  op a) = do
+    go (EUnOp op a) = do
       aEvald <- interpret a
       applyUnOp eloc op aEvald
     go (EBinOp op a b) = do
@@ -660,7 +746,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
           -- See comments for `ELet`
           evaldPart $ eLetRef eloc x (Just e1') (unEvald e2Evald)
     go (ELetRef x Nothing e2) =
-      case initialVal eloc (nameTyp x) of
+      case initVal eloc (nameTyp x) of
         Just v1' ->
           interpretLetRef eloc x v1' e2
         Nothing -> do
@@ -677,7 +763,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
         (Left derefExp, EvaldFull rhs') -> assign derefExp rhs'
         _otherwise                      -> return False
       if didAssign
-        then evaldFull $ ValueScalar eloc TUnit VUnit
+        then evaldFull $ MkValue ValueUnit eloc
         else do
           invalidateAssumptionsFor x
           evaldPart $ eAssign eloc (unDeref lhsEvald) (unEvald rhsEvald)
@@ -696,7 +782,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
         (Left derefExp, EvaldFull rhs') -> assign derefExp rhs'
         _otherwise                      -> return False
       if didAssign
-        then evaldFull $ ValueScalar eloc TUnit VUnit
+        then evaldFull $ MkValue ValueUnit eloc
         else do
           invalidateAssumptionsFor x
           -- Strip off the top-level EArrRead again (not that we should not
@@ -717,21 +803,17 @@ interpret e = guessIfUnevaluated (go . unExp) e
     go (ESeq e1 e2) = do
       e1Evald <- interpret e1
       e2Evald <- interpret e2
-      case e1Evald of
-        EvaldFull (ValueScalar _ _ VUnit) ->
-          return e2Evald
-        _otherwise ->
-          -- We could omit e1 completely if we manage to reduce e2 to a value
-          -- independent of e1, and e1 is side effect free.
-          evaldPart $ eSeq eloc (unEvald e1Evald) (unEvald e2Evald)
+      if evaldUnit e1Evald
+        then return e2Evald
+        else -- We could omit e1 completely if we manage to reduce e2 to a value
+             -- independent of e1, and e1 is side effect free.
+             evaldPart $ eSeq eloc (unEvald e1Evald) (unEvald e2Evald)
     go (EIf cond iftrue iffalse) = do
       condEvald <- interpret cond
-      case condEvald of
-        EvaldFull (ValueScalar _ _ (VBool b)) ->
+      case evaldBool condEvald of
+        Left b ->
           interpret (if b then iftrue else iffalse)
-        EvaldFull _ ->
-          error "interpret: type error (condition not a boolean)"
-        EvaldPart cond' -> do
+        Right cond' -> do
           -- We don't know which of the two branches will be executed, so we
           -- cannot execute any of its effects. Therefore we invalidate
           -- assumptions, so that any variables occurring in the branches will
@@ -743,29 +825,24 @@ interpret e = guessIfUnevaluated (go . unExp) e
     go (EFor ui x start len body) = do
       startEvald <- interpret start
       lenEvald   <- interpret len
-      fullEv <- case (startEvald, lenEvald) of
-        (EvaldFull (ValueScalar _ ty (VInt start')),
-         EvaldFull (ValueScalar _ _  (VInt len'))) -> do
+      fullEv <- case (evaldInt startEvald, evaldInt lenEvald) of
+        (Left start', Left len') -> do
           let loop n | n == start' + len' =
                 return True
               loop n = do
-                bodyEvald <-
-                  extendScope evalLets x (ValueScalar eloc ty (VInt n)) $
-                    interpret body
+                let n' = fromJust $ expValue (eVal eloc (nameTyp x) (VInt n))
+                bodyEvald <- extendScope evalLets x n' $ interpret body
                 -- Only when we can fully evaluate the body of the loop do we
                 -- continue. If not, we give up completely (alternatively, we
                 -- could choose to do loop unrolling here).
-                case bodyEvald of
-                  EvaldFull (ValueScalar _ _ VUnit) ->
-                    loop (n + 1)
-                  _otherwise ->
-                    return False
+                if evaldUnit bodyEvald then loop (n + 1)
+                                       else return False
 
           loop start'
         _otherwise -> -- Start or length not fully evaluated
           return False
       if fullEv
-        then evaldFull $ ValueScalar eloc TUnit VUnit
+        then evaldFull $ MkValue ValueUnit eloc
         else do -- See comments for conditionals
                 invalidateAssumptions
                 bodyEvald <- interpret body
@@ -775,20 +852,18 @@ interpret e = guessIfUnevaluated (go . unExp) e
     go (EWhile cond body) = do
       let loop = do
             condEvald <- interpret cond
-            case condEvald of
-              EvaldFull (ValueScalar _ _ (VBool False)) ->
+            case evaldBool condEvald of
+              Left False ->
                 return True
-              EvaldFull (ValueScalar _ _ (VBool True)) -> do
+              Left True -> do
                 bodyEvald <- interpret body
-                case bodyEvald of
-                  EvaldFull (ValueScalar _ _ VUnit) ->
-                    loop
-                  _otherwise ->
-                    return False -- See comments for `EFor`
+                -- See comments for `EFor`
+                if evaldUnit bodyEvald then loop
+                                       else return False
               _otherwise -> -- Condition not fully evaluated
                 return False
       fullEv <- loop
-      if fullEv then evaldFull $ ValueScalar eloc TUnit VUnit
+      if fullEv then evaldFull $ MkValue ValueUnit eloc
                 else do -- See comments for conditionals
                         invalidateAssumptions
                         condEvald <- interpret cond
@@ -811,11 +886,9 @@ interpret e = guessIfUnevaluated (go . unExp) e
     go (EPrint newline e1) = do
       e1Evald <- interpret e1
       case e1Evald of
-        EvaldFull v1' -> do
-          logPrint newline v1'
-          evaldFull $ ValueScalar eloc TUnit VUnit
-        EvaldPart e1' ->
-          evaldPart $ ePrint eloc newline e1'
+        EvaldFull v1' -> do logPrint newline v1'
+                            evaldFull $ MkValue ValueUnit eloc
+        EvaldPart e1' -> evaldPart $ ePrint eloc newline e1'
     go (EError ty str) =
       evaldPart $ eError eloc ty str
     go (ELUT _ _) =
@@ -836,74 +909,33 @@ interpretLetRef eloc x v1 e2 = do
       then evaldPart $ eLetRef eloc x (Just (valueExp v1)) (unEvald e2Evald)
       else return e2Evald
 
--- | The runtime currently leaves the initial value for unassigned variables
--- unspecified (https://github.com/dimitriv/Ziria/issues/79). This means that
--- we are free to specify whatever we wish in the interpret -- here we pick
--- sensible defaults.
-initialVal :: Maybe SourcePos -> Ty -> Maybe Value
-initialVal p = \ty ->
-    case ty of
-      TArray (Literal n) ty' -> ValueArray p . SA.newArray n <$> initialVal p ty'
-      TStruct _ fields       -> ValueStruct p ty <$> mapM initialField fields
-      TUnit                  -> return $ ValueScalar p ty $ VUnit
-      TBit                   -> return $ ValueScalar p ty $ VBit    False
-      TBool                  -> return $ ValueScalar p ty $ VBool   False
-      TString                -> return $ ValueScalar p ty $ VString ""
-      TDouble                -> return $ ValueScalar p ty $ VDouble 0
-      (TInt _)               -> return $ ValueScalar p ty $ VInt    0
-      _                      -> Nothing
-  where
-    initialField :: (FldName, Ty) -> Maybe (FldName, Value)
-    initialField (fldName, ty) = do e <- initialVal p ty ; return (fldName, e)
-
--- | Specialization of `initialVal` specifically for the default values in
--- arrays; since we can create defaults for all types that we allow to store
--- inside arrays, this does not return a Maybe.
-arrayDefault :: Maybe SourcePos -> Ty -> Value
-arrayDefault p = fromJust . initialVal p
-
 -- | Smart constructor for binary operators
 applyBinOp :: Maybe SourcePos -> BinOp -> Evald -> Evald -> Eval Evald
-applyBinOp p op (EvaldFull v) (EvaldFull v') = do
-    let applied = do a <- valueToDyn v
-                     b <- valueToDyn v'
-                     dynToValue p $ zBinOp op `dynApply` a `dynApply` b
-    case applied of
+applyBinOp _ op (EvaldFull a) (EvaldFull b) = do
+    case applyBinaryOp (zBinOp op) a b of
       Just result -> evaldFull result
       Nothing     -> error $ "applyBinOp: type error in ("
-                          ++ show v ++ " " ++ show op ++ " " ++ show v'
+                          ++ show a ++ " " ++ show op ++ " " ++ show b
                           ++ ")"
-applyBinOp p op a b = case (op, a, b) of
-    (Add,  _, EvaldFull (ValueScalar _ _ (VInt 0))) -> return a
-    (Mult, _, EvaldFull (ValueScalar _ _ (VInt 1))) -> return a
-    (Add,  EvaldFull (ValueScalar _ _ (VInt 0)), _) -> return b
-    (Mult, EvaldFull (ValueScalar _ _ (VInt 1)), _) -> return b
-    _otherwise ->
-      evaldPart $ eBinOp p op (unEvald a) (unEvald b)
+applyBinOp p op a b = case (op, evaldInt a, evaldInt b) of
+    (Add,  _, Left 0) -> return a
+    (Mult, _, Left 1) -> return a
+    (Add,  Left 0, _) -> return b
+    (Mult, Left 1, _) -> return b
+    _otherwise        -> evaldPart $ eBinOp p op (unEvald a) (unEvald b)
 
 -- | Smart constructor for unary operators
 applyUnOp :: Maybe SourcePos -> UnOp -> Evald -> Eval Evald
-applyUnOp p op (EvaldFull v) = case (op, v) of
-    -- Special case for ALength, because it is a polymorphic operation and
-    -- we don't support it in our Dynamic framework
-    (ALength, ValueArray _ vs) ->
-      evaldFull $ ValueScalar p tint32 (VInt (toInteger (SA.size vs)))
-    (ALength, _) ->
-      error $ "applyUnOp: type error in length("
-           ++ show v
-           ++ ")"
-    _otherwise -> do
-      let applied = do a <- valueToDyn v
-                       dynToValue p $ zUnOp op `dynApply` a
-      case applied of
-        Just result -> evaldFull result
-        Nothing     -> error $ "applyUnOp: type error in ("
-                            ++ show op ++ " " ++ show v
-                            ++ ")"
+applyUnOp _ op (EvaldFull a) = do
+    case applyUnaryOp (zUnOp op) a of
+      Just result -> evaldFull result
+      Nothing     -> error $ "applyUnOp: type error in ("
+                          ++ show op ++ " " ++ show a
+                          ++ ")"
 applyUnOp p op (EvaldPart e) = case (op, ctExp e) of
     -- Specific optimizations
     (ALength, TArray (Literal i) _) ->
-      evaldFull $ ValueScalar p tint32 (VInt (toInteger i))
+      evaldFull $ MkValue (ValueInt32 (fromIntegral i)) p
     (ALength, TArray (NVar _) _) ->
       evaldPart $ eUnOp p ALength e
     (ALength, _) ->
@@ -951,11 +983,9 @@ interpretDerefExp e = go0 (unExp e)
     go0 (EArrRead arr ix LISingleton) = do
       (x, arrEvald) <- interpretDerefExp arr
       ixEvald       <- interpret ix
-      case (arrEvald, ixEvald) of
-        (Left derefExp, EvaldFull (ValueScalar _ _ (VInt i))) ->
+      case (arrEvald, evaldInt ixEvald) of
+        (Left derefExp, Left i) ->
           return (x, Left $ DerefArrayElement eloc derefExp (fromInteger i))
-        (Left _derefExp, EvaldFull _) ->
-          error "interpretDerefExp: type error"
         _otherwise ->
           return (x, Right $ eArrRead eloc (unDeref arrEvald)
                                            (unEvald ixEvald)
@@ -963,11 +993,9 @@ interpretDerefExp e = go0 (unExp e)
     go0 (EArrRead arr ix (LILength len)) = do
       (x, arrEvald) <- interpretDerefExp arr
       ixEvald       <- interpret ix
-      case (arrEvald, ixEvald) of
-        (Left derefExp, EvaldFull (ValueScalar _ _ (VInt i))) ->
+      case (arrEvald, evaldInt ixEvald) of
+        (Left derefExp, Left i) ->
           return (x, Left $ DerefArraySlice eloc derefExp (fromInteger i) len)
-        (Left _derefExp, EvaldFull _) ->
-          error "interpretDerefExp: type error"
         _otherwise ->
           return (x, Right $ eArrRead eloc (unDeref arrEvald)
                                            (unEvald ixEvald)
@@ -1020,12 +1048,12 @@ assign = \lhs rhs -> deref lhs (\_ -> return rhs)
                 -> (Value -> Eval Value) -> (Value -> Eval Value)
     updateArray p i f arr =
       case arr of
-        ValueArray eloc vs -> do
+        MkValue (ValueArray vs) eloc -> do
           if 0 <= i && i < SA.size vs
             then do
               let y = SA.unsafeReadArray i vs
               y' <- f y
-              return $ ValueArray eloc (SA.unsafeWriteArray i y' vs)
+              return $ MkValue (ValueArray (SA.unsafeWriteArray i y' vs)) eloc
             else
               throwError $ "Array index out of bounds at position " ++ show p
         _otherwise ->
@@ -1038,14 +1066,14 @@ assign = \lhs rhs -> deref lhs (\_ -> return rhs)
                 -> (Value -> Eval Value) -> (Value -> Eval Value)
     updateSlice p i len f arr =
       case arr of
-        ValueArray eloc vs -> do
+        MkValue (ValueArray vs) eloc -> do
           if 0 <= i && i + len <= (SA.size vs)
             then do
               let slice = SA.unsafeSlice i len vs
-              updated <- f $ ValueArray eloc slice
-              case updated of
-                ValueArray _ slice' | SA.size slice == SA.size slice' ->
-                  return $ ValueArray eloc (SA.unsafeUpdate i slice' vs)
+              updated <- f $ MkValue (ValueArray slice) eloc
+              case unValue updated of
+                ValueArray slice' | SA.size slice == SA.size slice' ->
+                  return $ MkValue (ValueArray (SA.unsafeUpdate i slice' vs)) eloc
                 _  ->
                   -- TODO: Is a length mismatch between the two arrays
                   -- really a type error?
@@ -1061,145 +1089,108 @@ assign = \lhs rhs -> deref lhs (\_ -> return rhs)
                  -> (Value -> Eval Value) -> (Value -> Eval Value)
     updateStruct fld f struct =
       case struct of
-        ValueStruct eloc ty flds
+        MkValue (ValueStruct ty flds) eloc
           | Just (xs, (_fld, y), zs) <- splitListOn ((== fld) . fst) flds -> do
               y' <- f y
-              return $ ValueStruct eloc ty (xs ++ [(fld, y')] ++ zs)
+              return $ MkValue (ValueStruct ty (xs ++ [(fld, y')] ++ zs)) eloc
         _otherwise ->
           error "updateStruct: type error"
 
 {-------------------------------------------------------------------------------
-  Since the interpreter works with dynamically typed values, we provide some
-  infrastructure here for working with such values. This mirrors the standard
-  definition of (old) Typeable and Dynamic, but using Ziria's own types and
-  with support for ad-hoc polymorphism.
+  Semantics of binary operators
 -------------------------------------------------------------------------------}
 
-class Typeable a where
-  typeOf :: a -> Ty
+newtype BinaryOp = BinaryOp { applyBinaryOp :: Value -> Value -> Maybe Value }
 
--- | Avoids confusion between booleans and bits
-newtype Bit = Bit { bit :: Bool }
-  deriving (Eq, Ord, Enum, Show, Bits)
+instance Monoid BinaryOp where
+  mempty        = BinaryOp $ \_ _ -> Nothing
+  f `mappend` g = BinaryOp $ \a b -> applyBinaryOp f a b <|> applyBinaryOp g a b
 
-instance Typeable ()     where typeOf _ = TUnit
-instance Typeable Bit    where typeOf _ = TBit
-instance Typeable Bool   where typeOf _ = TBool
-instance Typeable Int8   where typeOf _ = TInt BW8
-instance Typeable Int16  where typeOf _ = TInt BW16
-instance Typeable Int32  where typeOf _ = TInt BW32
-instance Typeable Int64  where typeOf _ = TInt BW64
-instance Typeable Double where typeOf _ = TDouble
-instance Typeable String where typeOf _ = TString
+mkBinaryOp :: (Value0 -> Value0 -> Maybe Value0) -> BinaryOp
+mkBinaryOp f = BinaryOp $ \(MkValue va p) (MkValue vb _) ->
+                 (\v0 -> MkValue v0 p) <$> f va vb
 
-instance (Typeable a, Typeable b) => Typeable (a -> b) where
-  typeOf (_ :: a -> b) = TArrow [typeOf (undefined :: a)]
-                                (typeOf (undefined :: b))
-
-data Dynamic = Dynamic [(Ty, Any)]
-
-instance Show Dynamic where
-  show (Dynamic vs) =
-      "Dynamic [" ++ intercalate "," (map (uncurry aux) vs) ++ "]"
-    where
-      aux :: Ty -> Any -> String
-      aux ty val = case dynToScalar' ty val of
-                     Just e  -> pretty e      ++ " :: " ++ pretty ty
-                     Nothing -> "<<dynamic>>" ++ " :: " ++ pretty ty
-
-toDyn :: Typeable a => a -> Dynamic
-toDyn x = Dynamic [(typeOf x, unsafeCoerce x)]
-
-dynApply :: Dynamic -> Dynamic -> Dynamic
-dynApply (Dynamic fs) (Dynamic xs) = Dynamic
-    [ (yty, unsafeCoerce f x)
-    | (fty, f) <- fs
-    , (xty, x) <- xs
-    , Just yty <- [funResult fty xty]
-    ]
+zNum2 :: (forall a. Num a => a -> a -> a) -> BinaryOp
+zNum2 f = mkBinaryOp go
   where
-    funResult :: Ty -> Ty -> Maybe Ty
-    funResult (TArrow [a] b) a' | a == a' = Just $ b
-    funResult _ _ = Nothing
+    go (ValueInt8   a) (ValueInt8   b) = Just $ ValueInt8   (f a b)
+    go (ValueInt16  a) (ValueInt16  b) = Just $ ValueInt16  (f a b)
+    go (ValueInt32  a) (ValueInt32  b) = Just $ ValueInt32  (f a b)
+    go (ValueInt64  a) (ValueInt64  b) = Just $ ValueInt64  (f a b)
+    go (ValueDouble a) (ValueDouble b) = Just $ ValueDouble (f a b)
+    go _               _               = Nothing
 
-instance Monoid Dynamic where
-  mempty = Dynamic []
-  Dynamic xs `mappend` Dynamic ys = Dynamic (xs ++ ys)
-
-{-------------------------------------------------------------------------------
-  Define the semantics of Ziria operators using the dynamic typing
-  infrastructure developed in the previous section.
--------------------------------------------------------------------------------}
-
-zNum2 :: (forall a. Num a => a -> a -> a) -> Dynamic
-zNum2 f = mconcat [
-      toDyn (f :: Int8   -> Int8   -> Int8)
-    , toDyn (f :: Int16  -> Int16  -> Int16)
-    , toDyn (f :: Int32  -> Int32  -> Int32)
-    , toDyn (f :: Int64  -> Int64  -> Int64)
-    , toDyn (f :: Double -> Double -> Double)
-    ]
-
-zIntegral :: (forall a. Integral a => a -> a -> a) -> Dynamic
-zIntegral f = mconcat [
-      toDyn (f :: Int8  -> Int8  -> Int8)
-    , toDyn (f :: Int16 -> Int16 -> Int16)
-    , toDyn (f :: Int32 -> Int32 -> Int32)
-    , toDyn (f :: Int64 -> Int64 -> Int64)
-    ]
-
-zFloating :: (forall a. Floating a => a -> a -> a) -> Dynamic
-zFloating f = mconcat [
-      toDyn (f :: Double -> Double -> Double)
-    ]
-
-zBits2 :: (forall a. Bits a => a -> a -> a) -> Dynamic
-zBits2 f = mconcat [
-      toDyn (f :: Bit   -> Bit   -> Bit)
-    , toDyn (f :: Bool  -> Bool  -> Bool)
-    , toDyn (f :: Int8  -> Int8  -> Int8)
-    , toDyn (f :: Int16 -> Int16 -> Int16)
-    , toDyn (f :: Int32 -> Int32 -> Int32)
-    , toDyn (f :: Int64 -> Int64 -> Int64)
-    ]
-
-zShift :: (forall a. Bits a => a -> Int -> a) -> Dynamic
-zShift f = mconcat [
-      toDyn (f' :: Int8  -> Int8  -> Int8)
-    , toDyn (f' :: Int8  -> Int16 -> Int8)
-    , toDyn (f' :: Int8  -> Int32 -> Int8)
-    , toDyn (f' :: Int8  -> Int64 -> Int8)
-    , toDyn (f' :: Int16 -> Int8  -> Int16)
-    , toDyn (f' :: Int16 -> Int16 -> Int16)
-    , toDyn (f' :: Int16 -> Int32 -> Int16)
-    , toDyn (f' :: Int16 -> Int64 -> Int16)
-    , toDyn (f' :: Int32 -> Int8  -> Int32)
-    , toDyn (f' :: Int32 -> Int16 -> Int32)
-    , toDyn (f' :: Int32 -> Int32 -> Int32)
-    , toDyn (f' :: Int32 -> Int64 -> Int32)
-    , toDyn (f' :: Int64 -> Int8  -> Int64)
-    , toDyn (f' :: Int64 -> Int16 -> Int64)
-    , toDyn (f' :: Int64 -> Int32 -> Int64)
-    , toDyn (f' :: Int64 -> Int64 -> Int64)
-    ]
+zIntegral :: (forall a. Integral a => a -> a -> a) -> BinaryOp
+zIntegral f = mkBinaryOp go
   where
+    go (ValueInt8   a) (ValueInt8   b) = Just $ ValueInt8   (f a b)
+    go (ValueInt16  a) (ValueInt16  b) = Just $ ValueInt16  (f a b)
+    go (ValueInt32  a) (ValueInt32  b) = Just $ ValueInt32  (f a b)
+    go (ValueInt64  a) (ValueInt64  b) = Just $ ValueInt64  (f a b)
+    go _               _               = Nothing
+
+zFloating :: (forall a. Floating a => a -> a -> a) -> BinaryOp
+zFloating f = mkBinaryOp go
+  where
+    go (ValueDouble a) (ValueDouble b) = Just $ ValueDouble (f a b)
+    go _               _               = Nothing
+
+zBits2 :: (forall a. Bits a => a -> a -> a) -> BinaryOp
+zBits2 f = mkBinaryOp go
+  where
+    go (ValueBit    a) (ValueBit    b) = Just $ ValueBit    (f a b)
+    go (ValueBool   a) (ValueBool   b) = Just $ ValueBool   (f a b)
+    go (ValueInt8   a) (ValueInt8   b) = Just $ ValueInt8   (f a b)
+    go (ValueInt16  a) (ValueInt16  b) = Just $ ValueInt16  (f a b)
+    go (ValueInt32  a) (ValueInt32  b) = Just $ ValueInt32  (f a b)
+    go (ValueInt64  a) (ValueInt64  b) = Just $ ValueInt64  (f a b)
+    go _               _               = Nothing
+
+zShift :: (forall a. Bits a => a -> Int -> a) -> BinaryOp
+zShift f = mkBinaryOp go
+  where
+    go (ValueInt8  a) (ValueInt8  b) = Just $ ValueInt8  (f' a b)
+    go (ValueInt8  a) (ValueInt16 b) = Just $ ValueInt8  (f' a b)
+    go (ValueInt8  a) (ValueInt32 b) = Just $ ValueInt8  (f' a b)
+    go (ValueInt8  a) (ValueInt64 b) = Just $ ValueInt8  (f' a b)
+    go (ValueInt16 a) (ValueInt8  b) = Just $ ValueInt16 (f' a b)
+    go (ValueInt16 a) (ValueInt16 b) = Just $ ValueInt16 (f' a b)
+    go (ValueInt16 a) (ValueInt32 b) = Just $ ValueInt16 (f' a b)
+    go (ValueInt16 a) (ValueInt64 b) = Just $ ValueInt16 (f' a b)
+    go (ValueInt32 a) (ValueInt8  b) = Just $ ValueInt32 (f' a b)
+    go (ValueInt32 a) (ValueInt16 b) = Just $ ValueInt32 (f' a b)
+    go (ValueInt32 a) (ValueInt32 b) = Just $ ValueInt32 (f' a b)
+    go (ValueInt32 a) (ValueInt64 b) = Just $ ValueInt32 (f' a b)
+    go (ValueInt64 a) (ValueInt8  b) = Just $ ValueInt64 (f' a b)
+    go (ValueInt64 a) (ValueInt16 b) = Just $ ValueInt64 (f' a b)
+    go (ValueInt64 a) (ValueInt32 b) = Just $ ValueInt64 (f' a b)
+    go (ValueInt64 a) (ValueInt64 b) = Just $ ValueInt64 (f' a b)
+    go _              _              = Nothing
+
     f' :: (Bits a, Integral b) => a -> b -> a
     f' x i = f x (fromIntegral i)
 
-zOrd :: (forall a. Ord a => a -> a -> Bool) -> Dynamic
-zOrd f = mconcat [
-      toDyn (f :: ()     -> ()     -> Bool)
-    , toDyn (f :: Bit    -> Bit    -> Bool)
-    , toDyn (f :: Bool   -> Bool   -> Bool)
-    , toDyn (f :: Int8   -> Int8   -> Bool)
-    , toDyn (f :: Int16  -> Int16  -> Bool)
-    , toDyn (f :: Int32  -> Int32  -> Bool)
-    , toDyn (f :: Int64  -> Int64  -> Bool)
-    , toDyn (f :: Double -> Double -> Bool)
-    , toDyn (f :: String -> String -> Bool)
-    ]
+zOrd :: (forall a. Ord a => a -> a -> Bool) -> BinaryOp
+zOrd f = mkBinaryOp $ go
+  where
+    go ValueUnit       ValueUnit       = Just $ ValueBool (f () ())
+    go (ValueBit    a) (ValueBit    b) = Just $ ValueBool (f a b)
+    go (ValueBool   a) (ValueBool   b) = Just $ ValueBool (f a b)
+    go (ValueInt8   a) (ValueInt8   b) = Just $ ValueBool (f a b)
+    go (ValueInt16  a) (ValueInt16  b) = Just $ ValueBool (f a b)
+    go (ValueInt32  a) (ValueInt32  b) = Just $ ValueBool (f a b)
+    go (ValueInt64  a) (ValueInt64  b) = Just $ ValueBool (f a b)
+    go (ValueDouble a) (ValueDouble b) = Just $ ValueBool (f a b)
+    go (ValueString a) (ValueString b) = Just $ ValueBool (f a b)
+    go _               _               = Nothing
 
-zBinOp :: BinOp -> Dynamic
+zBool2 :: (Bool -> Bool -> Bool) -> BinaryOp
+zBool2 f = mkBinaryOp $ go
+  where
+    go (ValueBool a) (ValueBool b) = Just $ ValueBool (f a b)
+    go _             _             = Nothing
+
+zBinOp :: BinOp -> BinaryOp
 zBinOp Add   = zNum2 (+)
 zBinOp Sub   = zNum2 (-)
 zBinOp Mult  = zNum2 (*)
@@ -1217,128 +1208,125 @@ zBinOp Lt    = zOrd (<)
 zBinOp Gt    = zOrd (>)
 zBinOp Leq   = zOrd (<=)
 zBinOp Geq   = zOrd (>=)
-zBinOp And   = toDyn (&&)
-zBinOp Or    = toDyn (||)
+zBinOp And   = zBool2 (&&)
+zBinOp Or    = zBool2 (||)
 
 {-------------------------------------------------------------------------------
-  Similar for unary operators
+  Semantics of unary operators
 -------------------------------------------------------------------------------}
 
-zNum1 :: (forall a. Num a => a -> a) -> Dynamic
-zNum1 f = mconcat [
-      toDyn (f :: Int8   -> Int8)
-    , toDyn (f :: Int16  -> Int16)
-    , toDyn (f :: Int32  -> Int32)
-    , toDyn (f :: Int64  -> Int64)
-    , toDyn (f :: Double -> Double)
-    ]
+newtype UnaryOp = UnaryOp { applyUnaryOp :: Value -> Maybe Value }
 
-zBits1 :: (forall a. Bits a => a -> a) -> Dynamic
-zBits1 f = mconcat [
-      toDyn (f :: Bit   -> Bit)
-    , toDyn (f :: Bool  -> Bool)
-    , toDyn (f :: Int8  -> Int8)
-    , toDyn (f :: Int16 -> Int16)
-    , toDyn (f :: Int32 -> Int32)
-    , toDyn (f :: Int64 -> Int64)
-    ]
+instance Monoid UnaryOp where
+  mempty        = UnaryOp $ \_ -> Nothing
+  f `mappend` g = UnaryOp $ \a -> applyUnaryOp f a <|> applyUnaryOp g a
 
-zCast :: Typeable a
-      => Maybe (()     -> a)
-      -> Maybe (Bit    -> a)
-      -> Maybe (Bool   -> a)
-      -> Maybe (Int8   -> a)
-      -> Maybe (Int16  -> a)
-      -> Maybe (Int32  -> a)
-      -> Maybe (Int64  -> a)
-      -> Maybe (Double -> a)
-      -> Maybe (String -> a)
-      -> Dynamic
-zCast fUnit fBit fBool fInt8 fInt16 fInt32 fInt64 fDouble fString =
-    mconcat . catMaybes $ [
-        fmap toDyn fUnit
-      , fmap toDyn fBit
-      , fmap toDyn fBool
-      , fmap toDyn fInt8
-      , fmap toDyn fInt16
-      , fmap toDyn fInt32
-      , fmap toDyn fInt64
-      , fmap toDyn fDouble
-      , fmap toDyn fString
-      ]
+mkUnaryOp :: (Value0 -> Maybe Value0) -> UnaryOp
+mkUnaryOp f = UnaryOp $ \(MkValue va p) -> (\v0 -> MkValue v0 p) <$> f va
+
+zNum1 :: (forall a. Num a => a -> a) -> UnaryOp
+zNum1 f = mkUnaryOp go
+  where
+    go (ValueInt8   a) = Just $ ValueInt8   (f a)
+    go (ValueInt16  a) = Just $ ValueInt16  (f a)
+    go (ValueInt32  a) = Just $ ValueInt32  (f a)
+    go (ValueInt64  a) = Just $ ValueInt64  (f a)
+    go (ValueDouble a) = Just $ ValueDouble (f a)
+    go _               = Nothing
+
+zBits1 :: (forall a. Bits a => a -> a) -> UnaryOp
+zBits1 f = mkUnaryOp go
+  where
+    go (ValueBit   a) = Just $ ValueBit   (f a)
+    go (ValueBool  a) = Just $ ValueBool  (f a)
+    go (ValueInt8  a) = Just $ ValueInt8  (f a)
+    go (ValueInt16 a) = Just $ ValueInt16 (f a)
+    go (ValueInt32 a) = Just $ ValueInt32 (f a)
+    go (ValueInt64 a) = Just $ ValueInt64 (f a)
+    go _              = Nothing
+
+zBool1 :: (Bool -> Bool) -> UnaryOp
+zBool1 f = mkUnaryOp $ go
+  where
+    go (ValueBool a) = Just $ ValueBool (f a)
+    go _             = Nothing
+
+zALength :: UnaryOp
+zALength = mkUnaryOp go
+  where
+    go (ValueArray arr) = Just $ ValueInt32 (fromIntegral (SA.size arr))
+    go _                = Nothing
+
+zCast :: Ty -> UnaryOp
+zCast ty = mkUnaryOp (go ty)
+  where
+    go TUnit _ = Just $ ValueUnit
+
+    go TBit (ValueBit  a) = Just $ ValueBit a
+    go TBit (ValueBool a) = Just $ ValueBit a
+    go TBit _             = Nothing
+
+    go TBool (ValueBit  a) = Just $ ValueBool a
+    go TBool (ValueBool a) = Just $ ValueBool a
+    go TBool _             = Nothing
+
+    go (TInt BW8) (ValueInt8   a) = Just $ ValueInt8 a
+    go (TInt BW8) (ValueInt16  a) = Just $ ValueInt8 (fromIntegral a)
+    go (TInt BW8) (ValueInt32  a) = Just $ ValueInt8 (fromIntegral a)
+    go (TInt BW8) (ValueInt64  a) = Just $ ValueInt8 (fromIntegral a)
+    go (TInt BW8) (ValueDouble a) = Just $ ValueInt8 (round a)
+    go (TInt BW8) _               = Nothing
+
+    go (TInt BW16) (ValueInt8   a) = Just $ ValueInt16 (fromIntegral a)
+    go (TInt BW16) (ValueInt16  a) = Just $ ValueInt16 a
+    go (TInt BW16) (ValueInt32  a) = Just $ ValueInt16 (fromIntegral a)
+    go (TInt BW16) (ValueInt64  a) = Just $ ValueInt16 (fromIntegral a)
+    go (TInt BW16) (ValueDouble a) = Just $ ValueInt16 (round a)
+    go (TInt BW16) _               = Nothing
+
+    go (TInt BW32) (ValueInt8   a) = Just $ ValueInt32 (fromIntegral a)
+    go (TInt BW32) (ValueInt16  a) = Just $ ValueInt32 (fromIntegral a)
+    go (TInt BW32) (ValueInt32  a) = Just $ ValueInt32 a
+    go (TInt BW32) (ValueInt64  a) = Just $ ValueInt32 (fromIntegral a)
+    go (TInt BW32) (ValueDouble a) = Just $ ValueInt32 (round a)
+    go (TInt BW32) _               = Nothing
+
+    go (TInt BW64) (ValueInt8   a) = Just $ ValueInt64 (fromIntegral a)
+    go (TInt BW64) (ValueInt16  a) = Just $ ValueInt64 (fromIntegral a)
+    go (TInt BW64) (ValueInt32  a) = Just $ ValueInt64 (fromIntegral a)
+    go (TInt BW64) (ValueInt64  a) = Just $ ValueInt64 a
+    go (TInt BW64) (ValueDouble a) = Just $ ValueInt64 (round a)
+    go (TInt BW64) _               = Nothing
+
+    go TDouble (ValueInt8   a) = Just $ ValueDouble (fromIntegral a)
+    go TDouble (ValueInt16  a) = Just $ ValueDouble (fromIntegral a)
+    go TDouble (ValueInt32  a) = Just $ ValueDouble (fromIntegral a)
+    go TDouble (ValueInt64  a) = Just $ ValueDouble (fromIntegral a)
+    go TDouble (ValueDouble a) = Just $ ValueDouble a
+    go TDouble _               = Nothing
+
+    go TString ValueUnit       = Just $ ValueString "()"
+    go TString (ValueBit    a) = Just $ ValueString (show a)
+    go TString (ValueBool   a) = Just $ ValueString (show a)
+    go TString (ValueInt8   a) = Just $ ValueString (show a)
+    go TString (ValueInt16  a) = Just $ ValueString (show a)
+    go TString (ValueInt32  a) = Just $ ValueString (show a)
+    go TString (ValueInt64  a) = Just $ ValueString (show a)
+    go TString (ValueDouble a) = Just $ ValueString (show a)
+    go TString (ValueString a) = Just $ ValueString a
+    go TString _               = Nothing
+
+    -- Unsupported target type
+    go _ _ = Nothing
 
 -- | Semantics for unary operators
---
--- TODO: The matrix for cast may be incomplete
-zUnOp :: UnOp -> Dynamic
+zUnOp :: UnOp -> UnaryOp
 zUnOp NatExp    = error "NatExp not implemented"
 zUnOp Neg       = zNum1 negate
-zUnOp Not       = toDyn not
+zUnOp Not       = zBool1 not
 zUnOp BwNeg     = zBits1 complement
-zUnOp ALength   = error "zUnOp: ALength is polymorphic"
-zUnOp (Cast ty) = case ty of
-            -- Source: ()          Bit         Bool        Int8        Int16       Int32       Int64       Double       String
-    TUnit     -> zCast (Just id)   (Just cu)   (Just cu)   (Just cu)   (Just cu)   (Just cu)   (Just cu)   (Just cu)    (Just cu)
-    TBit      -> zCast Nothing     (Just id)   (Just Bit)  Nothing     Nothing     Nothing     Nothing     Nothing      Nothing
-    TBool     -> zCast Nothing     (Just bit)  (Just id)   Nothing     Nothing     Nothing     Nothing     Nothing      Nothing
-    TInt BW8  -> zCast Nothing     (Just ei)   (Just ei)   (Just id)   (Just fi)   (Just fi)   (Just fi)   (Just round) Nothing
-    TInt BW16 -> zCast Nothing     (Just ei)   (Just ei)   (Just fi)   (Just id)   (Just fi)   (Just fi)   (Just round) Nothing
-    TInt BW32 -> zCast Nothing     (Just ei)   (Just ei)   (Just fi)   (Just fi)   (Just id)   (Just fi)   (Just round) Nothing
-    TInt BW64 -> zCast Nothing     (Just ei)   (Just ei)   (Just fi)   (Just fi)   (Just fi)   (Just id)   (Just round) Nothing
-    TDouble   -> zCast Nothing     Nothing     Nothing     (Just fi)   (Just fi)   (Just fi)   (Just fi)   (Just id)    Nothing
-    TString   -> zCast (Just show) (Just show) (Just show) (Just show) (Just show) (Just show) (Just show) (Just show)  (Just id)
-    _         -> error "zUnOp: Invalid target type"
-  where
-    cu :: a -> ()
-    cu = const ()
-
-    ei :: (Enum a, Num b) => a -> b
-    ei = fromIntegral . fromEnum
-
-    fi :: (Integral a, Num b) => a -> b
-    fi = fromIntegral
-
-{-------------------------------------------------------------------------------
-  Conversion between expressions and dynamic values
--------------------------------------------------------------------------------}
-
-valueToDyn :: Value -> Maybe Dynamic
-valueToDyn (ValueScalar _ ty val) = Just (scalarToDyn ty val)
-valueToDyn _                      = Nothing
-
-dynToValue :: Maybe SourcePos -> Dynamic -> Maybe Value
-dynToValue p dyn = uncurry (ValueScalar p) <$> dynToScalar dyn
-
-scalarToDyn :: Ty -> Val -> Dynamic
-scalarToDyn TUnit       VUnit       = toDyn ()
-scalarToDyn TBit        (VBit b)    = toDyn (Bit b)
-scalarToDyn TBool       (VBool b)   = toDyn b
-scalarToDyn TString     (VString s) = toDyn s
-scalarToDyn (TInt BW8)  (VInt i)    = toDyn (fromInteger i :: Int8)
-scalarToDyn (TInt BW16) (VInt i)    = toDyn (fromInteger i :: Int16)
-scalarToDyn (TInt BW32) (VInt i)    = toDyn (fromInteger i :: Int32)
-scalarToDyn (TInt BW64) (VInt i)    = toDyn (fromInteger i :: Int64)
-scalarToDyn TDouble     (VDouble d) = toDyn d
-scalarToDyn _           _           = error "scalarToDyn: type error"
-
-dynToScalar :: Dynamic -> Maybe (Ty, Val)
-dynToScalar (Dynamic [(ty, x)]) = do val <- dynToScalar' ty x
-                                     return (ty, val)
-dynToScalar _                   = Nothing
-
--- | Internal auxiliary
-dynToScalar' :: Ty -> Any -> Maybe Val
-dynToScalar' ty val = case ty of
-    TUnit     -> Just $ VUnit
-    TBit      -> Just $ VBit    (bit (unsafeCoerce val))
-    TBool     -> Just $ VBool   (unsafeCoerce val)
-    TString   -> Just $ VString (unsafeCoerce val)
-    TInt BW8  -> Just $ VInt    (toInteger (unsafeCoerce val :: Int8))
-    TInt BW16 -> Just $ VInt    (toInteger (unsafeCoerce val :: Int16))
-    TInt BW32 -> Just $ VInt    (toInteger (unsafeCoerce val :: Int32))
-    TInt BW64 -> Just $ VInt    (toInteger (unsafeCoerce val :: Int64))
-    TDouble   -> Just $ VDouble (unsafeCoerce val)
-    _         -> Nothing
+zUnOp ALength   = zALength
+zUnOp (Cast ty) = zCast ty
 
 {-------------------------------------------------------------------------------
   Guessing (for satisfiability checking)
@@ -1459,3 +1447,10 @@ eNot e = eUnOp (expLoc e) Not e
 
 eOr :: Exp -> Exp -> Exp
 eOr e e' = eBinOp (expLoc e) Or e e'
+
+{-------------------------------------------------------------------------------
+  Auxiliary
+-------------------------------------------------------------------------------}
+
+second' :: Monad m => (a -> m b) -> (c, a) -> m (c, b)
+second' f (c, a) = do b <- f a ; return (c, b)
