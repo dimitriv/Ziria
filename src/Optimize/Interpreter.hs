@@ -722,24 +722,16 @@ evaldArray :: Evald -> Either (SparseArray Value) Exp
 evaldArray (EvaldFull (MkValue (ValueArray arr) _)) = Left arr
 evaldArray e = Right $ unEvald e
 
-evaldStruct :: Evald -> Either [(FldName, Value)] Exp
-evaldStruct (EvaldFull (MkValue (ValueStruct _ flds) _)) = Left flds
-evaldStruct (EvaldFull (MkValue (ValueCpx8 val) p)) = Left [
-      ("re", MkValue (ValueInt8 (re val)) p)
-    , ("im", MkValue (ValueInt8 (im val)) p)
-    ]
-evaldStruct (EvaldFull (MkValue (ValueCpx16 val) p)) = Left [
-      ("re", MkValue (ValueInt16 (re val)) p)
-    , ("im", MkValue (ValueInt16 (im val)) p)
-    ]
-evaldStruct (EvaldFull (MkValue (ValueCpx32 val) p)) = Left [
-      ("re", MkValue (ValueInt32 (re val)) p)
-    , ("im", MkValue (ValueInt32 (im val)) p)
-    ]
-evaldStruct (EvaldFull (MkValue (ValueCpx64 val) p)) = Left [
-      ("re", MkValue (ValueInt64 (re val)) p)
-    , ("im", MkValue (ValueInt64 (im val)) p)
-    ]
+evaldStruct :: Evald -> Either (Either (Value, Value) [(FldName, Value)]) Exp
+evaldStruct (EvaldFull (MkValue (ValueStruct _ flds) _)) = Left $ Right flds
+evaldStruct (EvaldFull (MkValue (ValueCpx8 val) p))      = Left $ Left
+    (MkValue (ValueInt8 (re val)) p, MkValue (ValueInt8 (im val)) p)
+evaldStruct (EvaldFull (MkValue (ValueCpx16 val) p))     = Left $ Left
+    (MkValue (ValueInt16 (re val)) p, MkValue (ValueInt16 (im val)) p)
+evaldStruct (EvaldFull (MkValue (ValueCpx32 val) p))     = Left $ Left
+    (MkValue (ValueInt32 (re val)) p, MkValue (ValueInt32 (im val)) p)
+evaldStruct (EvaldFull (MkValue (ValueCpx64 val) p))     = Left $ Left
+    (MkValue (ValueInt64 (re val)) p, MkValue (ValueInt64 (im val)) p)
 evaldStruct e =
     Right $ unEvald e
 
@@ -837,9 +829,12 @@ interpret e = guessIfUnevaluated (go . unExp) e
       -- We _could_ potentially also optimize projections out of known structs
       -- with non-value fields, but we have to be careful in that case that we
       -- do not lose side effects, and anyway that optimization is less useful.
-      case evaldStruct structEvald of
-        Left  fields  -> evaldFull $ getField fld fields
-        Right struct' -> evaldPart $ eProj eloc struct' fld
+      case (evaldStruct structEvald, fld) of
+        (Left  (Left (re, _)), "re") -> evaldFull re
+        (Left  (Left (_, im)), "im") -> evaldFull im
+        (Left  (Left _      ), _   ) -> error "Invalid field of complex"
+        (Left  (Right fields), _   ) -> evaldFull $ getField fld fields
+        (Right struct'       , _   ) -> evaldPart $ eProj eloc struct' fld
 
     -- Simple operators
 
@@ -1232,11 +1227,48 @@ assign = \lhs rhs -> deref lhs (\_ -> return rhs)
     updateStruct :: FldName
                  -> (Value -> Eval m Value) -> (Value -> Eval m Value)
     updateStruct fld f struct =
-      case struct of
-        MkValue (ValueStruct ty flds) eloc -> do
+      case (struct, fld) of
+        -- Structs
+        (MkValue (ValueStruct ty flds) eloc, _) -> do
             let y = getField fld flds
             y' <- f y
             return $ MkValue (ValueStruct ty (updateField fld y' flds)) eloc
+        -- 8-bit complex numbers
+        (MkValue (ValueCpx8 v) eloc, "re") -> do
+            let y = MkValue (ValueInt8 (re v)) eloc
+            MkValue (ValueInt8 y') _ <- f y
+            return $ MkValue (ValueCpx8 v{re = y'}) eloc
+        (MkValue (ValueCpx8 v) eloc, "im") -> do
+            let y = MkValue (ValueInt8 (im v)) eloc
+            MkValue (ValueInt8 y') _ <- f y
+            return $ MkValue (ValueCpx8 v{im = y'}) eloc
+        -- 16-bit complex numbers
+        (MkValue (ValueCpx16 v) eloc, "re") -> do
+            let y = MkValue (ValueInt16 (re v)) eloc
+            MkValue (ValueInt16 y') _ <- f y
+            return $ MkValue (ValueCpx16 v{re = y'}) eloc
+        (MkValue (ValueCpx16 v) eloc, "im") -> do
+            let y = MkValue (ValueInt16 (im v)) eloc
+            MkValue (ValueInt16 y') _ <- f y
+            return $ MkValue (ValueCpx16 v{im = y'}) eloc
+        -- 32-bit complex numbers
+        (MkValue (ValueCpx32 v) eloc, "re") -> do
+            let y = MkValue (ValueInt32 (re v)) eloc
+            MkValue (ValueInt32 y') _ <- f y
+            return $ MkValue (ValueCpx32 v{re = y'}) eloc
+        (MkValue (ValueCpx32 v) eloc, "im") -> do
+            let y = MkValue (ValueInt32 (im v)) eloc
+            MkValue (ValueInt32 y') _ <- f y
+            return $ MkValue (ValueCpx32 v{im = y'}) eloc
+        -- 64-bit complex numbers
+        (MkValue (ValueCpx64 v) eloc, "re") -> do
+            let y = MkValue (ValueInt64 (re v)) eloc
+            MkValue (ValueInt64 y') _ <- f y
+            return $ MkValue (ValueCpx64 v{re = y'}) eloc
+        (MkValue (ValueCpx64 v) eloc, "im") -> do
+            let y = MkValue (ValueInt64 (im v)) eloc
+            MkValue (ValueInt64 y') _ <- f y
+            return $ MkValue (ValueCpx64 v{im = y'}) eloc
         _otherwise ->
           error "updateStruct: type error"
 

@@ -1,6 +1,6 @@
--- Let a long loop
+-- This should be interpreted in constant memory 
 
-fun f() {
+fun f1() {
   var x : int := 0;
   for i in [0, 50000] {
     x := x + 1;
@@ -8,10 +8,19 @@ fun f() {
   return x;
 }
 
+fun f2() {
+  var x : complex := complex { re = 0; im = 0 };
+  for i in [0, 50001] {
+    x.re := x.re + 1;
+  }
+  return x.re;
+}
+
 fun comp test() {
   a <- take;
   emit a;
-  emit f();
+  emit f1();
+  emit f2();
   emit a; 
 }
 
