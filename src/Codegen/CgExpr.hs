@@ -148,6 +148,8 @@ cgBinOp op ce1 t@(TStruct cn _flds) ce2 _ _
       Sub  -> return [cexp|$id:fminus($ce1,$ce2)|]
       Mult -> return [cexp|$id:fmult($ce1,$ce2) |]
       Div  -> return [cexp|$id:fdiv($ce1,$ce2)  |]
+      -- Unsupported operation. NOTE: If we add more operations here,
+      -- we should also add them to the interpreter.
       _    -> fail "CodeGen error, Operation unsupported on complex numbers."
 
 cgBinOp op ce1 _ ce2 _ _ =

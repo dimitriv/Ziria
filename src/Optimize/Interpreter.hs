@@ -94,9 +94,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RecordWildCards #-}
 module Interpreter (
     -- * Values
-    Value(..)
+    Complex(..)
+  , Value(..)
   , expValue
   , valueExp
     -- * Main entry points
@@ -140,9 +142,65 @@ import GenSym (initGenSym)
 import SparseArray (SparseArray)
 import TcMonad (runTcM')
 import Typecheck (tyCheckExpr)
-import Utils
 import qualified Lens        as L
 import qualified SparseArray as SA
+
+{-------------------------------------------------------------------------------
+  Complex numbers
+
+  We don't reuse Haskell's infrastructure because Ziria's complex numbers are a
+  bit different. Although we give the usual type class instances so that this
+  integrates nicely with our implementation for binary operators, we only
+  implement a handful of operations for now; this closely follows the
+  definition on cgBinOp in CgExpr.hs and the corresponding definitions in
+  numerics.c.
+-------------------------------------------------------------------------------}
+
+data Complex a = Complex { re :: a, im :: a }
+
+instance Functor Complex where
+  fmap f Complex{..} = Complex { re = f re, im = f im }
+
+instance Eq (Complex a) where
+  (==) = error "(==) for Complex not implemented"
+
+instance Ord (Complex a) where
+  (<=) = error "(<=) for Complex not implemented"
+
+instance Enum (Complex a) where
+  toEnum   = error "toEnum for Complex not implemented"
+  fromEnum = error "fromEnum for Complex not implemented"
+
+instance Num a => Num (Complex a) where
+  x + y = Complex { re = re x + re y
+                  , im = im x + im y
+                  }
+  x - y = Complex { re = re x - re y
+                  , im = im x - im y
+                  }
+  x * y = Complex { re = (re x) * (re y) - (im x) * (im y)
+                  , im = (im x) * (re y) + (re x) * (im y)
+                  }
+
+  abs         = error "abs for Complex not implemented"
+  signum      = error "signum for Complex not implemented"
+  fromInteger = error "fromInteger for Complex not implemented"
+
+instance Num a => Real (Complex a) where
+  toRational = error "toRational for Complex not implemented"
+
+instance Integral a => Integral (Complex a) where
+  x `quot` y = Complex { re = (a*c + b*d) `quot` (c*c + d*d)
+                       , im = (b*c - a*d) `quot` (c*c + d*d)
+                       }
+    where
+      a = re x
+      b = im x
+      c = re y
+      d = im y
+
+  quotRem   = error "quotRem for Complex not implemented"
+  toInteger = error "toInteger for Complex not implemented"
 
 {-------------------------------------------------------------------------------
   Values
@@ -160,59 +218,107 @@ data Value0 =
   | ValueInt16  Int16
   | ValueInt32  Int32
   | ValueInt64  Int64
+  | ValueCpx8   (Complex Int8)
+  | ValueCpx16  (Complex Int16)
+  | ValueCpx32  (Complex Int32)
+  | ValueCpx64  (Complex Int64)
   | ValueDouble Double
   | ValueBool   Bool
   | ValueString String
   | ValueUnit
   | ValueArray  (SparseArray Value)
   | ValueStruct Ty [(FldName, Value)]
-  deriving Eq
 
 data Value = MkValue {
      unValue  :: Value0
    , valueLoc :: Maybe SourcePos
    }
-  deriving Eq
 
 instance Show Value where
   show = show . valueExp
+
+scalarValue :: Ty -> Val -> Value0
+scalarValue TBit        (VBit b)    = ValueBit    b
+scalarValue (TInt BW8)  (VInt i)    = ValueInt8   (fromInteger i)
+scalarValue (TInt BW16) (VInt i)    = ValueInt16  (fromInteger i)
+scalarValue (TInt BW32) (VInt i)    = ValueInt32  (fromInteger i)
+scalarValue (TInt BW64) (VInt i)    = ValueInt64  (fromInteger i)
+scalarValue TDouble     (VDouble d) = ValueDouble d
+scalarValue TBool       (VBool b)   = ValueBool   b
+scalarValue TString     (VString s) = ValueString s
+scalarValue TUnit       VUnit       = ValueUnit
+scalarValue _           _           = error "invalid scalar value"
+
+structValue :: Ty -> [(FldName, Value)] -> Value0
+structValue ty flds =
+    case ty of
+      TStruct "complex8" _ ->
+        let [("re", ValueInt8 re), ("im", ValueInt8 im)] = flds'
+        in ValueCpx8 Complex{..}
+      TStruct "complex16" _ ->
+        let [("re", ValueInt16 re), ("im", ValueInt16 im)] = flds'
+        in ValueCpx16 Complex{..}
+      TStruct "complex32" _ ->
+        let [("re", ValueInt32 re), ("im", ValueInt32 im)] = flds'
+        in ValueCpx32 Complex{..}
+      TStruct "complex64" _ ->
+        let [("re", ValueInt64 re), ("im", ValueInt64 im)] = flds'
+        in ValueCpx64 Complex{..}
+      _otherwise ->
+        ValueStruct ty flds
+  where
+    flds' = map (second unValue) flds
 
 expValue :: Exp -> Maybe Value
 expValue e = (\v0 -> MkValue v0 (expLoc e)) <$> go (unExp e)
   where
     go :: Exp0 -> Maybe Value0
-    go (EVal TBit        (VBit b))    = return $ ValueBit    b
-    go (EVal (TInt BW8)  (VInt i))    = return $ ValueInt8   (fromInteger i)
-    go (EVal (TInt BW16) (VInt i))    = return $ ValueInt16  (fromInteger i)
-    go (EVal (TInt BW32) (VInt i))    = return $ ValueInt32  (fromInteger i)
-    go (EVal (TInt BW64) (VInt i))    = return $ ValueInt64  (fromInteger i)
-    go (EVal TDouble     (VDouble d)) = return $ ValueDouble d
-    go (EVal TBool       (VBool b))   = return $ ValueBool   b
-    go (EVal TString     (VString s)) = return $ ValueString s
-    go (EVal TUnit       VUnit)       = return $ ValueUnit
+    go (EVal ty val)         = return $ scalarValue ty val
     go (EValArr elems@(x:_)) = do let def = initScalar (expLoc e) $ ctExp x
                                   mkArray def <$> mapM expValue elems
-    go (EStruct ty flds)     = mkStruct ty <$> mapM (second' expValue) flds
+    go (EStruct ty flds)     = structValue ty <$> mapM (second' expValue) flds
     go _                     = Nothing
 
     mkArray def = ValueArray . SA.newListArray def
-    mkStruct ty = ValueStruct ty
 
 valueExp :: Value -> Exp
-valueExp v = MkExp (go (unValue v)) (valueLoc v) ()
+valueExp v = MkExp (go (unValue v)) vloc ()
   where
     go :: Value0 -> Exp0
-    go (ValueBit    b)       = EVal TBit        (VBit b)
-    go (ValueInt8   i)       = EVal (TInt BW8)  (VInt (toInteger i))
-    go (ValueInt16  i)       = EVal (TInt BW16) (VInt (toInteger i))
-    go (ValueInt32  i)       = EVal (TInt BW32) (VInt (toInteger i))
-    go (ValueInt64  i)       = EVal (TInt BW64) (VInt (toInteger i))
-    go (ValueDouble d)       = EVal TDouble     (VDouble d)
-    go (ValueBool   b)       = EVal TBool       (VBool   b)
-    go (ValueString s)       = EVal TString     (VString s)
-    go ValueUnit             = EVal TUnit       VUnit
-    go (ValueArray elems)    = EValArr (map valueExp (SA.getElems elems))
-    go (ValueStruct ty flds) = EStruct ty (map (second valueExp) flds)
+    go (ValueBit    b)         = EVal TBit        (VBit b)
+    go (ValueInt8   i)         = EVal (TInt BW8)  (VInt (toInteger i))
+    go (ValueInt16  i)         = EVal (TInt BW16) (VInt (toInteger i))
+    go (ValueInt32  i)         = EVal (TInt BW32) (VInt (toInteger i))
+    go (ValueInt64  i)         = EVal (TInt BW64) (VInt (toInteger i))
+    go (ValueDouble d)         = EVal TDouble     (VDouble d)
+    go (ValueBool   b)         = EVal TBool       (VBool   b)
+    go (ValueString s)         = EVal TString     (VString s)
+    go ValueUnit               = EVal TUnit       VUnit
+    go (ValueArray elems)      = EValArr (map valueExp (SA.getElems elems))
+    go (ValueStruct ty flds)   = EStruct ty (map (second valueExp) flds)
+
+    go (ValueCpx8 Complex{..}) =
+      EStruct tcomplex8 [
+          ("re", eVal vloc tint8 (VInt (toInteger re)))
+        , ("im", eVal vloc tint8 (VInt (toInteger im)))
+        ]
+    go (ValueCpx16 Complex{..}) =
+      EStruct tcomplex16 [
+          ("re", eVal vloc tint16 (VInt (toInteger re)))
+        , ("im", eVal vloc tint16 (VInt (toInteger im)))
+        ]
+    go (ValueCpx32 Complex{..}) =
+      EStruct tcomplex32 [
+          ("re", eVal vloc tint32 (VInt (toInteger re)))
+        , ("im", eVal vloc tint32 (VInt (toInteger im)))
+        ]
+    go (ValueCpx64 Complex{..}) =
+      EStruct tcomplex64 [
+         ("re", eVal vloc tint64 (VInt (toInteger re)))
+       , ("im", eVal vloc tint64 (VInt (toInteger im)))
+       ]
+
+    vloc = valueLoc v
 
 -- | The runtime currently leaves the initial value for unassigned variables
 -- unspecified (https://github.com/dimitriv/Ziria/issues/79). This means that
@@ -594,9 +700,26 @@ evaldArray :: Evald -> Either (SparseArray Value) Exp
 evaldArray (EvaldFull (MkValue (ValueArray arr) _)) = Left arr
 evaldArray e = Right $ unEvald e
 
-evaldStruct :: Evald -> Either (Ty, [(FldName, Value)]) Exp
-evaldStruct (EvaldFull (MkValue (ValueStruct ty flds) _)) = Left (ty, flds)
-evaldStruct e = Right $ unEvald e
+evaldStruct :: Evald -> Either [(FldName, Value)] Exp
+evaldStruct (EvaldFull (MkValue (ValueStruct _ flds) _)) = Left flds
+evaldStruct (EvaldFull (MkValue (ValueCpx8 val) p)) = Left [
+      ("re", MkValue (ValueInt8 (re val)) p)
+    , ("im", MkValue (ValueInt8 (im val)) p)
+    ]
+evaldStruct (EvaldFull (MkValue (ValueCpx16 val) p)) = Left [
+      ("re", MkValue (ValueInt16 (re val)) p)
+    , ("im", MkValue (ValueInt16 (im val)) p)
+    ]
+evaldStruct (EvaldFull (MkValue (ValueCpx32 val) p)) = Left [
+      ("re", MkValue (ValueInt32 (re val)) p)
+    , ("im", MkValue (ValueInt32 (im val)) p)
+    ]
+evaldStruct (EvaldFull (MkValue (ValueCpx64 val) p)) = Left [
+      ("re", MkValue (ValueInt64 (re val)) p)
+    , ("im", MkValue (ValueInt64 (im val)) p)
+    ]
+evaldStruct e =
+    Right $ unEvald e
 
 evaldInt :: Evald -> Either Integer Exp
 evaldInt (EvaldFull (MkValue (ValueInt8  i) _)) = Left (toInteger i)
@@ -625,8 +748,8 @@ interpret e = guessIfUnevaluated (go . unExp) e
 
     -- Values
 
-    go (EVal _ _) =
-      evaldFull $ fromJust (expValue e)
+    go (EVal ty val) =
+      evaldFull $ MkValue (scalarValue ty val) eloc
 
     -- Arrays
 
@@ -683,7 +806,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
       fieldDefsEvald <- mapM interpret fieldDefs
       case partitionEvalds fieldDefsEvald of
         Left fieldDefs' -> do
-          let struct = ValueStruct ty (zip fieldNames fieldDefs')
+          let struct = structValue ty (zip fieldNames fieldDefs')
           evaldFull $ MkValue struct eloc
         Right fieldDefs' ->
           evaldPart $ eStruct eloc ty (zip fieldNames fieldDefs')
@@ -693,12 +816,8 @@ interpret e = guessIfUnevaluated (go . unExp) e
       -- with non-value fields, but we have to be careful in that case that we
       -- do not lose side effects, and anyway that optimization is less useful.
       case evaldStruct structEvald of
-        Left (_ty, fields) ->
-          case splitListOn ((== fld) . fst) fields of
-            Just (_, (_, y), _) -> evaldFull y
-            Nothing             -> throwError $ "Unknown field"
-        Right struct' ->
-          evaldPart $ eProj eloc struct' fld
+        Left  fields  -> evaldFull $ getField fld fields
+        Right struct' -> evaldPart $ eProj eloc struct' fld
 
     -- Simple operators
 
@@ -1089,10 +1208,10 @@ assign = \lhs rhs -> deref lhs (\_ -> return rhs)
                  -> (Value -> Eval Value) -> (Value -> Eval Value)
     updateStruct fld f struct =
       case struct of
-        MkValue (ValueStruct ty flds) eloc
-          | Just (xs, (_fld, y), zs) <- splitListOn ((== fld) . fst) flds -> do
-              y' <- f y
-              return $ MkValue (ValueStruct ty (xs ++ [(fld, y')] ++ zs)) eloc
+        MkValue (ValueStruct ty flds) eloc -> do
+            let y = getField fld flds
+            y' <- f y
+            return $ MkValue (ValueStruct ty (updateField fld y' flds)) eloc
         _otherwise ->
           error "updateStruct: type error"
 
@@ -1117,6 +1236,10 @@ zNum2 f = mkBinaryOp go
     go (ValueInt16  a) (ValueInt16  b) = Just $ ValueInt16  (f a b)
     go (ValueInt32  a) (ValueInt32  b) = Just $ ValueInt32  (f a b)
     go (ValueInt64  a) (ValueInt64  b) = Just $ ValueInt64  (f a b)
+    go (ValueCpx8   a) (ValueCpx8   b) = Just $ ValueCpx8   (f a b)
+    go (ValueCpx16  a) (ValueCpx16  b) = Just $ ValueCpx16  (f a b)
+    go (ValueCpx32  a) (ValueCpx32  b) = Just $ ValueCpx32  (f a b)
+    go (ValueCpx64  a) (ValueCpx64  b) = Just $ ValueCpx64  (f a b)
     go (ValueDouble a) (ValueDouble b) = Just $ ValueDouble (f a b)
     go _               _               = Nothing
 
@@ -1127,6 +1250,10 @@ zIntegral f = mkBinaryOp go
     go (ValueInt16  a) (ValueInt16  b) = Just $ ValueInt16  (f a b)
     go (ValueInt32  a) (ValueInt32  b) = Just $ ValueInt32  (f a b)
     go (ValueInt64  a) (ValueInt64  b) = Just $ ValueInt64  (f a b)
+    go (ValueCpx8   a) (ValueCpx8   b) = Just $ ValueCpx8   (f a b)
+    go (ValueCpx16  a) (ValueCpx16  b) = Just $ ValueCpx16  (f a b)
+    go (ValueCpx32  a) (ValueCpx32  b) = Just $ ValueCpx32  (f a b)
+    go (ValueCpx64  a) (ValueCpx64  b) = Just $ ValueCpx64  (f a b)
     go _               _               = Nothing
 
 zFloating :: (forall a. Floating a => a -> a -> a) -> BinaryOp
@@ -1270,12 +1397,12 @@ zCast ty = mkUnaryOp (go ty)
     go TBool (ValueBool a) = Just $ ValueBool a
     go TBool _             = Nothing
 
-    go (TInt BW8) (ValueInt8   a) = Just $ ValueInt8 a
-    go (TInt BW8) (ValueInt16  a) = Just $ ValueInt8 (fromIntegral a)
-    go (TInt BW8) (ValueInt32  a) = Just $ ValueInt8 (fromIntegral a)
-    go (TInt BW8) (ValueInt64  a) = Just $ ValueInt8 (fromIntegral a)
-    go (TInt BW8) (ValueDouble a) = Just $ ValueInt8 (round a)
-    go (TInt BW8) _               = Nothing
+    go (TInt BW8)  (ValueInt8   a) = Just $ ValueInt8 a
+    go (TInt BW8)  (ValueInt16  a) = Just $ ValueInt8 (fromIntegral a)
+    go (TInt BW8)  (ValueInt32  a) = Just $ ValueInt8 (fromIntegral a)
+    go (TInt BW8)  (ValueInt64  a) = Just $ ValueInt8 (fromIntegral a)
+    go (TInt BW8)  (ValueDouble a) = Just $ ValueInt8 (round a)
+    go (TInt BW8)  _               = Nothing
 
     go (TInt BW16) (ValueInt8   a) = Just $ ValueInt16 (fromIntegral a)
     go (TInt BW16) (ValueInt16  a) = Just $ ValueInt16 a
@@ -1297,6 +1424,26 @@ zCast ty = mkUnaryOp (go ty)
     go (TInt BW64) (ValueInt64  a) = Just $ ValueInt64 a
     go (TInt BW64) (ValueDouble a) = Just $ ValueInt64 (round a)
     go (TInt BW64) _               = Nothing
+
+    go (TStruct "complex8"  _) (ValueCpx8  a) = Just $ ValueCpx8 a
+    go (TStruct "complex8"  _) (ValueCpx16 a) = Just $ ValueCpx8 (fmap fromIntegral a)
+    go (TStruct "complex8"  _) (ValueCpx32 a) = Just $ ValueCpx8 (fmap fromIntegral a)
+    go (TStruct "complex8"  _) (ValueCpx64 a) = Just $ ValueCpx8 (fmap fromIntegral a)
+
+    go (TStruct "complex16" _) (ValueCpx8  a) = Just $ ValueCpx16 (fmap fromIntegral a)
+    go (TStruct "complex16" _) (ValueCpx16 a) = Just $ ValueCpx16 a
+    go (TStruct "complex16" _) (ValueCpx32 a) = Just $ ValueCpx16 (fmap fromIntegral a)
+    go (TStruct "complex16" _) (ValueCpx64 a) = Just $ ValueCpx16 (fmap fromIntegral a)
+
+    go (TStruct "complex32" _) (ValueCpx8  a) = Just $ ValueCpx32 (fmap fromIntegral a)
+    go (TStruct "complex32" _) (ValueCpx16 a) = Just $ ValueCpx32 (fmap fromIntegral a)
+    go (TStruct "complex32" _) (ValueCpx32 a) = Just $ ValueCpx32 a
+    go (TStruct "complex32" _) (ValueCpx64 a) = Just $ ValueCpx32 (fmap fromIntegral a)
+
+    go (TStruct "complex64" _) (ValueCpx8  a) = Just $ ValueCpx64 (fmap fromIntegral a)
+    go (TStruct "complex64" _) (ValueCpx16 a) = Just $ ValueCpx64 (fmap fromIntegral a)
+    go (TStruct "complex64" _) (ValueCpx32 a) = Just $ ValueCpx64 (fmap fromIntegral a)
+    go (TStruct "complex64" _) (ValueCpx64 a) = Just $ ValueCpx64 a
 
     go TDouble (ValueInt8   a) = Just $ ValueDouble (fromIntegral a)
     go TDouble (ValueInt16  a) = Just $ ValueDouble (fromIntegral a)
@@ -1454,3 +1601,17 @@ eOr e e' = eBinOp (expLoc e) Or e e'
 
 second' :: Monad m => (a -> m b) -> (c, a) -> m (c, b)
 second' f (c, a) = do b <- f a ; return (c, b)
+
+getField :: FldName -> [(FldName, a)] -> a
+getField fld = go
+  where
+    go [] = error $ "Type error: Unknown field " ++ show fld
+    go ((fld', a):flds) | fld == fld' = a
+                        | otherwise   = getField fld flds
+
+updateField :: FldName -> a -> [(FldName, a)] -> [(FldName, a)]
+updateField fld a' = go
+  where
+    go [] = error $ "Type error: Unknown field " ++ show fld
+    go ((fld', a):flds) | fld == fld' = (fld',a') : flds
+                        | otherwise   = (fld',a)  : go flds

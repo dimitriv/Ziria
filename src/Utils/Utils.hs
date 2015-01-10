@@ -15,9 +15,6 @@ module Utils (
   , cross_comb
   , gcd_many
   , none
-  , splitListAt
-  , sliceListAt
-  , splitListOn
   ) where
 
 import Control.Applicative
@@ -177,36 +174,3 @@ gcd_many []         = error "gcd_many: empty list!"
 -- | Check that none of the elements in the list satisfy the predicate
 none :: (a -> Bool) -> [a] -> Bool
 none p xs = not (any p xs)
-
-{-------------------------------------------------------------------------------
-  Isolating elements in a list
--------------------------------------------------------------------------------}
-
-splitListAt :: Integer -> [a] -> Maybe ([a], a, [a])
-splitListAt = go []
-  where
-    go _      _ []        = Nothing
-    go before 0 (x:after) = Just (reverse before, x, after)
-    go before n (x:after) = go (x:before) (n-1) after
-
--- Slice a list.
---
--- @sliceListAt n len@ isolates a chunk of length @len@ at position @n@.
---
--- > sliceListAt 3 2 [0..9] == Just ([0..2], [3, 4], [5..9])
-sliceListAt :: Integer -> Int -> [a] -> Maybe ([a], [a], [a])
-sliceListAt = go [] []
-  where
-    go  before  slice  0  0 after     = Just (reverse before, reverse slice, after)
-    go _before _slice  0 _n []        = Nothing
-    go  before  slice  0  n (x:after) = go before (x:slice) 0 (n-1) after
-    go _before _slice _m _n []        = Nothing
-    go  before  slice  m  n (x:after) = go (x:before) slice (m-1) n after
-
-splitListOn :: (a -> Bool) -> [a] -> Maybe ([a], a, [a])
-splitListOn f = go []
-  where
-    go _      []                    = Nothing
-    go before (x:after) | f x       = Just (reverse before, x, after)
-                        | otherwise = go (x:before) after
-
