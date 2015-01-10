@@ -96,6 +96,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE BangPatterns #-}
 module Interpreter (
     -- * Values
     Complex(..)
@@ -288,6 +289,10 @@ expValue e = (\v0 -> MkValue v0 (expLoc e)) <$> go (unExp e)
 
     mkArray def = ValueArray . SA.newListArray def
 
+-- | Convert a value back to an expression
+--
+-- We make sure that if the expression is reduced to whnf it will be fully
+-- evaluated (no remaining references to the Value)
 valueExp :: Value -> Exp
 valueExp v = MkExp (go (unValue v)) vloc ()
   where
@@ -301,8 +306,8 @@ valueExp v = MkExp (go (unValue v)) vloc ()
     go (ValueBool   b)         = EVal TBool       (VBool   b)
     go (ValueString s)         = EVal TString     (VString s)
     go ValueUnit               = EVal TUnit       VUnit
-    go (ValueArray elems)      = EValArr (map valueExp (SA.getElems elems))
-    go (ValueStruct ty flds)   = EStruct ty (map (second valueExp) flds)
+    go (ValueArray elems)      = EValArr    $! map' valueExp (SA.getElems elems)
+    go (ValueStruct ty flds)   = EStruct ty $! map' valueFld flds
 
     go (ValueCpx8 Complex{..}) =
       EStruct tcomplex8 [
@@ -324,6 +329,8 @@ valueExp v = MkExp (go (unValue v)) vloc ()
          ("re", eVal vloc tint64 (VInt (toInteger re)))
        , ("im", eVal vloc tint64 (VInt (toInteger im)))
        ]
+
+    valueFld (fld, v') = let !e' = valueExp v' in (fld, e')
 
     vloc = valueLoc v
 
@@ -385,8 +392,8 @@ evalFull e = aux . runIdentity $ evalEval (interpret e) EvalFull initState
 evalPartial :: Exp -> (Either String Exp, Prints)
 evalPartial e = aux . runIdentity $ evalEval (interpret e) EvalPartial initState
   where
-    aux (Right e', prints) = (Right (unEvald e'), prints)
-    aux (Left err, prints) = (Left err, prints)
+    aux (Right eEvald, prints) = let !e' = unEvald eEvald in (Right e', prints)
+    aux (Left  err,    prints) = (Left err, prints)
 
 -- | (Full) evaluation of expressions, guessing values for boolean expressions
 evalNonDet :: Exp -> [Exp]
@@ -715,15 +722,18 @@ partitionEvalds :: [Evald] -> Either [Value] [Exp]
 partitionEvalds = go []
   where
     -- Prefer to return all values, only returning all expressions if we have to
+    -- We make sure that if we reduce to expressions the translation of the
+    -- values to expressions is tied to a case analysis on the Either
     go :: [Value] -> [Evald] -> Either [Value] [Exp]
     go acc []               = Left (reverse acc)
     go acc (EvaldFull v:es) = go (v:acc) es
-    go acc (EvaldPart e:es) = Right $ reverse (map valueExp acc)
-                                   ++ e : map unEvald es
+    go acc (EvaldPart e:es) = let !acc' = map' valueExp acc
+                                  !es'  = map' unEvald es
+                              in Right $ reverse acc' ++ e : es'
 
 evaldArray :: Evald -> Either (SparseArray Value) Exp
 evaldArray (EvaldFull (MkValue (ValueArray arr) _)) = Left arr
-evaldArray e = Right $ unEvald e
+evaldArray e = Right $! unEvald e
 
 evaldStruct :: Evald -> Either (Either (Value, Value) [(FldName, Value)]) Exp
 evaldStruct (EvaldFull (MkValue (ValueStruct _ flds) _)) = Left $ Right flds
@@ -736,14 +746,14 @@ evaldStruct (EvaldFull (MkValue (ValueCpx32 val) p))     = Left $ Left
 evaldStruct (EvaldFull (MkValue (ValueCpx64 val) p))     = Left $ Left
     (MkValue (ValueInt64 (re val)) p, MkValue (ValueInt64 (im val)) p)
 evaldStruct e =
-    Right $ unEvald e
+    Right $! unEvald e
 
 evaldInt :: Num a => Evald -> Either a Exp
 evaldInt (EvaldFull (MkValue (ValueInt8  i) _)) = Left (fromIntegral i)
 evaldInt (EvaldFull (MkValue (ValueInt16 i) _)) = Left (fromIntegral i)
 evaldInt (EvaldFull (MkValue (ValueInt32 i) _)) = Left (fromIntegral i)
 evaldInt (EvaldFull (MkValue (ValueInt64 i) _)) = Left (fromIntegral i)
-evaldInt e = Right $ unEvald e
+evaldInt e = Right $! unEvald e
 
 evaldUnit :: Evald -> Bool
 evaldUnit (EvaldFull (MkValue ValueUnit _)) = True
@@ -751,7 +761,7 @@ evaldUnit _ = False
 
 evaldBool :: Evald -> Either Bool Exp
 evaldBool (EvaldFull (MkValue (ValueBool b) _)) = Left b
-evaldBool e = Right $ unEvald e
+evaldBool e = Right $! unEvald e
 
 {-------------------------------------------------------------------------------
   The interpreter proper
@@ -805,8 +815,10 @@ interpret e = guessIfUnevaluated (go . unExp) e
           | TArray (Literal m) _ <- ctExp arr'
           , LILength n           <- li
           , m == n -> evaldPart $ arr'
-        _otherwise ->
-          evaldPart $ eArrRead eloc (unEvald arrEvald) (unEvald ixEvald) li
+        _otherwise -> do
+          let !arr' = unEvald arrEvald
+              !ix'  = unEvald ixEvald
+          evaldPart $ eArrRead eloc arr' ix' li
 
     -- Structs
 
@@ -862,11 +874,12 @@ interpret e = guessIfUnevaluated (go . unExp) e
         EvaldFull v1 ->
           extendScope evalLets x v1 $ interpret e2
         EvaldPart e1' -> do
-          e2' <- interpret e2
+          e2Evald <- interpret e2
           -- We could potentially remove the let binding here if e2' is fully
           -- evaluated (this can only happen if it does not actually use the
           -- let-bound variable) and e1' is side effect free.
-          evaldPart $ eLet eloc x fi e1' (unEvald e2')
+          let !e2' = unEvald e2Evald
+          evaldPart $ eLet eloc x fi e1' e2'
     go (ELetRef x (Just e1) e2) = do
       e1Evald <- interpret e1
       case e1Evald of
@@ -875,7 +888,8 @@ interpret e = guessIfUnevaluated (go . unExp) e
         EvaldPart e1' -> do
           e2Evald <- interpret e2
           -- See comments for `ELet`
-          evaldPart $ eLetRef eloc x (Just e1') (unEvald e2Evald)
+          let !e2' = unEvald e2Evald
+          evaldPart $ eLetRef eloc x (Just e1') e2'
     go (ELetRef x Nothing e2) =
       case initVal eloc (nameTyp x) of
         Just v1' ->
@@ -883,9 +897,10 @@ interpret e = guessIfUnevaluated (go . unExp) e
         Nothing -> do
           -- We cannot construct a default value for this type
           -- (perhaps because it's a length-polymorphic array)
-          e2' <- interpret e2
+          e2Evald <- interpret e2
           -- See comments for `ELet`
-          evaldPart $ eLetRef eloc x Nothing (unEvald e2')
+          let !e2' = unEvald e2Evald
+          evaldPart $ eLetRef eloc x Nothing e2'
     go (EAssign lhs rhs) = do
       -- TODO: Check that we want to evaluate the RHS before the LHS
       rhsEvald      <- interpret rhs
@@ -897,7 +912,9 @@ interpret e = guessIfUnevaluated (go . unExp) e
         then evaldFull $ MkValue ValueUnit eloc
         else do
           invalidateAssumptionsFor x
-          evaldPart $ eAssign eloc (unDeref lhsEvald) (unEvald rhsEvald)
+          let !lhs' = unDeref lhsEvald
+              !rhs' = unEvald rhsEvald
+          evaldPart $ eAssign eloc lhs' rhs'
     go (EArrWrite arr ix len rhs) = do
       -- TODO: Ideally we should just call
       --
@@ -916,6 +933,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
         then evaldFull $ MkValue ValueUnit eloc
         else do
           invalidateAssumptionsFor x
+          let !rhs' = unEvald rhsEvald
           -- Strip off the top-level EArrRead again (not that we should not
           -- _re-evaluate_ the LHS because that may duplicate side effects)
           case unExp (unDeref lhsEvald) of
@@ -923,9 +941,9 @@ interpret e = guessIfUnevaluated (go . unExp) e
               -- Special optimizations
               case (ctExp arr, unExp ix', len') of
                 (TArray (Literal m) _, EVal _ (VInt 0), LILength n) | m == n ->
-                  evaldPart $ eAssign eloc arr' (unEvald rhsEvald)
-                _otherwise ->
-                  evaldPart $ eArrWrite eloc arr' ix' len' (unEvald rhsEvald)
+                  evaldPart $ eAssign eloc arr' rhs'
+                _otherwise -> do
+                  evaldPart $ eArrWrite eloc arr' ix' len' rhs'
             _otherwise ->
               error "the impossible happened"
 
@@ -936,9 +954,11 @@ interpret e = guessIfUnevaluated (go . unExp) e
       e2Evald <- interpret e2
       if evaldUnit e1Evald
         then return e2Evald
-        else -- We could omit e1 completely if we manage to reduce e2 to a value
-             -- independent of e1, and e1 is side effect free.
-             evaldPart $ eSeq eloc (unEvald e1Evald) (unEvald e2Evald)
+        else do -- We could omit e1 completely if we manage to reduce e2 to a
+                -- value independent of e1, and e1 is side effect free.
+                let !e1' = unEvald e1Evald
+                    !e2' = unEvald e2Evald
+                evaldPart $ eSeq eloc e1' e2'
     go (EIf cond iftrue iffalse) = do
       condEvald <- interpret cond
       case evaldBool condEvald of
@@ -950,9 +970,11 @@ interpret e = guessIfUnevaluated (go . unExp) e
           -- assumptions, so that any variables occurring in the branches will
           -- be considered free and cannot be assigned to.
           invalidateAssumptions
-          iftrue'  <- interpret iftrue
-          iffalse' <- interpret iffalse
-          evaldPart $ eIf eloc cond' (unEvald iftrue') (unEvald iffalse')
+          iftrueEvald  <- interpret iftrue
+          iffalseEvald <- interpret iffalse
+          let !iftrue'  = unEvald iftrueEvald
+              !iffalse' = unEvald iffalseEvald
+          evaldPart $ eIf eloc cond' iftrue' iffalse'
     go (EFor ui x start len body) = do
       startEvald <- interpret start
       lenEvald   <- interpret len
@@ -977,9 +999,10 @@ interpret e = guessIfUnevaluated (go . unExp) e
         else do -- See comments for conditionals
                 invalidateAssumptions
                 bodyEvald <- interpret body
-                evaldPart $ eFor eloc ui x (unEvald startEvald)
-                                           (unEvald lenEvald)
-                                           (unEvald bodyEvald)
+                let !start' = unEvald startEvald
+                    !len'   = unEvald lenEvald
+                    !body'  = unEvald bodyEvald
+                evaldPart $ eFor eloc ui x start' len' body'
     go (EWhile cond body) = do
       let loop = do
             condEvald <- interpret cond
@@ -999,8 +1022,9 @@ interpret e = guessIfUnevaluated (go . unExp) e
                         invalidateAssumptions
                         condEvald <- interpret cond
                         bodyEvald <- interpret body
-                        evaldPart $ eWhile eloc (unEvald condEvald)
-                                                (unEvald bodyEvald)
+                        let !cond' = unEvald condEvald
+                            !body' = unEvald bodyEvald
+                        evaldPart $ eWhile eloc cond' body'
 
     -- Functions
 
@@ -1014,7 +1038,8 @@ interpret e = guessIfUnevaluated (go . unExp) e
       -- variables here.
       invalidateAssumptions
       argsEvald <- mapM interpret args
-      evaldPart $ eCall eloc fn (map unEvald argsEvald)
+      let !args' = map' unEvald argsEvald
+      evaldPart $ eCall eloc fn args'
 
     -- Misc
 
@@ -1048,9 +1073,14 @@ interpretLetRef eloc x v1 initFromUsr e2 = do
     -- statically known value, we cannot remove the binding site.
     if xDeleted
       then do
-        let initExp = if initFromUsr then Just (valueExp v1)
-                                     else Nothing
-        evaldPart $ eLetRef eloc x initExp (unEvald e2Evald)
+        if initFromUsr
+          then do
+            let !e1' = valueExp v1
+                !e2' = unEvald e2Evald
+            evaldPart $ eLetRef eloc x (Just e1') e2'
+          else do
+            let !e2' = unEvald e2Evald
+            evaldPart $ eLetRef eloc x Nothing e2'
       else
         return e2Evald
 
@@ -1068,7 +1098,9 @@ applyBinOp p op a b = case (op, evaldInt a, evaldInt b) of
     (Mult, _, Left (1 :: Int)) -> return a
     (Add,  Left (0 :: Int), _) -> return b
     (Mult, Left (1 :: Int), _) -> return b
-    _otherwise        -> evaldPart $ eBinOp p op (unEvald a) (unEvald b)
+    _otherwise -> do let !a' = unEvald a
+                         !b' = unEvald b
+                     evaldPart $ eBinOp p op a' b'
 
 -- | Smart constructor for unary operators
 applyUnOp :: Monad m => Maybe SourcePos -> UnOp -> Evald -> Eval m Evald
@@ -1133,20 +1165,20 @@ interpretDerefExp e = go0 (unExp e)
       case (arrEvald, evaldInt ixEvald) of
         (Left derefExp, Left i) ->
           return (x, Left $ DerefArrayElement eloc derefExp i)
-        _otherwise ->
-          return (x, Right $ eArrRead eloc (unDeref arrEvald)
-                                           (unEvald ixEvald)
-                                           LISingleton)
+        _otherwise -> do
+          let !arr' = unDeref arrEvald
+              !ix'  = unEvald ixEvald
+          return (x, Right $ eArrRead eloc arr' ix' LISingleton)
     go0 (EArrRead arr ix (LILength len)) = do
       (x, arrEvald) <- interpretDerefExp arr
       ixEvald       <- interpret ix
       case (arrEvald, evaldInt ixEvald) of
         (Left derefExp, Left i) ->
           return (x, Left $ DerefArraySlice eloc derefExp i len)
-        _otherwise ->
-          return (x, Right $ eArrRead eloc (unDeref arrEvald)
-                                           (unEvald ixEvald)
-                                           (LILength len))
+        _otherwise -> do
+          let !arr' = unDeref arrEvald
+              !ix'  = unEvald ixEvald
+          return (x, Right $ eArrRead eloc arr' ix' (LILength len))
     go0 (EArrRead _ _ (LIMeta _)) =
       error "interpretDerefExp: Unexpected metavariable"
     go0 (EProj struct fld) = do
@@ -1702,3 +1734,13 @@ updateField fld a' = go
     go [] = error $ "Type error: Unknown field " ++ show fld
     go ((fld', a):flds) | fld == fld' = (fld',a') : flds
                         | otherwise   = (fld',a)  : go flds
+
+-- | Strict map
+--
+-- If the result is evaluated to whnf the entire list will be evaluated
+-- (spine and elements)
+map' :: (a -> b) -> [a] -> [b]
+map' _ []     = []
+map' f (x:xs) = let !y  = f x
+                    !ys = map' f xs
+                in y:ys
