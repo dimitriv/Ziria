@@ -331,6 +331,9 @@ valueExp v = MkExp (go (unValue v)) vloc ()
 -- unspecified (https://github.com/dimitriv/Ziria/issues/79). This means that
 -- we are free to specify whatever we wish in the interpret -- here we pick
 -- sensible defaults.
+--
+-- NOTE: We return Maybe a value primarily because we might be rewriting inside
+-- a polymorphic function and hence encounter an array with unknown length.
 initVal :: Maybe SourcePos -> Ty -> Maybe Value
 initVal p ty = (\v0 -> MkValue v0 p) <$> go ty
   where
@@ -868,7 +871,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
       e1Evald <- interpret e1
       case e1Evald of
         EvaldFull v1' -> do
-          interpretLetRef eloc x v1' e2
+          interpretLetRef eloc x v1' True e2
         EvaldPart e1' -> do
           e2Evald <- interpret e2
           -- See comments for `ELet`
@@ -876,7 +879,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
     go (ELetRef x Nothing e2) =
       case initVal eloc (nameTyp x) of
         Just v1' ->
-          interpretLetRef eloc x v1' e2
+          interpretLetRef eloc x v1' False e2
         Nothing -> do
           -- We cannot construct a default value for this type
           -- (perhaps because it's a length-polymorphic array)
@@ -1030,8 +1033,13 @@ interpret e = guessIfUnevaluated (go . unExp) e
     eloc = expLoc e
 
 interpretLetRef :: Monad m
-                => Maybe SourcePos -> GName Ty -> Value -> Exp -> Eval m Evald
-interpretLetRef eloc x v1 e2 = do
+                => Maybe SourcePos
+                -> GName Ty        -- ^ Letref-bound variable
+                -> Value           -- ^ Initial value
+                -> Bool            -- ^ Was the initial value user specified?
+                -> Exp             -- ^ LHS
+                -> Eval m Evald
+interpretLetRef eloc x v1 initFromUsr e2 = do
     (e2Evald, xDeleted) <- extendScope evalLetRefs x v1 $ do
       e2Evald  <- interpret e2
       xDeleted <- isNothing `liftM` readVar x
@@ -1039,8 +1047,12 @@ interpretLetRef eloc x v1 e2 = do
     -- If at any point x was (or might have been) assigned a not
     -- statically known value, we cannot remove the binding site.
     if xDeleted
-      then evaldPart $ eLetRef eloc x (Just (valueExp v1)) (unEvald e2Evald)
-      else return e2Evald
+      then do
+        let initExp = if initFromUsr then Just (valueExp v1)
+                                     else Nothing
+        evaldPart $ eLetRef eloc x initExp (unEvald e2Evald)
+      else
+        return e2Evald
 
 -- | Smart constructor for binary operators
 applyBinOp :: Monad m
