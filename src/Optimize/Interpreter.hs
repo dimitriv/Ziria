@@ -1002,9 +1002,15 @@ interpret e = guessIfUnevaluated (go . unExp) e
     -- Functions
 
     go (ECall fn args) = do
-      argsEvald <- mapM interpret args
       -- We don't know the state of mutable variables after a function call
+      -- Moreover, some function calls are by reference; a typical example is
+      --
+      -- > zero_bit(oarr)
+      --
+      -- in permutation.blk. Hence it is important that we do NOT expand
+      -- variables here.
       invalidateAssumptions
+      argsEvald <- mapM interpret args
       evaldPart $ eCall eloc fn (map unEvald argsEvald)
 
     -- Misc
