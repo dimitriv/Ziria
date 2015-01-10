@@ -64,9 +64,6 @@ eArrRead loc x y l = MkExp (EArrRead x y l) loc ()
 eArrWrite :: Maybe SourcePos ->  GExp t () -> GExp t () -> LengthInfo -> GExp t () -> GExp t ()
 eArrWrite loc x y l e = MkExp (EArrWrite x y l e) loc ()
 
-eIter :: Maybe SourcePos -> GName t -> GName t -> GExp t () -> GExp t () -> GExp t ()
-eIter loc x y e1 e2 = MkExp (EIter x y e1 e2) loc ()
-
 eFor :: Maybe SourcePos -> UnrollInfo -> GName t -> GExp t () -> GExp t () -> GExp t () -> GExp t ()
 eFor loc ui n e1 e2 e3 = MkExp (EFor ui n e1 e2 e3) loc ()
 
@@ -93,9 +90,6 @@ eError loc t s = MkExp (EError t s) loc ()
 
 eLUT :: Maybe SourcePos ->  Map (GName t) Range -> GExp t () -> GExp t ()
 eLUT loc m e = MkExp (ELUT m e) loc ()
-
-eBPerm :: Maybe SourcePos ->  GExp t () -> GExp t () -> GExp t ()
-eBPerm loc e1 e2 = MkExp (EBPerm e1 e2) loc ()
 
 eStruct :: Maybe SourcePos -> t -> [(String,GExp t ())] -> GExp t ()
 eStruct loc tn es = MkExp (EStruct tn es) loc ()

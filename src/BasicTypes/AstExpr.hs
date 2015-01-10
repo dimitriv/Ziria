@@ -310,16 +310,6 @@ data GExp0 t a where
   -- TODO: Maybe merge with `EAssign`.
   EArrWrite :: GExp t a -> GExp t a -> LengthInfo -> GExp t a -> GExp0 t a
 
-  -- | Iterate over an array
-  --
-  -- @EIter ix x earr ebody@ iterates over array @earr@, binding @ix@ to
-  -- the index into the array and @x@ to the value of the array at that index
-  -- at every step.
-  --
-  -- TODO: We don't seem to be creating instances of EIter anywhere in the
-  -- compiler (not in the parser, not anywhere else). Is it obsolete?
-  EIter :: GName t -> GName t -> GExp t a -> GExp t a -> GExp0 t a
-
   EFor :: UnrollInfo -> GName t -> GExp t a -> GExp t a -> GExp t a -> GExp0 t a
 
 
@@ -341,15 +331,6 @@ data GExp0 t a where
   -- | Generate runtime failure, with error report
   EError :: t -> String -> GExp0 t a
   ELUT :: Map (GName t) Range -> GExp t a -> GExp0 t a
-
-  -- | Permute a bit array: In the long run this should probably
-  -- become a generalized array read but for now I am keeping it as
-  -- is.
-  --
-  -- > e1 : arr[N] bit   e2 : arr[N] int
-  -- > ---------------------------------
-  -- >  EBPerm e1 e2  : arr[N] bit
-  EBPerm :: GExp t a -> GExp t a -> GExp0 t a
 
   -- | Constructing structs
   --
@@ -554,12 +535,6 @@ mapExpM onTyp onAnn f = goExp
       e2' <- goExp e2
       e3' <- goExp e3
       return $ EArrWrite e1' e2' r e3'
-    goExp0 (EIter nm1 nm2 e1 e2) = do
-      nm1' <- mapNameM onTyp nm1
-      nm2' <- mapNameM onTyp nm2
-      e1'  <- goExp e1
-      e2'  <- goExp e2
-      return $ EIter nm1' nm2' e1' e2'
     goExp0 (EFor ui nm1 e1 e2 e3) = do
       nm1' <- mapNameM onTyp nm1
       e1'  <- goExp e1
@@ -607,10 +582,6 @@ mapExpM onTyp onAnn f = goExp
       r'   <- goRanges r
       e1'  <- goExp e1
       return $ ELUT r' e1'
-    goExp0 (EBPerm e1 e2) = do
-      e1' <- goExp e1
-      e2' <- goExp e2
-      return $ EBPerm e1' e2'
     goExp0 (EStruct t fields) = do
       t' <- onTyp t
       let do_fld (fld,e') = goExp e' >>= \e'' -> return (fld,e'')
@@ -730,7 +701,6 @@ exprFVs' takeFuns = \e ->
     goExp0 (EFor _ x _ _ _) = unrecord x
     goExp0 (ELet x _ _ _)   = unrecord x
     goExp0 (ELetRef x _ _)  = unrecord x
-    goExp0 (EIter x v _ _)  = unrecord x >> unrecord v
     goExp0 (ECall f _)      = when takeFuns $ record f
     goExp0 _                = return ()
 
@@ -1002,7 +972,6 @@ mutates_state e = case unExp e of
   EAssign _e1 _e2              -> True
   EArrRead e1 e2 _li           -> any mutates_state [e1,e2]
   EArrWrite _e1 _e2 _r _e3     -> True
-  EIter _ _ e1 e2              -> any mutates_state [e1,e2]
   EFor _ _ e1 e2 e3            -> any mutates_state [e1,e2,e3]
   EWhile e1 e2                 -> any mutates_state [e1,e2]
   ELet _nm _fi e1 e2           -> any mutates_state [e1,e2]
@@ -1014,7 +983,6 @@ mutates_state e = case unExp e of
   EPrint _nl _e1               -> True -- See Note [IOEffects]
   EError _ _                   -> True
   ELUT _ e1                    -> mutates_state e1
-  EBPerm e1 e2                 -> any mutates_state [e1,e2]
   EStruct _ tfs                -> any mutates_state (map snd tfs)
   EProj e0 _f                  -> mutates_state e0
 

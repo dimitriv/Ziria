@@ -112,13 +112,6 @@ instance Outputable ty => Outputable (GExp0 ty a) where
       nest nestingDepth (ppr ebody) $$
       text "}"
 
-    EIter ix val earr ebody ->
-      text "for" <+>
-        ppr ix <> comma <+> text (name val) <+>
-        text "in" <+> ppr earr <+> text "{" $$
-          nest nestingDepth (ppr ebody) $$
-        text "}"
-
     ELet x _fi e1 e2 ->
       text "let" <+> assign "=" (ppName x) (ppr e1) $$
       text "in" $$
@@ -145,7 +138,6 @@ instance Outputable ty => Outputable (GExp0 ty a) where
     EPrint False e1  -> text "print" <+> ppr e1
     EError _ str     -> text "error " <+> text str
     ELUT _ e1        -> text "LUT" <+> ppr e1
-    EBPerm e1 e2     -> text "bperm " <> parens (ppr e1 <> comma <> ppr e2)
     EProj e fn       -> ppr e <> text "." <> text fn
 
     EStruct t tfs ->

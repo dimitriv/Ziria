@@ -805,14 +805,6 @@ interpret e = guessIfUnevaluated (go . unExp) e
         _otherwise ->
           evaldPart $ eArrRead eloc (unEvald arrEvald) (unEvald ixEvald) li
 
-    -- Array permutation
-
-    go (EBPerm e1 e2) = do
-      e1Evald <- interpret e1
-      e2Evald <- interpret e2
-      -- TODO: We should attempt to execute the permutation.
-      evaldPart $ eBPerm eloc (unEvald e1Evald) (unEvald e2Evald)
-
     -- Structs
 
     go (EStruct ty fields) = do
@@ -1006,8 +998,6 @@ interpret e = guessIfUnevaluated (go . unExp) e
                         bodyEvald <- interpret body
                         evaldPart $ eWhile eloc (unEvald condEvald)
                                                 (unEvald bodyEvald)
-    go (EIter _ _ _ _) =
-      throwError "EIter unsupported"
 
     -- Functions
 
