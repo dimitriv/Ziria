@@ -589,7 +589,7 @@ runEvald :: Eval m a -> EvalMode m -> EvalState -> m (Either String a, EvalState
 runEvald act mode st = runStateT (runReaderT (runErrorT (unEval act)) mode) st
 
 evalEval :: Monad m => Eval m a -> EvalMode m -> EvalState -> m (Either String a, Prints)
-evalEval act mode st = second _evalPrints
+evalEval act mode st = second (reverse . _evalPrints)
                `liftM` runStateT (runReaderT (runErrorT (unEval act)) mode) st
 
 mkEval :: (EvalMode m -> EvalState -> m (Either String a, EvalState)) -> Eval m a
