@@ -20,6 +20,8 @@
 --
 -- This provides constant time access read and write and constant time array
 -- slicing, as well as efficient storage (only non-default elements are stored)
+--
+-- Sparse arrays are strict in the elements.
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -46,8 +48,8 @@ module SparseArray (
   ) where
 
 import Data.Maybe (fromMaybe)
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as IM
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IM
 
 -- | Sparse arrays
 --

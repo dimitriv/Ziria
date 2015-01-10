@@ -905,7 +905,7 @@ passEval :: TypedExpPass
 passEval = TypedExpManual eval
   where
     eval :: Exp -> RwM Exp
-    eval e = case evalPartial e of
+    eval e = case {-# SCC interpreter #-} evalPartial e of
         (Right e', prints) -> do
           unless (null prints) $ logStep "eval: debug prints" eloc (format prints)
           shouldLog <- debugFold

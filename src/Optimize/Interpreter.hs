@@ -89,7 +89,7 @@
 -- assignment to the local variable `x` we also have no other way to refer to
 -- this old value.  We could solve this by using something like SSA form, but
 -- for now we just don't do symbolic evaluation at all.
-{-# OPTIONS_GHC -Wall -Wwarn #-}
+{-# OPTIONS_GHC -Wall -Wwarn -funbox-strict-fields #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -123,17 +123,17 @@ module Interpreter (
 import Control.Applicative
 import Control.Arrow (second)
 import Control.Monad.Error
-import Control.Monad.RWS hiding (Any)
+import Control.Monad.RWS.Strict hiding (Any)
 import Data.Bits hiding (bit)
 import Data.Int
-import Data.Map (Map)
+import Data.Map.Strict (Map)
 import Data.Maybe
 import Data.Set (Set)
 import Outputable
 import System.IO.Unsafe (unsafePerformIO)
 import Text.Parsec.Pos (SourcePos)
-import qualified Data.Map as Map
-import qualified Data.Set as Set
+import qualified Data.Map.Strict as Map
+import qualified Data.Set        as Set
 
 import AstExpr
 import AstUnlabelled
@@ -156,7 +156,7 @@ import qualified SparseArray as SA
   numerics.c.
 -------------------------------------------------------------------------------}
 
-data Complex a = Complex { re :: a, im :: a }
+data Complex a = Complex { re :: !a, im :: !a }
 
 instance Functor Complex where
   fmap f Complex{..} = Complex { re = f re, im = f im }
@@ -212,26 +212,29 @@ instance Integral a => Integral (Complex a) where
 -- values as well as scalars. Moreover, we represent integers by their actual
 -- fixed bitwidth representation rather than the arbitrary precision integers
 -- used by `Val`.
+--
+-- TODO: We should use a strict hashmap for structs; if we don't, we may leak
+-- memory.
 data Value0 =
-    ValueBit    Bool
-  | ValueInt8   Int8
-  | ValueInt16  Int16
-  | ValueInt32  Int32
-  | ValueInt64  Int64
-  | ValueCpx8   (Complex Int8)
-  | ValueCpx16  (Complex Int16)
-  | ValueCpx32  (Complex Int32)
-  | ValueCpx64  (Complex Int64)
-  | ValueDouble Double
-  | ValueBool   Bool
-  | ValueString String
+    ValueBit    !Bool
+  | ValueInt8   !Int8
+  | ValueInt16  !Int16
+  | ValueInt32  !Int32
+  | ValueInt64  !Int64
+  | ValueCpx8   !(Complex Int8)
+  | ValueCpx16  !(Complex Int16)
+  | ValueCpx32  !(Complex Int32)
+  | ValueCpx64  !(Complex Int64)
+  | ValueDouble !Double
+  | ValueBool   !Bool
+  | ValueString !String
   | ValueUnit
-  | ValueArray  (SparseArray Value)
+  | ValueArray  !(SparseArray Value)
   | ValueStruct Ty [(FldName, Value)]
 
 data Value = MkValue {
-     unValue  :: Value0
-   , valueLoc :: Maybe SourcePos
+     unValue  :: !Value0
+   , valueLoc :: !(Maybe SourcePos)
    }
 
 instance Show Value where
@@ -494,21 +497,21 @@ data EvalMode =
 -- | Evaluation state
 data EvalState = EvalState {
     -- | Let-bound variables (immutable)
-    _evalLets :: Map String Value
+    _evalLets :: !(Map String Value)
 
 
     -- | Letref-bound variables (mutable)
-  , _evalLetRefs :: Map String Value
+  , _evalLetRefs :: !(Map String Value)
 
     -- | Guesses about boolean-valued expressions
     --
     -- Used in `EvalNonDet` mode only.
-  , _evalGuessesBool :: Map Exp Bool
+  , _evalGuessesBool :: !(Map Exp Bool)
 
     -- | Guesses about integer-valued expressions
     --
     -- Used in `EvalNonDet` mode only.
-  , _evalGuessesInt :: Map Exp IntDomain
+  , _evalGuessesInt :: !(Map Exp IntDomain)
   }
   deriving Show
 

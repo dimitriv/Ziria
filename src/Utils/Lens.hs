@@ -34,6 +34,9 @@ module Lens (
   , getSt
   , putSt
   , modifySt
+    -- ** Auxiliary: strict state update in MonadState
+  , strictModify
+  , strictPut
   ) where
 
 import Control.Applicative
@@ -75,8 +78,24 @@ mapAtDef def k f mp = (\a -> Map.insert k a mp) <$> f (Map.findWithDefault def k
 getSt :: MonadState s m => Lens s a -> m a
 getSt lens = St.gets (get lens)
 
+-- | Update the indexed by a lens
+--
+-- NOTE: Updates the state strictly.
 modifySt :: MonadState s m => Lens s a -> (a -> a) -> m ()
-modifySt lens f = St.modify (modify lens f)
+modifySt lens f = strictModify (modify lens f)
 
+-- | Overwrite the state indexed by a lens
+--
+-- NOTE: Updates the state strictly
 putSt :: MonadState s m => Lens s a -> a -> m ()
 putSt lens a = modifySt lens (const a)
+
+{-------------------------------------------------------------------------------
+  Auxiliary: strict state update
+-------------------------------------------------------------------------------}
+
+strictModify :: MonadState s m => (s -> s) -> m ()
+strictModify f = do st <- St.get ; strictPut (f st)
+
+strictPut :: MonadState s m => s -> m ()
+strictPut st = St.put $! st
