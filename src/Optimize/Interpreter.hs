@@ -721,11 +721,11 @@ evaldStruct (EvaldFull (MkValue (ValueCpx64 val) p)) = Left [
 evaldStruct e =
     Right $ unEvald e
 
-evaldInt :: Evald -> Either Integer Exp
-evaldInt (EvaldFull (MkValue (ValueInt8  i) _)) = Left (toInteger i)
-evaldInt (EvaldFull (MkValue (ValueInt16 i) _)) = Left (toInteger i)
-evaldInt (EvaldFull (MkValue (ValueInt32 i) _)) = Left (toInteger i)
-evaldInt (EvaldFull (MkValue (ValueInt64 i) _)) = Left (toInteger i)
+evaldInt :: Num a => Evald -> Either a Exp
+evaldInt (EvaldFull (MkValue (ValueInt8  i) _)) = Left (fromIntegral i)
+evaldInt (EvaldFull (MkValue (ValueInt16 i) _)) = Left (fromIntegral i)
+evaldInt (EvaldFull (MkValue (ValueInt32 i) _)) = Left (fromIntegral i)
+evaldInt (EvaldFull (MkValue (ValueInt64 i) _)) = Left (fromIntegral i)
 evaldInt e = Right $ unEvald e
 
 evaldUnit :: Evald -> Bool
@@ -771,13 +771,13 @@ interpret e = guessIfUnevaluated (go . unExp) e
         (Left elems, Left i) ->
           case li of
             LISingleton ->
-              if 0 <= i && i < toInteger (SA.size elems)
-                then evaldFull $ SA.unsafeReadArray (fromInteger i) elems
+              if 0 <= i && i < SA.size elems
+                then evaldFull $ SA.unsafeReadArray i elems
                 else throwError "Out of bounds"
             LILength len ->
-              if 0 <= i && i + toInteger len <= toInteger (SA.size elems)
+              if 0 <= i && i + len <= SA.size elems
                 then do
-                  let slice = ValueArray (SA.unsafeSlice (fromInteger i) len elems)
+                  let slice = ValueArray (SA.unsafeSlice i len elems)
                   evaldFull $ MkValue slice eloc
                 else
                   throwError "Out of bounds"
@@ -1037,10 +1037,10 @@ applyBinOp _ op (EvaldFull a) (EvaldFull b) = do
                           ++ show a ++ " " ++ show op ++ " " ++ show b
                           ++ ")"
 applyBinOp p op a b = case (op, evaldInt a, evaldInt b) of
-    (Add,  _, Left 0) -> return a
-    (Mult, _, Left 1) -> return a
-    (Add,  Left 0, _) -> return b
-    (Mult, Left 1, _) -> return b
+    (Add,  _, Left (0 :: Int)) -> return a
+    (Mult, _, Left (1 :: Int)) -> return a
+    (Add,  Left (0 :: Int), _) -> return b
+    (Mult, Left (1 :: Int), _) -> return b
     _otherwise        -> evaldPart $ eBinOp p op (unEvald a) (unEvald b)
 
 -- | Smart constructor for unary operators
@@ -1104,7 +1104,7 @@ interpretDerefExp e = go0 (unExp e)
       ixEvald       <- interpret ix
       case (arrEvald, evaldInt ixEvald) of
         (Left derefExp, Left i) ->
-          return (x, Left $ DerefArrayElement eloc derefExp (fromInteger i))
+          return (x, Left $ DerefArrayElement eloc derefExp i)
         _otherwise ->
           return (x, Right $ eArrRead eloc (unDeref arrEvald)
                                            (unEvald ixEvald)
@@ -1114,7 +1114,7 @@ interpretDerefExp e = go0 (unExp e)
       ixEvald       <- interpret ix
       case (arrEvald, evaldInt ixEvald) of
         (Left derefExp, Left i) ->
-          return (x, Left $ DerefArraySlice eloc derefExp (fromInteger i) len)
+          return (x, Left $ DerefArraySlice eloc derefExp i len)
         _otherwise ->
           return (x, Right $ eArrRead eloc (unDeref arrEvald)
                                            (unEvald ixEvald)
