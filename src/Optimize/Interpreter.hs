@@ -124,12 +124,14 @@ module Interpreter (
 import Control.Applicative
 import Control.Arrow (second)
 import Control.Monad.Error
-import Control.Monad.RWS.Strict hiding (Any)
+import Control.Monad.Reader
+import Control.Monad.State.Strict
 import Data.Bits hiding (bit)
 import Data.Functor.Identity
 import Data.Int
 import Data.Map.Strict (Map)
 import Data.Maybe
+import Data.Monoid
 import Data.Set (Set)
 import Outputable
 import System.IO.Unsafe (unsafePerformIO)
@@ -512,6 +514,9 @@ data EvalState = EvalState {
     --
     -- Used in `EvalNonDet` mode only.
   , _evalGuessesInt :: !(Map Exp IntDomain)
+
+    -- | Print statements executed by the program
+  , _evalPrints :: Prints
   }
   deriving Show
 
@@ -527,12 +532,16 @@ evalGuessesBool f st = (\x -> st { _evalGuessesBool = x}) <$> f (_evalGuessesBoo
 evalGuessesInt :: L.Lens EvalState (Map Exp IntDomain)
 evalGuessesInt f st = (\x -> st { _evalGuessesInt = x}) <$> f (_evalGuessesInt st)
 
+evalPrints :: L.Lens EvalState Prints
+evalPrints f st = (\x -> st { _evalPrints = x }) <$> f (_evalPrints st)
+
 initState :: EvalState
 initState = EvalState {
     _evalLets        = Map.empty
   , _evalLetRefs     = Map.empty
   , _evalGuessesBool = Map.empty
   , _evalGuessesInt  = Map.empty
+  , _evalPrints      = []
   }
 
 -- | The evaluator monad
@@ -541,12 +550,20 @@ initState = EvalState {
 --
 -- 1. ErrorT: Runtime errors such as out-of-bound array indices
 -- 2. R:  Interpreter mode (full, partial, non-deterministic)
--- 3. W:  Any debug prints executed by the program
--- 4. S:  Locally bound vars and writes to locally bound vars, and guesses for
---        non-deterministic evaluation
--- 5. []: Non-determinism arising from guessing values
+-- 3. W:  Locally bound vars and writes to locally bound vars, and guesses for
+--        non-deterministic evaluation, as well as any debug prints executed
+--        by the program
+-- 4. []: Non-determinism arising from guessing values
+--
+-- NOTE: Morally we should use a WriterT monad for the print statements.
+-- However, WriterT (and, by extension, RWS) has unacceptable memory behaviour:
+-- even if no logging takes place, it is building up large chunks of
+--
+-- > [] `mappend` [] `mappend` ...
+--
+-- which do not get evaluated until the very end, hence causing a memory leak.
 newtype Eval m a = Eval {
-      unEval :: ErrorT String (RWST (EvalMode m) Prints EvalState m) a
+      unEval :: ErrorT String (ReaderT (EvalMode m) (StateT EvalState m)) a
     }
   deriving ( Functor
            , Applicative
@@ -565,20 +582,21 @@ instance Alternative (Eval []) where
   empty = mzero
   (<|>) = mplus
 
-runEvald :: Eval m a -> EvalMode m -> EvalState -> m (Either String a, EvalState, Prints)
-runEvald = runRWST . runErrorT . unEval
+runEvald :: Eval m a -> EvalMode m -> EvalState -> m (Either String a, EvalState)
+runEvald act mode st = runStateT (runReaderT (runErrorT (unEval act)) mode) st
 
 evalEval :: Monad m => Eval m a -> EvalMode m -> EvalState -> m (Either String a, Prints)
-evalEval = evalRWST . runErrorT . unEval
+evalEval act mode st = second _evalPrints
+               `liftM` runStateT (runReaderT (runErrorT (unEval act)) mode) st
 
-mkEval :: (EvalMode m -> EvalState -> m (Either String a, EvalState, Prints)) -> Eval m a
-mkEval = Eval . ErrorT . RWST
+mkEval :: (EvalMode m -> EvalState -> m (Either String a, EvalState)) -> Eval m a
+mkEval f = Eval $ ErrorT $ ReaderT $ \mode -> StateT $ \st -> f mode st
 
 getMode :: Monad m => Eval m (EvalMode m)
 getMode = Eval ask
 
 logPrint :: Monad m => Bool -> Value -> Eval m ()
-logPrint newline val = Eval $ tell [(newline, val)]
+logPrint newline val = L.modifySt evalPrints ((newline, val) :)
 
 -- | Run the second action only if the first one results zero results
 --
