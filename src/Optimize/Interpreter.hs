@@ -1389,14 +1389,24 @@ zCast ty = mkUnaryOp (go ty)
   where
     go TUnit _ = Just $ ValueUnit
 
-    go TBit (ValueBit  a) = Just $ ValueBit a
-    go TBit (ValueBool a) = Just $ ValueBit a
-    go TBit _             = Nothing
+    go TBit  (ValueBit   a) = Just $ ValueBit a
+    go TBit  (ValueBool  a) = Just $ ValueBit a
+    go TBit  (ValueInt8  a) = Just $ ValueBit (toBool a)
+    go TBit  (ValueInt16 a) = Just $ ValueBit (toBool a)
+    go TBit  (ValueInt32 a) = Just $ ValueBit (toBool a)
+    go TBit  (ValueInt64 a) = Just $ ValueBit (toBool a)
+    go TBit  _              = Nothing
 
-    go TBool (ValueBit  a) = Just $ ValueBool a
-    go TBool (ValueBool a) = Just $ ValueBool a
-    go TBool _             = Nothing
+    go TBool (ValueBit  a)  = Just $ ValueBool a
+    go TBool (ValueBool a)  = Just $ ValueBool a
+    go TBool (ValueInt8  a) = Just $ ValueBool (toBool a)
+    go TBool (ValueInt16 a) = Just $ ValueBool (toBool a)
+    go TBool (ValueInt32 a) = Just $ ValueBool (toBool a)
+    go TBool (ValueInt64 a) = Just $ ValueBool (toBool a)
+    go TBool _              = Nothing
 
+    go (TInt BW8)  (ValueBit    a) = Just $ ValueInt8 (fromBool a)
+    go (TInt BW8)  (ValueBool   a) = Just $ ValueInt8 (fromBool a)
     go (TInt BW8)  (ValueInt8   a) = Just $ ValueInt8 a
     go (TInt BW8)  (ValueInt16  a) = Just $ ValueInt8 (fromIntegral a)
     go (TInt BW8)  (ValueInt32  a) = Just $ ValueInt8 (fromIntegral a)
@@ -1404,6 +1414,8 @@ zCast ty = mkUnaryOp (go ty)
     go (TInt BW8)  (ValueDouble a) = Just $ ValueInt8 (round a)
     go (TInt BW8)  _               = Nothing
 
+    go (TInt BW16) (ValueBit    a) = Just $ ValueInt16 (fromBool a)
+    go (TInt BW16) (ValueBool   a) = Just $ ValueInt16 (fromBool a)
     go (TInt BW16) (ValueInt8   a) = Just $ ValueInt16 (fromIntegral a)
     go (TInt BW16) (ValueInt16  a) = Just $ ValueInt16 a
     go (TInt BW16) (ValueInt32  a) = Just $ ValueInt16 (fromIntegral a)
@@ -1411,6 +1423,8 @@ zCast ty = mkUnaryOp (go ty)
     go (TInt BW16) (ValueDouble a) = Just $ ValueInt16 (round a)
     go (TInt BW16) _               = Nothing
 
+    go (TInt BW32) (ValueBit    a) = Just $ ValueInt32 (fromBool a)
+    go (TInt BW32) (ValueBool   a) = Just $ ValueInt32 (fromBool a)
     go (TInt BW32) (ValueInt8   a) = Just $ ValueInt32 (fromIntegral a)
     go (TInt BW32) (ValueInt16  a) = Just $ ValueInt32 (fromIntegral a)
     go (TInt BW32) (ValueInt32  a) = Just $ ValueInt32 a
@@ -1418,6 +1432,8 @@ zCast ty = mkUnaryOp (go ty)
     go (TInt BW32) (ValueDouble a) = Just $ ValueInt32 (round a)
     go (TInt BW32) _               = Nothing
 
+    go (TInt BW64) (ValueBit    a) = Just $ ValueInt64 (fromBool a)
+    go (TInt BW64) (ValueBool   a) = Just $ ValueInt64 (fromBool a)
     go (TInt BW64) (ValueInt8   a) = Just $ ValueInt64 (fromIntegral a)
     go (TInt BW64) (ValueInt16  a) = Just $ ValueInt64 (fromIntegral a)
     go (TInt BW64) (ValueInt32  a) = Just $ ValueInt64 (fromIntegral a)
@@ -1465,6 +1481,12 @@ zCast ty = mkUnaryOp (go ty)
 
     -- Unsupported target type
     go _ _ = Nothing
+
+    toBool :: (Num a, Eq a) => a -> Bool
+    toBool n = if n == 0 then False else True
+
+    fromBool :: Num a => Bool -> a
+    fromBool b = fromInteger (if b then 0 else 1)
 
 -- | Semantics for unary operators
 zUnOp :: UnOp -> UnaryOp
