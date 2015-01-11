@@ -1,6 +1,7 @@
 -- This should be interpreted in constant memory 
 
 struct myStruct = { myField : int } 
+struct myOtherStruct = { myOtherField : arr[100000] int }
 
 fun f1() {
   var x : int := 0;
@@ -35,6 +36,15 @@ fun f4() {
   return x[0];
 }
 
+fun f5() {
+  var x : struct myOtherStruct;
+  x.myOtherField[0] := 0;
+  for i in [0, 50004] {
+    x.myOtherField[0] := x.myOtherField[0] + 1;
+  }
+  return x.myOtherField[0];
+}
+
 fun comp test() {
   a <- take;
   emit a;
@@ -42,6 +52,7 @@ fun comp test() {
   emit f2();
   emit f3();
   emit f4();
+  emit f5();
   emit a; 
 }
 
