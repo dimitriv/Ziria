@@ -117,6 +117,9 @@ module Interpreter (
     -- ** Satisfiability
   , provable
   , implies
+    -- * Statistics
+  , EvalStats
+  , formatStats
     -- * Convenience
   , eNot
   , eOr
@@ -130,6 +133,7 @@ import Control.Monad.State.Strict
 import Data.Bits hiding (bit)
 import Data.Functor.Identity
 import Data.Int
+import Data.List (intercalate)
 import Data.Map.Strict (Map)
 import Data.Maybe
 import Data.Monoid
@@ -382,14 +386,14 @@ type Prints = [(Bool, Value)]
 
 -- | (Full) evaluation of an expression
 evalFull :: Exp -> (Either String Value, Prints)
-evalFull e = aux . runIdentity $ evalEval (interpret e) EvalFull initState
+evalFull e = aux . runIdentity $ evalEval' (interpret e) EvalFull initState
   where
     aux (Right (EvaldFull v), prints) = (Right v,  prints)
     aux (Right (EvaldPart _), _)      = error "the impossible happened"
     aux (Left  err,           prints) = (Left err, prints)
 
 -- | (Partial) evaluation of an expression
-evalPartial :: Exp -> (Either String Exp, Prints)
+evalPartial :: Exp -> (Either String Exp, (Prints, EvalStats))
 evalPartial e = aux . runIdentity $ evalEval (interpret e) EvalPartial initState
   where
     aux (Right eEvald, prints) = let !e' = unEvald eEvald in (Right e', prints)
@@ -507,6 +511,11 @@ data EvalMode m where
     -- > if a then 1 else 2 ~~> [1, 2]
     EvalNonDet :: EvalMode []
 
+-- | Records maximum memory usage per variable
+--
+-- We index the map by uniq ID, but also record the name for display purposes.
+type EvalStats = Map String (GName Ty, Int)
+
 -- | Evaluation state
 data EvalState = EvalState {
     -- | Let-bound variables (immutable)
@@ -527,6 +536,9 @@ data EvalState = EvalState {
 
     -- | Print statements executed by the program
   , _evalPrints :: Prints
+
+    -- | Statistics (for debugging)
+  , _evalStats :: !EvalStats
   }
   deriving Show
 
@@ -545,6 +557,9 @@ evalGuessesInt f st = (\x -> st { _evalGuessesInt = x}) <$> f (_evalGuessesInt s
 evalPrints :: L.Lens EvalState Prints
 evalPrints f st = (\x -> st { _evalPrints = x }) <$> f (_evalPrints st)
 
+evalStats :: L.Lens EvalState EvalStats
+evalStats f st = (\x -> st { _evalStats = x }) <$> f (_evalStats st)
+
 initState :: EvalState
 initState = EvalState {
     _evalLets        = Map.empty
@@ -552,6 +567,7 @@ initState = EvalState {
   , _evalGuessesBool = Map.empty
   , _evalGuessesInt  = Map.empty
   , _evalPrints      = []
+  , _evalStats       = Map.empty
   }
 
 -- | The evaluator monad
@@ -595,9 +611,17 @@ instance Alternative (Eval []) where
 runEvald :: Eval m a -> EvalMode m -> EvalState -> m (Either String a, EvalState)
 runEvald act mode st = runStateT (runReaderT (runErrorT (unEval act)) mode) st
 
-evalEval :: Monad m => Eval m a -> EvalMode m -> EvalState -> m (Either String a, Prints)
-evalEval act mode st = second (reverse . _evalPrints)
-               `liftM` runStateT (runReaderT (runErrorT (unEval act)) mode) st
+evalEval :: Monad m => Eval m a -> EvalMode m -> EvalState -> m (Either String a, (Prints, EvalStats))
+evalEval act mode st =
+    second aux `liftM` runStateT (runReaderT (runErrorT (unEval act)) mode) st
+  where
+    aux st' = (reverse (_evalPrints st), _evalStats st')
+
+evalEval' :: Monad m => Eval m a -> EvalMode m -> EvalState -> m (Either String a, Prints)
+evalEval' act mode st =
+    second aux `liftM` runStateT (runReaderT (runErrorT (unEval act)) mode) st
+  where
+    aux st' = reverse (_evalPrints st')
 
 mkEval :: (EvalMode m -> EvalState -> m (Either String a, EvalState)) -> Eval m a
 mkEval f = Eval $ ErrorT $ ReaderT $ \mode -> StateT $ \st -> f mode st
@@ -652,7 +676,11 @@ extendScope scope x v act = do
 --
 -- The caller should verify that the variable is in scope.
 writeVar :: Monad m => GName Ty -> Value -> Eval m ()
-writeVar x v = L.modifySt evalLetRefs $ Map.insert (uniqId x) v
+writeVar x v = do
+    (_, oldSz) <- L.getSt $ evalStats . L.mapAtDef (x, 0) (uniqId x)
+    let newSz = sizeOf v
+    L.modifySt evalStats   $ Map.insert (uniqId x) (x, oldSz `max` newSz)
+    L.modifySt evalLetRefs $ Map.insert (uniqId x) v
 
 -- | Indicate that we could only partially evaluate an AST constructor
 --
@@ -1715,6 +1743,39 @@ eOr :: Exp -> Exp -> Exp
 eOr e e' = eBinOp (expLoc e) Or e e'
 
 {-------------------------------------------------------------------------------
+  Statistics
+-------------------------------------------------------------------------------}
+
+sizeOf :: Value -> Int
+sizeOf = go . unValue
+  where
+    go :: Value0 -> Int
+    go (ValueBit      _) = 1
+    go (ValueInt8     _) = 1
+    go (ValueInt16    _) = 1
+    go (ValueInt32    _) = 1
+    go (ValueInt64    _) = 1
+    go (ValueCpx8     _) = 2
+    go (ValueCpx16    _) = 2
+    go (ValueCpx32    _) = 2
+    go (ValueCpx64    _) = 2
+    go (ValueDouble   _) = 1
+    go (ValueBool     _) = 1
+    go (ValueString   _) = 1
+    go  ValueUnit        = 1
+    go (ValueArray    a) = sizeOf (SA.defaultElement a) * SA.nonDefaultCount a
+    go (ValueStruct _ a) = sum (map (sizeOf . snd) a)
+
+formatStats :: EvalStats -> String
+formatStats stats =
+    if Map.null stats
+      then "no memory usage"
+      else intercalate ", " . map aux . Map.elems $ stats
+  where
+    aux :: (GName Ty, Int) -> String
+    aux (x, sz) = show x ++ ":" ++ show sz
+
+{-------------------------------------------------------------------------------
   Auxiliary
 -------------------------------------------------------------------------------}
 
@@ -1744,3 +1805,4 @@ map' _ []     = []
 map' f (x:xs) = let !y  = f x
                     !ys = map' f xs
                 in y:ys
+

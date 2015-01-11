@@ -906,7 +906,7 @@ passEval = TypedExpManual eval
   where
     eval :: Exp -> RwM Exp
     eval e = do
-        ((e', prints), time) <- measure $
+        ((e', (prints, stats)), time) <- measure $
           case {-# SCC interpreter #-} evalPartial e of
               (Right e', prints) ->
                 return (e', prints)
@@ -916,7 +916,7 @@ passEval = TypedExpManual eval
         unless (null prints) $ logStep "eval: debug prints" eloc (format prints)
         shouldLog <- debugFold
         when (shouldLog) $ do
-          let label = "eval (" ++ show time ++ ")"
+          let label = "eval (" ++ show time ++ "; " ++ formatStats stats ++ ")"
           if e /= e' then logStep label eloc [step| e ~~> e' |]
                      else logStep label eloc [step| unchanged: e |]
         -- We use 'return' rather than 'rewrite' so that we don't attempt to

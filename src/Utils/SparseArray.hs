@@ -45,6 +45,9 @@ module SparseArray (
   , unsafeWriteDefault
   , unsafeSlice
   , unsafeUpdate
+    -- * Inspecting internal state
+  , defaultElement
+  , nonDefaultCount
   ) where
 
 import Data.Maybe (fromMaybe)
@@ -196,3 +199,13 @@ unsafeUpdate i arr2 = go 0 (toList arr2)
     go n []          arr                  = go (n + 1) []          (writeDefault (n + i)   arr)
     go n ((m, a):as) arr | n == m         = go (n + 1) as          (writeArray   (n + i) a arr)
                          | otherwise      = go (n + 1) ((m, a):as) (writeDefault (n + i)   arr)
+
+{-------------------------------------------------------------------------------
+  Inspecting internal state
+-------------------------------------------------------------------------------}
+
+defaultElement :: SparseArray a -> a
+defaultElement = saDef
+
+nonDefaultCount :: SparseArray a -> Int
+nonDefaultCount = length . toList
