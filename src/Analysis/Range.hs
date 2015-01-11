@@ -28,6 +28,7 @@ module Analysis.Range
   ) where
 
 import Control.Applicative
+import Control.DeepSeq.Generics (NFData(..), genericRnf)
 import Control.Monad.Error
 import Control.Monad.State
 import Data.Data (Data)
@@ -49,6 +50,9 @@ import Utils
 data Range = RangeTop
            | Range Integer Integer
   deriving (Generic, Typeable, Data, Eq, Ord, Show)
+
+instance NFData Range where
+  rnf = genericRnf
 
 instance Num Range where
     RangeTop    + _           = RangeTop

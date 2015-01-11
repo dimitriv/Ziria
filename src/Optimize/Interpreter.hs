@@ -97,6 +97,8 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Interpreter (
     -- * Values
     Complex(..)
@@ -127,6 +129,7 @@ module Interpreter (
 
 import Control.Applicative
 import Control.Arrow (second)
+import Control.DeepSeq.Generics (NFData(..), genericRnf)
 import Control.Monad.Error
 import Control.Monad.Reader
 import Control.Monad.State.Strict
@@ -138,6 +141,7 @@ import Data.Map.Strict (Map)
 import Data.Maybe
 import Data.Monoid
 import Data.Set (Set)
+import GHC.Generics
 import Outputable
 import System.IO.Unsafe (unsafePerformIO)
 import Text.Parsec.Pos (SourcePos)
@@ -166,6 +170,7 @@ import qualified SparseArray as SA
 -------------------------------------------------------------------------------}
 
 data Complex a = Complex { re :: !a, im :: !a }
+  deriving (Generic)
 
 instance Functor Complex where
   fmap f Complex{..} = Complex { re = f re, im = f im }
@@ -240,11 +245,13 @@ data Value0 =
   | ValueUnit
   | ValueArray  !(SparseArray Value)
   | ValueStruct Ty [(FldName, Value)]
+  deriving (Generic)
 
 data Value = MkValue {
-     unValue  :: !Value0
-   , valueLoc :: !(Maybe SourcePos)
-   }
+    unValue  :: !Value0
+  , valueLoc :: !(Maybe SourcePos)
+  }
+  deriving (Generic)
 
 instance Show Value where
   show = show . valueExp
@@ -298,7 +305,7 @@ expValue e = (\v0 -> MkValue v0 (expLoc e)) <$> go (unExp e)
 -- We make sure that if the expression is reduced to whnf it will be fully
 -- evaluated (no remaining references to the Value)
 valueExp :: Value -> Exp
-valueExp v = MkExp (go (unValue v)) vloc ()
+valueExp v = let !e0 = go (unValue v) in MkExp e0 vloc ()
   where
     go :: Value0 -> Exp0
     go (ValueBit    b)         = EVal TBit        (VBit b)
@@ -540,7 +547,7 @@ data EvalState = EvalState {
     -- | Statistics (for debugging)
   , _evalStats :: !EvalStats
   }
-  deriving Show
+  deriving (Show, Generic)
 
 evalLets :: L.Lens EvalState (Map String Value)
 evalLets f st = (\x -> st { _evalLets = x }) <$> f (_evalLets st)
@@ -595,8 +602,13 @@ newtype Eval m a = Eval {
            , Applicative
            , Monad
            , MonadError String
-           , MonadState EvalState
            )
+
+-- We derive MonadState manually so that we can make sure state is always
+-- updated strictly.
+instance Monad m => MonadState EvalState (Eval m) where
+  get    = Eval $ get
+  put st = Eval $ put $! st
 
 -- | We want the `MonadPlus` arising from the underlying list monad, not
 -- from the top-level `ErrorT` monad.
@@ -1693,7 +1705,7 @@ data IntDomain = IntDomain {
     , intDomUpper :: Maybe Integer   -- ^ .. @x <= intDomUpper d@
     , intDomHoles :: Set Integer     -- ^ .. @x `notElem` intDomHoles d@
     }
-    deriving (Eq, Show)
+    deriving (Eq, Show, Generic)
 
 fullIntDomain :: IntDomain
 fullIntDomain = IntDomain {
@@ -1769,7 +1781,7 @@ sizeOf = go . unValue
 formatStats :: EvalStats -> String
 formatStats stats =
     if Map.null stats
-      then "no memory usage"
+      then "no memory usage/memory usage unknown"
       else intercalate ", " . map aux . Map.elems $ stats
   where
     aux :: (GName Ty, Int) -> String
@@ -1806,3 +1818,15 @@ map' f (x:xs) = let !y  = f x
                     !ys = map' f xs
                 in y:ys
 
+{-------------------------------------------------------------------------------
+  NFData instances
+
+  (Mostly for debugging)
+-------------------------------------------------------------------------------}
+
+instance NFData a => NFData (Complex a) where rnf = genericRnf
+
+instance NFData IntDomain where rnf = genericRnf
+instance NFData EvalState where rnf = genericRnf
+instance NFData Value0    where rnf = genericRnf
+instance NFData Value     where rnf = genericRnf

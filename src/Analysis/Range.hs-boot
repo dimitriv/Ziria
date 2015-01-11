@@ -18,14 +18,16 @@
 -}
 module Analysis.Range where
 
+import Control.DeepSeq (NFData) 
 import Data.Data (Data)
 import Data.Typeable (Typeable)
 import Text.Show.Pretty (PrettyVal)
 
 data Range
 
-instance Typeable Range
-instance Data Range
+instance Typeable  Range
+instance Data      Range
 instance PrettyVal Range
-instance Eq Range
-instance Ord Range
+instance Eq        Range
+instance Ord       Range
+instance NFData    Range

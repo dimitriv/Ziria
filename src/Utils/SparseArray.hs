@@ -25,6 +25,7 @@
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DeriveGeneric #-}
 module SparseArray (
     SparseArray -- Opaque
     -- * "Data.Array.MArray"-like features
@@ -50,20 +51,25 @@ module SparseArray (
   , nonDefaultCount
   ) where
 
-import Data.Maybe (fromMaybe)
+import Control.DeepSeq.Generics (NFData(..), genericRnf)
 import Data.IntMap.Strict (IntMap)
+import Data.Maybe (fromMaybe)
+import GHC.Generics (Generic)
 import qualified Data.IntMap.Strict as IM
 
 -- | Sparse arrays
 --
 -- Sparse arrays are always indexed from 0.
 data SparseArray a = SA {
-       saElems  :: !(IntMap a)
-     , saOffset :: !Int
-     , saSize   :: !Int
-     , saDef    :: a
-     }
-   deriving Show
+      saElems  :: !(IntMap a)
+    , saOffset :: !Int
+    , saSize   :: !Int
+    , saDef    :: a
+    }
+  deriving (Generic, Show)
+
+instance NFData a => NFData (SparseArray a) where
+  rnf = genericRnf
 
 instance Eq a => Eq (SparseArray a) where
   arr1 == arr2 = getElems arr1 == getElems arr2

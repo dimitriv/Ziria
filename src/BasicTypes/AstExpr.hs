@@ -23,19 +23,20 @@ module AstExpr where
 import {-# SOURCE #-} Analysis.Range
 
 import Prelude hiding (exp, mapM)
+import Control.DeepSeq.Generics (NFData(..), genericRnf)
 import Control.Monad (liftM, when)
 import Control.Monad.State (State, execState, modify)
 import Data.Data (Data)
-import Data.Functor.Identity ( Identity (..) )
+import Data.Functor.Identity (Identity(..))
 import Data.Map (Map)
+import Data.Traversable (mapM)
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
 import Text.Parsec.Pos
 import Text.PrettyPrint.Mainland
 import Text.Show.Pretty (PrettyVal)
-import Data.Traversable (mapM)
-import qualified Data.Set as S
 import qualified Data.Map as Map
+import qualified Data.Set as S
 
 import Orphans ()
 
@@ -383,6 +384,28 @@ data GFun t a
 funName :: GFun t a -> GName t
 funName (MkFun (MkFunDefined  nm _ _) _ _) = nm
 funName (MkFun (MkFunExternal nm _ _) _ _) = nm
+
+{-------------------------------------------------------------------------------
+  NFData instances
+
+  (Mostly for debugging)
+-------------------------------------------------------------------------------}
+
+instance NFData BinOp       where rnf = genericRnf
+instance NFData BitWidth    where rnf = genericRnf
+instance NFData BufTy       where rnf = genericRnf
+instance NFData ForceInline where rnf = genericRnf
+instance NFData LengthInfo  where rnf = genericRnf
+instance NFData NumExpr     where rnf = genericRnf
+instance NFData Ty          where rnf = genericRnf
+instance NFData UnrollInfo  where rnf = genericRnf
+instance NFData Val         where rnf = genericRnf
+
+instance NFData t => NFData (GUnOp t) where rnf = genericRnf
+instance NFData t => NFData (GName t) where rnf = genericRnf
+
+instance (NFData t, NFData a) => NFData (GExp0 t a) where rnf = genericRnf
+instance (NFData t, NFData a) => NFData (GExp  t a) where rnf = genericRnf
 
 {-------------------------------------------------------------------------------
   Specialization of the AST to Ty (internal types)
