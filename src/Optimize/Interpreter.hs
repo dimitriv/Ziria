@@ -684,14 +684,23 @@ extendScope scope x v act = do
     L.modifySt scope $ Map.delete (uniqId x)
     return a
 
+-- | Should tracking statistics be enabled?
+--
+-- (Compile time flag)
+enableTracking :: Bool
+{-# INLINE enableTracking #-}
+enableTracking = False
+
 -- | Write a variable
 --
 -- The caller should verify that the variable is in scope.
 writeVar :: Monad m => GName Ty -> Value -> Eval m ()
 writeVar x v = do
-    (_, oldSz) <- L.getSt $ evalStats . L.mapAtDef (x, 0) (uniqId x)
-    let newSz = sizeOf v
-    L.modifySt evalStats   $ Map.insert (uniqId x) (x, oldSz `max` newSz)
+    when enableTracking $ do
+      (_, oldSz) <- L.getSt $ evalStats . L.mapAtDef (x, 0) (uniqId x)
+      let newSz = sizeOf v
+      L.modifySt evalStats   $ Map.insert (uniqId x) (x, oldSz `max` newSz)
+
     L.modifySt evalLetRefs $ Map.insert (uniqId x) v
 
 -- | Indicate that we could only partially evaluate an AST constructor
