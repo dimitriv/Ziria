@@ -1,0 +1,55 @@
+var b : int := 0;
+var c : int := 0;
+
+fun f1(a : int) {
+  var x : int := 0;
+  x := 12345;
+  x := x + a;
+  x := x + a;
+  return x;
+}
+
+fun f2(a : int) {
+  var x : int := 0;
+  x := 12345;
+  for i in [0, a] {
+    x := x + i;
+  }
+  return x;
+}
+
+fun f3(a : int) {
+  var x : int := 0;
+  x := 12345;
+  if (a > 0) then {
+    x := x + 1;
+  }
+  return x;
+}
+
+fun f4(a : int) {
+  var x : int := 0;
+  x := x + 5;
+  b := x;
+  x := x + 5;
+  c := x;
+  for i in [0, a] {
+    x := x + i;
+  }
+  return x + b + c;
+}
+
+
+fun comp test() {
+  a <- take;
+  emit a;
+
+  emit f1(a);
+  emit f2(a);
+  emit f3(a);
+  emit f4(a);
+
+  emit a;
+}
+
+let comp main = read[int] >>> test() >>> write[int];
