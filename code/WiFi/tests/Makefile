@@ -62,7 +62,7 @@ test_real_%.outfile: test_real_%.out test_real_%.infile
              --output-file-mode=dbg
 
 %.test: %.outfile
-	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
+	$(DIFF) -f $< -g $<.ground -d -v -n 0.88 -p
 
 
 %.accept : %.outfile
