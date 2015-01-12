@@ -88,7 +88,7 @@ void * wpl_alloca(HeapContextBlock *hblk, memsize_int bytes)
   //printf("Remaining heap: %d bytes\n", wpl_heap_siz - (wpl_free_idx + allocunit));
   
   if (hblk->wpl_free_idx + allocunit >= hblk->wpl_heap_siz) {
-    fprintf(stderr, "WPL allocator out of memory, try increasing heap size!\n");
+    fprintf(stderr, "WPL allocator out of memory, try increasing heap size (heap size = %lld, allocated = %lld, trying to allocate = %lld)!\n", hblk->wpl_heap_siz, hblk->wpl_free_idx, allocunit);
     exit(-1);
   }
 
