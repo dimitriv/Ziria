@@ -72,7 +72,21 @@ instance NFData a => NFData (SparseArray a) where
   rnf = genericRnf
 
 instance Eq a => Eq (SparseArray a) where
-  arr1 == arr2 = getElems arr1 == getElems arr2
+  arr1 == arr2 = size arr1 == size arr2
+              && defaultElement arr1 == defaultElement arr2
+              && go (toList arr1) (toList arr2)
+    where
+      -- We only need to look at explicitly specified elements, but if an
+      -- element in arr1 is explicitly specified it may still be equal to
+      -- the corresponding element in arr2, _if_ the value it was explicitly
+      -- specified as happens to equal the default value
+      go []          []          = True
+      go ((_, x):xs) []          = x == defaultElement arr2 && go xs []
+      go []          ((_, y):ys) = y == defaultElement arr1 && go [] ys
+      go ((m, x):xs) ((n, y):ys)
+        | m == n    = x == y                   && go xs          ys
+        | m <  n    = x == defaultElement arr2 && go xs          ((n, y):ys)
+        | otherwise = x == defaultElement arr1 && go ((m, x):xs) ys
 
 {-------------------------------------------------------------------------------
   MArray-like features
