@@ -245,13 +245,17 @@ data Value0 =
   | ValueUnit
   | ValueArray  !(SparseArray Value)
   | ValueStruct Ty [(FldName, Value)]
-  deriving (Generic)
+  deriving (Generic, Eq)
 
 data Value = MkValue {
     unValue  :: !Value0
   , valueLoc :: !(Maybe SourcePos)
   }
   deriving (Generic)
+
+-- Comparison for equality on Value ignores locations
+instance Eq Value where
+  v1 == v2 = unValue v1 == unValue v2
 
 instance Show Value where
   show = show . valueExp
@@ -523,13 +527,51 @@ data EvalMode m where
 -- We index the map by uniq ID, but also record the name for display purposes.
 type EvalStats = Map String (GName Ty, Int)
 
+-- | Value of letref-bound variables
+--
+-- We record either the "current" state of the variable as long as we manage to
+-- keep track of it, or else the value it should have when initialized.
+--
+-- Note that for variables where we cannot give an initial value we never
+-- record any state for them at all, treating them effectively as free
+-- variables.
+data LetRefState =
+    -- | Value of the variable statically known
+    --
+    -- When we first see a letref binding site, we record the initial value of
+    -- the variable as its current value. Then as long as we do any updates on
+    -- this variable that we can execute statically, we keep the current value
+    -- of the variable updated.
+    LetRefKnown Value
+
+    -- | Value of the variable not statically known
+    --
+    -- This can happen because of one or two things:
+    --
+    -- (1) We assign a not-statically known value to this variable. Since all
+    --     uses of the variable prior to the assignment will have been replaced
+    --     by the (previously known) value of this variable, and all subsequent
+    --     uses of this variable will refer to the value we are assigning now,
+    --     the initial value that we assign in the letref is not important.
+    -- (2) We fail to execute some statement (like a conditional or a loop) and
+    --     we must conservatively invalidate _all_ variables. In this case too
+    --     any prior use of this variable will have been replaced by its known
+    --     value, but any subsequent value will refer to the initial value it is
+    --     assigned in the letref binding site. Hence we record what this value
+    --     should be (it may no longer be the initial value specified by the
+    --     programmer).
+    --
+    -- See also `invalidateAssumptions` and `invalidateAssumptionFor`.
+  | LetRefUnknown (Maybe Value)
+  deriving (Show, Generic)
+
 -- | Evaluation state
 data EvalState = EvalState {
     -- | Let-bound variables (immutable)
     _evalLets :: !(Map String Value)
 
     -- | Letref-bound variables (mutable)
-  , _evalLetRefs :: !(Map String Value)
+  , _evalLetRefs :: !(Map String LetRefState)
 
     -- | Guesses about boolean-valued expressions
     --
@@ -552,7 +594,7 @@ data EvalState = EvalState {
 evalLets :: L.Lens EvalState (Map String Value)
 evalLets f st = (\x -> st { _evalLets = x }) <$> f (_evalLets st)
 
-evalLetRefs :: L.Lens EvalState (Map String Value)
+evalLetRefs :: L.Lens EvalState (Map String LetRefState)
 evalLetRefs f st = (\x -> st { _evalLetRefs = x }) <$> f (_evalLetRefs st)
 
 evalGuessesBool :: L.Lens EvalState (Map Exp Bool)
@@ -662,15 +704,18 @@ onZero act handler = mkEval $ \mode st ->
 -- (Either let-bound or letref bound)
 readVar :: Monad m => GName Ty -> Eval m (Maybe Value)
 readVar x = do
-  mLetBound <- L.getSt $ evalLets . L.mapAt (uniqId x)
-  case mLetBound of
-    Just letBound -> return $ Just letBound
-    Nothing       -> L.getSt $ evalLetRefs . L.mapAt (uniqId x)
+  letBound    <- L.getSt $ evalLets
+  letRefBound <- L.getSt $ evalLetRefs
+  case (Map.lookup (uniqId x) letBound, Map.lookup (uniqId x) letRefBound) of
+    (Just v, _)                 -> return (Just v)
+    (_, Just (LetRefKnown   v)) -> return (Just v)
+    (_, Just (LetRefUnknown _)) -> return Nothing -- Invalidated
+    (Nothing, Nothing)          -> return Nothing -- Free variable
 
 extendScope :: Monad m
-            => L.Lens EvalState (Map String Value)  -- ^ Scope to extend
-            -> GName Ty                             -- ^ Variable to introduce
-            -> Value                                -- ^ Initial value
+            => L.Lens EvalState (Map String val)  -- ^ Scope to extend
+            -> GName Ty                           -- ^ Variable to introduce
+            -> val                                -- ^ Initial value
             -> Eval m a -> Eval m a
 extendScope scope x v act = do
     -- Check if variable already in scope (if this happens it's a compiler bug)
@@ -701,7 +746,7 @@ writeVar x v = do
       let newSz = sizeOf v
       L.modifySt evalStats   $ Map.insert (uniqId x) (x, oldSz `max` newSz)
 
-    L.modifySt evalLetRefs $ Map.insert (uniqId x) v
+    L.modifySt evalLetRefs $ Map.insert (uniqId x) (LetRefKnown v)
 
 -- | Indicate that we could only partially evaluate an AST constructor
 --
@@ -735,26 +780,38 @@ guessIfUnevaluated f e = do
 -- guessed values (during non-deterministic evaluation) as now no longer
 -- accurate.
 --
--- Note that let-bound variables never need to be invalidated: once we know
--- that a let-bound variable evaluated to a specific value, future statements
--- can never invalidate that.
+-- Note that let-bound (as opposed to letref) variables never need to be
+-- invalidated: once we know that a let-bound variable evaluated to a specific
+-- value, future statements can never invalidate that.
 invalidateAssumptions :: Monad m => Eval m ()
 invalidateAssumptions = do
-    L.putSt evalLetRefs     Map.empty
+    L.modifySt evalLetRefs $ Map.map setUnknown
     L.putSt evalGuessesBool Map.empty
     L.putSt evalGuessesInt  Map.empty
+  where
+    setUnknown :: LetRefState -> LetRefState
+    setUnknown (LetRefKnown   v) = LetRefUnknown (Just v)
+    setUnknown (LetRefUnknown v) = LetRefUnknown v
 
 -- | Invalidate all assumptions about a particular variable
---
--- We conservatively remove all guesses. We could instead only remove those
--- guesses for expressions that mention the variable.
 --
 -- See also comments for `invalidateAssumptions`.
 invalidateAssumptionsFor :: Monad m => GName Ty -> Eval m ()
 invalidateAssumptionsFor x = do
-    L.modifySt evalLetRefs $ Map.delete (uniqId x)
+    L.modifySt (evalLetRefs . L.mapAt (uniqId x)) setUnknown
     L.putSt evalGuessesBool Map.empty
     L.putSt evalGuessesInt  Map.empty
+  where
+    setUnknown :: Maybe LetRefState -> Maybe LetRefState
+    -- Value was fully known until now, so when we invalidate the value it is
+    -- because if an assignment. Hence we don't need the initial value.
+    setUnknown (Just (LetRefKnown _)) = Just (LetRefUnknown Nothing)
+
+    -- Value was already in unknown state. Leave as is.
+    setUnknown (Just (LetRefUnknown v)) = Just (LetRefUnknown v)
+
+    -- Value was not in scope at all (free variable). Leave as is.
+    setUnknown Nothing = Nothing
 
 {-------------------------------------------------------------------------------
   The result of interpretation is either a value or an expression. We try to
@@ -1027,6 +1084,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
     go (EFor ui x start len body) = do
       startEvald <- interpret start
       lenEvald   <- interpret len
+      beforeSt   <- get
       fullEv <- case (evaldInt startEvald, evaldInt lenEvald) of
         (Left start', Left len') -> do
           let loop n | n == start' + len' =
@@ -1045,7 +1103,9 @@ interpret e = guessIfUnevaluated (go . unExp) e
           return False
       if fullEv
         then evaldFull $ MkValue ValueUnit eloc
-        else do -- See comments for conditionals
+        else do -- Undo any effects of attempting to execute the loop
+                put beforeSt
+                -- See comments for conditionals
                 invalidateAssumptions
                 bodyEvald <- interpret body
                 let !start' = unEvald startEvald
@@ -1053,6 +1113,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
                     !body'  = unEvald bodyEvald
                 evaldPart $ eFor eloc ui x start' len' body'
     go (EWhile cond body) = do
+      beforeSt <- get
       let loop = do
             condEvald <- interpret cond
             case evaldBool condEvald of
@@ -1067,7 +1128,9 @@ interpret e = guessIfUnevaluated (go . unExp) e
                 return False
       fullEv <- loop
       if fullEv then evaldFull $ MkValue ValueUnit eloc
-                else do -- See comments for conditionals
+                else do -- Undo any effects of attempting to execute the loop
+                        put beforeSt
+                        -- See comments for conditionals
                         invalidateAssumptions
                         condEvald <- interpret cond
                         bodyEvald <- interpret body
@@ -1114,24 +1177,35 @@ interpretLetRef :: Monad m
                 -> Exp             -- ^ LHS
                 -> Eval m Evald
 interpretLetRef eloc x v1 initFromUsr e2 = do
-    (e2Evald, xDeleted) <- extendScope evalLetRefs x v1 $ do
-      e2Evald  <- interpret e2
-      xDeleted <- isNothing `liftM` readVar x
-      return (e2Evald, xDeleted)
+    (e2Evald, xState) <- extendScope evalLetRefs x (LetRefKnown v1) $ do
+      e2Evald <- interpret e2
+      xState  <- L.getSt $ evalLetRefs . L.mapAtDef (error "impossible") (uniqId x)
+      return (e2Evald, xState)
+
     -- If at any point x was (or might have been) assigned a not
     -- statically known value, we cannot remove the binding site.
-    if xDeleted
-      then do
-        if initFromUsr
+    case xState of
+      LetRefKnown _ ->
+        -- Value of the variable known throughout. Don't need the binding.
+        return e2Evald
+      LetRefUnknown Nothing -> do
+        -- We are sure we don't need the initial value because we assign before
+        -- reading.
+        let !e2' = unEvald e2Evald
+        evaldPart $ eLetRef eloc x Nothing e2'
+      LetRefUnknown (Just v1') -> do
+        -- If the user specified the initial value explicitly, or if during
+        -- evaluation we partially evaluated the program so that we now need a
+        -- _different_ initial value, we explicitly record the initial value in
+        -- the resulting AST. Otherwise, we omit it.
+        if initFromUsr || v1' /= v1
           then do
-            let !e1' = valueExp v1
+            let !e1' = valueExp v1'
                 !e2' = unEvald e2Evald
             evaldPart $ eLetRef eloc x (Just e1') e2'
           else do
             let !e2' = unEvald e2Evald
             evaldPart $ eLetRef eloc x Nothing e2'
-      else
-        return e2Evald
 
 -- | Smart constructor for binary operators
 applyBinOp :: Monad m
@@ -1788,10 +1862,10 @@ sizeOf = go . unValue
     go (ValueStruct _ a) = sum (map (sizeOf . snd) a)
 
 formatStats :: EvalStats -> String
-formatStats stats =
-    if Map.null stats
-      then "no memory usage/memory usage unknown"
-      else intercalate ", " . map aux . Map.elems $ stats
+formatStats _ | not enableTracking = "memory usage unknown"
+formatStats stats = if Map.null stats
+                      then "no memory usage/"
+                      else intercalate ", " . map aux . Map.elems $ stats
   where
     aux :: (GName Ty, Int) -> String
     aux (x, sz) = show x ++ ":" ++ show sz
@@ -1835,7 +1909,8 @@ map' f (x:xs) = let !y  = f x
 
 instance NFData a => NFData (Complex a) where rnf = genericRnf
 
-instance NFData IntDomain where rnf = genericRnf
-instance NFData EvalState where rnf = genericRnf
-instance NFData Value0    where rnf = genericRnf
-instance NFData Value     where rnf = genericRnf
+instance NFData LetRefState where rnf = genericRnf
+instance NFData IntDomain   where rnf = genericRnf
+instance NFData EvalState   where rnf = genericRnf
+instance NFData Value0      where rnf = genericRnf
+instance NFData Value       where rnf = genericRnf

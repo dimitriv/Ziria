@@ -63,7 +63,9 @@ bin_%.outfile: bin_%.out bin_%.infile
              --output-file-mode=dbg
 
 %.test: %.outfile
-	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
+	$(DIFF) -f $< -g $<.ground -d -v -p
+
+#	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
 
 
 %.accept : %.outfile
