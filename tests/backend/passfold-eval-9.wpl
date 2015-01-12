@@ -39,6 +39,14 @@ fun f4(a : int) {
   return x + b + c;
 }
 
+fun f5(a : int) {
+  var x : int;
+  x := 0; -- Check that this optimization does not get lost
+  if (a > 0) then {
+    x := x + 1;
+  }
+  return x;
+}
 
 fun comp test() {
   a <- take;
@@ -48,6 +56,7 @@ fun comp test() {
   emit f2(a);
   emit f3(a);
   emit f4(a);
+  emit f5(a);
 
   emit a;
 }

@@ -527,6 +527,10 @@ data EvalMode m where
 -- We index the map by uniq ID, but also record the name for display purposes.
 type EvalStats = Map String (GName Ty, Int)
 
+-- | Mark a value with whether it was implicitly defined or not
+data MarkImplicit a = Implicit a | Explicit a
+  deriving (Show, Generic)
+
 -- | Value of letref-bound variables
 --
 -- We record either the "current" state of the variable as long as we manage to
@@ -542,7 +546,12 @@ data LetRefState =
     -- the variable as its current value. Then as long as we do any updates on
     -- this variable that we can execute statically, we keep the current value
     -- of the variable updated.
-    LetRefKnown Value
+    --
+    -- We additionally record if this value is explicitly initialized (explicit
+    -- initial value in a letref, or an explicit assignment) or implicitly
+    -- specified (letref without an initial value; in the code generator this
+    -- may refer to uninitialized memory or to zeroed memory).
+    LetRefKnown (MarkImplicit Value)
 
     -- | Value of the variable not statically known
     --
@@ -562,7 +571,7 @@ data LetRefState =
     --     programmer).
     --
     -- See also `invalidateAssumptions` and `invalidateAssumptionFor`.
-  | LetRefUnknown (Maybe Value)
+  | LetRefUnknown (Maybe (MarkImplicit Value))
   deriving (Show, Generic)
 
 -- | Evaluation state
@@ -707,10 +716,11 @@ readVar x = do
   letBound    <- L.getSt $ evalLets
   letRefBound <- L.getSt $ evalLetRefs
   case (Map.lookup (uniqId x) letBound, Map.lookup (uniqId x) letRefBound) of
-    (Just v, _)                 -> return (Just v)
-    (_, Just (LetRefKnown   v)) -> return (Just v)
-    (_, Just (LetRefUnknown _)) -> return Nothing -- Invalidated
-    (Nothing, Nothing)          -> return Nothing -- Free variable
+    (Just v, _)                          -> return (Just v)
+    (_, Just (LetRefKnown (Implicit v))) -> return (Just v)
+    (_, Just (LetRefKnown (Explicit v))) -> return (Just v)
+    (_, Just (LetRefUnknown _))          -> return Nothing -- Invalidated
+    (Nothing, Nothing)                   -> return Nothing -- Free variable
 
 extendScope :: Monad m
             => L.Lens EvalState (Map String val)  -- ^ Scope to extend
@@ -746,7 +756,7 @@ writeVar x v = do
       let newSz = sizeOf v
       L.modifySt evalStats   $ Map.insert (uniqId x) (x, oldSz `max` newSz)
 
-    L.modifySt evalLetRefs $ Map.insert (uniqId x) (LetRefKnown v)
+    L.modifySt evalLetRefs $ Map.insert (uniqId x) (LetRefKnown (Explicit v))
 
 -- | Indicate that we could only partially evaluate an AST constructor
 --
@@ -990,7 +1000,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
       e1Evald <- interpret e1
       case e1Evald of
         EvaldFull v1' -> do
-          interpretLetRef eloc x v1' True e2
+          interpretLetRef eloc x (Explicit v1') e2
         EvaldPart e1' -> do
           e2Evald <- interpret e2
           -- See comments for `ELet`
@@ -999,7 +1009,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
     go (ELetRef x Nothing e2) =
       case initVal eloc (nameTyp x) of
         Just v1' ->
-          interpretLetRef eloc x v1' False e2
+          interpretLetRef eloc x (Implicit v1') e2
         Nothing -> do
           -- We cannot construct a default value for this type
           -- (perhaps because it's a length-polymorphic array)
@@ -1171,12 +1181,11 @@ interpret e = guessIfUnevaluated (go . unExp) e
 
 interpretLetRef :: Monad m
                 => Maybe SourcePos
-                -> GName Ty        -- ^ Letref-bound variable
-                -> Value           -- ^ Initial value
-                -> Bool            -- ^ Was the initial value user specified?
-                -> Exp             -- ^ LHS
+                -> GName Ty              -- ^ Letref-bound variable
+                -> MarkImplicit Value    -- ^ Initial value
+                -> Exp                   -- ^ LHS
                 -> Eval m Evald
-interpretLetRef eloc x v1 initFromUsr e2 = do
+interpretLetRef eloc x v1 e2 = do
     (e2Evald, xState) <- extendScope evalLetRefs x (LetRefKnown v1) $ do
       e2Evald <- interpret e2
       xState  <- L.getSt $ evalLetRefs . L.mapAtDef (error "impossible") (uniqId x)
@@ -1193,19 +1202,16 @@ interpretLetRef eloc x v1 initFromUsr e2 = do
         -- reading.
         let !e2' = unEvald e2Evald
         evaldPart $ eLetRef eloc x Nothing e2'
-      LetRefUnknown (Just v1') -> do
-        -- If the user specified the initial value explicitly, or if during
-        -- evaluation we partially evaluated the program so that we now need a
-        -- _different_ initial value, we explicitly record the initial value in
-        -- the resulting AST. Otherwise, we omit it.
-        if initFromUsr || v1' /= v1
-          then do
-            let !e1' = valueExp v1'
-                !e2' = unEvald e2Evald
-            evaldPart $ eLetRef eloc x (Just e1') e2'
-          else do
-            let !e2' = unEvald e2Evald
-            evaldPart $ eLetRef eloc x Nothing e2'
+      LetRefUnknown (Just (Implicit _)) -> do
+        -- Value is _still_ at its implicit default value
+        let !e2' = unEvald e2Evald
+        evaldPart $ eLetRef eloc x Nothing e2'
+      LetRefUnknown (Just (Explicit v1')) -> do
+        -- Value explicitly specified (either from the letref initial value or
+        -- from a subsequent explicit assignment); must include.
+        let !e1' = valueExp v1'
+            !e2' = unEvald e2Evald
+        evaldPart $ eLetRef eloc x (Just e1') e2'
 
 -- | Smart constructor for binary operators
 applyBinOp :: Monad m
@@ -1907,10 +1913,11 @@ map' f (x:xs) = let !y  = f x
   (Mostly for debugging)
 -------------------------------------------------------------------------------}
 
-instance NFData a => NFData (Complex a) where rnf = genericRnf
+instance NFData a => NFData (Complex      a) where rnf = genericRnf
+instance NFData a => NFData (MarkImplicit a) where rnf = genericRnf
 
-instance NFData LetRefState where rnf = genericRnf
-instance NFData IntDomain   where rnf = genericRnf
 instance NFData EvalState   where rnf = genericRnf
-instance NFData Value0      where rnf = genericRnf
+instance NFData IntDomain   where rnf = genericRnf
+instance NFData LetRefState where rnf = genericRnf
 instance NFData Value       where rnf = genericRnf
+instance NFData Value0      where rnf = genericRnf
