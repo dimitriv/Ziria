@@ -1,0 +1,34 @@
+-- Testing complex numbers
+
+fun comp test16() {
+  a <- take;
+  emit a;
+
+  let x = complex16 { re = 2; im = 3 };
+  let y = complex16 { re = 30; im = 40 };
+
+  let emit_1 = x + y
+  let emit_2 = x - y
+  let emit_3 = x * y
+  let emit_4 = y / x
+
+  let emit_5 = complex8(x);
+  let emit_6 = complex32(x);
+
+  emit emit_1.re; 
+  emit emit_1.im; 
+  emit emit_2.re; 
+  emit emit_2.im; 
+  emit emit_3.re; 
+  emit emit_3.im; 
+  emit emit_4.re; 
+  emit emit_4.im; 
+  emit int16(emit_5.re);
+  emit int16(emit_5.im);
+  emit int16(emit_6.re);
+  emit int16(emit_6.im);
+
+  emit a;
+}
+
+let comp main = read[int16] >>> test16() >>> write[int16]

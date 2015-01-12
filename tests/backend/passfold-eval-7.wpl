@@ -1,0 +1,59 @@
+-- This should be interpreted in constant memory 
+
+struct myStruct = { myField : int } 
+struct myOtherStruct = { myOtherField : arr[100000] int }
+
+fun f1() {
+  var x : int := 0;
+  for i in [0, 50000] {
+    x := x + 1;
+  }
+  return x;
+}
+
+fun f2() {
+  var x : complex := complex { re = 0; im = 0 };
+  for i in [0, 50001] {
+    x.re := x.re + 1;
+  }
+  return x.re;
+}
+
+fun f3() {
+  var x : struct myStruct := myStruct { myField = 0 };
+  for i in [0, 50002] {
+    x.myField := x.myField + 1;
+  }
+  return x.myField;
+}
+
+fun f4() {
+  var x : arr[100000] int;
+  x[0] := 0;
+  for i in [0, 50003] {
+    x[0] := x[0] + 1;
+  }
+  return x[0];
+}
+
+fun f5() {
+  var x : struct myOtherStruct;
+  x.myOtherField[0] := 0;
+  for i in [0, 50004] {
+    x.myOtherField[0] := x.myOtherField[0] + 1;
+  }
+  return x.myOtherField[0];
+}
+
+fun comp test() {
+  a <- take;
+  emit a;
+  emit f1();
+  emit f2();
+  emit f3();
+  emit f4();
+  emit f5();
+  emit a; 
+}
+
+let comp main = read[int] >>> test() >>> write[int];

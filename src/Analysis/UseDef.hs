@@ -176,11 +176,6 @@ varUseDefs ranges = \e -> do
         earr_use <- go earr
         ei_use   <- go ei
         return $ earr_use <> ei_use
-    -- Bit permutation is like an array read
-    go0 (EBPerm earr ei) = do
-        earr_use <- go earr
-        ei_use   <- go ei
-        return $ earr_use <> ei_use
     go0 (EArrWrite (MkExp (EVar v) _ _) ei len e) = do
         insertUseFree v
         vs0 <- lookupVarDef v
@@ -198,12 +193,6 @@ varUseDefs ranges = \e -> do
     -- TODO: What about array-writes to structs?
     go0 (EArrWrite {}) =
         fail "Illegal array write expression: array is an expression"
-    go0 (EIter ix x earr ebody) = do
-        extendVars [ix, x] $ do
-          vs_earr <- go earr
-          insertUseDefs ix Set.empty
-          insertUseDefs x  vs_earr
-          (Set.delete ix . Set.delete x) <$> go ebody
     go0 (EFor _ ix estart elen ebody) =
         extendVars [ix] $ do
           vs_ix <- (<>) <$> go estart <*> go elen

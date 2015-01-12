@@ -1,11 +1,14 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE DeriveGeneric, TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE BangPatterns #-}
 module Orphans where
 
+import Control.DeepSeq
 import Data.Map (Map)
-import Text.Parsec.Pos (SourcePos)
-import Text.Show.Pretty (PrettyVal(..), Value(Con))
 import Text.Parsec.Pos
+import Text.Parsec.Pos
+import Text.Show.Pretty (PrettyVal(..), Value(Con))
 import qualified Data.Map as Map
 
 {-------------------------------------------------------------------------------
@@ -26,3 +29,13 @@ instance PrettyVal SourcePos where
 
 instance (PrettyVal k, PrettyVal a) => PrettyVal (Map k a) where
   prettyVal mp = Con (show 'Map.toList) [prettyVal (Map.toList mp)]
+
+{-------------------------------------------------------------------------------
+  NFData orphans
+-------------------------------------------------------------------------------}
+
+instance NFData SourcePos where
+  rnf p = let !line = sourceLine p
+              !col  = sourceColumn p
+              !name = force sourceName
+          in ()

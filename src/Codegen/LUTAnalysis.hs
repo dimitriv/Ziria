@@ -246,12 +246,6 @@ shouldLUT dflags ranges e = flip evalLM s0 $ do
         modify $ \s -> s { lmOpCount = lmOpCount s + 1 }
         should e1 >> should e2 >> should e3
 
-    go (EIter _ _ e1 e2) = do
-        modify $ \s -> s { lmHasLoop = True }
-        should e1 >> should e2
-        -- making sure that we LUT loops more often
-        modify $ \s -> s { lmOpCount = max (lmOpCount s) (mIN_OP_COUNT+1) }
-
     go (EFor _ _ e1 e2 e3) = do
         modify $ \s -> s { lmHasLoop = True }
         should e1 >> should e2 >> should e3
@@ -293,10 +287,6 @@ shouldLUT dflags ranges e = flip evalLM s0 $ do
     go (ELUT _ e) = do
         modify $ \s -> s { lmHasLUT = True }
         should e
-
-    go (EBPerm e1 e2) = do
-       modify $ \s -> s { lmHasBPerm = True }
-       should e1 >> should e2
 
     go (EStruct tn tfs)
        = mapM_ (\(fn,fe) -> should fe) tfs

@@ -44,7 +44,6 @@ ctExp0 (EBinOp op a b)     = ctBinOp op (ctExp a) (ctExp b)
 ctExp0 (EAssign _ _)       = TUnit
 ctExp0 (EArrRead a _ l)    = ctArrRead (ctExp a) l
 ctExp0 (EArrWrite _ _ _ _) = TUnit
-ctExp0 (EIter _ _ _ _)     = TUnit
 ctExp0 (EFor _ _ _ _ _)    = TUnit
 ctExp0 (EWhile _ _)        = TUnit
 ctExp0 (ELet _ _ _ e2)     = ctExp e2
@@ -55,7 +54,6 @@ ctExp0 (EIf _ a _)         = ctExp a
 ctExp0 (EPrint _ _)        = TUnit
 ctExp0 (EError ty _)       = ty
 ctExp0 (ELUT _ e)          = ctExp e
-ctExp0 (EBPerm e1 _)       = ctExp e1
 ctExp0 (EStruct t _)       = t
 ctExp0 (EProj s f)         = ctProj (ctExp s) f
 

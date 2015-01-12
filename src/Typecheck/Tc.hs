@@ -205,17 +205,6 @@ tcExp expr@(MkExp exp0 loc _) =
         LILength m  -> return $ TArray (Literal m) a
         LIMeta   x  -> raiseErrNoVarCtx loc $
                          text "Unexpected meta-variable" <+> text (show x)
-    go (EIter ix x earr ebody) = do
-      let ixTy = nameTyp ix
-      let xTy  = nameTyp x
-      earrTy  <- tcExp earr
-      ebodyTy <- tcExp ebody
-      void $ unifyTArray loc Infer (Check xTy) earrTy
-      unifyTInt' loc ixTy
-      unify loc ebodyTy TUnit
-      -- If type of ix is not known after typecheck the body, default to tint32
-      _ <- defaultTy loc ixTy tint32
-      return TUnit
     go (EFor _ui x estart elen ebody) = do
       let xTy = nameTyp x
       unifyTInt' loc xTy
@@ -272,13 +261,6 @@ tcExp expr@(MkExp exp0 loc _) =
     go (ELUT _ e) =
       -- TODO: Should we check anything about the types in the ranges?
       tcExp e
-    go (EBPerm earr eperm) = do
-      earrTy  <- tcExp earr
-      epermTy <- tcExp eperm
-      (n, _)  <- unifyTArray loc Infer (Check TBit) earrTy
-      ti <- TInt <$> freshBitWidth "bw"
-      void $ unifyTArray loc (Check n) (Check ti) epermTy
-      return earrTy
     go (EStruct t@(TStruct _ tys) flds) = do
       matchStructFields tys flds
       return t

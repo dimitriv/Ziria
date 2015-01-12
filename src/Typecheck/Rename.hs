@@ -356,13 +356,6 @@ renExp (MkExp exp0 eloc ()) = case exp0 of
         e2' <- renExp e2
         e3' <- renExp e3
         return $ eArrWrite eloc e1' e2' r e3'
-      EIter nm1 nm2 e1 e2 -> do
-        nm1' <- renBound nm1
-        nm2' <- renBound nm2
-        recNames [nm1', nm2'] $ do
-          e1' <- renExp e1
-          e2' <- renExp e2
-          return $ eIter eloc nm1' nm2' e1' e2'
       EFor ui nm1 e1 e2 e3 -> do
         e1' <- renExp e1
         e2' <- renExp e2
@@ -409,10 +402,6 @@ renExp (MkExp exp0 eloc ()) = case exp0 of
         r'  <- mapKeysM renFree r
         e1' <- renExp e1
         return $ eLUT eloc r' e1'
-      EBPerm e1 e2 -> do
-        e1' <- renExp e1
-        e2' <- renExp e2
-        return $ eBPerm eloc e1' e2'
       EStruct t tfs -> do
         t'   <- renReqTy eloc t
         tfs' <- mapM (\(f,e') -> renExp e' >>= \e'' -> return (f,e'')) tfs

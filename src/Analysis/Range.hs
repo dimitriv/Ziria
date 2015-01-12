@@ -28,6 +28,7 @@ module Analysis.Range
   ) where
 
 import Control.Applicative
+import Control.DeepSeq.Generics (NFData(..), genericRnf)
 import Control.Monad.Error
 import Control.Monad.State
 import Data.Data (Data)
@@ -39,7 +40,6 @@ import Text.Show.Pretty (PrettyVal)
 import qualified Data.Map as Map
 
 import AstExpr
-import CtExpr
 import Utils
 
 {-------------------------------------------------------------------------------
@@ -50,6 +50,9 @@ import Utils
 data Range = RangeTop
            | Range Integer Integer
   deriving (Generic, Typeable, Data, Eq, Ord, Show)
+
+instance NFData Range where
+  rnf = genericRnf
 
 instance Num Range where
     RangeTop    + _           = RangeTop
@@ -209,17 +212,6 @@ erange (MkExp (EArrWrite (MkExp (EVar _) _ _) ei _ e) _ _) = do
 erange (MkExp (EArrWrite {}) _ _) =
     fail "Illegal array write expression: array is an expression"
 
-erange (MkExp (EIter ix _ earr ebody) _ _) | TArray (Literal n) _ <- ctExp earr = do
-    erange earr
-    setRange ix (Range 0 (fromIntegral n - 1))
-    erange ebody
-    return RangeTop
-
-erange (MkExp (EIter _ _ earr ebody) _ _) = do
-    erange earr
-    erange ebody
-    return RangeTop
-
 erange (MkExp (EFor _ui ix estart elen ebody) _ _) = do
     r1 <- erange estart
     r2 <- erange elen
@@ -269,11 +261,6 @@ erange (MkExp (EError {}) _ _) =
 
 erange (MkExp (ELUT _ e) _ _) =
     erange e
-
-erange (MkExp (EBPerm e1 e2) _ _) = do
-    erange e1
-    erange e2
-    return RangeTop
 
 erange (MkExp (EProj e _) _ _) = do
     erange e

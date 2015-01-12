@@ -75,8 +75,14 @@ mapAtDef def k f mp = (\a -> Map.insert k a mp) <$> f (Map.findWithDefault def k
 getSt :: MonadState s m => Lens s a -> m a
 getSt lens = St.gets (get lens)
 
+-- | Update the indexed by a lens
+--
+-- NOTE: Updates the state strictly.
 modifySt :: MonadState s m => Lens s a -> (a -> a) -> m ()
 modifySt lens f = St.modify (modify lens f)
 
+-- | Overwrite the state indexed by a lens
+--
+-- NOTE: Updates the state strictly
 putSt :: MonadState s m => Lens s a -> a -> m ()
 putSt lens a = modifySt lens (const a)

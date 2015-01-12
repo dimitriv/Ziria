@@ -186,14 +186,6 @@ runAutoLUT dflags _ c = autolutC c
             go (EArrWrite e1 e2 len e3) =
                 EArrWrite <$> autoE e1 <*> autoE e2 <*> pure len <*> autoE e3
 
-            go (EIter i j e1 e2) = do
-                verbose dflags $ text "Cannot autolut loop:" </> nest 4 (ppr e0 <> line) </>
-                                 nest 4 (text "Variable ranges:" </> pprRanges ranges) </>
-                                 case pprLUTStats dflags ranges e0 of
-                                   Nothing  -> mempty
-                                   Just doc -> doc
-                EIter i j <$> autoE e1 <*> autoE e2
-
             go (EFor ui i e1 e2 e3) = do
                 verbose dflags $ text "Cannot autolut loop:" </> nest 4 (ppr e0 <> line) </>
                                  nest 4 (text "Variable ranges:" </> pprRanges ranges) </>
@@ -237,9 +229,6 @@ runAutoLUT dflags _ c = autolutC c
 
             go (ELUT _ e) =
                 pure $ ELUT ranges e
-
-            go (EBPerm e1 e2) =
-               autoE e1 >>= \e1' -> autoE e2 >>= \e2' -> return (EBPerm e1' e2')
 
             -- TODO: Revisit this, it seems defensive
             go (EStruct tn tfs) = pure e

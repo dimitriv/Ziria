@@ -55,7 +55,7 @@ data IsRewritten = NotRewritten | Rewritten
 
 -- The rewriting monad keeps track of whether any rewriting actually happened
 newtype RwM a = RwM { unRwM :: StateT IsRewritten (ReaderT (GS.Sym, DynFlags) IO) a }
-  deriving (Functor, Applicative, Monad)
+  deriving (Functor, Applicative, Monad, MonadIO)
 
 runRwM :: RwM a -> (GS.Sym, DynFlags) -> IO (a, IsRewritten)
 runRwM act = runReaderT (runStateT (unRwM act) NotRewritten)
@@ -905,17 +905,23 @@ passEval :: TypedExpPass
 passEval = TypedExpManual eval
   where
     eval :: Exp -> RwM Exp
-    eval e = case evalPartial e of
-        (Right e', prints) -> do
-          unless (null prints) $ logStep "eval: debug prints" eloc (format prints)
-          shouldLog <- debugFold
-          when (shouldLog && e /= e') $ logStep "eval" eloc [step| e ~~> e' |]
-          -- We use 'return' rather than 'rewrite' so that we don't attempt to
-          -- write the binding again
-          return e'
-        (Left _err, _prints) ->
-          -- Cannot evaluate. Leave unchanged
-          return $ e
+    eval e = do
+        ((e', (prints, stats)), time) <- measure $
+          case {-# SCC interpreter #-} evalPartial e of
+              (Right e', prints) ->
+                return (e', prints)
+              (Left err, _prints) ->
+                -- Error during interpretation indicates program error
+                fail $ "Program failure during evaluation: " ++ err
+        unless (null prints) $ logStep "eval: debug prints" eloc (format prints)
+        shouldLog <- debugFold
+        when (shouldLog) $ do
+          let label = "eval (" ++ show time ++ "; " ++ formatStats stats ++ ")"
+          if e /= e' then logStep label eloc [step| e ~~> e' |]
+                     else logStep label eloc [step| unchanged: e |]
+        -- We use 'return' rather than 'rewrite' so that we don't attempt to
+        -- write the binding again
+        return e'
       where
         eloc = expLoc e
 
@@ -1455,9 +1461,9 @@ instance Outputable LetERefs where
 -------------------------------------------------------------------------------}
 
 -- | Measure how long an action takes
-measure :: IO a -> IO (a, Double)
+measure :: MonadIO m => m a -> m (a, Double)
 measure act = do
-    st <- getCPUTime
+    st <- liftIO $ getCPUTime
     a  <- act
-    en <- getCPUTime
+    en <- liftIO $ getCPUTime
     return (a, fromIntegral (en - st) / (10 ^ (12 :: Integer)))

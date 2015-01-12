@@ -148,6 +148,8 @@ cgBinOp op ce1 t@(TStruct cn _flds) ce2 _ _
       Sub  -> return [cexp|$id:fminus($ce1,$ce2)|]
       Mult -> return [cexp|$id:fmult($ce1,$ce2) |]
       Div  -> return [cexp|$id:fdiv($ce1,$ce2)  |]
+      -- Unsupported operation. NOTE: If we add more operations here,
+      -- we should also add them to the interpreter.
       _    -> fail "CodeGen error, Operation unsupported on complex numbers."
 
 cgBinOp op ce1 _ ce2 _ _ =
@@ -310,50 +312,6 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
                          }|]
         return [cexp|UNIT|]
 
-    -- type(earr) must be "TArray ?n ?t" after typechecking
-    go t (EIter k v earr ebody) = do
-
-        let TArray _ ta = ctExp earr
-
-        k_new <- freshName (name k) tint
-        v_new <- freshName (name v) ta
-
-        (init_decls, init_stms, cearr) <-
-            inNewBlock $
-            extendVarEnv [ (k, [cexp|$id:(name k_new)|])
-                         , (v, [cexp|$id:(name v_new)|])
-                         ] $
-            codeGenExp dflags earr
-
-        (body_decls, body_stms, cebody) <-
-            inNewBlock $
-            extendVarEnv [ (k, [cexp|$id:(name k_new)|])
-                         , (v, [cexp|$id:(name v_new)|])
-                         ] $
-            codeGenExp dflags ebody
-
-        -- cebody may be side-effecting; must eval. each iter.
-        freshSym <- freshVar "__iter"
-        -- Invariant: ctExp ebody == ()
-        appendDecl [cdecl|$ty:(codeGenTyAlg $ ctExp ebody) $id:freshSym;|]
-        appendDecls init_decls
-        appendDecls body_decls
-
-        appendStmts init_stms
-
-        cupperBound <- case ctExp earr of
-                         TArray (Literal arrSz) _ -> return [cexp|$int:arrSz|]
-                         TArray (NVar nlen) _     -> return [cexp|$id:nlen|]
-                         _                        -> fail "Iterate has to be over an array!"
-
-        appendStmt [cstm|for (int $id:(name k_new) = 0; $id:(name k_new) < $cupperBound; $id:(name k_new)++) {
-                           $ty:(codeGenTyAlg ta) $id:(name v_new);
-                           $stms:body_stms
-                           $id:freshSym = $cebody;
-                         }|]
-
-        return [cexp|UNIT|]
-
     go t (ELet x _fi e1 e2) = do
         x_name <- genSym $ name x ++ getLnNumInStr (expLoc e0)
         let ty1 = ctExp e1
@@ -445,11 +403,6 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
 
     go t (ELUT r e1) =
       codeGenLUTExp dflags r e1 Nothing
-
-    -- TODO: Re-enable permuations, or treat as library function?
-    go t (EBPerm e1 e2) =
-      fail "Permutation code is currently under refactoring!"
-      -- CgPerm.genPermute dflags e1 e2
 
     go t (EProj e f) =
       do { b <- isStructPtrType (ctExp e)

@@ -64,8 +64,6 @@ import Control.Monad.IO.Class (MonadIO(..))
 
 import Data.List ( nub )
 
-import Interpreter ( evalBool )
-
 import CgFun
 
 ------------------------------------------------------------------------------
@@ -1086,13 +1084,8 @@ codeGenComp dflags comp k =
     --   branch_var == 0, and to c2_tick/c2_process if branch_var == 0.
     -- o The init function for branch is the only code that modifies branch_var
     --   (to 0 or 1, depending on the value of [e])
-    go (MkComp (Branch e c1 c2) csp ())
-       | (Right True, []) <- evalBool e
-       = codeGenCompTop dflags c1 k
-       | (Right False, []) <- evalBool e
-       = codeGenCompTop dflags c2 k
-       | otherwise
-       = mkBranch dflags e c1 k c2 k csp -- Pass them the same continuation!
+    go (MkComp (Branch e c1 c2) csp ()) =
+        mkBranch dflags e c1 k c2 k csp -- Pass them the same continuation!
 
     go (MkComp (Repeat wdth c1) csp ()) = do
         let vTy = ctDoneTyOfComp c1

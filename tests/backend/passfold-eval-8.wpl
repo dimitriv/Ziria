@@ -1,0 +1,23 @@
+fun f() {
+  var x : arr[288] int;
+
+  for i in [0, 288] {
+    x[i] := i;
+  }
+
+  return x;
+}
+
+fun comp test() {
+  a <- take;
+  emit a;
+
+  let arr = f();
+  for i in [0, 288] {
+    emit i;
+  }
+
+  emit a;
+}
+
+let comp main = read[int] >>> test() >>> write[int];
