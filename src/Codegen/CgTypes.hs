@@ -41,6 +41,7 @@ module CgTypes ( codeGenTy
 import Opts
 import AstExpr
 import AstComp
+import AstUnlabelled 
 import PpExpr
 import CgMonad
 
@@ -77,8 +78,10 @@ codeGenTyAlg = codeGenTy_qual "calign"
 
 
 codeGenTy_val :: Ty -> Cg C.Initializer
-codeGenTy_val (TStruct {}) = do { v <- cg_values [VInt 0] >>= (return . fromJust)
-                                ; return [cinit| { $v } |] }
+codeGenTy_val (TStruct {}) 
+  = do { v <- cg_values [v0] >>= (return . fromJust)
+       ; return [cinit| { $v } |] }
+  where v0 = EVal tint (VInt 0) 
 codeGenTy_val (TArray {})    = return [cinit| NULL |]
 codeGenTy_val _              = return [cinit| 0 |]
 
@@ -473,12 +476,12 @@ assignByRef :: Ty -> C.Exp -> C.Exp -> C.Stm
 assignByRef ty ce1 ce2 = [cstm| $(ce1) = $(ce2);|]
 
 
-codeGenArrVal :: String -> Ty -> [Val] -> Cg C.InitGroup
+codeGenArrVal :: String -> Ty -> [Exp] -> Cg C.InitGroup
 codeGenArrVal name ty@(TArray _ TBit) vals
-  = do { let mvs = cg_bitvalues vals
+  = do { let mvs = cg_bitvalues (map unExp vals)
        ; return . fst =<< codeGenDeclGroup_qual "" name ty mvs }
 codeGenArrVal name ty@(TArray _ _ty) vals
-  = do { mvs <- cg_values vals
+  = do { mvs <- cg_values (map unExp vals)
        ; return . fst =<< codeGenDeclGroup_qual "" name ty mvs }
 codeGenArrVal name _ty vals
   = fail "codeGenArrVal: non-array type!"
@@ -486,19 +489,35 @@ codeGenArrVal name _ty vals
 -- Generates a list of vales
 cg_values [] = return Nothing
 cg_values (h:hs)
-  = do { c <- codeGenVal h -- Why is this monadic?
+  = do { c <- codeGenValue h -- Why is this monadic?
        ; m_cs <- cg_values hs
        ; case m_cs of
            Nothing -> return (Just c)
            Just cs -> return (Just [cexp|$c, $cs|]) }
+
+-- Values are Vals and structs of Values
+codeGenValue (EVal _ v)    = codeGenVal v
+codeGenValue (EStruct _ fes) = do
+  vs <- cg_values (map (unExp . snd) fes)
+  return [cexp| $(fromJust vs)|]
+codeGenValue (EValArr vs) = do 
+  vs <- cg_values (map unExp vs) 
+  return [cexp| $(fromJust vs)|]
+codeGenValue _v = 
+  cgIO $ fail ("codeGenValue, non-value: " ++ show _v)
+
 
 cg_bitvalues [] = Nothing
 cg_bitvalues xs
   = case cg_bitvalues (drop 8 xs) of
            Just bs -> Just $ [cexp|$(first_cexp),$(bs)|]
            Nothing -> Just $ [cexp|$(first_cexp)|]
-  where to_num = foldr (\(VBit t) s -> if t then s*2 + 1 else s*2) 0
+  where to_num = foldr action (0::Int)
         first = take 8 xs
-        first_num = to_num (first ++ replicate (8 - length first) (VBit False))
+        first_num = to_num (first ++ replicate (8 - length first) 
+                                               (EVal TBit (VBit False)))
         first_cexp = [cexp|$int:(first_num) |]
+        action (EVal _ (VBit t)) s = if t then s*2 + 1 else s*2
+        action _ _ = error "cg_bitvalues: encountered non-value bit expresion!" 
+
 

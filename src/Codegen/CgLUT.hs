@@ -371,7 +371,8 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars e = do
                          -- clutentry declaration and initialization to zeros
                          -- clutentry declaration and initialization to zeros
                        ; let entry_ty = TArray (Literal ow) TBit
-                       ; g <- codeGenArrVal clutentry entry_ty [VBit False]
+                       ; g <- codeGenArrVal clutentry entry_ty 
+                                                [eVal Nothing TBit (VBit False)]
                        ; appendDecl g
                        ; return (ow,outVars, []) }
                   else
@@ -382,8 +383,8 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars e = do
                        ; ow <- varsBitWidth_ByteAlign outVarsWithRes
                          -- clutentry declaration and initialization to zeros
                        ; let entry_ty = TArray (Literal ow) TBit
-                       ; g <- codeGenArrVal clutentry entry_ty [VBit False]
-
+                       ; g <- codeGenArrVal clutentry entry_ty 
+                                                [eVal Nothing TBit (VBit False)]
                        ; appendDecl g
                        ; assignByVal retty retty
                                 [cexp|$id:(name resval)|] ce

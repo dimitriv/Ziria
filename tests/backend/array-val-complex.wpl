@@ -1,0 +1,14 @@
+fun test() {
+   var x : arr[2] complex16;
+   var val : complex16;
+   val.re := 1;
+   val.im := 2;
+
+   x[0] := val;
+   x[1] := val;
+
+   return x;
+}
+
+
+let comp main = read[int] >>> (let y = test() in emit y) >>> write
