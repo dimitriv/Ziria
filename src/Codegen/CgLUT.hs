@@ -52,19 +52,17 @@ import Data.Maybe ( isJust, fromJust )
 import Data.Word
 import Language.C.Quote.C
 import qualified Language.C.Syntax as C
--- import System.Directory(getTemporaryDirectory)
--- import System.IO (IOMode(..),
---                   hClose,
---                   hGetContents,
---                   openFile,
---                   openTempFile)
-import Text.PrettyPrint.Mainland
+import Text.PrettyPrint.HughesPJ 
 
 import LUTAnalysis
 
 import qualified Data.Hashable as H
 
 import CtExpr
+
+import PpExpr ()
+
+import Outputable 
 
 --  import System.Exit ( exitFailure )
 
@@ -257,18 +255,20 @@ codeGenLUTExp :: DynFlags
 codeGenLUTExp dflags ranges e mb_resname
   = case shouldLUT dflags ranges e of
       Left err ->
-        do { verbose dflags $ text "Asked to LUT un-LUTtable expression:" <+> string err </> nest 4 (ppr e)
+        do { verbose dflags $ vcat [ text "Asked to LUT un-LUTtable expression:" <+> text err
+                                   , nest 4 (ppr e) ]
            ; codeGenExp dflags e }
       Right True  -> lutIt mb_resname
       Right False ->
         do { verbose dflags $
-             text "Asked to LUT an expression we wouldn't normally LUT:" </>
-             nest 4 (ppr e)
+             vcat [ text "Asked to LUT an expression we wouldn't normally LUT:"
+                  , nest 4 (ppr e) 
+                  ] 
            ; lutStats <- calcLUTStats ranges e
            ; if lutTableSize lutStats >= aBSOLUTE_MAX_LUT_SIZE
              then do { verbose dflags $
-                       text "LUT way too big!" </>
-                         fromJust (pprLUTStats dflags ranges e)
+                       vcat [ text "LUT way too big!"
+                            , fromJust (pprLUTStats dflags ranges e) ]
                      ; codeGenExp dflags e }
              else lutIt mb_resname }
   where
@@ -282,9 +282,11 @@ codeGenLUTExp dflags ranges e mb_resname
         (inVars, outVars, allVars) <- inOutVars ranges e
 
         verbose dflags $
-          text "Creating LUT for expression:" </> nest 4 (ppr e) </>
-            nest 4 (text "Variable ranges:" </> pprRanges ranges) </>
-               fromJust (pprLUTStats dflags ranges e)
+          vcat [ text "Creating LUT for expression:" 
+               , nest 4 (ppr e)
+               , nest 4 $ vcat [ text "Variable ranges:"
+                               , pprRanges ranges ]
+               , fromJust (pprLUTStats dflags ranges e) ]
 
         let resultInOutVars
              | Just v <- expResultVar e

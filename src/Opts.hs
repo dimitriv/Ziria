@@ -26,7 +26,8 @@ import System.IO (Handle,
                   hClose,
                   openFile,
                   stderr)
-import Text.PrettyPrint.Mainland
+
+import Text.PrettyPrint.HughesPJ
 
 import System.Console.GetOpt
 import System.Environment
@@ -87,7 +88,7 @@ isDynFlagSet :: DynFlags -> DynFlag -> Bool
 isDynFlagSet flags f = f `elem` flags
 
 verbose :: MonadIO m => DynFlags -> Doc -> m ()
-verbose dflags doc | isDynFlagSet dflags Verbose = liftIO $ putDoc $ doc <> line
+verbose dflags doc | isDynFlagSet dflags Verbose = liftIO $ putStrLn $ render doc
                    | otherwise                   = return ()
 
 
@@ -107,7 +108,7 @@ dump :: MonadIO m
      -> Doc        -- ^ Doc to dump
      -> m ()
 dump dflags dflag ext doc | isDynFlagSet dflags dflag = liftIO $
-    withDumpHandle $ \h -> hPutDoc h doc
+    withDumpHandle $ \h -> hPutStrLn h (render doc)
   where
     withDumpHandle :: (Handle -> IO ()) -> IO ()
     withDumpHandle m

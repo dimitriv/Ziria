@@ -33,7 +33,6 @@ import Data.Traversable (mapM)
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
 import Text.Parsec.Pos
-import Text.PrettyPrint.Mainland
 import Text.Show.Pretty (PrettyVal)
 import qualified Data.Map as Map
 import qualified Data.Set as S
@@ -80,8 +79,8 @@ instance Ord (GName t) where
 instance Show (GName t) where
   show (MkName x _id _ _loc)    = x
 
-instance Pretty (GName t) where
-    ppr = string . show
+-- instance Pretty (GName t) where
+--     ppr = string . show
 
 toName :: String -> Maybe SourcePos -> t -> GName t
 -- This is our only function to create new names

@@ -36,7 +36,7 @@ import qualified Language.C.Syntax as C
 import Language.C.Quote.C
 import qualified Language.C.Pretty as P
 import qualified Data.Map as M
-import Text.PrettyPrint.Mainland
+import Text.PrettyPrint.HughesPJ 
 import Data.Maybe
 
 

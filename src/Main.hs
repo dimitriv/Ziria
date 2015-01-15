@@ -29,7 +29,8 @@ import System.Environment
 import System.Exit (exitFailure)
 import System.IO
 import Text.Parsec (runParserT)
-import Text.PrettyPrint.Mainland
+import Text.PrettyPrint.HughesPJ
+import qualified Text.PrettyPrint.Mainland as GMPretty
 import Text.Show.Pretty (dumpStr)
 import qualified Data.Map          as M
 import qualified Language.C.Syntax as C
@@ -66,6 +67,7 @@ import AutoLUT
 import CardAnalysis
 import VecM
 import VecSF
+import Vectorize
 
 import CgHeader
 import CgMonad
@@ -82,31 +84,32 @@ import VecMitigators
 
 import Orphans
 
+import Outputable 
 
 data CompiledProgram
   = CompiledProgram Comp [C.Definition] FilePath
 
 pprProgInfo :: Comp -> Doc
 pprProgInfo prog =
-    (text . show) prog </>
-    line <>
-    text "type:" </>
-    (text . show . ctComp) prog
+  vcat [ (text . show) prog
+       , text "" 
+       , text "type:"
+       , (text . show . ctComp) prog ]
 
 outputProgram :: Comp -> FilePath -> IO ()
 outputProgram c fn = do
     outHdl <- openFile fn WriteMode
-    hPutDoc outHdl $ pprProgInfo c
+    hPutStrLn outHdl $ render $ pprProgInfo c
     hClose outHdl
 
 outputCompiledProgram :: CompiledProgram -> IO ()
 outputCompiledProgram (CompiledProgram sc cc fn) = do
     outHdl <- openFile fn WriteMode
     hPutStrLn outHdl "/*"
-    hPutDoc outHdl $ pprProgInfo sc
+    hPutStrLn outHdl $ render $ pprProgInfo sc
     hPutStrLn outHdl "*/"
     hPutStr outHdl cHeader
-    hPutStr outHdl $ show $ ppr cc
+    hPutStr outHdl $ show (GMPretty.ppr cc)
     hClose outHdl
 
 
@@ -273,9 +276,11 @@ main = failOnException $ do
         verbose dflags $
            text "Result in file:" <+> text fn
         dump dflags DumpVect ".vec.dump" $
-           text "Result:" </> (text . show . ppCompTypedVect) c
+           vcat [ text "Result:"
+                , ppCompTypedVect c ]
         dump dflags DumpVectTypes ".vec-types.dump" $
-           text "Result (with types):" </> (text . show . ppCompTyped) c
+           vcat [ text "Result (with types):" 
+                , ppCompTyped c ]
 
         -- Second round of folding
         fc <- runFoldPhase dflags sym 2 c

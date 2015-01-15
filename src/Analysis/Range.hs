@@ -35,12 +35,15 @@ import Data.Data (Data)
 import Data.Map (Map)
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
-import Text.PrettyPrint.Mainland
+import Text.PrettyPrint.HughesPJ
 import Text.Show.Pretty (PrettyVal)
 import qualified Data.Map as Map
 
 import AstExpr
 import Utils
+
+import Outputable 
+import PpExpr ()
 
 {-------------------------------------------------------------------------------
   Definition of the Range
@@ -70,14 +73,14 @@ instance Num Range where
 
     fromInteger i = Range i i
 
-instance Pretty Range where
-    ppr = string . show
+instance Outputable Range where
+  ppr r = text (show r)
 
 instance PrettyVal Range
 
 pprRanges :: Map (GName Ty) Range -> Doc
-pprRanges r = stack $
-    map (\(k,v) -> ppr k <> char ':' <+> ppr v) (Map.toList r)
+pprRanges r = vcat $
+    map (\(k,v) -> ppr k <> char ':' <+> text (show v)) (Map.toList r)
 
 joinR :: Range -> Range -> Range
 joinR RangeTop      _             = RangeTop

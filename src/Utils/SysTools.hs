@@ -51,7 +51,7 @@ import System.IO (hClose,
 import Data.Char ( isSpace )
 
 import System.PosixCompat.Files (fileAccess, fileExist)
-import Text.PrettyPrint.Mainland
+import Text.PrettyPrint.HughesPJ 
 
 
 -- Find the 'make' executable 

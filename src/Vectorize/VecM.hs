@@ -73,9 +73,10 @@ runVecM (VecM act) venv = runReaderT act venv
 vecMFail :: Maybe SourcePos -> Doc -> VecM a
 vecMFail loc msg
   = liftIO $ 
-    do print $ vcat [ text "Vectorization failure!"
-                    , text "Reason  :" <+> msg 
-                    , text "Location:" <+> text (maybe (error "BUG") show loc) ]
+    do print $ vcat [ 
+           text "Vectorization failure!"
+         , text "Reason  :" <+> msg 
+         , text "Location:" <+> text (maybe (error "BUG") show loc) ]
        exitFailure
 
 
@@ -426,10 +427,10 @@ mitOut comp (ty,gty)
 -------------------------------------------------------------------------}
 
 -- | Match vectorization candidates composed on the data path
-conbineData :: ParInfo
+combineData :: ParInfo
             -> Maybe SourcePos
             -> [DelayedVectRes] -> [DelayedVectRes] -> [DelayedVectRes]
-conbineData p loc xs ys 
+combineData p loc xs ys 
   = cross_comb (mitigatePar p loc) xs ys
 
 mitigatePar :: ParInfo

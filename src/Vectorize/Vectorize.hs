@@ -24,6 +24,10 @@ import AstFM
 import AstUnlabelled
 import qualified AstLabelled as ASTL
 
+import Outputable
+
+import Text.PrettyPrint.HughesPJ
+
 import PpComp
 import Outputable
 import qualified GenSym as GS
@@ -48,55 +52,14 @@ import Debug.Trace
   Vectorizer proper
 -------------------------------------------------------------------------------}
 
--- | For non-vectorizable input or output type we convert the
--- corresponding CAlpha to CAUnknown so that we can still vectorize in
--- the other queue (output or input, respectively).
--- Postcondition: one of input or output CAlpha is not CAUnknown.
-vect_card :: Card -> Ty -> Ty -> Maybe (CAlpha,CAlpha)
-vect_card OCard ty1 ty2 = Nothing
-vect_card (SimplCard ain aout) tin tout
-  = case (ain', aout') of
-      (CAUnknown, CAUnknown) -> Nothing
-      _otherwise -> return (ain',aout')
-  where fix_alpha t a | not (isVectorizable t) = CAUnknown
-                      | otherwise              = a
-        ain'  = fix_alpha tin ain
-        aout' = fix_alpha tout aout
-        
-
--- | Emit a warning when we encounter an empty vectorization result
-warn_empty_vect :: DynFlags -> LComp -> [DelayedVectRes] -> String -> VecM ()
-warn_empty_vect dfs comp ress origin
-  =  when (null ress) $ liftIO $ do
-       print $ text "WARNING: empty vectorization" <+> braces (text origin)
-       verbose dfs $ ppr comp
-
-vectRdWr :: (Ty -> Comp) -> Ty -> [ DelayedVectRes ]
-vectRdWr builder ty
-  | isVectorizable ty
-  -> let vcs = map (\n ->
-          let vty = mkVectTy ty n
-          in DVR { dvr_comp = return (builder vty)
-                 , dvr_vres = DidVect vty vty } ) [2..vECT_ARR_BOUND]
-     in return $ self : vcs
-  | otherwise -> return [ self ]
-
--- | Vectorizing a (finitely) iterated /computer/
--- NB: not adding `self'
-vectIterComp :: (Comp -> Comp) -> Card -> LComp -> VecM [DelayedVectRes]
-vectIterComp builder vc c
-  | Just sf <- vcard >>= compSFDD
-  -> do env <- getVecEnv
-        vss <- doVectCompDD env dfs c sf
-        mapM (liftCompDVR builder) vss
-  | otherwise -> return []
-
 computeVectTop :: DynFlags -> LComp -> VecM [DelayedVectRes]
-computeVectTop dfs x = do
+computeVectTop dfs lcomp = do
+  let compname = compShortName lcomp
   verbose dfs $
-   text "Vectorizer, traversing" <+> text (compShortName lcomp) <+> text "{"
-  go CtxUnrestricted x
-  verbose dfs $ text "} Vectorizer, finished."
+    text "--> Vectorizer, traversing:" <+> text compname 
+  rs <- go CtxUnrestricted lcomp
+  verbose dfs $ text "<--"
+  return rs
   where
     go :: CtxForVect -> LComp -> VecM [DelayedVectRes]
     go vctx comp =
@@ -106,8 +69,7 @@ computeVectTop dfs x = do
           tyin  = inTyOfCTy cty
           tyout = yldTyOfCTy cty
           self  = DVR { dvr_comp = return $ eraseComp comp
-                      , dvr_vres = NotVect tyin tyout
-          vcard = vect_card card tyin tyout
+                      , dvr_vres = NotVect tyin tyout }
           warn_if_empty = warn_empty_vect dfs comp
       in
       case unComp comp of
@@ -115,18 +77,22 @@ computeVectTop dfs x = do
         Var x -> lookupCVarBind x >>= go vctx
 
         BindMany c1 xs_cs
-          | Just sf <- vcard >>= compSFDD
-          -> do env <- getVecEnv
-                vss <- doVectCompDD env dfs comp sf
+          | Just sf <- compSFDD card tyin tyout
+          -> do vss <- vect_comp_dd dfs comp sf
                 return $ self : vss
           | otherwise -> do
             let css = c1 : map snd xs_cs
                 xs  = map fst xs_cs
             vss <- mapM (go vctx) css
             let ress = cross_prod_mit $ map keepGroupMaximals vss
-            warn_if_empty ress "BindMany"
-            return $ keepGroupMaximals $
-                     map (\(vc:vcs) -> combineCtrl loc vc xs vcs) ress
+            let bs = keepGroupMaximals $
+                       map (\(vc:vcs) -> combineCtrl loc vc xs vcs) ress
+            warn_if_empty bs "BindMany"
+            return bs
+
+        -- Seq should have been eliminated during type checking
+        Seq {} -> vecMFail loc $
+                  text "Seq node encountered during vectorization."
 
         Par p c1 c2 -> do
           let is_c1 = isComputer (ctComp c1)
@@ -139,26 +105,27 @@ computeVectTop dfs x = do
           warn_if_empty ress "Par"
           return ress
 
-        LetStruct sdef c2 -> do
-          vcs2 <- go vctx c2
-          mapM (liftCompDVR (cLetStruct loc sdef)) vcs2
-
         Let x c1 c2 ->
-          -- Safe to ignore 'c1' as the vectorizer effectively inlined
-          -- computations, look at Var and Call nodes.
+        -- Safe to ignore 'c1' as the vectorizer effectively inlined
+        -- computations, look at Var and Call nodes.
           extendCVarBind x c1 (go vctx c2)
+        LetE x fi e c1 -> do
+          vcs1 <- go vctx c1
+          mapM (liftCompDVR $ cLetE loc x fi e) vcs1
+        LetERef x mbe c1 -> do
+          vcs1 <- go vctx c1
+          mapM (liftCompDVR $ cLetERef loc x mbe) vcs1
 
         LetHeader fdef c1 -> do
           vcs1 <- go vctx c1
-          map (liftCompDVR $ cLetHeader loc fdef) vcs1
-
-        LetE x fi e c1 -> do
-          vcs1 <- go vctx c1
-          map (liftCompDVR $ cLetE loc x fi e) vcs1
-
+          mapM (liftCompDVR $ cLetHeader loc fdef) vcs1
         LetFunC f params c1 c2 ->
           -- Safe to ignore the function as it will be effectively inlined
           extendCFunBind f params c1 $ go vctx c2
+
+        LetStruct sdef c2 -> do
+          vcs2 <- go vctx c2
+          mapM (liftCompDVR (cLetStruct loc sdef)) vcs2
 
         Call f es -> do
           CFunBind { cfun_params = prms, cfun_body = bdy } <- lookupCFunBind f
@@ -167,241 +134,382 @@ computeVectTop dfs x = do
           -- so let us create one and set its type each time.
           vf <- newVectGName "_VECT" undefined loc
           let mk_vect_call vbd
-                = cLetFunC loc vf_typed prms vbd (cCall loc vf_typed es)
+                = cLetFunC loc vf_typed prms vbd $ 
+                  cCall loc vf_typed (map eraseCallArg es)
                 where vf_typed = updNameTy vf (ctComp vbd)
           mapM (liftCompDVR mk_vect_call) vbdys
 
         Interleave c1 c2 -> return [self]
 
         Branch e c1 c2
-          | Just sf <- vcard >>= compSFDD
-          -> do env <- getVecEnv
-                vss <- doVectCompDD env dfs comp sf
+          | Just sf <- compSFDD card tyin tyout
+          -> do vss <- vect_comp_dd dfs comp sf
                 return $ self : vss
           | otherwise
-          -> do vcs1 <- computeVect ra c1
-                vcs2 <- computeVect ra c2
+          -> do vcs1 <- go vctx c1
+                vcs2 <- go vctx c2
                 let ress = cross_prod_mit $ map keepGroupMaximals [vcs1,vcs2]
-                branch_cands <- mapM (\[dvr1,dvr2] -> do
-                   let vtin  = vect_in_ty  $ dvr_vres dvr1
-                       vtout = vect_out_ty $ dvr_vres dvr1
-                       vres  = if any (didVect . dvr_vres) [dvr1,dvr2]
-                               then DidVect vtin vtout
+                branch_cands <- mapM (\[dvr1,dvr2] ->
+                   let vres1 = dvr_vres dvr1 
+                       vres2 = dvr_vres dvr2 
+                       vtin  = vect_in_ty  vres1
+                       vtout = vect_out_ty vres1
+                       vres  = if any didVect [vres1,vres2]
+                               then DidVect vtin vtout u
                                else NotVect vtin vtout
-                   in
-                   DVR { dvr_comp = do { c1' <- dvr_comp dvr1
-                                       ; c2' <- dvr_comp dvr2
-                                       ; return $ cBranch loc e c1' c2' }
-                       ; dvr_vres = vres } ) ress
+                       u = vResUtil vres1 + vResUtil vres2
+                   in return $
+                      DVR { dvr_comp = do c1' <- dvr_comp dvr1
+                                          c2' <- dvr_comp dvr2
+                                          return $ cBranch loc e c1' c2'
+                          , dvr_vres = vres }) ress
                 warn_if_empty branch_cands "Branch"
                 return branch_cands
 
         Filter {} -> return [ self ] -- TODO: Implement later on
 
         -- Reading and writing internal or external buffers
-        ReadSrc ty       -> return $ vectRdWr (cReadSrc       loc) ty
-        WriteSnk ty      -> return $ vectRdWr (cWriteSnk      loc) ty
-        ReadInternal ty  -> return $ vectRdWr (cReadInternal  loc) ty
-        WriteInternal ty -> return $ vectRdWr (cWriteInternal loc) ty
-
+        ReadSrc ty       -> return $ self : vect_rdwr (cReadSrc       loc) ty
+        WriteSnk ty      -> return $ self : vect_rdwr (cWriteSnk      loc) ty
+        ReadInternal  ty b rt 
+          -> return $ self : vect_rdwr (\t -> cReadInternal  loc t b rt) ty
+        WriteInternal ty b 
+          -> return $ self : vect_rdwr (\t -> cWriteInternal loc t b) ty
         Return _fi _e    -> return [ self ]
 
         -- Iterated computers
         Until e c -> do
-          vss <- vectIterComp (cUntil loc e) vcard c
+          vss <- vect_itercomp dfs (cUntil loc e) card tyin tyout c
           return (self : vss)
         While e c -> do
-          vss <- vectIterComp (cWhile loc e) vcard c
+          vss <- vect_itercomp dfs (cWhile loc e) card tyin tyout c
           return (self : vss)
-        Times ui e elen c -> do
-          vss <- vectIterComp (cTimes loc ui e elen) vcard c
+        Times ui nm e elen c -> do
+          vss <- vect_itercomp dfs (cTimes loc ui nm e elen) card tyin tyout c
           return (self : vss)
 
-        VectComp (finalin,finalout) c1
-          | not (isComputer cty)
-          -> vecMFail loc $ 
-             text "Vectorization annotation on non-simple-computer."
+       
+        -- Special cases
+        Standalone c -> do 
+           vcs <- go vctx c
+           mapM (liftCompDVR $ cStandalone loc) vcs
+        Mitigate {} ->
+           vecMFail loc $ text "BUG: Asked to vectorize Mitigate node."
+
+
+        -- Map
+        Map vann nm -> do
+          vcs <- vect_map vctx nm tyin tyout loc vann
+          return (self : vcs)
+
+        -- Repeat 
+        Repeat vann c -> do
+          vcs <- vect_repeat vctx c tyin tyout loc vann
+          return (self : vcs)
+
+        -- Annotated computer 
+        VectComp (fin,fout) c ->
+          vect_comp_annot (fin,fout) c tyin tyout loc
+          
+
+        -- Others: Take1/Take/Emit/Emits, just down-vectorize
+        _other
+          | Just sf <- compSFDD card tyin tyout
+          -> do vss <- vect_comp_dd dfs comp sf
+                return $ self : vss
           | otherwise 
-          -> do vc <- vectWithHint (finalin,finalout) c1
-                return [self, vc]
+          -> return [self]
 
-        -- Dealing with nested annotations
-        -- NB: treat nested annotations on simple computers under
-        -- 'Repeat' the same way as 'rigid' (but mitigate-able)
-        -- annotations. 
-        Repeat Nothing (MkComp (VectComp hint c1) _ _)
-          -> go vctx (ASTL.cRepeat loc (cty,card) (Just (Rigid True hint)) c1)
-        Repeat (Just {}) (MkComp (VectComp {}) _ _)
-           -> vecMFail loc $ 
-              text "Nested vectorization annotations not supported."
 
-        Repeat (Just (Rigid f (finalin, finalout)) c1)
-          -> do vc <- vectWithHint (finalin,finalout) c1 -- Rigidly vectorize computer
-                return $ mitUpDn_Maybe f vctx loc vc
+{-------------------------------------------------------------------------------
+  Helper functions
+-------------------------------------------------------------------------------}
+
+-- | Emit a warning when we encounter an empty vectorization result
+warn_empty_vect :: DynFlags -> LComp -> [DelayedVectRes] -> String -> VecM ()
+warn_empty_vect dfs comp ress origin
+  =  when (null ress) $ liftIO $ do
+       print $ text "WARNING: empty vectorization" <+> braces (text origin)
+       verbose dfs $ ppr comp
+
+-- | Vectorizing read/write nodes (NB: not adding 'self')
+vect_rdwr :: (Ty -> Comp) -> Ty -> [ DelayedVectRes ]
+vect_rdwr builder ty
+  | isVectorizable ty = map do_vect [2..vECT_ARRAY_BOUND]
+  | otherwise         = []
+  where
+   do_vect n
+     = DVR { dvr_comp = return $ builder vty
+           , dvr_vres = DidVect vty vty minUtil }
+     where vty = mkVectTy ty n
+
+-- | Vectorizing a (finitely) iterated computer (NB: not adding 'self')
+vect_itercomp :: DynFlags -> (Comp -> Comp)
+              -> Card -> Ty -> Ty -> LComp -> VecM [DelayedVectRes]
+vect_itercomp dfs builder vcard tin tout c
+  | Just sf <- compSFDD vcard tin tout
+  = do vss <- vect_comp_dd dfs c sf
+       mapM (liftCompDVR builder) vss
+  | otherwise = return []
+
+{-------------------------------------------------------------------------------
+  Vectorizing Map 
+-------------------------------------------------------------------------------}
+vect_map :: CtxForVect 
+         -> EId -> Ty -> Ty -> Maybe SourcePos
+         -> Maybe VectAnn 
+         -> VecM [DelayedVectRes]
+vect_map vctx f tin tout loc vann = error "Implement me!"
+
+
+{-------------------------------------------------------------------------------
+  Vectorizing Repeat 
+-------------------------------------------------------------------------------}
+vect_repeat :: CtxForVect
+            -> LComp -> Ty -> Ty -> Maybe SourcePos
+            -> Maybe VectAnn
+            -> VecM [DelayedVectRes]
+vect_repeat vctx c tyin tyout loc vann = error "Implement me!"
+
+
+{-------------------------------------------------------------------------------
+  Vectorizing Annotated Computers (see VecScaleForce)
+-------------------------------------------------------------------------------}
+vect_comp_annot :: (Int,Int) -> LComp
+                -> Ty -> Ty -> Maybe SourcePos
+                -> VecM [DelayedVectRes]
+vect_comp_annot (fin,fout) c tyin tyout loc = error "Implement me!"
+
+{-------------------------------------------------------------------------------
+  DD/UD/DU Vectorization entry points (see VecScaleUp/VecScaleDn)
+-------------------------------------------------------------------------------}
+
+-- | DD-vectorization
+vect_comp_dd :: DynFlags -> LComp -> SFDD -> VecM [DelayedVectRes]
+vect_comp_dd dfs comp sf = error "Implement me!"
+
+-- | UD-vectorization
+vect_comp_ud :: DynFlags -> LComp -> SFUD -> VecM [DelayedVectRes]
+vect_comp_ud dfs comp sf = error "Implement me!"
+
+-- | DU-vectorization
+vect_comp_du :: DynFlags -> LComp -> SFDU -> VecM [DelayedVectRes]
+vect_comp_du dfs comp sf = error "Implement me!"
+
+
+
+
+
+
+
+--         Map Nothing nm ->
+--           let mults = allVectMults ra tyin 1 1
+--                 mk_vect_map env (min,mout)
+--                   = DVR { dvr_comp
+--                               = inCurrentEnv env $
+--                                 vectMap min mout tyin tyout loc nm
+--                         , dvr_vres = DidVect min mout minUtil
+--                         , dvr_orig_tyin  = tyin
+--                         , dvr_orig_tyout = tyout
+--                         }
+
+--             in do { env <- getVecEnv
+--                   ; let vect_maps = map (mk_vect_map env) mults
+--                   ; return $ self_no_vect : vect_maps }
+
+
+
+
+--         -- Leftover cases
         
-****************
-
-          Repeat (Just (Rigid f (finalin, finalout))) c1
-            -> do { vc <- vectorizeWithHint (finalin,finalout) c1
-                  ; let self = self_no_vect
-
-                  ; let vect =
-                         DVR { dvr_comp  = return $
-                                           cRepeat loc () Nothing vc
-                             , dvr_vres  = DidVect finalin finalout minUtil
-                             , dvr_orig_tyin  = tyin
-                             , dvr_orig_tyout = tyout }
-                  ; return $ mitUpDn_Maybe f ra loc vect
-                  }
-
-          Repeat (Just (UpTo f (maxin, maxout))) c1
-             -> do { vss <- computeVect ra $ cRepeat loc (cty,card) Nothing c1
-                   ; let filter_res (dvr@DVR{ dvr_vres = r })
-                           = case r of NoVect -> True
-                                       DidVect i j _ -> i <= maxin && j <= maxout
-                   ; return $ concat $
-                     map (mitUpDn_Maybe f ra loc) (filter filter_res vss)
-                   }
+--         Take1/Take/Emit/Emits/Repeat/Map 
 
 
-          Repeat Nothing c -- NB: Vectorizing in anything we wish!
-            | SimplCard (Just cin) (Just cout) <- snd $ compInfo c
-            , isVectorizable tyin || cin == 0
-            , isVectorizable tyout || cout == 0
-            -> do { when verbose $ vecMIO (putStrLn "Repeat (nothing)")
-                  ; let [vsf_up,vsf_dn] = compVectScaleFacts ra tyin cin cout
-                  ; (sym,venv) <- getVecEnv
-                  ; let vcs_ups = doVectComp sym venv c vsf_up
-                  ; let vcs_dns = doVectComp sym venv c vsf_dn
+--         VectComp (finalin,finalout) c1
+--           | not (isComputer cty)
+--           -> vecMFail loc $ 
+--              text "Vectorization annotation on non-simple-computer."
+--           | otherwise 
+--           -> do vc <- vectWithHint (finalin,finalout) c1
+--                 return [self, vc]
 
-                  ; let vcs = vcs_ups ++ vcs_dns
+--         -- Dealing with nested annotations
+--         -- NB: treat nested annotations on simple computers under
+--         -- 'Repeat' the same way as 'rigid' (but mitigate-able)
+--         -- annotations. 
+--         Repeat Nothing (MkComp (VectComp hint c1) _ _)
+--           -> go vctx (ASTL.cRepeat loc (cty,card) (Just (Rigid True hint)) c1)
+--         Repeat (Just {}) (MkComp (VectComp {}) _ _)
+--            -> vecMFail loc $ 
+--               text "Nested vectorization annotations not supported."
 
-                  ; when verbose $ vecMIO (putStrLn (show $ length vcs))
+--         Repeat (Just (Rigid f (finalin, finalout)) c1)
+--           -> do vc <- vectWithHint (finalin,finalout) c1 -- Rigidly vectorize computer
+--                 return $ mitUpDn_Maybe f vctx loc vc
+        
+-- ****************
 
-                  ; let self = self_no_vect
-                  ; return $ self : [ liftDVR (cRepeat loc () Nothing) vc
-                                    | vc <- vcs ]
-                  }
-            | SimplCard mcin mcout <- snd $ compInfo c
-            , isVectorizable tyin ||
-                 (case mcin  of { Nothing -> True ; Just cin  -> cin == 0 })
-            , isVectorizable tyout ||
-                 (case mcout of { Nothing -> True ; Just cout -> cout == 0 })
-            -> do {
-{-
-                    vecMIO $
-                    putStrLn "Repeat (just: scaling down only input/output!)"
--}
-                  ; let sf = compVectScaleFactDn_InOrOut mcin mcout
+--           Repeat (Just (Rigid f (finalin, finalout))) c1
+--             -> do { vc <- vectorizeWithHint (finalin,finalout) c1
+--                   ; let self = self_no_vect
 
-                  ; (sym, venv) <- getVecEnv
-                  ; let vcs = doVectComp sym venv c sf
+--                   ; let vect =
+--                          DVR { dvr_comp  = return $
+--                                            cRepeat loc () Nothing vc
+--                              , dvr_vres  = DidVect finalin finalout minUtil
+--                              , dvr_orig_tyin  = tyin
+--                              , dvr_orig_tyout = tyout }
+--                   ; return $ mitUpDn_Maybe f ra loc vect
+--                   }
 
-                     -- Tedious 'self' case ...
-                  ; let cin_fin =
-                           case mcin of
-                             Nothing -> 1
-                             Just cin -> cin
-                  ; let cout_fin =
-                           case mcout of
-                             Nothing -> 1
-                             Just cout -> cout
-                  ; let self = self_no_vect
-                                  { dvr_vres = mkNoVect cin_fin cout_fin }
-
-                   ; return (self : [ liftDVR (cRepeat loc () Nothing) vc
-                                    | vc <- vcs
-                                    ])
-                   }
-
-            | otherwise
-            -> do { vcs <- computeVect ra c
-                  ; return [ liftDVR (cRepeat loc () Nothing) vc
-                           | vc <- vcs
-                           ]
-                  }
+--           Repeat (Just (UpTo f (maxin, maxout))) c1
+--              -> do { vss <- computeVect ra $ cRepeat loc (cty,card) Nothing c1
+--                    ; let filter_res (dvr@DVR{ dvr_vres = r })
+--                            = case r of NoVect -> True
+--                                        DidVect i j _ -> i <= maxin && j <= maxout
+--                    ; return $ concat $
+--                      map (mitUpDn_Maybe f ra loc) (filter filter_res vss)
+--                    }
 
 
-          Map Nothing nm ->
-            let mults = allVectMults ra tyin 1 1
-                mk_vect_map env (min,mout)
-                  = DVR { dvr_comp
-                              = inCurrentEnv env $
-                                vectMap min mout tyin tyout loc nm
-                        , dvr_vres = DidVect min mout minUtil
-                        , dvr_orig_tyin  = tyin
-                        , dvr_orig_tyout = tyout
-                        }
+--           Repeat Nothing c -- NB: Vectorizing in anything we wish!
+--             | SimplCard (Just cin) (Just cout) <- snd $ compInfo c
+--             , isVectorizable tyin || cin == 0
+--             , isVectorizable tyout || cout == 0
+--             -> do { when verbose $ vecMIO (putStrLn "Repeat (nothing)")
+--                   ; let [vsf_up,vsf_dn] = compVectScaleFacts ra tyin cin cout
+--                   ; (sym,venv) <- getVecEnv
+--                   ; let vcs_ups = doVectComp sym venv c vsf_up
+--                   ; let vcs_dns = doVectComp sym venv c vsf_dn
 
-            in do { env <- getVecEnv
-                  ; let vect_maps = map (mk_vect_map env) mults
-                  ; return $ self_no_vect : vect_maps }
+--                   ; let vcs = vcs_ups ++ vcs_dns
 
-          Map (Just (UpTo f (min,mout))) nm ->
-            let mults = filter (\(i,j) -> i <= min && j <= mout) $
-                        allVectMults ra tyin 1 1
-                mk_vect_map env (min,mout)
-                  = DVR { dvr_comp
-                              = inCurrentEnv env $
-                                vectMap min mout tyin tyout loc nm
-                        , dvr_vres = DidVect min mout minUtil
-                        , dvr_orig_tyin  = tyin
-                        , dvr_orig_tyout = tyout
-                        }
+--                   ; when verbose $ vecMIO (putStrLn (show $ length vcs))
 
-            in do { env <- getVecEnv
-                  ; let vect_maps = map (mk_vect_map env) mults
-                  ; return $ concat $ map (mitUpDn_Maybe f ra loc) $
-                             self_no_vect : vect_maps
-                  }
+--                   ; let self = self_no_vect
+--                   ; return $ self : [ liftDVR (cRepeat loc () Nothing) vc
+--                                     | vc <- vcs ]
+--                   }
+--             | SimplCard mcin mcout <- snd $ compInfo c
+--             , isVectorizable tyin ||
+--                  (case mcin  of { Nothing -> True ; Just cin  -> cin == 0 })
+--             , isVectorizable tyout ||
+--                  (case mcout of { Nothing -> True ; Just cout -> cout == 0 })
+--             -> do {
+-- {-
+--                     vecMIO $
+--                     putStrLn "Repeat (just: scaling down only input/output!)"
+-- -}
+--                   ; let sf = compVectScaleFactDn_InOrOut mcin mcout
 
-          Map (Just (Rigid f (min,mout))) nm
-            | min `mod` mout == 0          -- mout divides min
-            -> let mults = [(min,mout)]
-                   mk_vect_map env (min,mout)
-                     = DVR { dvr_comp
-                                = inCurrentEnv env $
-                                  vectMap min mout tyin tyout loc nm
-                           , dvr_vres = DidVect min mout minUtil
-                           , dvr_orig_tyin  = tyin
-                           , dvr_orig_tyout = tyout
-                           }
+--                   ; (sym, venv) <- getVecEnv
+--                   ; let vcs = doVectComp sym venv c sf
 
-               in do { env <- getVecEnv
-                     ; let vect_maps = map (mk_vect_map env) mults
-                     ; return $ concat $ map (mitUpDn_Maybe f ra loc) vect_maps
-                     }
-            | otherwise
-            -> vecMFail "Vectorization failure, bogus map annotation!"
+--                      -- Tedious 'self' case ...
+--                   ; let cin_fin =
+--                            case mcin of
+--                              Nothing -> 1
+--                              Just cin -> cin
+--                   ; let cout_fin =
+--                            case mcout of
+--                              Nothing -> 1
+--                              Just cout -> cout
+--                   ; let self = self_no_vect
+--                                   { dvr_vres = mkNoVect cin_fin cout_fin }
 
-          _other_simpl_comp0
-             | SimplCard (Just cin) (Just cout) <- card
-             , isVectorizable tyin  || cin == 0
-             , isVectorizable tyout || cout == 0
-             -> do { let sf = compVectScaleFactDn ra cin cout
-                   ; (sym,venv) <- getVecEnv
-                   ; let vss = doVectComp sym venv comp sf
-                   ; return $
-                     self_no_vect { dvr_vres = mkNoVect cin cout } : vss
-                   }
-             | otherwise
-             -> do { vecMIO $
-                     do { putStrLn "WARNING: NOT vectorizing:"
-                        ; putStrLn $ "In-type     = " ++ show tyin
-                        ; putStrLn $ "Out-type    = " ++ show tyout
-                        ; putStrLn $ "Cardinality = " ++ show card
-                        ; print $ ppr (eraseComp comp)
-                        ; putStrLn $ "Returning self."
-                        }
-                   ; return $ [self_no_vect]
-                   }
+--                    ; return (self : [ liftDVR (cRepeat loc () Nothing) vc
+--                                     | vc <- vcs
+--                                     ])
+--                    }
+
+--             | otherwise
+--             -> do { vcs <- computeVect ra c
+--                   ; return [ liftDVR (cRepeat loc () Nothing) vc
+--                            | vc <- vcs
+--                            ]
+--                   }
 
 
+--           Map Nothing nm ->
+--             let mults = allVectMults ra tyin 1 1
+--                 mk_vect_map env (min,mout)
+--                   = DVR { dvr_comp
+--                               = inCurrentEnv env $
+--                                 vectMap min mout tyin tyout loc nm
+--                         , dvr_vres = DidVect min mout minUtil
+--                         , dvr_orig_tyin  = tyin
+--                         , dvr_orig_tyout = tyout
+--                         }
+
+--             in do { env <- getVecEnv
+--                   ; let vect_maps = map (mk_vect_map env) mults
+--                   ; return $ self_no_vect : vect_maps }
+
+--           Map (Just (UpTo f (min,mout))) nm ->
+--             let mults = filter (\(i,j) -> i <= min && j <= mout) $
+--                         allVectMults ra tyin 1 1
+--                 mk_vect_map env (min,mout)
+--                   = DVR { dvr_comp
+--                               = inCurrentEnv env $
+--                                 vectMap min mout tyin tyout loc nm
+--                         , dvr_vres = DidVect min mout minUtil
+--                         , dvr_orig_tyin  = tyin
+--                         , dvr_orig_tyout = tyout
+--                         }
+
+--             in do { env <- getVecEnv
+--                   ; let vect_maps = map (mk_vect_map env) mults
+--                   ; return $ concat $ map (mitUpDn_Maybe f ra loc) $
+--                              self_no_vect : vect_maps
+--                   }
+
+--           Map (Just (Rigid f (min,mout))) nm
+--             | min `mod` mout == 0          -- mout divides min
+--             -> let mults = [(min,mout)]
+--                    mk_vect_map env (min,mout)
+--                      = DVR { dvr_comp
+--                                 = inCurrentEnv env $
+--                                   vectMap min mout tyin tyout loc nm
+--                            , dvr_vres = DidVect min mout minUtil
+--                            , dvr_orig_tyin  = tyin
+--                            , dvr_orig_tyout = tyout
+--                            }
+
+--                in do { env <- getVecEnv
+--                      ; let vect_maps = map (mk_vect_map env) mults
+--                      ; return $ concat $ map (mitUpDn_Maybe f ra loc) vect_maps
+--                      }
+--             | otherwise
+--             -> vecMFail "Vectorization failure, bogus map annotation!"
+
+          -- _other_simpl_comp0
+          --    | SimplCard (Just cin) (Just cout) <- card
+          --    , isVectorizable tyin  || cin == 0
+          --    , isVectorizable tyout || cout == 0
+          --    -> do { let sf = compVectScaleFactDn ra cin cout
+          --          ; (sym,venv) <- getVecEnv
+          --          ; let vss = doVectComp sym venv comp sf
+          --          ; return $
+          --            self_no_vect { dvr_vres = mkNoVect cin cout } : vss
+          --          }
+          --    | otherwise
+          --    -> do { vecMIO $
+          --            do { putStrLn "WARNING: NOT vectorizing:"
+          --               ; putStrLn $ "In-type     = " ++ show tyin
+          --               ; putStrLn $ "Out-type    = " ++ show tyout
+          --               ; putStrLn $ "Cardinality = " ++ show card
+          --               ; print $ ppr (eraseComp comp)
+          --               ; putStrLn $ "Returning self."
+          --               }
+          --          ; return $ [self_no_vect]
+          --          }
 
 
 
 
 
+
+{- 
 
 mitUpDn :: RateAction -> Maybe SourcePos -> DelayedVectRes -> [ DelayedVectRes ]
 mitUpDn ra loc dvr@(DVR { dvr_comp       = mk_c
@@ -1170,3 +1278,4 @@ runDebugVecM dflags comp sym
           -- mapM do_one vss
        }
 
+-}

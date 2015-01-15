@@ -22,8 +22,6 @@
 module PpExpr (nestingDepth, ppName, ppEs) where
 
 import Text.PrettyPrint.HughesPJ
-import Text.PrettyPrint.Mainland (Pretty)
-import qualified Text.PrettyPrint.Mainland as Mainland
 
 import AstExpr
 import Outputable
@@ -272,15 +270,3 @@ instance Outputable ty => Show (GUnOp ty)   where show = render . ppr
 instance Outputable ty => Show (GExp0 ty a) where show = render . ppr
 instance Outputable ty => Show (GExp ty a)  where show = render . ppr
 
-{-------------------------------------------------------------------------------
-  Pretty instances
--------------------------------------------------------------------------------}
-
-instance Outputable ty => Pretty (GFun ty a) where
-    ppr = Mainland.string . show
-
-instance Pretty Ty where
-    ppr = Mainland.string . show
-
-instance Outputable ty => Pretty (GExp ty a) where
-    ppr = Mainland.string . show

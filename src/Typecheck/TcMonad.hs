@@ -281,7 +281,7 @@ getCEnv = asks tcm_cenv
 
 lookupCEnv :: String -> Maybe SourcePos -> TcM (GName CTy)
 lookupCEnv s pos = do env <- getCEnv ; lookupTcM s pos msg env
-  where msg = text "Unbound computation variable:" <+> ppr s
+  where msg = text "Unbound computation variable:" <+> text s
 
 extendCEnv :: [(String, GName CTy)] -> TcM a -> TcM a
 extendCEnv binds = local $ \env -> env {

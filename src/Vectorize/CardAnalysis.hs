@@ -21,7 +21,7 @@
 
 -- | Cardinality analysis to drive the vectorizer
 module CardAnalysis (
-     Card
+     Card (..)
    , CAlpha (..)
    , LComp
    , isSimplCard_mb

@@ -43,9 +43,10 @@ import Control.Monad (ap)
 import Control.Monad.State  (MonadState(..), modify)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Monoid
-import Text.PrettyPrint.Mainland
 
+import Text.PrettyPrint.HughesPJ 
+
+import Outputable
 
 import CtExpr
 
@@ -77,6 +78,7 @@ expResultVar (MkExp (ESeq _ e2) _ _) = expResultVar e2
 expResultVar (MkExp (EVar v) _ ty)   = Just v
 expResultVar _                       = Nothing
 
+
 data LUTStats = LUTStats { lutInBitWidth      :: Int
                          , lutOutBitWidth     :: Int
                          , lutInVarsBitWidth  :: Int
@@ -86,14 +88,15 @@ data LUTStats = LUTStats { lutInBitWidth      :: Int
                          , lutTableSize       :: Integer
                          }
 
-instance Pretty LUTStats where
-    ppr s =
-        text "   result bitsize:" <+> (if lutResultInOutVars s
+instance Outputable LUTStats where
+    ppr s = vcat $ 
+      [ text "   result bitsize:" <+> (if lutResultInOutVars s
                                        then text "included in output variables"
-                                       else ppr (lutResultBitWidth s)) </>
-        text "    input bitsize:" <+> ppr (lutInBitWidth s) </>
-        text "   output bitsize:" <+> ppr (lutOutBitWidth s) </>
-        text "lut size in bytes:" <+> ppr (lutTableSize s)
+                                       else ppr (lutResultBitWidth s))
+      , text "    input bitsize:" <+> ppr (lutInBitWidth s)
+      , text "   output bitsize:" <+> ppr (lutOutBitWidth s)
+      , text "lut size in bytes:" <+> ppr (lutTableSize s)
+      ]
 
 calcLUTStats :: (Functor m, Monad m)
              => Map (GName Ty) Range
@@ -132,18 +135,21 @@ pprLUTStats :: Monad m
             -> Exp -> m Doc
 pprLUTStats dflags ranges e = do
     (inVars, outVars, allVars) <- inOutVars ranges e
-    return $ text "  input variables:" <+> ppr inVars </>
-             text " output variables:" <+> ppr outVars </>
-             text "    all variables:" <+> ppr allVars </>
-             text "      ranges used:" <+> ppr ranges <>
-             case calcLUTStats ranges e of
-               Nothing    -> mempty
-               Just stats -> line <>
-                             ppr stats </>
-                             text " should be lutted:" <+> pprShouldLUT (shouldLUT dflags ranges e)
+    return $ 
+      vcat [ text "  input variables:" <+> ppr inVars 
+           , text " output variables:" <+> ppr outVars
+           , text "    all variables:" <+> ppr allVars
+           , text "      ranges used:" <+> ppr ranges
+           , case calcLUTStats ranges e of
+               Nothing    -> text ""
+               Just stats -> 
+                  vcat [ ppr stats
+                       , text " should be lutted:" <+> pprShouldLUT (shouldLUT dflags ranges e) 
+                       ]
+           ]
   where
     pprShouldLUT :: Either String Bool -> Doc
-    pprShouldLUT (Left err)    = text "No, because" <+> string err
+    pprShouldLUT (Left err)    = text "No, because" <+> text err
     pprShouldLUT (Right False) = text "No"
     pprShouldLUT (Right True)  = text "Yes"
 

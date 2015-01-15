@@ -66,7 +66,7 @@ import Language.C.Quote.Base (ToConst(..))
 import qualified Language.C.Pretty as P
 import Numeric (showHex)
 import qualified Data.Map as M
-import Text.PrettyPrint.Mainland
+import Text.PrettyPrint.HughesPJ
 import Data.Maybe
 
 -- TODO: reimport this when permutations are fixed, or maybe we can

@@ -16,7 +16,16 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-module VecSF where
+module VecSF ( 
+
+    SFDU (..), compSFDU
+  , SFUD (..), compSFUD
+  , SFDD (..), compSFDD
+  , vECT_MULT_BOUND
+  , vECT_ARRAY_BOUND
+  , CtxForVect (..)
+
+) where
 
 import AstExpr
 import AstComp
@@ -32,6 +41,8 @@ import Data.List as M
 import Data.Functor.Identity
 
 import Opts
+
+import VecM ( isVectorizable )
 
 import CardAnalysis
 
@@ -126,32 +137,32 @@ data CtxForVect
   | CtxExistsCompRight
 
 -- | Compute SFUD scale factor
-compSFUD :: (CAlpha,CAlpha) -> Maybe SFUD
-compSFUD (CAUnknown,_)  = Nothing 
-compSFUD (CAMultOf _,_) = Nothing
-compSFUD (CAStatic i,CAStatic j)
+compSFUD_aux :: (CAlpha,CAlpha) -> Maybe SFUD
+compSFUD_aux (CAUnknown,_)  = Nothing 
+compSFUD_aux (CAMultOf _,_) = Nothing
+compSFUD_aux (CAStatic i,CAStatic j)
   = return $ SFUD { sfud_in = i, sfud_out = Left (compSFKnown j) }
-compSFUD (CAStatic i,_)
+compSFUD_aux (CAStatic i,_)
   = return $ SFUD { sfud_in = i, sfud_out = Right compSFUnknown  }
 
 -- | Compute SFDU scale factor
-compSFDU :: (CAlpha,CAlpha) -> Maybe SFDU
-compSFDU (_,CAUnknown)  = Nothing
-compSFDU (_,CAMultOf _) = Nothing
-compSFDU (CAStatic i, CAStatic j)
+compSFDU_aux :: (CAlpha,CAlpha) -> Maybe SFDU
+compSFDU_aux (_,CAUnknown)  = Nothing
+compSFDU_aux (_,CAMultOf _) = Nothing
+compSFDU_aux (CAStatic i, CAStatic j)
   = return $ SFDU { sfdu_out = j, sfdu_in = Left (compSFKnown i) }
-compSFDU (_,CAStatic j)
+compSFDU_aux (_,CAStatic j)
   = return $ SFDU { sfdu_out = j, sfdu_in = Right compSFUnknown  }
 
 -- | Compute SFDD scale factor
-compSFDD :: (CAlpha,CAlpha) -> Maybe SFDD
-compSFDD (CAStatic i,CAStatic j)
+compSFDD_aux :: (CAlpha,CAlpha) -> Maybe SFDD
+compSFDD_aux (CAStatic i,CAStatic j)
   = return $ SFDD_InOut { sfdd_in = compSFKnown i, sfdd_out = compSFKnown j }
-compSFDD (CAStatic i,_)
+compSFDD_aux (CAStatic i,_)
   = return $ SFDD_In { sfdd_in = compSFKnown i }
-compSFDD (_,CAStatic j)
+compSFDD_aux (_,CAStatic j)
   = return $ SFDD_Out { sfdd_out = compSFKnown j }
-compSFDD (_,_) 
+compSFDD_aux (_,_) 
   = Nothing
 
 compSFKnown :: Int -> SFKnown
@@ -183,3 +194,29 @@ multsUpTo bnd = [ (z1,z2) | x <- [1..bnd], (z1,z2) <- divsOf x
 -- | Divisors of a number
 divsOf :: Int -> [(Int,Int)]
 divsOf n = [ (x,y) | x <- [1..n], y <- [1..n], x*y == n ]
+
+-- | Take cardinality info and compute a pair of two CAlphas
+-- for the vectorizer to use when computing scale factors. 
+normalize_card :: Card -> Ty -> Ty -> Maybe (CAlpha,CAlpha)
+normalize_card OCard ty1 ty2 = Nothing
+normalize_card (SCard ain aout) tin tout
+  = normalize_card_aux ain' aout'
+  where ain'  = normalize_alpha ain tin
+        aout' = normalize_alpha aout tout
+        normalize_card_aux CAUnknown CAUnknown = Nothing 
+        normalize_card_aux ca ca' = Just (ca,ca')
+
+-- | Although we may have computed cardinality information for non
+-- vectorizable types, we normalize it to CAUnknown so that the
+-- vectorizer does not kick in.
+normalize_alpha :: CAlpha -> Ty -> CAlpha 
+normalize_alpha ca ty = if isVectorizable ty then ca else CAUnknown
+
+
+
+compSFUD :: Card -> Ty -> Ty -> Maybe SFUD
+compSFUD card tin tout = normalize_card card tin tout >>= compSFUD_aux
+compSFDD :: Card -> Ty -> Ty -> Maybe SFDD
+compSFDD card tin tout = normalize_card card tin tout >>= compSFDD_aux
+compSFDU :: Card -> Ty -> Ty -> Maybe SFDU
+compSFDU card tin tout = normalize_card card tin tout >>= compSFDU_aux

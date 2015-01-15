@@ -16,19 +16,33 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, OverlappingInstances #-}
 module Outputable where
 
 import Text.PrettyPrint.HughesPJ
+import qualified Data.Map as M
 
 class Outputable a where
   ppr :: a -> Doc
 
-instance Outputable String where
-  ppr = text
-
 instance Outputable Int where
   ppr = integer . fromIntegral
 
+instance Outputable Integer where
+  ppr = integer . fromIntegral
+
+instance Outputable a => Outputable [a] where
+  ppr = sep . punctuate comma . map ppr
+
+instance Outputable String where
+  ppr = text 
+
 pretty :: Outputable a => a -> String
 pretty = show . ppr
+
+instance (Outputable k, Outputable v) => Outputable (M.Map k v) where
+  ppr = vcat . map ppr_kv . M.toList
+   where ppr_kv (k,v) = ppr k <+> text "|->" <+> ppr v
+
+emptydoc :: Doc 
+emptydoc = empty

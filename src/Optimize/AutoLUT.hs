@@ -33,7 +33,10 @@ import Control.Applicative
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Monoid
-import Text.PrettyPrint.Mainland
+import Text.PrettyPrint.HughesPJ 
+
+import Outputable
+import PpExpr () 
 
 runAutoLUT :: DynFlags -> Sym -> Comp -> IO Comp
 runAutoLUT dflags _ c = autolutC c
@@ -154,10 +157,13 @@ runAutoLUT dflags _ c = autolutC c
         ranges = maybe Map.empty id (varRanges e_)
 
         autoE e0@(MkExp _ loc inf) | Right True <- shouldLUT dflags ranges e0 = do
-            verbose dflags $ text "Expression autolutted:" </> nest 4 (ppr e0 <> line) </>
-                             case pprLUTStats dflags ranges e0 of
-                               Nothing  -> mempty
-                               Just doc -> doc
+            verbose dflags $ vcat [ text "Expression autolutted:" 
+                                  , nest 4 (ppr e0)
+                                  , case pprLUTStats dflags ranges e0 of
+                                       Nothing  -> emptydoc
+                                       Just doc -> doc
+                                  ]
+
             pure $ MkExp (ELUT ranges e0) loc inf
 
         autoE e0@(MkExp e loc inf)
@@ -187,19 +193,25 @@ runAutoLUT dflags _ c = autolutC c
                 EArrWrite <$> autoE e1 <*> autoE e2 <*> pure len <*> autoE e3
 
             go (EFor ui i e1 e2 e3) = do
-                verbose dflags $ text "Cannot autolut loop:" </> nest 4 (ppr e0 <> line) </>
-                                 nest 4 (text "Variable ranges:" </> pprRanges ranges) </>
-                                 case pprLUTStats dflags ranges e0 of
-                                   Nothing  -> mempty
-                                   Just doc -> doc
+                verbose dflags $
+                  vcat [ text "Cannot autolut loop:" 
+                       , nest 4 (ppr e0)
+                       , nest 4 $ vcat [ text "Variable ranges:", pprRanges ranges ]
+                       , case pprLUTStats dflags ranges e0 of
+                           Nothing  -> emptydoc
+                           Just doc -> doc
+                       ]
                 EFor ui i <$> autoE e1 <*> autoE e2 <*> autoE e3
 
             go (EWhile e1 e2) = do
-                verbose dflags $ text "Cannot autolut loop:" </> nest 4 (ppr e0 <> line) </>
-                                 nest 4 (text "Variable ranges:" </> pprRanges ranges) </>
-                                 case pprLUTStats dflags ranges e0 of
-                                   Nothing  -> mempty
-                                   Just doc -> doc
+                verbose dflags $ 
+                 vcat [ text "Cannot autolut loop:" 
+                      , nest 4 (ppr e0)
+                      , nest 4 $ vcat [text "Variable ranges:", pprRanges ranges]
+                      , case pprLUTStats dflags ranges e0 of
+                          Nothing  -> emptydoc
+                          Just doc -> doc ]
+
                 EWhile <$> autoE e1 <*> autoE e2
 
 
@@ -241,10 +253,12 @@ runAutoLUT dflags _ c = autolutC c
         go :: Fun0 -> IO Fun0
         go (MkFunDefined v params body@(MkExp _ loc inf))
           | Right True <- shouldLUT dflags ranges body = do
-            verbose dflags $ text "Function autolutted:" </> nest 4 (ppr f0 <> line) <>
-                             case pprLUTStats dflags ranges body of
-                               Nothing  -> mempty
-                               Just doc -> line <> doc
+            verbose dflags $ 
+              vcat [ text "Function autolutted:" <+> ppr f0
+                   , case pprLUTStats dflags ranges body of
+                       Nothing  -> emptydoc
+                       Just doc -> doc ]
+
             pure $ MkFunDefined v params (MkExp (ELUT ranges body) loc inf)
 
           where
