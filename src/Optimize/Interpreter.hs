@@ -1668,24 +1668,38 @@ zCast ty = mkUnaryOp (go ty)
     go (TInt BW64) _               = Nothing
 
     go (TStruct "complex8"  _) (ValueCpx8  a) = Just $ ValueCpx8 a
-    go (TStruct "complex8"  _) (ValueCpx16 a) = Just $ ValueCpx8 (fmap fromIntegral a)
-    go (TStruct "complex8"  _) (ValueCpx32 a) = Just $ ValueCpx8 (fmap fromIntegral a)
-    go (TStruct "complex8"  _) (ValueCpx64 a) = Just $ ValueCpx8 (fmap fromIntegral a)
 
-    go (TStruct "complex16" _) (ValueCpx8  a) = Just $ ValueCpx16 (fmap fromIntegral a)
-    go (TStruct "complex16" _) (ValueCpx16 a) = Just $ ValueCpx16 a
-    go (TStruct "complex16" _) (ValueCpx32 a) = Just $ ValueCpx16 (fmap fromIntegral a)
-    go (TStruct "complex16" _) (ValueCpx64 a) = Just $ ValueCpx16 (fmap fromIntegral a)
+    go (TStruct "complex8"  _) (ValueCpx16 a)
+      = Just $ ValueCpx8 (fmap fromIntegral a)
+    go (TStruct "complex8"  _) (ValueCpx32 a)
+      = Just $ ValueCpx8 (fmap fromIntegral a)
+    go (TStruct "complex8"  _) (ValueCpx64 a)
+      = Just $ ValueCpx8 (fmap fromIntegral a)
+    go (TStruct "complex16" _) (ValueCpx8  a)
+       = Just $ ValueCpx16 (fmap fromIntegral a)
+    go (TStruct "complex16" _) (ValueCpx16 a)
+       = Just $ ValueCpx16 a
+    go (TStruct "complex16" _) (ValueCpx32 a)
+       = Just $ ValueCpx16 (fmap fromIntegral a)
+    go (TStruct "complex16" _) (ValueCpx64 a)
+       = Just $ ValueCpx16 (fmap fromIntegral a)
+    go (TStruct "complex32" _) (ValueCpx8  a)
+       = Just $ ValueCpx32 (fmap fromIntegral a)
+    go (TStruct "complex32" _) (ValueCpx16 a)
+       = Just $ ValueCpx32 (fmap fromIntegral a)
+    go (TStruct "complex32" _) (ValueCpx32 a)
+       = Just $ ValueCpx32 a
+    go (TStruct "complex32" _) (ValueCpx64 a)
+       = Just $ ValueCpx32 (fmap fromIntegral a)
 
-    go (TStruct "complex32" _) (ValueCpx8  a) = Just $ ValueCpx32 (fmap fromIntegral a)
-    go (TStruct "complex32" _) (ValueCpx16 a) = Just $ ValueCpx32 (fmap fromIntegral a)
-    go (TStruct "complex32" _) (ValueCpx32 a) = Just $ ValueCpx32 a
-    go (TStruct "complex32" _) (ValueCpx64 a) = Just $ ValueCpx32 (fmap fromIntegral a)
-
-    go (TStruct "complex64" _) (ValueCpx8  a) = Just $ ValueCpx64 (fmap fromIntegral a)
-    go (TStruct "complex64" _) (ValueCpx16 a) = Just $ ValueCpx64 (fmap fromIntegral a)
-    go (TStruct "complex64" _) (ValueCpx32 a) = Just $ ValueCpx64 (fmap fromIntegral a)
-    go (TStruct "complex64" _) (ValueCpx64 a) = Just $ ValueCpx64 a
+    go (TStruct "complex64" _) (ValueCpx8  a)
+       = Just $ ValueCpx64 (fmap fromIntegral a)
+    go (TStruct "complex64" _) (ValueCpx16 a)
+       = Just $ ValueCpx64 (fmap fromIntegral a)
+    go (TStruct "complex64" _) (ValueCpx32 a)
+       = Just $ ValueCpx64 (fmap fromIntegral a)
+    go (TStruct "complex64" _) (ValueCpx64 a)
+       = Just $ ValueCpx64 a
 
     go TDouble (ValueInt8   a) = Just $ ValueDouble (fromIntegral a)
     go TDouble (ValueInt16  a) = Just $ ValueDouble (fromIntegral a)
