@@ -1237,6 +1237,9 @@ void __ext_sora_fft(struct complex16* output, int nFFTSize, struct complex16 * i
 
 	// We use the safe version to respect Blink's semantic
 	switch (nFFTSize) {
+	case 16:
+		FFTSafe<16>(in, out);
+		break;
 	case 32:
 		FFTSafe<32>(in, out);
 		break;
@@ -1276,6 +1279,9 @@ void __ext_sora_ifft(struct complex16* output, int nFFTSize, struct complex16 * 
 	// We use the safe version to respect Blink's semantic
 	//	IFFT<128> (temp, pcOutput );
 	switch (nFFTSize) {
+	case 16:
+		IFFTSafe<16>(in, out);
+		break;
 	case 32:
 		IFFTSafe<32>(in, out);
 		break;
