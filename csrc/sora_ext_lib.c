@@ -46,6 +46,7 @@
 #include "samples.hpp"
 #include "sampling.hpp"
 #include "sora_ext_bricks.h"
+#include "sora_ext_lib_fft.h"
 
 #include "utils.h"
 
@@ -1237,6 +1238,9 @@ void __ext_sora_fft(struct complex16* output, int nFFTSize, struct complex16 * i
 
 	// We use the safe version to respect Blink's semantic
 	switch (nFFTSize) {
+	case 12:
+		FFTSafe<12>(in, out);
+		break;
 	case 16:
 		FFTSafe<16>(in, out);
 		break;
