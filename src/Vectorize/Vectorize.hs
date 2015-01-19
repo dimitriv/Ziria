@@ -96,21 +96,6 @@ computeVectTop dfs lcomp = do
                 -- Return directs + recursives (will contain self)
                 return (direct_vss ++ recursive_vss)
   
-{-                
- 
-          , not (null sfs) -- Design question: Should we instead always recurse too?
-          -> do vss <- vect_comp_dd dfs comp sfs
-                return $ self : vss
-          | otherwise -> do
-            let css = c1 : map snd xs_cs
-                xs  = map fst xs_cs
-            vss <- mapM (go vctx) css
-            let ress = cross_prod_mit $ map keepGroupMaximals vss
-            let bs = keepGroupMaximals $
-                       map (\(vc:vcs) -> combineCtrl loc vc xs vcs) ress
-            warn_if_empty bs "BindMany"
-            return bs
--}
 
         -- Seq should have been eliminated during type checking
         Seq {} -> vecMFail loc $
