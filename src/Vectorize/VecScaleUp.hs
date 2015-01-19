@@ -20,6 +20,8 @@ module VecScaleUp ( doVectorizeCompUp, vectMap ) where
 
 import AstExpr
 import AstComp
+import AstUnlabelled
+
 import PpComp
 import qualified GenSym as GS
 
@@ -31,9 +33,204 @@ import Control.Monad.State
 import Data.List as M
 
 
-import CardinalityAnalysis
+import CardAnalysis
+import VecM
 
-import VecMonad -- Import the vectorization monad
+import Control.Applicative ( <$> )
+
+
+
+
+        -- -- Some non-simple computers
+        -- (Interleave {}) ->
+        --     vecMFail "BUG: Interleave is not a simple computer!"
+        -- (Repeat {}) ->
+        --     vecMFail "BUG: Repeat is not a simple computer!"
+
+        -- (VectComp {}) ->
+        --     vecMFail "BUG: VectComp is not a simple computer!"
+
+        -- (Filter {}) ->
+        --     vecMFail "BUG: Filter is not a simple computer!"
+        -- (Map {}) ->
+        --     vecMFail "BUG: Map is not a simple computer!"
+        -- (Until {}) ->
+        --     vecMFail "BUG: Until is not a simple computer!"
+        -- (While {}) ->
+        --     vecMFail "BUG: While is not a simple computer!"
+
+        -- (Times _ _ _ x c1) ->
+        --     vecMFail "BUG: Times is not a simple computer!"
+
+        -- (Mitigate {}) ->
+        --     vecMFail "BUG: Mitigate is not a simple computer!"
+
+
+        -- Par {} ->
+        --    vecMFail loc $ text "Not a simple computer:" <+> show lcomp
+
+
+
+        -- (ReadSrc mty)
+        --    | RWRealTyAnn ty <- mty
+        --    , not (isArrTy ty)
+        --    , min > 1 -- For the vectorizer, a multiplicity of 1 is not really a vectorization
+        --    -> return $ MkComp (ReadSrc (RWRealTyAnn (TArr (Literal min) ty))) loc ()
+        --    | otherwise
+        --    -> return $ MkComp (ReadSrc mty) loc ()
+
+        -- (WriteSnk mty)
+        --    | RWRealTyAnn ty <- mty
+        --    , not (isArrTy ty)
+        --    , mout > 1 -- For the vectorizer, a multiplicity of 1 is not really a vectorization
+        --    -> return $ MkComp (WriteSnk (RWRealTyAnn (TArr (Literal mout) ty))) loc ()
+        --    | otherwise
+        --    -> return $ MkComp (WriteSnk mty) loc ()
+
+
+        -- (ReadInternal bid tp)
+        --       -> return $ MkComp (ReadInternal bid tp) loc ()
+        -- (WriteInternal bid) -> return $ MkComp (WriteInternal bid) loc ()
+
+
+        -- -- Now for the meat of the thing
+        -- (Emit e)
+        --    -> let mkexp e    = MkExp e loc ()
+        --           mkintexp e = MkExp e loc tint
+        --       in
+        --       do { ecnt <- getEmitCount
+        --          ; incEmitCount
+        --           -- emit ~~~> return (ya[j_cntr*cout + $emit_count] := e)
+        --          ; let idx = (mkintexp (EVar jcnt_name) `emul` mkintexp (EVal $ vint cout)) `eadd` mkintexp (EVal (vint ecnt))
+        --          ; let ya_write
+        --                  | arityout == 1
+        --                  = EAssign (eraseExp ya_exp) (eraseExp e) -- Just assign! No indices involved
+        --                  | otherwise
+        --                  = EArrWrite (eraseExp ya_exp) (eraseExp idx) LISingleton (eraseExp e)
+
+        --          ; return $ MkComp (Return AutoInline (mkexp ya_write)) loc ()
+        --          }
+        -- Take1
+        --   | arityin == 1
+        --   -> return $ MkComp Take1 loc ()
+        --   | otherwise -- Real vectorization on the input
+        --   -> let mkexp e    = MkExp e loc ()
+        --          mkintexp e = MkExp e loc tint
+        --      in
+        --      do { tcnt <- getTakeCount
+        --         ; incTakeCount
+        --           -- take ~~~> return (xa[i_cntr*(mout*cin) + j_cntr*cin + $take_count])
+        --         ; let eidx = (mkintexp (EVar icnt_name) `emul` mkintexp (EVal $ vint (mout*cin))) `eadd`
+        --                      (mkintexp (EVar jcnt_name) `emul` mkintexp (EVal $ vint cin))        `eadd`
+        --                      (mkintexp (EVal (vint tcnt)))
+
+        --               rdexp = mkexp (EArrRead (eraseExp xa_exp) (eraseExp eidx) LISingleton)
+        --         ; return $
+        --           MkComp (Return ForceInline rdexp) loc () -- NB: Force Inline
+        --         }
+        -- Take ne
+        --   | arityin == 1
+        --   -> return $ MkComp (Take (eraseExp ne)) loc ()
+        --   | otherwise
+        --   -> let mkexp e = MkExp e loc ()
+        --          mkintexp e = MkExp e loc tint
+        --      in
+        --      do { let n | (EVal (VInt m)) <- unExp ne = fromIntegral m
+        --                 | otherwise = error "getInt: can't happen!"
+        --         ; tcnt <- getTakeCount
+        --         ; mapM (\_ -> incTakeCount) [1..n]
+        --           -- take ~~~> return (xa[i_cntr*(mout*cin) + j_cntr*cin + $take_count])
+        --         ; let start_index = (mkintexp (EVar icnt_name) `emul` mkintexp (EVal $ vint (mout*cin))) `eadd`
+        --                             (mkintexp (EVar jcnt_name) `emul` mkintexp (EVal $ vint cin))        `eadd`
+        --                             (mkintexp (EVal (vint tcnt)))
+
+        --               rd_exp = mkexp $ EArrRead (eraseExp xa_exp)
+        --                                         (eraseExp start_index)
+        --                                         (LILength n)
+        --         ; return $ MkComp (Return ForceInline rd_exp) loc () -- NB: Force Inline!
+        --         }
+
+        -- (Emits e)
+        --   | TArr (Literal n) _ <- info e
+        --   -> -- Must create:
+        --      -- return ( let x = e in
+        --      --          for (k = 0; k <= n-1; k++) { ya[jcntr + ecnt + k] := x[k] })
+
+        --      -- Better one:
+        --      -- return (let x = e in ya {startpos = jcontr+ecount} {rangelen=k} = x }
+        --      let mkexp e = MkExp e loc ()
+        --          mkintexp e = MkExp e loc tint
+        --      in
+        --      do { ecnt <- getEmitCount
+        --         ; let xvar = toName "_x" loc Nothing
+        --               xexp = mkexp (EVar xvar)
+        --               jexp = mkintexp (EVar jcnt_name)
+        --               ecntexp = mkintexp (EVal (vint ecnt))
+
+        --          -- emit ~~~> return (ya[j_cntr*cout + $emit_count] := ...
+        --         ; let write_index = (jexp `emul` mkintexp (EVal $ vint cout)) `eadd` ecntexp
+
+        --         ; let asgn_expr
+        --                 | arityout == 1
+        --                 = mkexp $ EAssign ya_exp (mkexp (EArrRead (eraseExp e) (mkexp (EVal $ vint 0)) LISingleton))
+        --                 | otherwise
+        --                 = -- DV: used to be ... mkexp $ EArrWrite ya_exp (eraseExp write_index) (LILength n) xexp
+        --                   mkexp $ EArrWrite ya_exp (eraseExp write_index) (LILength n) (eraseExp e)
+
+        --         -- DV: changing this!
+        --         -- ; let let_exp   = mkexp $ ELet xvar (eraseExp e) asgn_expr
+        --         ; let let_exp = asgn_expr
+
+        --         ; mapM (\_ -> incEmitCount) [1..n]
+
+        --         ; return (MkComp (Return AutoInline let_exp) loc ())
+        --         }
+
+        --    | otherwise
+        --    -> vecMFail "BUG: emits with non known array size! Can't be simple computer!"
+
+
+
+         
+                
+
+
+
+
+doVectCompUD :: DynFlags -> LComp -> SFUD -> VecM DelayedVectRes
+doVectCompUD dfs lcomp (SFUD1 i j (Mul m1) (Mul m2))
+  -- [UD1] a^i       -> b^j       ~~~> (a*i*m1*m2)   -> (b*j*m1)^m2 
+  = 
+     xa <- take (i*m1*m2)
+     letref iidx = 0
+     letref tidx = 0;
+     times m2 $
+       letref oodx = 0 
+       times m1 $ rewritten_comp
+       oodx := 0;
+       emit ya;
+
+
+
+     take N ~~>  return { tidx = iidx; iidx+=N; xa[tidx,N] } 
+     emit es ~>  do { tidx = oidx; oidx+=N; ya[tidx,N] := es; }
+
+
+
+     letref oodx = 0;
+
+     times m1 i $ 
+       times m2 j $
+          take N ~~> do { return xa[iidx,N]; iidx++ }
+
+     xa <- take (i*m1*m2)
+     times m1 i $ 
+        times m2 j $
+           take ~~~> return xa[
+           emit e ~> ya[
+           .... 
+           x <- return xa[i*m1 ..... 
+           
 
 
 
