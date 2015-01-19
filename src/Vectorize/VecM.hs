@@ -198,8 +198,8 @@ data VectRes =
 
      -- Vectorization did happen
    | DidVect { 
-        vect_in_ty  :: Ty     -- not necessarily equal to original in_ty
-      , vect_out_ty :: Ty     -- not necessarily equal to original out_ty
+        vect_in_ty  :: Ty       -- not necessarily equal to original in_ty
+      , vect_out_ty :: Ty       -- not necessarily equal to original out_ty
       , vect_util   :: Double } -- utility of this vectorization
 
  deriving Show

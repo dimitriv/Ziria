@@ -79,8 +79,27 @@ computeVectTop dfs lcomp = do
         Var x -> lookupCVarBind x >>= go vctx
 
         BindMany c1 xs_cs
-          | Just sf <- compSFDD card tyin tyout
-          -> do vss <- vect_comp_dd dfs comp sf
+          -> do let sfs = compSFDD card tyin tyout
+                    css = c1 : map snd xs_cs
+                    xs  = map fst xs_cs
+
+                -- Compute direct down-vectorizations
+                direct_vss <- vect_comp_dd dfs comp sfs
+
+                -- Compute recursive vectorizations
+                vss <- mapM (go vctx) css
+                let ress = cross_prod_mit $ map keepGroupMaximals vss
+                let recursive_vss = keepGroupMaximals $
+                      map (\(vc:vcs) -> combineCtrl loc vc xs vcs) ress
+                warn_if_empty recursive_vss "BindMany"
+      
+                -- Return directs + recursives (will contain self)
+                return (direct_vss ++ recursive_vss)
+  
+{-                
+ 
+          , not (null sfs) -- Design question: Should we instead always recurse too?
+          -> do vss <- vect_comp_dd dfs comp sfs
                 return $ self : vss
           | otherwise -> do
             let css = c1 : map snd xs_cs
@@ -91,6 +110,7 @@ computeVectTop dfs lcomp = do
                        map (\(vc:vcs) -> combineCtrl loc vc xs vcs) ress
             warn_if_empty bs "BindMany"
             return bs
+-}
 
         -- Seq should have been eliminated during type checking
         Seq {} -> vecMFail loc $
@@ -144,14 +164,16 @@ computeVectTop dfs lcomp = do
         Interleave c1 c2 -> return [self]
 
         Branch e c1 c2
-          | Just sf <- compSFDD card tyin tyout
-          -> do vss <- vect_comp_dd dfs comp sf
-                return $ self : vss
-          | otherwise
-          -> do vcs1 <- go vctx c1
+          -> do let sfs = compSFDD card tyin tyout
+
+                -- Compute the direct vectorizations
+                direct_vss <- vect_comp_dd dfs comp sfs
+
+                -- Compute the recursive vss 
+                vcs1 <- go vctx c1
                 vcs2 <- go vctx c2
                 let ress = cross_prod_mit $ map keepGroupMaximals [vcs1,vcs2]
-                branch_cands <- mapM (\[dvr1,dvr2] ->
+                recursive_vss <- mapM (\[dvr1,dvr2] ->
                    let vres1 = dvr_vres dvr1 
                        vres2 = dvr_vres dvr2 
                        vtin  = vect_in_ty  vres1
@@ -165,14 +187,16 @@ computeVectTop dfs lcomp = do
                                           c2' <- dvr_comp dvr2
                                           return $ cBranch loc e c1' c2'
                           , dvr_vres = vres }) ress
-                warn_if_empty branch_cands "Branch"
-                return branch_cands
+                warn_if_empty recursive_vss "Branch"
+                
+                -- Return directs + recursives (recursives will contain 'self')
+                return $ direct_vss ++ recursive_vss
 
         Filter {} -> return [ self ] -- TODO: Implement later on
 
         -- Reading and writing internal or external buffers
-        ReadSrc ty       -> return $ self : vect_rdwr (cReadSrc       loc) ty
-        WriteSnk ty      -> return $ self : vect_rdwr (cWriteSnk      loc) ty
+        ReadSrc ty       -> return $ self : vect_rdwr (cReadSrc  loc) ty
+        WriteSnk ty      -> return $ self : vect_rdwr (cWriteSnk loc) ty
         ReadInternal  ty b rt 
           -> return $ self : vect_rdwr (\t -> cReadInternal  loc t b rt) ty
         WriteInternal ty b 
@@ -211,16 +235,13 @@ computeVectTop dfs lcomp = do
         -- Annotated computer 
         VectComp (fin,fout) c -> do 
           r <- vect_comp_annot (fin,fout) c tyin tyout loc
+          -- No `self' here, programmer has forced an annotation
           return [r]
-          
 
         -- Others: Take1/Take/Emit/Emits, just down-vectorize
         _other
-          | Just sf <- compSFDD card tyin tyout
-          -> do vss <- vect_comp_dd dfs comp sf
-                return $ self : vss
-          | otherwise 
-          -> return [self]
+          -> do vss <- vect_comp_dd dfs comp $ compSFDD card tyin tyout
+                return (self : vss)
 
 
 {-------------------------------------------------------------------------------
@@ -237,22 +258,19 @@ warn_empty_vect dfs comp ress origin
 -- | Vectorizing read/write nodes (NB: not adding 'self')
 vect_rdwr :: (Ty -> Comp) -> Ty -> [ DelayedVectRes ]
 vect_rdwr builder ty
-  | isVectorizable ty = map do_vect [2..vECT_ARRAY_BOUND]
+  | isVectorizable ty = map do_vect [2..vECT_IOARRAY_BOUND]
   | otherwise         = []
   where
    do_vect n
-     = DVR { dvr_comp = return $ builder vty
-           , dvr_vres = DidVect vty vty minUtil }
+     = DVR {dvr_comp = return $ builder vty, dvr_vres = DidVect vty vty minUtil}
      where vty = mkVectTy ty n
 
 -- | Vectorizing a (finitely) iterated computer (NB: not adding 'self')
 vect_itercomp :: DynFlags -> (Comp -> Comp)
               -> Card -> Ty -> Ty -> LComp -> VecM [DelayedVectRes]
 vect_itercomp dfs builder vcard tin tout c
-  | Just sf <- compSFDD vcard tin tout
-  = do vss <- vect_comp_dd dfs c sf
+  = do vss <- vect_comp_dd dfs c $ compSFDD vcard tin tout
        mapM (liftCompDVR builder) vss
-  | otherwise = return []
 
 {-------------------------------------------------------------------------------
   Vectorizing Map 
@@ -286,6 +304,20 @@ vect_map dfs vctx f tin tout loc vann = do
   Vectorizing Repeat 
 -------------------------------------------------------------------------------}
 
+type ScaleFactors = ([SFUD], [SFDU], [SFDD])
+
+-- | The scalefactors for a repeat
+repeat_scalefactors :: CtxForVect -> Card -> Ty -> Ty -> ScaleFactors
+repeat_scalefactors vctx card tyin tyout
+  = let sfdus  = compSFDU card tyin tyout
+        sfuds  = compSFUD card tyin tyout
+        sfdds  = compSFDD card tyin tyout
+    in case vctx of 
+         CtxUnrestricted    -> (sfuds, sfdus, sfdds)
+         CtxExistsCompLeft  -> (sfuds, []   , sfdds) 
+         CtxExistsCompRight -> ([]   , sfdus, sfdds)
+
+
 -- | NB: Not including 'self'
 vect_repeat :: DynFlags 
             -> CtxForVect
@@ -294,60 +326,48 @@ vect_repeat :: DynFlags
             -> VecM [DelayedVectRes]
 vect_repeat dynflags vctx c tyin tyout loc vann = go vann c
   where
-   go Nothing (MkComp (VectComp hint c0) _ _) =
      -- | Nested annotation on computer
-     go (Just (Rigid True hint)) c0
-   go (Just (Rigid f (fin,fout))) c0 = do
+   go Nothing (MkComp (VectComp hint c0) _ _) = go (Just (Rigid True hint)) c0
      -- | Vectorize rigidly and up/dn mitigate
+   go (Just (Rigid f (fin,fout))) c0 = do
      vc <- vect_comp_annot (fin,fout) c0 tyin tyout loc
-     return $ mitUpDn_Maybe f vctx loc vc
+     let repeat_sfs = repeat_scalefactors vctx (compInfo c0) tyin tyout
+     return $ mit_updn_maybe repeat_sfs f loc vc
    go (Just (UpTo f (maxin,maxout))) c0 = do
      -- | Vectorize up to maxin/maxout and up/dn mitigate
      vcs <- go Nothing c0
-     return $ concatMap (vec_upto maxin maxout f vctx loc) vcs
+     let repeat_sfs = repeat_scalefactors vctx (compInfo c0) tyin tyout
+     return $ concatMap (vec_upto repeat_sfs maxin maxout f loc) vcs
      -- | Vectorize without restrictions and up/dn mitigate
-   go Nothing c0 =
-     let card   = compInfo c0
-         sfdus  = compSFDU card tyin tyout
-         sfuds  = compSFUD card tyin tyout
-         sfdds  = compSFDD card tyin tyout
-         vecuds = maybe (return []) (vect_comp_ud dynflags c0) sfuds
-         vecdus = maybe (return []) (vect_comp_du dynflags c0) sfdus
-         vecdds = maybe (return []) (vect_comp_dd dynflags c0) sfdds
-     in do vcs <- case vctx of 
-             CtxUnrestricted    -> vecuds .++ vecdus .++ vecdds
-             CtxExistsCompLeft  -> vecuds .++ vecdds
-             CtxExistsCompRight -> vecdus .++ vecdds
-           return (map mk_repeat vcs)
+   go Nothing c0 = do 
+     let (sfuds,sfdus,sfdds) 
+            = repeat_scalefactors vctx (compInfo c0) tyin tyout
+     vecuds <- vect_comp_ud dynflags c0 sfuds
+     vecdus <- vect_comp_du dynflags c0 sfdus
+     vecdds <- vect_comp_dd dynflags c0 sfdds
+     return $ map mk_repeat (vecuds ++ vecdus ++ vecdds)
+
    mk_repeat :: DelayedVectRes -> DelayedVectRes
    mk_repeat (DVR { dvr_comp = io_comp, dvr_vres = vres })
      = DVR { dvr_comp = cRepeat loc Nothing <$> io_comp, dvr_vres = vres }
 
-   (.++) :: Monad m => m [a] -> m [a] -> m [a]
-   (.++) m1 m2 = do l1 <- m1
-                    l2 <- m2 
-                    return $ l1 ++ l2
 
 
 -- | Take a DelayedVectRes and if the vectorized array sizes are
 -- within the bounds given then keep all possible up/dn mitigations.
-vec_upto :: Int -> Int
-         -> Bool -> CtxForVect -> Maybe SourcePos
+vec_upto :: ScaleFactors -> Int -> Int
+         -> Bool -> Maybe SourcePos
          -> DelayedVectRes -> [DelayedVectRes]
-vec_upto maxin maxout f vctx loc dvr
+vec_upto sfs maxin maxout f loc dvr
   = case dres of
       NotVect {} -> [dvr]
       DidVect vect_tin vect_tout _util
         | check_tysiz vect_tin  maxin && check_tysiz vect_tout maxout
-        -> mitUpDn_Maybe f vctx loc dvr
+        -> mit_updn_maybe sfs f loc dvr
         | otherwise -> []
   where dres = dvr_vres dvr
         check_tysiz (TArray (Literal l) _) bnd | l >= bnd = False
         check_tysiz _tother _bnd = True
-
-
-mitUpDn_Maybe :: Bool -> CtxForVect -> Maybe SourcePos -> DelayedVectRes -> [DelayedVectRes]
-mitUpDn_Maybe f vctx loc dvr = error "Implement me!"
 
 
 {-------------------------------------------------------------------------------
@@ -356,23 +376,91 @@ mitUpDn_Maybe f vctx loc dvr = error "Implement me!"
 vect_comp_annot :: (Int,Int) -> LComp
                 -> Ty -> Ty -> Maybe SourcePos
                 -> VecM DelayedVectRes
-vect_comp_annot (fin,fout) c tyin tyout loc = error "Implement me!"
+vect_comp_annot (fin,fout) c tyin tyout loc 
+  = error "implementme"
 
 {-------------------------------------------------------------------------------
   DD/UD/DU Vectorization entry points (see VecScaleUp/VecScaleDn)
 -------------------------------------------------------------------------------}
 
--- | DD-vectorization
-vect_comp_dd :: DynFlags -> LComp -> SFDD -> VecM [DelayedVectRes]
-vect_comp_dd dfs comp sf = error "Implement me!"
+vect_comp_ud :: DynFlags -> LComp -> [SFUD] -> VecM [DelayedVectRes]
+vect_comp_ud dfs lcomp sfs = mapM (doVectCompUD dfs lcomp) sfs
 
--- | UD-vectorization
-vect_comp_ud :: DynFlags -> LComp -> SFUD -> VecM [DelayedVectRes]
-vect_comp_ud dfs comp sf = error "Implement me!"
+vect_comp_du :: DynFlags -> LComp -> [SFDU] -> VecM [DelayedVectRes]
+vect_comp_du dfs lcomp sfs = mapM (doVectCompDU dfs lcomp) sfs
 
--- | DU-vectorization
-vect_comp_du :: DynFlags -> LComp -> SFDU -> VecM [DelayedVectRes]
-vect_comp_du dfs comp sf = error "Implement me!"
+vect_comp_dd :: DynFlags -> LComp -> [SFDD] -> VecM [DelayedVectRes]
+vect_comp_dd dfs lcomp sfs = mapM (doVectCompDD dfs lcomp) sfs
+
+
+doVectCompUD :: DynFlags -> LComp -> SFUD -> VecM DelayedVectRes
+doVectCompUD = error "implementme" 
+doVectCompDU :: DynFlags -> LComp -> SFDU -> VecM DelayedVectRes
+doVectCompDU = error "implementme" 
+doVectCompDD :: DynFlags -> LComp -> SFDD -> VecM DelayedVectRes
+doVectCompDD = error "implementme" 
+
+{-------------------------------------------------------------------------------
+  Flexible mitigation
+-------------------------------------------------------------------------------}
+
+-- | Add mitigators around an already-vectorized component for more flexibility.
+mit_updn_maybe :: ScaleFactors 
+               -> Bool -> Maybe SourcePos -> DelayedVectRes -> [DelayedVectRes]
+mit_updn_maybe sfs flexi loc dvr = if flexi then mit_updn sfs loc dvr else []
+
+mit_updn :: ScaleFactors -> Maybe SourcePos 
+         -> DelayedVectRes -> [DelayedVectRes]
+mit_updn (sfuds,sfdus,sfdds) loc dvr
+  | NotVect {} <- dvr_vres dvr = [dvr] -- no point in mitigating if not-vect
+  | otherwise
+  = concatMap mit_aux $
+    map sfud_arity sfuds ++ map sfdu_arity sfdus ++ map sfdd_arity sfdds
+  where mit_aux (Nothing,Nothing) = return dvr
+        mit_aux (Just n, Nothing) = mit_in n dvr
+        mit_aux (Just n, Just m)  = mit_out dvr m >>= mit_in n
+        mit_aux (Nothing, Just m) = mit_out dvr m
+
+mit_in :: Int -> DelayedVectRes -> [DelayedVectRes]
+mit_in n dvr@(DVR { dvr_comp = io_comp, dvr_vres = vres }) 
+  = error "implementme"
+
+mit_out :: DelayedVectRes -> Int -> [DelayedVectRes] 
+mit_out dvr@(DVR { dvr_comp = io_comp, dvr_vres = vres }) m 
+  = error "implementme"
+
+
+
+-- Add all possible mitigations dictated by scale factors ...
+    
+
+-- vect_comp_ud dfs comp (SFUD ain (SFKnown aout divs_of_aout mults)) 
+--   = do ud2s <- mapM (do_vect_comp_ud2 ain aout comp) rs
+--        ud1s <- mapM (do_vect_comp_ud1 ain aout comp) mults
+--        return (ud2s ++ ud1s)
+--   where rs = [(j0,j1,m1*m2) | (j0,j1) <- divs_of_aout, (m1,m2) <- mults ]
+-- vect_comp_ud dfs comp (SFUD ain (SFUnknown mults))
+--   = mapM (do_vect_comp_ud3 ain comp) mults
+
+-- -- | DU-vectorization
+-- vect_comp_du :: DynFlags -> LComp -> SFDU -> VecM [DelayedVectRes]
+-- vect_comp_du dfs comp (SFDU (SFKnown ain divs_of_ain mults) aout)
+--   = do du2s <- mapM (do_vect_comp_du2 ain aout comp) rs
+--        du1s <- mapM (do_vect_comp_du1 ain aout comp) mults
+--        return (du2s ++ du1s)
+-- vect_comp_du dfs comp (SFDU (SFUnknown mults) aout)
+--   = mapM (do_vect_comp_du3 aout comp) mults
+
+-- -- | DD-vectorization
+-- vect_comp_dd :: DynFlags -> LComp -> SFDD -> VecM [DelayedVectRes]
+-- vect_comp_dd dfs comp (SFDD_InOut (SFKnown
+
+
+-- = error "Implement me!"
+
+
+
+-- error "Implement me!"
 
 
 
@@ -423,7 +511,7 @@ vect_comp_du dfs comp sf = error "Implement me!"
 
 --         Repeat (Just (Rigid f (finalin, finalout)) c1)
 --           -> do vc <- vectWithHint (finalin,finalout) c1 -- Rigidly vectorize computer
---                 return $ mitUpDn_Maybe f vctx loc vc
+--                 return $ mit_updn_maybe f vctx loc vc
         
 -- ****************
 
@@ -437,7 +525,7 @@ vect_comp_du dfs comp sf = error "Implement me!"
 --                              , dvr_vres  = DidVect finalin finalout minUtil
 --                              , dvr_orig_tyin  = tyin
 --                              , dvr_orig_tyout = tyout }
---                   ; return $ mitUpDn_Maybe f ra loc vect
+--                   ; return $ mit_updn_maybe f ra loc vect
 --                   }
 
 --           Repeat (Just (UpTo f (maxin, maxout))) c1
@@ -446,7 +534,7 @@ vect_comp_du dfs comp sf = error "Implement me!"
 --                            = case r of NoVect -> True
 --                                        DidVect i j _ -> i <= maxin && j <= maxout
 --                    ; return $ concat $
---                      map (mitUpDn_Maybe f ra loc) (filter filter_res vss)
+--                      map (mit_updn_maybe f ra loc) (filter filter_res vss)
 --                    }
 
 
@@ -537,7 +625,7 @@ vect_comp_du dfs comp sf = error "Implement me!"
 
 --             in do { env <- getVecEnv
 --                   ; let vect_maps = map (mk_vect_map env) mults
---                   ; return $ concat $ map (mitUpDn_Maybe f ra loc) $
+--                   ; return $ concat $ map (mit_updn_maybe f ra loc) $
 --                              self_no_vect : vect_maps
 --                   }
 
@@ -555,7 +643,7 @@ vect_comp_du dfs comp sf = error "Implement me!"
 
 --                in do { env <- getVecEnv
 --                      ; let vect_maps = map (mk_vect_map env) mults
---                      ; return $ concat $ map (mitUpDn_Maybe f ra loc) vect_maps
+--                      ; return $ concat $ map (mit_updn_maybe f ra loc) vect_maps
 --                      }
 --             | otherwise
 --             -> vecMFail "Vectorization failure, bogus map annotation!"
@@ -634,11 +722,11 @@ mitUpDn ra loc dvr@(DVR { dvr_comp       = mk_c
 
 
 
-mitUpDn_Maybe :: Bool
+mit_updn_maybe :: Bool
               -> RateAction
               -> Maybe SourcePos
               -> DelayedVectRes -> [ DelayedVectRes ]
-mitUpDn_Maybe flexi ra loc vres
+mit_updn_maybe flexi ra loc vres
   = if flexi then mitUpDn ra loc vres else [vres]
 
 
@@ -950,7 +1038,7 @@ computeVectTop verbose = computeVect FlexiRate
                              , dvr_vres  = DidVect finalin finalout minUtil
                              , dvr_orig_tyin  = tyin
                              , dvr_orig_tyout = tyout }
-                  ; return $ mitUpDn_Maybe f ra loc vect
+                  ; return $ mit_updn_maybe f ra loc vect
                   }
 
           Repeat (Just (UpTo f (maxin, maxout))) c1
@@ -959,7 +1047,7 @@ computeVectTop verbose = computeVect FlexiRate
                            = case r of NoVect -> True
                                        DidVect i j _ -> i <= maxin && j <= maxout
                    ; return $ concat $
-                     map (mitUpDn_Maybe f ra loc) (filter filter_res vss)
+                     map (mit_updn_maybe f ra loc) (filter filter_res vss)
                    }
 
 
@@ -1182,7 +1270,7 @@ computeVectTop verbose = computeVect FlexiRate
 
             in do { env <- getVecEnv
                   ; let vect_maps = map (mk_vect_map env) mults
-                  ; return $ concat $ map (mitUpDn_Maybe f ra loc) $
+                  ; return $ concat $ map (mit_updn_maybe f ra loc) $
                              self_no_vect : vect_maps
                   }
 
@@ -1200,7 +1288,7 @@ computeVectTop verbose = computeVect FlexiRate
 
                in do { env <- getVecEnv
                      ; let vect_maps = map (mk_vect_map env) mults
-                     ; return $ concat $ map (mitUpDn_Maybe f ra loc) vect_maps
+                     ; return $ concat $ map (mit_updn_maybe f ra loc) vect_maps
                      }
             | otherwise
             -> vecMFail "Vectorization failure, bogus map annotation!"
