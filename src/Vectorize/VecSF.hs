@@ -108,11 +108,11 @@ Factor datatypes.
   Scaling factors
 -------------------------------------------------------------------------------}
 
-data SFUnknown = SFUnknown { sf_mults :: [Int] }
+data SFUnknown = SFUnknown { sf_mults :: [Int] } -- multiplicities 
 data SFKnown = SFKnown {
-     sf_other       :: Int
-   , sf_other_divs  :: [(Int,Int)]
-   , sf_other_mults :: [(Int,Int)] }
+     sf_other       :: Int           -- known cardinality 
+   , sf_other_divs  :: [(Int,Int)]   -- (d0,d1) s.t. j0 * j1 = sf_other
+   , sf_other_mults :: [(Int,Int)] } -- (m1,m2) s.t. m1 * m2 = 
 
 -- | Scaling factor data types 
 data SFUD -- | UD scale factors

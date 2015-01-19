@@ -22,7 +22,7 @@ import AstExpr
 import AstComp
 import AstFM
 import AstUnlabelled
-import qualified AstLabelled as ASTL
+import qualified AstLabelled as AstL
 
 import Outputable
 
@@ -255,12 +255,29 @@ vect_itercomp dfs builder vcard tin tout c
 {-------------------------------------------------------------------------------
   Vectorizing Map 
 -------------------------------------------------------------------------------}
-vect_map :: CtxForVect 
-         -> EId -> Ty -> Ty -> Maybe SourcePos
-         -> Maybe VectAnn 
-         -> VecM [DelayedVectRes]
-vect_map vctx f tin tout loc vann = error "Implement me!"
 
+-- | The cardinality of any Map, obviously 1-1, statically known
+map_card :: Card
+map_card = SCard (CAStatic 1) (CAStatic 1)
+
+-- | To avoid duplication we vectorize Map exactly as we do for
+-- repeat. Hence, below we create a node: seq { x <- take; emit f(x) }
+-- and call the vectorizer for Repeat.
+vect_map :: CtxForVect
+         -> EId -> Ty -> Ty -> Maybe SourcePos
+         -> Maybe VectAnn
+         -> VecM [DelayedVectRes]
+vect_map vctx f tin tout loc vann = do
+  bind_name <- newVectGName "vm" tin loc
+  vect_repeat vctx (map2take_emit bind_name) tin tout loc vann
+  where map2take_emit :: EId -> LComp
+        map2take_emit x =
+          AstL.cRepeat loc OCard vann $
+          AstL.cBindMany loc map_card ctake [(x,cemit x)]
+        ctake   = AstL.cTake1 loc take_card tin
+        cemit x = AstL.cEmit loc emit_card (eCall loc f [(eVar loc x)])
+        take_card = SCard (CAStatic 1) (CAStatic 0)
+        emit_card = SCard (CAStatic 0) (CAStatic 1)
 
 {-------------------------------------------------------------------------------
   Vectorizing Repeat 
