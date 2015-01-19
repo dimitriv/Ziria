@@ -27,6 +27,7 @@ import Text.Parsec.Pos (SourcePos)
 
 import AstComp
 import AstExpr
+import AstFM
 import AstUnlabelled
 import qualified AstLabelled as AstL
 
@@ -272,6 +273,12 @@ isVectorizable ty
   | TArray {} <- ty
   = False 
   | otherwise = True
+
+
+-- | Build an array type from a base type (like VecM.mkVectTy)
+array_ty :: Int -> Ty -> Ty
+array_ty 1 ty = ty
+array_ty n ty = TArray (Literal n) ty 
 
 
 {-------------------------------------------------------------------------
@@ -606,3 +613,12 @@ mEmit loc e = return $ cEmit loc e
 mEmits :: Monad m => Maybe SourcePos -> GExp t () -> m (GComp tc t () ())
 mEmits loc e = return $ cEmits loc e
 
+
+{-------------------------------------------------------------------------
+  Interpret Ziria computations
+-------------------------------------------------------------------------}
+
+interpV :: Bindable v => Maybe SourcePos -> Zr v -> VecM Comp
+interpV loc zr = do 
+  sym  <- asks venv_sym
+  liftIO $ interpC sym loc zr

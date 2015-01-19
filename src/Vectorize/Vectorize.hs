@@ -44,6 +44,8 @@ import Opts
 import CardAnalysis -- Cardinality analysis
 import VecM         -- Vectorizer monad and infrastructure
 import VecSF        -- Vectorization scale factors
+import VecScaleUp
+
 import CtComp
 
 import PassFold ( elimMitigsIO )
@@ -368,8 +370,9 @@ vect_comp_dd :: DynFlags -> LComp -> [SFDD] -> VecM [DelayedVectRes]
 vect_comp_dd dfs lcomp sfs = mapM (doVectCompDD dfs lcomp) sfs
 
 
-doVectCompUD :: DynFlags -> LComp -> SFUD -> VecM DelayedVectRes
-doVectCompUD = error "implementme" 
+-- doVectCompUD :: DynFlags -> LComp -> SFUD -> VecM DelayedVectRes
+-- doVectCompUD = error "implementme" 
+
 doVectCompDU :: DynFlags -> LComp -> SFDU -> VecM DelayedVectRes
 doVectCompDU = error "implementme" 
 doVectCompDD :: DynFlags -> LComp -> SFDD -> VecM DelayedVectRes
@@ -441,11 +444,6 @@ mk_out_mitigator loc (TArray (Literal n) tbase) m
 mk_out_mitigator loc t m -- non-array
   | m > 1     = Just (array_ty m t, cMitigate loc t 1 m)
   | otherwise = Nothing 
-
--- | Build an array type from a base type (like VecM.mkVectTy)
-array_ty :: Int -> Ty -> Ty
-array_ty 1 ty = ty
-array_ty n ty = TArray (Literal n) ty 
 
 
 

@@ -285,6 +285,7 @@ data Zr v where
 
  FPure     :: v -> Zr v
 
+ FEmbed    :: Bindable v => IO Comp -> Zr v
 
 instance Monad Zr where
   return e                      = FPure e 
@@ -305,7 +306,7 @@ instance Monad Zr where
   (>>=) (FLetE fi x ty fe k) f  = FBind (FLetE fi x ty fe k) f 
   (>>=) (FLetERef x ty me k) f  = FBind (FLetERef x ty me k) f
   (>>=) (FBranch e c1 c2) f     = FBind (FBranch e c1 c2) f
-
+  (>>=) (FEmbed io_c) f         = FBind (FEmbed io_c) f
 
 interpC :: Bindable v => GS.Sym -> Maybe SourcePos -> Zr v -> IO Comp
 interpC sym loc = go
@@ -314,7 +315,7 @@ interpC sym loc = go
     go :: forall v. Bindable v => Zr v -> IO Comp
     go (FPure _e)      = error "FPure!?" 
                          -- FPure in isolation is just bad.
-
+    go (FEmbed io_c)   = io_c
     go (FTakeOne t)    = return $ cTake1 loc t
     go (FTakeMany t i) = return $ cTake loc t i
     go (FEmit e)       = return $ cEmit loc (interpE loc e)
@@ -403,6 +404,9 @@ flete :: (Bindable v, FExpy e)
       => ForceInline -> (String ::: Ty ::= e) -> (EId -> Zr v) -> Zr v
 flete fi (x ::: t ::= e) = FLetE fi x t (toFExp e)
 
+
+fembed :: Bindable v => IO Comp -> Zr v
+fembed = FEmbed
 
 instance Bindable v => IfThenElse FExp (Zr v) where
   ifThenElse = FBranch

@@ -16,8 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-module VecSF ( 
-
+module VecSF (
     SFDU (..), compSFDU
   , SFUD (..), compSFUD
   , SFDD (..), compSFDD
@@ -28,6 +27,8 @@ module VecSF (
   , sfud_arity
   , sfdu_arity
   , sfdd_arity
+
+  , NMul (..), NDiv (..), DivsOf (..)
 
 ) where
 
