@@ -208,8 +208,9 @@ computeVectTop dfs lcomp = do
           return (self : vcs)
 
         -- Annotated computer 
-        VectComp (fin,fout) c ->
-          vect_comp_annot (fin,fout) c tyin tyout loc
+        VectComp (fin,fout) c -> do 
+          r <- vect_comp_annot (fin,fout) c tyin tyout loc
+          return [r]
           
 
         -- Others: Take1/Take/Emit/Emits, just down-vectorize
@@ -282,11 +283,47 @@ vect_map vctx f tin tout loc vann = do
 {-------------------------------------------------------------------------------
   Vectorizing Repeat 
 -------------------------------------------------------------------------------}
+
+-- | NB: Not including 'self'
 vect_repeat :: CtxForVect
             -> LComp -> Ty -> Ty -> Maybe SourcePos
             -> Maybe VectAnn
             -> VecM [DelayedVectRes]
-vect_repeat vctx c tyin tyout loc vann = error "Implement me!"
+vect_repeat vctx c tyin tyout loc vann = go vann c
+  where
+   go Nothing (MkComp (VectComp hint c0) _ _) =
+     -- | Nested annotation on computer
+     go (Just (Rigid True hint)) c0
+   go (Just (Rigid f (fin,fout))) c0 = do
+     -- | Vectorize rigidly and up/dn mitigate
+     vc <- vect_comp_annot (fin,fout) c0 tyin tyout loc
+     return $ mitUpDn_Maybe f vctx loc vc
+   go (Just (UpTo f (maxin,maxout))) c0 = do
+     -- | Vectorize up to maxin/maxout and up/dn mitigate
+     vcs <- go Nothing c0
+     return $ concatMap (vec_upto maxin maxout f vctx loc) vcs
+     -- | Vectorize without restrictions and up/dn mitigate
+   go Nothing c0 = error "Implement me!"
+
+-- | Take a DelayedVectRes and if the vectorized array sizes are
+-- within the bounds given then keep all possible up/dn mitigations.
+vec_upto :: Int -> Int
+         -> Bool -> CtxForVect -> Maybe SourcePos
+         -> DelayedVectRes -> [DelayedVectRes]
+vec_upto maxin maxout f vctx loc dvr
+  = case dres of
+      NotVect {} -> [dvr]
+      DidVect vect_tin vect_tout _util
+        | check_tysiz vect_tin  maxin && check_tysiz vect_tout maxout
+        -> mitUpDn_Maybe f vctx loc dvr
+        | otherwise -> []
+  where dres = dvr_vres dvr
+        check_tysiz (TArray (Literal l) _) bnd | l >= bnd = False
+        check_tysiz _tother _bnd = True
+
+
+mitUpDn_Maybe :: Bool -> CtxForVect -> Maybe SourcePos -> DelayedVectRes -> [DelayedVectRes]
+mitUpDn_Maybe f vctx loc dvr = error "Implement me!" 
 
 
 {-------------------------------------------------------------------------------
@@ -294,7 +331,7 @@ vect_repeat vctx c tyin tyout loc vann = error "Implement me!"
 -------------------------------------------------------------------------------}
 vect_comp_annot :: (Int,Int) -> LComp
                 -> Ty -> Ty -> Maybe SourcePos
-                -> VecM [DelayedVectRes]
+                -> VecM DelayedVectRes
 vect_comp_annot (fin,fout) c tyin tyout loc = error "Implement me!"
 
 {-------------------------------------------------------------------------------
