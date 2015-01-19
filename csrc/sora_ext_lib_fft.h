@@ -38,27 +38,51 @@ COMPLEX16 wFFTLUT12_2[] =
 	/*4*/{ -16384, -28378 },
 	/*6*/{ -32767, -0 }
 };
+
+__declspec(selectany) __declspec(align(16)) extern const
+COMPLEX16 wFFTLUT24_1[] =
+{
+	/*0*/{ 16384, 0 },
+	/*1*/{ 31651, -8481 },
+	/*2*/{ 28378, -16384 },
+	/*3*/{ 23170, -23170 },
+	/*4*/{ 16384, -28378 },
+	/*5*/{ 8481, -31651 },
+	/*6*/{ 0, -32767 },
+	/*7*/{ -8481, -31651 }
+};
+__declspec(selectany) __declspec(align(16)) extern const
+COMPLEX16 wFFTLUT24_2[] =
+{
+	/*0*/{ 32767, 0 },
+	/*2*/{ 28378, -16384 },
+	/*4*/{ 16384, -28378 },
+	/*6*/{ 0, -32767 },
+	/*0*/{ -10240, -17736 },
+	/*2*/{ -17736, -10240 },
+	/*4*/{ -20480, 0},
+	/*6*/{ -17736, 10240 }
+};
+
+
 template<> DSP_INLINE const vcs* FFT_GetTwiddleConst<12, 1>() { return (vcs*)wFFTLUT12_1; }
 template<> DSP_INLINE const vcs* FFT_GetTwiddleConst<12, 2>() { return (vcs*)wFFTLUT12_2; }
+template<> DSP_INLINE const vcs* FFT_GetTwiddleConst<24, 1>() { return (vcs*)wFFTLUT24_1; }
+template<> DSP_INLINE const vcs* FFT_GetTwiddleConst<24, 2>() { return (vcs*)wFFTLUT24_2; }
+
 
 
 // Sorting maps for x3 FFTs
 __declspec(selectany) extern const short FFT12LUTMap[] =
 {
-	0,
-	4,
-	8,
-	2,
-	6,
-	10,
-	1,
-	5,
-	9,
-	3,
-	7,
-	11
+	0, 4, 8, 1, 5, 9, 2, 6, 10, 3, 7, 11
+};
+__declspec(selectany) extern const short FFT24LUTMap[] =
+{
+	0, 8, 16, 1, 9, 17, 2, 10, 18, 3, 11, 19, 4, 12, 20, 5, 13, 21, 6, 14, 22, 7, 15, 23
 };
 template<> DSP_INLINE short FFTLUTMapTable<12>(int i) { return FFT12LUTMap[i]; }
+template<> DSP_INLINE short FFTLUTMapTable<24>(int i) { return FFT24LUTMap[i]; }
 
 
 // General radix-3 breakdown

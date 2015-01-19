@@ -1241,6 +1241,9 @@ void __ext_sora_fft(struct complex16* output, int nFFTSize, struct complex16 * i
 	case 12:
 		FFTSafe<12>(in, out);
 		break;
+	case 24:
+		FFTSafe<24>(in, out);
+		break;
 	case 16:
 		FFTSafe<16>(in, out);
 		break;
