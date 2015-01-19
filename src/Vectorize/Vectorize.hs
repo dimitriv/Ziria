@@ -295,7 +295,8 @@ repeat_scalefactors vctx card tyin tyout
 -- | NB: Not including 'self'
 vect_repeat :: DynFlags 
             -> CtxForVect
-            -> LComp -> Ty -> Ty -> Maybe SourcePos
+            -> LComp -- The iterated /computer/ 
+            -> Ty -> Ty -> Maybe SourcePos
             -> Maybe VectAnn
             -> VecM [DelayedVectRes]
 vect_repeat dynflags vctx c tyin tyout loc vann = go vann c
@@ -306,7 +307,7 @@ vect_repeat dynflags vctx c tyin tyout loc vann = go vann c
    go (Just (Rigid f (fin,fout))) c0 = do
      vc <- vect_comp_annot dynflags (fin,fout) c0
      let repeat_sfs = repeat_scalefactors vctx (compInfo c0) tyin tyout
-     return $ mit_updn_maybe repeat_sfs f loc vc
+     return $ mit_updn_maybe repeat_sfs f loc (mk_repeat vc)
    go (Just (UpTo f (maxin,maxout))) c0 = do
      -- | Vectorize up to maxin/maxout and up/dn mitigate
      vcs <- go Nothing c0
