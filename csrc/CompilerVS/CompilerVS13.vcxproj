@@ -192,6 +192,7 @@
     <ClInclude Include="..\params.h" />
     <ClInclude Include="..\sora_ext_bricks.h" />
     <ClInclude Include="..\sora_ext_lib_fft.h" />
+    <ClInclude Include="..\sora_ext_lib_fft_coeffs.h" />
     <ClInclude Include="..\sora_ext_visual.h" />
     <ClInclude Include="..\sora_ip.h" />
     <ClInclude Include="..\sora_radio.h" />

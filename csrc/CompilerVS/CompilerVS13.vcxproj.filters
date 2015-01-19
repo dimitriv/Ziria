@@ -128,5 +128,8 @@
     <ClInclude Include="..\sora_ext_lib_fft.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\sora_ext_lib_fft_coeffs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
