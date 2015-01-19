@@ -270,20 +270,15 @@ vect_map :: DynFlags
          -> Maybe VectAnn
          -> VecM [DelayedVectRes]
 vect_map dfs vctx f tin tout loc vann = do
-  bind_name <- newVectGName "vm" tin loc
-  vect_repeat dfs vctx (aux bind_name) tin tout loc vann
-  where aux :: EId -> LComp
-        aux x =
-          AstL.cRepeat loc OCard vann $
-          AstL.cBindMany loc map_card ctake [(x,cemit x)]
-        ctake   = AstL.cTake1 loc take_card tin
-        cemit x = AstL.cEmit loc emit_card (eCall loc f [(eVar loc x)])
-
+  MkComp (Repeat _ c0) _ _ <- map2take_emit loc vann tin f 
+  vect_repeat dfs vctx c0 tin tout loc vann
+  
 {-------------------------------------------------------------------------------
   Vectorizing Repeat 
 -------------------------------------------------------------------------------}
 
 type ScaleFactors = ([SFUD], [SFDU], [SFDD])
+
 
 -- | The scalefactors for a repeat
 repeat_scalefactors :: CtxForVect -> Card -> Ty -> Ty -> ScaleFactors
