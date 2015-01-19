@@ -163,15 +163,18 @@ chooseBindUtility ds = us / len
 -- Precondition: the two vectorization results match, that is, the
 -- intermediate types are joinable (with ctJoin)
 chooseParUtility :: VectRes -> VectRes -> Double
-chooseParUtility vr1 vr2 = u1 + u2 + util tmid 
+chooseParUtility vr1 vr2 = parUtility u1 u2 tmid
   where 
     u1   = vResUtil vr1 
     u2   = vResUtil vr2 
     tmid = ctJoin (vect_out_ty vr1) (vect_in_ty vr2)
 
-    util :: Ty -> Double 
-    util (TArray (Literal n) _) = log $ fromIntegral n
-    util _ = minUtil
+util :: Ty -> Double 
+util (TArray (Literal n) _) = log $ fromIntegral n
+util _ = minUtil
+
+parUtility :: Double -> Double -> Ty -> Double
+parUtility u1 u2 tmid = u1 + u2 + util tmid
 
 minUtil :: Double
 minUtil = log 0.1
