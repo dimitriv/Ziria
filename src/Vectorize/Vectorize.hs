@@ -37,6 +37,8 @@ import Control.Monad.State
 import Data.List as M
 import Data.Functor.Identity
 
+import Control.Applicative  ( (<$>) )
+
 import Opts
 
 import CardAnalysis -- Cardinality analysis
@@ -196,15 +198,14 @@ computeVectTop dfs lcomp = do
         Mitigate {} ->
            vecMFail loc $ text "BUG: Asked to vectorize Mitigate node."
 
-
         -- Map
         Map vann nm -> do
-          vcs <- vect_map vctx nm tyin tyout loc vann
+          vcs <- vect_map dfs vctx nm tyin tyout loc vann
           return (self : vcs)
 
         -- Repeat 
         Repeat vann c -> do
-          vcs <- vect_repeat vctx c tyin tyout loc vann
+          vcs <- vect_repeat dfs vctx c tyin tyout loc vann
           return (self : vcs)
 
         -- Annotated computer 
@@ -264,13 +265,14 @@ map_card = SCard (CAStatic 1) (CAStatic 1)
 -- | To avoid duplication we vectorize Map exactly as we do for
 -- repeat. Hence, below we create a node: seq { x <- take; emit f(x) }
 -- and call the vectorizer for Repeat.
-vect_map :: CtxForVect
+vect_map :: DynFlags 
+         -> CtxForVect
          -> EId -> Ty -> Ty -> Maybe SourcePos
          -> Maybe VectAnn
          -> VecM [DelayedVectRes]
-vect_map vctx f tin tout loc vann = do
+vect_map dfs vctx f tin tout loc vann = do
   bind_name <- newVectGName "vm" tin loc
-  vect_repeat vctx (map2take_emit bind_name) tin tout loc vann
+  vect_repeat dfs vctx (map2take_emit bind_name) tin tout loc vann
   where map2take_emit :: EId -> LComp
         map2take_emit x =
           AstL.cRepeat loc OCard vann $
@@ -285,11 +287,12 @@ vect_map vctx f tin tout loc vann = do
 -------------------------------------------------------------------------------}
 
 -- | NB: Not including 'self'
-vect_repeat :: CtxForVect
+vect_repeat :: DynFlags 
+            -> CtxForVect
             -> LComp -> Ty -> Ty -> Maybe SourcePos
             -> Maybe VectAnn
             -> VecM [DelayedVectRes]
-vect_repeat vctx c tyin tyout loc vann = go vann c
+vect_repeat dynflags vctx c tyin tyout loc vann = go vann c
   where
    go Nothing (MkComp (VectComp hint c0) _ _) =
      -- | Nested annotation on computer
@@ -303,7 +306,28 @@ vect_repeat vctx c tyin tyout loc vann = go vann c
      vcs <- go Nothing c0
      return $ concatMap (vec_upto maxin maxout f vctx loc) vcs
      -- | Vectorize without restrictions and up/dn mitigate
-   go Nothing c0 = error "Implement me!"
+   go Nothing c0 =
+     let card   = compInfo c0
+         sfdus  = compSFDU card tyin tyout
+         sfuds  = compSFUD card tyin tyout
+         sfdds  = compSFDD card tyin tyout
+         vecuds = maybe (return []) (vect_comp_ud dynflags c0) sfuds
+         vecdus = maybe (return []) (vect_comp_du dynflags c0) sfdus
+         vecdds = maybe (return []) (vect_comp_dd dynflags c0) sfdds
+     in do vcs <- case vctx of 
+             CtxUnrestricted    -> vecuds .++ vecdus .++ vecdds
+             CtxExistsCompLeft  -> vecuds .++ vecdds
+             CtxExistsCompRight -> vecdus .++ vecdds
+           return (map mk_repeat vcs)
+   mk_repeat :: DelayedVectRes -> DelayedVectRes
+   mk_repeat (DVR { dvr_comp = io_comp, dvr_vres = vres })
+     = DVR { dvr_comp = cRepeat loc Nothing <$> io_comp, dvr_vres = vres }
+
+   (.++) :: Monad m => m [a] -> m [a] -> m [a]
+   (.++) m1 m2 = do l1 <- m1
+                    l2 <- m2 
+                    return $ l1 ++ l2
+
 
 -- | Take a DelayedVectRes and if the vectorized array sizes are
 -- within the bounds given then keep all possible up/dn mitigations.
@@ -323,7 +347,7 @@ vec_upto maxin maxout f vctx loc dvr
 
 
 mitUpDn_Maybe :: Bool -> CtxForVect -> Maybe SourcePos -> DelayedVectRes -> [DelayedVectRes]
-mitUpDn_Maybe f vctx loc dvr = error "Implement me!" 
+mitUpDn_Maybe f vctx loc dvr = error "Implement me!"
 
 
 {-------------------------------------------------------------------------------
