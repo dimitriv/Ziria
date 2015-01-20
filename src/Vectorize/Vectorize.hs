@@ -222,9 +222,11 @@ computeVectTop dfs lcomp = do
 
         -- Annotated computer 
         VectComp (fin,fout) c -> do 
-          r <- vect_comp_annot dfs (fin,fout) c
-          -- No `self' here, programmer has forced an annotation
-          return [r]
+          let sfs = compSFDD card tyin tyout
+          vcs <- vect_comp_dd dfs c sfs
+          -- NB: False below because we want /exactly/ the candidates
+          return $
+            concatMap (vec_exact (error "VectComp") fin fout False loc) vcs
 
         -- Others: Take1/Take/Emit/Emits, just down-vectorize
         _other
@@ -305,14 +307,16 @@ vect_repeat :: DynFlags
 vect_repeat dynflags vctx c tyin tyout loc vann = go vann c
   where
      -- | Nested annotation on computer
-   go Nothing (MkComp (VectComp hint c0) _ _) = go (Just (Rigid True hint)) c0
+   go Nothing (MkComp (VectComp hint c0) _ _) 
+     = go (Just (Rigid True hint)) c0
+
      -- | Vectorize rigidly and up/dn mitigate
    go (Just (Rigid f (fin,fout))) c0 = do
-     vc <- vect_comp_annot dynflags (fin,fout) c0
+     vcs <- go Nothing c0
      let repeat_sfs = repeat_scalefactors vctx (compInfo c0) tyin tyout
-     return $ mit_updn_maybe repeat_sfs f loc (mk_repeat vc)
+     return $ concatMap (vec_exact repeat_sfs fin fout f loc) vcs
+
    go (Just (UpTo f (maxin,maxout))) c0 = do
-     -- | Vectorize up to maxin/maxout and up/dn mitigate
      vcs <- go Nothing c0
      let repeat_sfs = repeat_scalefactors vctx (compInfo c0) tyin tyout
      return $ concatMap (vec_upto repeat_sfs maxin maxout f loc) vcs
@@ -336,26 +340,37 @@ vec_upto :: ScaleFactors -> Int -> Int
          -> Bool -> Maybe SourcePos
          -> DelayedVectRes -> [DelayedVectRes]
 vec_upto sfs maxin maxout f loc dvr
-  = case dres of
-      NotVect {} -> [dvr]
-      DidVect vect_tin vect_tout _util
-        | check_tysiz vect_tin  maxin && check_tysiz vect_tout maxout
-        -> mit_updn_maybe sfs f loc dvr
-        | otherwise -> []
+  = let vtin  = vect_in_ty  $ dvr_vres dvr
+        vtout = vect_out_ty $ dvr_vres dvr
+    in if check_tysiz vtin  maxin &&
+          check_tysiz vtout maxout
+       then mit_updn_maybe sfs f loc dvr else []
   where dres = dvr_vres dvr
         check_tysiz (TArray (Literal l) _) bnd | l > bnd = False
         check_tysiz _tother _bnd = True
 
-
-{-------------------------------------------------------------------------------
-  Vectorizing Annotated Computers (see VecScaleForce)
--------------------------------------------------------------------------------}
-vect_comp_annot :: DynFlags -> (Int,Int) -> LComp -> VecM DelayedVectRes
-vect_comp_annot dfs (fin,fout) lcomp
-  = doVectCompForce dfs lcomp (fin,fout)
-
-doVectCompForce :: DynFlags -> LComp -> (Int,Int) -> VecM DelayedVectRes
-doVectCompForce dfs lcomp (fin,fout) = error "implementme"
+vec_exact :: ScaleFactors -> Int -> Int
+          -> Bool -> Maybe SourcePos
+          -> DelayedVectRes -> [DelayedVectRes]
+vec_exact sfs maxin maxout f loc dvr
+  = let vtin  = vect_in_ty  $ dvr_vres dvr
+        vtout = vect_out_ty $ dvr_vres dvr
+    in if check_tysiz vtin  maxin &&
+          check_tysiz vtout maxout
+       then mit_updn_maybe sfs f loc dvr
+       -- TODO: think of what this does to the utility function?
+       -- Particularly the double mitigation: the user has 
+       -- specified some bounds which did not correspond to any
+       -- internal mode of vectorization and he wanted to be 
+       -- flexible about those. Probably that's suspicious and we
+       -- should instead be throwing a warning (or an error even!)
+       else do dvr'  <- mit_in loc maxin dvr
+               dvr'' <- mit_out loc dvr' maxout
+               mit_updn_maybe sfs f loc dvr''
+  where dres = dvr_vres dvr
+        check_tysiz (TArray (Literal l) _) bnd | l /= bnd = False
+        check_tysiz _tother _bnd = True
+ 
 
 {-------------------------------------------------------------------------------
   DD/UD/DU Vectorization entry points (see VecScaleUp/VecScaleDn)
@@ -380,7 +395,7 @@ vect_comp_dd dfs lcomp sfs = mapM (doVectCompDD dfs cty lcomp) sfs
 -- | Add mitigators around an already-vectorized component for more flexibility.
 mit_updn_maybe :: ScaleFactors -> Bool -> Maybe SourcePos 
                -> DelayedVectRes -> [DelayedVectRes]
-mit_updn_maybe sfs flexi loc dvr = if flexi then mit_updn sfs loc dvr else []
+mit_updn_maybe sfs flexi loc dvr = if flexi then mit_updn sfs loc dvr else [dvr]
 
 mit_updn :: ScaleFactors -> Maybe SourcePos 
          -> DelayedVectRes -> [DelayedVectRes]
@@ -442,95 +457,17 @@ mk_out_mitigator loc t m -- non-array
 
 
 
-{- 
-doVectComp :: GS.Sym
-           -> VecEnv
-           -> Comp (CTy, Card) Ty -> VectScaleFact
-           -> [DelayedVectRes]
-doVectComp gs venv comp (VectScaleUp cin cout mults)
-  = map do_vect_up mults
-  where
-    do_vect_up (min,mout)
-      = DVR { dvr_comp = inCurrentEnv (gs,venv) $
-                         doVectorizeCompUp comp cin cout (min,mout)
-            , dvr_vres = DidVect (cin*min) (cout*mout) minUtil
-            , dvr_orig_tyin  = inTyOfCTyBase  (fst $ compInfo comp)
-            , dvr_orig_tyout = yldTyOfCTyBase (fst $ compInfo comp)
-            }
-
-doVectComp gs venv comp (VectScaleDn cin cout divs)
-  = map do_vect_dn divs
-  where
-    do_vect_dn (divin,divout)
-      = DVR { dvr_comp = inCurrentEnv (gs,venv) $
-                         doVectorizeCompDn comp cin cout (divin,divout)
-            , dvr_vres = DidVect divin divout minUtil
-            , dvr_orig_tyin  = inTyOfCTyBase  (fst $ compInfo comp)
-            , dvr_orig_tyout = yldTyOfCTyBase (fst $ compInfo comp)
-            }
-
-doVectComp gs venv comp (VectScaleDnInOrOut cinout divs)
-  = map do_vect_inout_dn divs
-  where
-    do_vect_inout_dn d
-      = let vcomp = inCurrentEnv (gs,venv) $
-                    doVectorizeCompDnInOrOut comp cinout d
-            (divin,divout)
-               = case cinout of
-                   Left {}  -> (d,1) -- only vectorized input
-                   Right {} -> (1,d) -- only vectorized output
-        in DVR { dvr_comp = vcomp
-               , dvr_vres = DidVect divin divout minUtil
-               , dvr_orig_tyin  = inTyOfCTyBase  (fst $ compInfo comp)
-               , dvr_orig_tyout = yldTyOfCTyBase (fst $ compInfo comp)
-               }
-
-
-vectorizeWithHint (finalin,finalout) c
-  -- Scale up!
-  | SimplCard (Just cin) (Just cout) <- card
-  , finalin  `mod` cin == 0      -- cin divides finalin
-  , finalout `mod` cout == 0     -- cout divides finalout
-  , let min  = finalin `div` cin
-  , let mout = finalout `div` cout
-  , min `mod` mout == 0          -- mout divides min
-  , isVectorizable tyin || cin == 0
-  , isVectorizable tyout || cout == 0
-  = do { -- vecMIO (putStrLn "Repeat (just: scaling up)")
-       ; doVectorizeCompUp c cin cout (min,mout)
-       }
-
-  -- or Scale down!
-  | SimplCard (Just cin) (Just cout) <- card
-  , cin `mod` finalin == 0
-  , cout `mod` finalout == 0
-  , isVectorizable tyin || cin == 0
-  , isVectorizable tyout || cout == 0
-  = do { -- vecMIO (putStrLn "Repeat (just: scaling down)")
-       ; doVectorizeCompDn c cin cout (finalin,finalout)
-       }
-
-  -- If it is not a simple cardinality then we will just trust the annotation.
-  | not (isSimplCard card)
-  , isVectorizable tyin
-  , isVectorizable tyout
-  = doVectorizeCompForce c (finalin, finalout)
-
-  | otherwise
-  = vecMFail $
-    "Vectorization failure, (annotation/analysis mismatch) for:" ++ show c
-
-  where (cty,card) = compInfo c
-        tyin       = inTyOfCTyBase cty
-        tyout      = yldTyOfCTyBase cty
-
-
 
 {- Entry point to the vectorizer
  - ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -}
 
+vectorize :: DynFlags -> GS.Sym -> Comp -> IO [Comp]
+vectorize dflags sym comp
+  = error "implementme!"
+
+{- 
 runDebugVecM :: DynFlags
-             -> Comp CTy Ty
+             -> Comp
              -> GS.Sym
              -> IO [Comp CTy Ty]
 runDebugVecM dflags comp sym
