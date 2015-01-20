@@ -61,16 +61,68 @@ doVectCompDD dfs cty lcomp (SFDD3 (DivsOf i i0 i1) (DivsOf j j0 j1))
 -------------------------------------------------------------------------------}
 vect_dd1 :: DynFlags
          -> CTy -> LComp -> Int -> NDiv -> NDiv -> VecM DelayedVectRes
-vect_dd1 dfs cty lcomp i (NDiv i0) (NDiv i1) 
-  = error "implementme"
+vect_dd1 dfs cty lcomp i (NDiv i0) (NDiv i1)
+  = mkDVRes zirbody "DD1" loc vin_ty vout_ty
+  where
+    loc        = compLoc lcomp
+    orig_inty  = inTyOfCTy cty
+    vin_ty     = mkVectTy orig_inty  arin
+    vout_ty    = yldTyOfCTy cty
+    arin       = i0
+
+    vin_ty_big = mkVectTy orig_inty (i0*i1)
+
+    -- NB: action does not rewrite emit(s)
+    action venv iidx tidx xa
+      = rwTakeEmitIO venv (rw_take arin iidx tidx xa)
+                          (rw_takes iidx tidx xa) mEmit mEmits lcomp
+
+    zirbody :: VecEnv -> Zr EId
+    zirbody venv
+      = fleteref ("xa" ::: vin_ty_big) $ \xa ->
+        fleteref ("iidx" ::: tint ::= zERO) $ \iidx ->
+        fleteref ("tidx" ::: tint ::= zERO) $ \tidx ->
+        do { ftimes zERO i1 $ \cnt ->
+               do x <- ftake vin_ty
+                  if arin == 1
+                    then xa .! cnt   .:= x
+                    else xa .! ((cnt .* arin) :+ arin) .:= x
+           ; fembed (action venv iidx tidx xa) }
 
 {-------------------------------------------------------------------------------
   [DD2] X -> b^(j0*j1)   ~~~> X -> (b*j0)^j1
 -------------------------------------------------------------------------------}
 vect_dd2 :: DynFlags
          -> CTy -> LComp -> Int -> NDiv -> NDiv -> VecM DelayedVectRes
-vect_dd2 dfs cty lcomp j (NDiv j0) (NDiv j1) 
-  = error "implementme"
+vect_dd2 dfs cty lcomp j (NDiv j0) (NDiv j1)
+  = mkDVRes zirbody "DD2" loc orig_inty vout_ty
+  where
+    loc        = compLoc lcomp
+    orig_inty  = inTyOfCTy cty
+    orig_outty = yldTyOfCTy cty
+    vout_ty    = mkVectTy orig_outty arout
+    arout      = j0
+
+    vout_ty_big = mkVectTy orig_outty (j0*j1)
+
+    -- NB: action does not rewrite emit(s)
+    action venv oidx tidx ya
+      = rwTakeEmitIO venv mTake1 mTake
+              (rw_emit arout oidx tidx ya)
+              (rw_emits oidx tidx ya) lcomp
+
+    zirbody :: VecEnv -> Zr EId
+    zirbody venv
+      = fleteref ("ya" ::: vout_ty_big) $ \ya ->
+        fleteref ("oidx" ::: tint ::= zERO) $ \oidx ->
+        fleteref ("tidx" ::: tint ::= zERO) $ \tidx ->
+        do { v <- fembed (action venv oidx tidx ya)
+           ; ftimes zERO j1 $ \cnt ->
+               if arout == 1
+                 then femit (ya .! cnt)
+                 else femit (ya .!((cnt .*arout) :+ arout))
+           ; freturn _fI v
+           }
 
 {-------------------------------------------------------------------------------
   [DD3] a^(i0*i1) -> b^(j0*j1) ~~~>    (a*i0)^i1 -> (b*j0)^j1
@@ -80,327 +132,42 @@ vect_dd3 :: DynFlags -> CTy -> LComp
          -> Int -> NDiv -> NDiv -> VecM DelayedVectRes
 vect_dd3 dfs cty lcomp i (NDiv i0) (NDiv i1)
                        j (NDiv j0) (NDiv j1)
-  = error "implementme"
+  = mkDVRes zirbody "DD3" loc vin_ty vout_ty
+  where
+    loc        = compLoc lcomp
+    orig_inty  = inTyOfCTy cty
+    orig_outty = yldTyOfCTy cty
+    vin_ty     = mkVectTy orig_inty  arin
+    vout_ty    = mkVectTy orig_outty arout
+    arin       = i0
+    arout      = j0
 
+    vin_ty_big  = mkVectTy orig_inty (i0*i1)
+    vout_ty_big = mkVectTy orig_outty (j0*j1)
 
+    -- NB: action does not rewrite emit(s)
+    action venv iidx oidx tidx xa ya
+      = rwTakeEmitIO venv (rw_take arin iidx tidx xa)
+                          (rw_takes iidx tidx xa)
+                          (rw_emit arout oidx tidx ya)
+                          (rw_emits oidx tidx ya) lcomp
 
-
-
-
-{- 
-
-doVectorizeCompDnInOrOut :: Comp (CTy,Card) Ty -> Either Int Int -> Int -> VecM (Comp () ())
-doVectorizeCompDnInOrOut comp (Left i) di
-  = doVectorizeCompDn comp i 1 (di,1)
-doVectorizeCompDnInOrOut comp (Right j) dj
-  = doVectorizeCompDn comp 1 j (1,dj)
-
-
-doVectorizeCompDn :: Comp (CTy,Card) Ty
-                 -> Int       -- Input cardinality   (cin)
-                 -> Int       -- Output cardinality  (cout
-                 -> (Int,Int) -- Some divisor of input (divin)
-                              -- Some divisor of output (divout)
-                 -> VecM (Comp () ())
--- Postcondition:
---   Resulting computer has array inputs and output divin and divout
--- Plan for scaling down:
--- (1) Create a temporary array variable to hold cin values
--- (2) Create a temporary array variable to hold dout values (yes, dout, not cout)
--- (3) Create a loop cin / din times that initializes the bi input array.
--- (4) Go through the code, replacing takes from the input with takes from that array
---     and every 'dout' emits really do emit a dout vector.
---
--- Concretely:
---    wrap_vect_dn() {
---          var xa : arr[cin]
---          var ya : arr[cout]
---
---          times i (cin/din)
---             ( x <- take // array of size din
---               return (xa[i:i+din] := x))
---          v  <- rewritten body
---          times i (cout/dout)
---              emit ya[i:i+dout]
---          return v
---    }
---    in wrap_vect_dn()
---
-doVectorizeCompDn comp cin cout (din,dout)
-  = do {
-
-{-
-         vecMIO $ putStrLn "doVectorizeCompDn!"
-       ; vecMIO $ putStrLn ("arityin  = " ++ show arityin)
-       ; vecMIO $ putStrLn ("arityout = " ++ show arityout)
-       ; vecMIO $ putStrLn ("cin  = " ++ show cin)
-       ; vecMIO $ putStrLn ("cout = " ++ show cout)
--}
-
-       ; let loc = compLoc comp
-       ; wrap_fun_name <- newVectName "vect_dn" loc
-       ; let wrap_fun_prms = []
-
-         -- Create names for the local arrays
-       ; xa_name' <- newVectName "vect_xa" loc
-       ; ya_name' <- newVectName "vect_ya_dn" loc
-
-       ; let xa_name = xa_name' { mbtype = Just $ TArr (Literal cin) inty }
-       ; let ya_name = ya_name' { mbtype = Just $ TArr (Literal cout) outty }
-
-         -- avoid copying
-       ; let just_one_take = (cin == din)
-
-         -- Declare them to be arrays of size cin and cout respectively
-       ; let wrap_fun_lcls =
-                  [ (xa_name, TArr (Literal cin) inty,  Nothing) | arityin > 1  && (not just_one_take) ] ++
-                  [ (ya_name, TArr (Literal cout) outty, Nothing) | arityout > 1 ]
-
-       ; icnt_name <- newVectName "vect_i" loc
-       ; xtmp_name_untyped <- newVectName "xtemp" loc
-       ; let xtmp_name = xtmp_name_untyped { mbtype = Just (TArr (Literal din) inty) }
-
-       ; let mkexp e = MkExp e loc ()
-       ; let mkcomp c = MkComp c loc ()
-
-       ; let xa_exp   = mkexp $ EVar xa_name
-             ya_exp   = mkexp $ EVar ya_name
-             xtmp_exp = mkexp $ EVar xtmp_name
-             iexp n   = mkexp $ EBinOp Mult (mkexp $ EVar icnt_name) (mkexp $ EVal (vint n))
-
-             init_arr_in crest
-               | just_one_take
-               = cBindMany loc () (cTake1 loc ()) [(xa_name, crest)]
-               | otherwise
-               = cSeq loc () ( mkTimes (mkexp $ (EVal (vint $ cin `div` din))) icnt_name $
-                               mkcomp $
-                               BindMany (mkcomp Take1) $
-                               [(xtmp_name, mkcomp (Return NoInline (mkexp $ EArrWrite xa_exp (iexp din) (LILength din) xtmp_exp)))]
-                             ) crest
-
-             emit_arr_out = mkTimes (mkexp $ (EVal (vint $ cout `div` dout))) icnt_name $
-                            mkcomp $
-                            Emit (mkexp $ EArrRead ya_exp (iexp dout) (LILength dout))
-
-       ; comp_rewritten <- withInitCounts $ vectorize_body xa_exp ya_exp comp
-
-       ; res_var <- newVectName "vect_res" loc
-       ; let res_exp = mkexp $ EVar res_var
-             final_return = mkcomp $ Return AutoInline res_exp
-
-       ; let emit_and_return
-               | doneTyOfCTyBase (fst $ compInfo comp) == Just TUnit
-               = unComp emit_arr_out
-               | otherwise
-               = Seq emit_arr_out final_return
-
-         -- A bit of tedious case analysis depending on whether we generate
-         -- code for arrays or not really
-
-       ; let body = if (arityin > 1) then
-                       init_arr_in $
-                       if (arityout > 1) then
-                          mkcomp $
-                          BindMany comp_rewritten $
-                          [(res_var, mkcomp emit_and_return)]
-                       else comp_rewritten
-                    else
-                        if (arityout > 1) then
-                         mkcomp $
-                         BindMany comp_rewritten $
-                         [(res_var, mkcomp emit_and_return)]
-                        else comp_rewritten
-
-       ; let call = MkComp (Call wrap_fun_name []) loc ()
-             let0 = LetFunC wrap_fun_name [] wrap_fun_lcls body call
-
-             final_prog = MkComp let0 loc ()
-
---       ; vecMIO $ putStrLn "Vectorized (CompDn) program:"
---       ; vecMIO $ print $ ppComp final_prog
-
-       ; return final_prog
-       }
-
- where
-   arityin  = din
-   arityout = dout
-   inty     = inTyOfCTyBase  (fst $ compInfo comp)
-   outty    = yldTyOfCTyBase (fst $ compInfo comp)
-   v_inty   = mkVectTy inty arityin
-   v_outty  = mkVectTy outty arityout
-
-   vectorize_body xa_exp ya_exp comp = go comp
-      where go comp
-             | let loc = compLoc comp
-             , let mkexp e = MkExp e loc ()
-             , let mkintexp e = MkExp e loc TInt
-             , let mkcomp c = MkComp c loc ()
-             = -- vecMIO (putStrLn ("go: "))      >>
-               -- vecMIO (print (ppCompAst comp)) >>
-               case unComp comp of
-                (Var x) -> lookupCVarBind x >>= go
-                (BindMany c1 xs_cs) ->
-                    do { c1' <- go c1
-                       ; let go_one (x,c) = go c >>= \c' -> return (x,c')
-                       ; xs_cs' <- mapM go_one xs_cs
-                       ; return (MkComp (BindMany c1' xs_cs') loc ())
-                       }
-
-                (Let x c1 c2) ->
-                   extendCVarBind x c1 $ go c2
-
-                (LetE x fi e c1) ->
-                   do { c1' <- go c1
-                      ; return (MkComp (LetE x fi (eraseExp e) c1') loc ())
-                      }
-                -- CL
-                (LetERef x t (Just e) c1) ->
-                   do { c1' <- go c1
-                      ; return (MkComp (LetERef x t (Just (eraseExp e)) c1') loc ())
-                      }
-                (LetERef x t Nothing c1) ->
-                   do { c1' <- go c1
-                      ; return (MkComp (LetERef x t Nothing c1') loc ())
-                      }
-                (LetHeader x fn@(MkFun (MkFunDefined {}) _ _) c1) ->
-                   do { c1' <- go c1
-                      ; return $ MkComp (LetHeader x (eraseFun fn) c1') loc ()
-                      }
-                --
-                (LetFunC f params locals c1 c2) ->
-                   -- Aggressive specialization
-                   extendCFunBind f params locals c1 $ go c2
-                (Call f es) ->
-                   do { (CFunBind { cfun_params = prms
-                                  , cfun_locals = lcls
-                                  , cfun_body = body }) <- lookupCFunBind f
-                      ; vbody <- go body
-                      ; new_f <- newVectName (name f ++ "_spec") loc
-                      ; let -- new_f = f { name = name f ++ "_spec_" ++ show loc }
-                            es'   = map eraseCallArg es
-                            call = MkComp (Call new_f es') loc ()
-                            lcls' = eraseLocals lcls
-                            let0 = LetFunC new_f prms lcls' vbody call
-                      ; return (MkComp let0 loc ())
-                      }
-                (Branch e c1 c2) ->
-                    do { (c1',st1) <- withCurrentCounters (go c1)
-                       ; (c2',st2) <- withCurrentCounters (go c2)
-                       ; let g1 = vs_take_count st1 == vs_take_count st2
-                             g2 = vs_emit_count st1 == vs_emit_count st2
-                       ; unless (g1 && g2) $
-                         vecMFail "BUG: Branch with non-simple card!?"
-
-                       ; setVecState st1
-
-                       ; return $ MkComp (Branch (eraseExp e) c1' c2') loc ()
-                       }
-
-                -- Some non-simple computers
-                (Interleave {}) ->
-                    vecMFail "BUG: Interleave is not a simple computer!"
-                (Repeat {}) ->
-                    vecMFail "BUG: Repeat is not a simple computer!"
-                (Filter {}) ->
-                    vecMFail "BUG: Filter is not a simple computer!"
-                (Map {}) ->
-                    vecMFail "BUG: Map is not a simple computer!"
-                (Par p c1 c2) ->
-                   vecMFail "BUG: Par is not a simple computer!"
-
-                (Mitigate {}) ->
-                   vecMFail "BUG: Mitigate is not a simple computer!"
-
-                -- However, these guys are ok, /provided/ they either take OR emit, in which case we will
-                -- have vectorized only the takes or emits respectively. So this is not an error, instead we
-                -- vectorize the contents.
-                (Until e c) ->
-                   do { c' <- go c
-                      ; return $ MkComp (Until (eraseExp e) c') loc () }
-                (While e c) ->
-                   do { c' <- go c
-                      ; return $ MkComp (While (eraseExp e) c') loc () }
-
-                (Times ui e elen x c1) ->
-                   do { c1' <- go c1
-                      ; return $ MkComp (Times ui (eraseExp e) (eraseExp elen) x c1') loc () }
-
-
-                ReadSrc mty  -> return $ MkComp (ReadSrc mty)  loc ()
-                WriteSnk mty -> return $ MkComp (WriteSnk mty) loc ()
-
-                (ReadInternal bid tp)
-                     -> return $ MkComp (ReadInternal bid tp) loc ()
-                (WriteInternal bid) -> return $ MkComp (WriteInternal bid) loc ()
-
-                (Return fi e) -> return $ MkComp (Return fi $ eraseExp e) loc ()
-
-                -- CL
-                (LetHeader n fn@(MkFun (MkFunExternal {}) _ _) c) -> do { c' <- go c
-                                           ; return $ MkComp (LetHeader n (eraseFun fn) c') loc () }
-                                           -- NB: Don't worry,
-                                           -- even after erasure an external function has enough type info.
-                --
-                (LetStruct sdef c) -> do { c' <- go c
-                                         ; return $ MkComp (LetStruct sdef c') loc ()
-                                         }
-
-                (Seq c1 c2) -> do { c1' <- go c1
-                                  ; c2' <- go c2
-                                  ; return $ MkComp (Seq c1' c2') loc () }
-
-                -- Now for the meat of the thing
-                (Emit e)
-                   | arityout == 1 -- NB: This now covers the case where we vectorize on the input only!
-                   -> return $ MkComp (Emit (eraseExp e)) loc ()
-                   | otherwise
-                   -> do { ecnt <- getEmitCount
-                         ; incEmitCount
-                         ; let idx = mkexp $ EVal (vint ecnt)
-                               ya_write = EArrWrite (eraseExp ya_exp) idx LISingleton (eraseExp e)
-                         ; return $ mkcomp (Return AutoInline $ mkexp ya_write)
-                         }
-                Take1
-                  | arityin == 1 -- NB: This now covers the case where we vectorize on the output only!
-                  -> return $ MkComp Take1 loc ()
-                  | otherwise
-                  -> do { tcnt <- getTakeCount
-                        ; incTakeCount
-                        ; let idx = mkexp $ EVal (vint tcnt)
-                              xa_read = EArrRead (eraseExp xa_exp) idx LISingleton
-                        ; return $ mkcomp (Return ForceInline $ mkexp xa_read) } -- NB: Force Inline
-                Take ne
-                  | arityin == 1 -- NB: This now covers the case where we vectorize on the output only!
-                  -> return $ mkcomp (Take (eraseExp ne))
-                  | EVal (VInt n) <- unExp ne
-                  -> do { tcnt <- getTakeCount
-                        ; mapM (\_ -> incTakeCount) [1..n]
-                        ; let idx = mkexp $ EVal (vint tcnt)
-                              xa_read = mkexp $ EArrRead (eraseExp xa_exp) idx (LILength $ fromIntegral n)
-                        ; return $ mkcomp (Return ForceInline xa_read) } -- NB: Force Inline
-                  | otherwise
-                  -> vecMFail "BUG: takes with unknown array size! Can't be simple computer."
-
-                (Emits e)
-                  | arityout == 1 -- NB: This now covers the case where we vectorize on the input only!
-                  -> return $ MkComp (Emits (eraseExp e)) loc ()
-                  | TArr (Literal n) _ <- info e
-                  -> do { ecnt <- getEmitCount
-                        ; mapM (\_ -> incEmitCount) [1..n]
-                        ; let idx = mkexp $ EVal (vint ecnt)
-                              ya_write = EArrWrite (eraseExp ya_exp) idx (LILength n) (eraseExp e)
-                        ; return $ mkcomp (Return AutoInline $ mkexp ya_write)
-                        }
-                  | otherwise
-                  -> vecMFail "BUG: emits with unknown array size! Can't be simple computer."
-
-                (Standalone c) -> do { c' <- go c
-                                     ; return $ cStandalone loc () c' }
-
-                (VectComp hint c) -> vecMFail "BUG: VectComp is not a simple computer!"
-
-                -- _otherwise
-                --    -> vecMFail "BUG: emits with non known array size! Can't be simple computer!"
-
--}
+    zirbody :: VecEnv -> Zr EId
+    zirbody venv
+      = fleteref ("xa" ::: vin_ty_big)  $ \xa ->
+        fleteref ("ya" ::: vout_ty_big) $ \ya ->
+        fleteref ("iidx" ::: tint ::= zERO) $ \iidx ->
+        fleteref ("oidx" ::: tint ::= zERO) $ \oidx ->
+        fleteref ("tidx" ::: tint ::= zERO) $ \tidx ->
+        do { ftimes zERO i1 $ \cnt ->
+               do x <- ftake vin_ty
+                  if arin == 1
+                    then xa .! cnt   .:= x
+                    else xa .! ((cnt .* arin) :+ arin) .:= x
+           ; v <- fembed (action venv iidx oidx tidx xa ya)
+           ; ftimes zERO j1 $ \cnt ->
+               if arout == 1 
+                 then femit (ya .! cnt) 
+                 else femit (ya .!((cnt .*arout) :+ arout))
+           ; freturn _fI v
+           }
