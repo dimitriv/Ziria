@@ -225,3 +225,5 @@ cStandalone loc c = MkComp (Standalone c) loc ()
 
 cMitigate :: Maybe SourcePos -> t -> Int -> Int -> GComp tc t () ()
 cMitigate loc t n1 n2 = MkComp (Mitigate t n1 n2) loc ()
+
+

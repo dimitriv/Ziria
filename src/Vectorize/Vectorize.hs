@@ -361,21 +361,20 @@ doVectCompForce dfs lcomp (fin,fout) = error "implementme"
 -------------------------------------------------------------------------------}
 
 vect_comp_ud :: DynFlags -> LComp -> [SFUD] -> VecM [DelayedVectRes]
-vect_comp_ud dfs lcomp sfs = mapM (doVectCompUD dfs lcomp) sfs
+vect_comp_ud dfs lcomp sfs = mapM (doVectCompUD dfs cty lcomp) sfs
+  where cty = ctComp lcomp
 
 vect_comp_du :: DynFlags -> LComp -> [SFDU] -> VecM [DelayedVectRes]
-vect_comp_du dfs lcomp sfs = mapM (doVectCompDU dfs lcomp) sfs
+vect_comp_du dfs lcomp sfs = mapM (doVectCompDU dfs cty lcomp) sfs
+  where cty = ctComp lcomp
 
 vect_comp_dd :: DynFlags -> LComp -> [SFDD] -> VecM [DelayedVectRes]
-vect_comp_dd dfs lcomp sfs = mapM (doVectCompDD dfs lcomp) sfs
+vect_comp_dd dfs lcomp sfs = mapM (doVectCompDD dfs cty lcomp) sfs
+  where cty = ctComp lcomp
 
-
--- doVectCompUD :: DynFlags -> LComp -> SFUD -> VecM DelayedVectRes
--- doVectCompUD = error "implementme" 
-
-doVectCompDU :: DynFlags -> LComp -> SFDU -> VecM DelayedVectRes
+doVectCompDU :: DynFlags -> CTy -> LComp -> SFDU -> VecM DelayedVectRes
 doVectCompDU = error "implementme" 
-doVectCompDD :: DynFlags -> LComp -> SFDD -> VecM DelayedVectRes
+doVectCompDD :: DynFlags -> CTy -> LComp -> SFDD -> VecM DelayedVectRes
 doVectCompDD = error "implementme" 
 
 {-------------------------------------------------------------------------------

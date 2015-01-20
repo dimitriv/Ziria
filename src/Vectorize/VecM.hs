@@ -23,7 +23,7 @@ module VecM where
 import Control.Applicative
 import Control.Monad.Reader
 
-import Text.Parsec.Pos (SourcePos)
+import Text.Parsec.Pos ( SourcePos, sourceName )
 
 import AstComp
 import AstExpr
@@ -33,6 +33,7 @@ import qualified AstLabelled as AstL
 
 import CardAnalysis
 import CtComp
+import CtExpr
 import Utils 
 
 import Outputable
@@ -69,8 +70,8 @@ newtype VecM a = VecM (ReaderT VecEnv IO a)
            , MonadReader VecEnv
            )
 
-runVecM :: VecM a -> VecEnv -> IO a
-runVecM (VecM act) venv = runReaderT act venv
+runVecM :: VecEnv -> VecM a -> IO a
+runVecM venv (VecM act) = runReaderT act venv
 
 vecMFail :: Maybe SourcePos -> Doc -> VecM a
 vecMFail loc msg
@@ -500,6 +501,13 @@ gcdTys xs = go (head xs) (tail xs)
         go t (t1:t1s) = go (gcd_ty t t1) t1s
 
 
+-- | Wrap the comp in a new function and call, for debugging purposes.
+wrapCFunCall :: String -> Maybe SourcePos -> Comp -> VecM Comp 
+wrapCFunCall nm loc comp = do 
+  vname <- newVectGName (nm ++ "_" ++ src_nm) (ctComp comp) loc
+  return $ cLetFunC loc vname [] comp (cCall loc vname [])
+  where src_nm = maybe "" sourceName loc
+
 
 {-------------------------------------------------------------------------
   Rewrite the external emits and takes of a computer
@@ -613,12 +621,60 @@ mEmit loc e = return $ cEmit loc e
 mEmits :: Monad m => Maybe SourcePos -> GExp t () -> m (GComp tc t () ())
 mEmits loc e = return $ cEmits loc e
 
+rwTakeEmitIO :: VecEnv -> 
+     (Maybe SourcePos -> Ty -> VecM Comp)         -- on Take1
+  -> (Maybe SourcePos -> Ty -> Int -> VecM Comp)  -- on Take
+  -> (Maybe SourcePos -> Exp -> VecM Comp)        -- on Emit
+  -> (Maybe SourcePos -> Exp -> VecM Comp)        -- on Emits
+  -> LComp -> IO Comp
+rwTakeEmitIO venv t1 t2 e1 e2 lc 
+  = runVecM venv $ rewriteTakeEmit t1 t2 e1 e2 lc
+
+{-------------------------------------------------------------------------
+  Helpers for rewriting take and emit
+-------------------------------------------------------------------------}
+
+rw_take :: Int -> EId -> EId -> EId -> Maybe SourcePos -> Ty -> VecM Comp
+rw_take arin iidx tidx xa loc _ty
+  | arin == 1 = liftZr loc $ freturn _fI xa
+  | otherwise = liftZr loc $ do
+      tidx  .:= iidx
+      iidx  .:= iidx .+ I(1)
+      freturn _fI $ xa .! tidx
+
+rw_takes :: EId -> EId -> EId -> Maybe SourcePos -> Ty -> Int -> VecM Comp
+rw_takes iidx tidx xa loc _ty n
+  = liftZr loc $ do
+      tidx  .:= iidx
+      iidx  .:= iidx .+ I(n)
+      freturn _fI $ xa .! (tidx :+ n)
+
+rw_emit :: Int -> EId -> EId -> EId -> Maybe SourcePos -> Exp -> VecM Comp
+rw_emit arout oidx tidx ya loc e
+   -- there can be only one emit so this must be it
+  | arout == 1 = liftZr loc $ femit e
+  | otherwise  = liftZr loc $ do
+      tidx .:= oidx
+      oidx .:= oidx .+ I(1)
+      ya .! tidx .:= e
+
+rw_emits :: EId -> EId -> EId -> Maybe SourcePos -> Exp -> VecM Comp
+rw_emits oidx tidx ya loc es
+  = liftZr loc $ do
+      tidx .:= oidx
+      oidx .:= oidx .+ I(len)
+      ya .! (tidx :+ len) .:= es
+  where TArray (Literal len) _ = ctExp es
+
+
+
 
 {-------------------------------------------------------------------------
   Interpret Ziria computations
 -------------------------------------------------------------------------}
 
-interpV :: Bindable v => Maybe SourcePos -> Zr v -> VecM Comp
-interpV loc zr = do 
+liftZr :: Bindable v => Maybe SourcePos -> Zr v -> VecM Comp
+liftZr loc zr = do 
   sym  <- asks venv_sym
   liftIO $ interpC sym loc zr
+
