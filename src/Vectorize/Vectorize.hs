@@ -45,6 +45,7 @@ import CardAnalysis -- Cardinality analysis
 import VecM         -- Vectorizer monad and infrastructure
 import VecSF        -- Vectorization scale factors
 import VecScaleUp
+import VecScaleDn
 
 import CtComp
 
@@ -371,9 +372,6 @@ vect_comp_du dfs lcomp sfs = mapM (VecScaleUp.doVectCompDU dfs cty lcomp) sfs
 vect_comp_dd :: DynFlags -> LComp -> [SFDD] -> VecM [DelayedVectRes]
 vect_comp_dd dfs lcomp sfs = mapM (doVectCompDD dfs cty lcomp) sfs
   where cty = ctComp lcomp
-
-doVectCompDD :: DynFlags -> CTy -> LComp -> SFDD -> VecM DelayedVectRes
-doVectCompDD = error "implementme" 
 
 {-------------------------------------------------------------------------------
   Flexible mitigation

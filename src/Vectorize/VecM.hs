@@ -666,8 +666,18 @@ rw_emits oidx tidx ya loc es
       ya .! (tidx :+ len) .:= es
   where TArray (Literal len) _ = ctExp es
 
+zERO :: I
+zERO = I(0)
 
-
+mkDVRes :: Bindable v => (VecEnv -> Zr v) 
+        -> String
+        -> Maybe SourcePos -> Ty -> Ty -> VecM DelayedVectRes
+mkDVRes gen_zir kind loc vin_ty vout_ty = do 
+  venv <- getVecEnv
+  zirc <- liftZr loc (gen_zir venv)
+  zirc_wrapped <- wrapCFunCall ("_vect_" ++ kind) loc zirc
+  return $ DVR { dvr_comp = return zirc_wrapped
+               , dvr_vres = DidVect vin_ty vout_ty minUtil }
 
 {-------------------------------------------------------------------------
   Interpret Ziria computations

@@ -16,11 +16,15 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-module VecScaleDn ( doVectorizeCompDn, doVectorizeCompDnInOrOut ) where
+
+module VecScaleDn ( doVectCompDD ) where
 
 import AstExpr
 import AstComp
+import AstUnlabelled
+
 import PpComp
+import Outputable
 import qualified GenSym as GS
 
 import Text.Parsec.Pos
@@ -30,12 +34,60 @@ import Control.Monad.State
 
 import Data.List as M
 
+import CardAnalysis
+import VecM
+import VecSF
 
-import CardinalityAnalysis
+import Control.Applicative ( (<$>) )
+import Control.Monad ( when )
 
-import VecMonad -- Import the vectorization monad
+import AstFM
+import Opts
+
+import CtComp
+import CtExpr 
 
 
+doVectCompDD :: DynFlags -> CTy -> LComp -> SFDD -> VecM DelayedVectRes
+doVectCompDD dfs cty lcomp (SFDD1 (DivsOf i i0 i1))
+  = vect_dd1 dfs cty lcomp i i0 i1
+doVectCompDD dfs cty lcomp (SFDD2 (DivsOf j j0 j1))
+  = vect_dd2 dfs cty lcomp j j0 j1
+doVectCompDD dfs cty lcomp (SFDD3 (DivsOf i i0 i1) (DivsOf j j0 j1))
+  = vect_dd3 dfs cty lcomp i i0 i1 j j0 j1
+
+{-------------------------------------------------------------------------------
+  [DD1] a^(i0*i1)   -> X ~~~> (a*i0)^i1 -> X
+-------------------------------------------------------------------------------}
+vect_dd1 :: DynFlags
+         -> CTy -> LComp -> Int -> NDiv -> NDiv -> VecM DelayedVectRes
+vect_dd1 dfs cty lcomp i (NDiv i0) (NDiv i1) 
+  = error "implementme"
+
+{-------------------------------------------------------------------------------
+  [DD2] X -> b^(j0*j1)   ~~~> X -> (b*j0)^j1
+-------------------------------------------------------------------------------}
+vect_dd2 :: DynFlags
+         -> CTy -> LComp -> Int -> NDiv -> NDiv -> VecM DelayedVectRes
+vect_dd2 dfs cty lcomp j (NDiv j0) (NDiv j1) 
+  = error "implementme"
+
+{-------------------------------------------------------------------------------
+  [DD3] a^(i0*i1) -> b^(j0*j1) ~~~>    (a*i0)^i1 -> (b*j0)^j1
+-------------------------------------------------------------------------------}
+vect_dd3 :: DynFlags -> CTy -> LComp
+         -> Int -> NDiv -> NDiv
+         -> Int -> NDiv -> NDiv -> VecM DelayedVectRes
+vect_dd3 dfs cty lcomp i (NDiv i0) (NDiv i1)
+                       j (NDiv j0) (NDiv j1)
+  = error "implementme"
+
+
+
+
+
+
+{- 
 
 doVectorizeCompDnInOrOut :: Comp (CTy,Card) Ty -> Either Int Int -> Int -> VecM (Comp () ())
 doVectorizeCompDnInOrOut comp (Left i) di
@@ -351,3 +403,4 @@ doVectorizeCompDn comp cin cout (din,dout)
                 -- _otherwise
                 --    -> vecMFail "BUG: emits with non known array size! Can't be simple computer!"
 
+-}

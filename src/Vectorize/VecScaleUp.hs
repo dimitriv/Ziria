@@ -47,19 +47,6 @@ import Opts
 import CtComp
 import CtExpr 
 
-zERO = I(0)
-
-mkDVRes :: Bindable v => (VecEnv -> Zr v) 
-        -> String
-        -> Maybe SourcePos -> Ty -> Ty -> VecM DelayedVectRes
-mkDVRes gen_zir mode loc vin_ty vout_ty = do 
-  venv <- getVecEnv
-  zirc <- liftZr loc (gen_zir venv)
-  zirc_wrapped <- wrapCFunCall ("_vect" ++ mode) loc zirc
-  return $ DVR { dvr_comp = return zirc_wrapped
-               , dvr_vres = DidVect vin_ty vout_ty minUtil }
-
-
 
 -- | UD driver
 doVectCompUD :: DynFlags -> CTy -> LComp -> SFUD -> VecM DelayedVectRes
