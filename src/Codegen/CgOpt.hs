@@ -65,6 +65,7 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Data.List ( nub )
 
 import CgFun
+import Outputable
 
 ------------------------------------------------------------------------------
 -- | Computation Code Generation
@@ -440,10 +441,12 @@ codeGenCompTop :: DynFlags
                -> CompKont
                -> Cg CompInfo
 codeGenCompTop dflags comp k = do
-    when (isDynFlagSet dflags Debug) $ liftIO $ do
-        putStrLn ("Generating code for component: " ++
-                  compShortName comp ++ " at " ++ getLnNumInStr (compLoc comp))
-        print (show comp)
+    when (isDynFlagSet dflags Debug) $ 
+      verbose dflags $ 
+        vcat [ text $ "Generating code for component: " ++ compShortName comp
+             , text "Location: " <+> (text $ show (compLoc comp))
+
+             , text "Component: " <+> ppr comp ]
     codeGenComp dflags comp k
 
 ------------------------------------------------------------------------------
@@ -933,7 +936,12 @@ codeGenComp dflags comp k =
         c2Name <- nextName ("__par_c2_" ++ (getLnNumInStr csp))
         let c2id = c2Name
 
+--        liftIO $ putStrLn "(Par) Before"
+
         let yTy  = ctParMid c1 c2
+
+--        liftIO $ putStrLn ("(Par) After: " ++ show yTy)
+
 
         -- Allocate intermediate yield buffer
         new_yh <- freshVar ("__yv_tmp_"  ++ (getLnNumInStr csp))

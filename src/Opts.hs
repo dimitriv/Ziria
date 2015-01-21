@@ -87,9 +87,12 @@ type DynFlags = [DynFlag]
 isDynFlagSet :: DynFlags -> DynFlag -> Bool
 isDynFlagSet flags f = f `elem` flags
 
-verbose :: MonadIO m => DynFlags -> Doc -> m ()
-verbose dflags doc | isDynFlagSet dflags Verbose = liftIO $ putStrLn $ render doc
-                   | otherwise                   = return ()
+verbose :: MonadIO m => DynFlags -> Doc -> m () 
+verbose dflags doc 
+  | isDynFlagSet dflags Verbose 
+  = liftIO $ do putStrLn (render doc) 
+                hFlush stdout
+  | otherwise = return ()
 
 
 mAX_LUT_SIZE_DEFAULT :: Integer

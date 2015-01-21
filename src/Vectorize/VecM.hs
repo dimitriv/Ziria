@@ -23,7 +23,7 @@ module VecM where
 import Control.Applicative
 import Control.Monad.Reader
 
-import Text.Parsec.Pos ( SourcePos, sourceName )
+import Text.Parsec.Pos ( SourcePos )
 
 import AstComp
 import AstExpr
@@ -312,6 +312,10 @@ getMaximal = maximumBy $ compare <| dvResUtil
 liftCompDVR :: Monad m => (Comp -> Comp) -> DelayedVectRes -> m DelayedVectRes
 liftCompDVR f dvr = return $ dvr { dvr_comp = f <$> dvr_comp dvr }
 
+forceDVR :: DelayedVectRes -> VecM Comp
+forceDVR dvr = liftIO $ dvr_comp dvr
+
+
 
 {-------------------------------------------------------------------------
   Matching on the control path
@@ -393,8 +397,11 @@ combineCtrl loc dvr1 xs dvrs
 -- Result is a mitigating (ST T tin1 tin2) transformer.  
 mkMit :: Maybe SourcePos -> Ty -> Ty -> Maybe Comp 
 mkMit loc tin1 tin2
-    -- If the two types are equal no need for mitigation
-  | tin1 == tin2 = Nothing
+    -- If the two types are equal or Void no need for mitigation
+  | tin1 == tin2  = Nothing
+  | TVoid <- tin1 = Nothing
+  | TVoid <- tin2 = Nothing
+
     -- If one is array but other non-array then the latter must be 
     -- the base type of the former.  
     -- We must up-mitigate: 1 ~> len
@@ -492,6 +499,8 @@ gcd_ty t (TArray _ t') = assert "gcd_ty" (t == t') t
 gcd_ty (TArray _ t') t = assert "gcd_ty" (t == t') t
 
 gcd_ty t t' 
+  | t == t' = t
+  | otherwise
   = panic $ text "gcd_ty: types are non-joinable!" <+> 
             ppr t <+> text "and" <+> ppr t'
 
@@ -503,10 +512,10 @@ gcdTys xs = go (head xs) (tail xs)
 
 -- | Wrap the comp in a new function and call, for debugging purposes.
 wrapCFunCall :: String -> Maybe SourcePos -> Comp -> VecM Comp 
-wrapCFunCall nm loc comp = do 
-  vname <- newVectGName (nm ++ "_" ++ src_nm) (ctComp comp) loc
+wrapCFunCall nm loc comp = do
+  let carrty = CTArrow [] (ctComp comp)
+  vname <- newVectGName nm carrty loc
   return $ cLetFunC loc vname [] comp (cCall loc vname [])
-  where src_nm = maybe "" sourceName loc
 
 
 {-------------------------------------------------------------------------
@@ -576,7 +585,8 @@ rewriteTakeEmit on_take on_takes on_emit on_emits = go
           (CFunBind { cfun_params = prms
                     , cfun_body = body }) <- lookupCFunBind f
           vbody <- go body
-          vf <- newVectGName "_spec" (ctComp vbody) loc
+          let vf_type = CTArrow (map ctCallArg es) (ctComp vbody)
+          vf <- newVectGName "spec" vf_type loc
           return $ cLetFunC loc vf prms vbody $ 
                    cCall loc vf (map eraseCallArg es)
 

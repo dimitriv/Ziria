@@ -36,6 +36,7 @@ import qualified Data.Set as S
 import Control.Monad.State
 import Data.List as M
 import Data.Functor.Identity
+import Data.Maybe ( fromJust )
 
 import Control.Applicative  ( (<$>) )
 
@@ -59,11 +60,17 @@ import Debug.Trace
 -------------------------------------------------------------------------------}
 
 computeVectTop :: DynFlags -> LComp -> VecM [DelayedVectRes]
-computeVectTop dfs lcomp = do
-  let compname = compShortName lcomp
+computeVectTop dfs x = do
+  let compname = compShortName x
   verbose dfs $
-    text "--> Vectorizer, traversing:" <+> text compname 
-  rs <- go CtxUnrestricted lcomp
+    vcat [ text "--> Vectorizer, traversing:" <+> text compname 
+         , ppr x
+         ]
+  -- | The initial CtxForVect value used to be CtxUnrestricted but this 
+  -- very quickly leads to explosion, particularly for transformers that are 
+  -- connected to each other like read >>> t1 >>> t2 >>> ... >>> write. So 
+  -- we are instead starting from CtxExistsCompLeft.
+  rs <- go CtxExistsCompLeft x 
   verbose dfs $ text "<--"
   return rs
   where
@@ -78,6 +85,7 @@ computeVectTop dfs lcomp = do
                       , dvr_vres = NotVect tyin tyout }
           warn_if_empty = warn_empty_vect dfs comp
       in
+      verbose dfs (text "    " <+> text (compShortName comp)) >>
       case unComp comp of
 
         Var x -> lookupCVarBind x >>= go vctx
@@ -92,34 +100,92 @@ computeVectTop dfs lcomp = do
 
                 -- Compute recursive vectorizations
                 vss <- mapM (go vctx) css
+
+                liftIO $ verbose dfs $
+                  vcat [ text "Before combineCtrl"
+                       , nest 2 $ text "len(vss) =" <+> ppr (length vss)
+                       ]
+
                 let ress = cross_prod_mit $ map keepGroupMaximals vss
                 let recursive_vss = keepGroupMaximals $
                       map (\(vc:vcs) -> combineCtrl loc vc xs vcs) ress
+
+                liftIO $ 
+                 verbose dfs $ 
+                   vcat [ text "After combineCtrl"
+                        , nest 2 $ text "len(ress)         =" <+> 
+                                        (ppr $ length ress)
+                        , nest 2 $ text "len(recursive_vss)=" <+> 
+                                        (ppr $ length recursive_vss)
+                        , nest 2 $ text "len(direct_vss)   =" <+> 
+                                        (ppr $ length direct_vss)
+                        ]
+
                 warn_if_empty recursive_vss "BindMany"
       
                 -- Return directs + recursives (will contain self)
                 return (direct_vss ++ recursive_vss)
   
+        Seq c1 c2 -> do
+          let dty = fromJust $ doneTyOfCTy (ctComp c1)
+          tmp <- newVectGName "tmp" dty loc
+          go vctx (AstL.cBindMany loc card c1 [(tmp,c2)])
 
-        -- Seq should have been eliminated during type checking
-        Seq {} -> vecMFail loc $
-                  text "Seq node encountered during vectorization."
+        Par p c1 c2 
+         | ReadSrc orig_ty <- unComp c1
+         -> map (prependReadSrc loc p orig_ty) <$> go vctx c2
 
-        Par p c1 c2 -> do
+         | WriteSnk orig_ty <- unComp c2
+         -> map (appendWriteSnk loc p orig_ty) <$> go vctx c1
+
+         | otherwise -> do 
+
           let is_c1 = isComputer (ctComp c1)
               is_c2 = isComputer (ctComp c2)
               ctx1  = if is_c2 then CtxExistsCompRight else vctx
               ctx2  = if is_c1 then CtxExistsCompLeft  else vctx
           vcs1 <- go ctx1 c1
           vcs2 <- go ctx2 c2
-          let ress = keepGroupMaximals $ combineData p loc vcs1 vcs2
+
+          liftIO $ verbose dfs $ ppr comp         
+
+          liftIO $ verbose dfs $ 
+            vcat [ text "Before combineData"
+                 , nest 2 $ text "len(vcs1) =" <+> (ppr $ length vcs1)
+                 , nest 2 $ text "len(vcs2) =" <+> (ppr $ length vcs2)
+                 ]
+
+          let cd = combineData p loc vcs1 vcs2
+
+          -- liftIO $ putStrLn "*** Par: vcs1"
+          -- mapM (\r -> liftIO (putStrLn (show $ dvr_vres r))) vcs1
+
+          -- liftIO $ putStrLn "*** Par: vcs2"
+          -- mapM (\r -> liftIO (putStrLn (show $ dvr_vres r))) vcs2
+
+
+          -- liftIO $ putStrLn "*** Par: cd"
+          -- mapM (\r -> liftIO (putStrLn (show $ dvr_vres r))) cd
+
+
+          liftIO $ verbose dfs $ 
+            nest 2 $ text "len(cd) =" <+> (ppr $ length cd)
+
+          -- let grps = groupBy' (vResEqQ <| dvr_vres) cd
+          -- liftIO $ verbose dfs $ 
+          --   vcat [ text "len(grps) =" <+> (ppr $ length grps) ]
+
+          let ress = keepGroupMaximals cd
+
+          liftIO $ verbose dfs $ 
+            vcat [ text "After combineData"
+                 , nest 2 $ text "len(ress) =" <+> ppr (length ress)
+                 ]
+
           warn_if_empty ress "Par"
+
           return ress
 
-        Let x c1 c2 ->
-        -- Safe to ignore 'c1' as the vectorizer effectively inlined
-        -- computations, look at Var and Call nodes.
-          extendCVarBind x c1 (go vctx c2)
         LetE x fi e c1 -> do
           vcs1 <- go vctx c1
           mapM (liftCompDVR $ cLetE loc x fi e) vcs1
@@ -130,9 +196,19 @@ computeVectTop dfs lcomp = do
         LetHeader fdef c1 -> do
           vcs1 <- go vctx c1
           mapM (liftCompDVR $ cLetHeader loc fdef) vcs1
-        LetFunC f params c1 c2 ->
-          -- Safe to ignore the function as it will be effectively inlined
-          extendCFunBind f params c1 $ go vctx c2
+
+        -- Computation bindings (Let and LetFunC). Note we can't ignore the
+        -- binding despite the fact that we specialize because the 'self' 
+        -- vectorization may still mention the original bindings.
+        Let x c1 c2 -> do
+          c2s' <- extendCVarBind x c1 (go vctx c2)
+          let c1_nocard = eraseComp c1
+          mapM (liftCompDVR $ cLet loc x c1_nocard) c2s'
+
+        LetFunC f params c1 c2 -> do
+          c2s' <- extendCFunBind f params c1 $ go vctx c2
+          let c1_nocard = eraseComp c1
+          mapM (liftCompDVR $ cLetFunC loc f params c1_nocard) c2s'
 
         LetStruct sdef c2 -> do
           vcs2 <- go vctx c2
@@ -147,8 +223,10 @@ computeVectTop dfs lcomp = do
           let mk_vect_call vbd
                 = cLetFunC loc vf_typed prms vbd $ 
                   cCall loc vf_typed (map eraseCallArg es)
-                where vf_typed = updNameTy vf (ctComp vbd)
-          mapM (liftCompDVR mk_vect_call) vbdys
+                where vf_typed = updNameTy vf vf_type
+                      vf_type  = CTArrow (map ctCallArg es) (ctComp vbd)
+          ress <- mapM (liftCompDVR mk_vect_call) vbdys
+          return ress
 
         Interleave c1 c2 -> return [self]
 
@@ -183,14 +261,17 @@ computeVectTop dfs lcomp = do
 
         Filter {} -> return [ self ] -- TODO: Implement later on
 
-        -- Reading and writing internal or external buffers
-        ReadSrc ty       -> return $ self : vect_rdwr (cReadSrc  loc) ty
-        WriteSnk ty      -> return $ self : vect_rdwr (cWriteSnk loc) ty
-        ReadInternal  ty b rt 
-          -> return $ self : vect_rdwr (\t -> cReadInternal  loc t b rt) ty
-        WriteInternal ty b 
-          -> return $ self : vect_rdwr (\t -> cWriteInternal loc t b) ty
+        -- NB: We are not supposed to meet Read/Write nodes in
+        -- isolation, see special case for Par above. Otherwise we
+        -- could easily blow up by creating too manay candidates
+        ReadSrc {}       -> return [self]
+        WriteSnk {}      -> return [self] 
+        ReadInternal {}  -> return [self]
+        WriteInternal {} -> return [self]
+
+
         Return _fi _e    -> return [ self ]
+
 
         -- Iterated computers
         Until e c -> do
@@ -246,22 +327,45 @@ warn_empty_vect dfs comp ress origin
        print $ text "WARNING: empty vectorization" <+> braces (text origin)
        verbose dfs $ ppr comp
 
--- | Vectorizing read/write nodes (NB: not adding 'self')
-vect_rdwr :: (Ty -> Comp) -> Ty -> [ DelayedVectRes ]
-vect_rdwr builder ty
-  | isVectorizable ty = map do_vect [2..vECT_IOARRAY_BOUND]
-  | otherwise         = []
-  where
-   do_vect n
-     = DVR {dvr_comp = return $ builder vty, dvr_vres = DidVect vty vty minUtil}
-     where vty = mkVectTy ty n
-
 -- | Vectorizing a (finitely) iterated computer (NB: not adding 'self')
 vect_itercomp :: DynFlags -> (Comp -> Comp)
               -> Card -> Ty -> Ty -> LComp -> VecM [DelayedVectRes]
 vect_itercomp dfs builder vcard tin tout c
   = do vss <- vect_comp_dd dfs c $ compSFDD vcard tin tout
        mapM (liftCompDVR builder) vss
+
+
+-- | Take a vectorization candidate vc and prepend it with an appropriately
+-- vectorized version of readSrc, so that in the end we get (read >>> vc)
+prependReadSrc :: Maybe SourcePos -> ParInfo
+               -> Ty -> DelayedVectRes -> DelayedVectRes
+prependReadSrc loc p orig_ty (DVR { dvr_comp = iocomp, dvr_vres = vres })
+  = DVR { dvr_comp = iocomp', dvr_vres = vres' }
+  where iocomp'   = cPar loc p (cReadSrc loc new_rd_ty) <$> iocomp
+        new_rd_ty = if dvr_in_ty == TVoid then orig_ty else dvr_in_ty
+        dvr_in_ty = vect_in_ty vres        
+        new_in_ty = TBuff (ExtBuf new_rd_ty)
+        vres' = case vres of 
+          NotVect tin tout   
+            -> NotVect new_in_ty tout
+          DidVect tin tout u 
+            -> DidVect new_in_ty tout (parUtility minUtil u dvr_in_ty)
+
+-- | Take a vectorization candidate vc and append an appropriately vectorized
+--  WriteSnk in the data path so that in the end we get (vc >>> write).
+appendWriteSnk :: Maybe SourcePos -> ParInfo 
+              -> Ty -> DelayedVectRes -> DelayedVectRes
+appendWriteSnk loc p orig_ty (DVR { dvr_comp = iocomp, dvr_vres = vres })
+  = DVR { dvr_comp = iocomp', dvr_vres = vres' }
+  where iocomp'   = (\c -> cPar loc p c (cWriteSnk loc new_wr_ty)) <$> iocomp
+        new_wr_ty = if dvr_out_ty == TVoid then orig_ty else dvr_out_ty
+        dvr_out_ty = vect_out_ty vres        
+        new_out_ty = TBuff (ExtBuf new_wr_ty)
+        vres' = case vres of 
+          NotVect tin _
+            -> NotVect tin new_out_ty
+          DidVect tin _ u 
+            -> DidVect tin new_out_ty (parUtility minUtil u dvr_out_ty)
 
 {-------------------------------------------------------------------------------
   Vectorizing Map 
@@ -314,8 +418,14 @@ vect_repeat dynflags vctx c tyin tyout loc vann = go vann c
      -- | Vectorize rigidly and up/dn mitigate
    go (Just (Rigid f (fin,fout))) c0 = do
      vcs <- go Nothing c0
+     -- liftIO $ putStrLn "Repeat (automatic) candidates:"
+     -- liftIO $ mapM (putStrLn . show . dvr_vres) vcs
+
      let repeat_sfs = repeat_scalefactors vctx (compInfo c0) tyin tyout
-     return $ concatMap (vec_exact repeat_sfs fin fout f loc) vcs
+     -- liftIO $ putStrLn ("len(vcs)=" ++ show (length vcs))
+     let ress = concatMap (vec_exact repeat_sfs fin fout f loc) vcs
+     -- liftIO $ putStrLn ("len(ress)=" ++ show (length ress))
+     return ress
 
    go (Just (UpTo f (maxin,maxout))) c0 = do
      vcs <- go Nothing c0
@@ -356,18 +466,21 @@ vec_exact :: ScaleFactors -> Int -> Int
 vec_exact sfs maxin maxout f loc dvr
   = let vtin  = vect_in_ty  $ dvr_vres dvr
         vtout = vect_out_ty $ dvr_vres dvr
-    in if check_tysiz vtin  maxin &&
+    in -- First check if the native vectorization exactly matches
+       -- the programmer requirements. 
+       if check_tysiz vtin  maxin &&
           check_tysiz vtout maxout
        then mit_updn_maybe sfs f loc dvr
-       -- TODO: think of what this does to the utility function?
-       -- Particularly the double mitigation: the user has 
-       -- specified some bounds which did not correspond to any
-       -- internal mode of vectorization and he wanted to be 
-       -- flexible about those. Probably that's suspicious and we
-       -- should instead be throwing a warning (or an error even!)
-       else do dvr'  <- mit_in loc maxin dvr
-               dvr'' <- mit_out loc dvr' maxout
-               mit_updn_maybe sfs f loc dvr''
+       -- This native vectorization does not match user requirements
+       else 
+         -- but the user said he is flexible about it, arguably strange
+         if f == True then []
+         -- Not a native vectorization /and/ rigid flag. Just do
+         -- our best and give the user what he asked for with mitigaros
+         else do dvr'  <- mit_in loc maxin dvr
+                 dvr'' <- mit_out loc dvr' maxout
+                 return dvr''
+
   where dres = dvr_vres dvr
         check_tysiz (TArray (Literal l) _) bnd | l /= bnd = False
         check_tysiz _tother _bnd = True
@@ -400,14 +513,15 @@ mit_updn_maybe sfs flexi loc dvr = if flexi then mit_updn sfs loc dvr else [dvr]
 
 mit_updn :: ScaleFactors -> Maybe SourcePos 
          -> DelayedVectRes -> [DelayedVectRes]
-mit_updn (sfuds,sfdus,sfdds) loc dvr
-  | DidVect {} <- dvr_vres dvr 
-  = concatMap mit_aux $
-    map sfud_arity sfuds ++ map sfdu_arity sfdus ++ map sfdd_arity sfdds
-  where mit_aux (Nothing, Nothing) = return dvr
-        mit_aux (Just n , Nothing) = mit_in  loc n dvr
-        mit_aux (Just n , Just m)  = mit_out loc dvr m >>= mit_in loc n
-        mit_aux (Nothing, Just m)  = mit_out loc dvr m
+-- mit_updn (sfuds,sfdus,sfdds) loc dvr 
+--   | DidVect {} <- dvr_vres dvr 
+--   = concatMap mit_aux $ nub $ 
+--     map sfud_arity sfuds ++ map sfdu_arity sfdus ++ map sfdd_arity sfdds
+--   where mit_aux (Nothing, Nothing) = return dvr
+--         mit_aux (Just n , Nothing) = mit_in  loc n dvr
+--         mit_aux (Just n , Just m)  = mit_out loc dvr m >>= mit_in loc n
+--         mit_aux (Nothing, Just m)  = mit_out loc dvr m
+
 mit_updn _ _ dvr = [dvr] -- no point in mitigating in case of NotVect
 
 
@@ -459,7 +573,7 @@ mk_out_mitigator loc t m -- non-array
 
 
 -- | Entry point to vectorizer 
--- The first Comp is the maximal candidate. In Debug mode we also emit
+-- The first Comp is the maximal candidate. In Debug mode we also can
 -- all possible candidates in the second component of the
 -- returned pair (including the maximal)
 runVectorizer :: DynFlags -> GS.Sym -> Comp -> IO (Comp,[Comp])
@@ -473,7 +587,6 @@ runVectorizer dflags sym comp = do
   verbose dflags $ text "Vectorization finished." <+> 
                       parens (ppr (length vss) <+> text "candidates")
 
-
   when (null vss) $ 
     panic $ vcat [ text "Empty vectorization candidate set for computation:"
                  , ppr comp ]
@@ -484,16 +597,24 @@ runVectorizer dflags sym comp = do
         vc_opt_mit <- elimMitigsIO dflags sym vc_mit
         -- Compile away mitigators if flag set
         let vc = vc_opt_mit 
-    
-        verbose dflags $ text "Type checking vectorization candidate."
-        seq (ctComp vc) $ verbose dflags $ text "Done."
+{-     
+        verbose dflags $ vcat [ text "Type checking vectorization candidate."
+                              , nest 2 $ ppr vc ]
+-}
+        case ctComp vc of _ -> return vc
+
         return vc
 
   -- in Debug mode optimize compile and type check all candidates
   let maxi = getMaximal vss
+  
+  verbose dflags $ vcat [ text "Selected candidate is: "
+                        , nest 2 $ text $ show $ dvr_vres maxi
+                        ] 
+
   let final_vss = if isDynFlagSet dflags Debug then (maxi : vss) else [maxi]
   comps <- mapM do_one final_vss
 
-  return (head comps, tail comps) -- We know it's the maximal in Debug or not
+  return (head comps, []) -- Don't emit candidates 
 
 

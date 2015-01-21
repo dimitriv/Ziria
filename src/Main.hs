@@ -115,19 +115,23 @@ main = failOnException $ do
     dump dflags DumpAstPretty ".ast.pretty.dump" $ (text . show) prog
 
     sym <- GS.initGenSym (getName dflags)
-
+    
+    verbose dflags $ text "tyCheckProg .."
 
     (MkProg c', _unifier) <- failOnError $ runTcM' (tyCheckProg prog) sym
     let in_ty  =  inTyOfCTy (ctComp c')
         yld_ty = yldTyOfCTy (ctComp c')
 
-    when (isDynFlagSet dflags Debug) $ outputProgram c' outFile
+    when (isDynFlagSet dflags Debug) $ outputProgram c' (outFile ++ ".debug")
 
-    when (not (isDynFlagSet dflags Debug)) $ do
     dump dflags DumpTypes ".type.dump" $ (text . show) (ppCompTyped c')
+
+    verbose dflags $ text "runFoldPhase .."
 
     -- First let us run some small-scale optimizations
     folded <- runFoldPhase dflags sym 1 c'
+
+    verbose dflags $ text "runVectorizePhase .."
 
     (cand, cands) <- runVectorizePhase dflags sym folded
 
@@ -135,8 +139,19 @@ main = failOnException $ do
     let fnames = ["v"++show i++"_"++outFile | (i::Int) <- [0..]]
     let ccand_names = zip (cand:cands) (outFile : fnames)
 
+    verbose dflags $ text "runPostVectorizePhases .." 
     -- Fold, inline, and pipeline
     icands <- mapM (runPostVectorizePhases dflags sym) ccand_names
+
+    verbose dflags $ text "ctComp before code generation .."
+
+    -- Right before code generation let us type check everything
+    when (isDynFlagSet dflags Debug) $ 
+       do { verbose dflags $ text "Passing through ctCtomp"
+          ; mapM_ (\c -> seq (ctComp c) (return ())) (cand:cands)
+          }
+
+    verbose dflags $ text "codeGenProgram .."    
 
     -- Generate code
     -- Use module name to avoid generating the same name in different modules
@@ -148,6 +163,8 @@ main = failOnException $ do
                          codeGenProgram dflags ctx tid_cs bufTys (in_ty,yld_ty)
                ; return $ CompiledProgram sc defs fn }
     code_names <- forM icands compile_threads
+
+    verbose dflags $ text "outputCompiledProgram .."
 
     mapM_ outputCompiledProgram code_names
 

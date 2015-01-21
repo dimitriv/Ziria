@@ -33,13 +33,17 @@ import PpExpr ()
 import PpComp ()
 import Utils
 
-ctECall :: Ty -> [Ty] -> Ty
-ctECall (TArrow args res) args' = applyTy (matchAllTy (zip args args')) res
-ctECall t _ = panic $ text "ctECall: Unexpected" <+> ppr t
+ctECall :: EId -> Ty -> [Ty] -> Ty
+ctECall _f (TArrow args res) args' = applyTy (matchAllTy (zip args args')) res
+ctECall f t args = panic $ vcat [ text "ctECall: Unexpected type:" <+> ppr t
+                                , text "Argument list types:"     <+> ppr args
+                                , text "Function type      :"     <+> ppr f ]
 
-ctCall :: CTy -> [CallArg Ty CTy] -> CTy
-ctCall (CTArrow args res) args' = applyCTy (matchAllCA (zip args args')) res
-ctCall t _ = panic $ text "ctCall: Unexpected" <+> ppr t
+ctCall :: CId -> CTy -> [CallArg Ty CTy] -> CTy
+ctCall _f (CTArrow args res) args' = applyCTy (matchAllCA (zip args args')) res
+ctCall f t cargs = panic $ vcat [ text "ctCall: Unexpected type:" <+> ppr t
+                                , text "Argument list types:"     <+> ppr cargs
+                                , text "Function type      :"     <+> ppr f ]
 
 {-------------------------------------------------------------------------------
   Substitutions

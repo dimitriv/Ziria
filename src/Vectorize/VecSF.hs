@@ -159,6 +159,10 @@ vECT_MULT_BOUND  = 512
 vECT_IOARRAY_BOUND :: Int 
 vECT_IOARRAY_BOUND = 512
 
+-- | Bound for vectorizer-generated array sizes
+vECT_ARRAY_BOUND :: Int
+vECT_ARRAY_BOUND = 288
+
 {-------------------------------------------------------------------------------
   SFUD scaling factors
 -------------------------------------------------------------------------------}
@@ -182,10 +186,21 @@ compSFUD_aux (CAMultOf _,_) = []
 compSFUD_aux (CAStatic i, CAStatic j) = ud1s ++ ud2s
   where 
     ud1s = [ SFUD1 i j (NMul m1) (NMul m2)
-           | NMul m <- mults, DivsOf _ (NDiv m1) (NDiv m2) <- divsOf m ]
-    ud2s = [ SFUD2 i d m | d <- divsOf j, m <- mults ]
-compSFUD_aux (CAStatic i, _) = [ SFUD3 i m | m <- mults ]
-
+           | NMul m <- mults
+           , DivsOf _ (NDiv m1) (NDiv m2) <- divsOf m 
+           , i*m1*m2 <= vECT_ARRAY_BOUND
+           , j*m1    <= vECT_ARRAY_BOUND
+           ]
+    ud2s = [ SFUD2 i d (NMul m)
+           | d <- divsOf j
+           , NMul m <- mults 
+           , m*j <= vECT_ARRAY_BOUND
+           ]
+compSFUD_aux (CAStatic i, _) 
+  = [ SFUD3 i (NMul m)
+    | (NMul m) <- mults 
+    , i*m <= vECT_ARRAY_BOUND
+    ]
 
 {-------------------------------------------------------------------------------
   SFDU scaling factors
@@ -203,16 +218,13 @@ data SFDU =
   | SFDU3 Int    -- j
           NMul   -- m
 
--- | Compute SFDU scale factor
+-- | Compute SFDU scale factor (by exploiting symmetry)
+-- to avoid having to re-implement the delicate bound checking
 compSFDU_aux :: (CAlpha,CAlpha) -> [SFDU]
-compSFDU_aux (_,CAUnknown) = []
-compSFDU_aux (_,CAMultOf _)  = []
-compSFDU_aux (CAStatic i, CAStatic j) = du1s ++ du2s
-  where 
-    du1s = [ SFDU1 i j (NMul m1) (NMul m2)
-           | NMul m <- mults, DivsOf _ (NDiv m1) (NDiv m2) <- divsOf m ]
-    du2s = [ SFDU2 d j m | d <- divsOf i, m <- mults ]
-compSFDU_aux (_,CAStatic j) = [ SFDU3 j m | m <- mults ]
+compSFDU_aux (ca1,ca2) = map sym_sfud $ compSFUD_aux (ca2,ca1)
+  where sym_sfud (SFUD1 i j m1 m2) = SFDU1 j i m1 m2
+        sym_sfud (SFUD2 i ds m)    = SFDU2 ds i m
+        sym_sfud (SFUD3 i m)       = SFDU3 i m
 
 {-------------------------------------------------------------------------------
   SFDD scaling factors

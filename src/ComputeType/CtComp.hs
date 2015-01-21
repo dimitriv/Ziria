@@ -20,6 +20,7 @@
 {-# LANGUAGE RecordWildCards #-}
 -- | Compute the type of computations
 module CtComp ( ctComp
+              , ctCallArg
               , ctParMid
               , ctDoneTyOfComp
               , ctJoin_mb
@@ -52,7 +53,7 @@ ctComp0 (LetERef _ _ c)      = ctComp c
 ctComp0 (LetHeader _ c)      = ctComp c
 ctComp0 (LetFunC _ _ _ c2)   = ctComp c2
 ctComp0 (LetStruct _ c)      = ctComp c
-ctComp0 (Call f xs)          = ctCall (nameTyp f) (map ctCallArg xs)
+ctComp0 (Call f xs)          = ctCall f (nameTyp f) (map ctCallArg xs)
 ctComp0 (Emit e)             = CTComp TUnit TVoid (ctExp e)
 ctComp0 (Emits e)            = ctEmits TVoid (ctExp e)
 ctComp0 (Return _ e)         = CTComp (ctExp e) TVoid TVoid
