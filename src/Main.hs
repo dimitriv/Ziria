@@ -17,14 +17,12 @@
    permissions and limitations under the License.
 -}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS -Wall #-}
 
 module Main where
 
 import Control.Exception
-import Control.Monad (when, unless, foldM, forM)
-import Data.Maybe
-import Data.Monoid
-import System.Console.GetOpt
+import Control.Monad (when, forM)
 import System.Environment
 import System.Exit (exitFailure)
 import System.IO
@@ -32,59 +30,35 @@ import Text.Parsec (runParserT)
 import Text.PrettyPrint.HughesPJ
 import qualified Text.PrettyPrint.Mainland as GMPretty
 import Text.Show.Pretty (dumpStr)
-import qualified Data.Map          as M
 import qualified Language.C.Syntax as C
 
--- TODO: There are a lot of redundant imports here. Enable -Wall in Main.
+
 import AstComp
 import AstExpr
-import qualified AstLabelled   as Labelled
-import qualified AstUnlabelled as Unlabelled
-import qualified AstFreeMonad  as AstFreeMonad
 
-
-import qualified AstFM as AstFM
--- TODO: Re-enable me
--- import qualified AstQuasiQuote as AstQuasiQuote
 import CtComp (ctComp)
 import Opts
 import PassFold
 import PpComp
-import Rename
+
 import TcMonad
-import Typecheck (tyCheckProg)
-import PassPipeline
-import BlinkParseComp (parseProgram)
+import Typecheck      ( tyCheckProg              )
+
+import BlinkParseComp ( parseProgram             )
+import BlinkParseM    ( mkZiriaStream, runParseM )
+
 import qualified GenSym         as GS
-import qualified Outputable -- Qualified so that we don't clash with Mainland
-
-import CgOpt
-
+import qualified Outputable
 
 import AutoLUT
 
--- New cardinality analysis and new vectorizer
-import CardAnalysis
-import VecM
-import VecSF
-import Vectorize
+import Vectorize    ( runVectorizer  )
 
-import CgHeader
-import CgMonad
-import CgOpt
-
-import CgProgram ( codeGenProgram )
+import CgProgram    ( codeGenProgram )
+import CgMonad      ( evalCg         )
+import CgHeader     ( cHeader        )
 
 import qualified PassPipeline as PP
-
-import qualified BlinkParseComp as NewParser
-import BlinkParseM (mkZiriaStream)
-
-import VecMitigators
-
-import Orphans
-
-import Outputable 
 
 data CompiledProgram
   = CompiledProgram Comp [C.Definition] FilePath
@@ -117,24 +91,21 @@ main :: IO ()
 main = failOnException $ do
     hSetBuffering stdout NoBuffering
 
-    -- putStrLn "pre-command line parsing ..."
-
     args <- getArgs
     (dflags, _) <- compilerOpts args
 
     inFile  <- getInFile dflags
     outFile <- getOutFile dflags
-    input <- readFile inFile
+    input   <- readFile inFile
 
-    -- putStrLn "command line parsed ..."
     prog <-
           failOnError $
           do { let state  = ()
                    stream = mkZiriaStream input
-                   parser = runParserT NewParser.parseProgram state
-                                                              inFile
-                                                              stream
-             ; NewParser.runParseM parser []
+                   parser = runParserT parseProgram state
+                                                    inFile
+                                                    stream
+             ; runParseM parser []
              }
 
     -- pretty-show's `dumpDoc` generates a `Text.PrettyPrint.HughesPJ.Doc`
@@ -143,17 +114,8 @@ main = failOnException $ do
     dump dflags DumpAst ".ast.dump" $ (text . dumpStr) prog
     dump dflags DumpAstPretty ".ast.pretty.dump" $ (text . show) prog
 
-    -- putStrLn $ "renamed ... " ++ show prog_renamed
-
     sym <- GS.initGenSym (getName dflags)
 
-{- Testing the AstFM ........... -}
-
-    -- test1_comp <- AstFM.interpC sym Nothing (AstFM._test1 24 8)
-    -- putStrLn $ (show $ Outputable.ppr test1_comp)
-    -- exitFailure
-
-{- End Testing the AstFM ............. -}
 
     (MkProg c', _unifier) <- failOnError $ runTcM' (tyCheckProg prog) sym
     let in_ty  =  inTyOfCTy (ctComp c')
@@ -164,65 +126,32 @@ main = failOnException $ do
     when (not (isDynFlagSet dflags Debug)) $ do
     dump dflags DumpTypes ".type.dump" $ (text . show) (ppCompTyped c')
 
-    -- putStrLn "typechecked program ..."
-
     -- First let us run some small-scale optimizations
     folded <- runFoldPhase dflags sym 1 c'
 
-{-
-    -- putStrLn $ "run the fold phase ..." ++ show folded
+    (cand, cands) <- runVectorizePhase dflags sym folded
 
-    -- putStrLn $ "proceeding with vectorization ...."
-
-    cands <- runVectorizePhase dflags sym folded
-
-    -- The vectorizer returns a list of candidate
-    -- vectorizations. But I think that if it is empty then this
-    -- indicates vectorization failure. Moreover I think it can never
-    -- return more than one candidate.  However the code is prepared
-    -- for more than one candidates (and we might need to re-enable it
-    -- for experimentation. Hence I am adding some assertions below to
-    -- see when this happens (if at all ...)
-    check_vect_cands cands
--}
-    -- DV: replace this this with the commented code above
-    let cands = [ folded ]
-
-    -- Open files!
-    let fnames = outFile : ["v"++show i++"_"++outFile | i <- [0..]]
-    let ccand_names = zip cands fnames
-
-    -- putStrLn "post vectorized (before 2nd round of fold) ..."
+    -- Filenames
+    let fnames = ["v"++show i++"_"++outFile | (i::Int) <- [0..]]
+    let ccand_names = zip (cand:cands) (outFile : fnames)
 
     -- Fold, inline, and pipeline
     icands <- mapM (runPostVectorizePhases dflags sym) ccand_names
 
-
-    -- putStrLn "post vectorized ..."
-
     -- Generate code
     -- Use module name to avoid generating the same name in different modules
-    sym <- GS.initGenSym (getName dflags)
+    cg_sym <- GS.initGenSym (getName dflags)
 
     let compile_threads (sc,ctx,tid_cs,bufTys,fn)
           = do { defs <- failOnError $
-                         evalCg sym (getStkThreshold dflags) $
+                         evalCg cg_sym (getStkThreshold dflags) $
                          codeGenProgram dflags ctx tid_cs bufTys (in_ty,yld_ty)
                ; return $ CompiledProgram sc defs fn }
     code_names <- forM icands compile_threads
 
-    -- putStrLn "post code generation ..."
-
     mapM_ outputCompiledProgram code_names
 
   where
-{-
-    check_vect_cands cands
-      = case cands of
-         [c] -> return ()
-         []  -> failWithError "Vect failure: non-sensical annotations?"
-         _   -> failWithError "Vect failure: too many candidates?"
--}
 
     runFoldPhase :: DynFlags -> GS.Sym -> Int -> Comp -> IO Comp
     -- Fold Phase
@@ -249,15 +178,14 @@ main = failOnException $ do
       | otherwise
       = return c
 
-{-
+
     -- Vectorize Phase
-    runVectorizePhase :: DynFlags -> GS.Sym -> Comp -> IO [Comp]
+    runVectorizePhase :: DynFlags -> GS.Sym -> Comp -> IO (Comp,[Comp])
     runVectorizePhase dflags sym c
       | isDynFlagSet dflags Vectorize
-      = runDebugVecM dflags c sym
+      = Vectorize.runVectorizer dflags sym c
       | otherwise
-      = return [c]
--}
+      = return (c,[])
 
     runPipelinePhase :: DynFlags -> GS.Sym -> Comp
                      -> IO PP.PipelineRetPkg

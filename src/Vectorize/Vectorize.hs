@@ -40,6 +40,7 @@ import Data.Functor.Identity
 import Control.Applicative  ( (<$>) )
 
 import Opts
+import Utils
 
 import CardAnalysis -- Cardinality analysis
 import VecM         -- Vectorizer monad and infrastructure
@@ -457,58 +458,42 @@ mk_out_mitigator loc t m -- non-array
 
 
 
+-- | Entry point to vectorizer 
+-- The first Comp is the maximal candidate. In Debug mode we also emit
+-- all possible candidates in the second component of the
+-- returned pair (including the maximal)
+runVectorizer :: DynFlags -> GS.Sym -> Comp -> IO (Comp,[Comp])
+runVectorizer dflags sym comp = do
+  verbose dflags $ text "Cardinality analysis starting."
+  lcomp <- runCardAnal dflags comp
+  verbose dflags $ text "Cardinality analysis finished."
 
-{- Entry point to the vectorizer
- - ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -}
+  verbose dflags $ text "Vectorization starting."
+  vss <- runVecM (VecEnv sym [] []) (computeVectTop dflags lcomp)
+  verbose dflags $ text "Vectorization finished." <+> 
+                      parens (ppr (length vss) <+> text "candidates")
 
-vectorize :: DynFlags -> GS.Sym -> Comp -> IO [Comp]
-vectorize dflags sym comp
-  = error "implementme!"
 
-{- 
-runDebugVecM :: DynFlags
-             -> Comp
-             -> GS.Sym
-             -> IO [Comp CTy Ty]
-runDebugVecM dflags comp sym
-  = let verbose = isDynFlagSet dflags Verbose
-    in
-    do { -- First run cardinality analysis
-       ; when verbose $ putStrLn "Vectorization starting ..."
-       ; ccomp <- runCardinalityAnalysis verbose comp
-       ; when verbose $
-         putStrLn "Cardinality analysis finished, starting vectorization ..."
-       ; (vss,_vstate)
-             <- let vec_action = computeVectTop verbose ccomp
-                in runVecM vec_action sym (VecEnv [] []) (VecState 0 0)
+  when (null vss) $ 
+    panic $ vcat [ text "Empty vectorization candidate set for computation:"
+                 , ppr comp ]
+  
+  let do_one (DVR { dvr_comp = io_comp, dvr_vres = vres }) = do
+        vc_mit <- io_comp
+        -- Optimize mitigators
+        vc_opt_mit <- elimMitigsIO dflags sym vc_mit
+        -- Compile away mitigators if flag set
+        let vc = vc_opt_mit 
+    
+        verbose dflags $ text "Type checking vectorization candidate."
+        seq (ctComp vc) $ verbose dflags $ text "Done."
+        return vc
 
-       ; putStrLn "====>"
-       ; putStrLn $ "Vectorizer: length of results is: " ++ show (length vss)
-         -- Now do the final selection!
-       ; vs_maxi <- filterMaximal vss
+  -- in Debug mode optimize compile and type check all candidates
+  let maxi = getMaximal vss
+  let final_vss = if isDynFlagSet dflags Debug then (maxi : vss) else [maxi]
+  comps <- mapM do_one final_vss
 
-       ; let do_one (DVR { dvr_comp = io_comp, dvr_vres = _vres })
-                = do { vc_mit <- io_comp
-                       -- Fuse mitigators
-                     ; vc_opt_mit <- elimMitigsIO sym vc_mit
-                       -- Compile away remaining mitigators
-                     ; vc <- if isDynFlagSet dflags NativeMitigators
-                             then return vc_opt_mit
-                             else -- compile them away
-                                  compileMitigs sym vc_opt_mit
+  return (head comps, tail comps) -- We know it's the maximal in Debug or not
 
-                     ; res <- runTcM' (tyCheckTopComp vc) sym
-                     ; case res of
-                         Left err
-                          -> do { putStrLn "Type error in vectorization result."
-                                ; print err
-                                ; print (ppr vc)
-                                ; error "Vectorization bug!" }
-                         Right (tcv, _unifiers)
-                          -> return tcv
-                     }
-        ; mapM do_one [vs_maxi]
-          -- mapM do_one vss
-       }
 
--}

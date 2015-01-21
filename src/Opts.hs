@@ -150,7 +150,6 @@ options =
      , Option []        ["autolut"]             (NoArg AutoLUT)       "automatically convert function to use LUTs"
      , Option []        ["pipeline"]            (NoArg Pipeline)      "pipeline standalone computations"
 
-     , Option []        ["native-mitigators"]   (NoArg NativeMitigators) "use native mitigators instead of source-based"
      , Option []        ["no-lut-hashing"]      (NoArg NoLUTHashing)     "do not hash lut generation"
 
      , Option []        ["dummy-thread"]        (NoArg DummyThread)   "generate dummy thread when pipelining"
