@@ -102,8 +102,9 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
                                 , text "}" ]
 
     Seq c1 c2 ->
-      ppComp c1 <> semi $$
-      ppComp c2
+      text "seq" <+> vcat [ text "{" <+> ppComp c1 <> semi
+                          , nest 2 $ ppComp c2
+                          , text "}" ]
 
     Par parInfo c1 c2 ->
 {-
