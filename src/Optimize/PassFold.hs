@@ -263,7 +263,9 @@ foldExpPasses flags
     , ("exp-inlining" , passExpInlining)
     , ("asgn-letref"  , passAsgnLetRef )
     , ("exp-let-push" , passExpLetPush )
-    , ("eval"         , passEval       )
+    ] ++ 
+    [ ("eval"         , passEval       ) 
+    | not (isDynFlagSet flags NoStaticEval)
     ]
 
 {-------------------------------------------------------------------------------
@@ -805,8 +807,6 @@ passForUnroll = TypedExpBottomUp $ \eloc e -> do
 -- | Eliminate unused bindings
 passElimUnused :: TypedExpPass
 passElimUnused = TypedExpBottomUp $ \eloc e -> do
-  fgs <- getDynFlags
-
   if | ELet nm _ e1 e2 <- unExp e
        , nm `S.notMember` exprFVs e2
        , ctExp e1 == TUnit

@@ -49,6 +49,8 @@ data DynFlag =
   | StdoutDump
   | BoundsCheck
 
+  | NoStaticEval
+
   | NativeMitigators
   | NoLUTHashing
 
@@ -164,6 +166,8 @@ options =
      , Option []        ["ddump-autolut"]       (NoArg DumpAutoLUT)   "dump results of auto-LUT"
 
      , Option []        ["no-exp-fold"]         (NoArg NoExpFold)     "do not fold/inline expressions"
+     , Option []        ["no-static-eval"]      (NoArg NoStaticEval)  "do not statically evaluate expressions"
+
      , Option []        ["no-fold"]             (NoArg NoFold)        "do not fold/inline computations and expressions"
      , Option []        ["no-lut"]              (NoArg NoLUT)         "do not construct LUTs"
 
