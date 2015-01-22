@@ -113,8 +113,9 @@ compGenBind dflags f params c1_with_locals args k = do
                                  extendVarEnv (eparamsEnv ++ localEnv) $
                                  codeGenGlobalInitsOnly dflags locals'
     appendDecls local_decls
+    appendDecls args_decls
 
-    return $ c1info { compGenInit = codeDecls args_decls  `mappend`
+    return $ c1info { compGenInit = -- Wrong! codeDecls args_decls  `mappend`
                                     codeStmts args_stms   `mappend`
                                     codeStmts local_stms  `mappend`
                                     compGenInit c1info
