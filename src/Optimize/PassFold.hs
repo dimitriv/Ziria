@@ -102,6 +102,12 @@ recordLocalRewrite (RwM act) = RwM $ do
       Rewritten    -> return (result, True)
       NotRewritten -> return (result, False)
 
+-- | New typed name generation in the optimizer
+newPassFoldGName :: String -> ty -> Maybe SourcePos -> RwM (GName ty)
+newPassFoldGName nm ty loc = do
+    str <- genSym ""
+    return $ (toName (nm ++ "_" ++ str) loc ty) {uniqId = "_pf" ++ str}
+
 {-------------------------------------------------------------------------------
   Rewriting statistics
 -------------------------------------------------------------------------------}
@@ -253,6 +259,7 @@ foldExpPasses flags
   = []
   | otherwise
   = [ ("for-unroll"   , passForUnroll  )
+    , ("elim-unused"  , passElimUnused )
     , ("exp-inlining" , passExpInlining)
     , ("asgn-letref"  , passAsgnLetRef )
     , ("exp-let-push" , passExpLetPush )
@@ -296,7 +303,7 @@ passFold = TypedCompBottomUp $ \_ -> go
           return $ cBindMany cloc c [(nm, c12')]
 
         SeqView (MkComp (Return fi e) _ ()) c12 -> do
-          let nm = mkUniqNm cloc (ctExp e)
+          nm <- newPassFoldGName "_fold_unused" (ctExp e) cloc
           logStep "fold/seq" cloc
             [step| return .. ; .. ~~> let nm = .. in .. |]
           c12' <- go c12
@@ -304,9 +311,6 @@ passFold = TypedCompBottomUp $ \_ -> go
 
         _otherwise -> do
           return comp
-
-    mkUniqNm :: Maybe SourcePos -> Ty -> GName Ty
-    mkUniqNm loc tp = toName ("__fold_unused_" ++ getLnNumInStr loc) loc tp
 
 -- | Translate computation level `LetE` to expression level `Let`
 passPurify :: TypedCompPass
@@ -410,13 +414,17 @@ passLetFunTimes = TypedCompBottomUp $ \_cloc comp ->
       Times ui e elen i (MkComp (LetHeader def cont) cloc ())
         | MkFun (MkFunDefined f params body) floc () <- def
          -> do
+           iprm <- newPassFoldGName "i_prm" (nameTyp i) cloc 
+
            logStep "letfun-times" cloc
              [step| for i in [e, elen] { fun f(..) { .. } ; .. }
                 ~~> fun f(i, ..) { .. } ; for i in [e, elen] { .. } |]
 
-           let fty' = TArrow (map nameTyp (i:params)) (fun_ret_ty (nameTyp f))
+           -- Freshen the function definition 
+           let fty' = TArrow (map nameTyp (iprm:params)) (fun_ret_ty (nameTyp f))
                f'   = f { nameTyp = fty' }
-               def' = mkFunDefined floc f' (i:params) body
+               def' = mkFunDefined floc f' (iprm:params) $ 
+                      substExp [] [(i, eVar floc iprm)] body
                iexp = eVar cloc i -- The counter variable
            cont' <- augment_calls f' iexp cont
            rewrite $ cLetHeader cloc def' (cTimes cloc ui e elen i cont')
@@ -440,10 +448,8 @@ passLetFunTimes = TypedCompBottomUp $ \_cloc comp ->
 -- | Loop unrolling
 passTimesUnroll :: TypedCompPass
 passTimesUnroll = TypedCompBottomUp $ \cloc comp -> do
-    let unused :: GName Ty
-        unused = toName ("__unroll_unused_" ++ getLnNumInStr cloc) Nothing TUnit
-
-        mk_bind_many :: [Comp] -> Comp
+    unused <- newPassFoldGName "_unroll_unused" TUnit cloc
+    let mk_bind_many :: [Comp] -> Comp
         mk_bind_many []     = error "times_unroll_step: can't happen!"
         mk_bind_many [x]    = x
         mk_bind_many (x:xs) = cBindMany (compLoc x) x [(unused, mk_bind_many xs)]
@@ -591,8 +597,7 @@ passTakeEmit = TypedCompBottomUp $ \cloc comp -> if
            eloc = expLoc e
            fty  = TArrow [xty] ety
 
-       fname <- do fr <- genSym "auto_map_"
-                   return $ toName fr eloc fty
+       fname <- newPassFoldGName "auto_map_" fty cloc
 
        logStep "take-emit" cloc
          [step| repeat { x <- take ; emit .. }
@@ -774,6 +779,8 @@ passFloatTopLetRef fgs comp
   Expression passes
 -------------------------------------------------------------------------------}
 
+
+
 -- | Loop unrolling
 passForUnroll :: TypedExpPass
 passForUnroll = TypedExpBottomUp $ \eloc e -> do
@@ -794,6 +801,18 @@ passForUnroll = TypedExpBottomUp $ \eloc e -> do
 
        | otherwise
         -> return e
+
+-- | Eliminate unused bindings
+passElimUnused :: TypedExpPass
+passElimUnused = TypedExpBottomUp $ \eloc e -> do
+  fgs <- getDynFlags
+
+  if | ELet nm _ e1 e2 <- unExp e
+       , nm `S.notMember` exprFVs e2
+       , ctExp e1 == TUnit
+      -> rewrite (eSeq eloc e1 e2)
+     | otherwise
+      -> return e 
 
 -- | Inline let bindings
 passExpInlining :: TypedExpPass
@@ -943,26 +962,23 @@ rewrite_mit_map ty1 (i1,j1) ty2 (i2,j2) (f_name, fun)
        ; let floc = funLoc fun
 
          -- input variable
-       ; x <- genSym "x"
-       ; let x_ty   = TArray (Literal i1) ty1   -- input type
-       ; let x_name = toName x floc x_ty
+       ; let x_ty   = TArray (Literal i1) ty1     -- input type
+       ; x_name <- newPassFoldGName "x" x_ty floc
        ; let x_exp  = eVar floc x_name
 
+      
          -- output variable
-       ; y <- genSym "y"
-       ; let y_ty   = TArray (Literal j2) ty2      -- output type
-       ; let y_name = toName y floc y_ty
+       ; let y_ty   = TArray (Literal j2) ty2     -- output type
+       ; y_name <- newPassFoldGName "y" y_ty floc
        ; let y_exp  = eVar floc y_name
 
          -- name of new map function
-       ; new_f <- genSym "auto_map_mit"
        ; let f_ty = TArrow [x_ty] y_ty
-       ; let new_f_name = toName new_f floc f_ty
+       ; new_f_name <- newPassFoldGName "auto_map_mit" f_ty floc
 
 
          -- new counter
-       ; i <- genSym "i"
-       ; let i_name = toName i floc tint
+       ; i_name <- newPassFoldGName "i" tint floc
        ; let i_exp  = eVar floc i_name
 
          -- zero and 'd'
@@ -1297,7 +1313,10 @@ is_simpl_expr = go . unExp
     go :: Exp0 -> Bool
     go (EVal _ _)       = True
     go (EValArr elems)  = all is_simpl_expr elems
-    go (EVar _)         = True
+    -- NB: We could relax this to True for /immutable/ variables but at the 
+    -- moment we don't track those so we have to be conservative and assume
+    -- the worse. TODO: fix this. 
+    go (EVar _)         = False 
     go (EUnOp _ e)      = is_simpl_expr e
     go (EStruct _ fses) = all is_simpl_expr (map snd fses)
     go _                = False
@@ -1325,8 +1344,8 @@ inline_exp_fun_in_comp fun
 inline_exp_fun :: (GName Ty, [GName Ty], [MutVar], Exp)
                -> Exp -> RwM Exp
 -- True means that it is safe to just get rid of the function
-inline_exp_fun (nm,params,locals,body)
-    = mapExpM return return replace_call
+inline_exp_fun (nm,params,locals,body) e
+  = mapExpM return return replace_call e
   where
     replace_call (MkExp (ECall nm' args) loc ())
 --    | all is_simpl_expr args -- Like what we do for LetE/ELet

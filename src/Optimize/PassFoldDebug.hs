@@ -32,7 +32,6 @@ import Data.List (groupBy)
 import Language.Haskell.TH hiding (ppr)
 import Language.Haskell.TH.Quote
 import Text.PrettyPrint.HughesPJ (text, hcat)
--- import qualified Text.Show.Pretty as PrettyShow
 
 import Outputable
 

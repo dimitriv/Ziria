@@ -132,11 +132,11 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
          text "in" $$
          ppComp c1
 
-    LetE x _ e c
+    LetE x fi e c
       | ignorelet || ignoreexp
       -> ppComp c
       | otherwise
-      -> text "let" <+> ppr x <+> text "=" <+> ppr e $$
+      -> text "let" <> ppr fi <+> ppr x <+> text "=" <+> ppr e $$
          text "in" $$
          ppComp c
 
@@ -182,9 +182,9 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
     Emits e
       | ignoreexp -> text "emits ..."
       | otherwise -> text "emits" <+> ppr e
-    Return _ e
+    Return fi e
       | ignoreexp -> text "return ..."
-      | otherwise -> text "return" <+> ppr e
+      | otherwise -> text "return" <> ppr fi <+> ppr e
     Interleave c1 c2 ->
       ppComp c1 <+> text "<|>" <+> ppComp c2
     Branch e c1 c2 ->

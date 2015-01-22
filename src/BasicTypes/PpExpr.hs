@@ -75,6 +75,11 @@ instance Outputable Val where
     VString s -> text s
     VUnit     -> text "tt"
 
+instance Outputable ForceInline where
+  ppr ForceInline = brackets $ text "ForceInline"
+  ppr NoInline    = brackets $ text "NoInline"
+  ppr AutoInline  = text ""
+
 instance Outputable ty => Outputable (GExp0 ty a) where
   ppr e = case e of
     EVal _ v        -> ppr v
@@ -110,8 +115,8 @@ instance Outputable ty => Outputable (GExp0 ty a) where
       nest nestingDepth (ppr ebody) $$
       text "}"
 
-    ELet x _fi e1 e2 ->
-      text "let" <+> assign "=" (ppName x) (ppr e1) $$
+    ELet x fi e1 e2 ->
+      text "let" <> ppr fi <+> assign "=" (ppName x) (ppr e1) $$
       text "in" $$
       ppr e2
 
@@ -248,7 +253,7 @@ ppEs f sep eargs = case eargs of
     e : eargs' -> f e <> sep <+> ppEs f sep eargs'
 
 ppName :: GName ty -> Doc
-ppName nm = text (name nm) -- only in debug mode we want this: <> braces (text $ uniqId nm)
+ppName nm = text (name nm) -- <> braces (text $ uniqId nm)
 
 ppParams :: Outputable ty => [GName ty] -> Doc
 ppParams params =

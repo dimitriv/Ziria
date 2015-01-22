@@ -102,11 +102,11 @@ vect_ud2 dfs cty lcomp i j (NDiv j0) (NDiv j1) (NMul m)
     arin       = i*m -- size of input array
     arout      = j0  -- size of output array
 
-    action venv iidx oidx tidx xa ya 
-      = rwTakeEmitIO venv (rw_take arin iidx tidx xa)
-                          (rw_takes iidx tidx xa)
-                          (rw_emit arout oidx tidx ya)
-                          (rw_emits oidx tidx ya) lcomp
+    action venv iidx oidx itidx otidx xa ya 
+      = rwTakeEmitIO venv (rw_take arin iidx itidx xa)
+                          (rw_takes iidx itidx xa)
+                          (rw_emit arout oidx otidx ya)
+                          (rw_emits oidx otidx ya) lcomp
 
     zirbody :: VecEnv -> Zr ()
     zirbody venv
@@ -114,13 +114,14 @@ vect_ud2 dfs cty lcomp i j (NDiv j0) (NDiv j1) (NMul m)
       | otherwise = rest (error "BUG: Must not poke xa!") -- no take!
       where 
         rest xa
-          = fleteref ("iidx" ::: tint ::= zERO) $ \iidx ->
-            fleteref ("tidx" ::: tint ::= zERO) $ \tidx ->
-            fleteref ("ya"   ::: vout_ty) $ \ya ->
+          = fleteref ("iidx"  ::: tint ::= zERO)  $ \iidx  ->
+            fleteref ("itidx" ::: tint ::= zERO)  $ \itidx ->
+            fleteref ("ya"    ::: vout_ty) $ \ya ->
             ftimes zERO (j1*m) $ \_i ->
-            fleteref ("oidx" ::: tint ::= I(0)) $ \oidx ->
+            fleteref ("oidx" ::: tint ::= I(0))  $ \oidx  ->
+            fleteref ("otidx" ::: tint ::= I(0)) $ \otidx ->
               do { ftimes zERO j0 $ const $
-                     fembed (action venv iidx oidx tidx xa ya)
+                   fembed (action venv iidx oidx itidx otidx xa ya)
                  ; when (arout > 1) $ do { oidx .:= zERO; femit ya }
                  }
 
@@ -140,11 +141,11 @@ vect_ud1 dfs cty lcomp i j (NMul m1) (NMul m2)
     arin       = i*m1*m2 -- size of input array
     arout      = j*m1    -- size of output array
 
-    action venv iidx oidx tidx xa ya
-      = rwTakeEmitIO venv (rw_take arin iidx tidx xa)
-                          (rw_takes iidx tidx xa)
-                          (rw_emit arout oidx tidx ya)
-                          (rw_emits oidx tidx ya) lcomp
+    action venv iidx oidx itidx otidx xa ya
+      = rwTakeEmitIO venv (rw_take arin iidx itidx xa)
+                          (rw_takes iidx itidx xa)
+                          (rw_emit arout oidx otidx ya)
+                          (rw_emits oidx otidx ya) lcomp
 
     zirbody :: VecEnv -> Zr ()
     zirbody venv
@@ -152,13 +153,14 @@ vect_ud1 dfs cty lcomp i j (NMul m1) (NMul m2)
       | otherwise = rest (error "BUG: Must not poke xa!") -- no take!
       where 
         rest xa
-          = fleteref ("iidx" ::: tint ::= zERO) $ \iidx ->
-            fleteref ("tidx" ::: tint ::= zERO) $ \tidx ->
-            fleteref ("ya"   ::: vout_ty) $ \ya ->
+          = fleteref ("iidx"  ::: tint ::= zERO)  $ \iidx ->
+            fleteref ("itidx" ::: tint ::= zERO)  $ \itidx ->
+            fleteref ("ya"    ::: vout_ty)        $ \ya ->
             ftimes zERO m2 $ \_i ->
-            fleteref ("oidx" ::: tint ::= I(0)) $ \oidx ->
+            fleteref ("oidx" ::: tint ::= I(0))  $ \oidx ->
+            fleteref ("otidx" ::: tint ::= I(0)) $ \otidx ->
               do { ftimes zERO m1 $ const $
-                     fembed (action venv iidx oidx tidx xa ya)
+                   fembed (action venv iidx oidx itidx otidx xa ya)
                  ; when (arout > 1) $ do { oidx .:= zERO; femit ya }
                  }
 
@@ -189,24 +191,27 @@ vect_du1 dfs cty lcomp i j (NMul m1) (NMul m2)
     arin       = i*m1    -- size of input array
     arout      = j*m1*m2 -- size of output array
 
-    action venv iidx oidx tidx xa ya
-      = rwTakeEmitIO venv (rw_take arin iidx tidx xa)
-                          (rw_takes iidx tidx xa)
-                          (rw_emit arout oidx tidx ya)
-                          (rw_emits oidx tidx ya) lcomp
+    action venv iidx oidx itidx otidx xa ya
+      = rwTakeEmitIO venv (rw_take arin iidx itidx xa)
+                          (rw_takes iidx itidx xa)
+                          (rw_emit arout oidx otidx ya)
+                          (rw_emits oidx otidx ya) lcomp
 
     zirbody :: VecEnv -> Zr ()
     zirbody venv
-      = fleteref ("ya"   ::: vout_ty)       $ \ya   ->
-        fleteref ("tidx" ::: tint ::= zERO) $ \tidx ->
-        fleteref ("oidx" ::: tint ::= zERO) $ \oidx ->
+      = fleteref ("ya"   ::: vout_ty)         $ \ya   ->
+        fleteref ("oidx" ::: tint ::= zERO)   $ \oidx ->
+        fleteref ("otidx" ::: tint ::= zERO)  $ \otidx ->
         do { ftimes zERO m2 $ \_i ->
-             do xa <- if arin > 0 then ftake vin_ty 
-                      else error "BUG: must not touch input!"
-                fleteref ("iidx" ::: tint ::= zERO) $ \iidx ->
+             do { xa <- if arin > 0 then ftake vin_ty 
+                        else error "BUG: must not touch input!"
+                ; fleteref ("iidx" ::: tint  ::= zERO)  $ \iidx  ->
+                  fleteref ("itidx" ::: tint ::= zERO)  $ \itidx ->
                   ftimes zERO m1 $ const $ 
-                    fembed (action venv iidx oidx tidx xa ya)
-           ; when (arout > 1) $ femit ya }
+                    fembed (action venv iidx oidx itidx otidx xa ya)
+                }
+           ; when (arout > 1) $ femit ya 
+           }
 
 {-------------------------------------------------------------------------
 [DU2] a^(i0*i1) -> b^j     ~~~>    (a*i0)^(i1*m) -> (b*j*m)
@@ -224,24 +229,27 @@ vect_du2 dfs cty lcomp i (NDiv i0) (NDiv i1) j (NMul m)
     arin       = i0  -- size of input array
     arout      = j*m -- size of output array
 
-    action venv iidx oidx tidx xa ya
-      = rwTakeEmitIO venv (rw_take arin iidx tidx xa)
-                          (rw_takes iidx tidx xa)
-                          (rw_emit arout oidx tidx ya)
-                          (rw_emits oidx tidx ya) lcomp
+    action venv iidx oidx itidx otidx xa ya
+      = rwTakeEmitIO venv (rw_take arin iidx itidx xa)
+                          (rw_takes iidx itidx xa)
+                          (rw_emit arout oidx otidx ya)
+                          (rw_emits oidx otidx ya) lcomp
 
     zirbody :: VecEnv -> Zr ()
     zirbody venv
-      = fleteref ("ya"   ::: vout_ty)       $ \ya   ->
-        fleteref ("tidx" ::: tint ::= zERO) $ \tidx ->
-        fleteref ("oidx" ::: tint ::= zERO) $ \oidx ->
+      = fleteref ("ya"   ::: vout_ty)        $ \ya    ->
+        fleteref ("oidx" ::: tint ::= zERO)  $ \oidx  ->
+        fleteref ("otidx" ::: tint ::= zERO) $ \otidx ->
         do { ftimes zERO (i1*m) $ \_i ->
-             do xa <- if arin > 0 then ftake vin_ty 
-                      else return (error "BUG: must not touch input!")
-                fleteref ("iidx" ::: tint ::= zERO) $ \iidx ->
+             do { xa <- if arin > 0 then ftake vin_ty 
+                        else return (error "BUG: must not touch input!")
+                ; fleteref ("iidx" ::: tint ::= zERO)  $ \iidx  ->
+                  fleteref ("itidx" ::: tint ::= zERO) $ \itidx ->
                   ftimes zERO i0 $ const $
-                    fembed (action venv iidx oidx tidx xa ya)
-           ; when (arout > 1) $ femit ya }
+                    fembed (action venv iidx oidx itidx otidx xa ya)
+                }
+           ; when (arout > 1) $ femit ya 
+           }
 
 
 {-------------------------------------------------------------------------

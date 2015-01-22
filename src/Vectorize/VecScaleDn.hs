@@ -162,26 +162,27 @@ vect_dd3 dfs cty lcomp i (NDiv i0) (NDiv i1)
     vout_ty_big = mkVectTy orig_outty (j0*j1)
 
     -- NB: action does not rewrite emit(s)
-    action venv iidx oidx tidx xa ya
-      = rwTakeEmitIO venv (rw_take arin iidx tidx xa)
-                          (rw_takes iidx tidx xa)
-                          (rw_emit arout oidx tidx ya)
-                          (rw_emits oidx tidx ya) lcomp
+    action venv iidx oidx itidx otidx xa ya
+      = rwTakeEmitIO venv (rw_take arin iidx itidx xa)
+                          (rw_takes iidx itidx xa)
+                          (rw_emit arout oidx otidx ya)
+                          (rw_emits oidx otidx ya) lcomp
 
     zirbody :: VecEnv -> Zr EId
     zirbody venv
       = fleteref ("xa" ::: vin_ty_big)  $ \xa ->
         fleteref ("ya" ::: vout_ty_big) $ \ya ->
-        fleteref ("iidx" ::: tint ::= zERO) $ \iidx ->
-        fleteref ("oidx" ::: tint ::= zERO) $ \oidx ->
-        fleteref ("tidx" ::: tint ::= zERO) $ \tidx ->
+        fleteref ("iidx" ::: tint ::= zERO)  $ \iidx ->
+        fleteref ("oidx" ::: tint ::= zERO)  $ \oidx ->
+        fleteref ("itidx" ::: tint ::= zERO) $ \itidx ->
+        fleteref ("otidx" ::: tint ::= zERO) $ \otidx ->
         do { ftimes zERO i1 $ \cnt ->
                do { x <- ftake vin_ty
                   ; if arin == 1
                     then xa .! cnt   .:= x
                     else xa .! ((cnt .* arin) :+ arin) .:= x
                   }
-           ; v <- fembed (action venv iidx oidx tidx xa ya)
+           ; v <- fembed (action venv iidx oidx itidx otidx xa ya)
            ; ftimes zERO j1 $ \cnt ->
                if arout == 1 
                  then femit (ya .! cnt) 
