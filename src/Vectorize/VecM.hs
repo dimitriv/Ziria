@@ -652,14 +652,14 @@ rw_take arin iidx tidx xa loc _ty
   | otherwise = liftZr loc $ do
       tidx  .:= iidx
       iidx  .:= iidx .+ I(1)
-      freturn _fI $ xa .! tidx
+      freturn _aI $ xa .! tidx -- Auto inline, not force-inline
 
 rw_takes :: EId -> EId -> EId -> Maybe SourcePos -> Ty -> Int -> VecM Comp
 rw_takes iidx tidx xa loc _ty n
   = liftZr loc $ do
       tidx  .:= iidx
       iidx  .:= iidx .+ I(n)
-      freturn _fI $ xa .! (tidx :+ n)
+      freturn _aI $ xa .! (tidx :+ n)
 
 rw_emit :: Int -> EId -> EId -> EId -> Maybe SourcePos -> Exp -> VecM Comp
 rw_emit arout oidx tidx ya loc e
