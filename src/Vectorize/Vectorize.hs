@@ -216,15 +216,21 @@ computeVectTop dfs x = do
 
         Call f es -> do
           CFunBind { cfun_params = prms, cfun_body = bdy } <- lookupCFunBind f
-          vbdys <- go vctx bdy
+          -- Separate computation variables
+          let (prms', cbinds, es') = mkHOCompSubst prms es
+
+          -- And bind computation arguments 
+          let bdy' = foldl (\c (x,bnd) -> AstL.cLet loc (compInfo bdy) x bnd c) bdy cbinds
+
+          vbdys <- go vctx bdy'
           -- It's not very efficient to create a zillion typed names
           -- so let us create one and set its type each time.
-          vf <- newVectGName "_VECT" undefined loc
+          vf <- newVectGName (name f ++ "_vect") undefined loc
           let mk_vect_call vbd
-                = cLetFunC loc vf_typed prms vbd $ 
+                = cLetFunC loc vf_typed prms' vbd $ 
                   cCall loc vf_typed (map eraseCallArg es)
                 where vf_typed = updNameTy vf vf_type
-                      vf_type  = CTArrow (map ctCallArg es) (ctComp vbd)
+                      vf_type  = CTArrow (map ctCallArg es') (ctComp vbd)
           ress <- mapM (liftCompDVR mk_vect_call) vbdys
           return ress
 
@@ -330,9 +336,10 @@ warn_empty_vect dfs comp ress origin
 -- | Vectorizing a (finitely) iterated computer (NB: not adding 'self')
 vect_itercomp :: DynFlags -> (Comp -> Comp)
               -> Card -> Ty -> Ty -> LComp -> VecM [DelayedVectRes]
-vect_itercomp dfs builder vcard tin tout c
-  = do vss <- vect_comp_dd dfs c $ compSFDD vcard tin tout
-       mapM (liftCompDVR builder) vss
+vect_itercomp dfs builder iter_card tin tout cbody
+  = do let body_card = compInfo cbody -- Get cardinality of the body
+       vss <- vect_comp_dd dfs cbody $ compSFDD body_card tin tout
+       mapM (liftCompDVR builder) vss -- Lift to the iterator
 
 
 -- | Take a vectorization candidate vc and prepend it with an appropriately

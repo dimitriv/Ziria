@@ -58,7 +58,7 @@ data CFunBind = CFunBind {
 
 data VecEnv = VecEnv {
     venv_sym        :: GS.Sym 
-  , venv_cvar_binds :: [(CId, LComp)]
+  , venv_cvar_binds :: [(CId, LComp)] 
   , venv_cfun_binds :: [(CId, CFunBind)] }
 
 
@@ -130,6 +130,7 @@ lookupCVarBind nm = do
     case lookup nm bnds of
        Just bnd -> return bnd
        Nothing  -> panicStr $ "VecM: unbound cvar bind: " ++ show nm
+
 
 lookupCFunBind :: CId -> VecM CFunBind
 lookupCFunBind nm = do
@@ -559,6 +560,7 @@ rewriteTakeEmit on_take on_takes on_emit on_emits = go
       case unComp lcomp of 
         -- Standard boilerplate 
         Var x -> lookupCVarBind x >>= go 
+
         BindMany c1 xs_cs -> do
           c1' <- go c1
           let go_one (x,c) = go c >>= \c' -> return (x,c')
@@ -586,7 +588,7 @@ rewriteTakeEmit on_take on_takes on_emit on_emits = go
                     , cfun_body = body }) <- lookupCFunBind f
           vbody <- go body
           let vf_type = CTArrow (map ctCallArg es) (ctComp vbody)
-          vf <- newVectGName "spec" vf_type loc
+          vf <- newVectGName (name f ++ "_spec") vf_type loc
           return $ cLetFunC loc vf prms vbody $ 
                    cCall loc vf (map eraseCallArg es)
 

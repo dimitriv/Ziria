@@ -40,6 +40,10 @@ import Interpreter (evalInt)
 
 import Opts
 
+import Outputable
+import Text.PrettyPrint.HughesPJ
+
+
 {-------------------------------------------------------------------------------
   Top-level API
 -------------------------------------------------------------------------------}
@@ -64,11 +68,15 @@ data Card
     SCard CAlpha -- input  alpha
           CAlpha -- output alpha
   | OCard
-
+  deriving Show
 data CAlpha
   = CAStatic Int -- A concrete N >= 0.
   | CAMultOf Int -- Some x, which is a multiple of a concrete N >= 1
   | CAUnknown    -- Could not deduce or data dependent/dynamic.
+  deriving Show
+
+instance Outputable Card where
+  ppr card = text (show card)
 
 -- | Construct a cardinality
 scard :: Int -> Int -> Card

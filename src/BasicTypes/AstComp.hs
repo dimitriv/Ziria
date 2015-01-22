@@ -324,6 +324,27 @@ data CallArg a b
   | CAComp { unCAComp :: b }
   deriving (Generic, Typeable, Data)
 
+
+-- | Separate computation from expression arguments
+mkHOCompSubst ::
+     [(GName (CallArg t tc))]                  -- Original params
+  -> [CallArg (GExp t b) (GComp tc t a b)]     -- Original arguments
+  -> ( [(GName (CallArg t tc))]                -- Only expression params
+     , [(GName tc, GComp tc t a b)]            -- Bindings for comp arguments
+     , [CallArg (GExp t b) (GComp tc t a b)] ) -- Only expression arguments
+mkHOCompSubst fprms fargs = go fprms fargs ([],[],[])
+  where 
+    go [] [] acc = rev_acc acc
+    go (nm:nms) (arg@(CAExp _ae):args)  (eprms,cbinds,eargs)
+       = go nms args (nm:eprms, cbinds, arg:eargs)
+    go (nm:nms) ((CAComp ac):args) (eprms,cbinds,eargs)
+       = go nms args (eprms,(to_comp_nm nm, ac):cbinds,eargs)
+    go _ _ _ = panicStr "mkHOCompSubst"
+
+    rev_acc (x,y,z) = (reverse x, reverse y, reverse z)
+
+    to_comp_nm nm = updNameTy nm (callArg undefined id (nameTyp nm))
+
 -- A view of some Pars as a list
 data GParListView tc t a b
   = ParListView { plv_loc  :: CompLoc

@@ -401,7 +401,7 @@ doVectorizeCompForce comp (finalin,finalout)
                                                                   lookupCFunBind f
                              ; vbody <- go body
                              ; new_f <- liftVecM $
-                                        newVectName (name f ++ "_spec") loc
+                                        newVectName (name f ++ "_force_spec") loc
                              ; let es'   = map eraseCallArg es
                                    call = MkComp (Call new_f es') loc ()
                                    lcls' = eraseLocals lcls

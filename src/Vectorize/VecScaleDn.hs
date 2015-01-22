@@ -47,6 +47,8 @@ import Opts
 import CtComp
 import CtExpr 
 
+import Outputable
+import Text.PrettyPrint.HughesPJ
 
 doVectCompDD :: DynFlags -> CTy -> LComp -> SFDD -> VecM DelayedVectRes
 doVectCompDD dfs cty lcomp (SFDD1 (DivsOf i i0 i1))
@@ -131,8 +133,22 @@ vect_dd3 :: DynFlags -> CTy -> LComp
          -> Int -> NDiv -> NDiv
          -> Int -> NDiv -> NDiv -> VecM DelayedVectRes
 vect_dd3 dfs cty lcomp i (NDiv i0) (NDiv i1)
-                       j (NDiv j0) (NDiv j1)
-  = mkDVRes zirbody "DD3" loc vin_ty vout_ty
+                       j (NDiv j0) (NDiv j1) = do
+  liftIO $ verbose dfs $ vcat [ text "vect_dd3, lcomp:"
+                              , ppr lcomp
+                              , ppr (compInfo lcomp)
+                              , hsep [ text "i  =" <+> ppr i
+                                     , text "i0 =" <+> ppr i0
+                                     , text "i1 =" <+> ppr i1 ]
+                              , hsep [ text "j  =" <+> ppr j
+                                     , text "j0 =" <+> ppr j0
+                                     , text "j1 =" <+> ppr j1 ]
+                              ]
+  r <- mkDVRes zirbody "DD3" loc vin_ty vout_ty
+  liftIO $ do { c <- dvr_comp r
+              ; verbose dfs $ vcat [ text "vect_dd3, result:", ppr c ]
+              }
+  return r
   where
     loc        = compLoc lcomp
     orig_inty  = inTyOfCTy cty
@@ -160,10 +176,11 @@ vect_dd3 dfs cty lcomp i (NDiv i0) (NDiv i1)
         fleteref ("oidx" ::: tint ::= zERO) $ \oidx ->
         fleteref ("tidx" ::: tint ::= zERO) $ \tidx ->
         do { ftimes zERO i1 $ \cnt ->
-               do x <- ftake vin_ty
-                  if arin == 1
+               do { x <- ftake vin_ty
+                  ; if arin == 1
                     then xa .! cnt   .:= x
                     else xa .! ((cnt .* arin) :+ arin) .:= x
+                  }
            ; v <- fembed (action venv iidx oidx tidx xa ya)
            ; ftimes zERO j1 $ \cnt ->
                if arout == 1 
