@@ -1,0 +1,21 @@
+fun f(x : arr[2] int) {
+  var y : arr[4] int;
+
+  -- Test updating _part_ of a variable with an unknown value
+  
+  y[0]   := 0;
+  y[1]   := 1;
+  y[2,2] := x;
+
+  return y;
+}
+
+fun comp test() {
+  x <- take;
+
+  let y = f(x);
+  emit y[0,2];
+  emit y[2,2];
+}
+
+let comp main = read[arr[2] int] >>> repeat test() >>> write[arr[2] int]

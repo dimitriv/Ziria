@@ -803,25 +803,40 @@ invalidateAssumptions = do
     setUnknown (LetRefKnown   v) = LetRefUnknown (Just v)
     setUnknown (LetRefUnknown v) = LetRefUnknown v
 
--- | Invalidate all assumptions about a particular variable
+-- | Record that we assigned an unknown value to a variable
+--
+-- We need to know if this was a simple assignment (`x := ..`) or a complex
+-- assignment (`x[0] := ..` or `x.foo := ..`) because for simple assignments we
+-- don't need the previous value of the variable, but for complex we do.
 --
 -- See also comments for `invalidateAssumptions`.
-invalidateAssumptionsFor :: Monad m => GName Ty -> Eval m ()
-invalidateAssumptionsFor x = do
-    L.modifySt (evalLetRefs . L.mapAt (uniqId x)) setUnknown
+assignedUnknownValueTo :: Monad m => GName Ty -> Bool -> Eval m ()
+assignedUnknownValueTo x isSimple = do
+    L.modifySt (evalLetRefs . L.mapAt (uniqId x)) (setUnknown isSimple)
     L.putSt evalGuessesBool Map.empty
     L.putSt evalGuessesInt  Map.empty
   where
-    setUnknown :: Maybe LetRefState -> Maybe LetRefState
-    -- Value was fully known until now, so when we invalidate the value it is
-    -- because if an assignment. Hence we don't need the initial value.
-    setUnknown (Just (LetRefKnown _)) = Just (LetRefUnknown Nothing)
+    setUnknown :: Bool -> Maybe LetRefState -> Maybe LetRefState
+    -- Value was fully known until now, and we are replacing the value of
+    -- the variable completely (simple LHS). We don't need the initial value.
+    setUnknown True (Just (LetRefKnown _)) = Just (LetRefUnknown Nothing)
+
+    -- Value was fully known until now, but now we are updating part of the
+    -- variable with an unknown value (complex LHS). We need the initial value.
+    setUnknown False (Just (LetRefKnown v)) = Just (LetRefUnknown (Just v))
 
     -- Value was already in unknown state. Leave as is.
-    setUnknown (Just (LetRefUnknown v)) = Just (LetRefUnknown v)
+    setUnknown _ (Just (LetRefUnknown v)) = Just (LetRefUnknown v)
 
     -- Value was not in scope at all (free variable). Leave as is.
-    setUnknown Nothing = Nothing
+    setUnknown _ Nothing = Nothing
+
+-- | See `assignedUnknownValueTo` for a discussion of "simple" LHS.
+isSimpleLHS :: Exp -> Bool
+isSimpleLHS = go . unExp
+  where
+    go (EVar _) = True
+    go _        = False
 
 {-------------------------------------------------------------------------------
   The result of interpretation is either a value or an expression. We try to
@@ -1027,7 +1042,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
       if didAssign
         then evaldFull $ MkValue ValueUnit eloc
         else do
-          invalidateAssumptionsFor x
+          assignedUnknownValueTo x (isSimpleLHS lhs)
           let !lhs' = unDeref lhsEvald
               !rhs' = unEvald rhsEvald
           evaldPart $ eAssign eloc lhs' rhs'
@@ -1048,7 +1063,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
       if didAssign
         then evaldFull $ MkValue ValueUnit eloc
         else do
-          invalidateAssumptionsFor x
+          assignedUnknownValueTo x False
           let !rhs' = unEvald rhsEvald
           -- Strip off the top-level EArrRead again (not that we should not
           -- _re-evaluate_ the LHS because that may duplicate side effects)
