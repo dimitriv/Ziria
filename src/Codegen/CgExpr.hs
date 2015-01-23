@@ -278,7 +278,7 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
 
     go t (EFor _ui k estart elen ebody) = do
 
-        k_new <- freshName (name k) (ctExp estart)
+        k_new <- freshName (name k) (ctExp estart) Imm
 
         (init_decls, init_stms, (ceStart, ceLen)) <- inNewBlock $ do
             ceStart <- codeGenExp dflags estart
@@ -412,7 +412,7 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
 
 
     go t (EStruct tn tfs) =
-      do { snm <- freshName "__struct" t
+      do { snm <- freshName "__struct" t Mut
          ; let csnm = [cexp| $id:(name snm)|]
          ; appendDecl =<< codeGenDeclGroup (name snm) t -- ASSERT t = TStruct tn ...
          ; b <- isStructPtrType t
@@ -443,8 +443,8 @@ printArray dflags e cupper t
        ; appendStmt [cstm|printBitArrLn($ce, $cupper); |]
        }
   | otherwise
-  = do { pcdeclN <- freshName ("__print_cnt_") tint
-       ; pvdeclN <- freshName ("__print_val_") t
+  = do { pcdeclN <- freshName ("__print_cnt_") tint Mut
+       ; pvdeclN <- freshName ("__print_val_") t Mut
 
        ; let pcdeclN_c = name pcdeclN
              pvdeclN_c = name pvdeclN

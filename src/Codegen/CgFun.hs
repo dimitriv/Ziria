@@ -92,7 +92,7 @@ retByRef f locals body
 
    body_ty = ctExp body
    loc     = expLoc body
-   retN    = toName ("__retf_" ++ (name f)) Nothing body_ty
+   retN    = toName ("__retf_" ++ (name f)) Nothing body_ty Mut
    retE    = eVar (expLoc body) retN
 
    -- precondition: 'e' returns an array type
@@ -153,7 +153,7 @@ cgFunDefined dflags csp
   = do { let (locals, stripped_body) = extractEMutVars orig_body
 
          -- make up a new name for the function
-       ; newNm <- freshName (name f ++ "_" ++ getLnNumInStr csp) (nameTyp f)
+       ; newNm <- freshName (name f ++ "_" ++ getLnNumInStr csp) (nameTyp f) Imm
 
        ; let retTy = ctExp orig_body
 

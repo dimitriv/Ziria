@@ -40,6 +40,7 @@ import Interpreter (evalSrcInt)
 
 import Utils ( uncurry4 )
 
+
 {-------------------------------------------------------------------------------
   Top-level
 -------------------------------------------------------------------------------}
@@ -197,7 +198,7 @@ timesPref = try
     -- in a 'times' loop the code doesn't get access to the iterator anyway,
     -- so there is no possibility to cast the iterator to a different type.
     mkTimes p ui e =
-      let nm = toName "_tmp_count" p tintSrc
+      let nm = toName "_tmp_count" p tintSrc Imm
       in (ui, eVal p tintSrc (VInt 0), e, nm)
 
 -- > ("unroll" | "nounroll")? "for" <var-bind> "in" "[" <interval> "]"
@@ -219,7 +220,7 @@ parseVarOrCall = go <?> "variable or function call"
     go = do
       p <- getPosition
       x <- identifier
-      let xnm = toName x (Just p) SrcCTyUnknown
+      let xnm = toName x (Just p) SrcCTyUnknown (errMutKind x (Just p))
       choice [ do notFollowedBy (symbol "(")
                   notFollowedBy (reservedOp "<-")
                   return (cVar (Just p) xnm)
@@ -385,8 +386,8 @@ parseCVarBind = choice
       withPos mkNameTy <*> identifier <* symbol ":" <*> parseCompBaseType
     ] <?> "variable binding"
   where
-    mkName   p i    = toName i p SrcCTyUnknown
-    mkNameTy p i ty = toName i p ty
+    mkName   p i    = toName i p SrcCTyUnknown (errMutKind i p)
+    mkNameTy p i ty = toName i p ty (errMutKind i p)
 
 -- | Parameters to a (comp) function
 --
@@ -401,7 +402,7 @@ compParamsParser = parens $ sepBy paramParser (symbol ",")
                          , CAComp <$> parseCompBaseType
                          ] <?> "computation parameter type"
 
-    mkParam p x mty = toName x p mty
+    mkParam p x mty = toName x p mty (errMutKind x p)
 
 -- | Computation type
 --
@@ -433,7 +434,7 @@ cLetDecl (LetDeclFunComp  p h x ps c) = cLetFunC   p x ps (mkVectComp c h)
 cLetDecl (LetDeclFunExpr  p fn ps e)  = cLetHeader p (mkFunDefined  p fn ps e)
 cLetDecl (LetDeclExternal p x ps ty)  = cLetHeader p (mkFunExternal p fn ps ty)
   where
-    fn = toName x p SrcTyUnknown
+    fn = toName x p SrcTyUnknown (errMutKind x p)
 
 mkVectComp :: SrcComp -> Maybe (Int,Int) -> SrcComp
 mkVectComp sc Nothing  = sc

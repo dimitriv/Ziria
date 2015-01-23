@@ -379,7 +379,7 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars e = do
                        ; return (ow,outVars, []) }
                   else
                     do { let retty = ctExp e
-                       ; resval <- freshName "res" retty
+                       ; resval <- freshName "res" retty Imm -- TODO: is this correct?
                        ; codeGenDeclGroup (name resval) retty >>= appendDecl
                        ; let outVarsWithRes = outVars ++ [resval]
                        ; ow <- varsBitWidth_ByteAlign outVarsWithRes
@@ -510,7 +510,7 @@ genLUTLookup dflags ranges
         | otherwise
         -> case mb_resname of
              Nothing ->
-               do { res <- freshName "resx" ety
+               do { res <- freshName "resx" ety Imm
                     -- if the result variable is an super-byte array we will not allocate space since the LUT
                     -- contains space for it already, rather we will return the address in the LUT
                   ; case ety of 

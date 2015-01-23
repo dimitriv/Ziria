@@ -103,10 +103,10 @@ recordLocalRewrite (RwM act) = RwM $ do
       NotRewritten -> return (result, False)
 
 -- | New typed name generation in the optimizer
-newPassFoldGName :: String -> ty -> Maybe SourcePos -> RwM (GName ty)
-newPassFoldGName nm ty loc = do
+newPassFoldGName :: String -> ty -> Maybe SourcePos -> MutKind -> RwM (GName ty)
+newPassFoldGName nm ty loc mk = do
     str <- genSym ""
-    return $ (toName (nm ++ "_" ++ str) loc ty) {uniqId = MkUniq ("_pf" ++ str)}
+    return $ (toName (nm++"_"++str) loc ty mk) {uniqId = MkUniq ("_pf"++str)}
 
 {-------------------------------------------------------------------------------
   Rewriting statistics
@@ -305,7 +305,7 @@ passFold = TypedCompBottomUp $ \_ -> go
           return $ cBindMany cloc c [(nm, c12')]
 
         SeqView (MkComp (Return fi e) _ ()) c12 -> do
-          nm <- newPassFoldGName "_fold_unused" (ctExp e) cloc
+          nm <- newPassFoldGName "_fold_unused" (ctExp e) cloc Imm
           logStep "fold/seq" cloc
             [step| return .. ; .. ~~> let nm = .. in .. |]
           c12' <- go c12
@@ -416,7 +416,7 @@ passLetFunTimes = TypedCompBottomUp $ \_cloc comp ->
       Times ui e elen i (MkComp (LetHeader def cont) cloc ())
         | MkFun (MkFunDefined f params body) floc () <- def
          -> do
-           iprm <- newPassFoldGName "i_prm" (nameTyp i) cloc 
+           iprm <- newPassFoldGName "i_prm" (nameTyp i) cloc Imm
 
            logStep "letfun-times" cloc
              [step| for i in [e, elen] { fun f(..) { .. } ; .. }
@@ -450,7 +450,7 @@ passLetFunTimes = TypedCompBottomUp $ \_cloc comp ->
 -- | Loop unrolling
 passTimesUnroll :: TypedCompPass
 passTimesUnroll = TypedCompBottomUp $ \cloc comp -> do
-    unused <- newPassFoldGName "_unroll_unused" TUnit cloc
+    unused <- newPassFoldGName "_unroll_unused" TUnit cloc Imm
     let mk_bind_many :: [Comp] -> Comp
         mk_bind_many []     = error "times_unroll_step: can't happen!"
         mk_bind_many [x]    = x
@@ -599,7 +599,7 @@ passTakeEmit = TypedCompBottomUp $ \cloc comp -> if
            eloc = expLoc e
            fty  = TArrow [xty] ety
 
-       fname <- newPassFoldGName "auto_map_" fty cloc
+       fname <- newPassFoldGName "auto_map_" fty cloc Imm
 
        logStep "take-emit" cloc
          [step| repeat { x <- take ; emit .. }
@@ -963,22 +963,22 @@ rewrite_mit_map ty1 (i1,j1) ty2 (i2,j2) (f_name, fun)
 
          -- input variable
        ; let x_ty   = TArray (Literal i1) ty1     -- input type
-       ; x_name <- newPassFoldGName "x" x_ty floc
+       ; x_name <- newPassFoldGName "x" x_ty floc Imm
        ; let x_exp  = eVar floc x_name
 
       
          -- output variable
        ; let y_ty   = TArray (Literal j2) ty2     -- output type
-       ; y_name <- newPassFoldGName "y" y_ty floc
+       ; y_name <- newPassFoldGName "y" y_ty floc Mut
        ; let y_exp  = eVar floc y_name
 
          -- name of new map function
        ; let f_ty = TArrow [x_ty] y_ty
-       ; new_f_name <- newPassFoldGName "auto_map_mit" f_ty floc
+       ; new_f_name <- newPassFoldGName "auto_map_mit" f_ty floc Imm
 
 
          -- new counter
-       ; i_name <- newPassFoldGName "i" tint floc
+       ; i_name <- newPassFoldGName "i" tint floc Imm
        ; let i_exp  = eVar floc i_name
 
          -- zero and 'd'
@@ -1366,7 +1366,7 @@ inline_exp_fun (nm,params,locals,body) e
             -- TODO: this size substitution can (should?) go once we
             -- disallow direct term-level references to type-level length
             -- variables (#76)
-          , let siz_bnd = (toName siz_nm Nothing tint, arg_size (ctExp arg))
+          , let siz_bnd = (toName siz_nm Nothing tint Imm, arg_size (ctExp arg))
           = case how_to_inline prm_nm arg of
               Left bnd  -> (bnd:siz_bnd:rest_subst, rest_locals)
               Right bnd -> (siz_bnd:rest_subst, bnd:rest_locals)
@@ -1415,7 +1415,7 @@ inline_exp_fun (nm,params,locals,body) e
                 show nm ++ ", at call location:" ++ show loc
 
         arg_size :: Ty -> Exp
-        arg_size (TArray (NVar siz_nm) _) = eVar loc (toName siz_nm Nothing tint)
+        arg_size (TArray (NVar siz_nm) _) = eVar loc (toName siz_nm Nothing tint Imm)
         arg_size (TArray (Literal siz) _) = eVal loc tint (vint siz)
         arg_size _
           = error $

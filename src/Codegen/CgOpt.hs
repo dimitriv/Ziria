@@ -568,6 +568,7 @@ codeGenComp dflags comp k =
         let invalname = MkName { name    = inValOf ih
                                , uniqId  = MkUniq $ inValOf ih -- yikes
                                , nameTyp = invalty
+                               , nameMut = Imm
                                , nameLoc = invalloc }
             invalarg  = eVar invalloc invalname
 
@@ -861,7 +862,7 @@ codeGenComp dflags comp k =
                 let is_take (Take1 {}) = True
                     is_take _          = False
 
-                new_dh <- freshName ("__dv_tmp_"  ++ (getLnNumInStr csp)) vTy
+                new_dh <- freshName ("__dv_tmp_"  ++ (getLnNumInStr csp)) vTy Mut
                 let new_dhval = doneValOf $ name new_dh
                 appendDecl =<<
                     -- Note [Take Optimization]
@@ -996,7 +997,7 @@ codeGenComp dflags comp k =
 
     go (MkComp (Seq c1 c2) csp csinfo) = do
         let dty = ctDoneTyOfComp c1
-        unusedName <- freshName ("__seq_unused_" ++ (getLnNumInStr csp)) dty
+        unusedName <- freshName ("__seq_unused_" ++ (getLnNumInStr csp)) dty Imm
         codeGenCompTop dflags (MkComp (mkBind c1 (unusedName, c2)) csp csinfo) k
 
     go (MkComp (Var nm) csp _) = do
@@ -1098,7 +1099,7 @@ codeGenComp dflags comp k =
 
     go (MkComp (Repeat wdth c1) csp ()) = do
         let vTy = ctDoneTyOfComp c1
-        new_dh <- freshName ("__dv_tmp_"  ++ (getLnNumInStr csp)) vTy
+        new_dh <- freshName ("__dv_tmp_"  ++ (getLnNumInStr csp)) vTy Mut
         let new_dhval = doneValOf $ name new_dh
         codeGenDeclGroup new_dhval vTy >>= appendDecl
         codeGenFixpoint (mkRepeat dflags c1) (k { doneHdl = name new_dh})
@@ -1121,7 +1122,7 @@ codeGenComp dflags comp k =
         -- initialize the loop counter as part of the component's
         -- initialization.
 
-        nm' <- freshName ("__times_" ++ name nm ++ getLnNumInStr csp) (nameTyp nm)
+        nm' <- freshName ("__times_" ++ name nm ++ getLnNumInStr csp) (nameTyp nm) Mut
         appendDecl [cdecl|$ty:(codeGenTy (nameTyp nm)) $id:(name nm') = 0;|]
 
         cestart <- codeGenExp dflags estart
@@ -1275,12 +1276,12 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
            let retN = "__retf_" ++ name nm
 
            let extNm = "__ext_" ++ name nm
-           let extF = toName ("__ext_" ++ name nm) Nothing (nameTyp nm)
+           let extF = toName ("__ext_" ++ name nm) Nothing (nameTyp nm) Imm
 
            -- We cannot return an array declared within a function.  Instead we
            -- declare a global variable, store the return in it, and use that
            -- pointer as a return value
-           let retN_name = toName retN Nothing retTy
+           let retN_name = toName retN Nothing retTy Mut
 
            cparams <- codeGenParams (retN_name : ps)
            appendTopDecls [ [cdecl|void $id:(extNm)($params:cparams);|] ]
@@ -1290,7 +1291,7 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
         codeGenLetExternalFun _ = do
             cparams <- codeGenParams ps
             let extNm = "__ext_" ++ name nm
-            let extF = toName ("__ext_" ++ name nm) Nothing (nameTyp nm)
+            let extF = toName ("__ext_" ++ name nm) Nothing (nameTyp nm) Imm
 
             appendTopDecls [ [cdecl|$ty:(codeGenTy retTy)
                                            $id:(extNm)($params:cparams);|] ]

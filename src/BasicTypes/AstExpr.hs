@@ -69,13 +69,22 @@ newtype Uniq = MkUniq { unUniq :: String }
 instance Show Uniq where
   show (MkUniq s) = s
 
+-- | Mutability kind (mutable or immutable)
+data MutKind = Imm | Mut
+  deriving (Generic, Typeable, Data, Eq, Ord, Show)
+
+
 data GName t
   = MkName { name    :: String
            , uniqId  :: Uniq
            , nameTyp :: t
            , nameLoc :: Maybe SourcePos
+           , nameMut :: MutKind
            }
   deriving (Generic, Typeable, Data)
+
+isMutable :: GName t -> Bool
+isMutable nm = case nameMut nm of { Imm -> False ; Mut -> True }
 
 instance Eq (GName t) where
   nm1 == nm2 = (name nm1 == name nm2) && (uniqId nm1 == uniqId nm2)
@@ -84,14 +93,15 @@ instance Ord (GName t) where
   nm1 <= nm2 = (uniqId nm1 <= uniqId nm2)
 
 instance Show (GName t) where
-  show (MkName x _id _ _loc)    = x
+  show (MkName x _id _ _ _loc)    = x
 
 
-toName :: String -> Maybe SourcePos -> t -> GName t
-toName s mpos typ =
+toName :: String -> Maybe SourcePos -> t -> MutKind -> GName t
+toName s mpos typ mk =
     MkName { name    = s
            , uniqId  = MkUniq s
            , nameLoc = mpos
+           , nameMut = mk
            , nameTyp = typ
            }
 
@@ -99,7 +109,7 @@ updNameId :: Uniq -> GName t -> GName t
 updNameId uid nm = nm { uniqId = uid }
 
 updNameTy :: GName t -> u -> GName u
-updNameTy (MkName n i _ l) utyp = MkName n i utyp l
+updNameTy (MkName n i _ mk l) utyp = MkName n i utyp mk l
 
 getNameWithUniq :: GName t -> String
 getNameWithUniq nm = name nm ++ "_blk" ++ unUniq (uniqId nm)
@@ -255,7 +265,7 @@ data Val where
 
 data LengthInfo
      = LISingleton
-     | LILength Int -- Invariant: > 0
+     | LILength Int  -- Invariant: > 0
      | LIMeta String -- For meta-variables in quasi-quotes only
   deriving (Generic, Typeable, Data, Eq, Ord)
 
@@ -268,7 +278,6 @@ data UnrollInfo
 -- If true, the binding should be forced to be inlined.
 -- This is used by e.g. the vectorizer to bind inlinable
 -- sub-arrays of the input array.
-
 data ForceInline
   = ForceInline   -- Always inline
   | NoInline      -- Never inline
@@ -285,6 +294,7 @@ data GExp0 t a where
   EValArr :: [GExp t a] -> GExp0 t a
 
   EVar :: GName t -> GExp0 t a
+
   EUnOp :: GUnOp t -> GExp t a -> GExp0 t a
   EBinOp :: BinOp -> GExp t a -> GExp t a -> GExp0 t a
 
@@ -403,6 +413,7 @@ instance NFData NumExpr     where rnf = genericRnf
 instance NFData Ty          where rnf = genericRnf
 instance NFData UnrollInfo  where rnf = genericRnf
 instance NFData Val         where rnf = genericRnf
+instance NFData MutKind     where rnf = genericRnf
 
 instance NFData Uniq        where rnf = genericRnf
 instance NFData t => NFData (GUnOp t) where rnf = genericRnf
@@ -1052,6 +1063,7 @@ instance PrettyVal LengthInfo
 instance PrettyVal UnrollInfo
 instance PrettyVal Val
 instance PrettyVal Uniq
+instance PrettyVal MutKind
 
 instance PrettyVal t => PrettyVal (GName t)
 instance PrettyVal t => PrettyVal (GUnOp t)

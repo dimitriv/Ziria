@@ -70,7 +70,7 @@ codeGenCall_alloc dflags loc retTy nef eargs
   = do { is_struct_ptr <- isStructPtrType retTy
        ; newNm <- genSym $ name nef ++ "_" ++ getLnNumInStr loc
         
-       ; let retNewN = toName ("__retcall_" ++ newNm) Nothing retTy
+       ; let retNewN = toName ("__retcall_" ++ newNm) Nothing retTy Mut
              cer     = [cexp|$id:(name retNewN)|]
 
        ; unless (retTy == TUnit) $ 
@@ -179,7 +179,7 @@ codeGenArgByRef dflags e
                       else return [ [cexp|&$ce|] ]
                     }
              _otherwise -- A bit of a weird case. Create storage and pass addr of storage
-              -> do { new_tmp <- freshName "clos_ref_arg" ety
+              -> do { new_tmp <- freshName "clos_ref_arg" ety Mut
                     ; g <- codeGenDeclGroup (name new_tmp) ety
                     ; appendDecl g
                     ; assignByVal ety ety [cexp|$id:(name new_tmp)|] ce

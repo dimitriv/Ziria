@@ -227,28 +227,28 @@ data BndRes v = BndResB { bnd_res_id :: EId
                         , bnd_res_val :: v } 
               | BndResU { bnd_res_val :: v }
 
-gen_name :: GS.Sym -> Ty -> IO EId
-gen_name sym ty = gen_name_pref sym "" ty 
+gen_name :: GS.Sym -> Ty -> MutKind -> IO EId
+gen_name sym ty mk = gen_name_pref sym "" ty mk
 
-gen_name_pref :: GS.Sym -> String -> Ty -> IO EId
-gen_name_pref sym x ty = do
+gen_name_pref :: GS.Sym -> String -> Ty -> MutKind -> IO EId
+gen_name_pref sym x ty mk = do
     suff <- GS.genSymStr sym
-    return $ toName (x ++ "_free_" ++ suff) Nothing ty
+    return $ toName (x ++ "_free_" ++ suff) Nothing ty mk
 
-
+-- Generated from >>= hence immutable!
 class Bindable v where
   genbnd :: GS.Sym -> Ty -> IO (BndRes v)
   genexp :: v -> Exp
 
 instance Bindable EId where
   genbnd sym ty = do
-    nm <- gen_name sym ty
+    nm <- gen_name sym ty Imm
     return $ BndResB nm nm
   genexp nm = eVar Nothing nm
 
 instance Bindable FExp where
   genbnd sym t
-    = do nm <- gen_name sym t
+    = do nm <- gen_name sym t Imm
          return $ BndResB nm (FEVar nm)
   genexp fe = interpE Nothing fe
 
@@ -344,12 +344,12 @@ interpC sym loc = go
                               c2 <- go st2
                               return $ cPar loc p c1 c2
     go (FLetE fi x ty fe k) = do
-       nm <- gen_name_pref sym x ty
+       nm <- gen_name_pref sym x ty Imm
        c <- go (k nm)
        let e = interpE loc fe
        return $ cLetE loc nm fi e c
     go (FLetERef x ty mfe k) = do
-       nm <- gen_name_pref sym x ty
+       nm <- gen_name_pref sym x ty Mut
        let me = fmap (interpE loc) mfe
        c <- go (k nm) 
        return $ cLetERef loc nm me c
@@ -361,7 +361,7 @@ interpC sym loc = go
     go (FTimes ui fe1 fe2 k) = do
        let e1 = interpE loc (toFExp fe1)
            e2 = interpE loc (toFExp fe2)
-       nm <- gen_name_pref sym "idx" tint
+       nm <- gen_name_pref sym "idx" tint Imm
        c <- go (k nm) 
        return $ cTimes loc ui e1 e2 nm c
  

@@ -569,11 +569,11 @@ getMaxStackAlloc :: Cg Int
 getMaxStackAlloc = gets maxStackAlloc
 
 
-freshName :: String -> Ty -> Cg EId
+freshName :: String -> Ty -> MutKind -> Cg EId
 -- A new name of a given type
-freshName prefix ty
+freshName prefix ty mk
   = do { s' <- genSym prefix
-       ; return $ toName s' Nothing ty
+       ; return $ toName s' Nothing ty mk
        }
 
 type CLabel = String
@@ -696,7 +696,7 @@ extendVarEnv binds =
     -- NOTE: This is the point where we introduce GNames for LenVars.
     getPolymArrTy :: (GName Ty, ExpGen) -> Maybe (GName Ty, ExpGen)
     getPolymArrTy (n, e) = case nameTyp n of
-      TArray (NVar nv) ta -> Just (toName nv Nothing tint, [cexp|$id:nv|])
+      TArray (NVar nv) ta -> Just (toName nv Nothing tint Imm, [cexp|$id:nv|])
       _                   -> Nothing
 
     convTy :: [(GName Ty, ExpGen)] -> [(GName Ty, ExpGen)]

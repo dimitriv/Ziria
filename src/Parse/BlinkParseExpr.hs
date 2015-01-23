@@ -256,7 +256,7 @@ parseDerefSuffix = choice
     eArrRead' loc (y, l) x = eArrRead loc x y l
 
 mkVar :: Maybe SourcePos -> String -> SrcExp
-mkVar p x = eVar p (toName x p SrcTyUnknown)
+mkVar p x = eVar p (toName x p SrcTyUnknown (errMutKind x p))
 
 {-------------------------------------------------------------------------------
   Declarations and types
@@ -271,7 +271,7 @@ declParser =
                    <* colon <*> parseBaseType
                    <*> optionMaybe (reservedOp ":=" *> parseExpr)
   where
-    mkDecl p x ty mbinit = (toName x p ty, mbinit)
+    mkDecl p x ty mbinit = (toName x p ty (errMutKind x p), mbinit)
 
 -- | Base types
 --
@@ -338,7 +338,7 @@ parseBaseType = choice
 
     mkFixed _ (Left n)  t = let i = fromIntegral n
                             in SrcTArray (SrcLiteral i) t
-    mkFixed p (Right x) t = let nm = toName x p SrcTyUnknown
+    mkFixed p (Right x) t = let nm = toName x p SrcTyUnknown (errMutKind x p)
                             in SrcTArray (SrcNArr nm) t
 
     mkInferred p t = SrcTArray (SrcNVar (fromJust p)) t
@@ -535,7 +535,7 @@ paramsParser :: BlinkParser [GName SrcTy]
 paramsParser = parens $ sepBy paramParser (symbol ",")
   where
     paramParser = withPos mkParam <*> identifier <* colon <*> parseBaseType
-    mkParam p x ty = toName x p ty
+    mkParam p x ty = toName x p ty (errMutKind x p)
 
 eletDeclName :: ELetDecl -> String
 eletDeclName (ELetDeclERef _ (nm, _)) = show nm
@@ -562,8 +562,8 @@ parseVarBind = choice
                identifier <* reservedOp ":" <*> parseBaseType
     ] <?> "variable binding"
   where
-    mkName   p i    = toName i p SrcTyUnknown
-    mkNameTy p i ty = toName i p ty
+    mkName   p i    = toName i p SrcTyUnknown (errMutKind i p)
+    mkNameTy p i ty = toName i p ty (errMutKind i p)
 
 -- | Range
 --
@@ -623,7 +623,7 @@ orMetaVar :: BlinkParser a -> BlinkParser (Either a String)
 orMetaVar p = (Left <$> try p) <|> (Right <$> identifier)
 
 mkCall :: Maybe SourcePos -> String -> [SrcExp] -> SrcExp
-mkCall p fn args = eCall p (toName fn p SrcTyUnknown) args
+mkCall p fn args = eCall p (toName fn p SrcTyUnknown Imm) args
 
 eunit :: Maybe SourcePos ->  SrcExp
 eunit p = eValSrc p VUnit

@@ -128,7 +128,7 @@ computeVectTop dfs x = do
   
         Seq c1 c2 -> do
           let dty = fromJust $ doneTyOfCTy (ctComp c1)
-          tmp <- newVectGName "tmp" dty loc
+          tmp <- newVectGName "tmp" dty loc Imm
           go vctx (AstL.cBindMany loc card c1 [(tmp,c2)])
 
         Par p c1 c2 
@@ -225,7 +225,7 @@ computeVectTop dfs x = do
           vbdys <- go vctx bdy'
           -- It's not very efficient to create a zillion typed names
           -- so let us create one and set its type each time.
-          vf <- newVectGName (name f ++ "_vect") undefined loc
+          vf <- newVectGName (name f ++ "_vect") undefined loc Imm
           let mk_vect_call vbd
                 = cLetFunC loc vf_typed prms' vbd $ 
                   cCall loc vf_typed (map eraseCallArg es)

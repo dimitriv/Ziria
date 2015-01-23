@@ -48,7 +48,6 @@ import TcUnify
 tyCheckProg :: SrcProg -> TcM Prog
 tyCheckProg prog_src = do
   prog_ren <- renProg prog_src
-  -- liftIO $ putStrLn $ "Renamed: " ++ show prog_ren
   prog_tc  <- tc prog_ren
   prog_def <- defaultProg prog_tc
   void $ checkUnresolved (progComp prog_def)

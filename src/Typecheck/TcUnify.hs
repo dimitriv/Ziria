@@ -360,6 +360,10 @@ defaultExpr = mapExpM defaultBitWidths return goExp
       = do { ty' <- defaultTy (expLoc e) ty TUnit
            ; return $ eError (expLoc e) ty' str
            }
+      | EVar nm <- unExp e
+        -- Extra sanity check:
+        -- Make sure every variable has assigned mutability
+      = seq (nameMut nm) $ return e
       | otherwise
       = return e
 

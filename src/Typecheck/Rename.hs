@@ -52,26 +52,29 @@ import Utils
   uniqId (necessarily).
 -------------------------------------------------------------------------------}
 
-genRenBound :: (Maybe SourcePos -> ty -> TcM ty') -> GName ty -> TcM (GName ty')
-genRenBound onTy nm = do
+genRenBound :: MutKind 
+            -> (Maybe SourcePos -> ty -> TcM ty') -> GName ty -> TcM (GName ty')
+genRenBound mk onTy nm = do
     uniqId'  <- genSym "_r"
     nameTyp' <- onTy (nameLoc nm) (nameTyp nm)
-    return nm{uniqId = MkUniq uniqId', nameTyp = nameTyp'}
+    return nm{uniqId = MkUniq $ uniqId', nameTyp = nameTyp', nameMut = mk}
 
-renBound :: GName SrcTy -> TcM (GName Ty)
-renBound = genRenBound renTyAnn
+renBound :: MutKind -> GName SrcTy -> TcM (GName Ty)
+renBound mk = genRenBound mk renTyAnn
 
 renCBound :: GName SrcCTy -> TcM (GName CTy)
-renCBound = genRenBound renCTyAnn
+renCBound = genRenBound Imm renCTyAnn
 
+-- | Parameters are immutable for now
 renCABound :: GName (CallArg SrcTy SrcCTy)
            -> TcM (GName (CallArg Ty CTy))
-renCABound = genRenBound renTyCTyAnn
+renCABound = genRenBound Imm renTyCTyAnn
 
 genRenFree :: (GName ty -> TcM (GName ty')) -> GName ty -> TcM (GName ty')
 genRenFree lookupTy nm = do
     nm' <- lookupTy nm
-    return nm{uniqId = uniqId nm', nameTyp = nameTyp nm'}
+    -- NB: keep the mutability of the binding site but location of occurence
+    return nm{uniqId = uniqId nm', nameTyp = nameTyp nm', nameMut = nameMut nm'}
 
 renFree :: GName SrcTy -> TcM (GName Ty)
 renFree = genRenFree $ \nm -> lookupEnv (name nm) (nameLoc nm)
@@ -228,12 +231,12 @@ renComp (MkComp comp0 cloc ()) = case comp0 of
         return $ cLetStruct cloc sdef' c1'
       LetE x fi e c1 -> do
         e'  <- renExp e
-        x'  <- renBound x
+        x'  <- renBound Imm x
         c1' <- recName x' $ renComp c1
         return $ cLetE cloc x' fi e' c1'
       LetERef x e c1 -> do
         e' <- mapM renExp e
-        x' <- renBound x
+        x' <- renBound Mut x
         recName x' $ do
           c1' <- renComp c1
           return $ cLetERef cloc x' e' c1'
@@ -286,7 +289,7 @@ renComp (MkComp comp0 cloc ()) = case comp0 of
       Times ui e elen nm c' -> do
         e'    <- renExp e
         elen' <- renExp elen
-        nm'   <- renBound nm
+        nm'   <- renBound Imm nm
         c''   <- recName nm' $ renComp c'
         return $ cTimes cloc ui e' elen' nm' c''
       Repeat wdth c' -> do
@@ -359,7 +362,7 @@ renExp (MkExp exp0 eloc ()) = case exp0 of
       EFor ui nm1 e1 e2 e3 -> do
         e1' <- renExp e1
         e2' <- renExp e2
-        nm1' <- renBound nm1
+        nm1' <- renBound Imm nm1
         recName nm1' $ do
           e3' <- renExp e3
           return $ eFor eloc ui nm1' e1' e2' e3'
@@ -369,13 +372,13 @@ renExp (MkExp exp0 eloc ()) = case exp0 of
         return $ eWhile eloc e1' e2'
       ELet nm1 fi e1 e2 -> do
         e1' <- renExp e1
-        nm1' <- renBound nm1
+        nm1' <- renBound Imm nm1
         recName nm1' $ do
           e2' <- renExp e2
           return $ eLet eloc nm1' fi e1' e2'
       ELetRef nm1 e1 e2 -> do
         e1'  <- mapM renExp e1
-        nm1' <- renBound nm1
+        nm1' <- renBound Mut nm1
         recName nm1' $ do
           e2' <- renExp e2
           return $ eLetRef eloc nm1' e1' e2'
@@ -421,19 +424,19 @@ renUnOp _ ALength   = return ALength
 renFun :: SrcFun -> TcM Fun
 renFun (MkFun fun0 floc ()) = case fun0 of
     MkFunDefined nm params body -> do
-      nm'     <- renBound nm
-      params' <- mapTelescope recName renBound params
+      nm'     <- renBound Imm nm -- parameters are immutable ... revisit!
+      params' <- mapTelescope recName (renBound Imm) params
       body'   <- recNames params' $ renExp body
       return $ mkFunDefined floc nm' params' body'
     MkFunExternal nm params retTy -> do
-      nm'     <- renBound nm
-      params' <- mapTelescope recName renBound params
+      nm'     <- renBound Imm nm
+      params' <- mapTelescope recName (renBound Imm) params
       retTy'  <- recNames params' $ renReqTy floc retTy
       return $ mkFunExternal floc nm' params' retTy'
 
 -- | The continuation of a monadic bind
 renBind :: (GName SrcTy, SrcComp) -> TcM (GName Ty, Comp)
 renBind (x, c) = do
-    x' <- renBound x
+    x' <- renBound Imm x
     c' <- recName x' $ renComp c
     return (x', c')

@@ -37,6 +37,7 @@ module BlinkParseM (
   , xPrefix
   , lInfix
   , sepsBy
+  , errMutKind
   ) where
 
 import Control.Applicative
@@ -46,7 +47,7 @@ import Control.Monad.Reader
 import Text.Parsec
 import Text.Parsec.Expr
 
-import AstExpr (GName, SrcTy)
+import AstExpr (GName, SrcTy, MutKind)
 import AstComp (CallArg, SrcCTy)
 
 import ZiriaLexer
@@ -138,6 +139,11 @@ getParseEnv = ask
 
 withPos :: (Maybe SourcePos -> a) -> BlinkParser a
 withPos constr = constr . Just <$> getPosition
+
+
+errMutKind :: String -> Maybe SourcePos -> MutKind
+errMutKind s loc 
+  = error ("MutKind missing: " ++ s ++ ", " ++ show loc)
 
 {-------------------------------------------------------------------------------
   Generic auxiliary parsers

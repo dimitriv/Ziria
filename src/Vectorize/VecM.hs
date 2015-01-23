@@ -90,10 +90,10 @@ vecMFail loc msg
 newVectUniq :: VecM String
 newVectUniq = liftIO . GS.genSymStr =<< asks venv_sym 
 
-newVectGName :: String -> ty -> Maybe SourcePos -> VecM (GName ty)
-newVectGName nm ty loc = do
-    str <- newVectUniq
-    return $ (toName (nm ++ "_" ++ str) loc ty) {uniqId = MkUniq ("_v" ++ str)}
+newVectGName :: String -> ty -> Maybe SourcePos -> MutKind -> VecM (GName ty)
+newVectGName nm ty loc mk = do
+  str <- newVectUniq
+  return $ (toName (nm++"_"++str) loc ty mk) {uniqId = MkUniq ("_v"++str)}
 
 {-------------------------------------------------------------------------
   Accessing the environment
@@ -515,7 +515,7 @@ gcdTys xs = go (head xs) (tail xs)
 wrapCFunCall :: String -> Maybe SourcePos -> Comp -> VecM Comp 
 wrapCFunCall nm loc comp = do
   let carrty = CTArrow [] (ctComp comp)
-  vname <- newVectGName nm carrty loc
+  vname <- newVectGName nm carrty loc Imm
   return $ cLetFunC loc vname [] comp (cCall loc vname [])
 
 
@@ -536,7 +536,7 @@ emit_card = SCard (CAStatic 0) (CAStatic 1)
 map2take_emit :: Maybe SourcePos 
               -> Maybe VectAnn -> Ty -> EId -> VecM LComp
 map2take_emit loc vann inty f = do 
-  x <- newVectGName "_map_bnd" inty loc
+  x <- newVectGName "_map_bnd" inty loc Imm
   return $
     AstL.cRepeat loc OCard vann $ 
          AstL.cBindMany loc map_card tk [(x,em x)]
@@ -588,7 +588,7 @@ rewriteTakeEmit on_take on_takes on_emit on_emits = go
                     , cfun_body = body }) <- lookupCFunBind f
           vbody <- go body
           let vf_type = CTArrow (map ctCallArg es) (ctComp vbody)
-          vf <- newVectGName (name f ++ "_spec") vf_type loc
+          vf <- newVectGName (name f ++ "_spec") vf_type loc Imm
           return $ cLetFunC loc vf prms vbody $ 
                    cCall loc vf (map eraseCallArg es)
 
