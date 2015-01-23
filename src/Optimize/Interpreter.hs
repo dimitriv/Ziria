@@ -525,7 +525,7 @@ data EvalMode m where
 -- | Records maximum memory usage per variable
 --
 -- We index the map by uniq ID, but also record the name for display purposes.
-type EvalStats = Map String (GName Ty, Int)
+type EvalStats = Map Uniq (GName Ty, Int)
 
 -- | Mark a value with whether it was implicitly defined or not
 data MarkImplicit a = Implicit a | Explicit a
@@ -561,7 +561,11 @@ data LetRefState =
     --     uses of the variable prior to the assignment will have been replaced
     --     by the (previously known) value of this variable, and all subsequent
     --     uses of this variable will refer to the value we are assigning now,
-    --     the initial value that we assign in the letref is not important.
+    --     the initial value that we assign in the letref is not important. Example:
+    --     var x;
+    --     x := 5;
+    --     x := a -- some value impossible to evaluate statically  
+    --     In this case LetRefUnknoown has a Nothing value
     -- (2) We fail to execute some statement (like a conditional or a loop) and
     --     we must conservatively invalidate _all_ variables. In this case too
     --     any prior use of this variable will have been replaced by its known
@@ -569,18 +573,24 @@ data LetRefState =
     --     assigned in the letref binding site. Hence we record what this value
     --     should be (it may no longer be the initial value specified by the
     --     programmer).
-    --
+    --   
+    --     It holds the last value we assigned before we could not assign any longer
+    --     var x;
+    --     x := 5;
+    --     for (.....not statically known bounds) { x++ } 
+    --     return x;  -- Here x will have LetRefUnknown (Just (Explicit 5))
     -- See also `invalidateAssumptions` and `invalidateAssumptionFor`.
+
   | LetRefUnknown (Maybe (MarkImplicit Value))
   deriving (Show, Generic)
 
 -- | Evaluation state
 data EvalState = EvalState {
     -- | Let-bound variables (immutable)
-    _evalLets :: !(Map String Value)
+    _evalLets :: !(Map Uniq Value)
 
     -- | Letref-bound variables (mutable)
-  , _evalLetRefs :: !(Map String LetRefState)
+  , _evalLetRefs :: !(Map Uniq LetRefState)
 
     -- | Guesses about boolean-valued expressions
     --
@@ -600,10 +610,10 @@ data EvalState = EvalState {
   }
   deriving (Show, Generic)
 
-evalLets :: L.Lens EvalState (Map String Value)
+evalLets :: L.Lens EvalState (Map Uniq Value)
 evalLets f st = (\x -> st { _evalLets = x }) <$> f (_evalLets st)
 
-evalLetRefs :: L.Lens EvalState (Map String LetRefState)
+evalLetRefs :: L.Lens EvalState (Map Uniq LetRefState)
 evalLetRefs f st = (\x -> st { _evalLetRefs = x }) <$> f (_evalLetRefs st)
 
 evalGuessesBool :: L.Lens EvalState (Map Exp Bool)
@@ -723,7 +733,7 @@ readVar x = do
     (Nothing, Nothing)                   -> return Nothing -- Free variable
 
 extendScope :: Monad m
-            => L.Lens EvalState (Map String val)  -- ^ Scope to extend
+            => L.Lens EvalState (Map Uniq val)  -- ^ Scope to extend
             -> GName Ty                           -- ^ Variable to introduce
             -> val                                -- ^ Initial value
             -> Eval m a -> Eval m a

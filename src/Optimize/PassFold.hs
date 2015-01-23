@@ -106,7 +106,7 @@ recordLocalRewrite (RwM act) = RwM $ do
 newPassFoldGName :: String -> ty -> Maybe SourcePos -> RwM (GName ty)
 newPassFoldGName nm ty loc = do
     str <- genSym ""
-    return $ (toName (nm ++ "_" ++ str) loc ty) {uniqId = "_pf" ++ str}
+    return $ (toName (nm ++ "_" ++ str) loc ty) {uniqId = MkUniq ("_pf" ++ str)}
 
 {-------------------------------------------------------------------------------
   Rewriting statistics

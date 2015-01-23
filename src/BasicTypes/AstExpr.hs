@@ -62,9 +62,16 @@ type BufId = String
   Names
 -------------------------------------------------------------------------------}
 
+-- Unique identifiers
+newtype Uniq = MkUniq { unUniq :: String }
+  deriving (Generic, Typeable, Data, Eq, Ord)
+
+instance Show Uniq where
+  show (MkUniq s) = s
+
 data GName t
   = MkName { name    :: String
-           , uniqId  :: String
+           , uniqId  :: Uniq
            , nameTyp :: t
            , nameLoc :: Maybe SourcePos
            }
@@ -79,26 +86,23 @@ instance Ord (GName t) where
 instance Show (GName t) where
   show (MkName x _id _ _loc)    = x
 
--- instance Pretty (GName t) where
---     ppr = string . show
 
 toName :: String -> Maybe SourcePos -> t -> GName t
--- This is our only function to create new names
 toName s mpos typ =
     MkName { name    = s
-           , uniqId  = s
+           , uniqId  = MkUniq s
            , nameLoc = mpos
            , nameTyp = typ
            }
 
-updNameId :: String -> GName t -> GName t
+updNameId :: Uniq -> GName t -> GName t
 updNameId uid nm = nm { uniqId = uid }
 
 updNameTy :: GName t -> u -> GName u
 updNameTy (MkName n i _ l) utyp = MkName n i utyp l
 
 getNameWithUniq :: GName t -> String
-getNameWithUniq nm = name nm ++ "_blk" ++ uniqId nm
+getNameWithUniq nm = name nm ++ "_blk" ++ unUniq (uniqId nm)
 
 {-------------------------------------------------------------------------------
   Types in the source language
@@ -400,6 +404,7 @@ instance NFData Ty          where rnf = genericRnf
 instance NFData UnrollInfo  where rnf = genericRnf
 instance NFData Val         where rnf = genericRnf
 
+instance NFData Uniq        where rnf = genericRnf
 instance NFData t => NFData (GUnOp t) where rnf = genericRnf
 instance NFData t => NFData (GName t) where rnf = genericRnf
 
@@ -1046,6 +1051,7 @@ instance PrettyVal ForceInline
 instance PrettyVal LengthInfo
 instance PrettyVal UnrollInfo
 instance PrettyVal Val
+instance PrettyVal Uniq
 
 instance PrettyVal t => PrettyVal (GName t)
 instance PrettyVal t => PrettyVal (GUnOp t)

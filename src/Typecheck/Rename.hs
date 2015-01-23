@@ -56,7 +56,7 @@ genRenBound :: (Maybe SourcePos -> ty -> TcM ty') -> GName ty -> TcM (GName ty')
 genRenBound onTy nm = do
     uniqId'  <- genSym "_r"
     nameTyp' <- onTy (nameLoc nm) (nameTyp nm)
-    return nm{uniqId = uniqId', nameTyp = nameTyp'}
+    return nm{uniqId = MkUniq uniqId', nameTyp = nameTyp'}
 
 renBound :: GName SrcTy -> TcM (GName Ty)
 renBound = genRenBound renTyAnn

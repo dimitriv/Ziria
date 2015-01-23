@@ -93,7 +93,7 @@ newVectUniq = liftIO . GS.genSymStr =<< asks venv_sym
 newVectGName :: String -> ty -> Maybe SourcePos -> VecM (GName ty)
 newVectGName nm ty loc = do
     str <- newVectUniq
-    return $ (toName (nm ++ "_" ++ str) loc ty) {uniqId = "_v" ++ str}
+    return $ (toName (nm ++ "_" ++ str) loc ty) {uniqId = MkUniq ("_v" ++ str)}
 
 {-------------------------------------------------------------------------
   Accessing the environment
