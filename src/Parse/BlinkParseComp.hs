@@ -394,15 +394,26 @@ parseCVarBind = choice
 -- > <comp-params> ::= "(" (IDENT ":" (<base-type> | <comp-base-type>))*"," ")"
 --
 -- (<base-type> comes from the expr parser; <comp-base-type> is defined here).
+-- NB: We record the mutability kinds here
 compParamsParser :: BlinkParser [GName (CallArg SrcTy SrcCTy)]
 compParamsParser = parens $ sepBy paramParser (symbol ",")
   where
-    paramParser = withPos mkParam <*> identifier <* colon <*> parseType
+    paramParser = do 
+      p <- getPosition
+      m <- optionMaybe (reserved "var")
+      x <- identifier
+      colon
+      mty <- parseType
+      mkParam p m x mty
+
     parseType   = choice [ CAExp  <$> parseBaseType
                          , CAComp <$> parseCompBaseType
                          ] <?> "computation parameter type"
+ 
+    mkParam p Nothing   x mty            = return $ toName x (Just p) mty Imm
+    mkParam _p (Just {}) _x (CAComp {})  = fail "Computation parameter can't be mutable."
+    mkParam p (Just {}) x mty@(CAExp {}) = return $ toName x (Just p) mty Mut
 
-    mkParam p x mty = toName x p mty (errMutKind x p)
 
 -- | Computation type
 --

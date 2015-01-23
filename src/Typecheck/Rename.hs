@@ -65,10 +65,12 @@ renBound mk = genRenBound mk renTyAnn
 renCBound :: GName SrcCTy -> TcM (GName CTy)
 renCBound = genRenBound Imm renCTyAnn
 
--- | Parameters are immutable for now
-renCABound :: GName (CallArg SrcTy SrcCTy)
-           -> TcM (GName (CallArg Ty CTy))
-renCABound = genRenBound Imm renTyCTyAnn
+-- | Params are parsed with the right mutability kinds to start with
+renParam :: GName SrcTy -> TcM (GName Ty)
+renParam nm = genRenBound (nameMut nm) renTyAnn nm
+renCAParam :: GName (CallArg SrcTy SrcCTy) -> TcM (GName (CallArg Ty CTy))
+renCAParam nm = genRenBound (nameMut nm) renTyCTyAnn nm
+
 
 genRenFree :: (GName ty -> TcM (GName ty')) -> GName ty -> TcM (GName ty')
 genRenFree lookupTy nm = do
@@ -246,7 +248,7 @@ renComp (MkComp comp0 cloc ()) = case comp0 of
         return $ cLetHeader cloc fun' c2'
       LetFunC nm params c1 c2 -> do
         nm'     <- renCBound nm
-        params' <- mapTelescope recCAName renCABound params
+        params' <- mapTelescope recCAName renCAParam params
         c1'     <- recCANames params' $ renComp c1
         c2'     <- recCName nm' $ renComp c2
         return $ cLetFunC cloc nm' params' c1' c2'
@@ -425,12 +427,12 @@ renFun :: SrcFun -> TcM Fun
 renFun (MkFun fun0 floc ()) = case fun0 of
     MkFunDefined nm params body -> do
       nm'     <- renBound Imm nm -- parameters are immutable ... revisit!
-      params' <- mapTelescope recName (renBound Imm) params
+      params' <- mapTelescope recName renParam params
       body'   <- recNames params' $ renExp body
       return $ mkFunDefined floc nm' params' body'
     MkFunExternal nm params retTy -> do
       nm'     <- renBound Imm nm
-      params' <- mapTelescope recName (renBound Imm) params
+      params' <- mapTelescope recName renParam params
       retTy'  <- recNames params' $ renReqTy floc retTy
       return $ mkFunExternal floc nm' params' retTy'
 

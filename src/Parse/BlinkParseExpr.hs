@@ -530,12 +530,16 @@ parseELetDecl = choice
 
 -- | Parameters to a (non-comp) function
 --
--- > <params> ::= "(" (IDENT ":" <base-type>)*"," ")"
+-- > <params> ::= "(" (("var")? IDENT ":" <base-type>)*"," ")"
+-- NB: Parameter declaration really does annotated the MutKind of names
 paramsParser :: BlinkParser [GName SrcTy]
 paramsParser = parens $ sepBy paramParser (symbol ",")
+
+paramParser :: BlinkParser (GName SrcTy)
+paramParser = withPos mkParam <*> optionMaybe (reserved "var") <*> identifier <* colon <*> parseBaseType
   where
-    paramParser = withPos mkParam <*> identifier <* colon <*> parseBaseType
-    mkParam p x ty = toName x p ty (errMutKind x p)
+    mkParam p Nothing x ty   = toName x p ty Imm
+    mkParam p (Just {}) x ty = toName x p ty Mut
 
 eletDeclName :: ELetDecl -> String
 eletDeclName (ELetDeclERef _ (nm, _)) = show nm

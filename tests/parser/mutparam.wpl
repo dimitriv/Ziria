@@ -1,0 +1,16 @@
+var x : int; 
+var y : bool;
+var z : complex32;
+
+fun foo(var x : int) {
+   var z : bool := true;
+   return (x+1);
+}
+
+fun comp bar(var y : int, x : int) {
+  seq { x <- take
+      ; emit x
+      } >>> map foo
+}
+
+let comp main = read [int] >>> map foo >>> write [int] 
