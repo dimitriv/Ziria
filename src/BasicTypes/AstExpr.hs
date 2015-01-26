@@ -73,7 +73,6 @@ instance Show Uniq where
 data MutKind = Imm | Mut
   deriving (Generic, Typeable, Data, Eq, Ord, Show)
 
-
 data GName t
   = MkName { name    :: String
            , uniqId  :: Uniq
@@ -283,6 +282,26 @@ data ForceInline
   | NoInline      -- Never inline
   | AutoInline    -- Let the compiler decide
   deriving (Generic, Typeable, Data, Eq, Ord)
+
+
+-- | Dereference expressions
+data GDerefExp t a 
+  = GDVar  (Maybe SourcePos) a (GName t)
+  | GDProj (Maybe SourcePos) a (GDerefExp t a) FldName
+  | GDArr  (Maybe SourcePos) a (GDerefExp t a) (GExp t a) LengthInfo
+
+isGDerefExp :: GExp t a -> Maybe (GDerefExp t a)
+isGDerefExp e = case unExp e of
+  EVar nm -> return (GDVar loc nfo nm)
+  EProj estruct fld -> do
+    gde <- isGDerefExp estruct
+    return (GDProj loc nfo gde fld)
+  EArrRead earr estart elen -> do
+    gdarr <- isGDerefExp earr
+    return (GDArr loc nfo gdarr estart elen)
+  _ -> Nothing
+  where loc = expLoc e
+        nfo = info e
 
 data GExp0 t a where
   -- | A single value
