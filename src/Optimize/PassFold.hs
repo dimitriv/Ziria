@@ -36,6 +36,7 @@ import qualified GenSym as GS
 import PassFoldM
 import PassComp
 import PassExpr
+import PassOptMit
 
 
 runTypedCompPass :: TypedCompPass -> Comp -> RwM Comp
