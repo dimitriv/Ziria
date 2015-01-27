@@ -46,6 +46,7 @@
 #include "samples.hpp"
 #include "sampling.hpp"
 #include "sora_ext_bricks.h"
+#include "sora_ext_lib_fft.h"
 
 #include "utils.h"
 
@@ -1237,6 +1238,9 @@ void __ext_sora_fft(struct complex16* output, int nFFTSize, struct complex16 * i
 
 	// We use the safe version to respect Blink's semantic
 	switch (nFFTSize) {
+	case 16:
+		FFTSafe<16>(in, out);
+		break;
 	case 32:
 		FFTSafe<32>(in, out);
 		break;
@@ -1258,6 +1262,28 @@ void __ext_sora_fft(struct complex16* output, int nFFTSize, struct complex16 * i
 	case 2048:
 		FFTSafe<2048>(in, out);
 		break;
+	// LTE compatibility
+	case 12:
+		FFTSafe<12>(in, out);
+		break;
+	case 24:
+		FFTSafe<24>(in, out);
+		break;
+	case 48:
+		FFTSafe<48>(in, out);
+		break;
+	case 96:
+		FFTSafe<96>(in, out);
+		break;
+	case 192:
+		FFTSafe<192>(in, out);
+		break;
+	case 384:
+		FFTSafe<384>(in, out);
+		break;
+	case 768:
+		FFTSafe<768>(in, out);
+		break;
 	default:
 		printf("__ext_sora_fft error: fft size %d not supported!\n", nFFTSize);
 		break;
@@ -1276,6 +1302,9 @@ void __ext_sora_ifft(struct complex16* output, int nFFTSize, struct complex16 * 
 	// We use the safe version to respect Blink's semantic
 	//	IFFT<128> (temp, pcOutput );
 	switch (nFFTSize) {
+	case 16:
+		IFFTSafe<16>(in, out);
+		break;
 	case 32:
 		IFFTSafe<32>(in, out);
 		break;
@@ -1296,6 +1325,28 @@ void __ext_sora_ifft(struct complex16* output, int nFFTSize, struct complex16 * 
 		break;
 	case 2048:
 		IFFTSafe<2048>(in, out);
+		break;
+	// LTE compatibility
+	case 12:
+		IFFTSafe<12>(in, out);
+		break;
+	case 24:
+		IFFTSafe<24>(in, out);
+		break;
+	case 48:
+		IFFTSafe<48>(in, out);
+		break;
+	case 96:
+		IFFTSafe<96>(in, out);
+		break;
+	case 192:
+		IFFTSafe<192>(in, out);
+		break;
+	case 384:
+		IFFTSafe<384>(in, out);
+		break;
+	case 768:
+		IFFTSafe<768>(in, out);
 		break;
 	default:
 		printf("__ext_sora_ifft error: fft size %d not supported!\n", nFFTSize);
