@@ -17,12 +17,12 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall -Wwarn #-}
-{-# LANGUAGE ScopedTypeVariables, RecordWildCards, GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes, DeriveGeneric #-}
+{-# LANGUAGE ScopedTypeVariables, RecordWildCards, 
+    GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes, DeriveGeneric #-}
 module PassFoldM where
 
 import Prelude hiding (exp)
 import Control.Applicative
---import Control.Arrow (second)
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Maybe (isJust)
@@ -33,16 +33,12 @@ import Text.PrettyPrint.HughesPJ
 import Text.Printf
 import Text.Show.Pretty (PrettyVal)
 import qualified Data.Map as Map
--- import qualified Data.Set as S
 
 import AstComp
 import AstExpr
 import AstUnlabelled
--- import CtExpr ( ctExp  )
--- import Interpreter
 import Opts
 import Outputable
--- import PassFoldDebug
 import PpComp ()
 import PpExpr ()
 import qualified GenSym as GS
@@ -54,7 +50,8 @@ import qualified GenSym as GS
 data IsRewritten = NotRewritten | Rewritten
 
 -- The rewriting monad keeps track of whether any rewriting actually happened
-newtype RwM a = RwM { unRwM :: StateT IsRewritten (ReaderT (GS.Sym, DynFlags) IO) a }
+newtype RwM a 
+  = RwM { unRwM :: StateT IsRewritten (ReaderT (GS.Sym, DynFlags) IO) a }
   deriving (Functor, Applicative, Monad, MonadIO)
 
 runRwM :: RwM a -> (GS.Sym, DynFlags) -> IO (a, IsRewritten)
@@ -159,8 +156,6 @@ data TypedExpPass =
 
     -- | The pass does its own traversal of the tree.
   | TypedExpManual (Exp -> RwM Exp)
-
-
 
 
 newtype LetEs = LetEs [(Maybe SourcePos, GName Ty, ForceInline, Exp)]

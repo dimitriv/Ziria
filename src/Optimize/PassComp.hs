@@ -17,22 +17,31 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall -Wwarn #-}
-{-# LANGUAGE ScopedTypeVariables, RecordWildCards, GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes, DeriveGeneric #-}
-module PassComp where
+{-# LANGUAGE ScopedTypeVariables, RecordWildCards, 
+    GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes, DeriveGeneric #-}
+module PassComp (
+    passFold
+  , passPurify
+  , passPurifyLetRef
+  , passElimTimes
+  , passLetFunc
+  , passLetFunTimes
+  , passTimesUnroll
+  , passInline
+  , passPushCompLocals
+  , passTakeEmit
+  , passFloatLetFunRepeat
+  , passFloatLetPar
+  , passIfDead
+  , passIfReturn
+  , passElimAutomappedMitigs
+  , elimMitigsIO
+
+) where
 
 import Prelude hiding (exp)
--- import Control.Applicative
--- import Control.Arrow (second)
 import Control.Monad.Reader
--- import Control.Monad.State
--- import Data.Maybe (isJust)
 import GHC.Generics
--- import System.CPUTime
--- import Text.Parsec.Pos (SourcePos)
--- import Text.PrettyPrint.HughesPJ
--- import Text.Printf
--- import Text.Show.Pretty (PrettyVal)
--- import qualified Data.Map as Map
 import qualified Data.Set as S
 
 import AstComp
@@ -56,11 +65,12 @@ import PassFoldM
 -- | Convert `return` to `let`, and remove function definitions from the RHS
 -- of binds.
 --
--- NOTE: We have to manually traverse the entire bind structure, because
--- although the rewriting will happen at every node in the AST, there may only
--- be a single bind node for a sequence of binds. The same is not true for a
--- sequence of 'seq' nodes though. This is rather subtle, and fold_step is the
--- _only_ pass that actually does this. I'm not sure if there are other subtle
+-- NOTE: We have to manually traverse the entire bind structure,
+-- because although the rewriting will happen at every node in the
+-- AST, there may only be a single bind node for a sequence of
+-- binds. The same is not true for a sequence of 'seq' nodes
+-- though. This is rather subtle, and fold_step is the _only_ pass
+-- that actually does this. I'm not sure if there are other subtle
 -- bugs due to this.
 passFold :: TypedCompPass
 passFold = TypedCompBottomUp $ \_ -> go
@@ -183,7 +193,8 @@ passLetFunc = TypedCompBottomUp $ \cloc comp' -> do
                replace_call other = return other
 
                purify_calls :: Comp -> RwM Comp
-               purify_calls = mapCompM return return return return return replace_call
+               purify_calls = 
+                 mapCompM return return return return return replace_call
 
            cont' <- purify_calls cont
            rewrite $ cLetHeader cloc def' cont'
@@ -204,7 +215,8 @@ passLetFunTimes = TypedCompBottomUp $ \_cloc comp ->
                 ~~> fun f(i, ..) { .. } ; for i in [e, elen] { .. } |]
 
            -- Freshen the function definition 
-           let fty' = TArrow (map nameArgTy (iprm:params)) (fun_ret_ty (nameTyp f))
+           let fty' = TArrow (map nameArgTy (iprm:params)) 
+                             (fun_ret_ty (nameTyp f))
                f'   = f { nameTyp = fty' }
                def' = mkFunDefined floc f' (iprm:params) $ 
                       substExp [] [(i, eVar floc iprm)] body
@@ -235,7 +247,8 @@ passTimesUnroll = TypedCompBottomUp $ \cloc comp -> do
     let mk_bind_many :: [Comp] -> Comp
         mk_bind_many []     = error "times_unroll_step: can't happen!"
         mk_bind_many [x]    = x
-        mk_bind_many (x:xs) = cBindMany (compLoc x) x [(unused, mk_bind_many xs)]
+        mk_bind_many (x:xs) = 
+          cBindMany (compLoc x) x [(unused, mk_bind_many xs)]
 
     case unComp comp of
       Times ui e elen i c
@@ -688,7 +701,8 @@ inline_exp_fun (nm,params,locals,body) e
 
     replace_call other = return other
 
-inline_comp_fun :: (GName CTy, [GName (CallArg Ty CTy)], Comp) -> Comp -> RwM Comp
+inline_comp_fun :: (GName CTy, [GName (CallArg Ty CTy)], Comp) 
+                -> Comp -> RwM Comp
 inline_comp_fun (nm,params,cbody) c = do
     mapCompM return return return return return replace_call c
   where

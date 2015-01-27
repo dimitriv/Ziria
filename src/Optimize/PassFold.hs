@@ -17,32 +17,18 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall -Wwarn #-}
-{-# LANGUAGE ScopedTypeVariables, RecordWildCards, GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes, DeriveGeneric #-}
+{-# LANGUAGE ScopedTypeVariables, RecordWildCards, 
+    GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes, DeriveGeneric #-}
 module PassFold (runFold, elimMitigsIO) where
 
 import Prelude hiding (exp)
--- import Control.Applicative
 import Control.Arrow (second)
 import Control.Monad.Reader
--- import Control.Monad.State
--- import Data.Maybe (isJust)
--- import GHC.Generics
--- import System.CPUTime
--- import Text.Parsec.Pos (SourcePos)
--- import Text.PrettyPrint.HughesPJ
--- import Text.Printf
--- import Text.Show.Pretty (PrettyVal)
 import qualified Data.Map as Map
--- import qualified Data.Set as S
 
 import AstComp
 import AstExpr
--- import AstUnlabelled
--- import CtExpr ( ctExp  )
--- import Interpreter
 import Opts
--- import Outputable
--- import PassFoldDebug
 import PpComp ()
 import PpExpr ()
 import qualified GenSym as GS
@@ -50,7 +36,6 @@ import qualified GenSym as GS
 import PassFoldM
 import PassComp
 import PassExpr
-
 
 
 runTypedCompPass :: TypedCompPass -> Comp -> RwM Comp

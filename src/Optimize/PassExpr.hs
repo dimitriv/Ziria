@@ -17,42 +17,34 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall -Wwarn #-}
-{-# LANGUAGE ScopedTypeVariables, RecordWildCards, GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes, DeriveGeneric #-}
-module PassExpr where
+{-# LANGUAGE ScopedTypeVariables, RecordWildCards, 
+    GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes, DeriveGeneric #-}
+module PassExpr (
+   passForUnroll
+ , passElimUnused
+ , passExpInlining
+ , passAsgnLetRef
+ , passExpLetPush 
+ , passEval
+) where
 
 import Prelude hiding (exp)
-import Control.Applicative
-import Control.Arrow (second)
 import Control.Monad.Reader
-import Control.Monad.State
-import Data.Maybe (isJust)
-import GHC.Generics
-import System.CPUTime
-import Text.Parsec.Pos (SourcePos)
-import Text.PrettyPrint.HughesPJ
-import Text.Printf
-import Text.Show.Pretty (PrettyVal)
-import qualified Data.Map as Map
 import qualified Data.Set as S
-
-import AstComp
 import AstExpr
 import AstUnlabelled
 import CtExpr ( ctExp  )
 import Interpreter
 import Opts
-import Outputable
 import PassFoldDebug
 import PpComp ()
 import PpExpr ()
-import qualified GenSym as GS
 
 import PassFoldM
 
 {-------------------------------------------------------------------------------
   Expression passes
 -------------------------------------------------------------------------------}
-
 
 
 -- | Loop unrolling
@@ -134,7 +126,8 @@ passAsgnLetRef = TypedExpBottomUp $ \eloc exp -> if
     , not (mutates_state estart)
     , Just (y, residual_erhs) <- returns_letref_var erhs
    -> do
-     let exp' = substExp [] [(y, eArrRead (expLoc exp) e0 estart elen)] residual_erhs
+     let exp' = substExp [] 
+                  [(y, eArrRead (expLoc exp) e0 estart elen)] residual_erhs
 
      logStep "asgn-letref" eloc
        [step| x[estart, n] := var y in { ... y ... ; return y }
@@ -192,6 +185,7 @@ passExpLetPush = TypedExpBottomUp $ \eloc e -> if
     | otherwise
      -> return e
 
+-- | Static evaluator pass
 passEval :: TypedExpPass
 passEval = TypedExpManual eval
   where
