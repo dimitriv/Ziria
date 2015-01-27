@@ -25,7 +25,7 @@
 --
 -- Note: we don't pack it in complex32 
 -- as it requires extra cycles and is often not needed
-fun v_conj_mul_complex16_int32(re32:arr int, im32:arr int, a:arr complex16, b:arr complex16) {
+fun v_conj_mul_complex16_int32(var re32:arr int, var im32:arr int, a:arr complex16, b:arr complex16) {
    var vs1:arr[4] complex16;
 
    let vlen = (length(a) / 4) 

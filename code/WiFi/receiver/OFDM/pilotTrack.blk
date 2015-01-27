@@ -31,7 +31,7 @@
 
 
 
-fun build_coeff(pcoeffs:arr[64] complex16, ave:int16, delta:int16) {
+fun build_coeff(var pcoeffs:arr[64] complex16, ave:int16, delta:int16) {
   var th:int16;
 
   th := ave - delta * 26;

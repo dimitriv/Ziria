@@ -21,7 +21,7 @@
 
 #include <externals.blk>
 
-fun perm8(p : arr[8] int, iarr : arr[8] bit, oarr : arr bit) {
+fun perm8(p : arr[8] int, iarr : arr[8] bit, var oarr : arr bit) {
   var set : bool; 
   for j in [0,length(oarr)] {
     set := false;
