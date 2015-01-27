@@ -53,7 +53,12 @@ ctComp0 (LetERef _ _ c)      = ctComp c
 ctComp0 (LetHeader _ c)      = ctComp c
 ctComp0 (LetFunC _ _ _ c2)   = ctComp c2
 ctComp0 (LetStruct _ c)      = ctComp c
-ctComp0 (Call f xs)          = ctCall f (nameTyp f) (map ctCallArg xs)
+ctComp0 (Call f xs)         
+  | tfun@(CTArrow fun_tys _fres) <- nameTyp f
+  , checkCAArgMut fun_tys xs
+  = ctCall f tfun (map ctCallArg xs)
+  | otherwise              = panic $ text "ctComp: CCall ill-formed mutability"
+
 ctComp0 (Emit e)             = CTComp TUnit TVoid (ctExp e)
 ctComp0 (Emits e)            = ctEmits TVoid (ctExp e)
 ctComp0 (Return _ e)         = CTComp (ctExp e) TVoid TVoid
@@ -112,12 +117,14 @@ ctRepeat :: CTy -> CTy
 ctRepeat (CTComp _ a b) = CTTrans a b
 ctRepeat t = panic $ text "ctRepeat: Unexpected" <+> ppr t
 
+-- | Map should get an immutable argument
 ctMap :: Ty -> CTy
-ctMap (TArrow [a] b) = CTTrans a b
+ctMap (TArrow [(GArgTy a Imm)] b) = CTTrans a b
 ctMap t = panic $ text "ctMap: Unexpected" <+> ppr t
 
+-- | Filter should get an immutable argument
 ctFilter :: Ty -> CTy
-ctFilter (TArrow [a] TBool) = CTTrans a a
+ctFilter (TArrow [(GArgTy a Imm)] TBool) = CTTrans a a
 ctFilter t = panic $ text "ctFilter: Unexpected" <+> ppr t
 
 ctMitigate :: Ty -> Int -> Int -> CTy

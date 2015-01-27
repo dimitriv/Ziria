@@ -1,4 +1,4 @@
-fun test2(x : arr [4] int) {
+fun test2(var x : arr [4] int) {
     x[0] := 9;
     return x;
 }

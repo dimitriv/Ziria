@@ -29,6 +29,7 @@ import Data.Either (partitionEithers)
 import Data.Functor.Identity ( Identity (..) )
 import Data.Monoid
 import Data.Set (Set)
+import Data.Maybe ( isJust )
 import Data.Traversable (mapM)
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
@@ -55,7 +56,7 @@ data GCTy ty where
   CTVar   :: CTyVar -> GCTy ty
   CTComp  :: ty -> ty -> ty -> GCTy ty
   CTTrans :: ty -> ty -> GCTy ty
-  CTArrow :: [CallArg ty (GCTy ty)] -> GCTy ty -> GCTy ty
+  CTArrow :: [CallArg (GArgTy ty) (GCTy ty)] -> GCTy ty -> GCTy ty
   deriving (Generic, Typeable, Data)
 
 {-------------------------------------------------------------------------------
@@ -344,6 +345,19 @@ mkHOCompSubst fprms fargs = go fprms fargs ([],[],[])
     rev_acc (x,y,z) = (reverse x, reverse y, reverse z)
 
     to_comp_nm nm = updNameTy nm (callArg undefined id (nameTyp nm))
+
+
+checkCAArgMut :: -- Function argument types (expected)
+                 [CallArg ArgTy CTy]
+                 -- Actual arguments
+              -> [CallArg (GExp t b) (GComp tc t a b)] -> Bool
+checkCAArgMut fun_tys args = all check_mut (zip fun_tys args)
+  where 
+   check_mut (CAExp (GArgTy _ Mut), CAExp earg) 
+     = isJust $ isGDerefExp True earg
+   check_mut _other = True
+
+
 
 -- A view of some Pars as a list
 data GParListView tc t a b
@@ -763,7 +777,7 @@ tyFVs (TInt bw)           = bitWidthFVs bw
 tyFVs TDouble             = mempty
 tyFVs (TStruct _ flds)    = mconcat (map (tyFVs . snd) flds)
 tyFVs (TInterval _)       = mempty
-tyFVs (TArrow args res)   = mconcat (map tyFVs (res:args))
+tyFVs (TArrow args res)   = mconcat (map tyFVs (res:(map argty_ty args)))
 tyFVs (TBuff (IntBuf ty)) = tyFVs ty
 tyFVs (TBuff (ExtBuf ty)) = tyFVs ty
 tyFVs TVoid               = mempty
@@ -775,8 +789,8 @@ ctyFVs (CTComp u a b)     = mconcat (map tyFVs [u, a, b])
 ctyFVs (CTTrans a b)      = mconcat (map tyFVs [a, b])
 ctyFVs (CTArrow args res) = mconcat (ctyFVs res : map caFVs args)
   where
-    caFVs :: CallArg Ty CTy -> TyVars
-    caFVs = callArg tyFVs ctyFVs
+    caFVs :: CallArg ArgTy CTy -> TyVars
+    caFVs = callArg (tyFVs . argty_ty) ctyFVs
 
 numExprFVs :: NumExpr -> TyVars
 numExprFVs (Literal _) = mempty
@@ -809,8 +823,8 @@ substCTy slen = goCTy
     goTy :: Ty -> Ty
     goTy = substTy slen
 
-    goCA :: CallArg Ty CTy -> CallArg Ty CTy
-    goCA = callArg (CAExp . goTy) (CAComp . goCTy)
+    goCA :: CallArg ArgTy CTy -> CallArg ArgTy CTy
+    goCA = callArg (\(GArgTy t mk) -> CAExp (GArgTy (goTy t) mk)) (CAComp . goCTy)
 
 -- | Apply substitution to a computation
 --
@@ -834,6 +848,10 @@ substComp slen sexp scomp =
 callArg :: (a -> c) -> (b -> c) -> CallArg a b -> c
 callArg f _ (CAExp  a) = f a
 callArg _ g (CAComp b) = g b
+
+nameCallArgTy :: GName (CallArg a b) -> CallArg (GArgTy a) b
+nameCallArgTy nm = callArg (\t -> CAExp (GArgTy t (nameMut nm))) CAComp typ
+  where typ = nameTyp nm
 
 partitionCallArgs :: [CallArg a b] -> ([a], [b])
 partitionCallArgs = partitionEithers . map (callArg Left Right)

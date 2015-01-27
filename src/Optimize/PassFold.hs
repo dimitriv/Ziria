@@ -385,7 +385,7 @@ passLetFunc = TypedCompBottomUp $ \cloc comp' -> do
                 ~~> fun nm(..) {..} in .. return(nm(..)) .. |]
 
            let fun_ty :: Ty
-               fun_ty = TArrow (map nameTyp params') (ctExp e)
+               fun_ty = TArrow (map nameArgTy params') (ctExp e)
 
                nm' :: GName Ty
                nm' = nm { nameTyp = fun_ty }
@@ -423,7 +423,7 @@ passLetFunTimes = TypedCompBottomUp $ \_cloc comp ->
                 ~~> fun f(i, ..) { .. } ; for i in [e, elen] { .. } |]
 
            -- Freshen the function definition 
-           let fty' = TArrow (map nameTyp (iprm:params)) (fun_ret_ty (nameTyp f))
+           let fty' = TArrow (map nameArgTy (iprm:params)) (fun_ret_ty (nameTyp f))
                f'   = f { nameTyp = fty' }
                def' = mkFunDefined floc f' (iprm:params) $ 
                       substExp [] [(i, eVar floc iprm)] body
@@ -597,7 +597,7 @@ passTakeEmit = TypedCompBottomUp $ \cloc comp -> if
        let xty  = ain
            ety  = ctExp e
            eloc = expLoc e
-           fty  = TArrow [xty] ety
+           fty  = TArrow [(GArgTy xty Imm)] ety
 
        fname <- newPassFoldGName "auto_map_" fty cloc Imm
 
@@ -973,7 +973,7 @@ rewrite_mit_map ty1 (i1,j1) ty2 (i2,j2) (f_name, fun)
        ; let y_exp  = eVar floc y_name
 
          -- name of new map function
-       ; let f_ty = TArrow [x_ty] y_ty
+       ; let f_ty = TArrow [(GArgTy x_ty Imm)] y_ty
        ; new_f_name <- newPassFoldGName "auto_map_mit" f_ty floc Imm
 
 

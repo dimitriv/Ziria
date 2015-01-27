@@ -33,6 +33,8 @@ import TcMonad
 import TcUnify
 import Utils
 
+import Data.Maybe ( isNothing )
+
 {-------------------------------------------------------------------------------
   Top-level API
 -------------------------------------------------------------------------------}
@@ -179,21 +181,33 @@ tcExp expr@(MkExp exp0 loc _) =
       ty2 <- tcExp e2
       tcBinOp loc bop ty1 ty2
     go (EAssign e1 e2) = do
+      -- check e1 is a dereference expression
+      when (isNothing $ isGDerefExp True e1) $ do
+        raiseErrNoVarCtx loc $
+         text "Assignment to non-mutable dereference expression."
+      -- otherwise type check and unify 
       ty1 <- tcExp e1
       ty2 <- tcExp e2
       unify loc ty1 ty2
       return TUnit
     go (EArrWrite arr idx li rhs) = do
+      -- check arr is a dereference expression
+      when (isNothing $ isGDerefExp True arr) $ do
+        raiseErrNoVarCtx loc $
+         text "Assignment to non-mutable dereference expression."
       arrTy <- tcExp arr
       idxTy <- tcExp idx
       rhsTy <- tcExp rhs
       unifyTInt' loc idxTy
       (_n, a) <- unifyTArray loc Infer Infer arrTy
       case li of
-        LISingleton -> unify loc rhsTy a
-        LILength m  -> void $ unifyTArray loc (Check (Literal m)) (Check a) rhsTy
-        LIMeta x    -> raiseErrNoVarCtx loc $
-                         text "Unexpected meta-variable" <+> text (show x)
+        LISingleton 
+          -> unify loc rhsTy a
+        LILength m  
+          -> void $ unifyTArray loc (Check (Literal m)) (Check a) rhsTy
+        LIMeta x    
+          -> raiseErrNoVarCtx loc $
+               text "Unexpected meta-variable" <+> text (show x)
       return TUnit
     go (EArrRead arr idx li) = do
       arrTy <- tcExp arr
@@ -241,10 +255,16 @@ tcExp expr@(MkExp exp0 loc _) =
     go (ECall f args) = do
       -- The types of functions are always known before we call them
       -- (otherwise would not be able to call 'instantiateCall' here)
-      fTy    <- instantiateCall =<< zonk (nameTyp f)
+      fTy@(TArrow funtys _funres) <- instantiateCall =<< zonk (nameTyp f)
+
+      -- Check that mutability agrees with deref exprs
+      checkWith loc (checkArgMut funtys args) $ 
+          text "Mutable argument(s) not dereference expression(s)!"
+
       actual <- mapM tcExp args
+      let actual' = zipWith (\t (GArgTy _ m) -> GArgTy t m) actual funtys
       res    <- freshTy "b"
-      unify loc fTy $ TArrow actual res
+      unify loc fTy $ TArrow actual' res
       return res
     go (EIf be e1 e2) = do
       beTy <- tcExp be
@@ -332,19 +352,33 @@ tcComp comp@(MkComp comp0 loc _) =
       tcComp c
     go (LetFunC f args body rhs) = do
       res <- tcComp body
-      void $ ctyJoin loc (nameTyp f) $ CTArrow (map nameTyp args) res
+      void $ ctyJoin loc (nameTyp f) $ CTArrow (map nameCallArgTy args) res
       tcComp rhs
     go (LetStruct _ c) =
       tcComp c
     go (Call f args) = do
+
       -- TODO: Why don't we need to instantiate here? Don't we support
       -- polymorphism in comp functions?
-      fTy    <- zonk (nameTyp f)
+
+      fTy@(CTArrow funtys _funres) <- zonk (nameTyp f)
+
+      -- Check that mutability agrees with deref exprs
+      checkWith loc (checkCAArgMut funtys args) $
+          text "Mutable argument(s) not dereference expression(s)!"
+
+      -- Get the actual types
       actual <- forM args $ \arg -> case arg of
                   CAExp  e -> CAExp  <$> tcExp e
                   CAComp c -> CAComp <$> tcComp c
+      let munge (CAExp t) (CAExp (GArgTy _ m)) = return $ CAExp (GArgTy t m)
+          munge (CAComp cty) _                 = return $ CAComp cty
+          munge _ _ = raiseErrNoVarCtx loc $ 
+            text "Expected computation but found expression argument."
+      actual' <- zipWithM munge actual funtys
+
       res    <- freshCTy "b"
-      void $ ctyJoin loc fTy $ CTArrow actual res
+      void $ ctyJoin loc fTy $ CTArrow actual' res
       return res
 
     go (Until e c) = do
@@ -379,12 +413,12 @@ tcComp comp@(MkComp comp0 loc _) =
     go (Map _ f) = do
       a <- freshTy "a"
       b <- freshTy "b"
-      let fTy = TArrow [a] b
+      let fTy = TArrow [(GArgTy a Imm)] b
       unify loc fTy (nameTyp f)
       return $ CTTrans a b
     go (Filter f) = do
       a <- freshTy "a"
-      let fTy = TArrow [a] TBool
+      let fTy = TArrow [(GArgTy a Imm)] TBool
       unify loc fTy (nameTyp f)
       return $ CTTrans a a
     go (ReadSrc a) =
@@ -468,10 +502,10 @@ tcFun (MkFun fun0 loc _) = go fun0
     go :: GFun0 Ty a -> TcM Ty
     go (MkFunDefined f args body) = do
       res <- tcExp body
-      unify loc (nameTyp f) $ TArrow (map nameTyp args) res
+      unify loc (nameTyp f) $ TArrow (map nameArgTy args) res
       return (nameTyp f)
     go (MkFunExternal f args res) = do
-      unify loc (nameTyp f) $ TArrow (map nameTyp args) res
+      unify loc (nameTyp f) $ TArrow (map nameArgTy args) res
       return (nameTyp f)
 
 tcMitigator :: Maybe SourcePos -> Ty -> Int -> Int -> TcM CTy

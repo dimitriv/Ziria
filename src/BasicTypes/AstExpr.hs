@@ -29,6 +29,7 @@ import Control.Monad.State (State, execState, modify)
 import Data.Data (Data)
 import Data.Functor.Identity (Identity(..))
 import Data.Map (Map)
+import Data.Maybe ( isJust )
 import Data.Traversable (mapM)
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
@@ -103,6 +104,9 @@ toName s mpos typ mk =
            , nameMut = mk
            , nameTyp = typ
            }
+
+nameArgTy :: GName t -> GArgTy t
+nameArgTy nm = GArgTy (nameTyp nm) (nameMut nm)
 
 updNameId :: Uniq -> GName t -> GName t
 updNameId uid nm = nm { uniqId = uid }
@@ -181,12 +185,22 @@ data Ty where
   TInterval :: Int -> Ty
 
   -- Arrow and buffer types
-  TArrow :: [Ty] -> Ty -> Ty
+  TArrow :: [ArgTy] -> Ty -> Ty
   TBuff  :: BufTy -> Ty
 
   TVoid  :: Ty
 
   deriving (Generic, Typeable, Data, Eq, Ord)
+
+-- An argument type (we record the mutability)
+data GArgTy t
+  = GArgTy { argty_ty  :: t
+           , argty_mut :: MutKind
+           }
+  deriving (Generic, Typeable, Data, Eq, Ord)
+
+type ArgTy = GArgTy Ty
+
 
 data NumExpr where
   Literal :: Int -> NumExpr
@@ -290,18 +304,30 @@ data GDerefExp t a
   | GDProj (Maybe SourcePos) a (GDerefExp t a) FldName
   | GDArr  (Maybe SourcePos) a (GDerefExp t a) (GExp t a) LengthInfo
 
-isGDerefExp :: GExp t a -> Maybe (GDerefExp t a)
-isGDerefExp e = case unExp e of
-  EVar nm -> return (GDVar loc nfo nm)
+
+
+
+isGDerefExp :: Bool -> GExp t a -> Maybe (GDerefExp t a)
+isGDerefExp check_mut e = case unExp e of
+  EVar nm 
+   -> if check_mut && not (isMutable nm) 
+      then Nothing else Just (GDVar loc nfo nm)
   EProj estruct fld -> do
-    gde <- isGDerefExp estruct
+    gde <- isGDerefExp check_mut estruct
     return (GDProj loc nfo gde fld)
   EArrRead earr estart elen -> do
-    gdarr <- isGDerefExp earr
+    gdarr <- isGDerefExp check_mut earr
     return (GDArr loc nfo gdarr estart elen)
   _ -> Nothing
   where loc = expLoc e
         nfo = info e
+
+checkArgMut :: [ArgTy]    -- Function argument types (expected)
+            -> [GExp t a] -- Arguments
+            -> Bool       -- Mutable arguments must be isGDerefExp
+checkArgMut fun_tys args = all check_mut (zip fun_tys args)
+  where check_mut (GArgTy _ Mut, earg) = isJust $ isGDerefExp True earg
+        check_mut _other               = True
 
 data GExp0 t a where
   -- | A single value
@@ -433,6 +459,7 @@ instance NFData Ty          where rnf = genericRnf
 instance NFData UnrollInfo  where rnf = genericRnf
 instance NFData Val         where rnf = genericRnf
 instance NFData MutKind     where rnf = genericRnf
+instance NFData t => NFData (GArgTy t) where rnf = genericRnf
 
 instance NFData Uniq        where rnf = genericRnf
 instance NFData t => NFData (GUnOp t) where rnf = genericRnf
@@ -531,7 +558,7 @@ mapTyM f = go
                                 f $ TStruct tn (zip (map fst ts) ts')
     go (TArray n t)        = do t' <- go t
                                 f $ TArray n t'
-    go (TArrow ts t)       = do ts' <- mapM go ts
+    go (TArrow ts t)       = do ts' <- mapM go_arg ts
                                 t'  <- go t
                                 f $ TArrow ts' t'
     go (TBuff (IntBuf bt)) = do bt' <- go bt
@@ -540,6 +567,8 @@ mapTyM f = go
                                 f $ TBuff (ExtBuf bt')
 
     go TVoid               = f $ TVoid
+
+    go_arg (GArgTy t m) = do { t' <- go t ; return (GArgTy t' m) }
 
 mapNameM :: Monad m => (t -> m t') -> GName t -> m (GName t')
 mapNameM onTyp MkName{..} = do
@@ -884,15 +913,6 @@ binopList op a e0 (e : es) = toExp a $ EBinOp op e (binopList op a e0 es)
 dotDotName :: String
 dotDotName = "..."
 
--- Just for debugging purposes (and used in error messages)
-unknownTArr :: Ty
-unknownTArr = TArray (NVar dotDotName) (TVar dotDotName)
-
-unknownTArrOfBase :: Ty -> Ty
-unknownTArrOfBase t = TArray (NVar dotDotName) t
-
-unknownTFun :: Int -> Ty
-unknownTFun n = TArrow (replicate n (TVar dotDotName)) (TVar dotDotName)
 
 -- Observations/questions about the following code
 -- (a) Excludes Bit. Not sure why. (TODO)
@@ -1083,6 +1103,8 @@ instance PrettyVal UnrollInfo
 instance PrettyVal Val
 instance PrettyVal Uniq
 instance PrettyVal MutKind
+instance PrettyVal t => PrettyVal (GArgTy t)
+
 
 instance PrettyVal t => PrettyVal (GName t)
 instance PrettyVal t => PrettyVal (GUnOp t)

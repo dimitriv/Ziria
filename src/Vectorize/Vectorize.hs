@@ -230,7 +230,7 @@ computeVectTop dfs x = do
                 = cLetFunC loc vf_typed prms' vbd $ 
                   cCall loc vf_typed (map eraseCallArg es)
                 where vf_typed = updNameTy vf vf_type
-                      vf_type  = CTArrow (map ctCallArg es') (ctComp vbd)
+                      vf_type  = CTArrow (map nameCallArgTy prms') (ctComp vbd)
           ress <- mapM (liftCompDVR mk_vect_call) vbdys
           return ress
 

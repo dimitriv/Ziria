@@ -587,7 +587,7 @@ rewriteTakeEmit on_take on_takes on_emit on_emits = go
           (CFunBind { cfun_params = prms
                     , cfun_body = body }) <- lookupCFunBind f
           vbody <- go body
-          let vf_type = CTArrow (map ctCallArg es) (ctComp vbody)
+          let vf_type = CTArrow (map nameCallArgTy prms) (ctComp vbody)
           vf <- newVectGName (name f ++ "_spec") vf_type loc Imm
           return $ cLetFunC loc vf prms vbody $ 
                    cCall loc vf (map eraseCallArg es)

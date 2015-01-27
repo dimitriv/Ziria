@@ -34,16 +34,27 @@ import PpComp ()
 import Utils
 
 ctECall :: EId -> Ty -> [Ty] -> Ty
-ctECall _f (TArrow args res) args' = applyTy (matchAllTy (zip args args')) res
-ctECall f t args = panic $ vcat [ text "ctECall: Unexpected type:" <+> ppr t
-                                , text "Argument list types:"     <+> ppr args
-                                , text "Function type      :"     <+> ppr f ]
+ctECall _f (TArrow args res) args' 
+  = let funtys = map argty_ty args
+    in applyTy (matchAllTy (zip funtys args')) res
+ctECall f t args = panic $ 
+  vcat [ text "ctECall: Unexpected type:" <+> ppr t
+       , text "Argument list types:"     <+> ppr args
+       , text "Function type      :"     <+> ppr f ]
 
 ctCall :: CId -> CTy -> [CallArg Ty CTy] -> CTy
-ctCall _f (CTArrow args res) args' = applyCTy (matchAllCA (zip args args')) res
-ctCall f t cargs = panic $ vcat [ text "ctCall: Unexpected type:" <+> ppr t
-                                , text "Argument list types:"     <+> ppr cargs
-                                , text "Function type      :"     <+> ppr f ]
+ctCall _f (CTArrow args res) args' 
+  = applyCTy (matchAllCA (zip funtys argtys)) res
+  where funtys = map erase_mut args
+        argtys = args'
+        erase_mut (CAComp x) = CAComp x
+        erase_mut (CAExp x)  = CAExp (argty_ty x)
+
+ctCall f t cargs = panic $ 
+  vcat [ text "ctCall: Unexpected type:" <+> ppr t
+       , text "Argument list types:"     <+> ppr cargs
+       , text "Function type      :"     <+> ppr f ]
+
 
 {-------------------------------------------------------------------------------
   Substitutions
@@ -56,8 +67,11 @@ type Subst = [(LenVar, NumExpr)]
 
 applyTy :: Subst -> Ty -> Ty
 applyTy s (TArray n  t) = TArray (applyNumExpr s n)   (applyTy s t)
-applyTy s (TArrow ts t) = TArrow (map (applyTy s) ts) (applyTy s t)
+applyTy s (TArrow ts t) = TArrow (map (applyArgTy s) ts) (applyTy s t)
 applyTy _ t             = t
+
+applyArgTy :: Subst -> ArgTy -> ArgTy
+applyArgTy s (GArgTy t m) = GArgTy (applyTy s t) m
 
 applyNumExpr :: Subst -> NumExpr -> NumExpr
 applyNumExpr s (NVar n) = lookup' n s
@@ -69,8 +83,8 @@ applyCTy s (CTTrans  a b) = CTTrans (applyTy s a) (applyTy s b)
 applyCTy s (CTArrow ts t) = CTArrow (map (applyCA s) ts) (applyCTy s t)
 applyCTy _ (CTVar x)      = CTVar x
 
-applyCA :: Subst -> CallArg Ty CTy -> CallArg Ty CTy
-applyCA s = callArg (CAExp . applyTy s) (CAComp . applyCTy s)
+applyCA :: Subst -> CallArg ArgTy CTy -> CallArg ArgTy CTy
+applyCA s = callArg (CAExp . applyArgTy s) (CAComp . applyCTy s)
 
 {-------------------------------------------------------------------------------
   Expression types
@@ -81,7 +95,9 @@ matchAllTy = concatMap (uncurry matchTy)
 
 matchTy :: Ty -> Ty -> Subst
 matchTy (TArray n  t) (TArray n'  t') = matchNumExpr n n' ++ matchTy t t'
-matchTy (TArrow ts t) (TArrow ts' t') = matchAllTy (zip (t:ts) (t':ts'))
+matchTy (TArrow ts t) (TArrow ts' t') = matchAllTy (zip (t:ts_no_mut) (t':ts_no_mut'))
+  where ts_no_mut  = map argty_ty ts
+        ts_no_mut' = map argty_ty ts'
 matchTy _             _               = []
 
 matchNumExpr :: NumExpr -> NumExpr -> Subst

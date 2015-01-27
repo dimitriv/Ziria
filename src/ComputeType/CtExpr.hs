@@ -49,13 +49,19 @@ ctExp0 (EWhile _ _)        = TUnit
 ctExp0 (ELet _ _ _ e2)     = ctExp e2
 ctExp0 (ELetRef _ _ e2)    = ctExp e2
 ctExp0 (ESeq _ e2)         = ctExp e2
-ctExp0 (ECall f xs)        = ctECall f (nameTyp f) (map ctExp xs)
+ctExp0 (ECall f xs)
+  | tfun@(TArrow fun_tys _fres) <- nameTyp f
+  , checkArgMut fun_tys xs
+  = ctECall f tfun (map ctExp xs)
+  | otherwise              = panic $ text "ctExp: ECall ill-formed mutability"
 ctExp0 (EIf _ a _)         = ctExp a
 ctExp0 (EPrint _ _)        = TUnit
 ctExp0 (EError ty _)       = ty
 ctExp0 (ELUT _ e)          = ctExp e
 ctExp0 (EStruct t _)       = t
 ctExp0 (EProj s f)         = ctProj (ctExp s) f
+
+
 
 ctUnOp :: GUnOp Ty -> Ty -> Ty
 ctUnOp NatExp     _  = panic (text "ctUnOp: NatExp not supported")

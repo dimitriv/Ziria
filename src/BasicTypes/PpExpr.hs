@@ -173,6 +173,12 @@ instance Outputable SrcBitWidth where
     SrcBW32 -> text "32"
     SrcBW64 -> text "64"
 
+instance Outputable MutKind where
+  ppr mk = text (show mk)
+
+instance Outputable t => Outputable (GArgTy t) where
+  ppr (GArgTy t m) = parens (ppr m <+> ppr t)
+
 instance Outputable Ty where
   ppr ty = case ty of
     TVar x                 -> text "?" <> text x

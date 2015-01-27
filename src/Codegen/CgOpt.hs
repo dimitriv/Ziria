@@ -564,7 +564,7 @@ codeGenComp dflags comp k =
         -- not entirely satisfactory, admittedly.
 
         let invalloc = csp
-            TArrow [invalty] _ = nameTyp nm
+            TArrow [(GArgTy invalty _invalmut)] _ = nameTyp nm
         let invalname = MkName { name    = inValOf ih
                                , uniqId  = MkUniq $ inValOf ih -- yikes
                                , nameTyp = invalty

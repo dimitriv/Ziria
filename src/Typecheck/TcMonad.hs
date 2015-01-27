@@ -515,6 +515,10 @@ instance (Zonk a, Zonk b) => Zonk (CallArg a b) where
   zonk (CAExp  e) = CAExp  <$> zonk e
   zonk (CAComp c) = CAComp <$> zonk c
 
+
+instance Zonk t => Zonk (GArgTy t) where
+  zonk (GArgTy t m) = do { t' <- zonk t; return (GArgTy t' m) }
+
 instance Zonk (GCTy Ty) where
   zonk (CTVar x)
     = do { tenv <- getCTyEnv
@@ -574,11 +578,11 @@ tyVarsOfCTy (CTComp v a b) =
 tyVarsOfCTy (CTArrow tys ct0) =
     tvs_args tys `unionPair` tyVarsOfCTy ct0
 
-tvs_arg :: CallArg Ty CTy -> (S.Set TyVar, S.Set CTyVar)
-tvs_arg (CAExp  ty)  = (tyVarsOfTy ty, S.empty)
-tvs_arg (CAComp cty) = tyVarsOfCTy cty
+tvs_arg :: CallArg ArgTy CTy -> (S.Set TyVar, S.Set CTyVar)
+tvs_arg (CAExp  (GArgTy ty _)) = (tyVarsOfTy ty, S.empty)
+tvs_arg (CAComp cty)          = tyVarsOfCTy cty
 
-tvs_args :: [CallArg Ty CTy] -> (S.Set TyVar, S.Set CTyVar)
+tvs_args :: [CallArg ArgTy CTy] -> (S.Set TyVar, S.Set CTyVar)
 tvs_args = unionsPair . map tvs_arg
 
 {-------------------------------------------------------------------------------

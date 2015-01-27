@@ -141,7 +141,7 @@ instance Unify Ty where
       go (TStruct n1 _) (TStruct n2 _) | n1 == n2 = return ()
 
       go (TArrow args res) (TArrow args' res') | length args == length args'
-        = do { mapM_ (uncurry go) (zip args args')
+        = do { mapM_ (uncurry go_arg) (zip args args')
              ; go res res'
              }
 
@@ -150,6 +150,10 @@ instance Unify Ty where
       go _a TVoid    = panicStr "Unifier cannot possibly meet TVoid!"
 
       go a b = unifyErr p a b
+
+      go_arg (GArgTy t1 m1) (GArgTy t2 m2)
+        = do checkWith p (m1 == m2) (text "Mutability annotation mismatch")
+             go t1 t2
 
       goTyVar :: TyVar -> Ty -> TcM ()
       goTyVar x (TVar y)
@@ -222,9 +226,15 @@ ctyJoin p = go
         | otherwise
         = updCTyEnv [(x, cty)] >> return cty
 
-callArgJoin :: Maybe SourcePos -> CallArg Ty CTy -> CallArg Ty CTy -> TcM (CallArg Ty CTy)
-callArgJoin p (CAExp ty) (CAExp ty')     = unify p ty ty' >> return (CAExp ty)
-callArgJoin p (CAComp cty) (CAComp cty') = ctyJoin p cty cty' >>= (return . CAComp)
+callArgJoin :: Maybe SourcePos 
+            -> CallArg ArgTy CTy -> CallArg ArgTy CTy 
+            -> TcM (CallArg ArgTy CTy)
+callArgJoin p (CAExp (GArgTy ty m)) (CAExp (GArgTy ty' m'))
+  = do checkWith p (m == m') (text "Call argument mutability mismatch.")
+       unify p ty ty'
+       return (CAExp (GArgTy ty m))
+callArgJoin p (CAComp cty) (CAComp cty') 
+  = ctyJoin p cty cty' >>= (return . CAComp)
 callArgJoin p a b = unifyErr p a b
 
 {-
@@ -385,10 +395,11 @@ instantiateCall :: Ty -> TcM Ty
 instantiateCall = go
   where
     go :: Ty -> TcM Ty
-    go t@(TArrow tas tb) = do { let lvars = gatherPolyVars (tb:tas)
-                              ; s <- mapM freshen lvars
-                              ; mapTyM (subst_len s) t
-                              }
+    go t@(TArrow tas tb) = do let argtys = map argty_ty tas
+                                  lvars = gatherPolyVars (tb:argtys)
+                              s <- mapM freshen lvars
+                              mapTyM (subst_len s) t
+
     go other             = return other
 
     freshen :: LenVar -> TcM (LenVar, NumExpr)

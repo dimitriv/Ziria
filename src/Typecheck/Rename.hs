@@ -69,7 +69,10 @@ renCBound = genRenBound Imm renCTyAnn
 renParam :: GName SrcTy -> TcM (GName Ty)
 renParam nm = genRenBound (nameMut nm) renTyAnn nm
 renCAParam :: GName (CallArg SrcTy SrcCTy) -> TcM (GName (CallArg Ty CTy))
-renCAParam nm = genRenBound (nameMut nm) renTyCTyAnn nm
+renCAParam nm = genRenBound (nameMut nm) renTyCTy_ann nm
+  where 
+    renTyCTy_ann :: Maybe SourcePos -> CallArg SrcTy SrcCTy -> TcM (CallArg Ty CTy)
+    renTyCTy_ann p = callArg (liftM CAExp . renTyAnn p) (liftM CAComp . renCTyAnn p)
 
 
 genRenFree :: (GName ty -> TcM (GName ty')) -> GName ty -> TcM (GName ty')
@@ -189,11 +192,11 @@ renCTyAnn p (SrcCTyKnown ct) = renReqGCTy p ct
   Dealing with CallArg
 -------------------------------------------------------------------------------}
 
-renTyCTy :: Maybe SourcePos -> CallArg SrcTy (GCTy SrcTy) -> TcM (CallArg Ty CTy)
-renTyCTy p = callArg (liftM CAExp . renReqTy p) (liftM CAComp . renReqGCTy p)
-
-renTyCTyAnn :: Maybe SourcePos -> CallArg SrcTy SrcCTy -> TcM (CallArg Ty CTy)
-renTyCTyAnn p = callArg (liftM CAExp . renTyAnn p) (liftM CAComp . renCTyAnn p)
+renTyCTy :: Maybe SourcePos -> CallArg (GArgTy SrcTy) (GCTy SrcTy) -> TcM (CallArg ArgTy CTy)
+renTyCTy p = callArg on_exp (liftM CAComp . renReqGCTy p)
+  where on_exp (GArgTy srcty m)
+           = do ty <- renReqTy p srcty
+                return (CAExp (GArgTy ty m))
 
 renExpComp :: CallArg SrcExp SrcComp -> TcM (CallArg Exp Comp)
 renExpComp = callArg (liftM CAExp . renExp) (liftM CAComp . renComp)

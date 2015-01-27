@@ -34,6 +34,9 @@ instance Outputable Integer where
 instance Outputable a => Outputable [a] where
   ppr = sep . punctuate comma . map ppr
 
+instance (Outputable a, Outputable b) => Outputable (a,b) where
+  ppr (a,b) = parens (ppr a <> comma <+> ppr b)
+
 instance Outputable String where
   ppr = text 
 
