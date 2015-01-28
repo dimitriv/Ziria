@@ -20,10 +20,16 @@
 #include "ext_arr.h"
 
 // External functions that operate on arrays
-int32 __ext_zero_int16(int16* arr, int length)
+int32 __ext_zero_int8(int8* arr, int length)
 { 
-  memset((void *)arr, 0, length*sizeof(int16));
+  memset((void *)arr, 0, length*sizeof(int8));
   return 0;
+}
+
+int32 __ext_zero_int16(int16* arr, int length)
+{
+	memset((void *)arr, 0, length*sizeof(int16));
+	return 0;
 }
 
 int32 __ext_zero_int32(int32* arr, int length)
@@ -32,10 +38,16 @@ int32 __ext_zero_int32(int32* arr, int length)
   return 0;
 }
 
+int32 __ext_zero_complex8(complex8* arr, int length)
+{
+	memset((void *)arr, 0, length*sizeof(complex8));
+	return 0;
+}
+
 int32 __ext_zero_complex16(complex16* arr, int length)
-{ 
-  memset((void *)arr, 0, length*sizeof(complex16));
-  return 0;
+{
+	memset((void *)arr, 0, length*sizeof(complex16));
+	return 0;
 }
 
 int32 __ext_zero_complex32(complex32* arr, int length)
@@ -63,10 +75,16 @@ int32 __ext_zero_bit(BitArrPtr arr, int length)
 
 
 
-int32 __ext_copy_int16(int16* dst, int len, int16* src, int lens, int32 length)
+int32 __ext_copy_int8(int8* dst, int len, int8* src, int lens, int32 length)
 { 
-  memcpy((void *)dst, (void*) src, length*sizeof(int16));
+  memcpy((void *)dst, (void*) src, length*sizeof(int8));
   return 0;
+}
+
+int32 __ext_copy_int16(int16* dst, int len, int16* src, int lens, int32 length)
+{
+	memcpy((void *)dst, (void*)src, length*sizeof(int16));
+	return 0;
 }
 
 int32 __ext_copy_int32(int32* dst, int len, int32* src, int lens, int32 length)
@@ -75,10 +93,16 @@ int32 __ext_copy_int32(int32* dst, int len, int32* src, int lens, int32 length)
   return 0;
 }
 
-int32 __ext_copy_complex16(complex16* dst, int len, complex16* src, int lens, int32 length)
+int32 __ext_copy_complex8(complex8* dst, int len, complex8* src, int lens, int32 length)
 { 
-  memcpy((void *)dst, (void*) src, length*sizeof(complex16));
+  memcpy((void *)dst, (void*) src, length*sizeof(complex8));
   return 0;
+}
+
+int32 __ext_copy_complex16(complex16* dst, int len, complex16* src, int lens, int32 length)
+{
+	memcpy((void *)dst, (void*)src, length*sizeof(complex16));
+	return 0;
 }
 
 int32 __ext_copy_complex32(complex32* dst, int len, complex32* src, int lens, int32 length)
