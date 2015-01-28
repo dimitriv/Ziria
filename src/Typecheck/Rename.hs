@@ -294,7 +294,7 @@ renComp (MkComp comp0 cloc ()) = case comp0 of
       Times ui e elen nm c' -> do
         e'    <- renExp e
         elen' <- renExp elen
-        nm'   <- renBound Imm nm
+        nm'   <- renBound Imm nm -- NB: Immutable! 
         c''   <- recName nm' $ renComp c'
         return $ cTimes cloc ui e' elen' nm' c''
       Repeat wdth c' -> do

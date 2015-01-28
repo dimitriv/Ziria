@@ -38,23 +38,26 @@ module PassComp (
 ) where
 
 import Prelude hiding (exp)
-import Control.Monad.Reader
 import GHC.Generics
 import qualified Data.Set as S
+
+import Data.Monoid
+
+import Text.Parsec.Pos ( SourcePos )
 
 import AstComp
 import AstExpr
 import AstUnlabelled
 import CtExpr ( ctExp  )
 import Interpreter
-import Opts
 import Outputable ()
 import PassFoldDebug
 import PpComp ()
 import PpExpr ()
-import qualified GenSym as GS
 
 import PassFoldM
+
+import Utils ( panicStr )
 
 {-------------------------------------------------------------------------------
   Comp passes: standard optimizations
@@ -302,15 +305,14 @@ passInline = TypedCompBottomUp $ \cloc comp' -> if
        rewrite $ substComp [] [(nm,e1)] [] c2
 
     | LetHeader f@(MkFun (MkFunDefined {}) _ _) c2 <- unComp comp'
-      , MkFunDefined nm params body' <- unFun f
-      , (locals, body) <- extractEMutVars body'
+      , MkFunDefined nm params body <- unFun f
       , no_lut_inside body
      -> do
        -- Inlining functions not always completely eliminates them (e.g. args
        -- to map, or non-simple arguments).
 
-       (c2', didRewrite) <- recordLocalRewrite $
-         inline_exp_fun_in_comp (nm,params,locals,body) c2
+       (c2', didRewrite) <- recordLocalRewrite $ 
+                            inlineLetFun nm params body c2
 
        if | not didRewrite ->
              return $ cLetHeader cloc f c2'
@@ -337,7 +339,7 @@ passInline = TypedCompBottomUp $ \cloc comp' -> if
        -- non-simple arguments.
 
        (c2', didRewrite) <- recordLocalRewrite $
-         inline_comp_fun (nm,params,c1) c2
+                            inlineLetFunC nm params c1 c2
 
        if | not didRewrite ->
               return $ cLetFunC cloc nm params c1 c2'
@@ -572,122 +574,191 @@ fromSimplCallParam nm =
   Inlining auxiliary
 -------------------------------------------------------------------------------}
 
-inline_exp_fun_in_comp :: (GName Ty, [GName Ty], [MutVar], Exp)
-                       -> Comp -> RwM Comp
-inline_exp_fun_in_comp fun
-  = mapCompM return return return return (inline_exp_fun fun) return
+{- How to inline function arguments
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+We consider two cases for inlining function arguments:
 
-inline_exp_fun :: (GName Ty, [GName Ty], [MutVar], Exp)
-               -> Exp -> RwM Exp
--- True means that it is safe to just get rid of the function
-inline_exp_fun (nm,params,locals,body) e
-  = mapExpM return return replace_call e
+A. Immutable arguments.
+   We simply let-bind the argument (and the ordinary
+   inliner for let-bound variables should take care of inlining that). E.g.
+       fun foo(w : arr[256] int) { body }
+   and application:
+       foo(my_array)
+   will be inlined to:
+       let w = my_array
+       in body
+   and the let-inliner should deal with potentially inlining w
+   wherever that is safe.
+  
+B. Mutable arguments.
+   In this case we know by static type checking that we
+   have a mutable dereference expression. Consider for example the function:
+       fun foo(var w : complex16) { body }
+   and an application
+       foo(y[(i+34*45):5].im)
+   In this case we lift the expression indices inside the deref expression
+   with:
+       let idx = i+34*45
+       in
+       body[y[idx:5].im / w]
+  that is we /directly/ substitute for the derefernce expression.
+  The ordinary let-inliner may choose to evaluate the index or inline it.
+-----------------------------------------------------------------------------}
+
+data InlineData
+  = InlineData { inl_let_bound :: [(GName Ty, Exp)]
+               , inl_subst     :: [(GName Ty, Exp)]
+               , inl_len_subst :: [(LenVar, NumExpr)] }
+
+instance Monoid InlineData where
+  mempty = InlineData [] [] []
+  mappend (InlineData b1 s1 l1) 
+          (InlineData b2 s2 l2) = InlineData (b1++b2) (s1++s2) (l1++l2)
+
+mappendM :: RwM InlineData -> RwM InlineData -> RwM InlineData
+mappendM m1 m2 = do
+  i1 <- m1
+  i2 <- m2
+  return $ i1 `mappend` i2
+
+-- | Apply the inline data to an expression
+appInlDataExpr :: Maybe SourcePos -> InlineData -> Exp -> Exp
+appInlDataExpr loc (InlineData { inl_let_bound = let_bound
+                               , inl_subst     = subst
+                               , inl_len_subst = subst_len })
+  = substExp subst_len subst . go let_bound
+  where 
+    go [] e               = e
+    go ((nm1,eb1):bnds) e = eLet loc nm1 AutoInline eb1 $ go bnds e
+
+-- | Apply the inline data plus a computation substition to a computation
+appInlDataComp :: Maybe SourcePos 
+               -> InlineData -> [(GName CTy,Comp)] -> Comp -> Comp
+appInlDataComp loc (InlineData { inl_let_bound = let_bound
+                               , inl_subst     = subst
+                               , inl_len_subst = subst_len }) csubst
+  = substComp subst_len subst csubst . go let_bound
   where
-    replace_call (MkExp (ECall nm' args) loc ())
---    | all is_simpl_expr args -- Like what we do for LetE/ELet
-      | nm == nm'
-       = do let xs                        = zip params args
-                (subst, locals_from_args) = arg_subst xs
-                subst_len                 = len_subst xs
-            rewrite $ mk_local_lets subst subst_len (locals_from_args ++ locals) body
-      where
-        -- arg_subst will return (a) a substitution and (b) some local bindings
-        arg_subst :: [(GName Ty, Exp)] -> ([(GName Ty, Exp)], [MutVar])
-        arg_subst [] = ([],[])
-        arg_subst ((prm_nm,arg):rest)
-          -- An array of variable size.
-          -- Here we must substitute for the size too
-          | TArray (NVar siz_nm) _ <- nameTyp prm_nm
-          , let (rest_subst, rest_locals) = arg_subst rest
-            -- TODO: this size substitution can (should?) go once we
-            -- disallow direct term-level references to type-level length
-            -- variables (#76)
-          , let siz_bnd = (toName siz_nm Nothing tint Imm, arg_size (ctExp arg))
-          = case how_to_inline prm_nm arg of
-              Left bnd  -> (bnd:siz_bnd:rest_subst, rest_locals)
-              Right bnd -> (siz_bnd:rest_subst, bnd:rest_locals)
+    go [] c = c
+    go ((nm1,eb1):bnds) c = cLetE loc nm1 AutoInline eb1 $ go bnds c
 
-          | otherwise
-          , let (rest_subst, rest_locals) = arg_subst rest
-          = case how_to_inline prm_nm arg of
-              Left bnd  -> (bnd:rest_subst, rest_locals)
-              Right bnd -> (rest_subst, bnd:rest_locals)
 
-        -- Delicate: classifies which arrays are passed by
-        -- reference. Should revisit.  But at the moment this is
-        -- consistent with the semantics implemented in CgExpr.
-        -- See for example codeGenArrRead in CgExpr.hs
+inlAsSubst :: GName Ty -> Exp -> InlineData
+inlAsSubst nm e 
+  = InlineData { inl_let_bound = []
+               , inl_subst = [(nm,e)], inl_len_subst = [] }
 
-        how_to_inline :: GName Ty -> Exp
-                      -> Either (GName Ty, Exp) MutVar
-        -- The choice is: either with a substitution (Left), or
-        --                with a let-binding (Right)
-        how_to_inline prm_nm arg
-          = if is_simpl_expr arg
-            then Left (prm_nm, arg)
-            else case isArrayTy_maybe (nameTyp prm_nm) of
-                   Just bty
-                     | (bty /= TBit && is_array_ref arg)
-                     -> Left (prm_nm, arg)
-                   _otherwise -> Right (MutVar prm_nm (Just arg) (expLoc arg) ())
+inlAsLetBound :: GName Ty -> Exp -> InlineData
+inlAsLetBound nm e 
+  = InlineData { inl_let_bound = [(nm,e)]
+               , inl_subst = [], inl_len_subst = [] }
 
-        is_array_ref (MkExp (EVar _)      _ ()) = True
-        is_array_ref (MkExp (EArrRead {}) _ ()) = True
-        is_array_ref _ = False
-
-        len_subst :: [(GName Ty, Exp)] -> [(LenVar, NumExpr)]
-        len_subst [] = []
-        len_subst ((prm_nm,arg):rest)
-          | TArray (NVar siz_nm) _ <- nameTyp prm_nm
-          = (siz_nm, arg_numexpr (ctExp arg)):(len_subst rest)
-          | otherwise
-          = len_subst rest
-
-        arg_numexpr :: Ty -> NumExpr
-        arg_numexpr (TArray ne _t) = ne
-        arg_numexpr _
-          = error $
-            "Could not deduce param size during inlining of function:" ++
-                show nm ++ ", at call location:" ++ show loc
-
-        arg_size :: Ty -> Exp
-        arg_size (TArray (NVar siz_nm) _) = eVar loc (toName siz_nm Nothing tint Imm)
-        arg_size (TArray (Literal siz) _) = eVal loc tint (vint siz)
-        arg_size _
-          = error $
-            "Could not deduce param size during inlining of function:" ++
-                show nm ++ ", at call location:" ++ show loc
-
-        mk_local_lets :: [(GName Ty, Exp)]
-                      -> [(LenVar, NumExpr)]
-                      -> [MutVar]
-                      -> Exp
-                      -> Exp
-        mk_local_lets subst subst_len extended_locals
-            = substExp subst_len subst . insertEMutVars extended_locals
-
-    replace_call other = return other
-
-inline_comp_fun :: (GName CTy, [GName (CallArg Ty CTy)], Comp) 
-                -> Comp -> RwM Comp
-inline_comp_fun (nm,params,cbody) c = do
-    mapCompM return return return return return replace_call c
+-- | Figure out if this argument induces a length substitution
+inline_length :: GName Ty -> Ty -> InlineData
+inline_length prm argty
+  | TArray (NVar siz_nm) _ <- nameTyp prm
+  , TArray nexpr _ <- argty
+  , let siz_var  = toName siz_nm Nothing tint Imm
+  , let siz_expr = nexpr_to_expr nexpr
+  = InlineData { inl_let_bound = []
+               , inl_subst     = [(siz_var,siz_expr)]
+               , inl_len_subst = [(siz_nm,nexpr)] }
+  | otherwise = mempty
   where
-    replace_call :: Comp -> RwM Comp
-    replace_call (MkComp (Call nm' args) _ ())
-      | all is_simpl_call_arg args
-      , nm == nm'
-      = rewrite $ substComp [] (mk_expr_subst params args) [] cbody
-    replace_call other = return other
+    nexpr_to_expr (NVar s)    = eVar Nothing (toName s Nothing tint Imm)
+    nexpr_to_expr (Literal s) = eVal Nothing tint (vint s)  
 
-    mk_expr_subst :: [GName (CallArg Ty CTy)]
-                  -> [CallArg Exp Comp]
-                  -> [(GName Ty, Exp)]
-    mk_expr_subst [] [] = []
-    mk_expr_subst (p:ps1) (a:as1)
-      = let CAExp ty = nameTyp p
-            CAExp e1 = a
-        in (p{nameTyp = ty}, e1) : mk_expr_subst ps1 as1
-    mk_expr_subst _ _ = error "BUG: inline_comp_fun!"
+
+-- | How to inline an immutable parameter: effectively by let-binding it
+inline_immutable :: GName Ty -> Exp -> RwM InlineData
+inline_immutable nm expr
+  | is_simpl_expr expr = return $ inlAsSubst nm expr
+  | otherwise          = return $ inlAsLetBound nm expr
+
+
+-- | How to inline a mutable parameter: see notes above
+inline_mutable :: GName Ty -> GDerefExp Ty () -> RwM InlineData
+inline_mutable nm dexpr = do 
+  (bnds,simpl_dexpr) <- lift_idx dexpr
+  return (bnds `mappend` inlAsSubst nm simpl_dexpr)
+  where 
+    -- | Lift and let-bind non-simple indices
+    lift_idx (GDVar loc _ x)       = return (mempty, eVar loc x)
+    lift_idx (GDProj loc _ de fld) = do
+      (bnds, simpl_de) <- lift_idx de
+      return (bnds, eProj loc simpl_de fld)
+    lift_idx (GDArr loc _ de estart li)
+      | is_simpl_expr estart
+      = do (bnds,simpl_de) <- lift_idx de
+           return (bnds, eArrRead loc simpl_de estart li)
+      | otherwise
+      = do (bnds,simpl_de) <- lift_idx de
+           idx <- newPassFoldGName "idx" (ctExp estart) loc Imm
+           return (bnds `mappend` inlAsLetBound idx estart,
+                     eArrRead loc simpl_de (eVar loc idx) li)
+
+
+inlineParam :: GName Ty -> Exp -> RwM InlineData
+inlineParam prm earg = do
+  inl <- inline_prm
+  return $ inl `mappend` inline_length prm (ctExp earg)
+  where 
+    inline_prm
+      | isMutable prm
+      , Just earg_deref <- isGDerefExp True earg
+      = inline_mutable prm earg_deref
+      | otherwise
+      = inline_immutable prm earg
+
+inlineParams :: [GName Ty] -> [Exp] -> RwM InlineData
+inlineParams = go 
+  where
+    go [] [] = return mempty
+    go (prm:prms) (earg:eargs) 
+      = inlineParam prm earg `mappendM` go prms eargs
+    go _ _ = panicStr "inlineParams"
+
+
+inlineLetFun :: GName Ty   -- function name
+             -> [GName Ty] -- function params
+             -> Exp        -- function body
+             -> Comp       -- computation to substitute in
+             -> RwM Comp
+inlineLetFun f prms body
+  = mapCompM return 
+             return 
+             return 
+             return (inlineLetFunInExp f prms body) return
+
+inlineLetFunInExp :: GName Ty -> [GName Ty] -> Exp -> Exp -> RwM Exp
+inlineLetFunInExp f prms body
+  = mapExpM return return replace_call
+  where 
+    replace_call (MkExp (ECall f' eargs) loc ())
+      | f == f'
+      = do inl_data <- inlineParams prms eargs
+           rewrite (appInlDataExpr loc inl_data body)
+    replace_call eother = return eother
+
+inlineLetFunC :: GName CTy                -- function name
+              -> [GName (CallArg Ty CTy)] -- function params
+              -> Comp                     -- function body
+              -> Comp                     -- computation to substitute in
+              -> RwM Comp
+inlineLetFunC f prms body
+  = mapCompM return 
+             return
+             return 
+             return 
+             return replace_call
+  where
+    replace_call (MkComp (Call f' call_args) loc ())
+      | f == f'
+      , let (eargs,cargs) = partitionCallArgs call_args
+      , let (eprms,cprms) = partitionParams prms
+      , let comp_binds    = zip cprms cargs
+      = do inl_data <- inlineParams eprms eargs
+           rewrite (appInlDataComp loc inl_data comp_binds body)
+    replace_call eother = return eother
 
 
