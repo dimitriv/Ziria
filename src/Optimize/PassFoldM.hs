@@ -217,13 +217,12 @@ is_simpl_expr = go . unExp
     -- NB: No case for BinOp because this might duplicate computation
     go (EStruct _ fses) = all is_simpl_expr (map snd fses)
     -- We could even do the following:
-    -- go (EArrRead earr estart elen) 
-    --   = is_simpl_expr earr && is_simpl_expr estart
+    go (EArrRead earr estart elen)
+      = is_simpl_expr earr && is_simpl_expr estart
+    go (EProj estruct fld)
+      = is_simpl_expr estruct
     go _                = False
 
-is_simpl_call_arg :: CallArg Exp Comp -> Bool
-is_simpl_call_arg (CAExp e) = is_simpl_expr e
-is_simpl_call_arg _         = False
 
 no_lut_inside :: Exp -> Bool
 no_lut_inside x = isJust (mapExpM return return elut_nothing x)
