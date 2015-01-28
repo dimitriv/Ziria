@@ -38,6 +38,8 @@ import CardAnalysis
 import VecM
 import VecSF
 
+import VecRewriter
+
 import Control.Applicative ( (<$>) )
 import Control.Monad ( when )
 
