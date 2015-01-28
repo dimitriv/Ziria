@@ -136,7 +136,7 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
       | ignorelet || ignoreexp
       -> ppComp c
       | otherwise
-      -> text "let" <> ppr fi <+> ppr x <+> text "=" <+> ppr e $$
+      -> text "let" <> ppr fi <+> ppr x <> colon <> ppr (nameTyp x) <+> text "=" <+> ppr e $$
          text "in" $$
          ppComp c
 
@@ -145,7 +145,7 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
        | ignorelet || ignoreexp
        -> ppComp c
        | otherwise
-       -> text "letref" <+> ppName x $$
+       -> text "letref" <+> ppName x <> colon <> ppr (nameTyp x) $$
           text "in" $$
           ppComp c
 
@@ -153,7 +153,7 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
        | ignorelet || ignoreexp
        -> ppComp c
        | otherwise
-       -> text "letref" <+> assign ":=" (ppName x) (ppr e) $$
+       -> text "letref" <+> assign ":=" (ppName x <> colon <> ppr (nameTyp x)) (ppr e) $$
           text "in" $$
           ppComp c
 
@@ -191,9 +191,9 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
       text "if" <+> ppr e $$
       text "then" <+> ppComp c1 $$
       text "else" <+> ppComp c2
-    Take1 {} ->
-      text "take"
-    Take _ n ->
+    Take1 ty ->
+      text "take" <> brackets (ppr ty)
+    Take _ty n ->
       text "takes" <+> int n
     Until e c ->
       text "until" <+> parens (ppr e) <+> ppComp c
@@ -220,10 +220,10 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
     Filter e ->
       text "filter" <+> ppr e
 
-    ReadSrc {} ->
-      text "read"
-    WriteSnk {} ->
-      text "write"
+    ReadSrc ty ->
+      text "read" <> brackets (ppr ty)
+    WriteSnk ty ->
+      text "write" <> brackets (ppr ty)
 
     ReadInternal _ bid _typ ->
       text "read_internal[sq]" <> parens (text bid)

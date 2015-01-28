@@ -217,9 +217,9 @@ is_simpl_expr = go . unExp
     -- NB: No case for BinOp because this might duplicate computation
     go (EStruct _ fses) = all is_simpl_expr (map snd fses)
     -- We could even do the following:
-    go (EArrRead earr estart elen)
+    go (EArrRead earr estart _elen)
       = is_simpl_expr earr && is_simpl_expr estart
-    go (EProj estruct fld)
+    go (EProj estruct _fld)
       = is_simpl_expr estruct
     go _                = False
 

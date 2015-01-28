@@ -39,6 +39,7 @@ import PpExpr ()
 
 import PassFoldM
 
+import CtComp ( ctComp )
 
 {-------------------------------------------------------------------------------
   Rewriting and optimizing mitigators
@@ -288,26 +289,30 @@ elimMitigs comp
       | MkComp c0 cloc () <- c
       , Par p c1 c2 <- c0
       , Just (_,c1') <- frm_mit c1
-      , WriteSnk {} <- unComp c2
-      = rewrite $ cPar cloc p c1' c2
+      , WriteSnk _ty <- unComp c2
+      , let c2' = cWriteSnk (compLoc c2) (yldTyOfCTy (ctComp c1'))
+      = rewrite $ cPar cloc p c1' c2'
 
       | MkComp c0 cloc () <- c
       , Par p c1 c2 <- c0
       , Just (_,c1') <- frm_mit c1
-      , WriteInternal {} <- unComp c2
-      = rewrite $ cPar cloc p c1' c2
+      , WriteInternal _ty bid <- unComp c2
+      , let c2' = cWriteInternal (compLoc c2) (yldTyOfCTy (ctComp c1')) bid
+      = rewrite $ cPar cloc p c1' c2'
+      
+      | MkComp c0 cloc () <- c
+      , Par p c1 c2 <- c0
+      , Just (_,c2') <- flm_mit c2
+      , ReadSrc _ty <- unComp c1
+      , let c1' = cReadSrc (compLoc c1) (inTyOfCTy (ctComp c2'))
+      = rewrite $ cPar cloc p c1' c2'
 
       | MkComp c0 cloc () <- c
       , Par p c1 c2 <- c0
       , Just (_,c2') <- flm_mit c2
-      , ReadSrc {} <- unComp c1
-      = rewrite $ cPar cloc p c1 c2'
-
-      | MkComp c0 cloc () <- c
-      , Par p c1 c2 <- c0
-      , Just (_,c2') <- flm_mit c2
-      , ReadInternal {} <- unComp c1
-      = rewrite $ cPar cloc p c1 c2'
+      , ReadInternal _ty bid rt <- unComp c1
+      , let c1' = cReadInternal (compLoc c1) (inTyOfCTy (ctComp c2')) bid rt
+      = rewrite $ cPar cloc p c1' c2'
 
       -- trivial mitigators
       | MkComp c0 _cloc () <- c

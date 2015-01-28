@@ -310,11 +310,32 @@ computeVectTop dfs x = do
 
         -- Annotated computer 
         VectComp (fin,fout) c -> do 
-          let sfs = compSFDD card tyin tyout
+          let sfs = compSFDD (compInfo c) tyin tyout
           vcs <- vect_comp_dd dfs c sfs
+
+{- 
+
+          liftIO $ print $ 
+                   vcat [ text "VectComp **PRE** candidates are:"
+                        , nest 2 $ vcat (map (text . show . dvr_vres) vcs) ]
+
           -- NB: False below because we want /exactly/ the candidates
-          return $
-            concatMap (vec_exact (error "VectComp") fin fout False loc) vcs
+          liftIO $ print $ vcat [ text "VectComp: "   <+> ppr (fin,fout)
+                                , text "Cardinality:" <+> ppr (compInfo c) ]
+-}
+          let cands = 
+               concatMap (vec_exact (error "VectComp") fin fout False loc) vcs
+{-
+          comp_cands <- mapM (liftIO . dvr_comp) cands
+
+          liftIO $ print $ 
+                   vcat [ text "VectComp candidates are:"
+                        , nest 2 $ vcat (map (text . show . dvr_vres) cands) 
+                        , nest 2 $ vcat (map ppCompTypedVect comp_cands)
+                        ]
+-}
+
+          return cands
 
         -- Others: Take1/Take/Emit/Emits, just down-vectorize
         _other
@@ -520,39 +541,40 @@ mit_updn_maybe sfs flexi loc dvr = if flexi then mit_updn sfs loc dvr else [dvr]
 
 mit_updn :: ScaleFactors -> Maybe SourcePos 
          -> DelayedVectRes -> [DelayedVectRes]
--- mit_updn (sfuds,sfdus,sfdds) loc dvr 
---   | DidVect {} <- dvr_vres dvr 
---   = concatMap mit_aux $ nub $ 
---     map sfud_arity sfuds ++ map sfdu_arity sfdus ++ map sfdd_arity sfdds
---   where mit_aux (Nothing, Nothing) = return dvr
---         mit_aux (Just n , Nothing) = mit_in  loc n dvr
---         mit_aux (Just n , Just m)  = mit_out loc dvr m >>= mit_in loc n
---         mit_aux (Nothing, Just m)  = mit_out loc dvr m
-
+mit_updn (sfuds,sfdus,sfdds) loc dvr 
+  | DidVect {} <- dvr_vres dvr 
+  = concatMap mit_aux $ nub $ 
+    map sfud_arity sfuds ++ map sfdu_arity sfdus ++ map sfdd_arity sfdds
+  where mit_aux (Nothing, Nothing) = return dvr
+        mit_aux (Just n , Nothing) = mit_in  loc n dvr
+        mit_aux (Just n , Just m)  = mit_out loc dvr m >>= mit_in loc n
+        mit_aux (Nothing, Just m)  = mit_out loc dvr m
 mit_updn _ _ dvr = [dvr] -- no point in mitigating in case of NotVect
 
 
 mit_in :: Maybe SourcePos -> Int -> DelayedVectRes -> [DelayedVectRes]
 mit_in loc n dvr@(DVR { dvr_comp = io_comp, dvr_vres = vres })
   | Just (final_in_ty, cmit) <- mitin
-  = [ DVR { dvr_comp = cPar loc pnever cmit <$> io_comp
+  = -- trace ("mit_in:" ++ show final_in_ty ++ " ~~> " ++ show vinty ++ " ~~> " ++ show voutty) $ 
+    [ DVR { dvr_comp = cPar loc pnever cmit <$> io_comp
           , dvr_vres = DidVect final_in_ty voutty u } ]
   where vinty  = vect_in_ty vres  -- type in the middle!
         voutty = vect_out_ty vres
         mitin  = mk_in_mitigator loc n vinty
         u      = parUtility minUtil (vResUtil vres) vinty
-mit_in _ _ dvr = [dvr]
+mit_in _ _ dvr = []
 
 mit_out :: Maybe SourcePos -> DelayedVectRes -> Int -> [DelayedVectRes] 
 mit_out loc dvr@(DVR { dvr_comp = io_comp, dvr_vres = vres }) m 
   | Just (final_out_ty, cmit) <- mitout
-  = [ DVR { dvr_comp = (\c -> cPar loc pnever c cmit) <$> io_comp
+  = -- trace ("mit_out:" ++ show vinty ++ " ~~> " ++ show voutty ++ " ~~> " ++ show final_out_ty) $ 
+    [ DVR { dvr_comp = (\c -> cPar loc pnever c cmit) <$> io_comp
           , dvr_vres = DidVect vinty final_out_ty u } ]
   where vinty  = vect_in_ty vres
         voutty = vect_out_ty vres -- type in the middle!
         mitout = mk_out_mitigator loc voutty m 
         u      = parUtility minUtil (vResUtil vres) voutty
-mit_out _ dvr _ = [dvr]
+mit_out _ dvr _ = []
 
 
 -- | Mitigate on the input, return final input type

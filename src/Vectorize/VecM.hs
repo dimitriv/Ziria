@@ -544,6 +544,8 @@ map2take_emit loc vann inty f = do
         em x = AstL.cEmit loc emit_card (eCall loc f [eVar loc x])
 
 
+
+
 -- | Type-preserving transformations on the take and emit nodes of a computation
 -- NB: Does not include ReadSrc/WritSnk/ReadInternal/WriteInternal nodes as these
 -- can't currently be expressed as just a set of repeated computers. 
