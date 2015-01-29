@@ -161,6 +161,12 @@ let external v_pack_complex16_complex8(input:arr complex16) : arr[length(input)]
 let external v_negate_complex8(input:arr complex8) : arr[length(input)] complex8
 
 
+
+-- Bit-wise operations
+let external v_sign_int8(input1 : arr int8, input2 : arr[length(input1)] int8)    : arr[length(input1)] int8
+
+
+
 -- Cast 
 let external v_cast_complex8_int8(output:arr int8, input:arr complex8) : ()
 

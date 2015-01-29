@@ -1117,11 +1117,11 @@ void __ext_v_or_192(uchar *output, uchar *input1, uchar *input2)
 
 	unsigned __int64 i1, i2;
 
-        /* Strangely crashes ... */
-	/* vcs *pi1 = (vcs *)input1; */
-	/* vcs *pi2 = (vcs *)input2; */
-	/* vcs *po = (vcs *)output; */
-	/* *po = (vcs)_mm_and_si128(*pi1, *pi2); */
+    // Strangely crashes ... 
+	// vcs *pi1 = (vcs *)input1; 
+	// vcs *pi2 = (vcs *)input2; 
+	// vcs *po = (vcs *)output; 
+	// *po = (vcs)_mm_and_si128(*pi1, *pi2); 
 
 	i1 = *(unsigned __int64 *)(input1);
 	i2 = *(unsigned __int64 *)(input2);
@@ -1196,7 +1196,7 @@ void __ext_v_and(uchar *output, int outlen, uchar *input1, int inlen1, uchar *in
 		cnt += 16;
 	}
 
-	while (cnt <= bytelen1)
+	while (cnt < bytelen1)
 	{
 		output[cnt] = input1[cnt] & input2[cnt];
 		cnt++;
@@ -1222,7 +1222,7 @@ void __ext_v_andnot(uchar *output, int outlen, uchar *input1, int inlen1, uchar 
 		cnt += 16;
 	}
 
-	while (cnt <= bytelen1)
+	while (cnt < bytelen1)
 	{
 		output[cnt] = (~input1[cnt]) & input2[cnt];
 		cnt++;
@@ -1248,7 +1248,7 @@ void __ext_v_xor(uchar *output, int outlen, uchar *input1, int inlen1, uchar *in
 		cnt += 16;
 	}
 
-	while (cnt <= bytelen1)
+	while (cnt < bytelen1)
 	{
 		output[cnt] = input1[cnt] ^ input2[cnt];
 		cnt++;
@@ -1256,6 +1256,31 @@ void __ext_v_xor(uchar *output, int outlen, uchar *input1, int inlen1, uchar *in
 	outlen = inlen1;
 }
 
+
+
+void __ext_v_sign_int8(int8 *output, int outlen, int8 *input1, int inlen1, int8 *input2, int inlen2)
+{
+	int cnt = 0;
+	vcs *pi1 = (vcs *)input1;
+	vcs *pi2 = (vcs *)input2;
+	vcs *po = (vcs *)output;
+
+	while (cnt + 16 <= inlen1)
+	{
+		*po = (vcs)_mm_sign_epi16(*pi1, *pi2);
+		pi1++;
+		pi2++;
+		po++;
+		cnt += 16;
+	}
+
+	while (cnt < inlen1)
+	{
+		output[cnt] = (input2[cnt] < 0) ? (-input1[cnt]) : input1[cnt];
+		cnt++;
+	}
+	outlen = inlen1;
+}
 
 
 
