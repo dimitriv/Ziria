@@ -797,6 +797,66 @@ int __ext_v_pack_int32_complex16(struct complex16* z, int len, int32* re, int le
 
 
 //FINL 
+void __ext_v_pack_complex16_complex8(struct complex8* output, int lenout, complex16* input, int lenin)
+{
+	const int wlen = sizeof(vcs) / sizeof(complex16);
+	int i;
+	vcs *pinput = (vcs *) input;
+	vcb *poutput = (vcb *) output;
+	for (i = 0; i < lenin / wlen / 2; i++)
+	{
+		*poutput = (vcb)saturated_pack(*pinput, *(pinput + 1));
+		poutput++;
+		pinput += 2;
+	}
+	for (int j = i * 2 * wlen; j < lenin; j++)
+	{
+		output[j].re = input[j].re;
+		output[j].im = input[j].im;
+	}
+}
+
+
+//FINL 
+void __ext_v_negate_complex8(struct complex8* output, int lenout, complex8* input, int lenin)
+{
+	const int wlen = sizeof(vcb) / sizeof(complex8);
+	const static unsigned char __0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF[16] =
+	{
+		0xFF, 0xFF, 0xFF, 0xFF,
+		0xFF, 0xFF, 0xFF, 0xFF,
+		0xFF, 0xFF, 0xFF, 0xFF,
+		0xFF, 0xFF, 0xFF, 0xFF
+	};
+
+	int i;
+	vcb *pinput = (vcb *)input;
+	vcb *poutput = (vcb *)output;
+	for (i = 0; i < lenin / wlen; i++)
+	{
+		*poutput = (vcb)xor(*pinput, *((vcb*) __0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF));
+		poutput++;
+		pinput ++;
+	}
+	for (int j = i * wlen; j < lenin; j++)
+	{
+		output[j].re = input[j].re ^ 0xFF;
+		output[j].im = input[j].im ^ 0xFF;
+	}
+}
+
+
+
+
+//FINL 
+int __ext_v_cast_complex8_int8(int8* output, int lenout, complex8* input, int lenin)
+{
+	memcpy(output, input, lenin * sizeof(complex8));
+	return 0;
+}
+
+
+//FINL 
 int __ext_permutate_high1032w(struct complex16* x, int len1,
                         struct complex16* y, int len2)
 {
@@ -1057,11 +1117,11 @@ void __ext_v_or_192(uchar *output, uchar *input1, uchar *input2)
 
 	unsigned __int64 i1, i2;
 
-        /* Strangely crashes ... */
-	/* vcs *pi1 = (vcs *)input1; */
-	/* vcs *pi2 = (vcs *)input2; */
-	/* vcs *po = (vcs *)output; */
-	/* *po = (vcs)_mm_and_si128(*pi1, *pi2); */
+    // Strangely crashes ... 
+	// vcs *pi1 = (vcs *)input1; 
+	// vcs *pi2 = (vcs *)input2; 
+	// vcs *po = (vcs *)output; 
+	// *po = (vcs)_mm_and_si128(*pi1, *pi2); 
 
 	i1 = *(unsigned __int64 *)(input1);
 	i2 = *(unsigned __int64 *)(input2);
@@ -1136,7 +1196,7 @@ void __ext_v_and(uchar *output, int outlen, uchar *input1, int inlen1, uchar *in
 		cnt += 16;
 	}
 
-	while (cnt <= bytelen1)
+	while (cnt < bytelen1)
 	{
 		output[cnt] = input1[cnt] & input2[cnt];
 		cnt++;
@@ -1162,7 +1222,7 @@ void __ext_v_andnot(uchar *output, int outlen, uchar *input1, int inlen1, uchar 
 		cnt += 16;
 	}
 
-	while (cnt <= bytelen1)
+	while (cnt < bytelen1)
 	{
 		output[cnt] = (~input1[cnt]) & input2[cnt];
 		cnt++;
@@ -1188,7 +1248,7 @@ void __ext_v_xor(uchar *output, int outlen, uchar *input1, int inlen1, uchar *in
 		cnt += 16;
 	}
 
-	while (cnt <= bytelen1)
+	while (cnt < bytelen1)
 	{
 		output[cnt] = input1[cnt] ^ input2[cnt];
 		cnt++;
@@ -1196,6 +1256,31 @@ void __ext_v_xor(uchar *output, int outlen, uchar *input1, int inlen1, uchar *in
 	outlen = inlen1;
 }
 
+
+
+void __ext_v_sign_int8(int8 *output, int outlen, int8 *input1, int inlen1, int8 *input2, int inlen2)
+{
+	int cnt = 0;
+	vcs *pi1 = (vcs *)input1;
+	vcs *pi2 = (vcs *)input2;
+	vcs *po = (vcs *)output;
+
+	while (cnt + 16 <= inlen1)
+	{
+		*po = (vcs)_mm_sign_epi8(*pi1, *pi2);
+		pi1++;
+		pi2++;
+		po++;
+		cnt += 16;
+	}
+
+	while (cnt < inlen1)
+	{
+		output[cnt] = (input2[cnt] < 0) ? (-input1[cnt]) : input1[cnt];
+		cnt++;
+	}
+	outlen = inlen1;
+}
 
 
 

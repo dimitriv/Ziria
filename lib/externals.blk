@@ -123,10 +123,13 @@ fun external v_shift_left_int16(z:arr int16, x:arr[length(z)] int16, shift:int )
 
 
 
+
 -- Set array to zero
 fun external zero_bit(x:arr bit) : ()
+fun external zero_complex8(x:arr complex8) : ()
 fun external zero_complex16(x:arr complex16) : ()
 fun external zero_complex32(x:arr complex32) : ()
+fun external zero_int8(x:arr int8) : ()
 fun external zero_int16(x:arr int16) : ()
 fun external zero_int32(x:arr int32) : ()
 
@@ -135,8 +138,10 @@ fun external zero_int32(x:arr int32) : ()
 -- NB: When len is constant, this can be done with dst[0,len] := src[0,len]
 --     But this doesn't work for dynamic len
 -- NOTE: copy_bit is not trivial to write. TBD
+fun external copy_complex8(dst:arr complex8, src:arr complex8, len:int) : ()
 fun external copy_complex16(dst:arr complex16, src:arr complex16, len:int) : ()
 fun external copy_complex32(dst:arr complex32, src:arr complex32, len:int) : ()
+fun external copy_int8(dst:arr int8, src:arr int8, len:int) : ()
 fun external copy_int16(dst:arr int16, src:arr int16, len:int) : ()
 fun external copy_int32(dst:arr int32, src:arr int32, len:int) : ()
 
@@ -146,8 +151,24 @@ fun external int8_to_bits(dst: arr bit, src:arr int8) : ()
 
 
 
+-- Various packings
 -- Pack two int32 arrays into int16 array
 fun external v_pack_int32_complex16(z:arr complex16, x:arr[length(z)] int32, y:arr[length(z)] int32) : ()
+fun external v_pack_complex16_complex8(input:arr complex16) : arr[length(input)] complex8
+
+
+-- Negate
+fun external v_negate_complex8(input:arr complex8) : arr[length(input)] complex8
+
+
+
+-- Bit-wise operations
+fun external v_sign_int8(input1 : arr int8, input2 : arr[length(input1)] int8)    : arr[length(input1)] int8
+
+
+
+-- Cast 
+fun external v_cast_complex8_int8(output:arr int8, input:arr complex8) : ()
 
 
 -- Bit manipulation
