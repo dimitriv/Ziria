@@ -26,11 +26,15 @@ module CardAnalysis (
    , LComp
    , isSimplCard_mb
    , runCardAnal
+
+     -- For debugging/assertions
+   , unknown_times_card
    ) where
 
 import Control.Applicative
 import Control.Monad.State
 import Control.Monad.Reader
+import Control.Exception.Base ( assert )
 
 import AstExpr
 import AstComp
@@ -84,7 +88,6 @@ scard i j = SCard (CAStatic i) (CAStatic j)
 ocard :: Card
 ocard = OCard
 
-
 -- | Sum two alphas
 aplus :: CAlpha -> CAlpha -> CAlpha
 aplus (CAStatic n1) (CAStatic n2) = CAStatic (n1+n2)
@@ -136,6 +139,16 @@ atimes ca cb = go cb
     atimes_mult (CAStatic i) j = CAMultOf (i*j) -- i*x*j   = x*(i*j)
     atimes_mult (CAMultOf i) j = CAMultOf (i*j) -- y*i*x*j = x*y*(i*j)
     atimes_mult CAUnknown _    = CAUnknown
+
+-- | This is an invariant on ctimes card CAUnknown
+-- which is called for unknown number of iterations in while and Until nodes
+unknown_times_card :: Card -> Bool
+unknown_times_card OCard = True
+unknown_times_card (SCard CAUnknown CAUnknown)       = True
+unknown_times_card (SCard CAUnknown (CAStatic 0))    = True
+unknown_times_card (SCard (CAStatic 0) CAUnknown)    = True
+unknown_times_card (SCard (CAStatic 0) (CAStatic 0)) = True
+unknown_times_card _other = False 
 
 -- | Multiply a cardinality with an argument specifying how many times
 --   to iterate.
@@ -314,14 +327,16 @@ computeCard _dflags = go
         c1' <- go c1
         -- Don't know how many times to iterate
         let card = ctimes (compInfo c1') CAUnknown
-        return $ cUntil loc card e c1'
+        assert (unknown_times_card card) $ 
+          return (cUntil loc card e c1')
 
       While e c1 -> do
         c1' <- go c1
         -- Don't know how many times to iterate
         let card = ctimes (compInfo c1') CAUnknown
-        return $ cWhile loc card e c1'
-
+        assert (unknown_times_card card) $
+          return (cWhile loc card e c1')
+  
       Times ui e elen x c1 -> do
         c1' <- go c1
         let alpha = getint_calpha elen
@@ -332,8 +347,9 @@ computeCard _dflags = go
 
       VectComp hint c1 -> do
         c1' <- go c1
-        let errcard = error "VectComp cardinality: do not use me!"
-        return $ cVectComp loc errcard  hint c1'
+        -- NB: We return ocard to prevent vectorizing expressions that
+        -- have nested VectComp annotations.
+        return $ cVectComp loc ocard  hint c1'
 
       Map w nm     -> return $ cMap loc ocard w nm
       Filter e     -> return $ cFilter loc ocard e

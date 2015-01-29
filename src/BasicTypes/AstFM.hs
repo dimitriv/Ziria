@@ -147,10 +147,16 @@ instance Rng Exp                    where toRng e      = (toFExp e, LISingleton)
 instance Rng Int                    where toRng e      = (toFExp e, LISingleton)
 instance Rng Integer                where toRng e      = (toFExp e, LISingleton)
 instance FValy v => Rng (v ::: Ty)  where toRng e      = (toFExp e, LISingleton)
-instance FExpy e => Rng (e :+ Int)  where toRng (e:+i) = (toFExp e, LILength i )
-instance FExpy e => Rng (e :+ Integer) where 
-  toRng (e:+i) = (toFExp e, LILength $ fromIntegral i)
 
+-- Make it smart to avoid clutter about 1-element special casing
+instance FExpy e => Rng (e :+ Int)  where 
+  toRng (e:+i) = case (i == 1) of 
+      True  -> (toFExp e, LISingleton) 
+      False -> (toFExp e, LILength i )
+instance FExpy e => Rng (e :+ Integer) where 
+  toRng (e:+i) = case (i == 1) of
+      True  -> (toFExp e, LISingleton)
+      False -> (toFExp e, LILength $ fromIntegral i)
 
 (.!) :: (FExpy earr, Rng r) => earr -> r -> FExp
 (.!) earr r 
@@ -277,8 +283,11 @@ data Zr v where
 
  FLetE     :: Bindable v
            => ForceInline -> String -> Ty -> FExp -> (EId -> Zr v) -> Zr v
- FLetERef  :: (Bindable v)
-           => String -> Ty -> Maybe FExp -> (EId -> Zr v) -> Zr v
+ FLetERef  :: -- Bindable v =>
+              String -> Ty -> Maybe FExp -> (EId -> Zr v) -> Zr v
+
+ FNewERef  :: String -> Ty -> Maybe FExp -> Zr EId
+
  FBranch   :: (Bindable v, FExpy e) => e -> Zr v -> Zr v -> Zr v
  FTimes    :: (FExpy e1, FExpy e2) 
            => UnrollInfo -> e1 -> e2 -> (EId -> Zr ()) -> Zr ()
@@ -304,7 +313,9 @@ instance Monad Zr where
   (>>=) (FTimes ui fe1 fe2 k) f = FBind (FTimes ui fe1 fe2 k) f
 
   (>>=) (FLetE fi x ty fe k) f  = FBind (FLetE fi x ty fe k) f 
-  (>>=) (FLetERef x ty me k) f  = FBind (FLetERef x ty me k) f
+  (>>=) (FLetERef x ty me k) f  = FLetERef x ty me (\v -> k v >>= f)
+  (>>=) (FNewERef x ty me) f    = FLetERef x ty me f
+
   (>>=) (FBranch e c1 c2) f     = FBind (FBranch e c1 c2) f
   (>>=) (FEmbed io_c) f         = FBind (FEmbed io_c) f
 
@@ -353,6 +364,9 @@ interpC sym loc = go
        let me = fmap (interpE loc) mfe
        c <- go (k nm) 
        return $ cLetERef loc nm me c
+
+    go (FNewERef {}) = error "FNewERef: standalone occurence!"
+
     go (FBranch fe s1 s2) = do 
        let e = interpE loc (toFExp fe)
        c1 <- go s1
@@ -424,8 +438,14 @@ instance MutBind (String ::: Ty) where
 instance FExpy e => MutBind (String ::: Ty ::= e) where
   mutbind (x ::: t ::= e) = (x,t, Just $ toFExp e)
 
+{-
 fleteref :: (Bindable v, MutBind c) => c -> (EId -> Zr v) -> Zr v
 fleteref c = FLetERef x t mb
+  where (x,t,mb) = mutbind c
+-}
+
+fneweref :: MutBind c => c -> Zr EId
+fneweref c = FNewERef x t mb
   where (x,t,mb) = mutbind c
 
 
@@ -468,23 +488,23 @@ instance FExpy I where toFExp (I i) = toFExp i
 _test1 :: Int -> Int -> Zr FExp
 _test1 finalin n0 
   = let tarr = TArray (Literal finalin) tint
-    in 
-    fleteref ("tmp_idx"  ::: tint ) $ \tmp_idx  ->
-    fleteref ("is_empty" ::: TBool) $ \is_empty ->
-    fleteref ("in_buff"  ::: tarr ) $ \in_buff  ->
-    flete _aI ("in_buff_idx" ::: tint ::= I(0)) $ \in_buff_idx ->
-    do if is_empty .= True
-          then do x <- ftake (nameTyp in_buff)
-                  in_buff     .:= x
-                  is_empty    .:= False
-                  in_buff_idx .:= I(0)
-          else freturn _aI ()
-       if finalin .= in_buff_idx .+ n0
-        then do fexec $ is_empty .:= True
-                freturn _fI $ (in_buff  .! (in_buff_idx :+ n0))
-        else if in_buff_idx .+ n0 .< finalin
-             then do tmp_idx     .:= in_buff_idx
-                     in_buff_idx .:= in_buff_idx .+ n0
-                     freturn _fI $ in_buff .! (tmp_idx :+ n0)
-             else do ferror TUnit "rewrite_take: unaligned"
-                     freturn _fI $ in_buff .! (I(0) :+ n0)
+    in do { tmp_idx  <- fneweref ("tmp_idx"  ::: tint )
+          ; is_empty <- fneweref ("is_empty" ::: TBool)
+          ; in_buff  <- fneweref ("in_buff"  ::: tarr )
+          ; flete _aI ("in_buff_idx" ::: tint ::= I(0)) $ \in_buff_idx ->
+            do if is_empty .= True
+                  then do x <- ftake (nameTyp in_buff)
+                          in_buff     .:= x
+                          is_empty    .:= False
+                          in_buff_idx .:= I(0)
+                  else freturn _aI ()
+               if finalin .= in_buff_idx .+ n0
+                then do fexec $ is_empty .:= True
+                        freturn _fI $ (in_buff  .! (in_buff_idx :+ n0))
+                else if in_buff_idx .+ n0 .< finalin
+                     then do tmp_idx     .:= in_buff_idx
+                             in_buff_idx .:= in_buff_idx .+ n0
+                             freturn _fI $ in_buff .! (tmp_idx :+ n0)
+                     else do ferror TUnit "rewrite_take: unaligned"
+                             freturn _fI $ in_buff .! (I(0) :+ n0)
+          }

@@ -39,3 +39,4 @@ instance NFData SourcePos where
               !col  = sourceColumn p
               !name = force sourceName
           in ()
+

@@ -18,9 +18,14 @@
 -}
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, ConstraintKinds, FlexibleContexts #-}
-module VecRewriter where
+module VecRewriter ( 
+   rwTakeEmitIO
+ , RwState ( .. )
+ , RwQSt   ( .. )
+) where
 
 import Control.Applicative
+import Control.Monad.State
 
 import Text.Parsec.Pos ( SourcePos )
 
@@ -32,51 +37,178 @@ import AstUnlabelled
 import CardAnalysis
 import CtComp
 import CtExpr
-
-import Outputable
+import Outputable ()
 import Text.PrettyPrint.HughesPJ
-
+import Control.Exception.Base ( assert )
 import VecM
+import Utils ( panicStr, panic )
+
+import Data.Maybe ( isJust, isNothing )
 
 {-------------------------------------------------------------------------
   Vectorizer rewriter of simple computers 
 -------------------------------------------------------------------------}
 
+type IVecM s a = StateT s VecM a
+
+type TakeTransf s     = Maybe SourcePos -> Ty        -> IVecM s Comp
+type TakeManyTransf s = Maybe SourcePos -> Ty -> Int -> IVecM s Comp
+type EmitTransf s     = Maybe SourcePos -> Exp       -> IVecM s Comp
+type EmitManyTransf s = Maybe SourcePos -> Exp       -> IVecM s Comp
+
+lkpCVar :: CId -> IVecM s LComp
+lkpCVar nm = StateT (\s -> lookupCVarBind nm >>= \c -> return (c,s))
+
+lkpCFun :: CId -> IVecM s CFunBind
+lkpCFun nm = StateT (\s -> lookupCFunBind nm >>= \c -> return (c,s))
+
+extCVar :: CId -> LComp -> IVecM s a -> IVecM s a
+extCVar nm lc action = StateT (extendCVarBind nm lc . runStateT action)
+
+extCFun :: CId -> [GName (CallArg Ty CTy)] -> LComp -> IVecM s a -> IVecM s a
+extCFun nm params cbody action
+  = StateT (extendCFunBind nm params cbody . runStateT action)
+
+liftVecM :: VecM a -> IVecM s a
+liftVecM action = StateT (\s -> action >>= \r -> return (r,s))
 
 
--- | Type-preserving transformations on the take and emit nodes of a computation
--- NB: Does not include ReadSrc/WritSnk/ReadInternal/WriteInternal nodes as these
--- can't currently be expressed as just a set of repeated computers. 
-rewriteTakeEmit ::
-     (Maybe SourcePos -> Ty -> VecM Comp)         -- on Take1
-  -> (Maybe SourcePos -> Ty -> Int -> VecM Comp)  -- on Take
-  -> (Maybe SourcePos -> Exp -> VecM Comp)        -- on Emit
-  -> (Maybe SourcePos -> Exp -> VecM Comp)        -- on Emits
-  -> LComp -> VecM Comp
-rewriteTakeEmit on_take on_takes on_emit on_emits = go
-  where 
-    go lcomp = 
+tryWithCurrSt :: IVecM s a -> IVecM s (s,a)
+tryWithCurrSt action = do
+  s <- get        -- get current state
+  a <- action     -- execute the action in current state
+  sact <- get     -- get final state
+  put s           -- restore original state
+  return (sact,a) -- return the state in the end of the action
+
+{- Note [The Rewriter State]
+   ~~~~~~~~~~~~~~~~~~~~~~~~
+
+RwState consists of a state we can work with for rewriting
+Take(s) and a state for rewriting Emit(s). Each of those is represented
+with the RwQSt (rewriter queus state) datatype. 
+
+A rewriter queue state either says:
+
+   a) do not rewrite Take(s)/Emit(s) at all (presumably because we are
+      not vectorizing in that queue,
+
+   ... OR
+ 
+   b) yes please do rewrite and the rw_offset is the current offset
+      we are rewriting from and we should be updating upon every
+      Take(s)/Emit(s).
+-------------------------------------------------------------------------------}
+
+data RwState 
+  = RwState { rws_in  :: RwQSt
+            , rws_out :: RwQSt }
+
+data RwQSt
+  = DoNotRw
+  | DoRw { rw_vector :: EId
+         , rw_offset :: Exp }
+
+joinRwState :: RwState -> RwState -> RwState
+joinRwState rws1 rws2 
+  = RwState { rws_in  = rws_in rws1  `joinRwQSt` rws_in rws2
+            , rws_out = rws_out rws1 `joinRwQSt` rws_out rws2 }
+
+joinRwQSt :: RwQSt -> RwQSt -> RwQSt
+joinRwQSt DoNotRw DoNotRw = DoNotRw
+joinRwQSt DoNotRw _       = panicStr "Can't join RwQSt!" 
+joinRwQSt _ DoNotRw       = panicStr "Can't join RwQSt!" 
+joinRwQSt (DoRw va1 off1) (DoRw va2 _off2) 
+  = assert (va1 == va2) (DoRw va1 off1)
+    -- Because of invariants of cardinality analysis off1 == off2 but
+    -- we don't assert this fact too as off1 and off2 are not values
+    -- but rather expressions and it's a bit tedious to check equality
+    -- between expressions.
+
+
+
+-- | Set the new input offset in the case where input RwQSt was DoRw
+upd_in_offset :: Exp -> IVecM RwState ()
+upd_in_offset new_off = modify upd 
+  where upd (RwState rin rout) = RwState rin { rw_offset = new_off } rout
+
+-- | Set the new output offset in the case where output RwQSt was DoRw
+upd_out_offset :: Exp -> IVecM RwState ()
+upd_out_offset new_off = modify upd 
+  where upd (RwState rin rout) = RwState rin rout { rw_offset = new_off }
+
+-- Shorthand for incrementing an offset
+offset_plus :: Exp -> Int -> Exp
+offset_plus off i = interpE Nothing $ (off .+ I(i))
+
+-- | What to do on Take1
+on_take :: TakeTransf RwState
+on_take loc ty = do
+  rin <- gets rws_in
+  case rin of
+    DoNotRw -> return $ cTake1 loc ty
+    DoRw vect off -> do
+      upd_in_offset (off `offset_plus` 1)
+      liftVecM $ liftZr loc $ freturn _aI (vect .! off)
+
+-- | What to do on Take (many)
+on_takes :: TakeManyTransf RwState
+on_takes loc ty n = do  
+  rin <- gets rws_in
+  case rin of
+    DoNotRw -> return $ cTake loc ty n
+    DoRw vect off -> do
+      upd_in_offset (off `offset_plus` n)
+      liftVecM $ liftZr loc $ freturn _aI (vect .! ( off :+ n ))
+
+-- | What to do on Emit
+on_emit :: EmitTransf RwState 
+on_emit loc e = do
+  rout <- gets rws_out
+  case rout of
+    DoNotRw -> return $ cEmit loc e
+    DoRw vect off -> do      
+      upd_out_offset (off `offset_plus` 1) 
+      liftVecM $ liftZr loc $ do { vect .! off .:= e }
+
+-- | What to do on Emits (many)
+on_emits :: EmitManyTransf RwState 
+on_emits loc es = do
+  rout <- gets rws_out
+  case rout of
+    DoNotRw -> return $ cEmits loc es
+    DoRw vect off -> do      
+      upd_out_offset (off `offset_plus` len) 
+      liftVecM $ liftZr loc $ do { vect .! (off :+ len) .:= es }
+  where TArray (Literal len) _ = ctExp es
+
+
+-- | Precondition: we only attempt to rewrite SCard cain caout
+-- Moreover, if cain (caout, respectively) is 
+--     * CAStatic i  => we will rewrite every take (or emit)
+--     * CAUnknown   => we will not attempt to rewrite at all
+-- Correspondingly, the state of the IVecM monad should be
+rwTakeEmit :: LComp -> IVecM RwState Comp
+rwTakeEmit lx = assert (isJust $ isSimplCard_mb (compInfo lx)) (go lx)
+  where
+    go lcomp =
       let loc = compLoc lcomp in 
       case unComp lcomp of 
         -- Standard boilerplate 
-        Var x -> lookupCVarBind x >>= go 
+        Var x -> lkpCVar x >>= go 
 
         BindMany c1 xs_cs -> do
           c1' <- go c1
           let go_one (x,c) = go c >>= \c' -> return (x,c')
-          xs_cs' <- mapM go_one xs_cs
+          xs_cs' <- sequence (map go_one xs_cs)
           return $ cBindMany loc c1' xs_cs'
-        Let x c1 c2        -> extendCVarBind x c1 (go c2)
-        LetE x fi e c1     -> cLetE loc x fi e    <$> go c1
-        LetERef x me c1    -> cLetERef loc x me   <$> go c1
-        LetHeader fun c1   -> cLetHeader loc fun  <$> go c1
-        LetStruct sdef c1  -> cLetStruct loc sdef <$> go c1
-        LetFunC f params c1 c2
-          -> extendCFunBind f params c1 $ go c2
-        Branch e c1 c2 -> do
-          c1' <- go c1
-          c2' <- go c2
-          return $ cBranch loc e c1' c2'
+        Let x c1 c2            -> extCVar x c1 (go c2)
+        LetE x fi e c1         -> cLetE loc x fi e    <$> go c1
+        LetERef x me c1        -> cLetERef loc x me   <$> go c1
+        LetHeader fun c1       -> cLetHeader loc fun  <$> go c1
+        LetStruct sdef c1      -> cLetStruct loc sdef <$> go c1
+        LetFunC f params c1 c2 -> extCFun f params c1 $ go c2
+
         Standalone c1 -> cStandalone loc <$> go c1
         Return fi e   -> return $ cReturn loc fi e 
         Seq c1 c2 -> do
@@ -85,95 +217,83 @@ rewriteTakeEmit on_take on_takes on_emit on_emits = go
           return $ cSeq loc c1' c2'
         Call f es -> do 
           (CFunBind { cfun_params = prms
-                    , cfun_body = body }) <- lookupCFunBind f
+                    , cfun_body   = body }) <- lkpCFun f
           vbody <- go body
           let vf_type = CTArrow (map nameCallArgTy prms) (ctComp vbody)
-          vf <- newVectGName (name f ++ "_spec") vf_type loc Imm
+          vf <- liftVecM $ newVectGName (name f ++ "_spec") vf_type loc Imm
           return $ cLetFunC loc vf prms vbody $ 
                    cCall loc vf (map eraseCallArg es)
 
-        -- Interesting cases
+        -- Actual rewriting
         Take1 t  -> on_take loc t
         Take t n -> on_takes loc t n 
         Emit e   -> on_emit loc e
         Emits es -> on_emits loc es
 
-        Par pinfo c1 c2 -> do 
-          -- Note we don't rewrite the intermediates!
-          c1' <- rewriteTakeEmit on_take on_takes mEmit mEmits c1
-          c2' <- rewriteTakeEmit mTake1 mTake on_emit on_emits c2
-          return $ cPar loc pinfo c1' c2'
+        Branch e c1 c2 -> do
+          (s1,c1') <- tryWithCurrSt (go c1)
+          (s2,c2') <- tryWithCurrSt (go c2)
+          put (joinRwState s1 s2)
+          return $ cBranch loc e c1' c2'
 
-        Map vann f -> do 
-          let inty = inTyOfCTy $ ctComp lcomp
-          c <- map2take_emit loc vann inty f
-          go c
+        Times ui e elen n c -> do
+          let body_card = compInfo c
+          case body_card of
+            OCard -> return (eraseComp lcomp)
+            SCard ain aout -> do
+              -- normalize index to start from 0
+              let eidx = eBinOp loc Sub (eVar loc n) e
+              c' <- iterInvRwState ain aout eidx elen (go c)
+              return $ cTimes loc ui e elen n c'
 
-        Until e c           -> cUntil loc e <$> go c
-        While e c           -> cWhile loc e <$> go c
-        Times ui e elen n c -> cTimes loc ui e elen n <$> go c
-        Repeat vann c       -> cRepeat loc vann <$> go c
+        Until {} ->
+          assert (unknown_times_card (compInfo lcomp)) $ 
+          -- Input or output cardinality of until node will be 0 or unknown
+          --  o If it is unknown then we won't be rewriting (see VecSF.hs)
+          --  o If it is zero then there is nothing to rewrite!
+          -- .. Hence it suffices to simply return the exact same node!
+          return (eraseComp lcomp)
 
-        VectComp ann c -> cVectComp loc ann <$> go c
-
-        -- Other non-simple computers
-        _other -> 
-          vecMFail loc $ text "Not a simple computer:" <+> ppr lcomp
+        While {} ->
+          -- Same reasoning as for Until node, above
+          assert (unknown_times_card (compInfo lcomp)) $ 
+          return (eraseComp lcomp)
+          
         
+        -- All other cases will have OCard cardinality (we assert)
+        -- and hence they are impossible to happen.
+        _other
+          -> assert (isNothing $ isSimplCard_mb (compInfo lcomp)) $
+             panic $ text "VecRewriter: encountered OCard"
 
-mTake1 :: Monad m => Maybe SourcePos -> t -> m (GComp tc t () ())
-mTake1 loc t = return $ cTake1 loc t
 
-mTake :: Monad m => Maybe SourcePos -> t -> Int -> m (GComp tc t () ())
-mTake loc t n = return $ cTake loc t n
+iterInvRwState :: CAlpha -- Input cardinality
+               -> CAlpha -- Output cardinality 
+               -> Exp    -- Index expression (starting from 0)
+               -> Exp    -- Length
+               -> IVecM RwState a -> IVecM RwState a
+iterInvRwState body_ain body_aout eidx elen action = do
+  (_,res) <- tryWithCurrSt $ withStateT (updSt eidx body_ain body_aout) action
+  modify (updSt elen body_ain body_aout)
+  return res
 
-mEmit :: Monad m => Maybe SourcePos -> GExp t () -> m (GComp tc t () ())
-mEmit loc e = return $ cEmit loc e
+  where 
+    updSt :: Exp -> CAlpha -> CAlpha -> RwState -> RwState
+    updSt x cain caout rws
+      = RwState { rws_in  = updStQ x cain  $ rws_in rws
+                , rws_out = updStQ x caout $ rws_out rws }
+ 
+    updStQ :: Exp -> CAlpha -> RwQSt -> RwQSt
+    updStQ _x (CAUnknown ) (DoNotRw     ) = DoNotRw
+    updStQ _x _            (DoNotRw     ) = DoNotRw
+    updStQ  x (CAStatic i) (DoRw vec off) = DoRw vec off'
+      where off' = interpE Nothing (off .+ (i .* x))
+    updStQ _x _            _              = panicStr "updInStQ: impossible!"
 
-mEmits :: Monad m => Maybe SourcePos -> GExp t () -> m (GComp tc t () ())
-mEmits loc e = return $ cEmits loc e
 
-rwTakeEmitIO :: VecEnv -> 
-     (Maybe SourcePos -> Ty -> VecM Comp)         -- on Take1
-  -> (Maybe SourcePos -> Ty -> Int -> VecM Comp)  -- on Take
-  -> (Maybe SourcePos -> Exp -> VecM Comp)        -- on Emit
-  -> (Maybe SourcePos -> Exp -> VecM Comp)        -- on Emits
-  -> LComp -> IO Comp
-rwTakeEmitIO venv t1 t2 e1 e2 lc 
-  = runVecM venv $ rewriteTakeEmit t1 t2 e1 e2 lc
 
-{-------------------------------------------------------------------------
-  Helpers for rewriting take and emit
--------------------------------------------------------------------------}
+-- | Main entry point to the take/emit rewriter
+rwTakeEmitIO :: VecEnv -> RwState -> LComp -> IO Comp
+rwTakeEmitIO venv rws lc = runVecM venv $ evalStateT (rwTakeEmit lc) rws
 
-rw_take :: Int -> EId -> EId -> EId -> Maybe SourcePos -> Ty -> VecM Comp
-rw_take arin iidx tidx xa loc _ty
-  | arin == 1 = liftZr loc $ freturn _fI xa
-  | otherwise = liftZr loc $ do
-      tidx  .:= iidx
-      iidx  .:= iidx .+ I(1)
-      freturn _aI $ xa .! tidx -- Auto inline, not force-inline
 
-rw_takes :: EId -> EId -> EId -> Maybe SourcePos -> Ty -> Int -> VecM Comp
-rw_takes iidx tidx xa loc _ty n
-  = liftZr loc $ do
-      tidx  .:= iidx
-      iidx  .:= iidx .+ I(n)
-      freturn _aI $ xa .! (tidx :+ n)
-
-rw_emit :: Int -> EId -> EId -> EId -> Maybe SourcePos -> Exp -> VecM Comp
-rw_emit arout oidx tidx ya loc e
-   -- there can be only one emit so this must be it
-  | arout == 1 = liftZr loc $ femit e
-  | otherwise  = liftZr loc $ do
-      tidx .:= oidx
-      oidx .:= oidx .+ I(1)
-      ya .! tidx .:= e
-
-rw_emits :: EId -> EId -> EId -> Maybe SourcePos -> Exp -> VecM Comp
-rw_emits oidx tidx ya loc es
-  = liftZr loc $ do
-      tidx .:= oidx
-      oidx .:= oidx .+ I(len)
-      ya .! (tidx :+ len) .:= es
-  where TArray (Literal len) _ = ctExp es

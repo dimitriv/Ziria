@@ -73,24 +73,20 @@ vect_dd1 dfs cty lcomp i (NDiv i0) (NDiv i1)
     vout_ty    = yldTyOfCTy cty
     arin       = i0
 
-    vin_ty_big = mkVectTy orig_inty (i0*i1)
+    vin_ty_big = mkVectTy orig_inty i
 
-    -- NB: action does not rewrite emit(s)
-    action venv iidx tidx xa
-      = rwTakeEmitIO venv (rw_take arin iidx tidx xa)
-                          (rw_takes iidx tidx xa) mEmit mEmits lcomp
+    act venv st = rwTakeEmitIO venv st lcomp
 
     zirbody :: VecEnv -> Zr EId
-    zirbody venv
-      = fleteref ("xa" ::: vin_ty_big) $ \xa ->
-        fleteref ("iidx" ::: tint ::= zERO) $ \iidx ->
-        fleteref ("tidx" ::: tint ::= zERO) $ \tidx ->
-        do { ftimes zERO i1 $ \cnt ->
-               do x <- ftake vin_ty
-                  if arin == 1
-                    then xa .! cnt   .:= x
-                    else xa .! ((cnt .* arin) :+ arin) .:= x
-           ; fembed (action venv iidx tidx xa) }
+    zirbody venv = do 
+      xa <- fneweref ("xa" ::: vin_ty_big)
+      ftimes zERO i1 $ \cnt -> 
+        do x <- ftake vin_ty
+           xa .! ((cnt .* arin) :+ arin) .:= x
+      let offin = eint32 (0)
+          st    = RwState { rws_in = DoRw xa offin, rws_out = DoNotRw }
+      fembed (act venv st)
+
 
 {-------------------------------------------------------------------------------
   [DD2] X -> b^(j0*j1)   ~~~> X -> (b*j0)^j1
@@ -108,24 +104,16 @@ vect_dd2 dfs cty lcomp j (NDiv j0) (NDiv j1)
 
     vout_ty_big = mkVectTy orig_outty (j0*j1)
 
-    -- NB: action does not rewrite emit(s)
-    action venv oidx tidx ya
-      = rwTakeEmitIO venv mTake1 mTake
-              (rw_emit arout oidx tidx ya)
-              (rw_emits oidx tidx ya) lcomp
+    act venv st = rwTakeEmitIO venv st lcomp
 
     zirbody :: VecEnv -> Zr EId
-    zirbody venv
-      = fleteref ("ya" ::: vout_ty_big) $ \ya ->
-        fleteref ("oidx" ::: tint ::= zERO) $ \oidx ->
-        fleteref ("tidx" ::: tint ::= zERO) $ \tidx ->
-        do { v <- fembed (action venv oidx tidx ya)
-           ; ftimes zERO j1 $ \cnt ->
-               if arout == 1
-                 then femit (ya .! cnt)
-                 else femit (ya .!((cnt .*arout) :+ arout))
-           ; freturn _fI v
-           }
+    zirbody venv = do 
+      ya <- fneweref ("ya" ::: vout_ty_big)
+      let offout = eint32(0)
+          st     = RwState { rws_in = DoNotRw, rws_out = DoRw ya offout }
+      v <- fembed (act venv st)
+      ftimes zERO j1 $ \cnt -> femit (ya .!((cnt .* arout) :+ arout))
+      return v
 
 {-------------------------------------------------------------------------------
   [DD3] a^(i0*i1) -> b^(j0*j1) ~~~>    (a*i0)^i1 -> (b*j0)^j1
@@ -134,22 +122,8 @@ vect_dd3 :: DynFlags -> CTy -> LComp
          -> Int -> NDiv -> NDiv
          -> Int -> NDiv -> NDiv -> VecM DelayedVectRes
 vect_dd3 dfs cty lcomp i (NDiv i0) (NDiv i1)
-                       j (NDiv j0) (NDiv j1) = do
-  liftIO $ verbose dfs $ vcat [ text "vect_dd3, lcomp:"
-                              , ppr lcomp
-                              , ppr (compInfo lcomp)
-                              , hsep [ text "i  =" <+> ppr i
-                                     , text "i0 =" <+> ppr i0
-                                     , text "i1 =" <+> ppr i1 ]
-                              , hsep [ text "j  =" <+> ppr j
-                                     , text "j0 =" <+> ppr j0
-                                     , text "j1 =" <+> ppr j1 ]
-                              ]
-  r <- mkDVRes zirbody "DD3" loc vin_ty vout_ty
-  liftIO $ do { c <- dvr_comp r
-              ; verbose dfs $ vcat [ text "vect_dd3, result:", ppr c ]
-              }
-  return r
+                       j (NDiv j0) (NDiv j1) 
+  = mkDVRes zirbody "DD3" loc vin_ty vout_ty
   where
     loc        = compLoc lcomp
     orig_inty  = inTyOfCTy cty
@@ -162,31 +136,17 @@ vect_dd3 dfs cty lcomp i (NDiv i0) (NDiv i1)
     vin_ty_big  = mkVectTy orig_inty (i0*i1)
     vout_ty_big = mkVectTy orig_outty (j0*j1)
 
-    -- NB: action does not rewrite emit(s)
-    action venv iidx oidx itidx otidx xa ya
-      = rwTakeEmitIO venv (rw_take arin iidx itidx xa)
-                          (rw_takes iidx itidx xa)
-                          (rw_emit arout oidx otidx ya)
-                          (rw_emits oidx otidx ya) lcomp
+    act venv st = rwTakeEmitIO venv st lcomp
 
     zirbody :: VecEnv -> Zr EId
-    zirbody venv
-      = fleteref ("xa" ::: vin_ty_big)  $ \xa ->
-        fleteref ("ya" ::: vout_ty_big) $ \ya ->
-        fleteref ("iidx" ::: tint ::= zERO)  $ \iidx ->
-        fleteref ("oidx" ::: tint ::= zERO)  $ \oidx ->
-        fleteref ("itidx" ::: tint ::= zERO) $ \itidx ->
-        fleteref ("otidx" ::: tint ::= zERO) $ \otidx ->
-        do { ftimes zERO i1 $ \cnt ->
-               do { x <- ftake vin_ty
-                  ; if arin == 1
-                    then xa .! cnt   .:= x
-                    else xa .! ((cnt .* arin) :+ arin) .:= x
-                  }
-           ; v <- fembed (action venv iidx oidx itidx otidx xa ya)
-           ; ftimes zERO j1 $ \cnt ->
-               if arout == 1 
-                 then femit (ya .! cnt) 
-                 else femit (ya .!((cnt .*arout) :+ arout))
-           ; freturn _fI v
-           }
+    zirbody venv = do
+      xa <- fneweref ("xa" ::: vin_ty_big)
+      ftimes zERO i1 $ \cnt -> do x <- ftake vin_ty
+                                  xa .! ((cnt .* arin) :+ arin) .:= x
+      ya <- fneweref ("ya" ::: vout_ty_big)
+      let offin  = eint32 (0)
+          offout = eint32 (0) 
+          st     = RwState { rws_in = DoRw xa offin, rws_out = DoRw ya offout }
+      v <- fembed (act venv st)
+      ftimes zERO j1 $ \cnt -> femit (ya .!((cnt .* arout) :+ arout))
+      return v

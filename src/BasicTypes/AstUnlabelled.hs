@@ -36,6 +36,9 @@ vint :: Integral a => a -> Val
 -- Auxiliary function for use in the vectorizer
 vint n = VInt (fromIntegral n)
 
+eint32 :: Integral a => a -> Exp
+eint32 n = eVal Nothing tint (vint n) 
+
 {-------------------------------------------------------------------------------
   Expressions
 -------------------------------------------------------------------------------}
