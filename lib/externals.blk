@@ -123,6 +123,7 @@ let external v_shift_left_int16(z:arr int16, x:arr[length(z)] int16, shift:int )
 
 
 
+
 -- Set array to zero
 let external zero_bit(x:arr bit) : ()
 let external zero_complex8(x:arr complex8) : ()
@@ -150,8 +151,19 @@ let external int8_to_bits(dst: arr bit, src:arr int8) : ()
 
 
 
+-- Various packings
 -- Pack two int32 arrays into int16 array
 let external v_pack_int32_complex16(z:arr complex16, x:arr[length(z)] int32, y:arr[length(z)] int32) : ()
+let external v_pack_complex16_complex8(input:arr complex16) : arr[length(input)] complex8
+
+
+-- Negate
+let external v_negate_complex8(input:arr complex8) : arr[length(input)] complex8
+
+
+-- Cast 
+let external v_cast_complex8_int8(output:arr int8, input:arr complex8) : ()
+
 
 
 -- Bit manipulation

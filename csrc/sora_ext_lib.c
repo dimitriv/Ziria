@@ -797,6 +797,66 @@ int __ext_v_pack_int32_complex16(struct complex16* z, int len, int32* re, int le
 
 
 //FINL 
+void __ext_v_pack_complex16_complex8(struct complex8* output, int lenout, complex16* input, int lenin)
+{
+	const int wlen = sizeof(vcs) / sizeof(complex16);
+	int i;
+	vcs *pinput = (vcs *) input;
+	vcb *poutput = (vcb *) output;
+	for (i = 0; i < lenin / wlen / 2; i++)
+	{
+		*poutput = (vcb)saturated_pack(*pinput, *(pinput + 1));
+		poutput++;
+		pinput += 2;
+	}
+	for (int j = i * 2 * wlen; j < lenin; j++)
+	{
+		output[j].re = input[j].re;
+		output[j].im = input[j].im;
+	}
+}
+
+
+//FINL 
+void __ext_v_negate_complex8(struct complex8* output, int lenout, complex8* input, int lenin)
+{
+	const int wlen = sizeof(vcb) / sizeof(complex8);
+	const static unsigned char __0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF[16] =
+	{
+		0xFF, 0xFF, 0xFF, 0xFF,
+		0xFF, 0xFF, 0xFF, 0xFF,
+		0xFF, 0xFF, 0xFF, 0xFF,
+		0xFF, 0xFF, 0xFF, 0xFF
+	};
+
+	int i;
+	vcb *pinput = (vcb *)input;
+	vcb *poutput = (vcb *)output;
+	for (i = 0; i < lenin / wlen; i++)
+	{
+		*poutput = (vcb)xor(*pinput, *((vcb*) __0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF));
+		poutput++;
+		pinput ++;
+	}
+	for (int j = i * wlen; j < lenin; j++)
+	{
+		output[j].re = input[j].re ^ 0xFF;
+		output[j].im = input[j].im ^ 0xFF;
+	}
+}
+
+
+
+
+//FINL 
+int __ext_v_cast_complex8_int8(int8* output, int lenout, complex8* input, int lenin)
+{
+	memcpy(output, input, lenin * sizeof(complex8));
+	return 0;
+}
+
+
+//FINL 
 int __ext_permutate_high1032w(struct complex16* x, int len1,
                         struct complex16* y, int len2)
 {
