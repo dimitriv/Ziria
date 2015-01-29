@@ -1267,7 +1267,7 @@ void __ext_v_sign_int8(int8 *output, int outlen, int8 *input1, int inlen1, int8 
 
 	while (cnt + 16 <= inlen1)
 	{
-		*po = (vcs)_mm_sign_epi16(*pi1, *pi2);
+		*po = (vcs)_mm_sign_epi8(*pi1, *pi2);
 		pi1++;
 		pi2++;
 		po++;
