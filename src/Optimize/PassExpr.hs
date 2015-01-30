@@ -40,6 +40,9 @@ import PassFoldDebug
 import PpComp ()
 import PpExpr ()
 
+import Outputable
+import Text.PrettyPrint.HughesPJ
+
 import PassFoldM
 
 {-------------------------------------------------------------------------------
@@ -96,6 +99,7 @@ passExpInlining = TypedExpBottomUp $ \eloc e -> do
        if nm `S.notMember` exprFVs e2
          then if not (mutates_state e1)
                 then do
+                  liftIO $ print (ppr e2)
                   logStep "exp-inlining/unused" eloc
                     [step| Eliminating binding for nm |]
                   rewrite e2

@@ -77,6 +77,7 @@ data DynFlag =
 
   | NoExpFold
   | NoFold
+  | NoElimMit
 
   | NoLUT
 
@@ -170,6 +171,7 @@ options =
 
      , Option []        ["no-fold"]             (NoArg NoFold)        "do not fold/inline computations and expressions"
      , Option []        ["no-lut"]              (NoArg NoLUT)         "do not construct LUTs"
+     , Option []        ["no-elim-mit"]         (NoArg NoElimMit)     "do not optimize away mitigators"
 
      , Option []        ["mock-lut"]            (NoArg MockLUT)       "debugging help for LUTS (internal only)"
 

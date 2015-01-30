@@ -107,11 +107,6 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
                           , text "}" ]
 
     Par parInfo c1 c2 ->
-{-
-      parens ( ppComp c1 <+> ppr parInfo $$
-               ppComp c2
-             )
--}
       ppComp c1 <+> ppr parInfo $$
       ppComp c2
 
@@ -136,7 +131,7 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
       | ignorelet || ignoreexp
       -> ppComp c
       | otherwise
-      -> text "let" <> ppr fi <+> ppr x <> colon <> ppr (nameTyp x) <+> text "=" <+> ppr e $$
+      -> text "let" <> ppr fi <+> ppBind x <+> text "=" <+> ppr e $$
          text "in" $$
          ppComp c
 
@@ -145,7 +140,7 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
        | ignorelet || ignoreexp
        -> ppComp c
        | otherwise
-       -> text "letref" <+> ppName x <> colon <> ppr (nameTyp x) $$
+       -> text "var" <+> ppBind x $$
           text "in" $$
           ppComp c
 
@@ -153,7 +148,7 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
        | ignorelet || ignoreexp
        -> ppComp c
        | otherwise
-       -> text "letref" <+> assign ":=" (ppName x <> colon <> ppr (nameTyp x)) (ppr e) $$
+       -> text "var" <+> assign ":=" (ppBind x) (ppr e) $$
           text "in" $$
           ppComp c
 
@@ -161,7 +156,7 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
       | ignorelet || ignoreexp
       -> ppComp c
       | otherwise
-      -> text "let" <+> ppr fn $$
+      -> text "fun" <+> ppr fn $$
          text "in" $$
          ppComp c
     --
@@ -169,8 +164,8 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
       | ignorelet || (ignoreexp && not (nested_letfuns c1))
       -> ppComp c2
       | otherwise
-      -> text "let comp" <+> ppName f <+>
-                           parens (ppCompParams params) <+> text "=" $$
+      -> text "fun comp" <+> ppName f <+>
+                             parens (ppCompParams params) <+> text "=" $$
            nest nestingDepth (ppComp c1) $$
          text "in" $$
          ppComp c2

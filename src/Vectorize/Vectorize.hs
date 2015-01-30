@@ -623,7 +623,8 @@ runVectorizer dflags sym comp = do
   let do_one (DVR { dvr_comp = io_comp, dvr_vres = vres }) = do
         vc_mit <- io_comp
         -- Optimize mitigators
-        vc_opt_mit <- elimMitigsIO dflags sym vc_mit
+        vc_opt_mit <- if isDynFlagSet dflags NoElimMit then return vc_mit
+                      else elimMitigsIO dflags sym vc_mit
         -- Compile away mitigators if flag set
         let vc = vc_opt_mit 
 {-     
@@ -636,13 +637,18 @@ runVectorizer dflags sym comp = do
 
   -- in Debug mode optimize compile and type check all candidates
   let maxi = getMaximal vss
-  
+ 
+  maxi_comp <- dvr_comp maxi  
   verbose dflags $ vcat [ text "Selected candidate is: "
                         , nest 2 $ text $ show $ dvr_vres maxi
+                        , nest 2 $ ppr maxi_comp
                         ] 
 
   let final_vss = if isDynFlagSet dflags Debug then (maxi : vss) else [maxi]
   comps <- mapM do_one final_vss
+
+
+
 
   return (head comps, []) -- Don't emit candidates 
 

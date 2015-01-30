@@ -16,14 +16,14 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE GADTs, RankNTypes, DeriveGeneric, DeriveDataTypeable, ScopedTypeVariables, RecordWildCards #-}
+{-# LANGUAGE GADTs, RankNTypes, DeriveGeneric, DeriveDataTypeable, ScopedTypeVariables, RecordWildCards, 
+    TypeSynonymInstances, FlexibleInstances #-}
 {-# OPTIONS_GHC -Wall #-}
 module AstComp where
 
 import Prelude hiding (pi, mapM)
 import Control.Arrow ((***))
 import Control.Monad (forM, liftM)
-import Control.Monad.State (State, execState, modify)
 import Data.Data (Data)
 import Data.Either (partitionEithers)
 import Data.Functor.Identity ( Identity (..) )
@@ -651,7 +651,13 @@ eraseCallArg (CAComp c) = CAComp $ eraseComp c
   Free variables
 -------------------------------------------------------------------------------}
 
-type CompFVs tc t = (Set (GName tc), Set (GName t))
+type CompFVs tc t = (GNameSet t, GNameSet tc) -- Alread an instance of Monoid
+
+tdeleting :: CompFVs tc t -> GName t -> CompFVs tc t
+tdeleting (t,c) n = (S.delete n t, c)
+
+cdeleting :: CompFVs tc t -> GName tc -> CompFVs tc t
+cdeleting (t,c) n = (t, S.delete n c)
 
 -- | Compute the free variables in a computation
 --
@@ -660,76 +666,73 @@ type CompFVs tc t = (Set (GName tc), Set (GName t))
 -- that variable names don't occur in subexpressions where they are not in
 -- scope.
 compFVs :: forall tc t a b. GComp tc t a b -> CompFVs tc t
-compFVs = \c ->
-    execState (mapCompM return return return return goExp goComp c)
-              (S.empty, S.empty)
-  where
-    goComp :: GComp tc t a b -> State (CompFVs tc t) (GComp tc t a b)
-    goComp c = goComp0 (unComp c) >> return c
+compFVs = goComp
+  where 
+    goComp = goComp0 . unComp 
 
-    goComp0 :: GComp0 tc t a b -> State (CompFVs tc t) ()
-    goComp0 (Var nm)            = recordC nm
-    goComp0 (BindMany _ xcs)    = mapM_ unrecordE (map fst xcs)
-    goComp0 (Let nm _ _)        = unrecordC nm
-    goComp0 (LetE nm _ _ _)     = unrecordE nm
-    goComp0 (LetERef nm _ _)    = unrecordE nm
-    goComp0 (LetHeader fun _)   = unrecordE (funName fun)
-    goComp0 (LetFunC nm ps _ _) = unrecordC nm >> mapM_ unrecordCA ps
-    goComp0 (Call nm _)         = recordC nm
-    goComp0 (Times _ _ _ nm _)  = unrecordE nm
-    goComp0 (Map _v nm)         = recordE nm
-    goComp0 (Filter nm)         = recordE nm
+    goComp0 (Var nm)                 = (mempty,S.singleton nm)
+    goComp0 (BindMany c1 xcs)        = goBind c1 xcs 
+    goComp0 (Let nm c1 c2)           = goComp c1 `mappend` (goComp c2 `cdeleting` nm)
+    goComp0 (LetE nm _ e c2)         = goExp e   `mappend` (goComp c2 `tdeleting` nm)
+    goComp0 (LetERef nm Nothing c2)  = goComp c2 `tdeleting` nm
+    goComp0 (LetERef nm (Just e) c2) = goExp e `mappend` (goComp c2 `tdeleting` nm)
+    goComp0 (LetHeader fun c)        = goFun fun `mappend` (goComp c `tdeleting` funName fun)
 
-    goComp0 (Seq {})            = return ()
-    goComp0 (Par {})            = return ()
-    goComp0 (Emit {})           = return ()
-    goComp0 (LetStruct {})      = return ()
-    goComp0 (Emits {})          = return ()
-    goComp0 (Return {})         = return ()
-    goComp0 (Interleave {})     = return ()
-    goComp0 (Branch {})         = return ()
-    goComp0 (Take1 {})          = return ()
-    goComp0 (Take {})           = return ()
-    goComp0 (Until {})          = return ()
-    goComp0 (While {})          = return ()
-    goComp0 (Repeat {})         = return ()
-    goComp0 (VectComp {})       = return ()
-    goComp0 (ReadSrc {})        = return ()
-    goComp0 (WriteSnk {})       = return ()
-    goComp0 (ReadInternal {})   = return ()
-    goComp0 (WriteInternal {})  = return ()
-    goComp0 (Standalone {})     = return ()
-    goComp0 (Mitigate {})       = return ()
+    goComp0 (ReadSrc {})        = mempty
+    goComp0 (WriteSnk {})       = mempty
+    goComp0 (ReadInternal {})   = mempty
+    goComp0 (WriteInternal {})  = mempty
+    goComp0 (Mitigate {})       = mempty
+    goComp0 (Take1 {})          = mempty
+    goComp0 (Take {})           = mempty
+    goComp0 (Repeat _ c)        = goComp c
+    goComp0 (VectComp _ c)      = goComp c
+    goComp0 (Standalone c)      = goComp c
 
-    goExp :: GExp t b -> State (CompFVs tc t) (GExp t b)
-    goExp e = modify (\(sc, s) -> (sc, S.union (exprFVs e) s)) >> return e
+    goComp0 (Map _v nm)         = (S.singleton nm, mempty)
+    goComp0 (Filter nm)         = (S.singleton nm, mempty)
 
-    recordE, unrecordE :: GName t -> State (CompFVs tc t) ()
-    recordE   nm = modify $ \(sc, s) -> (sc, S.insert nm s)
-    unrecordE nm = modify $ \(sc, s) -> (sc, S.delete nm s)
+    goComp0 (Seq c1 c2)         = goComp c1 `mappend` goComp c2
+    goComp0 (Par _p c1 c2)      = goComp c1 `mappend` goComp c2
 
-    recordC, unrecordC :: GName tc -> State (CompFVs tc t) ()
-    recordC   nm = modify $ \(sc, s) -> (S.insert nm sc, s)
-    unrecordC nm = modify $ \(sc, s) -> (S.delete nm sc, s)
+    goComp0 (LetStruct _ c)     = goComp c
+    goComp0 (Emit e)            = goExp e
+    goComp0 (Emits e)           = goExp e
+    goComp0 (Return _ e)        = goExp e
+    goComp0 (Interleave c1 c2)  = goComp c1 `mappend` goComp c2
+    goComp0 (Branch e c1 c2)    = goExp e `mappend ` goComp c1 `mappend` goComp c2
 
-    unrecordCA :: GName (CallArg t tc) -> State (CompFVs tc t) ()
-    unrecordCA MkName{..} =
-      case nameTyp of
-        CAExp  t -> unrecordE MkName{nameTyp = t, ..}
-        CAComp t -> unrecordC MkName{nameTyp = t, ..}
+   
+    goComp0 (Call nm args)        = (mempty,S.singleton nm) `mappend` goCallArgs args
+    goComp0 (LetFunC nm ps c1 c2) = (goComp c1 `del_params` ps') `mappend` (goComp c2 `cdeleting` nm)
+      where ps' = map paramToName ps
 
-callArgFVs :: CallArg (GExp t b) (GComp tc t a b) -> CompFVs tc t
-callArgFVs (CAExp e)  = (S.empty, exprFVs e)
-callArgFVs (CAComp c) = compFVs c
+    goComp0 (Times _ui e elen nm c1) = goExp e `mappend` goExp elen `mappend` (goComp c1 `tdeleting` nm)
+    goComp0 (Until e c1) = goExp e `mappend` goComp c1
+    goComp0 (While e c1) = goExp e `mappend` goComp c1
+
+    goExp e = (exprFVs e, mempty)
+    goFun f = (funFVs f, mempty)
+    goCallArg (CAExp e)  = goExp e
+    goCallArg (CAComp c) = goComp c
+    goCallArgs = mconcat . map goCallArg
+
+    goBind c1 [] = goComp c1
+    goBind c1 ((x,c2):rest) = goComp c1 `mappend` (goBind c2 rest `tdeleting` x)
+    
+    del_params st [] = st
+    del_params st ((CAExp nm):rest)  = del_params (st `tdeleting` nm) rest
+    del_params st ((CAComp nm):rest) = del_params (st `cdeleting` nm) rest
+
 
 compFVs_all :: [GComp tc t a b] -> CompFVs tc t
 compFVs_all = (S.unions *** S.unions) . unzip . map compFVs
 
-compCFVs :: GComp tc t a b -> Set (GName tc)
-compCFVs = fst . compFVs
+compCFVs :: GComp tc t a b -> GNameSet tc
+compCFVs = snd . compFVs
 
-compEFVs :: GComp tc t a b -> Set (GName t)
-compEFVs = snd . compFVs
+compEFVs :: GComp tc t a b -> GNameSet t
+compEFVs = fst . compFVs
 
 {-------------------------------------------------------------------------------
   Free _type_ variables
@@ -852,6 +855,11 @@ callArg _ g (CAComp b) = g b
 nameCallArgTy :: GName (CallArg a b) -> CallArg (GArgTy a) b
 nameCallArgTy nm = callArg (\t -> CAExp (GArgTy t (nameMut nm))) CAComp typ
   where typ = nameTyp nm
+
+
+paramToName :: GName (CallArg a b) -> CallArg (GName a) (GName b)
+paramToName nm = callArg (\t  -> CAExp  nm { nameTyp = t })
+                         (\ct -> CAComp nm { nameTyp = ct }) (nameTyp nm)
 
 partitionCallArgs :: [CallArg a b] -> ([a], [b])
 partitionCallArgs = partitionEithers . map (callArg Left Right)

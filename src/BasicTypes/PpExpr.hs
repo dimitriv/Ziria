@@ -19,7 +19,7 @@
 {-# OPTIONS_GHC -Wall -fno-warn-orphans -fno-warn-name-shadowing #-}
 {-# LANGUAGE FlexibleInstances #-}
 -- | Pretty-printing type classes instances
-module PpExpr (nestingDepth, ppName, ppEs) where
+module PpExpr (nestingDepth, ppName, ppEs, ppBind) where
 
 import Text.PrettyPrint.HughesPJ
 
@@ -116,17 +116,17 @@ instance Outputable ty => Outputable (GExp0 ty a) where
       text "}"
 
     ELet x fi e1 e2 ->
-      text "let" <> ppr fi <+> assign "=" (ppName x) (ppr e1) $$
+      text "let" <> ppr fi <+> assign "=" (ppBind x) (ppr e1) $$
       text "in" $$
       ppr e2
 
     ELetRef x Nothing e2 ->
-      text "letref" <+> ppName x $$
+      text "var" <+> ppBind x $$
       text "in" $$
       ppr e2
 
     ELetRef x (Just e1) e2 ->
-      text "letref" <+> assign ":=" (ppName x) (ppr e1) $$
+      text "var" <+> assign ":=" (ppBind x) (ppr e1) $$
       text "in" $$
       ppr e2
 
@@ -194,7 +194,9 @@ instance Outputable Ty where
     TInterval n            -> text "interval" <> brackets (int n)
     TBuff (IntBuf t)       -> parens $ text "INTBUF" <> brackets (ppr t)
     TBuff (ExtBuf bt)      -> parens $ text "EXTBUF" <> brackets (text "base=" <> ppr bt)
-    TStruct tyname _       -> text tyname -- NOTE: If we change this to be the full type the instance for EStruct breaks
+    TStruct tyname _       -> text tyname 
+    -- NOTE: If we change this to be the full type the instance for EStruct breaks
+
     TVoid                  -> text "void"
 
 instance Outputable ty => Outputable (GStructDef ty) where
@@ -213,10 +215,10 @@ instance Outputable SrcTy where
     SrcTyUnknown  -> empty
     SrcTArray (SrcLiteral n) ty'
       -> text "arr" <> brackets (int n) <+> ppr ty'
-    SrcTArray (SrcNVar n) ty'
-      -> text "arr" <> brackets (text (show n)) <+> ppr ty'
+    SrcTArray (SrcNVar _loc) ty'
+      -> text "arr" <> brackets empty <+> ppr ty'
     SrcTArray (SrcNArr n) ty'
-      -> text "arr" <> brackets (text ("arr " ++ (show n))) <+> ppr ty'
+      -> text "arr" <> brackets (text "length" <> parens (ppName n)) <+> ppr ty'
 
 instance Outputable ty => Outputable (GFun ty a) where
   ppr fn = case unFun fn of
@@ -229,17 +231,11 @@ instance Outputable ty => Outputable (GFun ty a) where
 instance Outputable NumExpr where
   ppr ne = case ne of
     Literal i -> int i
-    NVar n    -> text (show n)
+    NVar n    -> text n
     -- TODO: here and elsewhere, are the quotes around the name intentional?
 
 instance Outputable ty => Outputable (GName ty) where
   ppr ix = ppName ix
-  {- TODO: Under which circumstances do we want to show a name with its type?
-  ppr ix | isEmpty pprTy = ppName ix
-         | otherwise     = parens (ppName ix <+> char ':' <+> pprTy)
-    where
-      pprTy = ppr (nameTyp ix)
-  -}
 
 {-------------------------------------------------------------------------------
   Utility
@@ -261,12 +257,19 @@ ppEs f sep eargs = case eargs of
 ppName :: GName ty -> Doc
 ppName nm = text (name nm) -- <> braces (text $ uniqId nm)
 
+ppBind :: Outputable ty => GName ty -> Doc
+ppBind nm = ppName nm <+> colon <+> ppr (nameTyp nm)
+
 ppParams :: Outputable ty => [GName ty] -> Doc
 ppParams params =
   case params of
     []          -> empty
-    x : []      -> ppName x <> text ":" <+> ppr (nameTyp x)
-    x : params' -> ppName x <> text ":" <+> ppr (nameTyp x) <> comma <+> ppParams params'
+    x : []      -> ppMut (nameMut x) <> ppBind x 
+    x : params' -> ppMut (nameMut x) <> ppBind x <> comma <+> ppParams params'
+
+ppMut :: MutKind -> Doc
+ppMut Imm = empty
+ppMut Mut = text "var " 
 
 {-------------------------------------------------------------------------------
   Show instances

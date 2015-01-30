@@ -50,13 +50,10 @@ import AstExpr
 import AstUnlabelled
 import CtExpr ( ctExp  )
 import Interpreter
-import Outputable ()
 import PassFoldDebug
 import PpComp ()
 import PpExpr ()
-
 import PassFoldM
-
 import Utils ( panicStr )
 
 {-------------------------------------------------------------------------------
@@ -260,12 +257,13 @@ passTimesUnroll = TypedCompBottomUp $ \cloc comp -> do
 -- BOZIDAR: this will currently fail perf test for TX/test_encoding_34
 --         , ui == Unroll -- || (n < 3 && n > 0 && ui == AutoUnroll)
        -> do
+
          logStep "times-unroll" cloc
            [step| for i in [0, elen] { body } ~~> body ; .. ; body |]
 
          let subst i' = substComp [] [(i, eVal (expLoc e) valTy (vint i'))] [] c
              unrolled = map subst [0..n-1]
-
+                               
          rewrite $ mk_bind_many unrolled
       _ ->
         return comp

@@ -149,7 +149,7 @@ on_take loc ty = do
     DoNotRw -> return $ cTake1 loc ty
     DoRw vect off -> do
       upd_in_offset (off `offset_plus` 1)
-      liftVecM $ liftZr loc $ freturn _aI (vect .! off)
+      liftVecM $ liftZr "" loc $ freturn _aI (vect .! off)
 
 -- | What to do on Take (many)
 on_takes :: TakeManyTransf RwState
@@ -159,7 +159,7 @@ on_takes loc ty n = do
     DoNotRw -> return $ cTake loc ty n
     DoRw vect off -> do
       upd_in_offset (off `offset_plus` n)
-      liftVecM $ liftZr loc $ freturn _aI (vect .! ( off :+ n ))
+      liftVecM $ liftZr "" loc $ freturn _aI (vect .! ( off :+ n ))
 
 -- | What to do on Emit
 on_emit :: EmitTransf RwState 
@@ -169,7 +169,7 @@ on_emit loc e = do
     DoNotRw -> return $ cEmit loc e
     DoRw vect off -> do      
       upd_out_offset (off `offset_plus` 1) 
-      liftVecM $ liftZr loc $ do { vect .! off .:= e }
+      liftVecM $ liftZr "" loc $ do { vect .! off .:= e }
 
 -- | What to do on Emits (many)
 on_emits :: EmitManyTransf RwState 
@@ -179,7 +179,7 @@ on_emits loc es = do
     DoNotRw -> return $ cEmits loc es
     DoRw vect off -> do      
       upd_out_offset (off `offset_plus` len) 
-      liftVecM $ liftZr loc $ do { vect .! (off :+ len) .:= es }
+      liftVecM $ liftZr "" loc $ do { vect .! (off :+ len) .:= es }
   where TArray (Literal len) _ = ctExp es
 
 
@@ -241,9 +241,10 @@ rwTakeEmit lx = assert (isJust $ isSimplCard_mb (compInfo lx)) (go lx)
           case body_card of
             OCard -> return (eraseComp lcomp)
             SCard ain aout -> do
-              -- normalize index to start from 0
-              let eidx = eBinOp loc Sub (eVar loc n) e
-              c' <- iterInvRwState ain aout eidx elen (go c)
+              -- normalize index to start from 0 (and make sure we are int32)
+              let eidx_int32 = eUnOp loc (Cast tint) $ eBinOp loc Sub (eVar loc n) e
+                  elen_int32 = eUnOp loc (Cast tint) $ elen
+              c' <- iterInvRwState ain aout eidx_int32 elen_int32 (go c)
               return $ cTimes loc ui e elen n c'
 
         Until {} ->

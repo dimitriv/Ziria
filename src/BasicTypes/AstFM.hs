@@ -243,27 +243,27 @@ gen_name_pref sym x ty mk = do
 
 -- Generated from >>= hence immutable!
 class Bindable v where
-  genbnd :: GS.Sym -> Ty -> IO (BndRes v)
+  genbnd :: GS.Sym -> String -> Ty -> IO (BndRes v)
   genexp :: v -> Exp
 
 instance Bindable EId where
-  genbnd sym ty = do
-    nm <- gen_name sym ty Imm
+  genbnd sym str ty = do
+    nm <- gen_name_pref sym str ty Imm
     return $ BndResB nm nm
   genexp nm = eVar Nothing nm
 
 instance Bindable FExp where
-  genbnd sym t
-    = do nm <- gen_name sym t Imm
+  genbnd sym str t
+    = do nm <- gen_name_pref sym str t Imm
          return $ BndResB nm (FEVar nm)
   genexp fe = interpE Nothing fe
 
 instance Bindable () where
-  genbnd _sym _ty = return $ BndResU ()
+  genbnd _sym _str _ty = return $ BndResU ()
   genexp _ = eVal Nothing TUnit VUnit
 
 instance Bindable Void where 
-  genbnd _sym _ 
+  genbnd _sym _ _
     = error "Bindable: Cannot bind result of transformer (Void)"
   genexp _ 
     = error "Bindable: Cannot bind result of transformer (Void)"
@@ -319,8 +319,9 @@ instance Monad Zr where
   (>>=) (FBranch e c1 c2) f     = FBind (FBranch e c1 c2) f
   (>>=) (FEmbed io_c) f         = FBind (FEmbed io_c) f
 
-interpC :: Bindable v => GS.Sym -> Maybe SourcePos -> Zr v -> IO Comp
-interpC sym loc = go
+interpC :: Bindable v => String -> -- a prefix to prepend to names (for debugging)
+           GS.Sym -> Maybe SourcePos -> Zr v -> IO Comp
+interpC pref sym loc = go
   where 
     -- NB: requires polymorphic recursion
     go :: forall v. Bindable v => Zr v -> IO Comp
@@ -337,7 +338,7 @@ interpC sym loc = go
     go (FBind st1 f) = do 
       c1 <- go st1
       let t = ctDoneTyOfComp c1
-      bnd <- genbnd sym t
+      bnd <- genbnd sym pref t
       let fc2 = f (bnd_res_val bnd)
       case (fc2,bnd) of 
         -- If continuation is pure then just return c1 

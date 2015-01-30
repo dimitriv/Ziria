@@ -547,7 +547,7 @@ mkDVRes :: Bindable v => (VecEnv -> Zr v)
         -> Maybe SourcePos -> Ty -> Ty -> VecM DelayedVectRes
 mkDVRes gen_zir kind loc vin_ty vout_ty = do 
   venv <- getVecEnv
-  zirc <- liftZr loc (gen_zir venv)
+  zirc <- liftZr kind loc (gen_zir venv)
   zirc_wrapped <- wrapCFunCall ("_vect_" ++ kind) loc zirc
   return $ DVR { dvr_comp = return zirc_wrapped
                , dvr_vres = DidVect vin_ty vout_ty minUtil }
@@ -556,8 +556,8 @@ mkDVRes gen_zir kind loc vin_ty vout_ty = do
   Interpret Ziria computations
 -------------------------------------------------------------------------}
 
-liftZr :: Bindable v => Maybe SourcePos -> Zr v -> VecM Comp
-liftZr loc zr = do 
+liftZr :: Bindable v => String -> Maybe SourcePos -> Zr v -> VecM Comp
+liftZr pref_dbg loc zr = do 
   sym  <- asks venv_sym
-  liftIO $ interpC sym loc zr
+  liftIO $ interpC pref_dbg sym loc zr
 

@@ -382,7 +382,7 @@ raiseErr print_vartypes p msg = do
     ppVarTypes False _
       = return empty
     ppVarTypes True (CompErrCtx comp)
-      = pp_vars $ (S.elems *** S.elems) (compFVs comp)
+      = pp_vars $ (S.elems *** S.elems) (swap $ compFVs comp)
     ppVarTypes True (ExprErrCtx exp)
       = pp_vars $ ([], S.elems (exprFVs exp))
     ppVarTypes _ _
@@ -405,6 +405,7 @@ raiseErr print_vartypes p msg = do
           ; return $ vcat [ text "Variable bindings:"
                           , nest 2 $ vcat (cdocs ++ docs)
                           ] }
+    swap (x,y) = (y,x)
 
 raiseErrNoVarCtx :: Maybe SourcePos -> Doc -> TcM a
 raiseErrNoVarCtx = raiseErr False

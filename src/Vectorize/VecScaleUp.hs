@@ -101,7 +101,7 @@ vect_ud1 dfs cty lcomp i j (NMul m1) (NMul m2)
 vect_ud2 :: DynFlags -> CTy -> LComp
          -> Int -> Int -> NDiv -> NDiv -> NMul -> VecM DelayedVectRes
 vect_ud2 dfs cty lcomp i j (NDiv j0) (NDiv j1) (NMul m)
-  = mkDVRes zirbody "UD2" loc vin_ty vout_ty
+  = mkDVRes zirbody "UD2" loc vin_ty (mkVectTy orig_outty j0)
   where
     loc        = compLoc lcomp
     orig_inty  = inTyOfCTy cty
@@ -109,7 +109,7 @@ vect_ud2 dfs cty lcomp i j (NDiv j0) (NDiv j1) (NMul m)
     vin_ty     = mkVectTy orig_inty  arin
     vout_ty    = mkVectTy orig_outty arout
     arin       = i*m -- size of input array
-    arout      = j*m -- size of output array
+    arout      = j*m 
 
     act venv st = rwTakeEmitIO venv st lcomp
 
@@ -120,7 +120,8 @@ vect_ud2 dfs cty lcomp i j (NDiv j0) (NDiv j1) (NMul m)
       ftimes zERO m $ \cnt ->
          let offin  = embed (cnt .* i)
              offout = embed (cnt .* j)
-             st = RwState { rws_in  = DoRw xa offin, rws_out = DoRw ya offout }
+             st = RwState { rws_in  = DoRw xa offin
+                          , rws_out = DoRw ya offout }
          in fembed (act venv st)
       ftimes zERO (j1*m) $ \odx ->
          femit (ya .! ((odx .* j0) :+ j0))
@@ -147,7 +148,6 @@ vect_ud3 dfs cty lcomp i (NMul m)
          let offin = embed (cnt .* i)
              st    = RwState { rws_in = DoRw xa offin, rws_out = DoNotRw }
          in fembed (act venv st)
-
 
 {------------------------------------------------------------------------}
 
@@ -199,14 +199,14 @@ vect_du1 dfs cty lcomp i j (NMul m1) (NMul m2)
 vect_du2 :: DynFlags -> CTy -> LComp
          -> Int -> NDiv -> NDiv -> Int -> NMul -> VecM DelayedVectRes
 vect_du2 dfs cty lcomp i (NDiv i0) (NDiv i1) j (NMul m) 
-  = mkDVRes zirbody "DU2" loc vin_ty vout_ty
+  = mkDVRes zirbody "DU2" loc (mkVectTy orig_inty i0) vout_ty
   where
     loc        = compLoc lcomp
     orig_inty  = inTyOfCTy cty
     orig_outty = yldTyOfCTy cty
     vin_ty     = mkVectTy orig_inty  arin
     vout_ty    = mkVectTy orig_outty arout
-    arin       = i*m -- size of input array
+    arin       = i*m 
     arout      = j*m -- size of output array
 
     act venv st = rwTakeEmitIO  venv st lcomp

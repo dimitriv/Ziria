@@ -24,8 +24,8 @@ import {-# SOURCE #-} Analysis.Range
 
 import Prelude hiding (exp, mapM)
 import Control.DeepSeq.Generics (NFData(..), genericRnf)
-import Control.Monad (liftM, when)
-import Control.Monad.State (State, execState, modify)
+import Control.Monad ( liftM )
+import Data.Monoid
 import Data.Data (Data)
 import Data.Functor.Identity (Identity(..))
 import Data.Map (Map)
@@ -767,7 +767,12 @@ eraseLoc = mapExp id -- types don't change
   Free variables
 -------------------------------------------------------------------------------}
 
-type ExprFVs t = S.Set (GName t)
+
+type GNameSet t = S.Set (GName t)
+
+
+deleting :: GNameSet t -> GName t -> GNameSet t
+deleting st n = S.delete n st
 
 -- | Collect free variables in an expression
 --
@@ -775,40 +780,51 @@ type ExprFVs t = S.Set (GName t)
 -- functions that are called in the expression. This is useful when we are
 -- computing the free variables in a nested function definition (which become
 -- additional arguments to the function when we generate C code).
-exprFVs' :: forall t b. Bool -> GExp t b -> ExprFVs t
-exprFVs' takeFuns = \e ->
-    execState (mapExpM return return goExp e) S.empty
+exprFVs' :: forall t b. Bool -> GExp t b -> GNameSet t
+exprFVs' takeFuns = goExp
   where
-    goExp :: GExp t b -> State (ExprFVs t) (GExp t b)
-    goExp x = goExp0 (unExp x) >> return x
+    goExp = goExp0 . unExp
+    goExp0 (EVar nm)                  = S.singleton nm
+    goExp0 (EVal {})                  = mempty
+    goExp0 (EValArr es)               = goExps es
+    goExp0 (EUnOp _op e1)             = goExp e1 
+    goExp0 (EBinOp _op e1 e2)         = goExp e1 `mappend` goExp e2
+    goExp0 (EAssign e1 e2)            = goExp e1 `mappend` goExp e2
+    goExp0 (EArrRead e1 e2 _r)        = goExp e1 `mappend` goExp e2
+    goExp0 (EArrWrite e1 e2 _r e3)    = goExp e1 `mappend` goExp e2 `mappend` goExp e3
+    goExp0 (EFor _ui nm1 e1 e2 e3)    = goExp e1 `mappend` goExp e2 `mappend` (goExp e3 `deleting` nm1)
+    goExp0 (EWhile e1 e2)             = goExp e1 `mappend` goExp e2
+    goExp0 (ELet nm1 _fi e1 e2)       = goExp e1 `mappend` (goExp e2 `deleting` nm1)
+    goExp0 (ELetRef nm1 Nothing e2)   = goExp e2 `deleting` nm1
+    goExp0 (ELetRef nm1 (Just e1) e2) = goExp e1 `mappend` (goExp e2 `deleting` nm1)
+    goExp0 (ESeq e1 e2)               = goExp e1 `mappend` goExp e2
+    goExp0 (ECall fun es)             = goExps es `mappend` (if takeFuns then S.singleton fun else mempty)
+    goExp0 (EIf e1 e2 e3)             = goExp e1 `mappend` goExp e2 `mappend` goExp e3
+    goExp0 (EPrint _nl e1)            = goExp e1
+    goExp0 (EError _t _err)           = mempty
+    goExp0 (ELUT _r e1)               = goExp e1
+    goExp0 (EStruct _t fields)        = goExps (map snd fields)
+    goExp0 (EProj e1 _fn)             = goExp e1
 
-    goExp0 :: GExp0 t b -> State (ExprFVs t) ()
-    goExp0 (EVar nm)        = record nm
-    goExp0 (EFor _ x _ _ _) = unrecord x
-    goExp0 (ELet x _ _ _)   = unrecord x
-    goExp0 (ELetRef x _ _)  = unrecord x
-    goExp0 (ECall f _)      = when takeFuns $ record f
-    goExp0 _                = return ()
+    goExps = mconcat . map goExp 
 
-    record, unrecord :: GName t -> State (ExprFVs t) ()
-    record   nm = modify $ S.insert nm
-    unrecord nm = modify $ S.delete nm
 
 -- NB: Take function variables (hence True)
 exprFVs :: GExp t b -> S.Set (GName t)
 exprFVs = exprFVs' True
 
+
 -- NB: Don't take function variables when computing fvs of closure
-exprFVsClos :: GExp t b -> S.Set (GName t)
+exprFVsClos :: GExp t b -> GNameSet t
 exprFVsClos = exprFVs' False
 
-funFVs :: GFun t a -> S.Set (GName t)
+funFVs :: GFun t a -> GNameSet t
 funFVs f = case unFun f of
   MkFunDefined _nm params body  -> exprFVs body S.\\ S.fromList params
   MkFunExternal _nm _params _ty -> S.empty
 
 -- | Find free variables in a function definition
-funFVsClos :: GFun t a -> S.Set (GName t)
+funFVsClos :: GFun t a -> GNameSet t
 funFVsClos f = case unFun f of
     MkFunDefined _nm params body  -> exprFVsClos body S.\\ S.fromList params
     MkFunExternal _nm _params _ty -> S.empty
