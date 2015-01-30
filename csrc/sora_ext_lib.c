@@ -817,6 +817,34 @@ void __ext_v_pack_complex16_complex8(struct complex8* output, int lenout, comple
 }
 
 
+
+void __ext_v_sign_int8(int8 *output, int outlen, int8 *input1, int inlen1, int8 *input2, int inlen2)
+{
+	int cnt = 0;
+	vcs *pi1 = (vcs *)input1;
+	vcs *pi2 = (vcs *)input2;
+	vcs *po = (vcs *)output;
+
+	while (cnt + 16 <= inlen1)
+	{
+		*po = (vcs)_mm_sign_epi8(*pi1, *pi2);
+		pi1++;
+		pi2++;
+		po++;
+		cnt += 16;
+	}
+
+	while (cnt < inlen1)
+	{
+		output[cnt] = (input2[cnt] < 0) ? (-input1[cnt]) : input1[cnt];
+		cnt++;
+	}
+	outlen = inlen1;
+}
+
+
+
+
 //FINL 
 void __ext_v_negate_complex8(struct complex8* output, int lenout, complex8* input, int lenin)
 {
@@ -834,14 +862,15 @@ void __ext_v_negate_complex8(struct complex8* output, int lenout, complex8* inpu
 	vcb *poutput = (vcb *)output;
 	for (i = 0; i < lenin / wlen; i++)
 	{
-		*poutput = (vcb)xor(*pinput, *((vcb*) __0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF));
+		//*poutput = (vcb)xor(*pinput, *((vcb*) __0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF));
+		*poutput = (vcb)_mm_sign_epi8(*pinput, *((vcb*)__0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF));
 		poutput++;
 		pinput ++;
 	}
 	for (int j = i * wlen; j < lenin; j++)
 	{
-		output[j].re = input[j].re ^ 0xFF;
-		output[j].im = input[j].im ^ 0xFF;
+		output[j].re = -input[j].re;
+		output[j].im = -input[j].im;
 	}
 }
 
@@ -1258,29 +1287,6 @@ void __ext_v_xor(uchar *output, int outlen, uchar *input1, int inlen1, uchar *in
 
 
 
-void __ext_v_sign_int8(int8 *output, int outlen, int8 *input1, int inlen1, int8 *input2, int inlen2)
-{
-	int cnt = 0;
-	vcs *pi1 = (vcs *)input1;
-	vcs *pi2 = (vcs *)input2;
-	vcs *po = (vcs *)output;
-
-	while (cnt + 16 <= inlen1)
-	{
-		*po = (vcs)_mm_sign_epi8(*pi1, *pi2);
-		pi1++;
-		pi2++;
-		po++;
-		cnt += 16;
-	}
-
-	while (cnt < inlen1)
-	{
-		output[cnt] = (input2[cnt] < 0) ? (-input1[cnt]) : input1[cnt];
-		cnt++;
-	}
-	outlen = inlen1;
-}
 
 
 

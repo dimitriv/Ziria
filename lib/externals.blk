@@ -162,7 +162,7 @@ let external v_negate_complex8(input:arr complex8) : arr[length(input)] complex8
 
 
 
--- Bit-wise operations
+-- Sign operations (essentially applies _mm_sign_epi8)
 let external v_sign_int8(input1 : arr int8, input2 : arr[length(input1)] int8)    : arr[length(input1)] int8
 
 
