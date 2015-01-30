@@ -162,8 +162,8 @@ fun external v_negate_complex8(input:arr complex8) : arr[length(input)] complex8
 
 
 
--- Bit-wise operations
-fun external v_sign_int8(input1 : arr int8, input2 : arr[length(input1)] int8)    : arr[length(input1)] int8
+-- Sign operations (essentially applies _mm_sign_epi8)
+fum external v_sign_int8(input1 : arr int8, input2 : arr[length(input1)] int8)    : arr[length(input1)] int8
 
 
 
