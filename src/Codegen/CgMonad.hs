@@ -107,6 +107,7 @@ module CgMonad
   , lookupVarEnv
   , lookupCompCode
   , lookupTyDefEnv
+  , getBoundVars
 
   , newHeapAlloc
   , getMaxStackAlloc
@@ -312,6 +313,8 @@ emptyEnv sym =
           , disableBC  = False
           , moduleName = ""
           }
+
+
 
 -- Note [CodeGen Invariants]
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -776,18 +779,26 @@ lookupExpFunEnv_maybe nm  =
     asks $ \rho -> M.lookup nm (funEnv rho)
 
 
+getBoundVars :: Cg [GName Ty]
+getBoundVars = asks (M.keys . varEnv)
+
 lookupVarEnv :: GName Ty -> Cg ExpGen
 lookupVarEnv nm = do
     maybe_x <- asks $ \rho -> M.lookup nm (varEnv rho)
     case maybe_x of
       Nothing -> do vars <- asks varEnv
-                    let bound = map (show . ppName) (M.keys vars)
+                    let bound = map ppNameUniq (M.keys vars)
                     -- TODO: This still does not render properly because we do a show on this string.
                     -- It has to do with the type of failOnError in Main.hs. The right thing to do
                     -- would be to simply make Cg return a Doc in the case of an error, not a string.
-                    fail (show (vcat [ text ("Unbound variable in code generation: "  ++ show (ppName nm))
-                                     , text ("bound = " ++ show bound)
-                                     , text ("pos = " ++ show (nameLoc nm)) ]))
+                    
+                    liftIO $ 
+                     print (vcat [ text ("Unbound variable in code generation: "  ++ show (ppNameUniq nm))
+                                 , text "bound = "
+                                 , nest 2 $ vcat bound
+                                 , text ("pos = " ++ show (nameLoc nm)) ])
+                    fail "Aborting compilation."
+
       Just x  -> return x
 
 lookupCompCode :: GName CTy -> Cg CompGen

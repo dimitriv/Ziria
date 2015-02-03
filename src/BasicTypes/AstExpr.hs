@@ -89,6 +89,9 @@ isMutable nm = case nameMut nm of { Imm -> False ; Mut -> True }
 instance Eq (GName t) where
   nm1 == nm2 = (name nm1 == name nm2) && (uniqId nm1 == uniqId nm2)
 
+-- NB: The Ord class is suspicious in the light of the above Eq class.
+-- We should revisit uses of Maps from GNames.
+
 instance Ord (GName t) where
   nm1 <= nm2 = (uniqId nm1 <= uniqId nm2)
 

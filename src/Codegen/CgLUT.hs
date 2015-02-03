@@ -408,6 +408,8 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars e = do
         clutDecl = [cdecl| $ty:lutbasety
                                  $id:clut[$int:idxLen][$int:lutEntryByteLen];|]
 
+    cbidx <- freshVar "bidx"
+
     let clutgen_def
           =
             [cedecl|void $id:clutgen()
@@ -418,11 +420,11 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars e = do
                         {
 
                           $decls:decls
-                          unsigned int b;
+                          unsigned int $id:cbidx;
                           $stms:stms
 
-                          for (b = 0; b < $int:(lutEntryByteLen); b++) {
-                                $id:clut[$id:cidx][b] = $id:clutentry[b];
+                          for ($id:cbidx = 0; $id:cbidx < $int:(lutEntryByteLen); $id:cbidx++) {
+                                $id:clut[$id:cidx][$id:cbidx] = $id:clutentry[$id:cbidx];
                           }
                         }
                      }
@@ -533,11 +535,8 @@ genLUTLookup dflags ranges
                           }
                   }
              Just res ->
-               do { extendVarEnv [(res,[cexp|$id:(name res)|])] $
-                    unpackByteAligned (outVars ++
+               do { unpackByteAligned (outVars ++
                        [res]) [cexp| (typename BitArrPtr) $clut[$id:idx]|]
-
---                ; cg_print_vars dflags outVars -- debugging
 
                   ; return $ [cexp|UNIT|]
                   }
@@ -545,7 +544,8 @@ genLUTLookup dflags ranges
   where store_var Nothing ce_res
           = return ce_res
         store_var (Just res) ce_res
-          = do { assignByVal ety ety [cexp|$id:(name res)|] ce_res
+          = do { cres <- lookupVarEnv res
+               ; assignByVal ety ety [cexp|$cres|] ce_res
                ; return [cexp|UNIT|]
                }
 

@@ -19,7 +19,7 @@
 {-# OPTIONS_GHC -Wall -fno-warn-orphans -fno-warn-name-shadowing #-}
 {-# LANGUAGE FlexibleInstances #-}
 -- | Pretty-printing type classes instances
-module PpExpr (nestingDepth, ppName, ppEs, ppBind) where
+module PpExpr (nestingDepth, ppName, ppNameUniq, ppEs, ppBind) where
 
 import Text.PrettyPrint.HughesPJ
 
@@ -256,6 +256,9 @@ ppEs f sep eargs = case eargs of
 
 ppName :: GName ty -> Doc
 ppName nm = text (name nm) -- <> braces (text $ uniqId nm)
+
+ppNameUniq :: GName ty -> Doc
+ppNameUniq nm = text (name nm) <> braces (text $ show $ uniqId nm)
 
 ppBind :: Outputable ty => GName ty -> Doc
 ppBind nm = ppName nm <+> colon <+> ppr (nameTyp nm)

@@ -215,9 +215,16 @@ varUseDefs ranges = \e -> do
           Set.delete v <$> go e2
     -- For ESeq we throw away the variables used to calculate the pure part of
     -- 'e1'.
+    -- NB: why? we may still have to do a LUT that will involve e1 even if the
+    -- result does not use those. This is a bug.
     go0 (ESeq e1 e2) = do
+        u1 <- go e1
+        u2 <- go e2
+        return $ u1 <> u2
+{- This is the potentially buggy part
         _ <- go e1
         go e2
+-}
     go0 (ECall {}) =
         fail "Cannot handle call"
     go0 (EIf econd ethen eelse) = do

@@ -37,6 +37,5 @@ fun floorc(a:complex16, b:int16) {
                { return(complex16{re=0;im=0}) }
              }
           }
-      };
-    return 0
+    }
 } 

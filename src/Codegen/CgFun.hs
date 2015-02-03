@@ -56,6 +56,8 @@ import Text.Parsec.Pos (SourcePos)
 import Text.PrettyPrint.HughesPJ 
 import Data.Maybe
 
+import Outputable 
+
 import Control.Monad ( when )
 import Control.Monad.IO.Class (MonadIO(..))
 
@@ -186,6 +188,25 @@ cgFunDefined dflags csp
              paramsEnv = map name_uniq params'
              localsEnv = map (name_uniq . mutVar) locals_defs'
 
+
+       ; vars <- getBoundVars 
+       ; let ambient_bound = map ppNameUniq vars
+
+{-  
+       ; liftIO $ print $ vcat [ text "CgFun (original) parameter environment:"
+                               , nest 2 $ vcat $ map ppr params
+
+                               , text "CgFun parameter environment:"
+                               , nest 2 $ vcat $ map (ppr.fst) paramsEnv 
+
+                               , text "CgFun local environment:"
+                               , nest 2 $ vcat $ map (ppr.fst) localsEnv
+
+                               , text "CgFun ambiently bound:"
+                               , nest 2 $ vcat ambient_bound
+                               ]
+-}
+
          -- Create an init group of all locals (just declarations)
        ; let decl_local MutVar{..} =
                codeGenDeclGroup (getNameWithUniq mutVar) (nameTyp mutVar)
@@ -199,6 +220,8 @@ cgFunDefined dflags csp
               codeGenGlobalInitsOnly dflags $
               map (\mv -> setMutVarName (getNameWithUniq (mutVar mv)) mv) locals_inits'
 
+       ; vars' <- getBoundVars 
+       ; let ambient_bound' = map ppNameUniq vars'
 
        ; (cdecls, cstmts, cbody) <-
             inNewBlock $
@@ -209,7 +232,7 @@ cgFunDefined dflags csp
               MkExp (ELUT r body'') _ _
                   | not (isDynFlagSet dflags NoLUT)               -- if it's a body that is lutted
                   , RetByRef (DoReuseLUT (ret_n,_)) <- ret_by_ref -- and here's the return name
-                  -> codeGenLUTExp dflags r body'' (Just ret_n { name = getNameWithUniq ret_n })
+                  -> codeGenLUTExp dflags r body'' (Just ret_n)   -- { name = getNameWithUniq ret_n })
                   | not (isDynFlagSet dflags NoLUT)
                   -> codeGenLUTExp dflags r body'' Nothing -- the usual thing
 
