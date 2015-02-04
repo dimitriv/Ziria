@@ -42,7 +42,7 @@ ctExp0 (EVar nm)           = nameTyp nm
 ctExp0 (EUnOp op a)        = ctUnOp op (ctExp a)
 ctExp0 (EBinOp op a b)     = ctBinOp op (ctExp a) (ctExp b)
 ctExp0 (EAssign _ _)       = TUnit
-ctExp0 (EArrRead a _ l)    = ctArrRead (ctExp a) l
+ctExp0 (EArrRead a _ l)    = ctArrRead (show a) (ctExp a) l
 ctExp0 (EArrWrite _ _ _ _) = TUnit
 ctExp0 (EFor _ _ _ _ _)    = TUnit
 ctExp0 (EWhile _ _)        = TUnit
@@ -81,10 +81,10 @@ ctBinOp op a _b
   | isBoolBinOp     op = a
   | otherwise          = panic $ text "ctBinOp:" <+> ppr op
 
-ctArrRead :: Ty -> LengthInfo -> Ty
-ctArrRead (TArray _ t) LISingleton  = t
-ctArrRead (TArray _ t) (LILength n) = TArray (Literal n) t
-ctArrRead ty _ = panic $ text "ctExp0:" <+> ppr ty
+ctArrRead :: String -> Ty -> LengthInfo -> Ty
+ctArrRead _err (TArray _ t) LISingleton  = t
+ctArrRead _err (TArray _ t) (LILength n) = TArray (Literal n) t
+ctArrRead err ty _ = panic $ text "ctExp0:" <+> text err <+> ppr ty
 
 ctProj :: Ty -> FldName -> Ty
 ctProj (TStruct _ fs) n = lookup' n fs

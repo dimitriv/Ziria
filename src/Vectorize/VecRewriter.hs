@@ -42,6 +42,7 @@ import Text.PrettyPrint.HughesPJ
 import Control.Exception.Base ( assert )
 import VecM
 import Utils ( panicStr, panic )
+import Outputable
 
 import Data.Maybe ( isJust, isNothing )
 
@@ -265,7 +266,8 @@ rwTakeEmit lx = assert (isJust $ isSimplCard_mb (compInfo lx)) (go lx)
         -- and hence they are impossible to happen.
         _other
           -> assert (isNothing $ isSimplCard_mb (compInfo lcomp)) $
-             panic $ text "VecRewriter: encountered OCard"
+             panic $ vcat [ text "VecRewriter: encountered OCard"
+                          , nest 2 $ ppr lcomp ]
 
 
 iterInvRwState :: CAlpha -- Input cardinality

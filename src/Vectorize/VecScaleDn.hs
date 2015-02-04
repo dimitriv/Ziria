@@ -113,7 +113,7 @@ vect_dd2 dfs cty lcomp j (NDiv j0) (NDiv j1)
           st     = RwState { rws_in = DoNotRw, rws_out = DoRw ya offout }
       v <- fembed (act venv st)
       ftimes zERO j1 $ \cnt -> femit (ya .!((cnt .* arout) :+ arout))
-      return v
+      freturn _aI v
 
 {-------------------------------------------------------------------------------
   [DD3] a^(i0*i1) -> b^(j0*j1) ~~~>    (a*i0)^i1 -> (b*j0)^j1
@@ -149,4 +149,4 @@ vect_dd3 dfs cty lcomp i (NDiv i0) (NDiv i1)
           st     = RwState { rws_in = DoRw xa offin, rws_out = DoRw ya offout }
       v <- fembed (act venv st)
       ftimes zERO j1 $ \cnt -> femit (ya .!((cnt .* arout) :+ arout))
-      return v
+      freturn _aI v

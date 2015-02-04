@@ -16,6 +16,9 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
+
+{-# LANGUAGE RecordWildCards #-}
+
 module Vectorize where
 
 import AstExpr
@@ -35,10 +38,13 @@ import Text.Parsec.Pos
 import qualified Data.Set as S
 import Control.Monad.State
 import Data.List as M
+import qualified Data.Map  as Map
 import Data.Functor.Identity
 import Data.Maybe ( fromJust )
 
 import Control.Applicative  ( (<$>) )
+
+import qualified Data.Traversable as T
 
 import Opts
 import Utils
@@ -59,341 +65,281 @@ import Debug.Trace
   Vectorizer proper
 -------------------------------------------------------------------------------}
 
-computeVectTop :: DynFlags -> LComp -> VecM [DelayedVectRes]
-computeVectTop dfs x = do
-  let compname = compShortName x
-  verbose dfs $
-    vcat [ text "--> Vectorizer, traversing:" <+> text compname 
-         , ppr x
+-- | Pack information we want to capture as we traverse AST
+data VectPack 
+  = VectPack { vp_comp     :: LComp
+             , vp_card     :: Card
+             , vp_self_dvr :: DelayedVectRes
+             , vp_vctx     :: CtxForVect
+             , vp_loc      :: Maybe SourcePos
+             , vp_cty      :: CTy
+             , vp_tyin     :: Ty
+             , vp_tyout    :: Ty }
+
+computeVectTop :: DynFlags -> LComp -> VecM DVRCands
+computeVectTop dfs x =
+   -- See Note [Initial Vectorization Context]
+  comp_vect dfs CtxExistsCompLeft x
+
+{- Note [Initial Vectorization Context]
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   The in initial CtxForVect value can well be CtxUnrestricted but this 
+   very quickly leads to explosion, particularly for transformers that are 
+   connected to each other like:
+             read >>> t1 >>> t2 >>> ... >>> tn >>> write
+   So we are instead starting from CtxExistsCompLeft.
+-}
+
+comp_vect :: DynFlags -> CtxForVect -> LComp -> VecM DVRCands
+comp_vect dfs vctx c = do 
+  verbose dfs (text "^^^" <+> text (compShortName c))
+  comp_vect0 dfs vpack (unComp c)
+  where 
+    vpack = VectPack { vp_comp     = c
+                     , vp_card     = compInfo c 
+                     , vp_vctx     = vctx
+                     , vp_cty      = cty
+                     , vp_loc      = loc 
+                     , vp_self_dvr = mkSelf c inty outty
+                     , vp_tyin     = inty
+                     , vp_tyout    = outty }
+    cty   = ctComp c
+    loc   = compLoc c
+    inty  = inTyOfCTy cty
+    outty = yldTyOfCTy cty
+
+comp_vect0 :: DynFlags -> VectPack -> LComp0 -> VecM DVRCands
+
+-- | Variable 
+comp_vect0 dfs (VectPack {..}) (Var x)
+  = lookupCVarBind x >>= comp_vect dfs vp_vctx
+
+-- | BindMany 
+comp_vect0 dfs (VectPack {..}) (BindMany c1 xs_cs) = do
+  let sfs = compSFDD vp_card vp_tyin vp_tyout
+      css = c1 : map snd xs_cs
+      xs  = map fst xs_cs
+  -- Compute direct down-vectorizations
+  direct_vss <- vect_comp_dd dfs vp_comp sfs
+  -- Compute recursive vectorizations
+  vss <- mapM (comp_vect dfs vp_vctx) css
+  let recursive_vss = combineBind vp_loc (head vss) xs (tail vss)
+  warnIfEmpty dfs vp_comp recursive_vss "BindMany (recursive)"
+  -- Return directs + recursives (will contain self)
+  return (direct_vss `unionDVRCands` recursive_vss)
+
+-- | Sequence
+comp_vect0 dfs (VectPack {..}) (Seq c1 c2) = do
+   let dty = fromJust $ doneTyOfCTy (ctComp c1)
+   tmp <- newVectGName "tmp" dty vp_loc Imm
+   comp_vect dfs vp_vctx (AstL.cBindMany vp_loc vp_card c1 [(tmp,c2)])
+
+-- | Par
+comp_vect0 dfs (VectPack {..}) (Par p c1 c2)
+  | ReadSrc orig_ty <- unComp c1
+  = mapDVRCands (prependReadSrc vp_loc p orig_ty) <$> comp_vect dfs vp_vctx c2
+  | WriteSnk orig_ty <- unComp c2
+  = mapDVRCands (appendWriteSnk vp_loc p orig_ty) <$> comp_vect dfs vp_vctx c1
+  | otherwise 
+  = let is_c1 = isComputer (ctComp c1)
+        is_c2 = isComputer (ctComp c2)
+        ctx1  = if is_c2 then CtxExistsCompRight else vp_vctx
+        ctx2  = if is_c1 then CtxExistsCompLeft  else vp_vctx
+    in do vcs1 <- comp_vect dfs ctx1 c1
+          vcs2 <- comp_vect dfs ctx2 c2
+          let res = combineData p vp_loc vcs1 vcs2
+          warnIfEmpty dfs vp_comp res "Par"
+          return res
+
+{-------------------------------------------------------------------------------}
+
+comp_vect0 dfs (VectPack {..}) (LetE x fi e c1) = 
+  mapDVRCands (updDVRComp $ cLetE vp_loc x fi e) <$> comp_vect dfs vp_vctx c1
+
+comp_vect0 dfs (VectPack {..}) (LetERef x mbe c1) = 
+  mapDVRCands (updDVRComp $ cLetERef vp_loc x mbe) <$> comp_vect dfs vp_vctx c1
+
+comp_vect0 dfs (VectPack {..}) (LetHeader fdef c1) =
+  mapDVRCands (updDVRComp $ cLetHeader vp_loc fdef) <$> comp_vect dfs vp_vctx c1
+
+comp_vect0 dfs (VectPack {..}) (Let x c1 c2) =
+  mapDVRCands (updDVRComp $ cLet vp_loc x (eraseComp c1)) <$>
+  extendCVarBind x c1 (comp_vect dfs vp_vctx c2)
+
+comp_vect0 dfs (VectPack {..}) (LetFunC f params c1 c2) =
+  mapDVRCands (updDVRComp $ cLetFunC vp_loc f params (eraseComp c1)) <$>
+  extendCFunBind f params c1 (comp_vect dfs vp_vctx c2)
+
+comp_vect0 dfs (VectPack {..}) (LetStruct sdef c2) =
+  mapDVRCands (updDVRComp (cLetStruct vp_loc sdef)) <$> comp_vect dfs vp_vctx c2
+
+{-------------------------------------------------------------------------------}
+
+comp_vect0 dfs (VectPack {..}) (Call f es) = do
+  CFunBind { cfun_params = prms, cfun_body = bdy } <- lookupCFunBind f
+
+  let (prms', cbinds, es') = mkHOCompSubst prms es
+
+  let bdy' = foldl mk_let_bind bdy cbinds
+      mk_let_bind c (x,bnd) = AstL.cLet vp_loc (compInfo bdy) x bnd c
+
+  -- NB: It's not very efficient to create a zillion typed names.
+  -- Hence we create one and set its type each time.
+  vf <- newVectGName (name f ++ "_vect") undefined vp_loc Imm
+
+  let mk_vect_call vbd
+        = cLetFunC vp_loc vf_typed prms' vbd $
+          cCall vp_loc vf_typed (map eraseCallArg es)
+        where vf_typed = updNameTy vf vf_type
+              vf_type  = CTArrow (map nameCallArgTy prms') (ctComp vbd)
+
+  mapDVRCands (updDVRComp mk_vect_call) <$> comp_vect dfs vp_vctx bdy'
+
+
+{-------------------------------------------------------------------------------}
+
+comp_vect0 dfs (VectPack {..}) (Interleave {}) = 
+  return (singleDVRCands vp_self_dvr)
+
+comp_vect0 dfs (VectPack {..}) (Filter {}) =
+  return (singleDVRCands vp_self_dvr)
+
+comp_vect0 dfs (VectPack {..}) (ReadSrc {}) =
+  return (singleDVRCands vp_self_dvr)
+
+comp_vect0 dfs (VectPack {..}) (WriteSnk {}) =
+  return (singleDVRCands vp_self_dvr)
+
+comp_vect0 dfs (VectPack {..}) (WriteInternal {}) =
+  return (singleDVRCands vp_self_dvr)
+
+comp_vect0 dfs (VectPack {..}) (ReadInternal {}) =
+  return (singleDVRCands vp_self_dvr)
+
+comp_vect0 dfs (VectPack {..}) (Return {}) =
+  return (singleDVRCands vp_self_dvr)
+
+{-------------------------------------------------------------------------------}
+
+comp_vect0 dfs (VectPack {..}) (Branch e c1 c2) = do 
+  let sfs = compSFDD vp_card vp_tyin vp_tyout
+
+  direct_vss <- vect_comp_dd dfs vp_comp sfs
+
+  vcs1 <- comp_vect dfs vp_vctx c1
+  vcs2 <- comp_vect dfs vp_vctx c2
+
+  let recursive_vss = combineBranch vp_loc e vcs1 vcs2
+  warnIfEmpty dfs vp_comp recursive_vss "Branch"
+
+  return $ direct_vss `unionDVRCands` recursive_vss
+
+{-------------------------------------------------------------------------------}
+
+comp_vect0 dfs (VectPack {..}) (Standalone c) = 
+  mapDVRCands (updDVRComp $ cStandalone vp_loc) <$> comp_vect dfs vp_vctx c
+
+comp_vect0 dfs (VectPack {..}) (Mitigate {}) =
+  vecMFail vp_loc $ text "Unexpected mitigate node in vectorization."
+
+
+{-------------------------------------------------------------------------------}
+
+comp_vect0 dfs (VectPack {..}) (Until e c) =
+  addDVR vp_self_dvr <$>
+  vectIterComp dfs (cUntil vp_loc e) vp_tyin vp_tyout c
+
+comp_vect0 dfs (VectPack {..}) (While e c) =
+  addDVR vp_self_dvr <$>
+  vectIterComp dfs (cWhile vp_loc e) vp_tyin vp_tyout c
+
+comp_vect0 dfs (VectPack {..}) (Times ui nm e elen c) =
+  addDVR vp_self_dvr <$>
+  vectIterComp dfs (cTimes vp_loc ui nm e elen) vp_tyin vp_tyout c
+
+{-------------------------------------------------------------------------------}
+
+comp_vect0 dfs (VectPack {..}) (Map vann nm) =
+  addDVR vp_self_dvr <$>
+    vectMap dfs vp_vctx nm vp_tyin vp_tyout vp_loc vann
+
+comp_vect0 dfs (VectPack {..}) (Repeat vann c) =
+  addDVR vp_self_dvr <$>
+    vectRepeat dfs vp_vctx c vp_tyin vp_tyout vp_loc vann
+
+{-------------------------------------------------------------------------------}
+
+comp_vect0 dfs (VectPack {..}) (VectComp (fin,fout) c) = do
+  -- I am not sure that the VectComp annotations are in fact used
+  liftIO $ print $
+    vcat [ text "VectComp, ignoring annotation."
+         , text "At location:" <+> text (show vp_loc)
          ]
-  -- | The initial CtxForVect value used to be CtxUnrestricted but this 
-  -- very quickly leads to explosion, particularly for transformers that are 
-  -- connected to each other like read >>> t1 >>> t2 >>> ... >>> write. So 
-  -- we are instead starting from CtxExistsCompLeft.
-  rs <- go CtxExistsCompLeft x 
-  verbose dfs $ text "<--"
-  return rs
-  where
-    go :: CtxForVect -> LComp -> VecM [DelayedVectRes]
-    go vctx comp =
-      let card  = compInfo comp
-          loc   = compLoc comp
-          cty   = ctComp comp
-          tyin  = inTyOfCTy cty
-          tyout = yldTyOfCTy cty
-          self  = DVR { dvr_comp = return $ eraseComp comp
-                      , dvr_vres = NotVect tyin tyout }
-          warn_if_empty = warn_empty_vect dfs comp
-      in
-      verbose dfs (text "    " <+> text (compShortName comp)) >>
-      case unComp comp of
+  comp_vect dfs vp_vctx c
 
-        Var x -> lookupCVarBind x >>= go vctx
+{-------------------------------------------------------------------------------}
 
-        BindMany c1 xs_cs
-          -> do let sfs = compSFDD card tyin tyout
-                    css = c1 : map snd xs_cs
-                    xs  = map fst xs_cs
-
-                -- Compute direct down-vectorizations
-                direct_vss <- vect_comp_dd dfs comp sfs
-
-                -- Compute recursive vectorizations
-                vss <- mapM (go vctx) css
-
-                liftIO $ verbose dfs $
-                  vcat [ text "Before combineCtrl"
-                       , nest 2 $ text "len(vss) =" <+> ppr (length vss)
-                       ]
-
-                let ress = cross_prod_mit $ map keepGroupMaximals vss
-                let recursive_vss = keepGroupMaximals $
-                      map (\(vc:vcs) -> combineCtrl loc vc xs vcs) ress
-
-                liftIO $ 
-                 verbose dfs $ 
-                   vcat [ text "After combineCtrl"
-                        , nest 2 $ text "len(ress)         =" <+> 
-                                        (ppr $ length ress)
-                        , nest 2 $ text "len(recursive_vss)=" <+> 
-                                        (ppr $ length recursive_vss)
-                        , nest 2 $ text "len(direct_vss)   =" <+> 
-                                        (ppr $ length direct_vss)
-                        ]
-
-                warn_if_empty recursive_vss "BindMany"
-      
-                -- Return directs + recursives (will contain self)
-                return (direct_vss ++ recursive_vss)
-  
-        Seq c1 c2 -> do
-          let dty = fromJust $ doneTyOfCTy (ctComp c1)
-          tmp <- newVectGName "tmp" dty loc Imm
-          go vctx (AstL.cBindMany loc card c1 [(tmp,c2)])
-
-        Par p c1 c2 
-         | ReadSrc orig_ty <- unComp c1
-         -> map (prependReadSrc loc p orig_ty) <$> go vctx c2
-
-         | WriteSnk orig_ty <- unComp c2
-         -> map (appendWriteSnk loc p orig_ty) <$> go vctx c1
-
-         | otherwise -> do 
-
-          let is_c1 = isComputer (ctComp c1)
-              is_c2 = isComputer (ctComp c2)
-              ctx1  = if is_c2 then CtxExistsCompRight else vctx
-              ctx2  = if is_c1 then CtxExistsCompLeft  else vctx
-          vcs1 <- go ctx1 c1
-          vcs2 <- go ctx2 c2
-
-          liftIO $ verbose dfs $ ppr comp         
-
-          liftIO $ verbose dfs $ 
-            vcat [ text "Before combineData"
-                 , nest 2 $ text "len(vcs1) =" <+> (ppr $ length vcs1)
-                 , nest 2 $ text "len(vcs2) =" <+> (ppr $ length vcs2)
-                 ]
-
-          let cd = combineData p loc vcs1 vcs2
-
-          -- liftIO $ putStrLn "*** Par: vcs1"
-          -- mapM (\r -> liftIO (putStrLn (show $ dvr_vres r))) vcs1
-
-          -- liftIO $ putStrLn "*** Par: vcs2"
-          -- mapM (\r -> liftIO (putStrLn (show $ dvr_vres r))) vcs2
-
-
-          -- liftIO $ putStrLn "*** Par: cd"
-          -- mapM (\r -> liftIO (putStrLn (show $ dvr_vres r))) cd
-
-
-          liftIO $ verbose dfs $ 
-            nest 2 $ text "len(cd) =" <+> (ppr $ length cd)
-
-          -- let grps = groupBy' (vResEqQ <| dvr_vres) cd
-          -- liftIO $ verbose dfs $ 
-          --   vcat [ text "len(grps) =" <+> (ppr $ length grps) ]
-
-          let ress = keepGroupMaximals cd
-
-          liftIO $ verbose dfs $ 
-            vcat [ text "After combineData"
-                 , nest 2 $ text "len(ress) =" <+> ppr (length ress)
-                 ]
-
-          warn_if_empty ress "Par"
-
-          return ress
-
-        LetE x fi e c1 -> do
-          vcs1 <- go vctx c1
-          mapM (liftCompDVR $ cLetE loc x fi e) vcs1
-        LetERef x mbe c1 -> do
-          vcs1 <- go vctx c1
-          mapM (liftCompDVR $ cLetERef loc x mbe) vcs1
-
-        LetHeader fdef c1 -> do
-          vcs1 <- go vctx c1
-          mapM (liftCompDVR $ cLetHeader loc fdef) vcs1
-
-        -- Computation bindings (Let and LetFunC). Note we can't ignore the
-        -- binding despite the fact that we specialize because the 'self' 
-        -- vectorization may still mention the original bindings.
-        Let x c1 c2 -> do
-          c2s' <- extendCVarBind x c1 (go vctx c2)
-          let c1_nocard = eraseComp c1
-          mapM (liftCompDVR $ cLet loc x c1_nocard) c2s'
-
-        LetFunC f params c1 c2 -> do
-          c2s' <- extendCFunBind f params c1 $ go vctx c2
-          let c1_nocard = eraseComp c1
-          mapM (liftCompDVR $ cLetFunC loc f params c1_nocard) c2s'
-
-        LetStruct sdef c2 -> do
-          vcs2 <- go vctx c2
-          mapM (liftCompDVR (cLetStruct loc sdef)) vcs2
-
-        Call f es -> do
-          CFunBind { cfun_params = prms, cfun_body = bdy } <- lookupCFunBind f
-          -- Separate computation variables
-          let (prms', cbinds, es') = mkHOCompSubst prms es
-
-          -- And bind computation arguments 
-          let bdy' = foldl (\c (x,bnd) -> AstL.cLet loc (compInfo bdy) x bnd c) bdy cbinds
-
-          vbdys <- go vctx bdy'
-          -- It's not very efficient to create a zillion typed names
-          -- so let us create one and set its type each time.
-          vf <- newVectGName (name f ++ "_vect") undefined loc Imm
-          let mk_vect_call vbd
-                = cLetFunC loc vf_typed prms' vbd $ 
-                  cCall loc vf_typed (map eraseCallArg es)
-                where vf_typed = updNameTy vf vf_type
-                      vf_type  = CTArrow (map nameCallArgTy prms') (ctComp vbd)
-          ress <- mapM (liftCompDVR mk_vect_call) vbdys
-          return ress
-
-        Interleave c1 c2 -> return [self]
-
-        Branch e c1 c2
-          -> do let sfs = compSFDD card tyin tyout
-
-                -- Compute the direct vectorizations
-                direct_vss <- vect_comp_dd dfs comp sfs
-
-                -- Compute the recursive vss 
-                vcs1 <- go vctx c1
-                vcs2 <- go vctx c2
-                let ress = cross_prod_mit $ map keepGroupMaximals [vcs1,vcs2]
-                recursive_vss <- mapM (\[dvr1,dvr2] ->
-                   let vres1 = dvr_vres dvr1 
-                       vres2 = dvr_vres dvr2 
-                       vtin  = vect_in_ty  vres1
-                       vtout = vect_out_ty vres1
-                       vres  = if any didVect [vres1,vres2]
-                               then DidVect vtin vtout u
-                               else NotVect vtin vtout
-                       u = vResUtil vres1 + vResUtil vres2
-                   in return $
-                      DVR { dvr_comp = do c1' <- dvr_comp dvr1
-                                          c2' <- dvr_comp dvr2
-                                          return $ cBranch loc e c1' c2'
-                          , dvr_vres = vres }) ress
-                warn_if_empty recursive_vss "Branch"
-                
-                -- Return directs + recursives (recursives will contain 'self')
-                return $ direct_vss ++ recursive_vss
-
-        Filter {} -> return [ self ] -- TODO: Implement later on
-
-        -- NB: We are not supposed to meet Read/Write nodes in
-        -- isolation, see special case for Par above. Otherwise we
-        -- could easily blow up by creating too manay candidates
-        ReadSrc {}       -> return [self]
-        WriteSnk {}      -> return [self] 
-        ReadInternal {}  -> return [self]
-        WriteInternal {} -> return [self]
-
-
-        Return _fi _e    -> return [ self ]
-
-
-        -- Iterated computers
-        Until e c -> do
-          vss <- vect_itercomp dfs (cUntil loc e) card tyin tyout c
-          return (self : vss)
-        While e c -> do
-          vss <- vect_itercomp dfs (cWhile loc e) card tyin tyout c
-          return (self : vss)
-        Times ui nm e elen c -> do
-          vss <- vect_itercomp dfs (cTimes loc ui nm e elen) card tyin tyout c
-          return (self : vss)
-
-       
-        -- Special cases
-        Standalone c -> do 
-           vcs <- go vctx c
-           mapM (liftCompDVR $ cStandalone loc) vcs
-        Mitigate {} ->
-           vecMFail loc $ text "BUG: Asked to vectorize Mitigate node."
-
-        -- Map
-        Map vann nm -> do
-          vcs <- vect_map dfs vctx nm tyin tyout loc vann
-          return (self : vcs)
-
-        -- Repeat 
-        Repeat vann c -> do
-          vcs <- vect_repeat dfs vctx c tyin tyout loc vann
-          return (self : vcs)
-
-        -- Annotated computer 
-        VectComp (fin,fout) c -> do 
-          let sfs = compSFDD (compInfo c) tyin tyout
-          vcs <- vect_comp_dd dfs c sfs
-
-{- 
-
-          liftIO $ print $ 
-                   vcat [ text "VectComp **PRE** candidates are:"
-                        , nest 2 $ vcat (map (text . show . dvr_vres) vcs) ]
-
-          -- NB: False below because we want /exactly/ the candidates
-          liftIO $ print $ vcat [ text "VectComp: "   <+> ppr (fin,fout)
-                                , text "Cardinality:" <+> ppr (compInfo c) ]
--}
-          let cands = 
-               concatMap (vec_exact (error "VectComp") fin fout False loc) vcs
-{-
-          comp_cands <- mapM (liftIO . dvr_comp) cands
-
-          liftIO $ print $ 
-                   vcat [ text "VectComp candidates are:"
-                        , nest 2 $ vcat (map (text . show . dvr_vres) cands) 
-                        , nest 2 $ vcat (map ppCompTypedVect comp_cands)
-                        ]
--}
-
-          return cands
-
-        -- Others: Take1/Take/Emit/Emits, just down-vectorize
-        _other
-          -> do vss <- vect_comp_dd dfs comp $ compSFDD card tyin tyout
-                return (self : vss)
+comp_vect0 dfs (VectPack {..}) _other =
+  addDVR vp_self_dvr <$>
+  vect_comp_dd dfs vp_comp (compSFDD vp_card vp_tyin vp_tyout)
 
 
 {-------------------------------------------------------------------------------
   Helper functions
 -------------------------------------------------------------------------------}
 
--- | Emit a warning when we encounter an empty vectorization result
-warn_empty_vect :: DynFlags -> LComp -> [DelayedVectRes] -> String -> VecM ()
-warn_empty_vect dfs comp ress origin
-  =  when (null ress) $ liftIO $ do
-       print $ text "WARNING: empty vectorization" <+> braces (text origin)
-       verbose dfs $ ppr comp
+-- | The very same component, non-vectorized
+mkSelf :: LComp -> Ty -> Ty -> DelayedVectRes
+mkSelf lcomp tin tout 
+  = DVR { dvr_comp = return (eraseComp lcomp), dvr_vres = NotVect tin tout }
+
+-- | Warn if DVRCands is empty
+warnIfEmpty :: DynFlags -> LComp -> DVRCands -> String -> VecM ()
+warnIfEmpty dfs lc cands msg 
+  = when (Map.null cands) $ liftIO $ do
+       print $ text "WARNING: empty vectorization" <+> braces (text msg)
+       verbose dfs $ vcat [ text "For computation:" 
+                          , nest 2 $ ppr lc ]
 
 -- | Vectorizing a (finitely) iterated computer (NB: not adding 'self')
-vect_itercomp :: DynFlags -> (Comp -> Comp)
-              -> Card -> Ty -> Ty -> LComp -> VecM [DelayedVectRes]
-vect_itercomp dfs builder iter_card tin tout cbody
-  = do let body_card = compInfo cbody -- Get cardinality of the body
-       vss <- vect_comp_dd dfs cbody $ compSFDD body_card tin tout
-       mapM (liftCompDVR builder) vss -- Lift to the iterator
+vectIterComp :: DynFlags -> (Comp -> Comp) -> Ty -> Ty -> LComp -> VecM DVRCands
+vectIterComp dfs builder tin tout cbody = do
+  let body_card = compInfo cbody
+  body_cands <- vect_comp_dd dfs cbody $ compSFDD body_card tin tout
+  return (mapDVRCands (updDVRComp $ builder) body_cands)
 
 
 -- | Take a vectorization candidate vc and prepend it with an appropriately
--- vectorized version of readSrc, so that in the end we get (read >>> vc)
+--   vectorized version of readSrc, to get (read >>> vc)
 prependReadSrc :: Maybe SourcePos -> ParInfo
                -> Ty -> DelayedVectRes -> DelayedVectRes
 prependReadSrc loc p orig_ty (DVR { dvr_comp = iocomp, dvr_vres = vres })
   = DVR { dvr_comp = iocomp', dvr_vres = vres' }
-  where iocomp'   = cPar loc p (cReadSrc loc new_rd_ty) <$> iocomp
-        new_rd_ty = if dvr_in_ty == TVoid then orig_ty else dvr_in_ty
-        dvr_in_ty = vect_in_ty vres        
-        new_in_ty = TBuff (ExtBuf new_rd_ty)
-        vres' = case vres of 
-          NotVect tin tout   
-            -> NotVect new_in_ty tout
-          DidVect tin tout u 
-            -> DidVect new_in_ty tout (parUtility minUtil u dvr_in_ty)
+  where 
+    iocomp'   = cPar loc p (cReadSrc loc new_rd_ty) <$> iocomp
+    new_rd_ty = if dvr_in_ty == TVoid then orig_ty else dvr_in_ty
+    dvr_in_ty = vect_in_ty vres
+    new_in_ty = TBuff (ExtBuf new_rd_ty)
+    vres' = case vres of 
+     NotVect tin tout -> NotVect new_in_ty tout
+     DidVect _ tout u -> DidVect new_in_ty tout (parUtility minUtil u dvr_in_ty)
 
 -- | Take a vectorization candidate vc and append an appropriately vectorized
---  WriteSnk in the data path so that in the end we get (vc >>> write).
-appendWriteSnk :: Maybe SourcePos -> ParInfo 
-              -> Ty -> DelayedVectRes -> DelayedVectRes
+--   version of WriteSnk, to get (vc >>> write).
+appendWriteSnk :: Maybe SourcePos -> ParInfo
+               -> Ty -> DelayedVectRes -> DelayedVectRes
 appendWriteSnk loc p orig_ty (DVR { dvr_comp = iocomp, dvr_vres = vres })
   = DVR { dvr_comp = iocomp', dvr_vres = vres' }
-  where iocomp'   = (\c -> cPar loc p c (cWriteSnk loc new_wr_ty)) <$> iocomp
-        new_wr_ty = if dvr_out_ty == TVoid then orig_ty else dvr_out_ty
-        dvr_out_ty = vect_out_ty vres        
-        new_out_ty = TBuff (ExtBuf new_wr_ty)
-        vres' = case vres of 
-          NotVect tin _
-            -> NotVect tin new_out_ty
-          DidVect tin _ u 
-            -> DidVect tin new_out_ty (parUtility minUtil u dvr_out_ty)
+  where 
+    iocomp' = do
+      c <- iocomp
+      return (cPar loc p c (cWriteSnk loc new_wr_ty))
+    new_wr_ty = if dvr_out_ty == TVoid then orig_ty else dvr_out_ty
+    dvr_out_ty = vect_out_ty vres        
+    new_out_ty = TBuff (ExtBuf new_wr_ty)
+    vres' = case vres of 
+     NotVect tin _ -> NotVect tin new_out_ty
+     DidVect tin _ u -> DidVect tin new_out_ty (parUtility minUtil u dvr_out_ty)
 
 {-------------------------------------------------------------------------------
   Vectorizing Map 
@@ -402,14 +348,14 @@ appendWriteSnk loc p orig_ty (DVR { dvr_comp = iocomp, dvr_vres = vres })
 -- | To avoid duplication we vectorize Map exactly as we do for
 -- repeat. Hence, below we create a node: seq { x <- take; emit f(x) }
 -- and call the vectorizer for Repeat.
-vect_map :: DynFlags 
-         -> CtxForVect
-         -> EId -> Ty -> Ty -> Maybe SourcePos
-         -> Maybe VectAnn
-         -> VecM [DelayedVectRes]
-vect_map dfs vctx f tin tout loc vann = do
-  MkComp (Repeat _ c0) _ _ <- map2take_emit loc vann tin f 
-  vect_repeat dfs vctx c0 tin tout loc vann
+vectMap :: DynFlags 
+        -> CtxForVect
+        -> EId -> Ty -> Ty -> Maybe SourcePos
+        -> Maybe VectAnn
+        -> VecM DVRCands
+vectMap dfs vctx f tin tout loc vann = do
+  MkComp (Repeat _ c0) _ _ <- expandMapToTakeEmit loc vann tin f 
+  vectRepeat dfs vctx c0 tin tout loc vann
   
 {-------------------------------------------------------------------------------
   Vectorizing Repeat 
@@ -430,183 +376,118 @@ repeat_scalefactors vctx card tyin tyout
          CtxExistsCompRight -> ([]   , sfdus, sfdds)
 
 
+logCandidates :: DynFlags -> String -> DVRCands -> VecM DVRCands
+logCandidates dfs origin cands = do
+  verbose dfs $ text origin <>
+    parens (text (show (Map.size cands)) <+> text "candidates")
+  return cands
+
+
 -- | NB: Not including 'self'
-vect_repeat :: DynFlags 
-            -> CtxForVect
-            -> LComp -- The iterated /computer/ 
-            -> Ty -> Ty -> Maybe SourcePos
-            -> Maybe VectAnn
-            -> VecM [DelayedVectRes]
-vect_repeat dynflags vctx c tyin tyout loc vann = go vann c
+vectRepeat :: DynFlags
+           -> CtxForVect
+           -> LComp -- The iterated /computer/ 
+           -> Ty -> Ty -> Maybe SourcePos
+           -> Maybe VectAnn
+           -> VecM DVRCands
+vectRepeat dfs vctx c tyin tyout loc vann = go vann c
   where
-     -- | Nested annotation on computer
-   go Nothing (MkComp (VectComp hint c0) _ _) 
-     = go (Just (Rigid True hint)) c0
-
-     -- | Vectorize rigidly and up/dn mitigate
-   go (Just (Rigid f (fin,fout))) c0 = do
-     vcs <- go Nothing c0
-     -- liftIO $ putStrLn "Repeat (automatic) candidates:"
-     -- liftIO $ mapM (putStrLn . show . dvr_vres) vcs
-
-     let repeat_sfs = repeat_scalefactors vctx (compInfo c0) tyin tyout
-     -- liftIO $ putStrLn ("len(vcs)=" ++ show (length vcs))
-     let ress = concatMap (vec_exact repeat_sfs fin fout f loc) vcs
-     -- liftIO $ putStrLn ("len(ress)=" ++ show (length ress))
-     return ress
-
-   go (Just (UpTo f (maxin,maxout))) c0 = do
-     vcs <- go Nothing c0
-     let repeat_sfs = repeat_scalefactors vctx (compInfo c0) tyin tyout
-     return $ concatMap (vec_upto repeat_sfs maxin maxout f loc) vcs
-     -- | Vectorize without restrictions and up/dn mitigate
+   -- | Vectorize without restrictions and up/dn mitigate
    go Nothing c0 = do 
-     let (sfuds,sfdus,sfdds) 
+     let (sfuds,sfdus,sfdds)
             = repeat_scalefactors vctx (compInfo c0) tyin tyout
-     vecuds <- vect_comp_ud dynflags c0 sfuds
-     vecdus <- vect_comp_du dynflags c0 sfdus
-     vecdds <- vect_comp_dd dynflags c0 sfdds
-     return $ map mk_repeat (vecuds ++ vecdus ++ vecdds)
+     vecuds <- vect_comp_ud dfs c0 sfuds >>= logCandidates dfs "vect_comp_ud"
+     vecdus <- vect_comp_du dfs c0 sfdus >>= logCandidates dfs "vect_comp_du"
+     vecdds <- vect_comp_dd dfs c0 sfdds >>= logCandidates dfs "vect_comp_dd"
+     let cands = vecuds `unionDVRCands` vecdus `unionDVRCands` vecdds
+     let res   = mapDVRCands (updDVRComp $ cRepeat loc Nothing) cands
+     logCandidates dfs "VectRepeat" res
+  
+   -- | Vectorize internally to /exactly/ (fin,fout) and externally up
+   -- or down depending on the flag f
+   go (Just (Rigid f (fin,fout))) c0 = do
+      vcs <- go Nothing c0
+      let pred (ty1,ty2) _ = ty_match ty1 fin && ty_match ty2 fout
+          vcs_matching     = Map.filterWithKey pred vcs
+          repeat_sfs       = repeat_scalefactors vctx (compInfo c0) tyin tyout
+      logCandidates dfs "VectRepeat" $ 
+        mitigateFlexi f repeat_sfs vcs_matching
 
-   mk_repeat :: DelayedVectRes -> DelayedVectRes
-   mk_repeat (DVR { dvr_comp = io_comp, dvr_vres = vres })
-     = DVR { dvr_comp = cRepeat loc Nothing <$> io_comp, dvr_vres = vres }
+   -- | Vectorize internally to anything <= (fin,fout) and externally up
+   -- or down depending on the flag f
+   go (Just (UpTo f (fin,fout))) c0 = do
+      vcs <- go Nothing c0
+      let pred (ty1,ty2) _ = ty_upto ty1 fin && ty_upto ty2 fout
+          vcs_matching     = Map.filterWithKey pred vcs
+          repeat_sfs       = repeat_scalefactors vctx (compInfo c0) tyin tyout
+      logCandidates dfs "VectRepeat" $ 
+        mitigateFlexi f repeat_sfs vcs_matching
+
+-- | Somewhat delicate arity equality and up-to comparisons
+ty_match :: Ty -> Int -> Bool
+ty_match (TArray (Literal n) _) j = j == n
+ty_match TVoid j                  = j >= 0
+ty_match _t j                     = j == 1
+
+ty_upto :: Ty -> Int -> Bool
+ty_upto (TArray (Literal n) _) j  = n <= j
+ty_upto TVoid j                   = j >= 0
+ty_upto _t j                      = j > 0
+
+{-------------------------------------------------------------------------------
+  Flexible modes of vectorization (via mitigators)
+-------------------------------------------------------------------------------}
+
+-- | Try to create mitigated versions of candidates to all scalefactors
+mitigateFlexi :: Bool -> ScaleFactors -> DVRCands -> DVRCands
+mitigateFlexi False _sfs cands = cands
+mitigateFlexi True (sfuds,sfdus,sfdds) cands =
+  let arities = map sfud_arity sfuds ++ 
+                map sfdu_arity sfdus ++ 
+                map sfdd_arity sfdds
+  -- For each arity try to convert the candidate to it
+  in foldDVRCands (upd arities) emptyDVRCands cands
+  where upd ars s r = foldl (\cs ar -> mit_one ar r `addDVR` cs) s ars
 
 
--- | Take a DelayedVectRes and if the vectorized array sizes are
--- within the bounds given then keep all possible up/dn mitigations.
-vec_upto :: ScaleFactors -> Int -> Int
-         -> Bool -> Maybe SourcePos
-         -> DelayedVectRes -> [DelayedVectRes]
-vec_upto sfs maxin maxout f loc dvr
-  = let vtin  = vect_in_ty  $ dvr_vres dvr
-        vtout = vect_out_ty $ dvr_vres dvr
-    in if check_tysiz vtin  maxin &&
-          check_tysiz vtout maxout
-       then mit_updn_maybe sfs f loc dvr else []
-  where dres = dvr_vres dvr
-        check_tysiz (TArray (Literal l) _) bnd | l > bnd = False
-        check_tysiz _tother _bnd = True
-
-vec_exact :: ScaleFactors -> Int -> Int
-          -> Bool -> Maybe SourcePos
-          -> DelayedVectRes -> [DelayedVectRes]
-vec_exact sfs maxin maxout f loc dvr
-  = let vtin  = vect_in_ty  $ dvr_vres dvr
-        vtout = vect_out_ty $ dvr_vres dvr
-    in -- First check if the native vectorization exactly matches
-       -- the programmer requirements. 
-       if check_tysiz vtin  maxin &&
-          check_tysiz vtout maxout
-       then mit_updn_maybe sfs f loc dvr
-       -- This native vectorization does not match user requirements
-       else 
-         -- but the user said he is flexible about it, arguably strange
-         if f == True then []
-         -- Not a native vectorization /and/ rigid flag. Just do
-         -- our best and give the user what he asked for with mitigaros
-         else do dvr'  <- mit_in loc maxin dvr
-                 dvr'' <- mit_out loc dvr' maxout
-                 return dvr''
-
-  where dres = dvr_vres dvr
-        check_tysiz (TArray (Literal l) _) bnd | l /= bnd = False
-        check_tysiz _tother _bnd = True
- 
 
 {-------------------------------------------------------------------------------
   DD/UD/DU Vectorization entry points (see VecScaleUp/VecScaleDn)
 -------------------------------------------------------------------------------}
 
-vect_comp_ud :: DynFlags -> LComp -> [SFUD] -> VecM [DelayedVectRes]
-vect_comp_ud dfs lcomp sfs = mapM (VecScaleUp.doVectCompUD dfs cty lcomp) sfs
+vect_comp_ud :: DynFlags -> LComp -> [SFUD] -> VecM DVRCands
+vect_comp_ud dfs lcomp sfs 
+ = foldM (\cs sf ->
+     do r <- VecScaleUp.doVectCompUD dfs cty lcomp sf
+        return (addDVR r cs)) emptyDVRCands sfs
+ where cty = ctComp lcomp
+
+vect_comp_du :: DynFlags -> LComp -> [SFDU] -> VecM DVRCands
+vect_comp_du dfs lcomp sfs 
+  = foldM (\cs sf -> 
+     do r <- VecScaleUp.doVectCompDU dfs cty lcomp sf
+        return (addDVR r cs)) emptyDVRCands sfs
   where cty = ctComp lcomp
 
-vect_comp_du :: DynFlags -> LComp -> [SFDU] -> VecM [DelayedVectRes]
-vect_comp_du dfs lcomp sfs = mapM (VecScaleUp.doVectCompDU dfs cty lcomp) sfs
+vect_comp_dd :: DynFlags -> LComp -> [SFDD] -> VecM DVRCands
+vect_comp_dd dfs lcomp sfs 
+  = foldM (\cs sf ->
+     do r <- VecScaleDn.doVectCompDD dfs cty lcomp sf
+        return (addDVR r cs)) emptyDVRCands sfs
   where cty = ctComp lcomp
 
-vect_comp_dd :: DynFlags -> LComp -> [SFDD] -> VecM [DelayedVectRes]
-vect_comp_dd dfs lcomp sfs = mapM (doVectCompDD dfs cty lcomp) sfs
-  where cty = ctComp lcomp
 
 {-------------------------------------------------------------------------------
-  Flexible mitigation
+  Entry point to the vectorizer
 -------------------------------------------------------------------------------}
 
--- | Add mitigators around an already-vectorized component for more flexibility.
-mit_updn_maybe :: ScaleFactors -> Bool -> Maybe SourcePos 
-               -> DelayedVectRes -> [DelayedVectRes]
-mit_updn_maybe sfs flexi loc dvr = if flexi then mit_updn sfs loc dvr else [dvr]
-
-mit_updn :: ScaleFactors -> Maybe SourcePos 
-         -> DelayedVectRes -> [DelayedVectRes]
-mit_updn (sfuds,sfdus,sfdds) loc dvr 
-  | DidVect {} <- dvr_vres dvr 
-  = concatMap mit_aux $ nub $ 
-    map sfud_arity sfuds ++ map sfdu_arity sfdus ++ map sfdd_arity sfdds
-  where mit_aux (Nothing, Nothing) = return dvr
-        mit_aux (Just n , Nothing) = mit_in  loc n dvr
-        mit_aux (Just n , Just m)  = mit_out loc dvr m >>= mit_in loc n
-        mit_aux (Nothing, Just m)  = mit_out loc dvr m
-mit_updn _ _ dvr = [dvr] -- no point in mitigating in case of NotVect
-
-
-mit_in :: Maybe SourcePos -> Int -> DelayedVectRes -> [DelayedVectRes]
-mit_in loc n dvr@(DVR { dvr_comp = io_comp, dvr_vres = vres })
-  | Just (final_in_ty, cmit) <- mitin
-  = -- trace ("mit_in:" ++ show final_in_ty ++ " ~~> " ++ show vinty ++ " ~~> " ++ show voutty) $ 
-    [ DVR { dvr_comp = cPar loc pnever cmit <$> io_comp
-          , dvr_vres = DidVect final_in_ty voutty u } ]
-  where vinty  = vect_in_ty vres  -- type in the middle!
-        voutty = vect_out_ty vres
-        mitin  = mk_in_mitigator loc n vinty
-        u      = parUtility minUtil (vResUtil vres) vinty
-mit_in _ _ dvr = []
-
-mit_out :: Maybe SourcePos -> DelayedVectRes -> Int -> [DelayedVectRes] 
-mit_out loc dvr@(DVR { dvr_comp = io_comp, dvr_vres = vres }) m 
-  | Just (final_out_ty, cmit) <- mitout
-  = -- trace ("mit_out:" ++ show vinty ++ " ~~> " ++ show voutty ++ " ~~> " ++ show final_out_ty) $ 
-    [ DVR { dvr_comp = (\c -> cPar loc pnever c cmit) <$> io_comp
-          , dvr_vres = DidVect vinty final_out_ty u } ]
-  where vinty  = vect_in_ty vres
-        voutty = vect_out_ty vres -- type in the middle!
-        mitout = mk_out_mitigator loc voutty m 
-        u      = parUtility minUtil (vResUtil vres) voutty
-mit_out _ dvr _ = []
-
-
--- | Mitigate on the input, return final input type
-mk_in_mitigator :: Maybe SourcePos -> Int -> Ty -> Maybe (Ty, Comp)
-mk_in_mitigator loc n (TArray (Literal m) tbase) 
-  | n > 1 || m > 1
-  , n `mod` m == 0 || m `mod` n == 0
-  = Just (array_ty n tbase, cMitigate loc tbase n m)
-  | otherwise = Nothing 
-mk_in_mitigator loc n t -- non-array
-  | n > 1     = Just (array_ty n t, cMitigate loc t n 1)
-  | otherwise = Nothing 
-
--- | Mitigate on the output, return final output type
-mk_out_mitigator :: Maybe SourcePos -> Ty -> Int -> Maybe (Ty, Comp)
-mk_out_mitigator loc (TArray (Literal n) tbase) m
-  | n > 1 || m > 1 
-  , n `mod` m == 0 || m `mod` n == 0
-  = Just (array_ty m tbase, cMitigate loc tbase n m)
-  | otherwise = Nothing
-mk_out_mitigator loc t m -- non-array
-  | m > 1     = Just (array_ty m t, cMitigate loc t 1 m)
-  | otherwise = Nothing 
-
-
-
 -- | Entry point to vectorizer 
--- The first Comp is the maximal candidate. In Debug mode we also can
--- all possible candidates in the second component of the
+-- The first Comp that we return is the maximal candidate. In Debug mode we 
+-- also can return all possible candidates in the second component of the 
 -- returned pair (including the maximal)
 runVectorizer :: DynFlags -> GS.Sym -> Comp -> IO (Comp,[Comp])
 runVectorizer dflags sym comp = do
+
   verbose dflags $ text "Cardinality analysis starting."
   lcomp <- runCardAnal dflags comp
   verbose dflags $ text "Cardinality analysis finished."
@@ -614,11 +495,18 @@ runVectorizer dflags sym comp = do
   verbose dflags $ text "Vectorization starting."
   vss <- runVecM (VecEnv sym [] []) (computeVectTop dflags lcomp)
   verbose dflags $ text "Vectorization finished." <+> 
-                      parens (ppr (length vss) <+> text "candidates")
+                   parens (ppr (Map.size vss) <+> text "candidates")
 
-  when (null vss) $ 
-    panic $ vcat [ text "Empty vectorization candidate set for computation:"
-                 , ppr comp ]
+  when (Map.null vss) $ 
+    panic $ 
+    vcat [ text "Empty vectorization candidate set for computation:"
+         , ppr comp 
+         ]
+{- Too verbose even in verbose mode ...
+  verbose dflags $
+      do let vss_list = map mlMax (Map.elems vss)
+         vcat (map (text . show . dvr_vres) vss_list)
+-}
   
   let do_one (DVR { dvr_comp = io_comp, dvr_vres = vres }) = do
         vc_mit <- io_comp
@@ -627,10 +515,10 @@ runVectorizer dflags sym comp = do
                       else elimMitigsIO dflags sym vc_mit
         -- Compile away mitigators if flag set
         let vc = vc_opt_mit 
-{-     
+
         verbose dflags $ vcat [ text "Type checking vectorization candidate."
                               , nest 2 $ ppr vc ]
--}
+
         case ctComp vc of _ -> return vc
 
         return vc
@@ -644,12 +532,11 @@ runVectorizer dflags sym comp = do
                         , nest 2 $ ppr maxi_comp
                         ] 
 
-  let final_vss = if isDynFlagSet dflags Debug then (maxi : vss) else [maxi]
-  comps <- mapM do_one final_vss
+  final_maxi_comp <- do_one maxi
 
+  when (isDynFlagSet dflags Debug) $ 
+    T.mapM (do_one . mlMax) vss >> return ()
 
-
-
-  return (head comps, []) -- Don't emit candidates 
+  return (final_maxi_comp, []) -- Don't emit candidates that's ok
 
 

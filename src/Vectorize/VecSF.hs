@@ -135,16 +135,19 @@ data CtxForVect
 -- Invariant: divs_of = d0_div * d1_div
 data DivsOf = 
   DivsOf { divs_of :: Int, d0_div  :: NDiv, d1_div  :: NDiv }
-
+  deriving Show
 -- | Just a newtype to avoid confusing ints with multiplicities or divisors
 newtype NMul = NMul { unNMul :: Int }
+  deriving Show
 newtype NDiv = NDiv { unNDiv :: Int }
+  deriving Show
 
 -- | Divisors of a number
 divsOf :: Int -> [DivsOf]
 divsOf n = [ DivsOf n (NDiv x) (NDiv y)
            | x <- [1..n]
            , y <- [1..n]
+           , x > 1 || y > 1 -- Not both 1, this is pointless
            , x*y == n, x >= y ]
 
 -- | All multiplicities
@@ -178,6 +181,7 @@ data SFUD =
           NMul   -- m
   | SFUD3 Int    -- i
           NMul   -- m
+  deriving Show
 
 -- | Compute SFUD scale factor
 compSFUD_aux :: (CAlpha,CAlpha) -> [SFUD]
@@ -217,6 +221,7 @@ data SFDU =
           NMul   -- m
   | SFDU3 Int    -- j
           NMul   -- m
+  deriving Show 
 
 -- | Compute SFDU scale factor (by exploiting symmetry)
 -- to avoid having to re-implement the delicate bound checking
@@ -235,6 +240,7 @@ data SFDD =
     SFDD1 { sfdd_in  :: DivsOf } -- i,i0,i1, i0*i1 == i
   | SFDD2 { sfdd_out :: DivsOf } -- j,j0,j1, j0*j1 == j
   | SFDD3 { sfdd_in  :: DivsOf, sfdd_out :: DivsOf }
+  deriving Show
 
 -- | Compute SFDD scale factor
 compSFDD_aux :: (CAlpha,CAlpha) -> [SFDD]

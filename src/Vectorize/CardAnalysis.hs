@@ -23,7 +23,7 @@
 module CardAnalysis (
      Card (..)
    , CAlpha (..)
-   , LComp
+   , LComp, LComp0
    , isSimplCard_mb
    , runCardAnal
 
@@ -53,8 +53,8 @@ import Text.PrettyPrint.HughesPJ
 -------------------------------------------------------------------------------}
 
 -- | Computation labelled with cardinality analysis results
-type LComp = GComp CTy Ty Card ()
-
+type LComp  = GComp CTy Ty Card ()
+type LComp0 = GComp0 CTy Ty Card ()
 
 -- | Run the cardinality analysis
 runCardAnal :: DynFlags -> Comp -> IO LComp

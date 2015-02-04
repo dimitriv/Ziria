@@ -862,7 +862,7 @@ codeGenComp dflags comp k =
                 let is_take (Take1 {}) = True
                     is_take _          = False
 
-                new_dh <- freshName ("__dv_tmp_"  ++ (getLnNumInStr csp)) vTy Mut
+                new_dh <- freshName ("__dv_tmp_"  ++ (name nm) ++ "_" ++ (getLnNumInStr csp)) vTy Mut
                 let new_dhval = doneValOf $ name new_dh
                 appendDecl =<<
                     -- Note [Take Optimization]

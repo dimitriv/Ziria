@@ -904,6 +904,11 @@ atomTyOf :: Ty -> Ty
 atomTyOf (TArray _ t) = atomTyOf t
 atomTyOf t            = t
 
+-- Arity 
+tyArity :: Ty -> Int
+tyArity (TArray (Literal n) _) = n
+tyArity _t = 1
+
 
 expEq :: Eq t => GExp t a -> GExp t a -> Bool
 -- Are these two expressions /definitely/ equal?
