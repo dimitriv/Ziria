@@ -36,15 +36,16 @@ fun comp downSample() {
   var pi0:arr[4] complex16;
   var pi1:arr[4] complex16;
 
-  var tmp1:arr[4] complex16;
-  var tmp2:arr[4] complex16;
-
 --  var oup:arr[4] complex16;
   
   repeat seq {
     (y:arr[8] complex16) <- takes 8;
 
+    var tmp1:arr[4] complex16;
+    var tmp2:arr[4] complex16;
+
     do {
+
       permutatew1313(y[0:3],tmp1);
       permutatew1313(y[4:7],tmp2);
 

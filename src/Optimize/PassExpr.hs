@@ -110,9 +110,12 @@ passExpInlining = TypedExpBottomUp $ \eloc e -> do
                   logStep "exp-inlining/subst" eloc
                     [step| Inlining binding for nm |]
                   rewrite $ substExp [] [(nm,e1)] e2
-                else
-                  return e
-
+                else case is_simpl_deref e1 of
+                       Just v1 | v1 `S.notMember` exprFVs e2
+                               , not (isDynFlagSet fgs NoExpFold)
+                               -> rewrite $ substExp [] [(nm,e1)] e2
+                       _otherwise -> return e
+ 
      | otherwise
       -> return e
 

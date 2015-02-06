@@ -206,22 +206,36 @@ insertEMutVars' (LetERefs vs) = insertEMutVars vs
 -- | Just a heuristic for inlining: what are 'simple' expressions that
 -- are safe and likely beneficial to just inline before code generation.
 is_simpl_expr :: Exp -> Bool
-is_simpl_expr = go . unExp
+is_simpl_expr = goE 
   where
+    goE = go . unExp 
     go :: Exp0 -> Bool
     go (EVal _ _)       = True
-    go (EValArr elems)  = all is_simpl_expr elems
+    go (EValArr elems)  = all goE elems
     -- Immutable variables are OK to inline in any context
-    go (EVar nm)        = nameMut nm == Imm 
-    go (EUnOp _ e)      = is_simpl_expr e
+    go (EVar nm)        = nameMut nm == Imm
+    go (EUnOp _ e)      = goE e
     -- NB: No case for BinOp because this might duplicate computation
-    go (EStruct _ fses) = all is_simpl_expr (map snd fses)
+    go (EStruct _ fses) = all goE (map snd fses)
     -- We could even do the following:
-    go (EArrRead earr estart _elen)
-      = is_simpl_expr earr && is_simpl_expr estart
-    go (EProj estruct _fld)
-      = is_simpl_expr estruct
+    go (EArrRead earr estart _elen) = goE earr && goE estart
+    go (EProj estruct _fld) = goE estruct
     go _                = False
+
+-- Simple dereference expression that is essentially simpl_expr
+-- but with a potentially mutable head (which we return)
+is_simpl_deref :: Exp -> Maybe EId
+is_simpl_deref = goE
+  where 
+    goE = go . unExp 
+
+    go (EVar x) = Just x
+    go (EProj estruct _fld) = goE estruct
+    go (EArrRead earr estart _elen)
+       | is_simpl_expr estart 
+       = goE earr
+       | otherwise = Nothing 
+    go _ = Nothing
 
 
 no_lut_inside :: Exp -> Bool
