@@ -406,8 +406,8 @@ data GExp0 t a where
   deriving (Generic, Typeable, Data, Eq, Ord)
 
 data GExp t a
-  = MkExp { unExp :: GExp0 t a
-          , expLoc :: Maybe SourcePos
+  = MkExp { unExp  :: !(GExp0 t a)
+          , expLoc :: !(Maybe SourcePos)
           , info :: a }
   deriving (Generic, Typeable, Data, Eq, Ord)
 
@@ -578,14 +578,25 @@ mapNameM onTyp MkName{..} = do
     nameTyp' <- onTyp nameTyp
     return MkName{nameTyp = nameTyp', ..}
 
--- | Most general form of mapping over expressions
+
 mapExpM :: forall t t' a a' m. Monad m
         => (t -> m t')                     -- ^ On types
         -> (a -> m a')                     -- ^ On annotations
         -> (GExp t' a' -> m (GExp t' a'))  -- ^ Combine results
         -> GExp t a
         -> m (GExp t' a')
-mapExpM onTyp onAnn f = goExp
+mapExpM onTyp onAnn f = mapExpM_env onTyp onAnn f (const id)
+
+
+-- | Most general form of mapping over expressions
+mapExpM_env :: forall t t' a a' m. Monad m
+        => (t -> m t')                     -- ^ On types
+        -> (a -> m a')                     -- ^ On annotations
+        -> (GExp t' a' -> m (GExp t' a'))  -- ^ Combine results
+        -> (GName t -> m (GExp t' a') -> m (GExp t' a'))
+        -> GExp t a
+        -> m (GExp t' a')
+mapExpM_env onTyp onAnn f extend = goExp
   where
     goExp :: GExp t a -> m (GExp t' a')
     goExp MkExp{..} = do
@@ -628,7 +639,7 @@ mapExpM onTyp onAnn f = goExp
       nm1' <- mapNameM onTyp nm1
       e1'  <- goExp e1
       e2'  <- goExp e2
-      e3'  <- goExp e3
+      e3'  <- extend nm1 (goExp e3)
       return $ EFor ui nm1' e1' e2' e3'
     goExp0 (EWhile e1 e2) = do
       e1' <- goExp e1
@@ -637,16 +648,16 @@ mapExpM onTyp onAnn f = goExp
     goExp0 (ELet nm1 fi e1 e2) = do
       nm1' <- mapNameM onTyp nm1
       e1'  <- goExp e1
-      e2'  <- goExp e2
+      e2'  <- extend nm1 (goExp e2)
       return $ ELet nm1' fi e1' e2'
     goExp0 (ELetRef nm1 Nothing e2) = do
       nm1' <- mapNameM onTyp nm1
-      e2'  <- goExp e2
+      e2'  <- extend nm1 (goExp e2)
       return $ ELetRef nm1' Nothing e2'
     goExp0 (ELetRef nm1 (Just e1) e2) = do
       nm1' <- mapNameM onTyp nm1
       e1'  <- goExp e1
-      e2'  <- goExp e2
+      e2'  <- extend nm1 (goExp e2)
       return $ ELetRef nm1' (Just e1') e2'
     goExp0 (ESeq e1 e2) = do
       e1' <- goExp e1
@@ -693,13 +704,13 @@ mapExpM onTyp onAnn f = goExp
              . mapM (\(n, r) -> do n' <- mapNameM onTyp n ; return (n', r))
              . Map.toList
 
-mapFunM :: forall t t' a a' m. Monad m
-        => (t -> m t')                    -- ^ On types
-        -> (a -> m a')                    -- ^ On annotations
-        -> (GExp t a -> m (GExp t' a'))   -- ^ On expressions
-        -> GFun t a
-        -> m (GFun t' a')
-mapFunM onTyp onAnn onExp = goFun
+mapFunM_env :: forall t t' a a' m. Monad m
+            => (t -> m t')                               -- ^ On types
+            -> (a -> m a')                               -- ^ On annotations
+            -> ([GName t] -> GExp t a -> m (GExp t' a')) -- ^ On expressions
+            -> GFun t a
+            -> m (GFun t' a')
+mapFunM_env onTyp onAnn onExp = goFun
   where
     goFun :: GFun t a -> m (GFun t' a')
     goFun MkFun{..} = do
@@ -711,13 +722,21 @@ mapFunM onTyp onAnn onExp = goFun
     goFun0 (MkFunDefined nm params body) = do
       nm'     <- mapNameM onTyp nm
       params' <- mapM (mapNameM onTyp) params
-      body'   <- onExp body
+      body'   <- onExp (nm : params) body
       return $ MkFunDefined nm' params' body'
     goFun0 (MkFunExternal nm params ret) = do
       nm'     <- mapNameM onTyp nm
       params' <- mapM (mapNameM onTyp) params
       ret'    <- onTyp ret
       return $ MkFunExternal nm' params' ret'
+
+mapFunM :: forall t t' a a' m. Monad m
+        => (t -> m t')                               -- ^ On types
+        -> (a -> m a')                               -- ^ On annotations
+        -> (GExp t a -> m (GExp t' a')) -- ^ On expressions
+        -> GFun t a
+        -> m (GFun t' a')
+mapFunM onTyp onAnn onExp = mapFunM_env onTyp onAnn (const onExp)
 
 {-------------------------------------------------------------------------------
   Pure mapping functions
@@ -738,14 +757,39 @@ mapExp onTyp onAnn f = runIdentity . mapExpM (Identity . onTyp)
                                              (Identity . onAnn)
                                              (Identity . f)
 
+mapExp_env :: (t -> t')                   -- ^ On types
+           -> (a -> a')                   -- ^ On annotations
+           -> (GExp t' a' -> GExp t' a')  -- ^ Combine results
+           -> (GName t -> GExp t' a' -> GExp t' a')
+           -> GExp t a
+           -> GExp t' a'
+mapExp_env onTyp onAnn f extend 
+  = runIdentity . mapExpM_env (Identity . onTyp)
+                              (Identity . onAnn)
+                              (Identity . f)
+                              (\x y -> Identity (extend x (runIdentity y)))
+                                             
+
+mapFun_env :: (t -> t')                             -- ^ On types
+           -> (a -> a')                             -- ^ On annotations
+           -> ([GName t] -> GExp t a -> GExp t' a') -- ^ On expressions
+           -> GFun t a
+           -> GFun t' a'
+mapFun_env onTyp onAnn f 
+  = runIdentity . mapFunM_env (Identity . onTyp)
+                              (Identity . onAnn)
+                              (\x y -> Identity (f x y))
+
+
 mapFun :: (t -> t')                    -- ^ On types
        -> (a -> a')                    -- ^ On annotations
        -> (GExp t a -> (GExp t' a'))   -- ^ On expressions
        -> GFun t a
        -> GFun t' a'
-mapFun onTyp onAnn f = runIdentity . mapFunM (Identity . onTyp)
-                                             (Identity . onAnn)
-                                             (Identity . f)
+mapFun onTyp onAnn f = mapFun_env onTyp onAnn (const f)
+
+
+
 
 {-------------------------------------------------------------------------------
   Erase annotations
@@ -851,15 +895,22 @@ substTy slen = mapTy aux
 -- particular, we assume that if the expressions in the codomain of the
 -- expression substitution do not mention any of the length variables in
 -- the domain of the type substitution.
-substExp :: [(LenVar, NumExpr)]
-         -> [(GName Ty, GExp Ty a)]
-         -> GExp Ty a -> GExp Ty a
-substExp slen sexp = mapExp (substTy slen) id aux
+substExp :: [(LenVar,NumExpr)] -> [(GName Ty,GExp Ty a)] -> GExp Ty a -> GExp Ty a
+substExp slen sexp ge
+  = mapExpM_env (\t _ -> substTy slen t)
+                (\x _ -> x)
+                aux
+                ext ge sexp
   where
-    aux e | EVar x <- unExp e = case lookup x sexp of
-                                  Just e' -> e'
-                                  Nothing -> e
-          | otherwise         = e
+    aux e s
+      | EVar x <- unExp e
+      , Just e' <- lookup x s
+      = e'
+      | otherwise = e
+    
+    ext nm act s = act (filter (\(snm,_) -> snm /= nm) s)
+
+
 
 {-------------------------------------------------------------------------------
   Utility

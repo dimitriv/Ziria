@@ -41,6 +41,9 @@ import Prelude hiding (exp)
 import GHC.Generics
 import qualified Data.Set as S
 
+import Control.Monad.IO.Class 
+import Outputable
+
 import Data.Monoid
 
 import Text.Parsec.Pos ( SourcePos )
@@ -298,9 +301,13 @@ passInline = TypedCompBottomUp $ \cloc comp' -> if
     | LetE nm AutoInline e1 c2 <- unComp comp'
       , is_simpl_expr e1
      -> do
+       -- liftIO $ print (ppr c2)
+       let c2' = substComp [] [(nm,e1)] [] c2
+       -- liftIO $ putStrLn "##########"
+       -- liftIO $ print (ppr c2')
        logStep "inline/LetE/AutoInline" cloc
          [step| let nm = e in c ~~> c[e/nm] |]
-       rewrite $ substComp [] [(nm,e1)] [] c2
+       rewrite c2'
 
     | LetHeader f@(MkFun (MkFunDefined {}) _ _) c2 <- unComp comp'
       , MkFunDefined nm params body <- unFun f

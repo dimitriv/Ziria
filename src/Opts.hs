@@ -78,8 +78,9 @@ data DynFlag =
   | NoExpFold
   | NoFold
   | NoElimMit
-
   | NoLUT
+
+  | Timeout Integer -- In seconds
 
   | MockLUT -- just for debugging LUT
 
@@ -106,6 +107,14 @@ maxLUTSize dflags =
     case [sz | MaxLUTSize sz <- dflags] of
       []     -> mAX_LUT_SIZE_DEFAULT
       sz : _ -> sz
+
+
+dynFlagTimeout :: DynFlags -> Maybe Integer
+dynFlagTimeout dflags = 
+    case [sz | Timeout sz <- dflags] of
+      []     -> Nothing
+      sz : _ -> Just sz
+
 
 dump :: MonadIO m
      => DynFlags   -- ^ Dynamic flags
@@ -176,6 +185,8 @@ options =
      , Option []        ["mock-lut"]            (NoArg MockLUT)       "debugging help for LUTS (internal only)"
 
      , Option []        ["max-lut"]             (ReqArg parseMaxLUTOpt "SIZE")    "max lut size"
+     , Option []        ["timeout"]             (ReqArg parseTimeout   "TIME")    "timeout (seconds)"
+
      , Option []        ["stack-threshold"]     (ReqArg parseStkThres  "SIZE")    "stack allocation threshold"
      , Option []        ["affinity-mask"]       (OptArg parseAffinityMask "MASK") "affinity mask"
 
@@ -190,6 +201,9 @@ parseAffinityMask (Just i) = AffinityMask $ read i
 
 parseStkThres :: String -> DynFlag
 parseStkThres i = StackAllocThreshold (read i)
+
+parseTimeout :: String -> DynFlag
+parseTimeout i = Timeout (read i)
 
 defaultMaxStkThreshold :: Int
 defaultMaxStkThreshold = CgMonad.cMAX_STACK_ALLOC

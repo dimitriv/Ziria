@@ -17,7 +17,7 @@
    permissions and limitations under the License.
 -}
 
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, BangPatterns #-}
 
 module Vectorize where
 
@@ -41,6 +41,7 @@ import Data.List as M
 import qualified Data.Map  as Map
 import Data.Functor.Identity
 import Data.Maybe ( fromJust )
+import Data.IORef
 
 import Control.Applicative  ( (<$>) )
 
@@ -93,7 +94,8 @@ computeVectTop dfs x =
 comp_vect :: DynFlags -> CtxForVect -> LComp -> VecM DVRCands
 comp_vect dfs vctx c = do 
   verbose dfs (text "^^^" <+> text (compShortName c))
-  comp_vect0 dfs vpack (unComp c)
+  r <- comp_vect0 dfs vpack (unComp c)
+  return $!r
   where 
     vpack = VectPack { vp_comp     = c
                      , vp_card     = compInfo c 
@@ -107,6 +109,7 @@ comp_vect dfs vctx c = do
     loc   = compLoc c
     inty  = inTyOfCTy cty
     outty = yldTyOfCTy cty
+ 
 
 comp_vect0 :: DynFlags -> VectPack -> LComp0 -> VecM DVRCands
 
@@ -123,10 +126,12 @@ comp_vect0 dfs (VectPack {..}) (BindMany c1 xs_cs) = do
   direct_vss <- vect_comp_dd dfs vp_comp sfs
   -- Compute recursive vectorizations
   vss <- mapM (comp_vect dfs vp_vctx) css
-  let recursive_vss = combineBind vp_loc (head vss) xs (tail vss)
+  let !recursive_vss = combineBind vp_loc (head vss) xs (tail vss)
   warnIfEmpty dfs vp_comp recursive_vss "BindMany (recursive)"
+
   -- Return directs + recursives (will contain self)
-  return (direct_vss `unionDVRCands` recursive_vss)
+  let ret = direct_vss `unionDVRCands` recursive_vss
+  ret `seq` return ret
 
 -- | Sequence
 comp_vect0 dfs (VectPack {..}) (Seq c1 c2) = do
@@ -147,7 +152,7 @@ comp_vect0 dfs (VectPack {..}) (Par p c1 c2)
         ctx2  = if is_c1 then CtxExistsCompLeft  else vp_vctx
     in do vcs1 <- comp_vect dfs ctx1 c1
           vcs2 <- comp_vect dfs ctx2 c2
-          let res = combineData p vp_loc vcs1 vcs2
+          let !res = combineData p vp_loc vcs1 vcs2
           warnIfEmpty dfs vp_comp res "Par"
           return res
 
@@ -232,7 +237,9 @@ comp_vect0 dfs (VectPack {..}) (Branch e c1 c2) = do
   let recursive_vss = combineBranch vp_loc e vcs1 vcs2
   warnIfEmpty dfs vp_comp recursive_vss "Branch"
 
-  return $ direct_vss `unionDVRCands` recursive_vss
+
+  let ret = direct_vss `unionDVRCands` recursive_vss
+  ret `seq` return ret
 
 {-------------------------------------------------------------------------------}
 
@@ -259,13 +266,13 @@ comp_vect0 dfs (VectPack {..}) (Times ui nm e elen c) =
 
 {-------------------------------------------------------------------------------}
 
-comp_vect0 dfs (VectPack {..}) (Map vann nm) =
-  addDVR vp_self_dvr <$>
-    vectMap dfs vp_vctx nm vp_tyin vp_tyout vp_loc vann
+comp_vect0 dfs vp (Map vann nm) =
+  -- addDVR vp_self_dvr <$> do not add self bacause the repeat scale factors will
+    vectMap dfs vp nm vann
 
-comp_vect0 dfs (VectPack {..}) (Repeat vann c) =
-  addDVR vp_self_dvr <$>
-    vectRepeat dfs vp_vctx c vp_tyin vp_tyout vp_loc vann
+comp_vect0 dfs vp (Repeat vann c) =
+  -- addDVR vp_self_dvr <$> do not add self because the repeat scale factors will
+    vectRepeat dfs vp c vann
 
 {-------------------------------------------------------------------------------}
 
@@ -287,19 +294,6 @@ comp_vect0 dfs (VectPack {..}) _other =
 {-------------------------------------------------------------------------------
   Helper functions
 -------------------------------------------------------------------------------}
-
--- | The very same component, non-vectorized
-mkSelf :: LComp -> Ty -> Ty -> DelayedVectRes
-mkSelf lcomp tin tout 
-  = DVR { dvr_comp = return (eraseComp lcomp), dvr_vres = NotVect tin tout }
-
--- | Warn if DVRCands is empty
-warnIfEmpty :: DynFlags -> LComp -> DVRCands -> String -> VecM ()
-warnIfEmpty dfs lc cands msg 
-  = when (Map.null cands) $ liftIO $ do
-       print $ text "WARNING: empty vectorization" <+> braces (text msg)
-       verbose dfs $ vcat [ text "For computation:" 
-                          , nest 2 $ ppr lc ]
 
 -- | Vectorizing a (finitely) iterated computer (NB: not adding 'self')
 vectIterComp :: DynFlags -> (Comp -> Comp) -> Ty -> Ty -> LComp -> VecM DVRCands
@@ -349,13 +343,13 @@ appendWriteSnk loc p orig_ty (DVR { dvr_comp = iocomp, dvr_vres = vres })
 -- repeat. Hence, below we create a node: seq { x <- take; emit f(x) }
 -- and call the vectorizer for Repeat.
 vectMap :: DynFlags 
-        -> CtxForVect
-        -> EId -> Ty -> Ty -> Maybe SourcePos
+        -> VectPack
+        -> EId
         -> Maybe VectAnn
         -> VecM DVRCands
-vectMap dfs vctx f tin tout loc vann = do
-  MkComp (Repeat _ c0) _ _ <- expandMapToTakeEmit loc vann tin f 
-  vectRepeat dfs vctx c0 tin tout loc vann
+vectMap dfs vp@(VectPack {..}) f vann = do
+  MkComp (Repeat _ c0) _ _ <- expandMapToTakeEmit vp_loc vann vp_tyin f
+  vectRepeat dfs vp c0 vann
   
 {-------------------------------------------------------------------------------
   Vectorizing Repeat 
@@ -385,12 +379,24 @@ logCandidates dfs origin cands = do
 
 -- | NB: Not including 'self'
 vectRepeat :: DynFlags
-           -> CtxForVect
+           -> VectPack
            -> LComp -- The iterated /computer/ 
-           -> Ty -> Ty -> Maybe SourcePos
            -> Maybe VectAnn
            -> VecM DVRCands
-vectRepeat dfs vctx c tyin tyout loc vann = go vann c
+vectRepeat dfs (VectPack { vp_vctx  = vctx
+                         , vp_tyin  = tyin
+                         , vp_tyout = tyout
+                         , vp_loc   = loc 
+                         , vp_comp  = orig_repeat_comp }) c vann 
+  = do cands <- go vann c
+       when (Map.null cands) $
+         vecMFail loc $
+              vcat [ text "Empty vectorization, check vectorization annotations."
+                   , text "Computation:" 
+                   , nest 2 (ppr orig_repeat_comp)
+                   ]
+       return cands
+ 
   where
    -- | Vectorize without restrictions and up/dn mitigate
    go Nothing c0 = do 
@@ -399,8 +405,16 @@ vectRepeat dfs vctx c tyin tyout loc vann = go vann c
      vecuds <- vect_comp_ud dfs c0 sfuds >>= logCandidates dfs "vect_comp_ud"
      vecdus <- vect_comp_du dfs c0 sfdus >>= logCandidates dfs "vect_comp_du"
      vecdds <- vect_comp_dd dfs c0 sfdds >>= logCandidates dfs "vect_comp_dd"
-     let cands = vecuds `unionDVRCands` vecdus `unionDVRCands` vecdds
-     let res   = mapDVRCands (updDVRComp $ cRepeat loc Nothing) cands
+ 
+     vec_recursives <- comp_vect dfs vctx c0
+
+     let cands = vecuds `unionDVRCands` 
+                 vecdus `unionDVRCands` 
+                 vecdds `unionDVRCands` vec_recursives
+
+     -- Add self too here:
+     let self = mkSelf orig_repeat_comp tyin tyout
+     let res   = self `addDVR` mapDVRCands (updDVRComp $ cRepeat loc Nothing) cands
      logCandidates dfs "VectRepeat" res
   
    -- | Vectorize internally to /exactly/ (fin,fout) and externally up
@@ -410,18 +424,37 @@ vectRepeat dfs vctx c tyin tyout loc vann = go vann c
       let pred (ty1,ty2) _ = ty_match ty1 fin && ty_match ty2 fout
           vcs_matching     = Map.filterWithKey pred vcs
           repeat_sfs       = repeat_scalefactors vctx (compInfo c0) tyin tyout
-      logCandidates dfs "VectRepeat" $ 
-        mitigateFlexi f repeat_sfs vcs_matching
+
+      verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands vcs))
+
+      res <- logCandidates dfs "VectRepeat" $ 
+                 mitigateFlexi f repeat_sfs vcs_matching
+      -- Force mitigation result
+      res `seq` do 
+         verbose dfs $ text "After mitigateFlexi:"
+         verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands res))
+         return res
 
    -- | Vectorize internally to anything <= (fin,fout) and externally up
    -- or down depending on the flag f
    go (Just (UpTo f (fin,fout))) c0 = do
       vcs <- go Nothing c0
+      verbose dfs $ text ("UpTo (fin,fout) = " ++ show (fin,fout))
+
+      verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands vcs))
+
       let pred (ty1,ty2) _ = ty_upto ty1 fin && ty_upto ty2 fout
           vcs_matching     = Map.filterWithKey pred vcs
           repeat_sfs       = repeat_scalefactors vctx (compInfo c0) tyin tyout
-      logCandidates dfs "VectRepeat" $ 
-        mitigateFlexi f repeat_sfs vcs_matching
+      res <- logCandidates dfs "VectRepeat" $ 
+                mitigateFlexi f repeat_sfs vcs_matching
+
+      res `seq` do 
+
+        verbose dfs $ text "After mitigateFlexi:"
+        verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands res))
+        return res
+ 
 
 -- | Somewhat delicate arity equality and up-to comparisons
 ty_match :: Ty -> Int -> Bool
@@ -442,13 +475,13 @@ ty_upto _t j                      = j > 0
 mitigateFlexi :: Bool -> ScaleFactors -> DVRCands -> DVRCands
 mitigateFlexi False _sfs cands = cands
 mitigateFlexi True (sfuds,sfdus,sfdds) cands =
-  let arities = map sfud_arity sfuds ++ 
+  let arities = map sfud_arity sfuds ++  
                 map sfdu_arity sfdus ++ 
                 map sfdd_arity sfdds
-  -- For each arity try to convert the candidate to it
-  in foldDVRCands (upd arities) emptyDVRCands cands
-  where upd ars s r = foldl (\cs ar -> mit_one ar r `addDVR` cs) s ars
 
+      cands_list = Map.elems cands
+      mitigated r = foldr (\ar res -> mit_one ar r : res) [] arities
+  in fromListDVRCands (concatMap mitigated cands_list)
 
 
 {-------------------------------------------------------------------------------
@@ -457,29 +490,28 @@ mitigateFlexi True (sfuds,sfdus,sfdds) cands =
 
 vect_comp_ud :: DynFlags -> LComp -> [SFUD] -> VecM DVRCands
 vect_comp_ud dfs lcomp sfs 
- = foldM (\cs sf ->
-     do r <- VecScaleUp.doVectCompUD dfs cty lcomp sf
-        return (addDVR r cs)) emptyDVRCands sfs
+ = fromListDVRCands <$> mapM (VecScaleUp.doVectCompUD dfs cty lcomp) sfs
  where cty = ctComp lcomp
 
 vect_comp_du :: DynFlags -> LComp -> [SFDU] -> VecM DVRCands
 vect_comp_du dfs lcomp sfs 
-  = foldM (\cs sf -> 
-     do r <- VecScaleUp.doVectCompDU dfs cty lcomp sf
-        return (addDVR r cs)) emptyDVRCands sfs
-  where cty = ctComp lcomp
+ = fromListDVRCands <$> mapM (VecScaleUp.doVectCompDU dfs cty lcomp) sfs
+ where cty = ctComp lcomp
 
 vect_comp_dd :: DynFlags -> LComp -> [SFDD] -> VecM DVRCands
 vect_comp_dd dfs lcomp sfs 
-  = foldM (\cs sf ->
-     do r <- VecScaleDn.doVectCompDD dfs cty lcomp sf
-        return (addDVR r cs)) emptyDVRCands sfs
-  where cty = ctComp lcomp
+ = fromListDVRCands <$> mapM (VecScaleDn.doVectCompDD dfs cty lcomp) sfs
+ where cty = ctComp lcomp
 
 
 {-------------------------------------------------------------------------------
   Entry point to the vectorizer
 -------------------------------------------------------------------------------}
+
+
+initVectorizer :: IO ()
+initVectorizer = writeIORef VecSF.divsOfMemo (Map.empty)
+
 
 -- | Entry point to vectorizer 
 -- The first Comp that we return is the maximal candidate. In Debug mode we 
@@ -535,7 +567,7 @@ runVectorizer dflags sym comp = do
   final_maxi_comp <- do_one maxi
 
   when (isDynFlagSet dflags Debug) $ 
-    T.mapM (do_one . mlMax) vss >> return ()
+    T.mapM do_one vss >> return ()
 
   return (final_maxi_comp, []) -- Don't emit candidates that's ok
 

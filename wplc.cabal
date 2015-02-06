@@ -65,7 +65,11 @@ Executable wplc
     build-depends:
       process              >= 1.1 && < 1.2
 
-  ghc-options: -fwarn-incomplete-patterns -Werror
+  ghc-options: -fwarn-incomplete-patterns -Werror 
+               -- For profiling
+               -threaded -fprof-auto 
+               -rtsopts
+               -- "-with-rtsopts=-N -p -s -hy -i0.1"
 
 Executable BlinkDiff
   hs-source-dirs:   tools

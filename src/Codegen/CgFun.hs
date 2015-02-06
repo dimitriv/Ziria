@@ -192,8 +192,8 @@ cgFunDefined dflags csp
        ; vars <- getBoundVars 
        ; let ambient_bound = map ppNameUniq vars
 
-{-  
-       ; liftIO $ print $ vcat [ text "CgFun (original) parameter environment:"
+
+       ; verbose dflags $ vcat [ text "CgFun (original) parameter environment:"
                                , nest 2 $ vcat $ map ppr params
 
                                , text "CgFun parameter environment:"
@@ -204,8 +204,8 @@ cgFunDefined dflags csp
 
                                , text "CgFun ambiently bound:"
                                , nest 2 $ vcat ambient_bound
-                               ]
--}
+                            ]
+
 
          -- Create an init group of all locals (just declarations)
        ; let decl_local MutVar{..} =

@@ -30,6 +30,7 @@ module VecSF (
 
   , NMul (..), NDiv (..), DivsOf (..)
 
+  , divsOfMemo
 ) where
 
 import AstExpr
@@ -45,7 +46,13 @@ import Control.Monad.State
 import Data.List as M
 import Data.Functor.Identity
 
+import Data.IORef
+
+import qualified Data.Map  as Map
 import Opts
+
+
+import System.IO.Unsafe ( unsafePerformIO ) 
 
 import VecM ( isVectorizable )
 
@@ -142,13 +149,23 @@ newtype NMul = NMul { unNMul :: Int }
 newtype NDiv = NDiv { unNDiv :: Int }
   deriving Show
 
+divsOfMemo :: IORef (Map.Map Int [DivsOf])
+divsOfMemo = unsafePerformIO (newIORef (Map.empty))
+
 -- | Divisors of a number
 divsOf :: Int -> [DivsOf]
-divsOf n = [ DivsOf n (NDiv x) (NDiv y)
-           | x <- [1..n]
-           , y <- [1..n]
-           , x > 1 || y > 1 -- Not both 1, this is pointless
-           , x*y == n, x >= y ]
+divsOf n = unsafePerformIO $ do
+   dm <- readIORef divsOfMemo
+   case Map.lookup n dm of 
+     Nothing -> do
+       let ds' = [ DivsOf n (NDiv x) (NDiv y)
+                 | x <- [1..n]
+                 , y <- [1..n]
+                 , x > 1 || y > 1
+                 , x*y == n, x >= y ]
+       writeIORef divsOfMemo (Map.insert n ds' dm)
+       return ds'
+     Just ds -> return ds
 
 -- | All multiplicities
 mults :: [NMul]
@@ -195,11 +212,16 @@ compSFUD_aux (CAStatic i, CAStatic j) = ud1s ++ ud2s
            , i*m1*m2 <= vECT_ARRAY_BOUND
            , j*m1    <= vECT_ARRAY_BOUND
            ]
-    ud2s = [ SFUD2 i d (NMul m)
+    ud2s 
+      | j > 1  -- rewriting possible in the output
+      = [ SFUD2 i d (NMul m)
            | d <- divsOf j
            , NMul m <- mults 
            , m*j <= vECT_ARRAY_BOUND
-           ]
+        ]
+      | otherwise
+      = compSFUD_aux (CAStatic i, CAUnknown) 
+
 compSFUD_aux (CAStatic i, _) 
   = [ SFUD3 i (NMul m)
     | (NMul m) <- mults 
@@ -236,19 +258,27 @@ compSFDU_aux (ca1,ca2) = map sym_sfud $ compSFUD_aux (ca2,ca1)
 -------------------------------------------------------------------------------}
 
 -- | SFDD factors
+-- NB: it will return some factors *only* if some rewriting is needed
 data SFDD =
-    SFDD1 { sfdd_in  :: DivsOf } -- i,i0,i1, i0*i1 == i
-  | SFDD2 { sfdd_out :: DivsOf } -- j,j0,j1, j0*j1 == j
-  | SFDD3 { sfdd_in  :: DivsOf, sfdd_out :: DivsOf }
+    SFDD0 { sfdd_i :: Int, sfdd_j :: Int } -- i <= 1, j <= 1
+  | SFDD1 { sfdd_in  :: DivsOf } -- i,i0,i1, i0*i1 == i  (i >= 1)
+  | SFDD2 { sfdd_out :: DivsOf } -- j,j0,j1, j0*j1 == j  (j >= 1)
+  | SFDD3 { sfdd_in  :: DivsOf, sfdd_out :: DivsOf }  -- (i >= 1 && j >= 1)
   deriving Show
 
 -- | Compute SFDD scale factor
 compSFDD_aux :: (CAlpha,CAlpha) -> [SFDD]
-compSFDD_aux (CAStatic i,CAStatic j) 
+compSFDD_aux (CAStatic i, CAStatic j)
+  | i <= 1 && j <= 1 = [SFDD0 i j] -- nothing to rewrite at all
+  | i <= 1 = compSFDD_aux (CAUnknown,CAStatic j)  -- j > 1
+  | j <= 1 = compSFDD_aux (CAStatic i, CAUnknown) -- i > 1
+  | otherwise -- both > 1
   = [ SFDD3 dsi dsj | dsi <- divsOf i, dsj <- divsOf j ]
-compSFDD_aux (CAStatic i,_) = [ SFDD1 dsi | dsi <- divsOf i ]
-compSFDD_aux (_,CAStatic j) = [ SFDD2 dsj | dsj <- divsOf j ]
-compSFDD_aux _              = []
+
+compSFDD_aux (CAStatic i,_) | i > 1 = [ SFDD1 dsi | dsi <- divsOf i ]
+compSFDD_aux (_,CAStatic j) | j > 1 = [ SFDD2 dsj | dsj <- divsOf j ]
+
+compSFDD_aux _ = []
 
 
 {-------------------------------------------------------------------------------
@@ -293,6 +323,7 @@ sfdu_arity (SFDU2 (DivsOf i (NDiv i0) i1) j (NMul m)) = (Just i0, Just (j*m))
 sfdu_arity (SFDU3 j (NMul m)) = (Nothing, Just (j*m))
 
 sfdd_arity :: SFDD -> (Maybe Int, Maybe Int) 
+sfdd_arity (SFDD0 i j) = (Just i, Just j)
 sfdd_arity (SFDD1 (DivsOf _ (NDiv i0) _)) = (Just i0, Nothing)
 sfdd_arity (SFDD2 (DivsOf _ (NDiv j0) _)) = (Nothing, Just j0)
 sfdd_arity (SFDD3 (DivsOf _ (NDiv i0) _) 

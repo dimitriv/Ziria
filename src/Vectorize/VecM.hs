@@ -38,11 +38,9 @@ import Utils
 import Outputable
 import Text.PrettyPrint.HughesPJ
 
--- import Data.List 
 import Data.Maybe ( fromJust )
-
-import qualified Data.Map as Map
-
+import qualified Data.Map.Strict as Map
+import Opts
 
 import System.Exit
 
@@ -80,7 +78,8 @@ vecMFail loc msg
   = liftIO $ 
     do print $ vcat [ 
            text "Vectorization failure!"
-         , text "Reason  :" <+> msg 
+         , text "Reason:" 
+         , msg 
          , text "Location:" <+> text (maybe (error "BUG") show loc) ]
        exitFailure
 
@@ -158,14 +157,14 @@ lookupCFunBind nm = do
 data VectRes =
      -- No vectorization
      NotVect { 
-        vect_in_ty  :: Ty   -- same asoriginal in_ty
-      , vect_out_ty :: Ty } -- same as original out_ty 
+        vect_in_ty  :: !Ty   -- same asoriginal in_ty
+      , vect_out_ty :: !Ty } -- same as original out_ty 
 
      -- Vectorization did happen
    | DidVect { 
-        vect_in_ty  :: Ty       -- final input type
-      , vect_out_ty :: Ty       -- final output type
-      , vect_util   :: Double } -- utility, see Note [Utility]
+        vect_in_ty  :: !Ty       -- final input type
+      , vect_out_ty :: !Ty       -- final output type
+      , vect_util   :: !Double } -- utility, see Note [Utility]
 
  deriving Show
 
@@ -197,8 +196,8 @@ vResEqQ _ _ = False
 -- thunk. Hence we can manipulate thousands of results without
 -- actually having done the rewriting.
 data DelayedVectRes
-   = DVR { dvr_comp :: IO Comp   -- Delayed result
-         , dvr_vres :: VectRes } -- Information about the result
+   = DVR { dvr_comp :: !(IO Comp) -- Delayed result
+         , dvr_vres :: !VectRes }  -- Information about the result
 
 -- | Lift an operation on VectRes to be on a DelayedVectRes
 lift_dvr :: (VectRes -> a) -> DelayedVectRes -> a
@@ -219,11 +218,10 @@ forceDVR dvr = liftIO $ dvr_comp dvr
 {- Note [Vectorizer Candidates]
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    We need to keep groups of candidates indexed by type, and for each
-   group we want a heap that allows fast access to the one with the
-   maximum utility.  For this reason we introduce DVRQueues that
-   represent the key queue types in this map, holding Heaps ordered by
-   the utility of each item. The DVRCands type is used to hold those
-   candidates.
+   group we just keep the maximal candidate.For this reason we introduce
+   DVRQueues that represent the key queue types in this map. The DVRCands
+  type is used to hold those candidates.
+
 -}
 
 -- | Input and output type of vectorization result
@@ -234,80 +232,60 @@ dvrQueueDVR dvr = (inty,yldty)
   where inty  = vect_in_ty  (dvr_vres dvr)
         yldty = vect_out_ty (dvr_vres dvr)
 
--- | A non-empty list keeping track of the largest element separately
-data MList a = MList { ml_max :: a, ml_rest :: [a] }
-
-class Leq a where
-  leq :: a -> a -> Bool
-
-
-mlSingle :: a -> MList a 
-mlSingle x = MList x []
-
-mlInsert :: Leq a => a -> MList a -> MList a
-mlInsert x (MList m rest)
-  | m `leq` x = MList x (m:rest)
-  | otherwise = MList m (x:rest)
-
-mlMax :: MList a -> a
-mlMax (MList m _) = m
-
-mlUnion :: Leq a => MList a -> MList a -> MList a
-mlUnion (MList m1 r1) (MList m2 r2)
-  | m1 `leq` m2 = MList m2 (m1 : r1 ++ r2)
-  | otherwise   = MList m1 (m2 : r1 ++ r2)
-
---  | Precondition: f does not change ordering
-mapMList :: (a -> b) -> MList a -> MList b
-mapMList f (MList m rest) = MList (f m) (map f rest)
-
-
 -- | Type-indexed set of utility-sorted heaps
-type DVRCands = Map.Map DVRQueues (MList DelayedVectRes)
+type DVRCands = Map.Map DVRQueues DelayedVectRes
 
-instance Leq DelayedVectRes where
-  dvr1 `leq` dvr2 = dvResUtil dvr1 <= dvResUtil dvr2
-
+max_dvr :: DelayedVectRes -> DelayedVectRes -> DelayedVectRes
+max_dvr x y = if dvResUtil x <= dvResUtil y then y else x
 
 addDVR :: DelayedVectRes -> DVRCands -> DVRCands
-addDVR dvr cands = Map.insertWith mlUnion (dvrQueueDVR dvr) ml cands
- where ml = mlSingle dvr
-
-addDVRMany :: [DelayedVectRes] -> DVRCands -> DVRCands
-addDVRMany [] cs     = cs
-addDVRMany (r:rs) cs = addDVRMany rs (addDVR r cs)
+addDVR dvr = dvr `seq` Map.insertWith max_dvr (dvrQueueDVR dvr) dvr
 
 fromListDVRCands :: [DelayedVectRes] -> DVRCands
-fromListDVRCands rs = addDVRMany rs emptyDVRCands
+fromListDVRCands rs = 
+  Map.fromListWith max_dvr (map (\r -> (dvrQueueDVR r, r)) rs)
+
 
 unionDVRCands :: DVRCands -> DVRCands -> DVRCands
-unionDVRCands = Map.unionWith mlUnion 
+unionDVRCands d1 d2 
+  = d1 `seq` d2 `seq` (Map.unionWith max_dvr d1 d2)
 
 
 mapDVRCands :: (DelayedVectRes -> DelayedVectRes) -> DVRCands -> DVRCands
-mapDVRCands f = Map.map (mapMList f) 
-
-foldDVRCands :: (s -> DelayedVectRes -> s) -> s -> DVRCands -> s
-foldDVRCands f = Map.fold (\r s -> mlFold f s r)
-
-mlFold :: (s -> a -> s) -> s -> MList a -> s
-mlFold f s (MList m1 ms) = foldl f s (m1:ms)
+mapDVRCands f = Map.map f
 
 
 emptyDVRCands :: DVRCands
 emptyDVRCands = Map.empty
+
+dvResDVRCands :: DVRCands -> [VectRes]
+dvResDVRCands rs = map dvr_vres  (Map.elems rs)
+
 
 singleDVRCands :: DelayedVectRes -> DVRCands
 singleDVRCands dvr = dvr `addDVR` emptyDVRCands
 
 -- | Get the maximal candidate
 getMaximal :: DVRCands -> DelayedVectRes
-getMaximal = fromJust . Map.fold aux Nothing 
-  where aux hp Nothing = return $ mlMax hp
+getMaximal = fromJust . Map.foldr aux Nothing 
+  where aux hp Nothing = return hp
         aux hp (Just dvr) 
-          | let dvr' = mlMax hp 
-          = if dvr `leq` dvr' then return dvr' else return dvr
+          | let dvr' = hp
+          = return $ max_dvr dvr dvr'
 
+
+-- | The very same component, non-vectorized
+mkSelf :: LComp -> Ty -> Ty -> DelayedVectRes
+mkSelf lcomp tin tout 
+  = DVR { dvr_comp = return (eraseComp lcomp), dvr_vres = NotVect tin tout }
+
+-- | Warn if DVRCands is empty
+warnIfEmpty :: DynFlags -> LComp -> DVRCands -> String -> VecM ()
+warnIfEmpty dfs lc cands msg 
+  = when (Map.null cands) $ liftIO $ do
+       print $ text "WARNING: empty vectorization" <+> braces (text msg)
+       verbose dfs $ vcat [ text "For computation:" 
+                          , nest 2 $ ppr lc ]
 
 {-------------------------------------------------------------------------
   Vectorization utility calculations
@@ -436,14 +414,15 @@ gcdTys xs = go (head xs) (tail xs)
 -- | Match vectorization candidates composed on the data path
 combineData :: ParInfo  -> Maybe SourcePos
             -> DVRCands -> DVRCands -> DVRCands
-combineData p loc xs ys = Map.fold foreach_xs emptyDVRCands xs
-  where
-    foreach_xs heap res = Map.fold foreach_ys res ys
-      where foreach_ys heap' res'
-                = maybe res' (`addDVR` res') $
-                do let maxi  = mlMax heap
-                       maxi' = mlMax heap'
-                   combine_par p loc maxi maxi'
+combineData p loc xs ys 
+ = let xs_list = Map.elems xs
+       ys_list = Map.elems ys
+   in fromListDVRCands $ 
+          [ r | x <- xs_list, y <- ys_list
+              , r <- from_mb $ combine_par p loc x y
+          ]
+ where from_mb Nothing  = []
+       from_mb (Just x) = [x]
 
 combine_par :: ParInfo -> Maybe SourcePos
             -> DelayedVectRes -> DelayedVectRes -> Maybe DelayedVectRes
@@ -505,69 +484,6 @@ mitigate_all vcs = map (mit_one (Just final_ty_in, Just final_ty_out)) vcs
    final_ty_in  = tyArity $ gcdTys $ map (vect_in_ty  . dvr_vres) vcs
    final_ty_out = tyArity $ gcdTys $ map (vect_out_ty . dvr_vres) vcs
 
---    -- Mitigate from the expected input type (exp_tin) and to the 
---    -- expected output type (exp_tout)
---    mitigate_one exp_tin exp_tout dvr
---      = dvr { dvr_comp = new_dvr_comp, dvr_vres = new_dvr_vres }
---      where
---        vres  = dvr_vres dvr
---        vtin  = vect_in_ty vres
---        vtout = vect_out_ty vres
---        new_dvr_comp = do
---           comp <- dvr_comp dvr
---           return $ (exp_tin,vtin) `mitIn` comp `mitOut` (vtout,exp_tout)
---        -- Do not touch utility (since we do not want to increase it!)
---        new_dvr_vres = vres { vect_in_ty  = exp_tin, vect_out_ty = exp_tout }
-
-
--- -- | Mitigate by creating a Mitigate node (maybe) node between 
--- --   tin1 ~> tin2
--- -- Pre-condition: tin1 is a ``type divisor'' of tin2 or vice-versa.
--- -- Result is a mitigating (ST T tin1 tin2) transformer.  
--- mkMit :: Maybe SourcePos -> Ty -> Ty -> Maybe Comp 
--- mkMit loc tin1 tin2
---     -- If the two types are equal or Void no need for mitigation
---   | tin1 == tin2  = Nothing
---   | TVoid <- tin1 = Nothing
---   | TVoid <- tin2 = Nothing
---     -- If one is array but other non-array then the latter must be 
---     -- the base type of the former.  
---     -- We must up-mitigate: 1 ~> len
---   | not (isArrayTy tin1)
---   , TArray (Literal len) tbase <- tin2
---   = assert "mkMit" (tbase == tin1) $ 
---     return $ cMitigate loc tbase 1 len
---     -- Symmetric to previous case 
---   | not (isArrayTy tin2)
---   , TArray (Literal len) tbase <- tin1
---   = assert "mkMit" (tbase == tin2) $
---     return $ cMitigate loc tbase len 1
---     -- If both types are arrays (of different lenghts) let's mitigate 
---   | TArray (Literal len1) tbase1 <- tin1
---   , TArray (Literal len2) tbase2 <- tin2
---   = assert "mkMit" (tbase1 == tbase2) $
---     return $ cMitigate loc tbase1 len1 len2
---   | otherwise
---   = panic $ text "mkMit: can't mitigate:" <+> 
---             ppr tin1 <+> text "~>" <+> ppr tin2
-
--- -- | (gty,ty) `mitIn` comp
--- -- Mitigates in the input type of comp
--- mitIn :: (Ty,Ty) -> Comp -> Comp
--- mitIn (gty,ty) comp
---   | let loc = compLoc comp
---   , Just m <- mkMit loc gty ty
---   = cPar loc pnever m comp
---   | otherwise = comp
-
--- -- | comp `mitOut` (ty,gty)
--- -- Mitigates on the output type of comp, symmetrically to `mitIn' above.
--- mitOut :: Comp -> (Ty,Ty) -> Comp 
--- mitOut comp (ty,gty)
---   | let loc = compLoc comp
---   , Just m <- mkMit loc ty gty
---   = cPar loc pnever comp m
---   | otherwise = comp
 
 mit_one :: (Maybe Int, Maybe Int) -> DelayedVectRes -> DelayedVectRes
 mit_one (Nothing, Nothing) dvr = fixup_util_out (fixup_util_in dvr)
@@ -647,120 +563,22 @@ combineBind loc c1cands xs cscands
   = aux (c1cands:cscands) (\(r:rs) -> combine_bind loc r xs rs)
   where 
      aux :: [DVRCands] -> ([DelayedVectRes] -> DelayedVectRes) -> DVRCands
-     aux cs h = go cs h 
-       where go [] f       = singleDVRCands (f [])
-             go (c1:c1s) f = Map.fold (\c st ->
-                   let m     = mlMax c
-                       f' rs = f (m : rs)
-                   in go c1s f' `unionDVRCands` st) emptyDVRCands c1
+     aux cs h = fromListDVRCands (go cs h)
+       where go [] f       = [f []]
+             go (c1:c1s) f = foldr (\c st ->
+                   let f' rs = f (c : rs)
+                   in go c1s f' ++ st) [] (Map.elems c1)
 
+
+-- | Match vectorization candidates to compose them in a branch
 combineBranch :: Maybe SourcePos -> Exp -> DVRCands -> DVRCands -> DVRCands
-combineBranch loc e xs ys = Map.fold foreach_xs emptyDVRCands xs
+combineBranch loc e xs ys = Map.foldr foreach_xs emptyDVRCands xs
  where
-   foreach_xs heap res = Map.fold foreach_ys res ys
+   foreach_xs heap res = Map.foldr foreach_ys res ys
       where 
         foreach_ys heap' res' 
           = maybe res' (`addDVR` res') $
-            do let maxi  = mlMax heap
-               let maxi' = mlMax heap'
-               return $ combine_branch loc e maxi maxi'
-
-
-
--- -- | Build an array type from a base type (like VecM.mkVectTy)
--- array_ty :: Int -> Ty -> Ty
--- array_ty 1 ty = ty
--- array_ty n ty = TArray (Literal n) ty 
-
-{- 
-
--- | Keep a result with maximal utility for each group by vResEqQ
-keepGroupMaximals :: [DelayedVectRes] -> [DelayedVectRes]
-keepGroupMaximals xs = map getMaximal (groups xs)
-  where groups = groupBy' $ vResEqQ <| dvr_vres
-
--- | Return a result with maximal utility
-getMaximal :: [DelayedVectRes] -> DelayedVectRes
-getMaximal = maximumBy $ compare <| dvResUtil 
-
--}
-
-
-
-
-{-------------------------------------------------------------------------
-  Matching on the control path
--------------------------------------------------------------------------}
-
--- | Match vectorization candidates composed on the control path (bind).
---
--- For a set of components c1..cn this function accepts the
--- vectorization candidates for each ci and creates the set of
--- vectorization candidates for matching them in the control path. For
--- example:
--- 
--- [ [vc11,vc12], [vc21,vc22] ] 
---     ~~>
--- [ [vc11,vc21], [vc11,vc22], [vc12,vc21], [vc11,vc22] ]
--- 
--- assuming that for each group in the resulting list the input types
--- of all components are joinable and the output types are also all
--- joinable.
--- 
--- NB: 'cross_prod_mit' may introduce mitigators to make sure that
--- queues match.  These mitigate between the ``greatest common
--- divisor'' type of all input types and each individual input type,
--- and similarly between each individual output type and the
--- ``greatest common divisor'' type of all output types.  See VecM.hs
--- for the definition of gcdTys.
--- cross_prod_mit :: [ [DelayedVectRes] ] -> [ [DelayedVectRes] ]
--- cross_prod_mit bcands 
---   = map mitigate $ Utils.cross_prod bcands 
---   where
---     mitigate :: [DelayedVectRes] -> [DelayedVectRes]
---     mitigate vcs = map (mitigate_one ty_in ty_out) vcs
---       -- Compute "the" common input type and "the" common output type
---       where ty_in  = gcdTys $ map (vect_in_ty  . dvr_vres) vcs
---             ty_out = gcdTys $ map (vect_out_ty . dvr_vres) vcs
---     -- Mitigate from the expected input type (exp_tin) and to the 
---     -- expected output type (exp_tout)
---     mitigate_one exp_tin exp_tout dvr
---       = dvr { dvr_comp = new_dvr_comp, dvr_vres = vres_new } 
---       where 
---        vect_tin     = vect_in_ty  $ dvr_vres dvr
---        vect_tout    = vect_out_ty $ dvr_vres dvr
---        new_dvr_comp = do
---           comp <- dvr_comp dvr
---           return $ 
---             (exp_tin,vect_tin) `mitIn` comp `mitOut` (vect_tout,exp_tout)
---        vres_new = (dvr_vres dvr) { vect_in_ty  = exp_tin
---                                  , vect_out_ty = exp_tout }
-
-
-
--- combineCtrl :: Maybe SourcePos
---             -> DelayedVectRes
---             -> [EId] -> [DelayedVectRes]
---             -> DelayedVectRes
--- combineCtrl loc dvr1 xs dvrs
---   = DVR { dvr_comp = do
---             c1 <- dvr_comp dvr1
---             cs <- mapM dvr_comp dvrs
---             return $ cBindMany loc c1 (zip xs cs)
---         , dvr_vres = bind_vres (dvr1:dvrs) }
---   where
---      bind_vres ds
---        | [] <- filter (didVect . dvr_vres) ds
---        = NotVect vtin vtout
---        | otherwise
---        = DidVect vtin vtout u
---        where
---           vds   = map dvr_vres ds
---           u     = chooseBindUtility vds
---           vtin  = fromJust $ ctJoinMany_mb $ map vect_in_ty  vds
---           vtout = fromJust $ ctJoinMany_mb $ map vect_out_ty vds
-
-
+               return $ combine_branch loc e heap heap'
 
 
 {-------------------------------------------------------------------------

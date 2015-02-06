@@ -6,7 +6,7 @@ fun comp viterbi() {
   var cnt :int := 0;
 
 -- repeat {
- repeat[288,256] {
+ repeat <= [288,256] {
 
     (svalue:arr[48] int8) <- takes 48;
    

@@ -33,6 +33,8 @@ import Text.Show.Pretty (dumpStr)
 import qualified Language.C.Syntax as C
 
 
+import System.Timeout 
+
 import AstComp
 import AstExpr
 
@@ -52,7 +54,7 @@ import qualified Outputable
 
 import AutoLUT
 
-import Vectorize    ( runVectorizer  )
+import Vectorize    ( initVectorizer, runVectorizer  )
 
 import CgProgram    ( codeGenProgram )
 import CgMonad      ( evalCg         )
@@ -87,16 +89,31 @@ outputCompiledProgram (CompiledProgram sc cc fn) = do
     hClose outHdl
 
 
-main :: IO ()
-main = failOnException $ do
-    hSetBuffering stdout NoBuffering
+withTimeout :: DynFlags -> IO a -> IO a 
+withTimeout dfs action = 
+   case dynFlagTimeout dfs of 
+     Nothing -> action
+     Just t  -> do
+       r <- timeout (fromIntegral (t * 1000000)) action
+       case r of Nothing -> error "Timout exceeded!" 
+                 Just x  -> return x
 
-    args <- getArgs
-    (dflags, _) <- compilerOpts args
+main :: IO ()
+main = do 
+  hSetBuffering stdout NoBuffering
+
+  args <- getArgs
+  (dflags, _) <- compilerOpts args
+
+  withTimeout dflags $ failOnException $ do
 
     inFile  <- getInFile dflags
     outFile <- getOutFile dflags
     input   <- readFile inFile
+
+    
+
+
 
     prog <-
           failOnError $
@@ -132,6 +149,8 @@ main = failOnException $ do
     folded <- runFoldPhase dflags sym 1 c'
 
     verbose dflags $ text "runVectorizePhase .."
+
+    initVectorizer
 
     (cand, cands) <- runVectorizePhase dflags sym folded
 

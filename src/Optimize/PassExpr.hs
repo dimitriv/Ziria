@@ -116,9 +116,11 @@ passExpInlining = TypedExpBottomUp $ \eloc e -> do
      | otherwise
       -> return e
 
+
 -- | If we have an assignment to a fresh array variable @y@ to a slice of an
 -- array @x@, we can instead do all operations on @x@ directly.
 passAsgnLetRef :: TypedExpPass
+-- TODO: revise this when EAssign and EArrWrite merge!
 passAsgnLetRef = TypedExpBottomUp $ \eloc exp -> if
   | EArrWrite e0 estart elen erhs <- unExp exp
     , TArray _ ty <- ctExp e0
@@ -138,6 +140,15 @@ passAsgnLetRef = TypedExpBottomUp $ \eloc exp -> if
           ~~> { ... x[estart, n] ... } |]
 
      rewrite exp'
+  | EAssign elhs erhs <- unExp exp
+    , EVar x <- unExp elhs
+    , x `S.notMember` exprFVs erhs 
+    , Just (y, residual_erhs) <- returns_letref_var erhs
+   -> do let exp' = substExp [] [(y,elhs)] residual_erhs
+         logStep "asgn-letref" eloc
+           [step| x := var y in { ... y ... ; return y }
+                ~~> { ... x ... } |]
+         rewrite exp'
   | otherwise
    ->
      return exp

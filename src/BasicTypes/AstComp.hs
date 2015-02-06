@@ -390,8 +390,8 @@ data ReadType
 type CompLoc = Maybe SourcePos
 
 data GComp tc t a b
-  = MkComp { unComp   :: GComp0 tc t a b
-           , compLoc  :: CompLoc
+  = MkComp { unComp   :: !(GComp0 tc t a b)
+           , compLoc  :: !(CompLoc)
            , compInfo :: a }
   deriving (Generic, Typeable, Data)
 
@@ -458,6 +458,7 @@ mkBindMany = go
 -- | General form of mapping over computations
 --
 -- NOTE: Not binding aware.
+
 mapCompM :: forall tc tc' t t' a a' b b' m. Monad m
          => (tc -> m tc')                  -- ^ On comp types
          -> (t -> m t')                    -- ^ On expression types
@@ -467,8 +468,34 @@ mapCompM :: forall tc tc' t t' a a' b b' m. Monad m
          -> (GComp tc' t' a' b' -> m (GComp tc' t' a' b')) -- ^ Combine results
          -> GComp tc t a b
          -> m (GComp tc' t' a' b')
-mapCompM onCTyp onETyp onCAnn onEAnn onExp f = goComp
+mapCompM onCTyp onETyp onCAnn onEAnn onExp f 
+  = mapCompM_env onCTyp onETyp onCAnn onEAnn onExp f (const id) (const id)
+
+mapCompM_env :: forall tc tc' t t' a a' b b' m. Monad m
+         => (tc -> m tc')                  -- ^ On comp types
+         -> (t -> m t')                    -- ^ On expression types
+         -> (a -> m a')                    -- ^ On comp annotations
+         -> (b -> m b')                    -- ^ On expression annotations
+         -> (GExp t b -> m (GExp t' b'))   -- ^ On expressions
+         -> (GComp tc' t' a' b' -> m (GComp tc' t' a' b')) -- ^ Combine results
+         -> (forall i. GName t -> m i -> m i)  -- extending environments
+         -> (forall i. GName tc -> m i -> m i) -- extending environments
+         -> GComp tc t a b
+         -> m (GComp tc' t' a' b')
+mapCompM_env onCTyp onETyp onCAnn onEAnn onExp f extE extC = goComp
   where
+    goBind c xs_cs = do 
+        c' <- goComp c
+        xs_cs' <- go_binds xs_cs
+        return $ mkBindMany c' xs_cs'
+    
+    go_binds [] = return []
+    go_binds ((x,c1):xs_cs) = do
+      x' <- mapNameM onETyp x
+      c1' <- extE x $ goComp c1
+      xs_cs' <- extE x $ go_binds xs_cs
+      return $ (x',c1'):xs_cs'
+
     goComp :: GComp tc t a b  -> m (GComp tc' t' a' b')
     goComp MkComp{..} = do
       unComp'   <- goComp0 unComp
@@ -479,18 +506,9 @@ mapCompM onCTyp onETyp onCAnn onEAnn onExp f = goComp
     goComp0 (Var x) = do
        x' <- mapNameM onCTyp x
        return $ Var x'
-    goComp0 (BindMany c1 xs_cs) = do
-       c1'    <- goComp c1
-       xs_cs' <- forM  xs_cs $ \(x,c') -> do
-                   x'  <- mapNameM onETyp x
-                   c'' <- goComp c'
-                   return (x', c'')
-       -- TODO: we normalize at every node in the AST as we go up
-       -- which is not terribly nice. Perhaps we should get rid of
-       -- BindMany, in favor of plain old Bind, and have a
-       -- bindManyView later on that gives us the functionality
-       -- we need.
-       return $ mkBindMany c1' xs_cs'
+
+    goComp0 (BindMany c1 xs_cs) = goBind c1 xs_cs
+
     goComp0 (Seq c1 c2) = do
       c1' <- goComp c1
       c2' <- goComp c2
@@ -502,7 +520,7 @@ mapCompM onCTyp onETyp onCAnn onEAnn onExp f = goComp
     goComp0 (Let x c1 c2) = do
       x'  <- mapNameM onCTyp x
       c1' <- goComp c1
-      c2' <- goComp c2
+      c2' <- extC x $ goComp c2
       return $ Let x' c1' c2'
     goComp0 (LetStruct sdef c1) = do
       sdef' <- goStructDef sdef
@@ -511,23 +529,29 @@ mapCompM onCTyp onETyp onCAnn onEAnn onExp f = goComp
     goComp0 (LetE x fi e c1) = do
       x'  <- mapNameM onETyp x
       e'  <- onExp e
-      c1' <- goComp c1
+      c1' <- extE x $ goComp c1
       return $ LetE x' fi e' c1'
     goComp0 (LetERef x me c1) = do
       x' <- mapNameM onETyp x
       me' <- mapM onExp me
-      c1' <- goComp c1
+      c1' <- extE x $ goComp c1
       return $ LetERef x' me' c1'
+
+    -- Header 
     goComp0 (LetHeader fun c1) = do
-      fun' <- mapFunM onETyp onEAnn onExp fun
-      c1'  <- goComp c1
+      let on_body prms = extParams (map CAExp prms) . onExp
+      fun' <- mapFunM_env onETyp onEAnn on_body fun
+      c1'  <- extFun fun $ goComp c1
       return $ LetHeader fun' c1'
+
     goComp0 (LetFunC nm params c1 c2) = do
       nm'     <- mapNameM onCTyp nm
       params' <- mapM (mapNameM goCallArgT) params
       c1'     <- goComp c1
-      c2'     <- goComp c2
+      c2'     <- extParams (map paramToName params) $ 
+                 extC nm (goComp c2)
       return $ LetFunC nm' params' c1' c2'
+
     goComp0 (Call nm args) = do
       nm'   <- mapNameM onCTyp nm
       args' <- mapM goCallArg args
@@ -568,7 +592,7 @@ mapCompM onCTyp onETyp onCAnn onEAnn onExp f = goComp
       e'    <- onExp e
       elen' <- onExp elen
       nm'   <- mapNameM onETyp nm
-      c1'   <- goComp c1
+      c1'   <- extE nm $ goComp c1
       return $ Times ui e' elen' nm' c1'
     goComp0 (Repeat wdth c1) = do
       c1' <- goComp c1
@@ -600,6 +624,17 @@ mapCompM onCTyp onETyp onCAnn onEAnn onExp f = goComp
     goComp0 (Mitigate t n1 n2) = do
       t' <- onETyp t
       return $ Mitigate t' n1 n2
+
+    extParams :: forall i. [(CallArg (GName t) (GName tc))] -> m i -> m i 
+    extParams [] act = act
+    extParams ((CAExp nm):prms) act  = extE nm (extParams prms act)
+    extParams ((CAComp nm):prms) act = extC nm (extParams prms act)
+
+    extFun :: forall i. GFun t b -> m i -> m i
+    extFun (MkFun (MkFunDefined nm prms _) _ _) act
+      = extE nm $ extParams (map CAExp prms) act
+    extFun (MkFun (MkFunExternal nm _ _) _ _) act = extE nm act
+
 
     goCallArg :: CallArg (GExp t b) (GComp tc t a b) -> m (CallArg (GExp t' b') (GComp tc' t' a' b'))
     goCallArg (CAExp  e) = CAExp  `liftM` onExp e
@@ -836,13 +871,21 @@ substComp :: [(LenVar, NumExpr)]
           -> [(GName Ty, GExp Ty b)]
           -> [(GName CTy, GComp CTy Ty a b)]
           -> GComp CTy Ty a b -> GComp CTy Ty a b
-substComp slen sexp scomp =
-    mapComp (substCTy slen) (substTy slen) id id (substExp slen sexp) aux
-  where
-    aux c | Var x <- unComp c = case lookup x scomp of
-                                  Just c' -> c'
-                                  Nothing -> c
-          | otherwise         = c
+substComp slen sexp scomp arg
+  = mapCompM_env on_cty on_ty (\l _ -> l) (\l _ -> l)
+                 on_exp aux ext_e ext_c arg (sexp, scomp)
+  where 
+    on_cty x _      = substCTy slen x
+    on_ty  x _      = substTy slen x
+    on_exp x (es,_) = substExp slen es x
+  
+    ext_c nm act (s,c) = act (s, filter (\(snm,_) -> snm /= nm) c)
+    ext_e nm act (s,c) = act (filter (\(snm,_) -> snm /= nm) s, c)
+
+    aux c (_,sc)
+     | Var x <- unComp c
+     , Just c' <- lookup x sc = c'
+     | otherwise = c
 
 {-------------------------------------------------------------------------------
   Dealing with CallArgs
