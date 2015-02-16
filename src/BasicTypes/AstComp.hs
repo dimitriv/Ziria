@@ -311,7 +311,8 @@ data GComp0 tc t a b where
   --
   -- > --------------------------
   -- > Mitigate a 1 1 :: ST T a a
-  Mitigate :: t -> Int -> Int -> GComp0 tc t a b
+  Mitigate :: String  -- just for debugging 
+           -> t -> Int -> Int -> GComp0 tc t a b
   deriving (Generic, Typeable, Data)
 
 data VectAnn = Rigid Bool (Int,Int) -- True == allow mitigations up, False == disallow mitigations up
@@ -621,9 +622,9 @@ mapCompM_env onCTyp onETyp onCAnn onEAnn onExp f extE extC = goComp
     goComp0 (Standalone c1) = do
       c1' <- goComp c1
       return $ Standalone c1'
-    goComp0 (Mitigate t n1 n2) = do
+    goComp0 (Mitigate s t n1 n2) = do
       t' <- onETyp t
-      return $ Mitigate t' n1 n2
+      return $ Mitigate s t' n1 n2
 
     extParams :: forall i. [(CallArg (GName t) (GName tc))] -> m i -> m i 
     extParams [] act = act

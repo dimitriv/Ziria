@@ -27,6 +27,8 @@ module VecSF (
   , sfud_arity
   , sfdu_arity
   , sfdd_arity
+  , isSteady_sfdu
+  , isSteady_sfud
 
   , NMul (..), NDiv (..), DivsOf (..)
 
@@ -126,13 +128,21 @@ the Scaling Factor datatypes.
 -- to our input queue or to our output queue. This determines which
 -- vectorization mode is applicable.
 data CtxForVect 
-  = -- Unrestricted context, UD, DU, DD all apply
+  = 
+    -- Unrestricted context, UD, DU, DD all apply
     CtxUnrestricted
-    -- T-after-C, appliable modes are: UD, DD 
-  | CtxExistsCompLeft
-    -- T-before-C, applicable modes are: DU, DD
-  | CtxExistsCompRight
 
+    -- T-after-C, appliable modes are: UD, DD 
+  | CtxExCompLeft
+
+    -- T-before-C, applicable modes are: DU, DD
+  | CtxExCompRight
+
+    --  c >>> do { t >>> c1 
+    --           ; t' }
+    -- In this case we can only use DD on t.
+  | CtxExCompLeftAndRight
+  deriving Show
 
 {-------------------------------------------------------------------------------
   Scaling factors
@@ -162,7 +172,8 @@ divsOf n = unsafePerformIO $ do
                  | x <- [1..n]
                  , y <- [1..n]
                  , x > 1 || y > 1
-                 , x*y == n, x >= y ]
+                 , x*y == n
+                 ]
        writeIORef divsOfMemo (Map.insert n ds' dm)
        return ds'
      Just ds -> return ds
@@ -249,9 +260,27 @@ data SFDU =
 -- to avoid having to re-implement the delicate bound checking
 compSFDU_aux :: (CAlpha,CAlpha) -> [SFDU]
 compSFDU_aux (ca1,ca2) = map sym_sfud $ compSFUD_aux (ca2,ca1)
-  where sym_sfud (SFUD1 i j m1 m2) = SFDU1 j i m1 m2
-        sym_sfud (SFUD2 i ds m)    = SFDU2 ds i m
-        sym_sfud (SFUD3 i m)       = SFDU3 i m
+
+sym_sfud (SFUD1 i j m1 m2) = SFDU1 j i m1 m2
+sym_sfud (SFUD2 i ds m)    = SFDU2 ds i m
+sym_sfud (SFUD3 i m)       = SFDU3 i m
+
+-- | When is an UD/DU scale factor steady i.e. does not increase nor
+-- decrease the rate of a component? We need those for vectorization
+-- of Repeat nodes in CtxExCompLeftAndRight mode.
+isSteady_sfdu :: SFDU -> Bool 
+isSteady_sfdu (SFDU1 i j (NMul m1) (NMul m2)) 
+ | m2 == 1 = True
+isSteady_sfdu (SFDU2 (DivsOf i (NDiv i0) (NDiv i1)) j (NMul m))
+ | i1*m == 1 = True
+isSteady_sfdu (SFDU3 j (NMul m)) 
+ | m == 1 = True
+isSteady_sfdu _ = False
+
+isSteady_sfud :: SFUD -> Bool
+isSteady_sfud = isSteady_sfdu . sym_sfud
+
+
 
 {-------------------------------------------------------------------------------
   SFDD scaling factors

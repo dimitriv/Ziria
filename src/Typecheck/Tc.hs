@@ -431,7 +431,7 @@ tcComp comp@(MkComp comp0 loc _) =
       return $ CTTrans a (TBuff (IntBuf a))
     go (Standalone c) =
       tcComp c
-    go (Mitigate a n1 n2) =
+    go (Mitigate _ a n1 n2) =
       tcMitigator loc a n1 n2
 
     -- DV: Typing those in more restrictive ways

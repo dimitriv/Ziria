@@ -22,6 +22,8 @@ module VecRewriter (
    rwTakeEmitIO
  , RwState ( .. )
  , RwQSt   ( .. )
+ , doRw
+ , doNotRw
 ) where
 
 import Control.Applicative
@@ -126,6 +128,13 @@ joinRwQSt (DoRw va1 off1) (DoRw va2 _off2)
     -- but rather expressions and it's a bit tedious to check equality
     -- between expressions.
 
+
+-- | If we use arrays of size <= 1 then we do not really have to rewrite
+doRw :: Int -> EId -> Exp -> RwQSt
+doRw n vect offset = if n <= 1 then DoNotRw else DoRw vect offset
+
+doNotRw :: RwQSt
+doNotRw = DoNotRw
 
 
 -- | Set the new input offset in the case where input RwQSt was DoRw

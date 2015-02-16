@@ -360,7 +360,7 @@ computeCard _dflags = go
       Standalone c1 -> do
         c1' <- go c1
         return $ cStandalone loc (compInfo c1') c1'
-      Mitigate t n1 n2  -> return $ cMitigate loc ocard t n1 n2
+      Mitigate s t n1 n2  -> return $ cMitigate loc ocard s t n1 n2
 
     go_callarg :: CallArg Exp Comp -> CardM (CallArg Exp LComp)
     go_callarg (CAExp  e) = return $ CAExp e

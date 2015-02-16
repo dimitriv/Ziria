@@ -87,17 +87,20 @@ instance Outputable ty => Outputable (GExp0 ty a) where
     EVar x          -> ppName x
     EUnOp op e      -> ppr op <> parens (ppr e)
     EBinOp op e1 e2 -> ppr e1 <> ppr op <> ppr e2
-    EAssign e1 e2   -> assign ":=" (ppr e1) (ppr e2)
+    EAssign e1 e2   -> ppr e1 <+> text ":=" $$ 
+                       nest 2 (ppr e2)
 
     EArrRead earr eix LISingleton  -> ppr earr <> brackets (ppr eix)
     EArrRead earr eix (LILength n) -> ppr earr <> brackets ((ppr eix) <> text ":+" <> int n)
     EArrRead earr eix (LIMeta   x) -> ppr earr <> brackets ((ppr eix) <> text ":+" <> text  x)
 
     EArrWrite earr eix LISingleton eval ->
-      ppr earr <> assign ":=" (brackets (ppr eix)) (ppr eval)
+      ppr earr <> (brackets (ppr eix)) <+> text ":=" $$ 
+      nest 2 (ppr eval)
 
     EArrWrite earr eix (LILength r) eval ->
-      ppr earr <> assign ":=" (brackets $ (ppr eix) <> text ":+" <> int r) (ppr eval)
+      ppr earr <> (brackets $ (ppr eix) <> text ":+" <> int r) <+> text ":=" $$
+      nest 2 (ppr eval)  
 
     EArrWrite earr eix (LIMeta x) eval ->
       ppr earr <> assign ":=" (brackets $ (ppr eix) <> text ":+" <> text x) (ppr eval)
@@ -116,18 +119,17 @@ instance Outputable ty => Outputable (GExp0 ty a) where
       text "}"
 
     ELet x fi e1 e2 ->
-      text "let" <> ppr fi <+> assign "=" (ppBind x) (ppr e1) $$
+      text "let" <> ppr fi <+> ppBind x <+> text "=" $$
+      nest 2 (ppr e1) $$
       text "in" $$
       ppr e2
 
     ELetRef x Nothing e2 ->
-      text "var" <+> ppBind x $$
-      text "in" $$
+      text "var" <+> ppBind x <+> text "in" $$
       ppr e2
 
     ELetRef x (Just e1) e2 ->
-      text "var" <+> assign ":=" (ppBind x) (ppr e1) $$
-      text "in" $$
+      text "var" <+> assign ":=" (ppBind x) (ppr e1) <+> text "in" $$
       ppr e2
 
     ESeq e1 e2       -> ppr e1 <> semi $$ ppr e2

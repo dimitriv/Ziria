@@ -50,7 +50,7 @@ fun comp DemapLimit(shr:int) {
   var symbol : arr[4] complex16;
   var symbol_out : arr[4] complex16;
 
-  repeat ![48,48] seq {
+  repeat <= [48,48] seq {
     
      (x:arr[4] complex16) <- takes 4;
     

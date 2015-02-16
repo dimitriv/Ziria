@@ -464,7 +464,7 @@ codeGenComp dflags comp k =
     go :: Comp -> Cg CompInfo
 
 
-    go (MkComp (Mitigate bty i1 i2) csp ()) = do
+    go (MkComp (Mitigate _ bty i1 i2) csp ()) = do
         -- Assume i1 `mod` i2 = 0
         mitName <- nextName ("__mit_" ++ (getLnNumInStr csp))
         let prefix = mitName

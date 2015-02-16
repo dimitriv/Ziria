@@ -131,7 +131,8 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
       | ignorelet || ignoreexp
       -> ppComp c
       | otherwise
-      -> text "let" <> ppr fi <+> ppBind x <+> text "=" <+> ppr e $$
+      -> text "let" <> ppr fi <+> ppBind x <+> text "=" $$
+         nest 4 (ppr e) $$
          text "in" $$
          ppComp c
 
@@ -140,16 +141,15 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
        | ignorelet || ignoreexp
        -> ppComp c
        | otherwise
-       -> text "var" <+> ppBind x $$
-          text "in" $$
+       -> text "var" <+> ppBind x <+> text "in" $$
           ppComp c
 
     LetERef x (Just e) c
        | ignorelet || ignoreexp
        -> ppComp c
        | otherwise
-       -> text "var" <+> assign ":=" (ppBind x) (ppr e) $$
-          text "in" $$
+       -> text "var" <+> ppBind x <+> text ":=" $$ 
+          nest 4 (ppr e) <+> text "in" $$
           ppComp c
 
     LetHeader fn c
@@ -228,11 +228,10 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
     Standalone c1 ->
       text "standalone" <> braces (ppComp c1)
 
-    Mitigate t n1 n2 ->
-      int n1 <> text "-mitigate" <> brackets (ppr t) <> text "-" <> int n2
+    Mitigate s t n1 n2 ->
+      int n1 <> text "-mitigate" <> parens (text s) <>
+                                      brackets (ppr t) <> text "-" <> int n2
     -- CL
-    where assign s e1 e2 = e1 <+> text s <+> e2
-    --
 
 
 ppWidth :: (Int, Int) -> Doc
@@ -282,6 +281,7 @@ ppCompTypedVect x =
       inty  = inTyOfCTy cty
       yldty = yldTyOfCTy cty
       arity (TArray (Literal n) _) = show n
+      arity TVoid                  = "0"
       arity _                      = "1"
       ain   = arity inty
       ayld  = arity yldty

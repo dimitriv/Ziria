@@ -226,7 +226,7 @@ cWriteInternal loc t bid = MkComp (WriteInternal t bid) loc ()
 cStandalone :: Maybe SourcePos -> GComp tc t () () -> GComp tc t () ()
 cStandalone loc c = MkComp (Standalone c) loc ()
 
-cMitigate :: Maybe SourcePos -> t -> Int -> Int -> GComp tc t () ()
-cMitigate loc t n1 n2 = MkComp (Mitigate t n1 n2) loc ()
+cMitigate :: Maybe SourcePos -> String -> t -> Int -> Int -> GComp tc t () ()
+cMitigate loc s t n1 n2 = MkComp (Mitigate s t n1 n2) loc ()
 
 

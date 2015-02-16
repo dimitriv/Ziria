@@ -223,5 +223,5 @@ cWriteInternal loc a t bid = MkComp (WriteInternal t bid) loc a
 cStandalone :: Maybe SourcePos -> a -> GComp tc t a b -> GComp tc t a b
 cStandalone loc a c = MkComp (Standalone c) loc a
 
-cMitigate :: Maybe SourcePos -> a -> t -> Int -> Int -> GComp tc t a b
-cMitigate loc a t n1 n2 = MkComp (Mitigate t n1 n2) loc a
+cMitigate :: Maybe SourcePos -> a -> String -> t -> Int -> Int -> GComp tc t a b
+cMitigate loc a s t n1 n2 = MkComp (Mitigate s t n1 n2) loc a

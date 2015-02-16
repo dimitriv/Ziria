@@ -23,7 +23,7 @@ module VecM where
 import Control.Applicative
 import Control.Monad.Reader
 
-import Text.Parsec.Pos ( SourcePos )
+import Text.Parsec.Pos ( SourcePos, sourceName )
 
 import AstComp
 import AstExpr
@@ -281,11 +281,24 @@ mkSelf lcomp tin tout
 
 -- | Warn if DVRCands is empty
 warnIfEmpty :: DynFlags -> LComp -> DVRCands -> String -> VecM ()
-warnIfEmpty dfs lc cands msg 
-  = when (Map.null cands) $ liftIO $ do
-       print $ text "WARNING: empty vectorization" <+> braces (text msg)
-       verbose dfs $ vcat [ text "For computation:" 
-                          , nest 2 $ ppr lc ]
+warnIfEmpty _dfs lc cands msg = warnIfEmptyDoc _dfs lc cands msg (text "")
+
+warnIfEmptyDoc :: DynFlags -> LComp -> DVRCands -> String -> Doc -> VecM ()
+warnIfEmptyDoc _dfs lc cands msg extra_info
+  = when (Map.null cands) $ do
+       vecMFail (compLoc lc) $ 
+          vcat [ text "ERROR: empty vectorization" <+> braces (text msg)
+               , text "For computation:" 
+               , nest 2 $ ppr lc
+               , text "Extra info:" 
+               , nest 2 extra_info 
+               ]
+       
+pprDVRess :: DVRCands -> Doc
+pprDVRess cands = 
+  let xs = Map.elems cands
+  in vcat $ map (text . show . dvr_vres) xs
+
 
 {-------------------------------------------------------------------------
   Vectorization utility calculations
@@ -332,8 +345,8 @@ minUtil :: Double
 minUtil = log 0.1
 
 -- | Choose a VectRes in case all types are joinable (precondition)
-vResMatch :: [VectRes] -> VectRes
-vResMatch vs = fromJust $ do 
+vResMatch :: [VectRes] -> Maybe VectRes
+vResMatch vs = do 
   inty  <- ctJoinMany_mb $ map vect_in_ty vs
   yldty <- ctJoinMany_mb $ map vect_out_ty vs
   -- We have ensured precondition of chooseBindUtility
@@ -456,6 +469,8 @@ combine_par pnfo loc dp1 dp2 = do
 -- continuations and potentially stitches those together.
 -- NB: Never fails since originally the program used to work and we can
 -- always mitigate input and output.
+
+{- 
 combine_bind :: Maybe SourcePos
              -> DelayedVectRes -> [EId] -> [DelayedVectRes] -> DelayedVectRes
 combine_bind loc pre_dvr1 xs pre_dvrs
@@ -465,7 +480,50 @@ combine_bind loc pre_dvr1 xs pre_dvrs
             return $ cBindMany loc c1 (zip xs cs)
         , dvr_vres = vResMatch $ map dvr_vres (dvr1:dvrs) }
   where (dvr1:dvrs) = mitigate_all (pre_dvr1:pre_dvrs)
+-}
 
+
+combine_bind_mb :: Maybe SourcePos
+                -> Bool 
+                -> DelayedVectRes -> [EId] -> [DelayedVectRes] 
+                -> Maybe DelayedVectRes
+combine_bind_mb loc is_computer pre_dvr1 xs pre_dvrs = do
+   res <- vResMatch $ map dvr_vres (dvr1:dvrs)
+   return $ 
+     DVR { dvr_comp = do
+            c1 <- dvr_comp dvr1
+            cs <- mapM dvr_comp dvrs
+            return $ cBindMany loc c1 (zip xs cs)
+        , dvr_vres = res }
+  where (dvr1:dvrs) = 
+           if is_computer then 
+             mitigate_all (pre_dvr1:pre_dvrs)
+           else -- if he is a transformer then only the last guy
+                -- can be a transformer so mitigate everyone except him
+             let (r:rs) = reverse (pre_dvr1:pre_dvrs)
+             in reverse (r : mitigate_all rs)
+
+
+combine_branch_mb :: Maybe SourcePos
+                  -> Bool
+                  -> Exp -> DelayedVectRes -> DelayedVectRes 
+                  -> Maybe DelayedVectRes
+combine_branch_mb loc is_computer e pre_dvr1 pre_dvr2 = do 
+  res <- vResMatch $ map dvr_vres [dvr1,dvr2]
+  return $ 
+     DVR { dvr_comp = do
+            c1 <- dvr_comp dvr1
+            c2 <- dvr_comp dvr2 
+            return $ cBranch loc e c1 c2
+        , dvr_vres = res }
+  where
+     [dvr1,dvr2] = 
+       if is_computer 
+         then mitigate_all [pre_dvr1,pre_dvr2]
+         else [pre_dvr1,pre_dvr2]
+          -- mitigate_all [pre_dvr1,pre_dvr2]
+
+{- 
 combine_branch :: Maybe SourcePos
                -> Exp -> DelayedVectRes -> DelayedVectRes -> DelayedVectRes
 combine_branch loc e pre_dvr1 pre_dvr2
@@ -477,31 +535,33 @@ combine_branch loc e pre_dvr1 pre_dvr2
   where
      [dvr1,dvr2] = mitigate_all [pre_dvr1,pre_dvr2]
 
+-}
+
 mitigate_all :: [DelayedVectRes] -> [DelayedVectRes]
-mitigate_all vcs = map (mit_one (Just final_ty_in, Just final_ty_out)) vcs
+mitigate_all vcs = map (mit_one "MA" (Just final_ty_in, Just final_ty_out)) vcs
  where 
    -- Compute "the" common input type and "the" common output type
    final_ty_in  = tyArity $ gcdTys $ map (vect_in_ty  . dvr_vres) vcs
    final_ty_out = tyArity $ gcdTys $ map (vect_out_ty . dvr_vres) vcs
 
 
-mit_one :: (Maybe Int, Maybe Int) -> DelayedVectRes -> DelayedVectRes
-mit_one (Nothing, Nothing) dvr = fixup_util_out (fixup_util_in dvr)
-mit_one (Just n,  Nothing) dvr = fixup_util_out (mit_in n dvr)
-mit_one (Nothing, Just n)  dvr = fixup_util_in  (mit_out dvr n)
-mit_one (Just n, Just m)   dvr = mit_in n (mit_out dvr m)
+mit_one :: String -> (Maybe Int, Maybe Int) -> DelayedVectRes -> DelayedVectRes
+mit_one _orig (Nothing, Nothing) dvr = fixup_util_out (fixup_util_in dvr)
+mit_one orig (Just n,  Nothing) dvr = fixup_util_out (mit_in orig n dvr)
+mit_one orig (Nothing, Just n)  dvr = fixup_util_in  (mit_out orig dvr n)
+mit_one orig (Just n, Just m)   dvr = mit_in orig n (mit_out orig dvr m)
 
-mit_in :: Int -> DelayedVectRes -> DelayedVectRes
-mit_in n (DVR { dvr_comp = io_comp, dvr_vres = vres })
+mit_in :: String -> Int -> DelayedVectRes -> DelayedVectRes
+mit_in orig n (DVR { dvr_comp = io_comp, dvr_vres = vres })
   | Just (final_in_ty, cmit) <- mitin
   = -- trace ("mit_in:" ++ show final_in_ty ++ " ~~> " ++ show vinty ++ " ~~> " ++ show voutty) $ 
     DVR { dvr_comp = cPar Nothing pnever cmit <$> io_comp
         , dvr_vres = DidVect final_in_ty voutty u }
   where vinty  = vect_in_ty vres  -- type in the middle!
         voutty = vect_out_ty vres
-        mitin  = mk_in_mitigator n vinty
+        mitin  = mk_in_mitigator orig n vinty
         u      = parUtility minUtil (vResUtil vres) vinty
-mit_in _ dvr = fixup_util_in dvr
+mit_in _ _ dvr = fixup_util_in dvr
 
 -- | Fixes-up utility /as if/ mitigation has happened
 -- This is to ensure all candidates are compared fairly, whether mitigation happened or not.
@@ -512,17 +572,17 @@ fixup_util_in dvr = dvr { dvr_vres = DidVect vinty voutty u }
         voutty = vect_out_ty vres
         u = parUtility minUtil (vResUtil vres) vinty
 
-mit_out :: DelayedVectRes -> Int -> DelayedVectRes
-mit_out (DVR { dvr_comp = io_comp, dvr_vres = vres }) m 
+mit_out :: String -> DelayedVectRes -> Int -> DelayedVectRes
+mit_out orig (DVR { dvr_comp = io_comp, dvr_vres = vres }) m 
   | Just (final_out_ty, cmit) <- mitout
   = -- trace ("mit_out:" ++ show vinty ++ " ~~> " ++ show voutty ++ " ~~> " ++ show final_out_ty) $ 
     DVR { dvr_comp = (\c -> cPar Nothing pnever c cmit) <$> io_comp
         , dvr_vres = DidVect vinty final_out_ty u }
   where vinty  = vect_in_ty vres
         voutty = vect_out_ty vres -- type in the middle!
-        mitout = mk_out_mitigator voutty m
+        mitout = mk_out_mitigator orig voutty m
         u      = parUtility minUtil (vResUtil vres) voutty
-mit_out dvr _ = fixup_util_out dvr
+mit_out _ dvr _ = fixup_util_out dvr
 
 fixup_util_out :: DelayedVectRes -> DelayedVectRes
 fixup_util_out dvr = dvr { dvr_vres = DidVect vinty voutty u } 
@@ -532,53 +592,59 @@ fixup_util_out dvr = dvr { dvr_vres = DidVect vinty voutty u }
         u = parUtility minUtil (vResUtil vres) voutty
 
 -- | Mitigate on the input, return final input type
-mk_in_mitigator :: Int -> Ty -> Maybe (Ty, Comp)
-mk_in_mitigator n (TArray (Literal m) tbase) 
+mk_in_mitigator :: String -> Int -> Ty -> Maybe (Ty, Comp)
+mk_in_mitigator orig n (TArray (Literal m) tbase) 
   | n > 1 || m > 1
+  , n <= m        
   , n `mod` m == 0 || m `mod` n == 0
-  = Just (mkVectTy tbase n, cMitigate Nothing tbase n m)
+  = Just (mkVectTy tbase n, cMitigate Nothing orig tbase n m)
   | otherwise = Nothing 
-mk_in_mitigator _n TVoid = Nothing -- nothing to mitigate
-mk_in_mitigator n t -- non-array
-  | n > 1     = Just (mkVectTy t n, cMitigate Nothing t n 1)
+mk_in_mitigator _ _n TVoid = Nothing -- nothing to mitigate
+mk_in_mitigator orig n t -- non-array
+  | n > 1     = Just (mkVectTy t n, cMitigate Nothing orig t n 1)
   | otherwise = Nothing 
 
 -- | Mitigate on the output, return final output type
-mk_out_mitigator :: Ty -> Int -> Maybe (Ty, Comp)
-mk_out_mitigator (TArray (Literal n) tbase) m
+mk_out_mitigator :: String -> Ty -> Int -> Maybe (Ty, Comp)
+mk_out_mitigator orig (TArray (Literal n) tbase) m
   | n > 1 || m > 1 
+  , m <= n
   , n `mod` m == 0 || m `mod` n == 0
-  = Just (mkVectTy tbase m, cMitigate Nothing tbase n m)
+  = Just (mkVectTy tbase m, cMitigate Nothing orig tbase n m)
   | otherwise = Nothing
-mk_out_mitigator TVoid _m = Nothing -- nothing to mitigate
-mk_out_mitigator t m -- non-array
-  | m > 1     = Just (mkVectTy t m, cMitigate Nothing t 1 m)
+mk_out_mitigator _ TVoid _m = Nothing -- nothing to mitigate
+mk_out_mitigator orig t m -- non-array
+  | m > 1     = Just (mkVectTy t m, cMitigate Nothing orig t 1 m)
   | otherwise = Nothing
 
         
 
 -- | Match vectorization candidates composed on the control path
-combineBind :: Maybe SourcePos -> DVRCands -> [EId] -> [DVRCands] -> DVRCands 
-combineBind loc c1cands xs cscands 
-  = aux (c1cands:cscands) (\(r:rs) -> combine_bind loc r xs rs)
+combineBind :: Maybe SourcePos -> Bool -> 
+               DVRCands -> [EId] -> [DVRCands] -> DVRCands 
+combineBind loc is_comp c1cands xs cscands 
+  = aux (c1cands:cscands) (\(r:rs) -> combine_bind_mb loc is_comp r xs rs)
   where 
-     aux :: [DVRCands] -> ([DelayedVectRes] -> DelayedVectRes) -> DVRCands
+     aux :: [DVRCands] -> ([DelayedVectRes] -> Maybe DelayedVectRes) -> DVRCands
      aux cs h = fromListDVRCands (go cs h)
-       where go [] f       = [f []]
+       where go [] f = case f [] of Nothing -> []
+                                    Just c  -> [c]
              go (c1:c1s) f = foldr (\c st ->
                    let f' rs = f (c : rs)
                    in go c1s f' ++ st) [] (Map.elems c1)
 
 
 -- | Match vectorization candidates to compose them in a branch
-combineBranch :: Maybe SourcePos -> Exp -> DVRCands -> DVRCands -> DVRCands
-combineBranch loc e xs ys = Map.foldr foreach_xs emptyDVRCands xs
+combineBranch :: Maybe SourcePos -> Bool 
+              -> Exp -> DVRCands -> DVRCands -> DVRCands
+combineBranch loc is_comp e xs ys 
+ = Map.foldr foreach_xs emptyDVRCands xs
  where
    foreach_xs heap res = Map.foldr foreach_ys res ys
       where 
         foreach_ys heap' res' 
           = maybe res' (`addDVR` res') $
-               return $ combine_branch loc e heap heap'
+               combine_branch_mb loc is_comp e heap heap'
 
 
 {-------------------------------------------------------------------------
@@ -591,7 +657,8 @@ mkDVRes :: Bindable v => (VecEnv -> Zr v)
 mkDVRes gen_zir kind loc vin_ty vout_ty = do 
   venv <- getVecEnv
   zirc <- liftZr kind loc (gen_zir venv)
-  zirc_wrapped <- wrapCFunCall ("_vect_" ++ kind) loc zirc
+  let srcn = maybe "" sourceName loc
+  zirc_wrapped <- wrapCFunCall (srcn ++ "_vect_" ++ kind) loc zirc
   return $ DVR { dvr_comp = return zirc_wrapped
                , dvr_vres = DidVect vin_ty vout_ty minUtil }
 

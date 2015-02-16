@@ -324,9 +324,9 @@ renComp (MkComp comp0 cloc ()) = case comp0 of
       Standalone c' -> do
         c'' <- renComp c'
         return $ cStandalone cloc c''
-      Mitigate ty n1 n2 -> do
+      Mitigate s ty n1 n2 -> do
         ty' <- renTyAnn cloc ty
-        return $ cMitigate cloc ty' n1 n2
+        return $ cMitigate cloc s ty' n1 n2
 
 {-------------------------------------------------------------------------------
   Renaming expressions

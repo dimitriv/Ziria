@@ -283,7 +283,7 @@ data LengthInfo
      = LISingleton
      | LILength Int  -- Invariant: > 0
      | LIMeta String -- For meta-variables in quasi-quotes only
-  deriving (Generic, Typeable, Data, Eq, Ord)
+  deriving (Generic, Typeable, Data, Eq, Ord, Show)
 
 data UnrollInfo
   = Unroll        -- force unroll

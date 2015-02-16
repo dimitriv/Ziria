@@ -52,6 +52,7 @@ import {-# SOURCE #-} CgCall
 
 import Text.Parsec.Pos ( SourcePos )
 
+import Outputable
 
 import Control.Applicative
 import Control.Monad (when)
@@ -591,7 +592,7 @@ data ArrIdx
   = AIdxCExp C.Exp      -- A C expression index
   | AIdxStatic Int      -- A statically known index
   | AIdxMult Int C.Exp  -- A statically known multiple of unknown C.Exp
-
+  deriving Show 
 
 cexp_of_idx :: ArrIdx -> C.Exp
 cexp_of_idx (AIdxStatic i)   = [cexp| $int:i|]
@@ -633,10 +634,12 @@ codeGenArrRead dflags (TArray _ tbase) ce1 mb_ce2 LISingleton
 codeGenArrRead dflags (TArray _ tbase) ce1 mb_ce2 (LILength _)
   = let ce2 = cexp_of_idx mb_ce2
     in return [cexp|& ($ce1[$ce2])|]
-codeGenArrRead _ ty _ _ _
-  = fail ("codeGenArrRead: non-array type " ++ show ty)
-
-
+codeGenArrRead _ ty ce1 mb_ce2 li
+  = panic $ vcat [ text "codeGenArrRead: non-array type" <+> ppr ty
+                 , text "ce1   :" <+> text (show ce1)
+                 , text "mb_ce2:" <+> text (show mb_ce2)
+                 , text "li    :" <+> text (show li)
+                 ]
 
 codeGenArrWrite_stored :: DynFlags
                 -> Ty

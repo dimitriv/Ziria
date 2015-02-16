@@ -116,7 +116,7 @@ frm_mit :: Comp -> Maybe ((Ty,Int,Int), Comp)
 -- returns (mitigator,residual-comp)
 frm_mit c
   | Par _p0 c1 c2 <- unComp c
-  , Mitigate ty i1 i2  <- unComp c2
+  , Mitigate _s ty i1 i2  <- unComp c2
   = Just ((ty,i1,i2), c1)
 
   | Par p0 c1 c2 <- unComp c
@@ -173,7 +173,7 @@ flm_mit :: Comp -> Maybe ((Ty,Int,Int), Comp)
 -- returns (mitigator,residual-comp)
 flm_mit c
   | Par _p0 c1 c2 <- unComp c
-  , Mitigate ty i1 i2  <- unComp c1
+  , Mitigate _s ty i1 i2  <- unComp c1
   = Just ((ty,i1,i2), c2)
 
   | Par p0 c1 c2 <- unComp c
@@ -240,48 +240,48 @@ elimMitigs comp
              do { rewrite $
                   cPar cloc p c1' $
                   cPar cloc (mkParInfo NeverPipeline)
-                            (cMitigate cloc ty1 i1 j2) c2'
+                            (cMitigate cloc "POM" ty1 i1 j2) c2'
                 }
              else
              if l /= j1 then
-                 rewrite $
-                 cPar cloc p (cPar cloc pnever c1' (cMitigate cloc ty1 i1 l))
-                             (cPar cloc pnever (cMitigate cloc ty2 l j2) c2')
+              rewrite $
+              cPar cloc p (cPar cloc pnever c1' (cMitigate cloc "POM" ty1 i1 l))
+                          (cPar cloc pnever (cMitigate cloc "POM" ty2 l j2) c2')
              else return c
            }
 
       | MkComp c0 cloc () <- c
       , Par p c1 c2 <- c0
       , Just ((ty1,i1,j1),c1') <- frm_mit c1
-      , Mitigate ty2 i2 j2 <- unComp c2
+      , Mitigate s2 ty2 i2 j2 <- unComp c2
       , let l = lcm i1 j2
       = do { when (j1 /= i2) $ error "BUG: Mitigation mismatch!"
            ; if i1 `mod` j2 == 0 || j2 `mod` i1 == 0 then
              do { rewrite $
-                  cPar cloc p c1' (cMitigate cloc ty1 i1 j2)
+                  cPar cloc p c1' (cMitigate cloc "POM" ty1 i1 j2)
                 }
              else
              if l /= j1 then
-                 rewrite $
-                 cPar cloc p (cPar cloc pnever c1' (cMitigate cloc ty1 i1 l))
-                             (cMitigate cloc ty2 l j2)
+              rewrite $
+              cPar cloc p (cPar cloc pnever c1' (cMitigate cloc "POM" ty1 i1 l))
+                          (cMitigate cloc "POM" ty2 l j2)
              else return c
            }
 
       | MkComp c0 cloc () <- c
       , Par p c1 c2 <- c0
       , Just ((ty2,i2,j2),c2') <- flm_mit c2
-      , Mitigate ty1 i1 j1 <- unComp c1
+      , Mitigate s1 ty1 i1 j1 <- unComp c1
       , let l = lcm i1 j2
       = do { when (j1 /= i2) $ error "BUG: Mitigation mismatch!"
            ; if i1 `mod` j2 == 0 || j2 `mod` i1 == 0 then
              do { rewrite $
-                  cPar cloc p (cMitigate cloc ty1 i1 j2) c2'
+                  cPar cloc p (cMitigate cloc "POM" ty1 i1 j2) c2'
                 }
              else if l /= j1 then
-                 rewrite $
-                 cPar cloc p (cMitigate cloc ty1 i1 l)
-                                (cPar cloc pnever (cMitigate cloc ty2 l j2) c2')
+              rewrite $
+              cPar cloc p (cMitigate cloc "POM" ty1 i1 l)
+                          (cPar cloc pnever (cMitigate cloc "POM" ty2 l j2) c2')
              else return c
            }
 
@@ -317,13 +317,13 @@ elimMitigs comp
       -- trivial mitigators
       | MkComp c0 _cloc () <- c
       , Par _p c1 c2 <- c0
-      , Mitigate _ty i1 i2 <- unComp c1
+      , Mitigate _ _ty i1 i2 <- unComp c1
       , i1 == i2
       = rewrite c2
 
       | MkComp c0 _cloc () <- c
       , Par _p c1 c2 <- c0
-      , Mitigate _ty i1 i2 <- unComp c2
+      , Mitigate _ _ty i1 i2 <- unComp c2
       , i1 == i2
       = rewrite c1
 
@@ -339,8 +339,8 @@ passElimAutomappedMitigs = TypedCompBottomUp $ \_cloc c -> if
     , Par _p c1 c2 <- c0
     , Par _p c11 c12 <- unComp c1
     , LetHeader fun (MkComp (Map _v f) _ _) <- unComp c12  -- (c1 - map f) - c2
-    , Mitigate ty1 i1 j1 <- unComp c11
-    , Mitigate ty2 i2 j2 <- unComp c2           -- (c11' -- mitigate(i2,j2) -- map f) - mitigate(i2,j2) - c2'
+    , Mitigate _ ty1 i1 j1 <- unComp c11
+    , Mitigate _ ty2 i2 j2 <- unComp c2           -- (c11' -- mitigate(i2,j2) -- map f) - mitigate(i2,j2) - c2'
     , i1 >= j1 && i2 <= j2                      -- down mit and up mit
     , let d1 = i1 `div` j1
     , let d2 = j2 `div` i2
@@ -352,8 +352,8 @@ passElimAutomappedMitigs = TypedCompBottomUp $ \_cloc c -> if
     , Par _p c1 c2 <- c0
     , Par _p c21 c22 <- unComp c2
     , LetHeader fun (MkComp (Map _v f) _ _) <- unComp c21  -- c1 - (map f - c2)
-    , Mitigate ty1 i1 j1 <- unComp c1      -- (c11' -- mitigate(i1,j1) -- map f) - c2
-    , Mitigate ty2 i2 j2 <- unComp c22     -- (c11' -- mitigate(i2,j2) -- map f) - mitigate(i2,j2) - c2'
+    , Mitigate _ ty1 i1 j1 <- unComp c1      -- (c11' -- mitigate(i1,j1) -- map f) - c2
+    , Mitigate _ ty2 i2 j2 <- unComp c22     -- (c11' -- mitigate(i2,j2) -- map f) - mitigate(i2,j2) - c2'
     , i1 >= j1 && i2 <= j2                      -- down mit and up mit
     , let d1 = i1 `div` j1
     , let d2 = j2 `div` i2

@@ -64,6 +64,8 @@ doVectCompUD dfs cty lcomp (SFUD2 i (DivsOf j j0 j1) m)
 doVectCompUD dfs cty lcomp (SFUD3 i m) 
   = vect_ud3 dfs cty lcomp i m
 
+
+
 {-------------------------------------------------------------------------
   [UD1] a^i -> b^j  ~~~> (a*i*m1*m2) -> (b*j*m1)^m2
 -------------------------------------------------------------------------}
@@ -84,16 +86,22 @@ vect_ud1 dfs cty lcomp i j (NMul m1) (NMul m2)
 
     zirbody :: VecEnv -> Zr ()
     zirbody venv = do
-      xa <- optzr (arin > 0) $ ftake vin_ty
+      -- if we do take > 1 then let's take upfront
+      xa <- optzr (arin > 1) $ ftake vin_ty
       ftimes zERO m2 $ \c2 -> 
-        do ya <- optzr (arout > 0) $ fneweref ("ya" ::: vout_ty)
+        do ya <- optzr (arout > 1) $ fneweref ("ya" ::: vout_ty)
            ftimes zERO m1 $ \c1 ->
               let offin  = embed (c2 .* i .* m1 .+ c1 .* i)
                   offout = embed (c1 .* j)
-                  st = RwState { rws_in  = DoRw xa offin 
-                               , rws_out = DoRw ya offout }
+                  -- if arin  <= 1 then we won't rewrite input
+                  -- if arout <= 1 (hence j*m1 <= 1) so just
+                  -- emit every time (and do not emit in the end)
+                  st = RwState { rws_in  = doRw arin xa offin
+                               , rws_out = doRw arout ya offout }
               in fembed (act venv st)
-           when (arout > 0) (femit ya)
+           -- if arout > 1 then we were writing to an array instead
+           -- of emitting so now it's time to emit
+           when (arout > 1) (femit ya)
 
 {-------------------------------------------------------------------------
 [UD2] a^i -> b^(j0*j1) ~~~> (a*i*m) -> (b*j0)^(j1*m)
@@ -109,18 +117,18 @@ vect_ud2 dfs cty lcomp i j (NDiv j0) (NDiv j1) (NMul m)
     vin_ty     = mkVectTy orig_inty  arin
     vout_ty    = mkVectTy orig_outty arout
     arin       = i*m -- size of input array
-    arout      = j*m 
+    arout      = j*m -- j > 1 because j0 and j1 are not /both/ 1
 
     act venv st = rwTakeEmitIO venv st lcomp
 
     zirbody :: VecEnv -> Zr ()
     zirbody venv = do
-      xa <- optzr (arin > 0) $ ftake vin_ty
+      xa <- optzr (arin > 1)  $ ftake vin_ty
       ya <- fneweref ("ya" ::: vout_ty) 
       ftimes zERO m $ \cnt ->
          let offin  = embed (cnt .* i)
              offout = embed (cnt .* j)
-             st = RwState { rws_in  = DoRw xa offin
+             st = RwState { rws_in  = doRw arin xa offin
                           , rws_out = DoRw ya offout }
          in fembed (act venv st)
       ftimes zERO (j1*m) $ \odx ->
@@ -143,10 +151,10 @@ vect_ud3 dfs cty lcomp i (NMul m)
 
     zirbody :: VecEnv -> Zr ()
     zirbody venv = do
-      xa <- optzr (arin > 0) $ ftake vin_ty
+      xa <- optzr (arin > 1) $ ftake vin_ty
       ftimes zERO m $ \cnt ->
          let offin = embed (cnt .* i)
-             st    = RwState { rws_in = DoRw xa offin, rws_out = DoNotRw }
+             st    = RwState { rws_in = doRw arin xa offin, rws_out = DoNotRw }
          in fembed (act venv st)
 
 {------------------------------------------------------------------------}
@@ -182,16 +190,16 @@ vect_du1 dfs cty lcomp i j (NMul m1) (NMul m2)
 
     zirbody :: VecEnv -> Zr ()
     zirbody venv = do
-      ya <- optzr (arout > 0) $ fneweref ("ya" ::: vout_ty)
+      ya <- optzr (arout > 1) $ fneweref ("ya" ::: vout_ty)
       ftimes zERO m2 $ \c2 -> 
-        do xa <- optzr (arin > 0) $ ftake vin_ty
+        do xa <- optzr (arin > 1) $ ftake vin_ty
            ftimes zERO m1 $ \c1 ->
               let offin  = embed (c1 .* i)
                   offout = embed (c2 .* j .* m1 .+ c1 .* j)
-                  st = RwState { rws_in  = DoRw xa offin
-                               , rws_out = DoRw ya offout }
+                  st = RwState { rws_in  = doRw arin xa offin
+                               , rws_out = doRw arout ya offout }
               in fembed (act venv st)
-      when (arout > 0) $ femit ya
+      when (arout > 1) $ femit ya
 
 {-------------------------------------------------------------------------
 [DU2] a^(i0*i1) -> b^j     ~~~>    (a*i0)^(i1*m) -> (b*j*m)
@@ -206,7 +214,7 @@ vect_du2 dfs cty lcomp i (NDiv i0) (NDiv i1) j (NMul m)
     orig_outty = yldTyOfCTy cty
     vin_ty     = mkVectTy orig_inty  arin
     vout_ty    = mkVectTy orig_outty arout
-    arin       = i*m 
+    arin       = i*m -- i > 1 because i0 and i1 are not both 1!
     arout      = j*m -- size of output array
 
     act venv st = rwTakeEmitIO  venv st lcomp
@@ -214,7 +222,7 @@ vect_du2 dfs cty lcomp i (NDiv i0) (NDiv i1) j (NMul m)
     zirbody :: VecEnv -> Zr ()
     zirbody venv = do
       xa <- fneweref ("xa" ::: vin_ty ) 
-      ya <- fneweref ("ya" ::: vout_ty)
+      ya <- optzr (arout > 1) $ fneweref ("ya" ::: vout_ty)
       ftimes zERO (i1*m) $ \idx -> 
          -- Yikes. this part screams for imperative 'take'
          do xtmp <- ftake (mkVectTy orig_inty i0)
@@ -222,9 +230,10 @@ vect_du2 dfs cty lcomp i (NDiv i0) (NDiv i1) j (NMul m)
       ftimes zERO m $ \cnt -> 
          let offin  = embed (cnt .* i)
              offout = embed (cnt .* j)
-             st = RwState { rws_in = DoRw xa offin, rws_out = DoRw ya offout }
+             st = RwState { rws_in = DoRw xa offin
+                          , rws_out = doRw arout ya offout }
          in fembed (act venv st)
-      when (arout > 0) $ femit ya 
+      when (arout > 1) $ femit ya 
 
 
 {-------------------------------------------------------------------------
@@ -244,10 +253,10 @@ vect_du3 dfs cty lcomp j (NMul m)
 
     zirbody :: VecEnv -> Zr ()
     zirbody venv = do
-      ya <- optzr (arout > 0) $ fneweref ("ya" ::: vout_ty) 
+      ya <- optzr (arout > 1) $ fneweref ("ya" ::: vout_ty) 
       ftimes zERO m $ \cnt ->
         let offout = embed (cnt .* j)
-            st = RwState { rws_in = DoNotRw, rws_out = DoRw ya offout }
+            st = RwState { rws_in = DoNotRw, rws_out = doRw arout ya offout }
         in fembed (act venv st)
-      when (arout > 0) $ femit ya
+      when (arout > 1) $ femit ya
 
