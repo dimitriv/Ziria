@@ -110,7 +110,8 @@ foldCompPasses flags
   = []
   | otherwise
   = -- Standard good things
-    [ ("fold"          , passFold        )
+    [ ("elim-seq"      , elimSeq         )
+    , ("fold"          , passFold        )
     , ("purify"        , passPurify      )
     , ("purify-letref" , passPurifyLetRef)
     , ("elim-times"    , passElimTimes   )
@@ -127,6 +128,7 @@ foldCompPasses flags
     , ("ifdead"                 , passIfDead              )
     , ("if-return"              , passIfReturn            )
     , ("elim-automapped-mitigs" , passElimAutomappedMitigs)
+    
 
     -- Don't use: not wrong but does not play nicely with LUT
     --  , ("float-top-letref"   , passFloatTopLetRef )

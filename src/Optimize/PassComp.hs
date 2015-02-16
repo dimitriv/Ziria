@@ -34,6 +34,7 @@ module PassComp (
   , passFloatLetPar
   , passIfDead
   , passIfReturn
+  , elimSeq
 
 ) where
 
@@ -46,12 +47,15 @@ import Outputable
 
 import Data.Monoid
 
+import Data.Maybe ( fromJust )
+
 import Text.Parsec.Pos ( SourcePos )
 
 import AstComp
 import AstExpr
 import AstUnlabelled
 import CtExpr ( ctExp  )
+import CtComp ( ctComp )
 import Interpreter
 import PassFoldDebug
 import PpComp ()
@@ -73,6 +77,19 @@ import Utils ( panicStr )
 -- though. This is rather subtle, and fold_step is the _only_ pass
 -- that actually does this. I'm not sure if there are other subtle
 -- bugs due to this.
+
+
+
+elimSeq :: TypedCompPass
+elimSeq = TypedCompBottomUp $ \_ -> go 
+  where
+    go comp = case unComp comp of 
+      Seq c1 c2 -> do 
+        nm <- newPassFoldGName "_unused" (fromJust $ doneTyOfCTy $ ctComp c1) cloc Imm
+        rewrite $ cBindMany cloc c1 [(nm,c2)]
+      _ -> return comp
+      where cloc = compLoc comp
+
 passFold :: TypedCompPass
 passFold = TypedCompBottomUp $ \_ -> go
   where
@@ -96,12 +113,14 @@ passFold = TypedCompBottomUp $ \_ -> go
           c12' <- go c12
           return $ cBindMany cloc c [(nm, c12')]
 
+{- 
         SeqView (MkComp (Return fi e) _ ()) c12 -> do
           nm <- newPassFoldGName "_fold_unused" (ctExp e) cloc Imm
           logStep "fold/seq" cloc
             [step| return .. ; .. ~~> let nm = .. in .. |]
           c12' <- go c12
           rewrite $ cLetE cloc nm fi e c12'
+-}
 
         _otherwise -> do
           return comp
