@@ -611,18 +611,27 @@ codeGenArrRead dflags (TArray _ TBit) ce1 mb_ce2 LISingleton
        ; appendStmt $ [cstm| bitRead($ce1,$(cexp_of_idx mb_ce2),& $id:res); |]
        ; return [cexp| $id:res |] }
 codeGenArrRead dflags (TArray _ TBit) ce1 mb_ce2 (LILength l)
+  | AIdxStatic i <- mb_ce2
+  , i `mod` 8 == 0
+  = return [cexp| & $ce1[$int:(i `div` 8)]|]
+  | AIdxMult i ce2 <- mb_ce2
+  , i `mod` 8 == 0
+  = return [cexp| & $ce1[$int:(i `div` 8)*$ce2]|]
+
+codeGenArrRead dflags (TArray _ TBit) ce1 mb_ce2 (LILength l)
   = do { res <- genSym "bitarrres"
        ; codeGenDeclGroup res (TArray (Literal l) TBit) >>= appendDecl
-       ; case mb_ce2 of
-           AIdxStatic i
-             | i `mod` 8 == 0 && l == 8
-             -> appendStmt $ [cstm| * $id:res = $ce1[$int:(i `div` 8)];|]
-           AIdxMult i ce2
-             | i >= 8 && i `mod` 8 == 0 && l == 8
-             -> appendStmt $ [cstm| * $id:res = $ce1[$int:(i `div` 8)*$ce2]; |]
-           _otherwise
-             -> appendStmt [cstm|
-                   bitArrRead($ce1,$(cexp_of_idx mb_ce2),$int:l,$id:res); |]
+       -- ; case mb_ce2 of
+       --     AIdxStatic i
+       --       | i `mod` 8 == 0 && l == 8
+       --       -> appendStmt $ [cstm| * $id:res = $ce1[$int:(i `div` 8)];|]
+       --     AIdxMult i ce2
+       --       | i >= 8 && i `mod` 8 == 0 && l == 8
+       --     -> appendStmt $ [cstm| * $id:res = $ce1[$int:(i `div` 8)*$ce2]; |]
+       --    _otherwise
+       --      -> 
+       ; appendStmt [cstm|
+            bitArrRead($ce1,$(cexp_of_idx mb_ce2),$int:l,$id:res); |]
        ; return [cexp| $id:res |]
        }
 codeGenArrRead dflags (TArray _ tbase) ce1 mb_ce2 LISingleton

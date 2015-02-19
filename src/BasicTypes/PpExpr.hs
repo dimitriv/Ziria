@@ -87,7 +87,8 @@ instance Outputable ty => Outputable (GExp0 ty a) where
     EVar x          -> ppName x
     EUnOp op e      -> ppr op <> parens (ppr e)
     EBinOp op e1 e2 -> ppr e1 <> ppr op <> ppr e2
-    EAssign e1 e2   -> ppr e1 <+> text ":=" $$ 
+    EAssign e1 e2   -> -- text "-- EAssign" $$
+                       ppr e1 <+> text ":=" $$
                        nest 2 (ppr e2)
 
     EArrRead earr eix LISingleton  -> ppr earr <> brackets (ppr eix)
@@ -95,12 +96,14 @@ instance Outputable ty => Outputable (GExp0 ty a) where
     EArrRead earr eix (LIMeta   x) -> ppr earr <> brackets ((ppr eix) <> text ":+" <> text  x)
 
     EArrWrite earr eix LISingleton eval ->
-      ppr earr <> (brackets (ppr eix)) <+> text ":=" $$ 
+      -- text "-- EArrWrite (1)" $$
+      ppr earr <> (brackets (ppr eix)) <+> text ":=" $$
       nest 2 (ppr eval)
 
     EArrWrite earr eix (LILength r) eval ->
+      -- text "-- EArrWrite (2)" $$
       ppr earr <> (brackets $ (ppr eix) <> text ":+" <> int r) <+> text ":=" $$
-      nest 2 (ppr eval)  
+      nest 2 (ppr eval)
 
     EArrWrite earr eix (LIMeta x) eval ->
       ppr earr <> assign ":=" (brackets $ (ppr eix) <> text ":+" <> text x) (ppr eval)

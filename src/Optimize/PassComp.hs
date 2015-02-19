@@ -42,8 +42,7 @@ import Prelude hiding (exp)
 import GHC.Generics
 import qualified Data.Set as S
 
-import Control.Monad.IO.Class 
-import Outputable
+-- import Outputable
 
 import Data.Monoid
 
@@ -383,26 +382,26 @@ passInline = TypedCompBottomUp $ \cloc comp' -> if
   Comp passes: more aggressive optimizations
 -------------------------------------------------------------------------------}
 
--- | Lift mutable variable bindings over `take`
-passPushCompLocals :: TypedCompPass
-passPushCompLocals = TypedCompBottomUp $ \cloc comp' -> if
-    | LetFunC nm params cbody_with_locals ccont <- unComp comp'
-      , Just (locals, cbody) <- extractCMutVars' cbody_with_locals
-      , BindMany tk [(x,emt)] <- unComp cbody
-      , Take1 {} <- unComp tk
-      , Emit e <- unComp emt
-     -> do
-       logStep "push-comp-locals" cloc
-         [step| fun comp nm(..) { var locals ; x <- take ; emit .. }
-            ~~> fun comp nm(..) { x <- take ; var locals ; emit .. } |]
+-- -- | Lift mutable variable bindings over `take`
+-- passPushCompLocals :: TypedCompPass
+-- passPushCompLocals = TypedCompBottomUp $ \cloc comp' -> if
+--     | LetFunC nm params cbody_with_locals ccont <- unComp comp'
+--       , Just (locals, cbody) <- extractCMutVars' cbody_with_locals
+--       , BindMany tk [(x,emt)] <- unComp cbody
+--       , Take1 {} <- unComp tk
+--       , Emit e <- unComp emt
+--      -> do
+--        logStep "push-comp-locals" cloc
+--          [step| fun comp nm(..) { var locals ; x <- take ; emit .. }
+--             ~~> fun comp nm(..) { x <- take ; var locals ; emit .. } |]
 
-       let cbody' = cBindMany cloc tk [(x,emt')]
-           emt'   = cEmit cloc e'
-           e'     = insertEMutVars' locals e
-       rewrite $ cLetFunC cloc nm params cbody' ccont
+--        let cbody' = cBindMany cloc tk [(x,emt')]
+--            emt'   = cEmit cloc e'
+--            e'     = insertEMutVars' locals e
+--        rewrite $ cLetFunC cloc nm params cbody' ccont
 
-    | otherwise
-     -> return comp'
+--     | otherwise
+--      -> return comp'
 
 -- | Turn explicit `take`/`emit` loop into application of `map`
 passTakeEmit :: TypedCompPass
@@ -433,6 +432,41 @@ passTakeEmit = TypedCompBottomUp $ \cloc comp -> if
     | otherwise
      -> return comp
 
+-- | Push let and letref bindings after "take" nodes. This is important
+-- for enabling the passTakeEmit phase in situations like:
+--  repeat $ let x = e in do
+--    z <- take
+--    emit foobar
+--  ~~> 
+--  repeat $ do z <- take
+--    let x = e
+--    emit foobar
+--
+passPushCompLocals :: TypedCompPass
+passPushCompLocals = TypedCompBottomUp $ \cloc comp -> if
+    | Just (cbody,builder) <- ebind $ unComp comp
+      , BindMany tk ((x1,c1):crest)  <- unComp cbody
+      , is_tk (unComp tk)
+     -> do
+      logStep "push-comp-locals" cloc
+        [step| fun comp nm(..) { var locals ; x <- take ; emit .. }
+           ~~> fun comp nm(..) { x <- take ; var locals ; emit .. } |]
+      rewrite $
+        cBindMany cloc tk [(x1, builder (cBindMany cloc c1 crest))]
+    | otherwise
+     -> return comp
+
+    where
+     ebind (LetE nm fi e cbody)
+       = Just (cbody, cLetE (compLoc cbody) nm fi e)
+     ebind (LetERef nm mbe cbody)
+       = Just (cbody, cLetERef (compLoc cbody) nm mbe)
+     ebind _ = Nothing
+
+     is_tk (Take1 {}) = True
+     is_tk (Take {})  = True
+     is_tk _          = False
+    
 -- | Let computation functions out of repeat loops.
 --
 -- This will give the opportunity to take-emit to kick in and rewrite the whole

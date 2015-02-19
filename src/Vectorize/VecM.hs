@@ -43,6 +43,7 @@ import qualified Data.Map.Strict as Map
 import Opts
 
 import System.Exit
+import Data.Char ( isAlphaNum )
 
 import qualified GenSym as GS
 
@@ -335,14 +336,14 @@ chooseParUtility vr1 vr2 = parUtility u1 u2 tmid
     tmid = ctJoin (vect_out_ty vr1) (vect_in_ty vr2)
 
 util :: Ty -> Double 
-util (TArray (Literal n) _) = log $ fromIntegral n
+util (TArray (Literal n) _) = log $ (10.0 * fromIntegral n)
 util _ = minUtil
 
 parUtility :: Double -> Double -> Ty -> Double
 parUtility u1 u2 tmid = u1 + u2 + util tmid
 
 minUtil :: Double
-minUtil = log 0.1
+minUtil = 0.1 -- log 0.1
 
 -- | Choose a VectRes in case all types are joinable (precondition)
 vResMatch :: [VectRes] -> Maybe VectRes
@@ -657,10 +658,14 @@ mkDVRes :: Bindable v => (VecEnv -> Zr v)
 mkDVRes gen_zir kind loc vin_ty vout_ty = do 
   venv <- getVecEnv
   zirc <- liftZr kind loc (gen_zir venv)
-  let srcn = maybe "" sourceName loc
+  let srcn = maybe "" sourceName' loc
   zirc_wrapped <- wrapCFunCall (srcn ++ "_vect_" ++ kind) loc zirc
   return $ DVR { dvr_comp = return zirc_wrapped
                , dvr_vres = DidVect vin_ty vout_ty minUtil }
+
+  where 
+    sourceName' = map (\c -> if isAlphaNum c then c else '_') . sourceName
+
 
 liftZr :: Bindable v => String -> Maybe SourcePos -> Zr v -> VecM Comp
 liftZr pref_dbg loc zr = do 

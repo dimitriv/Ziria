@@ -22,6 +22,7 @@
 module PassExpr (
    passForUnroll
  , passElimUnused
+ , passElimTrivialAssign
  , passExpInlining
  , passAsgnLetRef
  , passExpLetPush 
@@ -203,6 +204,26 @@ passExpLetPush = TypedExpBottomUp $ \eloc e -> if
     | otherwise
      -> return e
 
+{- The vectorizer emits often code of the form
+   emit var ya_free_3459 : arr[256] bit in
+        ya_free_3459 :=
+          outViterbi[0:+256];
+        ya_free_3459
+   which we optimize away here -}
+passElimTrivialAssign :: TypedExpPass
+passElimTrivialAssign = TypedExpBottomUp $ \eloc e -> if
+    | ELetRef nm Nothing ebody <- unExp e
+      , ESeq easgn evar    <- unExp ebody
+      , EAssign elhs erhs  <- unExp easgn 
+      , EVar nm'           <- unExp elhs
+      , EVar nm''          <- unExp evar
+      , nm == nm' && nm == nm''
+     -> do logStep "elim-trivial-assign" eloc 
+             [step| e ~~> erhs |] 
+           rewrite erhs
+    | otherwise -> return e
+
+
 -- | Static evaluator pass
 passEval :: TypedExpPass
 passEval = TypedExpManual eval
@@ -232,7 +253,6 @@ passEval = TypedExpManual eval
     format []              = ""
     format ((True,  v):vs) = show v ++ "\n" ++ format vs
     format ((False, v):vs) = show v         ++ format vs
-
 
 
 

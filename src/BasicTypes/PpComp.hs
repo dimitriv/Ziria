@@ -207,8 +207,8 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
                        ppComp c
 
     VectComp (n1,n2) c ->
-      text "repeat" <> ppWidth (n1,n2) <+>
-                       ppComp c
+      text "vectcomp" <> ppWidth (n1,n2) <+>
+                         ppComp c
 
     Map wdth nm ->
       text "map" <> maybe empty ppr wdth <+> ppName nm

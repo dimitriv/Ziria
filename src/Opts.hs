@@ -127,7 +127,7 @@ dump dflags dflag ext doc | isDynFlagSet dflags dflag = liftIO $
   where
     withDumpHandle :: (Handle -> IO ()) -> IO ()
     withDumpHandle m
-       | isDynFlagSet dflags StdoutDump = m stderr >> putStrLn ""
+       | isDynFlagSet dflags StdoutDump = m stdout >> putStrLn ""
        | otherwise
        = case [path | InputFile path <- dflags] of
             path : _ -> do h <- openFile (path ++ ext) WriteMode

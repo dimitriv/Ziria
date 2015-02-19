@@ -139,11 +139,13 @@ foldExpPasses flags
   | isDynFlagSet flags NoFold || isDynFlagSet flags NoExpFold
   = []
   | otherwise
-  = [ ("for-unroll"   , passForUnroll  )
-    , ("elim-unused"  , passElimUnused )
-    , ("exp-inlining" , passExpInlining)
-    , ("asgn-letref"  , passAsgnLetRef )
-    , ("exp-let-push" , passExpLetPush )
+  = [ ("for-unroll"         , passForUnroll  )
+    , ("elim-unused"        , passElimUnused )
+    , ("exp-inlining"       , passExpInlining)
+    , ("asgn-letref"        , passAsgnLetRef )
+    , ("exp-let-push"       , passExpLetPush )
+    , ("elim-trivial-assign", passElimTrivialAssign)
+
     ] ++ 
     [ ("eval"         , passEval       ) 
     | not (isDynFlagSet flags NoStaticEval)

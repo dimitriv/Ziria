@@ -464,7 +464,7 @@ vectRepeat dfs (VectPack { vp_vctx  = vctx
      let self = mkSelf orig_repeat_comp tyin tyout
      let res = self `addDVR` 
                  mapDVRCands (updDVRComp $ cRepeat loc Nothing) cands
-     logCands dfs False "VectRepeat" res
+     logCands dfs True "VectRepeat" res
   
    -- | Vectorize internally to /exactly/ (fin,fout) and externally up
    -- or down depending on the flag f

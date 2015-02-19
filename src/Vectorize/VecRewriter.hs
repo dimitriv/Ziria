@@ -114,19 +114,16 @@ data RwQSt
 
 joinRwState :: RwState -> RwState -> RwState
 joinRwState rws1 rws2 
-  = RwState { rws_in  = rws_in rws1  `joinRwQSt` rws_in rws2
-            , rws_out = rws_out rws1 `joinRwQSt` rws_out rws2 }
+  = RwState { rws_in  = rws_in rws1  `aux` rws_in rws2
+            , rws_out = rws_out rws1 `aux` rws_out rws2 }
+  where aux = joinRwQSt
 
 joinRwQSt :: RwQSt -> RwQSt -> RwQSt
 joinRwQSt DoNotRw DoNotRw = DoNotRw
 joinRwQSt DoNotRw _       = panicStr "Can't join RwQSt!" 
 joinRwQSt _ DoNotRw       = panicStr "Can't join RwQSt!" 
 joinRwQSt (DoRw va1 off1) (DoRw va2 _off2) 
-  = assert (va1 == va2) (DoRw va1 off1)
-    -- Because of invariants of cardinality analysis off1 == off2 but
-    -- we don't assert this fact too as off1 and off2 are not values
-    -- but rather expressions and it's a bit tedious to check equality
-    -- between expressions.
+  = assert (va1 == va2) $ DoRw va1 off1
 
 
 -- | If we use arrays of size <= 1 then we do not really have to rewrite
@@ -159,7 +156,7 @@ on_take loc ty = do
     DoNotRw -> return $ cTake1 loc ty
     DoRw vect off -> do
       upd_in_offset (off `offset_plus` 1)
-      liftVecM $ liftZr "" loc $ freturn _aI (vect .! off)
+      liftVecM $ liftZr "" loc $ freturn _fI (vect .! off)
 
 -- | What to do on Take (many)
 on_takes :: TakeManyTransf RwState
@@ -169,7 +166,7 @@ on_takes loc ty n = do
     DoNotRw -> return $ cTake loc ty n
     DoRw vect off -> do
       upd_in_offset (off `offset_plus` n)
-      liftVecM $ liftZr "" loc $ freturn _aI (vect .! ( off :+ n ))
+      liftVecM $ liftZr "" loc $ freturn _fI (vect .! ( off :+ n ))
 
 -- | What to do on Emit
 on_emit :: EmitTransf RwState 
