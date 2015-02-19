@@ -4,6 +4,8 @@
 module Utils (
     panic
   , panicStr
+  , warn
+  , warnStr
   , assert
   , mapKeysM
   , mapTelescope
@@ -30,6 +32,14 @@ panic :: Doc -> a
 panic err = unsafePerformIO $ do
   print $ text "Panic! The impossible happened!" $$ err
   exitFailure
+
+warn :: Doc -> a -> a 
+warn msg a = unsafePerformIO $ do
+  print $ text "Warning:" $$ msg
+  return a
+
+warnStr :: String -> a -> a
+warnStr s a = warn (text s) a
 
 panicStr :: String -> a
 panicStr = panic . text

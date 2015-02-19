@@ -382,27 +382,6 @@ passInline = TypedCompBottomUp $ \cloc comp' -> if
   Comp passes: more aggressive optimizations
 -------------------------------------------------------------------------------}
 
--- -- | Lift mutable variable bindings over `take`
--- passPushCompLocals :: TypedCompPass
--- passPushCompLocals = TypedCompBottomUp $ \cloc comp' -> if
---     | LetFunC nm params cbody_with_locals ccont <- unComp comp'
---       , Just (locals, cbody) <- extractCMutVars' cbody_with_locals
---       , BindMany tk [(x,emt)] <- unComp cbody
---       , Take1 {} <- unComp tk
---       , Emit e <- unComp emt
---      -> do
---        logStep "push-comp-locals" cloc
---          [step| fun comp nm(..) { var locals ; x <- take ; emit .. }
---             ~~> fun comp nm(..) { x <- take ; var locals ; emit .. } |]
-
---        let cbody' = cBindMany cloc tk [(x,emt')]
---            emt'   = cEmit cloc e'
---            e'     = insertEMutVars' locals e
---        rewrite $ cLetFunC cloc nm params cbody' ccont
-
---     | otherwise
---      -> return comp'
-
 -- | Turn explicit `take`/`emit` loop into application of `map`
 passTakeEmit :: TypedCompPass
 passTakeEmit = TypedCompBottomUp $ \cloc comp -> if
@@ -444,9 +423,10 @@ passTakeEmit = TypedCompBottomUp $ \cloc comp -> if
 --
 passPushCompLocals :: TypedCompPass
 passPushCompLocals = TypedCompBottomUp $ \cloc comp -> if
-    | Just (cbody,builder) <- ebind $ unComp comp
+    | Just (cbody,builder,fvs) <- ebind $ unComp comp
       , BindMany tk ((x1,c1):crest)  <- unComp cbody
       , is_tk (unComp tk)
+      , x1 `S.notMember` fvs -- Avoid capture (which can happen because of unrolling!)
      -> do
       logStep "push-comp-locals" cloc
         [step| fun comp nm(..) { var locals ; x <- take ; emit .. }
@@ -458,9 +438,9 @@ passPushCompLocals = TypedCompBottomUp $ \cloc comp -> if
 
     where
      ebind (LetE nm fi e cbody)
-       = Just (cbody, cLetE (compLoc cbody) nm fi e)
+       = Just (cbody, cLetE (compLoc cbody) nm fi e, exprFVs e)
      ebind (LetERef nm mbe cbody)
-       = Just (cbody, cLetERef (compLoc cbody) nm mbe)
+       = Just (cbody, cLetERef (compLoc cbody) nm mbe, maybe S.empty exprFVs mbe)
      ebind _ = Nothing
 
      is_tk (Take1 {}) = True
@@ -491,6 +471,7 @@ passFloatLetPar :: TypedCompPass
 passFloatLetPar = TypedCompBottomUp $ \cloc comp -> if
     | Par p c1 c2 <- unComp comp
       , LetE x fi e1 c1' <- unComp c1
+      , x `S.notMember` (compEFVs c2) -- avoid capture
      -> do
        logStep "float-let-par/left" cloc
          [step| (let x = .. in ..) >>> .. ~~> let x = .. in (.. >>> ..) |]
@@ -498,6 +479,7 @@ passFloatLetPar = TypedCompBottomUp $ \cloc comp -> if
 
     | Par p c1 c2 <- unComp comp
       , LetE x fi e2 c2' <- unComp c2
+      , x `S.notMember` (compEFVs c1) -- avoid capture 
      -> do
        logStep "float-let-par/right" cloc
          [step| .. >>> (let x = .. in ..) ~~> let x = .. in (.. >>> ..) |]
@@ -557,7 +539,7 @@ passIfReturn = TypedCompBottomUp $ \_cloc comp -> if
     | Branch eguard c1 c2 <- unComp comp
       , Return f1 e1  <- unComp c1
       , Return _f2 e2 <- unComp c2
-   -- , f1 == f2
+   -- , f1 == f2 important?
       , let cloc = compLoc comp
      -> do
        logStep "if-return" cloc
@@ -567,36 +549,6 @@ passIfReturn = TypedCompBottomUp $ \_cloc comp -> if
 
     | otherwise
      -> return comp
-
-
-{-
-
-Not wrong, by evil, we lose the letref-structure and LUT can't do a
-very good job!
-
-passFloatTopLetRef :: DynFlags -> Comp CTy Ty -> RwM (Comp CTy Ty)
-passFloatTopLetRef fgs comp
-  | LetFun nm f c <- unComp comp
-  , MkFunDefined nm params locals body <- unFun f
-  , let (extra_locals,rem_body) = strip_letrefs body
-  , not (null extra_locals)
-  = do { let f' = f { unFun = fdef' }
-             fdef' = MkFunDefined nm params (locals ++ extra_locals) rem_body
-       ; rewrite $
-         cLetFun (compLoc comp) (compInfo comp) nm f' c
-       }
-  | otherwise
-  = return comp
-  where strip_letrefs e = go [] e
-        go defs e
-          = go0 defs (unExp e)
-          where
-             go0 defs (ELetRef nm (Left ty) e')
-               = go ((nm,ty,Nothing):defs) e'
-             go0 defs (ELetRef nm (Right einit) e')
-               = go ((nm, info einit, Just einit):defs) e'
-             go0 defs _other = (reverse defs, e)
--}
 
 
 {-------------------------------------------------------------------------------

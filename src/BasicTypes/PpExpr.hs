@@ -260,7 +260,8 @@ ppEs f sep eargs = case eargs of
     e : eargs' -> f e <> sep <+> ppEs f sep eargs'
 
 ppName :: GName ty -> Doc
-ppName nm = text (name nm) -- <> braces (text $ uniqId nm)
+ppName nm = ppNameUniq nm
+            -- text (name nm)
 
 ppNameUniq :: GName ty -> Doc
 ppNameUniq nm = text (name nm) <> braces (text $ show $ uniqId nm)

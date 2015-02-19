@@ -155,6 +155,8 @@ import qualified Text.Parsec as PS
 
 import Rebindables
 import AstExpr
+import NameEnv
+
 import AstComp
 import PpComp
 import PpExpr
@@ -271,16 +273,16 @@ type CompFunGen = [CallArg Exp Comp] -> CompKont -> Cg CompInfo
 data CgEnv = CgEnv
     {
       -- | Parameterized ST computations
-      compFunEnv :: M.Map (GName CTy) CompFunGen
+      compFunEnv :: NameEnv CTy CompFunGen
 
       -- | TODO: doc
-    , compEnv :: M.Map (GName CTy) CompGen
+    , compEnv :: NameEnv CTy CompGen
 
       -- | Type definitions
     , tyDefEnv :: M.Map TyName StructDef
 
       -- | TODO: doc
-    , varEnv :: M.Map (GName Ty) ExpGen
+    , varEnv :: NameEnv Ty ExpGen
 
       -- | The code generator lifts local functions to top-level, introducing
       -- additional function parameters for any free variables in the (local)
@@ -288,7 +290,7 @@ data CgEnv = CgEnv
       -- local function name to the unique name of the lifted global fiunction,
       -- as well as the list of additional "closure" parameters that we
       -- introduced.
-    , funEnv :: M.Map (GName Ty) (GName Ty, [GName Ty])
+    , funEnv :: NameEnv Ty (GName Ty, [GName Ty])
 
       -- | Reference to a symbol, for gensym'ing
     , symEnv :: GS.Sym
@@ -304,11 +306,11 @@ data CgEnv = CgEnv
 
 emptyEnv :: GS.Sym -> CgEnv
 emptyEnv sym =
-    CgEnv { compFunEnv = M.empty
-          , compEnv    = M.empty
+    CgEnv { compFunEnv = neEmpty
+          , compEnv    = neEmpty
           , tyDefEnv   = M.fromList primComplexStructs
-          , varEnv     = M.empty
-          , funEnv     = M.empty
+          , varEnv     = neEmpty
+          , funEnv     = neEmpty
           , symEnv     = sym
           , disableBC  = False
           , moduleName = ""
@@ -687,14 +689,14 @@ appendLabeledBlock i m
 
 extendFunEnv :: GName CTy -> CompFunGen -> Cg a -> Cg a
 extendFunEnv nm fn =
-    local $ \rho -> rho { compFunEnv = M.insert nm fn (compFunEnv rho) }
+    local $ \rho -> rho { compFunEnv = neExtend nm fn (compFunEnv rho) }
 
 extendVarEnv :: [(GName Ty, ExpGen)] -> Cg a -> Cg a
 -- BUG: This seems wrong: We can't inline a potentially
 -- imperative expression anywhere we want! What is this ExpGen stuff????
 extendVarEnv binds =
     -- We need to bind array lengths of polymorphic array as well
-    local $ \rho -> rho { varEnv = M.union (M.fromList (binds ++ convTy binds)) (varEnv rho) }
+    local $ \rho -> rho { varEnv = neExtendMany (binds ++ convTy binds) (varEnv rho) }
   where
     -- NOTE: This is the point where we introduce GNames for LenVars.
     getPolymArrTy :: (GName Ty, ExpGen) -> Maybe (GName Ty, ExpGen)
@@ -707,16 +709,16 @@ extendVarEnv binds =
 
 extendExpFunEnv :: GName Ty -> (GName Ty, [GName Ty]) -> Cg a -> Cg a
 extendExpFunEnv nm bind =
-   local $ \rho -> rho { funEnv = M.union (M.fromList [(nm,bind)]) (funEnv rho) }
+   local $ \rho -> rho { funEnv = neExtend nm bind (funEnv rho) }
 
 extendTyDefEnv :: TyName -> StructDef -> Cg a -> Cg a
 extendTyDefEnv nm bind =
-   local $ \rho -> rho { tyDefEnv = M.union (M.fromList [(nm,bind)]) (tyDefEnv rho) }
+   local $ \rho -> rho { tyDefEnv = M.insert nm bind (tyDefEnv rho) }
 
 
 extendCompEnv :: GName CTy -> CompGen -> Cg a -> Cg a
 extendCompEnv nm bind =
-    local $ \rho -> rho { compEnv = M.insert nm bind (compEnv rho) }
+    local $ \rho -> rho { compEnv = neExtend nm bind (compEnv rho) }
 
 
 withDisabledBC :: Cg a -> Cg a
@@ -759,35 +761,35 @@ withClonedState cg = do
 
 lookupCompFunCode :: GName CTy -> Cg CompFunGen
 lookupCompFunCode nm = do
-    maybe_gen <- asks $ \rho -> M.lookup nm (compFunEnv rho)
+    maybe_gen <- asks $ \rho -> neLookup nm (compFunEnv rho)
     case maybe_gen of
       Nothing  -> fail ("CodeGen: unbound computation function: " ++ show nm)
       Just gen -> return gen
 
 lookupExpFunEnv :: GName Ty -> Cg (GName Ty, [GName Ty])
 lookupExpFunEnv nm  = do
-    maybe_x <- asks $ \rho -> M.lookup nm (funEnv rho)
+    maybe_x <- asks $ \rho -> neLookup nm (funEnv rho)
     case maybe_x of
       Nothing -> do funs <- asks funEnv
-                    let bound = map (show . ppName) (M.keys funs)
+                    let bound = map (show . ppName) (neKeys funs)
                     fail ("Unbound function in code generation: "  ++ show (ppName nm) ++
                           " bound = " ++ show bound ++ " pos = " ++ show (nameLoc nm))
       Just x  -> return x
 
 lookupExpFunEnv_maybe :: GName Ty -> Cg (Maybe (GName Ty, [GName Ty]))
 lookupExpFunEnv_maybe nm  =
-    asks $ \rho -> M.lookup nm (funEnv rho)
+    asks $ \rho -> neLookup nm (funEnv rho)
 
 
 getBoundVars :: Cg [GName Ty]
-getBoundVars = asks (M.keys . varEnv)
+getBoundVars = asks (neKeys . varEnv)
 
 lookupVarEnv :: GName Ty -> Cg ExpGen
 lookupVarEnv nm = do
-    maybe_x <- asks $ \rho -> M.lookup nm (varEnv rho)
+    maybe_x <- asks $ \rho -> neLookup nm (varEnv rho)
     case maybe_x of
       Nothing -> do vars <- asks varEnv
-                    let bound = map ppNameUniq (M.keys vars)
+                    let bound = map ppNameUniq (neKeys vars)
                     -- TODO: This still does not render properly because we do a show on this string.
                     -- It has to do with the type of failOnError in Main.hs. The right thing to do
                     -- would be to simply make Cg return a Doc in the case of an error, not a string.
@@ -803,7 +805,7 @@ lookupVarEnv nm = do
 
 lookupCompCode :: GName CTy -> Cg CompGen
 lookupCompCode nm = do
-    maybe_e <- asks $ \rho -> M.lookup nm (compEnv rho)
+    maybe_e <- asks $ \rho -> neLookup nm (compEnv rho)
     case maybe_e of
       Nothing -> fail $ "CodeGen: Unbound computation var " ++ show nm ++ " detected!"
       Just e  -> return e
@@ -812,7 +814,8 @@ lookupTyDefEnv :: TyName -> Cg StructDef
 lookupTyDefEnv nm = do
     (maybe_e,env) <- asks $ \rho -> (M.lookup nm (tyDefEnv rho), tyDefEnv rho)
     case maybe_e of
-      Nothing -> fail $ "CodeGen: Unbound struct type " ++ show nm ++ " detected!" ++ "\nBound are: " ++ show (M.keys env)
+      Nothing -> fail $ 
+        "CodeGen: Unbound struct type " ++ show nm ++ " detected!" ++ "\nBound are: " ++ show (M.keys env)
       Just e  -> return e
 
 
