@@ -542,17 +542,20 @@ mitigateFlexi True  vctx cands =
   in fromListDVRCands (concatMap mitigated (Map.elems cands))
 
 
-{- 
-1-{read[arr[8] complex16]}-8 >>>
-repeat seq { y{_r2223} <- 8-{___downSample_blk_vect_DD1_9635{_v9635} ()}-0;
-             0-{___downSample_blk_vect_DD2_9643{_v9643} ()}-4
-           } >>>
-seq { det{_r2644} <- 4-mitigate(MAoMF)[complex16]-64 .>>>.
-                     repeat 64-{___removeDC_blk_vect_DU1_9888{_v9888} ()}-64 .>>>.
-                     64-mitigate(MF)[complex16]-4 >>>
-                     seq { _unused_4622{_pf4622} <- until (detected{_r1673}==true) 4-{___cca_cca_blk_vect_DD1_12682{_v12682} ()}-0;
-                           0-{return ...}-0
-           
+{- The following /must not/ happen, but it used to happen due to a bug 
+   in flexible mitigation, particularly removeDC was becoming 64-64 but
+   externally appeared as 8-8. As a result it really had to read chunks
+   of 64 but the upstream guy sent only some multiple of 8 (I believe
+   just 48)
+
+   1-{read[arr[8] complex16]}-8 >>>
+    repeat seq { y{_r2223} <- 8-{___downSample_blk_vect_DD1_9635{_v9635} ()}-0
+               ; 0-{___downSample_blk_vect_DD2_9643{_v9643} ()}-4 } >>> 
+    seq { det{_r2644} <- 4-mitigate(MAoMF)[complex16]-64 .>>>.
+      repeat 64-{___removeDC_blk_vect_DU1_9888{_v9888} ()}-64 .>>>.
+      64-mitigate(MF)[complex16]-4 >>>
+      seq { _unused_4622{_pf4622} <- until (...) (...)
+          ; 0-{return ...}-0
 -}
 
 
