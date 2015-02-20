@@ -41,6 +41,8 @@ fun comp downSample() {
   repeat seq {
     (y:arr[8] complex16) <- takes 8;
 
+--    do { println "took: ", y; }
+ 
     var tmp1:arr[4] complex16;
     var tmp2:arr[4] complex16;
 

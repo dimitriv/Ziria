@@ -47,10 +47,10 @@ seq{
       }
     };
 
-    repeat seq{
+    repeat <= [64,64] seq{
 
       (x:arr[4] complex16) <- takes 4;
-
+--      do { print "x/removeDC: ", x };
       do {
          v_sub_complex16(y,x,dc);
       };
@@ -78,6 +78,8 @@ seq{
 
       };
 
+--      do { print "x/removeDC (end): ", x };
+--      do { print "y/removeDC (end): ", y };
       emits y
 
     }

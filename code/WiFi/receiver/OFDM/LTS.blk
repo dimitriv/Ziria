@@ -108,9 +108,11 @@ fun comp LTS(shift:int16, amp:int32) {
   } in 
 
 seq{
-  do{LTSInit()};
+  do{ LTSInit() };
 
   (xp:arr[144] complex16) <- takes 144;
+ 
+--  do { println "xp/LTS: ", xp; };
 
   do{
      preamble := xp[16-shift,64];

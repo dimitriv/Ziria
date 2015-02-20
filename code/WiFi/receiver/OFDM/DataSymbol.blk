@@ -22,8 +22,9 @@
 #include <externals.blk>
 
 fun comp DataSymbol(shift:int16) {
-  repeat seq{
+  repeat seq {
      (xp:arr[80] complex16) <- takes 80;
+--     do { println "xp: ", xp };
      emits xp[16-shift,64]
   }
 }

@@ -206,6 +206,7 @@ seq{
 
   until detected == true seq{
     xb <- takes 4;
+--    do { println "xb/cca: ", xb; };
     do{
       x := xb;
 

@@ -30,6 +30,8 @@ fun comp ChannelEqualization(params : struct LTECoeffs) {
    repeat seq {
 
     (fftdata_in:arr[64] complex16) <- takes 64;
+    
+--    do { println "fftdata_in: ", fftdata_in };
 
     var fftdata:arr[64] complex16;
 

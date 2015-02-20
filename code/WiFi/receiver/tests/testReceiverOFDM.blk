@@ -32,20 +32,21 @@
 
 
 fun comp detectPreamble() {
-  (removeDC() >>> cca())
+  removeDC() >>> cca()
 }
 
 let comp main = read >>> downSample() >>> 
-  seq{ det<-detectPreamble()
+  seq { det <- detectPreamble()
 #ifndef FAST
-     ; do{println "Detected at: ", det.noSamples}
+      ; do{println "Detected at: ", det.noSamples}
 #endif
-     -- receiver uses Sora port of cca to produce comparable performance measurements
-     -- but this one does not maxCorr value, so we provide an appropriate one here to pass tests
-     -- In real-world examples use cca_tufv instead of cca.
-     ; params <- LTS(det.shift, 850906)
-       DataSymbol(det.shift) >>> FFT() >>> ChannelEqualization(params)
-       >>> PilotTrack() >>> GetData()
+     -- receiver uses Sora port of cca to produce comparable
+     -- performance measurements but this one does not maxCorr value,
+     -- so we provide an appropriate one here to pass tests In
+     -- real-world examples use cca_tufv instead of cca.
+      ; params <- LTS(det.shift, 850906)
+        DataSymbol(det.shift) >>> FFT() >>> ChannelEqualization(params)
+        >>> PilotTrack() >>> GetData()
   }
 >>> write 
 
