@@ -26,6 +26,8 @@ module CardAnalysis (
    , LComp, LComp0
    , isSimplCard_mb
    , runCardAnal
+   , scard
+   , ocard
 
      -- For debugging/assertions
    , unknown_times_card

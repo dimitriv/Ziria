@@ -61,6 +61,7 @@ import CtComp
 import PassFold ( elimMitigsIO )
 import Debug.Trace
 
+import CardAnalysis
 
 {-------------------------------------------------------------------------------
   Vectorizer proper
@@ -407,13 +408,17 @@ repeat_scalefactors vctx card tyin tyout
   = let sfdus  = compSFDU card tyin tyout
         sfuds  = compSFUD card tyin tyout
         sfdds  = compSFDD card tyin tyout
-    in case vctx of 
-         CtxUnrestricted       -> (sfuds, sfdus, sfdds)
-         CtxExCompLeft         -> (sfuds, []   , sfdds) 
-         CtxExCompRight        -> ([]   , sfdus, sfdds)
-         CtxExCompLeftAndRight 
-          -> (filter isSteady_sfud sfuds, 
-                 filter isSteady_sfdu sfdus, sfdds)
+    in select_scalefactors vctx (sfuds,sfdus,sfdds)
+
+select_scalefactors :: CtxForVect -> ScaleFactors -> ScaleFactors
+select_scalefactors vctx (sfuds,sfdus,sfdds)
+  = case vctx of 
+      CtxUnrestricted       -> (sfuds, sfdus, sfdds)
+      CtxExCompLeft         -> (sfuds, []   , sfdds) 
+      CtxExCompRight        -> ([]   , sfdus, sfdds)
+      CtxExCompLeftAndRight 
+       -> (filter isSteady_sfud sfuds, 
+              filter isSteady_sfdu sfdus, sfdds)
 
 
 logCands :: DynFlags -> Bool -> String -> DVRCands -> VecM DVRCands
@@ -472,12 +477,11 @@ vectRepeat dfs (VectPack { vp_vctx  = vctx
       vcs <- go Nothing c0
       let pred (ty1,ty2) _ = ty_match ty1 fin && ty_match ty2 fout
           vcs_matching     = Map.filterWithKey pred vcs
-          repeat_sfs       = repeat_scalefactors vctx (compInfo c0) tyin tyout
 
       verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands vcs))
 
       res <- logCands dfs False "VectRepeat" $ 
-               mitigateFlexi f repeat_sfs vcs_matching
+               mitigateFlexi f vctx vcs_matching
       -- Force mitigation result
       res `seq` do 
          verbose dfs $ text "After mitigateFlexi:"
@@ -494,9 +498,8 @@ vectRepeat dfs (VectPack { vp_vctx  = vctx
 
       let pred (ty1,ty2) _ = ty_upto ty1 fin && ty_upto ty2 fout
           vcs_matching     = Map.filterWithKey pred vcs
-          repeat_sfs       = repeat_scalefactors vctx (compInfo c0) tyin tyout
       res <- logCands dfs False "VectRepeat" $ 
-             mitigateFlexi f repeat_sfs vcs_matching
+                mitigateFlexi f vctx vcs_matching
 
       res `seq` do 
 
@@ -521,15 +524,36 @@ ty_upto _t j                      = j > 0
 -------------------------------------------------------------------------------}
 
 -- | Try to create mitigated versions of candidates to all scalefactors
-mitigateFlexi :: Bool -> ScaleFactors -> DVRCands -> DVRCands
-mitigateFlexi False _sfs cands = cands
-mitigateFlexi True (sfuds,sfdus,sfdds) cands =
-  let arities = map sfud_arity sfuds ++  
-                map sfdu_arity sfdus ++ 
-                map sfdd_arity sfdds
-      cands_list = Map.elems cands
-      mitigated r = foldr (\ar res -> mit_one "MF" ar r : res) [] arities
-  in fromListDVRCands (concatMap mitigated cands_list)
+mitigateFlexi :: Bool -> CtxForVect -> DVRCands -> DVRCands
+mitigateFlexi False vctx cands = cands
+mitigateFlexi True  vctx cands =
+  let mitigated r = 
+       let ain  = tyArity (vect_in_ty  $ dvr_vres r)
+           aout = tyArity (vect_out_ty $ dvr_vres r)
+           dummy_card = (CAStatic ain, CAStatic aout)
+           sfuds0 = compSFUD_aux dummy_card
+           sfdus0 = compSFDU_aux dummy_card
+           sfdds0 = [] -- compSFDD_aux dummy_card
+           (sfuds,sfdus,sfdds) = select_scalefactors vctx (sfuds0,sfdus0,sfdds0)
+           arities = map sfud_arity sfuds ++
+                     map sfdu_arity sfdus ++
+                     map sfdd_arity sfdds
+       in map (\ar -> mit_one "MF" ar r) arities
+  in fromListDVRCands (concatMap mitigated (Map.elems cands))
+
+
+{- 
+1-{read[arr[8] complex16]}-8 >>>
+repeat seq { y{_r2223} <- 8-{___downSample_blk_vect_DD1_9635{_v9635} ()}-0;
+             0-{___downSample_blk_vect_DD2_9643{_v9643} ()}-4
+           } >>>
+seq { det{_r2644} <- 4-mitigate(MAoMF)[complex16]-64 .>>>.
+                     repeat 64-{___removeDC_blk_vect_DU1_9888{_v9888} ()}-64 .>>>.
+                     64-mitigate(MF)[complex16]-4 >>>
+                     seq { _unused_4622{_pf4622} <- until (detected{_r1673}==true) 4-{___cca_cca_blk_vect_DD1_12682{_v12682} ()}-0;
+                           0-{return ...}-0
+           
+-}
 
 
 {-------------------------------------------------------------------------------

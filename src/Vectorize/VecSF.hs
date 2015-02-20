@@ -24,6 +24,10 @@ module VecSF (
   , vECT_IOARRAY_BOUND
   , CtxForVect (..)
 
+  , compSFDU_aux
+  , compSFUD_aux
+  , compSFDD_aux
+
   , sfud_arity
   , sfdu_arity
   , sfdd_arity
