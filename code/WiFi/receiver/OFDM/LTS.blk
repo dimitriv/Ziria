@@ -38,22 +38,26 @@ fun comp LTS(shift:int16, amp:int32) {
   var fftdata:arr[64] complex16;
   var delayedFftdata:arr[64] complex16;
 
-  var aLTSSeq11a:arr[64] complex16;
-
-
-
   fun LTSInit() {
-     var norm_one:complex16 := complex16{re=1600;im=0};
+     var ret : arr[64] complex16; 
+
+     let norm_one = complex16{re=1600;im=0}
+    
      let lts11a = 
         {0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 
          1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 
          0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 
-         1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1} in 
+         1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1}
 
      for i in [0,64] {
-         aLTSSeq11a[i] := ( complex16{re=(2*lts11a[i]-1); im=0}*norm_one);
-     }
+         ret[i] := ( complex16{re=(2*lts11a[i]-1); im=0}*norm_one);
+     };
+
+     return ret
+
   } in
+
+  let aLTSSeq11a = LTSInit() in
 
 
   fun arr_shift(a : arr complex16, agc_shift : int) { 
@@ -108,7 +112,6 @@ fun comp LTS(shift:int16, amp:int32) {
   } in 
 
 seq{
-  do{ LTSInit() };
 
   (xp:arr[144] complex16) <- takes 144;
  

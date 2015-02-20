@@ -41,7 +41,7 @@ fun comp encode34() {
 -- This is too big for LUTter as we take three times
 -- and it gets inlined
 -- repeat [12,8] seq{
-repeat <= [6,8] seq{
+repeat [6,8] seq{
    dvm1 <- take;
    dvm2 <- take;
    dvm3 <- take;

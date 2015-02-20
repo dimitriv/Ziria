@@ -65,18 +65,35 @@ fun comp cca() {
 
 
   -- STS
-  var sts_re : arr[64] int16 :=
+  let (sts_re : arr[64] int16) =
     {312,-900,-92,969,625,969,-92,-900,312,15,-534,-86,0,-86,-534,15,
      312,-900,-92,969,625,969,-92,-900,312,15,-534,-86,0,-86,-534,15,
      312,-900,-92,969,625,969,-92,-900,312,15,-534,-86,0,-86,-534,15,
-     312,-900,-92,969,625,969,-92,-900,312,15,-534,-86,0,-86,-534,15};
+     312,-900,-92,969,625,969,-92,-900,312,15,-534,-86,0,-86,-534,15} in
  
-  var sts_im : arr[64] int16 := 
+  let (sts_im : arr[64] int16) = 
     {312,15,-534,-86,0,-86,-534,15,312,-900,-92,969,625,969,-92,-900,
      312,15,-534,-86,0,-86,-534,15,312,-900,-92,969,625,969,-92,-900,
      312,15,-534,-86,0,-86,-534,15,312,-900,-92,969,625,969,-92,-900,
-     312,15,-534,-86,0,-86,-534,15,312,-900,-92,969,625,969,-92,-900};
-  var STS:arr[64] complex16;
+     312,15,-534,-86,0,-86,-534,15,312,-900,-92,969,625,969,-92,-900} in
+
+
+  fun initSTS() {
+    var ret : arr[64] complex16;
+
+    for i in [0, 64] {
+      ret[i] := complex16{re=sts_re[i]; im=sts_im[i]};
+    };
+    return ret
+  } in
+
+--  let (STS : arr[64] complex16) = initSTS() in
+  var STS : arr[64] complex16 := initSTS() in
+ 
+  -- var STS:arr[64] complex16;
+  --   for i in [0, 64] {
+  --     STS[i] := complex16{re=sts_re[i]; im=sts_im[i]};
+  --   };
 
 
   fun calcAutoCorr(x : arr[4] complex16, oldsample : arr[16] complex16) {
@@ -196,19 +213,17 @@ seq{
       gesw[i] := 0
     };
 
-    for i in [0, 64] {
-      STS[i] := complex16{re=sts_re[i]; im=sts_im[i]};
-    };
 
     iterind := 0
   };
 
 
   until detected == true seq{
-    xb <- takes 4;
+--    xb <- takes 4;
+      x <- takes 4
 --    do { println "xb/cca: ", xb; };
     do{
-      x := xb;
+      -- x := xb;
 
       iterind := iterind + 1;
     
