@@ -112,12 +112,12 @@ elimMitigsIO flags sym = go
                  }
 
 
-frm_mit :: Comp -> Maybe ((Ty,Int,Int), Comp)
+frm_mit :: Comp -> Maybe ((Ty,Int,Int,String), Comp)
 -- returns (mitigator,residual-comp)
 frm_mit c
   | Par _p0 c1 c2 <- unComp c
-  , Mitigate _s ty i1 i2  <- unComp c2
-  = Just ((ty,i1,i2), c1)
+  , Mitigate s ty i1 i2  <- unComp c2
+  = Just ((ty,i1,i2,s), c1)
 
   | Par p0 c1 c2 <- unComp c
   = case frm_mit c2 of
@@ -169,12 +169,12 @@ frm_mit c
   | otherwise
   = Nothing
 
-flm_mit :: Comp -> Maybe ((Ty,Int,Int), Comp)
+flm_mit :: Comp -> Maybe ((Ty,Int,Int,String), Comp)
 -- returns (mitigator,residual-comp)
 flm_mit c
   | Par _p0 c1 c2 <- unComp c
-  , Mitigate _s ty i1 i2  <- unComp c1
-  = Just ((ty,i1,i2), c2)
+  , Mitigate s ty i1 i2  <- unComp c1
+  = Just ((ty,i1,i2,s), c2)
 
   | Par p0 c1 c2 <- unComp c
   = case flm_mit c1 of
@@ -232,56 +232,56 @@ elimMitigs comp
    mitig c
       | MkComp c0 cloc () <- c
       , Par p c1 c2 <- c0
-      , Just ((ty1,i1,j1),c1') <- frm_mit c1
-      , Just ((ty2,i2,j2),c2') <- flm_mit c2
+      , Just ((ty1,i1,j1,s1),c1') <- frm_mit c1
+      , Just ((ty2,i2,j2,s2),c2') <- flm_mit c2
       , let l = lcm i1 j2
       = do { when (j1 /= i2) $ error "BUG: Mitigation mismatch!"
            ; if (i1 `mod` j2 == 0) || (j2 `mod` i1) == 0 then
              do { rewrite $
                   cPar cloc p c1' $
                   cPar cloc (mkParInfo NeverPipeline)
-                            (cMitigate cloc "POM" ty1 i1 j2) c2'
+                            (cMitigate cloc (s1 ++ "o" ++ s2) ty1 i1 j2) c2'
                 }
              else
              if l /= j1 then
               rewrite $
-              cPar cloc p (cPar cloc pnever c1' (cMitigate cloc "POM" ty1 i1 l))
-                          (cPar cloc pnever (cMitigate cloc "POM" ty2 l j2) c2')
+              cPar cloc p (cPar cloc pnever c1' (cMitigate cloc (s1 ++ "-") ty1 i1 l))
+                          (cPar cloc pnever (cMitigate cloc ("-"++s2) ty2 l j2) c2')
              else return c
            }
 
       | MkComp c0 cloc () <- c
       , Par p c1 c2 <- c0
-      , Just ((ty1,i1,j1),c1') <- frm_mit c1
-      , Mitigate _s2 ty2 i2 j2 <- unComp c2
+      , Just ((ty1,i1,j1,s1),c1') <- frm_mit c1
+      , Mitigate s2 ty2 i2 j2 <- unComp c2
       , let l = lcm i1 j2
       = do { when (j1 /= i2) $ error "BUG: Mitigation mismatch!"
            ; if i1 `mod` j2 == 0 || j2 `mod` i1 == 0 then
              do { rewrite $
-                  cPar cloc p c1' (cMitigate cloc "POM" ty1 i1 j2)
+                  cPar cloc p c1' (cMitigate cloc (s1++"o"++s2) ty1 i1 j2)
                 }
              else
              if l /= j1 then
               rewrite $
-              cPar cloc p (cPar cloc pnever c1' (cMitigate cloc "POM" ty1 i1 l))
-                          (cMitigate cloc "POM" ty2 l j2)
+              cPar cloc p (cPar cloc pnever c1' (cMitigate cloc (s1++"-") ty1 i1 l))
+                          (cMitigate cloc ("-"++s2) ty2 l j2)
              else return c
            }
 
       | MkComp c0 cloc () <- c
       , Par p c1 c2 <- c0
-      , Just ((ty2,i2,j2),c2') <- flm_mit c2
-      , Mitigate _s1 ty1 i1 j1 <- unComp c1
+      , Just ((ty2,i2,j2,s2),c2') <- flm_mit c2
+      , Mitigate s1 ty1 i1 j1 <- unComp c1
       , let l = lcm i1 j2
       = do { when (j1 /= i2) $ error "BUG: Mitigation mismatch!"
            ; if i1 `mod` j2 == 0 || j2 `mod` i1 == 0 then
              do { rewrite $
-                  cPar cloc p (cMitigate cloc "POM" ty1 i1 j2) c2'
+                  cPar cloc p (cMitigate cloc (s1++"o"++s2) ty1 i1 j2) c2'
                 }
              else if l /= j1 then
               rewrite $
-              cPar cloc p (cMitigate cloc "POM" ty1 i1 l)
-                          (cPar cloc pnever (cMitigate cloc "POM" ty2 l j2) c2')
+              cPar cloc p (cMitigate cloc (s1++"-") ty1 i1 l)
+                          (cPar cloc pnever (cMitigate cloc ("-"++s2) ty2 l j2) c2')
              else return c
            }
 
