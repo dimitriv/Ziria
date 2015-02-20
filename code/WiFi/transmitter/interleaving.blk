@@ -69,7 +69,7 @@ fun comp interleaver_bpsk() {
   let ids2 = intlv_perm2(M_BPSK) in
   let ids3 = fuse_perm(ids1,ids2) in
 
-  repeat [48,48] {
+  repeat <= [48,48] {
     (x : arr[48] bit) <- takes 48;
 -- We break it in two because heavy inlining done by the compiler
 -- will miss the LUTing opportunity
@@ -86,7 +86,7 @@ fun comp interleaver_qpsk() {
   let ids2 = intlv_perm2(M_QPSK)  in
   let ids3 = fuse_perm(ids1,ids2) in
   
-  repeat [96,96] {
+  repeat <= [96,96] {
     (x : arr[96] bit) <- takes 96;
 -- We break it in two because heavy inlining done by the compiler
 -- will miss the LUTing opportunity
@@ -104,7 +104,7 @@ fun comp interleaver_m16qam() {
   let ids2 = intlv_perm2(M_16QAM) in
   let ids3 = fuse_perm(ids1,ids2) in
   
-  repeat [192, 192] {
+  repeat <= [192, 192] {
     (x : arr[192] bit) <- takes 192;
 -- We break it in two because heavy inlining done by the compiler
 -- will miss the LUTing opportunity
@@ -121,7 +121,7 @@ fun comp interleaver_m64qam() {
   let ids2 = intlv_perm2(M_64QAM) in
   let ids3 = fuse_perm(ids1,ids2) in
 
-  repeat [288, 288]{
+  repeat <= [288, 288]{
     (x : arr[288] bit) <- takes 288;
 -- We break it in two because heavy inlining done by the compiler
 -- will miss the LUTing opportunity
