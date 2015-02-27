@@ -50,6 +50,11 @@ data DynFlag =
                       -- Compare files in debug mode, assuming int-valued
                       -- entries that they must be within each other by 
                       -- the percent expressed by the double [0.0 - 1.0]
+  | Threshold Double 
+                      -- When the absolute value is too small (close to zero)
+                      -- the relative error will be arbitrary and we'll get false positives
+                      -- To avoid this, set the threshold, and any mismatched values
+                      -- that are below the threshold will be ignored
   | AsComplex
   deriving Eq
 
@@ -68,10 +73,13 @@ options
     , Option ['v']     ["verbose"]    (NoArg  Verbose)                "Verbose messages; default off"
     , Option ['h']     ["help"]       (NoArg Help)                    "Print help message"
     , Option ['n']     ["npc"]        (ReqArg parse_npc "precision")  "Precision 0.0-1.0, only valid when debug is on and entries are numerical"
+    , Option ['t']     ["thr"]        (ReqArg parse_thr "threshold")  "Ignore numbers that are in absolute under threshold (i.e. too close to 0)"
     , Option ['c']     ["as-complex"] (NoArg AsComplex)               "When precision is on and debug is on, the precision test is done for complex numbers (i.e. pairs of entries at a time)"
     ]
   where parse_npc :: String -> DynFlag
         parse_npc s = NinetyPercent (read s)
+        parse_thr :: String -> DynFlag
+        parse_thr s = Threshold (read s)
 
 usage = "Usage: blinkdiff [OPTION...] \n" ++ 
         "Exit codes: 0 = files match, 1 = mismatch, 2 = some error occured\n"
@@ -108,6 +116,20 @@ getNpcFlag (NinetyPercent n : _)
 getNpcFlag (_ : opts') 
   = getNpcFlag opts'
 
+
+getThrFlag :: DynFlags -> IO (Maybe Double)
+-- Returns Nothing if npc is not set, or 0-100 if npc is set
+getThrFlag []                    
+  = return Nothing 
+getThrFlag (Threshold n : _) 
+  | 0.0 <= n
+  = return (Just n)
+  | otherwise 
+  = failWithMsg $ "Threshold must be positive\n" ++ fullUsage
+getThrFlag (_ : opts') 
+  = getThrFlag opts'
+
+
 compilerOpts :: [String] -> IO (DynFlags, [String])
 compilerOpts argv = 
   case getOpt Permute options argv of
@@ -128,10 +150,11 @@ main = do { hSetBuffering stdout NoBuffering
                ; inFile  <- getInFile flags
                ; gndFile <- getGndFile flags
                ; npc <- getNpcFlag flags
-               ; when (isJust npc && not (isDynFlagSet flags Debug)) $
+               ; thr <- getThrFlag flags
+               ; when ((isJust npc || isJust thr) && not (isDynFlagSet flags Debug)) $
                  failWithMsg $ 
-                 "Ninety-percent can only be used in debug mode\n" ++ fullUsage
-               ; doCompare flags npc inFile gndFile 
+                 "Ninety-percent and threshold can only be used in debug mode\n" ++ fullUsage
+               ; doCompare flags npc thr inFile gndFile 
                }
 
 -- Abnormal termination (exit code 2)
@@ -142,14 +165,14 @@ errHandler msg (e :: IOError)
        hPutStrLn stderr (ioe_description e) 
        exitWith (ExitFailure 2)
 
-doCompare :: DynFlags -> Maybe Double -> String -> String -> IO ()
-doCompare dflags npc infile gndfile 
+doCompare :: DynFlags -> Maybe Double -> Maybe Double -> String -> String -> IO ()
+doCompare dflags npc thr infile gndfile 
   = withFiles infile gndfile $ 
     if debug_on then 
         if complex_on then
-            do_compare prefix_on verbose_on $ textPairFmtReader npc
+            do_compare prefix_on verbose_on $ textPairFmtReader npc thr
         else 
-            do_compare prefix_on verbose_on $ textFmtReader npc
+            do_compare prefix_on verbose_on $ textFmtReader npc thr
     else
         do_compare prefix_on verbose_on $ binFmtReader
   where
@@ -272,15 +295,19 @@ bin_read_entry fptr h
 
 -- A Text Format Reader
 -- ~~~~~~~~~~~~~~~~~~~~
--- We pass on the NPC flag because the comparison function may need to
+-- We pass on the NPC and THR flags because the comparison function may need to
 -- compare for similarity up to a certain percentage (given by NPC)
--- instead of absolute equality.
+-- instead of absolute equality, and only for entries larger than THR in absolute.
+-- A typical example where we need THR is when we expect a zero but, 
+-- due to a numerical error, get a small number (e.g. 1). This has infinite relative
+-- error but no effect on the correctness. We ignore these corner cases through THR
 
-textFmtReader :: Maybe Double -> FmtReader () String
-textFmtReader npc
+
+textFmtReader :: Maybe Double -> Maybe Double -> FmtReader () String
+textFmtReader npc thr
   = MkFmtReader { init_state = return ()
                 , read_entry = txt_read_entry
-                , eq_entry   = txt_cmp_entry npc }
+                , eq_entry   = txt_cmp_entry npc thr}
 txt_read_entry _unit h = go []
   where 
     go acc = 
@@ -314,23 +341,26 @@ txt_read_entry _unit h = go []
     compute_special_char ','  = Just ','
     compute_special_char _    = Nothing
 
-txt_cmp_entry Nothing x y = if x == y then CmpEq else CmpDiff
-txt_cmp_entry (Just pc) x y 
+txt_cmp_entry Nothing _ x y = if x == y then CmpEq else CmpDiff
+txt_cmp_entry (Just pc) Nothing x y = txt_cmp_entry (Just pc) (Just 0) x y 
+txt_cmp_entry (Just pc) (Just thr) x y 
  = case (reads x, reads y) of
      ([(dx::Double,[])],[(dy::Double,[])]) -> 
           let delta = abs (dx - dy)
-          in if delta <= abs(dy) * (1.0 - pc)
-             then CmpWithin (1.0 - (delta /dy)) else CmpDiff
+          in if (abs(dx) < thr && abs(dy) < thr)
+             then CmpWithin 1.0 else
+               if delta <= abs(dy) * (1.0 - pc)
+               then CmpWithin (1.0 - (delta /dy)) else CmpDiff
      -- We could just fail here and complain that we could not parse the file
      (_,_) -> error $ "Unparseable files: " ++ x ++ " - " ++ y 
 
 
 -- Pair Format Reader
-textPairFmtReader :: Maybe Double -> FmtReader () (Integer,Integer)
-textPairFmtReader npc
+textPairFmtReader :: Maybe Double -> Maybe Double -> FmtReader () (Integer,Integer)
+textPairFmtReader npc thr
   = MkFmtReader { init_state = return ()
                 , read_entry = txtpair_read_entry
-                , eq_entry   = txtpair_cmp_entry npc }
+                , eq_entry   = txtpair_cmp_entry npc thr}
 
 -- Read two entries at a time
 txtpair_read_entry _unit h 
@@ -342,14 +372,19 @@ txtpair_read_entry _unit h
                          Nothing -> return Nothing
                          Just v2 -> return $ Just (read v1, read v2)
 
-txtpair_cmp_entry Nothing x y = if x == y then CmpEq else CmpDiff
-txtpair_cmp_entry (Just pc) (x1,x2) (y1,y2)
+txtpair_cmp_entry Nothing _ x y = if x == y then CmpEq else CmpDiff
+txtpair_cmp_entry (Just pc) Nothing x y = txtpair_cmp_entry (Just pc) (Just 0) x y
+txtpair_cmp_entry (Just pc) (Just thr) (x1,x2) (y1,y2)
  = let x1d :: Double = fromIntegral x1
        x2d :: Double = fromIntegral x2
        y1d :: Double = fromIntegral y1
        y2d :: Double = fromIntegral y2
+       absx = sqrt (x1d^2 + x2d^2)
+       absy = sqrt (y1d^2 + y2d^2)
        delta = sqrt ((x1d - y1d)^2 + (x2d - y2d)^2)
        ymes  = sqrt (y1d^2 + y2d^2)
-   in if delta <= ymes * (1.0 - pc)
-      then CmpWithin (1.0 - (delta /ymes)) else CmpDiff
+   in if (absx < thr && absy < thr)
+      then CmpWithin 1.0 else
+        if delta <= ymes * (1.0 - pc) 
+        then CmpWithin (1.0 - (delta /ymes)) else CmpDiff
 
