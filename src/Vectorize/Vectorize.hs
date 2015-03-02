@@ -473,7 +473,7 @@ vectRepeat dfs (VectPack { vp_vctx  = vctx
   
    -- | Vectorize internally to /exactly/ (fin,fout) and externally up
    -- or down depending on the flag f
-   go (Just (Rigid f (fin,fout))) c0 = do
+   go (Just ann@(Rigid f (fin,fout))) c0 = do
       vcs <- go Nothing c0
       let pred (ty1,ty2) _ = ty_match ty1 fin && ty_match ty2 fout
           vcs_matching     = Map.filterWithKey pred vcs
@@ -481,7 +481,7 @@ vectRepeat dfs (VectPack { vp_vctx  = vctx
       verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands vcs))
 
       res <- logCands dfs False "VectRepeat" $ 
-               mitigateFlexi f vctx vcs_matching
+               mitigateFlexi ann vctx vcs_matching
       -- Force mitigation result
       res `seq` do 
          verbose dfs $ text "After mitigateFlexi:"
@@ -490,7 +490,7 @@ vectRepeat dfs (VectPack { vp_vctx  = vctx
 
    -- | Vectorize internally to anything <= (fin,fout) and externally up
    -- or down depending on the flag f
-   go (Just (UpTo f (fin,fout))) c0 = do
+   go (Just ann@(UpTo f (fin,fout))) c0 = do
       vcs <- go Nothing c0
       verbose dfs $ text ("UpTo (fin,fout) = " ++ show (fin,fout))
 
@@ -499,7 +499,7 @@ vectRepeat dfs (VectPack { vp_vctx  = vctx
       let pred (ty1,ty2) _ = ty_upto ty1 fin && ty_upto ty2 fout
           vcs_matching     = Map.filterWithKey pred vcs
       res <- logCands dfs False "VectRepeat" $ 
-                mitigateFlexi f vctx vcs_matching
+                mitigateFlexi ann vctx vcs_matching
 
       res `seq` do 
 
@@ -524,16 +524,24 @@ ty_upto _t j                      = j > 0
 -------------------------------------------------------------------------------}
 
 -- | Try to create mitigated versions of candidates to all scalefactors
-mitigateFlexi :: Bool -> CtxForVect -> DVRCands -> DVRCands
-mitigateFlexi False vctx cands = cands
-mitigateFlexi True  vctx cands =
-  let mitigated r = 
+mitigateFlexi :: VectAnn -> CtxForVect -> DVRCands -> DVRCands
+mitigateFlexi (Rigid False _) vctx cands = cands
+mitigateFlexi (UpTo False _) vctx cands  = cands
+mitigateFlexi vann vctx cands = 
+  let is_rigid = case vann of { Rigid {} -> True; _ -> False }
+      mitigated r = 
        let ain  = tyArity (vect_in_ty  $ dvr_vres r)
            aout = tyArity (vect_out_ty $ dvr_vres r)
            dummy_card = (CAStatic ain, CAStatic aout)
            sfuds0 = compSFUD_aux dummy_card
            sfdus0 = compSFDU_aux dummy_card
-           sfdds0 = [] -- compSFDD_aux dummy_card
+           -- If Rigid, the programmer explicitly asked for this
+           -- internal vectorization, so it's ok to arbitrarily
+           -- down-vectorize, if not then conservatively we do not
+           -- down-vectorize.
+           sfdds0 = if is_rigid 
+                    then compSFDD_aux dummy_card
+                    else []
            (sfuds,sfdus,sfdds) = select_scalefactors vctx (sfuds0,sfdus0,sfdds0)
            arities = map sfud_arity sfuds ++
                      map sfdu_arity sfdus ++
