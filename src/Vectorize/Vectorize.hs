@@ -413,7 +413,12 @@ repeat_scalefactors vctx card tyin tyout
 select_scalefactors :: CtxForVect -> ScaleFactors -> ScaleFactors
 select_scalefactors vctx (sfuds,sfdus,sfdds)
   = case vctx of 
+{- Treat CtxUnrestricted a bit more ... restricted. In principle we should not have to do this
+   if we were to use a better utility function, and instead we'd say:
       CtxUnrestricted       -> (sfuds, sfdus, sfdds)
+-}
+      CtxUnrestricted       -> (sfuds, [], sfdds)
+ 
       CtxExCompLeft         -> (sfuds, []   , sfdds) 
       CtxExCompRight        -> ([]   , sfdus, sfdds)
       CtxExCompLeftAndRight 

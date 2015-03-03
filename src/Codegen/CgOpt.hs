@@ -874,12 +874,12 @@ codeGenComp dflags comp k =
                     -- read >>> seq { x <- take[array]; y <- take[array]; ... }
                     -- If we do the optimization, the moment we read 'y' we will
                     -- invalidate the memory that 'x' is pointing to! BUG! 
-                    {- 
+                     {-
                       if is_take (unComp c1) && isArrayTy vTy then
                          return [cdecl| $ty:(codeGenTyAlg vTy) $id:new_dhval;|]
                       else
-                    -}
-                      codeGenDeclGroup new_dhval vTy
+                     -}
+                        codeGenDeclGroup new_dhval vTy
 
 
                 let ce = [cexp|$id:new_dhval |]
@@ -1032,9 +1032,11 @@ codeGenComp dflags comp k =
 
         appendLabeledBlock (processNmOf prefix) $ do
             -- See Note [Take Optimization]
-            -- if isArrayTy inty then
-            --    appendStmt [cstm|$id:(doneValOf dh) = $id:(inValOf ih);|]
-            -- else
+            {- 
+            if isArrayTy inty then
+                appendStmt [cstm|$id:(doneValOf dh) = $id:(inValOf ih);|]
+            else         
+            -}
             assignByVal inty inty donevalexp invalofexp
 
             -- WHAT!? 
