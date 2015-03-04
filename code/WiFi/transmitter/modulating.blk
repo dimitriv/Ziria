@@ -148,7 +148,7 @@ fun comp modulate_16qam () {
 
 fun comp modulate_64qam () {
 
-  repeat <= [6, 1] {
+  repeat <= [12, 2] {
     x <- takes 6;
 
     let re = 
