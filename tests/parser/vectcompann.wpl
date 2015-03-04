@@ -1,6 +1,6 @@
 
 -- Very silly proof of concept update
-fun update_crc(x : bit, st : arr[4] bit) { 
+fun update_crc(x : bit, var st : arr[4] bit) { 
   st[3] := x;
 }
 

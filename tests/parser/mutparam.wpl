@@ -2,7 +2,7 @@ var x : int;
 var y : bool;
 var z : complex32;
 
-fun foo(var x : int) {
+fun foo(x : int) {
    var z : bool := true;
    return (x+1);
 }
