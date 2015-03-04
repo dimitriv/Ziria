@@ -188,6 +188,10 @@ fun external v_xor(input1 : arr bit, input2 : arr[length(input1)] bit)    : arr[
 fun external sora_ifft(inp : arr complex16) : arr [length(inp)] complex16
 fun external sora_fft(inp : arr complex16) : arr [length(inp)] complex16
 
+-- Same as above, as it operates on subarray of inp/outp, so useful for dynamically sized arrays
+let external sora_ifft_dynamic(nFFTSize : int16, inp : arr complex16) : arr [length(inp)] complex16
+let external sora_fft_dynamic(nFFTSize : int16, inp : arr complex16) : arr [length(inp)] complex16
+
 
 
 -- Do we still need this?

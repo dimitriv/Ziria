@@ -1384,6 +1384,14 @@ void __ext_sora_fft(struct complex16* output, int nFFTSize, struct complex16 * i
 	//return 0;
 }
 
+void __ext_sora_fft_dynamic(struct complex16* output, int unused2, int16 nFFTSize, struct complex16 * input, int unused1)
+{
+	__ext_sora_fft(output, nFFTSize, input, unused1);
+}
+
+
+
+
 //int __ext_sora_ifft(short nFFTSize, struct complex16 * input, int unused1, struct complex16* output, int unused2)
 void __ext_sora_ifft(struct complex16* output, int nFFTSize, struct complex16 * input, int unused1)
 {
@@ -1447,6 +1455,10 @@ void __ext_sora_ifft(struct complex16* output, int nFFTSize, struct complex16 * 
 	//return 0;
 }
 
+void __ext_sora_ifft_dynamic(struct complex16* output, int unused2, int16 nFFTSize, struct complex16 * input, int unused1)
+{
+	__ext_sora_ifft(output, nFFTSize, input, unused1);
+}
 
 
 
