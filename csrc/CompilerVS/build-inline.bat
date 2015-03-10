@@ -27,10 +27,12 @@ set MAKEFLAGS=
 msbuild CompilerVS13-inline.vcxproj /target:build /p:Configuration=Release /p:Platform=x64 /m /verbosity:minimal
 
 if %errorlevel% NEQ 0 (
-set errorlev=1
-del CompilerVS13\x64\Release\CompilerVS13-inline.exe 
+  @echo CompilerVS13-inline compilation error!
+  set errorlev=1
+  del CompilerVS13\x64\Release\CompilerVS13-inline.exe 
 ) else (
-set errorlev=0
+  set errorlev=0
 )
+
 exit /B %errorlev%
 
