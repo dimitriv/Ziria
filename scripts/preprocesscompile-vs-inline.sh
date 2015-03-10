@@ -37,14 +37,16 @@ cp $1.c $TOP/csrc/test.c
 
 
 #echo "Compiling C code (VS) ..."
-pushd . && cd $TOP/csrc/CompilerVS && ./build-inline.bat && popd
-
+pushd . && cd $TOP/csrc/CompilerVS && ./build-inline.bat 
 
 if [[ $# -ge 2 ]]
 then
+   popd
    # cp -f is sometimes not sufficient on cygwin
    rm -f $2
    cp -f $TOP/csrc/CompilerVS/CompilerVS13-inline/x64/Release/CompilerVS13-inline.exe $2
+else
+   popd
 fi
 
 

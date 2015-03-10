@@ -38,12 +38,17 @@ cp $1.c $TOP/csrc/test.c
 
 
 #echo "Compiling C code (WinDDK) ..."
-pushd . && cd $TOP/csrc/CompilerDDK && ./bczcompile-inline.bat && popd
+pushd . && cd $TOP/csrc/CompilerDDK && ./bczcompile-inline.bat
 
 
 if [[ $# -ge 2 ]]
 then
+    popd
+    # cp -f is sometimes not sufficient on cygwin
+    rm -f $2
     cp -f $DDKDIR/target/amd64/compilerddk.exe $2
+else
+    popd
 fi
 
 
