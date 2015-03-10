@@ -141,11 +141,12 @@ cExpShR ce 0 = ce
 cExpShR ce n = [cexp| $ce >> $int:n |]
 
 
-unpackIdx :: [EId]   -- Variables
-          -> C.Exp   -- A C expression representing the index
-          -> C.Type  -- The index type (typically unsigned int)
+unpackIdx :: Map EId Range -- Ranges
+          -> [EId]         -- Variables
+          -> C.Exp         -- A C expression representing the index
+          -> C.Type        -- The index type (typically unsigned int)
           -> Cg ()
-unpackIdx xs src src_ty = go xs 0
+unpackIdx ranges xs src src_ty = go xs 0
   where go [] _ = return ()
         go (v:vs) pos
          | let ty = nameTyp v
@@ -167,7 +168,7 @@ unpackIdx xs src src_ty = go xs 0
               ; go vs (pos+w) }
          | otherwise
          = do { varexp <- lookupVarEnv v
-              ; w <- tyBitWidth (nameTyp v)
+              ; w <- varBitWidth ranges v
               ; let mask = 2^w - 1
               ; appendStmt $ [cstm| $varexp = (($src >> $int:pos)) & $int:mask; |]
               ; go vs (pos+w) }
@@ -351,7 +352,7 @@ genLUT dflags ranges inVars (outVars, res_in_outvars) allVars e = do
            extendVarEnv [(v,[cexp|$id:(name v)|]) | v <- allVars] $
            -- Generate local declarations for all input and output variables
            do { genLocalVarInits dflags allVars
-              ; unpackIdx inVars [cexp|$id:cidx |] [cty|unsigned int|]
+              ; unpackIdx ranges inVars [cexp|$id:cidx |] [cty|unsigned int|]
 
                 -- DEBUG ONLY
               ; let dbg_idx = "___dbg_idx"
