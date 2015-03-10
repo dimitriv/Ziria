@@ -233,3 +233,10 @@ fun external dbgplot_dot(data:complex16) : ()
 -- Time-related
 fun external print_time() : ()
 
+-- Start recording time
+fun external record_time_start() : ()
+-- Print time elapsed in (ns) since last record_time_start()
+fun external record_time_stop()  : ()
+
+-- Populate a bit array with random stuff
+fun external populate_rand_array(arr : arr bit) : ()
