@@ -42,6 +42,16 @@ char * try_alloc_bytes(HeapContextBlock *hblk, memsize_int siz)
 	fprintf(stderr, "Error: could not allocate buffer of size %ul\n", siz);
 	exit(1); 
   }
+
+  // This will lock all memory allocated into real mem
+  // However, there is a subtle problem - if we do real-time scheduling
+  // it seems that occasional swaps helped OS interrupt our high-priority code
+  // and stopped PC from freezing. With VirtualLock it seems as it freezes more often
+  // But this hypothesis is not properly tested
+  // #ifdef SORA_PLATFORM
+  //  VirtualLock(buf, siz);
+  // #endif
+
   return buf;
 }
 
