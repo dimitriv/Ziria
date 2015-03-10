@@ -1,0 +1,20 @@
+--
+-- Check LTE/MatlabTests/dft to see how fft code has been generated
+--
+
+let comp main = read[complex16] >>> 
+{ 
+  x<-takes 12; emits x;
+  x<-takes 24; emits x;
+  x<-takes 48; emits x;
+  x<-takes 96; emits x;
+  x<-takes 192; emits x;
+  x<-takes 384; emits x;
+  x<-takes 768; emits x;
+} >>> 
+repeat {
+  (x : complex16) <- take;
+  emit x.re;
+  emit x.im;
+} >>>  write[int16]
+
