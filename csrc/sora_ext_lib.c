@@ -1495,7 +1495,32 @@ extern TimeMeasurements measurementInfo;
 // and return the time as a 64-bit number
 int __ext_print_time() {
 	ULONGLONG time = SoraGetCPUTimestamp(&measurementInfo.tsinfo);
-	printf("%ul", time);
+	printf("%ul\n", time);
 	fflush(stdout);
 	return 0;
 }
+
+ULONGLONG record_time = 0;
+int __ext_record_time_start() {
+	record_time = SoraGetCPUTimestamp(&measurementInfo.tsinfo);
+	return 0;
+}
+int __ext_record_time_stop() {
+	ULONGLONG record_end_time = SoraGetCPUTimestamp(&measurementInfo.tsinfo);
+	printf("Elapsed(ns):%ul\n", record_end_time - record_time);
+	fflush(stdout);
+	return 0;
+}
+
+#include <time.h>
+
+int __ext_populate_rand_array(BitArrPtr arr, int siz) {
+
+	srand(time(NULL));
+	for (int i = 0; i < siz/8; i++)
+	{
+		arr[i] = (unsigned char)rand(); // it's random anyway
+	}
+	return 0;
+}
+

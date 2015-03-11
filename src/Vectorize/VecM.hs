@@ -48,6 +48,9 @@ import Data.Char ( isAlphaNum )
 import qualified GenSym as GS
 
 
+-- import Debug.Trace
+
+
 {-------------------------------------------------------------------------
   Vectorizer monad
 -------------------------------------------------------------------------}
@@ -548,9 +551,9 @@ mitigate_all vcs = map (mit_one "MA" (Just final_ty_in, Just final_ty_out)) vcs
 
 mit_one :: String -> (Maybe Int, Maybe Int) -> DelayedVectRes -> DelayedVectRes
 mit_one _orig (Nothing, Nothing) dvr = fixup_util_out (fixup_util_in dvr)
-mit_one orig (Just n,  Nothing) dvr = fixup_util_out (mit_in orig n dvr)
-mit_one orig (Nothing, Just n)  dvr = fixup_util_in  (mit_out orig dvr n)
-mit_one orig (Just n, Just m)   dvr = mit_in orig n (mit_out orig dvr m)
+mit_one orig (Just n,  Nothing) dvr  = fixup_util_out (mit_in orig n dvr)
+mit_one orig (Nothing, Just n)  dvr  = fixup_util_in  (mit_out orig dvr n)
+mit_one orig (Just n, Just m)   dvr  = mit_in orig n (mit_out orig dvr m)
 
 mit_in :: String -> Int -> DelayedVectRes -> DelayedVectRes
 mit_in orig n (DVR { dvr_comp = io_comp, dvr_vres = vres })
@@ -623,16 +626,20 @@ mk_out_mitigator orig t m -- non-array
 -- | Match vectorization candidates composed on the control path
 combineBind :: Maybe SourcePos -> Bool -> 
                DVRCands -> [EId] -> [DVRCands] -> DVRCands 
-combineBind loc is_comp c1cands xs cscands 
-  = aux (c1cands:cscands) (\(r:rs) -> combine_bind_mb loc is_comp r xs rs)
+combineBind loc is_comp = go 
   where 
-     aux :: [DVRCands] -> ([DelayedVectRes] -> Maybe DelayedVectRes) -> DVRCands
-     aux cs h = fromListDVRCands (go cs h)
-       where go [] f = case f [] of Nothing -> []
-                                    Just c  -> [c]
-             go (c1:c1s) f = foldr (\c st ->
-                   let f' rs = f (c : rs)
-                   in go c1s f' ++ st) [] (Map.elems c1)
+    go c1cands [] [] = c1cands
+    go c1cands (y:ys) (cs:css) =
+       let cont_cands = go cs ys css
+       in Map.foldr (foreach1 cont_cands) emptyDVRCands c1cands
+      where 
+        foreach1 k heap res = Map.foldr foreach2 res k
+          where 
+            foreach2 heap' res' 
+              = maybe res' (`addDVR` res') $
+                combine_bind_mb loc is_comp heap [y] [heap']
+
+    go _ _ _ = error "combineBind!"
 
 
 -- | Match vectorization candidates to compose them in a branch

@@ -308,6 +308,16 @@ data GDerefExp t a
   | GDArr  (Maybe SourcePos) a (GDerefExp t a) (GExp t a) LengthInfo
 
 
+derefToExp :: GDerefExp t a -> GExp t a
+derefToExp (GDVar loc a nm)  
+  = MkExp (EVar nm) loc a
+derefToExp (GDProj loc a de fld) 
+  = MkExp (EProj (derefToExp de) fld) loc a
+derefToExp (GDArr loc a de1 e2 li) 
+  = MkExp (EArrRead (derefToExp de1) e2 li) loc a
+
+
+
 
 
 isGDerefExp :: Bool -> GExp t a -> Maybe (GDerefExp t a)

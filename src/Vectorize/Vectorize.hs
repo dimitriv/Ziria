@@ -78,6 +78,15 @@ data VectPack
              , vp_tyin     :: Ty
              , vp_tyout    :: Ty }
 
+pprVectPack :: VectPack -> Doc
+pprVectPack (VectPack {..}) 
+  = vcat [ text "vp_card  = " <+> text (show vp_card)
+         , text "vp_cty   = " <+> ppr vp_cty
+         , text "vp_tyin  = " <+> ppr vp_tyin
+         , text "vp_tyout = " <+> ppr vp_tyout
+         , text "vp_vctx  = " <+> text (show vp_vctx)
+         ]
+
 computeVectTop :: DynFlags -> LComp -> VecM DVRCands
 computeVectTop dfs x =
    -- See Note [Initial Vectorization Context]
@@ -94,7 +103,10 @@ computeVectTop dfs x =
 
 comp_vect :: DynFlags -> CtxForVect -> LComp -> VecM DVRCands
 comp_vect dfs vctx c = do 
-  verbose dfs (text "^^^" <+> text (compShortName c))
+  verbose dfs (text "^^^" <+> 
+               text (compShortName c) <+> 
+               parens (text (show loc))
+              )
   r <- comp_vect0 dfs vpack (unComp c)
   return $!r
   where 
@@ -112,6 +124,8 @@ comp_vect dfs vctx c = do
     outty = yldTyOfCTy cty
  
 
+
+
 comp_vect0 :: DynFlags -> VectPack -> LComp0 -> VecM DVRCands
 
 -- | Variable 
@@ -119,16 +133,31 @@ comp_vect0 dfs (VectPack {..}) (Var x)
   = lookupCVarBind x >>= comp_vect dfs vp_vctx
 
 -- | BindMany 
-comp_vect0 dfs (VectPack {..}) (BindMany c1 xs_cs) = do
+comp_vect0 dfs pack@(VectPack {..}) (BindMany c1 xs_cs) = do
   let sfs = compSFDD vp_card vp_tyin vp_tyout
       css = c1 : map snd xs_cs
       xs  = map fst xs_cs
       is_computer = isComputer vp_cty
   -- Compute direct down-vectorizations
+
+  -- verbose dfs $ vcat [ text "BindMany vectorization"
+  --                    , nest 2 $ pprVectPack pack 
+  --                    ]
+
   direct_vss <- vect_comp_dd dfs vp_comp sfs
+
+              
   -- Compute recursive vectorizations
   vss <- mapM (comp_vect dfs vp_vctx) css
-  let !recursive_vss = combineBind vp_loc is_computer (head vss) xs (tail vss)
+
+  -- verbose dfs $ vcat [ text "Temp vss lengths = " 
+  --                    , nest 2 $ vcat $ map (\(v,c) -> 
+  --                                       vcat [ text "Computation: " <+> ppr c 
+  --                                            , text "Candidate length: " <+> (int (Map.size v)) ]) (zip vss css)
+  --                    ]
+
+  let recursive_vss = combineBind vp_loc is_computer (head vss) xs (tail vss)
+
   warnIfEmpty dfs vp_comp recursive_vss "BindMany (recursive)"
 
   -- Return directs + recursives (will contain self)
@@ -330,9 +359,10 @@ comp_vect0 dfs (VectPack {..}) (VectComp (fin,fout) c) = do
 
 {------------------------------------------------------------------------------}
 
-comp_vect0 dfs (VectPack {..}) _other =
+comp_vect0 dfs (VectPack {..}) _other = do 
+  verbose dfs $ text "comp_vect0 _other, location = " <+> text (show vp_loc)
   addDVR vp_self_dvr <$>
-  vect_comp_dd dfs vp_comp (compSFDD vp_card vp_tyin vp_tyout)
+    vect_comp_dd dfs vp_comp (compSFDD vp_card vp_tyin vp_tyout)
 
 
 {-------------------------------------------------------------------------------
@@ -483,23 +513,22 @@ vectRepeat dfs (VectPack { vp_vctx  = vctx
       let pred (ty1,ty2) _ = ty_match ty1 fin && ty_match ty2 fout
           vcs_matching     = Map.filterWithKey pred vcs
 
-      verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands vcs))
+      -- verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands vcs))
 
       res <- logCands dfs False "VectRepeat" $ 
                mitigateFlexi ann vctx vcs_matching
       -- Force mitigation result
       res `seq` do 
-         verbose dfs $ text "After mitigateFlexi:"
-         verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands res))
+         -- verbose dfs $ text "After mitigateFlexi:"
+         -- verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands res))
          return res
 
    -- | Vectorize internally to anything <= (fin,fout) and externally up
    -- or down depending on the flag f
    go (Just ann@(UpTo f (fin,fout))) c0 = do
       vcs <- go Nothing c0
-      verbose dfs $ text ("UpTo (fin,fout) = " ++ show (fin,fout))
-
-      verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands vcs))
+      -- verbose dfs $ text ("UpTo (fin,fout) = " ++ show (fin,fout))
+      -- verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands vcs))
 
       let pred (ty1,ty2) _ = ty_upto ty1 fin && ty_upto ty2 fout
           vcs_matching     = Map.filterWithKey pred vcs
@@ -508,8 +537,8 @@ vectRepeat dfs (VectPack { vp_vctx  = vctx
 
       res `seq` do 
 
-        verbose dfs $ text "After mitigateFlexi:"
-        verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands res))
+        -- verbose dfs $ text "After mitigateFlexi:"
+        -- verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands res))
         return res
  
 
@@ -588,7 +617,17 @@ vect_comp_du dfs lcomp sfs
 
 vect_comp_dd :: DynFlags -> LComp -> [SFDD] -> VecM DVRCands
 vect_comp_dd dfs lcomp sfs 
- = fromListDVRCands <$> mapM (VecScaleDn.doVectCompDD dfs cty lcomp) sfs
+ = do -- verbose dfs $ 
+      --   vcat [ text "vect_comp_dd scalefactor list length = " <+> int (length sfs)
+      --        , nest 2 $ vcat (map (text . show) sfs) ]
+      rres <- mapM (VecScaleDn.doVectCompDD dfs cty lcomp) sfs
+      -- verbose dfs $ 
+      --   vcat [ text "vect_comp_dd, result size = " <+> int (length rres)
+      --        , nest 2 $ vcat (map (text . show . dvr_vres) rres) 
+      --        ]
+
+      return (fromListDVRCands rres)
+
  where cty = ctComp lcomp
 
 
