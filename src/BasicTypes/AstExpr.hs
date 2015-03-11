@@ -311,8 +311,8 @@ data GDerefExp t a
 derefToExp :: GDerefExp t a -> GExp t a
 derefToExp (GDVar loc a nm)  
   = MkExp (EVar nm) loc a
-derefToExp (GDProj loc a de) 
-  = MkExp (EProj (derefToExp de)) loc a
+derefToExp (GDProj loc a de fld) 
+  = MkExp (EProj (derefToExp de) fld) loc a
 derefToExp (GDArr loc a de1 e2 li) 
   = MkExp (EArrRead (derefToExp de1) e2 li) loc a
 
