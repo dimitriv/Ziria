@@ -139,21 +139,30 @@ comp_vect0 dfs pack@(VectPack {..}) (BindMany c1 xs_cs) = do
       is_computer = isComputer vp_cty
   -- Compute direct down-vectorizations
 
-  -- verbose dfs $ vcat [ text "BindMany vectorization"
-  --                    , nest 2 $ pprVectPack pack 
-  --                    ]
+  verbose dfs $ vcat [ text "BindMany vectorization"
+                     , nest 2 $ pprVectPack pack 
+                     ]
+
+  verbose dfs $ text "BindMany: before direct."
+
+  verbose dfs $ text "sfs length = " <+> int (length sfs)
+
 
   direct_vss <- vect_comp_dd dfs vp_comp sfs
 
+  verbose dfs $ text "BindMany: before recursive."
               
   -- Compute recursive vectorizations
   vss <- mapM (comp_vect dfs vp_vctx) css
 
-  -- verbose dfs $ vcat [ text "Temp vss lengths = " 
-  --                    , nest 2 $ vcat $ map (\(v,c) -> 
-  --                                       vcat [ text "Computation: " <+> ppr c 
-  --                                            , text "Candidate length: " <+> (int (Map.size v)) ]) (zip vss css)
-  --                    ]
+  verbose dfs $ 
+    vcat [ text "Bindmany: after recursive"
+         , text "Temp vss lengths = " 
+         , nest 2 $ vcat $ map (\(v,c) -> 
+                     vcat [ text "Computation: " <+> ppr c 
+                          , text "Candidate length: " <+> 
+                               (int (Map.size v)) ]) (zip vss css)
+         ]
 
   let recursive_vss = combineBind vp_loc is_computer (head vss) xs (tail vss)
 

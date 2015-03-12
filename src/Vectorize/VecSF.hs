@@ -173,7 +173,7 @@ divsOf n = unsafePerformIO $ do
    case Map.lookup n dm of 
      Nothing -> do
        let ds' = [ DivsOf n (NDiv x) (NDiv y)
-                 | x <- [1..n]
+                 | x <- [1..vECT_IOARRAY_BOUND]
                  , y <- [1..n]
                  , x > 1 || y > 1
                  , x*y == n
