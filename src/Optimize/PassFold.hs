@@ -19,7 +19,7 @@
 {-# OPTIONS_GHC -Wall -Wwarn #-}
 {-# LANGUAGE ScopedTypeVariables, RecordWildCards, 
     GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes, DeriveGeneric #-}
-module PassFold (runFold, elimMitigsIO) where
+module PassFold (runFold) where
 
 import Prelude hiding (exp)
 import Control.Arrow (second)
@@ -127,12 +127,16 @@ foldCompPasses flags
     , ("float-let-par"          , passFloatLetPar         )
     , ("ifdead"                 , passIfDead              )
     , ("if-return"              , passIfReturn            )
-    , ("elim-automapped-mitigs" , passElimAutomappedMitigs)
-    
+    ] ++ 
+
+    [ ("pass-push-mit",           passPushMit)              | opt_mits ] ++
+    [ ("elim-automapped-mitigs" , passElimAutomappedMitigs) | opt_mits ] ++ 
+    [ ("elim-mitigs"            , passElimMitigs)           | opt_mits ]
+
+  where opt_mits = not (isDynFlagSet flags NoElimMit)
 
     -- Don't use: not wrong but does not play nicely with LUT
     --  , ("float-top-letref"   , passFloatTopLetRef )
-    ]
 
 foldExpPasses :: DynFlags -> [(String,TypedExpPass)]
 foldExpPasses flags

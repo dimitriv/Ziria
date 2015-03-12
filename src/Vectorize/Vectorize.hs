@@ -58,7 +58,6 @@ import VecScaleDn
 
 import CtComp
 
-import PassFold ( elimMitigsIO )
 import Debug.Trace
 
 import CardAnalysis
@@ -670,9 +669,9 @@ runVectorizer dflags sym comp = do
   let do_one (DVR { dvr_comp = io_comp, dvr_vres = vres }) = do
         vc_mit <- io_comp
         -- Optimize mitigators
-        vc_opt_mit <- if isDynFlagSet dflags NoElimMit then return vc_mit
-                      else elimMitigsIO dflags sym vc_mit
-        -- Compile away mitigators if flag set
+        let vc_opt_mit = vc_mit
+        -- Maybe here we want to do a very light elimination of mitigators
+        -- before a proper PassFold later on. Not clear. 
         let vc = vc_opt_mit 
 
         verbose dflags $ vcat [ text "Type checking vectorization candidate."

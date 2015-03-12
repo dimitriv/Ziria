@@ -35,6 +35,7 @@ module PassComp (
   , passIfDead
   , passIfReturn
   , elimSeq
+  , passPushMit
 
 ) where
 
@@ -551,6 +552,75 @@ passIfReturn = TypedCompBottomUp $ \_cloc comp -> if
      -> return comp
 
 
+-- | Push mitigators under seq 
+passPushMit :: TypedCompPass
+passPushMit = TypedCompBottomUp $ \cloc  comp -> if 
+  | Par p mit1 c2 <- unComp comp
+    , BindMany ch xs_cs <- unComp c2
+    , Mitigate {} <- unComp mit1
+   -> rewrite $ cBindMany cloc (cMitIn cloc p mit1 ch) 
+                               (map (\(x,c) -> (x, cMitIn cloc p mit1 c)) xs_cs)
+  | Par p c1 mit2 <- unComp comp
+    , BindMany ch xs_cs <- unComp c1
+    , Mitigate {} <- unComp mit2
+   -> rewrite $ cBindMany cloc (cMitOut cloc p ch mit2) 
+                               (map (\(x,c) -> (x, cMitOut cloc p c mit2)) xs_cs)
+
+  | Par p mit1 c2 <- unComp comp
+    , Seq ch ct   <- unComp c2
+    , Mitigate {} <- unComp mit1
+   -> rewrite $ cSeq cloc (cMitIn cloc p mit1 ch) (cMitIn cloc p mit1 ct)
+
+  | Par p c1 mit2 <- unComp comp
+    , Seq ch ct   <- unComp c1
+    , Mitigate {} <- unComp mit2
+   -> rewrite $ cSeq cloc (cMitOut cloc p ch mit2) (cMitOut cloc p ct mit2)
+
+  | otherwise
+   -> return comp
+  
+  where cMitIn l p m c 
+          | TVoid <- inTyOfCTy (ctComp c) = c
+          | otherwise = cPar l p m c
+        cMitOut l p c m 
+          | TVoid <- yldTyOfCTy (ctComp c) = c
+          | otherwise = cPar l p c m
+
+
+  --   -- Input mitigation on an emit/emits
+  -- | Par _p mit1 c2 <- unComp comp
+  --   , Emit {} <- unComp c2
+  --   , Mitigate {} <- unComp mit1
+  --  -> rewrite c2
+
+  -- | Par _p mit1 c2 <- unComp comp
+  --   , Emits {} <- unComp c2
+  --   , Mitigate {} <- unComp mit1
+  --  -> rewrite c2
+
+  --   -- Output mitigation on an take/takes
+  -- | Par _p c1 mit2 <- unComp comp
+  --   , Take1 {} <- unComp c1
+  --   , Mitigate {} <- unComp mit2
+  --  -> rewrite c1
+  -- | Par _p c1 mit2 <- unComp comp
+  --   , Take {} <- unComp c1
+  --   , Mitigate {} <- unComp mit2
+  --  -> rewrite c1
+
+  -- | Par p c mit <- unComp comp
+  --   , Return {} <- unComp c
+  --   , Mitigate {} <- unComp mit
+  --  -> rewrite c
+
+  -- | Par p mit c <- unComp comp
+  --   , Return {} <- unComp c
+  --   , Mitigate {} <- unComp mit
+  --  -> rewrite c
+
+
+
+
 {-------------------------------------------------------------------------------
   Some view patterns
 -------------------------------------------------------------------------------}
@@ -577,7 +647,6 @@ fromSimplCallParam nm =
   case nameTyp nm of
     CAExp  t -> Just nm{nameTyp = t}
     CAComp _ -> Nothing
-
 
 
 {-------------------------------------------------------------------------------
