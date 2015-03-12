@@ -209,20 +209,9 @@ comp_vect0 dfs (VectPack {..}) (Par p c1 c2)
                , nest 2 $ pprDVRess res
                ]
 
-       verbose dfs dbg_doc
+--     verbose dfs dbg_doc
 
        warnIfEmptyDoc dfs vp_comp res "Par" dbg_doc
-{-
-          vcat [ text "Left candidates: " <+> text (show (compLoc c1))
-               , nest 2 $ pprDVRess vcs1
-               , nest 2 $ text (show ctx1)
-               , nest 4 $ ppr c1
-               , text "Right candidates: " <+> text (show (compLoc c2))
-               , nest 2 $ pprDVRess vcs2
-               , nest 2 $ text (show ctx2)
-               , nest 4 $ ppr c2
-               ]
--}
 
        return res
   where 
@@ -684,7 +673,8 @@ runVectorizer dflags sym comp = do
         let vc = vc_opt_mit 
 
         verbose dflags $ vcat [ text "Type checking vectorization candidate."
-                              , nest 2 $ ppr vc ]
+                              -- too verbose: , nest 2 $ ppr vc 
+                              ]
 
         case ctComp vc of _ -> return vc
 
@@ -696,7 +686,7 @@ runVectorizer dflags sym comp = do
   maxi_comp <- dvr_comp maxi  
   verbose dflags $ vcat [ text "Selected candidate is: "
                         , nest 2 $ text $ show $ dvr_vres maxi
-                        , nest 2 $ ppr maxi_comp
+                        -- too verbose: , nest 2 $ ppr maxi_comp
                         ] 
 
   final_maxi_comp <- do_one maxi
