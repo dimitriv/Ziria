@@ -440,9 +440,13 @@ repeat_scalefactors vctx card tyin tyout
 select_scalefactors :: CtxForVect -> ScaleFactors -> ScaleFactors
 select_scalefactors vctx (sfuds,sfdus,sfdds)
   = case vctx of 
-{- Treat CtxUnrestricted a bit more ... restricted. In principle we should not have to do this
-   if we were to use a better utility function, and instead we'd say:
+
+{- Treat CtxUnrestricted a bit more ... restricted. In principle we
+   should not have to do this if we were to use a better utility
+   function, and instead we'd say:
+
       CtxUnrestricted       -> (sfuds, sfdus, sfdds)
+
 -}
       CtxUnrestricted       -> (sfuds, [], sfdds)
  
@@ -614,10 +618,8 @@ vect_comp_du dfs lcomp sfs
 
 vect_comp_dd :: DynFlags -> LComp -> [SFDD] -> VecM DVRCands
 vect_comp_dd dfs lcomp sfs 
- = do -- verbose dfs $ 
-      --   vcat [ text "vect_comp_dd scalefactor list length = " <+> int (length sfs)
-      --        , nest 2 $ vcat (map (text . show) sfs) ]
-      rres <- mapM (VecScaleDn.doVectCompDD dfs cty lcomp) sfs
+ = do rres <- mapM (VecScaleDn.doVectCompDD dfs cty lcomp) sfs
+      
       -- verbose dfs $ 
       --   vcat [ text "vect_comp_dd, result size = " <+> int (length rres)
       --        , nest 2 $ vcat (map (text . show . dvr_vres) rres) 
@@ -658,11 +660,6 @@ runVectorizer dflags sym comp = do
     vcat [ text "Empty vectorization candidate set for computation:"
          , ppr comp 
          ]
-{- Too verbose even in verbose mode ...
-  verbose dflags $
-      do let vss_list = map mlMax (Map.elems vss)
-         vcat (map (text . show . dvr_vres) vss_list)
--}
   
   let do_one (DVR { dvr_comp = io_comp, dvr_vres = vres }) = do
         vc_mit <- io_comp
@@ -672,9 +669,10 @@ runVectorizer dflags sym comp = do
         -- before a proper PassFold later on. Not clear. 
         let vc = vc_opt_mit 
 
-        verbose dflags $ vcat [ text "Type checking vectorization candidate."
-                              -- too verbose: , nest 2 $ ppr vc 
-                              ]
+        verbose dflags $ 
+           vcat [ text "Type checking vectorization candidate."
+                  -- too verbose: , nest 2 $ ppr vc 
+                ]
 
         case ctComp vc of _ -> return vc
 
@@ -694,6 +692,6 @@ runVectorizer dflags sym comp = do
   when (isDynFlagSet dflags Debug) $ 
     T.mapM do_one vss >> return ()
 
-  return (final_maxi_comp, []) -- Don't emit candidates that's ok
+  return (final_maxi_comp, []) -- Don't emit candidates, that's ok
 
 

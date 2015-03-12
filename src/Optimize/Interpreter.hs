@@ -617,10 +617,12 @@ evalLetRefs :: L.Lens EvalState (Map Uniq LetRefState)
 evalLetRefs f st = (\x -> st { _evalLetRefs = x }) <$> f (_evalLetRefs st)
 
 evalGuessesBool :: L.Lens EvalState (Map Exp Bool)
-evalGuessesBool f st = (\x -> st { _evalGuessesBool = x}) <$> f (_evalGuessesBool st)
+evalGuessesBool f st 
+  = (\x -> st { _evalGuessesBool = x}) <$> f (_evalGuessesBool st)
 
 evalGuessesInt :: L.Lens EvalState (Map Exp IntDomain)
-evalGuessesInt f st = (\x -> st { _evalGuessesInt = x}) <$> f (_evalGuessesInt st)
+evalGuessesInt f st 
+  = (\x -> st { _evalGuessesInt = x}) <$> f (_evalGuessesInt st)
 
 evalPrints :: L.Lens EvalState Prints
 evalPrints f st = (\x -> st { _evalPrints = x }) <$> f (_evalPrints st)
@@ -1189,13 +1191,17 @@ interpret e = guessIfUnevaluated (go . unExp) e
       evaldPart $ eCall eloc fn args'
 
     -- Misc
+    go (EPrint newline e1s) = do
+      e1Evald <- mapM interpret e1s
+      let !e1s' = map' unEvald e1Evald
+      evaldPart $ ePrint eloc newline e1s'
 
-    go (EPrint newline e1) = do
-      e1Evald <- interpret e1
-      case e1Evald of
-        EvaldFull v1' -> do logPrint newline v1'
-                            evaldFull $ MkValue ValueUnit eloc
-        EvaldPart e1' -> evaldPart $ ePrint eloc newline e1'
+      -- NB: Don't swallow output, as the code below did:
+      -- case e1Evald of
+      --   EvaldFull v1' -> do logPrint newline v1'
+      --                       evaldFull $ MkValue ValueUnit eloc
+      --   EvaldPart e1' -> evaldPart $ ePrint eloc newline e1'
+
     go (EError ty str) =
       evaldPart $ eError eloc ty str
     go (ELUT _ _) =

@@ -375,8 +375,8 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
                          }|]
         return [cexp|$id:freshSym|]
 
-    go t (EPrint nl e1) = do
-        printExp nl dflags e1
+    go t (EPrint nl e1s) = do
+        printExps nl dflags e1s
         return [cexp|UNIT|]
 
     -- BOZIDAR TODO: We need a more graceful exit here...
@@ -425,10 +425,13 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
                                  }) tfs
          ; return csnm }
 
-printExp :: Bool -> DynFlags -> Exp -> Cg ()
-printExp nl dflags e1 = do
-    go e1 (ctExp e1)
-    when nl $ appendStmt [cstm|printf("\n");|]
+printExps :: Bool -> DynFlags -> [Exp] -> Cg ()
+printExps nl dflags es = do
+  mapM (printExp dflags) es
+  when nl $ appendStmt [cstm|printf("\n");|]
+
+printExp :: DynFlags -> Exp -> Cg ()
+printExp dflags e1 = go e1 (ctExp e1)
   where
     go :: Exp -> Ty -> Cg ()
     go e (TArray l t) = printArray dflags e cUpperBound t

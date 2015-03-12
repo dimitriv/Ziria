@@ -273,8 +273,8 @@ tcExp expr@(MkExp exp0 loc _) =
       unify loc beTy TBool
       unify loc e1Ty e2Ty
       return e1Ty
-    go (EPrint _ e) = do
-      void $ tcExp e
+    go (EPrint _ es) = do
+      void $ mapM tcExp es
       return TUnit
     go (EError t _) =
       return t

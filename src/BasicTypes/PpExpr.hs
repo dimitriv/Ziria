@@ -139,8 +139,8 @@ instance Outputable ty => Outputable (GExp0 ty a) where
                         text "}" <+> text "else" <+> text "{" $$
                           nest nestingDepth (ppr e2) $$
                         text "}"
-    EPrint True e1   -> text "printl" <+> ppr e1
-    EPrint False e1  -> text "print" <+> ppr e1
+    EPrint True e1s   -> text "println" <+> ppEs ppr comma e1s
+    EPrint False e1s  -> text "print"   <+> ppEs ppr comma e1s
     EError _ str     -> text "error " <+> text str
     ELUT _ e1        -> text "LUT" <+> ppr e1
     EProj e fn       -> ppr e <> text "." <> text fn
