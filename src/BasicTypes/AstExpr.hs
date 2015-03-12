@@ -398,7 +398,7 @@ data GExp0 t a where
   EIf :: GExp t a -> GExp t a -> GExp t a -> GExp0 t a
 
   -- | Print any expression, for debugging
-  EPrint :: Bool -> GExp t a -> GExp0 t a
+  EPrint :: Bool -> [GExp t a] -> GExp0 t a
 
   -- | Generate runtime failure, with error report
   EError :: t -> String -> GExp0 t a
@@ -682,9 +682,9 @@ mapExpM_env onTyp onAnn f extend = goExp
       e2' <- goExp e2
       e3' <- goExp e3
       return $ EIf e1' e2' e3'
-    goExp0 (EPrint nl e1) = do
-      e1' <- goExp  e1
-      return $ EPrint nl e1'
+    goExp0 (EPrint nl e1s) = do
+      e1s' <- mapM goExp  e1s
+      return $ EPrint nl e1s'
     goExp0 (EError t err) = do
       t' <- onTyp t
       return $ EError t' err
@@ -857,7 +857,7 @@ exprFVs' takeFuns = goExp
     goExp0 (ESeq e1 e2)               = goExp e1 `mappend` goExp e2
     goExp0 (ECall fun es)             = goExps es `mappend` (if takeFuns then S.singleton fun else mempty)
     goExp0 (EIf e1 e2 e3)             = goExp e1 `mappend` goExp e2 `mappend` goExp e3
-    goExp0 (EPrint _nl e1)            = goExp e1
+    goExp0 (EPrint _nl e1s)           = goExps e1s
     goExp0 (EError _t _err)           = mempty
     goExp0 (ELUT _r e1)               = goExp e1
     goExp0 (EStruct _t fields)        = goExps (map snd fields)

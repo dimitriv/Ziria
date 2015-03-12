@@ -285,8 +285,8 @@ shouldLUT dflags ranges e = flip evalLM s0 $ do
     go (EIf e1 e2 e3) =
         should e1 >> should e2 >> should e3
 
-    go (EPrint _ e) =
-        should e
+    go (EPrint _ es) =
+        mapM_ should es
 
     go e@(EError {})    = return ()
 

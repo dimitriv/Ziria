@@ -234,8 +234,8 @@ runAutoLUT dflags _ c = autolutC c
             go (EIf e1 e2 e3) =
                 EIf <$> autoE e1 <*> autoE e2 <*> autoE e3
 
-            go (EPrint nl e) =
-                EPrint nl <$> autoE e
+            go (EPrint nl es) =
+                EPrint nl <$> mapM autoE es
 
             go (EError _t str) = pure e
 

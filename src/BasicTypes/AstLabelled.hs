@@ -82,7 +82,7 @@ eCall loc a f es = MkExp (ECall f es) loc a
 eIf :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> GExp t a -> GExp t a
 eIf loc a e1 e2 e3 = MkExp (EIf e1 e2 e3) loc a
 
-ePrint :: Maybe SourcePos -> a ->  Bool -> GExp t a -> GExp t a
+ePrint :: Maybe SourcePos -> a ->  Bool -> [GExp t a] -> GExp t a
 ePrint loc a b e = MkExp (EPrint b e) loc a
 
 eError :: Maybe SourcePos -> a -> t -> String -> GExp t a

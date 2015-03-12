@@ -58,7 +58,6 @@ import VecScaleDn
 
 import CtComp
 
-import PassFold ( elimMitigsIO )
 import Debug.Trace
 
 import CardAnalysis
@@ -140,21 +139,30 @@ comp_vect0 dfs pack@(VectPack {..}) (BindMany c1 xs_cs) = do
       is_computer = isComputer vp_cty
   -- Compute direct down-vectorizations
 
-  -- verbose dfs $ vcat [ text "BindMany vectorization"
-  --                    , nest 2 $ pprVectPack pack 
-  --                    ]
+  verbose dfs $ vcat [ text "BindMany vectorization"
+                     , nest 2 $ pprVectPack pack 
+                     ]
+
+  verbose dfs $ text "BindMany: before direct."
+
+  verbose dfs $ text "sfs length = " <+> int (length sfs)
+
 
   direct_vss <- vect_comp_dd dfs vp_comp sfs
 
+  verbose dfs $ text "BindMany: before recursive."
               
   -- Compute recursive vectorizations
   vss <- mapM (comp_vect dfs vp_vctx) css
 
-  -- verbose dfs $ vcat [ text "Temp vss lengths = " 
-  --                    , nest 2 $ vcat $ map (\(v,c) -> 
-  --                                       vcat [ text "Computation: " <+> ppr c 
-  --                                            , text "Candidate length: " <+> (int (Map.size v)) ]) (zip vss css)
-  --                    ]
+  verbose dfs $ 
+    vcat [ text "Bindmany: after recursive"
+         , text "Temp vss lengths = " 
+         , nest 2 $ vcat $ map (\(v,c) -> 
+                     vcat [ text "Computation: " <+> ppr c 
+                          , text "Candidate length: " <+> 
+                               (int (Map.size v)) ]) (zip vss css)
+         ]
 
   let recursive_vss = combineBind vp_loc is_computer (head vss) xs (tail vss)
 
@@ -201,20 +209,9 @@ comp_vect0 dfs (VectPack {..}) (Par p c1 c2)
                , nest 2 $ pprDVRess res
                ]
 
-       verbose dfs dbg_doc
+--     verbose dfs dbg_doc
 
        warnIfEmptyDoc dfs vp_comp res "Par" dbg_doc
-{-
-          vcat [ text "Left candidates: " <+> text (show (compLoc c1))
-               , nest 2 $ pprDVRess vcs1
-               , nest 2 $ text (show ctx1)
-               , nest 4 $ ppr c1
-               , text "Right candidates: " <+> text (show (compLoc c2))
-               , nest 2 $ pprDVRess vcs2
-               , nest 2 $ text (show ctx2)
-               , nest 4 $ ppr c2
-               ]
--}
 
        return res
   where 
@@ -443,9 +440,13 @@ repeat_scalefactors vctx card tyin tyout
 select_scalefactors :: CtxForVect -> ScaleFactors -> ScaleFactors
 select_scalefactors vctx (sfuds,sfdus,sfdds)
   = case vctx of 
-{- Treat CtxUnrestricted a bit more ... restricted. In principle we should not have to do this
-   if we were to use a better utility function, and instead we'd say:
+
+{- Treat CtxUnrestricted a bit more ... restricted. In principle we
+   should not have to do this if we were to use a better utility
+   function, and instead we'd say:
+
       CtxUnrestricted       -> (sfuds, sfdus, sfdds)
+
 -}
       CtxUnrestricted       -> (sfuds, [], sfdds)
  
@@ -617,10 +618,8 @@ vect_comp_du dfs lcomp sfs
 
 vect_comp_dd :: DynFlags -> LComp -> [SFDD] -> VecM DVRCands
 vect_comp_dd dfs lcomp sfs 
- = do -- verbose dfs $ 
-      --   vcat [ text "vect_comp_dd scalefactor list length = " <+> int (length sfs)
-      --        , nest 2 $ vcat (map (text . show) sfs) ]
-      rres <- mapM (VecScaleDn.doVectCompDD dfs cty lcomp) sfs
+ = do rres <- mapM (VecScaleDn.doVectCompDD dfs cty lcomp) sfs
+      
       -- verbose dfs $ 
       --   vcat [ text "vect_comp_dd, result size = " <+> int (length rres)
       --        , nest 2 $ vcat (map (text . show . dvr_vres) rres) 
@@ -661,22 +660,19 @@ runVectorizer dflags sym comp = do
     vcat [ text "Empty vectorization candidate set for computation:"
          , ppr comp 
          ]
-{- Too verbose even in verbose mode ...
-  verbose dflags $
-      do let vss_list = map mlMax (Map.elems vss)
-         vcat (map (text . show . dvr_vres) vss_list)
--}
   
   let do_one (DVR { dvr_comp = io_comp, dvr_vres = vres }) = do
         vc_mit <- io_comp
         -- Optimize mitigators
-        vc_opt_mit <- if isDynFlagSet dflags NoElimMit then return vc_mit
-                      else elimMitigsIO dflags sym vc_mit
-        -- Compile away mitigators if flag set
+        let vc_opt_mit = vc_mit
+        -- Maybe here we want to do a very light elimination of mitigators
+        -- before a proper PassFold later on. Not clear. 
         let vc = vc_opt_mit 
 
-        verbose dflags $ vcat [ text "Type checking vectorization candidate."
-                              , nest 2 $ ppr vc ]
+        verbose dflags $ 
+           vcat [ text "Type checking vectorization candidate."
+                  -- too verbose: , nest 2 $ ppr vc 
+                ]
 
         case ctComp vc of _ -> return vc
 
@@ -688,7 +684,7 @@ runVectorizer dflags sym comp = do
   maxi_comp <- dvr_comp maxi  
   verbose dflags $ vcat [ text "Selected candidate is: "
                         , nest 2 $ text $ show $ dvr_vres maxi
-                        , nest 2 $ ppr maxi_comp
+                        -- too verbose: , nest 2 $ ppr maxi_comp
                         ] 
 
   final_maxi_comp <- do_one maxi
@@ -696,6 +692,6 @@ runVectorizer dflags sym comp = do
   when (isDynFlagSet dflags Debug) $ 
     T.mapM do_one vss >> return ()
 
-  return (final_maxi_comp, []) -- Don't emit candidates that's ok
+  return (final_maxi_comp, []) -- Don't emit candidates, that's ok
 
 

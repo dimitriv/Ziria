@@ -107,8 +107,8 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
                           , text "}" ]
 
     Par parInfo c1 c2 ->
-      ppComp c1 <+> ppr parInfo $$
-      ppComp c2
+      parens ( ppComp c1 <+> ppr parInfo $$
+               ppComp c2 )
 
     Let x c1 c2
       | ignorelet

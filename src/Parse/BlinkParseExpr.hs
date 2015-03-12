@@ -450,9 +450,7 @@ parseStmtExp = choice
     eError' p                     = eError p SrcTyUnknown
 
     -- Print a series of expression; @b@ argument indicates whether we a newline
-    makePrint b p []     = ePrint p b (eValSrc p (VString ""))
-    makePrint b p [x]    = ePrint p b x
-    makePrint b p (x:xs) = eSeq p (ePrint p False x) (makePrint b p xs)
+    makePrint b p es     = ePrint p b es 
 
     mkAssign p x ds Nothing rhs =
       eAssign p (foldr ($) (mkVar p x) ds) rhs

@@ -400,9 +400,9 @@ renExp (MkExp exp0 eloc ()) = case exp0 of
         e2' <- renExp e2
         e3' <- renExp e3
         return $ eIf eloc e1' e2' e3'
-      EPrint nl e1 -> do
-        e1' <- renExp e1
-        return $ ePrint eloc nl e1'
+      EPrint nl e1s -> do
+        e1s' <- mapM renExp e1s
+        return $ ePrint eloc nl e1s'
       EError a str -> do
         a' <- renTyAnn eloc a
         return $ eError eloc a' str

@@ -553,7 +553,7 @@ mit_one :: String -> (Maybe Int, Maybe Int) -> DelayedVectRes -> DelayedVectRes
 mit_one _orig (Nothing, Nothing) dvr = fixup_util_out (fixup_util_in dvr)
 mit_one orig (Just n,  Nothing) dvr  = fixup_util_out (mit_in orig n dvr)
 mit_one orig (Nothing, Just n)  dvr  = fixup_util_in  (mit_out orig dvr n)
-mit_one orig (Just n, Just m)   dvr  = mit_in orig n (mit_out orig dvr m)
+mit_one orig (Just n, Just m)   dvr  = mit_in orig n  (mit_out orig dvr m)
 
 mit_in :: String -> Int -> DelayedVectRes -> DelayedVectRes
 mit_in orig n (DVR { dvr_comp = io_comp, dvr_vres = vres })
