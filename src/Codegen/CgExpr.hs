@@ -85,7 +85,8 @@ cgBoundsCheck dflags loc arrty cbase linfo
                      LISingleton -> 0
                      LILength n  -> (n-1)
                      LIMeta _    -> panicStr "cgBoundsCheck: meta-variable"
-                   spos = getLnNumInStr loc
+                   spos = case loc of { Nothing -> "No location available"
+                                      ; Just l  -> show l }
                in
                do { cnumexpr
                         <- case numexpr of
