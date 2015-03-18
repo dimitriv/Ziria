@@ -72,9 +72,8 @@ unsigned int parse_dbg_int8(char *dbg_buf, int8 *target)
 	return i; // total number of entries
 }
 
-void init_getint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
+void _init_getint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
-	blk->size_in = 8;
 	blk->total_in = 0;
 
 	if (params->inType == TY_DUMMY)
@@ -109,11 +108,11 @@ void init_getint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *h
 		{
 			unsigned int i;
 			int8 *typed_filebuffer = (int8 *)filebuffer;
-			for (i = 0; i < sz; i++)
+			blk->num8_input_entries = sz;					// We always count entries in ints and do two reads for complex
+			for (i = 0; i < blk->num8_input_entries; i++)
 			{
 				blk->num8_input_buffer[i] = typed_filebuffer[i];
 			}
-			blk->num8_input_entries = i;
 		}
 		else
 		{
@@ -133,6 +132,14 @@ void init_getint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *h
 	}
 	*/
 }
+
+void init_getint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
+{
+	blk->size_in = 8;
+	// we just need to initialize the input buffer in the same way
+	_init_getint8(params, blk, hblk, unit_size);
+}
+
 
 FINL
 GetStatus _buf_getint8(BlinkParams *params, BufContextBlock *blk, int8 *x)
@@ -236,9 +243,9 @@ GetStatus buf_getarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, uns
 
 void init_getcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
-	// we just need to initialize the input buffer in the same way
-	init_getint8(params, blk, hblk, unit_size*2);                              
 	blk->size_in = 16;
+	// we just need to initialize the input buffer in the same way
+	_init_getint8(params, blk, hblk, unit_size*2);                              
 
 	// since we will be doing this in integer granularity
 	blk->num8_max_dummy_samples = params->dummySamples * 2; 

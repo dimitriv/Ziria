@@ -68,9 +68,8 @@ unsigned int parse_dbg_int32(char *dbg_buf, num32 *target)
   return i; // total number of entries
 }
 
-void init_getint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
+void _init_getint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
-	blk->size_in = 32;
 	blk->total_in = 0;
 
 	if (params->inType == TY_DUMMY)
@@ -105,11 +104,11 @@ void init_getint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *
 		{ 
 			unsigned int i;
 			int16 *typed_filebuffer = (int16 *) filebuffer;
-			for (i=0; i < sz / 2; i++)
+			blk->num_input_entries = sz / 4;					// We always count entries in ints and do two reads for complex
+			for (i = 0; i < blk->num_input_entries; i++)
 			{
 				blk->num_input_buffer[i] = typed_filebuffer[i];
 			}
-			blk->num_input_entries = i;
 		}
 		else 
 		{
@@ -123,6 +122,16 @@ void init_getint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *
 		exit(1);
 	}
 }
+
+void init_getint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
+{
+	// Change the values that differ in complex
+	blk->size_in = 32;
+
+	// we just need to initialize the input buffer in the same way
+	_init_getint32(params, blk, hblk, unit_size);                              // we just need to initialize the input buffer in the same way
+}
+
 
 FINL
 GetStatus _buf_getint32(BlinkParams *params, BufContextBlock *blk, int32 *x)
@@ -229,11 +238,11 @@ void init_getcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlo
 {
 	if (params->inType == TY_DUMMY || params->inType == TY_FILE || params->inType == TY_MEM)
 	{
-		// we just need to initialize the input buffer in the same way
-		init_getint32(params, blk, hblk, unit_size*2);                              // we just need to initialize the input buffer in the same way
-
 		// Change the values that differ in complex
-		blk->size_in = 32;
+		blk->size_in = 64;
+
+		// we just need to initialize the input buffer in the same way
+		_init_getint32(params, blk, hblk, unit_size*2);                              // we just need to initialize the input buffer in the same way
 
 		// since we will be doing this in integer granularity
 		blk->num_max_dummy_samples = params->dummySamples * 2; // since we will be doing this in integer granularity
