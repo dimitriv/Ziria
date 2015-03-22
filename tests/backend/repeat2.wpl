@@ -1,0 +1,19 @@
+fun comp test(){
+var out : int := 0;
+repeat{
+  x<-take;
+  for sym_cnt in [0, 7] {
+    do {
+      if (sym_cnt == 0) then {
+        out := 1;
+      } else {
+        out := 2;
+      }
+    }
+    emit out;
+  }
+};
+}
+
+let comp main = read[int] >>> test() >>> write[int]
+        
