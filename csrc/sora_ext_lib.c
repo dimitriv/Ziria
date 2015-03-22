@@ -626,6 +626,21 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 
 
 
+void __ext_v_downsample_complex16(struct complex16* out, int lenout, struct complex16* in, int len)  
+{ 
+	vcs *pi = (vcs *)in; 
+	vcs *o = (vcs*)out; 
+	for (int i = 0; i < len/8; i++) 
+	{ 
+		vcs t1 = permutate<0, 2, 0, 2>(pi[0]); 
+		vcs t2 = permutate<0, 2, 0, 2>(pi[1]); 
+		*o = (vcs)(interleave_low((vcui&)t1, (vcui&)t2)); 
+		pi += 2; 
+		o++; 
+	} 
+} 
+
+
 //FINL 
 int __ext_permutatew1313 (struct complex16* x,
                int __unused_2,  struct complex16* y, int __unused_1)
