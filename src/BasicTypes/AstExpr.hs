@@ -232,9 +232,9 @@ data BufTy =
   | ExtBuf { bufty_ty :: Ty }
   deriving (Generic, Typeable, Data, Eq, Ord)
 
-{-------------------------------------------------------------------------------
+{------------------------------------------------------------------------
   Expressions (parameterized by the (Haskell) type of (Ziria) types
--------------------------------------------------------------------------------}
+------------------------------------------------------------------------}
 
 data GUnOp t =
     NatExp
@@ -301,12 +301,13 @@ data ForceInline
   deriving (Generic, Typeable, Data, Eq, Ord)
 
 
--- | Dereference expressions
-data GDerefExp t a 
+-- | Dereference expressions, abstract over length
+data AGDerefExp len t a 
   = GDVar  (Maybe SourcePos) a (GName t)
-  | GDProj (Maybe SourcePos) a (GDerefExp t a) FldName
-  | GDArr  (Maybe SourcePos) a (GDerefExp t a) (GExp t a) LengthInfo
+  | GDProj (Maybe SourcePos) a (AGDerefExp len t a) FldName
+  | GDArr  (Maybe SourcePos) a (AGDerefExp len t a) len LengthInfo
 
+type GDerefExp t a = AGDerefExp (GExp t a) t a
 
 derefToExp :: GDerefExp t a -> GExp t a
 derefToExp (GDVar loc a nm)  
