@@ -58,6 +58,9 @@ fun external sqrt_int32(d:int32) : int32
 
 
 -- SIMD
+-- Downsample input by 2
+fun external v_downsample_complex16(input:arr complex16) : arr[length(input)] complex16;
+
 fun external permutate_low1032w (x:arr[4] complex16, y:arr[4] complex16): ()
 fun external permutate_high1032w (x:arr[4] complex16, y:arr[4] complex16): ()
 fun external pairwise_muladdw (x:arr[4] complex16, y:arr[4] complex16, z:arr[4] int): ()

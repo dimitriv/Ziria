@@ -72,9 +72,8 @@ unsigned int parse_dbg_int16(char *dbg_buf, int16 *target)
   return i; // total number of entries
 }
 
-void init_getint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
+void _init_getint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
-	blk->size_in = 16;
 	blk->total_in = 0;
 
 	if (params->inType == TY_DUMMY)
@@ -109,11 +108,11 @@ void init_getint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *
 		{
 			unsigned int i;
 			int16 *typed_filebuffer = (int16 *) filebuffer;
-			for (i=0; i < sz; i++)
+			blk->num16_input_entries = sz / 2;					// We always count entries in ints and do two reads for complex
+			for (i = 0; i < blk->num16_input_entries; i++)
 			{
 				blk->num16_input_buffer[i] = typed_filebuffer[i];
 			}
-			blk->num16_input_entries = i;
 		}
 		else 
 		{
@@ -133,6 +132,17 @@ void init_getint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *
 	}
 	*/
 }
+
+
+void init_getint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
+{
+	// Change the values that differ in complex
+	blk->size_in = 16;
+	// we just need to initialize the input buffer in the same way
+	_init_getint16(params, blk, hblk, unit_size);
+}
+
+
 FINL
 GetStatus _buf_getint16(BlinkParams *params, BufContextBlock *blk, int16 *x)
 {
@@ -236,10 +246,10 @@ GetStatus buf_getarrint16(BlinkParams *params, BufContextBlock *blk, int16 *x, u
 
 void init_getcomplex16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
-	// we just need to initialize the input buffer in the same way
-	init_getint16(params, blk, hblk, unit_size*2);
 	// Change the values that differ in complex
 	blk->size_in = 32;
+	// we just need to initialize the input buffer in the same way
+	_init_getint16(params, blk, hblk, unit_size*2);
 
 	// since we will be doing this in integer granularity
 	blk->num16_max_dummy_samples = params->dummySamples * 2;
