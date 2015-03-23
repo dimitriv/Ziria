@@ -42,7 +42,7 @@ import PassFoldM
 
 import CtComp ( ctComp )
 
-import Control.Monad.IO.Class ( liftIO )
+-- import Control.Monad.IO.Class ( liftIO )
 
 {-------------------------------------------------------------------------------
   Fuse together consecutive mitigators connected with a Map
@@ -275,7 +275,6 @@ elim_mit cloc c
   , let c2' = cWriteInternal cloc (inTyOfCTy (mitPkgCTy mp)) bid
   = rewrite $ cParMbL cloc p mc1' c2'
 
-  
   | Par p c1 c2 <- unComp c
   , Just (mp,mc2') <- flmMitTop c2
   , ReadSrc _ty <- unComp c1
@@ -288,30 +287,26 @@ elim_mit cloc c
   , let c1' = cReadInternal cloc (yldTyOfCTy (mitPkgCTy mp)) bid rt
   = rewrite $ cParMbR cloc p c1' mc2'
 
-  -- trivial mitigators, could use flmMitTop/frmMitTop but oh well ..
-  | Par _p c1 c2 <- unComp c
-  , Mitigate _ _ty i1 i2 <- unComp c1
-  , i1 == i2
-  = rewrite c2
 
-  | Par _p c1 c2 <- unComp c
-  , Mitigate _ _ty i1 i2 <- unComp c2
-  , i1 == i2
-  = rewrite c1
+  | Par p c1 c2 <- unComp c
+  , Just (mp,mc1') <- frmMitTop c1
+  , mit_in mp == mit_out mp
+  = rewrite $ cParMbL cloc p mc1' c2
 
-  | Par _p c1 c2 <- unComp c
-  , Mitigate {} <- unComp c1
+  | Par p c1 c2 <- unComp c
+  , Just (mp,mc2') <- flmMitTop c2
+  , mit_in mp == mit_out mp
+  = rewrite $ cParMbR cloc p c1 mc2'
+
+  | Par p c1 c2 <- unComp c
+  , Just (_mp,mc1') <- frmMitTop c1
   , TVoid <- inTyOfCTy (ctComp c2)
-  = rewrite c2
+  = rewrite $ cParMbL cloc p mc1' c2
 
-  | MkComp c0 _cloc () <- c
-  , Par _p c1 c2 <- c0
-  , Mitigate {} <- unComp c2
+  | Par p c1 c2 <- unComp c
+  , Just (_mp,mc2') <- flmMitTop c2
   , TVoid <- yldTyOfCTy (ctComp c1)
-  = rewrite c1
+  = rewrite $ cParMbR cloc p c1 mc2'
 
   | otherwise
   = return c
-
-
-
