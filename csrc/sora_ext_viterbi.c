@@ -172,7 +172,7 @@ int16 __ext_viterbiSig11a_brick_decode_fast(char* intInput, int len1, uchar* bit
 	vub   trellis[state_size / 16 * input_size];
 	uint output = 0;
 
-	Viterbi_sig11(trellis, (char *)intInput, (char *)(bit));
+	Viterbi_sig11a(trellis, (char *)intInput, (char *)(bit));
 	*((uint *)bit) >>= 6; // remove the prefix 6 zeros
 
 	return 0;

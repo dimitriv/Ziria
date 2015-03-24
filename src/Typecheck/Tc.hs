@@ -255,17 +255,25 @@ tcExp expr@(MkExp exp0 loc _) =
     go (ECall f args) = do
       -- The types of functions are always known before we call them
       -- (otherwise would not be able to call 'instantiateCall' here)
-      fTy@(TArrow funtys _funres) <- instantiateCall =<< zonk (nameTyp f)
+      fTy <- instantiateCall =<< zonk (nameTyp f)
+      -- liftIO $ print $ vcat [ ppr f, ppr fTy ]
+      case fTy of 
+        TArrow funtys _funres -> do 
+          checkWith loc (checkArgMut funtys args) $ 
+             text "Mutable argument(s) not dereference expression(s)!"
+          actual <- mapM tcExp args
+          let actual' = zipWith (\t (GArgTy _ m) -> GArgTy t m) actual funtys
+          res    <- freshTy "b"
+          unify loc fTy $ TArrow actual' res
+          return res
+        _otherwise -> 
+          -- Print variable context, as this is probably a shadowing bug
+          raiseErr True loc $
+            vcat [ text "Call to function" <+> ppr f 
+                 , text "Which is of non-function type: " <+> ppr fTy 
+                 , text "Maybe " <+> ppr f <+> text "is shadowed, or declared as non-function?" 
+                 ]
 
-      -- Check that mutability agrees with deref exprs
-      checkWith loc (checkArgMut funtys args) $ 
-          text "Mutable argument(s) not dereference expression(s)!"
-
-      actual <- mapM tcExp args
-      let actual' = zipWith (\t (GArgTy _ m) -> GArgTy t m) actual funtys
-      res    <- freshTy "b"
-      unify loc fTy $ TArrow actual' res
-      return res
     go (EIf be e1 e2) = do
       beTy <- tcExp be
       e1Ty <- tcExp e1

@@ -20,45 +20,90 @@
 
 module NameEnv (
    NameEnv
+ , NameMap
  , neLookup
  , neExtend
  , neEmpty
  , neFromList
  , neKeys
  , neExtendMany
+ , neUpdate
+ , neToList
+ , neUnionWith
 ) where 
 
 import AstExpr
 import PpExpr
 import Utils ( warn )
 import Text.PrettyPrint.HughesPJ
+import Outputable
 
 {-------------------------------------------------------------------------------
   Name environments (implemented as lists to deal correctly with shadowing) 
 -------------------------------------------------------------------------------}
 
-type NameEnv t a = [(GName t, a)]
+newtype NameEnv t a = NameEnv { unNameEnv :: [(GName t, a)] }
+type NameMap t a = NameEnv t a 
+
+instance (Outputable t, Outputable a) => Outputable (NameEnv t a) where
+  ppr (NameEnv lst) = 
+    vcat (map (\(n,a) -> ppr n <+> text "|->" <+> ppr a) lst)
 
 neLookup :: GName t -> NameEnv t a -> Maybe a
-neLookup _nm [] = Nothing
-neLookup nm ((nm1,a):rest)
-  | nm1 == nm = Just a
-  | otherwise = neLookup nm rest
+neLookup x (NameEnv env) = go x env
+  where go _nm [] = Nothing
+        go nm ((nm1,a):rest)
+          | nm1 == nm = Just a
+          | otherwise = go nm rest
+
+neUnionWith :: NameEnv t a -> NameEnv t a 
+            -> (GName t -> a -> a -> a)
+            -> NameEnv t a
+neUnionWith (NameEnv nea) neb f = go nea neb
+  where 
+    go [] ne2 = ne2
+    go ((n1,a1):ne1') ne2 = neUpdate n1 aux $ (go ne1' ne2)
+      where 
+        aux Nothing    = Just a1
+        aux (Just a1') = Just (f n1 a1 a1')
+
+
 
 neExtend :: GName t -> a -> NameEnv t a -> NameEnv t a
 neExtend nm a menv = aux (neLookup nm menv)
   where
-    aux Nothing = (nm,a) : menv
-    aux Just {} = warn (text "Shadowing" <+> ppNameUniq nm) $ (nm,a) : menv
+    aux Nothing = NameEnv ((nm,a) : unNameEnv menv)
+    aux Just {} = warn (text "Shadowing" <+> ppNameUniq nm) $ 
+                  NameEnv ((nm,a) : unNameEnv menv)
 
 neEmpty :: NameEnv t a
-neEmpty = []
+neEmpty = NameEnv []
 
 neFromList :: [(GName t, a)] -> NameEnv t a
-neFromList x = x
+neFromList x = NameEnv x
+
+neToList :: NameEnv t a -> [(GName t,a)]
+neToList = unNameEnv
 
 neKeys :: NameEnv t a -> [GName t]
-neKeys = map fst
+neKeys = map fst . unNameEnv
 
 neExtendMany :: [(GName t, a)] -> NameEnv t a -> NameEnv t a
-neExtendMany bnds orig = bnds ++ orig
+neExtendMany bnds (NameEnv orig) = NameEnv (bnds ++ orig)
+
+neUpdate :: GName t
+         -> (Maybe a -> Maybe a)
+         -> NameEnv t a -> NameEnv t a
+neUpdate x h (NameEnv env) 
+  = NameEnv (go x h env)
+  where go nm f [] 
+          = case f Nothing of 
+              Nothing -> []
+              Just a  -> [(nm,a)]
+        go nm f ((nm',a):rest) 
+          | nm == nm'
+          = case f (Just a) of 
+              Nothing -> rest
+              Just a' -> (nm',a'):rest
+          | otherwise
+          = (nm',a) : go nm f rest

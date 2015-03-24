@@ -136,55 +136,27 @@ mkRepeat dflags c cinfo k =
           else appendStmts [cstms|$id:globalWhatIs = SKIP;
                                   goto l_IMMEDIATE;|]
 
-mkUntil :: DynFlags
-        -> Cg C.Exp
-        -> Cg ()
-        -> Comp
-        -> CompInfo
-        -> CompKont
-        -> Cg CompInfo
-mkUntil dflags mtest mfinal c cinfo k =
-    codeGenComp dflags c (k { kontDone = doneKont })
-  where
-    doneKont = do
-        ce_test <- mtest
-        if ce_test
-          then kontDone k
-          else do mfinal
-                  emitCode (compGenInit cinfo)
-                  if canTick cinfo
-                    then appendStmt  [cstm|goto $id:(tickNmOf (tickHdl cinfo));|]
-                    else appendStmts [cstms|$id:globalWhatIs = SKIP;
-                                            goto l_IMMEDIATE;|]
-
 mkWhile :: DynFlags
-        -> C.Stm       -- Initialization
         -> Exp         -- Test
-        -> Comp -- Body
-        -> C.Stm       -- Update
+        -> Comp        -- Body
         -> CompInfo    -- Self
         -> CompKont    -- Outer continuation
         -> Cg CompInfo
--- Compile: while etest { cbody; mfinal }
-mkWhile dflags minit etest cbody mfinal cinfo k
+mkWhile dflags etest cbody cinfo k
   = mkBranch dflags etest cbody k' cretunit k'' csp
   where
     csp = compLoc cbody
     k'  = k { kontDone = doneKont }
     k'' = k { kontDone = doneKont' k }
-    cretunit = cReturn csp AutoInline $
-               eVal csp TUnit VUnit
+    cretunit = cReturn csp AutoInline $ eVal csp TUnit VUnit
 
-    -- MkComp (Return AutoInline (MkExp (EVal VUnit) csp TUnit)) csp cty
-    doneKont = do appendStmt mfinal
-                  emitCode (compGenInit cinfo)
+    doneKont = do emitCode (compGenInit cinfo)
                   if canTick cinfo
                   then appendStmt  [cstm|goto $id:(tickNmOf (tickHdl cinfo));|]
                   else appendStmts [cstms|$id:globalWhatIs = SKIP;
                                           goto l_IMMEDIATE;|]
 
-    doneKont' k = do appendStmt minit
-                     kontDone k
+    doneKont' k = kontDone k
 
 
 mkBranch :: DynFlags
@@ -1113,41 +1085,50 @@ codeGenComp dflags comp k =
         codeGenDeclGroup new_dhval vTy >>= appendDecl
         codeGenFixpoint (mkRepeat dflags c1) (k { doneHdl = name new_dh})
 
-    go (MkComp (Until e c1) csp ()) =
-        codeGenFixpoint (mkUntil dflags (codeGenExp dflags e) (return ()) c1) k
+    go (MkComp (Until e c1) csp ()) = do 
+        ffst <- freshName "__fst" TBool Mut
+        let eflip  = eAssign csp (eVar csp ffst) (eVal csp TBool (VBool False))
+            econd1 = eVar csp ffst
+            econd2 = eUnOp csp Not e
+            econd  = eBinOp csp Or econd1 econd2 
+            -- letref ffst := True 
+            -- in while ( fst || not e) seq { c1 ; ffst := False } 
+            while_comp = cLetERef csp ffst (Just (eVal csp TBool (VBool True))) $
+                         cWhile csp econd $ cSeq csp c1 (cReturn csp AutoInline eflip)
+
+        codeGenCompTop dflags while_comp k
+
+        -- let comp = cLetERef csp (
+        -- codeGenFixpoint (mkUntil dflags (codeGenExp dflags e) (return ()) c1) k
 
 
     go (MkComp (VectComp _ c) _ _) = go c  -- Just ignore vectorization annotation if it has survived so far.
 
     go (MkComp (While e c1) csp ()) =
-        let emptyStm = [cstm|UNIT;|]
-        in codeGenFixpoint (mkWhile dflags emptyStm e c1 emptyStm) k
+        codeGenFixpoint (mkWhile dflags e c1) k
 
 
     go cb@(MkComp (Times _ui estart elen nm c1) csp ()) = do
-        -- @nm@ scopes over @e@ and @c1@, so we need to gensym here to make sure
-        -- it maps to a unique C identifier and then bring it into scope below
-        -- when we generate code for @e@ and @c1@. We also have to make sure we
-        -- initialize the loop counter as part of the component's
-        -- initialization.
+        -- For loops generate code via the following desugaring:
+        -- for nm in [estart,elen] c1 
+        --    ~~> 
+        -- letref nm := estart in while (nm < elen) { c1 ; do {nm := nm+1;} }
+        -- 
+        -- NB: nm is declared to be immutable, to prevent programmers
+        -- from assigning it by mistake, but here we mutate it ourselves. This 
+        -- is arguably a bit naughty, and to be completely cosher we'd have to 
+        -- change the mutability flag, but the code generator should not really 
+        -- care (or check).
+        let nmexpr      = eVar csp nm 
+            nmexprplus  = eBinOp csp Add nmexpr (eVal csp (nameTyp nm) (VInt 1))
+            eincr  = eAssign csp nmexpr nmexprplus
+            efinal = eBinOp csp Add elen estart
+            mtest  = eBinOp csp Lt nmexpr efinal
+            while_comp = cLetERef csp nm (Just estart) $ 
+                         cWhile csp mtest $ 
+                         cSeq csp c1 $ cReturn csp NoInline eincr
 
-        nm' <- freshName ("__times_" ++ name nm ++ getLnNumInStr csp) (nameTyp nm) Mut
-        appendDecl [cdecl|$ty:(codeGenTy (nameTyp nm)) $id:(name nm') = 0;|]
-
-        cestart <- codeGenExp dflags estart
-
-        extendVarEnv [(nm,[cexp|$id:(name nm')|])] $ do
-
-        let efinal = eBinOp csp Add elen estart
-
-        let mtest  = eBinOp csp Lt (eVar csp nm) efinal
-            mfinal = [cstm|++$id:(name nm');  |]
-            minit  = [cstm|$id:(name nm') = $cestart;|]
-
-        cinfo <- codeGenFixpoint (mkWhile dflags minit mtest c1 mfinal) k
-
-        let minits = compGenInit cinfo `mappend` codeStmt minit
-        return cinfo { compGenInit = minits }
+        codeGenCompTop dflags while_comp k
 
     go c@(MkComp (Standalone c1) csp ()) = do
        codeGenCompTop dflags c1 k

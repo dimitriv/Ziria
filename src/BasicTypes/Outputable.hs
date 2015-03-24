@@ -40,6 +40,10 @@ instance (Outputable a, Outputable b) => Outputable (a,b) where
 instance Outputable String where
   ppr = text 
 
+instance Outputable a => Outputable (Maybe a) where 
+  ppr Nothing  = text "N/A"
+  ppr (Just a) = ppr a
+
 pretty :: Outputable a => a -> String
 pretty = show . ppr
 

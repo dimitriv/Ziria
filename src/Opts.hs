@@ -74,6 +74,7 @@ data DynFlag =
   | DumpPipeline
   | DumpLUT
   | DumpAutoLUT
+  | DumpRange
 
   | NoExpFold
   | NoFold
@@ -174,6 +175,8 @@ options =
      , Option []        ["ddump-pipeline"]      (NoArg DumpPipeline)  "dump results of pipelining"
      , Option []        ["ddump-lut"]           (NoArg DumpLUT)       "dump results of LUTting"
      , Option []        ["ddump-autolut"]       (NoArg DumpAutoLUT)   "dump results of auto-LUT"
+     , Option []        ["ddump-range"]         (NoArg DumpRange)     "dump results of range analysis"
+
 
      , Option []        ["no-exp-fold"]         (NoArg NoExpFold)     "do not fold/inline expressions"
      , Option []        ["no-static-eval"]      (NoArg NoStaticEval)  "do not statically evaluate expressions"

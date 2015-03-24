@@ -91,9 +91,11 @@ cgBoundsCheck dflags loc arrty cbase linfo
                do { cnumexpr
                         <- case numexpr of
                              Literal m -> return [cexp| $int:m |]
-                             NVar nm -> return [cexp| $id:nm|] -- DV: used to be lookupVarEnv nm
+                             NVar nm -> return [cexp| $id:nm|] 
+                             -- DV: used to be lookupVarEnv nm
                   ; appendStmt $
-                    [cstm|bounds_check($cnumexpr, $cbase + $int:(leninfo),$string:spos);|]
+                    [cstm|bounds_check($cnumexpr, 
+                               $cbase + $int:(leninfo),$string:spos);|]
                   }
         }
    | otherwise = return ()

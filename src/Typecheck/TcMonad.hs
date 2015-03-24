@@ -126,6 +126,8 @@ import PpExpr (ppName)
 import PpComp ()
 import qualified GenSym as GS
 
+import Orphans ()
+
 {-------------------------------------------------------------------------------
   Unifier
 -------------------------------------------------------------------------------}
@@ -170,10 +172,6 @@ newtype TcM a = TcM {
            , MonadState Unifier
            , MonadReader TcMEnv
            )
-
-instance Error Doc where
-  noMsg  = empty
-  strMsg = text
 
 runTcM :: TcM a
        -> TyDefEnv

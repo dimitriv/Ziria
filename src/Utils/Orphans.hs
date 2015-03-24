@@ -11,6 +11,10 @@ import Text.Parsec.Pos
 import Text.Show.Pretty (PrettyVal(..), Value(Con))
 import qualified Data.Map as Map
 
+import qualified Text.PrettyPrint.HughesPJ as HughesPJ
+import Control.Monad.Error.Class 
+
+
 {-------------------------------------------------------------------------------
   PrettyVal orphans
 -------------------------------------------------------------------------------}
@@ -40,3 +44,10 @@ instance NFData SourcePos where
               !name = force sourceName
           in ()
 
+{-------------------------------------------------------------------------------
+  Error orphans
+-------------------------------------------------------------------------------}
+
+instance Error HughesPJ.Doc where
+  noMsg  = HughesPJ.empty
+  strMsg = HughesPJ.text
