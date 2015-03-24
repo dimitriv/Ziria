@@ -19,7 +19,7 @@
 -- | Compute the types of expressions
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE RecordWildCards #-}
-module CtExpr (ctExp, ctFun) where
+module CtExpr (ctExp, ctFun, ctDerefExp) where
 
 import Text.PrettyPrint.HughesPJ
 
@@ -97,3 +97,8 @@ ctFun fun
       MkFunDefined nm _ _ -> nameTyp nm
       MkFunExternal nm _ _ -> nameTyp nm
 
+
+ctDerefExp :: AGDerefExp len Ty a -> Ty
+ctDerefExp (GDVar _ _ nm)      = nameTyp nm
+ctDerefExp (GDProj _ _ de fld) = ctProj (ctDerefExp de) fld
+ctDerefExp (GDArr _ _ de _ li) = ctArrRead "ctDerefExp" (ctDerefExp de) li

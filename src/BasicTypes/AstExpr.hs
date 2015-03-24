@@ -307,17 +307,23 @@ data AGDerefExp len t a
   | GDProj (Maybe SourcePos) a (AGDerefExp len t a) FldName
   | GDArr  (Maybe SourcePos) a (AGDerefExp len t a) len LengthInfo
 
+
+-- For debugging purposes
+instance (Show len, Show t, Show a) => Show (AGDerefExp len t a) where
+  show (GDVar _ _ x) = show x
+  show (GDProj _ _ d fld) = show d ++ "." ++ fld
+  show (GDArr _ _ d len LISingleton) = show d ++ "[" ++ show len ++ "]"
+  show (GDArr _ _ d _len _) = show d ++ "[..]"
+
 type GDerefExp t a = AGDerefExp (GExp t a) t a
 
-derefToExp :: GDerefExp t a -> GExp t a
+derefToExp :: AGDerefExp (GExp t a) t a -> GExp t a
 derefToExp (GDVar loc a nm)  
   = MkExp (EVar nm) loc a
 derefToExp (GDProj loc a de fld) 
   = MkExp (EProj (derefToExp de) fld) loc a
 derefToExp (GDArr loc a de1 e2 li) 
   = MkExp (EArrRead (derefToExp de1) e2 li) loc a
-
-
 
 
 

@@ -26,11 +26,11 @@
 
 module AbsInt (
 
-   ValDom
- , CmdDom
- , CmdDomRec
- , AbsInt
- , AbsT  (..)
+   ValDom    (..)
+ , CmdDom    (..)
+ , CmdDomRec (..)
+ , AbsInt    (..)
+ , AbsT      (..)
  , LVal
  , absEval 
 
@@ -86,11 +86,15 @@ class CmdDom m v => CmdDomRec m v | m -> v where
   aBranch :: (Ord s, Monad m, MonadState s m, ValDom v) 
           => Exp -> m v -> m v -> m v
 
+
 -- | Specific operations for abstract domains
 class AbsInt m v where
+
   aSkip     :: m v
   aJoin     :: m v -> m v -> m v 
   aWithFact :: v -> m v -> m v
+  aWiden    :: v -> m v -> m v -> m v
+
 
 {------------------------------------------------------------------------
   For abstract (as opposed to concrete) interpreter DomRec is definable
@@ -104,6 +108,7 @@ instance AbsInt m a => AbsInt (AbsT m) a where
   aSkip = AbsT aSkip
   aJoin (AbsT m1) (AbsT m2) = AbsT (aJoin m1 m2)
   aWithFact v (AbsT m) = AbsT (aWithFact v m)
+  aWiden v (AbsT m1) (AbsT m2) = AbsT (aWiden v m1 m2)
 
 instance CmdDom m v => CmdDom (AbsT m) v where
   aAssign lval val          = AbsT (aAssign lval val)
@@ -123,8 +128,8 @@ instance (AbsInt m v, CmdDom m v) => CmdDomRec (AbsT m) v where
   
   aWhile e m = do
      a <- absEval e
-     afix $ aJoin (aWithFact a m)
-                  (aWithFact (aUnOp Not a) aSkip)
+     afix $ aWiden a (aWithFact a m)
+                     (aWithFact (aUnOp Not a) aSkip)
 
   aFor idx estart elen m = do
     s <- get 
@@ -140,8 +145,8 @@ instance (AbsInt m v, CmdDom m v) => CmdDomRec (AbsT m) v where
                      return $ aVal VUnit
     withMutABind idx $
       do aAssign (varLVal idx) astart
-         afix $ aJoin (aWithFact acond m')
-                      (aWithFact (aUnOp Not acond) aSkip)
+         afix $ aWiden acond (aWithFact acond m')
+                             (aWithFact (aUnOp Not acond) aSkip)
     where 
       eidx = eVar Nothing idx
 

@@ -29,6 +29,8 @@ import PpExpr
 import CgLUT (pprLUTStats, shouldLUT)
 import Analysis.Range
 
+import qualified Analysis.RangeAnal as RangeAnal
+
 import Control.Applicative
 import qualified Data.Map as Map
 import Data.Map (Map)
@@ -156,7 +158,10 @@ runAutoLUT dflags _ c = autolutC c
         ranges :: Map EId Range
         ranges = maybe Map.empty id (varRanges e_)
 
-        autoE e0@(MkExp _ loc inf) | Right True <- shouldLUT dflags ranges e0 = do
+        autoE e0@(MkExp _ loc inf) = do
+          autoE' e0
+   
+        autoE' e0@(MkExp _ loc inf) | Right True <- shouldLUT dflags ranges e0 = do
             verbose dflags $ vcat [ text "Expression autolutted:" 
                                   , nest 4 (ppr e0)
                                   , case pprLUTStats dflags ranges e0 of
@@ -165,8 +170,7 @@ runAutoLUT dflags _ c = autolutC c
                                   ]
 
             pure $ MkExp (ELUT ranges e0) loc inf
-
-        autoE e0@(MkExp e loc inf)
+        autoE' e0@(MkExp e loc inf)
            = MkExp <$> go e <*> pure loc <*> pure inf
           where
             go :: Exp0 -> IO Exp0

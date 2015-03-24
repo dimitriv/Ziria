@@ -32,7 +32,6 @@ import qualified Text.PrettyPrint.Mainland as GMPretty
 import Text.Show.Pretty (dumpStr)
 import qualified Language.C.Syntax as C
 
-
 import System.Timeout 
 
 import AstComp
@@ -54,6 +53,8 @@ import qualified Outputable
 
 import AutoLUT
 
+import qualified Analysis.RangeAnal as RA
+
 import Vectorize    ( initVectorizer, runVectorizer  )
 
 import CgProgram    ( codeGenProgram )
@@ -61,6 +62,7 @@ import CgMonad      ( evalCg         )
 import CgHeader     ( cHeader        )
 
 import qualified PassPipeline as PP
+
 
 data CompiledProgram
   = CompiledProgram Comp [C.Definition] FilePath
@@ -148,11 +150,16 @@ main = do
     -- First let us run some small-scale optimizations
     folded <- runFoldPhase dflags sym 1 c'
 
+
     verbose dflags $ text "runVectorizePhase .."
 
     initVectorizer
 
     (cand, cands) <- runVectorizePhase dflags sym folded
+
+
+    when (isDynFlagSet dflags DumpRange) $ RA.debugRngAnal cand
+
 
     -- Filenames
     let fnames = ["v"++show i++"_"++outFile | (i::Int) <- [0..]]
