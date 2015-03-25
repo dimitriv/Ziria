@@ -32,8 +32,9 @@ module AbsInt (
  , AbsInt    (..)
  , AbsT      (..)
  , LVal
+ , POrd      (..)
  , absEval 
-
+ , inCurrSt
 ) where
 
 
@@ -42,8 +43,17 @@ import AstUnlabelled
 import Utils
 import PpExpr ()
 import Control.Monad.State.Class
-import Control.Applicative 
-import Control.Monad ( when ) 
+import Control.Applicative
+import Control.Monad ( unless )
+
+import Data.Set ( Set )
+import qualified Data.Set as Set
+import NameEnv
+
+import Text.PrettyPrint.HughesPJ
+
+import CtExpr ( ctExp )
+import Outputable 
 
 -- | Dereference expressions with abstract values as indices
 type LVal idx = AGDerefExp idx Ty ()
@@ -51,6 +61,26 @@ type LVal idx = AGDerefExp idx Ty ()
 -- | Variable lvalues 
 varLVal :: EId -> LVal v
 varLVal = GDVar Nothing ()
+
+
+{-------------------------------------------------------------------------------
+  Some infrastructure on partial orders, sets and maps
+-------------------------------------------------------------------------------}
+
+-- | Partially ordered values
+class POrd v where
+  pleq :: v -> v -> Bool
+
+-- | Default instances for name environments
+pleqNE :: POrd a => NameEnv t a -> NameEnv t a -> Bool
+pleqNE m1 m2 = all is_ok (neToList m1)
+  where is_ok (nm1,s1) = case neLookup nm1 m2 of
+                            Nothing -> False
+                            Just s2 -> s1 `pleq` s2
+
+-- | Instances for name environments and sets
+instance POrd a => POrd (NameEnv t a) where pleq = pleqNE
+instance Ord s => POrd (Set s) where pleq = Set.isSubsetOf
 
 
 {-------------------------------------------------------------------------------
@@ -67,11 +97,11 @@ class ValDom v where
 
 -- | Commands 
 class CmdDom m v | m -> v where
-  aAssign   :: LVal v -> v -> m ()
+  aAssign      :: LVal v -> v -> m ()
   aDerefRead   :: LVal v -> m v
 
-  withImmABind :: EId -> v -> m a -> m a
-  withMutABind :: EId -> m a -> m a
+  withImmABind :: EId -> v -> m v -> m v
+  withMutABind :: EId -> m v -> m v
 
   aCall     :: EId -> [Either v (LVal v)] -> m v
   aError    :: m a
@@ -79,11 +109,11 @@ class CmdDom m v | m -> v where
 
 -- | Commands plus controls flow 
 class CmdDom m v => CmdDomRec m v | m -> v where 
-  aWhile  :: (Ord s, Monad m, MonadState s m, ValDom v) 
+  aWhile  :: (POrd s, Monad m, MonadState s m, ValDom v) 
           => Exp -> m v -> m v
-  aFor    :: (Ord s, Monad m, MonadState s m, ValDom v) 
+  aFor    :: (POrd s, Monad m, MonadState s m, ValDom v) 
           => EId -> Exp -> Exp -> m v -> m v
-  aBranch :: (Ord s, Monad m, MonadState s m, ValDom v) 
+  aBranch :: (POrd s, Monad m, MonadState s m, ValDom v) 
           => Exp -> m v -> m v -> m v
 
 
@@ -95,13 +125,22 @@ class AbsInt m v where
   aWithFact :: v -> m v -> m v
   aWiden    :: v -> m v -> m v -> m v
 
+-- | Run computation w/o modifying initial state
+-- and return the final state
+inCurrSt :: MonadState s m => m a -> m (a,s)
+inCurrSt act = do
+  pre  <- get
+  x    <- act
+  post <- get
+  put pre
+  return (x,post)
 
 {------------------------------------------------------------------------
   For abstract (as opposed to concrete) interpreter DomRec is definable
 ------------------------------------------------------------------------}
 
 -- | A newtype for /abstract/ interpreters
-newtype AbsT m a = AbsT (m a) 
+newtype AbsT m a = AbsT { unAbsT :: m a } 
   deriving (Applicative, Functor)
 
 instance AbsInt m a => AbsInt (AbsT m) a where
@@ -135,7 +174,7 @@ instance (AbsInt m v, CmdDom m v) => CmdDomRec (AbsT m) v where
     s <- get 
     astart <- absEval estart
     s' <- get
-    when (not (s' <= s)) $ fail "Analysis failure, imperative estart!"
+    unless (s' `pleq` s) $ fail "Analysis failure, imperative estart!"
     let econd = eBinOp Nothing Lt eidx (eBinOp Nothing Add estart elen)
     acond <- absEval econd
     let m' = m >> do rhs <- absEval $
@@ -150,23 +189,52 @@ instance (AbsInt m v, CmdDom m v) => CmdDomRec (AbsT m) v where
     where 
       eidx = eVar Nothing idx
 
-afix :: (Ord s, MonadState s m) => m a -> m a
+afix :: (POrd s, MonadState s m) => m a -> m a
 afix action = loop
   where loop = do
           pre <- get
           x <- action
           post <- get
-          if post <= pre then return x else loop
+          if post `pleq` pre then return x else loop
 
 {-------------------------------------------------------------------------------
   The abstract evaluator proper
 -------------------------------------------------------------------------------}
+
+absEvalDeref :: ( POrd s, ValDom v, Monad m, MonadState s m, CmdDomRec m v )
+             => Exp -> m (LVal v)
+absEvalDeref e = go (unExp e) where
+  loc = expLoc e
+  -- Variables are lvalues
+  go (EVar x) = return (GDVar loc () x)
+  -- Reading, projections
+  go (EArrRead earr estart elen) = do
+    d <- absEvalDeref earr
+    astart <- absEval estart
+    return (GDArr loc () d astart elen)
+  go (EProj e' fld) = do
+    d <- absEvalDeref e'
+    return (GDProj loc () d fld)
+  -- Allocations 
+  go (EValArr vs) = do 
+    let ty = ctExp e
+    avs <- mapM absEval vs
+    return $ GDNewArray loc () ty avs
+  go (EStruct t tfs) = do
+    atfs <- mapM (\(f,x) -> absEval x >>= \a -> return (f,a)) tfs
+    return $ GDNewStruct loc () t atfs
+
+  -- All rest should not occur here!
+  go _ = panic $ 
+         vcat [ text "BUG: Cannot evaluate expression as lvalue."
+              , text "Should have been enforced by the frontend!"
+              , nest 2 $ ppr e ]
+
 absEval :: forall m s v. 
-  ( Ord s, ValDom v, Monad m, MonadState s m, CmdDomRec m v )
+  ( POrd s, ValDom v, Monad m, MonadState s m, CmdDomRec m v )
         => Exp -> m v
 absEval e = go (unExp e) where
   -- Values and operators
-  go :: Exp0 -> m v
   go (EVal _ v)   = return $ aVal v
   go (EValArr vs) = do 
     avs <- mapM absEval vs
@@ -182,7 +250,7 @@ absEval e = go (unExp e) where
   -- Assignments 
   go (EAssign elhs erhs) = do
     arhs <- absEval erhs
-    alhs <- absDeref elhs
+    alhs <- absEvalDeref elhs
     aAssign alhs arhs
     return $ aVal VUnit
   go (EArrWrite earr ei rng erhs) = 
@@ -190,12 +258,12 @@ absEval e = go (unExp e) where
 
   -- Reading, projections 
   go (EArrRead {}) = do
-    d <- absDeref e
+    d <- absEvalDeref e
     aDerefRead d
   go (EProj {}) = do
-    d <- absDeref e
+    d <- absEvalDeref e
     aDerefRead d
-    
+
   go (EStruct nm tfs) = do
     atfs <- mapM (\(f,x) -> absEval x >>= \a -> return (f,a)) tfs
     return $ aStruct nm atfs
@@ -231,7 +299,7 @@ absEval e = go (unExp e) where
   go (ELetRef v (Just e1) e2) = do
     a1 <- absEval e1
     withMutABind v $ do
-      d <- absDeref (eVar Nothing v)
+      d <- absEvalDeref (eVar Nothing v)
       aAssign d a1
       absEval e2
 
@@ -243,25 +311,9 @@ absEval e = go (unExp e) where
     aWhile econd (absEval ebody)
     return $ aVal VUnit
 
-absDeref :: forall m s v. 
-  ( Ord s, ValDom v, Monad m, MonadState s m, CmdDomRec m v )
-         => Exp -> m (LVal v)
-absDeref e = case unExp e of
-  EVar nm -> return $ GDVar loc nfo nm
-  EProj estruct fld -> do 
-    astruct <- absDeref estruct
-    return $ GDProj loc nfo astruct fld
-  EArrRead earr estart elen -> do
-    astart <- absEval estart
-    aearr <- absDeref earr
-    return $ GDArr loc nfo aearr astart elen
-  _ -> panicStr "absDeref: not a dereference expression!"
-  where loc = expLoc e
-        nfo = info e
-
 
 absEvalArg :: forall m s v. 
-  ( Ord s, ValDom v, Monad m, MonadState s m, CmdDomRec m v)
+  ( POrd s, ValDom v, Monad m, MonadState s m, CmdDomRec m v)
            => (ArgTy,Exp) -> m (Either v (LVal v))
-absEvalArg (GArgTy _ Mut, earg) = absDeref earg >>= (return . Right)
-absEvalArg (_, earg)            = absEval earg  >>= (return . Left )
+absEvalArg (GArgTy _ Mut, earg) = absEvalDeref earg >>= (return . Right)
+absEvalArg (_, earg)            = absEval      earg >>= (return . Left )

@@ -53,7 +53,7 @@ import qualified Outputable
 
 import AutoLUT
 
-import qualified Analysis.RangeAnal as RA
+import qualified Analysis.DataFlow  as DF
 
 import Vectorize    ( initVectorizer, runVectorizer  )
 
@@ -158,7 +158,8 @@ main = do
     (cand, cands) <- runVectorizePhase dflags sym folded
 
 
-    when (isDynFlagSet dflags DumpRange) $ RA.debugRngAnal cand
+    when (isDynFlagSet dflags DumpRange) $ do
+      DF.debugDataFlow dflags cand
 
 
     -- Filenames

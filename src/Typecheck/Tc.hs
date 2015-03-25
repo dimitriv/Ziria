@@ -182,7 +182,7 @@ tcExp expr@(MkExp exp0 loc _) =
       tcBinOp loc bop ty1 ty2
     go (EAssign e1 e2) = do
       -- check e1 is a dereference expression
-      when (isNothing $ isGDerefExp True e1) $ do
+      when (isNothing $ isMutGDerefExp e1) $ do
         raiseErrNoVarCtx loc $
          text "Assignment to non-mutable dereference expression."
       -- otherwise type check and unify 
@@ -192,7 +192,7 @@ tcExp expr@(MkExp exp0 loc _) =
       return TUnit
     go (EArrWrite arr idx li rhs) = do
       -- check arr is a dereference expression
-      when (isNothing $ isGDerefExp True arr) $ do
+      when (isNothing $ isMutGDerefExp arr) $ do
         raiseErrNoVarCtx loc $
          text "Assignment to non-mutable dereference expression."
       arrTy <- tcExp arr

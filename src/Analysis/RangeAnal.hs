@@ -22,12 +22,10 @@
 {-# OPTIONS_GHC -Wall -fno-warn-unused-do-bind #-}
 
 -- | Range analysis
-
 module Analysis.RangeAnal 
      ( Range
      , pprRanges
      , varRanges 
-     , debugRngAnal
      )
 where
 
@@ -41,8 +39,6 @@ import GHC.Generics (Generic)
 import Text.PrettyPrint.HughesPJ
 
 import AstExpr
-import AstComp
-
 import Orphans ()
 
 import Outputable 
@@ -159,14 +155,16 @@ ijoin (IRng i j) (IRng i' j')
     if l < - bound || h > bound then ITop else IRng l h
   where l = min i i'
         h = max j j'
-        -- 32 bits, should be good enough for LUTs
-        bound = 32768
+        -- A modest bound 
+        bound = 512
 
 
 runop :: UnOp -> Range -> Range
-runop Neg (RInt i)  = RInt (ineg i)
-runop _   (RInt {}) = RInt ITop
-runop _    _        = error "runop!"
+runop Neg (RInt i)       = RInt (ineg i)
+runop _   (RInt {})      = RInt ITop
+runop ALength _          = RInt ITop -- That's a bit sad but oh well
+runop (Cast (TInt {})) _ = RInt ITop
+runop _ _                = ROther
 
 sunop :: UnOp -> Maybe SymExp -> Maybe SymExp
 sunop Neg s = s >>= \x -> return (SymUnOp Neg x)
@@ -241,32 +239,18 @@ instance ValDom RngVal where
 
 type RngMap = NameMap Ty Range
 
-instance Ord Interval where 
-  IBot <= _r               = True
-  IRng l1 h1 <= IRng l2 h2 = (l2 <= l1) && (h1 <= h2)
-  _ <= ITop                = True
-  _ <= _                   = False
+instance POrd Interval where 
+  IBot       `pleq` _r         = True
+  IRng l1 h1 `pleq` IRng l2 h2 = l2 <= l1 && h1 <= h2
+  _          `pleq` ITop       = True
+  _          `pleq` _          = False
 
-instance Ord Range where 
-  RInt intv1   <= RInt intv2   = intv1 <= intv2
-  ROther       <= ROther       = True
-  RArr ri1 wi1 <= RArr ri2 wi2 = ri1 <= ri2 && wi1 <= wi2
-  _            <= _            = error "Ord Range!"
+instance POrd Range where 
+  RInt intv1   `pleq` RInt intv2   = intv1 `pleq` intv2
+  ROther       `pleq` ROther       = True
+  RArr ri1 wi1 `pleq` RArr ri2 wi2 = ri1 `pleq` ri2 && wi1 `pleq` wi2
+  r1           `pleq` r2           = error ("POrd Range:" ++ show r1 ++ " <= " ++ show r2)
 
-
-leqRngMap :: RngMap -> RngMap -> Bool 
-leqRngMap rm1 rm2 
-  = all is_ok (neToList rm1)
-  where is_ok (nm1,r1) = case neLookup nm1 rm2 of
-                           Nothing -> False
-                           Just r2 -> r1 <= r2
-
-instance Eq RngMap where
-  rm1 == rm2 = (rm1 `leqRngMap` rm2) && 
-               (rm2 `leqRngMap` rm1)
-
-instance Ord RngMap where 
-  rm1 <= rm2 = rm1 `leqRngMap` rm2
 
 joinRngMap :: RngMap -> RngMap -> RngMap
 joinRngMap rm1 rm2 
@@ -287,7 +271,7 @@ hasChanged rm1 rm2 x =
     (Nothing,Nothing)  -> False
     (Nothing,Just {})  -> True
     (Just {},Nothing)  -> True
-    (Just r1, Just r2) -> not (r1 <= r2 && r2 <= r1)
+    (Just r1, Just r2) -> not (r1 `pleq` r2 && r2 `pleq` r1)
 
 blowRange :: Range -> Range
 blowRange (RInt {}) = RInt ITop
@@ -299,14 +283,6 @@ blowTrue :: (EId -> Bool) -> RngMap -> RngMap
 blowTrue f rm = neFromList (map blow rmelems)
   where rmelems = neToList rm
         blow (x,r) = if f x then (x, blowRange r) else (x, r)
-
-inCurrSt :: Rng a -> Rng (a,RngMap)
-inCurrSt act = do
-  pre  <- get
-  x    <- act
-  post <- get
-  put pre
-  return (x,post)
 
 instance AbsInt Rng RngVal where
   aSkip = return $ RngVal ROther Nothing
@@ -336,6 +312,7 @@ instance AbsInt Rng RngVal where
 
     let post = joinRngMap post1 post2
 
+{- 
     liftIO $ print $
              vcat [ text "aJoin"
                   , nest 2 $
@@ -350,6 +327,8 @@ instance AbsInt Rng RngVal where
                          , ppr post 
                          ]
                   ]
+-}
+
     put post
     return (rngValJoin v1 v2)
 
@@ -357,12 +336,16 @@ instance AbsInt Rng RngVal where
     = action
   aWithFact (RngVal _r (Just s)) action
     = do pre <- get 
+{- 
          liftIO $ print (text "aWithFact" <+> text (show s))
          liftIO $ print (nest 2 $ text "pre-fact:")
          liftIO $ print (nest 2 $ ppr pre)
+-}
          let pre' = pushFact s pre
+{-
          liftIO $ print (nest 2 $ text "post-fact:")
          liftIO $ print (nest 2 $ ppr pre')
+-}
          put pre'
          action
 
@@ -416,13 +399,14 @@ derefArr :: EId -> Range -> LengthInfo
          -> Rng RngVal
 derefArr x idx_range LISingleton upd_arr_rng = do 
   s <- get
-  liftIO $ print (text "derefArr, s =" <+> ppr s)
+--  liftIO $ print (text "derefArr, s =" <+> ppr s)
   let rng' = case neLookup x s of 
                 Nothing -> upd_arr_rng (RArr IBot IBot) idx_range
                 Just arr_range -> upd_arr_rng arr_range idx_range
-  liftIO $ print (text "-> rng' =" <+> ppr rng')
+--  liftIO $ print (text "-> rng' =" <+> ppr rng')
   put $ neUpdate x (\_ -> Just rng') s
-  return $ RngVal rng' Nothing
+  let TArray _ base_ty = nameTyp x
+  return $ RngVal (rangeTop base_ty) Nothing
 derefArr x idx_range (LILength n) upd_arr_rng = do 
   s <- get
   let idx_range' = rstretch idx_range (n-1)
@@ -430,20 +414,21 @@ derefArr x idx_range (LILength n) upd_arr_rng = do
                 Nothing -> upd_arr_rng (RArr IBot IBot) idx_range'
                 Just arr_range -> upd_arr_rng arr_range idx_range'
   put $ neUpdate x (\_ -> Just rng') s
-  return $ RngVal rng' Nothing
-derefArr _x _idx_range (LIMeta {}) _upd_arr_rng = fail "derefArr: LIMeta!"
+  return $ RngVal (RArr ITop ITop) Nothing
+derefArr _x _idx_range (LIMeta {}) _upd_arr_rng 
+  = fail "derefArr: LIMeta!"
 
 updArrRdRng :: Range -> Range -> Range
 updArrRdRng arr_range idx_range = 
   case (arr_range, idx_range) of 
     (RArr rdintv wrintv, RInt i) -> RArr (rdintv `ijoin` i) wrintv
-    _ -> error "updArrRdRng"
+    o -> error ("updArrRdRng: " ++ show o)
 
 updArrWrRng :: Range -> Range -> Range
 updArrWrRng arr_range idx_range = 
   case (arr_range, idx_range) of 
     (RArr rdintv wrintv, RInt i) -> RArr rdintv (wrintv `ijoin` i)
-    _ -> error "updArrWrRng"
+    o -> error ("updArrWrRng: " ++ show o)
 
 
 data RdWr = Rd | Wr Range
@@ -460,13 +445,6 @@ varJoinRng x range = do
   return $ RngVal range (Just $ SymVar x)
   where upd Nothing  = Just range
         upd (Just r) = Just (r `rjoin` range)
-{- 
-varSetRng :: EId -> Range -> Rng ()
-varSetRng x range = do
-  s <- get
-  put $ neUpdate x upd s
-  where upd _ = Just range
--}
 
 varGetRng :: EId -> Rng (Maybe Range)
 varGetRng x = get >>= (return . neLookup x)
@@ -476,6 +454,8 @@ derefVar x rdwr = do
   case nameTyp x of
     TArray (Literal n) _
        -> varJoinRng x $ arrRdWrRng rdwr n
+    TArray _meta _
+       -> varJoinRng x $ RArr ITop ITop -- Unknown!
     TInt {}
        -> case rdwr of
             Rd -> do m <- varGetRng x
@@ -495,22 +475,24 @@ derefVar x rdwr = do
 
 
 dbgRngSt :: Doc -> Rng a -> Rng a
-dbgRngSt d action = do
-  liftIO $ print d
-  pre <- get
-  liftIO $ print $ vcat [ nest 2 $ text "Pre:",  nest 2 $ ppr pre  ]
+dbgRngSt _d action = do
+--  liftIO $ print d
+--  pre <- get
+--  liftIO $ print $ vcat [ nest 2 $ text "Pre:",  nest 2 $ ppr pre  ]
   x <- action
-  post <- get 
-  liftIO $ print $ vcat [ nest 2 $ text "Post:", nest 2 $ ppr post ]
+--  post <- get 
+--  liftIO $ print $ vcat [ nest 2 $ text "Post:", nest 2 $ ppr post ]
   return x
 
 instance CmdDom Rng RngVal where
 
   aDerefRead lval = dbgRngSt (text $ "aDerefRead, lval= " ++ show lval) (go lval)
-     where go d 
+     where go d
              | GDArr _ _ (GDVar _ _ x) (RngVal ridx _) linfo <- d
              = derefArr x ridx linfo updArrRdRng
-             | GDVar _ _ x <- d = derefVar x Rd
+             | GDVar _ _ x <- d            = derefVar x Rd
+             | GDNewArray _ _ _ vs    <- d = return $ aArr vs
+             | GDNewStruct _ _ t flds <- d = return $ aStruct t flds
              | GDArr _ _ d' _ _ <- d
              = do _ <- go d'
                   return $ rngValTop (ctDerefExp d)
@@ -533,6 +515,10 @@ instance CmdDom Rng RngVal where
               | GDProj _ _ d' _ <- d
               = void $ go d' (RngVal undefined undefined)
               | otherwise = error "aAssign"
+              | GDNewArray {} <- d
+              = return () -- Writing to an unnamed array has no effects
+              | GDNewStruct {} <- d
+              = return () -- Writing to an unnamed struct has no effects
 
   withImmABind nm rng action 
     = do pre <- get
@@ -551,20 +537,15 @@ instance CmdDom Rng RngVal where
          return res
 
   aCall  _ _ = fail "Calls not supported in range analysis"
-  aPrint _ _ = fail "Print not supported in range analysis"
   aError     = fail "Error not supported in range analysis"
+  aPrint _ _ = return ()
 
 
 
 {------------------------------------------------------------------------
   Running the analysis
 ------------------------------------------------------------------------}
-
-instance MonadState RngMap (AbsT Rng) where
-  get     = AbsT get
-  put s   = AbsT (put s)
-  state f = AbsT (state f)
-
+deriving instance MonadState RngMap (AbsT Rng) 
 deriving instance Monad (AbsT Rng)
 
 pprRanges :: RngMap -> Doc
@@ -575,31 +556,18 @@ pprRanges r = vcat $
 runRng :: Rng a -> IO (Either Doc (a, RngMap))
 runRng (Rng action) = runErrorT (runStateT action neEmpty)
 
-varRanges :: MonadIO m => Exp -> m (RngMap, Range)
-varRanges e = liftIO $
+varRanges :: MonadIO m => Exp -> m (Either Doc (RngMap, Range))
+varRanges e =
   case action of 
     AbsT m -> do 
-      r <- runRng m 
+      r <- liftIO $ runRng m
       case r of 
-        Left _err -> fail "Range analysis failure"
-        Right (rngval,rmap) -> return (rmap, av_range rngval)
-  where action :: AbsT Rng RngVal
-        action = absEval e
+        Left err 
+          -> return $ Left err
+        Right (rngval,rmap) 
+          -> return $ Right (rmap, av_range rngval)
+  where 
+    action :: AbsT Rng RngVal
+    action = absEval e
 
 
-debugRngAnal :: Comp -> IO ()
-debugRngAnal comp = do
-  _ <- mapCompM return return return return on_exp return comp
-  return ()
-  where on_exp = mapExpM return return on_exp'
-        on_exp' e0 = do
-          print $ vcat [ text "**** Debugging new range analysis ****"
-                       , text "Range-analyzing expression:"
-                       , nest 4 (ppr e0)
-                       ]
-          (rm,rng) <- varRanges e0
-          print $ vcat [ text "Free variable ranges = "
-                       , nest 2 (pprRanges rm)
-                       , text "Result range = "
-                       , nest 2 (ppr rng) ]
-          return e0
