@@ -445,13 +445,6 @@ varJoinRng x range = do
   return $ RngVal range (Just $ SymVar x)
   where upd Nothing  = Just range
         upd (Just r) = Just (r `rjoin` range)
-{- 
-varSetRng :: EId -> Range -> Rng ()
-varSetRng x range = do
-  s <- get
-  put $ neUpdate x upd s
-  where upd _ = Just range
--}
 
 varGetRng :: EId -> Rng (Maybe Range)
 varGetRng x = get >>= (return . neLookup x)
@@ -494,7 +487,7 @@ dbgRngSt _d action = do
 instance CmdDom Rng RngVal where
 
   aDerefRead lval = dbgRngSt (text $ "aDerefRead, lval= " ++ show lval) (go lval)
-     where go d 
+     where go d
              | GDArr _ _ (GDVar _ _ x) (RngVal ridx _) linfo <- d
              = derefArr x ridx linfo updArrRdRng
              | GDVar _ _ x <- d            = derefVar x Rd

@@ -249,13 +249,13 @@ debugDataFlow dfs comp = do
                        ]
           verbose dfs $ nest 4 (ppr e0)
 
-          unlessErr (inOutVars e0)    $ \(VarUsePkg invars outvars _allvars) ->
+          unlessErr (inOutVars e0)      $ \(VarUsePkg invars outvars _allvars) ->
             unlessErr (RA.varRanges e0) $ \(rm,rng) -> do
               print $ vcat [ text "Input variables :" <+> sep (map ppr invars)
                            , text "Output variables:" <+> sep (map ppr outvars)
-                           ]
-              print $ vcat [ text "Ranges = "
+                           , text "Ranges          :"
                            , nest 2 (RA.pprRanges rm)
-                           , text "Result range = "
-                           , nest 2 (ppr rng) ]
+                           , text "Result range    :"
+                           , nest 2 (ppr rng) 
+                           ]
           return e0
