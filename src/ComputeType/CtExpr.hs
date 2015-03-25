@@ -98,7 +98,9 @@ ctFun fun
       MkFunExternal nm _ _ -> nameTyp nm
 
 
-ctDerefExp :: AGDerefExp len Ty a -> Ty
-ctDerefExp (GDVar _ _ nm)      = nameTyp nm
-ctDerefExp (GDProj _ _ de fld) = ctProj (ctDerefExp de) fld
-ctDerefExp (GDArr _ _ de _ li) = ctArrRead "ctDerefExp" (ctDerefExp de) li
+ctDerefExp :: AGDerefExp exp Ty a -> Ty
+ctDerefExp (GDVar _ _ nm)        = nameTyp nm
+ctDerefExp (GDProj _ _ de fld)   = ctProj (ctDerefExp de) fld
+ctDerefExp (GDArr _ _ de _ li)   = ctArrRead "ctDerefExp" (ctDerefExp de) li
+ctDerefExp (GDNewArray _ _ t _)  = t
+ctDerefExp (GDNewStruct _ _ t _) = t

@@ -301,52 +301,50 @@ data ForceInline
   deriving (Generic, Typeable, Data, Eq, Ord)
 
 
--- | Dereference expressions, abstract over length
-data AGDerefExp len t a 
-  = GDVar  (Maybe SourcePos) a (GName t)
-  | GDProj (Maybe SourcePos) a (AGDerefExp len t a) FldName
-  | GDArr  (Maybe SourcePos) a (AGDerefExp len t a) len LengthInfo
+-- | Dereference expressions, abstract over expressions inside
+data AGDerefExp expr t a
+  = GDVar (Maybe SourcePos) a (GName t)
 
+  | GDProj (Maybe SourcePos) a (AGDerefExp expr t a) FldName
 
--- For debugging purposes
-instance (Show len, Show t, Show a) => Show (AGDerefExp len t a) where
-  show (GDVar _ _ x) = show x
-  show (GDProj _ _ d fld) = show d ++ "." ++ fld
-  show (GDArr _ _ d len LISingleton) = show d ++ "[" ++ show len ++ "]"
-  show (GDArr _ _ d _len _) = show d ++ "[..]"
+  | GDArr (Maybe SourcePos) a (AGDerefExp expr t a) expr LengthInfo
+
+  | GDNewArray (Maybe SourcePos) a t [expr]
+          -- NB: t is the array type, not the element type
+
+  | GDNewStruct (Maybe SourcePos) a t [(FldName,expr)]
+          -- NB: t is the struct type
+  deriving Show
 
 type GDerefExp t a = AGDerefExp (GExp t a) t a
 
 derefToExp :: AGDerefExp (GExp t a) t a -> GExp t a
-derefToExp (GDVar loc a nm)  
-  = MkExp (EVar nm) loc a
-derefToExp (GDProj loc a de fld) 
-  = MkExp (EProj (derefToExp de) fld) loc a
-derefToExp (GDArr loc a de1 e2 li) 
-  = MkExp (EArrRead (derefToExp de1) e2 li) loc a
+derefToExp (GDVar loc a nm)           = MkExp (EVar nm) loc a
+derefToExp (GDProj loc a de fld)      = MkExp (EProj (derefToExp de) fld) loc a
+derefToExp (GDArr loc a de1 e2 li)    = MkExp (EArrRead (derefToExp de1) e2 li) loc a
+derefToExp (GDNewArray loc a _t es)   = MkExp (EValArr es) loc a
+derefToExp (GDNewStruct loc a t flds) = MkExp (EStruct t flds) loc a
 
 
-
-isGDerefExp :: Bool -> GExp t a -> Maybe (GDerefExp t a)
-isGDerefExp check_mut e = case unExp e of
-  EVar nm 
-   -> if check_mut && not (isMutable nm) 
-      then Nothing else Just (GDVar loc nfo nm)
+isMutGDerefExp :: GExp t a -> Maybe (GDerefExp t a)
+isMutGDerefExp e = case unExp e of
+  EVar nm | not (isMutable nm) -> Nothing
+          | otherwise          -> Just (GDVar loc nfo nm)
   EProj estruct fld -> do
-    gde <- isGDerefExp check_mut estruct
+    gde <- isMutGDerefExp estruct
     return (GDProj loc nfo gde fld)
   EArrRead earr estart elen -> do
-    gdarr <- isGDerefExp check_mut earr
+    gdarr <- isMutGDerefExp earr
     return (GDArr loc nfo gdarr estart elen)
-  _ -> Nothing
+  _ -> Nothing -- All other cases are immutable
   where loc = expLoc e
         nfo = info e
 
 checkArgMut :: [ArgTy]    -- Function argument types (expected)
             -> [GExp t a] -- Arguments
-            -> Bool       -- Mutable arguments must be isGDerefExp
+            -> Bool       -- Mutable arguments must be isMutGDerefExp
 checkArgMut fun_tys args = all check_mut (zip fun_tys args)
-  where check_mut (GArgTy _ Mut, earg) = isJust $ isGDerefExp True earg
+  where check_mut (GArgTy _ Mut, earg) = isJust $ isMutGDerefExp earg
         check_mut _other               = True
 
 data GExp0 t a where

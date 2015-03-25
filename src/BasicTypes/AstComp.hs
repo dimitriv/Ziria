@@ -355,7 +355,7 @@ checkCAArgMut :: -- Function argument types (expected)
 checkCAArgMut fun_tys args = all check_mut (zip fun_tys args)
   where 
    check_mut (CAExp (GArgTy _ Mut), CAExp earg) 
-     = isJust $ isGDerefExp True earg
+     = isJust $ isMutGDerefExp earg
    check_mut _other = True
 
 

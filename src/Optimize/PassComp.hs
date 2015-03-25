@@ -775,6 +775,8 @@ inline_mutable nm dexpr = do
            idx <- newPassFoldGName "idx" (ctExp estart) loc Imm
            return (bnds `mappend` inlAsLetBound idx estart,
                      eArrRead loc simpl_de (eVar loc idx) li)
+    lift_idx _ = error "inline_mutable" 
+        -- All the rest are *immutable* (values)
 
 
 inlineParam :: GName Ty -> Exp -> RwM InlineData
@@ -784,7 +786,7 @@ inlineParam prm earg = do
   where 
     inline_prm
       | isMutable prm
-      , Just earg_deref <- isGDerefExp True earg
+      , Just earg_deref <- isMutGDerefExp earg
       = inline_mutable prm earg_deref
       | otherwise
       = inline_immutable prm earg
