@@ -28,7 +28,7 @@ qam16_mod_11a = bpsk_mod_11a / 3.162;
 qam64_mod_11a = bpsk_mod_11a / 6.481;
 
 
-%%% Create STS sequence
+%%% Create STS/STF sequence
 
 sts_mod = bpsk_mod_11a * 1.472;
 
@@ -54,7 +54,7 @@ sts_time(128+(1:32)) = sts_time(1:32);
 
 
   
-%%% Create LTE sequence
+%%% Create LTE/LTF sequence
 
 lts = [0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, ...
        1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, ...
@@ -62,6 +62,14 @@ lts = [0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, ...
        1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1];
 
 lts = (lts'*2-1);
+
+
+% 802.11n for debugging
+ht_ltf=[1,1,-1,-1,1,1,-1,1,-1,1,1,1,1,1,1,-1,-1,1,1,-1,1,-1,1,1,1,1,1,...
+        1,-1,-1,1,1,-1,1,-1,1,-1,-1,-1,-1,-1,1,1,-1,-1,1,-1,1,-1,1,1,1,1,-1,-1,-1,1,0,...
+        0,0,-1,1,1,-1,1,1,-1,-1,1,1,-1,1,-1,1,1,1,1,1,1,-1,-1,1,1,-1,1,-1,1,1,1,1,1,...
+        1,-1,-1,1,1,-1,1,-1,1,-1,-1,-1,-1,-1,1,1,-1,-1,1,-1,1,-1,1,1,1,1];
+
 
 
 %%% Create 127-elements cyclic pilot sequence
@@ -92,19 +100,19 @@ end
 % Delta - manually detected start of packet
 
 
-input = 4;
+input = 5;
 switch input
 
   case 1
     % Ziria generated direct input (no channel distorsions)
-    pkt = load('../../rx.infile');
+    pkt = load('../testbed/rx.infile');
     pkt = pkt(1:2:end) + i*pkt(2:2:end);
     pkt = transpose(pkt(1:2:end));
     delta = 0;
 
   case 2
     % Ziria generated captured input
-    file = fopen('../../../tests/test_real_rx.infile');
+    file = fopen('../tests/test_real_rx.infile');
     pkt = fread(file, inf, 'int16');
     pkt = pkt(1:2:end-1) + i*pkt(2:2:end);
     pkt = pkt(24753:65388);
@@ -120,9 +128,17 @@ switch input
     
   case 4
     % Wifi capture using BladeRF
-    pkt = load('pkt10.infile');
+    pkt = load('pkt1.infile');
     pkt = pkt(1:2:end)' + i*pkt(2:2:end)';
-    delta = -7;
+    delta = 160-67;
+    
+  case 5
+    % Weird packet. It seems to have only one LTS symbol, and than OFDM symbols right after that
+    %pkt = pkt2;
+    %delta = 62;
+
+    pkt = pkt3;
+    delta = 0;
 
 end
 
@@ -150,6 +166,7 @@ while x<length(pkt) && j <= length(offsets)
   x = x + offsets(j);
   j = j + 1;
 end
+xlim([0 600]);
 title('OFDM symbols in time');
 subplot(2,1,2); plot(abs(CPc));
 title('CP correlation in time');
@@ -165,20 +182,21 @@ len = min(length(ppkt), 2000);
 for d=1:len-length(sts_time)
   Y = [Y, ppkt(d+(1:length(sts_time)))'*sts_time];
 end
-f = [fft(pkt(1:64)), fft(pkt(1:64))];
+f = [fft(pkt(1:64)), fft(pkt(0+(1:64)))];
 ind = [4:4:24, 40:4:60, 64+(4:4:24), 64+(40:4:60)] + 1;
 figure(2); clf(2);
 subplot(3,1,1); plot(-prepad+(1:length(Y)), abs(Y))
 title('STS');
 xlabel('Delay [samples]');
 ylabel('Correlation');
-subplot(3,1,2); plot(abs(f)); 
+subplot(3,1,2); plot(1:64, abs(f), 1:64, abs(sts)/max(abs(sts))*max(abs(f))*1.2); 
 X=1:length(ind)-1;
 xlabel('Sub-carrier');
 ylabel('abs(fft(RX STS))');
 subplot(3,1,3); 
 hold on;
-stairs(X,diff(angle(f(ind))));
+stairs(X,diff(angle(f(ind))), 'k');
+stairs(X(1:11),diff(angle(sts(ind(1:12)))) + 0.5, 'g');
 plot(X, zeros(size(X))+pi, 'r:');
 plot(X, zeros(size(X))-pi, 'r:');
 plot(X, zeros(size(X)), 'r:');
@@ -201,12 +219,16 @@ hold on; plot(1:64, abs(fft(pkt(lts_start + 128 + (1:64)))), 'r:');
 xlabel('Sub-carrier');
 ylabel('abs(chan estimate)');
 legend('LTS1', 'LTS2', 'Data1');
-subplot(3,1,3); plot(angle(ch));
+subplot(3,1,3); 
+hold on
+plot(angle(ch));
+plot(angle(lts), ':');
 xlabel('Sub-carrier');
 ylabel('angle(chan estimate)');
 % Smooth the estimate
-ch = (ch(:,1) + ch(:,2))/2;
-
+%%% DEBUG
+%ch = (ch(:,1) + ch(:,2))/2;
+ch = ch(:,1);
 
 
 
@@ -214,8 +236,9 @@ ch = (ch(:,1) + ch(:,2))/2;
 
 pilot_index = 1;          % This changes across symbols
 pilot_ref = pilots(pilot_index) * pilot_mask;
-payload_start = lts_start + 128 + 80*0;
-
+payload_start = lts_start + 128 + 80*2;
+%%% DEBUG
+payload_start = payload_start - 64;
 
 % Original received data and its reshuffle
 d = fft(pkt(payload_start + (1:64)));
