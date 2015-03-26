@@ -88,10 +88,10 @@ pilot_mask = [1,1,1,-1]';
 
 % Code to save capture to Ziria-compatible format
 if 0
-  out = [real(pkt9)'; imag(pkt9)'];
+  out = [real(pkt1)'; imag(pkt1)'];
   out = out(:);
   out = round(out / max(out) * 10000);
-  f = fopen('pkt10.infile', 'w');
+  f = fopen('pkt1.infile', 'w');
   fprintf(f, '%d, ', out);
   fclose(f);
 end
@@ -100,7 +100,7 @@ end
 % Delta - manually detected start of packet
 
 
-input = 5;
+input = 4;
 switch input
 
   case 1
@@ -130,15 +130,17 @@ switch input
     % Wifi capture using BladeRF
     pkt = load('pkt1.infile');
     pkt = pkt(1:2:end)' + i*pkt(2:2:end)';
-    delta = 160-67;
+    delta = 160-84;
     
   case 5
     % Weird packet. It seems to have only one LTS symbol, and than OFDM symbols right after that
     %pkt = pkt2;
     %delta = 62;
 
-    pkt = pkt3;
-    delta = 0;
+    pkt = pkt1;
+    delta = 160-84;
+    
+    % 422, 549
 
 end
 
@@ -196,7 +198,7 @@ ylabel('abs(fft(RX STS))');
 subplot(3,1,3); 
 hold on;
 stairs(X,diff(angle(f(ind))), 'k');
-stairs(X(1:11),diff(angle(sts(ind(1:12)))) + 0.5, 'g');
+%stairs(X(1:11),diff(angle(sts(ind(1:12)))) + 0.5, 'g');
 plot(X, zeros(size(X))+pi, 'r:');
 plot(X, zeros(size(X))-pi, 'r:');
 plot(X, zeros(size(X)), 'r:');
@@ -226,9 +228,7 @@ plot(angle(lts), ':');
 xlabel('Sub-carrier');
 ylabel('angle(chan estimate)');
 % Smooth the estimate
-%%% DEBUG
-%ch = (ch(:,1) + ch(:,2))/2;
-ch = ch(:,1);
+ch = (ch(:,1) + ch(:,2))/2;
 
 
 
@@ -236,12 +236,11 @@ ch = ch(:,1);
 
 pilot_index = 1;          % This changes across symbols
 pilot_ref = pilots(pilot_index) * pilot_mask;
-payload_start = lts_start + 128 + 80*2;
-%%% DEBUG
-payload_start = payload_start - 64;
+payload_start = lts_start + 128 + 80*0;
+
 
 % Original received data and its reshuffle
-d = fft(pkt(payload_start + (1:64)));
+d = fft(pkt(payload_start + 16 + (1:64)));
 dr = d([38:38+4, 44:44+12, 58:58+5, 1:1+5, 8:8+12, 22:22+4]+1);
 chr = ch([38:38+4, 44:44+12, 58:58+5, 1:1+5, 8:8+12, 22:22+4]+1);
 
@@ -252,6 +251,10 @@ der = de([38:38+4, 44:44+12, 58:58+5, 1:1+5, 8:8+12, 22:22+4]+1);
 % Create estimation from pilots
 p = de([43,57,7,21]+1);
 pche = p ./ pilot_ref;
+
+% First find and remove trend, because of inaccurate clock sync
+a = mean(angle(pche(1:3)./pche(2:4)));
+
 pch = interp1([43-64,57-64,7, 21], pche, (-31:32), 'nearest', 'extrap');
 pch = [pch(33:end), pch(1:32)];
 pch = transpose(pch);
@@ -283,7 +286,7 @@ legend('Received', 'Post channel', 'Post pilots');
 ylabel('Phase');
 xlabel('Data sub-carrier');
 d = d ./ ch;
-figure(6);
+figure(5);
 subplot(1,3,1);
 plot(real(dr), imag(dr), '.');
 subplot(1,3,2);
