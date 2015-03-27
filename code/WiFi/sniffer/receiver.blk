@@ -64,7 +64,3 @@ fun comp receiver() {
        >>> GetData() 
        >>> receiveBits()
 }
-
-
-let comp main = read[complex16] >>> receiver() >>> write
-

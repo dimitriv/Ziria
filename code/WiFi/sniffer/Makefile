@@ -43,15 +43,22 @@ all: $(TGTS)
 %.out : %.blk
 	EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PP) $< $@
 
-%.outfile: %.out pkt1.infile
+sniffer_test.outfile: sniffer_test.out ../matlab/pkt1.infile
 	./$< --input=file \
-             --input-file-name=pkt1.infile \
+             --input-file-name=../matlab/pkt1.infile \
              --input-file-mode=dbg \
              --output-file-name=$@ \
              --output-file-mode=dbg
 
 %.test: %.outfile
 	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
+
+sniffer.run: sniffer.out
+	./$< --input=file \
+             --input-file-name=../matlab/pkt1.infile \
+             --input-file-mode=dbg \
+             --output-file-name=$@ \
+             --output-file-mode=dbg
 
 
 %.accept : %.outfile

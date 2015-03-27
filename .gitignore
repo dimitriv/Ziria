@@ -6,6 +6,7 @@
 .cabal-sandbox/
 cabal.sandbox.config
 tmp
+playground
 csrc/test.c
 csrc/Threads/backup
 Code/802.11a/receiver/*.c
