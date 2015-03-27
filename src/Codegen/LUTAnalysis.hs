@@ -356,8 +356,8 @@ invar_bitwidth pkg v
   = return (intLog2 (max (abs l) (abs h)))
 
   -- | Array variables in known input range
-  | Just rin <- inArrSlice pkg v
-  = inArrSliceBitWidth (nameTyp v) rin
+  | Just r <- inArrSlice pkg v
+  = inArrSliceBitWidth (nameTyp v) r
   -- ^ NB: at the moment input struct variables are considered as inputs
   -- ^ in their entirety. Perhaps later on we would like to extend the
   -- ^ range analysis and be more precise and efficient about this.
@@ -373,11 +373,12 @@ intLog2 ix = ceiling (logBase 2 dx + 1)
         dx = fromIntegral ix
 
 -- | Input array slice? 
-inArrSlice :: (Functor m, Monad m) => VarUsePkg -> EId -> Maybe (Int,Int)
-inArrSlice pkg x 
-  | Just (RArr rin _) <- neLookup x $ vu_ranges pkg
-  = return rin
-  | otherwise = Nothing
+inArrSlice :: VarUsePkg -> EId -> Maybe (Int,Int)
+inArrSlice pkg x = do 
+  RArr rin _ <- neLookup x $ vu_ranges pkg
+  case rin of 
+    IRng lidx hidx -> return (fromIntegral lidx, fromIntegral hidx)
+    _              -> Nothing
 
 inArrSliceBitWidth :: (Functor m, Monad m) => Ty -> (Int,Int) -> m Int
 inArrSliceBitWidth arrayty (lidx,hidx) = do
