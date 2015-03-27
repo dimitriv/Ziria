@@ -237,32 +237,34 @@ ch = (ch(:,1) + ch(:,2))/2;
 pilot_index = 1;          % This changes across symbols
 pilot_ref = pilots(pilot_index) * pilot_mask;
 payload_start = lts_start + 128 + 80*0;
-
+subset = [38:38+4, 44:44+12, 58:58+5, 1:1+5, 8:8+12, 22:22+4]+1;
 
 % Original received data and its reshuffle
 d = fft(pkt(payload_start + 16 + (1:64)));
-dr = d([38:38+4, 44:44+12, 58:58+5, 1:1+5, 8:8+12, 22:22+4]+1);
-chr = ch([38:38+4, 44:44+12, 58:58+5, 1:1+5, 8:8+12, 22:22+4]+1);
+dr = d(subset);
+chr = ch(subset);
 
 % Compensate channel
 de = d ./ ch;
-der = de([38:38+4, 44:44+12, 58:58+5, 1:1+5, 8:8+12, 22:22+4]+1);
+der = de(subset);
+
 
 % Create estimation from pilots
+% The goal is to find and remove trend, because of inaccurate clock sync
 p = de([43,57,7,21]+1);
 pche = p ./ pilot_ref;
-
-% First find and remove trend, because of inaccurate clock sync
-a = mean(angle(pche(1:3)./pche(2:4)));
-
-pch = interp1([43-64,57-64,7, 21], pche, (-31:32), 'nearest', 'extrap');
+a = mean(angle(pche(1:3)./pche(2:4)) ./ diff([43-64,57-64,7,21])');
+X = (-31:32);
+%pch = interp1([43-64,57-64,7, 21], pche, (-31:32), 'nearest', 'extrap');
+pch = exp(-i*a*X);
 pch = [pch(33:end), pch(1:32)];
 pch = transpose(pch);
-pchr = pch([38:38+4, 44:44+12, 58:58+5, 1:1+5, 8:8+12, 22:22+4]+1);
+pchr = pch(subset);
+
 
 % Compensate pilots
 dc = de ./ pch;
-dcr = de([38:38+4, 44:44+12, 58:58+5, 1:1+5, 8:8+12, 22:22+4]+1);
+dcr = der ./ pchr;
 
 
 figure(4);clf(4);
@@ -290,11 +292,11 @@ figure(5);
 subplot(1,3,1);
 plot(real(dr), imag(dr), '.');
 subplot(1,3,2);
-plot(real(dcr), imag(dcr), '.');
+plot(real(der), imag(der), '.');
 xlim([-1.5 1.5]);
 ylim([-1.5 1.5]);
 subplot(1,3,3);
-plot(real(der), imag(der), '.');
+plot(real(dcr), imag(dcr), '.');
 xlim([-1.5 1.5]);
 ylim([-1.5 1.5]);
 
