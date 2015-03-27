@@ -184,9 +184,6 @@ runAutoLUT dflags _ c = autolutC c
             go (EBinOp op e1 e2) =
                 EBinOp op <$> autoE e1 <*> autoE e2
 
-            -- go (EComplex e1 e2) =
-            --     EComplex <$> autoE e1 <*> autoE e2
-
             go (EAssign e1 e2) =
                 EAssign <$> autoE e1 <*> autoE e2
 

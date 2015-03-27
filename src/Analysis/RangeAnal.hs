@@ -23,9 +23,11 @@
 
 -- | Range analysis
 module Analysis.RangeAnal 
-     ( Range
+     ( Range ( .. )
+     , Interval ( .. )
+     , RngMap
      , pprRanges
-     , varRanges 
+     , varRanges
      )
 where
 
@@ -47,6 +49,8 @@ import PpExpr ()
 import NameEnv
 import AbsInt
 import CtExpr
+
+import Opts
 
 import qualified Data.Set as S
 import qualified Data.Monoid as M
@@ -249,7 +253,7 @@ instance POrd Range where
   RInt intv1   `pleq` RInt intv2   = intv1 `pleq` intv2
   ROther       `pleq` ROther       = True
   RArr ri1 wi1 `pleq` RArr ri2 wi2 = ri1 `pleq` ri2 && wi1 `pleq` wi2
-  r1           `pleq` r2           = error ("POrd Range:" ++ show r1 ++ " <= " ++ show r2)
+  r1 `pleq` r2  = error ("POrd Range:" ++ show r1 ++ " <= " ++ show r2)
 
 
 joinRngMap :: RngMap -> RngMap -> RngMap
@@ -459,15 +463,15 @@ derefVar x rdwr = do
     TInt {}
        -> case rdwr of
             Rd -> do m <- varGetRng x
-                     -- liftIO $ print (text "derefVar(rd): " <+> ppr x)
-                     -- liftIO $ print (text "current range:" <+> text (show m))
+             -- liftIO $ print (text "derefVar(rd): " <+> ppr x)
+             -- liftIO $ print (text "current range:" <+> text (show m))
                      case m of
                        Nothing -> return $ RngVal (RInt ITop) symx
                        Just r  -> return $ RngVal r symx
             Wr r -> do varJoinRng x r
-                       -- liftIO $ print (text "derefVar(wr):" <+> ppr x)
-                       -- s <- get
-                       -- liftIO $ print (text "new range   :" <+> ppr (neLookup x s))
+              -- liftIO $ print (text "derefVar(wr):" <+> ppr x)
+              -- s <- get
+              -- liftIO $ print (text "new range   :" <+> ppr (neLookup x s))
                        return (RngVal r symx)
     _other
        -> varJoinRng x $ ROther
@@ -556,18 +560,17 @@ pprRanges r = vcat $
 runRng :: Rng a -> IO (Either Doc (a, RngMap))
 runRng (Rng action) = runErrorT (runStateT action neEmpty)
 
-varRanges :: MonadIO m => Exp -> m (Either Doc (RngMap, Range))
-varRanges e =
-  case action of 
-    AbsT m -> do 
+varRanges :: MonadIO m => DynFlags -> Exp -> m (RngMap, Range)
+varRanges dfs e =
+  case action of
+    AbsT m -> do
       r <- liftIO $ runRng m
-      case r of 
-        Left err 
-          -> return $ Left err
+      case r of
+        Left err
+          -> do verbose dfs $ text "varRanges:" <+> err
+                return (neEmpty, rangeTop (ctExp e))
         Right (rngval,rmap) 
-          -> return $ Right (rmap, av_range rngval)
+          -> return (rmap, av_range rngval)
   where 
     action :: AbsT Rng RngVal
     action = absEval e
-
-

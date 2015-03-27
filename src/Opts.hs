@@ -101,7 +101,7 @@ verbose dflags doc
 
 
 mAX_LUT_SIZE_DEFAULT :: Integer
-mAX_LUT_SIZE_DEFAULT = 128*1024
+mAX_LUT_SIZE_DEFAULT = 256*1024
 
 maxLUTSize :: DynFlags -> Integer
 maxLUTSize dflags =

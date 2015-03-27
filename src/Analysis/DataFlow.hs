@@ -21,7 +21,13 @@
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 
 
-module Analysis.DataFlow ( inOutVars, debugDataFlow ) where
+module Analysis.DataFlow (
+    inOutVars
+  , pprVarUsePkg
+  , debugDataFlow
+  , VarUsePkg (..)
+) where
+
 
 import Control.Applicative
 import Control.Monad.Error
@@ -209,13 +215,14 @@ deriving instance MonadIO (AbsT DFM)
 
 
 data VarUsePkg 
-  = VarUsePkg { vs_invars   :: [EId]
-              , vs_outvars  :: [EId]
-              , vs_allvars  :: [EId] 
-              }
+  = VarUsePkg { vu_invars   :: [EId]
+              , vu_outvars  :: [EId]
+              , vu_allvars  :: [EId]
+              , vu_ranges   :: RA.RngMap }
 
-inOutVars :: MonadIO m => Exp -> m (Either Doc VarUsePkg)
-inOutVars e = do
+
+inOutVars :: MonadIO m => DynFlags -> Exp -> m (Either Doc VarUsePkg)
+inOutVars dfs e = do
   res <- liftIO $ runDFM (unAbsT action)
   case res of 
     Left err -> return $ Left err
@@ -225,9 +232,13 @@ inOutVars e = do
           impUsed  = Set.toList $ Set.unions (map snd (neToList udmap))
           pureUsed = Set.toList varset
           allVars  = Set.toList ufset
-      return $ Right $ VarUsePkg { vs_invars  = nub $ impUsed ++ pureUsed
-                                 , vs_outvars = modified
-                                 , vs_allvars = allVars }
+      -- Try now the range analysis
+      (ranges,_ret_rng) <- RA.varRanges dfs e
+      return $ Right $ 
+        VarUsePkg { vu_invars  = nub $ impUsed ++ pureUsed
+                  , vu_outvars = modified
+                  , vu_allvars = allVars 
+                  , vu_ranges  = ranges }
   where action :: AbsT DFM VarSet
         action = absEval e
 
@@ -244,18 +255,20 @@ debugDataFlow dfs comp = do
   return ()
   where on_exp = mapExpM return return on_exp'
         on_exp' e0 = do
-          print $ vcat [ text "**** Debugging new dataflow analysis ****"
-                       , text "Analyzing expression at location: " <+> text (show (expLoc e0))
-                       ]
-          verbose dfs $ nest 4 (ppr e0)
-
-          unlessErr (inOutVars e0)      $ \(VarUsePkg invars outvars _allvars) ->
-            unlessErr (RA.varRanges e0) $ \(rm,rng) -> do
-              print $ vcat [ text "Input variables :" <+> sep (map ppr invars)
-                           , text "Output variables:" <+> sep (map ppr outvars)
-                           , text "Ranges          :"
-                           , nest 2 (RA.pprRanges rm)
-                           , text "Result range    :"
-                           , nest 2 (ppr rng) 
-                           ]
+          print $
+             vcat [ text "**** Debugging new dataflow analysis ****"
+                  , text "Analyzing expression at location: " <+>
+                    text (show (expLoc e0))
+                  ]
+          verbose dfs (nest 4 $ ppr e0)
+          unlessErr (inOutVars dfs e0) (print . pprVarUsePkg)
           return e0
+
+
+pprVarUsePkg :: VarUsePkg -> Doc
+pprVarUsePkg (VarUsePkg invars outvars allvars rmap)
+  = vcat [ text "  input variables:" <+> ppr invars
+         , text " output variables:" <+> ppr outvars
+         , text "    all variables:" <+> ppr allvars
+         , text "      ranges used:" <+> RA.pprRanges rmap
+         ]

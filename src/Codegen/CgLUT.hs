@@ -23,6 +23,7 @@
 {-# OPTIONS_GHC -fwarn-unused-binds #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
+
 module CgLUT
   ( codeGenLUTExp
   , codeGenLUTExp_Mock
