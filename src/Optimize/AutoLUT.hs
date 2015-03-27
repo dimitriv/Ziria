@@ -26,7 +26,7 @@ import GenSym
 import AstComp
 import AstExpr
 import PpExpr
-import CgLUT (pprLUTStats, shouldLUT)
+import CgLUT
 import Analysis.Range
 
 import qualified Analysis.RangeAnal as RangeAnal
