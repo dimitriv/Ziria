@@ -49,6 +49,10 @@ typedef enum {
 #include "wpl_alloc.h"
 #include "utils.h"
 
+#ifdef BLADE_RF
+#include "bladerf_radio.h"
+#endif
+
 // We keep two sets of parameters in case we want to do full-duplex 
 // one radio each. Otherwise, we only use one set for common parameters.
 typedef struct {
@@ -60,6 +64,12 @@ typedef struct {
 	LONG FreqencyOffset;
 	ULONG SampleRate;
 	ULONG TXBufferSize;
+	ULONG Bandwidth;
+
+#ifdef BLADE_RF
+	struct bladerf *dev;
+#endif
+
 } SoraParameters;
 #endif
 
