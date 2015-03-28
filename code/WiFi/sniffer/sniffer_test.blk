@@ -1,5 +1,3 @@
--- #include "receiver.blk"
+#include "receiver.blk"
 
--- let comp main = read[complex16] >>> receiver() >>> write
-
-let comp main = read[complex16] >>> write
+let comp main = read[complex16] >>> receiver() >>> write
