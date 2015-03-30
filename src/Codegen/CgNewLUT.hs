@@ -37,8 +37,8 @@ import {-# SOURCE #-} CgExpr
 import CgMonad hiding (State)
 import CgTypes
 import NameEnv
-import Analysis.Range
-import Analysis.UseDef
+import Analysis.RangeAnal
+import Analysis.Dataflow
 import Control.Monad.IO.Class ( liftIO )
 import Data.Maybe ( isJust, fromJust )
 import Language.C.Quote.C

@@ -70,7 +70,7 @@ import Data.Maybe ( isJust )
 -- | LUT statistics
 data LUTStats = LUTStats { 
      lutInBitWidth      :: Int       -- ^ Index bitwidth
-   , lutOutBitWidth     :: Int       -- ^ Total output bitwidth
+   , lutOutBitWidth     :: Int       -- ^ Total output bitwidth (contains result!)
    , lutResultBitWidth  :: Int       -- ^ Result bitwidth
    , lutTableSize       :: Integer   -- ^ Size needed (in bytes)
    , lutVarUsePkg       :: VarUsePkg -- ^ Var use info

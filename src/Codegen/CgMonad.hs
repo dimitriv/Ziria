@@ -329,8 +329,9 @@ emptyEnv sym =
 -- see Note [Continuation Invariants]
 
 data LUTGenInfo
-  = LUTGenInfo { lgi_lut_var  :: C.Exp -- the lut table variable
-               , lgi_lut_gen  :: C.Stm -- call to the lut initializer
+  = LUTGenInfo { lgi_lut_var        :: C.Exp -- the lut table variable
+               , lgi_lut_gen        :: C.Stm -- call to the lut initializer
+               , lgi_masked_outvars :: [(EId, Maybe C.Exp)] -- The outvars plus their mask BitArrPtr vars
                }
   deriving Show
 

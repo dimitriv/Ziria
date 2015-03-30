@@ -377,6 +377,8 @@ data GExp0 t a where
   --
   -- > d := x | d.f | d[e] | d[e,j]
   --
+  -- TODO -- TODO : let bindings too are important to lift to normal forms!
+  -- 
   -- See semantics for details.
   EAssign :: GExp t a -> GExp t a -> GExp0 t a
 
