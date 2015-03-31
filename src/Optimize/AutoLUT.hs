@@ -27,8 +27,6 @@ import AstComp
 import AstExpr
 import PpExpr
 import CgLUT
-import Analysis.Range
-
 import qualified Analysis.RangeAnal as RangeAnal
 import LUTAnalysis 
 
