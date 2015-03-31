@@ -33,6 +33,7 @@ module LUTAnalysis (
    -- | Densely packed input variable width
  , inVarsBitWidth
  , inVarBitWidth
+ , inArrSlice
 
    -- | Byte-aligned packed output variable width and assign-masks
  , outVarsBitWidth
