@@ -140,9 +140,9 @@ cgBitArrRead src_base pos len tgt
     byte_len      = (len+7) `div` 8
 
 
-{----------------------------------------------------------------------------
+{---------------------------------------------------------------------------
    Packing index variables (see also Note [LUT Packing Strategy])
-----------------------------------------------------------------------------}
+---------------------------------------------------------------------------}
 packIdx :: VarUsePkg
         -> [EId]   -- ^ Variables to pack
         -> C.Exp   -- ^ A C expression for the index variable
@@ -195,6 +195,7 @@ unpack_idx_var :: VarUsePkg -- ^ Variable use package
 -- ^ NB: Unpacking index variables is not performance critical since
 -- it is only used during LUT generation but not during execution. So
 -- there aren't any clever fast paths here.
+-- ^ NB: Mutates the index
 unpack_idx_var pkg v idx
   | TArray _ base_ty <- nameTyp v
   , Just (lidx,hidx) <- inArrSlice pkg v
@@ -209,10 +210,10 @@ unpack_idx_var pkg v idx
   = do w    <- inVarBitWidth pkg v
        vptr <- varToBitArrPtr v
        appendStmt $
-         [cstm| bitArrWrite((BitArrPtr) & $idx,0,$int:w,$vptr);|]
+         [cstm| bitArrWrite($idx_ptr,0,$int:w,$vptr);|]
        let new_idx = idx `cExpShR` w
        appendStmt $ [cstm| $idx = $new_idx;|]
-  where idx_ptr      = [cexp| (BitArrPtr) & $idx |]
+  where idx_ptr      = [cexp| (typename BitArrPtr) & $idx |]
 
 {----------------------------------------------------------------------------
    Packing (byte-aligned) output variables (see Note [LUT Packing Strategy])
@@ -227,7 +228,7 @@ packOutVars :: VarUsePkg          -- ^ Usage info
 packOutVars pkg outvars tgt = do
   final_bit_idx <- go outvars 0
   let final_byte_idx = (final_bit_idx + 7) `div` 8
-  return $ [cexp| & tgt[$int:final_byte_idx]|]
+  return $ [cexp| & $tgt[$int:final_byte_idx]|]
 
   where go [] w       = return w
         go (v:vs) pos = pack_out_var pkg v tgt pos >>= go vs
@@ -252,9 +253,9 @@ pack_out_var _pkg (v,v_asgn_mask) tgt pos = do
   -- | Return new position
   return (pos+total_width)
 
-{----------------------------------------------------------------------------
+{---------------------------------------------------------------------------
    Unpacking (byte-aligned) output vars (see aNote [LUT Packing Strategy])
-----------------------------------------------------------------------------}
+---------------------------------------------------------------------------}
 
 unpackOutVars :: VarUsePkg          -- ^ Usage info
               -> [(EId, Maybe EId)] -- ^ Output vars and assign-masks
@@ -263,7 +264,7 @@ unpackOutVars :: VarUsePkg          -- ^ Usage info
 unpackOutVars pkg outvars src = do
   final_bit_idx <- go outvars 0
   let final_byte_idx = (final_bit_idx + 7) `div` 8
-  return $ [cexp| & src[$int:final_byte_idx]|]
+  return $ [cexp| & $src[$int:final_byte_idx]|]
 
   where go [] n      = return n
         go (v:vs) pos = unpack_out_var pkg v src pos >>= go vs
@@ -283,14 +284,14 @@ unpack_out_var _pkg (v, Just {}) src pos = do
   vptr    <- varToBitArrPtr v
   total_w <- outVarBitWidth v
   let w  = total_w `div` 2
-  let mask_ptr = [cexp| & src[$int:((pos+w) `div` 8)]|]
+  let mask_ptr = [cexp| & $src[$int:((pos+w) `div` 8)]|]
   cgBitArrLUTMask vptr mask_ptr src w
   return (pos + total_w)
 
 
-{----------------------------------------------------------------------------
+{---------------------------------------------------------------------------
    Compile an epxression to LUTs
-----------------------------------------------------------------------------}
+---------------------------------------------------------------------------}
 
 codeGenLUTExp :: DynFlags
               -> LUTStats  -- ^ LUT stats for the expression to LUT-compile
@@ -360,9 +361,9 @@ codeGenLUTExp dflags stats e mb_resname
       genLUTLookup dflags stats clut (ctExp e) mb_resname
 
 
-{----------------------------------------------------------------------------
+{---------------------------------------------------------------------------
    Generate the code for looking up a LUT value
-----------------------------------------------------------------------------}
+---------------------------------------------------------------------------}
 
 genLUTLookup :: DynFlags
              -> LUTStats
@@ -412,9 +413,9 @@ genLUTLookup _dflags stats lgi ety mb_resname = do
         return [cexp|UNIT|]
 
 
-{----------------------------------------------------------------------------
+{---------------------------------------------------------------------------
    Generate the code for generating a LUT 
-----------------------------------------------------------------------------}
+---------------------------------------------------------------------------}
 
 genLUT :: DynFlags
        -> LUTStats       -- ^ LUT stats and info
@@ -442,7 +443,12 @@ genLUT dflags stats e = do
       genLocalVarInits dflags (vu_allvars vupkg) $
       genLocalMaskInits dflags mask_eids $ do 
          -- | Unpack the index into the input variables
-         unpackIdx vupkg (vu_invars vupkg) [cexp|$id:cidx|]
+         -- However, since unpacking is mutating the index we
+         -- first have to copy the index to debug later.
+         orig_cidx <- freshVar "orig_idx"
+         appendDecl [cdecl| $ty:cidx_ty $id:orig_cidx;|]
+         appendStmt [cstm|  $id:orig_cidx = $id:cidx; |]
+         unpackIdx vupkg (vu_invars vupkg) [cexp|$id:orig_cidx|]
          -- | Debug the LUT
          cgDebugLUTIdxPack [cexp|$id:cidx|] cidx_ty vupkg loc
          -- | Initialize clutentry
@@ -462,18 +468,21 @@ genLUT dflags stats e = do
              -> assignByVal ety ety [cexp| *(($ty:c_ty) $clut_fin)|] ce
 
    -- | make lut entry be 2-byte aligned
-   let lutEntryByteLen = ((((lutOutBitWidth stats + 7) `div` 8) + 1) `div` 2) * 2
+   let lutEntryByteLen 
+        = ((((lutOutBitWidth stats + 7) `div` 8) + 1) `div` 2) * 2
    let idxLen = (1::Word) `shiftL` (lutInBitWidth stats)
        lutbasety = namedCType $ "calign unsigned char"
        clutDecl = [cdecl| $ty:lutbasety
                               $id:clut[$int:idxLen][$int:lutEntryByteLen];|]
    cbidx <- freshVar "bidx"
+
+   -- | LUT Generation Function Proper
    let clutgen_def
          = [cedecl|void $id:clutgen() {
-               for($ty:cidx_ty $id:cidx = 0;
-                        $id:cidx < $int:idxLen;
-                        ($id:cidx)++)
+               for (unsigned long _lidx = 0; _lidx < $int:idxLen; _lidx++)
                {
+                  $ty:cidx_ty $id:cidx = ($ty:cidx_ty) _lidx;
+
                   $decls:lut_decls
                   unsigned int $id:cbidx;
                   $stms:lut_stms
@@ -483,7 +492,9 @@ genLUT dflags stats e = do
                       $id:clut[$id:cidx][$id:cbidx] = 
                                       $id:clutentry[$id:cbidx]; 
                   }
-               }}
+
+               }
+           }
            |]
    appendTopDecl clutDecl
    appendTopDefs lut_defs
@@ -534,7 +545,7 @@ cgDebugLUTIdxPack :: C.Exp            -- ^ original index
                   -> Cg ()
 cgDebugLUTIdxPack cidx cidx_ty vupkg loc = do
    dbg_cidx <- freshVar "dbg_idx"
-   appendDecl [cdecl| $ty:cidx_ty $id:dbg_cidx;|]
+   appendDecl [cdecl| $ty:cidx_ty $id:dbg_cidx = 0;|]
    packIdx vupkg (vu_invars vupkg) [cexp|$id:dbg_cidx|] cidx_ty
    appendStmt [cstm| 
      if ($cidx != $id:dbg_cidx) {
@@ -543,9 +554,9 @@ cgDebugLUTIdxPack cidx cidx_ty vupkg loc = do
         exit(-1); } |]
 
 
-{----------------------------------------------------------------------------
+{---------------------------------------------------------------------------
    Instrument an expression to update the assign-masks
-----------------------------------------------------------------------------}
+---------------------------------------------------------------------------}
 
 bIT0 :: Exp
 bIT0 = eVal Nothing TBit (VBit False)
@@ -577,9 +588,10 @@ eBitArrSet :: EId -> Exp -> Int -> Exp
 eBitArrSet bitarr start width 
   = eArrWrite Nothing bitarr_exp start width_linfo arrval
   where 
-    bitarr_exp  = eVar Nothing bitarr
-    arrval      = eValArr Nothing (replicate width bIT1)
-    width_linfo = if width == 1 then LISingleton else LILength width
+   bitarr_exp = eVar Nothing bitarr
+   (arrval, width_linfo)
+     | width == 1 = (bIT1,LISingleton)
+     | otherwise  = (eValArr Nothing (replicate width bIT1), LILength width)
 
 eMultBy :: Exp -> Int -> Exp
 eMultBy e n = eBinOp loc Mult e (eVal loc ety (VInt ni))
@@ -666,10 +678,37 @@ liftLValEffects (GDArr loc a de e len) = do
   nm <- freshName "n" (ctExp e) Imm
   let nmexp = eVar loc nm
   (bnds,de') <- liftLValEffects de
-  let bnds' = (nm,e) : bnds
+  let TArray (Literal n) _ = ctDerefExp de
+  e' <- mk_bounded loc n e len
+  let bnds' = (nm,e') : bnds
   return (bnds', GDArr loc a de' nmexp len)
 liftLValEffects other = return ([],other)
 
+mk_bounded :: Maybe SourcePos
+           -> Int 
+           -> Exp
+           -> LengthInfo 
+           -> Cg Exp
+-- ^ As we are iterating over a potentially larger space we must be
+-- ^ careful to not cause segfaults during LUT generation.
+mk_bounded loc array_len estart LISingleton = do 
+  let int_ty = ctExp estart
+  let earray_len = eVal loc int_ty (VInt $ fromIntegral array_len) 
+  tmp <- freshName "tmp" int_ty Imm
+  let etmp = eVar loc tmp
+  let etest = eBinOp loc Leq etmp earray_len
+  return $ eLet loc tmp AutoInline estart $
+           eIf loc etest etmp (eVal loc int_ty (VInt 0))
+mk_bounded loc array_len estart (LILength n) = do 
+  let int_ty = ctExp estart
+  let earray_len = eVal loc int_ty (VInt $ fromIntegral array_len) 
+  let lilen      = eVal loc int_ty (VInt $ fromIntegral n)
+  tmp <- freshName "tmp" int_ty Imm 
+  let etmp = eVar loc tmp
+  let etest = eBinOp loc Leq (eBinOp loc Add etmp lilen) earray_len
+  return $ eLet loc tmp AutoInline estart $
+           eIf loc etest etmp (eVal loc int_ty (VInt 0))
+mk_bounded _ _ _ (LIMeta {}) = panicStr "mk_bounded, LIMeta!"
 
 eLetMany :: [(EId,Exp)] -> Exp -> Exp
 eLetMany [] e = e

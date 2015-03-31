@@ -55,33 +55,33 @@ autolutC dflags
   = mapCompM return return return return (autolutE dflags) return
 
 autolutE :: DynFlags -> Exp -> IO Exp
-autolutE dflags e = autoE e
+autolutE dflags = autoE
   where
     autoE e0@(MkExp e loc inf) = do
-      vupkg_mb <- DataFlow.inOutVars dflags e0
-      case vupkg_mb of
-        Left err
-           -> do let doc = vcat [ text "DataFlow analysis failed:"
-                                , nest 4 (ppr e0)
-                                , text "Reason:" <+> err ]
-                 verbose dflags doc
-                 recurse e0 (Left doc)
-        Right vupkg
-           -> calcLUTStats dflags vupkg e0 >>= autoE' e0
+      -- | Calculate LUT statistics 
+      stats <- calcLUTStats dflags e0
+      case stats of 
+        Left err -> do 
+          verbose dflags $ 
+            vcat [ text "Cannot autolut expresion:"
+                 , nest 4 (ppr e0)
+                 , text "Location:" <+> text (show loc)
+                 , text "Reason:" <+> err ]
+          go_inside e0
+        Right stats -> autoE' e0 stats
 
     autoE' e0 stats
       | Right True <- lutShould stats
       = do verbose dflags $
              vcat [ text "Expression autolutted:" 
                   , nest 4 (ppr e0)
+                  , text "Location:" <+> text (show (expLoc e0))
                   , ppr stats ]
            pure $ eLUT (expLoc e0) stats e0
+    autoE' e0 stats = go_inside e0
 
-    autoE' e0 stats = recurse e0 (Right stats)
-
-    recurse e0@(MkExp e loc inf) mstats =
-        MkExp <$> go e <*> pure loc <*> pure inf
-
+    go_inside e0@(MkExp e loc inf) 
+      = MkExp <$> go e <*> pure loc <*> pure inf
       where
         go :: Exp0 -> IO Exp0
         go e@(EVal {})       = pure e
@@ -90,33 +90,17 @@ autolutE dflags e = autoE e
         go (EUnOp op e)      = EUnOp op <$> autoE e
         go (EBinOp op e1 e2) = EBinOp op <$> autoE e1 <*> autoE e2
         go (EAssign e1 e2)   = EAssign <$> autoE e1 <*> autoE e2
-
         go (EArrRead e1 e2 len) =
             EArrRead <$> autoE e1 <*> autoE e2 <*> pure len
         go (EArrWrite e1 e2 len e3) =
             EArrWrite <$> autoE e1 <*> autoE e2 <*> pure len <*> autoE e3
-
         go (EFor ui i e1 e2 e3) = do
-            verbose dflags $
-              vcat [ text "Cannot autolut loop:" 
-                   , nest 4 (ppr e0)
-                   , text "At location:" <+> text (show loc)
-                   , ppr mstats ]                   
             EFor ui i <$> autoE e1 <*> autoE e2 <*> autoE e3
-
         go (EWhile e1 e2) = do
-            verbose dflags $ 
-             vcat [ text "Cannot autolut loop:" 
-                  , nest 4 (ppr e0)
-                  , text "At location:" <+> text (show loc)
-                  , ppr mstats ]
             EWhile <$> autoE e1 <*> autoE e2
-
         go (ELet v fi e1 e2) = ELet v fi <$> autoE e1 <*> autoE e2
-
         go (ELetRef v (Just e1) e2) 
           = autoE e1 >>= \e1' -> ELetRef v (Just e1') <$> autoE e2
-
         go (ELetRef v Nothing e2) = ELetRef v Nothing <$> autoE e2
         go (ESeq e1 e2)    = ESeq <$> autoE e1 <*> autoE e2
         go (ECall f es)    = ECall f <$> mapM autoE es
@@ -124,7 +108,6 @@ autolutE dflags e = autoE e
         go (EPrint nl es)  = EPrint nl <$> mapM autoE es
         go (EError _t str) = pure e
         go (ELUT s e)      = pure $ ELUT s e
-
         -- TODO: Revisit this, it seems defensive
         go (EStruct tn tfs) = pure e
         go (EProj _ fn)     = pure e
