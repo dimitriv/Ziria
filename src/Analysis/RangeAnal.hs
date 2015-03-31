@@ -54,7 +54,7 @@ import Opts
 
 import qualified Data.Set as S
 import qualified Data.Monoid as M
-
+import Text.Show.Pretty (PrettyVal)
 
 {----------------------------------------------------------------------
   Definition of the Range
@@ -65,7 +65,10 @@ data Range
   = RInt Interval
   | RArr Interval Interval
   | ROther 
-  deriving (Generic, Typeable, Data, Eq, Show)
+  deriving (Generic, Typeable, Data, Eq, Show, Ord)
+
+instance PrettyVal Interval
+instance PrettyVal Range
 
 instance Outputable Range where
   ppr r = text (show r)
@@ -118,7 +121,7 @@ sjoin ms1 ms2 = do
 -- | Intervals
 data Interval 
   = IBot | IRng Integer Integer | ITop
-  deriving (Generic, Typeable, Data, Eq, Show)
+  deriving (Generic, Typeable, Data, Eq, Ord, Show)
 
 instance NFData Interval where
   rnf = genericRnf

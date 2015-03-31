@@ -31,3 +31,6 @@ instance PrettyVal Range
 instance Eq        Range
 instance Ord       Range
 instance NFData    Range
+
+
+

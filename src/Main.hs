@@ -29,7 +29,7 @@ import System.IO
 import Text.Parsec (runParserT)
 import Text.PrettyPrint.HughesPJ
 import qualified Text.PrettyPrint.Mainland as GMPretty
-import Text.Show.Pretty (dumpStr)
+-- import Text.Show.Pretty (dumpStr)
 import qualified Language.C.Syntax as C
 
 import System.Timeout 
@@ -127,11 +127,10 @@ main = do
              ; runParseM parser []
              }
 
-    -- pretty-show's `dumpDoc` generates a `Text.PrettyPrint.HughesPJ.Doc`
-    -- rather than `Text.PrettyPrint.Mainland.Doc`, so we generate a flat
-    -- string instead
-    dump dflags DumpAst ".ast.dump" $ (text . dumpStr) prog
-    dump dflags DumpAstPretty ".ast.pretty.dump" $ (text . show) prog
+
+    dump dflags DumpAst ".ast.dump" $ (text . show) prog
+    -- Disabling Pretty for now
+    dump dflags DumpAstPretty ".ast.dump" $ (text . show) prog
 
     sym <- GS.initGenSym (getName dflags)
     

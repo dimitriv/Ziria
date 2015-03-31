@@ -313,7 +313,6 @@ data GComp0 tc t a b where
   -- > Mitigate a 1 1 :: ST T a a
   Mitigate :: String  -- just for debugging 
            -> t -> Int -> Int -> GComp0 tc t a b
-  deriving (Generic, Typeable, Data)
 
 data VectAnn = Rigid Bool (Int,Int) -- True == allow mitigations up, False == disallow mitigations up
              | UpTo  Bool (Int,Int)
@@ -394,11 +393,9 @@ data GComp tc t a b
   = MkComp { unComp   :: !(GComp0 tc t a b)
            , compLoc  :: !(CompLoc)
            , compInfo :: a }
-  deriving (Generic, Typeable, Data)
 
 data GProg tc t a b
   = MkProg { progComp :: GComp tc t a b }
-  deriving (Generic, Typeable, Data)
 
 {-------------------------------------------------------------------------------
   Specialization of the AST to Ty (internal types)
@@ -1217,11 +1214,11 @@ instance PrettyVal t => PrettyVal (GCTy t)
 
 instance (PrettyVal a, PrettyVal b) => PrettyVal (CallArg a b)
 
-instance (PrettyVal t, PrettyVal a, PrettyVal b) => PrettyVal (GMutVar t a b)
 
-instance (PrettyVal tc, PrettyVal t, PrettyVal a, PrettyVal b) => PrettyVal (GComp0 tc t a b)
-instance (PrettyVal tc, PrettyVal t, PrettyVal a, PrettyVal b) => PrettyVal (GComp tc t a b)
-instance (PrettyVal tc, PrettyVal t, PrettyVal a, PrettyVal b) => PrettyVal (GProg tc t a b)
+-- instance (PrettyVal t, PrettyVal a, PrettyVal b) => PrettyVal (GMutVar t a b)
+-- instance (PrettyVal tc, PrettyVal t, PrettyVal a, PrettyVal b) => PrettyVal (GComp0 tc t a b)
+-- instance (PrettyVal tc, PrettyVal t, PrettyVal a, PrettyVal b) => PrettyVal (GComp tc t a b)
+-- instance (PrettyVal tc, PrettyVal t, PrettyVal a, PrettyVal b) => PrettyVal (GProg tc t a b)
 
 instance PrettyVal SrcCTy
 

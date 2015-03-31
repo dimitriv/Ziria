@@ -129,7 +129,6 @@ module Interpreter (
 
 import Control.Applicative
 import Control.Arrow (second)
-import Control.DeepSeq.Generics (NFData(..), genericRnf)
 import Control.Monad.Error
 import Control.Monad.Reader
 import Control.Monad.State.Strict
@@ -1958,11 +1957,11 @@ map' f (x:xs) = let !y  = f x
   (Mostly for debugging)
 -------------------------------------------------------------------------------}
 
-instance NFData a => NFData (Complex      a) where rnf = genericRnf
-instance NFData a => NFData (MarkImplicit a) where rnf = genericRnf
+-- instance NFData a => NFData (Complex      a) where rnf = genericRnf
+-- instance NFData a => NFData (MarkImplicit a) where rnf = genericRnf
 
-instance NFData EvalState   where rnf = genericRnf
-instance NFData IntDomain   where rnf = genericRnf
-instance NFData LetRefState where rnf = genericRnf
-instance NFData Value       where rnf = genericRnf
-instance NFData Value0      where rnf = genericRnf
+-- instance NFData EvalState   where rnf = genericRnf
+-- instance NFData IntDomain   where rnf = genericRnf
+-- instance NFData LetRefState where rnf = genericRnf
+-- instance NFData Value       where rnf = genericRnf
+-- instance NFData Value0      where rnf = genericRnf

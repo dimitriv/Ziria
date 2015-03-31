@@ -20,22 +20,18 @@
 {-# OPTIONS_GHC -Wall #-}
 module AstExpr where
 
-import {-# SOURCE #-} Analysis.Range
-
+import {-# SOURCE #-} LUTAnalysis
 import Prelude hiding (exp, mapM)
 import Control.DeepSeq.Generics (NFData(..), genericRnf)
-import Control.Monad ( liftM )
 import Data.Monoid
 import Data.Data (Data)
 import Data.Functor.Identity (Identity(..))
-import Data.Map (Map)
 import Data.Maybe ( isJust )
 import Data.Traversable (mapM)
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
 import Text.Parsec.Pos
 import Text.Show.Pretty (PrettyVal)
-import qualified Data.Map as Map
 import qualified Data.Set as S
 
 import Orphans ()
@@ -409,7 +405,7 @@ data GExp0 t a where
 
   -- | Generate runtime failure, with error report
   EError :: t -> String -> GExp0 t a
-  ELUT :: Map (GName t) Range -> GExp t a -> GExp0 t a
+  ELUT :: LUTStats -> GExp t a -> GExp0 t a
 
   -- | Constructing structs
   --
@@ -420,13 +416,14 @@ data GExp0 t a where
 
   -- | Project field out of a struct
   EProj   :: GExp t a -> FldName -> GExp0 t a
-  deriving (Generic, Typeable, Data, Eq, Ord)
+
+  deriving (Eq, Ord) 
 
 data GExp t a
   = MkExp { unExp  :: !(GExp0 t a)
           , expLoc :: !(Maybe SourcePos)
           , info :: a }
-  deriving (Generic, Typeable, Data, Eq, Ord)
+  deriving (Eq, Ord)
 
 -- Structure definitions
 data GStructDef t
@@ -443,7 +440,7 @@ data GFun0 t a where
                 -> [GName t]   -- ^ params
                 -> t           -- ^ return type
                 -> GFun0 t a
-  deriving (Generic, Typeable, Data)
+  deriving (Eq, Ord) 
 
 {- TODO plug this in at some point
 data FunDef a body
@@ -457,7 +454,7 @@ data GFun t a
   = MkFun { unFun   :: GFun0 t a
           , funLoc  :: Maybe SourcePos
           , funInfo :: a }
-  deriving (Generic, Typeable, Data)
+  deriving (Eq, Ord) 
 
 funName :: GFun t a -> GName t
 funName (MkFun (MkFunDefined  nm _ _) _ _) = nm
@@ -485,8 +482,8 @@ instance NFData Uniq        where rnf = genericRnf
 instance NFData t => NFData (GUnOp t) where rnf = genericRnf
 instance NFData t => NFData (GName t) where rnf = genericRnf
 
-instance (NFData t, NFData a) => NFData (GExp0 t a) where rnf = genericRnf
-instance (NFData t, NFData a) => NFData (GExp  t a) where rnf = genericRnf
+-- instance (NFData t, NFData a) => NFData (GExp0 t a) where rnf = genericRnf
+-- instance (NFData t, NFData a) => NFData (GExp  t a) where rnf = genericRnf
 
 {-------------------------------------------------------------------------------
   Specialization of the AST to Ty (internal types)
@@ -716,10 +713,8 @@ mapExpM_env onTyp onAnn f extend = goExp
     goUnOp (Cast t) = do t' <- onTyp t ; return (Cast t')
     goUnOp ALength  = return ALength
 
-    goRanges :: Map (GName t) Range -> m (Map (GName t') Range)
-    goRanges = liftM Map.fromList
-             . mapM (\(n, r) -> do n' <- mapNameM onTyp n ; return (n', r))
-             . Map.toList
+    goRanges :: LUTStats -> m LUTStats
+    goRanges = return 
 
 mapFunM_env :: forall t t' a a' m. Monad m
             => (t -> m t')                               -- ^ On types
@@ -1202,10 +1197,10 @@ instance PrettyVal t => PrettyVal (GName t)
 instance PrettyVal t => PrettyVal (GUnOp t)
 instance PrettyVal t => PrettyVal (GStructDef t)
 
-instance (PrettyVal t, PrettyVal a) => PrettyVal (GExp0 t a)
-instance (PrettyVal t, PrettyVal a) => PrettyVal (GExp t a)
-instance (PrettyVal t, PrettyVal a) => PrettyVal (GFun t a)
-instance (PrettyVal t, PrettyVal a) => PrettyVal (GFun0 t a)
+-- instance (PrettyVal t, PrettyVal a) => PrettyVal (GExp0 t a)
+-- instance (PrettyVal t, PrettyVal a) => PrettyVal (GExp t a)
+-- instance (PrettyVal t, PrettyVal a) => PrettyVal (GFun t a)
+-- instance (PrettyVal t, PrettyVal a) => PrettyVal (GFun0 t a)
 
 {-
 Note [IOEffects]

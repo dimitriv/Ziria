@@ -20,6 +20,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# OPTIONS_GHC -fwarn-unused-binds #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
@@ -64,6 +65,7 @@ import Analysis.RangeAnal
 
 import Data.Maybe ( isJust )
 
+
 {------------------------------------------------------------------
   LUT statistics
 -------------------------------------------------------------------}
@@ -80,8 +82,9 @@ data LUTStats = LUTStats {
      --   (a) @v@ is the result variable
      --   (b) and is in @vu_outvars lutVarUsePkg@
    , lutResultInOutVars :: Maybe EId
-   , lutShould          :: Either Doc Bool -- ^ Should we LUT?
-   }
+   , lutShould          :: Either String Bool -- ^ Should we LUT?
+   } 
+   deriving (Eq, Ord)
 
 instance Outputable LUTStats where
   ppr s = vcat $
@@ -93,8 +96,8 @@ instance Outputable LUTStats where
       , text " should be lutted:" <+> should (lutShould s) 
       ]
    where
-    should :: Either Doc Bool -> Doc
-    should (Left err)    = text "No, because" <+> err
+    should :: Either String Bool -> Doc
+    should (Left err)    = text "No, because" <+> text err
     should (Right False) = text "No"
     should (Right True)  = text "Yes"
     resdoc = if isJust $ lutResultInOutVars s
@@ -155,11 +158,11 @@ calcLUTStats dflags pkg e = do
   Determine if we should LUT
 ----------------------------------------------------------------------}
 
-newtype LM a = LM { unLM :: ErrorT Doc (State LMState) a }
+newtype LM a = LM { unLM :: ErrorT String (State LMState) a }
   deriving ( Functor, Applicative, Monad, MonadState LMState
-           , MonadError Doc )
+           , MonadError String )
   
-evalLM :: LM a -> LMState -> Either Doc a
+evalLM :: LM a -> LMState -> Either String a
 evalLM m s = fst $ runState (runErrorT $ unLM m) s
 
 data LMState = LMState { lmHasLoop          :: !Bool
@@ -176,7 +179,7 @@ mIN_OP_COUNT = 5
 shouldLUT :: DynFlags 
           -> Int     -- ^ LUT output bitwidth
           -> Integer -- ^ LUT total size in bytes
-          -> Exp -> Either Doc Bool
+          -> Exp -> Either String Bool
 shouldLUT dflags lut_outbitwidth lut_tablesize e = flip evalLM s0 $ do
   should e
   s <- get

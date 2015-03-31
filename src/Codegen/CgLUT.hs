@@ -302,7 +302,7 @@ codeGenLUTExp dflags stats e mb_resname
     -- | We simply cannot LUT, fullstop.
   | Left err <- lutShould stats
   = do let msg = text "Compiling without LUT."
-       verbose dflags $ cannot_lut err msg
+       verbose dflags $ cannot_lut (text err) msg
        codeGenExp dflags e
 
     -- | Below we were forced to LUT although analysis recommends we don't

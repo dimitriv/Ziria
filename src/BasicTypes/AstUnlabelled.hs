@@ -22,11 +22,9 @@ module AstUnlabelled where
 
 import Prelude hiding (pi)
 import Text.Parsec.Pos (SourcePos)
-import Data.Map (Map)
-
 import AstExpr
 import AstComp
-import Analysis.Range (Range)
+import {-# SOURCE #-} LUTAnalysis
 
 {-------------------------------------------------------------------------------
   Values
@@ -91,7 +89,7 @@ ePrint loc b e = MkExp (EPrint b e) loc ()
 eError :: Maybe SourcePos -> t -> String -> GExp t ()
 eError loc t s = MkExp (EError t s) loc ()
 
-eLUT :: Maybe SourcePos ->  Map (GName t) Range -> GExp t () -> GExp t ()
+eLUT :: Maybe SourcePos ->  LUTStats -> GExp t () -> GExp t ()
 eLUT loc m e = MkExp (ELUT m e) loc ()
 
 eStruct :: Maybe SourcePos -> t -> [(String,GExp t ())] -> GExp t ()

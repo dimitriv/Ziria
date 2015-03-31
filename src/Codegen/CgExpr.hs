@@ -393,8 +393,9 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
     go t (ELUT _ e1) | isDynFlagSet dflags NoLUT =
       codeGenExp dflags e1
 
-    go t (ELUT r e1) | isDynFlagSet dflags MockLUT =
-      codeGenLUTExp_Mock dflags (expLoc e1) r e1
+    go t (ELUT r e1) | isDynFlagSet dflags MockLUT = do
+      cgIO $ putStrLn "MockLUT is set, ignoring AutoLUT analysis ..."
+      codeGenExp dflags e1
 
     go t (ELUT r e1) =
       codeGenLUTExp dflags r e1 Nothing

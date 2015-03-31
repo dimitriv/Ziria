@@ -407,9 +407,8 @@ renExp (MkExp exp0 eloc ()) = case exp0 of
         a' <- renTyAnn eloc a
         return $ eError eloc a' str
       ELUT r e1 -> do
-        r'  <- mapKeysM renFree r
         e1' <- renExp e1
-        return $ eLUT eloc r' e1'
+        return $ eLUT eloc r e1'
       EStruct t tfs -> do
         t'   <- renReqTy eloc t
         tfs' <- mapM (\(f,e') -> renExp e' >>= \e'' -> return (f,e'')) tfs

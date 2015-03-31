@@ -16,6 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
 {-# OPTIONS_GHC -Wall #-}
 
 module NameEnv (
@@ -38,11 +39,18 @@ import Utils ( warn )
 import Text.PrettyPrint.HughesPJ
 import Outputable
 
+import Control.DeepSeq (NFData) 
+import Data.Data (Data)
+import Data.Typeable (Typeable)
+import Text.Show.Pretty (PrettyVal)
+
 {-------------------------------------------------------------------------------
   Name environments (implemented as lists to deal correctly with shadowing) 
 -------------------------------------------------------------------------------}
 
 newtype NameEnv t a = NameEnv { unNameEnv :: [(GName t, a)] }
+  deriving (Typeable, Data, NFData, PrettyVal, Eq, Ord)
+
 type NameMap t a = NameEnv t a 
 
 instance (Outputable t, Outputable a) => Outputable (NameEnv t a) where

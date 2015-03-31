@@ -44,6 +44,13 @@ instance Outputable a => Outputable (Maybe a) where
   ppr Nothing  = text "N/A"
   ppr (Just a) = ppr a
 
+instance (Outputable b, Outputable a) => Outputable (Either a b) where 
+  ppr (Left x1)  = ppr x1
+  ppr (Right x2) = ppr x2
+
+instance Outputable Doc where
+  ppr = id
+
 pretty :: Outputable a => a -> String
 pretty = show . ppr
 

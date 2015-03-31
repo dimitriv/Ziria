@@ -22,11 +22,9 @@ module AstLabelled where
 
 import Prelude hiding (pi)
 import Text.Parsec.Pos (SourcePos)
-import Data.Map (Map)
-
 import AstExpr
 import AstComp
-import Analysis.Range (Range)
+import LUTAnalysis
 
 {-------------------------------------------------------------------------------
   Values
@@ -88,7 +86,7 @@ ePrint loc a b e = MkExp (EPrint b e) loc a
 eError :: Maybe SourcePos -> a -> t -> String -> GExp t a
 eError loc a t s = MkExp (EError t s) loc a
 
-eLUT :: Maybe SourcePos -> a ->  Map (GName t) Range -> GExp t a -> GExp t a
+eLUT :: Maybe SourcePos -> a ->  LUTStats -> GExp t a -> GExp t a
 eLUT loc a m e = MkExp (ELUT m e) loc a
 
 eStruct :: Maybe SourcePos -> a -> t -> [(String,GExp t a)] -> GExp t a

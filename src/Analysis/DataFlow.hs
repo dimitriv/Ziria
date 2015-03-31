@@ -16,7 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE GeneralizedNewtypeDeriving, StandaloneDeriving,
+{-# LANGUAGE GeneralizedNewtypeDeriving, StandaloneDeriving, DeriveDataTypeable,
     TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 
@@ -49,7 +49,11 @@ import Opts
 import AbsInt
 import NameEnv
 
+import Data.Data (Data)
+import Data.Typeable (Typeable)
+
 import qualified Analysis.RangeAnal as RA
+import Orphans ()
 
 type VarSet = Set (GName Ty)
 
@@ -219,6 +223,7 @@ data VarUsePkg
               , vu_outvars  :: [EId]
               , vu_allvars  :: [EId]
               , vu_ranges   :: RA.RngMap }
+  deriving (Typeable, Data, Eq, Ord) 
 
 
 inOutVars :: MonadIO m => DynFlags -> Exp -> m (Either Doc VarUsePkg)

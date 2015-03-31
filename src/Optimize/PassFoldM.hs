@@ -252,9 +252,6 @@ no_lut_inside x = isJust (mapExpM return return elut_nothing x)
   Useful for debugging
 -------------------------------------------------------------------------------}
 
-instance PrettyVal LetEs
-instance PrettyVal LetERefs
-
 instance Outputable LetEs where
   ppr (LetEs ls) = hsep (punctuate comma (map aux ls))
     where
