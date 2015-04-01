@@ -37,9 +37,10 @@ module LUTAnalysis (
  , inArrSlice
 
    -- | Byte-aligned packed output variable width and assign-masks
- , outVarsBitWidth
- , outVarBitWidth
 
+ , outVarsBitWidth -- ^ Total output variables and their masks 
+ , outVarBitWidth  -- ^ Includes mask width
+ , outVarMaskWidth -- ^ Only this variable's width
  ) where
 
 import Opts
@@ -324,6 +325,7 @@ outVarsBitWidth :: (Functor m, Monad m) => VarUsePkg -> m Int
 outVarsBitWidth pkg = outvars_bitwidth (vu_outvars pkg)
 
 outVarBitWidth :: (Functor m, Monad m) => EId -> m Int 
+-- | NB: Includes the mask width!
 outVarBitWidth = outvar_bitwidth 
 
 outvar_bitwidth :: (Functor m, Monad m) => EId -> m Int
@@ -332,6 +334,14 @@ outvar_bitwidth x = go (nameTyp x) x
         go t@(TStruct {}) x = double <$> tyBitWidth_ByteAlign t
         go t otherwise      = tyBitWidth_ByteAlign t
         double n = 2*n
+
+outVarMaskWidth :: Ty -> Maybe Int
+-- | Original type of variable, return the width 
+-- of the mask if this type is mask-able.
+outVarMaskWidth t@(TArray {})  = tyBitWidth_ByteAlign t
+outVarMaskWidth t@(TStruct {}) = tyBitWidth_ByteAlign t
+outVarMaskWidth t              = Nothing
+
 
 outvars_bitwidth :: (Functor m, Monad m) => [EId] -> m Int
 outvars_bitwidth vartys = do

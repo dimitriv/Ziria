@@ -34,7 +34,7 @@ import CgMonad
 import CgTypes
 import Analysis.DataFlow
 import Control.Applicative ( (<$>) )
-import Data.Maybe ( isJust, fromJust, catMaybes )
+import Data.Maybe ( isJust, catMaybes )
 import Language.C.Quote.C
 import qualified Language.C.Syntax as C
 import Text.PrettyPrint.HughesPJ 
@@ -505,13 +505,13 @@ genLUT dflags stats e = do
 
 genOutVarMask :: EId -> Cg (EId, Maybe EId)
 -- ^ Generate a new output mask variable
-genOutVarMask x
-  | isArrayTy x_ty || isStructTy x_ty
-  = do bw <- outVarBitWidth x
-       let bitarrty = TArray (Literal bw) TBit 
-       x_mask  <- freshName (name x ++ "_mask") bitarrty Mut
-       return (x, Just x_mask)
-  | otherwise = return (x, Nothing)
+genOutVarMask x = 
+  case outVarMaskWidth x_ty of
+    Nothing -> return (x, Nothing)
+    Just bw -> do
+      let bitarrty = TArray (Literal bw) TBit 
+      x_mask  <- freshName (name x ++ "_mask") bitarrty Mut
+      return (x, Just x_mask)
   where x_ty = nameTyp x
 
 genLocalMaskInits :: DynFlags -> [(EId, Maybe EId)] -> Cg a -> Cg a
@@ -564,40 +564,47 @@ bIT0 = eVal Nothing TBit (VBit False)
 bIT1 :: Exp
 bIT1 = eVal Nothing TBit (VBit True)
 
-
-bitArrRng :: Ty -> LengthInfo -> Int
--- ^ Return the bit width of this array slice
-bitArrRng base_ty LISingleton  = tyBitWidth' base_ty
-bitArrRng base_ty (LILength n) = n * tyBitWidth' base_ty
-bitArrRng _base_ty (LIMeta {}) = panicStr "bitArrRng: can't happen"
-
 tyBitWidth' :: Ty -> Int
 tyBitWidth' = runIdentity . tyBitWidth
-
-fldBitArrRng :: [(FldName,Ty)] -> FldName -> (Int, Int)
--- ^ Return the bit interval that this field 
--- ^ corresponds to in a bit array mask
-fldBitArrRng vs the_fld = go 0 vs
-  where go _ [] = error "fldBitArrRng: not in struct!"
-        go n ((f,ty):rest)
-          | f == the_fld = (n, tyBitWidth' ty)
-          | otherwise    = go (n + tyBitWidth' ty) rest
-
-eBitArrSet :: EId -> Exp -> Int -> Exp
--- ^ Set some bits in this bit array
-eBitArrSet bitarr start width 
-  = eArrWrite Nothing bitarr_exp start width_linfo arrval
-  where 
-   bitarr_exp = eVar Nothing bitarr
-   (arrval, width_linfo)
-     | width == 1 = (bIT1,LISingleton)
-     | otherwise  = (eValArr Nothing (replicate width bIT1), LILength width)
 
 eMultBy :: Exp -> Int -> Exp
 eMultBy e n = eBinOp loc Mult e (eVal loc ety (VInt ni))
   where ety = ctExp e
         loc = expLoc e
         ni  = fromIntegral n
+
+eAddBy :: Exp -> Int -> Exp
+eAddBy e n = eBinOp loc Add e (eVal loc ety (VInt ni))
+  where ety = ctExp e
+        loc = expLoc e
+        ni  = fromIntegral n
+
+----------------------------------------------------------------------------
+
+-- | Return the bit width of this array slice
+bitArrRng :: Ty -> LengthInfo -> Int
+bitArrRng base_ty LISingleton  = tyBitWidth' base_ty
+bitArrRng base_ty (LILength n) = n * tyBitWidth' base_ty
+bitArrRng _base_ty (LIMeta {}) = panicStr "bitArrRng: can't happen"
+
+-- | Return the bit interval that this field corresponds to.
+fldBitArrRng :: [(FldName,Ty)] -> FldName -> (Int, Int)
+fldBitArrRng vs the_fld = go 0 vs
+  where go _ [] = error "fldBitArrRng: not in struct!"
+        go n ((f,ty):rest)
+          | f == the_fld = (n, tyBitWidth' ty)
+          | otherwise    = go (n + tyBitWidth' ty) rest
+
+-- | Set some bits in this bit array
+eBitArrSet :: EId -> Exp -> Int -> Exp
+eBitArrSet bitarr start width 
+  = eArrWrite Nothing bitarr_exp start width_linfo arrval
+  where
+   bitarr_exp = eVar Nothing bitarr
+   (arrval, width_linfo)
+     | width == 1 = (bIT1,                  LISingleton   )
+     | otherwise  = (eValArr Nothing bIT1s, LILength width)
+   bIT1s = replicate width bIT1
 
 eArrWriteUpdateMask :: EId                -- ^ the array
                     -> [(EId, Maybe EId)] -- ^ the mask map
@@ -609,8 +616,7 @@ eArrWriteUpdateMask x mask_map estart len
   , Just (Just mask_var) <- lookup x mask_map
   , let start = estart `eMultBy` tyBitWidth' basety
   = [ eBitArrSet mask_var start (bitArrRng basety len) ]
-  | otherwise 
-  = []
+  | otherwise = []
 
 eFldWriteUpdateMask :: EId                -- ^ the struct
                     -> [(EId, Maybe EId)] -- ^ the mask map
@@ -622,101 +628,80 @@ eFldWriteUpdateMask x mask_map fld
   , let (i,j) = fldBitArrRng fltys fld
   , let start = eVal Nothing tint (VInt $ fromIntegral i)
   = [ eBitArrSet mask_var start j ]
-  | otherwise 
-  = []
+  | otherwise = []
 
--- | Main expression instrumentation
+-- | Expression instrumentation, see also Note [LUT OutOfRangeTests]
 lutInstrument :: [(EId, Maybe EId)] -> Exp -> Cg Exp
-lutInstrument mask_eids = mapExpM return return do_asgn
+lutInstrument mask_eids = mapExpM return return do_instr
   where
-    do_asgn e
-      | EAssign elhs erhs <- unExp e
-      = do let lval = parse_deref elhs
-           (bnds, lval') <- liftLValEffects lval
-           es <- procPureLVal mask_eids lval'
-           return $ eLetMany bnds $
-                    eSeqs (eAssign loc (derefToExp lval') erhs : es)
+    do_instr e
+      | EArrRead earr estart len <- unExp e
+      , TArray (Literal n) _ <- ctExp earr
+      = do tmpvar <- freshName "tmp" (ctExp estart) Imm
+           let tmpexp = eVar loc tmpvar
+               etest  = mk_rangetest loc n tmpexp len
+           return $
+             eLet loc tmpvar AutoInline estart $
+             eIf loc etest
+                (eArrRead loc earr tmpexp len)
+                -- replace with safe (up-to bounds check) read
+                (eArrRead loc earr (eVal loc tint (VInt 0)) len)
+
       | EArrWrite earr estart len rhs <- unExp e
-      = do let lval = parse_deref (eArrRead loc earr estart len)
-           (bnds, lval') <- liftLValEffects lval
-           es <- procPureLVal mask_eids lval'
-           let (GDArr _ () de estart' len') = lval
-           let earr' = derefToExp de
-           return $ eLetMany bnds $
-                    eSeqs (eArrWrite loc earr' estart' len' rhs : es)
-      | otherwise
+      , TArray (Literal n) _ <- ctExp earr
+      = do tmpvar <- freshName "tmp" (ctExp estart) Imm
+           let tmpexp = eVar loc tmpvar
+               etest  = mk_rangetest loc n tmpexp len
+               emask_stmts = case unExp earr of
+                 EVar v -> eArrWriteUpdateMask v mask_eids tmpexp len
+                 _      -> []
+           return $
+             eLet loc tmpvar AutoInline estart $
+             let new_e = eArrWrite loc earr tmpexp len rhs
+             in eIf loc etest 
+                   (eseqs loc $ new_e : emask_stmts)
+                   (eVal loc TUnit VUnit)
+
+      | EProj estruct fld <- unExp e
+      = let emask_stmts = case unExp estruct of 
+              EVar v -> eFldWriteUpdateMask v mask_eids fld
+              _      -> []
+        in return (eseqs loc $ e : emask_stmts)
+
+      | otherwise 
       = return e
-      where loc = expLoc e
 
-    parse_deref = fromJust . isMutGDerefExp 
+      where loc = expLoc e 
 
-procPureLVal :: [(EId, Maybe EId)] -- ^ Mask map
-             -> GDerefExp Ty ()    -- ^ LVal
-             -> Cg [Exp]           -- ^ Assignments
-procPureLVal mask_map (GDVar _loc () x)
-  | Just (Just mvar) <- lookup x mask_map
-  , let start = eVal Nothing tint (VInt 0)
-  , let len   = tyBitWidth' (nameTyp x)
-  = return [ eBitArrSet mvar start len ]
-  | otherwise = return []
-procPureLVal mask_map (GDArr _loc () (GDVar _ () x) estart len)
-  = return $ eArrWriteUpdateMask x mask_map estart len
-procPureLVal mask_map (GDProj _loc () (GDVar _ () x) fld)
-  = return $ eFldWriteUpdateMask x mask_map fld
-procPureLVal mask_map (GDArr _loc () d _ _) = procPureLVal mask_map d
-procPureLVal mask_map (GDProj _loc () d _)  = procPureLVal mask_map d
-procPureLVal _mask_map (GDNewArray {})  = return []
-procPureLVal _mask_map (GDNewStruct {}) = return []
+    mk_rangetest :: Maybe SourcePos
+                 -> Int           -- ^ array size
+                 -> Exp           -- ^ start expression
+                 -> LengthInfo    -- ^ length to address
+                 -> Exp           -- ^ boolean check
+    mk_rangetest loc array_len estart len = case len of 
+      LISingleton -> eBinOp loc Leq estart earray_len
+      LILength n  -> eBinOp loc Leq (eAddBy estart n) earray_len
+      LIMeta {}   -> panicStr "mk_rangetest: LIMeta!"
+      where earray_len = eVal loc (ctExp estart) varray_len
+            varray_len = VInt $ fromIntegral array_len
+
+    eseqs :: Maybe SourcePos -> [Exp] -> Exp
+    eseqs _loc [e]   = e
+    eseqs loc (e:es) = eSeq loc e (eseqs loc es)
+    eseqs _ [] = panicStr "eseqs: empty"
 
 
-liftLValEffects :: GDerefExp Ty () -> Cg ([(EId,Exp)],GDerefExp Ty ())
-liftLValEffects d@(GDVar {}) = return ([],d)
-liftLValEffects (GDProj loc a de fld) = do
-  (bnds,de') <- liftLValEffects de
-  return (bnds, GDProj loc a de' fld)
-liftLValEffects (GDArr loc a de e len) = do
-  nm <- freshName "n" (ctExp e) Imm
-  let nmexp = eVar loc nm
-  (bnds,de') <- liftLValEffects de
-  let TArray (Literal n) _ = ctDerefExp de
-  e' <- mk_bounded loc n e len
-  let bnds' = (nm,e') : bnds
-  return (bnds', GDArr loc a de' nmexp len)
-liftLValEffects other = return ([],other)
+{- | Note [LUT OutOfRangeTests]
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-mk_bounded :: Maybe SourcePos
-           -> Int 
-           -> Exp
-           -> LengthInfo 
-           -> Cg Exp
--- ^ As we are iterating over a potentially larger space we must be
--- ^ careful to not cause segfaults during LUT generation.
-mk_bounded loc array_len estart LISingleton = do 
-  let int_ty = ctExp estart
-  let earray_len = eVal loc int_ty (VInt $ fromIntegral array_len) 
-  tmp <- freshName "tmp" int_ty Imm
-  let etmp = eVar loc tmp
-  let etest = eBinOp loc Leq etmp earray_len
-  return $ eLet loc tmp AutoInline estart $
-           eIf loc etest etmp (eVal loc int_ty (VInt 0))
-mk_bounded loc array_len estart (LILength n) = do 
-  let int_ty = ctExp estart
-  let earray_len = eVal loc int_ty (VInt $ fromIntegral array_len) 
-  let lilen      = eVal loc int_ty (VInt $ fromIntegral n)
-  tmp <- freshName "tmp" int_ty Imm 
-  let etmp = eVar loc tmp
-  let etest = eBinOp loc Leq (eBinOp loc Add etmp lilen) earray_len
-  return $ eLet loc tmp AutoInline estart $
-           eIf loc etest etmp (eVal loc int_ty (VInt 0))
-mk_bounded _ _ _ (LIMeta {}) = panicStr "mk_bounded, LIMeta!"
+   When we generate a LUT we are possibly iterating over the full
+   input space e.g. a 32-bit integer. However, in an actual execution,
+   because of some programmer invariant the actual space of inputs we
+   care about may be smaller -- e.g. because of some complex programmer
+   invariant -- and our analysis cannot necessarily detect that. However
+   we must avoid out-of-bounds writes, hence we have to implement dynamic
+   checks for in-bounds-ranges and not perform potentially dangerous
+   out-of-bounds memory accesses.
 
-eLetMany :: [(EId,Exp)] -> Exp -> Exp
-eLetMany [] e = e
-eLetMany ((nm1,e1):bnds) e
-  = eLet Nothing nm1 AutoInline e1 (eLetMany bnds e)
-
-eSeqs :: [Exp] -> Exp
-eSeqs [e]     = e
-eSeqs (e1:es) = eSeq Nothing e1 (eSeqs es)
-eSeqs _       = panicStr "eSeqs: empty"
+-}
 
