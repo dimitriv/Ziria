@@ -68,7 +68,8 @@ autolutE dflags = autoE
                  , text "Location:" <+> text (show loc)
                  , text "Reason:" <+> err ]
           go_inside e0
-        Right stats -> autoE' e0 stats
+        Right stats -> do 
+          autoE' e0 stats
 
     autoE' e0 stats
       | Right True <- lutShould stats

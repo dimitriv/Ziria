@@ -47,6 +47,8 @@ import Data.Word
 import Utils
 import Control.Monad.Identity ( runIdentity )
 
+-- import Debug.Trace
+
 {----------------------------------------------------------------------------
    Infrastructure 
 ----------------------------------------------------------------------------}
@@ -209,6 +211,7 @@ unpack_idx_var pkg v idx
   | otherwise
   = do w    <- inVarBitWidth pkg v
        vptr <- varToBitArrPtr v
+       appendStmt $ [cstm| memset($vptr,0, $int:((w + 7) `div` 8));|]
        appendStmt $
          [cstm| bitArrWrite($idx_ptr,0,$int:w,$vptr);|]
        let new_idx = idx `cExpShR` w
@@ -285,7 +288,8 @@ unpack_out_var _pkg (v, Just {}) src pos = do
   total_w <- outVarBitWidth v
   let w  = total_w `div` 2
   let mask_ptr = [cexp| & $src[$int:((pos+w) `div` 8)]|]
-  cgBitArrLUTMask vptr mask_ptr src w
+  let src_ptr  = [cexp| ($src + $int:(pos `div` 8))|]
+  cgBitArrLUTMask vptr mask_ptr src_ptr w
   return (pos + total_w)
 
 
@@ -458,6 +462,22 @@ genLUT dflags stats e = do
          e' <- lutInstrument mask_eids e
          ce <- codeGenExp dflags e'
          clut_fin <- packOutVars vupkg mask_eids [cexp| $id:clutentry|]
+
+         -- | For debugging let us try to unpack to the outvars
+         _ <- unpackOutVars vupkg mask_eids [cexp|$id:clutentry|]
+         dbg_clutentry <- freshVar "dbg_lutentry"
+         codeGenArrVal dbg_clutentry clutentry_ty [bit0] >>= appendDecl
+         _ <- packOutVars vupkg mask_eids [cexp| $id:dbg_clutentry|]
+         appendStmt $
+            [cstm| if (0 != memcmp($id:dbg_clutentry,
+                                   $id:clutentry,
+                                   $int:(lutOutBitWidth stats `div` 8))) {
+                     printf("Fatal bug in LUT generation: un/packOutVars mismatch.\n");
+                     printf("Location: %s\n", $string:(show loc));
+                     exit(-1);
+                   }
+            |]
+
          -- | The result is either an existing output variable or @clut_fin@
          case lutResultInOutVars stats of
            Just _v -> return ()
@@ -509,7 +529,7 @@ genOutVarMask x =
   case outVarMaskWidth x_ty of
     Nothing -> return (x, Nothing)
     Just bw -> do
-      let bitarrty = TArray (Literal bw) TBit 
+      let bitarrty = TArray (Literal bw) TBit
       x_mask  <- freshName (name x ++ "_mask") bitarrty Mut
       return (x, Just x_mask)
   where x_ty = nameTyp x
@@ -550,7 +570,7 @@ cgDebugLUTIdxPack cidx cidx_ty vupkg loc = do
    appendStmt [cstm| 
      if ($cidx != $id:dbg_cidx) {
         printf("Fatal bug in LUT generation: packIdx/unpackIdx mismatch.\n");
-        printf("Location: %s", $string:(show loc));
+        printf("Location: %s\n", $string:(show loc));
         exit(-1); } |]
 
 

@@ -107,39 +107,36 @@ instance Outputable LUTStats where
 
 calcLUTStats :: DynFlags
              -> Exp -> IO (Either Doc LUTStats)
-calcLUTStats dflags e = do
-  mb_pkg <- inOutVars dflags e 
-  case mb_pkg of
-    Left err  -> return $ Left err
-    Right pkg -> return $ do
-      -- Input (LUT index) bitwidth
-      inBitWidth <- inVarsBitWidth pkg
-    
-      -- Calculate output bitwidth
-      let resultInOutVars
-           | Just v <- expResultVar e
-           , v `elem` vu_outvars pkg = Just v
-           | otherwise               = Nothing
+calcLUTStats dflags e = runErrorT $ do
+  pkg <- inOutVars dflags e
+  -- Input (LUT index) bitwidth
+  inBitWidth <- inVarsBitWidth pkg
+  
+  -- Calculate output bitwidth
+  let resultInOutVars
+       | Just v <- expResultVar e
+       , v `elem` vu_outvars pkg = Just v
+       | otherwise               = Nothing
  
-      (outBitWidth, resultBitWidth) <- do
-          b1 <- outVarsBitWidth pkg
-          if isJust resultInOutVars then return (b1,0)
-          else do rbw <- tyBitWidth_ByteAlign (ctExp e)
-                  return (b1+rbw,rbw)
+  (outBitWidth, resultBitWidth) <- do
+      b1 <- outVarsBitWidth pkg
+      if isJust resultInOutVars then return (b1,0)
+      else do rbw <- tyBitWidth_ByteAlign (ctExp e)
+              return (b1+rbw,rbw)
 
-      let bytes  = lutBytes inBitWidth outBitWidth
-          should = shouldLUT dflags outBitWidth bytes e
+  let bytes  = lutBytes inBitWidth outBitWidth
+      should = shouldLUT dflags outBitWidth bytes e
 
-      return
-        LUTStats { lutInBitWidth      = inBitWidth
-                 , lutOutBitWidth     = outBitWidth
-                 , lutResultBitWidth  = resultBitWidth
-                 , lutResultInOutVars = resultInOutVars
+  return
+    LUTStats { lutInBitWidth      = inBitWidth
+             , lutOutBitWidth     = outBitWidth
+             , lutResultBitWidth  = resultBitWidth
+             , lutResultInOutVars = resultInOutVars
 
-                 , lutTableSize       = bytes
-                 , lutShould          = should
-                 , lutVarUsePkg       = pkg
-                 }
+             , lutTableSize       = bytes
+             , lutShould          = should
+             , lutVarUsePkg       = pkg
+             }
   where
     -- | How many bytes will this LUT take
     lutBytes :: Int     -- ^ Input width  (in bits)

@@ -24,7 +24,6 @@
 module Analysis.DataFlow (
     inOutVars
   , pprVarUsePkg
-  , debugDataFlow
   , VarUsePkg (..)
 ) where
 
@@ -33,25 +32,17 @@ import Control.Applicative
 import Control.Monad.Error
 import Control.Monad.Reader
 import Control.Monad.State
-
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Text.PrettyPrint.HughesPJ
-
 import Data.List ( nub )
-
 import AstExpr
-import AstComp
-
 import Outputable 
 import Opts
-
 import AbsInt
 import NameEnv
-
 import Data.Data (Data)
 import Data.Typeable (Typeable)
-
 import qualified Analysis.RangeAnal as RA
 import Orphans ()
 
@@ -93,9 +84,9 @@ newtype DFM a = DFM (ReaderT DFEnv (StateT DFState (ErrorT Doc IO)) a)
            , MonadIO
            )
 -- | Run the monad
-runDFM :: DFM a -> IO (Either Doc (a,DFState))
+runDFM :: DFM a -> ErrorT Doc IO (a, DFState)
 runDFM (DFM act) 
-  = runErrorT $ runStateT (runReaderT act initDFEnv) initDFState
+  = runStateT (runReaderT act initDFEnv) initDFState
 
 -- | Union of two states
 unionDFState :: DFState -> DFState -> DFState
@@ -226,49 +217,22 @@ data VarUsePkg
   deriving (Typeable, Data, Eq, Ord) 
 
 
-inOutVars :: MonadIO m => DynFlags -> Exp -> m (Either Doc VarUsePkg)
+inOutVars :: DynFlags -> Exp -> ErrorT Doc IO VarUsePkg
 inOutVars dfs e = do
-  res <- liftIO $ runDFM (unAbsT action)
-  case res of 
-    Left err -> return $ Left err
-    Right (varset, DFState udmap ufset) -> do
-      let modified, impUsed, pureUsed, allVars :: [GName Ty]
-          modified = neKeys udmap
-          impUsed  = Set.toList $ Set.unions (map snd (neToList udmap))
-          pureUsed = Set.toList varset
-          allVars  = Set.toList ufset
-      -- Try now the range analysis
-      (ranges,_ret_rng) <- RA.varRanges dfs e
-      return $ Right $ 
-        VarUsePkg { vu_invars  = nub $ impUsed ++ pureUsed
-                  , vu_outvars = modified
-                  , vu_allvars = allVars 
-                  , vu_ranges  = ranges }
+  (varset, DFState udmap ufset) <- runDFM (unAbsT action)
+  let modified, impUsed, pureUsed, allVars :: [GName Ty]
+      modified = neKeys udmap
+      impUsed  = Set.toList $ Set.unions (map snd (neToList udmap))
+      pureUsed = Set.toList varset
+      allVars  = Set.toList ufset
+  -- Try now the range analysis
+  (ranges,_ret_rng) <- RA.varRanges dfs e
+  return $ VarUsePkg { vu_invars  = nub $ impUsed ++ pureUsed
+                     , vu_outvars = modified
+                     , vu_allvars = allVars 
+                     , vu_ranges  = ranges }
   where action :: AbsT DFM VarSet
         action = absEval e
-
-unlessErr :: MonadIO m => m (Either Doc a) -> (a -> m ()) -> m ()
-unlessErr m f = do 
-  res <- m
-  case res of 
-    Left doc -> liftIO $ print doc
-    Right a  -> f a
-
-debugDataFlow :: DynFlags -> Comp -> IO ()
-debugDataFlow dfs comp = do
-  _ <- mapCompM return return return return on_exp return comp
-  return ()
-  where on_exp = mapExpM return return on_exp'
-        on_exp' e0 = do
-          print $
-             vcat [ text "**** Debugging new dataflow analysis ****"
-                  , text "Analyzing expression at location: " <+>
-                    text (show (expLoc e0))
-                  ]
-          verbose dfs (nest 4 $ ppr e0)
-          unlessErr (inOutVars dfs e0) (print . pprVarUsePkg)
-          return e0
-
 
 pprVarUsePkg :: VarUsePkg -> Doc
 pprVarUsePkg (VarUsePkg invars outvars allvars rmap)

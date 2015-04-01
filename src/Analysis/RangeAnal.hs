@@ -560,20 +560,15 @@ pprRanges r = vcat $
   map (\(k,v) -> ppr k <> char ':' <+> text (show v)) (neToList r)
 
 
-runRng :: Rng a -> IO (Either Doc (a, RngMap))
-runRng (Rng action) = runErrorT (runStateT action neEmpty)
+runRng :: Rng a -> ErrorT Doc IO (a, RngMap)
+runRng (Rng action) = runStateT action neEmpty
 
-varRanges :: MonadIO m => DynFlags -> Exp -> m (RngMap, Range)
-varRanges dfs e =
+varRanges :: DynFlags -> Exp -> ErrorT Doc IO (RngMap, Range)
+varRanges _dfs e =
   case action of
     AbsT m -> do
-      r <- liftIO $ runRng m
-      case r of
-        Left err
-          -> do verbose dfs $ text "varRanges:" <+> err
-                return (neEmpty, rangeTop (ctExp e))
-        Right (rngval,rmap) 
-          -> return (rmap, av_range rngval)
+      (rngval, rmap) <- runRng m
+      return (rmap, av_range rngval)
   where 
     action :: AbsT Rng RngVal
     action = absEval e

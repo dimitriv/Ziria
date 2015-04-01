@@ -53,8 +53,6 @@ import qualified Outputable
 
 import AutoLUT
 
-import qualified Analysis.DataFlow  as DF
-
 import Vectorize    ( initVectorizer, runVectorizer  )
 
 import CgProgram    ( codeGenProgram )
@@ -155,11 +153,6 @@ main = do
     initVectorizer
 
     (cand, cands) <- runVectorizePhase dflags sym folded
-
-
-    when (isDynFlagSet dflags DumpRange) $ do
-      DF.debugDataFlow dflags cand
-
 
     -- Filenames
     let fnames = ["v"++show i++"_"++outFile | (i::Int) <- [0..]]
