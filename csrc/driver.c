@@ -37,6 +37,10 @@
 #include "sora_threads.h"
 #include "sora_thread_queues.h"
 #include "sora_ip.h"
+
+#ifdef BLADE_RF
+#include "bladerf_radio.h"
+#endif
 #endif
 
 #include "wpl_alloc.h"
@@ -95,6 +99,7 @@ int __cdecl main(int argc, char **argv) {
   // Initialize the global parameters
   params = &Globals;
   try_parse_args(params, argc, argv);
+
 
 #ifdef SORA_PLATFORM
   // Start Sora HW

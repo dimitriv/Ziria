@@ -1,0 +1,3 @@
+#include "receiver.blk"
+
+let comp main = read[complex16] >>> repeat {receiver()} >>> write

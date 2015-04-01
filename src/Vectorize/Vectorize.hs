@@ -370,7 +370,8 @@ comp_vect0 dfs (VectPack {..}) _other = do
 vectIterComp :: DynFlags -> (Comp -> Comp) -> Ty -> Ty -> LComp -> VecM DVRCands
 vectIterComp dfs builder tin tout cbody = do
   let body_card = compInfo cbody
-  body_cands <- vect_comp_dd dfs cbody $ compSFDD body_card tin tout
+  body_cands <- comp_vect dfs CtxExCompLeftAndRight cbody
+  --body_cands <- vect_comp_dd dfs cbody $ compSFDD body_card tin tout
   return (mapDVRCands (updDVRComp $ builder) body_cands)
 
 

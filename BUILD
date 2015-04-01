@@ -55,6 +55,13 @@ in `/Users/<username>/AppData/Roaming` to avoid stale state problems.
 
 
 
+* Linking with Blade-RF
+
+  Add path to blade-RF:
+    BLADE_RF=C:\Program Files\bladeRF
+
+
+
 * Ziria mode in Emacs
 
   First install haskell-mode for emacs from a standard repository.

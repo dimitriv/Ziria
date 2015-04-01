@@ -78,6 +78,9 @@
     <ClCompile Include="..\buf_chunk.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\bladerf_radio.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\bit.h">
@@ -129,6 +132,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\sora_ext_lib_fft_coeffs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\bladerf_radio.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
