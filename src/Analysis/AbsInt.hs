@@ -31,7 +31,6 @@ module AbsInt (
  , CmdDomRec (..)
  , AbsInt    (..)
  , AbsT      (..)
- , LVal
  , POrd      (..)
  , absEval 
  , inCurrSt
@@ -55,17 +54,16 @@ import Text.PrettyPrint.HughesPJ
 import CtExpr ( ctExp )
 import Outputable 
 
--- | Dereference expressions with abstract values as indices
-type LVal idx = AGDerefExp idx Ty ()
+
 
 -- | Variable lvalues 
 varLVal :: EId -> LVal v
-varLVal = GDVar Nothing ()
+varLVal = GDVar
 
 
-{-------------------------------------------------------------------------------
+{---------------------------------------------------------------------------
   Some infrastructure on partial orders, sets and maps
--------------------------------------------------------------------------------}
+---------------------------------------------------------------------------}
 
 -- | Partially ordered values
 class POrd v where
@@ -204,25 +202,24 @@ afix action = loop
 absEvalDeref :: ( POrd s, ValDom v, Monad m, MonadState s m, CmdDomRec m v )
              => Exp -> m (LVal v)
 absEvalDeref e = go (unExp e) where
-  loc = expLoc e
   -- Variables are lvalues
-  go (EVar x) = return (GDVar loc () x)
+  go (EVar x) = return (GDVar x)
   -- Reading, projections
   go (EArrRead earr estart elen) = do
     d <- absEvalDeref earr
     astart <- absEval estart
-    return (GDArr loc () d astart elen)
+    return (GDArr d astart elen)
   go (EProj e' fld) = do
     d <- absEvalDeref e'
-    return (GDProj loc () d fld)
+    return (GDProj d fld)
   -- Allocations 
   go (EValArr vs) = do 
     let ty = ctExp e
     avs <- mapM absEval vs
-    return $ GDNewArray loc () ty avs
+    return $ GDNewArray ty avs
   go (EStruct t tfs) = do
     atfs <- mapM (\(f,x) -> absEval x >>= \a -> return (f,a)) tfs
-    return $ GDNewStruct loc () t atfs
+    return $ GDNewStruct t atfs
 
   -- All rest should not occur here!
   go _ = panic $ 
@@ -315,5 +312,7 @@ absEval e = go (unExp e) where
 absEvalArg :: forall m s v. 
   ( POrd s, ValDom v, Monad m, MonadState s m, CmdDomRec m v)
            => (ArgTy,Exp) -> m (Either v (LVal v))
-absEvalArg (GArgTy _ Mut, earg) = absEvalDeref earg >>= (return . Right)
-absEvalArg (_, earg)            = absEval      earg >>= (return . Left )
+absEvalArg (GArgTy _ Mut, earg) 
+  = absEvalDeref earg >>= (return . Right)
+absEvalArg (_, earg)            
+  = absEval      earg >>= (return . Left )

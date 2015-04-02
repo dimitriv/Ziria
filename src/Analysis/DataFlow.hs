@@ -153,24 +153,24 @@ lookupVarDef v = do
 instance CmdDom DFM VarSet where
   aAssign d varset = go d varset
     where
-      go (GDVar _ _ x) vs = insertUseFree x >> insertUseDefs x vs
-      go (GDArr _ _ d' idx_vs _) vs = go d' (idx_vs `Set.union` vs)
-      go (GDProj _ _ d' _) vs       = go d' vs
+      go (GDVar x) vs = insertUseFree x >> insertUseDefs x vs
+      go (GDArr d' idx_vs _) vs = go d' (idx_vs `Set.union` vs)
+      go (GDProj d' _) vs       = go d' vs
       go (GDNewArray {}) _vs        = return ()
       go (GDNewStruct {}) _vs       = return ()
 
   aDerefRead d = go d
     where
-      go (GDVar _ _ x)           = insertUseFree x >> lookupVarDef x
-      go (GDArr _ _ d' vs _)     = go d' >>= \r -> return $ Set.union r vs
-      go (GDProj _ _ d' _)       = go d'
-      go (GDNewArray _ _ _ vs)   = return $ Set.unions vs
-      go (GDNewStruct _ _ _ tfs) = return $ Set.unions (map snd tfs)
+      go (GDVar x)           = insertUseFree x >> lookupVarDef x
+      go (GDArr d' vs _)     = go d' >>= \r -> return $ Set.union r vs
+      go (GDProj d' _)       = go d'
+      go (GDNewArray _ vs)   = return $ Set.unions vs
+      go (GDNewStruct _ tfs) = return $ Set.unions (map snd tfs)
   
 
   
   withImmABind x vs m = extendVar x $
-    do aAssign (GDVar Nothing () x) vs
+    do aAssign (GDVar x) vs
        res_vs <- m
        return $ Set.delete x res_vs
       

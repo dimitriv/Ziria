@@ -495,15 +495,15 @@ instance CmdDom Rng RngVal where
 
   aDerefRead lval = dbgRngSt (text $ "aDerefRead, lval= " ++ show lval) (go lval)
      where go d
-             | GDArr _ _ (GDVar _ _ x) (RngVal ridx _) linfo <- d
+             | GDArr (GDVar x) (RngVal ridx _) linfo <- d
              = derefArr x ridx linfo updArrRdRng
-             | GDVar _ _ x <- d            = derefVar x Rd
-             | GDNewArray _ _ _ vs    <- d = return $ aArr vs
-             | GDNewStruct _ _ t flds <- d = return $ aStruct t flds
-             | GDArr _ _ d' _ _ <- d
+             | GDVar x <- d            = derefVar x Rd
+             | GDNewArray _ vs    <- d = return $ aArr vs
+             | GDNewStruct t flds <- d = return $ aStruct t flds
+             | GDArr d' _ _ <- d
              = do _ <- go d'
                   return $ rngValTop (ctDerefExp d)
-             | GDProj _ _ d' _ <- d
+             | GDProj d' _ <- d
              = do _ <- go d'
                   return $ rngValTop (ctDerefExp d)
              | otherwise = error "aDerefRead"
@@ -513,13 +513,13 @@ instance CmdDom Rng RngVal where
                       , text $ "rhs range, r = " ++ show r ])
                 (go lval r)
      where go d (RngVal rng _symexp)
-              | GDArr _ _ (GDVar _ _ x) (RngVal ridx _) linfo <- d
+              | GDArr (GDVar x) (RngVal ridx _) linfo <- d
               = void $ derefArr x ridx linfo updArrWrRng
-              | GDVar _ _ x <- d 
+              | GDVar x <- d 
               = void $ derefVar x (Wr rng)
-              | GDArr _ _ d' _ _ <- d
+              | GDArr d' _ _ <- d
               = void $ go d' (RngVal undefined undefined)
-              | GDProj _ _ d' _ <- d
+              | GDProj d' _ <- d
               = void $ go d' (RngVal undefined undefined)
               | otherwise = error "aAssign"
               | GDNewArray {} <- d

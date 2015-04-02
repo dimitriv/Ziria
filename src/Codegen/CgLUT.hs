@@ -34,7 +34,7 @@ import CgMonad
 import CgTypes
 import Analysis.DataFlow
 import Control.Applicative ( (<$>) )
-import Data.Maybe ( isJust, catMaybes )
+import Data.Maybe ( isJust, catMaybes, fromJust )
 import Language.C.Quote.C
 import qualified Language.C.Syntax as C
 import Text.PrettyPrint.HughesPJ 
@@ -650,65 +650,87 @@ eFldWriteUpdateMask x mask_map fld
   = [ eBitArrSet mask_var start j ]
   | otherwise = []
 
+eWriteFullMask :: EId 
+               -> [(EId, Maybe EId)]
+               -> [Exp]
+eWriteFullMask x mask_eids
+  | Just (Just mask_var) <- lookup x mask_eids
+  , Just w <- outVarMaskWidth (nameTyp x)
+  = return $ eBitArrSet mask_var (int32Val 0) w
+  | otherwise
+  = []
+
 -- | Expression instrumentation, see also Note [LUT OutOfRangeTests]
 lutInstrument :: [(EId, Maybe EId)] -> Exp -> Cg Exp
 lutInstrument mask_eids = mapExpM return return do_instr
   where
     do_instr e
-      | EArrRead earr estart len <- unExp e
-      , TArray (Literal n) _ <- ctExp earr
-      = do tmpvar <- freshName "tmp" (ctExp estart) Imm
-           let tmpexp = eVar loc tmpvar
-               etest  = mk_rangetest loc n tmpexp len
-           return $
-             eLet loc tmpvar AutoInline estart $
-             eIf loc etest
-                (eArrRead loc earr tmpexp len)
-                -- replace with safe (up-to bounds check) read
-                (eArrRead loc earr (eVal loc tint (VInt 0)) len)
-
-      | EArrWrite earr estart len rhs <- unExp e
-      , TArray (Literal n) _ <- ctExp earr
-      = do tmpvar <- freshName "tmp" (ctExp estart) Imm
-           let tmpexp = eVar loc tmpvar
-               etest  = mk_rangetest loc n tmpexp len
-               emask_stmts = case unExp earr of
-                 EVar v -> eArrWriteUpdateMask v mask_eids tmpexp len
-                 _      -> []
-           return $
-             eLet loc tmpvar AutoInline estart $
-             let new_e = eArrWrite loc earr tmpexp len rhs
-             in eIf loc etest 
-                   (eseqs loc $ new_e : emask_stmts)
-                   (eVal loc TUnit VUnit)
-
-      | EProj estruct fld <- unExp e
-      = let emask_stmts = case unExp estruct of 
-              EVar v -> eFldWriteUpdateMask v mask_eids fld
-              _      -> []
-        in return (eseqs loc $ e : emask_stmts)
-
-      | otherwise 
-      = return e
-
+      | EAssign elhs erhs <- unExp e 
+      = do let lval = fromJust $ isMutGDerefExp elhs
+           instrAsgn mask_eids loc lval erhs
+      | EArrWrite earr es l erhs <- unExp e
+      = do let lval = fromJust $ isMutGDerefExp (eArrRead loc earr es l)
+           instrAsgn mask_eids loc lval erhs
+      | otherwise = return e
+    -- NB: we should also be checking for EArrRead or we may get access 
+    -- violations?
       where loc = expLoc e 
 
-    mk_rangetest :: Maybe SourcePos
-                 -> Int           -- ^ array size
+int32Val :: Int -> Exp
+int32Val n = eVal Nothing tint (VInt $ fromIntegral n)
+
+instrAsgn :: [(EId, Maybe EId)] -> Maybe SourcePos 
+          -> LVal Exp -> Exp -> Cg Exp
+instrAsgn mask_eids loc d' erhs' = do
+  (bnds, eassigns) <- instrLVal loc mask_eids d'
+  let eassign = mk_lets bnds (mk_asgn d' erhs')
+  return $ eseqs (eassign : eassigns)
+  where 
+    mk_asgn (GDArr d es l) erhs = eArrWrite loc (derefToExp loc d) es l erhs
+    mk_asgn d erhs              = eAssign loc (derefToExp loc d) erhs
+
+    mk_lets [] ebody = ebody
+    mk_lets ((x,e,test):bnds) ebody =
+      eLet loc x AutoInline e $ eIf loc test (mk_lets bnds ebody) eunit
+    eunit = eVal loc TUnit VUnit
+
+    eseqs :: [Exp] -> Exp
+    eseqs [e]    = e
+    eseqs (e:es) = eSeq loc e (eseqs es)
+    eseqs []     = panicStr "eseqs: empty"
+
+
+instrLVal :: Maybe SourcePos
+          -> [(EId, Maybe EId)] -> LVal Exp -> Cg ([(EId,Exp,Exp)], [Exp])
+-- Returns let binding, numerical expression, bounds-check plus a set
+-- of assignments.
+instrLVal loc ms lval = go lval []
+  where
+    go (GDVar x) bnds = 
+       return (bnds, eWriteFullMask x ms)
+    go (GDProj (GDVar x) fld) bnds = 
+       return (bnds, eFldWriteUpdateMask x ms fld)
+    go (GDArr (GDVar x) estart l) bnds = do 
+       tmp <- freshName "tmp" (ctExp estart) Imm
+       let tmpexp = eVar loc tmp
+           TArray (Literal arrsiz) _ = nameTyp x
+           rngtest = mk_rangetest arrsiz tmpexp l
+       return ((tmp,tmpexp,rngtest):bnds, eArrWriteUpdateMask x ms tmpexp l)
+    go (GDProj d _ ) bnds = go d bnds
+    go (GDArr d _ _) bnds = go d bnds
+    go _ bnds             = return (bnds,[])
+
+    mk_rangetest :: Int           -- ^ array size
                  -> Exp           -- ^ start expression
                  -> LengthInfo    -- ^ length to address
                  -> Exp           -- ^ boolean check
-    mk_rangetest loc array_len estart len = case len of 
+    mk_rangetest array_len estart len = case len of 
       LISingleton -> eBinOp loc Leq estart earray_len
       LILength n  -> eBinOp loc Leq (eAddBy estart n) earray_len
       LIMeta {}   -> panicStr "mk_rangetest: LIMeta!"
       where earray_len = eVal loc (ctExp estart) varray_len
             varray_len = VInt $ fromIntegral array_len
 
-    eseqs :: Maybe SourcePos -> [Exp] -> Exp
-    eseqs _loc [e]   = e
-    eseqs loc (e:es) = eSeq loc e (eseqs loc es)
-    eseqs _ [] = panicStr "eseqs: empty"
 
 
 {- | Note [LUT OutOfRangeTests]

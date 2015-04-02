@@ -756,17 +756,18 @@ inline_immutable nm expr
 
 
 -- | How to inline a mutable parameter: see notes above
-inline_mutable :: GName Ty -> GDerefExp Ty () -> RwM InlineData
-inline_mutable nm dexpr = do 
+inline_mutable :: Maybe SourcePos -> 
+                  GName Ty -> GDerefExp Ty () -> RwM InlineData
+inline_mutable loc nm dexpr = do 
   (bnds,simpl_dexpr) <- lift_idx dexpr
   return (bnds `mappend` inlAsSubst nm simpl_dexpr)
   where 
     -- | Lift and let-bind non-simple indices
-    lift_idx (GDVar loc _ x)       = return (mempty, eVar loc x)
-    lift_idx (GDProj loc _ de fld) = do
+    lift_idx (GDVar x)       = return (mempty, eVar loc x)
+    lift_idx (GDProj de fld) = do
       (bnds, simpl_de) <- lift_idx de
       return (bnds, eProj loc simpl_de fld)
-    lift_idx (GDArr loc _ de estart li)
+    lift_idx (GDArr de estart li)
       | is_simpl_expr estart
       = do (bnds,simpl_de) <- lift_idx de
            return (bnds, eArrRead loc simpl_de estart li)
@@ -787,7 +788,7 @@ inlineParam prm earg = do
     inline_prm
       | isMutable prm
       , Just earg_deref <- isMutGDerefExp earg
-      = inline_mutable prm earg_deref
+      = inline_mutable (expLoc earg) prm earg_deref
       | otherwise
       = inline_immutable prm earg
 
