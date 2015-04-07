@@ -179,6 +179,7 @@ fun comp PilotTrack() {
 
        
        -- Compensate pilots
+       zero_complex16(symbol_out);
        v_mul_complex16(symbol_out[0,28], symbol[0,28], rotate_coeffs[0,28],15);
        v_mul_complex16(symbol_out[36,28],symbol[36,28],rotate_coeffs[36,28],15);
 

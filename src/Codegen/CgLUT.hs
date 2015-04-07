@@ -383,10 +383,12 @@ genLUTLookup _dflags stats lgi ety mb_resname = do
    idx <- freshVar "idx"
    idx_ty <- lutIndexTypeByWidth (lutInBitWidth stats)
    appendDecl [cdecl| $ty:idx_ty $id:idx;|]
+   -- | Initialize the index to 0 entry in case invars is empty!
    appendStmt [cstm| $id:idx = 0;|]
 
    -- | Pack input variables to index
    let vupkg = lutVarUsePkg stats
+
    packIdx vupkg (vu_invars vupkg) [cexp|$id:idx|] idx_ty
 
     -- | LUT lookup and unpack output variables
