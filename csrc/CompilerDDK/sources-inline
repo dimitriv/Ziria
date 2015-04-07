@@ -62,7 +62,9 @@ C_DEFINES       = $(C_DEFINES) \
 
 ## Deliberately disabled most of the warnings
 ## USER_C_FLAGS = $(USER_C_FLAGS) /TP /FAs /W1
-USER_C_FLAGS = $(USER_C_FLAGS) /TP /W1 /GR /GL
+USER_C_FLAGS = $(USER_C_FLAGS) /TP /W1 /GR /GL /wd4333 
+
+## WD433 is a specific bit-shift warning for code that our LUT codegen emits.
 
 ## To generate post-processed code with expanded header files, add options /C /P
 ## Note that this will prevent generation of obj files, so compilation will fail
