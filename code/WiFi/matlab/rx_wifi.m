@@ -130,7 +130,7 @@ switch input
     % Wifi capture using BladeRF
     pkt = load('pkt1.infile');
     pkt = pkt(1:2:end)' + i*pkt(2:2:end)';
-    delta = 160-84;
+    delta = -19;
     
   case 5
     % Weird packet. It seems to have only one LTS symbol, and than OFDM symbols right after that
@@ -138,7 +138,7 @@ switch input
     %delta = 62;
 
     pkt = pkt1;
-    delta = 160-84;
+    delta = -19;
     
     % 422, 549
 
