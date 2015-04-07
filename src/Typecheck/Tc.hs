@@ -261,6 +261,9 @@ tcExp expr@(MkExp exp0 loc _) =
         TArrow funtys _funres -> do 
           checkWith loc (checkArgMut funtys args) $ 
              text "Mutable argument(s) not dereference expression(s)!"
+          checkWith loc (length funtys == length args) $
+             text "Formal parameters vs. actual arguments length mismatch!"
+
           actual <- mapM tcExp args
           let actual' = zipWith (\t (GArgTy _ m) -> GArgTy t m) actual funtys
           res    <- freshTy "b"
@@ -374,6 +377,8 @@ tcComp comp@(MkComp comp0 loc _) =
       -- Check that mutability agrees with deref exprs
       checkWith loc (checkCAArgMut funtys args) $
           text "Mutable argument(s) not dereference expression(s)!"
+      checkWith loc (length funtys == length args) $ 
+          text "Formal parameters vs. actual arguments length mismatch!"
 
       -- Get the actual types
       actual <- forM args $ \arg -> case arg of
