@@ -20,8 +20,12 @@
 #include <stdlib.h>
 #include <memory.h>
 
+#include <xmmintrin.h>
+#include <emmintrin.h>
+
 #include "types.h"
 #include "bit.h"
+
 
 /* Effectively implements:  tgt := src[vstart ... (vstart+vlen-1)] 
  * Precondition: tgt has allocated (vlen+7)/8 bytes already
@@ -219,5 +223,20 @@ void printBitArrLn(BitArrPtr arr, unsigned int vlen)
 		printf("%d",tmp);
 	}
 	printf("\n");
+}
+
+
+
+// LUT-specific operations
+// v = l & m | v & ~ m
+void lutmask128(BitArrPtr v, BitArrPtr m, BitArrPtr l)
+{
+		// could be unaligned ...
+		__m128i mv = _mm_loadu_si128((__m128i *) v);
+		__m128i mm = _mm_loadu_si128((__m128i *) m);
+		__m128i ml = _mm_loadu_si128((__m128i *) l);
+
+		mv = _mm_or_si128(_mm_and_si128(ml, mm), _mm_andnot_si128(mm, mv));
+		_mm_storeu_si128((__m128i *) v, mv);
 }
 

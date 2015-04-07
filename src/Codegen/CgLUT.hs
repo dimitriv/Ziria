@@ -95,21 +95,25 @@ varToBitArrPtr v = do
   where ty = nameTyp v
 
 
-cgBreakDown :: Int -> C.Exp -> [C.Exp]
+cgBreakDown :: Int -> C.Exp -> [(C.Exp, Int)]
 -- ^ Breakdown to 64,32,16,8 ... (later we should also add SSE 128/256)
-cgBreakDown 8  ptr = [ ptr ]
-cgBreakDown 16 ptr = [ [cexp| (typename uint16 *) $ptr |] ]
-cgBreakDown 32 ptr = [ [cexp| (typename uint32 *) $ptr |] ]
-cgBreakDown 64 ptr = [ [cexp| (typename uint64 *) $ptr |] ]
+-- ^ Also returns the width of each breakdown
+cgBreakDown 8  ptr  = [ (ptr,8) ]
+cgBreakDown 16 ptr  = [ ([cexp| (typename uint16 *) $ptr |],16)  ]
+cgBreakDown 32 ptr  = [ ([cexp| (typename uint32 *) $ptr |],32)  ]
+cgBreakDown 64 ptr  = [ ([cexp| (typename uint64 *) $ptr |],64)  ]
+cgBreakDown 128 ptr = [ ([cexp| $ptr |], 128) ]
 cgBreakDown n  ptr
-  | n - 64 > 0 
-  = [cexp| (typename uint64 *) $ptr |] : cgBreakDown (n-64) [cexp| $ptr + 8 |]
+  | n - 128 > 0
+  = ([cexp| $ptr |], 128) : cgBreakDown (n - 128) [cexp| $ptr + 16 |]
+  | n - 64 > 0
+  = ([cexp| (typename uint64 *) $ptr |],64) : cgBreakDown (n-64) [cexp| $ptr + 8 |]
   | n - 32 > 0 
-  = [cexp| (typename uint32 *) $ptr |] : cgBreakDown (n-32) [cexp| $ptr + 4 |] 
+  = ([cexp| (typename uint32 *) $ptr |],32) : cgBreakDown (n-32) [cexp| $ptr + 4 |] 
   | n - 16 > 0 
-  = [cexp| (typename uint16 *) $ptr |] : cgBreakDown (n-16) [cexp| $ptr + 2 |]
+  = ([cexp| (typename uint16 *) $ptr |],16) : cgBreakDown (n-16) [cexp| $ptr + 2 |]
   | n - 8 > 0  
-  = [ ptr ]
+  = [ (ptr,8) ]
   | otherwise = []
 
 cgBitArrLUTMask :: C.Exp -- ^ output variable BitArrPtr
@@ -122,24 +126,36 @@ cgBitArrLUTMask vptr mptr lptr width
   = let vptrs = cgBreakDown width vptr
         mptrs = cgBreakDown width mptr
         lptrs = cgBreakDown width lptr
-        mk_stmt (v,m,l) = [cstm| * $v = (* $l & * $m) | (* $v & ~ * $m);|]
+        mk_stmt ((v,w),(m,_),(l,_))
+          | w == 128
+          = [cstm| lutmask128($v,$m,$l);|] -- SSE
+          | otherwise
+          = [cstm| * $v = (* $l & * $m) | (* $v & ~ * $m);|]
+
+        -- Optimizing for the sparse writes:
+        -- mk_stmt (v,m,l) = [cstm| if (*$m) *$v = (* $l & * $m) | (* $v & ~ * $m);|]
+        -- Optimizing for the dense writes:
+        -- mk_stmt (v,m,l) = [cstm| if (*$m == -1) { *$v = *$l; } else
+        --                                        { *$v = (* $l & * $m) | (* $v & ~ * $m);}|]
+
     in sequence_ $ map (appendStmt . mk_stmt) (zip3 vptrs mptrs lptrs)
 
 cgBitArrRead :: C.Exp -> Int -> Int -> C.Exp -> Cg ()
 -- ^ Pre: pos and len are multiples of 8; src, tgt are of type BitArrPtr
 cgBitArrRead src_base pos len tgt
-  | len >= 288
+  | len >= 128
   = appendStmt $ 
     [cstm| blink_copy((void *) $tgt, $int:byte_len, (void *) $src);|]
   | otherwise
   = sequence_ $ map (appendStmt . mk_stmt) (zip src_ptrs tgt_ptrs)
   where
-    src_ptrs      = cgBreakDown len src
-    tgt_ptrs      = cgBreakDown len tgt
-    mk_stmt (s,t) = [cstm| * $t = * $s;|]
-    sidx          = pos `div` 8
-    src           = [cexp| & ($src_base[$int:sidx])|]
-    byte_len      = (len+7) `div` 8
+    src_ptrs              = cgBreakDown len src
+    tgt_ptrs              = cgBreakDown len tgt
+    mk_stmt ((s,w),(t,_)) = assert "cgBitArrRead" (w < 128) $ 
+                            [cstm| * $t = * $s;|]
+    sidx                  = pos `div` 8
+    src                   = [cexp| & ($src_base[$int:sidx])|]
+    byte_len              = (len+7) `div` 8
 
 
 {---------------------------------------------------------------------------
