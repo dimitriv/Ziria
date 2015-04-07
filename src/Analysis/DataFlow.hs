@@ -99,8 +99,9 @@ instance POrd DFState where
    = ud1 `pleq` ud2 && uf1 `pleq` uf2
 
 -- | Run action in extended control flow
-extendFlowVars :: VarSet -> DFM a -> DFM a
-extendFlowVars vs = local upd_env
+extendFlowVars :: VarSet -> DFM VarSet -> DFM VarSet
+extendFlowVars vs m = do r <- local upd_env m 
+                         return (r `Set.union` vs)
   where upd_env env = env `Set.union` vs
 
 -- | Run action but in the end delete variable from result
