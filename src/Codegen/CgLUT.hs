@@ -401,8 +401,8 @@ genLUTLookup _dflags stats lgi ety mb_resname = do
        let c_ty = codeGenTy ety
            cres_well_typed
              | TUnit     <- ety = [cexp|UNIT|]
-             | TArray {} <- ety = [cexp|   ($ty:c_ty) $cres |]
-             | otherwise        = [cexp| *(($ty:c_ty) $cres)|]
+             | TArray {} <- ety = [cexp|   ($ty:c_ty)   $cres |]
+             | otherwise        = [cexp| *(($ty:c_ty *) $cres)|]
        return cres_well_typed
 
    -- | Store the resul if someone has given us a location 
@@ -483,9 +483,9 @@ genLUT dflags stats e = do
            Just _v -> return ()
            Nothing
              | TArray {} <- ety
-             -> assignByVal ety ety [cexp| ($ty:c_ty) $clut_fin   |] ce
+             -> assignByVal ety ety [cexp| ($ty:c_ty) $clut_fin     |] ce
              | otherwise
-             -> assignByVal ety ety [cexp| *(($ty:c_ty) $clut_fin)|] ce
+             -> assignByVal ety ety [cexp| *(($ty:c_ty *) $clut_fin)|] ce
 
    -- | make lut entry be 2-byte aligned
    let lutEntryByteLen 
@@ -683,8 +683,8 @@ instrAsgn :: [(EId, Maybe EId)] -> Maybe SourcePos
           -> LVal Exp -> Exp -> Cg Exp
 instrAsgn mask_eids loc d' erhs' = do
   (bnds, eassigns) <- instrLVal loc mask_eids d'
-  let eassign = mk_lets bnds (mk_asgn d' erhs')
-  return $ eseqs (eassign : eassigns)
+  let eassign = mk_asgn d' erhs'
+  return $ mk_lets bnds $ eseqs (eassign : eassigns)
   where 
     mk_asgn (GDArr d es l) erhs = eArrWrite loc (derefToExp loc d) es l erhs
     mk_asgn d erhs              = eAssign loc (derefToExp loc d) erhs
@@ -715,7 +715,7 @@ instrLVal loc ms lval = go lval []
        let tmpexp = eVar loc tmp
            TArray (Literal arrsiz) _ = nameTyp x
            rngtest = mk_rangetest arrsiz tmpexp l
-       return ((tmp,tmpexp,rngtest):bnds, eArrWriteUpdateMask x ms tmpexp l)
+       return ((tmp,estart,rngtest):bnds, eArrWriteUpdateMask x ms tmpexp l)
     go (GDProj d _ ) bnds = go d bnds
     go (GDArr d _ _) bnds = go d bnds
     go _ bnds             = return (bnds,[])
