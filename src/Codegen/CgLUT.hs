@@ -630,39 +630,6 @@ eBitArrSet bitarr start width
      | otherwise  = (eValArr Nothing bIT1s, LILength width)
    bIT1s = replicate width bIT1
 
--- eArrWriteUpdateMask :: EId                -- ^ the array
---                     -> [(EId, Maybe EId)] -- ^ the mask map
---                     -> Exp                -- ^ start index (pre: pure)
---                     -> LengthInfo         -- ^ length info
---                     -> [Exp]              -- ^ assignment
--- eArrWriteUpdateMask x mask_map estart len
---   | TArray _ basety      <- nameTyp x
---   , Just (Just mask_var) <- lookup x mask_map
---   , let start = estart `eMultBy` tyBitWidth' basety
---   = [ eBitArrSet mask_var start (bitArrRng basety len) ]
---   | otherwise = []
-
--- eFldWriteUpdateMask :: EId                -- ^ the struct
---                     -> [(EId, Maybe EId)] -- ^ the mask map
---                     -> FldName            -- ^ field name
---                     -> [Exp]              -- ^ assignment
--- eFldWriteUpdateMask x mask_map fld
---   | TStruct _ fltys      <- nameTyp x
---   , Just (Just mask_var) <- lookup x mask_map
---   , let (i,j) = fldBitArrRng fltys fld
---   , let start = eVal Nothing tint (VInt $ fromIntegral i)
---   = [ eBitArrSet mask_var start j ]
---   | otherwise = []
-
--- eWriteFullMask :: EId 
---                -> [(EId, Maybe EId)]
---                -> [Exp]
--- eWriteFullMask x mask_eids
---   | Just (Just mask_var) <- lookup x mask_eids
---   , Just w <- outVarMaskWidth (nameTyp x)
---   = return $ eBitArrSet mask_var (int32Val 0) w
---   | otherwise
---   = []
 
 -- | Expression instrumentation, see also Note [LUT OutOfRangeTests]
 lutInstrument :: [(EId, Maybe EId)] -> Exp -> Cg Exp
@@ -706,42 +673,14 @@ instrAsgn mask_eids loc d' erhs' = do
     eseqs []     = panicStr "eseqs: empty"
 
 
--- instrLVal :: Maybe SourcePos
---           -> [(EId, Maybe EId)] -> LVal Exp -> Cg ([(EId,Exp,Exp)], [Exp])
--- -- Returns let binding, numerical expression, bounds-check plus a set
--- -- of assignments.
--- instrLVal loc ms lval = go lval []
---   where
---     go (GDVar x) bnds = 
---        return (bnds, eWriteFullMask x ms)
---     go (GDProj (GDVar x) fld) bnds = 
---        return (bnds, eFldWriteUpdateMask x ms fld)
---     go (GDArr (GDVar x) estart l) bnds = do 
---        tmp <- freshName "tmp" (ctExp estart) Imm
---        let tmpexp = eVar loc tmp
---            TArray (Literal arrsiz) _ = nameTyp x
---            rngtest = mk_rangetest arrsiz tmpexp l
---        return ((tmp,estart,rngtest):bnds, eArrWriteUpdateMask x ms tmpexp l)
---     go (GDProj d _ ) bnds = go d bnds
---     go (GDArr d _ _) bnds = go d bnds
---     go _ bnds             = return (bnds,[])
-
---     mk_rangetest :: Int           -- ^ array size
---                  -> Exp           -- ^ start expression
---                  -> LengthInfo    -- ^ length to address
---                  -> Exp           -- ^ boolean check
---     mk_rangetest array_len estart len = case len of 
---       LISingleton -> eBinOp loc Leq estart earray_len
---       LILength n  -> eBinOp loc Leq (eAddBy estart n) earray_len
---       LIMeta {}   -> panicStr "mk_rangetest: LIMeta!"
---       where earray_len = eVal loc (ctExp estart) varray_len
---             varray_len = VInt $ fromIntegral array_len
-
-
+-- | MaskRange: a compact representation of bitmasks 
 data MaskRange 
-  = MRFull                                   -- ^ Full range
-  | MRField [(FldName,Ty)] MaskRange FldName -- ^ Field projection
-  | MRArr Ty MaskRange Exp LengthInfo        -- ^ Array slice (Ty is the *element* type of array)
+  = -- | Full range
+    MRFull
+    -- | Field projection
+  | MRField [(FldName,Ty)] MaskRange FldName
+    -- | Array slice (Ty is the *element* type of array)
+  | MRArr Ty MaskRange Exp LengthInfo
 
 maskRangeToRng :: Int         -- ^ Full mask bitwidth
                -> MaskRange   -- ^ Range to set
@@ -774,6 +713,9 @@ writeMask x mask_map rng
   | otherwise
   = []
 
+-- | Instrument an lvalue for assignment. Mainly two things
+--   a) write the appropriate range in the corresponding bitmask
+--   b) guard for out-of-bounds writing
 instrLVal :: Maybe SourcePos
           -> [(EId, Maybe EId)] -> LVal Exp -> Cg ([(EId,Exp,Exp)], [Exp])
 -- Returns let binding, numerical expression, bounds-check plus a set
