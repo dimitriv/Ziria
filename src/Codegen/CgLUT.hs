@@ -630,39 +630,39 @@ eBitArrSet bitarr start width
      | otherwise  = (eValArr Nothing bIT1s, LILength width)
    bIT1s = replicate width bIT1
 
-eArrWriteUpdateMask :: EId                -- ^ the array
-                    -> [(EId, Maybe EId)] -- ^ the mask map
-                    -> Exp                -- ^ start index (pre: pure)
-                    -> LengthInfo         -- ^ length info
-                    -> [Exp]              -- ^ assignment
-eArrWriteUpdateMask x mask_map estart len
-  | TArray _ basety      <- nameTyp x
-  , Just (Just mask_var) <- lookup x mask_map
-  , let start = estart `eMultBy` tyBitWidth' basety
-  = [ eBitArrSet mask_var start (bitArrRng basety len) ]
-  | otherwise = []
+-- eArrWriteUpdateMask :: EId                -- ^ the array
+--                     -> [(EId, Maybe EId)] -- ^ the mask map
+--                     -> Exp                -- ^ start index (pre: pure)
+--                     -> LengthInfo         -- ^ length info
+--                     -> [Exp]              -- ^ assignment
+-- eArrWriteUpdateMask x mask_map estart len
+--   | TArray _ basety      <- nameTyp x
+--   , Just (Just mask_var) <- lookup x mask_map
+--   , let start = estart `eMultBy` tyBitWidth' basety
+--   = [ eBitArrSet mask_var start (bitArrRng basety len) ]
+--   | otherwise = []
 
-eFldWriteUpdateMask :: EId                -- ^ the struct
-                    -> [(EId, Maybe EId)] -- ^ the mask map
-                    -> FldName            -- ^ field name
-                    -> [Exp]              -- ^ assignment
-eFldWriteUpdateMask x mask_map fld
-  | TStruct _ fltys      <- nameTyp x
-  , Just (Just mask_var) <- lookup x mask_map
-  , let (i,j) = fldBitArrRng fltys fld
-  , let start = eVal Nothing tint (VInt $ fromIntegral i)
-  = [ eBitArrSet mask_var start j ]
-  | otherwise = []
+-- eFldWriteUpdateMask :: EId                -- ^ the struct
+--                     -> [(EId, Maybe EId)] -- ^ the mask map
+--                     -> FldName            -- ^ field name
+--                     -> [Exp]              -- ^ assignment
+-- eFldWriteUpdateMask x mask_map fld
+--   | TStruct _ fltys      <- nameTyp x
+--   , Just (Just mask_var) <- lookup x mask_map
+--   , let (i,j) = fldBitArrRng fltys fld
+--   , let start = eVal Nothing tint (VInt $ fromIntegral i)
+--   = [ eBitArrSet mask_var start j ]
+--   | otherwise = []
 
-eWriteFullMask :: EId 
-               -> [(EId, Maybe EId)]
-               -> [Exp]
-eWriteFullMask x mask_eids
-  | Just (Just mask_var) <- lookup x mask_eids
-  , Just w <- outVarMaskWidth (nameTyp x)
-  = return $ eBitArrSet mask_var (int32Val 0) w
-  | otherwise
-  = []
+-- eWriteFullMask :: EId 
+--                -> [(EId, Maybe EId)]
+--                -> [Exp]
+-- eWriteFullMask x mask_eids
+--   | Just (Just mask_var) <- lookup x mask_eids
+--   , Just w <- outVarMaskWidth (nameTyp x)
+--   = return $ eBitArrSet mask_var (int32Val 0) w
+--   | otherwise
+--   = []
 
 -- | Expression instrumentation, see also Note [LUT OutOfRangeTests]
 lutInstrument :: [(EId, Maybe EId)] -> Exp -> Cg Exp
@@ -675,10 +675,12 @@ lutInstrument mask_eids = mapExpM return return do_instr
       | EArrWrite earr es l erhs <- unExp e
       = do let lval = fromJust $ isMutGDerefExp (eArrRead loc earr es l)
            instrAsgn mask_eids loc lval erhs
+      | EPrint nl eargs <- unExp e
+      = return $ ePrint loc nl (eargs ++ [io_msg])
       | otherwise = return e
-    -- NB: we should also be checking for EArrRead or we may get access 
-    -- violations?
+    -- NB: we should also be checking for EArrRead or we may get access violations?
       where loc = expLoc e 
+            io_msg = eVal loc TString (VString "(IO from LUT _generator_)")
 
 int32Val :: Int -> Exp
 int32Val n = eVal Nothing tint (VInt $ fromIntegral n)
@@ -704,25 +706,94 @@ instrAsgn mask_eids loc d' erhs' = do
     eseqs []     = panicStr "eseqs: empty"
 
 
+-- instrLVal :: Maybe SourcePos
+--           -> [(EId, Maybe EId)] -> LVal Exp -> Cg ([(EId,Exp,Exp)], [Exp])
+-- -- Returns let binding, numerical expression, bounds-check plus a set
+-- -- of assignments.
+-- instrLVal loc ms lval = go lval []
+--   where
+--     go (GDVar x) bnds = 
+--        return (bnds, eWriteFullMask x ms)
+--     go (GDProj (GDVar x) fld) bnds = 
+--        return (bnds, eFldWriteUpdateMask x ms fld)
+--     go (GDArr (GDVar x) estart l) bnds = do 
+--        tmp <- freshName "tmp" (ctExp estart) Imm
+--        let tmpexp = eVar loc tmp
+--            TArray (Literal arrsiz) _ = nameTyp x
+--            rngtest = mk_rangetest arrsiz tmpexp l
+--        return ((tmp,estart,rngtest):bnds, eArrWriteUpdateMask x ms tmpexp l)
+--     go (GDProj d _ ) bnds = go d bnds
+--     go (GDArr d _ _) bnds = go d bnds
+--     go _ bnds             = return (bnds,[])
+
+--     mk_rangetest :: Int           -- ^ array size
+--                  -> Exp           -- ^ start expression
+--                  -> LengthInfo    -- ^ length to address
+--                  -> Exp           -- ^ boolean check
+--     mk_rangetest array_len estart len = case len of 
+--       LISingleton -> eBinOp loc Leq estart earray_len
+--       LILength n  -> eBinOp loc Leq (eAddBy estart n) earray_len
+--       LIMeta {}   -> panicStr "mk_rangetest: LIMeta!"
+--       where earray_len = eVal loc (ctExp estart) varray_len
+--             varray_len = VInt $ fromIntegral array_len
+
+
+data MaskRange 
+  = MRFull                                   -- ^ Full range
+  | MRField [(FldName,Ty)] MaskRange FldName -- ^ Field projection
+  | MRArr Ty MaskRange Exp LengthInfo        -- ^ Array slice (Ty is the *element* type of array)
+
+maskRangeToRng :: Int         -- ^ Full mask bitwidth
+               -> MaskRange   -- ^ Range to set
+               -> (Exp, Int)  -- ^ Width to set
+maskRangeToRng width = go
+  where
+    go MRFull 
+      = (int32Val 0, width)
+
+    go (MRField fltys mr fld) 
+      = let (offset,_) = go mr                  
+            (i,j)      = fldBitArrRng fltys fld
+        in (offset `eAddBy` i, j)
+
+    go (MRArr basety mr estart len) =
+       let (offset,_)  = go mr
+           blen         = bitArrRng basety len
+           sidx        = estart `eMultBy` tyBitWidth' basety
+       in (eBinOp Nothing Add offset sidx, blen)
+       
+writeMask :: EId
+          -> [(EId,Maybe EId)]
+          -> MaskRange
+          -> [Exp]
+writeMask x mask_map rng 
+  | Just (Just mask_var) <- lookup x mask_map
+  , Just w <- outVarMaskWidth (nameTyp x)
+  , let (estart,mask_len) = maskRangeToRng w rng
+  = [eBitArrSet mask_var estart mask_len]
+  | otherwise
+  = []
+
 instrLVal :: Maybe SourcePos
           -> [(EId, Maybe EId)] -> LVal Exp -> Cg ([(EId,Exp,Exp)], [Exp])
 -- Returns let binding, numerical expression, bounds-check plus a set
 -- of assignments.
-instrLVal loc ms lval = go lval []
+instrLVal loc ms lval = go lval [] MRFull
   where
-    go (GDVar x) bnds = 
-       return (bnds, eWriteFullMask x ms)
-    go (GDProj (GDVar x) fld) bnds = 
-       return (bnds, eFldWriteUpdateMask x ms fld)
-    go (GDArr (GDVar x) estart l) bnds = do 
-       tmp <- freshName "tmp" (ctExp estart) Imm
-       let tmpexp = eVar loc tmp
-           TArray (Literal arrsiz) _ = nameTyp x
-           rngtest = mk_rangetest arrsiz tmpexp l
-       return ((tmp,estart,rngtest):bnds, eArrWriteUpdateMask x ms tmpexp l)
-    go (GDProj d _ ) bnds = go d bnds
-    go (GDArr d _ _) bnds = go d bnds
-    go _ bnds             = return (bnds,[])
+    go (GDVar x) bnds r = return (bnds, writeMask x ms r)
+
+    go (GDProj d fld) bnds r = do
+      let TStruct _ tflds = ctDerefExp d
+      go d bnds (MRField tflds r fld)
+
+    go (GDArr d estart l) bnds r = do
+      tmp <- freshName "tmp" (ctExp estart) Imm
+      let tmpexp = eVar loc tmp
+          TArray (Literal arrsiz) basety = ctDerefExp d
+          rngtest = mk_rangetest arrsiz tmpexp l
+      go d ((tmp,estart,rngtest):bnds) (MRArr basety r tmpexp l)
+
+    go _ bnds _r = return (bnds,[])
 
     mk_rangetest :: Int           -- ^ array size
                  -> Exp           -- ^ start expression
@@ -734,6 +805,8 @@ instrLVal loc ms lval = go lval []
       LIMeta {}   -> panicStr "mk_rangetest: LIMeta!"
       where earray_len = eVal loc (ctExp estart) varray_len
             varray_len = VInt $ fromIntegral array_len
+
+
 
 
 
