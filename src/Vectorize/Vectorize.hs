@@ -259,7 +259,8 @@ comp_vect0 dfs (VectPack {..}) (Call f es) = do
 
   -- NB: It's not very efficient to create a zillion typed names.
   -- Hence we create one and set its type each time.
-  vf <- newVectGName (name f ++ "_vect") undefined vp_loc Imm
+  vf <- newVectGName (name f ++ "_vect") 
+                     (error "comp_vect0: unset type!") vp_loc Imm
 
   let mk_vect_call vbd
         = cLetFunC vp_loc vf_typed prms' vbd $

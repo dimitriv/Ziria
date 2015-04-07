@@ -155,7 +155,7 @@ data MitPkg = MitPkg { mit_ty  :: Ty
 -- | Get the type of a mitigator package
 mitPkgCTy :: MitPkg -> CTy 
 mitPkgCTy (MitPkg { mit_ty = t, mit_in = i, mit_out = j, mit_ctx = s })
-  = ctComp (cMitigate undefined s t i j)
+  = ctComp (cMitigate Nothing s t i j)
 
 -- | If the computation /ends/ with a Mitigator then give it back
 -- NB: If the computation consists of just a mitigator we will 

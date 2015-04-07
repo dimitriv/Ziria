@@ -518,9 +518,9 @@ instance CmdDom Rng RngVal where
               | GDVar x <- d 
               = void $ derefVar x (Wr rng)
               | GDArr d' _ _ <- d
-              = void $ go d' (RngVal undefined undefined)
+              = void $ go d' (RngVal (error "aAssign(A)") (error "aAssign(B)"))
               | GDProj d' _ <- d
-              = void $ go d' (RngVal undefined undefined)
+              = void $ go d' (RngVal (error "aAssign(C)") (error "aAssign(D)"))
               | otherwise = error "aAssign"
               | GDNewArray {} <- d
               = return () -- Writing to an unnamed array has no effects
