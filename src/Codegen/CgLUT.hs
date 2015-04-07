@@ -482,8 +482,10 @@ genLUT dflags stats e = do
          case lutResultInOutVars stats of
            Just _v -> return ()
            Nothing
+             | TUnit <- ety
+             -> return ()
              | TArray {} <- ety
-             -> assignByVal ety ety [cexp| ($ty:c_ty) $clut_fin     |] ce
+             -> assignByVal ety ety [cexp| ($ty:c_ty) $clut_fin |] ce
              | otherwise
              -> assignByVal ety ety [cexp| *(($ty:c_ty *) $clut_fin)|] ce
 
