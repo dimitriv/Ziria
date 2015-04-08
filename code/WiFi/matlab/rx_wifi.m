@@ -91,7 +91,7 @@ if 0
   out = [real(pkt1)'; imag(pkt1)'];
   out = out(:);
   out = round(out / max(out) * 10000);
-  f = fopen('pkt1.infile', 'w');
+  f = fopen('pkt3.infile', 'w');
   fprintf(f, '%d, ', out);
   fclose(f);
 end
