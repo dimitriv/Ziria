@@ -177,16 +177,27 @@ pack_idx_var :: VarUsePkg -- ^ Variable use package
              -> Int       -- ^ Offset to place the variable at
              -> Cg Int    -- ^ Final offset (for the next variable)
 pack_idx_var pkg v idx idx_ty pos
-  | TArray _ base_ty <- nameTyp v
-  , Just (lidx,hidx) <- inArrSlice pkg v
-  = do base_w <- tyBitWidth base_ty
-       let slice_w = (hidx-lidx+1)*base_w -- ^ slice width
-       varexp <- lookupVarEnv v
-       let tmp_var = [cexp|(($ty:idx_ty) (* $varexp))|]
-           slice   = tmp_var `cExpShR` (lidx*base_w) `cMask` slice_w
+  | Just (vstart,vlen) <- inArrSliceBitWidth pkg v
+  = do varexp <- lookupVarEnv v -- must be pointer! 
+       let byte_start = vstart `div` 8
+
+           -- | NB: Observe the uint32 below. Why?
+           -- We will do the calculation with uint32 because if we
+           -- start addressing in this particular position we may have
+           -- to spill over to the next byte -- so cast the current 
+           -- location to a pointer for the maximum index type (uint32), 
+           -- and only once you've got the final value truncate
+           -- back. Sigh ...
+
+           tmp_var = [cexp| ( * (typename uint32 *) 
+                                              (& ((typename BitArrPtr) $varexp)[$int:byte_start]))
+                     |]
+
+           slice_shift = vstart - byte_start * 8
+           slice   = tmp_var `cExpShR` slice_shift `cMask` vlen
            rhs     = slice `cExpShL` pos
-       appendStmt $ [cstm| $idx |= $rhs; |]
-       return (pos+slice_w)
+       appendStmt $ [cstm| $idx |= ( $ty:idx_ty ) $rhs; |]
+       return (pos+vlen)
   | otherwise
   = do w <- inVarBitWidth pkg v
        varexp <- lookupVarEnv v
@@ -215,14 +226,11 @@ unpack_idx_var :: VarUsePkg -- ^ Variable use package
 -- there aren't any clever fast paths here.
 -- ^ NB: Mutates the index
 unpack_idx_var pkg v idx
-  | TArray _ base_ty <- nameTyp v
-  , Just (lidx,hidx) <- inArrSlice pkg v
-  = do base_w <- tyBitWidth base_ty
-       vptr <- varToBitArrPtr v
-       let slice_w = base_w*(hidx-lidx+1)
+  | Just (vstart,vlen) <- inArrSliceBitWidth pkg v
+  = do vptr <- varToBitArrPtr v
        appendStmt $ 
-         [cstm|bitArrWrite($idx_ptr,$int:(lidx*base_w),$slice_w,$vptr);|]
-       let new_idx = idx `cExpShR` slice_w
+         [cstm|bitArrWrite($idx_ptr,$int:vstart,$int:vlen,$vptr);|]
+       let new_idx = idx `cExpShR` vlen
        appendStmt $ [cstm| $idx = $new_idx;|]
   | otherwise
   = do w    <- inVarBitWidth pkg v

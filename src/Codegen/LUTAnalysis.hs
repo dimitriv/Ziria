@@ -34,8 +34,7 @@ module LUTAnalysis (
    -- | Densely packed input variable width
  , inVarsBitWidth
  , inVarBitWidth
- , inArrSlice
-
+ , inArrSliceBitWidth
    -- | Byte-aligned packed output variable width and assign-masks
 
  , outVarsBitWidth -- ^ Total output variables and their masks 
@@ -369,8 +368,8 @@ invar_bitwidth pkg v
   = return (intLog2 (max (abs l) (abs h)))
 
   -- | Array variables in known input range
-  | Just r <- inArrSlice pkg v
-  = inArrSliceBitWidth (nameTyp v) r
+  | Just (_,w) <- inArrSliceBitWidth pkg v
+  = return w
   -- ^ NB: at the moment input struct variables are considered as inputs
   -- ^ in their entirety. Perhaps later on we would like to extend the
   -- ^ range analysis and be more precise and efficient about this.
@@ -393,8 +392,12 @@ inArrSlice pkg x = do
     IRng lidx hidx -> return (fromIntegral lidx, fromIntegral hidx)
     _              -> Nothing
 
-inArrSliceBitWidth :: (Functor m, Monad m) => Ty -> (Int,Int) -> m Int
-inArrSliceBitWidth arrayty (lidx,hidx) = do
-  let TArray _ basety = arrayty
+
+inArrSliceBitWidth :: VarUsePkg -> EId -> Maybe (Int,Int)
+-- | Returns the start, and length positions of the slice, in bits.
+inArrSliceBitWidth vpkg x = do
+  basety <- isArrayTy_maybe (nameTyp x)
   bwidth <- tyBitWidth basety
-  return $ bwidth * fromIntegral (hidx - lidx + 1)
+  (lidx,hidx) <- inArrSlice vpkg x 
+  return $ (bwidth * lidx, bwidth * fromIntegral (hidx - lidx + 1))
+  
