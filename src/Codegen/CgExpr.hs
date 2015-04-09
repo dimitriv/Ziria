@@ -70,6 +70,8 @@ import qualified Data.Map as M
 import Text.PrettyPrint.HughesPJ
 import Data.Maybe
 
+import LUTAnalysis
+
 -- TODO: reimport this when permutations are fixed, or maybe we can
 -- express the optimized permutation primitive in Blink.
 -- import CgPerm
@@ -394,11 +396,15 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
       codeGenExp dflags e1
 
     go t (ELUT r e1) | isDynFlagSet dflags MockLUT = do
-      cgIO $ putStrLn "MockLUT is set, ignoring AutoLUT analysis ..."
-      codeGenExp dflags e1
+      cres <- codeGenExp dflags e1
+      cg_print_outvars dflags (expLoc e1) (lutVarUsePkg r)
+      return cres      
 
-    go t (ELUT r e1) =
-      codeGenLUTExp dflags r e1 Nothing
+    go t (ELUT r e1) = do
+      cres <- codeGenLUTExp dflags r e1 Nothing
+      cg_print_outvars dflags (expLoc e1) (lutVarUsePkg r)
+      return cres      
+
 
     go t (EProj e f) =
       do { b <- isStructPtrType (ctExp e)

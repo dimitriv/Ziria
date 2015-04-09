@@ -22,7 +22,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# OPTIONS_GHC -Wall #-}
 
-module CgLUT ( codeGenLUTExp ) where
+module CgLUT ( codeGenLUTExp, cg_print_outvars ) where
 
 import Opts
 import AstExpr
@@ -98,23 +98,23 @@ varToBitArrPtr v = do
 cgBreakDown :: Int -> C.Exp -> [(C.Exp, Int)]
 -- ^ Breakdown to 64,32,16,8 ... (later we should also add SSE 128/256)
 -- ^ Also returns the width of each breakdown
-cgBreakDown 8  ptr  = [ (ptr,8) ]
-cgBreakDown 16 ptr  = [ ([cexp| (typename uint16 *) $ptr |],16)  ]
-cgBreakDown 32 ptr  = [ ([cexp| (typename uint32 *) $ptr |],32)  ]
-cgBreakDown 64 ptr  = [ ([cexp| (typename uint64 *) $ptr |],64)  ]
-cgBreakDown 128 ptr = [ ([cexp| $ptr |], 128) ]
-cgBreakDown n  ptr
-  | n - 128 > 0
-  = ([cexp| $ptr |], 128) : cgBreakDown (n - 128) [cexp| $ptr + 16 |]
-  | n - 64 > 0
-  = ([cexp| (typename uint64 *) $ptr |],64) : cgBreakDown (n-64) [cexp| $ptr + 8 |]
-  | n - 32 > 0 
-  = ([cexp| (typename uint32 *) $ptr |],32) : cgBreakDown (n-32) [cexp| $ptr + 4 |] 
-  | n - 16 > 0 
-  = ([cexp| (typename uint16 *) $ptr |],16) : cgBreakDown (n-16) [cexp| $ptr + 2 |]
-  | n - 8 > 0  
-  = [ (ptr,8) ]
-  | otherwise = []
+cgBreakDown m ptr  = go m 0
+  where 
+    go :: Int -> Int -> [(C.Exp, Int)]
+    go n off
+      | n - 128 >= 0
+      = ([cexp| $offptr |], 128) : go (n - 128) (off+16)
+      | n - 64 >= 0
+      = ([cexp| (typename uint64 *) $offptr |], 64) : go (n-64) (off+8)
+      | n - 32 >= 0
+      = ([cexp| (typename uint32 *) $offptr |], 32) : go (n-32) (off+4)
+      | n - 16 >= 0
+      = ([cexp| (typename uint16 *) $offptr |], 16) : go (n-16) (off+2)
+      | n - 8 > 0
+      = [ ([cexp| $offptr|], 8) ]
+      | otherwise -- n == 0
+      = []
+      where offptr = [cexp| (BitArrPtr)($ptr + $int:off)|]
 
 cgBitArrLUTMask :: C.Exp -- ^ output variable BitArrPtr
                 -> C.Exp -- ^ mask BitArrPtr  (1 means 'set')
@@ -312,7 +312,7 @@ unpack_out_var _pkg (v, Just {}) src pos = do
   total_w <- outVarBitWidth v
   let w  = total_w `div` 2
   let mask_ptr = [cexp| & $src[$int:((pos+w) `div` 8)]|]
-  let src_ptr  = [cexp| ($src + $int:(pos `div` 8))|]
+  let src_ptr  = [cexp| & $src[$int:(pos `div` 8)]     |]
   cgBitArrLUTMask vptr mask_ptr src_ptr w
   return (pos + total_w)
 
@@ -381,19 +381,27 @@ codeGenLUTExp dflags stats e mb_resname
              , nest 4 $ vcat [ text "LUT stats"
                              , ppr stats ] ]
 
-      -- Generate code that will generate the LUT at init
-      -- time and return the LUT table name.
       clut <- hashGenLUT
+      -- Do generate LUT lookup code.
+      genLUTLookup dflags (expLoc e) stats clut (ctExp e) mb_resname
 
-      -- Generate LUT lookup code.
-      genLUTLookup dflags stats clut (ctExp e) mb_resname
 
+cg_print_outvars :: DynFlags -> Maybe SourcePos -> VarUsePkg -> Cg ()
+cg_print_outvars dflags loc (VarUsePkg { vu_outvars = vs }) = do 
+  appendStmt $ [cstm| printf(">>> cg_print_outvars: %s\n", $string:(show loc));|]
+  sequence_ $ map (codeGenExp dflags . print_var) vs
+  where
+    preamb = "    cg_print_outvars:"
+    print_var v = ePrint loc True $ 
+                  [ eVal loc TString (VString (preamb ++ show v ++ ":"))
+                  , eVar loc v ]
 
 {---------------------------------------------------------------------------
    Generate the code for looking up a LUT value
 ---------------------------------------------------------------------------}
 
 genLUTLookup :: DynFlags
+             -> Maybe SourcePos
              -> LUTStats
              -> LUTGenInfo -- ^ LUT table information
              -> Ty         -- ^ Expression type
@@ -401,7 +409,7 @@ genLUTLookup :: DynFlags
              -> Cg C.Exp
 -- ^ Returns () if result has been already stored in mb_resname,
 -- ^ otherwise it returns the actual expression.
-genLUTLookup _dflags stats lgi ety mb_resname = do
+genLUTLookup _dflags _loc stats lgi ety mb_resname = do
    
    -- | Declare local index variable
    idx <- freshVar "idx"
@@ -430,17 +438,20 @@ genLUTLookup _dflags stats lgi ety mb_resname = do
              | TArray {} <- ety = [cexp|   ($ty:c_ty)   $cres |]
              | otherwise        = [cexp| *(($ty:c_ty *) $cres)|]
        return cres_well_typed
-
-   -- | Store the resul if someone has given us a location 
-   store_var mb_resname result
+   -- | Store the result if someone has given us a location 
+   store_var mb_resname ety result
 
    where
      clut = lgi_lut_var lgi
-     store_var Nothing cres = return cres
-     store_var (Just res_var) cres = do 
-        cres_var <- lookupVarEnv res_var
-        assignByVal ety ety cres_var cres
-        return [cexp|UNIT|]
+
+store_var :: Maybe EId -> Ty -> C.Exp -> Cg C.Exp
+-- | If (Just var) then store the result in this var 
+-- and return unit else return result
+store_var Nothing _ety cres = return cres
+store_var (Just res_var) ety cres = do 
+   cres_var <- lookupVarEnv res_var
+   assignByVal ety ety cres_var cres
+   return [cexp|UNIT|]
 
 
 {---------------------------------------------------------------------------
