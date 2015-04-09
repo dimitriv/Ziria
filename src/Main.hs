@@ -61,6 +61,7 @@ import CgHeader     ( cHeader        )
 
 import qualified PassPipeline as PP
 
+import qualified Language.Ziria.Parser as P
 
 data CompiledProgram
   = CompiledProgram Comp [C.Definition] FilePath
@@ -129,6 +130,16 @@ main = do
     dump dflags DumpAst ".ast.dump" $ (text . show) prog
     -- Disabling Pretty for now
     dump dflags DumpAstPretty ".ast.dump" $ (text . show) prog
+
+    when True $ do
+        prog' <- P.parseProgramFromFile inFile
+
+        when (show prog' /= show prog) $
+            fail (
+            unlines ["Parsers produced different programs:"
+                    , show $ progComp prog
+                    , show $ progComp prog'
+                    ])
 
     sym <- GS.initGenSym (getName dflags)
     
