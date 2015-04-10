@@ -364,22 +364,24 @@ codeGenLUTExp dflags stats e mb_resname
            let h = H.hash (show e)
            case lookup h hs of
              Just clut -> do
-               verbose dflags $ text "Expression to LUT is already lutted!"
+               verbose dflags $ 
+                 vcat [ text "Expression to LUT is already lutted!"
+                      , text "At location" <+> text (show (expLoc e)) 
+                      ]
                return clut
              Nothing -> do
-               verbose dflags $ text "Invoking LUT generation (genLUT)"
+               verbose dflags $
+                 vcat [ text "Creating LUT for expression:"
+                      , nest 4 $ ppr e
+                      , nest 4 $ vcat [ text "LUT stats"
+                                      , ppr stats ] ]
+
                lgi <- genLUT dflags stats e
                setLUTHashes $ (h,lgi):hs
                return lgi
 
     lutIt :: Cg C.Exp
     lutIt = do
-
-      verbose dflags $
-        vcat [ text "Creating LUT for expression:"
-             , nest 4 $ ppr e
-             , nest 4 $ vcat [ text "LUT stats"
-                             , ppr stats ] ]
 
       clut <- hashGenLUT
       -- Do generate LUT lookup code.
@@ -422,6 +424,8 @@ genLUTLookup _dflags _loc stats lgi ety mb_resname = do
    let vupkg = lutVarUsePkg stats
 
    packIdx vupkg (vu_invars vupkg) [cexp|$id:idx|] idx_ty
+
+   -- DEBUG: appendStmt [cstm| printf("lut index = %d",$id:idx);|]
 
     -- | LUT lookup and unpack output variables
    let outvars = lgi_masked_outvars lgi

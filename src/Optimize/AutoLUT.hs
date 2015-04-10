@@ -62,22 +62,28 @@ autolutE dflags = autoE
       stats <- calcLUTStats dflags e0
       case stats of 
         Left err -> do 
+{- Too verbose
           verbose dflags $ 
-            vcat [ text "Cannot autolut expresion:"
-                 , nest 4 (ppr e0)
+            vcat [ text "Cannot autolut expresion."
+                   -- , nest 4 (ppr e0)
                  , text "Location:" <+> text (show loc)
                  , text "Reason:" <+> err ]
+-}
+
           go_inside e0
         Right stats -> do 
           autoE' e0 stats
 
     autoE' e0 stats
       | Right True <- lutShould stats
-      = do verbose dflags $
+      = do 
+{- Too verbose  
+           verbose dflags $
              vcat [ text "Expression autolutted:" 
                   , nest 4 (ppr e0)
                   , text "Location:" <+> text (show (expLoc e0))
                   , ppr stats ]
+-}
            pure $ eLUT (expLoc e0) stats e0
     autoE' e0 stats = go_inside e0
 

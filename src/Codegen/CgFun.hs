@@ -192,7 +192,7 @@ cgFunDefined dflags csp
        ; vars <- getBoundVars 
        ; let ambient_bound = map ppNameUniq vars
 
-
+{- Too verbose ...
        ; verbose dflags $ vcat [ text "CgFun (original) parameter environment:"
                                , nest 2 $ vcat $ map ppr params
 
@@ -205,6 +205,7 @@ cgFunDefined dflags csp
                                , text "CgFun ambiently bound:"
                                , nest 2 $ vcat ambient_bound
                             ]
+-} 
 
 
          -- Create an init group of all locals (just declarations)
