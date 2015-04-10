@@ -19,6 +19,32 @@
 --
 #pragma once 
 
+
+#define CRC_X_WIDTH     8
+#define CRC_S_WIDTH     32
+
+
+let (base:arr[CRC_S_WIDTH+1] bit) = {'1,'0,'0,'0,'0,'0,'1,'0,'0,'1,'1,'0,'0,'0,'0,'0,'1,'0,'0,'0,'1,'1,'1,'0,'1,'1,'0,'1,'1,'0,'1,'1,'1};
+
+fun update_crc_generic(x:arr[CRC_X_WIDTH] bit, base:arr[CRC_S_WIDTH+1] bit, var crc_state:arr[CRC_S_WIDTH] bit) {
+var out : arr[CRC_X_WIDTH + CRC_S_WIDTH] bit;
+
+  let start_state = crc_state[0, CRC_X_WIDTH];
+
+  zero_bit(out);
+  for i in [0, CRC_X_WIDTH] {
+    if (start_state[i] == '1) then {
+      out[i+1, CRC_S_WIDTH] := out[i+1, CRC_S_WIDTH] ^ base[1,CRC_S_WIDTH];
+    }
+  }
+
+  crc_state[0,CRC_S_WIDTH-CRC_X_WIDTH] := crc_state[CRC_X_WIDTH, CRC_S_WIDTH-CRC_X_WIDTH];
+  crc_state[CRC_S_WIDTH-CRC_X_WIDTH, CRC_X_WIDTH] := x;
+  crc_state := crc_state ^ out[CRC_X_WIDTH, CRC_S_WIDTH];
+}
+
+
+
 fun update_crc(x:bit, var crc_state:arr[4] bit) {
   let base = {'1, '0, '1, '1} 
   if crc_state[0] == '1 then {

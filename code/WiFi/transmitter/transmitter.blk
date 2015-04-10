@@ -79,7 +79,6 @@ fun comp tx_driver(h : struct HeaderInfo) {
 
 fun comp transform_w_header() {
       seq{ hInfo <- ( emitHeader() >>> 
-                      scrambler() >>> 
                       encode12() >>> 
                       interleaver_bpsk() >>> 
                       modulate_bpsk() )

@@ -23,6 +23,10 @@
 fun comp [8, CRC_VEC] CRC_NAME (len : int, pad : bool) {
 var crc_state: arr[4] bit := {'0,'0,'0,'0};
 
+  -- Prepend SERVICE bits
+  emits {'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0};
+
+  -- TODO: Implement real WiFi CRC (ITU CRC-32)
   times len seq {
     (x:arr[8] bit) <- takes 8;
     do {
@@ -38,10 +42,17 @@ var crc_state: arr[4] bit := {'0,'0,'0,'0};
     emits crc_state;
     emits {'0,'0,'0,'0};
 
+-- DEBUG: make it 32 bits for now
+emits {'1,'0,'1,'1,'1,'1,'0,'1}
+emits {'1,'0,'1,'1,'1,'1,'0,'1}
+emits {'1,'0,'1,'1,'1,'1,'0,'1}
+
     -- Add padding so that the length of output is a multiple of CRC_VEC in bits
-    let len_so_far = (len+1) * 8 in 
-    let len_mod = if len_so_far % CRC_VEC > 0 then 1 else 0 in 
-    let final_len = ((len_so_far / CRC_VEC) + len_mod) * CRC_VEC in
+    let len_so_far = 16 + len * 8 + 32 in 
+    let len_so_far_plus_tail = len_so_far + 6 in 
+    let len_mod = if len_so_far_plus_tail % CRC_VEC > 0 then 1 else 0 in 
+    let final_len = ((len_so_far_plus_tail / CRC_VEC) + len_mod) * CRC_VEC in
+    -- Padded length is always modulo 8 (since OFDM symbol carries 48 data symbols)
     times ((final_len - len_so_far)/8) emits {'0,'0,'0,'0,'0,'0,'0,'0};
   }
 

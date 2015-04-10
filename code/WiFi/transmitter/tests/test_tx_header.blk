@@ -17,24 +17,17 @@
 -- permissions and limitations under the License.
 --
 --
-#pragma once 
 
-fun comp scrambler() {
-var scrmbl_st: arr[7] bit := {'1,'0,'1,'1,'1,'0,'1}; 
-var y:bit;
-  
-  repeat [8,8] seq {
-    x <- take;
-    
-    var tmp : bit;
-    do{
-      tmp := (scrmbl_st[3] ^ scrmbl_st[0]);
-      scrmbl_st[0:5] := scrmbl_st[1:6];
-      scrmbl_st[6] := tmp;
-    }; 
+-- Test created using Annex G, IEEE Standard_802.11a-1999
 
-    emit (x^tmp)
-  }
-}
+#include "../parsePLCPHeader.blk"
+#include "../encoding.blk"
+#include "../interleaving.blk"
 
+let h = HeaderInfo{coding=CR_34; modulation=M_16QAM; len=100};
 
+let comp main = read[int] >>> 
+  {  emits createPLCPHeader(h)
+  ; (emits createPLCPHeader(h) >>> encode12())
+  ; (emits createPLCPHeader(h) >>> encode12() >>> interleaver_bpsk())
+  } >>> write

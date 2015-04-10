@@ -17,24 +17,25 @@
 -- permissions and limitations under the License.
 --
 --
-#pragma once 
 
-fun comp scrambler() {
-var scrmbl_st: arr[7] bit := {'1,'0,'1,'1,'1,'0,'1}; 
-var y:bit;
-  
-  repeat [8,8] seq {
-    x <- take;
-    
-    var tmp : bit;
-    do{
-      tmp := (scrmbl_st[3] ^ scrmbl_st[0]);
-      scrmbl_st[0:5] := scrmbl_st[1:6];
-      scrmbl_st[6] := tmp;
-    }; 
+-- Test created using Annex G, IEEE Standard_802.11a-1999
 
-    emit (x^tmp)
+#include "../parsePLCPHeader.blk"
+#include "../encoding.blk"
+#include "../interleaving.blk"
+#include "../modulating.blk"
+#include "../map_ofdm.blk"
+
+let h = HeaderInfo{coding=CR_34; modulation=M_16QAM; len=100};
+
+fun comp scale() {
+  repeat {
+    (x:complex16)<-take;
+    emit complex16{re=x.re/bpsk_mod_11a; im=x.im/bpsk_mod_11a};
   }
 }
 
-
+-- We don't test IFFT because we transmit at 40 MHz
+let comp main = read[int] >>> 
+  emits createPLCPHeader(h) >>> encode12() >>> interleaver_bpsk() >>> modulate_bpsk() >>> map_ofdm() >>> scale()
+  >>> write
