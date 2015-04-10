@@ -787,7 +787,7 @@ instrLVal loc ms lval = go lval [] MRFull
                  -> LengthInfo    -- ^ length to address
                  -> Exp           -- ^ boolean check
     mk_rangetest array_len estart len = case len of 
-      LISingleton -> eBinOp loc Leq estart earray_len
+      LISingleton -> eBinOp loc Lt estart earray_len
       LILength n  -> eBinOp loc Leq (eAddBy estart n) earray_len
       LIMeta {}   -> panicStr "mk_rangetest: LIMeta!"
       where earray_len = eVal loc (ctExp estart) varray_len
