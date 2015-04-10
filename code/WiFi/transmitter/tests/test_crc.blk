@@ -20,4 +20,45 @@
 
 #include "../crc.blk"
 
-let comp main = read [bit] >>> crc(2, true) >>> write[bit]
+
+fun comp convert() {
+var ai : arr[1] int8;
+var ao : arr[8] bit;
+
+  repeat{
+    x<-take;
+    do{
+      ai[0] := x;
+      int8_to_bits(ao, ai);
+    }
+    emits ao;
+  }
+}
+    
+
+fun comp crc_test() {
+var crc_state:arr[CRC_S_WIDTH] bit;
+
+  -- Initialize state
+  x <- takes CRC_S_WIDTH;
+  do{crc_state := x};
+
+  --times (96*8 - CRC_S_WIDTH)/CRC_X_WIDTH {
+  times (40 - CRC_S_WIDTH)/CRC_X_WIDTH {
+    x <- takes CRC_X_WIDTH;
+    do {
+      --println crc_state[0], " ", crc_state[1], " ", crc_state[2], " ", x[0];
+      update_crc_generic(x, base32, crc_state)
+    };
+  }
+  do {
+    update_crc_generic({'0,'0,'0,'0,'0,'0,'0,'0}, base32, crc_state);
+    update_crc_generic({'0,'0,'0,'0,'0,'0,'0,'0}, base32, crc_state);
+    update_crc_generic({'0,'0,'0,'0,'0,'0,'0,'0}, base32, crc_state);
+    update_crc_generic({'0,'0,'0,'0,'0,'0,'0,'0}, base32, crc_state);
+    println crc_state;
+  };
+    
+}
+
+let comp main = read >>> convert() >>> crc_test() >>> write[bit]
