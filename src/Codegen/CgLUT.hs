@@ -22,7 +22,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# OPTIONS_GHC -Wall #-}
 
-module CgLUT ( codeGenLUTExp, cg_print_outvars ) where
+module CgLUT ( codeGenLUTExp, cg_print_vars ) where
 
 import Opts
 import AstExpr
@@ -110,7 +110,9 @@ cgBreakDown m ptr  = go m 0
       = ([cexp| (typename uint32 *) $offptr |], 32) : go (n-32) (off+4)
       | n - 16 >= 0
       = ([cexp| (typename uint16 *) $offptr |], 16) : go (n-16) (off+2)
-      | n - 8 > 0
+      | n - 8 >= 0
+      = ([cexp| (typename uint8 *) $offptr |], 8) : go (n-16) (off+1)
+      | n > 0 
       = [ ([cexp| $offptr|], 8) ]
       | otherwise -- n == 0
       = []
@@ -382,18 +384,20 @@ codeGenLUTExp dflags stats e mb_resname
 
     lutIt :: Cg C.Exp
     lutIt = do
-
       clut <- hashGenLUT
       -- Do generate LUT lookup code.
       genLUTLookup dflags (expLoc e) stats clut (ctExp e) mb_resname
 
 
-cg_print_outvars :: DynFlags -> Maybe SourcePos -> VarUsePkg -> Cg ()
-cg_print_outvars dflags loc (VarUsePkg { vu_outvars = vs }) = do 
-  appendStmt $ [cstm| printf(">>> cg_print_outvars: %s\n", $string:(show loc));|]
-  sequence_ $ map (codeGenExp dflags . print_var) vs
+cg_print_vars :: DynFlags -> String -> Maybe SourcePos -> [EId] -> Cg ()
+cg_print_vars dflags dbg_ctx loc vs
+  | isDynFlagSet dflags Verbose
+  = do appendStmt $ [cstm| printf("%s> cg_print_vars: %s\n", $string:(dbg_ctx), $string:(show loc));|]
+       sequence_ $ map (codeGenExp dflags . print_var) vs
+  | otherwise
+  = return ()
   where
-    preamb = "    cg_print_outvars:"
+    preamb = dbg_ctx ++ ">   "
     print_var v = ePrint loc True $ 
                   [ eVal loc TString (VString (preamb ++ show v ++ ":"))
                   , eVar loc v ]
@@ -430,6 +434,7 @@ genLUTLookup _dflags _loc stats lgi ety mb_resname = do
     -- | LUT lookup and unpack output variables
    let outvars = lgi_masked_outvars lgi
    let lkup_val = [cexp|(typename BitArrPtr) $clut[$id:idx]|]
+
    cres <- unpackOutVars vupkg outvars lkup_val 
 
    -- | The result is either an existing output variable or @cres@
@@ -686,7 +691,7 @@ lutInstrument mask_eids = mapExpM return return do_instr
       | otherwise = return e
     -- NB: we should also be checking for EArrRead or we may get access violations?
       where loc = expLoc e 
-            io_msg = eVal loc TString (VString "(IO from LUT _generator_)")
+            io_msg = eVal loc TString (VString " (NB: IO from LUT _generator_)")
 
 int32Val :: Int -> Exp
 int32Val n = eVal Nothing tint (VInt $ fromIntegral n)
@@ -704,7 +709,8 @@ instrAsgn mask_eids loc d' erhs' = do
     mk_lets [] ebody = ebody
     mk_lets ((x,e,test):bnds) ebody =
       eLet loc x AutoInline e $ eIf loc test (mk_lets bnds ebody) eunit
-    eunit = eVal loc TUnit VUnit
+    eunit = ePrint loc True [emsg]
+    emsg  = eVal loc TString (VString "Bounds exceeded during LUT generation!")
 
     eseqs :: [Exp] -> Exp
     eseqs [e]    = e

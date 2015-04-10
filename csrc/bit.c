@@ -215,14 +215,19 @@ void bitWrite(BitArrPtr tgt,unsigned int vpos, Bit val)
 
 void printBitArrLn(BitArrPtr arr, unsigned int vlen)
 {
+	printBitArr(arr, vlen);
+	printf("\n");
+}
+
+void printBitArr(BitArrPtr arr, unsigned int vlen)
+{
 	unsigned int i;
-	for (i =0; i < vlen; i++)
+	for (i = 0; i < vlen; i++)
 	{
 		Bit tmp;
-		bitRead(arr,i,&tmp);
-		printf("%d",tmp);
+		bitRead(arr, i, &tmp);
+		printf("%d", tmp);
 	}
-	printf("\n");
 }
 
 

@@ -71,6 +71,7 @@ import Text.PrettyPrint.HughesPJ
 import Data.Maybe
 
 import LUTAnalysis
+import Analysis.DataFlow
 
 -- TODO: reimport this when permutations are fixed, or maybe we can
 -- express the optimized permutation primitive in Blink.
@@ -396,13 +397,15 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
       codeGenExp dflags e1
 
     go t (ELUT r e1) | isDynFlagSet dflags MockLUT = do
+      cg_print_vars dflags "LUT-invars"  (expLoc e1) (vu_invars $ lutVarUsePkg r)
       cres <- codeGenExp dflags e1
-      cg_print_outvars dflags (expLoc e1) (lutVarUsePkg r)
+      cg_print_vars dflags "LUT-outvars" (expLoc e1) (vu_outvars $ lutVarUsePkg r)
       return cres      
 
     go t (ELUT r e1) = do
+      cg_print_vars dflags "LUT-invars"  (expLoc e1) (vu_invars $ lutVarUsePkg r)
       cres <- codeGenLUTExp dflags r e1 Nothing
-      cg_print_outvars dflags (expLoc e1) (lutVarUsePkg r)
+      cg_print_vars dflags "LUT-outvars" (expLoc e1) (vu_outvars $ lutVarUsePkg r)
       return cres      
 
 
@@ -454,7 +457,7 @@ printExp dflags e1 = go e1 (ctExp e1)
 printArray dflags e cupper t
   | TBit <- t
   = do { ce <- codeGenExp dflags e
-       ; appendStmt [cstm|printBitArrLn($ce, $cupper); |]
+       ; appendStmt [cstm|printBitArr($ce, $cupper); |]
        }
   | otherwise
   = do { pcdeclN <- freshName ("__print_cnt_") tint Mut

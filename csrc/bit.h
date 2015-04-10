@@ -40,6 +40,7 @@ void bitWrite(BitArrPtr tgt,unsigned int vpos, Bit val);
 
 
 void printBitArrLn(BitArrPtr arr, unsigned int vlen);
+void printBitArr(BitArrPtr arr, unsigned int vlen);
 
 // v = (l & m) | (l & ~ m)
 void lutmask128(BitArrPtr v, BitArrPtr m, BitArrPtr l);
