@@ -26,7 +26,6 @@ import Control.Monad (when, forM)
 import System.Environment
 import System.Exit (exitFailure)
 import System.IO
-import Text.Parsec (runParserT)
 import Text.PrettyPrint.HughesPJ
 import qualified Text.PrettyPrint.Mainland as GMPretty
 -- import Text.Show.Pretty (dumpStr)
@@ -44,9 +43,6 @@ import PpComp
 
 import TcMonad
 import Typecheck      ( tyCheckProg              )
-
-import BlinkParseComp ( parseProgram             )
-import BlinkParseM    ( mkZiriaStream, runParseM )
 
 import qualified GenSym         as GS
 import qualified Outputable
@@ -110,36 +106,11 @@ main = do
 
     inFile  <- getInFile dflags
     outFile <- getOutFile dflags
-    input   <- readFile inFile
-
-    
-
-
-
-    prog <-
-          failOnError $
-          do { let state  = ()
-                   stream = mkZiriaStream input
-                   parser = runParserT parseProgram state
-                                                    inFile
-                                                    stream
-             ; runParseM parser []
-             }
-
+    prog    <- P.parseProgramFromFile inFile
 
     dump dflags DumpAst ".ast.dump" $ (text . show) prog
     -- Disabling Pretty for now
     dump dflags DumpAstPretty ".ast.dump" $ (text . show) prog
-
-    when True $ do
-        prog' <- P.parseProgramFromFile inFile
-
-        when (show prog' /= show prog) $
-            fail (
-            unlines ["Parsers produced different programs:"
-                    , show $ progComp prog
-                    , show $ progComp prog'
-                    ])
 
     sym <- GS.initGenSym (getName dflags)
     
