@@ -143,7 +143,9 @@ lookupVarDef :: EId -> DFM VarSet
 lookupVarDef v = do
   maybe_vs <- gets $ \s -> neLookup v (usedefs s)
   -- Original:
-  return $ maybe (Set.singleton v) id maybe_vs
+  return $ maybe self (Set.union self) maybe_vs
+  where self = Set.singleton v
+
   -- Question: What about the flow variables? Should we 
   -- append them in the final set? Or not?
 
