@@ -116,7 +116,7 @@ cgBreakDown m ptr  = go m 0
       = [ ([cexp| $offptr|], 8) ]
       | otherwise -- n == 0
       = []
-      where offptr = [cexp| (BitArrPtr)($ptr + $int:off)|]
+      where offptr = [cexp| (typename BitArrPtr)($ptr + $int:off)|]
 
 cgBitArrLUTMask :: C.Exp -- ^ output variable BitArrPtr
                 -> C.Exp -- ^ mask BitArrPtr  (1 means 'set')
