@@ -21,7 +21,7 @@
 #include "../crc.blk"
 
 
-fun comp convert() {
+fun comp convert_i2b() {
 var ai : arr[1] int8;
 var ao : arr[8] bit;
 
@@ -34,31 +34,44 @@ var ao : arr[8] bit;
     emits ao;
   }
 }
+
+fun comp convert_b2i() {
+var ai : arr[8] bit;
+var ao : arr[1] int8;
+
+  repeat{
+    x<-takes 8;
+    do{
+      ai := x;
+      bits_to_int8(ao, ai);
+    }
+    emits ao;
+  }
+}
     
 
 fun comp crc_test() {
-var crc_state:arr[CRC_S_WIDTH] bit;
-
-  -- Initialize state
-  x <- takes CRC_S_WIDTH;
-  do{crc_state := x};
+var crc_state:arr[CRC_S_WIDTH] bit := 
+    {'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,
+     '1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1};
 
   --times (96*8 - CRC_S_WIDTH)/CRC_X_WIDTH {
-  times (40 - CRC_S_WIDTH)/CRC_X_WIDTH {
+  times 4*8/CRC_X_WIDTH {
     x <- takes CRC_X_WIDTH;
     do {
-      --println crc_state[0], " ", crc_state[1], " ", crc_state[2], " ", x[0];
       update_crc_generic(x, base32, crc_state)
     };
   }
   do {
-    update_crc_generic({'0,'0,'0,'0,'0,'0,'0,'0}, base32, crc_state);
-    update_crc_generic({'0,'0,'0,'0,'0,'0,'0,'0}, base32, crc_state);
-    update_crc_generic({'0,'0,'0,'0,'0,'0,'0,'0}, base32, crc_state);
-    update_crc_generic({'0,'0,'0,'0,'0,'0,'0,'0}, base32, crc_state);
+    for i in [0, CRC_S_WIDTH/8] {
+      for j in [0, 8] {
+        crc_state[i*8+j] := ~crc_state[i*8+j];
+      }
+    }
     println crc_state;
   };
+  emits crc_state;
     
 }
 
-let comp main = read >>> convert() >>> crc_test() >>> write[bit]
+let comp main = read >>> convert_i2b() >>> crc_test() >>> convert_b2i() >>> write

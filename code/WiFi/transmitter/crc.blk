@@ -20,27 +20,16 @@
 #pragma once 
 #include <externals.blk>
 
-#define CRC_X_WIDTH     8
+#define CRC_X_WIDTH     1
 #define CRC_S_WIDTH     32
---#define CRC_X_WIDTH     1
---#define CRC_S_WIDTH     3
-
--- 11011010010101111001100111101101
-
--- let (base32:arr[CRC_S_WIDTH+1] bit) = {'1,'0,'0,'0,'0,'0,'1,'0,'0,'1,'1,'0,'0,'0,'0,'0,'1,'0,'0,'0,'1,'1,'1,'0,'1,'1,'0,'1,'1,'0,'1,'1,'1};
--- 10011100101101000101011111110000 = 9CB457F0
--- or
--- 00001111111010100010110100111001 = FEA2D39
-
--- let (base32:arr[CRC_S_WIDTH+1] bit) = {'1,'1,'1,'0,'1,'1,'0,'1,'1,'0,'1,'1,'1,'0,'0,'0,'1,'0,'0,'0,'0,'0,'1,'1,'0,'0,'1,'0,'0,'0,'0,'0,'1};
--- 01011100110111110001010010001001 = 5CDF1489
--- or
--- 10010001001010001111101100111010 = 9128FB3A
-
---let (base32:arr[CRC_S_WIDTH+1] bit) = {'1,'0,'1,'1};
 
 
+let (base32:arr[CRC_S_WIDTH+1] bit) = {'1,'0,'0,'0,'0,'0,'1,'0,'0,'1,'1,'0,'0,'0,'0,'0,'1,'0,'0,'0,'1,'1,'1,'0,'1,'1,'0,'1,'1,'0,'1,'1,'1};
 
+
+-- For a full description see http://www.hackersdelight.org/crc.pdf, Page 9, and in particular
+-- note that "The CRC-32 protocol initializes the CRC register to all 1's, transmits each byte 
+-- least significant bit first, and complements the checksum."
 
 fun update_crc_generic(x:arr[CRC_X_WIDTH] bit, base:arr[CRC_S_WIDTH+1] bit, var crc_state:arr[CRC_S_WIDTH] bit) {
 var out : arr[CRC_X_WIDTH + CRC_S_WIDTH] bit;
@@ -58,12 +47,13 @@ var out : arr[CRC_X_WIDTH + CRC_S_WIDTH] bit;
 
   crc_state[0,CRC_S_WIDTH-CRC_X_WIDTH] := crc_state[CRC_X_WIDTH, CRC_S_WIDTH-CRC_X_WIDTH];
   crc_state[CRC_S_WIDTH-CRC_X_WIDTH, CRC_X_WIDTH] := x;
+
 --  crc_state := crc_state ^ out[CRC_X_WIDTH, CRC_S_WIDTH];
   for j in [0, CRC_S_WIDTH] {
     crc_state[j] := crc_state[j] ^ out[CRC_X_WIDTH + j];
   }
-
 }
+
 
 
 
