@@ -27,16 +27,22 @@
 let (base32:arr[CRC_S_WIDTH+1] bit) = {'1,'0,'0,'0,'0,'0,'1,'0,'0,'1,'1,'0,'0,'0,'0,'0,'1,'0,'0,'0,'1,'1,'1,'0,'1,'1,'0,'1,'1,'0,'1,'1,'1};
 
 
--- For a full description see http://www.hackersdelight.org/crc.pdf, Page 9, and in particular
+-- For a full description see http://www.hackersdelight.org/crc.pdf, Page 8, Figure 14-4, and in particular
 -- note that "The CRC-32 protocol initializes the CRC register to all 1's, transmits each byte 
 -- least significant bit first, and complements the checksum."
 
 fun update_crc_generic(x:arr[CRC_X_WIDTH] bit, base:arr[CRC_S_WIDTH+1] bit, var crc_state:arr[CRC_S_WIDTH] bit) {
 var out : arr[CRC_X_WIDTH + CRC_S_WIDTH] bit;
 var start_state : arr[CRC_X_WIDTH] bit;
+var s : arr[1] bit;
 
   -- We create a smaller subset of crc_state to make the code amenable to LUTting
   start_state := crc_state[0, CRC_X_WIDTH];
+
+  -- This is expected to be autoLUTtted
+  for i in [0, CRC_X_WIDTH] {
+    start_state[i] := start_state[i] ^ x[i];
+  }
 
   zero_bit(out);
 
@@ -44,7 +50,7 @@ var start_state : arr[CRC_X_WIDTH] bit;
   -- Inputs: start_state, Output: out, start_state
   for i in [0, CRC_X_WIDTH] {
     if (start_state[i] == '1) then {
-      for j in [0, CRC_S_WIDTH] {
+      for j in [0, CRC_S_WIDTH - 1] {
         out[i+1+j] := out[i+1+j] ^ base[1+j];
       }
       for j in [0,CRC_X_WIDTH-i-1] {
@@ -54,11 +60,14 @@ var start_state : arr[CRC_X_WIDTH] bit;
   }
 
   crc_state[0,CRC_S_WIDTH-CRC_X_WIDTH] := crc_state[CRC_X_WIDTH, CRC_S_WIDTH-CRC_X_WIDTH];
-  crc_state[CRC_S_WIDTH-CRC_X_WIDTH, CRC_X_WIDTH] := x;
+  crc_state[CRC_S_WIDTH-CRC_X_WIDTH, CRC_X_WIDTH] := start_state;
 
 --  crc_state := crc_state ^ out[CRC_X_WIDTH, CRC_S_WIDTH];
-  for j in [0, CRC_S_WIDTH] {
-    crc_state[j] := crc_state[j] ^ out[CRC_X_WIDTH + j];
+  for i in [0, CRC_S_WIDTH/8] {
+    -- This is expected to be autoLUTtted
+    for j in [0, 8] {
+      crc_state[i*8+j] := crc_state[i*8+j] ^ out[CRC_X_WIDTH + i*8+j];
+    }
   }
 }
 
