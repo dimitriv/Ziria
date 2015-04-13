@@ -62,10 +62,10 @@ var s : arr[1] bit;
   crc_state[0,CRC_S_WIDTH-CRC_X_WIDTH] := crc_state[CRC_X_WIDTH, CRC_S_WIDTH-CRC_X_WIDTH];
   crc_state[CRC_S_WIDTH-CRC_X_WIDTH, CRC_X_WIDTH] := start_state;
 
---  crc_state := crc_state ^ out[CRC_X_WIDTH, CRC_S_WIDTH];
+-- Serialized version of crc_state := crc_state ^ out[CRC_X_WIDTH, CRC_S_WIDTH];
   for i in [0, CRC_S_WIDTH/8] {
     -- This is expected to be autoLUTtted
-    for j in [0, 8] {
+    for j in [0, 8] { 
       crc_state[i*8+j] := crc_state[i*8+j] ^ out[CRC_X_WIDTH + i*8+j];
     }
   }

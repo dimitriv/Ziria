@@ -55,8 +55,7 @@ var crc_state:arr[CRC_S_WIDTH] bit :=
     {'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,
      '1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1};
 
-  --times (96*8 - CRC_S_WIDTH)/CRC_X_WIDTH {
-  times 4*8/CRC_X_WIDTH {
+  times 96*8/CRC_X_WIDTH {
     x <- takes CRC_X_WIDTH;
     do {
       update_crc_generic(x, base32, crc_state)
@@ -68,7 +67,7 @@ var crc_state:arr[CRC_S_WIDTH] bit :=
         crc_state[i*8+j] := ~crc_state[i*8+j];
       }
     }
-    println crc_state;
+    -- println crc_state;
   };
   emits crc_state;
     

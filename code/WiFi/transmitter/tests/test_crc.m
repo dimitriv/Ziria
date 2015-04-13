@@ -45,6 +45,15 @@ end
 fprintf('\n');
 
 
+fprintf('Inverted int8 header + payload: ');
+for j = 1:96
+  bi = dec2bin(M(j),8);
+  bi = bi(end:-1:1);
+  fprintf('%d, ', bin2dec(bi));
+end
+fprintf('\n');
+
+
 %Invert bits
 fprintf('Inverted hex msg: ');
 Mi = {};
@@ -71,16 +80,16 @@ end
 fprintf('\n');
 
 
-S = '0123';
-fprintf('Inverting %s: ', S);
-for j = 1:length(S)
-  bi = dec2bin(S(j),8);
-  bi = bi(end:-1:1);
-  d = bin2dec(bi);
-  fprintf('%d,', bin2dec(bi));
-  % fprintf('%c%c', dec2hex(bin2dec(bi),2));
-end
-fprintf('\n');
+% $$$ S = '0123';
+% $$$ fprintf('Inverting %s: ', S);
+% $$$ for j = 1:length(S)
+% $$$   bi = dec2bin(S(j),8);
+% $$$   bi = bi(end:-1:1);
+% $$$   d = bin2dec(bi);
+% $$$   fprintf('%d,', bin2dec(bi));
+% $$$   % fprintf('%c%c', dec2hex(bin2dec(bi),2));
+% $$$ end
+% $$$ fprintf('\n');
 
 
 % Calculate CRC
@@ -93,10 +102,7 @@ B = B - '0';
 
 
 ind = [0,1,3,4,6,7,9,10,11,15,21,22,25,31]+1;
-X = B(1:32);
-X = zeros(1,32);
-X(1) = 1;
-X(25) = 1;
+X = B; %(1:32); 
 C = ones(1,32);
 for j=1:length(X)
   n = mod(X(j) + C(end), 2);
@@ -113,5 +119,17 @@ fprintf('CRC(hex): ');
 for j=1:length(C)/8
   s = sprintf('%d', C((j-1)*8+1:(j-1)*8+8));
   fprintf('%c%c', dec2hex(bin2dec(s)));
+end
+fprintf('\n');
+
+fprintf('CRC(dec): ');
+for j=1:length(C)/8
+  s = sprintf('%d', C((j-1)*8+1:(j-1)*8+8));
+  d = bin2dec(s);
+  if d >= 128
+    fprintf('%d, ', d-256);
+  else
+    fprintf('%d, ', d);
+  end
 end
 fprintf('\n');
