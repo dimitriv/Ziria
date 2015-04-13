@@ -20,7 +20,7 @@
 #pragma once 
 #include <externals.blk>
 
-#define CRC_X_WIDTH     1
+#define CRC_X_WIDTH     8
 #define CRC_S_WIDTH     32
 
 
@@ -33,14 +33,22 @@ let (base32:arr[CRC_S_WIDTH+1] bit) = {'1,'0,'0,'0,'0,'0,'1,'0,'0,'1,'1,'0,'0,'0
 
 fun update_crc_generic(x:arr[CRC_X_WIDTH] bit, base:arr[CRC_S_WIDTH+1] bit, var crc_state:arr[CRC_S_WIDTH] bit) {
 var out : arr[CRC_X_WIDTH + CRC_S_WIDTH] bit;
+var start_state : arr[CRC_X_WIDTH] bit;
 
-  let start_state = crc_state[0, CRC_X_WIDTH];
+  -- We create a smaller subset of crc_state to make the code amenable to LUTting
+  start_state := crc_state[0, CRC_X_WIDTH];
 
   zero_bit(out);
+
+  -- This is expected to be autoLUTtted
+  -- Inputs: start_state, Output: out, start_state
   for i in [0, CRC_X_WIDTH] {
     if (start_state[i] == '1) then {
       for j in [0, CRC_S_WIDTH] {
         out[i+1+j] := out[i+1+j] ^ base[1+j];
+      }
+      for j in [0,CRC_X_WIDTH-i-1] {
+        start_state[i+1+j] := start_state[i+1+j] ^ base[1+j];
       }
     }
   }
@@ -53,6 +61,7 @@ var out : arr[CRC_X_WIDTH + CRC_S_WIDTH] bit;
     crc_state[j] := crc_state[j] ^ out[CRC_X_WIDTH + j];
   }
 }
+
 
 
 
