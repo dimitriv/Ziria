@@ -18,6 +18,7 @@
 --
 --
 
+#include <bits.blk>
 #include "../crc.blk"
 
 
@@ -30,6 +31,7 @@ var ao : arr[8] bit;
     do{
       ai[0] := x;
       int8_to_bits(ao, ai);
+      ao := invert_bits(ao);
     }
     emits ao;
   }
@@ -38,11 +40,12 @@ var ao : arr[8] bit;
 fun comp convert_b2i() {
 var ai : arr[8] bit;
 var ao : arr[1] int8;
+var s : int8;
 
   repeat{
     x<-takes 8;
     do{
-      ai := x;
+      ai := invert_bits(x);
       bits_to_int8(ao, ai);
     }
     emits ao;

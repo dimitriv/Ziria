@@ -30,6 +30,13 @@ let (base32:arr[CRC_S_WIDTH+1] bit) = {'1,'0,'0,'0,'0,'0,'1,'0,'0,'1,'1,'0,'0,'0
 -- For a full description see http://www.hackersdelight.org/crc.pdf, Page 8, Figure 14-4, and in particular
 -- note that "The CRC-32 protocol initializes the CRC register to all 1's, transmits each byte 
 -- least significant bit first, and complements the checksum."
+-- In particular, CRC is calculated on the most-siginificant bit first, 
+-- but the data is transmitted least significant bit first.
+-- For example, 0x04, 0x02, 0x00, 0x2e is fed into CRC-32 state machine as:
+-- 00000100:00000010:00000000:00101110
+-- but it is further transmitted (to scrambler, encoder, etc) as
+-- 00100000:01000000:00000000:01110100
+-- (see Table G.13 in 802.11a)
 
 fun update_crc_generic(x:arr[CRC_X_WIDTH] bit, base:arr[CRC_S_WIDTH+1] bit, var crc_state:arr[CRC_S_WIDTH] bit) {
 var out : arr[CRC_X_WIDTH + CRC_S_WIDTH] bit;

@@ -38,6 +38,13 @@ fprintf('%c', P);
 fprintf('\n');
 
 
+fprintf('Bin: ');
+for j = 1:length(M)
+  fprintf('%s', dec2bin(M(j),8));
+end
+fprintf('\n');
+
+
 fprintf('Int8 header + payload: ');
 for j = 1:96
   fprintf('%d, ', M(j));
@@ -117,14 +124,14 @@ fprintf('\n');
 
 fprintf('CRC(hex): ');
 for j=1:length(C)/8
-  s = sprintf('%d', C((j-1)*8+1:(j-1)*8+8));
+  s = sprintf('%d', C((j-1)*8+8:-1:(j-1)*8+1));
   fprintf('%c%c', dec2hex(bin2dec(s)));
 end
 fprintf('\n');
 
 fprintf('CRC(dec): ');
 for j=1:length(C)/8
-  s = sprintf('%d', C((j-1)*8+1:(j-1)*8+8));
+  s = sprintf('%d', C((j-1)*8+8:-1:(j-1)*8+1));
   d = bin2dec(s);
   if d >= 128
     fprintf('%d, ', d-256);
