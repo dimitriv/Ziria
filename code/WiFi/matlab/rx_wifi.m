@@ -91,7 +91,7 @@ if 0
   out = [real(pkt1)'; imag(pkt1)'];
   out = out(:);
   out = round(out / max(out) * 10000);
-  f = fopen('pkt1.infile', 'w');
+  f = fopen('pkt3.infile', 'w');
   fprintf(f, '%d, ', out);
   fclose(f);
 end
@@ -128,9 +128,15 @@ switch input
     
   case 4
     % Wifi capture using BladeRF
-    pkt = load('pkt1.infile');
+    %delta = -19;
+    %pkt = load('pkt1.infile');
+
+    %delta = -26;
+    %pkt = load('pkt2.infile');
+
+    delta = -40;
+    pkt = load('pkt3.infile');
     pkt = pkt(1:2:end)' + i*pkt(2:2:end)';
-    delta = 160-84;
     
   case 5
     % Weird packet. It seems to have only one LTS symbol, and than OFDM symbols right after that
@@ -138,7 +144,7 @@ switch input
     %delta = 62;
 
     pkt = pkt1;
-    delta = 160-84;
+    delta = -19;
     
     % 422, 549
 

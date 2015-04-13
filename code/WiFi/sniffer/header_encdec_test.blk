@@ -1,0 +1,59 @@
+#include "receiver.blk"
+
+-- #include "../transmitter/transmitter.blk"
+
+#include "../const.blk"
+#include <externals.blk>
+#include "../transmitter/scramble.blk"
+#include "../transmitter/encoding.blk"
+#include "../transmitter/interleaving.blk"
+#include "../transmitter/crc.blk"
+
+
+#include "../transmitter/parsePLCPHeader.blk"
+#include "../receiver/decoding/DemapLimit.blk"
+#include "../receiver/decoding/DemapBPSK.blk"
+#include "../receiver/decoding/DeinterleaveBPSK.blk"
+#include "../receiver/decoding/ViterbiSig11a.blk"
+
+
+-- let comp main = read[complex16] >>> receiver() >>> write
+
+
+fun comp transform_w_header() {
+      seq{ hInfo <- ( emitHeader() >>> 
+                      encode12() >>> 
+                      interleaver_bpsk()
+                    )
+         ; return ()
+         }
+}
+
+
+fun comp conv() {
+  repeat{
+    x<- take;
+    if (x == '1) then {
+      emit 7;
+    } else {
+      emit 0;
+    }
+  }
+}
+
+
+fun comp DecodePLCP() {
+  var hdata : arr[24] bit;
+  seq{ DeinterleaveBPSK() 
+                     >>> ViterbiSig11a() -- >>> scrambler()
+                     >>> repeat{ (x:arr[24] bit) <- takes 24; do{hdata := x}}
+     ; return parsePLCPHeader(hdata)
+     }
+}
+
+let comp main = read[int] >>> 
+  repeat { emits {'1,'0,'1,'1,'0,'0,'0,'1,'0,'0,'1,'1,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0} } >>> 
+  transform_w_header() >>>
+  conv() >>>
+  repeat {DecodePLCP()}
+>>> write [int]
