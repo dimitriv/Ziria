@@ -59,7 +59,7 @@ import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
 import Data.Bits
 import Data.List (elemIndex, foldl', isPrefixOf )
-import qualified Data.Loc
+import Data.Loc
 import qualified Data.Symbol
 import qualified Language.C.Syntax as C
 import Language.C.Quote.C
@@ -81,7 +81,7 @@ import qualified Data.Set as S
 -- import CgPerm
 
 cgBoundsCheck :: DynFlags
-              -> Maybe SourcePos -> Ty -> C.Exp -> LengthInfo -> Cg ()
+              -> SrcLoc -> Ty -> C.Exp -> LengthInfo -> Cg ()
 cgBoundsCheck dflags loc arrty cbase linfo
    | isDynFlagSet dflags BoundsCheck
    , TArray numexpr _ <- arrty
@@ -91,8 +91,7 @@ cgBoundsCheck dflags loc arrty cbase linfo
                      LISingleton -> 0
                      LILength n  -> (n-1)
                      LIMeta _    -> panicStr "cgBoundsCheck: meta-variable"
-                   spos = case loc of { Nothing -> "No location available"
-                                      ; Just l  -> show l }
+                   spos = show loc
                in
                do { cnumexpr
                         <- case numexpr of
@@ -475,10 +474,10 @@ printArray dflags e cupper t
        ; let pcdeclN_c = name pcdeclN
              pvdeclN_c = name pvdeclN
 
-       ; let pcDeclE  = eVar Nothing pcdeclN
-             pvDeclE  = eVar Nothing pvdeclN
-             pvAssign = eAssign Nothing
-                           pvDeclE (eArrRead Nothing e pcDeclE LISingleton)
+       ; let pcDeclE  = eVar noLoc pcdeclN
+             pvDeclE  = eVar noLoc pvdeclN
+             pvAssign = eAssign noLoc
+                           pvDeclE (eArrRead noLoc e pcDeclE LISingleton)
 
        ; extendVarEnv [(pcdeclN, [cexp|$id:pcdeclN_c|])
                       ,(pvdeclN, [cexp|$id:pvdeclN_c|])] $ do
@@ -486,7 +485,7 @@ printArray dflags e cupper t
        ; (e1_decls, e1_stms, ce1) <- inNewBlock $ codeGenExp dflags pvAssign
        ; (e2_decls, e2_stms, ce2) <- inNewBlock $ printScalar dflags pvDeclE
        ; (e3_decls, e3_stms, ce3) <- inNewBlock $ printScalar dflags
-                                     (eVal Nothing TString (VString ","))
+                                     (eVal noLoc TString (VString ","))
 
        ; appendDecls e1_decls
        ; appendDecls e2_decls

@@ -114,7 +114,7 @@ import Control.Arrow ((***))
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Error
-import Text.Parsec.Pos
+import Data.Loc
 import Text.PrettyPrint.HughesPJ
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -226,7 +226,7 @@ mkTyDefEnv = M.fromList
 getTDefEnv :: TcM TyDefEnv
 getTDefEnv = asks tcm_tydefenv
 
-lookupTDefEnv :: String -> Maybe SourcePos -> TcM StructDef
+lookupTDefEnv :: String -> SrcLoc -> TcM StructDef
 lookupTDefEnv s pos = getTDefEnv >>= lookupTcM s pos msg
   where msg = text "Unbound type definition:" <+> text s
 
@@ -255,7 +255,7 @@ mkEnv = M.fromList
 getEnv :: TcM Env
 getEnv = asks tcm_env
 
-lookupEnv :: String -> Maybe SourcePos -> TcM (GName Ty)
+lookupEnv :: String -> SrcLoc -> TcM (GName Ty)
 lookupEnv s pos = do env <- getEnv ; lookupTcM s pos msg env
   where msg = text "Unbound variable:" <+> text s
 
@@ -277,7 +277,7 @@ mkCEnv = M.fromList
 getCEnv :: TcM CEnv
 getCEnv = asks tcm_cenv
 
-lookupCEnv :: String -> Maybe SourcePos -> TcM (GName CTy)
+lookupCEnv :: String -> SrcLoc -> TcM (GName CTy)
 lookupCEnv s pos = do env <- getCEnv ; lookupTcM s pos msg env
   where msg = text "Unbound computation variable:" <+> text s
 
@@ -369,7 +369,7 @@ getErrCtx = asks tcm_errctx
 pushErrCtx :: ErrCtx -> TcM a -> TcM a
 pushErrCtx ctxt = local $ \env -> env { tcm_errctx = ctxt }
 
-raiseErr :: Bool -> Maybe SourcePos -> Doc -> TcM a
+raiseErr :: Bool -> SrcLoc -> Doc -> TcM a
 raiseErr print_vartypes p msg = do
     ctx <- getErrCtx
     vartypes_msg <- ppVarTypes print_vartypes ctx
@@ -405,13 +405,13 @@ raiseErr print_vartypes p msg = do
                           ] }
     swap (x,y) = (y,x)
 
-raiseErrNoVarCtx :: Maybe SourcePos -> Doc -> TcM a
+raiseErrNoVarCtx :: SrcLoc -> Doc -> TcM a
 raiseErrNoVarCtx = raiseErr False
 
 failTcM :: Doc -> TcM a
 failTcM = throwError
 
-checkWith :: Maybe SourcePos -> Bool -> Doc -> TcM ()
+checkWith :: SrcLoc -> Bool -> Doc -> TcM ()
 checkWith _   True  _   = return ()
 checkWith pos False err = raiseErr False pos err
 
@@ -619,7 +619,7 @@ instance Show ErrCtx where
 
 data TyErr
   = TyErr { err_ctxt     :: ErrCtx
-          , err_pos      :: Maybe SourcePos
+          , err_pos      :: SrcLoc
           , err_msg      :: Doc
           , err_var_ctxt :: Doc }
 
@@ -628,7 +628,7 @@ ppTyErr TyErr{..}
   = vcat [ err_msg
          , pp_ctxt err_ctxt
          , text "At location:" <+>
-           text (maybe "BUG: Unknown location!" show err_pos)
+           text (show err_pos)
          , err_var_ctxt
          ]
 
@@ -683,7 +683,7 @@ dumpTypeSubstitutions = do
 -------------------------------------------------------------------------------}
 
 -- Lookups
-lookupTcM :: Ord a => a -> Maybe SourcePos -> Doc -> M.Map a b -> TcM b
+lookupTcM :: Ord a => a -> SrcLoc -> Doc -> M.Map a b -> TcM b
 lookupTcM s pos err env
   | Just res <- M.lookup s env
   = return res

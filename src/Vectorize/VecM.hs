@@ -22,8 +22,7 @@ module VecM where
 
 import Control.Applicative
 import Control.Monad.Reader
-
-import Text.Parsec.Pos ( SourcePos, sourceName )
+import Data.Loc
 
 import AstComp
 import AstExpr
@@ -77,14 +76,14 @@ newtype VecM a = VecM (ReaderT VecEnv IO a)
 runVecM :: VecEnv -> VecM a -> IO a
 runVecM venv (VecM act) = runReaderT act venv
 
-vecMFail :: Maybe SourcePos -> Doc -> VecM a
+vecMFail :: SrcLoc -> Doc -> VecM a
 vecMFail loc msg
   = liftIO $ 
     do print $ vcat [ 
            text "Vectorization failure!"
          , text "Reason:" 
          , msg 
-         , text "Location:" <+> text (maybe (error "BUG") show loc) ]
+         , text "Location:" <+> text (show loc) ]
        exitFailure
 
 
@@ -95,7 +94,7 @@ vecMFail loc msg
 newVectUniq :: VecM String
 newVectUniq = liftIO . GS.genSymStr =<< asks venv_sym 
 
-newVectGName :: String -> ty -> Maybe SourcePos -> MutKind -> VecM (GName ty)
+newVectGName :: String -> ty -> SrcLoc -> MutKind -> VecM (GName ty)
 newVectGName nm ty loc mk = do
   str <- newVectUniq
   return $ (toName (nm++"_"++str) loc ty mk) {uniqId = MkUniq ("_v"++str)}
@@ -429,7 +428,7 @@ gcdTys xs = go (head xs) (tail xs)
 -------------------------------------------------------------------------}
 
 -- | Match vectorization candidates composed on the data path
-combineData :: ParInfo  -> Maybe SourcePos
+combineData :: ParInfo  -> SrcLoc
             -> DVRCands -> DVRCands -> DVRCands
 combineData p loc xs ys 
  = let xs_list = Map.elems xs
@@ -441,7 +440,7 @@ combineData p loc xs ys
  where from_mb Nothing  = []
        from_mb (Just x) = [x]
 
-combine_par :: ParInfo -> Maybe SourcePos
+combine_par :: ParInfo -> SrcLoc
             -> DelayedVectRes -> DelayedVectRes -> Maybe DelayedVectRes
 combine_par pnfo loc dp1 dp2 = do
   vres <- mk_vres (dvr_vres dp1) (dvr_vres dp2)
@@ -475,7 +474,7 @@ combine_par pnfo loc dp1 dp2 = do
 -- always mitigate input and output.
 
 {- 
-combine_bind :: Maybe SourcePos
+combine_bind :: SrcLoc
              -> DelayedVectRes -> [EId] -> [DelayedVectRes] -> DelayedVectRes
 combine_bind loc pre_dvr1 xs pre_dvrs
   = DVR { dvr_comp = do
@@ -487,7 +486,7 @@ combine_bind loc pre_dvr1 xs pre_dvrs
 -}
 
 
-combine_bind_mb :: Maybe SourcePos
+combine_bind_mb :: SrcLoc
                 -> Bool 
                 -> DelayedVectRes -> [EId] -> [DelayedVectRes] 
                 -> Maybe DelayedVectRes
@@ -508,7 +507,7 @@ combine_bind_mb loc is_computer pre_dvr1 xs pre_dvrs = do
              in reverse (r : mitigate_all rs)
 
 
-combine_branch_mb :: Maybe SourcePos
+combine_branch_mb :: SrcLoc
                   -> Bool
                   -> Exp -> DelayedVectRes -> DelayedVectRes 
                   -> Maybe DelayedVectRes
@@ -528,7 +527,7 @@ combine_branch_mb loc is_computer e pre_dvr1 pre_dvr2 = do
           -- mitigate_all [pre_dvr1,pre_dvr2]
 
 {- 
-combine_branch :: Maybe SourcePos
+combine_branch :: SrcLoc
                -> Exp -> DelayedVectRes -> DelayedVectRes -> DelayedVectRes
 combine_branch loc e pre_dvr1 pre_dvr2
   = DVR { dvr_comp = do
@@ -559,7 +558,7 @@ mit_in :: String -> Int -> DelayedVectRes -> DelayedVectRes
 mit_in orig n (DVR { dvr_comp = io_comp, dvr_vres = vres })
   | Just (final_in_ty, cmit) <- mitin
   = -- trace ("mit_in:" ++ show final_in_ty ++ " ~~> " ++ show vinty ++ " ~~> " ++ show voutty) $ 
-    DVR { dvr_comp = cPar Nothing pnever cmit <$> io_comp
+    DVR { dvr_comp = cPar noLoc pnever cmit <$> io_comp
         , dvr_vres = DidVect final_in_ty voutty u }
   where vinty  = vect_in_ty vres  -- type in the middle!
         voutty = vect_out_ty vres
@@ -580,7 +579,7 @@ mit_out :: String -> DelayedVectRes -> Int -> DelayedVectRes
 mit_out orig (DVR { dvr_comp = io_comp, dvr_vres = vres }) m 
   | Just (final_out_ty, cmit) <- mitout
   = -- trace ("mit_out:" ++ show vinty ++ " ~~> " ++ show voutty ++ " ~~> " ++ show final_out_ty) $ 
-    DVR { dvr_comp = (\c -> cPar Nothing pnever c cmit) <$> io_comp
+    DVR { dvr_comp = (\c -> cPar noLoc pnever c cmit) <$> io_comp
         , dvr_vres = DidVect vinty final_out_ty u }
   where vinty  = vect_in_ty vres
         voutty = vect_out_ty vres -- type in the middle!
@@ -601,11 +600,11 @@ mk_in_mitigator orig n (TArray (Literal m) tbase)
   | n > 1 || m > 1
   , n <= m        
   , n `mod` m == 0 || m `mod` n == 0
-  = Just (mkVectTy tbase n, cMitigate Nothing orig tbase n m)
+  = Just (mkVectTy tbase n, cMitigate noLoc orig tbase n m)
   | otherwise = Nothing 
 mk_in_mitigator _ _n TVoid = Nothing -- nothing to mitigate
 mk_in_mitigator orig n t -- non-array
-  | n > 1     = Just (mkVectTy t n, cMitigate Nothing orig t n 1)
+  | n > 1     = Just (mkVectTy t n, cMitigate noLoc orig t n 1)
   | otherwise = Nothing 
 
 -- | Mitigate on the output, return final output type
@@ -614,17 +613,17 @@ mk_out_mitigator orig (TArray (Literal n) tbase) m
   | n > 1 || m > 1 
   , m <= n
   , n `mod` m == 0 || m `mod` n == 0
-  = Just (mkVectTy tbase m, cMitigate Nothing orig tbase n m)
+  = Just (mkVectTy tbase m, cMitigate noLoc orig tbase n m)
   | otherwise = Nothing
 mk_out_mitigator _ TVoid _m = Nothing -- nothing to mitigate
 mk_out_mitigator orig t m -- non-array
-  | m > 1     = Just (mkVectTy t m, cMitigate Nothing orig t 1 m)
+  | m > 1     = Just (mkVectTy t m, cMitigate noLoc orig t 1 m)
   | otherwise = Nothing
 
         
 
 -- | Match vectorization candidates composed on the control path
-combineBind :: Maybe SourcePos -> Bool -> 
+combineBind :: SrcLoc -> Bool -> 
                DVRCands -> [EId] -> [DVRCands] -> DVRCands 
 combineBind loc is_comp = go 
   where 
@@ -643,7 +642,7 @@ combineBind loc is_comp = go
 
 
 -- | Match vectorization candidates to compose them in a branch
-combineBranch :: Maybe SourcePos -> Bool 
+combineBranch :: SrcLoc -> Bool 
               -> Exp -> DVRCands -> DVRCands -> DVRCands
 combineBranch loc is_comp e xs ys 
  = Map.foldr foreach_xs emptyDVRCands xs
@@ -661,27 +660,28 @@ combineBranch loc is_comp e xs ys
 
 mkDVRes :: Bindable v => (VecEnv -> Zr v) 
         -> String
-        -> Maybe SourcePos -> Ty -> Ty -> VecM DelayedVectRes
+        -> SrcLoc -> Ty -> Ty -> VecM DelayedVectRes
 mkDVRes gen_zir kind loc vin_ty vout_ty = do 
   venv <- getVecEnv
   zirc <- liftZr kind loc (gen_zir venv)
-  let srcn = maybe "" sourceName' loc
+  let srcn = sourceName' loc
   zirc_wrapped <- wrapCFunCall (srcn ++ "_vect_" ++ kind) loc zirc
   return $ DVR { dvr_comp = return zirc_wrapped
                , dvr_vres = DidVect vin_ty vout_ty minUtil }
 
   where 
-    sourceName' = map (\c -> if isAlphaNum c then c else '_') . sourceName
+    sourceName' (SrcLoc (Loc p _)) = map (\c -> if isAlphaNum c then c else '_') (posFile p)
+    sourceName' (SrcLoc NoLoc)     = ""
 
 
-liftZr :: Bindable v => String -> Maybe SourcePos -> Zr v -> VecM Comp
+liftZr :: Bindable v => String -> SrcLoc -> Zr v -> VecM Comp
 liftZr pref_dbg loc zr = do 
   sym  <- asks venv_sym
   liftIO $ interpC pref_dbg sym loc zr
 
 
 -- | Wrap the comp in a new function and call, for debugging purposes.
-wrapCFunCall :: String -> Maybe SourcePos -> Comp -> VecM Comp 
+wrapCFunCall :: String -> SrcLoc -> Comp -> VecM Comp 
 wrapCFunCall nm loc comp = do
   let carrty = CTArrow [] (ctComp comp)
   vname <- newVectGName nm carrty loc Imm
@@ -699,7 +699,7 @@ emit_card = SCard (CAStatic 0) (CAStatic 1)
 
 
 -- | Expand a Map node to a Repeat node
-expandMapToTakeEmit :: Maybe SourcePos 
+expandMapToTakeEmit :: SrcLoc 
                     -> Maybe VectAnn -> Ty -> EId -> VecM LComp
 expandMapToTakeEmit loc vann inty f = do 
   x <- newVectGName "_map_bnd" inty loc Imm

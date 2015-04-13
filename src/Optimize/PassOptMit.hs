@@ -26,6 +26,7 @@ module PassOptMit (
 ) where
 
 import Prelude hiding (exp)
+import Data.Loc
 
 import AstComp
 import AstExpr
@@ -35,8 +36,6 @@ import AstUnlabelled
 import Outputable ()
 import PpComp ()
 import PpExpr ()
-
-import Text.Parsec ( SourcePos )
 
 import PassFoldM
 
@@ -155,7 +154,7 @@ data MitPkg = MitPkg { mit_ty  :: Ty
 -- | Get the type of a mitigator package
 mitPkgCTy :: MitPkg -> CTy 
 mitPkgCTy (MitPkg { mit_ty = t, mit_in = i, mit_out = j, mit_ctx = s })
-  = ctComp (cMitigate Nothing s t i j)
+  = ctComp (cMitigate noLoc s t i j)
 
 -- | If the computation /ends/ with a Mitigator then give it back
 -- NB: If the computation consists of just a mitigator we will 
@@ -180,7 +179,7 @@ flmMit c = find_mit c on_par flmMit
                return (mit, cPar loc p c1' c2)
 
 find_mit :: Comp 
-   -> (Maybe SourcePos -> ParInfo -> Comp -> Comp -> Maybe (MitPkg,Comp))
+   -> (SrcLoc -> ParInfo -> Comp -> Comp -> Maybe (MitPkg,Comp))
    -> (Comp -> Maybe (MitPkg,Comp))
    -> Maybe (MitPkg,Comp)              
 find_mit c on_par on_rec
@@ -229,11 +228,11 @@ frmMitTop comp
         -> return (MitPkg ty i1 i2 s, Nothing)
       _ -> Nothing
 
-cParMbR :: Maybe SourcePos -> ParInfo -> Comp -> Maybe Comp -> Comp
+cParMbR :: SrcLoc -> ParInfo -> Comp -> Maybe Comp -> Comp
 cParMbR _loc _p comp Nothing     = comp
 cParMbR loc p comp1 (Just comp2) = cPar loc p comp1 comp2
 
-cParMbL :: Maybe SourcePos -> ParInfo -> Maybe Comp -> Comp -> Comp
+cParMbL :: SrcLoc -> ParInfo -> Maybe Comp -> Comp -> Comp
 cParMbL _loc _p Nothing comp     = comp
 cParMbL loc p (Just comp1) comp2 = cPar loc p comp1 comp2
 
@@ -242,7 +241,7 @@ cParMbL loc p (Just comp1) comp2 = cPar loc p comp1 comp2
 passElimMitigs :: TypedCompPass
 passElimMitigs = TypedCompBottomUp elim_mit
 
-elim_mit :: Maybe SourcePos -> GComp CTy Ty () () -> RwM Comp
+elim_mit :: SrcLoc -> GComp CTy Ty () () -> RwM Comp
 elim_mit cloc c
   | Par p c1 c2 <- unComp c
   , Just (MitPkg ty1 i1 j1 s1, mc1') <- frmMitTop c1

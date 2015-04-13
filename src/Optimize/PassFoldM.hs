@@ -25,10 +25,10 @@ import Prelude hiding (exp)
 import Control.Applicative
 import Control.Monad.Reader
 import Control.Monad.State
+import Data.Loc
 import Data.Maybe (isJust)
 import GHC.Generics
 import System.CPUTime
-import Text.Parsec.Pos (SourcePos)
 import Text.PrettyPrint.HughesPJ
 import Text.Printf
 import Text.Show.Pretty (PrettyVal)
@@ -74,14 +74,13 @@ getDynFlags = RwM $ snd `liftM` ask
 debugFold :: RwM Bool
 debugFold = (`isDynFlagSet` DebugFold) <$> getDynFlags
 
-logStep :: String -> Maybe SourcePos -> String -> RwM ()
+logStep :: String -> SrcLoc -> String -> RwM ()
 logStep pass pos str = do
     shouldLog <- debugFold
     when shouldLog $ RwM $ do
-      liftIO $ putStrLn $ "* " ++ pass ++ ": " ++ ppr' pos ++ "\n" ++ str
+      liftIO $ putStrLn $ "* " ++ pass ++ ": " ++ show pos ++ ": " ++ "\n" ++ str
   where
-    ppr' (Just p) = show p ++ ": "
-    ppr' Nothing  = ""
+    ppr' p = show p ++ ": "
 
 -- | Record if an action does a local rewrite
 --
@@ -100,7 +99,7 @@ recordLocalRewrite (RwM act) = RwM $ do
       NotRewritten -> return (result, False)
 
 -- | New typed name generation in the optimizer
-newPassFoldGName :: String -> ty -> Maybe SourcePos -> MutKind -> RwM (GName ty)
+newPassFoldGName :: String -> ty -> SrcLoc -> MutKind -> RwM (GName ty)
 newPassFoldGName nm ty loc mk = do
     str <- genSym ""
     return $ (toName (nm++"_"++str) loc ty mk) {uniqId = MkUniq ("_pf"++str)}
@@ -147,18 +146,18 @@ incRewrites mp d s = RwStats (Map.alter aux s $ getRwStats mp)
 -- | Transformations on Comp terms
 data TypedCompPass =
     -- | Apply the pass on each node of the tree in bottom-up fashion
-    TypedCompBottomUp (Maybe SourcePos -> Comp -> RwM Comp)
+    TypedCompBottomUp (SrcLoc -> Comp -> RwM Comp)
 
 -- | Transformations on Exp terms
 data TypedExpPass =
     -- | Apply the pass on each node of the tree in bototm-up fashion
-    TypedExpBottomUp (Maybe SourcePos -> Exp -> RwM Exp)
+    TypedExpBottomUp (SrcLoc -> Exp -> RwM Exp)
 
     -- | The pass does its own traversal of the tree.
   | TypedExpManual (Exp -> RwM Exp)
 
 
-newtype LetEs = LetEs [(Maybe SourcePos, GName Ty, ForceInline, Exp)]
+newtype LetEs = LetEs [(SrcLoc, GName Ty, ForceInline, Exp)]
   deriving (Generic)
 
 -- | Collect multiple top-level consecutive `LetE` bindings

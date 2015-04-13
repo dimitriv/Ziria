@@ -136,6 +136,7 @@ import Data.Bits hiding (bit)
 import Data.Functor.Identity
 import Data.Int
 import Data.List (intercalate)
+import Data.Loc
 import Data.Map.Strict (Map)
 import Data.Maybe
 import Data.Monoid
@@ -143,7 +144,6 @@ import Data.Set (Set)
 import GHC.Generics
 import Outputable
 import System.IO.Unsafe (unsafePerformIO)
-import Text.Parsec.Pos (SourcePos)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set        as Set
 
@@ -248,7 +248,7 @@ data Value0 =
 
 data Value = MkValue {
     unValue  :: !Value0
-  , valueLoc :: !(Maybe SourcePos)
+  , valueLoc :: !SrcLoc
   }
   deriving (Generic)
 
@@ -355,7 +355,7 @@ valueExp v = let !e0 = go (unValue v) in MkExp e0 vloc ()
 --
 -- NOTE: We return Maybe a value primarily because we might be rewriting inside
 -- a polymorphic function and hence encounter an array with unknown length.
-initVal :: Maybe SourcePos -> Ty -> Maybe Value
+initVal :: SrcLoc -> Ty -> Maybe Value
 initVal p ty = (\v0 -> MkValue v0 p) <$> go ty
   where
     go TBit        = return $ ValueBit    False
@@ -378,13 +378,13 @@ initVal p ty = (\v0 -> MkValue v0 p) <$> go ty
 --
 -- If we are sure that the type must be a scalar type we are justified in
 -- stripping of the `Maybe`
-initScalar :: Maybe SourcePos -> Ty -> Value
+initScalar :: SrcLoc -> Ty -> Value
 initScalar p = fromJust . initVal p
 
-vTrue :: Maybe SourcePos -> Value
+vTrue :: SrcLoc -> Value
 vTrue = MkValue (ValueBool True)
 
-vFalse :: Maybe SourcePos -> Value
+vFalse :: SrcLoc -> Value
 vFalse = MkValue (ValueBool False)
 
 {-------------------------------------------------------------------------------
@@ -1206,11 +1206,11 @@ interpret e = guessIfUnevaluated (go . unExp) e
     go (ELUT _ _) =
       throwError "Unexpected LUT during interpretation"
 
-    eloc :: Maybe SourcePos
+    eloc :: SrcLoc
     eloc = expLoc e
 
 interpretLetRef :: Monad m
-                => Maybe SourcePos
+                => SrcLoc
                 -> GName Ty              -- ^ Letref-bound variable
                 -> MarkImplicit Value    -- ^ Initial value
                 -> Exp                   -- ^ LHS
@@ -1245,7 +1245,7 @@ interpretLetRef eloc x v1 e2 = do
 
 -- | Smart constructor for binary operators
 applyBinOp :: Monad m
-           => Maybe SourcePos -> BinOp -> Evald -> Evald -> Eval m Evald
+           => SrcLoc -> BinOp -> Evald -> Evald -> Eval m Evald
 applyBinOp _ op (EvaldFull a) (EvaldFull b) = do
     case applyBinaryOp (zBinOp op) a b of
       Just result -> evaldFull result
@@ -1262,7 +1262,7 @@ applyBinOp p op a b = case (op, evaldInt a, evaldInt b) of
                      evaldPart $ eBinOp p op a' b'
 
 -- | Smart constructor for unary operators
-applyUnOp :: Monad m => Maybe SourcePos -> UnOp -> Evald -> Eval m Evald
+applyUnOp :: Monad m => SrcLoc -> UnOp -> Evald -> Eval m Evald
 applyUnOp _ op (EvaldFull a) = do
     case applyUnaryOp (zUnOp op) a of
       Just result -> evaldFull result
@@ -1285,10 +1285,10 @@ applyUnOp p op (EvaldPart e) = case (op, ctExp e) of
 -------------------------------------------------------------------------------}
 
 data FullyEvaldDerefExp =
-    DerefVar          (Maybe SourcePos) (GName Ty)
-  | DerefArrayElement (Maybe SourcePos) FullyEvaldDerefExp Int
-  | DerefArraySlice   (Maybe SourcePos) FullyEvaldDerefExp Int Int
-  | DerefStructField  (Maybe SourcePos) FullyEvaldDerefExp FldName
+    DerefVar          SrcLoc (GName Ty)
+  | DerefArrayElement SrcLoc FullyEvaldDerefExp Int
+  | DerefArraySlice   SrcLoc FullyEvaldDerefExp Int Int
+  | DerefStructField  SrcLoc FullyEvaldDerefExp FldName
 
 unDeref :: Either FullyEvaldDerefExp Exp -> Exp
 unDeref (Right e)        = e
@@ -1381,7 +1381,7 @@ assign = \lhs rhs -> deref lhs (\_ -> return rhs)
 
     -- Given a function that updates an element, construct a function that
     -- updates the array at a particular index
-    updateArray :: Maybe SourcePos
+    updateArray :: SrcLoc
                 -> Int
                 -> (Value -> Eval m Value) -> (Value -> Eval m Value)
     updateArray p i f arr =
@@ -1399,7 +1399,7 @@ assign = \lhs rhs -> deref lhs (\_ -> return rhs)
 
     -- Given a function that updates a slice, construct a function that updates
     -- the whole array
-    updateSlice :: Maybe SourcePos
+    updateSlice :: SrcLoc
                 -> Int -> Int
                 -> (Value -> Eval m Value) -> (Value -> Eval m Value)
     updateSlice p i len f arr =

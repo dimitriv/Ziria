@@ -45,11 +45,10 @@ import qualified Data.Set as S
 
 -- import Outputable
 
+import Data.Loc
 import Data.Monoid
 
 import Data.Maybe ( fromJust )
-
-import Text.Parsec.Pos ( SourcePos )
 
 import AstComp
 import AstExpr
@@ -701,7 +700,7 @@ mappendM m1 m2 = do
   return $ i1 `mappend` i2
 
 -- | Apply the inline data to an expression
-appInlDataExpr :: Maybe SourcePos -> InlineData -> Exp -> Exp
+appInlDataExpr :: SrcLoc -> InlineData -> Exp -> Exp
 appInlDataExpr loc (InlineData { inl_let_bound = let_bound
                                , inl_subst     = subst
                                , inl_len_subst = subst_len })
@@ -711,7 +710,7 @@ appInlDataExpr loc (InlineData { inl_let_bound = let_bound
     go ((nm1,eb1):bnds) e = eLet loc nm1 AutoInline eb1 $ go bnds e
 
 -- | Apply the inline data plus a computation substition to a computation
-appInlDataComp :: Maybe SourcePos 
+appInlDataComp :: SrcLoc 
                -> InlineData -> [(GName CTy,Comp)] -> Comp -> Comp
 appInlDataComp loc (InlineData { inl_let_bound = let_bound
                                , inl_subst     = subst
@@ -737,15 +736,15 @@ inline_length :: GName Ty -> Ty -> InlineData
 inline_length prm argty
   | TArray (NVar siz_nm) _ <- nameTyp prm
   , TArray nexpr _ <- argty
-  , let siz_var  = toName siz_nm Nothing tint Imm
+  , let siz_var  = toName siz_nm noLoc tint Imm
   , let siz_expr = nexpr_to_expr nexpr
   = InlineData { inl_let_bound = []
                , inl_subst     = [(siz_var,siz_expr)]
                , inl_len_subst = [(siz_nm,nexpr)] }
   | otherwise = mempty
   where
-    nexpr_to_expr (NVar s)    = eVar Nothing (toName s Nothing tint Imm)
-    nexpr_to_expr (Literal s) = eVal Nothing tint (vint s)  
+    nexpr_to_expr (NVar s)    = eVar noLoc (toName s noLoc tint Imm)
+    nexpr_to_expr (Literal s) = eVal noLoc tint (vint s)  
 
 
 -- | How to inline an immutable parameter: effectively by let-binding it
@@ -756,7 +755,7 @@ inline_immutable nm expr
 
 
 -- | How to inline a mutable parameter: see notes above
-inline_mutable :: Maybe SourcePos -> 
+inline_mutable :: SrcLoc -> 
                   GName Ty -> GDerefExp Ty () -> RwM InlineData
 inline_mutable loc nm dexpr = do 
   (bnds,simpl_dexpr) <- lift_idx dexpr

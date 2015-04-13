@@ -22,7 +22,6 @@ import Control.Monad (forM_,
                       unless,
                       liftM)
 import Control.Monad.Exception
-import Data.Maybe (fromJust)
 import Data.List (foldl1',
                   intersperse)
 import Data.Loc
@@ -30,7 +29,6 @@ import Data.Maybe (fromMaybe, catMaybes)
 import Data.Monoid
 import Data.Symbol
 import Text.PrettyPrint.Mainland
-import Text.Parsec.Pos
 
 import Language.Ziria.Parser.Lexer
 import Language.Ziria.Parser.Monad
@@ -250,86 +248,86 @@ scalar_value :
 exp :: { SrcExp }
 exp :
     exp_na           { $1 }
-  | '{' exp_list '}' { eValArr (msp $ srclocOf $2) $2 }
+  | '{' exp_list '}' { eValArr (srclocOf $2) $2 }
 
 exp_na :: { SrcExp }
 exp_na :
     exp_na '+' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) Add $1 $3 }
+      { eBinOp ($1 `srcspan` $3) Add $1 $3 }
   | exp_na '-' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) Sub $1 $3 }
+      { eBinOp ($1 `srcspan` $3) Sub $1 $3 }
   | exp_na '*' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) Mult $1 $3 }
+      { eBinOp ($1 `srcspan` $3) Mult $1 $3 }
   | exp_na '/' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) Div $1 $3 }
+      { eBinOp ($1 `srcspan` $3) Div $1 $3 }
   | exp_na '%' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) Rem $1 $3 }
+      { eBinOp ($1 `srcspan` $3) Rem $1 $3 }
   | exp_na '**' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) Expon  $1 $3 }
+      { eBinOp ($1 `srcspan` $3) Expon  $1 $3 }
   | exp_na '<<' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) ShL $1 $3 }
+      { eBinOp ($1 `srcspan` $3) ShL $1 $3 }
   | exp_na '>>' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) ShR $1 $3 }
+      { eBinOp ($1 `srcspan` $3) ShR $1 $3 }
   | exp_na '&' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) BwAnd $1 $3 }
+      { eBinOp ($1 `srcspan` $3) BwAnd $1 $3 }
   | exp_na '|' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) BwOr $1 $3 }
+      { eBinOp ($1 `srcspan` $3) BwOr $1 $3 }
   | exp_na '^' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) BwXor $1 $3 }
+      { eBinOp ($1 `srcspan` $3) BwXor $1 $3 }
   | exp_na '==' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) Eq $1 $3 }
+      { eBinOp ($1 `srcspan` $3) Eq $1 $3 }
   | exp_na '!=' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) Neq $1 $3 }
+      { eBinOp ($1 `srcspan` $3) Neq $1 $3 }
   | exp_na '<' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) Lt $1 $3 }
+      { eBinOp ($1 `srcspan` $3) Lt $1 $3 }
   | exp_na '>' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) Gt $1 $3 }
+      { eBinOp ($1 `srcspan` $3) Gt $1 $3 }
   | exp_na '<=' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) Leq $1 $3 }
+      { eBinOp ($1 `srcspan` $3) Leq $1 $3 }
   | exp_na '>=' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) Geq $1 $3 }
+      { eBinOp ($1 `srcspan` $3) Geq $1 $3 }
   | exp_na '&&' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) And $1 $3 }
+      { eBinOp ($1 `srcspan` $3) And $1 $3 }
   | exp_na '||' exp_na
-      { eBinOp (msp $ $1 `srcspan` $3) Or $1 $3 }
+      { eBinOp ($1 `srcspan` $3) Or $1 $3 }
 
   | 'length' exp_na %prec LENGTH
-      { eUnOp' (msp $ $1 `srcspan` $2) ALength $2 }
+      { eUnOp' ($1 `srcspan` $2) ALength $2 }
 
   | '-' exp_na %prec NEG
-      { eUnOp' (msp $ $1 `srcspan` $2) Neg $2 }
+      { eUnOp' ($1 `srcspan` $2) Neg $2 }
   | 'not' exp_na %prec NEG
-      { eUnOp' (msp $ $1 `srcspan` $2) Not $2 }
+      { eUnOp' ($1 `srcspan` $2) Not $2 }
   | '~' exp_na %prec NEG
-      { eUnOp' (msp $ $1 `srcspan` $2) BwNeg $2 }
+      { eUnOp' ($1 `srcspan` $2) BwNeg $2 }
 
   | 'if' exp_na 'then' exp_na 'else' exp_na %prec IF
-      { eIf (msp $ $1 `srcspan` $6) $2 $4 $6 }
+      { eIf ($1 `srcspan` $6) $2 $4 $6 }
   | let_decl 'in' exp_or_stmts %prec IF
       { eLetDecl $1 $3 }
 
   | scalar_value
-      { eValSrc (msp $ srclocOf $1) (unLoc $1) }
+      { eValSrc (srclocOf $1) (unLoc $1) }
   | ID
-      { mkVar (msp $ srclocOf $1) (unintern (getID $1)) }
+      { mkVar (srclocOf $1) (unintern (getID $1)) }
   -- XXX: we can shadow a comp
   | COMPID
-      { mkVar (msp $ srclocOf $1) (unintern (getCOMPID $1)) }
+      { mkVar (srclocOf $1) (unintern (getCOMPID $1)) }
   | ID '{' struct_init_list1 '}'
-      { eStruct' (msp $ $1 `srcspan` $4) (unintern (getID $1)) $3 }
+      { eStruct' ($1 `srcspan` $4) (unintern (getID $1)) $3 }
   | struct_id '{' struct_init_list1 '}'
-      { eStruct' (msp $ $1 `srcspan` $4) (unLoc $1) $3 }
+      { eStruct' ($1 `srcspan` $4) (unLoc $1) $3 }
   | ID derefs
-      { $2 (mkVar (msp $ srclocOf $1) (unintern (getID $1))) }
+      { $2 (mkVar (srclocOf $1) (unintern (getID $1))) }
   | ID '(' exp_list ')'
-      { mkCall (msp $ $1 `srcspan` $4) (unintern (getID $1)) $3 }
+      { mkCall ($1 `srcspan` $4) (unintern (getID $1)) $3 }
   -- XXX: a fun comp can reuse a fun identifier, but the old fun identifier is
   -- still visible! The lexer has now way of telling this, of
   -- course... Disgusting!
   | COMPID '(' exp_list ')'
-      { mkCall (msp $ $1 `srcspan` $4) (unintern (getCOMPID $1)) $3 }
+      { mkCall ($1 `srcspan` $4) (unintern (getCOMPID $1)) $3 }
   | cast_type '(' exp_na ')'
-      { eUnOp' (msp ($1 `srcspan` $4)) (Cast (unLoc $1)) $3 }
+      { eUnOp' ($1 `srcspan` $4) (Cast (unLoc $1)) $3 }
   | '(' exp ')'
       { $2 }
   | '(' exp error
@@ -344,14 +342,14 @@ exp_or_stmts :
 var_bind :: { SrcName }
 var_bind :
     identifier
-      { let { p = toSourcePos (srclocOf $1)
+      { let { p = srclocOf $1
             ; i = unLoc $1
             }
         in
           toName i p SrcTyUnknown (errMutKind i p)
       }
   | '(' identifier ':' base_type ')'
-      { let { p  = toSourcePos ($1 `srcspan` $5)
+      { let { p  = $1 `srcspan` $5
             ; i  = unLoc $2
             ; ty = unLoc $4
             }
@@ -360,7 +358,7 @@ var_bind :
       }
   -- XXX: we can shadow an existing comp
   |  COMPID
-      { let { p = toSourcePos (srclocOf $1)
+      { let { p = srclocOf $1
             ; i = unintern (getCOMPID $1)
             }
         in
@@ -432,15 +430,15 @@ deref_rlist :
 deref :: { SrcExp -> SrcExp }
 deref :
     '.' ID
-      { \e -> eProj (msp $ $1 `srcspan` $2) e (unintern (getID $2)) }
+      { \e -> eProj ($1 `srcspan` $2) e (unintern (getID $2)) }
   | range
-      { \e -> eArrRead (msp $ srclocOf (fst $1)) e (fst $1) (snd $1) }
+      { \e -> eArrRead (srclocOf (fst $1)) e (fst $1) (snd $1) }
 
 -- Ranges and intervals
 range :: { (SrcExp, LengthInfo) }
 range :
     '[' const_int_exp ':' const_int_exp ']'
-      { let { p    = msp $ $1 `srcspan` $5
+      { let { p    = $1 `srcspan` $5
             ; from = unLoc $2
             ; to   = unLoc $4
             ; len  = to - from + 1
@@ -462,7 +460,7 @@ range :
 gen_interval :: { (SrcExp, SrcExp) }
 gen_interval :
     '[' const_int_exp ':' const_int_exp ']'
-      { let { p    = msp $ $1 `srcspan` $5
+      { let { p    = $1 `srcspan` $5
             ; from = unLoc $2
             ; to   = unLoc $4
             ; len  = to - from + 1
@@ -517,7 +515,7 @@ cast_type :
 arr_length :: { L SrcTy }
 arr_length :
     '[' 'length' '(' ID ')' ']' base_type
-      { let { p  = msp ($1 `srcspan` $7)
+      { let { p  = $1 `srcspan` $7
             ; x  = unintern (getID $4)
             ; nm = toName x p SrcTyUnknown (errMutKind x p)
             }
@@ -527,9 +525,9 @@ arr_length :
   | '[' const_int_exp ']' base_type
       { L ($1 <--> $4) $ SrcTArray (SrcLiteral (unLoc $2)) (unLoc $4) }
   | base_type
-      { let { p = msp (srclocOf $1) }
+      { let { p = srclocOf $1 }
         in
-          L (locOf $1) $ SrcTArray (SrcNVar (fromJust p)) (unLoc $1)
+          L (locOf $1) $ SrcTArray (SrcNVar p) (unLoc $1)
       }
 
 comp_base_type :: { L SrcCTy }
@@ -554,14 +552,14 @@ index_type :
 let_decl :: { ELetDecl }
 let_decl :
     decl
-      { let { p      = msp (srclocOf $1)
+      { let { p      = srclocOf $1
             ; (x, e) = unLoc $1
             }
         in
           ELetDeclERef p x e
       }
   | 'let' var_bind '=' exp
-      { let { p = msp ($1 `srcspan` $4)
+      { let { p = $1 `srcspan` $4
             ; x = $2
             ; e = $4
             }
@@ -574,7 +572,7 @@ let_decl :
 decl :: { L (SrcName, Maybe SrcExp) }
 decl :
     'var' ID ':' base_type maybe_initializer
-      { let { p   = toSourcePos ($1 `srcspan` $5)
+      { let { p   = $1 `srcspan` $5
             ; tau = unLoc $4
             ; x   = unintern (getID $2)
             }
@@ -617,7 +615,7 @@ stmt :
 stmt_exp :: { SrcExp }
 stmt_exp :
     unroll_info 'for' var_bind 'in' gen_interval stmt_block
-      { let { p              = msp $ $1 `srcspan` $6
+      { let { p              = $1 `srcspan` $6
             ; ui             = unLoc $1
             ; k              = $3
             ; (estart, elen) = $5
@@ -627,42 +625,42 @@ stmt_exp :
           eFor p ui k estart elen body
       }
   | 'while' '(' exp ')' stmt_block
-      { let { p = msp $ $1 `srcspan` $5 }
+      { let { p = $1 `srcspan` $5 }
         in
           eWhile p $3 $5
       }
   | 'if' exp 'then' stmt_block
-      { let { p = msp $ $1 `srcspan` $4 }
+      { let { p = $1 `srcspan` $4 }
         in
           eIf p $2 $4 (eUnit p)
       }
   | 'if' exp 'then' stmt_block 'else' stmt_block
-      { let { p = msp $ $1 `srcspan` $6 }
+      { let { p = $1 `srcspan` $6 }
         in
           eIf p $2 $4 $6
       }
   | 'return' exp
       { $2 }
   | 'print' exp_list1
-      { ePrint (msp $ $1 `srcspan` $2) False $2 }
+      { ePrint ($1 `srcspan` $2) False $2 }
   | 'println' exp_list1
-      { ePrint (msp $ $1 `srcspan` $2) True $2 }
+      { ePrint ($1 `srcspan` $2) True $2 }
   | 'error' STRING
-      { let { p = msp $ $1 `srcspan` $2 }
+      { let { p = $1 `srcspan` $2 }
         in
           eError p SrcTyUnknown (snd (getSTRING $2))
       }
   | let_decl 'in' stmt_block
       { eLetDecl $1 $3 }
   | ID '(' exp_list ')'
-      { let { p = (msp $ $1 `srcspan` $3)
+      { let { p = ($1 `srcspan` $3)
             ; x = unintern (getID $1)
             }
         in
           mkCall p x $3
       }
   | ID projs ':=' exp
-      { let { p    = (msp $ $1 `srcspan` $4)
+      { let { p    = $1 `srcspan` $4
             ; x    = unintern (getID $1)
             ; proj = $2
             ; rhs  = $4
@@ -671,7 +669,7 @@ stmt_exp :
           eAssign p (proj (mkVar p x)) rhs
       }
   | ID projs range ':=' exp
-      { let { p             = (msp $ $1 `srcspan` $5)
+      { let { p             = $1 `srcspan` $5
             ; x             = unintern (getID $1)
             ; proj          = $2
             ; (estart, len) = $3
@@ -700,7 +698,7 @@ proj_rlist :
 proj :: { SrcExp -> SrcExp }
 proj :
     ID
-      { let { p = msp (srclocOf $1)
+      { let { p = srclocOf $1
             ; v = unintern (getID $1)
             }
         in
@@ -727,7 +725,7 @@ command :
     comp_let_decl
       { CDecl $1 }
   | var_bind '<-' command_comp
-      { let { p  = msp ($1 `srcspan` $3)
+      { let { p  = $1 `srcspan` $3
             ; x  = $1
             ; c1 = $3
             }
@@ -740,19 +738,19 @@ command :
 comp_let_decl :: { CLetDecl }
 comp_let_decl :
     decl
-      { let { p      = msp (srclocOf $1)
+      { let { p      = srclocOf $1
             ; (x, e) = unLoc $1
             }
         in
           CLetDeclERef p x e
       }
   | struct
-      { let { p = msp (srclocOf $1) }
+      { let { p = srclocOf $1 }
         in
           CLetDeclStruct p (unLoc $1)
       }
   | 'fun' 'external' ID params ':' base_type
-      { let { p  = msp ($1 `srcspan` $6)
+      { let { p  = $1 `srcspan` $6
             ; x  = unintern (getID $3)
             ; ps = $4
             ; ty = unLoc $6
@@ -761,7 +759,7 @@ comp_let_decl :
           CLetDeclExternal p x ps ty
       }
   | 'fun' 'comp' maybe_comp_range comp_var_bind comp_params '{' commands '}'
-      { let { p  = msp ($1 `srcspan` $6)
+      { let { p  = $1 `srcspan` $6
             ; h  = $3
             ; x  = $4
             ; ps = $5
@@ -771,7 +769,7 @@ comp_let_decl :
           CLetDeclFunComp p h x ps c
       }
   | 'fun' var_bind params stmt_block
-      { let { p  = msp ($1 `srcspan` $4)
+      { let { p  = $1 `srcspan` $4
             ; fn = $2
             ; ps = $3
             ; e  = $4
@@ -780,7 +778,7 @@ comp_let_decl :
           CLetDeclFunExpr p fn ps e
       }
   | 'let' 'comp' maybe_comp_range comp_var_bind '=' command_comp
-      { let { p  = msp ($1 `srcspan` $6)
+      { let { p  = $1 `srcspan` $6
             ; h  = $3
             ; x  = $4
             ; c  = $6
@@ -789,7 +787,7 @@ comp_let_decl :
           CLetDeclComp p h x c
       }
   | 'let' var_bind '=' exp
-      { let { p  = msp ($1 `srcspan` $4)
+      { let { p  = $1 `srcspan` $4
             ; x  = $2
             ; e  = $4
             }
@@ -800,15 +798,15 @@ comp_let_decl :
 command_comp :: { SrcComp }
 command_comp :
     'standalone' command_comp %prec STANDALONE
-      { cStandalone (msp $ $1 `srcspan` $2) $2 }
+      { cStandalone ($1 `srcspan` $2) $2 }
   | 'repeat' vect_ann command_comp %prec STANDALONE
-      { cRepeat (msp $ $1 `srcspan` $3) $2 $3 }
+      { cRepeat ($1 `srcspan` $3) $2 $3 }
   | 'until' exp command_comp %prec STANDALONE
-      { cUntil (msp $ $1 `srcspan` $3) $2 $3 }
+      { cUntil ($1 `srcspan` $3) $2 $3 }
   | 'while' exp command_comp %prec STANDALONE
-      { cWhile (msp $ $1 `srcspan` $3) $2 $3 }
+      { cWhile ($1 `srcspan` $3) $2 $3 }
   | unroll_info 'times' exp command_comp %prec STANDALONE
-      { let { p  = msp ($1 `srcspan` $3)
+      { let { p  = $1 `srcspan` $3
             ; ui = unLoc $1
             ; e  = $3
             ; c  = $4
@@ -818,7 +816,7 @@ command_comp :
           cTimes p ui (eVal p tintSrc (VInt 0)) e nm c
       }
   | unroll_info 'for' var_bind 'in' gen_interval command_comp %prec STANDALONE
-      { let { p              = msp ($1 `srcspan` $6)
+      { let { p              = $1 `srcspan` $6
             ; ui             = unLoc $1
             ; k              = $3
             ; (estart, elen) = $5
@@ -828,9 +826,9 @@ command_comp :
           cTimes p ui estart elen k c
       }
   | command_comp '>>>' command_comp
-      { cPar (msp ($1 `srcspan` $3)) (mkParInfo MaybePipeline) $1 $3 }
+      { cPar ($1 `srcspan` $3) (mkParInfo MaybePipeline) $1 $3 }
   | command_comp '|>>>|' command_comp
-      { cPar (msp ($1 `srcspan` $3)) (mkParInfo (AlwaysPipeline 0 0)) $1 $3 }
+      { cPar ($1 `srcspan` $3) (mkParInfo (AlwaysPipeline 0 0)) $1 $3 }
   | comp_term
       { $1 }
 
@@ -839,15 +837,15 @@ comp_term :
     '(' command_comp ')'
       { $2 }
   | inline_ann 'return' exp
-      { cReturn (msp $ $1 `srcspan` $3) (unLoc $1) $3 }
+      { cReturn ($1 `srcspan` $3) (unLoc $1) $3 }
   | 'emit' exp
-      { cEmit (msp $ $1 `srcspan` $2) $2 }
+      { cEmit ($1 `srcspan` $2) $2 }
   | 'emits' exp
-      { cEmits (msp $ $1 `srcspan` $2) $2 }
+      { cEmits ($1 `srcspan` $2) $2 }
   | 'take'
-      { cTake1 (msp $ srclocOf $1) SrcTyUnknown }
+      { cTake1 (srclocOf $1) SrcTyUnknown }
   | 'takes' exp
-      {% let { p = msp ($1 `srcspan` $2) }
+      {% let { p = $1 `srcspan` $2 }
          in
            case evalSrcInt $2 of
              { (Right n, _) -> return $ cTake p SrcTyUnknown (fromInteger n)
@@ -855,25 +853,25 @@ comp_term :
              }
       }
   | 'filter' var_bind
-      { cFilter (msp $ srclocOf $1) $2 }
+      { cFilter (srclocOf $1) $2 }
   | 'read' type_ann
-      { cReadSrc (msp $ $1 `srcspan` $2) (unLoc $2) }
+      { cReadSrc ($1 `srcspan` $2) (unLoc $2) }
   | 'write' type_ann
-      { cWriteSnk (msp $ $1 `srcspan` $2) (unLoc $2) }
+      { cWriteSnk ($1 `srcspan` $2) (unLoc $2) }
   | 'map' vect_ann var_bind
-      { cMap (msp $ srclocOf $1) $2 $3 }
+      { cMap (srclocOf $1) $2 $3 }
   | 'if' exp 'then' command_comp comp_maybe_else
-      { cBranch (msp $ $1 `srcspan` $5) $2 $4 (unLoc $5) }
+      { cBranch ($1 `srcspan` $5) $2 $4 (unLoc $5) }
   | comp_let_decl 'in' command_comp
       { cLetDecl $1 $3 }
   | 'do' stmt_block
-      { cReturn (msp $ $1 `srcspan` $2) AutoInline $2 }
+      { cReturn ($1 `srcspan` $2) AutoInline $2 }
   | 'seq' '{' commands '}'
       { $3 }
   | '{' commands '}'
       { $2 }
   | COMPID
-      { let { p = msp (srclocOf $1)
+      { let { p = srclocOf $1
             ; x = unintern (getCOMPID $1)
             ; v = toName x p SrcCTyUnknown (errMutKind x p)
             }
@@ -881,7 +879,7 @@ comp_term :
           cVar p v
       }
   | COMPID '(' args ')'
-      { let { p = msp (srclocOf $1)
+      { let { p = srclocOf $1
             ; x = unintern (getCOMPID $1)
             ; v = toName x p SrcCTyUnknown (errMutKind x p)
             }
@@ -891,7 +889,7 @@ comp_term :
 
 comp_maybe_else :: { L SrcComp }
 comp_maybe_else :
-    {- empty -}         { L NoLoc (cUnit (msp noLoc)) }
+    {- empty -}         { L NoLoc (cUnit noLoc) }
   | 'else' command_comp { L ($1 <--> $2) $2 }
 
 inline_ann :: { L ForceInline }
@@ -947,7 +945,7 @@ maybe_comp_range :
 comp_var_bind :: { GName SrcCTy }
 comp_var_bind :
     ID
-      {% let { p = toSourcePos (srclocOf $1)
+      {% let { p = srclocOf $1
              ; i = (unintern (getID $1))
              }
          in
@@ -956,7 +954,7 @@ comp_var_bind :
               }
       }
   | '(' ID ':' comp_base_type ')'
-      {% let { p  = toSourcePos ($1 `srcspan` $5)
+      {% let { p  = $1 `srcspan` $5
              ; i  = (unintern (getID $2))
              ; ty = unLoc $4
              }
@@ -1001,7 +999,7 @@ param_rlist :
 param :: { SrcName }
 param :
     'var' ID ':' base_type
-      { let { p  = msp ($1 `srcspan` $4)
+      { let { p  = $1 `srcspan` $4
             ; x  = unintern (getID $2)
             ; ty = unLoc $4
             }
@@ -1009,7 +1007,7 @@ param :
           toName x p ty Mut
       }
   | identifier ':' base_type
-      { let { p  = msp ($1 `srcspan` $3)
+      { let { p  = $1 `srcspan` $3
             ; x  = unLoc $1
             ; ty = unLoc $3
             }
@@ -1031,7 +1029,7 @@ comp_param_rlist :
 comp_param :: { GName (CallArg SrcTy SrcCTy) }
 comp_param :
     'var' ID ':' base_type
-      { let { p  = msp ($1 `srcspan` $4)
+      { let { p  = $1 `srcspan` $4
             ; x  = unintern (getID $2)
             ; ty = unLoc $4
             }
@@ -1041,7 +1039,7 @@ comp_param :
   | 'var' ID ':' comp_base_type
       {% fail "Computation parameter cannot be mutable" }
   | ID ':' base_type
-      { let { p  = msp ($1 `srcspan` $3)
+      { let { p  = $1 `srcspan` $3
             ; x  = unintern (getID $1)
             ; ty = unLoc $3
             }
@@ -1049,7 +1047,7 @@ comp_param :
           toName x p (CAExp ty) Imm
       }
   | ID ':' comp_base_type
-      {% let { p  = msp ($1 `srcspan` $3)
+      {% let { p  = $1 `srcspan` $3
              ; x  = unintern (getID $1)
              ; ty = unLoc $3
              }
@@ -1119,30 +1117,30 @@ type SrcCName = GName SrcCTy
 
 type SrcStructDef = GStructDef SrcTy
 
-errMutKind :: String -> Maybe SourcePos -> MutKind
+errMutKind :: String -> SrcLoc -> MutKind
 errMutKind s loc =
     error $ "MutKind missing: " ++ s ++ ", " ++ show loc
 
-mkVar :: Maybe SourcePos -> String -> SrcExp
+mkVar :: SrcLoc -> String -> SrcExp
 mkVar p x = eVar p (toName x p SrcTyUnknown (errMutKind x p))
 
-mkCall :: Maybe SourcePos -> String -> [SrcExp] -> SrcExp
+mkCall :: SrcLoc -> String -> [SrcExp] -> SrcExp
 mkCall p fn args = eCall p (toName fn p SrcTyUnknown Imm) args
 
 mkVectComp :: SrcComp -> Maybe (Int, Int) -> SrcComp
 mkVectComp sc Nothing  = sc
 mkVectComp sc (Just h) = cVectComp (compLoc sc) h sc
 
-eUnit :: Maybe SourcePos -> SrcExp
+eUnit :: SrcLoc -> SrcExp
 eUnit p = eValSrc p VUnit
 
-cUnit :: Maybe SourcePos -> SrcComp
+cUnit :: SrcLoc -> SrcComp
 cUnit p = cReturn p ForceInline (eUnit p)
 
-eValSrc :: Maybe SourcePos -> Val -> SrcExp
+eValSrc :: SrcLoc -> Val -> SrcExp
 eValSrc p v = eVal p SrcTyUnknown v
 
-eUnOp' :: Maybe SourcePos -> GUnOp t -> GExp t () -> GExp t ()
+eUnOp' :: SrcLoc -> GUnOp t -> GExp t () -> GExp t ()
 eUnOp' p op e =
     case (op, unExp e) of
       (Neg, EVal ty (VInt i)) -> eVal eloc ty (VInt (negate i))
@@ -1150,7 +1148,7 @@ eUnOp' p op e =
   where
     eloc = expLoc e
 
-eStruct' :: Maybe SourcePos -> String -> [(String, SrcExp)] -> SrcExp
+eStruct' :: SrcLoc -> String -> [(String, SrcExp)] -> SrcExp
 eStruct' loc "complex" = eStruct loc (SrcTStruct complex32TyName)
 eStruct' loc tn        = eStruct loc (SrcTStruct tn)
 
@@ -1172,12 +1170,12 @@ extractMain acc (d:ds) =
 -- | Local declarations
 --
 -- This is the equivalent of 'CLetDecl' in the comp parser.
-data ELetDecl = ELetDeclERef (Maybe SourcePos) (GName SrcTy) (Maybe SrcExp)
-              | ELetDeclExpr (Maybe SourcePos) (GName SrcTy) SrcExp
+data ELetDecl = ELetDeclERef SrcLoc (GName SrcTy) (Maybe SrcExp)
+              | ELetDeclExpr SrcLoc (GName SrcTy) SrcExp
 
 instance Located ELetDecl where
-    locOf (ELetDeclERef p _ _) = toLoc p
-    locOf (ELetDeclExpr p _ _) = toLoc p
+    locOf (ELetDeclERef p _ _) = locOf p
+    locOf (ELetDeclExpr p _ _) = locOf p
 
 eLetDecl :: ELetDecl -> SrcExp -> SrcExp
 eLetDecl (ELetDeclERef p x e) = eLetRef p x e
@@ -1216,22 +1214,22 @@ desugarStatements (SLetDecl d : ss) =
 -- | Declarations
 --
 -- This is the equivalent of `ELetDecl` and co in the expression parser.
-data CLetDecl = CLetDeclERef     (Maybe SourcePos) SrcName (Maybe SrcExp)
-              | CLetDeclStruct   (Maybe SourcePos) SrcStructDef
-              | CLetDeclExternal (Maybe SourcePos) String [SrcName] SrcTy
-              | CLetDeclFunComp  (Maybe SourcePos) (Maybe (Int, Int)) SrcCName [GName (CallArg SrcTy SrcCTy)] SrcComp
-              | CLetDeclFunExpr  (Maybe SourcePos) SrcName [SrcName] SrcExp
-              | CLetDeclComp     (Maybe SourcePos) (Maybe (Int, Int)) SrcCName SrcComp
-              | CLetDeclExpr     (Maybe SourcePos) SrcName SrcExp
+data CLetDecl = CLetDeclERef     SrcLoc SrcName (Maybe SrcExp)
+              | CLetDeclStruct   SrcLoc SrcStructDef
+              | CLetDeclExternal SrcLoc String [SrcName] SrcTy
+              | CLetDeclFunComp  SrcLoc (Maybe (Int, Int)) SrcCName [GName (CallArg SrcTy SrcCTy)] SrcComp
+              | CLetDeclFunExpr  SrcLoc SrcName [SrcName] SrcExp
+              | CLetDeclComp     SrcLoc (Maybe (Int, Int)) SrcCName SrcComp
+              | CLetDeclExpr     SrcLoc SrcName SrcExp
 
 instance Located CLetDecl where
-    locOf (CLetDeclERef p _ _)        = toLoc p
-    locOf (CLetDeclStruct p _)        = toLoc p
-    locOf (CLetDeclExternal p _ _ _)  = toLoc p
-    locOf (CLetDeclFunComp p _ _ _ _) = toLoc p
-    locOf (CLetDeclFunExpr p _ _ _)   = toLoc p
-    locOf (CLetDeclComp p _ _ _)      = toLoc p
-    locOf (CLetDeclExpr p _ _)        = toLoc p
+    locOf (CLetDeclERef p _ _)        = locOf p
+    locOf (CLetDeclStruct p _)        = locOf p
+    locOf (CLetDeclExternal p _ _ _)  = locOf p
+    locOf (CLetDeclFunComp p _ _ _ _) = locOf p
+    locOf (CLetDeclFunExpr p _ _ _)   = locOf p
+    locOf (CLetDeclComp p _ _ _)      = locOf p
+    locOf (CLetDeclExpr p _ _)        = locOf p
 
 cLetDecl :: CLetDecl -> SrcComp -> SrcComp
 cLetDecl (CLetDeclStruct   p sdef)     = cLetStruct p sdef
@@ -1257,12 +1255,12 @@ cLetDeclName (CLetDeclExpr _ nm _)        = show nm
 --
 -- This is the equivalent to 'Statement' in the expression parser.
 data Command = CDecl CLetDecl
-             | CBind (Maybe SourcePos) (GName SrcTy) SrcComp
+             | CBind SrcLoc (GName SrcTy) SrcComp
              | CComp SrcComp
 
 instance Located Command where
     locOf (CDecl d)     = locOf d
-    locOf (CBind p _ _) = toLoc p
+    locOf (CBind p _ _) = locOf p
     locOf (CComp c)     = locOf c
 
 desugarCommands :: [Command] -> P SrcComp
@@ -1276,7 +1274,7 @@ desugarCommands [CDecl d] =
             ]
 
 desugarCommands [CBind p x _] =
-    failAt (toLoc p) $
+    failAt (locOf p) $
     unlines [ "A block must end on a computation, it cannot end on a bind."
             , "Try removing the '" ++ show x ++ " <-' part perhaps?"
             ]
@@ -1294,28 +1292,6 @@ desugarCommands (CBind p x c1:cs) = do
 desugarCommands (CComp c1:cs) = do
     c2 <- desugarCommands cs
     return $ cSeq (compLoc c2) c1 c2
-
-instance Located (GName t) where
-    locOf (MkName { nameLoc = p }) = toLoc p
-
-instance Located SrcExp where
-    locOf (MkExp { expLoc = p }) = toLoc p
-
-instance Located SrcComp where
-    locOf (MkComp { compLoc = p }) = toLoc p
-
-toSourcePos :: SrcLoc -> Maybe SourcePos
-toSourcePos (SrcLoc NoLoc)     = Nothing
-toSourcePos (SrcLoc (Loc p _)) = Just $ newPos (posFile p) (posLine p) (posCol p)
-
-msp :: SrcLoc -> Maybe SourcePos
-msp = toSourcePos
-
-toLoc :: Maybe SourcePos -> Loc
-toLoc Nothing  = NoLoc
-toLoc (Just p) = Loc p' p'
-  where
-    p' = Pos (sourceName p) (sourceLine p) (sourceColumn p) 0
 
 locate :: Loc -> (SrcLoc -> a) -> L a
 locate loc f = L loc (f (SrcLoc loc))

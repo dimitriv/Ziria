@@ -27,8 +27,7 @@ import PpComp
 import Outputable
 import qualified GenSym as GS
 
-import Text.Parsec.Pos
-
+import Data.Loc
 import qualified Data.Set as S
 import Control.Monad.State
 
@@ -53,7 +52,7 @@ optzr :: Bool -> Zr v -> Zr v
 optzr True  m  = m
 optzr False _m = return (error "Illegal access!") 
 
-embed = interpE Nothing
+embed = interpE noLoc
 
 -- | UD driver
 doVectCompUD :: DynFlags -> CTy -> LComp -> SFUD -> VecM DelayedVectRes
