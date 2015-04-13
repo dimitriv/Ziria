@@ -10,8 +10,6 @@ import Control.DeepSeq.Generics (NFData(..), genericRnf)
 import Data.Loc
 import Data.Map (Map)
 import GHC.Generics (Generic)
-import Text.Parsec.Pos
-import Text.Parsec.Pos
 import Text.Show.Pretty (PrettyVal(..), Value(Con))
 import qualified Data.Map as Map
 
@@ -39,13 +37,6 @@ instance PrettyVal Pos
 instance PrettyVal Loc
 instance PrettyVal SrcLoc
 
-instance PrettyVal SourcePos where
-  prettyVal pos = Con (show 'newPos) [
-                      prettyVal (sourceName pos)
-                    , prettyVal (sourceLine pos)
-                    , prettyVal (sourceColumn pos)
-                    ]
-
 instance (PrettyVal k, PrettyVal a) => PrettyVal (Map k a) where
   prettyVal mp = Con (show 'Map.toList) [prettyVal (Map.toList mp)]
 
@@ -56,12 +47,6 @@ instance (PrettyVal k, PrettyVal a) => PrettyVal (Map k a) where
 instance NFData Pos         where rnf = genericRnf
 instance NFData Loc         where rnf = genericRnf
 instance NFData SrcLoc      where rnf = genericRnf
-
-instance NFData SourcePos where
-  rnf p = let !line = sourceLine p
-              !col  = sourceColumn p
-              !name = force sourceName
-          in ()
 
 {-------------------------------------------------------------------------------
   Error orphans

@@ -151,7 +151,6 @@ import qualified Language.C.Pretty as P
 import qualified Data.Map as M
 import Text.PrettyPrint.HughesPJ hiding ( (<>) )
 import Data.Maybe
-import qualified Text.Parsec as PS
 
 import Rebindables
 import AstExpr

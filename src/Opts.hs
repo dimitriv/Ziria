@@ -33,7 +33,6 @@ import System.Console.GetOpt
 import System.Environment
 import System.Exit (exitFailure)
 import System.IO
-import Text.Parsec
 
 import CgMonad ( cMAX_STACK_ALLOC )
 

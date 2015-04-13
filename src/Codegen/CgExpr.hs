@@ -50,8 +50,6 @@ import Utils
 import CtExpr
 import {-# SOURCE #-} CgCall
 
-import Text.Parsec.Pos ( SourcePos )
-
 import Outputable
 
 import Control.Applicative
