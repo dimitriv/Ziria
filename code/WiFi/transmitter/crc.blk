@@ -82,34 +82,27 @@ var s : arr[1] bit;
 
 
 
-fun update_crc(x:bit, var crc_state:arr[4] bit) {
-  let base = {'1, '0, '1, '1} 
-  if crc_state[0] == '1 then {
-    for i in [0,length(crc_state)] {
-      crc_state[i] := crc_state[i]^base[i];
-    }
-  };
-  crc_state[0,3] := crc_state[1,3];
-  crc_state[3] := x
-}
+fun comp check_crc(crc_state : arr[32] bit) { 
+var ac : arr[4] int8;
+var ax : arr[4] int8;
+var ret : bool;
 
-
-
-fun comp check_crc(crc_state : arr[4] bit) { 
-  var ret : bool;
-  (x:arr[8] bit) <- takes 8;
+  (x:arr[32] bit) <- takes 32;
   do {
-  if (crc_state[0] == x[0] && crc_state[1] == x[1] && crc_state[2] == x[2] && crc_state[3] == x[3]) then {
+    bits_to_int8(ax, x);
+    bits_to_int8(ac, crc_state);
+
+    if (ax[0] == ac[0] && ax[1] == ac[1] && ax[2] == ac[2] && ax[3] == ac[3]) then {
 #ifndef FAST
-     println "CRC passed!";
+      println "CRC passed!";
 #endif
-     ret := true;
-  } else {
+      ret := true;
+    } else {
 #ifndef FAST
-     println "CRC failed!";
+      println "CRC failed!";
 #endif
-     ret := false;
-  }
+      ret := false;
+    }
   }
   return ret;
 }
