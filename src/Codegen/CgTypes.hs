@@ -18,14 +18,15 @@
 -}
 {-# LANGUAGE  QuasiQuotes, GADTs, ScopedTypeVariables, RecordWildCards #-}
 
-module CgTypes ( codeGenTy
+module CgTypes ( bwBitWidth, namedCType
+               , codeGenTy
                , codeGenTy_qual
                , codeGenTy_val
                , codeGenTyAlg
                , codeGenArrTyPtr
                , codeGenArrTyPtrAlg
                , assignByVal
-               , tyBitWidth, tySizeOf_C, tySizeOf, tyBitWidth_ByteAlign
+               , tySizeOf_C, tySizeOf
                , codeGenDeclGroup, codeGenDeclVolGroup, codeGenDeclVolGroup_init
                , codeGenDeclGlobalGroups
                , codeGenDeclDef
@@ -34,7 +35,6 @@ module CgTypes ( codeGenTy
                , initGroupDef
                , codeGenVal
                , codeGenArrVal
-               , namedCType
                , isStructPtrType
                ) where
 
@@ -55,10 +55,22 @@ import Text.PrettyPrint.HughesPJ
 import Data.Maybe
 
 import Outputable
+import Utils
 
+namedCType :: String -> C.Type
+namedCType nm =
+  C.Type
+    (C.DeclSpec [] [] (C.Tnamed (C.Id nm emptyLoc) [] emptyLoc) emptyLoc)
+    (C.DeclRoot emptyLoc)
+    emptyLoc
+  where emptyLoc = Data.Loc.SrcLoc Data.Loc.NoLoc
+
+-- | Unit type 
 unitTy :: String -> C.Type
-unitTy quals = namedCType $ quals ++ " int"
+unitTy quals = namedCType (quals ++ " int") 
 
+-- | Unit value 
+unitVal :: C.Exp
 unitVal = [cexp|0|]
 
 tickTy :: C.Type
@@ -67,25 +79,17 @@ tickTy = [cty|char|]
 procTy :: C.Type
 procTy = [cty|char|]
 
-
-namedCType nm =
-  C.Type
-    (C.DeclSpec [] [] (C.Tnamed (C.Id nm emptyLoc) [] emptyLoc) emptyLoc)
-    (C.DeclRoot emptyLoc)
-    emptyLoc
-  where emptyLoc = Data.Loc.SrcLoc Data.Loc.NoLoc
-
 codeGenTy    = codeGenTy_qual ""
 codeGenTyAlg = codeGenTy_qual "calign"
 
 
 codeGenTy_val :: Ty -> Cg C.Initializer
-codeGenTy_val (TStruct {}) 
-  = do { v <- cg_values [v0] >>= (return . fromJust)
-       ; return [cinit| { $v } |] }
+codeGenTy_val (TStruct {}) = do 
+  v <- cg_values [v0] >>= (return . fromJust)
+  return [cinit| { $v } |]
   where v0 = EVal tint (VInt 0) 
-codeGenTy_val (TArray {})    = return [cinit| NULL |]
-codeGenTy_val _              = return [cinit| 0 |]
+codeGenTy_val (TArray {}) = return [cinit| NULL |]
+codeGenTy_val _           = return [cinit| 0 |]
 
 
 codeGenTy_qual :: String -- Type qualifiers
@@ -98,10 +102,6 @@ codeGenTy_qual quals ty =
     TArray _n ty'  -> codeGenArrTyPtr_qual quals ty
     TDouble        -> namedCType $ quals ++ " double"
     TUnit          -> unitTy quals
-
-    -- TODO: Fail here (don't want to generate code for type vars.)!
-    -- TODO: Make codeGenTy monadic so we can give some context error location
-    TVar _ -> error "CodeGen error: ambiguous intermediate type variable, missing a type annotation?"
 
     -- Must keep in sync with CgLut.typeBitWidth and CgLut.lutField.
 
@@ -122,64 +122,9 @@ codeGenTy_qual quals ty =
     -- Structs
     TStruct namety _sflds -> namedCType $ quals ++ " " ++ namety
 
-    _ -> error $ show (ppr ty) ++ " type not yet supported in codeGenTy"
+    _ -> panic (ppr ty) ++ " type not yet supported in codeGenTy"
 
 
--- The bit width that is required to represent a type NB: the actual
--- storage bitwidth might be larger.
--- Example: (arr [5] bit) is represented as an unsigned char (or maybe
--- as a 4 byte unsigned int). But tyBitWidth would return 5
-tyBitWidth :: Monad m => Ty -> m Int
-tyBitWidth TUnit                 = return 0
-tyBitWidth TBit                  = return 1 -- NB not 8
-tyBitWidth TBool                 = return 1 -- NB not 8
-tyBitWidth (TInt bw)             = bwBitWidth bw
-tyBitWidth TDouble               = return 64
-tyBitWidth (TArray (Literal n) ty)
-  = do { w <- tyBitWidth ty
-       ; return (n*w)
-       }
-tyBitWidth t@(TStruct tn _flds)
-  | tn == complexTyName
-  = return 64
-  | tn == complex8TyName
-  = return 16
-  | tn == complex16TyName
-  = return 32
-  | tn == complex32TyName
-  = return 64
-
--- For the moment let's say that we can't calculate bit width of
--- arbitrary structs.  This means that expressions that manipulated
--- structs will not be lutted.
-tyBitWidth ty
-  -- = error $ "Cannot calculate bit width of type: " ++ show ty
-  = fail $ "Cannot calculate bit width of type " ++ show ty
-
-tyBitWidth_ByteAlign :: Monad m => Ty -> m Int
--- This is a similar version but overshoots so that align to byte boundaries
-tyBitWidth_ByteAlign TUnit                 = return 0
-tyBitWidth_ByteAlign TBit                  = return 8 -- NB not 1
-tyBitWidth_ByteAlign TBool                 = return 8 -- NB not 1
-tyBitWidth_ByteAlign (TInt bw)             = bwBitWidth bw
-tyBitWidth_ByteAlign TDouble               = return 64
-tyBitWidth_ByteAlign (TArray (Literal n) ty)
-  = do { w <- tyBitWidth ty
-       ; return $ (((n*w) + 7) `div` 8) * 8
-       }
-
-tyBitWidth_ByteAlign t@(TStruct tn _flds)
-  | tn == complexTyName
-  = return 64
-  | tn == complex8TyName
-  = return 16
-  | tn == complex16TyName
-  = return 32
-  | tn == complex32TyName
-  = return 64
-
-tyBitWidth_ByteAlign ty
-  = fail $ "Cannot calculate bit width of type " ++ show ty
 
 -- Returns the representation of the type in bytes
 tySizeOf :: Ty -> Cg (Maybe Int)

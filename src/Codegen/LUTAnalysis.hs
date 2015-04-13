@@ -32,6 +32,7 @@ module LUTAnalysis (
  , calcLUTStats
 
    -- | Densely packed input variable width
+ , tyBitWidth, tyBitWidth_ByteAlign
  , inVarsBitWidth
  , inVarBitWidth
  , inArrSliceBitWidth
@@ -64,6 +65,42 @@ import Analysis.DataFlow
 import Analysis.RangeAnal 
 
 import Data.Maybe ( isJust )
+
+
+{------------------------------------------------------------------
+  Bitwidths of various types needed for LUT
+-------------------------------------------------------------------}
+
+tyBitWidth :: Monad m => Ty -> m Int
+-- | This gives the /precise/ bitwidth of a type but the actual bit
+-- width may be bigger, e.g. a Bit is declared as unsigned char, and
+-- a bit array of 6 bits is a 1-element byte array.
+tyBitWidth TUnit                 = return 0
+tyBitWidth TBit                  = return 1 -- NB not 8
+tyBitWidth TBool                 = return 1 -- NB not 8
+tyBitWidth (TInt bw)             = bwBitWidth bw
+tyBitWidth TDouble               = return 64
+tyBitWidth (TArray (Literal n) ty)
+  = do { w <- tyBitWidth ty
+       ; return (n*w)
+       }
+tyBitWidth t@(TStruct tn _flds)
+  | tn == complexTyName   = return 64 -- NB: platform-dependent
+  | tn == complex8TyName  = return 16 -- but ok with GCC and VS in
+  | tn == complex16TyName = return 32 -- Cygwin and in VS
+  | tn == complex32TyName = return 64
+
+-- | For the moment we do not calculate bit width of
+-- | arbitrary structs.  This means that expressions 
+-- | that manipulate structs will not be lutted.
+tyBitWidth ty
+  = fail $ "Cannot calculate bit width of type " ++ show ty
+
+tyBitWidth_ByteAlign :: Monad m => Ty -> m Int
+-- | Similar version but overshoots to align to byte boundaries
+tyBitWidth_ByteAlign ty = do 
+  w <- tyBitWidth ty
+  return $ ((w + 7) `div` 8) * 8
 
 
 {------------------------------------------------------------------
