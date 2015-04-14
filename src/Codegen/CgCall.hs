@@ -74,8 +74,7 @@ codeGenCall_alloc dflags loc retTy nef eargs
              cer     = [cexp|$id:(name retNewN)|]
 
        ; unless (retTy == TUnit) $ 
-           appendDecls =<<
-              codeGenDeclGlobalGroups dflags [retNewN]
+           appendCodeGenDeclGroup "calign" retNewN retTy
 
        ; codegen_call dflags loc retTy cer nef eargs 
        }

@@ -22,7 +22,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# OPTIONS_GHC -Wall #-}
 
-module CgLUT ( codeGenLUTExp, cg_print_vars ) where
+module CgLUT ( codeGenLUTExp, cgPrintVars ) where
 
 import Opts
 import AstExpr
@@ -88,35 +88,13 @@ cMask ce w = assert "cMask" (w <= 32) $ [cexp| $ce & $int:mask|]
 varToBitArrPtr :: EId -> Cg C.Exp
 varToBitArrPtr v = do
   varexp <- lookupVarEnv v
-  is_ptr <- isStructPtrType ty
+  let is_ptr = isStructPtrType ty
   if isArrayTy ty || is_ptr
       then return [cexp| (typename BitArrPtr) $varexp    |]
       else return [cexp| (typename BitArrPtr) (& $varexp)|]
   where ty = nameTyp v
 
 
-cgBreakDown :: Int -> C.Exp -> [(C.Exp, Int)]
--- ^ Breakdown to 64,32,16,8 ... (later we should also add SSE 128/256)
--- ^ Also returns the width of each breakdown
-cgBreakDown m ptr  = go m 0
-  where 
-    go :: Int -> Int -> [(C.Exp, Int)]
-    go n off
-      | n - 128 >= 0
-      = ([cexp| $offptr |], 128) : go (n - 128) (off+16)
-      | n - 64 >= 0
-      = ([cexp| (typename uint64 *) $offptr |], 64) : go (n-64) (off+8)
-      | n - 32 >= 0
-      = ([cexp| (typename uint32 *) $offptr |], 32) : go (n-32) (off+4)
-      | n - 16 >= 0
-      = ([cexp| (typename uint16 *) $offptr |], 16) : go (n-16) (off+2)
-      | n - 8 >= 0
-      = ([cexp| (typename uint8 *) $offptr |], 8) : go (n-16) (off+1)
-      | n > 0 
-      = [ ([cexp| $offptr|], 8) ]
-      | otherwise -- n == 0
-      = []
-      where offptr = [cexp| (typename BitArrPtr)($ptr + $int:off)|]
 
 cgBitArrLUTMask :: C.Exp -- ^ output variable BitArrPtr
                 -> C.Exp -- ^ mask BitArrPtr  (1 means 'set')
@@ -142,22 +120,6 @@ cgBitArrLUTMask vptr mptr lptr width
 
     in sequence_ $ map (appendStmt . mk_stmt) (zip3 vptrs mptrs lptrs)
 
-cgBitArrRead :: C.Exp -> Int -> Int -> C.Exp -> Cg ()
--- ^ Pre: pos and len are multiples of 8; src, tgt are of type BitArrPtr
-cgBitArrRead src_base pos len tgt
-  | len >= 128
-  = appendStmt $ 
-    [cstm| blink_copy((void *) $tgt, $int:byte_len, (void *) $src);|]
-  | otherwise
-  = sequence_ $ map (appendStmt . mk_stmt) (zip src_ptrs tgt_ptrs)
-  where
-    src_ptrs              = cgBreakDown len src
-    tgt_ptrs              = cgBreakDown len tgt
-    mk_stmt ((s,w),(t,_)) = assert "cgBitArrRead" (w < 128) $ 
-                            [cstm| * $t = * $s;|]
-    sidx                  = pos `div` 8
-    src                   = [cexp| & ($src_base[$int:sidx])|]
-    byte_len              = (len+7) `div` 8
 
 
 {---------------------------------------------------------------------------
@@ -389,6 +351,14 @@ codeGenLUTExp dflags stats e mb_resname
       genLUTLookup dflags (expLoc e) stats clut (ctExp e) mb_resname
 
 
+cgPrintVars :: DynFlags -> String 
+            -> Maybe SourcePos -> VarUsePkg -> Cg a -> Cg a
+cgPrintVars dflags dbg_ctx loc vpkg action = do
+  cg_print_vars dflags "Invars" loc (vu_invars vpkg)
+  r <- action
+  cg_print_vars dflags "Outvars" loc (vu_outvars vpkg)
+  return r
+
 cg_print_vars :: DynFlags -> String -> Maybe SourcePos -> [EId] -> Cg ()
 cg_print_vars dflags dbg_ctx loc vs
   | isDynFlagSet dflags Verbose
@@ -441,7 +411,8 @@ genLUTLookup _dflags _loc stats lgi ety mb_resname = do
    result <- case lutResultInOutVars stats of
      Just v  -> lookupVarEnv v
      Nothing -> do
-       let c_ty = codeGenTy ety
+       let c_ty = codeGenTyOcc ety 
+           -- NB: See LUTAnalysis (non-nested arrays in LUT output types)
            cres_well_typed
              | TUnit     <- ety = [cexp|UNIT|]
              | TArray {} <- ety = [cexp|   ($ty:c_ty)   $cres |]
@@ -459,7 +430,7 @@ store_var :: Maybe EId -> Ty -> C.Exp -> Cg C.Exp
 store_var Nothing _ety cres = return cres
 store_var (Just res_var) ety cres = do 
    cres_var <- lookupVarEnv res_var
-   assignByVal ety ety cres_var cres
+   assignByVal ety cres_var cres
    return [cexp|UNIT|]
 
 
@@ -474,7 +445,9 @@ genLUT :: DynFlags
 genLUT dflags stats e = do
    let vupkg = lutVarUsePkg stats
        ety   = ctExp e
-       c_ty  = codeGenTy ety
+       -- NB: ety is a non-nested array (if an array), see LUTAnalysis
+       c_ty  = codeGenTyOcc ety 
+
        loc   = expLoc e
 
    clut <- freshVar "clut"
@@ -502,8 +475,8 @@ genLUT dflags stats e = do
          -- | Debug the LUT
          cgDebugLUTIdxPack [cexp|$id:cidx|] cidx_ty vupkg loc
          -- | Initialize clutentry
-         let bit0 = eVal Nothing TBit (VBit False)
-         codeGenArrVal clutentry clutentry_ty [bit0] >>= appendDecl
+         appendCodeGenDeclGroup clutentry clutentry_ty ZeroOut
+
          -- | Instrument e and compile
          e' <- lutInstrument mask_eids e
          ce <- codeGenExp dflags e'
@@ -512,7 +485,8 @@ genLUT dflags stats e = do
          -- | For debugging let us try to unpack to the outvars
          _ <- unpackOutVars vupkg mask_eids [cexp|$id:clutentry|]
          dbg_clutentry <- freshVar "dbg_lutentry"
-         codeGenArrVal dbg_clutentry clutentry_ty [bit0] >>= appendDecl
+         appendCodeGenDeclGroup dbg_clutentry clutentry_ty ZeroOut
+
          _ <- packOutVars vupkg mask_eids [cexp| $id:dbg_clutentry|]
          appendStmt $
             [cstm| if (0 != memcmp($id:dbg_clutentry,
@@ -531,9 +505,9 @@ genLUT dflags stats e = do
              | TUnit <- ety
              -> return ()
              | TArray {} <- ety
-             -> assignByVal ety ety [cexp| ($ty:c_ty) $clut_fin |] ce
+             -> assignByVal ety [cexp| ($ty:c_ty) $clut_fin |] ce
              | otherwise
-             -> assignByVal ety ety [cexp| *(($ty:c_ty *) $clut_fin)|] ce
+             -> assignByVal ety [cexp| *(($ty:c_ty *) $clut_fin)|] ce
 
    -- | make lut entry be 2-byte aligned
    let lutEntryByteLen 
@@ -588,8 +562,7 @@ genLocalMaskInits _dfs mask_vars action = do
   let new_bind (_x,Nothing) = return Nothing
       new_bind (_x,Just mx) = do
          mcx <- freshVar (name mx)
-         g <- codeGenArrVal mcx (nameTyp mx) [bIT0]
-         appendDecl g
+         appendCodeGenDeclGroup mcx (nameTyp mx) ZeroOut
          return $ Just (mx,[cexp|$id:mcx|])
   var_env <- catMaybes <$> mapM new_bind mask_vars
   extendVarEnv var_env action
@@ -600,7 +573,7 @@ genLocalVarInits :: DynFlags -> [EId] -> Cg a -> Cg a
 genLocalVarInits _dflags variables action = do 
   let new_bind v = do 
          cv <- freshVar (name v); 
-         codeGenDeclGroup cv (nameTyp v) >>= appendDecl
+         appendCodeGenDeclGroup cv (nameTyp v) ZeroOut
          return (v,[cexp|$id:cv|])
   var_env <- mapM new_bind variables
   extendVarEnv var_env action
@@ -625,9 +598,6 @@ cgDebugLUTIdxPack cidx cidx_ty vupkg loc = do
 {---------------------------------------------------------------------------
    Instrument an expression to update the assign-masks
 ---------------------------------------------------------------------------}
-
-bIT0 :: Exp
-bIT0 = eVal Nothing TBit (VBit False)
 
 bIT1 :: Exp
 bIT1 = eVal Nothing TBit (VBit True)

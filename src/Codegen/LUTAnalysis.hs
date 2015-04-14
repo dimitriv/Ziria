@@ -75,15 +75,12 @@ tyBitWidth :: Monad m => Ty -> m Int
 -- | This gives the /precise/ bitwidth of a type but the actual bit
 -- width may be bigger, e.g. a Bit is declared as unsigned char, and
 -- a bit array of 6 bits is a 1-element byte array.
-tyBitWidth TUnit                 = return 0
-tyBitWidth TBit                  = return 1 -- NB not 8
-tyBitWidth TBool                 = return 1 -- NB not 8
-tyBitWidth (TInt bw)             = bwBitWidth bw
-tyBitWidth TDouble               = return 64
-tyBitWidth (TArray (Literal n) ty)
-  = do { w <- tyBitWidth ty
-       ; return (n*w)
-       }
+tyBitWidth TUnit                   = return 0
+tyBitWidth TBit                    = return 1 -- NB not 8
+tyBitWidth TBool                   = return 1 -- NB not 8
+tyBitWidth (TInt bw)               = return $ bwBitWidth bw
+tyBitWidth TDouble                 = return 64
+tyBitWidth (TArray (Literal n) ty) = tyBitWidth ty >>= \w -> return (n*w)
 tyBitWidth t@(TStruct tn _flds)
   | tn == complexTyName   = return 64 -- NB: platform-dependent
   | tn == complex8TyName  = return 16 -- but ok with GCC and VS in
@@ -226,8 +223,18 @@ shouldLUT dflags lut_outbitwidth lut_tablesize e = flip evalLM s0 $ do
                  -- ^ otherwise probably it's not worth it
                , lmOpCount s > mIN_OP_COUNT
                , lut_tablesize <= maxLUTSize dflags
+               , luttable_out_type (ctExp e)
                ]
   where
+    -- | Non-nested arrays in LUT generation.
+    --   There is no fundamental reason for this other than the fact that
+    --   the implementation of LUT is simpler (avoids a complicated cast)
+    --   when unpacking/packing the final result from the LUT.
+    luttable_out_type (TArray _ ty) = non_array ty
+    luttable_out_type _             = True 
+    non_array (TArray {}) = False
+    non_array _           = True
+
     s0 :: LMState
     s0 = LMState { lmHasLoop = False
                  , lmHasCall = False

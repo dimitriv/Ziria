@@ -18,24 +18,47 @@
 -}
 {-# LANGUAGE  QuasiQuotes, GADTs, ScopedTypeVariables, RecordWildCards #-}
 
-module CgTypes ( bwBitWidth, namedCType
-               , codeGenTy
-               , codeGenTy_qual
-               , codeGenTy_val
-               , codeGenTyAlg
-               , codeGenArrTyPtr
-               , codeGenArrTyPtrAlg
-               , assignByVal
-               , tySizeOf_C, tySizeOf
-               , codeGenDeclGroup, codeGenDeclVolGroup, codeGenDeclVolGroup_init
-               , codeGenDeclGlobalGroups
-               , codeGenDeclDef
-               , codeGenDeclGlobalDefs
-               , codeGenFieldDeclGroup
-               , initGroupDef
-               , codeGenVal
-               , codeGenArrVal
+module CgTypes ( bwBitWidth
+               , namedCType, namedCType_
+               , codeGenTyOcc, codeGenTyOcc_
+               , tySizeOf, tySizeOf_C
+
                , isStructPtrType
+
+               , HowToInit ( .. ), isInitWith 
+               , codeGenDeclGroup
+               , appendCodeGenDeclGroup
+               , codeGenDeclVolGroup
+               , codeGenFieldDeclGroup
+               , codeGenDeclDef
+
+               , assignByVal
+               , cgBitArrRead, cgBreakDown
+
+               , cgInitVal
+               , initGroupDef
+               , codeGenVal 
+
+               , cgBitValues
+               , cgNonBitValues
+               
+
+               -- , codeGenTy_qual
+               -- , codeGenTy_DefaultVal
+               -- , codeGenTyAlg
+               -- , codeGenArrTyPtr
+               -- , codeGenArrTyPtrAlg
+               -- , assignByVal
+               -- , tySizeOf_C, tySizeOf
+               -- , codeGenDeclGroup, codeGenDeclVolGroup, codeGenDeclVolGroup_init
+               -- , codeGenDeclGlobalGroups
+               -- , codeGenDeclDef
+               -- , codeGenDeclGlobalDefs
+               -- , initGroupDef
+               -- , codeGenVal
+               -- , codeGenArrVal
+               -- , isStructPtrType
+
                ) where
 
 import Opts
@@ -57,17 +80,70 @@ import Data.Maybe
 import Outputable
 import Utils
 
+
+{------------------------------------------------------------------------
+  Sizes of various types
+------------------------------------------------------------------------}
+
+-- | Get the length of a bitarray in bytes. 
+--   NB: this is coupled to the implementation in csrc/bit.c
+bitArrByteLen :: Int -> Int 
+bitArrByteLen n = (n + 7) `div` 8
+
+bwBitWidth :: BitWidth -> Int
+bwBitWidth BW8           = 8
+bwBitWidth BW16          = 16
+bwBitWidth BW32          = 32
+bwBitWidth BW64          = 64
+bwBitWidth (BWUnknown _) = 32 -- ^ Defaulting to 32
+
+-- | Returns the size of the type in bytes
+tySizeOf :: Ty -> Int
+tySizeOf TUnit     = 1
+tySizeOf TBit      = 1
+tySizeOf TBool     = 1
+tySizeOf (TInt bw) = ((bwBitWidth bw) + 7) `div` 8
+tySizeOf TDouble   = (64 `div` 8)
+tySizeOf (TArray (Literal n) TBit) = bitArrByteLen n
+tySizeOf (TArray (Literal n) ty)   = n * tySizeOf ty
+tySizeOf (TStruct sn flds)         = sum $ map (tySizeOf . snd) flds
+tySizeOf TVoid                     = 0
+tySizeOf other_ty = 
+  panic $ text "tySizeOf: Cannot determine size of: " <+> ppr other_ty
+
+
+tySizeOf_C :: Ty -> C.Exp
+tySizeOf_C (TArray (NVar n) TBit) = [cexp| (($id:n + 7) >> 3) |]
+tySizeOf_C (TArray (NVar n) ty)   = [cexp| $id:n * $exp:(tySizeOf_C ty)|]
+tySizeOf_C ty = [cexp| $int:(tySizeOf ty)|]
+
+{------------------------------------------------------------------------
+  Language-c-quote infrastructure and fixed types
+------------------------------------------------------------------------}
+
 namedCType :: String -> C.Type
 namedCType nm =
   C.Type
-    (C.DeclSpec [] [] (C.Tnamed (C.Id nm emptyLoc) [] emptyLoc) emptyLoc)
-    (C.DeclRoot emptyLoc)
-    emptyLoc
-  where emptyLoc = Data.Loc.SrcLoc Data.Loc.NoLoc
+    (C.DeclSpec [] [] (C.Tnamed (C.Id nm noCLoc) [] noCLoc) noCLoc)
+    (C.DeclRoot noCLoc)
+    noCLoc
 
--- | Unit type 
-unitTy :: String -> C.Type
-unitTy quals = namedCType (quals ++ " int") 
+initGroupDef :: C.InitGroup -> C.Definition
+initGroupDef ig = C.DecDef ig Data.Loc.noLoc
+
+noCLoc :: Data.Loc.SrcLoc
+noCLoc = Data.Loc.SrcLoc Data.Loc.NoLoc
+
+-- | Initializers that consist of just an expression
+exprInit :: C.Exp -> C.Initializer
+exprInit e = C.ExpInitializer e noCLoc
+
+-- | Compound initializers
+compInit :: [C.Initializer] -> C.Initializer
+compInit cis
+  = C.CompoundInitializer (map aux cis) noCLoc
+  where aux i = (Nothing, i)
+
 
 -- | Unit value 
 unitVal :: C.Exp
@@ -79,368 +155,375 @@ tickTy = [cty|char|]
 procTy :: C.Type
 procTy = [cty|char|]
 
-codeGenTy    = codeGenTy_qual ""
-codeGenTyAlg = codeGenTy_qual "calign"
+{------------------------------------------------------------------------
+  Types to C-types
+------------------------------------------------------------------------}
 
+type Quals = String 
 
-codeGenTy_val :: Ty -> Cg C.Initializer
-codeGenTy_val (TStruct {}) = do 
-  v <- cg_values [v0] >>= (return . fromJust)
-  return [cinit| { $v } |]
-  where v0 = EVal tint (VInt 0) 
-codeGenTy_val (TArray {}) = return [cinit| NULL |]
-codeGenTy_val _           = return [cinit| 0 |]
+-- | Unit type 
+unitTy :: Maybe Quals -> C.Type
+unitTy quals = namedCType_ quals "int"
 
+namedCType_ :: Maybe Quals -> String -> C.Type
+namedCType_ Nothing  s = namedCType s
+namedCType_ (Just q) s = namedCType $ q ++ " " ++ s
 
-codeGenTy_qual :: String -- Type qualifiers
-               -> Ty
-               -> C.Type
-codeGenTy_qual quals ty =
+codeGenTyOcc_ :: Maybe Quals -> Ty -> C.Type
+-- ^ Occurrence type 
+codeGenTyOcc_ q ty =
   case ty of
-    TBit           -> namedCType $ quals ++ " Bit"
-    TBool          -> namedCType $ quals ++ " unsigned char"
-    TArray _n ty'  -> codeGenArrTyPtr_qual quals ty
-    TDouble        -> namedCType $ quals ++ " double"
-    TUnit          -> unitTy quals
+    TBit             -> namedCType_ q "Bit"
+    TBool            -> namedCType_ q "unsigned char"
+    TArray _n ty'    -> codeGenArrTyPtrOcc_ q ty
+    TDouble          -> namedCType_ q "double"
+    TUnit            -> unitTy q
+    TInt bw          -> namedCType_ q (cgTIntName bw)
+    TStruct sname _  -> namedCType_ q sname
+ 
+    -- Buffer types. NB: we should never have to generate code for
+    -- those but we do generate dummy signatures (e.g. yld variables)
+    -- for every component so we could choose *any* type (here int)
+    TBuff (ExtBuf _ty) -> [cty|int |]
+    TBuff (IntBuf _ty) -> [cty|int |]
 
-    -- Must keep in sync with CgLut.typeBitWidth and CgLut.lutField.
+    _ -> panic $
+         ppr ty <+> text " type not supported in code generation."
 
-    TInt bw -> namedCType $ quals ++ " " ++ cgTIntName bw
-
-    -- TODO: Why do we ever call codeGenTy
-    -- for these? And why is the ExtBuf giving void?
-    -- Old comment said:
-    -- ``We should never have to generate code for TBuff but this is
-    --   an artifact of the fact that we generate dummy signatures for
-    --   everything.''
-    TBuff (IntBuf (TVar _))
-          -> error "CodeGen error: uninferred intermediate buffer type!"
-    TBuff (IntBuf ty')
-          -> codeGenTy_qual quals ty'
-    TBuff (ExtBuf _ty) -> [cty|void |]
-
-    -- Structs
-    TStruct namety _sflds -> namedCType $ quals ++ " " ++ namety
-
-    _ -> panic (ppr ty) ++ " type not yet supported in codeGenTy"
-
-
-
--- Returns the representation of the type in bytes
-tySizeOf :: Ty -> Cg (Maybe Int)
-tySizeOf TUnit      = return $ Just 1
-tySizeOf TBit       = return $ Just 1
-tySizeOf TBool      = return $ Just 1
-tySizeOf (TInt bw)  = bwBitWidth bw >>= \s -> return $ Just (s `div` 8)
-tySizeOf TDouble    = return $ Just (64 `div` 8)
-tySizeOf (TArray (Literal n) TBit) = return $ Just (getBitArrayByteLength n)
-tySizeOf (TArray (Literal n) ty)
-  = do { m <- tySizeOf ty
-       ; case m of
-           Nothing -> return Nothing
-           Just s -> return (Just (n*s))
-       }
-tySizeOf (TStruct sn _flds)
-  -- Note from DV (13/10/14): We could get it directly from _flds but
-  -- I am keeping the functionality as it was
-  = do { sdef <- lookupTyDefEnv sn
-       ; szs  <- mapM (tySizeOf . snd) (struct_flds sdef)
-       ; return (sequence szs >>= (return . sum)) }
-
-tySizeOf TVoid  = return $ Just 0
-tySizeOf _other = return Nothing
-
-tySizeOfCg :: Ty -> Cg Int
-tySizeOfCg ty = do { mi <- tySizeOf ty
-                   ; case mi of
-                      Nothing ->
-                        fail $ "Can't determine tySizeOf of type: " ++ show ty
-                      Just i -> return i
-                   }
-
-tySizeOf_C :: Ty -> C.Exp
-tySizeOf_C (TArray (Literal n) TBit)
- = [cexp| $int:(getBitArrayByteLength n)|]
-tySizeOf_C (TArray (Literal n) t)
- = [cexp| $int:n * $(tySizeOf_C t) |]
-tySizeOf_C t
- = [cexp| sizeof($ty:(codeGenTy t)) |]
-
-
-bwBitWidth BW8           = return 8
-bwBitWidth BW16          = return 16
-bwBitWidth BW32          = return 32
-bwBitWidth BW64          = return 64
-bwBitWidth (BWUnknown _) = return 32 -- Defaulting!
-
-
-codeGenArrTyPtr :: Ty -> C.Type
-codeGenArrTyPtr = codeGenArrTyPtr_qual ""
-
-codeGenArrTyPtrAlg :: Ty -> C.Type
-codeGenArrTyPtrAlg = codeGenArrTyPtr_qual "calign"
-
-
-codeGenArrTyPtr_qual :: String -- Qualifier
-                     -> Ty     -- An array type
-                     -> C.Type
-codeGenArrTyPtr_qual quals ty
+codeGenArrTyPtrOcc_ :: Maybe Quals -> Ty -> C.Type 
+codeGenArrTyPtrOcc_ q ty
  | TArray (Literal {}) t <- ty = aux t
  | TArray (NVar {})    t <- ty = aux t
  | otherwise
- = error "codeGenArrTyPtr_qual: unexpected non-array type"
- where aux t
-        | TBit <- t
-        = [cty| $ty:(namedCType $ quals ++ " BitArrPtr") |]
-        | otherwise
-        = [cty| $ty:(codeGenTy_qual quals t)* |]
+ = panicStr $ "codeGenArrTyPtrOcc: non array type " ++ show ty
+ where aux TBit = [cty| $ty:(namedCType_ q "BitArrPtr")  |]
+       aux t    = [cty| $ty:(codeGenTyOcc_ q t) * |]
+
+codeGenArrTyPtrOcc :: Ty -> C.Type
+codeGenArrTyPtrOcc t = codeGenArrTyPtrOcc_ Nothing t
+
+codeGenTyOcc :: Ty -> C.Type
+codeGenTyOcc t = codeGenTyOcc_ Nothing t
+
+{------------------------------------------------------------------------
+  When should values of a type declared as pointers? (heap-allocated)
+------------------------------------------------------------------------}
+
+-- | Is this type a pointer type?
+isPtrType :: Ty -> Bool
+isPtrType ty = isArrayTy ty || isStructPtrType ty
+
+-- | Is this type a /struct/ represented by a pointer
+isStructPtrType :: Ty -> Bool
+isStructPtrType ty
+  | isArrayTy ty = False
+  | otherwise    = isLargeTy (tySizeOf ty)
+
+isLargeTy :: Int -> Bool
+-- ^ Determine if this type is large. 
+-- ^ If it's a large type then values 
+-- ^ of this type will be declared as pointers and are heap allocated
+isLargeTy ty_size = ty_size > cMAX_STACK_ALLOC
+
+shouldAllocAsPtr :: Ty -> Bool
+shouldAllocAsPtr (TArray (NVar {}) _) = True
+shouldAllocAsPtr other = isLargeTy (tySizeOf other)
 
 
-codeGenVal :: Val -> Cg C.Exp
+{------------------------------------------------------------------------
+  Value code generation
+------------------------------------------------------------------------}
+
+mIN_INT32 :: Integer
+mIN_INT32 = -2147483648
+mAX_INT32 :: Integer
+mAX_INT32 = 2147483647
+
+codeGenVal :: Val -> C.Exp
+-- ^ Generate code for a value
 codeGenVal v =
   case v of
-    VBit True   -> return [cexp|1|]
-    VBit False  -> return [cexp|0|]
-    VInt i      -> return [cexp|$lint:i|] -- NB: $lint instead of $int to accommodate 64-bit constants
-    VDouble d   -> return [cexp|$double:(toRational d)|]
-    VBool True  -> return [cexp|$uint:(1)|]
-    VBool False -> return [cexp|$uint:(0)|]
-    VString str -> return [cexp|$string:(str)|]
-    VUnit       -> return unitVal
+    VInt i 
+      | i <= mAX_INT32 && mIN_INT32 <= i
+      -> [cexp|$int:i|]
+      | otherwise
+      -> [cexp|$lint:i|]
+    VBit True   -> [cexp| 1                     |]
+    VBit False  -> [cexp| 0                     |]
+    VDouble d   -> [cexp| $double:(toRational d)|]
+    VBool True  -> [cexp| $uint:(1)             |]
+    VBool False -> [cexp| $uint:(0)             |]
+    VString str -> [cexp| $string:(str)         |]
+    VUnit       -> unitVal
 
-------------------------------------------------------------------------------
--- | Arrays related code
-------------------------------------------------------------------------------
--- Note: for SIMD/SSE instructions we need to declare 16-bytes aligned arrays
--- To do that we have special versions of codeGenTy and variants
--- with suffic Alg which appends the alignment keyword in front of decls.
+cgInitVal :: Ty -> C.Initializer
+-- ^ Generate an initial value (all zeros) for declarations
+cgInitVal ty
+  | isPtrType ty = [cinit|NULL|]
+  | otherwise    = go ty
+  where go (TStruct _ [])      = compInit [exprInit [cexp|0|]]
+        go (TStruct _ fld_tys) = compInit (map (go . snd) fld_tys)
+        go (TArray _ ty_base)  = compInit [go ty_base]
+        go _t                  = exprInit [cexp|0|]
+
+{------------------------------------------------------------------------
+  Variable declarations
+------------------------------------------------------------------------}
+
+-- | C-declared variables
+type CVar = String 
+
+-- | When declaring a new variable we can choose how to initialize it
+-- by passing a @HowToInit@ value. @ZeroOut@ zeroes the relevant
+-- memory, whereas @InitWith init@ allows you to pass in a C initializer.
+data HowToInit = ZeroOut | InitWith C.Initializer
+
+isInitWith :: HowToInit -> Bool
+isInitWith (InitWith {}) = True
+isInitWith _ = False
 
 
--- Get the length of a bitarray in bytes.
--- Coupled to the implementation in _csrc/bit.c
-getBitArrayByteLength n = (n + 7) `div` 8
+arrBaseCType :: Maybe Quals -> Ty -> C.Type 
+-- ^ Array base type for declaration
+arrBaseCType q (TArray _ TBit) = namedCType_ q "unsigned char"
+arrBaseCType q (TArray _ tb)   = arrBaseCType q tb
+arrBaseCType q tother          = codeGenTyOcc_ q tother
+
+arrIdxCStack :: Ty -> [Int]
+-- ^ Index stack for declaration
+arrIdxCStack = go
+  where 
+    go (TArray (Literal n) TBit) = [bitArrByteLen n]
+    go (TArray (Literal n) ty)   = n : go ty
+    go _ty                       = []
+
+cgDeclAllocPtr :: Quals -> CVar -> Ty -> Cg (C.InitGroup,[C.Stm])
+-- ^ Declare and heap-allocate (for large types or dynamic arrays)
+cgDeclAllocPtr quals v ty = do 
+  newHeapAlloc
+  heap_ctx <- getHeapContext
+  let ig   = [cdecl| $ty:qty *$id:v = NULL;|]
+      stmt = [cstm| $id:v = ($ty:nonqty *) 
+               wpl_alloca($id:heap_ctx, $exp:(tySizeOf_C ty));|]
+  return (ig,[stmt])
+
+  where qty    = arrBaseCType (Just quals) ty 
+        nonqty = arrBaseCType Nothing ty
 
 
--- Arrays more than 128K wide allocated on the heap
-mAX_STACK_ALLOC = 1024 * 32
 
--- Is this type a *struct* represented by pointer?
-isStructPtrType :: Ty -> Cg Bool
-isStructPtrType ty
-  | isArrayTy ty
-  = return False
+
+cgDeclStatic :: Quals     -- ^ qualifiers
+             -> CVar      -- ^ C variable
+             -> Ty
+             -> HowToInit
+             -> C.InitGroup
+-- ^ Declare a variable of array type  
+cgDeclStatic quals v ty mb_init =
+  case idx_stack of 
+    []            -> [cdecl| $ty:base_ty $id:v = $init:dflt;|]
+    [i]           -> [cdecl| $ty:base_ty $id:v[$int:i] = $init:dflt;|]
+    [i1,i2]       -> [cdecl| $ty:base_ty $id:v[$int:i1][$int:i2] = $init:dflt;|]
+    [i1,i2,i3]    -> [cdecl| $ty:base_ty $id:v[$int:i1][$int:i2][$int:i3] = $init:dflt;|]
+    [i1,i2,i3,i4] -> [cdecl| $ty:base_ty $id:v[$int:i1][$int:i2][$int:i3][$int:i4] = $init:dflt;|]
+    _t -> panicStr "Code generator supports nested arrays of nesting level <= 4"
+  where idx_stack = arrIdxCStack ty
+        base_ty   = arrBaseCType (Just quals) ty
+        dflt      = case mb_init of ZeroOut     -> cgInitVal ty
+                                    InitWith it -> it
+
+codeGenFieldDeclGroup :: FldName -> Ty -> C.FieldGroup
+codeGenFieldDeclGroup v ty = 
+  case idx_stack of 
+    []            -> [csdecl| $ty:base_ty $id:v; |]
+    [i]           -> [csdecl| $ty:base_ty $id:v[$int:i]; |]
+    [i1,i2]       -> [csdecl| $ty:base_ty $id:v[$int:i1][$int:i2]; |]
+    [i1,i2,i3]    -> [csdecl| $ty:base_ty $id:v[$int:i1][$int:i2][$int:i3];|]
+    [i1,i2,i3,i4] -> [csdecl| $ty:base_ty $id:v[$int:i1][$int:i2][$int:i3][$int:i4];|]
+    _t -> panicStr "Code generator supports nested arrays of nesting level <= 4"
+  where idx_stack = arrIdxCStack ty
+        base_ty   = arrBaseCType Nothing ty
+
+codeGenDeclGroup_qual :: Quals -> CVar -> Ty -> HowToInit -> Cg (C.InitGroup, [C.Stm])
+codeGenDeclGroup_qual quals v ty mb_init
+  | shouldAllocAsPtr ty && not (isInitWith mb_init) 
+    -- ^ If the type is big and we do not have a programmer-supplied 
+    --   initializer then we can simply do a heap alllocation
+  = cgDeclAllocPtr quals v ty
+  | otherwise 
+    -- ^ We have given a static initializer or the type is small
+  = return (cgDeclStatic quals v ty mb_init,[])
+
+-- | codeGenDeclGroup wrappers
+codeGenDeclGroup,codeGenDeclVolGroup :: CVar -> Ty -> HowToInit -> Cg (C.InitGroup,[C.Stm])
+codeGenDeclGroup    = codeGenDeclGroup_qual "calign"
+codeGenDeclVolGroup = codeGenDeclGroup_qual "volatile"
+
+-- | Init group to definitions
+codeGenDeclDef :: CVar -> Ty -> HowToInit -> Cg (C.Definition,[C.Stm])
+codeGenDeclDef v ty minit = do
+  (ig,stms) <- codeGenDeclGroup v ty minit
+  return (initGroupDef ig,stms)
+
+
+appendCodeGenDeclGroup :: CVar -> Ty -> HowToInit -> Cg ()
+-- | Append declaration and initialization in the current block
+appendCodeGenDeclGroup x ty minit = do
+  (ig,stms) <- codeGenDeclGroup x ty minit
+  appendDecl ig
+  appendStmts stms
+
+{------------------------------------------------------------------------
+  Assign by value
+------------------------------------------------------------------------}
+
+cgBreakDown :: Int -> C.Exp -> [(C.Exp, Int)]
+-- ^ Breakdown to 64,32,16,8 ... (later we should also add SSE 128/256)
+-- ^ Also returns the width of each breakdown
+cgBreakDown m ptr  = go m 0
+  where 
+    go :: Int -> Int -> [(C.Exp, Int)]
+    go n off
+      | n-128 >= 0 = ([cexp|$offptr |],128): go (n-128) (off+16)
+      | n-64  >= 0 = ([cexp|(typename uint64 *) $offptr|],64):go (n-64) (off+8)
+      | n-32  >= 0 = ([cexp|(typename uint32 *) $offptr|],32):go (n-32) (off+4)
+      | n-16  >= 0 = ([cexp|(typename uint16 *) $offptr|],16):go (n-16) (off+2)
+      | n-8   >= 0 = ([cexp|(typename uint8  *) $offptr|], 8):go (n-16) (off+1)
+      | n > 0      = [([cexp|$offptr|],8)]
+      | otherwise  = []
+      where offptr = [cexp| (typename BitArrPtr)($ptr + $int:off)|]
+
+cgBitArrRead :: C.Exp -> Int -> Int -> C.Exp -> Cg ()
+-- ^ Pre: pos and len are multiples of 8; src, tgt are of type BitArrPtr
+cgBitArrRead src_base pos len tgt
+  | len >= 128 
+  = appendStmt [cstm| blink_copy((void *) $tgt, $int:byte_len, (void *) $src);|]
   | otherwise
-  = tySizeOfCg ty >>= isLargeTy
-
-isLargeTy :: Int -> Cg Bool
-isLargeTy ty_size
-  = do { mAX_STACK_ALLOC <- getMaxStackAlloc
-       ; return (ty_size > mAX_STACK_ALLOC) }
-
-codeGenDeclGroup_qual :: String      -- Type qualifiers
-                      -> String      -- Id
-                      -> Ty          -- Type to be declared with
-                      -> Maybe C.Exp -- Initialization
-                      -> Cg (C.InitGroup, (C.InitGroup, Maybe (C.Stm)))
--- We return two different representations
--- (a) the initgroup
--- (b) just the declaration and in a separate statement the initialization
-codeGenDeclGroup_qual quals v ty vinit
-  = do { alloc_as_ptr <- isStructPtrType ty
-       ; case ty of
-            TArray (Literal n) t
-               -> do { s <- tySizeOfCg ty
-                     ; alloc_as_ptr <- isLargeTy s
-                     ; let vlen       = [cexp|$int:(arr_len t n)|]
-                           tbase      = arr_base t
-                           tdecl_base = aligned_base t
-                     ; arr_decl alloc_as_ptr v vlen tbase tdecl_base
-                     }
-
-            -- dynamic allocation for variable-size arrays
-            TArray (NVar siz_nm) t
-               -> do { let vlen = case t of
-                                    TBit -> [cexp|($id:siz_nm + 7) >> 3|]
-                                    _    -> [cexp|$id:siz_nm|]
-                           tbase = arr_base t
-                           tdecl_base = aligned_base t
-                     ; arr_decl True v vlen tbase tdecl_base
-                     }
-
-            _other
-               | Just val <- vinit
-               -> let ig = [cdecl| $ty:(codeGenTy_qual quals ty) $id:v = $val; |]
-                  in return (ig, (ig, Nothing))
-               | alloc_as_ptr
-               -> let cty = codeGenTy_qual quals ty
-                      cty_plain = codeGenTy_qual "" ty
-                  in do { newHeapAlloc
-                        ; heap_context <- getHeapContext
-                        ; let ig1  = [cdecl| $ty:cty * $id:v =
-                                         ($ty:cty_plain *) wpl_alloca($id:heap_context, sizeof($ty:cty_plain));|]
-                              ig2  = [cdecl| $ty:cty * $id:v;|]
-                        ; let stmt = [cstm| $id:v = ($ty:cty_plain *) wpl_alloca($id:heap_context, sizeof($ty:cty_plain)); |]
-                        ; return (ig1, (ig2, Just stmt))
-                        }
-
-               | otherwise
-               -> let ig = [cdecl| $ty:(codeGenTy_qual quals ty) $id:v;|]
-                  in return (ig, (ig, Nothing))
-        }
-
-  where arr_len TBit n = getBitArrayByteLength n
-        arr_len _    n = n
-        arr_base TBit = [cty| unsigned char |]
-        arr_base t    = codeGenTy_qual "" t
-
-        aligned_base TBit = namedCType $ "calign" ++ " unsigned char"
-        aligned_base t    = codeGenTy_qual "calign" t
-
-        arr_decl alloc_as_ptr v len t decl_t
-          | Just val <- vinit -- NB: "braces" around val as it's a Seq!
-          = let ig = [cdecl| $ty:decl_t $id:v[$len] = {$val}; |]
-            in return (ig, (ig, Nothing))
-          | alloc_as_ptr
-          = do { newHeapAlloc
-               ; heap_context <- getHeapContext
-               ; let ig1  = [cdecl| $ty:decl_t *$id:v =
-                                       ($ty:t *) wpl_alloca($id:heap_context, $len * sizeof($ty:t)); |]
-                     ig2  = [cdecl| $ty:decl_t *$id:v; |]
-                     stmt = [cstm| $id:v =
-                                       ($ty:t *) wpl_alloca($id:heap_context, $len * sizeof($ty:t)); |]
-               ; return (ig1, (ig2, Just stmt))
-               }
-          | otherwise
-          = let ig = [cdecl| $ty:decl_t $id:v[$len]; |]
-            in return (ig, (ig, Nothing))
+  = sequence_ $ map (appendStmt . mk_stmt) (zip src_ptrs tgt_ptrs)
+  where
+    src_ptrs              = cgBreakDown len src
+    tgt_ptrs              = cgBreakDown len tgt
+    mk_stmt ((s,w),(t,_)) = assert "cgBitArrRead" (w < 128) $ 
+                            [cstm| * $t = * $s;|]
+    sidx                  = pos `div` 8
+    src                   = [cexp| & ($src_base[$int:sidx])|]
+    byte_len              = (len+7) `div` 8
 
 
+assignByVal :: Ty -> C.Exp -> C.Exp -> Cg ()
+assignByVal ty@(TArray (Literal n) TBit) ce1 ce2 
+  = cgBitArrRead ce1 0 (((n+7)`div` 8)*8) ce2
 
+assignByVal ty@(TArray (NVar n) TBit) ce1 ce2
+  = appendStmt [cstm|bitArrRead($ce2,0,$id:n,$ce1);|]
 
-codeGenFieldDeclGroup :: String      -- Id
-                      -> Ty          -- Type to be declared with
-                      -> C.FieldGroup
-codeGenFieldDeclGroup v ty =
-  case ty of
-    TArray (Literal n) t -> arr_decl v (arr_siz t n) (arr_base t)
-    TArray (NVar n) t    -> error "codeGenFieldDeclGroup: struct array field with unknown size!?"
-    _other               -> [csdecl| $ty:(codeGenTy ty) $id:v; |]
+assignByVal ty@(TArray (Literal n) t) ce1 ce2 
+  = appendStmt [cstm|blink_copy($ce1, $ce2, $int:(tySizeOf ty));|]
 
-  where arr_siz TBit n = getBitArrayByteLength n
-        arr_siz _    n = n
-        arr_base TBit  = [cty| unsigned char |]
-        arr_base t     = codeGenTy t
-        arr_decl v sz t = [csdecl| $ty:t $id:v[$int:sz]; |]
+assignByVal ty@(TArray (NVar n) t) ce1 ce2
+  = appendStmt [cstm|blink_copy($ce1, $ce2, $id:n * $int:(tySizeOf t));|]
 
-
-
-codeGenDeclGroup :: String -> Ty -> Cg C.InitGroup
-codeGenDeclGroup v ty = return . fst =<< codeGenDeclGroup_qual "calign" v ty Nothing
-
-codeGenDeclVolGroup :: String -> Ty -> Cg C.InitGroup
-codeGenDeclVolGroup v ty
-  = return . fst =<< codeGenDeclGroup_qual "volatile" v ty Nothing
-
-codeGenDeclVolGroup_init :: String -> Ty -> C.Exp -> Cg C.InitGroup
-codeGenDeclVolGroup_init v ty e
-  = return . fst =<< codeGenDeclGroup_qual "volatile" v ty (Just e)
-
-
-
-codeGenDeclDef :: String -> Ty -> Cg C.Definition
-codeGenDeclDef v ty
-  = do { ig <- codeGenDeclGroup v ty
-       ; return $ initGroupDef ig
-       }
-
-initGroupDef :: C.InitGroup -> C.Definition
-initGroupDef ig = C.DecDef ig Data.Loc.noLoc
-
-
-codeGenDeclGlobalGroups :: DynFlags -> [GName Ty] -> Cg [C.InitGroup]
-codeGenDeclGlobalGroups dflags = mapM $ \nm ->
-  codeGenDeclGroup (name nm) (nameTyp nm)
-
-codeGenDeclGlobalDefs :: DynFlags
-                      -> [MutVar]
-                      -> Cg ([C.Definition],[C.Stm])
-codeGenDeclGlobalDefs dflags defs
- = do { defs_inits <- mapM (\MutVar{..} ->
-                      do { let ty = nameTyp mutVar
-                         ; (_,(ig,mstm)) <- codeGenDeclGroup_qual "calign" (name mutVar) ty Nothing
-                         ; let id = C.DecDef ig Data.Loc.noLoc
-                         ; case mstm of Nothing   -> return (id,[])
-                                        Just init -> return (id,[init]) }) defs
-      ; let (defs,inits) = unzip defs_inits
-      ; return (defs, concat inits)
-      }
-
-assignByVal :: Ty -> Ty -> C.Exp -> C.Exp -> Cg ()
-assignByVal ty@(TArray (Literal n) TBit) _ ce1 ce2
-  | n `mod` 8 == 0
-  = if n == 8
-    then appendStmt [cstm| *($ce1) = *($ce2); |]
-    else appendStmt [cstm|blink_copy($ce1,$ce2,$int:(n `div` 8));|]
-  | otherwise
-  = appendStmt [cstm|bitArrRead($ce2,0,$int:n,$ce1);|]
-
-assignByVal ty@(TArray (Literal n) t) _ ce1 ce2 =
-    appendStmt [cstm|blink_copy($ce1, $ce2, $int:n*sizeof($ty:(codeGenTy t)));|]
-
-assignByVal ty@(TArray (NVar n) TBit) _ ce1 ce2
-  =  appendStmt [cstm|bitArrRead($ce2,0,$id:n,$ce1);|]
-
-assignByVal ty@(TArray (NVar n) t) _ ce1 ce2 =
-    appendStmt [cstm|blink_copy($ce1, $ce2,
-                      $id:n * sizeof($ty:(codeGenTy t)));|]
-
-assignByVal TDouble TDouble ce1 ce2 =
-    appendStmt [cstm|$ce1 = $ce2;|]
-
--- Works for structs
-assignByVal t t' ce1 ce2 =
-  do { b <- isStructPtrType t
-     ; if b then
-         -- If represented as pointers then do a memcopy
-         appendStmt [cstm|blink_copy($ce1, $ce2, sizeof($ty:(codeGenTy t)));|]
-         -- Else just do assignment
-       else just_assign ce1 ce2 }
+assignByVal t ce1 ce2 
+  | isStructPtrType t
+  = appendStmt [cstm|blink_copy($ce1, $ce2, $int:(tySizeOf t));|]
+  | otherwise = just_assign ce1 ce2
   where just_assign ce1 ce2
-            -- just an optimization for expensive complex assignments
-          | isComplexTy t && is_c_var ce2
+          | isComplexTy t && is_c_var ce2 
           = do appendStmt [cstm|$ce1.re = $ce2.re;|]
                appendStmt [cstm|$ce1.im = $ce2.im;|]
-
           | otherwise
           = appendStmt [cstm|$ce1 = $ce2;|]
-
+        -- DV: Why?
         is_c_var (C.Var (C.Id {}) _) = True
         is_c_var _                   = False
 
 
--- NB: Only assigns by ref for arrays
-assignByRef :: Ty -> C.Exp -> C.Exp -> C.Stm
-assignByRef ty ce1 ce2 = [cstm| $(ce1) = $(ce2);|]
+{------------------------------------------------------------------------
+  Values and initialization
+------------------------------------------------------------------------}
+
+cgBitValues :: [Val] -> C.Initializer
+cgBitValues = compInit . fromJust . go
+  where 
+    go [] = Nothing
+    go xs = case go (drop 8 xs) of
+              Nothing -> Just [exprInit [cexp| $int:first_num|]]
+              Just bs -> Just $ exprInit [cexp| $int:first_num|] : bs
+      where
+        to_num = foldr action (0::Int)
+        first  = take 8 xs
+        bit0   = VBit False
+        first_num = to_num (first ++ replicate (8 - length first) bit0)
+        action (VBit t) s = if t then s*2 + 1 else s*2
+        action _ _        = error "cgBitValues: not a bit value!"
+
+cgNonBitValues :: [Val] -> C.Initializer
+cgNonBitValues = compInit . go
+  where go []     = panicStr "cgValues: empty"
+        go [x]    = [exprInit (codeGenVal x)]
+        go (x:xs) = exprInit (codeGenVal x) : go xs
+
+expValMbs :: [Exp] -> Maybe [Val]
+expValMbs = mapM expValMb 
+
+expValMb :: Exp -> Maybe Val
+expValMb e = case unExp e of { EVal t v -> return v; _ -> Nothing }
 
 
-codeGenArrVal :: String -> Ty -> [Exp] -> Cg C.InitGroup
-codeGenArrVal name ty@(TArray _ TBit) vals
-  = do { let mvs = cg_bitvalues (map unExp vals)
-       ; return . fst =<< codeGenDeclGroup_qual "" name ty mvs }
-codeGenArrVal name ty@(TArray _ _ty) vals
-  = do { mvs <- cg_values (map unExp vals)
-       ; return . fst =<< codeGenDeclGroup_qual "" name ty mvs }
-codeGenArrVal name _ty vals
-  = fail "codeGenArrVal: non-array type!"
+{- 
+appendDeclArrVal :: CVar -> Ty -> [Exp] -> Cg ()
+-- Pre: all values
+appendDeclArrVal x ty einits = cg_arr_val x ty einits
 
--- Generates a list of vales
-cg_values [] = return Nothing
-cg_values (h:hs)
-  = do { c <- codeGenValue h -- Why is this monadic?
-       ; m_cs <- cg_values hs
-       ; case m_cs of
-           Nothing -> return (Just c)
-           Just cs -> return (Just [cexp|$c, $cs|]) }
+
+codeGenArrVal :: CVar -> Ty -> [Exp] -> Cg (C.InitGroup,[C.Stm])
+codeGenArrVal x ty einits
+  | all is_eval einits
+  = cg_arr_val x ty einits
+  | otherwise
+  = cg_arr_exp x ty einits
+
+cg_arr_val :: CVar -> Ty -> [Exp] -> Cg (C.InitGroup,[C.Stm])
+-- ^ Precondition: all are values
+cg_arr_val name ty@(TArray _ TBit) vals = do 
+  let mvs = cg_bitvalues (map unExp vals)
+  codeGenDeclGroup_qual "" name ty mvs
+cg_arr_val name ty@(TArray _ _ty) vals = do
+  mvs <- cg_values (map unExp vals)
+  codeGenDeclGroup_qual "" name ty mvs
+cg_arr_val name _ty vals = fail "codeGenArrVal: non-array type!"
+
+-- | Return a packed list of bits
+cg_bitvalues [] = Nothing
+cg_bitvalues xs
+  = case cg_bitvalues (drop 8 xs) of
+           Just bs -> Just $ [cexp|$(first_cexp),$(bs)|]
+           Nothing -> Just $ [cexp|$(first_cexp)|]
+  where to_num = foldr action (0::Int)
+        first = take 8 xs
+        first_num = to_num (first ++ replicate (8 - length first) 
+                                               (EVal TBit (VBit False)))
+        first_cexp = [cexp|$int:(first_num) |]
+        action (EVal _ (VBit t)) s = if t then s*2 + 1 else s*2
+        action _ _ = error "cg_bitvalues: non-value bit expresion!" 
+
+-- | Return a list of values (non-bit)
+cg_values [] = Nothing
+cg_values (h:hs) = do
+  let (EVal t v) = unExp h
+       c = codeGenVal t v
+  case cg_values hs of
+    Nothing -> Just c
+    Just cs -> Just [cexp|$c, $cs|]
+
+
+cg_arr_exp :: CVar -> Ty -> [Exp] -> Cg (C.InitGroup,[C.Stm])
+cg_arr_exp x ty es
+  = do 
+
+
+
+
 
 -- Values are Vals and structs of Values
 codeGenValue (EVal _ v)    = codeGenVal v
@@ -454,17 +537,17 @@ codeGenValue _v =
   cgIO $ fail ("codeGenValue, non-value: " ++ show _v)
 
 
-cg_bitvalues [] = Nothing
-cg_bitvalues xs
-  = case cg_bitvalues (drop 8 xs) of
-           Just bs -> Just $ [cexp|$(first_cexp),$(bs)|]
-           Nothing -> Just $ [cexp|$(first_cexp)|]
-  where to_num = foldr action (0::Int)
-        first = take 8 xs
-        first_num = to_num (first ++ replicate (8 - length first) 
-                                               (EVal TBit (VBit False)))
-        first_cexp = [cexp|$int:(first_num) |]
-        action (EVal _ (VBit t)) s = if t then s*2 + 1 else s*2
-        action _ _ = error "cg_bitvalues: encountered non-value bit expresion!" 
+codeGenArrVal :: String -> Ty -> [Exp] -> Cg C.InitGroup
+codeGenArrVal name ty@(TArray _ TBit) vals
+  = do { let mvs = cg_bitvalues (map unExp vals)
+       ; return . fst =<< codeGenDeclGroup_qual "" name ty mvs }
+codeGenArrVal name ty@(TArray _ _ty) vals
+  = do { mvs <- cg_values (map unExp vals)
+       ; return . fst =<< codeGenDeclGroup_qual "" name ty mvs }
+codeGenArrVal name _ty vals
+  = fail "codeGenArrVal: non-array type!"
 
 
+
+
+-}

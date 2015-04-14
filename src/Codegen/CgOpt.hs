@@ -76,20 +76,10 @@ compGenBind :: DynFlags
             -> [GName (CallArg Ty CTy)]
             -> Comp
             -> CompFunGen
-compGenBind dflags f params c1_with_locals args k = do
-    let (locals, c1) = extractCMutVars c1_with_locals
+compGenBind dflags f params c1 args k = do
 
     appName <- nextName $ "__" ++ (name f) ++ "_"
     let appId = appName
-
-    -- The environment of locals
-    let localEnv = [ (mutVar, [cexp|$id:(name nm_fresh)|])
-                   | MutVar{..} <- locals
-                   , let nm_fresh = mutVar { name = appId ++ name mutVar }
-                   ]
-
-    -- A freshened version of locals that uses the new ids!
-    let locals' = map (\mv -> setMutVarName (appId ++ name (mutVar mv)) mv) locals
 
     let (eparams,cparams) = partitionParams params
     let (eargs, cargs)    = partitionCallArgs args
@@ -105,14 +95,9 @@ compGenBind dflags f params c1_with_locals args k = do
 
     pushName appName
 
-    c1info <- extendVarEnv (eparamsEnv ++ localEnv) $ do
-              codeGenDeclGlobalGroups dflags (map mutVar locals') >>= appendDecls
+    c1info <- extendVarEnv eparamsEnv $ do
               codeGenComp dflags new_c1 k
 
-    (local_decls, local_stms) <- inNewBlock_ $
-                                 extendVarEnv (eparamsEnv ++ localEnv) $
-                                 codeGenGlobalInitsOnly dflags locals'
-    appendDecls local_decls
     appendDecls args_decls
 
     return $ c1info { compGenInit = -- Wrong! codeDecls args_decls  `mappend`
@@ -937,7 +922,7 @@ codeGenComp dflags comp k =
         -- error messages about uninitialized intermediate __yv_tmp values.
         -- Example:   do { error "foo" } >>> bar
         let yTy_c = codeGenTyAlg yTy
-        yv_init <- (codeGenTy_val yTy :: Cg C.Initializer)
+        yv_init <- (codeGenTy_DefaultVal yTy :: Cg C.Initializer)
         let foo = yv_init
         let ydecl | (b && not (isArrayTy yTy)) -- Not already a pointer
                   = [cdecl| $ty:yTy_c * $id:new_yhval = NULL; |]

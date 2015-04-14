@@ -55,7 +55,7 @@ import Text.Parsec.Pos ( SourcePos )
 import Outputable
 
 import Control.Applicative
-import Control.Monad (when)
+import Control.Monad ( when, unless )
 import Control.Monad.IO.Class (liftIO)
 import Data.Bits
 import Data.List (elemIndex, foldl', isPrefixOf )
@@ -73,41 +73,41 @@ import Data.Maybe
 import LUTAnalysis
 import Analysis.DataFlow
 
--- TODO: reimport this when permutations are fixed, or maybe we can
--- express the optimized permutation primitive in Blink.
--- import CgPerm
+{------------------------------------------------------------------------
+  Bounds checking
+------------------------------------------------------------------------}
 
 cgBoundsCheck :: DynFlags
-              -> Maybe SourcePos -> Ty -> C.Exp -> LengthInfo -> Cg ()
+              -> Maybe SourcePos 
+              -> Ty 
+              -> C.Exp 
+              -> LengthInfo -> Cg ()
 cgBoundsCheck dflags loc arrty cbase linfo
    | isDynFlagSet dflags BoundsCheck
    , TArray numexpr _ <- arrty
-   = do { is_disabled <- isDisabledBC
-        ; if is_disabled then return ()
-          else let leninfo = case linfo of
-                     LISingleton -> 0
-                     LILength n  -> (n-1)
-                     LIMeta _    -> panicStr "cgBoundsCheck: meta-variable"
-                   spos = case loc of { Nothing -> "No location available"
-                                      ; Just l  -> show l }
-               in
-               do { cnumexpr
-                        <- case numexpr of
-                             Literal m -> return [cexp| $int:m |]
-                             NVar nm -> return [cexp| $id:nm|] 
-                             -- DV: used to be lookupVarEnv nm
-                  ; appendStmt $
-                    [cstm|bounds_check($cnumexpr, 
-                               $cbase + $int:(leninfo),$string:spos);|]
-                  }
-        }
+   = do is_disabled <- isDisabledBC
+        unless is_disabled $
+          appendStmt [cstm|bounds_check(
+                              $(cnumexpr numexpr),
+                              $cbase + $int:(leninfo linfo),
+                              $string:(show loc)); 
+                     |]
    | otherwise = return ()
+   where 
+     leninfo LISingleton  = 0
+     leninfo (LILength n) = n-1
+     leninfo (LIMeta {})  = panicStr "cgBoundsCheck: LIMeta!"
+     cnumexpr (Literal m) = [cexp| $int:m|]
+     cnumexpr (NVar nm)   = [cexp| $id:nm|]
 
+{------------------------------------------------------------------------
+  Unary and binary operators
+------------------------------------------------------------------------}
 
 cgUnOp :: UnOp
-       -> C.Exp -- Inner expression (already compiled)
-       -> Ty    -- Type of ce
-       -> Ty    -- Type of (Unop op ce)
+       -> C.Exp -- ^ Inner expression (already compiled)
+       -> Ty    -- ^ Type of ce
+       -> Ty    -- ^ Type of (Unop op ce)
        -> Cg C.Exp
 cgUnOp Neg     ce _ _  = return [cexp|-$ce|]
 cgUnOp Not     ce _ _  = return [cexp|!$ce|]
@@ -117,32 +117,33 @@ cgUnOp BwNeg   ce te _ -- NB: BwNeg is polymorphic
 
 cgUnOp ALength ce (TArray (Literal l) _t) _ = return [cexp|$int:l|]
 cgUnOp ALength ce (TArray (NVar c) _t)  _   = return [cexp|$id:c|]
-cgUnOp ALength ce _ _ = fail "codeGenExp: Cannot apply length on non-array!"
-cgUnOp NatExp _ _ _   = fail "codeGenExp: NatExp not supported yet."
+cgUnOp ALength ce _ _ = fail "codeGenExp: ALength on non-array!"
+cgUnOp NatExp _ _ _   = fail "codeGenExp: NatExp not supported yet!"
 
 cgUnOp (Cast target_ty) ce src_ty _target_ty
   | target_ty /= _target_ty
-  = fail "codeGenExp: catastrophic bug, type of castee different than cast target type!"
+  = panicStr "cgUnOp: invalid cast!"
   | otherwise
   = case (target_ty, src_ty) of
       (TBit, TInt _)     -> return [cexp|$ce & 1|]
       (TInt _, TBit)     -> return ce
       (TDouble, TInt _)  -> return [cexp|(double) $ce|]
-      (TInt bw, TDouble) -> return [cexp|($ty:(namedCType (cgTIntName bw))) $ce |]
-      (TInt bw, TInt _)  -> return [cexp|($ty:(namedCType (cgTIntName bw))) $ce |]
+      (TInt bw, TDouble) -> return [cexp|($ty:(intty bw) $ce |]
+      (TInt bw, TInt _)  -> return [cexp|($ty:(intty bw) $ce |]
 
-      -- For complex we must emit a proper function, see _csrc/numerics.h
+      -- | For complex types we must emit a proper function,
+      -- defined in csrc/numerics.h
       (TStruct tn _flds, TStruct sn _flds')
          | isComplexTy target_ty && isComplexTy src_ty
          , let castfun = sn ++ "_to_" ++ tn
          -> return [cexp|$id:castfun($ce)|]
-      (_,_) -> fail "codeGenExp: catastrophic bug, invalid cast passed through type checker?"
-
+      (_,_) -> panicStr "cgUnOp: invalid cast!"
+  where intty bw = namedCType (cgTIntName bw) 
 
 cgBinOp :: BinOp
-        -> C.Exp -> Ty   -- ce1 and its type
-        -> C.Exp -> Ty   -- ce2 and its type
-        -> Ty            -- type of (BinOp op ce1 ce2)
+        -> C.Exp -> Ty   -- ^ ce1 and its type
+        -> C.Exp -> Ty   -- ^ ce2 and its type
+        -> Ty            -- ^ type of (BinOp op ce1 ce2)
         -> Cg C.Exp
 cgBinOp op ce1 t@(TStruct cn _flds) ce2 _ _
   | isComplexTy t
@@ -155,33 +156,227 @@ cgBinOp op ce1 t@(TStruct cn _flds) ce2 _ _
       Sub  -> return [cexp|$id:fminus($ce1,$ce2)|]
       Mult -> return [cexp|$id:fmult($ce1,$ce2) |]
       Div  -> return [cexp|$id:fdiv($ce1,$ce2)  |]
-      -- Unsupported operation. NOTE: If we add more operations here,
-      -- we should also add them to the interpreter.
-      _    -> fail "CodeGen error, Operation unsupported on complex numbers."
+
+      -- Unsupported operation. 
+      -- NB: If we add more operations here, we should also add them
+      -- to the interpreter.
+      _    -> fail "CodeGen error, unsupported operation."
 
 cgBinOp op ce1 _ ce2 _ _ =
     case op of
-        Add   -> return [cexp|$ce1 + $ce2|]
-        Sub   -> return [cexp|$ce1 - $ce2|]
-        Mult  -> return [cexp|$ce1 * $ce2|]
-        Div   -> return [cexp|$ce1 / $ce2|]
-        Rem   -> return [cexp|$ce1 % $ce2|]
+        Add   -> return [cexp|$ce1 + $ce2    |]   
+        Sub   -> return [cexp|$ce1 - $ce2    |]
+        Mult  -> return [cexp|$ce1 * $ce2    |]
+        Div   -> return [cexp|$ce1 / $ce2    |]
+        Rem   -> return [cexp|$ce1 % $ce2    |]   
         Expon -> return [cexp|pow($ce1, $ce2)|]
 
         ShL   -> return [cexp|($ce1 << $ce2)|]
         ShR   -> return [cexp|($ce1 >> $ce2)|]
-        BwAnd -> return [cexp|($ce1 & $ce2)|]
-        BwOr  -> return [cexp|($ce1 | $ce2)|]
-        BwXor -> return [cexp|($ce1 ^ $ce2)|]
+        BwAnd -> return [cexp|($ce1 & $ce2) |]
+        BwOr  -> return [cexp|($ce1 | $ce2) |]
+        BwXor -> return [cexp|($ce1 ^ $ce2) |]
 
         Eq    -> return [cexp|$ce1 == $ce2|]
         Neq   -> return [cexp|$ce1 != $ce2|]
-        Lt    -> return [cexp|$ce1 < $ce2|]
-        Gt    -> return [cexp|$ce1 > $ce2|]
+        Lt    -> return [cexp|$ce1 < $ce2 |]
+        Gt    -> return [cexp|$ce1 > $ce2 |]
         Leq   -> return [cexp|$ce1 <= $ce2|]
         Geq   -> return [cexp|$ce1 >= $ce2|]
         And   -> return [cexp|$ce1 && $ce2|]
         Or    -> return [cexp|$ce1 || $ce2|]
+
+
+{------------------------------------------------------------------------
+  Code Generation Proper
+------------------------------------------------------------------------}
+
+-- | Compiled array indices
+data ArrIdx
+  = AIdxCExp C.Exp      -- ^ A C expression index
+  | AIdxStatic Int      -- ^ A statically known index
+  | AIdxMult Int C.Exp  -- ^ A statically known multiple of unknown C.Exp
+  deriving Show
+
+
+
+-- | Given an expression, evaluate it as an LValue
+codeGenLVal :: DynFlags -> Exp -> Cg (LVal ArrIdx)
+codeGenLVal dflags e0 = go (ctExp e0) (unExp e0)
+  where
+    go :: Ty -> Exp0 -> Cg (LVal ArrIdx)
+    
+
+-- | Given a storage LVal and an expression, evaluate it and store result
+codeGenExpStore :: DynFlags -> LVal C.Exp -> Exp -> Cg ()
+codeGenExpStore dflags e0 = go (ctExp e0) (unExp e0)
+  where 
+    go :: Ty -> Exp0 -> Cg ()
+
+
+cgLetBind :: DynFlags -> EId -> Exp -> Cg a -> Cg a
+cgLetBind = error "IMPLEMENTME"
+cgMutBind :: DynFlags -> EId -> Maybe Exp -> Cg a -> Cg a
+cgMutBind = error "IMPLEMENTME"
+
+-- | Return a field expression
+cgProj :: DynFlags -> Ty -> Exp -> FldName -> Cg C.Exp
+cgProj dflags t e f = do
+  let b     = isStructPtrType (ctExp e) -- ^ struct type
+      bproj = isStructPtrType t         -- ^ field type
+  cd <- codeGenExpAlloc dflags e
+  return $
+    if b then
+        if not bproj || isArrayTy t
+        then [cexp| $cd->$id:f |] else [cexp| &($cd->$id:f) |]
+    else
+        if not bproj || isArrayTy t
+        then [cexp| $cd.$id:f |] else [cexp| &($cd.$id:f) |]
+
+cgIf_ :: DynFlags -> C.Exp -> Cg () -> Cg () -> Cg ()
+cgIf_ dflags ccond act1 act2 = if ccond then act1 else act2
+
+cgIf :: DynFlags -> C.Exp -> Cg C.Exp -> Cg C.Exp -> Cg C.Exp
+cgIf dflags ccond act1 act2 = do 
+   condvar <- genSym "__c"
+   appendDecl [cdecl| $ty:int $id:condvar;|]
+   appendStmt [cstm|  $id:condvar = ccond;|]
+
+   (e2_decls, e2_stmts, ce2) <- inNewBlock act1
+   (e3_decls, e3_stmts, ce3) <- inNewBlock act2
+
+   appendDecls e2_decls
+   appendDecls e3_decls
+
+   appendStmt [cstm|if ($id:condvar) {
+                      $stms:e2_stmts
+                    } else {
+                      $stms:e3_stmts
+                    } |]
+   return [cexp| $id:condvar?$ce2:$ce3|]
+
+
+data CVal = CRVal C.Exp | CLVal (LVal ArrIdx)
+
+lValToRVal :: LVal ArrIdx -> Cg C.Exp
+lValToRVal = ... 
+
+
+codeGenExp :: DynFlags -> Exp -> Cg CVal
+codeGenExp 
+
+
+codeGenExpAlloc :: DynFlags -> Exp -> Cg CVal
+
+
+
+
+-- | Given an expression, evaluate it, perhaps allocating some space
+codeGenExpAlloc :: DynFlags -> Exp -> Cg C.Exp
+codeGenExpAlloc dflags e0 = go (ctExp e0) (unExp e0)
+  where 
+    go :: Ty -> Exp0 -> Cg C.Exp
+    go t (EVal _ v) = codeGenVal v
+    go t (EVar x)   = lookupVarEnv x
+    go t (EUnOp op e) = do
+        ce <- codeGenExpAlloc dflags e
+        cgUnOp op ce (ctExp e) (ctExp e0)
+    go t (EBinOp op e1 e2) = do
+        ce1 <- codeGenExpAlloc dflags e1
+        ce2 <- codeGenExpAlloc dflags e2
+        cgBinOp op ce1 (ctExp e1) ce2 (ctExp e2) (ctExp e0)
+
+    go t (EValArr elems)    = cgValArrAlloc dflags t elems
+    go t (EStruct tn tfs)   = cgValStructAlloc dflags t tn tfs
+    go t (EProj e f)        = cgProj dflags t e f
+    go t (EArrRead e1 e2 l) = cgArrReadAlloc dflags e1 e2 l
+
+    go t (EAssign elhs erhs) = do 
+      lval <- codeGenLVal dflags elhs
+      codeGenExpStore dflags lval erhs
+      return [cexp|UNIT|]
+    go t (EArrWrite e1 e2 l e3) = go t (EAssign (EArrRead e1 e2 l) e3)
+    go t (ELet x _fi e1 e2)
+       = cgLetBind dflags x e1 (codeGenExpAlloc dflags e2)
+    go t (ELetRef x mb_e1 e2)
+       = cgMutBind dflags x mb_e1 (codeGenExpAlloc dflags e2)
+    go t (ESeq e1 e2) = do
+        _ce1 <- codeGenExpAlloc dflags e1
+        codeGenExpAlloc dflags e2
+    go t (EIf e1 e2 e3) = do
+       ce1 <- codeGenExpAlloc dflags e1
+       cgIf ce1 (codeGenExpAlloc dflags e2) (codeGenExpAlloc dflags e3)
+    go t (EPrint nl e1s) =
+        printExps nl dflags e1s >> return [cexp|UNIT|]
+    go t (EError ty str) = do
+        appendStmt [cstm|printf("RUNTIME ERROR: %s\n", $str);|]
+        appendStmt [cstm|exit(1);|]
+        -- We allocate a new variable of the appropriate type just
+        -- because error is polymorphic and this is a cheap way to 
+        -- return "the right type"
+        x <- genSym "__err"
+        appendCodeGenDeclGroup x ty ZeroOut
+        return [cexp|$id:x|]
+    
+    go t (ELUT r e1) 
+       | isDynFlagSet dflags NoLUT 
+       = codeGenExpAlloc dflags e1
+       | isDynFlagSet dflags MockLUT
+       = cgPrintVars dflags loc (lutVarUsePkg r) $
+         codeGenExpAlloc dflags e1
+       | otherwise
+       = cgPrintVars dflags loc (lutVarUsePkg r) $
+         codeGenLUTExp dflags r e1 Nothing
+
+    go t (EWhile econd ebody) = do
+        (init_decls,init_stms,cecond) 
+           <- inNewBlock (codeGenExpAlloc dflags econd)
+        (body_decls,body_stms,cebody) 
+           <- inNewBlock (codeGenExpAlloc dflags ebody)
+
+        appendDecls init_decls
+        appendDecls body_decls
+        appendStmts init_stms
+
+        appendStmt [cstm|while ($cecond) {
+                           $stms:body_stms
+                           $stms:init_stms
+                    }|]
+        return [cexp|UNIT|]
+
+    go t (EFor _ui k estart elen ebody) = do
+
+        k_new <- freshName (name k) (ctExp estart) Imm
+
+        (init_decls, init_stms, (ceStart, ceLen)) <- inNewBlock $ do
+            ceStart <- codeGenExp dflags estart
+            ceLen   <- codeGenExp dflags elen
+            return (ceStart, ceLen)
+
+        (body_decls, body_stms, cebody) <- inNewBlock $
+            extendVarEnv [(k, [cexp|$id:(name k_new)|])] $
+            codeGenExpAlloc dflags ebody
+
+        appendDecls init_decls
+        appendDecls body_decls
+        appendStmts init_stms
+        let idx_ty = codeGenTyOcc (ctExp estart)
+        appendStmt [cstm|for ($ty:(idx_ty) $id:(name k_new) = $ceStart; 
+                              $id:(name k_new) < ($ceStart + $ceLen); 
+                              $id:(name k_new)++) {
+                           $stms:init_stms
+                           $stms:body_stms
+                         }|]
+        return [cexp|UNIT|]
+
+    go t ce@(ECall nef eargs) =
+       codeGenCallAlloc dflags (expLoc e0) t nef eargs
+
+
+
+
+
+
 
 
 codeGenExpAndStore :: DynFlags
@@ -198,6 +393,7 @@ codeGenExpAndStore dflags (ty1,ce1) e2
        ; assignByVal ty1 (ctExp e2) ce1 ce2
        ; return [cexp|UNIT|]
        }
+
 
 
 codeGenExp :: DynFlags

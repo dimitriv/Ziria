@@ -36,6 +36,7 @@ import System.IO
 import Text.Parsec
 
 import CgMonad ( cMAX_STACK_ALLOC )
+import System.IO.Unsafe ( unsafePerformIO )
 
 data DynFlag =
     InputFile String
@@ -151,47 +152,47 @@ options =
      , Option ['n']     ["name"]        (ReqArg Name  "NAME")                 "go function name NAME"
 
      -- Boolean flags
-     , Option ['d']     ["debug"]               (NoArg Debug)         "debug"
-     , Option []        ["debug-fold"]          (NoArg DebugFold)     "debug-fold"
-     , Option ['x']     ["optimize"]            (NoArg Opt)           "optimize"
-     , Option ['v']     ["verbose"]             (NoArg Verbose)       "verbose"
-     , Option ['a']     ["bounds-check"]        (NoArg BoundsCheck)   "bounds check"
-     , Option []        ["stdout-dump"]         (NoArg StdoutDump)    "dump to stdout instead of files"
-     , Option []        ["ddump-vect"]          (NoArg DumpVect)      "dump vectorization output"
-     , Option []        ["ddump-types"]         (NoArg DumpTypes)     "dump a typechecked version of program"
-     , Option []        ["ddump-vect-types"]    (NoArg DumpVectTypes) "dump typechecked vectorized program"
-     , Option []        ["ddump-ast"]           (NoArg DumpAst)       "dump the parsed AST"
-     , Option []        ["ddump-ast-pretty"]    (NoArg DumpAstPretty) "dump the parsed AST (pretty-printed)"
-     , Option []        ["vectorize"]           (NoArg Vectorize)     "vectorize program"
-     , Option []        ["autolut"]             (NoArg AutoLUT)       "automatically convert function to use LUTs"
-     , Option []        ["pipeline"]            (NoArg Pipeline)      "pipeline standalone computations"
+     , Option ['d'] ["debug"]            (NoArg Debug)         "debug"
+     , Option []    ["debug-fold"]       (NoArg DebugFold)     "debug-fold"
+     , Option ['x'] ["optimize"]         (NoArg Opt)           "optimize"
+     , Option ['v'] ["verbose"]          (NoArg Verbose)       "verbose"
+     , Option ['a'] ["bounds-check"]     (NoArg BoundsCheck)   "bounds check"
+     , Option []    ["stdout-dump"]      (NoArg StdoutDump)    "dump to stdout instead of files"
+     , Option []    ["ddump-vect"]       (NoArg DumpVect)      "dump vectorization output"
+     , Option []    ["ddump-types"]      (NoArg DumpTypes)     "dump a typechecked version of program"
+     , Option []    ["ddump-vect-types"] (NoArg DumpVectTypes) "dump typechecked vectorized program"
+     , Option []    ["ddump-ast"]        (NoArg DumpAst)       "dump the parsed AST"
+     , Option []    ["ddump-ast-pretty"] (NoArg DumpAstPretty) "dump the parsed AST (pretty-printed)"
+     , Option []    ["vectorize"]        (NoArg Vectorize)     "vectorize program"
+     , Option []    ["autolut"]          (NoArg AutoLUT)       "automatically convert function to use LUTs"
+     , Option []    ["pipeline"]         (NoArg Pipeline)      "pipeline standalone computations"
 
-     , Option []        ["no-lut-hashing"]      (NoArg NoLUTHashing)     "do not hash lut generation"
+     , Option []    ["no-lut-hashing"]   (NoArg NoLUTHashing)  "do not hash lut generation"
 
-     , Option []        ["dummy-thread"]        (NoArg DummyThread)   "generate dummy thread when pipelining"
-     , Option []        ["ddump-to-file"]       (NoArg DumpToFile)    "dump to a file"
-     , Option []        ["ddump-fold"]          (NoArg DumpFold)      "dump results of folding"
-     , Option []        ["ddump-inline"]        (NoArg DumpInline)    "dump results of inlining"
-     , Option []        ["ddump-pipeline"]      (NoArg DumpPipeline)  "dump results of pipelining"
-     , Option []        ["ddump-lut"]           (NoArg DumpLUT)       "dump results of LUTting"
-     , Option []        ["ddump-autolut"]       (NoArg DumpAutoLUT)   "dump results of auto-LUT"
-     , Option []        ["ddump-range"]         (NoArg DumpRange)     "dump results of range analysis"
+     , Option []    ["dummy-thread"]     (NoArg DummyThread)   "generate dummy thread when pipelining"
+     , Option []    ["ddump-to-file"]    (NoArg DumpToFile)    "dump to a file"
+     , Option []    ["ddump-fold"]       (NoArg DumpFold)      "dump results of folding"
+     , Option []    ["ddump-inline"]     (NoArg DumpInline)    "dump results of inlining"
+     , Option []    ["ddump-pipeline"]   (NoArg DumpPipeline)  "dump results of pipelining"
+     , Option []    ["ddump-lut"]        (NoArg DumpLUT)       "dump results of LUTting"
+     , Option []    ["ddump-autolut"]    (NoArg DumpAutoLUT)   "dump results of auto-LUT"
+     , Option []    ["ddump-range"]      (NoArg DumpRange)     "dump results of range analysis"
 
 
-     , Option []        ["no-exp-fold"]         (NoArg NoExpFold)     "do not fold/inline expressions"
-     , Option []        ["no-static-eval"]      (NoArg NoStaticEval)  "do not statically evaluate expressions"
+     , Option []    ["no-exp-fold"]      (NoArg NoExpFold)     "do not fold expressions"
+     , Option []    ["no-static-eval"]   (NoArg NoStaticEval)  "do not statically evaluate expressions"
 
-     , Option []        ["no-fold"]             (NoArg NoFold)        "do not fold/inline computations and expressions"
-     , Option []        ["no-lut"]              (NoArg NoLUT)         "do not construct LUTs"
-     , Option []        ["no-elim-mit"]         (NoArg NoElimMit)     "do not optimize away mitigators"
+     , Option []    ["no-fold"]          (NoArg NoFold)        "do not fold computations and expressions"
+     , Option []    ["no-lut"]           (NoArg NoLUT)         "do not construct LUTs"
+     , Option []    ["no-elim-mit"]      (NoArg NoElimMit)     "do not optimize away mitigators"
 
-     , Option []        ["mock-lut"]            (NoArg MockLUT)       "debugging help for LUTS (internal only)"
+     , Option []    ["mock-lut"]         (NoArg MockLUT)       "debugging help for LUTS (internal only)"
 
-     , Option []        ["max-lut"]             (ReqArg parseMaxLUTOpt "SIZE")    "max lut size"
-     , Option []        ["timeout"]             (ReqArg parseTimeout   "TIME")    "timeout (seconds)"
+     , Option []    ["max-lut"]          (ReqArg parseMaxLUTOpt "SIZE")    "max lut size"
+     , Option []    ["timeout"]          (ReqArg parseTimeout   "TIME")    "timeout (seconds)"
 
-     , Option []        ["stack-threshold"]     (ReqArg parseStkThres  "SIZE")    "stack allocation threshold"
-     , Option []        ["affinity-mask"]       (OptArg parseAffinityMask "MASK") "affinity mask"
+     , Option []    ["stack-threshold"]  (ReqArg parseStkThres  "SIZE")    "stack allocation threshold"
+     , Option []    ["affinity-mask"]    (OptArg parseAffinityMask "MASK") "affinity mask"
 
      ]
 

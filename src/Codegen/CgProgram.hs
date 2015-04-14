@@ -80,21 +80,6 @@ codeGenContexts
                 ]
        }
 
-codeGenGlobals :: DynFlags
-               -> [MutVar]
-               -> Ty -- input type  (must be ext buffer!)
-               -> Ty -- output type (must be ext buffer!)
-               -> Cg [C.Stm]
--- Returns initialization statements
-codeGenGlobals dflags globals inty outty
- = do { ctx_decls <- codeGenContexts
-      ; appendTopDecls ctx_decls
-      ; (defs, initstms) <- codeGenDeclGlobalDefs dflags globals
-      ; appendTopDefs defs
-      ; (decls, stms) <- inNewBlock_ $ codeGenGlobalInitsOnly dflags globals
-      ; appendTopDecls decls
-      ; return (initstms ++ stms) }
-
 codeGenWPLGlobalInit :: [C.Stm] -> String -> Cg ()
 codeGenWPLGlobalInit stms mfreshId
   = do { heap_context  <- getHeapContext
@@ -160,41 +145,37 @@ codeGenProgram :: DynFlags                -- Flags
                -> [Ty]                    -- Buftys (Between threads)
                -> (Ty,Ty)                 -- Main input and output type
                -> Cg ()
-codeGenProgram dflags shared_ctxt_with_globals
+codeGenProgram dflags shared_ctxt
                tid_cs bufTys (in_ty,yld_ty)
   = withModuleName module_name $
-    do { let (globals, shared_ctxt) = extractCtxtMutVars shared_ctxt_with_globals
-       ; initstms <- codeGenGlobals dflags globals in_ty yld_ty
-       ; extendVarEnv [(nm,[cexp|$id:(name nm)|]) | MutVar nm _ _ _ <- globals] $
-         do { (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
-                do { forM tid_cs $ \(tid,c) -> codeGenThread dflags tid c
-                   ; if pipeline_flag then
-                       do { -- Just to make the SORA code happy we need
-                            -- to implement a dummy wpl_go
-                            -- In reality the set_up_threads() function uses
-                            -- thread0,thread1,...
-                          ; let wpl_go_dummy_def
-                                   = [cedecl| int wpl_go() { exit (-1); } |]
-                          ; appendTopDefs [wpl_go_dummy_def]
+    do { (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
+           do { forM tid_cs $ \(tid,c) -> codeGenThread dflags tid c
+              ; if pipeline_flag then
+                  do { -- Just to make the SORA code happy we need
+                       -- to implement a dummy wpl_go
+                       -- In reality the set_up_threads() function uses
+                       -- thread0,thread1,...
+                     ; let wpl_go_dummy_def
+                              = [cedecl| int wpl_go() { exit (-1); } |]
+                     ; appendTopDefs [wpl_go_dummy_def]
 
-                            -- Emit the appropriate wpl_set_up_threads()
-                            -- definition for SORA code to work
-                          ; appendTopDefs $
-                            ST.thread_setup affinity_mask module_name bufTys tids
-                          }
-                     else
-                        -- In this case we know that wpl_go /is/ going to be
-                        -- the main function
-                        appendTopDefs $ ST.thread_setup_shim module_name
-                   }
-               -- Emit buf init and fins (once all C types are defined)
-             ; cgExtBufInitsAndFins (in_ty,yld_ty) (getName dflags)
-               -- Finally emit wpl_global_init()
-             ; lut_init_stms <- getLUTHashes >>=
-                                   (return . map (lgi_lut_gen . snd))
-             ; codeGenWPLGlobalInit (lut_init_stms ++ initstms ++ moreinitstms) module_name
-             }
-        }
+                       -- Emit the appropriate wpl_set_up_threads()
+                       -- definition for SORA code to work
+                     ; appendTopDefs $
+                       ST.thread_setup affinity_mask module_name bufTys tids
+                     }
+                else
+                   -- In this case we know that wpl_go /is/ going to be
+                   -- the main function
+                   appendTopDefs $ ST.thread_setup_shim module_name
+              }
+          -- Emit buf init and fins (once all C types are defined)
+       ; cgExtBufInitsAndFins (in_ty,yld_ty) (getName dflags)
+          -- Finally emit wpl_global_init()
+       ; lut_init_stms <- getLUTHashes >>=
+                              (return . map (lgi_lut_gen . snd))
+       ; codeGenWPLGlobalInit (lut_init_stms ++ initstms ++ moreinitstms) module_name
+       }
 
   where
     tids            = map fst tid_cs
