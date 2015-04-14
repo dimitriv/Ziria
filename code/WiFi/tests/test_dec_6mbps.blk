@@ -20,19 +20,7 @@
 
 #include <bits.blk>
 #include "../receiver/receiver.blk"
-#include "../transmitter/transmitter.blk"
 
-
-fun comp encdec_atten(c:int16) {
-  repeat seq {
-    (x:complex16) <-take;
-    let cre = x.re in 
-    let cim = x.im in 
-    let dre = cre/c in 
-    let dim = cim/c in 
-    emit complex16{re=dre;im=dim}
-  }
-}
 
 
 fun comp dummy() {
@@ -42,29 +30,9 @@ fun comp dummy() {
   }
 } 
 
-fun comp convert_to_bits() {
-var ai : arr[1] int8;
-var ab : arr[8] bit;
-
-  repeat {
-    x<-take;
-    do{
-      ai[0] := x;
-      int8_to_bits(ab, ai);
-    }
-    emits ab;
-  }
-}
-
 
 -- Test the entire TX/RX at the bit level
-let comp main = read[int8] >>> convert_to_bits() 
-          >>> { transform_w_header()
-                ; dummy()                   -- This is here just to make it a computer
-              }
-          >>> encdec_atten(16) 
-          >>> {(t:bool) <- receiveBits() ; return ()}
-          >>> write
+let comp main = read >>> {(t:bool) <- receiveBits() ; return ()} >>> write
 
 
 

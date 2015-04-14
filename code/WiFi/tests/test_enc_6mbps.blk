@@ -19,7 +19,6 @@
 --
 
 #include <bits.blk>
-#include "../receiver/receiver.blk"
 #include "../transmitter/transmitter.blk"
 
 
@@ -63,9 +62,6 @@ let comp main = read[int8] >>> convert_to_bits()
                 ; dummy()                   -- This is here just to make it a computer
               }
           >>> encdec_atten(16) 
-          >>> {(t:bool) <- receiveBits() ; return ()}
           >>> write
-
-
 
 
