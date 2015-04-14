@@ -29,15 +29,6 @@
 #include "../transmitter.blk"
 
 
-let h = HeaderInfo{coding=CR_34; modulation=M_16QAM; len=100};
-
-fun comp scale() {
-  repeat {
-    (x:complex16)<-take;
-    emit complex16{re=x.re/bpsk_mod_11a; im=x.im/bpsk_mod_11a};
-  }
-}
-
 fun comp convert_to_bits() {
 var ai : arr[1] int8;
 var ab : arr[8] bit;
