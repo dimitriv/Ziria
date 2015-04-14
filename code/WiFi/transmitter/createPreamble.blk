@@ -25,9 +25,20 @@ let sts_mod = int16(double(bpsk_mod_11a) * 1.472)
 let lts_mod = bpsk_mod_11a 
 
 
+#ifdef SHORT_FFT
+  -- This is used to create standard output, to be verified against specs
+  #define FFT_SIZE        64
+  #define CP_SIZE         16
+#else
+  -- This is used to create oversampled output, to be transmitted at 40 MHz
+  #define FFT_SIZE        128
+  #define CP_SIZE         32
+#endif
+
+
 fun createSTSinTime() {
-  var sts : arr[128] complex16;
-  var sts_time : arr[320] complex16;
+  var sts : arr[FFT_SIZE] complex16;
+  var sts_time : arr[2*(FFT_SIZE+CP_SIZE)] complex16;
 
   -- Reset everything - otherwise we might have an ambiguous preamble
   zero_complex16(sts);
@@ -42,24 +53,24 @@ fun createSTSinTime() {
   sts[20]  := complex16{re=sts_mod; im=sts_mod};
   sts[24]  := complex16{re=sts_mod; im=sts_mod};
 
-  sts[104] := complex16{re=sts_mod; im=sts_mod};
-  sts[108] := complex16{re=-sts_mod; im=-sts_mod};
-  sts[112] := complex16{re=sts_mod; im=sts_mod};
-  sts[116] := complex16{re=-sts_mod; im=-sts_mod};
-  sts[120] := complex16{re=-sts_mod; im=-sts_mod};
-  sts[124] := complex16{re=sts_mod; im=sts_mod};
+  sts[FFT_SIZE-32+8]  := complex16{re=sts_mod; im=sts_mod};
+  sts[FFT_SIZE-32+12] := complex16{re=-sts_mod; im=-sts_mod};
+  sts[FFT_SIZE-32+16] := complex16{re=sts_mod; im=sts_mod};
+  sts[FFT_SIZE-32+20] := complex16{re=-sts_mod; im=-sts_mod};
+  sts[FFT_SIZE-32+24] := complex16{re=-sts_mod; im=-sts_mod};
+  sts[FFT_SIZE-32+28] := complex16{re=sts_mod; im=sts_mod};
 
-  sts_time[0, 128] := sora_ifft(sts);
-  sts_time[128,128] := sts_time[0,128];
-  sts_time[256,64] := sts_time[0,64];
+  sts_time[0,FFT_SIZE] := sora_ifft(sts);
+  sts_time[FFT_SIZE,FFT_SIZE] := sts_time[0,FFT_SIZE];
+  sts_time[2*FFT_SIZE,2*CP_SIZE] := sts_time[0,2*CP_SIZE];
 
   return sts_time;
 } 
 
 
 fun createLTSinTime() {
-  var lts : arr[128] complex16;
-  var lts_time : arr[320] complex16;
+  var lts : arr[FFT_SIZE] complex16;
+  var lts_time : arr[2*(FFT_SIZE+CP_SIZE)] complex16;
   var LTS_Positive_table : arr [64] int16 := {
       0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 
       1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 
@@ -85,15 +96,15 @@ fun createLTSinTime() {
   -- (i=64-26; i<64; i++ )
   for i in [(64-26),26] {
      if (LTS_Positive_table[i] > 0) then {
-        lts[i+64] := complex16{re=lts_mod;im=0};
+        lts[i+FFT_SIZE-64] := complex16{re=lts_mod;im=0};
      } else {
-        lts[i+64] := complex16{re=-lts_mod;im=0};
+        lts[i+FFT_SIZE-64] := complex16{re=-lts_mod;im=0};
      }
   }
 
-  lts_time[64,128] := sora_ifft(lts);
-  lts_time[64+128,128] := lts_time[64,128];
-  lts_time[0,64] := lts_time[256,64];
+  lts_time[2*CP_SIZE,FFT_SIZE] := sora_ifft(lts);
+  lts_time[2*CP_SIZE+FFT_SIZE,FFT_SIZE] := lts_time[2*CP_SIZE,FFT_SIZE];
+  lts_time[0,2*CP_SIZE] := lts_time[2*FFT_SIZE,2*CP_SIZE];
 
   return lts_time;
 }

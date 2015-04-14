@@ -22,6 +22,9 @@
 
 #include <bits.blk>
 #include "../parsePLCPHeader.blk"
+#include "../scramble.blk"
+#include "../encoding.blk"
+#include "../interleaving.blk"
 #include "../crc.blk"
 
 let h = HeaderInfo{coding=CR_34; modulation=M_16QAM; len=100};
@@ -50,7 +53,7 @@ var ab : arr[8] bit;
 let len_without_crc = 100-4;
 
 let comp main = read[int8] >>> convert_to_bits() >>>
-  crc144(len_without_crc, true) >>> repeat{x<-takes 864; emits x[0, 144]; emits x[720, 144]}
+  crc144(len_without_crc, true) >>> scrambler()>>> repeat{x<-takes 864; emits x[0, 144]; emits x[720, 144]}
   >>> write
 
 

@@ -20,9 +20,14 @@
 
 -- Test created using Annex G, IEEE Standard_802.11a-1999
 
+
+-- See createPreamble.blk for explanation
+#define SHORT_FFT
+
+
 #include <bits.blk>
-#include "../parsePLCPHeader.blk"
-#include "../crc.blk"
+#include "../transmitter.blk"
+
 
 let h = HeaderInfo{coding=CR_34; modulation=M_16QAM; len=100};
 
@@ -47,10 +52,8 @@ var ab : arr[8] bit;
   }
 }
 
-let len_without_crc = 100-4;
 
-let comp main = read[int8] >>> convert_to_bits() >>>
-  crc144(len_without_crc, true) >>> repeat{x<-takes 864; emits x[0, 144]; emits x[720, 144]}
-  >>> write
-
+-- Note, we don't implement the filter from 802.11a-1999 but we modify 
+-- the data to match the one without the filter (only each 80th sample changes)
+let comp main = read[int8] >>> convert_to_bits() >>> transmitter() >>> write
 
