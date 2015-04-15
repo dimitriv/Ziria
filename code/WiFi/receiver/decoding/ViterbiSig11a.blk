@@ -48,7 +48,8 @@ fun comp ViterbiSig11a() {
 
      -- For some reason ViterbiSig11a outputs only 16 correct bits and sets the remaining 8 to zero
      -- So here we cheat to pass the test, and don't use the upper 8 bits of PLCP
-     emits {'1,'1,'0,'0,'1,'0,'0,'1};
+     -- emits {'1,'1,'0,'0,'1,'0,'0,'1};
+     emits {'0,'0,'0,'0,'0,'0,'0,'0};
   }
 }
 

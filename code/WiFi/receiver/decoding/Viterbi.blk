@@ -27,7 +27,10 @@ fun comp Viterbi(rate:int, len:int) {
   var nOutput:int16;
   var outViterbi:arr[96000] bit; 
 
---  do {viterbi_brick_init(len, int16(rate))};
+-- TODO: This calls free and malloc. 
+-- When receiving multiple packets (MAC, sniffer), 
+-- we probably want to allocate
+-- a large buffer at the start and never all it again 
   do {viterbi_brick_init_fast(len, int16(rate), 256)};
 
  repeat {
@@ -35,7 +38,6 @@ fun comp Viterbi(rate:int, len:int) {
     (svalue:arr[48] int8) <- takes 48;
    
      do{
---       nOutput := viterbi_brick_decode(svalue, outViterbi);
        nOutput := viterbi_brick_decode_fast(svalue, outViterbi);
      };
 

@@ -61,7 +61,7 @@ let comp main = read[int8] >>> convert_to_bits()
           >>> { transform_w_header()
                 ; dummy()                   -- This is here just to make it a computer
               }
-          >>> encdec_atten(16) 
+          >>> encdec_atten(16*5) 
           >>> write
 
 

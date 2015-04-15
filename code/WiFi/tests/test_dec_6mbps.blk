@@ -31,9 +31,26 @@ fun comp dummy() {
 } 
 
 
+fun comp convert_to_int8() {
+var ai : arr[1] int8;
+
+  repeat {
+    x<-takes 8;
+    do{
+      bits_to_int8(ai, x);
+    }
+    emits ai;
+  }
+}
+
+
 -- Test the entire TX/RX at the bit level
-let comp main = read >>> {(t:bool) <- receiveBits() ; return ()} >>> write
-
-
-
-
+let comp main = read >>> 
+  { (t:bool) <- receiveBits() 
+  ; do { if (t) then {
+           println "CRC OK";
+         } else {
+           println "CRC Failed";
+         }
+       }
+  } >>> convert_to_int8() >>> write

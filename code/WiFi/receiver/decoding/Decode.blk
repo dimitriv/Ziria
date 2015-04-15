@@ -33,8 +33,19 @@
 #include "Viterbi.blk"
 
 
+fun comp descrambler() {
+  -- This will be used to estimate the scrambler's state but for now we ignore
+  scrambler() >>> 
+  { 
+    state <- takes 16;
+    repeat {
+      x<-take;
+      emit x;
+    }
+  }
+}
+
 fun comp Decode(h : struct HeaderInfo) {
-  -- +8 is for CRC (4 bits but byte aligned)
   DemapLimit(0) 
   >>> {if (h.modulation == M_BPSK) then 
           DemapBPSK() >>> DeinterleaveBPSK() 
@@ -47,5 +58,6 @@ fun comp Decode(h : struct HeaderInfo) {
              else 
                 DemapQAM64() >>> DeinterleaveQAM64() 
       }
-  >>> Viterbi(h.coding, h.len*8 + 8) >>> scrambler()
+  -- +2B here is to include 16-bit SERVICE field at the beggining of DATA
+  >>> Viterbi(h.coding, h.len+2) >>> descrambler()
 }

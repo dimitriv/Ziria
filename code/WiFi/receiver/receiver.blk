@@ -45,7 +45,7 @@ fun comp detectSTS() {
 
 fun comp receiveBits() {
        seq { hdata <- DecodePLCP()
-           ; Decode(hdata) >>> seq { (c : arr[32] bit) <- crc(hdata.len, false); check_crc(c) }
+           ; Decode(hdata) >>> seq { (c : arr[32] bit) <- crc(hdata.len-4, false); check_crc(c) }
        }
 }
 

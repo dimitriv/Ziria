@@ -174,7 +174,7 @@ var p : bit;
      for i in [0, 3] {
        let a = hdata[i*8, 8];
        for j in [0, 8] {
-         p := p & a[j];
+         p := p ^ a[j];
        }
      }
      if (p != '0) then {

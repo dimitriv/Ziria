@@ -26,8 +26,10 @@ var crc_state:arr[CRC_S_WIDTH] bit :=
     {'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,
      '1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1};
 
-  -- Prepend SERVICE bits
-  emits {'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0};
+  -- Prepend SERVICE bits (only at the transmitter)
+  if (pad) then {
+    emits {'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0};
+  }
 
   times len seq {
     (x:arr[CRC_X_WIDTH] bit) <- takes CRC_X_WIDTH;
@@ -37,23 +39,21 @@ var crc_state:arr[CRC_S_WIDTH] bit :=
     };
     emits x;
   }
-  -- CRC-32 requires inverting all bits at the end
   do {
+    -- CRC-32 requires flipping all bits at the end
     for i in [0, CRC_S_WIDTH/8] {
       for j in [0, 8] {
         crc_state[i*8+j] := ~crc_state[i*8+j];
       }
     }
+    -- Also invert bits to match 802.11 output requirements
+    for i in [0, 4] {
+      crc_state[i*8,8] := invert_bits(crc_state[i*8,8]);
+    }
   };
  
   -- Only add CRC and padding at the transmitter
   if (pad) then {
-    var t : arr[8] bit;
-    do{
-      for i in [0, 4] {
-        crc_state[i*8,8] := invert_bits(crc_state[i*8,8]);
-      }
-    };
     emits crc_state;
 
     -- Add padding so that the length of output is a multiple of CRC_VEC in bits
