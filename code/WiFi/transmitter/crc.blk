@@ -89,8 +89,6 @@ var ret : bool;
 
   (x:arr[32] bit) <- takes 32;
   do {
-    println crc_state;
-    println x;
     bits_to_int8(ax, x);
     bits_to_int8(ac, crc_state);
 
