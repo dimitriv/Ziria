@@ -61,7 +61,7 @@ int16 __ext_viterbi_brick_decode_fast(char* intInput, int len1, uchar* bit, int 
 	//uchar  m_outbuf[TRELLIS_DEPTH / 8 + 1];
 
 
-	uint ii = 0;
+	uint total_byte_count = 0;
 
 	// vector128 constants
 	static const vub * const pVITMA = (const vub*)VIT_MA; // Branch Metric A
@@ -102,7 +102,7 @@ int16 __ext_viterbi_brick_decode_fast(char* intInput, int len1, uchar* bit, int 
 		// check trace_back
 		uint output_count = 0;
 		uint lookahead = 0;
-		const uint tr_index_end = frame_length * 8 + 16 + trellis_prefix;
+		const uint tr_index_end = frame_length * 8 + trellis_prefix;
 		if (tr_index >= tr_index_end) {
 			// all bytes have been processed - track back all of them
 			output_count = tr_index_end - ob_count
@@ -124,22 +124,16 @@ int16 __ext_viterbi_brick_decode_fast(char* intInput, int len1, uchar* bit, int 
 			m_viterbi.Traceback((char*)m_outbuf, output_count, lookahead);
 			ob_count += output_count;
 
-			//output_count >>= 3;
-			while (ii < output_count) {
-				//uchar* po = opin().append();
-				//*po = m_outbuf[ii++];
-				uchar po = m_outbuf[ii];
-				bit[ii] = po;
-				ii++;
-				//printf ("%d (%x) \n", *po, *po );
-				//Next()->Process(opin0());
+			uint last_byte_count = 0;
+			while (last_byte_count < output_count / 8) {
+				bit[total_byte_count] = m_outbuf[last_byte_count];
+				last_byte_count++;
+				total_byte_count++;
 			}
-			//printf ( "\n" );
 		}
 
 	}
-	//ipin.pop();
-	return ii;
+	return total_byte_count * 8;
 }
 
 
