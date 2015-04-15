@@ -56,7 +56,8 @@ var ab : arr[8] bit;
 let len_without_crc = 100-4;
 
 let comp main = read[int8] >>> convert_to_bits() >>>
-  crc144(len_without_crc, true) >>> scrambler() >>> encode34() >>> interleaver_m16qam() >>> modulate_16qam() >>> map_ofdm()
+  crc144(len_without_crc, true) >>> scrambler(default_scrmbl_st) >>> encode34() 
+  >>> interleaver_m16qam() >>> modulate_16qam() >>> map_ofdm()
   >>> repeat{x<-takes (64*6); emits x[0, 64]}
   >>> write
 

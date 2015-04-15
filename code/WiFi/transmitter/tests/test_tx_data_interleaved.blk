@@ -53,7 +53,8 @@ var ab : arr[8] bit;
 let len_without_crc = 100-4;
 
 let comp main = read[int8] >>> convert_to_bits() >>>
-  crc144(len_without_crc, true) >>> scrambler() >>> encode34() >>> interleaver_m16qam() >>> repeat{x<-takes (864*4/3); emits x[0, 192]}
+  crc144(len_without_crc, true) >>> scrambler(default_scrmbl_st) >>> encode34() >>> interleaver_m16qam() 
+  >>> repeat{x<-takes (864*4/3); emits x[0, 192]}
   >>> write
 
 

@@ -19,8 +19,15 @@
 --
 #pragma once 
 
-fun comp scrambler() {
-var scrmbl_st: arr[7] bit := {'1,'0,'1,'1,'1,'0,'1}; 
+
+-- This is a default initial scrambler's state for tests
+-- In a real MAC the initial state should be selected
+-- pseudorandomly for each re-transmission
+let (default_scrmbl_st: arr[7] bit) = {'1,'0,'1,'1,'1,'0,'1}; 
+
+fun comp scrambler(init_scrmbl_st: arr[7] bit) {
+--var scrmbl_st: arr[7] bit := {'1,'0,'1,'1,'1,'0,'1}; 
+var scrmbl_st: arr[7] bit := init_scrmbl_st; 
 var y:bit;
   
   repeat [8,8] seq {
@@ -31,6 +38,7 @@ var y:bit;
       tmp := (scrmbl_st[3] ^ scrmbl_st[0]);
       scrmbl_st[0:5] := scrmbl_st[1:6];
       scrmbl_st[6] := tmp;
+--      print x^tmp, " : ", scrmbl_st;
     }; 
 
     emit (x^tmp)

@@ -34,15 +34,12 @@
 
 
 fun comp descrambler() {
-  -- This will be used to estimate the scrambler's state but for now we ignore
-  scrambler() >>> 
-  { 
-    state <- takes 16;
-    repeat {
-      x<-take;
-      emit x;
-    }
-  }
+  -- WiFi RX learns the scrambler's state from SERVICE field
+  -- (which is zero so it containts the scrambler's state itself)
+  -- We cheat a bit to simplify the code by learning from
+  -- the reserved part of SERVICE field. 
+  state <- takes 16;
+  scrambler(state[9,7])
 }
 
 fun comp Decode(h : struct HeaderInfo) {

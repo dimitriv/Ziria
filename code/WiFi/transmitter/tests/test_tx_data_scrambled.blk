@@ -54,7 +54,8 @@ let len_without_crc = 100-4;
 -- Hence we recreate the test using our own code, which seems correct
 -- (http://standards.ieee.org/findstds/interps/802.11a-interp.pdf)
 let comp main = read[int8] >>> convert_to_bits() >>>
-  crc144(len_without_crc, true) >>> scrambler()>>> repeat{x<-takes 864; emits x[0, 144]; emits x[720, 144]}
+  crc144(len_without_crc, true) >>> scrambler(default_scrmbl_st)
+  >>> repeat{x<-takes 864; emits x[0, 144]; emits x[720, 144]}
   >>> write
 
 
