@@ -41,7 +41,8 @@ TGTS = $(patsubst %.blk, %.test, $(wildcard *.blk))
 all: $(TGTS)
 
 %.out : %.blk
-	C_DEFINES='BLADE_RF' LIBS='bladeRF.lib' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PP) $< $@
+#	C_DEFINES='BLADE_RF' LIBS='bladeRF.lib' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PP) $< $@
+	EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PP) $< $@
 
 
 sniffer_test.outfile: sniffer_test.out ../matlab/pkt1.infile

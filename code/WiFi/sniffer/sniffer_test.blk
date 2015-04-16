@@ -1,3 +1,27 @@
-#include "receiver.blk"
+#include "../receiver/receiver.blk"
+#include "../transmitter/parseMACHeader.blk"
 
-let comp main = read[complex16] >>> receiver() >>> write
+fun comp convert_to_int8() {
+var ai : arr[1] int8;
+
+  repeat {
+    x<-takes 8;
+    do{
+      bits_to_int8(ai, x);
+    }
+    emits ai;
+  }
+}
+
+fun comp print_hdr() {
+x <- takes 24*8;
+do {parseMACHeader(x)};
+emits x;
+
+repeat{
+  x<-take;
+  emit x;
+}
+}
+
+let comp main = read[complex16] >>> receiver() >>> print_hdr() >>> convert_to_int8() >>> write

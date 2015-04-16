@@ -1,0 +1,70 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+
+-- Simple function to parse 802.11 MAC header, for debugging purposes
+
+#include <externals.blk>
+
+fun parseMACHeader(hdr : arr[24*8] bit) {
+var a : arr[6] int8;
+
+  println "*** Frame control: ";
+  println "  Protocol:       ", hdr[0,2];
+  print   "  Type (";
+  if hdr[2] == '0 && hdr[3] == '0 then {
+    print "Mgmt";
+  } else {
+    if hdr[2] == '0 && hdr[3] == '1 then {
+      print "Ctrl";
+    } else {
+      if hdr[2] == '1 && hdr[3] == '0 then {
+        print "Data";
+      } else {
+        print "Rsvd";
+      }
+    }
+  }
+  println "):    ", hdr[2,2];
+  println "  Subtype:        ", hdr[4,4];
+  println "  To DS:          ", hdr[8];
+  println "  From DS:        ", hdr[9];
+  println "  More fragments: ", hdr[10];
+  println "  Retry:          ", hdr[11];
+  println "  Power Mgmt:     ", hdr[12];
+  println "  More data:      ", hdr[13];
+  println "  WEP:            ", hdr[14];
+  println "  Order:          ", hdr[15];
+  println "";
+
+  bits_to_int8(a[0,2], hdr[16,16]);
+  println "Duration: ", int16(a[0]) + 256*int16(a[1]);
+
+  bits_to_int8(a[0,6], hdr[32,6*8]);
+  println "Addr 1: ", a[0,6];
+  bits_to_int8(a[0,6], hdr[32+6*8,6*8]);
+  println "Addr 2: ", a[0,6];
+  bits_to_int8(a[0,6], hdr[32+12*8,6*8]);
+  println "Addr 3: ", a[0,6];
+
+  bits_to_int8(a[0,2], hdr[32+18*8,16]);
+  println "Seq ctl: ", int16(a[0]) + 256*int16(a[1]);
+  println "";
+
+}

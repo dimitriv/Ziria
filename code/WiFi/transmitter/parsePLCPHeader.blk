@@ -194,8 +194,8 @@ var p : bit;
 
 #ifndef FAST
      printHeader(h);
+     println "Header bits: ", hdata
 #endif
-     --println "Header bits: ", hdata
       
   return h;
 }
