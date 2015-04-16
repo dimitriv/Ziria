@@ -114,8 +114,13 @@ test-WiFi-RX-clean:
 # WiFi pedantic tests
 #############################################################
 
-test-WiFi-pedantic: test-WiFi test-WiFi-TX test-WiFi-RX
+test-WiFi-pedantic: 
 	@echo ">>>>>>>>>>>>>>> Pedantic WiFi tests"
+
+	@echo "Default"
+	make test-WiFi && make test-WiFi-clean
+	make test-WiFi-RX && make test-WiFi-RX-clean 
+	make test-WiFi-TX && make test-WiFi-TX-clean 
 
 	@echo "EXTRAOPTS=--no-fold --no-exp-fold"
 	EXTRAOPTS='--no-fold --no-exp-fold' make test-WiFi && make test-WiFi-clean
