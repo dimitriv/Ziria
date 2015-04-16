@@ -17,7 +17,10 @@
 -- permissions and limitations under the License.
 --
 --
-#pragma once
+
+-- NOTE: This should not have pragma once as it is included multiple times
+--#pragma once
+
 #include <bits.blk>
 
 -- Used with macros to create a simple template structure
