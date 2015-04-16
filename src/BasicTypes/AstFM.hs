@@ -148,15 +148,10 @@ instance Rng Int                    where toRng e      = (toFExp e, LISingleton)
 instance Rng Integer                where toRng e      = (toFExp e, LISingleton)
 instance FValy v => Rng (v ::: Ty)  where toRng e      = (toFExp e, LISingleton)
 
--- Make it smart to avoid clutter about 1-element special casing
 instance FExpy e => Rng (e :+ Int)  where 
-  toRng (e:+i) = case (i == 1) of 
-      True  -> (toFExp e, LISingleton) 
-      False -> (toFExp e, LILength i )
+  toRng (e:+i) = (toFExp e, LILength i )
 instance FExpy e => Rng (e :+ Integer) where 
-  toRng (e:+i) = case (i == 1) of
-      True  -> (toFExp e, LISingleton)
-      False -> (toFExp e, LILength $ fromIntegral i)
+  toRng (e:+i) = (toFExp e, LILength $ fromIntegral i)
 
 (.!) :: (FExpy earr, Rng r) => earr -> r -> FExp
 (.!) earr r 

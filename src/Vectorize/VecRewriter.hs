@@ -24,6 +24,7 @@ module VecRewriter (
  , RwQSt   ( .. )
  , doRw
  , doNotRw
+ , vectAssign, vectEmit
 ) where
 
 import Control.Applicative
@@ -306,3 +307,15 @@ rwTakeEmitIO :: VecEnv -> RwState -> LComp -> IO Comp
 rwTakeEmitIO venv rws lc = runVecM venv $ evalStateT (rwTakeEmit lc) rws
 
 
+
+-- | Assign to a vector variable xa 
+vectAssign :: (FExpy xa, FExpy x) => xa -> EId -> Int -> x -> Zr ()
+vectAssign xa cnt arin x
+ = if arin == 1 then (xa .! cnt) .:= x
+   else xa .! ((cnt .* arin) :+ arin) .:= x
+
+-- | Emit a vector variable ya
+vectEmit :: FExpy ya => ya -> EId -> Int -> Zr ()
+vectEmit ya cnt arout 
+ = if arout == 1 then femit (ya .! cnt)
+   else femit (ya .!((cnt .* arout) :+ arout)) 
