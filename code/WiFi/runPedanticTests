@@ -41,13 +41,6 @@ then
 fi
 #read -p "VECTORIZE, AUTOLUT tests passed, press any key to continue... " -n1 -s
 
-echo "================== VECTORIZE - AUTOLUT - NATIVE MITIGATORS =================="
-EXTRAOPTS='--vectorize --autolut --native-mitigators' ./runTests
-if [[ $? -ne 0 ]]
-then
-    exit 1
-fi
-#read -p "VECTORIZE, AUTOLUT, NATIVE MITIGATORS tests passed, press any key to continue... " -n1 -s
 
 
 
