@@ -18,35 +18,91 @@
 --
 --
 #pragma once 
+#include <externals.blk>
 
-fun update_crc(x:bit, var crc_state:arr[4] bit) {
-  let base = {'1, '0, '1, '1} 
-  if crc_state[0] == '1 then {
-    for i in [0,length(crc_state)] {
-      crc_state[i] := crc_state[i]^base[i];
+#define CRC_X_WIDTH     8
+#define CRC_S_WIDTH     32
+
+
+let (base32:arr[CRC_S_WIDTH+1] bit) = {'1,'0,'0,'0,'0,'0,'1,'0,'0,'1,'1,'0,'0,'0,'0,'0,'1,'0,'0,'0,'1,'1,'1,'0,'1,'1,'0,'1,'1,'0,'1,'1,'1};
+
+
+-- For a full description see http://www.hackersdelight.org/crc.pdf, Page 8, Figure 14-4, and in particular
+-- note that "The CRC-32 protocol initializes the CRC register to all 1's, transmits each byte 
+-- least significant bit first, and complements the checksum."
+-- In particular, CRC is calculated on the most-siginificant bit first, 
+-- but the data is transmitted least significant bit first.
+-- For example, 0x04, 0x02, 0x00, 0x2e is fed into CRC-32 state machine as:
+-- 00000100:00000010:00000000:00101110
+-- but it is further transmitted (to scrambler, encoder, etc) as
+-- 00100000:01000000:00000000:01110100
+-- (see Table G.13 in 802.11a)
+
+fun update_crc_generic(x:arr[CRC_X_WIDTH] bit, base:arr[CRC_S_WIDTH+1] bit, var crc_state:arr[CRC_S_WIDTH] bit) {
+var out : arr[CRC_X_WIDTH + CRC_S_WIDTH] bit;
+var start_state : arr[CRC_X_WIDTH] bit;
+var s : arr[1] bit;
+
+  -- We create a smaller subset of crc_state to make the code amenable to LUTting
+  start_state := crc_state[0, CRC_X_WIDTH];
+
+  -- This is expected to be autoLUTtted
+  for i in [0, CRC_X_WIDTH] {
+    start_state[i] := start_state[i] ^ x[i];
+  }
+
+  zero_bit(out);
+
+  -- This is expected to be autoLUTtted
+  -- Inputs: start_state, Output: out, start_state
+  for i in [0, CRC_X_WIDTH] {
+    if (start_state[i] == '1) then {
+      for j in [0, CRC_S_WIDTH - 1] {
+        out[i+1+j] := out[i+1+j] ^ base[1+j];
+      }
+      for j in [0,CRC_X_WIDTH-i-1] {
+        start_state[i+1+j] := start_state[i+1+j] ^ base[1+j];
+      }
     }
-  };
-  crc_state[0,3] := crc_state[1,3];
-  crc_state[3] := x
+  }
+
+  crc_state[0,CRC_S_WIDTH-CRC_X_WIDTH] := crc_state[CRC_X_WIDTH, CRC_S_WIDTH-CRC_X_WIDTH];
+  crc_state[CRC_S_WIDTH-CRC_X_WIDTH, CRC_X_WIDTH] := start_state;
+
+-- Serialized version of crc_state := crc_state ^ out[CRC_X_WIDTH, CRC_S_WIDTH];
+  for i in [0, CRC_S_WIDTH/8] {
+    -- This is expected to be autoLUTtted
+    for j in [0, 8] { 
+      crc_state[i*8+j] := crc_state[i*8+j] ^ out[CRC_X_WIDTH + i*8+j];
+    }
+  }
 }
 
 
 
-fun comp check_crc(crc_state : arr[4] bit) { 
-  var ret : bool;
-  (x:arr[8] bit) <- takes 8;
+
+
+fun comp check_crc(crc_state : arr[32] bit) { 
+var ac : arr[4] int8;
+var ax : arr[4] int8;
+var ret : bool;
+
+  (x:arr[32] bit) <- takes 32;
   do {
-  if (crc_state[0] == x[0] && crc_state[1] == x[1] && crc_state[2] == x[2] && crc_state[3] == x[3]) then {
+    bits_to_int8(ax, x);
+    bits_to_int8(ac, crc_state);
+
+    if (ax[0] == ac[0] && ax[1] == ac[1] && ax[2] == ac[2] && ax[3] == ac[3]) then {
 #ifndef FAST
-     println "CRC passed!";
+      println "CRC passed!";
 #endif
-     ret := true;
-  } else {
+      ret := true;
+    } else {
 #ifndef FAST
-     println "CRC failed!";
+      println "CRC failed!";
 #endif
-     ret := false;
-  }
+      ret := false;
+    }
   }
   return ret;
 }

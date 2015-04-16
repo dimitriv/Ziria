@@ -38,7 +38,7 @@ DIFF = ../../../tools/BlinkDiff
 .PRECIOUS: %.outfile %.out
 
 # Targets
-TGTS = $(patsubst %.blk, %.test, $(wildcard *.blk))
+TGTS = $(patsubst %.infile, %.test, $(wildcard *.infile))
 
 all: $(TGTS)
 
@@ -51,6 +51,14 @@ test_real_%.outfile: test_real_%.out test_real_%.infile
 	./$< --input=file \
              --input-file-name=test_real_$*.infile \
              --input-file-mode=bin \
+             --output-file-name=$@ \
+             --output-file-mode=dbg
+
+# test multiple encdec tests with the same exe
+test_encdec%.outfile: test_encdec.out test_encdec%.infile
+	./test_encdec.out --input=file \
+             --input-file-name=test_encdec$*.infile \
+             --input-file-mode=dbg \
              --output-file-name=$@ \
              --output-file-mode=dbg
 

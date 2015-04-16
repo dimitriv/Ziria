@@ -18,7 +18,19 @@
 --
 --
 
+#include <bits.blk>
 #include "../receiver/receiver.blk"
 
+fun comp convert_to_int8() {
+var ai : arr[1] int8;
 
-let comp main = read >>> receiver() >>> write
+  repeat {
+    x<-takes 8;
+    do{
+      bits_to_int8(ai, x);
+    }
+    emits ai;
+  }
+}
+
+let comp main = read >>> receiver() >>> convert_to_int8() >>> write

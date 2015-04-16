@@ -19,6 +19,7 @@
 --
 #pragma once 
 
+#include <externals.blk>
 #include "../const.blk"
 
 
@@ -45,11 +46,80 @@ fun printHeader(h : struct HeaderInfo) {
 }
 
 
+fun createPLCPHeader(h:struct HeaderInfo) {
+var hdata:arr[24] bit;
+var ai : arr[2] int8;
+var ab : arr[16] bit;
+var p : bit;
+
+  -- Rate
+  if h.modulation == M_BPSK && h.coding == CR_12 then {
+    hdata[0,4] := {'1, '1, '0, '1};
+  } else {
+    if h.modulation == M_BPSK && h.coding == CR_34 then {
+       hdata[0,4] := {'1, '1, '1, '1};
+    } else {
+      if h.modulation == M_QPSK && h.coding == CR_12 then {
+         hdata[0,4] := {'0, '1, '0, '1};
+      } else {
+        if h.modulation == M_QPSK && h.coding == CR_34 then {
+           hdata[0,4] := {'0, '1, '1, '1};
+        } else {
+          if h.modulation == M_16QAM && h.coding == CR_12 then {
+             hdata[0,4] := {'1, '0, '0, '1};
+          } else {
+            if h.modulation == M_16QAM && h.coding == CR_34 then {
+               hdata[0,4] := {'1, '0, '1, '1}; 
+            } else {
+              if h.modulation == M_64QAM && h.coding == CR_23 then {
+                 hdata[0,4] := {'0, '0, '0, '1};
+              } else {
+                if h.modulation == M_64QAM && h.coding == CR_34 then {
+                   hdata[0,4] := {'0, '0, '1, '1};
+                } else {
+                   -- Default: BPSK, 1/2
+                   hdata[0,4] := {'1, '1, '0, '1};
+                }
+              }
+            }
+          }
+        }           
+      }
+    }
+  }
+
+  -- Reserved
+  hdata[4] := '0;
+
+  -- Length
+  ai[0] := int8(h.len % 256);
+  ai[1] := int8(h.len / 256);
+  int8_to_bits(ab, ai); 
+  hdata[5, 12] := ab[0, 12];
+
+  -- Padding
+  hdata[17,7] := {'0, '0, '0, '0, '0, '0, '0};
+
+  -- Calculate header's parity
+  p := '0;
+  for i in [0, 3] {
+    let a = hdata[i*8, 8];
+    for j in [0, 8] {
+      p := p & a[j];
+    }
+  }
+  hdata[17] := hdata[17] ^ p;
+
+  return hdata;
+}
+
+
+
 
 fun parsePLCPHeader(hdata:arr[24] bit) {
 var b:int;
 var h:struct HeaderInfo;
-
+var p : bit;
     
      if hdata[0] == '1 && hdata[1] == '1 && hdata[2] == '0 && hdata[3] == '1 then { -- 1
        h.modulation := M_BPSK; h.coding := CR_12
@@ -98,6 +168,29 @@ var h:struct HeaderInfo;
 
      -- Sanity check - no packet larger than 2048B
      h.len := if h.len > 2048 then 2048 else h.len;
+
+     -- Check header's parity
+     p := '0;
+     for i in [0, 3] {
+       let a = hdata[i*8, 8];
+       for j in [0, 8] {
+         p := p ^ a[j];
+       }
+     }
+     if (p != '0) then {
+       println "Header parity check failed!";
+     }
+
+     -- Check header's tail
+     p := '0;
+     let a = hdata[16, 8];
+     for j in [2, 6] {
+         p := p | a[j];
+     }
+     if (p != '0) then {
+       println "Header tail non-zero!";
+     }
+         
 
 #ifndef FAST
      printHeader(h);

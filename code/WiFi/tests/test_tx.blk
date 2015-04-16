@@ -18,6 +18,7 @@
 --
 --
 
+#include <bits.blk>
 #include "../transmitter/transmitter.blk"
 
 
@@ -32,6 +33,19 @@ fun comp amp(c:int16) {
   }
 }
 
+fun comp convert_to_bits() {
+var ai : arr[1] int8;
+var ab : arr[8] bit;
 
-let comp main = read >>> transmitter() >>> amp(10) >>> write
+  repeat {
+    x<-take;
+    do{
+      ai[0] := x;
+      int8_to_bits(ab, ai);
+    }
+    emits ab;
+  }
+}
+
+let comp main = read >>> convert_to_bits() >>> transmitter() >>> amp(10) >>> write
 

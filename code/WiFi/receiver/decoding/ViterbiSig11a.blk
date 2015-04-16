@@ -26,29 +26,18 @@ fun comp ViterbiSig11a() {
   var nOutput:int16;
   var outViterbi:arr[96000] bit; 
 
---  do {viterbiSig11a_brick_init(0, 0)};
-
   seq {
-
     (svalue:arr[48] int8) <- takes 48;
    
      do{
---       nOutput := viterbi_brick_decode(svalue, outViterbi);
        nOutput := viterbiSig11a_brick_decode_fast(svalue, outViterbi);
+       -- Here we get 32 bits but we are only interested in 24 PLCP bits
+       -- Moreover, only 18 bits are correct, and the last 6 are random due to prefix
+       -- The last 6 bits are reserved and set to 0 by WiFi for this reason
+       outViterbi[18,6] := {'0,'0,'0,'0,'0,'0};
      };
 
-     -- Here we get 32 bits but we are only interested in 24 PLCP bits
-     {-
-     for i in [0, nOutput] {
-       emit outViterbi[i];
-     }
-     -}
-
-     emits outViterbi[0,16];
-
-     -- For some reason ViterbiSig11a outputs only 16 correct bits and sets the remaining 8 to zero
-     -- So here we cheat to pass the test, and don't use the upper 8 bits of PLCP
-     emits {'1,'1,'0,'0,'1,'0,'0,'1};
+     emits outViterbi[0,24];
   }
 }
 

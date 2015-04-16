@@ -30,7 +30,7 @@
 fun comp DecodePLCP() {
   var hdata : arr[24] bit;
   seq{ DemapLimit(0) >>> DemapBPSK() >>> DeinterleaveBPSK() 
-                     >>> ViterbiSig11a() >>> scrambler()
+                     >>> ViterbiSig11a() 
                      >>> repeat{ (x:arr[24] bit) <- takes 24; do{hdata := x}}
      ; return parsePLCPHeader(hdata)
      }
