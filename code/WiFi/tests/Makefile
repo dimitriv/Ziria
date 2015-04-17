@@ -69,8 +69,12 @@ test_encdec%.outfile: test_encdec.out test_encdec%.infile
              --output-file-name=$@ \
              --output-file-mode=dbg
 
+# We remove -p (ignore endings) from tests to detect subtle errors 
+# For example, if no packet is detected, there is no output, 
+# and -p treats that as correct
+# We add -p in vectorized tests through DIFFOPTS=-p
 %.test: %.outfile
-	$(DIFF) -f $< -g $<.ground -d -v -n 0.88 -p
+	$(DIFF) $(DIFFOPTS) -f $< -g $<.ground -d -v -n 0.88
 
 
 %.accept : %.outfile

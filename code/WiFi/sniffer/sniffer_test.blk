@@ -1,3 +1,9 @@
+-- #define CCA_TUFV_DEBUG_OUTPUT
+-- #define CCA_DEBUG_PLOT
+--#include "../receiver/downSample.blk"
+--#include "../receiver/removeDC.blk"
+--#include "../receiver/cca/cca_tufv.blk"
+
 #include "../receiver/receiver.blk"
 #include "../transmitter/parseMACHeader.blk"
 
@@ -13,6 +19,42 @@ var ai : arr[1] int8;
   }
 }
 
+fun comp att() {
+var c : complex16;
+  repeat {
+    (x:complex16)<-take;
+    do{
+    c.re := x.re/1;
+    c.im := x.im/1;
+    }
+    emit c;
+  }
+}
+
+
+-- cca_tufv waits for some idle time before detecting a packet
+-- so we supply 1000 zero samples before sending the actual packet
+fun comp append_idle() {
+  times 1000 {
+    emit complex16{re=0; im=0};
+  }
+  repeat{
+    x<-take;
+    emit x;
+  }
+}
+
+
+{-
+let comp main = read[complex16] >>> removeDC() >>> att() >>> 
+{
+  det<-cca(5000); 
+  do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
+                  ", energy: ", det.energy, ", noise: ", det.noise, ", maxCorr: ", det.maxCorr};
+  return()
+} >>> write[int]
+-}
+
 fun comp print_hdr() {
 x <- takes 24*8;
 do {parseMACHeader(x)};
@@ -24,4 +66,4 @@ repeat{
 }
 }
 
-let comp main = read[complex16] >>> receiver() >>> print_hdr() >>> convert_to_int8() >>> write
+let comp main = read[complex16] >>> append_idle() >>> receiver() >>> print_hdr() >>> convert_to_int8() >>> write

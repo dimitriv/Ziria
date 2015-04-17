@@ -18,7 +18,7 @@ fi
 # #read -p "NO-EXP-FOLD,NO-FOLD tests passed, press any key to continue... " -n1 -s
 
 echo "========================= VECTORIZE ====================="
-EXTRAOPTS='--vectorize' ./runTests
+DIFFOPTS='-p' EXTRAOPTS='--vectorize' ./runTests
 if [[ $? -ne 0 ]]
 then
     exit 1
@@ -34,7 +34,7 @@ fi
 #read -p "AUTOLUT tests passed, press any key to continue... " -n1 -s
 
 echo "================== VECTORIZE - AUTOLUT =================="
-EXTRAOPTS='--vectorize --autolut' ./runTests
+DIFFOPTS='-p' EXTRAOPTS='--vectorize --autolut' ./runTests
 if [[ $? -ne 0 ]]
 then
     exit 1

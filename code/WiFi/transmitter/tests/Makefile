@@ -59,10 +59,12 @@ test_c_%.test: test_c_%.outfile
 	$(DIFF) -f $< -g $<.ground -d -v -n 0.8 -c -t 20
 
 
-# Tests with binary outputs - just compare
+# We remove -p (ignore endings) from tests to detect subtle errors 
+# For example, if no packet is detected, there is no output, 
+# and -p treats that as correct
+# We add -p in vectorized tests through DIFFOPTS=-p
 %.test: %.outfile
-	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
-
+	$(DIFF) $(DIFFOPTS) -f $< -g $<.ground -d -v -n 0.9
 
 
 %.accept : %.outfile
