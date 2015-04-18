@@ -26,15 +26,15 @@ fun parseMACHeader(hdr : arr[24*8] bit) {
 var a : arr[6] int8;
 
   println "*** Frame control: ";
-  println "  Protocol:       ", hdr[0,2];
+  println "  Protocol:       ", hdr[1], hdr[0];
   print   "  Type (";
-  if hdr[2] == '0 && hdr[3] == '0 then {
+  if hdr[3] == '0 && hdr[2] == '0 then {
     print "Mgmt";
   } else {
-    if hdr[2] == '0 && hdr[3] == '1 then {
+    if hdr[3] == '0 && hdr[2] == '1 then {
       print "Ctrl";
     } else {
-      if hdr[2] == '1 && hdr[3] == '0 then {
+      if hdr[3] == '1 && hdr[2] == '0 then {
         print "Data";
       } else {
         print "Rsvd";
@@ -42,7 +42,7 @@ var a : arr[6] int8;
     }
   }
   println "):    ", hdr[2,2];
-  println "  Subtype:        ", hdr[4,4];
+  println "  Subtype:        ", hdr[7], hdr[6], hdr[5], hdr[4];
   println "  To DS:          ", hdr[8];
   println "  From DS:        ", hdr[9];
   println "  More fragments: ", hdr[10];

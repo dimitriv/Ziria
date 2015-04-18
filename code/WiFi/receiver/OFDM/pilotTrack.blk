@@ -103,7 +103,7 @@ fun comp PilotTrack() {
 
     -- Compensate phase shift
      do {
--- BOZIDAR: This is frequency correction code that is not fully debugged
+-- BOZIDAR: This is CFO frequency correction code that is not fully debugged
 -- so we disable it for the moment
 --        v_mul_complex16(symbol,symbol_in,compCoeffs,15);
         symbol := symbol_in;
@@ -128,6 +128,17 @@ fun comp PilotTrack() {
        -- TODO: Convert this into the follwoing, when compiler gets support for parsing it
        -- pilot_hist[0,4*PILOT_AVG-1] := pilot_hist[1,4*PILOT_AVG-1];
        pilot_hist[0,PILOT_WINDOW_LENGTH] := pilot_hist[1,PILOT_WINDOW_LENGTH];
+
+       if (cnt == 0) then {
+         -- Populate the first RX pilot for good averaging at the beginning
+         for i in [0, PILOT_AVG-1] {
+           pilot_hist[i]             := complex16{re=p1.re >> LOG_PILOT_AVG; im=p1.im >> LOG_PILOT_AVG};
+           pilot_hist[PILOT_AVG+i]   := complex16{re=p2.re >> LOG_PILOT_AVG; im=p2.im >> LOG_PILOT_AVG};
+           pilot_hist[2*PILOT_AVG+i] := complex16{re=p3.re >> LOG_PILOT_AVG; im=p3.im >> LOG_PILOT_AVG};
+           pilot_hist[3*PILOT_AVG+i] := complex16{re=p4.re >> LOG_PILOT_AVG; im=p4.im >> LOG_PILOT_AVG};
+         }
+       }
+
        pilot_hist[PILOT_AVG-1]   := complex16{re=p1.re >> LOG_PILOT_AVG; im=p1.im >> LOG_PILOT_AVG};
        pilot_hist[2*PILOT_AVG-1] := complex16{re=p2.re >> LOG_PILOT_AVG; im=p2.im >> LOG_PILOT_AVG};
        pilot_hist[3*PILOT_AVG-1] := complex16{re=p3.re >> LOG_PILOT_AVG; im=p3.im >> LOG_PILOT_AVG};
@@ -139,10 +150,23 @@ fun comp PilotTrack() {
        let s3 = v_sum_complex16(pilot_hist[2*PILOT_AVG,PILOT_AVG]) 
        let s4 = v_sum_complex16(pilot_hist[3*PILOT_AVG,PILOT_AVG]) 
 
-       th[0] := int32(atan2_int16( s1.im, s1.re));
-       th[1] := int32(atan2_int16( s2.im, s2.re));
-       th[2] := int32(atan2_int16( s3.im, s3.re));
-       th[3] := int32(atan2_int16( -s4.im, -s4.re));
+         -- TODO: Currently, CFO correction is disabled as it is not fully debugged
+         -- Becaue of frequency offset the first PILOT_AVG pilots cannot use averaging
+         -- Once CFO correnction is added, this if should be removed and we should
+         -- only use averaged pilots (s1-s4) for correction
+       -- if (cnt < PILOT_AVG) then {
+       -- DEBUG: It turns out that due to large CFO the old scheme works better for the BladeRF demo
+       if (true) then {
+         th[0] := int32(atan2_int16( p1.im, p1.re));
+         th[1] := int32(atan2_int16( p2.im, p2.re));
+         th[2] := int32(atan2_int16( p3.im, p3.re));
+         th[3] := int32(atan2_int16( -p4.im, -p4.re));
+       } else {
+         th[0] := int32(atan2_int16( s1.im, s1.re));
+         th[1] := int32(atan2_int16( s2.im, s2.re));
+         th[2] := int32(atan2_int16( s3.im, s3.re));
+         th[3] := int32(atan2_int16( -s4.im, -s4.re));
+       }
 #else
        th[0] := int32(atan2_int16( p1.im, p1.re));
        th[1] := int32(atan2_int16( p2.im, p2.re));
@@ -196,20 +220,18 @@ fun comp PilotTrack() {
 
        -- DEBUG
 {-
-       if (cnt >= 1 && cnt <= 8) then 
+       if (cnt >= 1 && cnt <= 800) then 
        {
 --         print "cnt: ", cnt, " D: ", pilotSgn[symbol_count-1], " th: ", double(th[0])/32768.0, ", ", 
 --               double(th[1])/32768.0, ", ", double(th[2])/32768.0, ", ", double(th[3])/32768.0;
-         print "cnt: ", cnt, " D: ", pilotSgn[symbol_count-1], " th: ", th[0], ", ", 
+         print "cnt: ", cnt, " D: ", pilotSgn[(symbol_count+126)%127], " th: ", th[0], ", ", 
                th[1], ", ", th[2], ", ", th[3];
-         println " avgTheta: ", avgTheta, " delTheta: ", delTheta;
-         println "p1: ", p1, ", s1: ", s1;
+         print " avgTheta: ", avgTheta, " delTheta: ", delTheta;
+         println " sCFO_comp: ", sCFO_comp, "/", sCFO_tracker, " sSFO_tracker: ", sSFO_comp, "/", sSFO_tracker;
+--         println "p1: ", p1, ", s1: ", s1;
          
-         let tt1 = complex16{re=6894;im=-725} in
-         let tt1 = complex16{re=-5432;im=-1158} in
-         println 
 
-         println "cnt: ", cnt, ", ", symbol[64-21], symbol[64-7], symbol[7], symbol[21];
+--         println "cnt: ", cnt, ", ", symbol[64-21], symbol[64-7], symbol[7], symbol[21];
 
          -- println rotate_coeffs;
        }
