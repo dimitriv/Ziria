@@ -47,7 +47,7 @@ all: $(TGTS)
 
 sniffer_test.outfile: sniffer_test.out ../matlab/pkt1.infile
 	./$< --input=file \
-             --input-file-name=../matlab/pkt9.infile \
+             --input-file-name=../matlab/pkt1.infile \
              --input-file-mode=dbg \
              --output-file-name=$@ \
              --output-file-mode=dbg
