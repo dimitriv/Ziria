@@ -20,7 +20,7 @@
 #pragma once 
 
 #include <externals.blk>
-#include "cca/cca.blk"
+#include "cca/cca_tufv.blk"
 #include "OFDM/LTS.blk"
 #include "removeDC.blk"
 #include "downSample.blk"
@@ -35,9 +35,9 @@
 #include "../transmitter/crc.blk"
 
 
-fun comp detectSTS() {
-  removeDC() >>> cca()
-}
+fun comp detectPreamble(energy_threshold : int32) { 
+  (removeDC() >>> cca(energy_threshold))
+} 
 
 -- FreqCompensation does not work but it is nor crucial so we remove it for now
 --       DataSymbol() >>> FreqCompensation(params) >>> FFT() >>> ChannelEqualization(params) >>> 
@@ -45,22 +45,24 @@ fun comp detectSTS() {
 
 fun comp receiveBits() {
        seq { hdata <- DecodePLCP()
-           ; Decode(hdata) >>> seq { (c : arr[4] bit) <- crc(hdata.len, false); check_crc(c) }
+           ; Decode(hdata) >>> seq { (c : arr[32] bit) <- crc(hdata.len-4, false); check_crc(c) }
        }
 }
 
 
 fun comp receiver() {
-  downSample() >>> 
-  seq{ det<-detectSTS()
+  seq{ det<-detectPreamble(5000)
 #ifndef FAST
-     ; do{println "Detected at: ", det.noSamples}
+     ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
+                  ", energy: ", det.energy, ", noise: ", det.noise, ", maxCorr: ", det.maxCorr}
 #endif
      -- receiver uses Sora port of cca to produce comparable performance measurements
      -- but this one does not maxCorr value, so we provide an appropriate one here to pass tests
      -- In real-world examples use cca_tufv instead of cca.
-     ; params <- LTS(det.shift, 850906)
-     ; DataSymbol(det.shift) >>> FFT() >>> ChannelEqualization(params)
+     ; params <- (LTS(det.shift, det.maxCorr))
+     ; DataSymbol(det.shift) 
+       >>> FFT() 
+       >>> ChannelEqualization(params)
        >>> PilotTrack()
        >>> GetData() 
        >>> receiveBits()

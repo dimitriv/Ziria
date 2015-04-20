@@ -56,7 +56,6 @@ import Language.C.Quote.C
 import qualified Language.C.Pretty as P
 import qualified Data.Set as S
 import qualified Data.Map as M
-import Text.Parsec.Pos (SourcePos)
 import Text.PrettyPrint.HughesPJ
 import Data.Maybe
 

@@ -18,7 +18,32 @@
 --
 --
 
+#include <bits.blk>
 #include "../receiver/receiver.blk"
 
+fun comp convert_to_int8() {
+var ai : arr[1] int8;
 
-let comp main = read >>> receiver() >>> write
+  repeat {
+    x<-takes 8;
+    do{
+      bits_to_int8(ai, x);
+    }
+    emits ai;
+  }
+}
+
+
+-- cca_tufv waits for some idle time before detecting a packet
+-- so we supply 1000 zero samples before sending the actual packet
+fun comp append_idle() {
+  times 1000 {
+    emit complex16{re=0; im=0};
+  }
+  repeat{
+    x<-take;
+    emit x;
+  }
+}
+
+let comp main = read >>> append_idle() >>> downSample() >>> receiver() >>> convert_to_int8() >>> write

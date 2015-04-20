@@ -47,7 +47,7 @@ import CgLUT
 import Control.Monad.Writer
 import qualified Data.DList as DL
 import qualified Data.List
-import qualified Data.Loc
+import Data.Loc
 import Data.Monoid
 import qualified Data.Symbol
 import qualified Language.C.Syntax as C
@@ -55,7 +55,6 @@ import Language.C.Quote.C
 import qualified Language.C.Pretty as P
 import qualified Data.Set as S
 import qualified Data.Map as M
-import Text.Parsec.Pos (SourcePos)
 import Text.PrettyPrint.HughesPJ 
 import Data.Maybe
 
@@ -148,7 +147,7 @@ mkBranch :: DynFlags
          -> Exp
          -> Comp  -> CompKont  -- we give each branch his own continuation
          -> Comp  -> CompKont  -- we give each branch his own continuation
-         -> Maybe SourcePos
+         -> SrcLoc
          -> Cg CompInfo
 mkBranch dflags e c1 k1 c2 k2 csp
   = do { branchName <- nextName ("__branch_" ++ (getLnNumInStr csp))
@@ -262,7 +261,7 @@ codeGenFixpoint f k = do
 ------------------------------------------------------------------------------
 
 readCode :: Ty
-         -> Maybe SourcePos
+         -> SrcLoc
          -> String
          -> ReadType
          -> CompKont
@@ -342,7 +341,7 @@ readCode ty csp buf_id read_type k = do
     return (mkCompInfo prefix True)
 
 writeCode :: Ty
-          -> Maybe SourcePos
+          -> SrcLoc
           -> String
           -> CompKont
           -> Cg CompInfo
@@ -1251,12 +1250,12 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
            let retN = "__retf_" ++ name nm
 
            let extNm = "__ext_" ++ name nm
-           let extF = toName ("__ext_" ++ name nm) Nothing (nameTyp nm) Imm
+           let extF = toName ("__ext_" ++ name nm) noLoc (nameTyp nm) Imm
 
            -- We cannot return an array declared within a function.  Instead we
            -- declare a global variable, store the return in it, and use that
            -- pointer as a return value
-           let retN_name = toName retN Nothing retTy Mut
+           let retN_name = toName retN noLoc retTy Mut
 
            cparams <- codeGenParams (retN_name : ps)
            appendTopDecls [ [cdecl|void $id:(extNm)($params:cparams);|] ]
@@ -1266,7 +1265,7 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
         codeGenLetExternalFun _ = do
             cparams <- codeGenParams ps
             let extNm = "__ext_" ++ name nm
-            let extF = toName ("__ext_" ++ name nm) Nothing (nameTyp nm) Imm
+            let extF = toName ("__ext_" ++ name nm) noLoc (nameTyp nm) Imm
 
             appendTopDecls [ [cdecl|$ty:(codeGenTy retTy)
                                            $id:(extNm)($params:cparams);|] ]

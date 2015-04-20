@@ -50,7 +50,7 @@ module TcUnify (
 
 import Control.Monad hiding (forM_)
 import Data.Foldable (Foldable, forM_)
-import Text.Parsec.Pos (SourcePos)
+import Data.Loc
 import Text.PrettyPrint.HughesPJ
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -69,26 +69,26 @@ import Utils ( panicStr )
   Public API
 -------------------------------------------------------------------------------}
 
-unify :: Unify a => Maybe SourcePos -> a -> a -> TcM ()
+unify :: Unify a => SrcLoc -> a -> a -> TcM ()
 unify p a b = do
   ctx <- getErrCtx
   pushErrCtx (UnifyErrCtx a b ctx) $ unify' p a b
 
-unifyAll :: Unify a => Maybe SourcePos -> [a] -> TcM ()
+unifyAll :: Unify a => SrcLoc -> [a] -> TcM ()
 unifyAll p = go
   where
     go []         = return ()
     go [_]        = return ()
     go (t1:t2:ts) = unify p t1 t2 >> go (t2:ts)
 
-unifyMany :: Unify a => Maybe SourcePos -> [a] -> [a] -> TcM ()
+unifyMany :: Unify a => SrcLoc -> [a] -> [a] -> TcM ()
 unifyMany p t1s t2s = mapM_ (\(t1,t2) -> unify p t1 t2) (zip t1s t2s)
 
 {-------------------------------------------------------------------------------
   Unification errors (for internal use)
 -------------------------------------------------------------------------------}
 
-unifyErrGeneric :: Zonk a => Doc -> Maybe SourcePos -> a -> a -> TcM x
+unifyErrGeneric :: Zonk a => Doc -> SrcLoc -> a -> a -> TcM x
 unifyErrGeneric msg pos ty1 ty2 = do
     zty1 <- zonk ty1
     zty2 <- zonk ty2
@@ -97,10 +97,10 @@ unifyErrGeneric msg pos ty1 ty2 = do
            , text "Cannot unify" <+> ppr zty1 <+> text "with" <+> ppr zty2
            ]
 
-unifyErr :: Zonk a => Maybe SourcePos -> a -> a -> TcM x
+unifyErr :: Zonk a => SrcLoc -> a -> a -> TcM x
 unifyErr = unifyErrGeneric empty
 
-occCheckErr :: Zonk a => Maybe SourcePos -> a -> a -> TcM x
+occCheckErr :: Zonk a => SrcLoc -> a -> a -> TcM x
 occCheckErr = unifyErrGeneric (text "Occurs check error.")
 
 {-------------------------------------------------------------------------------
@@ -109,7 +109,7 @@ occCheckErr = unifyErrGeneric (text "Occurs check error.")
 
 -- | Unification
 class Zonk a => Unify a where
-  unify' :: Maybe SourcePos -> a -> a -> TcM ()
+  unify' :: SrcLoc -> a -> a -> TcM ()
 
 -- | Unification of types
 --
@@ -171,17 +171,17 @@ instance Unify Ty where
         | otherwise                  = updTyEnv [(x, ty)]
 
 
-tyJoin :: Maybe SourcePos -> Ty -> Ty -> TcM Ty
+tyJoin :: SrcLoc -> Ty -> Ty -> TcM Ty
 tyJoin _ TVoid ty  = return ty
 tyJoin _ ty TVoid  = return ty
 tyJoin loc ty1 ty2 = unify loc ty1 ty2 >> return ty1
 
-tyJoinWithHint :: Maybe SourcePos -> Hint Ty -> Ty -> TcM Ty
+tyJoinWithHint :: SrcLoc -> Hint Ty -> Ty -> TcM Ty
 tyJoinWithHint _loc Infer t     = return t
 tyJoinWithHint loc (Check t) t' = tyJoin loc t t'
 
 
-ctyJoin :: Maybe SourcePos -> CTy -> CTy -> TcM CTy
+ctyJoin :: SrcLoc -> CTy -> CTy -> TcM CTy
 ctyJoin p = go
   where
       go :: GCTy Ty -> GCTy Ty -> TcM CTy
@@ -226,7 +226,7 @@ ctyJoin p = go
         | otherwise
         = updCTyEnv [(x, cty)] >> return cty
 
-callArgJoin :: Maybe SourcePos 
+callArgJoin :: SrcLoc 
             -> CallArg ArgTy CTy -> CallArg ArgTy CTy 
             -> TcM (CallArg ArgTy CTy)
 callArgJoin p (CAExp (GArgTy ty m)) (CAExp (GArgTy ty' m'))
@@ -345,7 +345,7 @@ instance (Unify a, Unify b) => Unify (CallArg a b) where
 --
 -- Be careful calling this: only call this if you are sure that later
 -- unification equations will not instantiate this type variable.
-defaultTy :: Maybe SourcePos -> Ty -> Ty -> TcM Ty
+defaultTy :: SrcLoc -> Ty -> Ty -> TcM Ty
 defaultTy p ty def = do
     ty' <- zonk ty
     case ty' of
@@ -356,7 +356,7 @@ defaultBitWidths :: Ty -> TcM Ty
 defaultBitWidths ty = do
     ty' <- zonk ty
     case ty' of
-      TInt (BWUnknown _) -> do unify Nothing ty' tint32 ; return tint32
+      TInt (BWUnknown _) -> do unify noLoc ty' tint32 ; return tint32
       _                  -> return ty'
 
 -- | Zonk all type variables and default the type of `EError` to `TUnit` when
@@ -431,7 +431,7 @@ hint :: b -> (a -> b) -> Hint a -> b
 hint _ f (Check a) = f a
 hint b _ Infer     = b
 
-unifyTInt :: Maybe SourcePos -> Hint BitWidth -> Ty -> TcM BitWidth
+unifyTInt :: SrcLoc -> Hint BitWidth -> Ty -> TcM BitWidth
 unifyTInt loc annBW = zonk >=> go
   where
     go (TInt bw) = do
@@ -443,10 +443,10 @@ unifyTInt loc annBW = zonk >=> go
       return bw
 
 -- Version of unifyTInt where we don't care about the bitwidths
-unifyTInt' :: Maybe SourcePos -> Ty -> TcM ()
+unifyTInt' :: SrcLoc -> Ty -> TcM ()
 unifyTInt' loc ty = void $ unifyTInt loc Infer ty
 
-unifyTArray :: Maybe SourcePos -> Hint NumExpr -> Hint Ty -> Ty -> TcM (NumExpr, Ty)
+unifyTArray :: SrcLoc -> Hint NumExpr -> Hint Ty -> Ty -> TcM (NumExpr, Ty)
 unifyTArray loc annN annA = zonk >=> go
   where
     go (TArray n a) = do
@@ -459,7 +459,7 @@ unifyTArray loc annN annA = zonk >=> go
       unify loc ty (TArray n a)
       return (n, a)
 
-unifyComp :: Maybe SourcePos
+unifyComp :: SrcLoc
           -> Hint Ty -> Hint Ty -> Hint Ty
           -> CTy -> TcM (Ty, Ty, Ty)
 unifyComp loc annU annA annB = zonk >=> go
@@ -477,7 +477,7 @@ unifyComp loc annU annA annB = zonk >=> go
       return (ux, ax, bx)
 
 
-unifyTrans :: Maybe SourcePos
+unifyTrans :: SrcLoc
            -> Hint Ty -> Hint Ty
            -> CTy -> TcM (Ty, Ty)
 unifyTrans loc annA annB = zonk >=> go
@@ -495,7 +495,7 @@ unifyTrans loc annA annB = zonk >=> go
 -- | Sadly, we cannot have a unification constraint that somehing must
 -- either be a computer or a transformer, so if we find a type variable here
 -- we must give a type error.
-unifyCompOrTrans :: Maybe SourcePos
+unifyCompOrTrans :: SrcLoc
                  -> Hint Ty -> Hint Ty
                  -> CTy -> TcM (Maybe Ty, Ty, Ty)
 unifyCompOrTrans loc annA annB = zonk >=> go
@@ -515,7 +515,7 @@ unifyCompOrTrans loc annA annB = zonk >=> go
       raiseErrNoVarCtx loc $
         text "Expected computer or transformer, but got type variable (bug?)"
 
-unifyCompOrTrans_CTy :: Maybe SourcePos
+unifyCompOrTrans_CTy :: SrcLoc
                  -> Hint Ty -> Hint Ty
                  -> CTy -> TcM CTy
 unifyCompOrTrans_CTy loc annA annB cty
@@ -524,14 +524,14 @@ unifyCompOrTrans_CTy loc annA annB cty
           Nothing -> return $ CTTrans a b
           Just v  -> return $ CTComp v a b
 
-unifyTrans_CTy :: Maybe SourcePos
+unifyTrans_CTy :: SrcLoc
               -> Hint Ty -> Hint Ty
               -> CTy -> TcM CTy
 unifyTrans_CTy loc annA annB cty
   = do (a,b) <- unifyTrans loc annA annB cty
        return $ CTTrans a b
 
-unifyComp_CTy :: Maybe SourcePos
+unifyComp_CTy :: SrcLoc
           -> Hint Ty -> Hint Ty -> Hint Ty
           -> CTy -> TcM CTy
 unifyComp_CTy loc annU annA annB cty

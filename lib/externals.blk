@@ -152,6 +152,8 @@ fun external copy_int32(dst:arr int32, src:arr int32, len:int) : ()
 fun external bits_to_int8(dst: arr int8, src:arr bit) : ()
 fun external int8_to_bits(dst: arr bit, src:arr int8) : ()
 
+-- Output
+fun external hexprint_int8(a : arr int8, length : int) : ()
 
 
 -- Various packings

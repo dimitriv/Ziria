@@ -114,8 +114,13 @@ test-WiFi-RX-clean:
 # WiFi pedantic tests
 #############################################################
 
-test-WiFi-pedantic: test-WiFi test-WiFi-TX test-WiFi-RX
+test-WiFi-pedantic: 
 	@echo ">>>>>>>>>>>>>>> Pedantic WiFi tests"
+
+	@echo "Default"
+	make test-WiFi && make test-WiFi-clean
+	make test-WiFi-RX && make test-WiFi-RX-clean 
+	make test-WiFi-TX && make test-WiFi-TX-clean 
 
 	@echo "EXTRAOPTS=--no-fold --no-exp-fold"
 	EXTRAOPTS='--no-fold --no-exp-fold' make test-WiFi && make test-WiFi-clean
@@ -123,9 +128,9 @@ test-WiFi-pedantic: test-WiFi test-WiFi-TX test-WiFi-RX
 	EXTRAOPTS='--no-exp-fold --no-fold' make test-WiFi-TX && make test-WiFi-TX-clean 
 
 	@echo "EXTRAOPTS=--vectorize"
-	EXTRAOPTS='--vectorize'             make test-WiFi && make test-WiFi-clean
-	EXTRAOPTS='--vectorize'             make test-WiFi-RX && make test-WiFi-RX-clean 
-	EXTRAOPTS='--vectorize'             make test-WiFi-TX && make test-WiFi-TX-clean 
+	DIFFOPTS='-p' EXTRAOPTS='--vectorize'             make test-WiFi && make test-WiFi-clean
+	DIFFOPTS='-p' EXTRAOPTS='--vectorize'             make test-WiFi-RX && make test-WiFi-RX-clean 
+	DIFFOPTS='-p' EXTRAOPTS='--vectorize'             make test-WiFi-TX && make test-WiFi-TX-clean 
 
 	@echo "EXTRAOPTS=--autolut"
 	EXTRAOPTS='--autolut'               make test-WiFi && make test-WiFi-clean
@@ -133,9 +138,9 @@ test-WiFi-pedantic: test-WiFi test-WiFi-TX test-WiFi-RX
 	EXTRAOPTS='--autolut'               make test-WiFi-TX && make test-WiFi-TX-clean 
 
 	@echo "EXTRAOPTS=--vectorize --autolut"
-	EXTRAOPTS='--vectorize --autolut'   make test-WiFi && make test-WiFi-clean
-	EXTRAOPTS='--vectorize --autolut'   make test-WiFi-RX && make test-WiFi-RX-clean
-	EXTRAOPTS='--vectorize --autolut'   make test-WiFi-TX && make test-WiFi-TX-clean
+	DIFFOPTS='-p' EXTRAOPTS='--vectorize --autolut'   make test-WiFi && make test-WiFi-clean
+	DIFFOPTS='-p' EXTRAOPTS='--vectorize --autolut'   make test-WiFi-RX && make test-WiFi-RX-clean
+	DIFFOPTS='-p' EXTRAOPTS='--vectorize --autolut'   make test-WiFi-TX && make test-WiFi-TX-clean
 
 
 test-WiFi-pedantic-clean: test-WiFi-clean test-WiFi-TX-clean test-WiFi-RX-clean

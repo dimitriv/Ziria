@@ -24,12 +24,12 @@ module VecRewriter (
  , RwQSt   ( .. )
  , doRw
  , doNotRw
+ , vectAssign, vectEmit
 ) where
 
 import Control.Applicative
 import Control.Monad.State
-
-import Text.Parsec.Pos ( SourcePos )
+import Data.Loc
 
 import AstComp
 import AstExpr
@@ -54,10 +54,10 @@ import Data.Maybe ( isJust, isNothing )
 
 type IVecM s a = StateT s VecM a
 
-type TakeTransf s     = Maybe SourcePos -> Ty        -> IVecM s Comp
-type TakeManyTransf s = Maybe SourcePos -> Ty -> Int -> IVecM s Comp
-type EmitTransf s     = Maybe SourcePos -> Exp       -> IVecM s Comp
-type EmitManyTransf s = Maybe SourcePos -> Exp       -> IVecM s Comp
+type TakeTransf s     = SrcLoc -> Ty        -> IVecM s Comp
+type TakeManyTransf s = SrcLoc -> Ty -> Int -> IVecM s Comp
+type EmitTransf s     = SrcLoc -> Exp       -> IVecM s Comp
+type EmitManyTransf s = SrcLoc -> Exp       -> IVecM s Comp
 
 lkpCVar :: CId -> IVecM s LComp
 lkpCVar nm = StateT (\s -> lookupCVarBind nm >>= \c -> return (c,s))
@@ -146,7 +146,7 @@ upd_out_offset new_off = modify upd
 
 -- Shorthand for incrementing an offset
 offset_plus :: Exp -> Int -> Exp
-offset_plus off i = interpE Nothing $ (off .+ I(i))
+offset_plus off i = interpE noLoc $ (off .+ I(i))
 
 -- | What to do on Take1
 on_take :: TakeTransf RwState
@@ -296,7 +296,7 @@ iterInvRwState body_ain body_aout eidx elen action = do
     updStQ _x (CAUnknown ) (DoNotRw     ) = DoNotRw
     updStQ _x _            (DoNotRw     ) = DoNotRw
     updStQ  x (CAStatic i) (DoRw vec off) = DoRw vec off'
-      where off' = interpE Nothing (off .+ (i .* x))
+      where off' = interpE noLoc (off .+ (i .* x))
     updStQ _x _            _              = panicStr "updInStQ: impossible!"
 
 
@@ -306,3 +306,15 @@ rwTakeEmitIO :: VecEnv -> RwState -> LComp -> IO Comp
 rwTakeEmitIO venv rws lc = runVecM venv $ evalStateT (rwTakeEmit lc) rws
 
 
+
+-- | Assign to a vector variable xa 
+vectAssign :: (FExpy xa, FExpy x) => xa -> EId -> Int -> x -> Zr ()
+vectAssign xa cnt arin x
+ = if arin == 1 then (xa .! cnt) .:= x
+   else xa .! ((cnt .* arin) :+ arin) .:= x
+
+-- | Emit a vector variable ya
+vectEmit :: FExpy ya => ya -> EId -> Int -> Zr ()
+vectEmit ya cnt arout 
+ = if arout == 1 then femit (ya .! cnt)
+   else femit (ya .!((cnt .* arout) :+ arout)) 

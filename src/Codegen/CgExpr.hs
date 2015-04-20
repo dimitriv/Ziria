@@ -50,8 +50,6 @@ import Utils
 import CtExpr
 import {-# SOURCE #-} CgCall
 
-import Text.Parsec.Pos ( SourcePos )
-
 import Outputable
 
 import Control.Applicative
@@ -59,7 +57,7 @@ import Control.Monad ( when, unless )
 import Control.Monad.IO.Class (liftIO)
 import Data.Bits
 import Data.List (elemIndex, foldl', isPrefixOf )
-import qualified Data.Loc
+import Data.Loc
 import qualified Data.Symbol
 import qualified Language.C.Syntax as C
 import Language.C.Quote.C
@@ -78,7 +76,7 @@ import Analysis.DataFlow
 ------------------------------------------------------------------------}
 
 cgBoundsCheck :: DynFlags
-              -> Maybe SourcePos 
+              -> SrcLoc
               -> Ty 
               -> C.Exp 
               -> LengthInfo -> Cg ()
@@ -380,11 +378,15 @@ codeGenExpAlloc dflags e0 = go (ctExp e0) (unExp e0)
 
 
 codeGenExpAndStore :: DynFlags
-                   -> (Ty, C.Exp) -- Where to store the result Exp Ty
+                   -> (Ty, C.Exp, S.Set EId) -- Where to store the result Exp Ty
                    -> Exp         -- RHS of assignment
                    -> Cg C.Exp    -- Result of assignment: UNIT always
-codeGenExpAndStore dflags (ty1,ce1) e2
+codeGenExpAndStore dflags (ty1,ce1,lhsvars) e2
   | ECall nef eargs <- unExp e2
+  , S.null (S.intersection lhsvars (exprFVs e2))
+  -- DV: This is somewhat BUGGY! We have to make sure that the LHS
+  -- does not appear in the closure variables, nor the arguments to
+  -- the function call!!!!!!!!!!!!!!
   = do { codeGenCall_store dflags (expLoc e2) ty1 ce1 nef eargs
        ; return [cexp|UNIT|]
        }
@@ -428,7 +430,7 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
 
     go t (EAssign e1 e2) = do
         ce1 <- codeGenExp dflags e1
-        codeGenExpAndStore dflags (ctExp e1, ce1) e2
+        codeGenExpAndStore dflags (ctExp e1, ce1, exprFVs e1) e2
 
     go t (EArrRead e1 e2 r)
       | (EVal _t (VInt i2)) <- unExp e2
@@ -448,15 +450,17 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
       , let ii2 :: Int = fromIntegral i2
       = do { ce1 <- codeGenExp dflags e1
            -- ; ce3 <- codeGenExp dflags e3
+           ; let lhsvars = exprFVs e1 `S.union` exprFVs e2
            ; cgBoundsCheck dflags (expLoc e0) (ctExp e1) [cexp| $int:ii2|] l
-           ; codeGenArrWrite_stored dflags (ctExp e1) ce1 (AIdxStatic ii2) l e3
+           ; codeGenArrWrite_stored dflags (ctExp e1) ce1 (AIdxStatic ii2) l lhsvars e3
            ; return [cexp|UNIT|]
            }
     go t (EArrWrite e1 e2 l e3) = do
         ce1 <- codeGenExp dflags e1
         ce2 <- codeGenExp dflags e2
+        let lhsvars = exprFVs e1 `S.union` exprFVs e2
         cgBoundsCheck dflags (expLoc e0) (ctExp e1) ce2 l
-        codeGenArrWrite_stored dflags (ctExp e1) ce1 (AIdxCExp ce2) l e3
+        codeGenArrWrite_stored dflags (ctExp e1) ce1 (AIdxCExp ce2) l lhsvars e3
         return [cexp|UNIT|]
 
     go t (EWhile econd ebody) = do
@@ -662,10 +666,10 @@ printArray dflags e cupper t
        ; let pcdeclN_c = name pcdeclN
              pvdeclN_c = name pvdeclN
 
-       ; let pcDeclE  = eVar Nothing pcdeclN
-             pvDeclE  = eVar Nothing pvdeclN
-             pvAssign = eAssign Nothing
-                           pvDeclE (eArrRead Nothing e pcDeclE LISingleton)
+       ; let pcDeclE  = eVar noLoc pcdeclN
+             pvDeclE  = eVar noLoc pvdeclN
+             pvAssign = eAssign noLoc
+                           pvDeclE (eArrRead noLoc e pcDeclE LISingleton)
 
        ; extendVarEnv [(pcdeclN, [cexp|$id:pcdeclN_c|])
                       ,(pvdeclN, [cexp|$id:pvdeclN_c|])] $ do
@@ -673,7 +677,7 @@ printArray dflags e cupper t
        ; (e1_decls, e1_stms, ce1) <- inNewBlock $ codeGenExp dflags pvAssign
        ; (e2_decls, e2_stms, ce2) <- inNewBlock $ printScalar dflags pvDeclE
        ; (e3_decls, e3_stms, ce3) <- inNewBlock $ printScalar dflags
-                                     (eVal Nothing TString (VString ","))
+                                     (eVal noLoc TString (VString ","))
 
        ; appendDecls e1_decls
        ; appendDecls e2_decls
@@ -867,23 +871,24 @@ codeGenArrWrite_stored :: DynFlags
                 -> C.Exp       -- c1
                 -> ArrIdx      -- c2
                 -> LengthInfo  -- rng
+                -> S.Set EId   -- LHS free variables
                 -> Exp         -- c3
                 -> Cg ()       -- c1[c2...c2+rng-1] := c3
-codeGenArrWrite_stored dflags t@(TArray _ ty) ce1 mb_ce2 range e3
+codeGenArrWrite_stored dflags t@(TArray _ ty) ce1 mb_ce2 range lhsvars e3
   | ty /= TBit
   = do { cread <- codeGenArrRead dflags t ce1 mb_ce2 range
        ; let tres = case range of
                       LISingleton -> ty
                       LILength l  -> TArray (Literal l) ty
                       LIMeta {}   -> error "codeGenArrWrite_stored: what IS LIMeta?"
-       ; _unit_always <- codeGenExpAndStore dflags (tres,cread) e3
+       ; _unit_always <- codeGenExpAndStore dflags (tres,cread,lhsvars) e3
        ; return ();
        }
   | otherwise
   = do { ce3 <- codeGenExp dflags e3
        ; codeGenArrWrite dflags t ce1 mb_ce2 range ce3
        }
-codeGenArrWrite_stored dflags _t ce1 mb_ce2 range e3
+codeGenArrWrite_stored dflags _t ce1 mb_ce2 range _ e3
   = fail ("codeGenArrWrite: non-array type " ++ show _t)
 
 codeGenArrWrite :: DynFlags

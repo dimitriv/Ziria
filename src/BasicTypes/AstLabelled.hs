@@ -21,7 +21,7 @@
 module AstLabelled where
 
 import Prelude hiding (pi)
-import Text.Parsec.Pos (SourcePos)
+import Data.Loc
 import AstExpr
 import AstComp
 import LUTAnalysis
@@ -38,71 +38,71 @@ vint n = VInt (fromIntegral n)
   Expressions
 -------------------------------------------------------------------------------}
 
-eVal :: Maybe SourcePos -> a -> t -> Val -> GExp t a
+eVal :: SrcLoc -> a -> t -> Val -> GExp t a
 eVal loc a t v = MkExp (EVal t v) loc a
 
-eValArr :: Maybe SourcePos -> a -> [GExp t a] -> GExp t a
+eValArr :: SrcLoc -> a -> [GExp t a] -> GExp t a
 eValArr loc a v = MkExp (EValArr v) loc a
 
-eVar :: Maybe SourcePos -> a ->  GName t -> GExp t a
+eVar :: SrcLoc -> a ->  GName t -> GExp t a
 eVar loc a v = MkExp (EVar v) loc a
 
-eUnOp :: Maybe SourcePos -> a -> GUnOp t -> GExp t a -> GExp t a
+eUnOp :: SrcLoc -> a -> GUnOp t -> GExp t a -> GExp t a
 eUnOp loc a o v = MkExp (EUnOp o v) loc a
 
-eBinOp :: Maybe SourcePos -> a -> BinOp -> GExp t a -> GExp t a -> GExp t a
+eBinOp :: SrcLoc -> a -> BinOp -> GExp t a -> GExp t a -> GExp t a
 eBinOp loc a b x y = MkExp (EBinOp b x y) loc a
 
-eAssign :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> GExp t a
+eAssign :: SrcLoc -> a ->  GExp t a -> GExp t a -> GExp t a
 eAssign loc a x y = MkExp (EAssign x y) loc a
 
-eArrRead :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> LengthInfo -> GExp t a
+eArrRead :: SrcLoc -> a ->  GExp t a -> GExp t a -> LengthInfo -> GExp t a
 eArrRead loc a x y l = MkExp (EArrRead x y l) loc a
 
-eArrWrite :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> LengthInfo -> GExp t a -> GExp t a
+eArrWrite :: SrcLoc -> a ->  GExp t a -> GExp t a -> LengthInfo -> GExp t a -> GExp t a
 eArrWrite loc a x y l e = MkExp (EArrWrite x y l e) loc a
 
-eFor :: Maybe SourcePos -> a -> UnrollInfo -> GName t -> GExp t a -> GExp t a -> GExp t a -> GExp t a
+eFor :: SrcLoc -> a -> UnrollInfo -> GName t -> GExp t a -> GExp t a -> GExp t a -> GExp t a
 eFor loc a ui n e1 e2 e3 = MkExp (EFor ui n e1 e2 e3) loc a
 
-eLet :: Maybe SourcePos -> a ->  GName t -> ForceInline -> GExp t a -> GExp t a -> GExp t a
+eLet :: SrcLoc -> a ->  GName t -> ForceInline -> GExp t a -> GExp t a -> GExp t a
 eLet loc a x fi e1 e2 = MkExp (ELet x fi e1 e2) loc a
 
-eLetRef :: Maybe SourcePos -> a ->  GName t -> Maybe (GExp t a) -> GExp t a -> GExp t a
+eLetRef :: SrcLoc -> a ->  GName t -> Maybe (GExp t a) -> GExp t a -> GExp t a
 eLetRef loc a nm x e = MkExp (ELetRef nm x e) loc a
 
-eSeq :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> GExp t a
+eSeq :: SrcLoc -> a ->  GExp t a -> GExp t a -> GExp t a
 eSeq loc a e1 e2 = MkExp (ESeq e1 e2) loc a
 
-eCall :: Maybe SourcePos -> a ->  GName t -> [GExp t a] -> GExp t a
+eCall :: SrcLoc -> a ->  GName t -> [GExp t a] -> GExp t a
 eCall loc a f es = MkExp (ECall f es) loc a
 
-eIf :: Maybe SourcePos -> a ->  GExp t a -> GExp t a -> GExp t a -> GExp t a
+eIf :: SrcLoc -> a ->  GExp t a -> GExp t a -> GExp t a -> GExp t a
 eIf loc a e1 e2 e3 = MkExp (EIf e1 e2 e3) loc a
 
-ePrint :: Maybe SourcePos -> a ->  Bool -> [GExp t a] -> GExp t a
+ePrint :: SrcLoc -> a ->  Bool -> [GExp t a] -> GExp t a
 ePrint loc a b e = MkExp (EPrint b e) loc a
 
-eError :: Maybe SourcePos -> a -> t -> String -> GExp t a
+eError :: SrcLoc -> a -> t -> String -> GExp t a
 eError loc a t s = MkExp (EError t s) loc a
 
-eLUT :: Maybe SourcePos -> a ->  LUTStats -> GExp t a -> GExp t a
+eLUT :: SrcLoc -> a ->  LUTStats -> GExp t a -> GExp t a
 eLUT loc a m e = MkExp (ELUT m e) loc a
 
-eStruct :: Maybe SourcePos -> a -> t -> [(String,GExp t a)] -> GExp t a
+eStruct :: SrcLoc -> a -> t -> [(String,GExp t a)] -> GExp t a
 eStruct loc a tn es = MkExp (EStruct tn es) loc a
 
-eProj :: Maybe SourcePos -> a ->  GExp t a -> String -> GExp t a
+eProj :: SrcLoc -> a ->  GExp t a -> String -> GExp t a
 eProj loc a e s = MkExp (EProj e s) loc a
 
-eWhile :: Maybe SourcePos -> a -> GExp t a -> GExp t a -> GExp t a
+eWhile :: SrcLoc -> a -> GExp t a -> GExp t a -> GExp t a
 eWhile loc a econd ebody = MkExp (EWhile econd ebody) loc a
 
 {-------------------------------------------------------------------------------
   Functions
 -------------------------------------------------------------------------------}
 
-mkFunDefined :: Maybe SourcePos -> a
+mkFunDefined :: SrcLoc -> a
              -> GName t                       -- ^ name
              -> [GName t]                     -- ^ params
              -> GExp t a                      -- ^ body
@@ -113,7 +113,7 @@ mkFunDefined loc a nm params body = MkFun {
     , funInfo = a
     }
 
-mkFunExternal :: Maybe SourcePos -> a
+mkFunExternal :: SrcLoc -> a
               -> GName t                      -- ^ name
               -> [GName t]                    -- ^ params
               -> t                            -- ^ return type
@@ -128,98 +128,98 @@ mkFunExternal loc a nm params ret = MkFun {
   Computations
 -------------------------------------------------------------------------------}
 
-cVar :: Maybe SourcePos -> a -> GName tc -> GComp tc t a b
+cVar :: SrcLoc -> a -> GName tc -> GComp tc t a b
 cVar loc a x = MkComp (Var x) loc a
 
-cBindMany :: Maybe SourcePos -> a -> GComp tc t a b -> [(GName t,GComp tc t a b)] -> GComp tc t a b
+cBindMany :: SrcLoc -> a -> GComp tc t a b -> [(GName t,GComp tc t a b)] -> GComp tc t a b
 cBindMany loc a c cs = MkComp (mkBindMany c cs) loc a -- NB: using smart constructor
 
-cSeq :: Maybe SourcePos -> a -> GComp tc t a b -> GComp tc t a b -> GComp tc t a b
+cSeq :: SrcLoc -> a -> GComp tc t a b -> GComp tc t a b -> GComp tc t a b
 cSeq loc a c1 c2 = MkComp (Seq c1 c2) loc a
 
-cPar :: Maybe SourcePos -> a -> ParInfo -> GComp tc t a b -> GComp tc t a b -> GComp tc t a b
+cPar :: SrcLoc -> a -> ParInfo -> GComp tc t a b -> GComp tc t a b -> GComp tc t a b
 cPar loc a pi c1 c2 = MkComp (Par pi c1 c2) loc a
 
-cLet :: Maybe SourcePos -> a -> GName tc ->
+cLet :: SrcLoc -> a -> GName tc ->
         GComp tc t a b -> GComp tc t a b -> GComp tc t a b
 cLet loc a x c1 c2 = MkComp (Let x c1 c2) loc a
 
-cLetE :: Maybe SourcePos -> a -> GName t -> ForceInline ->
+cLetE :: SrcLoc -> a -> GName t -> ForceInline ->
          GExp t b -> GComp tc t a b -> GComp tc t a b
 cLetE loc a x fi e c = MkComp (LetE x fi e c) loc a
 
-cLetERef :: Maybe SourcePos -> a -> GName t -> Maybe (GExp t b) -> GComp tc t a b -> GComp tc t a b
+cLetERef :: SrcLoc -> a -> GName t -> Maybe (GExp t b) -> GComp tc t a b -> GComp tc t a b
 cLetERef loc a x y c = MkComp (LetERef x y c) loc a
 
-cLetHeader :: Maybe SourcePos -> a -> GFun t b -> GComp tc t a b -> GComp tc t a b
+cLetHeader :: SrcLoc -> a -> GFun t b -> GComp tc t a b -> GComp tc t a b
 cLetHeader loc a f c = MkComp (LetHeader f c) loc a
 
-cLetFunC :: Maybe SourcePos -> a -> GName tc -> [(GName (CallArg t tc))]
+cLetFunC :: SrcLoc -> a -> GName tc -> [(GName (CallArg t tc))]
          -> GComp tc t a b -> GComp tc t a b -> GComp tc t a b
 cLetFunC loc a x args c1 c2 = MkComp (LetFunC x args c1 c2) loc a
 
-cLetStruct :: Maybe SourcePos -> a -> GStructDef t -> GComp tc t a b -> GComp tc t a b
+cLetStruct :: SrcLoc -> a -> GStructDef t -> GComp tc t a b -> GComp tc t a b
 cLetStruct loc a sd c = MkComp (LetStruct sd c) loc a
 
-cCall :: Maybe SourcePos -> a -> GName tc -> [CallArg (GExp t b) (GComp tc t a b)] -> GComp tc t a b
+cCall :: SrcLoc -> a -> GName tc -> [CallArg (GExp t b) (GComp tc t a b)] -> GComp tc t a b
 cCall loc a x es = MkComp (Call x es) loc a
 
-cEmit :: Maybe SourcePos -> a -> GExp t b -> GComp tc t a b
+cEmit :: SrcLoc -> a -> GExp t b -> GComp tc t a b
 cEmit loc a e = MkComp (Emit e) loc a
 
-cEmits :: Maybe SourcePos -> a -> GExp t b -> GComp tc t a b
+cEmits :: SrcLoc -> a -> GExp t b -> GComp tc t a b
 cEmits loc a e = MkComp (Emits e) loc a
 
-cReturn :: Maybe SourcePos -> a -> ForceInline -> GExp t b -> GComp tc t a b
+cReturn :: SrcLoc -> a -> ForceInline -> GExp t b -> GComp tc t a b
 cReturn loc a fi e = MkComp (Return fi e) loc a
 
-cInterleave :: Maybe SourcePos -> a -> GComp tc t a b -> GComp tc t a b -> GComp tc t a b
+cInterleave :: SrcLoc -> a -> GComp tc t a b -> GComp tc t a b -> GComp tc t a b
 cInterleave loc a c1 c2 = MkComp (Interleave c1 c2) loc a
 
-cBranch :: Maybe SourcePos -> a -> GExp t b -> GComp tc t a b -> GComp tc t a b -> GComp tc t a b
+cBranch :: SrcLoc -> a -> GExp t b -> GComp tc t a b -> GComp tc t a b -> GComp tc t a b
 cBranch loc a e c1 c2 = MkComp (Branch e c1 c2) loc a
 
-cTake1 :: Maybe SourcePos -> a -> t -> GComp tc t a b
+cTake1 :: SrcLoc -> a -> t -> GComp tc t a b
 cTake1 loc a t = MkComp (Take1 t) loc a
 
-cTake :: Maybe SourcePos -> a -> t -> Int -> GComp tc t a b
+cTake :: SrcLoc -> a -> t -> Int -> GComp tc t a b
 cTake loc a t n = MkComp (Take t n) loc a
 
-cUntil :: Maybe SourcePos -> a -> GExp t b -> GComp tc t a b -> GComp tc t a b
+cUntil :: SrcLoc -> a -> GExp t b -> GComp tc t a b -> GComp tc t a b
 cUntil loc a e c = MkComp (Until e c) loc a
 
-cWhile :: Maybe SourcePos -> a -> GExp t b -> GComp tc t a b -> GComp tc t a b
+cWhile :: SrcLoc -> a -> GExp t b -> GComp tc t a b -> GComp tc t a b
 cWhile loc a e c = MkComp (While e c) loc a
 
-cTimes :: Maybe SourcePos -> a -> UnrollInfo -> GExp t b -> GExp t b -> GName t -> GComp tc t a b -> GComp tc t a b
+cTimes :: SrcLoc -> a -> UnrollInfo -> GExp t b -> GExp t b -> GName t -> GComp tc t a b -> GComp tc t a b
 cTimes loc a ui es elen x c = MkComp (Times ui es elen x c) loc a
 
-cRepeat :: Maybe SourcePos -> a -> Maybe VectAnn -> GComp tc t a b -> GComp tc t a b
+cRepeat :: SrcLoc -> a -> Maybe VectAnn -> GComp tc t a b -> GComp tc t a b
 cRepeat loc a ann c = MkComp (Repeat ann c) loc a
 
-cVectComp :: Maybe SourcePos -> a -> (Int,Int) -> GComp tc t a b -> GComp tc t a b
+cVectComp :: SrcLoc -> a -> (Int,Int) -> GComp tc t a b -> GComp tc t a b
 cVectComp loc a ann c = MkComp (VectComp ann c) loc a
 
-cMap :: Maybe SourcePos -> a -> Maybe VectAnn -> GName t -> GComp tc t a b
+cMap :: SrcLoc -> a -> Maybe VectAnn -> GName t -> GComp tc t a b
 cMap loc a ann nm = MkComp (Map ann nm) loc a
 
-cFilter :: Maybe SourcePos -> a -> GName t -> GComp tc t a b
+cFilter :: SrcLoc -> a -> GName t -> GComp tc t a b
 cFilter loc a nm = MkComp (Filter nm) loc a
 
-cReadSrc  :: Maybe SourcePos -> a -> t -> GComp tc t a b
+cReadSrc  :: SrcLoc -> a -> t -> GComp tc t a b
 cReadSrc loc a t = MkComp (ReadSrc t) loc a
 
-cWriteSnk :: Maybe SourcePos -> a -> t -> GComp tc t a b
+cWriteSnk :: SrcLoc -> a -> t -> GComp tc t a b
 cWriteSnk loc a t = MkComp (WriteSnk t) loc a
 
-cReadInternal  :: Maybe SourcePos -> a -> t -> BufId -> ReadType -> GComp tc t a b
+cReadInternal  :: SrcLoc -> a -> t -> BufId -> ReadType -> GComp tc t a b
 cReadInternal  loc a t bid rt = MkComp (ReadInternal t bid rt) loc a
 
-cWriteInternal :: Maybe SourcePos -> a -> t -> BufId -> GComp tc t a b
+cWriteInternal :: SrcLoc -> a -> t -> BufId -> GComp tc t a b
 cWriteInternal loc a t bid = MkComp (WriteInternal t bid) loc a
 
-cStandalone :: Maybe SourcePos -> a -> GComp tc t a b -> GComp tc t a b
+cStandalone :: SrcLoc -> a -> GComp tc t a b -> GComp tc t a b
 cStandalone loc a c = MkComp (Standalone c) loc a
 
-cMitigate :: Maybe SourcePos -> a -> String -> t -> Int -> Int -> GComp tc t a b
+cMitigate :: SrcLoc -> a -> String -> t -> Int -> Int -> GComp tc t a b
 cMitigate loc a s t n1 n2 = MkComp (Mitigate s t n1 n2) loc a

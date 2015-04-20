@@ -1,0 +1,34 @@
+struct CCAParams = {
+  noSamples:int32;              -- Total number of samples read from the start of CCA
+  shift:int16;                  -- Shift within 16 samples at which the peak was detected
+  energy:int32;                 -- Preamble energy calculated using calcEnergy() from CCA
+  noise:int32;                  -- Noise energy calculated using calcEnergy() from CCA
+  maxCorr:int32                 -- Value of correlation that triggered CCA
+}
+
+
+fun comp cca() {
+   var initial_idle :bool := false;
+   -- return param
+   var ret : struct CCAParams;
+
+   until initial_idle == true {
+     x <- take;
+     do {initial_idle := true};
+   }
+
+  do {
+    ret.noSamples := 0;
+    ret.shift := 0;
+    ret.energy := 0;
+    ret.noise := 0;
+    ret.maxCorr := 0;
+  };
+
+  return ret;
+}
+
+
+-- Refers to erropr #103. Uncomment the line below to enable the bug
+-- let comp main = read[int] >>> cca() >>> write[int]
+let comp main = read[int] >>> {cca(); return()} >>> write[int]

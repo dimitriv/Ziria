@@ -128,14 +128,15 @@ switch input
     
   case 4
     % Wifi capture using BladeRF
-    %delta = -19;
-    %pkt = load('pkt1.infile');
+    delta = -19;
+    pkt = load('pkt1.infile');
 
     %delta = -26;
     %pkt = load('pkt2.infile');
 
-    delta = -40;
-    pkt = load('pkt3.infile');
+    %delta = -40;
+    %pkt = load('pkt3.infile');
+    
     pkt = pkt(1:2:end)' + i*pkt(2:2:end)';
     
   case 5
@@ -302,7 +303,8 @@ plot(real(der), imag(der), '.');
 xlim([-1.5 1.5]);
 ylim([-1.5 1.5]);
 subplot(1,3,3);
-plot(real(dcr), imag(dcr), '.');
-xlim([-1.5 1.5]);
-ylim([-1.5 1.5]);
+% $$$ plot(real(dcr), imag(dcr), '.');
+% $$$ xlim([-1.5 1.5]);
+% $$$ ylim([-1.5 1.5]);
+plot(imag(dcr));
 

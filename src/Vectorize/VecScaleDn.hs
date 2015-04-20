@@ -27,8 +27,6 @@ import PpComp
 import Outputable
 import qualified GenSym as GS
 
-import Text.Parsec.Pos
-
 import qualified Data.Set as S
 import Control.Monad.State
 
@@ -95,7 +93,8 @@ vect_dd1 dfs cty lcomp i (NDiv i0) (NDiv i1)
       unless eqtys $
         ftimes zERO i1 $ \cnt -> 
           do x <- ftake vin_ty
-             xa .! ((cnt .* arin) :+ arin) .:= x
+             vectAssign xa cnt arin x
+
       let offin = eint32 (0)
           st    = RwState { rws_in = DoRw xa offin, rws_out = DoNotRw }
       fembed (act venv st)
@@ -134,7 +133,7 @@ vect_dd2 dfs cty lcomp j (NDiv j0) (NDiv j1)
 
       if vout_ty == vout_ty_big 
         then femit ya
-        else ftimes zERO j1 $ \cnt -> femit (ya .!((cnt .* arout) :+ arout))
+        else ftimes zERO j1 $ \cnt -> vectEmit ya cnt arout 
 
     zirbody2 :: VecEnv -> Zr EId
     zirbody2 venv = do 
@@ -145,7 +144,7 @@ vect_dd2 dfs cty lcomp j (NDiv j0) (NDiv j1)
 
       if vout_ty == vout_ty_big
         then femit ya
-        else ftimes zERO j1 $ \cnt -> femit (ya .!((cnt .* arout) :+ arout))
+        else ftimes zERO j1 $ \cnt -> vectEmit ya cnt arout
 
       freturn _aI v
 
@@ -187,7 +186,7 @@ vect_dd3 dfs cty lcomp i (NDiv i0) (NDiv i1)
       unless eqtys $
          ftimes zERO i1 $ \cnt -> 
             do x <- ftake vin_ty
-               xa .! ((cnt .* arin) :+ arin) .:= x
+               vectAssign xa cnt arin x
 
       ya <- fneweref ("ya" ::: vout_ty_big)
 
@@ -200,7 +199,7 @@ vect_dd3 dfs cty lcomp i (NDiv i0) (NDiv i1)
 
       if vout_ty == vout_ty_big
         then femit ya
-        else ftimes zERO j1 $ \cnt -> femit (ya .!((cnt .* arout) :+ arout))
+        else ftimes zERO j1 $ \cnt -> vectEmit ya cnt arout
 
 
     zirbody2 :: VecEnv -> Zr EId
@@ -210,7 +209,7 @@ vect_dd3 dfs cty lcomp i (NDiv i0) (NDiv i1)
       unless eqtys $
          ftimes zERO i1 $ \cnt -> 
             do x <- ftake vin_ty
-               xa .! ((cnt .* arin) :+ arin) .:= x
+               vectAssign xa cnt arin x
 
       ya <- fneweref ("ya" ::: vout_ty_big)
 
@@ -222,6 +221,6 @@ vect_dd3 dfs cty lcomp i (NDiv i0) (NDiv i1)
 
       if vout_ty == vout_ty_big
         then femit ya
-        else ftimes zERO j1 $ \cnt -> femit (ya .!((cnt .* arout) :+ arout))
+        else ftimes zERO j1 $ \cnt -> vectEmit ya cnt arout
 
       freturn _aI v

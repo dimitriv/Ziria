@@ -56,6 +56,8 @@ int32 __ext_zero_complex32(complex32* arr, int length)
   return 0;
 }
 
+// TO BE DONE - TBD - This is tested only in special cases - check if it always works!
+// https://github.com/dimitriv/Ziria/issues/45
 int32 __ext_zero_bit(BitArrPtr arr, int length)
 {
 	Bit mask = 0;
@@ -65,7 +67,7 @@ int32 __ext_zero_bit(BitArrPtr arr, int length)
 	if (length % 8 > 0)
 	{
 		mask = ~((1 << (length % 8)) - 1);
-		arr[length / 8 + 1] &= mask;
+		arr[length / 8] &= mask;
 	}
 	return 0;
 
@@ -124,5 +126,14 @@ int32 __ext_int8_to_bits(BitArrPtr arrout, int lengthout, int8* arrin, int lengt
 {
 	lengthout = lengthin * 8;
 	memcpy((void *)arrout, (void*)arrin, lengthin*sizeof(int8));
+	return 0;
+}
+
+
+int32 __ext_hexprint_int8(int8* arr, int len, int32 length)
+{
+	for (int i = 0; i < length; i++) {
+		printf("%02X ", (unsigned char) arr[i]);
+	}
 	return 0;
 }

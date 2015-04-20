@@ -18,30 +18,56 @@
 --
 --
 
+-- NOTE: This should not have pragma once as it is included multiple times
+--#pragma once
+
+#include <bits.blk>
+
 -- Used with macros to create a simple template structure
 
-fun comp [8, CRC_VEC] CRC_NAME (len : int, pad : bool) {
-var crc_state: arr[4] bit := {'0,'0,'0,'0};
+-- len - packet length in bytes
+fun comp [CRC_X_WIDTH, CRC_VEC] CRC_NAME (len : int, pad : bool) {
+var crc_state:arr[CRC_S_WIDTH] bit := 
+    {'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,
+     '1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1};
+
+  -- Prepend SERVICE bits (only at the transmitter)
+  if (pad) then {
+    emits {'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0};
+  }
 
   times len seq {
-    (x:arr[8] bit) <- takes 8;
+    (x:arr[CRC_X_WIDTH] bit) <- takes CRC_X_WIDTH;
     do {
-      for i in [0, 8] {
-        update_crc(x[i], crc_state)
+      let xi = invert_bits(x);
+      update_crc_generic(xi, base32, crc_state)
+    };
+    emits x;
+  }
+  do {
+    -- CRC-32 requires flipping all bits at the end
+    for i in [0, CRC_S_WIDTH/8] {
+      for j in [0, 8] {
+        crc_state[i*8+j] := ~crc_state[i*8+j];
       }
     }
-    emits x;
+    -- Also invert bits to match 802.11 output requirements
+    for i in [0, 4] {
+      crc_state[i*8,8] := invert_bits(crc_state[i*8,8]);
+    }
   };
-
+ 
   -- Only add CRC and padding at the transmitter
   if (pad) then {
     emits crc_state;
-    emits {'0,'0,'0,'0};
 
     -- Add padding so that the length of output is a multiple of CRC_VEC in bits
-    let len_so_far = (len+1) * 8 in 
-    let len_mod = if len_so_far % CRC_VEC > 0 then 1 else 0 in 
-    let final_len = ((len_so_far / CRC_VEC) + len_mod) * CRC_VEC in
+    let len_so_far = 16 + len * 8 + 32;
+    let len_so_far_plus_tail = len_so_far + 6;
+    let len_mod = if len_so_far_plus_tail % CRC_VEC > 0 then 1 else 0;
+    let final_len = ((len_so_far_plus_tail / CRC_VEC) + len_mod) * CRC_VEC;
+
+    -- Padded length is always modulo 8 (since OFDM symbol carries 48 data symbols)
     times ((final_len - len_so_far)/8) emits {'0,'0,'0,'0,'0,'0,'0,'0};
   }
 

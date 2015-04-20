@@ -26,7 +26,6 @@ import Control.Monad (when, forM)
 import System.Environment
 import System.Exit (exitFailure)
 import System.IO
-import Text.Parsec (runParserT)
 import Text.PrettyPrint.HughesPJ
 import qualified Text.PrettyPrint.Mainland as GMPretty
 -- import Text.Show.Pretty (dumpStr)
@@ -45,9 +44,6 @@ import PpComp
 import TcMonad
 import Typecheck      ( tyCheckProg              )
 
-import BlinkParseComp ( parseProgram             )
-import BlinkParseM    ( mkZiriaStream, runParseM )
-
 import qualified GenSym         as GS
 import qualified Outputable
 
@@ -61,6 +57,7 @@ import CgHeader     ( cHeader        )
 
 import qualified PassPipeline as PP
 
+import qualified Language.Ziria.Parser as P
 
 data CompiledProgram
   = CompiledProgram Comp [C.Definition] FilePath
@@ -109,22 +106,7 @@ main = do
 
     inFile  <- getInFile dflags
     outFile <- getOutFile dflags
-    input   <- readFile inFile
-
-    
-
-
-
-    prog <-
-          failOnError $
-          do { let state  = ()
-                   stream = mkZiriaStream input
-                   parser = runParserT parseProgram state
-                                                    inFile
-                                                    stream
-             ; runParseM parser []
-             }
-
+    prog    <- P.parseProgramFromFile inFile
 
     dump dflags DumpAst ".ast.dump" $ (text . show) prog
     -- Disabling Pretty for now

@@ -1,0 +1,20 @@
+fun bits_to_int8(var ao:arr[1] int8, ai:arr[8] bit) {
+  ao[0] := 0;
+}
+
+fun comp convert_b2i() {
+var ai : arr[8] bit;
+var ao : arr[1] int8;
+var s : int8;
+
+  repeat{
+    x<-takes 8;
+    do{
+      ai := x;
+      bits_to_int8(ao, ai);
+    }
+    emits ao;
+  }
+}
+
+let comp main = read >>> convert_b2i() >>> write

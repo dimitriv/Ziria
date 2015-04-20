@@ -34,10 +34,10 @@ import Text.PrettyPrint.HughesPJ
 import PpComp
 import Outputable
 import qualified GenSym as GS
-import Text.Parsec.Pos
 import qualified Data.Set as S
 import Control.Monad.State
 import Data.List as M
+import Data.Loc
 import qualified Data.Map  as Map
 import Data.Functor.Identity
 import Data.Maybe ( fromJust )
@@ -72,7 +72,7 @@ data VectPack
              , vp_card     :: Card
              , vp_self_dvr :: DelayedVectRes
              , vp_vctx     :: CtxForVect
-             , vp_loc      :: Maybe SourcePos
+             , vp_loc      :: SrcLoc
              , vp_cty      :: CTy
              , vp_tyin     :: Ty
              , vp_tyout    :: Ty }
@@ -378,7 +378,7 @@ vectIterComp dfs builder tin tout cbody = do
 
 -- | Take a vectorization candidate vc and prepend it with an appropriately
 --   vectorized version of readSrc, to get (read >>> vc)
-prependReadSrc :: Maybe SourcePos -> ParInfo
+prependReadSrc :: SrcLoc -> ParInfo
                -> Ty -> DelayedVectRes -> DelayedVectRes
 prependReadSrc loc p orig_ty (DVR { dvr_comp = iocomp, dvr_vres = vres })
   = DVR { dvr_comp = iocomp', dvr_vres = vres' }
@@ -393,7 +393,7 @@ prependReadSrc loc p orig_ty (DVR { dvr_comp = iocomp, dvr_vres = vres })
 
 -- | Take a vectorization candidate vc and append an appropriately vectorized
 --   version of WriteSnk, to get (vc >>> write).
-appendWriteSnk :: Maybe SourcePos -> ParInfo
+appendWriteSnk :: SrcLoc -> ParInfo
                -> Ty -> DelayedVectRes -> DelayedVectRes
 appendWriteSnk loc p orig_ty (DVR { dvr_comp = iocomp, dvr_vres = vres })
   = DVR { dvr_comp = iocomp', dvr_vres = vres' }

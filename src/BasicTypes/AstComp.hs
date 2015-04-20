@@ -27,13 +27,13 @@ import Control.Monad (forM, liftM)
 import Data.Data (Data)
 import Data.Either (partitionEithers)
 import Data.Functor.Identity ( Identity (..) )
+import Data.Loc
 import Data.Monoid
 import Data.Set (Set)
 import Data.Maybe ( isJust )
 import Data.Traversable (mapM)
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
-import Text.Parsec.Pos
 import Text.Show.Pretty (PrettyVal)
 import qualified Data.Set as S
 
@@ -387,12 +387,15 @@ data ReadType
   | JumpToConsumeOnEmpty
   deriving (Generic, Typeable, Data)
 
-type CompLoc = Maybe SourcePos
+type CompLoc = SrcLoc
 
 data GComp tc t a b
   = MkComp { unComp   :: !(GComp0 tc t a b)
            , compLoc  :: !(CompLoc)
            , compInfo :: a }
+
+instance Located (GComp tc t a b) where
+    locOf = locOf . compLoc
 
 data GProg tc t a b
   = MkProg { progComp :: GComp tc t a b }
@@ -1152,10 +1155,10 @@ isComputer (CTVar   {}) = panicStr "isComputer: type variable"
 
 
 toComp :: a -> GComp0 tc t a b -> GComp tc t a b
-toComp a c0 = MkComp c0 Nothing a
+toComp a c0 = MkComp c0 noLoc a
 
-toCompPos :: a -> SourcePos -> GComp0 tc t a b -> GComp tc t a b
-toCompPos a pos c0 = MkComp c0 (Just pos) a
+toCompPos :: a -> SrcLoc -> GComp0 tc t a b -> GComp tc t a b
+toCompPos a pos c0 = MkComp c0 pos a
 
 
 

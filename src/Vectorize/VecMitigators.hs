@@ -27,8 +27,7 @@ import PpComp
 import Outputable
 import qualified GenSym as GS
 
-import Text.Parsec.Pos
-
+import Data.Loc
 import qualified Data.Set as S
 import Control.Monad.State
 
@@ -41,7 +40,7 @@ import qualified TcMonad as TcM
 import Debug.Trace
 
 
-mitigateUp :: Maybe SourcePos
+mitigateUp :: SrcLoc
            -> String
            -> Ty -> Int -> Int -> FreeComp ()
 mitigateUp loc _orig ty lo hi
@@ -61,7 +60,7 @@ mitigateUp loc _orig ty lo hi
                     }
           }
 
-mitigateDn :: Maybe SourcePos
+mitigateDn :: SrcLoc
            -> String
            -> Ty -> Int -> Int -> FreeComp ()
 mitigateDn loc _orig ty hi lo

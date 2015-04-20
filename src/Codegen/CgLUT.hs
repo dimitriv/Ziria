@@ -28,12 +28,12 @@ import Opts
 import AstExpr
 import AstUnlabelled
 import CtExpr
-import Text.Parsec.Pos
 import {-# SOURCE #-} CgExpr
 import CgMonad
 import CgTypes
 import Analysis.DataFlow
 import Control.Applicative ( (<$>) )
+import Data.Loc
 import Data.Maybe ( isJust, catMaybes, fromJust )
 import Language.C.Quote.C
 import qualified Language.C.Syntax as C
@@ -359,7 +359,7 @@ cgPrintVars dflags dbg_ctx loc vpkg action = do
   cg_print_vars dflags "Outvars" loc (vu_outvars vpkg)
   return r
 
-cg_print_vars :: DynFlags -> String -> Maybe SourcePos -> [EId] -> Cg ()
+cg_print_vars :: DynFlags -> String -> SrcLoc -> [EId] -> Cg ()
 cg_print_vars dflags dbg_ctx loc vs
   | isDynFlagSet dflags Verbose
   = do appendStmt $ [cstm| printf("%s> cg_print_vars: %s\n", $string:(dbg_ctx), $string:(show loc));|]
@@ -377,7 +377,7 @@ cg_print_vars dflags dbg_ctx loc vs
 ---------------------------------------------------------------------------}
 
 genLUTLookup :: DynFlags
-             -> Maybe SourcePos
+             -> SrcLoc
              -> LUTStats
              -> LUTGenInfo -- ^ LUT table information
              -> Ty         -- ^ Expression type
@@ -582,7 +582,7 @@ genLocalVarInits _dflags variables action = do
 cgDebugLUTIdxPack :: C.Exp            -- ^ original index
                   -> C.Type           -- ^ type of index
                   -> VarUsePkg        -- ^ var use info
-                  -> Maybe SourcePos  -- ^ location
+                  -> SrcLoc           -- ^ location
                   -> Cg ()
 cgDebugLUTIdxPack cidx cidx_ty vupkg loc = do
    dbg_cidx <- freshVar "dbg_idx"
@@ -599,8 +599,11 @@ cgDebugLUTIdxPack cidx cidx_ty vupkg loc = do
    Instrument an expression to update the assign-masks
 ---------------------------------------------------------------------------}
 
+bIT0 :: Exp
+bIT0 = eVal noLoc TBit (VBit False)
+
 bIT1 :: Exp
-bIT1 = eVal Nothing TBit (VBit True)
+bIT1 = eVal noLoc TBit (VBit True)
 
 tyBitWidth' :: Ty -> Int
 tyBitWidth' = runIdentity . tyBitWidth
@@ -636,12 +639,12 @@ fldBitArrRng vs the_fld = go 0 vs
 -- | Set some bits in this bit array
 eBitArrSet :: EId -> Exp -> Int -> Exp
 eBitArrSet bitarr start width 
-  = eArrWrite Nothing bitarr_exp start width_linfo arrval
+  = eArrWrite noLoc bitarr_exp start width_linfo arrval
   where
-   bitarr_exp = eVar Nothing bitarr
+   bitarr_exp = eVar noLoc bitarr
    (arrval, width_linfo)
-     | width == 1 = (bIT1,                  LISingleton   )
-     | otherwise  = (eValArr Nothing bIT1s, LILength width)
+     | width == 1 = (bIT1,                LISingleton   )
+     | otherwise  = (eValArr noLoc bIT1s, LILength width)
    bIT1s = replicate width bIT1
 
 
@@ -664,9 +667,9 @@ lutInstrument mask_eids = mapExpM return return do_instr
             io_msg = eVal loc TString (VString " (NB: IO from LUT _generator_)")
 
 int32Val :: Int -> Exp
-int32Val n = eVal Nothing tint (VInt $ fromIntegral n)
+int32Val n = eVal noLoc tint (VInt $ fromIntegral n)
 
-instrAsgn :: [(EId, Maybe EId)] -> Maybe SourcePos 
+instrAsgn :: [(EId, Maybe EId)] -> SrcLoc 
           -> LVal Exp -> Exp -> Cg Exp
 instrAsgn mask_eids loc d' erhs' = do
   (bnds, eassigns) <- instrLVal loc mask_eids d'
@@ -714,7 +717,7 @@ maskRangeToRng width = go
        let (offset,_)  = go mr
            blen         = bitArrRng basety len
            sidx        = estart `eMultBy` tyBitWidth' basety
-       in (eBinOp Nothing Add offset sidx, blen)
+       in (eBinOp noLoc Add offset sidx, blen)
        
 writeMask :: EId
           -> [(EId,Maybe EId)]
@@ -731,7 +734,7 @@ writeMask x mask_map rng
 -- | Instrument an lvalue for assignment. Mainly two things
 --   a) write the appropriate range in the corresponding bitmask
 --   b) guard for out-of-bounds writing
-instrLVal :: Maybe SourcePos
+instrLVal :: SrcLoc
           -> [(EId, Maybe EId)] -> LVal Exp -> Cg ([(EId,Exp,Exp)], [Exp])
 -- Returns let binding, numerical expression, bounds-check plus a set
 -- of assignments.

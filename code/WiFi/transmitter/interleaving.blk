@@ -57,7 +57,7 @@ fun intlv_perm2(mod: int) {
   let s = if (mod == M_BPSK) then 1 else nBPSC(mod)/2  
 
   for k in [0,288] {
-    perm[k] := s * k/s + (k+nCBPS(mod) - 16*k/nCBPS(mod)) % s
+    perm[k] := s * (k/s) + (k+nCBPS(mod) - (16*k)/nCBPS(mod)) % s
   };
   return perm
 }
@@ -99,8 +99,8 @@ fun comp interleaver_qpsk() {
 
 fun comp interleaver_m16qam() {
   var y : arr[4*48] bit; 
-  let nCBPSMod = 4*48 in 
-  let ids1 = intlv_perm1(M_16QAM) in 
+  let nCBPSMod = 4*48 in
+  let ids1 = intlv_perm1(M_16QAM) in
   let ids2 = intlv_perm2(M_16QAM) in
   let ids3 = fuse_perm(ids1,ids2) in
   

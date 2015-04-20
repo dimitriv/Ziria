@@ -53,10 +53,12 @@ all: $(TGTS)
              --output-file-name=$@ \
              --output-file-mode=dbg
 
+# We remove -p (ignore endings) from tests to detect subtle errors 
+# For example, if no packet is detected, there is no output, 
+# and -p treats that as correct
+# We add -p in vectorized tests through DIFFOPTS=-p
 %.test: %.outfile
-# -p prefix disabled
-	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
-
+	$(DIFF) $(DIFFOPTS) -f $< -g $<.ground -d -v -n 0.9
 
 %.accept : %.outfile
 	cp $< $<.ground

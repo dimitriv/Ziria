@@ -18,39 +18,16 @@
 --
 --
 
-#include "../receiver/receiver.blk"
-#include "../transmitter/transmitter.blk"
+-- Test created using Annex G, IEEE Standard_802.11a-1999
+
+-- See createPreamble.blk for explanation
+#define SHORT_FFT
 
 
-fun comp encdec_atten(c:int16) {
-  repeat seq {
-    (x:complex16) <-take;
-    let cre = x.re in 
-    let cim = x.im in 
-    let dre = cre/c in 
-    let dim = cim/c in 
-    emit complex16{re=dre;im=dim}
-  }
-}
+#include <externals.blk>
+#include "../../const.blk"
+#include "../createPreamble.blk"
 
-
-fun comp dummy() {
-  repeat{
-    (x:bit) <-take;
-    emit complex16{re=0; im=0}
-  }
-} 
-
-
--- Test the entire TX/RX at the bit level
-let comp main = read[bit] 
-          >>> { transform_w_header()
-                ; dummy()                   -- This is here just to make it a computer
-              }
-          >>> encdec_atten(16) 
-          >>> {(t:bool) <- receiveBits() ; return ()}
-          >>> write
-
-
-
-
+-- Note, we don't apply the windowing function, as in 802.11a-1999 document, 
+-- so the first symbols differs from the example and the last is removed
+let comp main = read[int] >>> {emits createSTSinTime(); emits createLTSinTime()} >>> write;

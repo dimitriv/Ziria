@@ -27,8 +27,7 @@ import PpComp
 import Outputable
 import qualified GenSym as GS
 
-import Text.Parsec.Pos
-
+import Data.Loc
 import qualified Data.Set as S
 import Control.Monad.State
 
@@ -53,7 +52,7 @@ optzr :: Bool -> Zr v -> Zr v
 optzr True  m  = m
 optzr False _m = return (error "Illegal access!") 
 
-embed = interpE Nothing
+embed = interpE noLoc
 
 -- | UD driver
 doVectCompUD :: DynFlags -> CTy -> LComp -> SFUD -> VecM DelayedVectRes
@@ -131,8 +130,7 @@ vect_ud2 dfs cty lcomp i j (NDiv j0) (NDiv j1) (NMul m)
              st = RwState { rws_in  = doRw arin xa offin
                           , rws_out = DoRw ya offout }
          in fembed (act venv st)
-      ftimes zERO (j1*m) $ \odx ->
-         femit (ya .! ((odx .* j0) :+ j0))
+      ftimes zERO (j1*m) $ \odx -> vectEmit ya odx j0
                     
 {-------------------------------------------------------------------------
 [UD3] a^i -> X     ~~~>    (a*i*m) -> X^m
@@ -226,7 +224,8 @@ vect_du2 dfs cty lcomp i (NDiv i0) (NDiv i1) j (NMul m)
       ftimes zERO (i1*m) $ \idx -> 
          -- Yikes. this part screams for imperative 'take'
          do xtmp <- ftake (mkVectTy orig_inty i0)
-            xa .! ((idx .* i0) :+ i0) .:= xtmp
+            vectAssign xa idx i0 xtmp
+           
       ftimes zERO m $ \cnt -> 
          let offin  = embed (cnt .* i)
              offout = embed (cnt .* j)

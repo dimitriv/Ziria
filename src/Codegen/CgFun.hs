@@ -44,7 +44,7 @@ import CgLUT
 import Control.Monad.Writer
 import qualified Data.DList as DL
 import qualified Data.List
-import qualified Data.Loc
+import Data.Loc
 import Data.Monoid
 import qualified Data.Symbol
 import qualified Language.C.Syntax as C
@@ -52,7 +52,6 @@ import Language.C.Quote.C
 import qualified Language.C.Pretty as P
 import qualified Data.Set as S
 import qualified Data.Map as M
-import Text.Parsec.Pos (SourcePos)
 import Text.PrettyPrint.HughesPJ 
 import Data.Maybe
 
@@ -94,7 +93,7 @@ retByRef f locals body
 
    body_ty = ctExp body
    loc     = expLoc body
-   retN    = toName ("__retf_" ++ (name f)) Nothing body_ty Mut
+   retN    = toName ("__retf_" ++ (name f)) noLoc body_ty Mut
    retE    = eVar (expLoc body) retN
 
    -- precondition: 'e' returns an array type
@@ -145,7 +144,7 @@ getClosureVars fdef
        }
 
 cgFunDefined :: DynFlags
-             -> Maybe SourcePos
+             -> SrcLoc
              -> Fun      -- The function definition
              -> Cg a     -- action for the body
              -> Cg a
