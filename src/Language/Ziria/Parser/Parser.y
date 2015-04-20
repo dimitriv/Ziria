@@ -303,8 +303,18 @@ exp_na :
 
   | 'if' exp_na 'then' exp_na 'else' exp_na %prec IF
       { eIf ($1 `srcspan` $6) $2 $4 $6 }
+  | 'if' exp_na 'then' exp_na 'else' error
+      {% expected ["expression"] Nothing }
+  | 'if' exp_na 'then' exp_na error
+      {% expected ["else clause"] Nothing }
+  | 'if' exp_na 'then' error
+      {% expected ["expression"] Nothing }
+  | 'if' exp_na error
+      {% expected ["then clause"] Nothing }
   | let_decl 'in' exp_or_stmts %prec IF
       { eLetDecl $1 $3 }
+  | let_decl error %prec IF
+      {% expected ["'in'"] Nothing }
 
   | scalar_value
       { eValSrc (srclocOf $1) (unLoc $1) }
@@ -629,16 +639,20 @@ stmt_exp :
         in
           eWhile p $3 $5
       }
-  | 'if' exp 'then' stmt_block
-      { let { p = $1 `srcspan` $4 }
-        in
-          eIf p $2 $4 (eUnit p)
-      }
   | 'if' exp 'then' stmt_block 'else' stmt_block
       { let { p = $1 `srcspan` $6 }
         in
           eIf p $2 $4 $6
       }
+  | 'if' exp 'then' stmt_block 'else' error
+      {% expected ["statement block"] Nothing }
+  | 'if' exp 'then' stmt_block
+      { let { p = $1 `srcspan` $4 }
+        in
+          eIf p $2 $4 (eUnit p)
+      }
+  | 'if' exp error
+      {% expected ["then clause"] Nothing }
   | 'return' exp
       { $2 }
   | 'print' exp_list1
@@ -652,6 +666,8 @@ stmt_exp :
       }
   | let_decl 'in' stmt_block
       { eLetDecl $1 $3 }
+  | let_decl error
+      {% expected ["'in'"] Nothing }
   | ID '(' exp_list ')'
       { let { p = ($1 `srcspan` $3)
             ; x = unintern (getID $1)
@@ -829,6 +845,8 @@ command_comp :
       { cPar ($1 `srcspan` $3) (mkParInfo MaybePipeline) $1 $3 }
   | command_comp '|>>>|' command_comp
       { cPar ($1 `srcspan` $3) (mkParInfo (AlwaysPipeline 0 0)) $1 $3 }
+  | command_comp error
+      {% expected [">>> or |>>>|"] Nothing }
   | comp_term
       { $1 }
 
@@ -862,8 +880,14 @@ comp_term :
       { cMap (srclocOf $1) $2 $3 }
   | 'if' exp 'then' command_comp comp_maybe_else
       { cBranch ($1 `srcspan` $5) $2 $4 (unLoc $5) }
+  | 'if' exp 'then' error
+      {% expected ["command"] Nothing }
+  | 'if' exp ';'
+      {% expected ["then clause"] Nothing }
   | comp_let_decl 'in' command_comp
       { cLetDecl $1 $3 }
+  | comp_let_decl error
+      {% expected ["'in'"] Nothing }
   | 'do' stmt_block
       { cReturn ($1 `srcspan` $2) AutoInline $2 }
   | 'seq' '{' commands '}'
