@@ -23,8 +23,8 @@ module Tc ( tc ) where
 
 import Control.Applicative
 import Control.Monad
+import Data.Loc
 import Text.PrettyPrint.HughesPJ
-import Text.Parsec.Pos (SourcePos)
 
 import AstComp
 import AstExpr
@@ -70,7 +70,7 @@ tcVal = go
 -- TODO: The case for Neg is dubious: we should not check isScalarTy until all
 -- unification constraints have been applied (where some of those constraints
 -- might not be known at this point). See also comments for 'isScalarTy'.
-tcUnOp :: Maybe SourcePos -> GUnOp Ty -> Ty -> TcM Ty
+tcUnOp :: SrcLoc -> GUnOp Ty -> Ty -> TcM Ty
 tcUnOp loc uop = zonk >=> go uop
   where
     go Neg argTy = do
@@ -103,7 +103,7 @@ tcUnOp loc uop = zonk >=> go uop
     go NatExp _argTy =
       error "typeCheckExpr: NatExp not supported!"
 
-tcBinOp :: Maybe SourcePos -> BinOp -> Ty -> Ty -> TcM Ty
+tcBinOp :: SrcLoc -> BinOp -> Ty -> Ty -> TcM Ty
 tcBinOp loc bop = \argTy1 argTy2 -> do
     argTy1' <- zonk argTy1
     argTy2' <- zonk argTy2
@@ -521,7 +521,7 @@ tcFun (MkFun fun0 loc _) = go fun0
       unify loc (nameTyp f) $ TArrow (map nameArgTy args) res
       return (nameTyp f)
 
-tcMitigator :: Maybe SourcePos -> Ty -> Int -> Int -> TcM CTy
+tcMitigator :: SrcLoc -> Ty -> Int -> Int -> TcM CTy
 tcMitigator loc a n1 n2 = do
     unless (n1 `divides` n2 || n2 `divides` n1) $
       raiseErrNoVarCtx loc $

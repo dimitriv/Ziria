@@ -33,8 +33,8 @@ import Prelude hiding (mapM)
 import Control.Applicative
 import Control.Arrow ((&&&))
 import Control.Monad.Reader hiding (mapM)
+import Data.Loc
 import Data.Traversable (mapM)
-import Text.Parsec.Pos (SourcePos)
 
 import AstComp
 import AstExpr
@@ -53,7 +53,7 @@ import Utils
 -------------------------------------------------------------------------------}
 
 genRenBound :: MutKind 
-            -> (Maybe SourcePos -> ty -> TcM ty') -> GName ty -> TcM (GName ty')
+            -> (SrcLoc -> ty -> TcM ty') -> GName ty -> TcM (GName ty')
 genRenBound mk onTy nm = do
     uniqId'  <- genSym "_r"
     nameTyp' <- onTy (nameLoc nm) (nameTyp nm)
@@ -71,7 +71,7 @@ renParam nm = genRenBound (nameMut nm) renTyAnn nm
 renCAParam :: GName (CallArg SrcTy SrcCTy) -> TcM (GName (CallArg Ty CTy))
 renCAParam nm = genRenBound (nameMut nm) renTyCTy_ann nm
   where 
-    renTyCTy_ann :: Maybe SourcePos -> CallArg SrcTy SrcCTy -> TcM (CallArg Ty CTy)
+    renTyCTy_ann :: SrcLoc -> CallArg SrcTy SrcCTy -> TcM (CallArg Ty CTy)
     renTyCTy_ann p = callArg (liftM CAExp . renTyAnn p) (liftM CAComp . renCTyAnn p)
 
 
@@ -128,7 +128,7 @@ recCANames params = let (names, cnames) = partitionParams params
 -------------------------------------------------------------------------------}
 
 
-renReqTy :: Maybe SourcePos -> SrcTy -> TcM Ty
+renReqTy :: SrcLoc -> SrcTy -> TcM Ty
 renReqTy p = go
   where
     go SrcTUnit               = return TUnit
@@ -146,7 +146,7 @@ renReqTy p = go
 
     go SrcTyUnknown           = panicStr "renReqTy: unknown type"
 
-renReqGCTy :: Maybe SourcePos -> GCTy SrcTy -> TcM CTy
+renReqGCTy :: SrcLoc -> GCTy SrcTy -> TcM CTy
 renReqGCTy p = go
   where
     go (CTVar _)          = panicStr "Unexpected type variable in source type"
@@ -156,7 +156,7 @@ renReqGCTy p = go
     go (CTArrow args res) = CTArrow <$>
                             mapM (renTyCTy p) args <*> go res
 
-renNumExpr :: Maybe SourcePos -> SrcNumExpr -> TcM NumExpr
+renNumExpr :: SrcLoc -> SrcNumExpr -> TcM NumExpr
 renNumExpr _ (SrcLiteral n) = return $ Literal n
 renNumExpr _ (SrcNVar _)    = freshNumExpr "n"
 renNumExpr p (SrcNArr nm)   = do
@@ -170,7 +170,7 @@ renBitWidth SrcBW16 = return BW16
 renBitWidth SrcBW32 = return BW32
 renBitWidth SrcBW64 = return BW64
 
-renStructDef :: Maybe SourcePos -> GStructDef SrcTy -> TcM StructDef
+renStructDef :: SrcLoc -> GStructDef SrcTy -> TcM StructDef
 renStructDef p (StructDef nm flds) = do
     flds' <- forM flds $ \(fld, ty) -> do
                ty' <- renReqTy p ty
@@ -179,11 +179,11 @@ renStructDef p (StructDef nm flds) = do
                      , struct_flds = flds'
                      }
 
-renTyAnn :: Maybe SourcePos -> SrcTy -> TcM Ty
+renTyAnn :: SrcLoc -> SrcTy -> TcM Ty
 renTyAnn _ SrcTyUnknown = freshTy "a"
 renTyAnn p ty           = renReqTy p ty
 
-renCTyAnn :: Maybe SourcePos -> SrcCTy -> TcM CTy
+renCTyAnn :: SrcLoc -> SrcCTy -> TcM CTy
 renCTyAnn _ SrcCTyUnknown    = freshCTy "c"
 renCTyAnn p (SrcCTyKnown ct) = renReqGCTy p ct
 
@@ -192,7 +192,7 @@ renCTyAnn p (SrcCTyKnown ct) = renReqGCTy p ct
   Dealing with CallArg
 -------------------------------------------------------------------------------}
 
-renTyCTy :: Maybe SourcePos -> CallArg (GArgTy SrcTy) (GCTy SrcTy) -> TcM (CallArg ArgTy CTy)
+renTyCTy :: SrcLoc -> CallArg (GArgTy SrcTy) (GCTy SrcTy) -> TcM (CallArg ArgTy CTy)
 renTyCTy p = callArg on_exp (liftM CAComp . renReqGCTy p)
   where on_exp (GArgTy srcty m)
            = do ty <- renReqTy p srcty
@@ -417,7 +417,7 @@ renExp (MkExp exp0 eloc ()) = case exp0 of
         e1' <- renExp e1
         return $ eProj eloc e1' fn
 
-renUnOp :: Maybe SourcePos -> GUnOp SrcTy -> TcM UnOp
+renUnOp :: SrcLoc -> GUnOp SrcTy -> TcM UnOp
 renUnOp _ NatExp    = return NatExp
 renUnOp _ Neg       = return Neg
 renUnOp _ Not       = return Not

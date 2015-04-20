@@ -44,7 +44,7 @@ import PpExpr ()
 import Control.Monad.State.Class
 import Control.Applicative
 import Control.Monad ( unless )
-
+import Data.Loc
 import Data.Set ( Set )
 import qualified Data.Set as Set
 import NameEnv
@@ -173,11 +173,11 @@ instance (AbsInt m v, CmdDom m v) => CmdDomRec (AbsT m) v where
     astart <- absEval estart
     s' <- get
     unless (s' `pleq` s) $ fail "Analysis failure, imperative estart!"
-    let econd = eBinOp Nothing Lt eidx (eBinOp Nothing Add estart elen)
+    let econd = eBinOp noLoc Lt eidx (eBinOp noLoc Add estart elen)
     acond <- absEval econd
     let m' = m >> do rhs <- absEval $
-                            eBinOp Nothing Add eidx
-                              (eVal Nothing (nameTyp idx) (VInt 1))
+                            eBinOp noLoc Add eidx
+                              (eVal noLoc (nameTyp idx) (VInt 1))
                      aAssign (varLVal idx) rhs
                      return $ aVal VUnit
     withMutABind idx $
@@ -185,7 +185,7 @@ instance (AbsInt m v, CmdDom m v) => CmdDomRec (AbsT m) v where
          afix $ aWiden acond (aWithFact acond m')
                              (aWithFact (aUnOp Not acond) aSkip)
     where 
-      eidx = eVar Nothing idx
+      eidx = eVar noLoc idx
 
 afix :: (POrd s, MonadState s m) => m a -> m a
 afix action = loop
@@ -251,7 +251,7 @@ absEval e = go (unExp e) where
     aAssign alhs arhs
     return $ aVal VUnit
   go (EArrWrite earr ei rng erhs) = 
-    go $ EAssign (eArrRead Nothing earr ei rng) erhs
+    go $ EAssign (eArrRead noLoc earr ei rng) erhs
 
   -- Reading, projections 
   go (EArrRead {}) = do
@@ -296,7 +296,7 @@ absEval e = go (unExp e) where
   go (ELetRef v (Just e1) e2) = do
     a1 <- absEval e1
     withMutABind v $ do
-      d <- absEvalDeref (eVar Nothing v)
+      d <- absEvalDeref (eVar noLoc v)
       aAssign d a1
       absEval e2
 

@@ -21,7 +21,6 @@ module CgExpr where
 import Opts
 import AstExpr
 import CgMonad
-import Text.Parsec.Pos
 
 import qualified Language.C.Syntax as C
 

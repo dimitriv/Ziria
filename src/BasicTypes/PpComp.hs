@@ -253,10 +253,7 @@ ppCompAst cmp =
            False False False (unComp cmp)
 
 ppCompLoc :: GComp tc t a b -> Doc
-ppCompLoc c =
-  (case compLoc c of
-    Just pos -> text (show pos)
-    Nothing -> empty)
+ppCompLoc c = text (show (compLoc c))
 
 
 ppCompTyped :: GComp CTy Ty a b -> Doc

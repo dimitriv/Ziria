@@ -36,8 +36,6 @@ import CgMonad
 import CgTypes
 import CgLUT
 
-import Text.Parsec.Pos ( SourcePos )
-
 import Control.Monad (when, unless)
 
 import Control.Applicative
@@ -45,7 +43,7 @@ import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
 import Data.Bits
 import Data.List (elemIndex, foldl', isPrefixOf )
-import qualified Data.Loc
+import Data.Loc
 import qualified Data.Symbol
 import qualified Language.C.Syntax as C
 import Language.C.Quote.C
@@ -61,7 +59,7 @@ import CgExpr
 import CtExpr 
 
 codeGenCall_alloc :: DynFlags 
-                  -> Maybe SourcePos 
+                  -> SrcLoc 
                   -> Ty 
                   -> GName Ty 
                   -> [Exp] -> Cg C.Exp
@@ -70,7 +68,7 @@ codeGenCall_alloc dflags loc retTy nef eargs
   = do { is_struct_ptr <- isStructPtrType retTy
        ; newNm <- genSym $ name nef ++ "_" ++ getLnNumInStr loc
         
-       ; let retNewN = toName ("__retcall_" ++ newNm) Nothing retTy Mut
+       ; let retNewN = toName ("__retcall_" ++ newNm) noLoc retTy Mut
              cer     = [cexp|$id:(name retNewN)|]
 
        ; unless (retTy == TUnit) $ 
@@ -81,7 +79,7 @@ codeGenCall_alloc dflags loc retTy nef eargs
        }
 
 codeGenCall_store :: DynFlags
-                  -> Maybe SourcePos
+                  -> SrcLoc
                   -> Ty 
                   -> C.Exp
                   -> GName Ty
@@ -93,7 +91,7 @@ codeGenCall_store dflags loc retTy cer nef eargs
 
 
 codegen_call :: DynFlags
-             -> Maybe SourcePos 
+             -> SrcLoc 
              -> Ty 
              -> C.Exp 
              -> GName Ty 

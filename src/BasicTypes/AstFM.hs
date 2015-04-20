@@ -36,8 +36,7 @@ module AstFM where
 import Prelude
 
 import Control.Applicative
-
-import Text.Parsec.Pos
+import Data.Loc
 
 import AstComp
 import AstExpr
@@ -160,7 +159,7 @@ instance FExpy e => Rng (e :+ Integer) where
 
 
 -- Interpret expressions
-interpE :: FExpy e => Maybe SourcePos -> e -> Exp
+interpE :: FExpy e => SrcLoc -> e -> Exp
 interpE p fe  = go (toFExp fe)
   where 
     go (FEVal t v) = eVal p t v
@@ -186,13 +185,13 @@ instance Monad FStmt where
   (FEAssign fe1 fe2 ss) >>= f         = FEAssign fe1 fe2 (ss >>= f)
   (FEReturn v) >>= f                  = f v
 
-interpS_FExpy :: FExpy e => Maybe SourcePos -> FStmt e -> Exp
+interpS_FExpy :: FExpy e => SrcLoc -> FStmt e -> Exp
 interpS_FExpy p = interpS_aux p (interpE p . toFExp)
 
-interpS_Bindable :: Bindable e => Maybe SourcePos -> FStmt e -> Exp
+interpS_Bindable :: Bindable e => SrcLoc -> FStmt e -> Exp
 interpS_Bindable p = interpS_aux p genexp
 
-interpS_aux :: Maybe SourcePos -> (v -> Exp) -> FStmt v -> Exp
+interpS_aux :: SrcLoc -> (v -> Exp) -> FStmt v -> Exp
 interpS_aux p on_ret = go 
   where 
     go (FEReturn e) = on_ret e
@@ -234,7 +233,7 @@ gen_name sym ty mk = gen_name_pref sym "" ty mk
 gen_name_pref :: GS.Sym -> String -> Ty -> MutKind -> IO EId
 gen_name_pref sym x ty mk = do
     suff <- GS.genSymStr sym
-    return $ toName (x ++ "_free_" ++ suff) Nothing ty mk
+    return $ toName (x ++ "_free_" ++ suff) noLoc ty mk
 
 -- Generated from >>= hence immutable!
 class Bindable v where
@@ -245,17 +244,17 @@ instance Bindable EId where
   genbnd sym str ty = do
     nm <- gen_name_pref sym str ty Imm
     return $ BndResB nm nm
-  genexp nm = eVar Nothing nm
+  genexp nm = eVar noLoc nm
 
 instance Bindable FExp where
   genbnd sym str t
     = do nm <- gen_name_pref sym str t Imm
          return $ BndResB nm (FEVar nm)
-  genexp fe = interpE Nothing fe
+  genexp fe = interpE noLoc fe
 
 instance Bindable () where
   genbnd _sym _str _ty = return $ BndResU ()
-  genexp _ = eVal Nothing TUnit VUnit
+  genexp _ = eVal noLoc TUnit VUnit
 
 instance Bindable Void where 
   genbnd _sym _ _
@@ -315,7 +314,7 @@ instance Monad Zr where
   (>>=) (FEmbed io_c) f         = FBind (FEmbed io_c) f
 
 interpC :: Bindable v => String -> -- a prefix to prepend to names (for debugging)
-           GS.Sym -> Maybe SourcePos -> Zr v -> IO Comp
+           GS.Sym -> SrcLoc -> Zr v -> IO Comp
 interpC pref sym loc = go
   where 
     -- NB: requires polymorphic recursion

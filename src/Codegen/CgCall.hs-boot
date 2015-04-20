@@ -25,19 +25,19 @@ module CgCall
 import Opts
 import AstExpr
 import CgMonad
-import Text.Parsec.Pos
 
+import Data.Loc
 import qualified Language.C.Syntax as C
 
 
 codeGenCall_alloc :: DynFlags
-                  -> Maybe SourcePos
+                  -> SrcLoc
                   -> Ty 
                   -> GName Ty 
                   -> [Exp] -> Cg C.Exp
 
 codeGenCall_store :: DynFlags
-                  -> Maybe SourcePos
+                  -> SrcLoc
                   -> Ty 
                   -> C.Exp
                   -> GName Ty

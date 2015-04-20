@@ -27,8 +27,6 @@ import PpComp
 import Outputable
 import qualified GenSym as GS
 
-import Text.Parsec.Pos
-
 import qualified Data.Set as S
 import Control.Monad.State
 

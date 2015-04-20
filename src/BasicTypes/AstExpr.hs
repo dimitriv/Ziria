@@ -23,6 +23,7 @@ module AstExpr where
 import {-# SOURCE #-} LUTAnalysis
 import Prelude hiding (exp, mapM)
 import Control.DeepSeq.Generics (NFData(..), genericRnf)
+import Data.Loc
 import Data.Monoid
 import Data.Data (Data)
 import Data.Functor.Identity (Identity(..))
@@ -30,7 +31,6 @@ import Data.Maybe ( isJust )
 import Data.Traversable (mapM)
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
-import Text.Parsec.Pos
 import Text.Show.Pretty (PrettyVal)
 import qualified Data.Set as S
 
@@ -74,10 +74,13 @@ data GName t
   = MkName { name    :: String
            , uniqId  :: Uniq
            , nameTyp :: t
-           , nameLoc :: Maybe SourcePos
+           , nameLoc :: SrcLoc
            , nameMut :: MutKind
            }
   deriving (Generic, Typeable, Data)
+
+instance Located (GName t) where
+    locOf = locOf . nameLoc
 
 isMutable :: GName t -> Bool
 isMutable nm = case nameMut nm of { Imm -> False ; Mut -> True }
@@ -95,7 +98,7 @@ instance Show (GName t) where
   show (MkName x _id _ _ _loc)    = x
 
 
-toName :: String -> Maybe SourcePos -> t -> MutKind -> GName t
+toName :: String -> SrcLoc -> t -> MutKind -> GName t
 toName s mpos typ mk =
     MkName { name    = s
            , uniqId  = MkUniq s
@@ -158,7 +161,7 @@ data SrcNumExpr where
 
   -- | User doesn't specify array length.
   -- We record the the location for the sake of error messages.
-  SrcNVar :: SourcePos -> SrcNumExpr
+  SrcNVar :: SrcLoc -> SrcNumExpr
 
   deriving (Generic, Typeable, Data, Eq)
 
@@ -314,7 +317,7 @@ type GDerefExp t a = AGDerefExp (GExp t a) t
 type LVal idx = AGDerefExp idx Ty
 
 
-derefToExp :: Maybe SourcePos -> AGDerefExp (GExp t ()) t -> GExp t ()
+derefToExp :: SrcLoc -> AGDerefExp (GExp t ()) t -> GExp t ()
 derefToExp loc = go 
   where go (GDVar nm)           = MkExp (EVar nm) loc ()
         go (GDProj de fld)      = MkExp (EProj (go de) fld) loc ()
@@ -421,9 +424,12 @@ data GExp0 t a where
 
 data GExp t a
   = MkExp { unExp  :: !(GExp0 t a)
-          , expLoc :: !(Maybe SourcePos)
+          , expLoc :: !SrcLoc
           , info :: a }
   deriving (Eq, Ord)
+
+instance Located (GExp t a) where
+    locOf = locOf . expLoc
 
 -- Structure definitions
 data GStructDef t
@@ -452,7 +458,7 @@ data FunDef a body
 
 data GFun t a
   = MkFun { unFun   :: GFun0 t a
-          , funLoc  :: Maybe SourcePos
+          , funLoc  :: SrcLoc
           , funInfo :: a }
   deriving (Eq, Ord) 
 
@@ -820,7 +826,7 @@ eraseFun = mapFun id (const ()) eraseExp
 eraseLoc :: Exp -> Exp
 eraseLoc = mapExp id -- types don't change
                   id -- annotations don't change
-                  (\e -> e { expLoc = Nothing }) -- delete locations
+                  (\e -> e { expLoc = noLoc }) -- delete locations
 
 {-------------------------------------------------------------------------------
   Free variables
@@ -928,11 +934,11 @@ substExp slen sexp ge
   Utility
 -------------------------------------------------------------------------------}
 
-getLnNumInStr :: Maybe SourcePos -> String
+getLnNumInStr :: SrcLoc -> String
 getLnNumInStr csp
-   = case csp of
-       Just l  -> "ln" ++ (show $ sourceLine l) ++ "_"
-       Nothing -> "ln_"
+   = case locOf csp of
+       Loc p _  -> "ln" ++ (show . posLine) p ++ "_"
+       NoLoc    -> "ln_"
 
 isEVal :: GExp t a -> Bool
 isEVal e
@@ -988,10 +994,10 @@ expEq e e' = expEq0 (unExp e) (unExp e')
     expEq0 _e _e' = False
 
 toExp :: a -> GExp0 t a -> GExp t a
-toExp a e = MkExp { unExp = e, expLoc = Nothing, info = a }
+toExp a e = MkExp { unExp = e, expLoc = noLoc, info = a }
 
-toExpPos :: a -> SourcePos -> GExp0 t a -> GExp t a
-toExpPos a pos e = MkExp { unExp = e, expLoc = Just pos, info = a }
+toExpPos :: a -> SrcLoc -> GExp0 t a -> GExp t a
+toExpPos a pos e = MkExp { unExp = e, expLoc = pos, info = a }
 
 binopList :: BinOp -> a -> GExp t a -> [GExp t a] -> GExp t a
 binopList _  _ e0 []       = e0
@@ -1082,8 +1088,8 @@ complex64TyName :: TyName
 complex64TyName = "complex64"
 
 
-toFunPos :: a -> SourcePos -> GFun0 t a -> GFun t a
-toFunPos a pos fn = MkFun fn (Just pos) a
+toFunPos :: a -> SrcLoc -> GFun0 t a -> GFun t a
+toFunPos a pos fn = MkFun fn pos a
 
 isArithBinOp :: BinOp -> Bool
 isArithBinOp Add   = True
