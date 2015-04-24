@@ -323,6 +323,7 @@ exp_na :
 
   | scalar_value
       { eValSrc (srclocOf $1) (unLoc $1) }
+  | 'arr' '{' exp_list '}' { eValArr (srclocOf $3) $3 }
   -- XXX: we can shadow a comp
   | comp_identifier
       { mkVar (srclocOf $1) (unLoc $1) }
