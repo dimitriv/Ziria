@@ -222,6 +222,11 @@ identifier :
   | 'fun'    { L (locOf $1) "fun" }
   | 'length' { L (locOf $1) "length" }
 
+comp_identifier :: { L String }
+comp_identifier :
+    ID       { L (locOf $1) (unintern (getID $1)) }
+  | COMPID   { L (locOf $1) (unintern (getCOMPID $1)) }
+
 {------------------------------------------------------------------------------
  -
  - Values
@@ -318,24 +323,20 @@ exp_na :
 
   | scalar_value
       { eValSrc (srclocOf $1) (unLoc $1) }
-  | ID
-      { mkVar (srclocOf $1) (unintern (getID $1)) }
   -- XXX: we can shadow a comp
-  | COMPID
-      { mkVar (srclocOf $1) (unintern (getCOMPID $1)) }
+  | comp_identifier
+      { mkVar (srclocOf $1) (unLoc $1) }
   | ID '{' struct_init_list1 '}'
       { eStruct' ($1 `srcspan` $4) (unintern (getID $1)) $3 }
   | struct_id '{' struct_init_list1 '}'
       { eStruct' ($1 `srcspan` $4) (unLoc $1) $3 }
   | ID derefs
       { $2 (mkVar (srclocOf $1) (unintern (getID $1))) }
-  | ID '(' exp_list ')'
-      { mkCall ($1 `srcspan` $4) (unintern (getID $1)) $3 }
   -- XXX: a fun comp can reuse a fun identifier, but the old fun identifier is
   -- still visible! The lexer has now way of telling this, of
   -- course... Disgusting!
-  | COMPID '(' exp_list ')'
-      { mkCall ($1 `srcspan` $4) (unintern (getCOMPID $1)) $3 }
+  | comp_identifier '(' exp_list ')'
+      { mkCall ($1 `srcspan` $4) (unLoc $1) $3 }
   | cast_type '(' exp_na ')'
       { eUnOp' ($1 `srcspan` $4) (Cast (unLoc $1)) $3 }
   | '(' exp ')'
@@ -968,22 +969,22 @@ maybe_comp_range :
 -- Comp variable binding
 comp_var_bind :: { GName SrcCTy }
 comp_var_bind :
-    ID
+    comp_identifier
       {% let { p = srclocOf $1
-             ; i = (unintern (getID $1))
+             ; i = unLoc $1
              }
          in
-           do { addCompIdentifier (getID $1)
+           do { addCompIdentifier (intern i)
               ; return $ toName i p SrcCTyUnknown (errMutKind i p)
               }
       }
-  | '(' ID ':' comp_base_type ')'
+  | '(' comp_identifier ':' comp_base_type ')'
       {% let { p  = $1 `srcspan` $5
-             ; i  = (unintern (getID $2))
+             ; i  = unLoc $2
              ; ty = unLoc $4
              }
          in
-           do { addCompIdentifier (getID $1)
+           do { addCompIdentifier (intern i)
               ; return $ toName i p ty (errMutKind i p)
               }
       }
