@@ -709,8 +709,8 @@ instrAsgn mask_eids loc d' erhs' = do
     mk_lets [] ebody = ebody
     mk_lets ((x,e,test):bnds) ebody =
       eLet loc x AutoInline e $ eIf loc test (mk_lets bnds ebody) eunit
-    eunit = ePrint loc True [emsg]
-    emsg  = eVal loc TString (VString "Bounds exceeded during LUT generation!")
+    eunit = eVal loc TUnit VUnit -- Too verbose: ePrint loc True [emsg]
+    -- emsg  = eVal loc TString (VString "Bounds exceeded during LUT generation!")
 
     eseqs :: [Exp] -> Exp
     eseqs [e]    = e
@@ -787,11 +787,18 @@ instrLVal loc ms lval = go lval [] MRFull
                  -> LengthInfo    -- ^ length to address
                  -> Exp           -- ^ boolean check
     mk_rangetest array_len estart len = case len of 
-      LISingleton -> eBinOp loc Lt estart earray_len
-      LILength n  -> eBinOp loc Leq (eAddBy estart n) earray_len
+      LISingleton -> 
+             eBinOp loc And estart_non_neg $
+             eBinOp loc Lt estart earray_len
+      LILength n  -> 
+             eBinOp loc And estart_non_neg $
+             eBinOp loc Leq (eAddBy estart n) earray_len
       LIMeta {}   -> panicStr "mk_rangetest: LIMeta!"
       where earray_len = eVal loc (ctExp estart) varray_len
             varray_len = VInt $ fromIntegral array_len
+            estart_non_neg = eBinOp loc Geq estart $ 
+                             eVal loc (ctExp estart) (VInt 0)
+
 
 
 
