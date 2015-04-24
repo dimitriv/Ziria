@@ -15,4 +15,4 @@ fun comp qpsk() {
   do { joo := 3; }
 }
 
-comp main = read[int] >>> write[int]
+let comp main = read[int] >>> write[int]
