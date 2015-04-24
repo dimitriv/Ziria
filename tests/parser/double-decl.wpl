@@ -1,0 +1,18 @@
+
+{- This program fails with an uninformative: ``parse error on qpsk''. I am not sure if
+   this should be a parse error or a shadowing -}
+
+
+
+
+fun comp qpsk() {
+  var out : int
+  do { out := 35; }
+};
+
+fun comp qpsk() {
+  var joo : int;
+  do { joo := 3; }
+}
+
+comp main = read[int] >>> write[int]
