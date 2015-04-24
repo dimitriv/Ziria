@@ -698,7 +698,7 @@ stmt_exp :
 
 unroll_info :: { L UnrollInfo }
 unroll_info :
-    {- empty -} { L NoLoc AutoUnroll }
+    {- empty -} { L NoLoc      AutoUnroll }
   | 'unroll'    { L (locOf $1) Unroll }
   | 'nounroll'  { L (locOf $1) NoUnroll }
 
@@ -880,7 +880,10 @@ comp_term :
   | 'map' vect_ann var_bind
       { cMap (srclocOf $1) $2 $3 }
   | 'if' exp 'then' command_comp comp_maybe_else
-      { cBranch ($1 `srcspan` $5) $2 $4 (unLoc $5) }
+      { let { sloc = $1 `srcspan` $5 }
+        in
+          cBranch sloc $2 $4 (unLoc $5 sloc)
+      }
   | 'if' exp 'then' error
       {% expected ["command"] Nothing }
   | 'if' exp ';'
@@ -912,14 +915,14 @@ comp_term :
           cCall p v $3
       }
 
-comp_maybe_else :: { L SrcComp }
+comp_maybe_else :: { L (SrcLoc -> SrcComp) }
 comp_maybe_else :
-    {- empty -}         { L NoLoc (cUnit noLoc) }
-  | 'else' command_comp { L ($1 <--> $2) $2 }
+    {- empty -}         { L NoLoc        cUnit }
+  | 'else' command_comp { L ($1 <--> $2) (\_ -> $2) }
 
 inline_ann :: { L ForceInline }
 inline_ann :
-    {- empty -}   { L NoLoc AutoInline }
+    {- empty -}   { L NoLoc      AutoInline }
   | 'noinline'    { L (locOf $1) NoInline }
   | 'forceinline' { L (locOf $1) ForceInline }
   | 'autoinline'  { L (locOf $1) AutoInline }
