@@ -29,6 +29,7 @@ COMPILER?=vs
 
 PP   = ../../../scripts/preprocesscompile-$(COMPILER)-debug.sh
 DIFF = ../../../tools/BlinkDiff
+BLADERF_PATH_CYGW = $(shell cygpath -u '$(BLADERF_PATH)\x64')
 
 # Do not delete outfiles to allow quick recheck of failed tests
 # use make clean to get rid of them
@@ -41,13 +42,13 @@ TGTS = $(patsubst %.blk, %.test, $(wildcard *.blk))
 all: $(TGTS)
 
 %.out : %.blk
-#	C_DEFINES='BLADE_RF' LIBS='bladeRF.lib' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PP) $< $@
-	EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PP) $< $@
+	C_DEFINES='BLADE_RF' LIBS='bladeRF.lib' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PP) $< $@
 
 
-sniffer_test.outfile: sniffer_test.out ../matlab/pkt1.infile
+sniffer_test.outfile: sniffer_test.out ../matlab/pkt3.infile
+	PATH="$(PATH)":"/cygdrive/c/Program Files/bladeRF/x64" \
 	./$< --input=file \
-             --input-file-name=../matlab/pkt1.infile \
+             --input-file-name=../matlab/pkt3.infile \
              --input-file-mode=dbg \
              --output-file-name=$@ \
              --output-file-mode=dbg
@@ -56,6 +57,7 @@ sniffer_test.outfile: sniffer_test.out ../matlab/pkt1.infile
 	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
 
 sniffer.run: sniffer.out
+	PATH="$(PATH)":"/cygdrive/c/Program Files/bladeRF/x64" \
 	./$< --input=file \
              --input-file-name=../matlab/pkt1.infile \
              --input-file-mode=dbg \
