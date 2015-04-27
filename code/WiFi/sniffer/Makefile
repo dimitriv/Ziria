@@ -58,11 +58,11 @@ sniffer_test.outfile: sniffer_test.out ../matlab/pkt3.infile
 
 sniffer.run: sniffer.out
 	PATH="$(PATH)":"/cygdrive/c/Program Files/bladeRF/x64" \
-	./$< --input=file \
-             --input-file-name=../matlab/pkt1.infile \
-             --input-file-mode=dbg \
-             --output-file-name=$@ \
-             --output-file-mode=dbg
+	./$< --input=sdr \
+	     --sora-central-frequency=2412000000 \
+             --input-file-mode=bin \
+             --output=dummy
+
 
 
 %.accept : %.outfile

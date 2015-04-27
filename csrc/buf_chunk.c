@@ -86,7 +86,7 @@ void init_getchunk(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *
 		}
 	}
 
-	if (params->inType == TY_SORA)
+	if (params->inType == TY_SDR)
 	{
 		fprintf(stderr, "Error: Sora does not support chunk receive\n");
 		exit(1);
@@ -249,7 +249,7 @@ void init_putchunk(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *
 		}
 	}
 
-	if (params->outType == TY_SORA)
+	if (params->outType == TY_SDR)
 	{
 		fprintf(stderr, "Error: Sora TX does not support bits\n");
 		exit(1);

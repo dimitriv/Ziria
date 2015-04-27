@@ -47,8 +47,8 @@ BlinkFileType parse_type(char *typ)
 {
 	if (strcmp(typ,"file") == 0)  return TY_FILE; 
 	if (strcmp(typ,"dummy") == 0) return TY_DUMMY;
-	if (strcmp(typ,"sora") == 0)  return TY_SORA;
-	if (strcmp(typ,"ip") == 0)    return TY_IP;
+	if (strcmp(typ,"sdr") == 0)   return TY_SDR;
+	if (strcmp(typ, "ip") == 0)   return TY_IP;
 	fprintf(stderr, "Error: cannot parse type parameter %s\n",typ);
 	exit(1);
 }
@@ -164,12 +164,12 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
 	   "0",
 	   init_DEBUG },
 	 { "--input=", 
-       "--input=file|dummy|sora|ip",
+       "--input=file|dummy|sora|bladerf|ip",
        "Input samples come from a file, radio, or are dummy samples",
        "file",
        init_inType },
      { "--output=", 
-       "--output=file|dummy|sora|ip",
+       "--output=file|dummy|sora|bladerf|ip",
        "Output samples written to file, radio, or are ignored (dummy)",
        "file",
        init_outType },

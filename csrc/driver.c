@@ -103,14 +103,14 @@ int __cdecl main(int argc, char **argv) {
 
 #ifdef SORA_PLATFORM
   // Start Sora HW
-  if (Globals.inType == TY_SORA || Globals.outType == TY_SORA)
+  if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
   {
 	  RadioStart(&Globals);
-	  if (Globals.inType == TY_SORA)
+	  if (Globals.inType == TY_SDR)
 	  {
 		  InitSoraRx(params);
 	  }
-	  if (Globals.outType == TY_SORA)
+	  if (Globals.outType == TY_SDR)
 	  {
 		  InitSoraTx(params);
 	  }
@@ -188,7 +188,7 @@ int __cdecl main(int argc, char **argv) {
 
 #ifdef SORA_PLATFORM
 	// Stop Sora HW
-	if (Globals.inType == TY_SORA || Globals.outType == TY_SORA)
+	if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
 	{
 		RadioStop(&Globals);
 	}

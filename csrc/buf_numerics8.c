@@ -121,7 +121,7 @@ void _init_getint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *
 	}
 
 	/*
-	if (params->inType == TY_SORA)
+	if (params->inType == TY_SDR)
 	{
 #ifdef SORA_PLATFORM
 		InitSoraRx(params);
@@ -171,7 +171,7 @@ GetStatus _buf_getint8(BlinkParams *params, BufContextBlock *blk, int8 *x)
 		return GS_SUCCESS;
 	}
 
-	if (params->inType == TY_SORA)
+	if (params->inType == TY_SDR)
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora RX supports only complex16 type.\n");
@@ -221,7 +221,7 @@ GetStatus _buf_getarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, un
 		return GS_SUCCESS;
 	}
 
-	if (params->inType == TY_SORA)
+	if (params->inType == TY_SDR)
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora RX supports only complex8 type.\n");
@@ -270,7 +270,7 @@ GetStatus buf_getcomplex8(BlinkParams *params, BufContextBlock *blk, complex8 *x
 		}
 	}
 
-	if (params->inType == TY_SORA)
+	if (params->inType == TY_SDR)
 	{
 		fprintf(stderr, "Error: Sora does not support 8-bit receive\n");
 		exit(1);
@@ -290,7 +290,7 @@ GetStatus buf_getarrcomplex8(BlinkParams *params, BufContextBlock *blk, complex8
 		return _buf_getarrint8(params, blk, (int8*)x, vlen * 2);
 	}
 
-	if (params->inType == TY_SORA)
+	if (params->inType == TY_SDR)
 	{
 		fprintf(stderr, "Error: Sora RX does not support Complex8\n");
 		exit(1);
@@ -354,7 +354,7 @@ void init_putint8(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *h
 		}
 	}
 
-	if (params->outType == TY_SORA)
+	if (params->outType == TY_SDR)
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora TX supports only int16 type.\n");
@@ -396,7 +396,7 @@ void _buf_putint8(BlinkParams *params, BufContextBlock *blk, int8 x)
 		}
 	}
 
-	if (params->outType == TY_SORA)
+	if (params->outType == TY_SDR)
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora TX supports only int16 type.\n");
@@ -461,7 +461,7 @@ void _buf_putarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigne
 		}
 	}
 
-	if (params->outType == TY_SORA)
+	if (params->outType == TY_SDR)
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora TX supports only complex8 type.\n");
@@ -550,7 +550,7 @@ void init_putcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBloc
 	}
 
 	/*
-	if (params->outType == TY_SORA)
+	if (params->outType == TY_SDR)
 	{
 #ifdef SORA_PLATFORM
 		InitSoraTx(params);
@@ -577,7 +577,7 @@ void buf_putcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 
 		_buf_putint8(params, blk, x.im);
 	}
 
-	if (params->outType == TY_SORA)
+	if (params->outType == TY_SDR)
 	{
 		fprintf(stderr, "Error: Sora TX does not support Complex8\n");
 		exit(1);
@@ -597,7 +597,7 @@ void buf_putarrcomplex8(BlinkParams *params, BufContextBlock *blk, struct comple
 		_buf_putarrint8(params, blk, (int8 *)x, vlen * 2);
 	}
 
-	if (params->outType == TY_SORA)
+	if (params->outType == TY_SDR)
 	{
 		fprintf(stderr, "Error: Sora TX does not support Complex8\n");
 		exit(1);

@@ -22,9 +22,10 @@
 typedef enum  { 
   TY_FILE  = 0,
   TY_DUMMY = 1,
-  TY_SORA = 2,
+  TY_SDR = 2,
   TY_IP = 3,
-  TY_MEM = 4
+  TY_MEM = 4, 
+  TY_BLADERF = 5
 } BlinkFileType;
 
 // Binary or debug (human-readable) file format

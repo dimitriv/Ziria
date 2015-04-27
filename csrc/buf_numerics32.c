@@ -116,7 +116,7 @@ void _init_getint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock 
 		}
 	}
 
-	if (params->inType == TY_SORA)
+	if (params->inType == TY_SDR)
 	{
 		fprintf(stderr, "Error: Sora does not support 32-bit receive\n");
 		exit(1);
@@ -163,7 +163,7 @@ GetStatus _buf_getint32(BlinkParams *params, BufContextBlock *blk, int32 *x)
 		return GS_SUCCESS;
 	}
 
-	if (params->inType == TY_SORA)
+	if (params->inType == TY_SDR)
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora RX supports only Complex16 type.\n");
@@ -213,7 +213,7 @@ GetStatus _buf_getarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, 
 		return GS_SUCCESS;
 	}
 
-	if (params->inType == TY_SORA)
+	if (params->inType == TY_SDR)
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora RX supports only Complex16 type.\n");
@@ -248,7 +248,7 @@ void init_getcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlo
 		blk->num_max_dummy_samples = params->dummySamples * 2; // since we will be doing this in integer granularity
 	}
 
-	if (params->inType == TY_SORA)
+	if (params->inType == TY_SDR)
 	{
 		fprintf(stderr, "Error: Sora RX does not support Complex32\n");
 		exit(1);
@@ -336,7 +336,7 @@ void init_putint32(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *
 		}
 	}
 
-	if (params->outType == TY_SORA)
+	if (params->outType == TY_SDR)
 	{
 		fprintf(stderr, "Error: Sora TX does not support Int32\n");
 		exit(1);
@@ -371,7 +371,7 @@ void _buf_putint32(BlinkParams *params, BufContextBlock *blk, int32 x)
 		}
 	}
 
-	if (params->outType == TY_SORA)
+	if (params->outType == TY_SDR)
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora TX supports only Complex16 type.\n");
@@ -435,7 +435,7 @@ void _buf_putarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsig
 		}
 	}
 
-	if (params->outType == TY_SORA)
+	if (params->outType == TY_SDR)
 	{
 #ifdef SORA_PLATFORM
 		fprintf(stderr, "Sora TX supports only Complex16 type.\n");
@@ -521,7 +521,7 @@ void init_putcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlo
 		}
 	}
 
-	if (params->outType == TY_SORA)
+	if (params->outType == TY_SDR)
 	{
 		fprintf(stderr, "Error: Sora TX does not support Complex32\n");
 		exit(1);
@@ -542,7 +542,7 @@ void buf_putcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex3
 		_buf_putint32(params, blk, x.im);
 	}
 
-	if (params->outType == TY_SORA)
+	if (params->outType == TY_SDR)
 	{
 		fprintf(stderr, "Error: Sora TX does not support Complex32\n");
 		exit(1);
@@ -560,7 +560,7 @@ void buf_putarrcomplex32(BlinkParams *params, BufContextBlock *blk, struct compl
 		_buf_putarrint32(params, blk, (int32 *)x, vlen * 2);
 	}
 
-	if (params->outType == TY_SORA)
+	if (params->outType == TY_SDR)
 	{
 		fprintf(stderr, "Error: Sora TX does not support Complex32\n");
 		exit(1);
