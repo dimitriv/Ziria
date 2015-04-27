@@ -1179,78 +1179,40 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
       -- CLetE is the top-level enclosing context. We should be
       -- generating global declarations.
       --
-
       = do { (e_decls,e_stmts,ce) <- inNewBlock $ codeGenExp dflags e
            ; let ty = ctExp e
            ; x_name <- freshVar ((name x) ++ "_" ++ (getLnNumInStr csp))
            ; let x_cname = x_name
 
-           ; x_decl <- codeGenDeclGroup x_cname ty
+           ; x_decl@(d,_) <- codeGenDeclGroup_qual "calign" x_cname ty Nothing
 
-           ; if emit_global then
-                appendTopDecls (x_decl : e_decls)
-             else
-                appendDecls (x_decl : e_decls)
-
-           ; (a,stms) <- extendVarEnv [(x, [cexp|$id:x_cname|])] $
-                         do { -- cgIO $ putStrLn "before action."
-                            ; r <- go ctxt action
-                              -- cgIO $ putStrLn "after action."
-                            ; return r
-                            }
+             -- Declare any declarations from e 
+           ; if emit_global then appendTopDecls e_decls else appendDecls e_decls
 
            ; (_,asgn_stmts) <- inNewBlock_ $
                                assignByVal ty ty [cexp|$id:x_cname|] ce
 
+           ; if emit_global then appendTopDecl d else appendDecl d
+
+           ; (a,stms) <- extendVarEnv [(x, [cexp|$id:x_cname|])] $ go ctxt action
            ; return (a,e_stmts ++ asgn_stmts ++ stms)
            }
 
     -- CL
     -- TODO: Should we do something with _ty here?
-    go (CLetERef csp x (Just e) ctxt) action
-      = do { (e_decls,e_stmts,ce) <- inNewBlock $ codeGenExp dflags e
-           ; let ty = ctExp e
-           ; x_name <- freshVar ((name x) ++ "_" ++ (getLnNumInStr csp))
-           ; let x_cname = x_name
+    go (CLetERef csp x (Just e) ctxt) action 
+      = go (CLetE csp x AutoInline e ctxt) action -- Exactly the same code generation
 
-           ; x_decl <- codeGenDeclGroup x_cname ty
-
-           ; if emit_global then
-                appendTopDecls (x_decl : e_decls)
-             else
-                appendDecls (x_decl : e_decls)
-
-           ; (a,stms) <- extendVarEnv [(x, [cexp|$id:x_cname|])] $
-                         do { -- cgIO $ putStrLn "before action."
-                            ; r <- go ctxt action
-                              -- cgIO $ putStrLn "after action."
-                            ; return r
-                            }
-
-           ; (_,asgn_stmts) <- inNewBlock_ $
-                               assignByVal ty ty [cexp|$id:x_cname|] ce
-
-           ; return (a,e_stmts ++ asgn_stmts ++ stms)
-           }
     go (CLetERef csp x Nothing ctxt) action
       = do { x_name <- freshVar ((name x) ++ "_" ++ (getLnNumInStr csp))
            ; let x_cname = x_name
 
-           ; x_decl <- codeGenDeclGroup x_cname (nameTyp x)
+           ; x_decl@(d,_) <- codeGenDeclGroup_qual "calign" x_cname (nameTyp x) Nothing
 
-           ; if emit_global then
-                appendTopDecls [x_decl]
-             else
-                appendDecls [x_decl]
-
-           ; res <- extendVarEnv [(x, [cexp|$id:x_cname|])] $
-                    do { -- cgIO $ putStrLn "before action."
-                        ; r <- go ctxt action
-                         -- cgIO $ putStrLn "after action."
-                        ; return r
-                       }
-           ; return res
+           ; if emit_global then appendTopDecl d else appendDecl d
+           ; extendVarEnv [(x, [cexp|$id:x_cname|])] $ go ctxt action
            }
+
     --
     go (CLetFunC csp f params c1 ctxt) action
       = extendFunEnv f (compGenBind dflags f params c1) $

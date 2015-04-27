@@ -27,6 +27,7 @@ module CgTypes ( codeGenTy
                , assignByVal
                , tyBitWidth, tySizeOf_C, tySizeOf, tyBitWidth_ByteAlign
                , codeGenDeclGroup, codeGenDeclVolGroup, codeGenDeclVolGroup_init
+               , codeGenDeclGroup_qual
                , codeGenDeclGlobalGroups
                , codeGenDeclDef
                , codeGenDeclGlobalDefs
@@ -35,7 +36,7 @@ module CgTypes ( codeGenTy
                , codeGenVal
                , codeGenArrVal
                , namedCType
-               , isStructPtrType
+               , isStructPtrType, isLargeTy, doWplAllocate, appendLetDecl
                ) where
 
 import Opts
@@ -291,6 +292,26 @@ isLargeTy :: Int -> Cg Bool
 isLargeTy ty_size
   = do { mAX_STACK_ALLOC <- getMaxStackAlloc
        ; return (ty_size > mAX_STACK_ALLOC) }
+
+doWplAllocate :: Ty -> Cg Bool
+doWplAllocate ty = do 
+  s <- isStructPtrType ty
+  l <- tySizeOfCg ty >>= isLargeTy
+  return (s || l)
+
+-- | A Let-bound definition will be declared globally
+appendLetDecl :: Ty -> (C.InitGroup, (C.InitGroup, Maybe C.Stm)) -> Cg a -> Cg a
+appendLetDecl ty (d,(d',stms)) action = do
+  let mk_stms Nothing  = []
+      mk_stms (Just s) = [s] 
+  b <- doWplAllocate ty
+  if b then do 
+    appendDecl d' 
+    inAllocFrame $ do 
+      appendStmts (mk_stms stms)
+      action
+  else do appendDecl d 
+          action
 
 codeGenDeclGroup_qual :: String      -- Type qualifiers
                       -> String      -- Id
