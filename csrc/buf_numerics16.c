@@ -281,10 +281,19 @@ GetStatus buf_getcomplex16(BlinkParams *params, BufContextBlock *blk, complex16 
 
 	if (params->inType == TY_SDR)
 	{
-#ifdef SORA_PLATFORM
-		readSDR(params, x, 1);
+#ifdef SORA_RF
+		readSora(params, x, 1);
 		return GS_SUCCESS;
+#else
+  #ifdef BLADE_RF
+		readBladeRF(params, x, 1);
+		return GS_SUCCESS;
+  #else
+		fprintf(stderr, "Type SDR only supported if compiled in.\n");
+		exit(1);
+  #endif
 #endif
+
 	}
 
 	return GS_EOF;
@@ -304,9 +313,17 @@ GetStatus buf_getarrcomplex16(BlinkParams *params, BufContextBlock *blk, complex
 
 	if (params->inType == TY_SDR)
 	{
-#ifdef SORA_PLATFORM
-		readSDR(params, x, vlen);
+#ifdef SORA_RF
+		readSora(params, x, vlen);
 		return GS_SUCCESS;
+#else
+  #ifdef BLADE_RF
+		readBladeRF(params, x, vlen);
+		return GS_SUCCESS;
+  #else
+		fprintf(stderr, "Type SDR only supported if compiled in.\n");
+		exit(1);
+  #endif
 #endif
 	}
 
@@ -594,11 +611,15 @@ void buf_putcomplex16(BlinkParams *params, BufContextBlock *blk, struct complex1
 
 	if (params->outType == TY_SDR)
 	{
-#ifdef SORA_PLATFORM
-		writeSDR(params, &x, 1);
+#ifdef SORA_RF
+		writeSora(params, &x, 1);
 #else
-		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
+#ifdef BLADE_RF
+		writeBladeRF(params, &x, 1);
+#else
+		fprintf(stderr, "Type SDR only supported if compiled in.\n");
 		exit(1);
+#endif
 #endif
 	}
 
@@ -624,11 +645,15 @@ void buf_putarrcomplex16(BlinkParams *params, BufContextBlock *blk, struct compl
 
 	if (params->outType == TY_SDR)
 	{
-#ifdef SORA_PLATFORM
-		writeSDR(params, x, vlen);
+#ifdef SORA_RF
+		writeSora(params, x, vlen);
 #else
-		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
+  #ifdef BLADE_RF
+		writeBladeRF(params, x, vlen);
+  #else
+		fprintf(stderr, "Type SDR only supported if compiled in.\n");
 		exit(1);
+  #endif
 #endif
 	}
 }

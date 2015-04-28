@@ -110,7 +110,9 @@ int __cdecl main(int argc, char **argv) {
 	  {
 		  exit(1);
 	  }
-#else
+#endif
+
+#ifdef SORA_RF
 	  // SORA
 	  RadioStart(&Globals);
 	  if (Globals.inType == TY_SDR)
@@ -200,7 +202,8 @@ int __cdecl main(int argc, char **argv) {
 	{
 #ifdef BLADE_RF
 		BladeRF_RadioStop(params);
-#else
+#endif
+#ifdef SORA_RF
 		RadioStop(&Globals);
 #endif
 	}
