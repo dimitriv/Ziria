@@ -293,11 +293,11 @@ absEval e = go (unExp e) where
 
   go (ESeq e1 e2) = do 
     _a1 <- absEval e1
-    absEval e2
+    absEvalRVal e2 >>= rValM
 
   go (ELet v _ e1 e2) = do
     a1 <- absEvalRVal e1
-    withImmABind v a1 $ absEval e2
+    withImmABind v a1 $ absEvalRVal e2 >>= rValM
 
   go (ELetRef v Nothing e2) = withMutABind v $ absEval e2
 
@@ -306,7 +306,7 @@ absEval e = go (unExp e) where
     withMutABind v $ do
        d <- absEvalLVal (eVar noLoc v)
        aAssign d a1
-       absEval e2
+       absEvalRVal e2 >>= rValM
 
   -- | Control flow returns values!
   go (EIf ec e1 e2) 
