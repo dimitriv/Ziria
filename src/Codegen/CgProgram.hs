@@ -76,7 +76,7 @@ codeGenContexts
        ; return [ [cdecl| extern $ty:(namedCType "BufContextBlock")* $id:buf_context;|]
                 , [cdecl| extern $ty:(namedCType "HeapContextBlock")* $id:heap_context;|]
                 , [cdecl| extern $ty:(namedCType "BlinkParams")* $id:global_params;|]
-                , [cdecl| extern $ty:(namedCType "bool") stop_program;|]
+                , [cdecl| extern $ty:(namedCType "int") stop_program;|]
                 ]
        }
 

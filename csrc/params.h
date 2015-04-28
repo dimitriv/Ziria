@@ -39,8 +39,8 @@ typedef enum {
 
 #ifdef SORA_PLATFORM
 #include <soratime.h>
-#endif
 #include <thread_func.h>
+#endif
 #include <stdlib.h>
 #include <time.h>
 #include "types.h"
@@ -68,15 +68,15 @@ typedef struct _SoraRadioParams {
 // We keep two sets of parameters in case we want to do full-duplex 
 // one radio each. Otherwise, we only use one set for common parameters.
 typedef struct {
-	ULONG radioId;
-	ULONG TXgain;
-	ULONG RXpa;
-	ULONG RXgain;
-	ULONG CentralFrequency;
-	LONG FreqencyOffset;
-	ULONG SampleRate;
-	ULONG TXBufferSize;
-	ULONG Bandwidth;
+	unsigned long radioId;
+	unsigned long TXgain;
+	unsigned long RXpa;
+	unsigned long RXgain;
+	unsigned long CentralFrequency;
+	long FreqencyOffset;
+	unsigned long SampleRate;
+	unsigned long TXBufferSize;
+	unsigned long Bandwidth;
 
 #ifdef SORA_RF
 	SoraRadioParam *dev;
@@ -120,11 +120,13 @@ typedef struct _BlinkParams {
 	SDRParameters radioParams;
 
 	// SDR buffers
-	PVOID pRxBuf;				// RX
-    PVOID TXBuffer;				// TX
+	void * pRxBuf;				// RX
+	void * TXBuffer;			// TX
 
+#ifdef SORA_PLATFORM
 	// Latency measurements
 	TimeMeasurements measurementInfo;
+#endif
 } BlinkParams;
 
 

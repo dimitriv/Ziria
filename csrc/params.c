@@ -25,6 +25,7 @@
 #include "params.h"
 
 
+
 // Parse debug level
 int parse_DEBUG(char *d) {
 	return (int)strtol(d, NULL, 10);
@@ -64,48 +65,46 @@ BlinkFileType parse_type(char *typ)
 
 
 
-#ifdef SORA_PLATFORM
 // TODO: Add error handling
-ULONG parse_radioID(char *rp) 
+ unsigned long parse_radioID(char *rp)
 {
-	return (ULONG) strtoul(rp,NULL,10);
+	return (unsigned long) strtoul(rp,NULL,10);
 }
 
 
 // TODO: Add error handling
-ULONG parse_Amp(char *rp) 
+ unsigned long  parse_Amp(char *rp)
 {
-	return (ULONG) strtoul(rp,NULL,10);
+	return (unsigned long)strtoul(rp, NULL, 10);
 }
 
 
 // TODO: Add error handling
-ULONG parse_CentralFrequency(char *rp) 
+ unsigned long  parse_CentralFrequency(char *rp)
 {
-	return (ULONG) strtoul(rp,NULL,10);
+	return (unsigned long)strtoul(rp, NULL, 10);
 }
 
 
 // TODO: Add error handling
-LONG parse_FrequencyOffset(char *rp) 
+ long  parse_FrequencyOffset(char *rp)
 {
-	return (LONG) strtol(rp,NULL,10);
+	return (long)strtol(rp, NULL, 10);
 }
 
 
 // TODO: Add error handling
-ULONG parse_SampleRate(char *rp) 
+unsigned long  parse_SampleRate(char *rp)
 {
-	return (ULONG) strtoul(rp,NULL,10);
+	return (unsigned long)strtoul(rp, NULL, 10);
 }
 
 
 // TODO: Add error handling
-ULONG parse_TXBufferSize(char *rp) 
+unsigned long  parse_TXBufferSize(char *rp)
 {
-	return (ULONG) strtoul(rp,NULL,10);
+	return (unsigned long)strtoul(rp, NULL, 10);
 }
-#endif
 
 
 

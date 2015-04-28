@@ -72,7 +72,7 @@ BufContextBlock buf_ctx;
 HeapContextBlock heap_ctx;
 BufContextBlock *pbuf_ctx = &buf_ctx;
 HeapContextBlock *pheap_ctx = &heap_ctx;
-bool stop_program = false;
+int stop_program = 0;
 
 // Blink generated functions 
 extern void wpl_input_initialize();

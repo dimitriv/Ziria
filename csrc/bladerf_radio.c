@@ -32,7 +32,7 @@ permissions and limitations under the License.
 #define BLADE_RF_RX_VGA2     BLADERF_RXVGA2_GAIN_MIN
 #define BLADE_RF_RX_BUFF_L   8096
 
-extern bool stop_program; 
+extern int stop_program; 
 
 
 int BladeRF_RadioStart(BlinkParams *params)

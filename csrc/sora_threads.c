@@ -36,13 +36,13 @@ thread_info t_info[MAX_THREADS];
 // http://msdn.microsoft.com/en-us/library/windows/desktop/dd627187(v=vs.85).aspx
 
 
-extern bool stop_program;
+extern int stop_program;
 // Handler function will be called on separate thread!
 static BOOL WINAPI console_ctrl_handler(DWORD dwCtrlType)
 {
 	printf("Breaking...\n");
 	fflush(stdout);
-	stop_program = true;
+	stop_program = 1;
 	return TRUE;
 }
 
@@ -54,7 +54,7 @@ int StartThreads(ULONGLONG * ttstart,
 		 TIMESTAMPINFO *tsinfo,
                  int no_threads, PSORA_UTHREAD_PROC* User_Routines)
 {
-	stop_program = false;
+	stop_program = 0;
 	bool init_error = false;
 
 	SetConsoleCtrlHandler(console_ctrl_handler, TRUE);
@@ -95,7 +95,7 @@ int StartThreads(ULONGLONG * ttstart,
 			fflush(stdout);
 			if (kbhit())
 			{
-				stop_program = true;
+				stop_program = 1;
 			}
 		}
 	}
