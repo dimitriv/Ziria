@@ -120,18 +120,18 @@ class CmdDom m v | m -> v where
 -- | Commands plus controls flow 
 class CmdDom m v => CmdDomRec m v | m -> v where 
   aWhile  :: (POrd s, Monad m, MonadState s m, ValDom v)
-          => Exp -> m (AVal v) -> m (AVal v)
+          => Exp -> m v -> m v
   aFor    :: (POrd s, Monad m, MonadState s m, ValDom v)
-          => EId -> Exp -> Exp -> m (AVal v) -> m (AVal v)
+          => EId -> Exp -> Exp -> m v -> m v
   aBranch :: (POrd s, Monad m, MonadState s m, ValDom v) 
-          => Exp -> m (AVal v) -> m (AVal v) -> m (AVal v)
+          => Exp -> m v -> m v -> m v
 
 -- | Specific operations for abstract domains
 class AbsInt m v where
 
-  aSkip     :: m (AVal v)
-  aJoin     :: m (AVal v) -> m (AVal v) -> m (AVal v)
-  aWithFact :: v -> m (AVal v) -> m (AVal v)
+  aSkip     :: m v
+  aJoin     :: m v -> m v -> m v
+  aWithFact :: v -> m v -> m v
 
 -- | Run computation w/o modifying initial state and return final state
 inCurrSt :: MonadState s m => m a -> m (a,s)
@@ -295,28 +295,28 @@ absEval e = go (unExp e) where
     _a1 <- absEval e1
     absEval e2
 
-  go (EIf ec e1 e2) = do
-    aBranch ec (absEval e1) (absEval e2) 
-
   go (ELet v _ e1 e2) = do
     a1 <- absEvalRVal e1
     withImmABind v a1 $ absEval e2
 
-  go (ELetRef v Nothing e2) = do
-    withMutABind v $ absEval e2
+  go (ELetRef v Nothing e2) = withMutABind v $ absEval e2
 
   go (ELetRef v (Just e1) e2) = do
     a1 <- absEvalRVal e1
     withMutABind v $ do
-      d <- absEvalLVal (eVar noLoc v)
-      aAssign d a1
-      absEval e2
+       d <- absEvalLVal (eVar noLoc v)
+       aAssign d a1
+       absEval e2
+
+  -- | Control flow returns values!
+  go (EIf ec e1 e2) 
+    = aBranch ec (absEvalRVal e1) (absEvalRVal e2) >>= rValM
 
   go (EFor _ui ix estart elen ebody) 
-    = aFor ix estart elen (absEval ebody)
+    = aFor ix estart elen (absEvalRVal ebody) >>= rValM
 
   go (EWhile econd ebody)            
-    = aWhile econd (absEval ebody)
+    = aWhile econd (absEvalRVal ebody) >>= rValM
 
 
 absEvalArg :: forall m s v.  EvalCtx s m v => (ArgTy, Exp) -> m (AVal v)
