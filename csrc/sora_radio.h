@@ -19,6 +19,7 @@
 // Put to 0 to run tests on a PC without Sora board
 #pragma once
 
+#ifdef SORA_RF
 #include <soratime.h>
 #include <thread_func.h>
 #include <stdlib.h>
@@ -37,7 +38,6 @@ void readSora(BlinkParams *params, complex16 *ptr, int size);
 void writeSora(BlinkParams *params, complex16 *ptr, ULONG size);
 
 
-#ifndef BLADE_RF
 #define readSDR		readSora
 #define writeSDR	writeSora
 #endif

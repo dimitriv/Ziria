@@ -39,6 +39,7 @@
 //Sora only supports debugPlot lib in WIN32 and this is the fast 64-bit version
 //#include "sora_ext_visual.c"
 #include "sora_radio.c"
+#include "bladerf_radio.c"
 #include "utils.c"
 #include "driver.c"
 #include "test.c"

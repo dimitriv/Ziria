@@ -72,7 +72,9 @@ int StartThreads(ULONGLONG * ttstart,
 			{
 				not_finished = not_finished || t_info[i].fRunning;
 			}
-			Sleep (1);
+			Sleep (100);
+			// Flush stdout to get any printout that could be out there
+			fflush(stdout);
 		}
 	}
 	else

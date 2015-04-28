@@ -105,6 +105,13 @@ int __cdecl main(int argc, char **argv) {
   // Start Sora HW
   if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
   {
+#ifdef BLADE_RF
+	  if (BladeRF_RadioStart(params) < 0)
+	  {
+		  exit(1);
+	  }
+#else
+	  // SORA
 	  RadioStart(&Globals);
 	  if (Globals.inType == TY_SDR)
 	  {
@@ -114,6 +121,7 @@ int __cdecl main(int argc, char **argv) {
 	  {
 		  InitSoraTx(params);
 	  }
+#endif
   }
 
 
@@ -190,7 +198,11 @@ int __cdecl main(int argc, char **argv) {
 	// Stop Sora HW
 	if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
 	{
+#ifdef BLADE_RF
+		BladeRF_RadioStop(params);
+#else
 		RadioStop(&Globals);
+#endif
 	}
 
 	// Stop NDIS

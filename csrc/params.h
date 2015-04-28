@@ -37,12 +37,9 @@ typedef enum {
 
 
 
-/**********************************************
-	Radio parameters
-***********************************************/ 
-
 #ifdef SORA_PLATFORM
 #include <soratime.h>
+#endif
 #include <thread_func.h>
 #include <stdlib.h>
 #include <time.h>
@@ -50,9 +47,23 @@ typedef enum {
 #include "wpl_alloc.h"
 #include "utils.h"
 
-#ifdef BLADE_RF
-#include "bladerf_radio.h"
+
+
+#ifdef SORA_RF
+typedef struct _SoraRadioParams {
+	// RX
+	SORA_RADIO_RX_STREAM RxStream;
+} SoraRadioParam;
 #endif
+
+#ifdef BLADE_RF
+#include <libbladeRF.h>
+#endif
+
+
+/**********************************************
+	Radio parameters (generic for all radios)
+***********************************************/ 
 
 // We keep two sets of parameters in case we want to do full-duplex 
 // one radio each. Otherwise, we only use one set for common parameters.
@@ -67,12 +78,15 @@ typedef struct {
 	ULONG TXBufferSize;
 	ULONG Bandwidth;
 
+#ifdef SORA_RF
+	SoraRadioParam *dev;
+#endif
+
 #ifdef BLADE_RF
 	struct bladerf *dev;
 #endif
 
-} SoraParameters;
-#endif
+} SDRParameters;
 
 
 
@@ -103,19 +117,14 @@ typedef struct _BlinkParams {
 	unsigned long latencyCDFSize;		// How many latency samples to be stored in the CDF table
 	int debug;					// Level of debug info to print (0 - lowest)
 
-#ifdef SORA_PLATFORM
-	SoraParameters radioParams;
+	SDRParameters radioParams;
 
-	// RX
-	SORA_RADIO_RX_STREAM RxStream;
-	PVOID pRxBuf;
-
-	// TX
-    PVOID TXBuffer;
+	// SDR buffers
+	PVOID pRxBuf;				// RX
+    PVOID TXBuffer;				// TX
 
 	// Latency measurements
 	TimeMeasurements measurementInfo;
-#endif
 } BlinkParams;
 
 

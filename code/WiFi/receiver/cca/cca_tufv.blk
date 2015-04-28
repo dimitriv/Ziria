@@ -221,7 +221,10 @@ fun comp cca(energy_threshold : int32) {
 
        -- Because of repeating preamble we should have a certain number of consecutive 
        -- increases before declaring the peak - start of a packet
-       if (iEnergy > energy_threshold && noInc > no_consec_increases && (oldCorr > maxCorr || oldInd != maxInd)) then {
+       if (iEnergy > energy_threshold && noInc > no_consec_increases && (oldCorr > maxCorr || oldInd != maxInd)
+           -- DEBUG: Hardcoded for WiFi sniffer demo, to avoid 802.11b packets. 
+           -- In general, we should look at maxCorr / iEnergy ration. See TODO above
+           && maxCorr > 500000) then {
           detected := true;
        }
 
