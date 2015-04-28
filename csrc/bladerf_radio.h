@@ -25,11 +25,7 @@ permissions and limitations under the License.
 int  BladeRF_RadioStart(BlinkParams *params);
 void BladeRF_RadioStop(BlinkParams *params);
 void readBladeRF(BlinkParams *params, complex16 *ptr, int size);
-
-
-#define readSDR		readBladeRF
-// Write to be added
-#define writeSDR
+void writeBladeRF(BlinkParams *params, complex16 *ptr, ULONG size);
 
 #endif
 

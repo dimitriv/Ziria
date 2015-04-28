@@ -37,8 +37,5 @@ void InitSoraTx(BlinkParams *params);
 void readSora(BlinkParams *params, complex16 *ptr, int size);
 void writeSora(BlinkParams *params, complex16 *ptr, ULONG size);
 
-
-#define readSDR		readSora
-#define writeSDR	writeSora
 #endif
 
