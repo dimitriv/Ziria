@@ -145,6 +145,9 @@ mkRuntime mfreshId m = do
        [cstm|
         l_LOOP:
          {
+          if (stop_program) {
+            return 0;
+          }
           loop_counter++;
             $stm:(main_tick cinfo)
             l_IMMEDIATE:

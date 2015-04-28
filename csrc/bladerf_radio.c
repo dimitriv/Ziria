@@ -32,6 +32,7 @@ permissions and limitations under the License.
 #define BLADE_RF_RX_VGA2     BLADERF_RXVGA2_GAIN_MIN
 #define BLADE_RF_RX_BUFF_L   8096
 
+extern bool stop_program; 
 
 
 int BladeRF_RadioStart(BlinkParams *params)
@@ -126,6 +127,7 @@ int BladeRF_RadioStart(BlinkParams *params)
 out:
 	if (status != 0) {
 		bladerf_close(params->radioParams.dev);
+		stop_program = true;
 		return -1;
 	}
 
@@ -166,6 +168,7 @@ out1:
 	if (status != 0) {
 		status = bladerf_enable_module(params->radioParams.dev, BLADERF_MODULE_RX, false);
 		bladerf_close(params->radioParams.dev);
+		stop_program = true;
 		return -1;
 	}
 
@@ -183,6 +186,7 @@ void BladeRF_RadioStop(BlinkParams *params)
 	if (status != 0) {
 		fprintf(stderr, "Failed to disable RX module: %s\n",
 			bladerf_strerror(status));
+		stop_program = true;
 	}
 
 	bladerf_close(params->radioParams.dev);

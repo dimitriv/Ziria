@@ -20,6 +20,7 @@
 #include <assert.h>
 #include <limits.h>
 #include <windows.h>
+#include <conio.h>
 
 #include <thread_func.h>
 
@@ -35,6 +36,16 @@ thread_info t_info[MAX_THREADS];
 // http://msdn.microsoft.com/en-us/library/windows/desktop/dd627187(v=vs.85).aspx
 
 
+extern bool stop_program;
+// Handler function will be called on separate thread!
+static BOOL WINAPI console_ctrl_handler(DWORD dwCtrlType)
+{
+	printf("Breaking...\n");
+	fflush(stdout);
+	stop_program = true;
+	return TRUE;
+}
+
 // no_threads - number of threads to start
 // User_Routines[no_threads] - pointers to functions to be started
 // sizes[no_threads-1] - size of data structure to be held by each buffer (in bytes)
@@ -43,7 +54,11 @@ int StartThreads(ULONGLONG * ttstart,
 		 TIMESTAMPINFO *tsinfo,
                  int no_threads, PSORA_UTHREAD_PROC* User_Routines)
 {
+	stop_program = false;
 	bool init_error = false;
+
+	SetConsoleCtrlHandler(console_ctrl_handler, TRUE);
+
 	for (int i=0; i<no_threads; i++)
 	{
 		if (User_Routines[i] != NULL)
@@ -67,6 +82,9 @@ int StartThreads(ULONGLONG * ttstart,
 		bool not_finished = true;
 		while (not_finished) 
 		{
+			// Threads will exit when stop_program = true
+			// So no need to close them explicitly
+
 			not_finished = false;
 			for (int i=0; i<no_threads; i++)
 			{
@@ -75,6 +93,10 @@ int StartThreads(ULONGLONG * ttstart,
 			Sleep (100);
 			// Flush stdout to get any printout that could be out there
 			fflush(stdout);
+			if (kbhit())
+			{
+				stop_program = true;
+			}
 		}
 	}
 	else
@@ -83,14 +105,6 @@ int StartThreads(ULONGLONG * ttstart,
 		exit(1);
 	}
 
-
-	for (int i=0; i<no_threads; i++)
-	{
-		if (threads[i] != NULL)
-		{
-			StopFreeThread (threads[i]);
-		}
-	}
 
 	// Stop measuring time
 	*ttend = SoraGetCPUTimestamp ( tsinfo );
