@@ -110,8 +110,8 @@ class CmdDom m v | m -> v where
   aAssign      :: LVal v -> v -> m ()
   aDerefRead   :: LVal v -> m v
 
-  withImmABind :: EId -> v -> m a -> m a
-  withMutABind :: EId -> m a -> m a
+  withImmABind :: EId -> v -> m v -> m v
+  withMutABind :: EId -> m v -> m v
 
   aCall     :: EId -> [(AVal v)] -> m v
   aError    :: m a
@@ -129,9 +129,13 @@ class CmdDom m v => CmdDomRec m v | m -> v where
 -- | Specific operations for abstract domains
 class AbsInt m v where
 
-  aSkip     :: m v
-  aJoin     :: m v -> m v -> m v
+  aSkip  :: m v
+  aJoin  :: m v -> m v -> m v
   aWithFact :: v -> m v -> m v
+
+  aWiden :: v -> m v -> m v -> m v
+  -- | Default implementation
+  aWiden v m1 m2 = aJoin (aWithFact v m1) m2
 
 -- | Run computation w/o modifying initial state and return final state
 inCurrSt :: MonadState s m => m a -> m (a,s)
@@ -151,9 +155,10 @@ newtype AbsT m a = AbsT { unAbsT :: m a }
   deriving (Applicative, Functor)
 
 instance AbsInt m a => AbsInt (AbsT m) a where
-  aSkip = AbsT aSkip
-  aJoin (AbsT m1) (AbsT m2) = AbsT (aJoin m1 m2)
-  aWithFact v (AbsT m) = AbsT (aWithFact v m)
+  aSkip                        = AbsT aSkip
+  aJoin (AbsT m1) (AbsT m2)    = AbsT (aJoin m1 m2)
+  aWithFact v (AbsT m)         = AbsT (aWithFact v m)
+  aWiden v (AbsT m1) (AbsT m2) = AbsT (aWiden v m1 m2)
 
 instance CmdDom m v => CmdDom (AbsT m) v where
   aAssign lval val          = AbsT (aAssign lval val)
@@ -174,7 +179,7 @@ instance (AbsInt m v, CmdDom m v) => CmdDomRec (AbsT m) v where
     where 
       loop = do 
         a <- absEvalRVal e
-        aJoin (aWithFact a m') aSkip
+        aWiden a m' aSkip
         where m' = do pre  <- get -- ^ get state
                       x    <- m   -- ^ execute once
                       post <- get -- ^ get state 
@@ -297,17 +302,17 @@ absEval e = go (unExp e) where
 
   go (ELet v _ e1 e2) = do
     a1 <- absEvalRVal e1
-    withImmABind v a1 $ absEvalRVal e2 >>= rValM
+    withImmABind v a1 (absEvalRVal e2) >>= rValM
 
   go (ELetRef v Nothing e2) = 
-    withMutABind v $ absEvalRVal e2 >>= rValM
+    withMutABind v (absEvalRVal e2) >>= rValM
 
   go (ELetRef v (Just e1) e2) = do
     a1 <- absEvalRVal e1
-    withMutABind v $ do
+    withMutABind v ( do
        d <- absEvalLVal (eVar noLoc v)
        aAssign d a1
-       absEvalRVal e2 >>= rValM
+       absEvalRVal e2 ) >>= rValM
 
   -- | Control flow returns values!
   go (EIf ec e1 e2) 
