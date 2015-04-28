@@ -502,7 +502,7 @@ void _flush_putint16(BlinkParams *params, BufContextBlock *blk, size_t size)
 	if (params->outType == TY_FILE)
 	{
 		if (params->outFileMode == MODE_BIN) {
-			fwrite(blk->num16_output_buffer, size, blk->num16_output_idx, blk->num16_output_file);
+			fwrite(blk->num16_output_buffer, sizeof(int16), blk->num16_output_idx, blk->num16_output_file);
 		}
 	}
 	blk->num16_output_idx = 0;

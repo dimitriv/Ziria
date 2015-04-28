@@ -490,7 +490,7 @@ void _flush_putint8(BlinkParams *params, BufContextBlock *blk, size_t size)
 	if (params->outType == TY_FILE)
 	{
 		if (params->outFileMode == MODE_BIN) {
-			fwrite(blk->num8_output_buffer, size, blk->num8_output_idx, blk->num8_output_file);
+			fwrite(blk->num8_output_buffer, sizeof(int8), blk->num8_output_idx, blk->num8_output_file);
 		}
 	}
 	blk->num8_output_idx = 0;

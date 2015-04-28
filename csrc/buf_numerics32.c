@@ -364,10 +364,10 @@ void _buf_putint32(BlinkParams *params, BufContextBlock *blk, int32 x)
 		{
 			if (blk->num_output_idx == blk->num_output_entries)
 			{
-				fwrite(blk->num_output_buffer, blk->num_output_entries, sizeof(int16), blk->num_output_file);
+				fwrite(blk->num_output_buffer, blk->num_output_entries, sizeof(int32), blk->num_output_file);
 				blk->num_output_idx = 0;
 			}
-			blk->num_output_buffer[blk->num_output_idx++] = (int16)x;
+			blk->num_output_buffer[blk->num_output_idx++] = (int32)x;
 		}
 	}
 
@@ -421,7 +421,7 @@ void _buf_putarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsig
 					blk->num_output_buffer[blk->num_output_idx + i] = x[i];
 
 				// then flush the buffer
-				fwrite(blk->num_output_buffer, blk->num_output_entries, sizeof(int16), blk->num_output_file);
+				fwrite(blk->num_output_buffer, blk->num_output_entries, sizeof(int32), blk->num_output_file);
 
 				// then write the rest
 				for (blk->num_output_idx = 0; blk->num_output_idx < vlen - m; blk->num_output_idx++)
@@ -462,7 +462,7 @@ void _flush_putint32(BlinkParams *params, BufContextBlock *blk, size_t size)
 	if (params->outType == TY_FILE)
 	{
 		if (params->outFileMode == MODE_BIN) {
-			fwrite(blk->num_output_buffer, size, blk->num_output_idx, blk->num_output_file);
+			fwrite(blk->num_output_buffer, sizeof(int32), blk->num_output_idx, blk->num_output_file);
 		}
 	}
 	blk->num_output_idx = 0;
