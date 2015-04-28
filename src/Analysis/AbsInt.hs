@@ -299,7 +299,8 @@ absEval e = go (unExp e) where
     a1 <- absEvalRVal e1
     withImmABind v a1 $ absEvalRVal e2 >>= rValM
 
-  go (ELetRef v Nothing e2) = withMutABind v $ absEval e2
+  go (ELetRef v Nothing e2) = 
+    withMutABind v $ absEvalRVal e2 >>= rValM
 
   go (ELetRef v (Just e1) e2) = do
     a1 <- absEvalRVal e1
