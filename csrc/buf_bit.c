@@ -229,7 +229,7 @@ void init_getbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 		}
 	}
 
-	if (params->inType == TY_SORA)
+	if (params->inType == TY_SDR)
 	{
 		fprintf(stderr, "Error: Sora does not support bit receive\n");
 		exit(1);
@@ -373,7 +373,7 @@ void init_putbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 		}
 	}
 
-	if (params->outType == TY_SORA)
+	if (params->outType == TY_SDR)
 	{
 		fprintf(stderr, "Error: Sora TX does not support bits\n");
 		exit(1);

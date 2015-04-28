@@ -72,7 +72,7 @@ BufContextBlock buf_ctx;
 HeapContextBlock heap_ctx;
 BufContextBlock *pbuf_ctx = &buf_ctx;
 HeapContextBlock *pheap_ctx = &heap_ctx;
-
+int stop_program = 0;
 
 // Blink generated functions 
 extern void wpl_input_initialize();
@@ -103,17 +103,27 @@ int __cdecl main(int argc, char **argv) {
 
 #ifdef SORA_PLATFORM
   // Start Sora HW
-  if (Globals.inType == TY_SORA || Globals.outType == TY_SORA)
+  if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
   {
+#ifdef BLADE_RF
+	  if (BladeRF_RadioStart(params) < 0)
+	  {
+		  exit(1);
+	  }
+#endif
+
+#ifdef SORA_RF
+	  // SORA
 	  RadioStart(&Globals);
-	  if (Globals.inType == TY_SORA)
+	  if (Globals.inType == TY_SDR)
 	  {
 		  InitSoraRx(params);
 	  }
-	  if (Globals.outType == TY_SORA)
+	  if (Globals.outType == TY_SDR)
 	  {
 		  InitSoraTx(params);
 	  }
+#endif
   }
 
 
@@ -188,9 +198,14 @@ int __cdecl main(int argc, char **argv) {
 
 #ifdef SORA_PLATFORM
 	// Stop Sora HW
-	if (Globals.inType == TY_SORA || Globals.outType == TY_SORA)
+	if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
 	{
+#ifdef BLADE_RF
+		BladeRF_RadioStop(params);
+#endif
+#ifdef SORA_RF
 		RadioStop(&Globals);
+#endif
 	}
 
 	// Stop NDIS

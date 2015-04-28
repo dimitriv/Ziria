@@ -25,6 +25,7 @@
 #include "params.h"
 
 
+
 // Parse debug level
 int parse_DEBUG(char *d) {
 	return (int)strtol(d, NULL, 10);
@@ -47,8 +48,8 @@ BlinkFileType parse_type(char *typ)
 {
 	if (strcmp(typ,"file") == 0)  return TY_FILE; 
 	if (strcmp(typ,"dummy") == 0) return TY_DUMMY;
-	if (strcmp(typ,"sora") == 0)  return TY_SORA;
-	if (strcmp(typ,"ip") == 0)    return TY_IP;
+	if (strcmp(typ,"sdr") == 0)   return TY_SDR;
+	if (strcmp(typ, "ip") == 0)   return TY_IP;
 	fprintf(stderr, "Error: cannot parse type parameter %s\n",typ);
 	exit(1);
 }
@@ -64,48 +65,46 @@ BlinkFileType parse_type(char *typ)
 
 
 
-#ifdef SORA_PLATFORM
 // TODO: Add error handling
-ULONG parse_radioID(char *rp) 
+ unsigned long parse_radioID(char *rp)
 {
-	return (ULONG) strtol(rp,NULL,10);
+	return (unsigned long) strtoul(rp,NULL,10);
 }
 
 
 // TODO: Add error handling
-ULONG parse_Amp(char *rp) 
+ unsigned long  parse_Amp(char *rp)
 {
-	return (ULONG) strtol(rp,NULL,10);
+	return (unsigned long)strtoul(rp, NULL, 10);
 }
 
 
 // TODO: Add error handling
-ULONG parse_CentralFrequency(char *rp) 
+ unsigned long  parse_CentralFrequency(char *rp)
 {
-	return (ULONG) strtol(rp,NULL,10);
+	return (unsigned long)strtoul(rp, NULL, 10);
 }
 
 
 // TODO: Add error handling
-LONG parse_FrequencyOffset(char *rp) 
+ long  parse_FrequencyOffset(char *rp)
 {
-	return (LONG) strtol(rp,NULL,10);
+	return (long)strtol(rp, NULL, 10);
 }
 
 
 // TODO: Add error handling
-ULONG parse_SampleRate(char *rp) 
+unsigned long  parse_SampleRate(char *rp)
 {
-	return (ULONG) strtol(rp,NULL,10);
+	return (unsigned long)strtoul(rp, NULL, 10);
 }
 
 
 // TODO: Add error handling
-ULONG parse_TXBufferSize(char *rp) 
+unsigned long  parse_TXBufferSize(char *rp)
 {
-	return (ULONG) strtol(rp,NULL,10);
+	return (unsigned long)strtoul(rp, NULL, 10);
 }
-#endif
 
 
 
@@ -136,26 +135,21 @@ void init_LatencySampling(BlinkParams *params, char *siz)   { params->latencySam
 void init_LatencyCDFSize(BlinkParams *params, char *siz)    { params->latencyCDFSize = parse_size(siz); }
 
 
-
-#ifdef SORA_PLATFORM
+// SDR related
 void init_radioId(BlinkParams *params, char *i)				{ params->radioParams.radioId = parse_radioID(i); }
 void init_RXpa(BlinkParams *params, char *i)				{ params->radioParams.RXpa = parse_Amp(i); }
 void init_RXgain(BlinkParams *params, char *i)				{ params->radioParams.RXgain = parse_Amp(i); }
 void init_TXgain(BlinkParams *params, char *i)				{ params->radioParams.TXgain = parse_Amp(i); }
 void init_CentralFrequency(BlinkParams *params, char *i)	{ params->radioParams.CentralFrequency = parse_CentralFrequency(i); }
 void init_FreqencyOffset(BlinkParams *params, char *i)		{ params->radioParams.FreqencyOffset = parse_FrequencyOffset(i); }
-void init_SampleRate(BlinkParams *params, char *i)			{ params->radioParams.SampleRate = parse_SampleRate(i); }
+void init_SampleRate(BlinkParams *params, char *i)			{ params->radioParams.SampleRate = parse_SampleRate(i); 
+															  params->radioParams.Bandwidth = params->radioParams.SampleRate; }
 void init_TXBufferSize(BlinkParams *params, char *i)		{ params->radioParams.TXBufferSize = parse_TXBufferSize(i); }
-#endif
 
 
 
 // Here is where we declare the parameters
-#ifdef SORA_PLATFORM
 #define PARAM_TABLE_LENGTH		21
-#else
-#define PARAM_TABLE_LENGTH		13
-#endif
 
 BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] = 
   {  { "--DEBUG=",
@@ -164,12 +158,12 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
 	   "0",
 	   init_DEBUG },
 	 { "--input=", 
-       "--input=file|dummy|sora|ip",
+       "--input=file|dummy|sora|bladerf|ip",
        "Input samples come from a file, radio, or are dummy samples",
        "file",
        init_inType },
      { "--output=", 
-       "--output=file|dummy|sora|ip",
+       "--output=file|dummy|sora|bladerf|ip",
        "Output samples written to file, radio, or are ignored (dummy)",
        "file",
        init_outType },
@@ -224,48 +218,63 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
 	   "0",
 	   init_LatencyCDFSize }
 
-#ifdef SORA_PLATFORM
-     , { "--sora-radio-id=",
-       "--sora-radio-id = ...",
-       "Sora radio ID",
+// ***************
+// SDR Related
+// ***************
+
+     , { "--sdr-radio-id=",
+       "--sdr-radio-id = ...",
+       "SDR radio ID",
        "0", 
        init_radioId }
-     , { "--sora-rx-pa=",
-       "--sora-rx-pa = ...",
-       "Sora RX power amplification",
+     , { "--sdr-rx-pa=",
+       "--sdr-rx-pa = ...",
+       "SDR RX power amplification",
        "0", 
        init_RXpa }
-     , { "--sora-rx-gain=",
-       "--sora-rx-gain = ...",
-       "Sora RX gain",
-       "0", 
+     , { "--sdr-rx-gain=",
+       "--sdr-rx-gain = ...",
+       "SDR RX gain",
+#ifdef SORA_RF
+	   "0",
+#else
+	   "20",
+#endif
        init_RXgain }
-     , { "--sora-tx-gain=",
-       "--sora-tx-gain = ...",
-       "Sora TX gain",
+     , { "--sdr-tx-gain=",
+       "--sdr-tx-gain = ...",
+       "SDR TX gain",
        "0", 
        init_TXgain }
-     , { "--sora-central-frequency=",
-       "--sora-central-frequency = ...",
-       "Sora central frequency in MHz (default 578)",
+     , { "--sdr-central-frequency=",
+       "--sdr-central-frequency = ...",
+#ifdef SORA_RF
+       "SDR central frequency in MHz (default 578)",
        "578", 
+#else
+	   "SDR central frequency in Hz (default 2412 MHz)",
+	   "2412000000",
+#endif
        init_CentralFrequency }
-     , { "--sora-freqency-offset=",
-       "--sora-freqency-offset = ...",
-       "Sora frequency offset",
+     , { "--sdr-freqency-offset=",
+       "--sdr-freqency-offset = ...",
+       "SDR frequency offset",
        "0", 
        init_FreqencyOffset }
-     , { "--sora-sample-rate=",
-       "--sora-sample-rate = ...",
-       "Sora sample rate",
-       "40", 
+     , { "--sdr-sample-rate=",
+       "--sdr-sample-rate = ...",
+       "SDR sample rate",
+#ifdef SORA_RF
+	   "40",
+#else
+	   "20000000",
+#endif
        init_SampleRate }
-     , { "--sora-tx-buffer-size=",
-       "--sora-tx-buffer-size = ...",
+     , { "--sdr-tx-buffer-size=",
+       "--sdr-tx-buffer-size = ...",
        "Size of the TX buffer transmitted at once (in number of complex16)",
        "2097152", 
        init_TXBufferSize }
-#endif
 
 
 };

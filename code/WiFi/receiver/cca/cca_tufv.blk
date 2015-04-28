@@ -195,7 +195,7 @@ fun comp cca(energy_threshold : int32) {
      do {
        v_shift_right_complex16(input, x, norm_shift);
 
-       iEnergy := calcEnergy(x);      
+       iEnergy := calcEnergy(x);
 
        maxCorr := 0;
        for i in [0, CORR_LEN] {
@@ -219,9 +219,22 @@ fun comp cca(energy_threshold : int32) {
           }
        }
 
+       var sh : int := 0;
+       var ie : int := iEnergy;
+       while (ie > 0) {
+         ie := ie >> 1;
+         sh := sh + 1;
+       }
+       let normMaxCorr = maxCorr >> sh;
+ 
+
        -- Because of repeating preamble we should have a certain number of consecutive 
        -- increases before declaring the peak - start of a packet
-       if (iEnergy > energy_threshold && noInc > no_consec_increases && (oldCorr > maxCorr || oldInd != maxInd)) then {
+       if (iEnergy > energy_threshold && 
+           noInc > no_consec_increases && 
+           (oldCorr > maxCorr || oldInd != maxInd)) then {
+-- DEBUG
+--           normMaxCorr > 100) then {
           detected := true;
        }
 

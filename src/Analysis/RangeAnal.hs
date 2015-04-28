@@ -167,11 +167,17 @@ ijoin (IRng i j) (IRng i' j')
 
 
 runop :: UnOp -> Range -> Range
+-- | This is sensitive to the type checker
 runop Neg (RInt i)       = RInt (ineg i)
-runop _   (RInt {})      = RInt ITop
+runop Neg _              = ROther
 runop ALength _          = RInt ITop -- That's a bit sad but oh well
 runop (Cast (TInt {})) _ = RInt ITop
-runop _ _                = ROther
+runop (Cast _) _         = ROther
+runop Not _              = ROther 
+runop NatExp (RInt {})   = RInt ITop
+runop NatExp _           = ROther
+runop BwNeg (RInt {})    = RInt ITop
+runop BwNeg _            = ROther 
 
 sunop :: UnOp -> Maybe SymExp -> Maybe SymExp
 sunop Neg s = s >>= \x -> return (SymUnOp Neg x)
@@ -179,6 +185,8 @@ sunop Not s = s >>= \x -> return (SymUnOp Not x)
 sunop _ _s  = Nothing
 
 rbinop :: BinOp -> Range -> Range -> Range
+-- | This is sensitive to the type checker
+
 -- Arithmetic binops
 rbinop Add (RInt r1) (RInt r2) = RInt (r1 `iplus` r2)
 rbinop Sub _ _                 = RInt ITop
@@ -186,8 +194,27 @@ rbinop Mult  _r1 _r2 = RInt ITop
 rbinop Div   _r1 _r2 = RInt ITop
 rbinop Rem   _r1 _r2 = RInt ITop
 rbinop Expon _r1 _r2 = RInt ITop
--- Other binops
-rbinop _bop _r1 _r2  = ROther
+
+-- Other binops that can return integers
+rbinop ShL _r1 _r2   = RInt ITop
+rbinop ShR _r1 _r2   = RInt ITop
+rbinop BwAnd (RInt {}) _ = RInt ITop
+rbinop BwOr (RInt {}) _  = RInt ITop
+rbinop BwXor (RInt {}) _ = RInt ITop
+
+-- Boolean-returning: ROther
+rbinop Eq _ _    = ROther
+rbinop Neq _ _   = ROther
+rbinop Lt _ _    = ROther
+rbinop Gt _ _    = ROther
+rbinop Leq _ _   = ROther
+rbinop Geq _ _   = ROther
+rbinop Or _ _    = ROther
+rbinop And _ _   = ROther
+rbinop Add _ _   = ROther
+rbinop BwAnd _ _ = ROther
+rbinop BwOr _ _  = ROther
+rbinop BwXor _ _ = ROther
 
 symBinOp :: BinOp -> SymExp -> SymExp -> SymExp 
 symBinOp Add (SymVal (VInt i)) (SymVal (VInt j)) = SymVal (VInt (i+j))

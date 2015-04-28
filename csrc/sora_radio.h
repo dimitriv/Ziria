@@ -1,4 +1,4 @@
-/* 
+/*
    Copyright (c) Microsoft Corporation
    All rights reserved. 
 
@@ -17,6 +17,9 @@
    permissions and limitations under the License.
 */
 // Put to 0 to run tests on a PC without Sora board
+#pragma once
+
+#ifdef SORA_RF
 #include <soratime.h>
 #include <thread_func.h>
 #include <stdlib.h>
@@ -31,9 +34,11 @@ void RadioStart(BlinkParams *params);
 void RadioStop(BlinkParams *params);
 void InitSoraRx(BlinkParams *params);
 void InitSoraTx(BlinkParams *params);
-
-
-// BOZIDAR TODO: Once debugging is finished, put these as inline and move here!
 void readSora(BlinkParams *params, complex16 *ptr, int size);
 void writeSora(BlinkParams *params, complex16 *ptr, ULONG size);
+
+
+#define readSDR		readSora
+#define writeSDR	writeSora
+#endif
 

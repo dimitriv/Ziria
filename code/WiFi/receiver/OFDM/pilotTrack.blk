@@ -88,6 +88,7 @@ fun comp PilotTrack() {
   -- Init
   do {
     cnt := 0;
+    zero_complex16(rotate_coeffs);
     zero_complex16(pilot_hist);
     for i in [0,64] {
        compCoeffs[i] := complex16{re=32500;im=0}

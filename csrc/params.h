@@ -22,9 +22,10 @@
 typedef enum  { 
   TY_FILE  = 0,
   TY_DUMMY = 1,
-  TY_SORA = 2,
+  TY_SDR = 2,
   TY_IP = 3,
-  TY_MEM = 4
+  TY_MEM = 4, 
+  TY_BLADERF = 5
 } BlinkFileType;
 
 // Binary or debug (human-readable) file format
@@ -36,42 +37,56 @@ typedef enum {
 
 
 
-/**********************************************
-	Radio parameters
-***********************************************/ 
-
 #ifdef SORA_PLATFORM
 #include <soratime.h>
 #include <thread_func.h>
+#endif
 #include <stdlib.h>
 #include <time.h>
 #include "types.h"
 #include "wpl_alloc.h"
 #include "utils.h"
 
-#ifdef BLADE_RF
-#include "bladerf_radio.h"
+
+
+#ifdef SORA_RF
+typedef struct _SoraRadioParams {
+	// RX
+	SORA_RADIO_RX_STREAM RxStream;
+} SoraRadioParam;
 #endif
+
+#ifdef BLADE_RF
+#include <libbladeRF.h>
+#endif
+
+
+/**********************************************
+	Radio parameters (generic for all radios)
+***********************************************/ 
 
 // We keep two sets of parameters in case we want to do full-duplex 
 // one radio each. Otherwise, we only use one set for common parameters.
 typedef struct {
-	ULONG radioId;
-	ULONG TXgain;
-	ULONG RXpa;
-	ULONG RXgain;
-	ULONG CentralFrequency;
-	LONG FreqencyOffset;
-	ULONG SampleRate;
-	ULONG TXBufferSize;
-	ULONG Bandwidth;
+	unsigned long radioId;
+	unsigned long TXgain;
+	unsigned long RXpa;
+	unsigned long RXgain;
+	unsigned long CentralFrequency;
+	long FreqencyOffset;
+	unsigned long SampleRate;
+	unsigned long TXBufferSize;
+	unsigned long Bandwidth;
+
+#ifdef SORA_RF
+	SoraRadioParam *dev;
+#endif
 
 #ifdef BLADE_RF
 	struct bladerf *dev;
 #endif
 
-} SoraParameters;
-#endif
+} SDRParameters;
 
 
 
@@ -102,16 +117,13 @@ typedef struct _BlinkParams {
 	unsigned long latencyCDFSize;		// How many latency samples to be stored in the CDF table
 	int debug;					// Level of debug info to print (0 - lowest)
 
+	SDRParameters radioParams;
+
+	// SDR buffers
+	void * pRxBuf;				// RX
+	void * TXBuffer;			// TX
+
 #ifdef SORA_PLATFORM
-	SoraParameters radioParams;
-
-	// RX
-	SORA_RADIO_RX_STREAM RxStream;
-	PVOID pRxBuf;
-
-	// TX
-    PVOID TXBuffer;
-
 	// Latency measurements
 	TimeMeasurements measurementInfo;
 #endif

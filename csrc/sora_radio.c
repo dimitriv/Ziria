@@ -16,6 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 */
+#ifdef SORA_RF
 #include <soratime.h>
 #include <thread_func.h>
 #include <stdlib.h>
@@ -64,7 +65,7 @@ void RadioStop(BlinkParams *params) {
 	if (params->pRxBuf != NULL)
 	{
 		HRESULT hr;
-		SoraURadioReleaseRxStream(&params->RxStream, params->radioParams.radioId);
+		SoraURadioReleaseRxStream(&params->radioParams.dev->RxStream, params->radioParams.radioId);
         hr = SoraURadioUnmapRxSampleBuf(params->radioParams.radioId, params->pRxBuf);
 	}
 
@@ -86,7 +87,7 @@ void InitSoraRx(BlinkParams *params)
     }
     
     // Generate a sample stream from mapped Rx buffer
-	SoraURadioAllocRxStream( &(params->RxStream), params->radioParams.radioId, (PUCHAR)params->pRxBuf, nRxBufSize);
+	SoraURadioAllocRxStream(&(params->radioParams.dev->RxStream), params->radioParams.radioId, (PUCHAR)params->pRxBuf, nRxBufSize);
 }
 
 
@@ -131,7 +132,7 @@ void readSora(BlinkParams *params, complex16 *ptr, int size)
 	while (remaining > 0)
 	{
 		// Read from the radio
-		hr = SoraRadioReadRxStream( &(params->RxStream), &fReachEnd, block);
+		hr = SoraRadioReadRxStream(&(params->radioParams.dev->RxStream), &fReachEnd, block);
 		if (FAILED(hr)) {
 			fprintf (stderr, "Error: Fail to read Sora Rx buffer!\n" );
 			exit(1);
@@ -208,3 +209,4 @@ void writeSora(BlinkParams *params, complex16 *ptr, ULONG size)
 
     hr = SoraURadioTxFree(params->radioParams.radioId, TxID);
 }
+#endif
