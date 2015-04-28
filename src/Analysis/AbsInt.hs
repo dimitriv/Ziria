@@ -39,20 +39,19 @@ module AbsInt (
 
 import AstExpr
 import AstUnlabelled
-import Utils
+-- import Utils
 import PpExpr ()
 import Control.Monad.State.Class
 import Control.Applicative
-import Control.Monad ( unless )
+-- import Control.Monad ( unless )
 import Data.Loc
 import Data.Set ( Set )
 import qualified Data.Set as Set
 import NameEnv
 
-import Text.PrettyPrint.HughesPJ
-
-import CtExpr ( ctExp )
-import Outputable 
+-- import Text.PrettyPrint.HughesPJ
+-- import CtExpr ( ctExp )
+-- import Outputable 
 
 
 
@@ -93,38 +92,48 @@ class ValDom v where
   aBinOp    :: BinOp -> v -> v -> v
   aStruct   :: Ty -> [(FldName,v)] -> v
 
+  -- reading (purely) from array values
+  aArrRead  :: v -> v -> LengthInfo -> v
+  -- reading (purely) from struct values
+  aStrProj  :: v -> FldName -> v 
+
+-- | Abstract values are either lvalues or concrete values
+data AVal v = LVal (LVal v) | RVal v
+
+rValM :: Monad m => v -> m (AVal v)
+rValM x = return (RVal x)
+lValM :: Monad m => LVal v -> m (AVal v)
+lValM x = return (LVal x)
+
 -- | Commands 
 class CmdDom m v | m -> v where
   aAssign      :: LVal v -> v -> m ()
   aDerefRead   :: LVal v -> m v
 
-  withImmABind :: EId -> v -> m v -> m v
-  withMutABind :: EId -> m v -> m v
+  withImmABind :: EId -> v -> m a -> m a
+  withMutABind :: EId -> m a -> m a
 
-  aCall     :: EId -> [Either v (LVal v)] -> m v
+  aCall     :: EId -> [(AVal v)] -> m v
   aError    :: m a
   aPrint    :: Bool -> [v] -> m ()
 
 -- | Commands plus controls flow 
 class CmdDom m v => CmdDomRec m v | m -> v where 
-  aWhile  :: (POrd s, Monad m, MonadState s m, ValDom v) 
-          => Exp -> m v -> m v
-  aFor    :: (POrd s, Monad m, MonadState s m, ValDom v) 
-          => EId -> Exp -> Exp -> m v -> m v
+  aWhile  :: (POrd s, Monad m, MonadState s m, ValDom v)
+          => Exp -> m (AVal v) -> m (AVal v)
+  aFor    :: (POrd s, Monad m, MonadState s m, ValDom v)
+          => EId -> Exp -> Exp -> m (AVal v) -> m (AVal v)
   aBranch :: (POrd s, Monad m, MonadState s m, ValDom v) 
-          => Exp -> m v -> m v -> m v
-
+          => Exp -> m (AVal v) -> m (AVal v) -> m (AVal v)
 
 -- | Specific operations for abstract domains
 class AbsInt m v where
 
-  aSkip     :: m v
-  aJoin     :: m v -> m v -> m v 
-  aWithFact :: v -> m v -> m v
-  aWiden    :: v -> m v -> m v -> m v
+  aSkip     :: m (AVal v)
+  aJoin     :: m (AVal v) -> m (AVal v) -> m (AVal v)
+  aWithFact :: v -> m (AVal v) -> m (AVal v)
 
--- | Run computation w/o modifying initial state
--- and return the final state
+-- | Run computation w/o modifying initial state and return final state
 inCurrSt :: MonadState s m => m a -> m (a,s)
 inCurrSt act = do
   pre  <- get
@@ -145,7 +154,6 @@ instance AbsInt m a => AbsInt (AbsT m) a where
   aSkip = AbsT aSkip
   aJoin (AbsT m1) (AbsT m2) = AbsT (aJoin m1 m2)
   aWithFact v (AbsT m) = AbsT (aWithFact v m)
-  aWiden v (AbsT m1) (AbsT m2) = AbsT (aWiden v m1 m2)
 
 instance CmdDom m v => CmdDom (AbsT m) v where
   aAssign lval val          = AbsT (aAssign lval val)
@@ -157,127 +165,131 @@ instance CmdDom m v => CmdDom (AbsT m) v where
   aPrint b vs               = AbsT (aPrint b vs)
 
 
-
 instance (AbsInt m v, CmdDom m v) => CmdDomRec (AbsT m) v where
   aBranch e m1 m2 = do 
-    a <- absEval e
+    a <- absEvalRVal e
     aJoin (aWithFact a m1) (aWithFact (aUnOp Not a) m2)
   
-  aWhile e m = do
-     a <- absEval e
-     afix $ aWiden a (aWithFact a m)
-                     (aWithFact (aUnOp Not a) aSkip)
-
-  aFor idx estart elen m = do
-    s <- get 
-    astart <- absEval estart
-    s' <- get
-    unless (s' `pleq` s) $ fail "Analysis failure, imperative estart!"
-    let econd = eBinOp noLoc Lt eidx (eBinOp noLoc Add estart elen)
-    acond <- absEval econd
-    let m' = m >> do rhs <- absEval $
-                            eBinOp noLoc Add eidx
-                              (eVal noLoc (nameTyp idx) (VInt 1))
-                     aAssign (varLVal idx) rhs
-                     return $ aVal VUnit
-    withMutABind idx $
-      do aAssign (varLVal idx) astart
-         afix $ aWiden acond (aWithFact acond m')
-                             (aWithFact (aUnOp Not acond) aSkip)
+  aWhile e m = loop 
     where 
+      loop = do 
+        a <- absEvalRVal e
+        aJoin (aWithFact a m') aSkip
+        where m' = do pre  <- get -- ^ get state
+                      x    <- m   -- ^ execute once
+                      post <- get -- ^ get state 
+                      if post `pleq` pre 
+                        then return x -- ^ reached fixpoint
+                        else loop     -- ^ go around the loop
+
+  -- NB: We could improve by statically inlining when elen is known
+  aFor idx estart elen m =
+   withMutABind idx $ do 
+    astart <- absEvalRVal estart
+    aAssign (varLVal idx) astart
+    let econd = eBinOp noLoc Lt eidx (eBinOp noLoc Add estart elen)
+    let erhs  = eBinOp noLoc Add eidx (eVal noLoc (nameTyp idx) (VInt 1))
+        m'    = do x <- m 
+                   arhs <- absEvalRVal erhs
+                   aAssign (varLVal idx) arhs
+                   return x
+    aWhile econd m'
+
+   where 
       eidx = eVar noLoc idx
 
-afix :: (POrd s, MonadState s m) => m a -> m a
-afix action = loop
-  where loop = do
-          pre <- get
-          x <- action
-          post <- get
-          if post `pleq` pre then return x else loop
 
 {-------------------------------------------------------------------------------
   The abstract evaluator proper
 -------------------------------------------------------------------------------}
 
-absEvalDeref :: ( POrd s, ValDom v, Monad m, MonadState s m, CmdDomRec m v )
-             => Exp -> m (LVal v)
-absEvalDeref e = go (unExp e) where
-  -- Variables are lvalues
-  go (EVar x) = return (GDVar x)
-  -- Reading, projections
-  go (EArrRead earr estart elen) = do
-    d <- absEvalDeref earr
-    astart <- absEval estart
-    return (GDArr d astart elen)
-  go (EProj e' fld) = do
-    d <- absEvalDeref e'
-    return (GDProj d fld)
-  -- Allocations 
-  go (EValArr vs) = do 
-    let ty = ctExp e
-    avs <- mapM absEval vs
-    return $ GDNewArray ty avs
-  go (EStruct t tfs) = do
-    atfs <- mapM (\(f,x) -> absEval x >>= \a -> return (f,a)) tfs
-    return $ GDNewStruct t atfs
 
-  -- All rest should not occur here!
-  go _ = panic $ 
-         vcat [ text "BUG: Cannot evaluate expression as lvalue."
-              , text "Should have been enforced by the frontend!"
-              , nest 2 $ ppr e ]
+type EvalCtx s m v
+  = ( POrd s
+    , Monad m
+    , MonadState s m
+    , ValDom v
+    , CmdDomRec m v 
+    )
 
-absEval :: forall m s v. 
-  ( POrd s, ValDom v, Monad m, MonadState s m, CmdDomRec m v )
-        => Exp -> m v
+absEvalRVal :: EvalCtx s m v => Exp -> m v 
+-- | Evaluate and if we get back an l-value then just read it
+absEvalRVal  e = absEval e >>= do_ret
+  where do_ret (RVal v)    = return v
+        do_ret (LVal lval) = aDerefRead lval
+
+absEvalLVal :: EvalCtx s m v => Exp -> m (LVal v) 
+-- | Precondition: this expression does evaluate to an LValue
+absEvalLVal e = do { r <- absEval e; return (fromLVal r) }
+  where fromLVal :: AVal v -> LVal v
+        fromLVal (LVal lval) = lval
+        fromLVal _           = error "fromLVal"
+
+
+absEval :: forall s m v. EvalCtx s m v => Exp -> m (AVal v)
 absEval e = go (unExp e) where
-  -- Values and operators
-  go (EVal _ v)   = return $ aVal v
+
+  go :: Exp0 -> m (AVal v)
+
+  go (EVal _ v)   = rValM (aVal v)
+
   go (EValArr vs) = do 
-    avs <- mapM absEval vs
-    return $ aArr avs
-  go (EVar x)     = aDerefRead $ varLVal x
+    avs <- mapM absEvalRVal vs
+    rValM (aArr avs)
+ 
   go (EUnOp u e1) = do 
-    a <- absEval e1
-    return $ aUnOp u a
+    a <- absEvalRVal e1
+    rValM (aUnOp u a)
+
   go (EBinOp b e1 e2) = do
-    a1 <- absEval e1
-    a2 <- absEval e2
-    return $ aBinOp b a1 a2
-  -- Assignments 
+    a1 <- absEvalRVal e1
+    a2 <- absEvalRVal e2
+    rValM (aBinOp b a1 a2)
+
   go (EAssign elhs erhs) = do
-    arhs <- absEval erhs
-    alhs <- absEvalDeref elhs
+    arhs <- absEvalRVal erhs
+    alhs <- absEvalLVal elhs
     aAssign alhs arhs
-    return $ aVal VUnit
-  go (EArrWrite earr ei rng erhs) = 
+    rValM (aVal VUnit)
+
+  go (EArrWrite earr ei rng erhs) = -- will go away!
     go $ EAssign (eArrRead noLoc earr ei rng) erhs
 
-  -- Reading, projections 
-  go (EArrRead {}) = do
-    d <- absEvalDeref e
-    aDerefRead d
-  go (EProj {}) = do
-    d <- absEvalDeref e
-    aDerefRead d
+  go (EVar x) = lValM (varLVal x)
+
+  go (EArrRead earr ei rng) = do
+    vi <- absEvalRVal ei
+    d <- absEval earr
+    case d of
+      LVal lval -> lValM (GDArr lval vi rng)
+      RVal aval -> rValM (aArrRead aval vi rng)
+
+  go (EProj e0 fld) = do
+    d <- absEval e0
+    case d of
+      LVal lval -> lValM (GDProj lval fld)
+      RVal sval -> rValM (aStrProj sval fld)
 
   go (EStruct nm tfs) = do
-    atfs <- mapM (\(f,x) -> absEval x >>= \a -> return (f,a)) tfs
-    return $ aStruct nm atfs
+    atfs <- mapM eval_fld tfs
+    rValM (aStruct nm atfs)
+    where 
+      eval_fld (f,x) = absEvalRVal x >>= \v -> return (f, v)
 
-  go (ELUT _ e1)    = absEval e1
+  go (ELUT _ e1) = absEval e1
+
   go (EPrint nl es) = do 
-    as <- mapM absEval es 
+    as <- mapM absEvalRVal es 
     aPrint nl as
-    return $ aVal VUnit
+    rValM (aVal VUnit)
 
-  go (EError {})   = aError 
+  go (EError {}) = aError 
 
   go (ECall fn es) = do
     let (TArrow funtys _funres) = nameTyp fn
     let tys_args = zip funtys es
     as <- mapM absEvalArg tys_args
-    aCall fn as
+    aCall fn as >>= rValM -- Functions return by-value!
 
   go (ESeq e1 e2) = do 
     _a1 <- absEval e1
@@ -287,32 +299,30 @@ absEval e = go (unExp e) where
     aBranch ec (absEval e1) (absEval e2) 
 
   go (ELet v _ e1 e2) = do
-    a1 <- absEval e1
+    a1 <- absEvalRVal e1
     withImmABind v a1 $ absEval e2
 
   go (ELetRef v Nothing e2) = do
     withMutABind v $ absEval e2
 
   go (ELetRef v (Just e1) e2) = do
-    a1 <- absEval e1
+    a1 <- absEvalRVal e1
     withMutABind v $ do
-      d <- absEvalDeref (eVar noLoc v)
+      d <- absEvalLVal (eVar noLoc v)
       aAssign d a1
       absEval e2
 
-  go (EFor _ui ix estart elen ebody) = do   
-    aFor ix estart elen $ absEval ebody
-    return $ aVal VUnit
+  go (EFor _ui ix estart elen ebody) 
+    = aFor ix estart elen (absEval ebody)
 
-  go (EWhile econd ebody) = do
-    aWhile econd (absEval ebody)
-    return $ aVal VUnit
+  go (EWhile econd ebody)            
+    = aWhile econd (absEval ebody)
 
 
-absEvalArg :: forall m s v. 
-  ( POrd s, ValDom v, Monad m, MonadState s m, CmdDomRec m v)
-           => (ArgTy,Exp) -> m (Either v (LVal v))
-absEvalArg (GArgTy _ Mut, earg) 
-  = absEvalDeref earg >>= (return . Right)
-absEvalArg (_, earg)            
-  = absEval      earg >>= (return . Left )
+absEvalArg :: forall m s v.  EvalCtx s m v => (ArgTy, Exp) -> m (AVal v)
+absEvalArg (GArgTy _ Mut, earg) = do 
+  v <- absEvalLVal earg
+  return (LVal v) -- NB: /force/ it to be lvalue
+absEvalArg (_, earg) = do
+  v <- absEvalRVal earg
+  return (RVal v) -- NB: /force/ a read if lvalue

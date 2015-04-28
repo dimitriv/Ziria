@@ -305,10 +305,12 @@ data AGDerefExp expr t
   = GDVar  (GName t)
   | GDProj (AGDerefExp expr t) FldName
   | GDArr  (AGDerefExp expr t) expr LengthInfo
-  | GDNewArray t [expr]
-          -- NB: t is the array type, not the element type
-  | GDNewStruct t [(FldName,expr)]
-          -- NB: t is the struct type
+
+  -- DELETEME
+  -- | GDNewArray t [expr]
+  --         -- NB: t is the array type, not the element type
+  -- | GDNewStruct t [(FldName,expr)]
+  --         -- NB: t is the struct type
   deriving Show
 
 type GDerefExp t a = AGDerefExp (GExp t a) t
@@ -316,14 +318,14 @@ type GDerefExp t a = AGDerefExp (GExp t a) t
 -- | Dereference expressions with abstract values as indices
 type LVal idx = AGDerefExp idx Ty
 
-
 derefToExp :: SrcLoc -> AGDerefExp (GExp t ()) t -> GExp t ()
 derefToExp loc = go 
   where go (GDVar nm)           = MkExp (EVar nm) loc ()
         go (GDProj de fld)      = MkExp (EProj (go de) fld) loc ()
         go (GDArr de1 e2 li)    = MkExp (EArrRead (go de1) e2 li) loc ()
-        go (GDNewArray _t es)   = MkExp (EValArr es) loc ()
-        go (GDNewStruct t flds) = MkExp (EStruct t flds) loc ()
+        -- DELETEME
+        -- go (GDNewArray _t es)   = MkExp (EValArr es) loc ()
+        -- go (GDNewStruct t flds) = MkExp (EStruct t flds) loc ()
 
 
 isMutGDerefExp :: GExp t a -> Maybe (GDerefExp t a)

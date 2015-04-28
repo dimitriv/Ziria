@@ -90,17 +90,14 @@ ctProj :: Ty -> FldName -> Ty
 ctProj (TStruct _ fs) n = lookup' n fs
 ctProj t _ = panic $ text "ctProj:" <+> ppr t
 
-
 ctFun :: Fun -> Ty
-ctFun fun
-  = case unFun fun of
-      MkFunDefined nm _ _ -> nameTyp nm
-      MkFunExternal nm _ _ -> nameTyp nm
-
+ctFun fun = nameTyp (funName fun) 
 
 ctDerefExp :: AGDerefExp exp Ty -> Ty
 ctDerefExp (GDVar nm)        = nameTyp nm
 ctDerefExp (GDProj de fld)   = ctProj (ctDerefExp de) fld
 ctDerefExp (GDArr de _ li)   = ctArrRead "ctDerefExp" (ctDerefExp de) li
-ctDerefExp (GDNewArray t _)  = t
-ctDerefExp (GDNewStruct t _) = t
+
+-- DELETEME
+-- ctDerefExp (GDNewArray t _)  = t
+-- ctDerefExp (GDNewStruct t _) = t

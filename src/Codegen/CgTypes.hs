@@ -248,8 +248,7 @@ codeGenVal v =
     VInt i 
       | i <= mAX_INT32 && mIN_INT32 <= i
       -> [cexp|$int:i|]
-      | otherwise
-      -> [cexp|$lint:i|]
+      | otherwise -> [cexp|$lint:i|]
     VBit True   -> [cexp| 1                     |]
     VBit False  -> [cexp| 0                     |]
     VDouble d   -> [cexp| $double:(toRational d)|]
