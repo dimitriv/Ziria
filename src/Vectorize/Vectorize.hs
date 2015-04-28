@@ -104,7 +104,7 @@ comp_vect :: DynFlags -> CtxForVect -> LComp -> VecM DVRCands
 comp_vect dfs vctx c = do 
   verbose dfs (text "^^^" <+> 
                text (compShortName c) <+> 
-               parens (text (show loc))
+               parens (ppr loc)
               )
   r <- comp_vect0 dfs vpack (unComp c)
   return $!r
@@ -192,16 +192,16 @@ comp_vect0 dfs (VectPack {..}) (Par p c1 c2)
     in
     do verbose dfs $ text (show vp_vctx ++ " => " ++ show ctx1)
        verbose dfs $ text (show vp_vctx ++ " => " ++ show ctx2) 
-       vcs1 <- comp_vect dfs ctx1 c1 >>= logCands dfs False (show (compLoc c1))
-       vcs2 <- comp_vect dfs ctx2 c2 >>= logCands dfs False (show (compLoc c2))
+       vcs1 <- comp_vect dfs ctx1 c1 >>= logCands dfs False ((displayLoc . locOf . compLoc) c1)
+       vcs2 <- comp_vect dfs ctx2 c2 >>= logCands dfs False ((displayLoc . locOf . compLoc) c2)
        let !res = combineData p vp_loc vcs1 vcs2
     
        let dbg_doc = vcat $ 
-               [ text "Left candidates: " <+> text (show (compLoc c1))
+               [ text "Left candidates: " <+> ppr (compLoc c1)
                , nest 2 $ pprDVRess vcs1
                , nest 2 $ text (show ctx1)
                , nest 4 $ ppr c1
-               , text "Right candidates: " <+> text (show (compLoc c2))
+               , text "Right candidates: " <+> ppr (compLoc c2)
                , nest 2 $ pprDVRess vcs2
                , nest 2 $ text (show ctx2)
                , nest 4 $ ppr c2
@@ -351,14 +351,14 @@ comp_vect0 dfs (VectPack {..}) (VectComp (fin,fout) c) = do
   -- I am not sure that the VectComp annotations are in fact used
   liftIO $ print $
     vcat [ text "VectComp, ignoring annotation."
-         , text "At location:" <+> text (show vp_loc)
+         , text "At location:" <+> ppr vp_loc
          ]
   comp_vect dfs vp_vctx c
 
 {------------------------------------------------------------------------------}
 
 comp_vect0 dfs (VectPack {..}) _other = do 
-  verbose dfs $ text "comp_vect0 _other, location = " <+> text (show vp_loc)
+  verbose dfs $ text "comp_vect0 _other, location = " <+> ppr vp_loc
   addDVR vp_self_dvr <$>
     vect_comp_dd dfs vp_comp (compSFDD vp_card vp_tyin vp_tyout)
 

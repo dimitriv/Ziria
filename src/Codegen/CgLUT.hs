@@ -350,7 +350,7 @@ codeGenLUTExp dflags stats e mb_resname
     cannot_lut d what_next
       = vcat [ text "Asked to LUT an expression we would not LUT." <+> d
              , nest 4 (ppr e)
-             , text "At location" <+> text (show (expLoc e))
+             , text "At location" <+> ppr (expLoc e)
              , what_next ]
 
     aBSOLUTE_MAX_LUT_SIZE :: Integer
@@ -368,7 +368,7 @@ codeGenLUTExp dflags stats e mb_resname
              Just clut -> do
                verbose dflags $ 
                  vcat [ text "Expression to LUT is already lutted!"
-                      , text "At location" <+> text (show (expLoc e)) 
+                      , text "At location" <+> ppr (expLoc e)
                       ]
                return clut
              Nothing -> do

@@ -140,7 +140,7 @@ import Data.Monoid
 import Data.Maybe (catMaybes)
 import Data.Monoid
 import Data.Loc (noLoc)
-import qualified Data.Loc
+import Data.Loc
 import qualified Data.Symbol
 import Control.Monad (ap)
 import Control.Monad.IO.Class (MonadIO(..))
@@ -157,6 +157,7 @@ import AstExpr
 import NameEnv
 
 import AstComp
+import Outputable
 import PpComp
 import PpExpr
 import qualified GenSym as GS
@@ -773,7 +774,7 @@ lookupExpFunEnv nm  = do
       Nothing -> do funs <- asks funEnv
                     let bound = map (show . ppName) (neKeys funs)
                     fail ("Unbound function in code generation: "  ++ show (ppName nm) ++
-                          " bound = " ++ show bound ++ " pos = " ++ show (nameLoc nm))
+                          " bound = " ++ show bound ++ " pos = " ++ (displayLoc . locOf . nameLoc) nm)
       Just x  -> return x
 
 lookupExpFunEnv_maybe :: GName Ty -> Cg (Maybe (GName Ty, [GName Ty]))
@@ -798,7 +799,7 @@ lookupVarEnv nm = do
                      print (vcat [ text ("Unbound variable in code generation: "  ++ show (ppNameUniq nm))
                                  , text "bound = "
                                  , nest 2 $ vcat bound
-                                 , text ("pos = " ++ show (nameLoc nm)) ])
+                                 , text ("pos = " ++ (displayLoc . locOf . nameLoc) nm) ])
                     fail "Aborting compilation."
 
       Just x  -> return x
