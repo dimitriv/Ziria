@@ -225,7 +225,9 @@ isLargeTy :: Int -> Bool
 -- ^ of this type will be declared as pointers and are heap allocated
 isLargeTy ty_size = ty_size > cMAX_STACK_ALLOC
 
+
 shouldAllocAsPtr :: Ty -> Bool
+-- | Should we allocate as pointer
 shouldAllocAsPtr (TArray (NVar {}) _) = True
 shouldAllocAsPtr other = isLargeTy (tySizeOf other)
 
@@ -274,9 +276,12 @@ cgInitVal ty
 type CVar = String 
 
 -- | When declaring a new variable we can choose how to initialize it
--- by passing a @HowToInit@ value. @ZeroOut@ zeroes the relevant
--- memory, whereas @InitWith init@ allows you to pass in a C initializer.
+-- ^ by passing a @HowToInit@ value. @ZeroOut@ zeroes the relevant
+-- ^ memory, whereas @InitWith init@ allows you to pass in a C-initializer.
 data HowToInit = ZeroOut | InitWith C.Initializer
+
+-- | An InitGroup or Definition plus any statements for initialization
+data DeclPkg d = DeclPkg { dp_decl :: d, dp_init :: [C.Stm] }
 
 isInitWith :: HowToInit -> Bool
 isInitWith (InitWith {}) = True
@@ -297,7 +302,7 @@ arrIdxCStack = go
     go (TArray (Literal n) ty)   = n : go ty
     go _ty                       = []
 
-cgDeclAllocPtr :: Quals -> CVar -> Ty -> Cg (C.InitGroup,[C.Stm])
+cgDeclAllocPtr :: Quals -> CVar -> Ty -> Cg (DeclPkg C.InitGroup)
 -- ^ Declare and heap-allocate (for large types or dynamic arrays)
 cgDeclAllocPtr quals v ty = do 
   newHeapAlloc
@@ -305,20 +310,16 @@ cgDeclAllocPtr quals v ty = do
   let ig   = [cdecl| $ty:qty *$id:v = NULL;|]
       stmt = [cstm| $id:v = ($ty:nonqty *) 
                wpl_alloca($id:heap_ctx, $exp:(tySizeOf_C ty));|]
-  return (ig,[stmt])
-
+  return $ DeclPkg ig [stmt]
   where qty    = arrBaseCType (Just quals) ty 
         nonqty = arrBaseCType Nothing ty
-
-
-
 
 cgDeclStatic :: Quals     -- ^ qualifiers
              -> CVar      -- ^ C variable
              -> Ty
              -> HowToInit
              -> C.InitGroup
--- ^ Declare a variable of array type  
+-- ^ Declare a variable of array type statically
 cgDeclStatic quals v ty mb_init =
   case idx_stack of 
     []            -> [cdecl| $ty:base_ty $id:v = $init:dflt;|]
@@ -344,7 +345,7 @@ codeGenFieldDeclGroup v ty =
   where idx_stack = arrIdxCStack ty
         base_ty   = arrBaseCType Nothing ty
 
-codeGenDeclGroup_qual :: Quals -> CVar -> Ty -> HowToInit -> Cg (C.InitGroup, [C.Stm])
+codeGenDeclGroup_qual :: Quals -> CVar -> Ty -> HowToInit -> Cg (DeclPkg C.InitGroup)
 codeGenDeclGroup_qual quals v ty mb_init
   | shouldAllocAsPtr ty && not (isInitWith mb_init) 
     -- ^ If the type is big and we do not have a programmer-supplied 
@@ -352,24 +353,24 @@ codeGenDeclGroup_qual quals v ty mb_init
   = cgDeclAllocPtr quals v ty
   | otherwise 
     -- ^ We have given a static initializer or the type is small
-  = return (cgDeclStatic quals v ty mb_init,[])
+  = return $ DeclPkg (cgDeclStatic quals v ty mb_init) []
 
 -- | codeGenDeclGroup wrappers
-codeGenDeclGroup,codeGenDeclVolGroup :: CVar -> Ty -> HowToInit -> Cg (C.InitGroup,[C.Stm])
+codeGenDeclGroup,codeGenDeclVolGroup :: CVar -> Ty -> HowToInit -> Cg (DeclPkg C.InitGroup)
 codeGenDeclGroup    = codeGenDeclGroup_qual "calign"
 codeGenDeclVolGroup = codeGenDeclGroup_qual "volatile"
 
 -- | Init group to definitions
-codeGenDeclDef :: CVar -> Ty -> HowToInit -> Cg (C.Definition,[C.Stm])
+codeGenDeclDef :: CVar -> Ty -> HowToInit -> Cg (DeclPkg C.Definition)
 codeGenDeclDef v ty minit = do
-  (ig,stms) <- codeGenDeclGroup v ty minit
-  return (initGroupDef ig,stms)
+  (DeclPkg ig stms) <- codeGenDeclGroup v ty minit
+  return $ DeclPkg (initGroupDef ig) stms
 
 
 appendCodeGenDeclGroup :: CVar -> Ty -> HowToInit -> Cg ()
 -- | Append declaration and initialization in the current block
 appendCodeGenDeclGroup x ty minit = do
-  (ig,stms) <- codeGenDeclGroup x ty minit
+  (DeclPkg ig stms) <- codeGenDeclGroup x ty minit
   appendDecl ig
   appendStmts stms
 
@@ -411,29 +412,37 @@ cgBitArrRead src_base pos len tgt
 
 
 assignByVal :: Ty -> C.Exp -> C.Exp -> Cg ()
-assignByVal ty@(TArray (Literal n) TBit) ce1 ce2 
+assignByVal (TArray numexp base) ce1 ce2
+  = asgn_arr numexp base ce1 ce2
+assignByVal t ce1 ce2
+  | isStructPtrType t = asgn_memcpy t ce1 ce2
+  | otherwise         = asgn_direct t ce1 ce2
+
+asgn_arr :: NumExpr -> Ty -> C.Exp -> C.Exp -> Cg ()
+asgn_arr (Literal n) TBit ce1 ce2
   = cgBitArrRead ce1 0 (((n+7)`div` 8)*8) ce2
-
-assignByVal ty@(TArray (NVar n) TBit) ce1 ce2
+asgn_arr (NVar n) TBit ce1 ce2
   = appendStmt [cstm|bitArrRead($ce2,0,$id:n,$ce1);|]
-
-assignByVal ty@(TArray (Literal n) t) ce1 ce2 
+asgn_arr (Literal n) ty ce1 ce2
   = appendStmt [cstm|blink_copy($ce1, $ce2, $int:(tySizeOf ty));|]
+asgn_arr (NVar n) ty ce1 ce2
+  = appendStmt [cstm|blink_copy($ce1, $ce2, $id:n * $int:(tySizeOf ty));|]
 
-assignByVal ty@(TArray (NVar n) t) ce1 ce2
-  = appendStmt [cstm|blink_copy($ce1, $ce2, $id:n * $int:(tySizeOf t));|]
-
-assignByVal t ce1 ce2 
-  | isStructPtrType t
+asgn_memcpy :: Ty -> C.Exp -> C.Exp -> Cg ()
+asgn_memcpy t ce1 ce2 
   = appendStmt [cstm|blink_copy($ce1, $ce2, $int:(tySizeOf t));|]
-  | otherwise = just_assign ce1 ce2
-  where just_assign ce1 ce2
-          | isComplexTy t && is_c_var ce2 
-          = do appendStmt [cstm|$ce1.re = $ce2.re;|]
-               appendStmt [cstm|$ce1.im = $ce2.im;|]
-          | otherwise
-          = appendStmt [cstm|$ce1 = $ce2;|]
-        -- DV: Why?
+
+asgn_direct :: Ty -> C.Exp -> C.Exp -> Cg ()
+asgn_direct ty ce1 ce2
+  | isComplexTy ty && is_c_var ce2 
+    -- ^ Assignments in the fields of complex numbers seem to 
+    -- ^ result to much better performance than assigning the 
+    -- ^ full struct, hence we special-case here. 
+  = do appendStmt [cstm|$ce1.re = $ce2.re;|]
+       appendStmt [cstm|$ce1.im = $ce2.im;|]
+  | otherwise
+  = appendStmt [cstm|$ce1 = $ce2;|]
+  where -- DV: Seems defensive. Why is this necessary?
         is_c_var (C.Var (C.Id {}) _) = True
         is_c_var _                   = False
 
@@ -468,6 +477,9 @@ expValMbs = mapM expValMb
 
 expValMb :: Exp -> Maybe Val
 expValMb e = case unExp e of { EVal t v -> return v; _ -> Nothing }
+
+
+
 
 
 {- 

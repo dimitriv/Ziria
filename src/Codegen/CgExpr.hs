@@ -515,43 +515,45 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
         let ty1 = ctExp e1
         d <- case unExp e1 of
                EValArr {} ->
-                 return [cdecl|$ty:(codeGenArrTyPtrAlg ty1) $id:(x_name);|]
-               _ -> codeGenDeclGroup x_name (ctExp e1)
-        appendDecl d
+                 let g = [cdecl|$ty:(codeGenArrTyPtrAlg ty1) $id:(x_name);|]
+                 in return (g,(g,Nothing))
+               _ -> codeGenDeclGroup_qual "calign" x_name (ctExp e1) Nothing
 
         ce1 <- codeGenExp dflags e1
 
-        extendVarEnv [(x,[cexp|$id:x_name|])] $
-          do { case unExp e1 of
-                 EValArr {}
-                     -> appendStmt [cstm|$id:x_name = $ce1;|]
-                 _ -> do { cx <- go (ctExp e1) (EVar x)
-                         ; assignByVal (ctExp e1) (ctExp e1) cx ce1 }
-            ; codeGenExp dflags e2
-            }
+        appendLetDecl ty1 d $ 
+           extendVarEnv [(x,[cexp|$id:x_name|])] $
+             do { case unExp e1 of
+                    EValArr {}
+                        -> appendStmt [cstm|$id:x_name = $ce1;|]
+                    _ -> do { cx <- go (ctExp e1) (EVar x)
+                            ; assignByVal (ctExp e1) (ctExp e1) cx ce1 }
+               ; codeGenExp dflags e2
+               }
 
     -- TODO: Is it right that we ignore _ty1 here?
     go t (ELetRef x (Just e1) e2) = do
         x_name <- freshVar $ name x ++ getLnNumInStr (expLoc e0)
 
         let t1 = ctExp e1
-
-        codeGenDeclGroup x_name t1 >>= appendDecl
-
+         
+        d <- codeGenDeclGroup_qual "calign" x_name t1 Nothing
         ce1 <- codeGenExp dflags e1
 
-        extendVarEnv [(x, [cexp|$id:x_name|])] $ do
-          cx <- go t1 (EVar x)
-          assignByVal t1 t1 cx ce1
-          codeGenExp dflags e2
+        appendLetDecl t1 d $ 
+           extendVarEnv [(x, [cexp|$id:x_name|])] $ do
+             cx <- go t1 (EVar x)
+             assignByVal t1 t1 cx ce1
+             codeGenExp dflags e2
 
     go t (ELetRef x Nothing e2) = do
         x_name <- freshVar $ name x ++ getLnNumInStr (expLoc e0)
 
-        codeGenDeclGroup x_name (nameTyp x) >>= appendDecl
+        d <- codeGenDeclGroup_qual "calign" x_name (nameTyp x) Nothing
 
-        extendVarEnv [(x,[cexp|$id:x_name|])] $
-          codeGenExp dflags e2
+        appendLetDecl (nameTyp x) d $ 
+          extendVarEnv [(x,[cexp|$id:x_name|])] $
+            codeGenExp dflags e2
 
     go t (ESeq e1 e2) = do
         ce1 <- codeGenExp dflags e1
@@ -637,6 +639,7 @@ codeGenExp dflags e0 = go (ctExp e0) (unExp e0)
                                  ; assignByVal (ctExp fe) (ctExp fe) fproj cfe
                                  }) tfs
          ; return csnm }
+
 
 printExps :: Bool -> DynFlags -> [Exp] -> Cg ()
 printExps nl dflags es = do

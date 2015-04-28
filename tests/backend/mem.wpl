@@ -1,0 +1,75 @@
+#include <externals.blk>
+#define MAX_BIT_MSG_SIZE        (50*12*14*6)
+#define PUNCTURE                -1
+
+fun derateMatchTurbo(ek : arr int8, var dk : arr[MAX_BIT_MSG_SIZE] int8, D : int32, rv : int16) { 
+var wk : arr [MAX_BIT_MSG_SIZE] int32;
+var wkout : arr [MAX_BIT_MSG_SIZE] int8;
+var Kpi : int32;
+var cnt : int32;
+var pad : int32 := 0;
+
+    -- TODO: filler bits in vk2?
+    -- TODO: puncturing, repetition averaging
+    Kpi := 0;
+
+    let CC = 32;
+    let R = ceil_int32(double(D) / double(CC));
+    let Ncb = 3 * R * CC;                    --  TODO: have skipped all the Nsoft stuff
+    let k0 = R * (2 * ceil_int32(double(Ncb) / double(8 * R)) * int32(rv) + 2);
+
+    cnt := 0;
+
+    -- pad = sum(isnan(wk(1:k0)));
+    pad := 0;
+    for i in [0, k0] {
+      if (wk[i] == PUNCTURE) then {
+        pad := pad+1;
+      }
+    }
+
+    for i in [0, 3*Kpi] {
+      if (wk[i] != PUNCTURE) then {
+        let ind = (cnt + 3*D - (k0-pad)) % (3*D); 
+        wkout[i] := ek[ind];
+        cnt := cnt+1;
+      } else {
+        wkout[i] := PUNCTURE;
+      }
+    }
+
+  
+    return cnt;
+}
+
+
+
+-- Returns an array of max_size. The caller should trim to trblklen size
+fun sch_decode(e : arr int8, trblklen : int32, rv : int16) {
+var dk : arr[MAX_BIT_MSG_SIZE] int8;
+var crcOK : bool;
+
+  let A = trblklen;
+  let D = A + 24 + 4;    -- TB + CRC + trellis termination
+
+  derateMatchTurbo(e, dk , D, rv);
+
+  return 0;
+}
+
+
+
+
+-- NRB here hardcoded to 8
+#define CNRB         8
+#define ENC_PKT_LEN  CNRB -- *12*12*2
+
+let comp main = read >>> 
+    repeat { 
+      x <- takes ENC_PKT_LEN;
+      let o = sch_decode(x, 16, 0);
+      emit o;
+    }
+>>> write
+
+
