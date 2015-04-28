@@ -177,9 +177,12 @@ var p : bit;
          p := p ^ a[j];
        }
      }
+
+#ifndef FAST
      if (p != '0) then {
        println "Header parity check failed!";
      }
+#endif
 
      -- Check header's tail
      p := '0;
@@ -187,10 +190,11 @@ var p : bit;
      for j in [2, 6] {
          p := p | a[j];
      }
+#ifndef FAST
      if (p != '0) then {
        println "Header tail non-zero!";
      }
-         
+#endif         
 
 #ifndef FAST
      printHeader(h);
