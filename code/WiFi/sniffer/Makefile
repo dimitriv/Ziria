@@ -46,6 +46,9 @@ all: $(TGTS)
 sniffer_test.out : sniffer_test.blk
 	C_DEFINES='BLADE_RF' LIBS='bladeRF.lib' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PPDEB) $< $@
 
+sniffer_example.out : sniffer_example.blk
+	C_DEFINES='BLADE_RF' LIBS='bladeRF.lib' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PPDEB) $< $@
+
 %.out : %.blk
 	C_DEFINES='BLADE_RF' LIBS='bladeRF.lib' EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS)' $(PP) $< $@
 
@@ -66,6 +69,10 @@ sniffer.run: sniffer.out
 	./$< --input=sdr --heap-size=1000000000 --sdr-central-frequency=2412000000 --sdr-rx-gain=20 --input-file-mode=bin --output=dummy
 #	./$< --input=sdr --sdr-central-frequency=2412000000 --sdr-rx-gain=20 --input-file-mode=bin --output=file --output-file-name=out.txt --output-file-mode=dbg --heap-size=1000000000 --output-buffer-size=30000000
 
+
+sniffer_example.outfile: sniffer_example.out
+	PATH="$(PATH)":"/cygdrive/c/Program Files/bladeRF/x64" \
+	./$< --input=file --input-file-name=sniffer_example.infile --input-file-mode=dbg --output=dummy
 
 
 %.accept : %.outfile

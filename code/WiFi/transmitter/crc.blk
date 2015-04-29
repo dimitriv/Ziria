@@ -100,6 +100,8 @@ var ret : bool;
     } else {
 #ifndef FAST
 --      println "CRC failed!";
+--      println "Expected: ", ac;
+--      println "Received: ", ax;
 #endif
       ret := false;
     }
