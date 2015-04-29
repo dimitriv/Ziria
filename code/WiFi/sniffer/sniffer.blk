@@ -57,7 +57,14 @@ var a : arr[1] int8;
 }
 
 
--- let comp main = read[complex16] >>> repeat {receiver() >>> print_hdr() >>> convert_to_int8() >>> print_hex()} >>> write
-let comp main = read[complex16] >>> repeat {receiver() >>> print_hdr()} >>> write
+let comp main = read[complex16] >>> 
+  repeat {
+    (receiver() >>> print_hdr() >>> convert_to_int8() >>> print_hex());
+    do{println ""; println "";}
+  } >>> write
+
+--let comp main = read[complex16] >>> repeat {receiver() >>> print_hdr()} >>> write
+--let comp main = read[complex16] >>> receiver() >>> write
+
 
 --let comp main = read >>> times 1000000 {(x :arr[16] complex16)<-take; emit x} >>> write

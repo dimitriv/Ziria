@@ -94,12 +94,12 @@ var ret : bool;
 
     if (ax[0] == ac[0] && ax[1] == ac[1] && ax[2] == ac[2] && ax[3] == ac[3]) then {
 #ifndef FAST
-      println "CRC passed!";
+--      println "CRC passed!";
 #endif
       ret := true;
     } else {
 #ifndef FAST
-      println "CRC failed!";
+--      println "CRC failed!";
 #endif
       ret := false;
     }

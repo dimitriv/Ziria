@@ -51,10 +51,12 @@ fun comp receiveBits() {
 
 
 fun comp receiver() {
-  seq{ det<-detectPreamble(5000)
+  seq{ det<-detectPreamble(500)
 #ifndef FAST
-     ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
-                  ", energy: ", det.energy, ", noise: ", det.noise, ", maxCorr: ", det.maxCorr}
+     ; do{let normMaxCorr = if (det.energy == 0) then 0 else det.maxCorr / det.energy;
+          println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
+                  ", energy: ", det.energy, ", noise: ", det.noise, 
+                  ", maxCorr: ", det.maxCorr, ", normMaxCorr: ", normMaxCorr}
 #endif
      -- receiver uses Sora port of cca to produce comparable performance measurements
      -- but this one does not maxCorr value, so we provide an appropriate one here to pass tests
@@ -65,6 +67,7 @@ fun comp receiver() {
        >>> ChannelEqualization(params)
        >>> PilotTrack()
        >>> GetData() 
+       -->>> times 10000 {x<-take; emit x}
        >>> receiveBits()
   }
 }

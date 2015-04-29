@@ -64,8 +64,7 @@ sniffer_test.outfile: sniffer_test.out ../matlab/pkt3.infile
 sniffer.run: sniffer.out
 	PATH="$(PATH)":"/cygdrive/c/Program Files/bladeRF/x64" \
 	./$< --input=sdr --heap-size=1000000000 --sdr-central-frequency=2412000000 --sdr-rx-gain=20 --input-file-mode=bin --output=dummy
-
-#	./$< --input=sdr --sdr-central-frequency=2412000000 --sdr-rx-gain=20 --input-file-mode=bin --output=file --output-file-name=out.bin --output-file-mode=bin --heap-size=1000000000 --output-buffer-size=30000000
+#	./$< --input=sdr --sdr-central-frequency=2412000000 --sdr-rx-gain=20 --input-file-mode=bin --output=file --output-file-name=out.txt --output-file-mode=dbg --heap-size=1000000000 --output-buffer-size=30000000
 
 
 
