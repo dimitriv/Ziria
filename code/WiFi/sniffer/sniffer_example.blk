@@ -1,0 +1,107 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+-- sniffer_example.infile contains a dump of a packet from a channel 
+-- It consists of a dump after GetData() in receiver.blk, 
+-- and it is a sequence of BPSK modulated complex numbers with a decent shape 
+-- and no obvious reception errors
+--
+-- There are 1488 BPSK symbols (complex numbers with large energy)
+-- corresponding to 31 OFDM symbols. 
+-- The packet has 87B (incl. MAC header and CRC) + 3B PLCP header = 91B
+-- With 1/2 coding this is a bit above 30 OFDM symbols, as expected
+--
+-- Packet was received with the following parameters:
+-- 
+-- Detected at: 3458723, shift: 3, energy: 8442, noise: 35, maxCorr: 1557135, normMaxCorr: 184
+-- Header - modulation: BPSK, coding: 1/2, length: 87 B
+-- Header bits: 110101110101000000000000
+-- *** Frame control:
+--   Protocol:       00
+--   Type (Mgmt):    00
+--   Subtype:        0101
+--   To DS:          0
+--   From DS:        0
+--   More fragments: 0
+--   Retry:          0
+--   Power Mgmt:     0
+--   More data:      0
+--   WEP:            0
+--   Order:          0
+-- 
+-- Duration: 60
+-- Addr 1: -64,51,94,7,-62,-15,  (Microsoft_07:c2:f1)
+-- Addr 2: 0,30,42,16,-28,63,    (Netgear_10:e4:3f)
+-- Addr 3: 0,30,42,16,-28,63,    (Netgear_10:e4:3f)
+-- Seq ctl: 7008
+-- 
+-- 50 00 3C 00 C0 33 5E 07 C2 F1 00 1E 2A 10 E4 3F 00 1E 2A 10 E4 3F 60 1B 37 DF 16 05 
+-- A6 02 00 00 32 00 21 04 00 0F 4E 45 54 47 45 41 52 5F 31 31 67 20 2D 20 30 01 08 82 
+-- 84 8B 96 8C 98 B0 48 03 01 01 07 06 47 42 20 01 0D 14 2A 01 00 32 04 12 24 60 6C
+
+
+#pragma once 
+
+#include <externals.blk>
+#include "../receiver/receiver.blk"
+#include "../transmitter/parseMACHeader.blk"
+
+fun comp convert_to_int8() {
+var ai : arr[1] int8;
+
+  repeat {
+    x<-takes 8;
+    do{
+      bits_to_int8(ai, x);
+    }
+    emits ai;
+  }
+}
+
+fun comp print_hdr() {
+  x <- takes 24*8;
+  do {parseMACHeader(x)};
+  emits x;
+
+  repeat{
+    x<-take;
+    emit x;
+  }
+}
+
+
+fun comp print_hex() {
+var a : arr[1] int8;
+  repeat {
+    x<-take;
+    do{
+      a[0] := x;
+      hexprint_int8(a, 1);
+    };
+    emit x;
+  }
+}
+
+
+
+let comp main = read[complex16] >>> 
+  repeat {
+    (receiveBits() >>> print_hdr() >>> convert_to_int8() >>> print_hex());
+    do{println ""; println "";}
+  } >>> write
