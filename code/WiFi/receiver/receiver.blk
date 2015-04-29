@@ -45,13 +45,20 @@ fun comp detectPreamble(energy_threshold : int32) {
 
 fun comp receiveBits() {
        seq { hdata <- DecodePLCP()
-           ; Decode(hdata) >>> seq { (c : arr[32] bit) <- crc(hdata.len-4, false); check_crc(c) }
+           ; Decode(hdata) >>> 
+             seq { (c : arr[32] bit) <- crc(hdata.len-4, false); check_crc(c) } >>>
+             repeat{
+               x<-takes 8;
+               if (not hdata.err) then {
+                  emits x;
+               }
+             }
        }
 }
 
 
 fun comp receiver() {
-  seq{ det<-detectPreamble(500)
+  seq{ det<-detectPreamble(1000)
 #ifndef FAST
      ; do{let normMaxCorr = if (det.energy == 0) then 0 else det.maxCorr / det.energy;
           println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
