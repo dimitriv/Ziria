@@ -216,4 +216,8 @@ void readBladeRF(BlinkParams *params, complex16 *ptr, int size)
 	}
 }
 
+void writeBladeRF(BlinkParams *params, complex16 *ptr, ULONG size)
+{
+	// Dummy
+}
 #endif

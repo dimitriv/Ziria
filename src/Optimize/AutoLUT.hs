@@ -81,7 +81,7 @@ autolutE dflags = autoE
            verbose dflags $
              vcat [ text "Expression autolutted:" 
                   , nest 4 (ppr e0)
-                  , text "Location:" <+> text (show (expLoc e0))
+                  , text "Location:" <+> ppr (expLoc e0)
                   , ppr stats ]
 -}
            pure $ eLUT (expLoc e0) stats e0

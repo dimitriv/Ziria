@@ -628,7 +628,7 @@ ppTyErr TyErr{..}
   = vcat [ err_msg
          , pp_ctxt err_ctxt
          , text "At location:" <+>
-           text (show err_pos)
+           ppr err_pos
          , err_var_ctxt
          ]
 

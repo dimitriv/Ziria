@@ -29,6 +29,7 @@ import Prelude
 import Opts
 import AstExpr
 import AstComp
+import Outputable
 import PpComp
 import PpExpr
 import qualified GenSym as GS
@@ -48,7 +49,7 @@ import qualified PassPipeline as PP
 import Control.Monad.Writer
 import qualified Data.DList as DL
 import qualified Data.List
-import qualified Data.Loc
+import Data.Loc
 import Data.Monoid
 import qualified Data.Symbol
 import qualified Language.C.Syntax as C
@@ -136,7 +137,7 @@ codeGenThread dflags tid c = do
                 ++ show c ++ "\n" ++
                 "is: " ++ show (compInfo c) ++ "\n" ++
                 "but should be a fully applied computation type.\n" ++
-                "At location: " ++ show (compLoc c)
+                "At location: " ++ (displayLoc . locOf . compLoc) c
 
 
 codeGenProgram :: DynFlags                -- Flags

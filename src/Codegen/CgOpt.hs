@@ -401,7 +401,7 @@ codeGenCompTop dflags comp k = do
     when (isDynFlagSet dflags Debug) $ 
       verbose dflags $ 
         vcat [ text $ "Generating code for component: " ++ compShortName comp
-             , text "Location: " <+> (text $ show (compLoc comp))
+             , text "Location: " <+> ppr (compLoc comp)
 
              , text "Component: " <+> ppr comp ]
     codeGenComp dflags comp k
