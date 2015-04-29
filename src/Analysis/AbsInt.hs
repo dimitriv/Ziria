@@ -80,9 +80,9 @@ instance POrd a => POrd (NameEnv t a) where pleq = pleqNE
 instance Ord s => POrd (Set s) where pleq = Set.isSubsetOf
 
 
-{-------------------------------------------------------------------------------
+{---------------------------------------------------------------------------
   Type classes for the abstract domain
--------------------------------------------------------------------------------}
+---------------------------------------------------------------------------}
 
 -- | Value domain
 class ValDom v where 
@@ -204,9 +204,9 @@ instance (AbsInt m v, CmdDom m v) => CmdDomRec (AbsT m) v where
       eidx = eVar noLoc idx
 
 
-{-------------------------------------------------------------------------------
+{---------------------------------------------------------------------------
   The abstract evaluator proper
--------------------------------------------------------------------------------}
+---------------------------------------------------------------------------}
 
 
 type EvalCtx s m v
@@ -278,8 +278,7 @@ absEval e = go (unExp e) where
   go (EStruct nm tfs) = do
     atfs <- mapM eval_fld tfs
     rValM (aStruct nm atfs)
-    where 
-      eval_fld (f,x) = absEvalRVal x >>= \v -> return (f, v)
+    where eval_fld (f,x) = absEvalRVal x >>= \v -> return (f, v)
 
   go (ELUT _ e1) = absEval e1
 
@@ -294,7 +293,8 @@ absEval e = go (unExp e) where
     let (TArrow funtys _funres) = nameTyp fn
     let tys_args = zip funtys es
     as <- mapM absEvalArg tys_args
-    aCall fn as >>= rValM -- Functions return by-value!
+    -- Functions return by-value!
+    aCall fn as >>= rValM 
 
   go (ESeq e1 e2) = do 
     _a1 <- absEval e1
