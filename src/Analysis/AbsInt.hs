@@ -39,20 +39,19 @@ module AbsInt (
 
 import AstExpr
 import AstUnlabelled
--- import Utils
 import PpExpr ()
 import Control.Monad.State.Class
 import Control.Applicative
--- import Control.Monad ( unless )
 import Data.Loc
 import Data.Set ( Set )
 import qualified Data.Set as Set
 import NameEnv
+import CtExpr ( ctExp )
 
 -- import Text.PrettyPrint.HughesPJ
--- import CtExpr ( ctExp )
 -- import Outputable 
-
+-- import Control.Monad ( unless )
+-- import Utils
 
 
 -- | Variable lvalues 
@@ -92,10 +91,11 @@ class ValDom v where
   aBinOp    :: BinOp -> v -> v -> v
   aStruct   :: Ty -> [(FldName,v)] -> v
 
-  -- reading (purely) from array values
-  aArrRead  :: v -> v -> LengthInfo -> v
-  -- reading (purely) from struct values
-  aStrProj  :: v -> FldName -> v 
+  -- | Reading (purely) from array values
+  -- | NB: Ty is the *result* type of the projection
+  aArrRead  :: Ty -> v -> v -> LengthInfo -> v
+  -- | Reading (purely) from struct values
+  aStrProj  :: Ty -> v -> FldName -> v 
 
 -- | Abstract values are either lvalues or concrete values
 data AVal v = LVal (LVal v) | RVal v
@@ -267,13 +267,13 @@ absEval e = go (unExp e) where
     d <- absEval earr
     case d of
       LVal lval -> lValM (GDArr lval vi rng)
-      RVal aval -> rValM (aArrRead aval vi rng)
+      RVal aval -> rValM (aArrRead (ctExp e) aval vi rng)
 
   go (EProj e0 fld) = do
     d <- absEval e0
     case d of
       LVal lval -> lValM (GDProj lval fld)
-      RVal sval -> rValM (aStrProj sval fld)
+      RVal sval -> rValM (aStrProj (ctExp e) sval fld)
 
   go (EStruct nm tfs) = do
     atfs <- mapM eval_fld tfs
