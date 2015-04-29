@@ -20,6 +20,7 @@
 module Outputable where
 
 import Text.PrettyPrint.HughesPJ
+import Data.Loc
 import qualified Data.Map as M
 
 class Outputable a where
@@ -50,6 +51,9 @@ instance (Outputable b, Outputable a) => Outputable (Either a b) where
 
 instance Outputable Doc where
   ppr = id
+
+instance Outputable SrcLoc where
+  ppr = text . displayLoc . locOf
 
 pretty :: Outputable a => a -> String
 pretty = show . ppr

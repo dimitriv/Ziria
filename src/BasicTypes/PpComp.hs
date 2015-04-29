@@ -253,7 +253,7 @@ ppCompAst cmp =
            False False False (unComp cmp)
 
 ppCompLoc :: GComp tc t a b -> Doc
-ppCompLoc c = text (show (compLoc c))
+ppCompLoc c = ppr (compLoc c)
 
 
 ppCompTyped :: GComp CTy Ty a b -> Doc
