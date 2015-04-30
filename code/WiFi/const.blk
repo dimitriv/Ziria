@@ -63,7 +63,8 @@ struct LTECoeffs = {
 struct HeaderInfo = { 
   coding:int32;
   modulation:int32;
-  len:int32
+  len:int32;
+  err:bool                      -- Any kind of header parsing error (parity bit wrong, reserved bits non-zero)
 }
 
 

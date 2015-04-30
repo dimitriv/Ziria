@@ -39,26 +39,29 @@ fun comp detectPreamble(energy_threshold : int32) {
   (removeDC() >>> cca(energy_threshold))
 } 
 
--- FreqCompensation does not work but it is nor crucial so we remove it for now
---       DataSymbol() >>> FreqCompensation(params) >>> FFT() >>> ChannelEqualization(params) >>> 
-
 
 fun comp receiveBits() {
        seq { hdata <- DecodePLCP()
-           ; Decode(hdata) >>> seq { (c : arr[32] bit) <- crc(hdata.len-4, false); check_crc(c) }
+           ; Decode(hdata) >>> 
+             seq { (c : arr[32] bit) <- crc(hdata.len-4, false); check_crc(c) } >>>
+             repeat{
+               x<-takes 8;
+               if (not hdata.err) then {
+                  emits x;
+               }
+             }
        }
 }
 
 
 fun comp receiver() {
-  seq{ det<-detectPreamble(5000)
+  seq{ det<-detectPreamble(1000)
 #ifndef FAST
-     ; do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
-                  ", energy: ", det.energy, ", noise: ", det.noise, ", maxCorr: ", det.maxCorr}
+     ; do{let normMaxCorr = if (det.energy == 0) then 0 else det.maxCorr / det.energy;
+          println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
+                  ", energy: ", det.energy, ", noise: ", det.noise, 
+                  ", maxCorr: ", det.maxCorr, ", normMaxCorr: ", normMaxCorr}
 #endif
-     -- receiver uses Sora port of cca to produce comparable performance measurements
-     -- but this one does not maxCorr value, so we provide an appropriate one here to pass tests
-     -- In real-world examples use cca_tufv instead of cca.
      ; params <- (LTS(det.shift, det.maxCorr))
      ; DataSymbol(det.shift) 
        >>> FFT() 

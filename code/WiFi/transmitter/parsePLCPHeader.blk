@@ -166,8 +166,13 @@ var p : bit;
        b := 2*b
      };
 
+     h.err := false;
+
      -- Sanity check - no packet larger than 2048B
-     h.len := if h.len > 2048 then 2048 else h.len;
+     if (h.len > 2048) then {
+       h.err := true;
+       h.len := 2048;
+     }
 
      -- Check header's parity
      p := '0;
@@ -178,11 +183,11 @@ var p : bit;
        }
      }
 
-#ifndef FAST
      if (p != '0) then {
-       println "Header parity check failed!";
+       h.err := true;
+       -- Don't print wrong packets
+       -- println "Header parity check failed!";
      }
-#endif
 
      -- Check header's tail
      p := '0;
@@ -190,15 +195,17 @@ var p : bit;
      for j in [2, 6] {
          p := p | a[j];
      }
-#ifndef FAST
      if (p != '0) then {
-       println "Header tail non-zero!";
+       h.err := true;
+       -- Don't print wrong packets
+       -- println "Header tail non-zero!";
      }
-#endif         
 
 #ifndef FAST
-     printHeader(h);
-     println "Header bits: ", hdata
+     if (not h.err) then {
+       printHeader(h);
+       println "Header bits: ", hdata
+     }
 #endif
       
   return h;

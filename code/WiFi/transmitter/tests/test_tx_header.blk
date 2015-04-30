@@ -24,7 +24,7 @@
 #include "../encoding.blk"
 #include "../interleaving.blk"
 
-let h = HeaderInfo{coding=CR_34; modulation=M_16QAM; len=100};
+let h = HeaderInfo{coding=CR_34; modulation=M_16QAM; len=100; err=false};
 
 let comp main = read[int] >>> 
   {  emits createPLCPHeader(h)

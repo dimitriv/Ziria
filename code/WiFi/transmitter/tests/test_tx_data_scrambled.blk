@@ -25,7 +25,7 @@
 #include "../scramble.blk"
 #include "../crc.blk"
 
-let h = HeaderInfo{coding=CR_34; modulation=M_16QAM; len=100};
+let h = HeaderInfo{coding=CR_34; modulation=M_16QAM; len=100; err=false};
 
 fun comp scale() {
   repeat {

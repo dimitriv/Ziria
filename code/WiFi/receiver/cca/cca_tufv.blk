@@ -183,10 +183,6 @@ fun comp cca(energy_threshold : int32) {
 #endif
 
 
--- TODO: Here, we should not use the absolute value of energy_threshold
--- Noise floor can be very different in different environment (indoor vs outdoor)
--- and it is difficult to set the threshold correctly
--- Instead, we should use the ration of maxCorr / iEnergy to decide on detection.
 
 #ifndef CCA_TUFV_DEBUG_OUTPUT
    until detected == true {
@@ -219,22 +215,19 @@ fun comp cca(energy_threshold : int32) {
           }
        }
 
-       var sh : int := 0;
-       var ie : int := iEnergy;
-       while (ie > 0) {
-         ie := ie >> 1;
-         sh := sh + 1;
-       }
-       let normMaxCorr = maxCorr >> sh;
- 
+       -- Here, we should not use the absolute value of energy_threshold and maxCorr
+       -- Noise floor can be very different in different environment (indoor vs outdoor)
+       -- and it is difficult to set the threshold correctly
+       -- Also, there can be packets from other PHYs (802.11b) to create high energy
+       -- Instead, we use the ratio of normMaxCorr = maxCorr / iEnergy to decide on detection.
+       let normMaxCorr = if (iEnergy == 0) then 0 else maxCorr / iEnergy;
 
        -- Because of repeating preamble we should have a certain number of consecutive 
        -- increases before declaring the peak - start of a packet
        if (iEnergy > energy_threshold && 
            noInc > no_consec_increases && 
-           (oldCorr > maxCorr || oldInd != maxInd)) then {
--- DEBUG
---           normMaxCorr > 100) then {
+           (oldCorr > maxCorr || oldInd != maxInd) && 
+           normMaxCorr > 96) then {
           detected := true;
        }
 
