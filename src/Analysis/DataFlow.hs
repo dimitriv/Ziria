@@ -52,11 +52,13 @@ type VarSet = Set (GName Ty)
   Value domain is the set of variables an expression depends on
 ----------------------------------------------------------------}
 instance ValDom VarSet where
-  aVal _         = Set.empty
-  aArr vs        = Set.unions vs
-  aUnOp _ v      = v
-  aBinOp _ v1 v2 = v1 `Set.union` v2
-  aStruct _ vs   = Set.unions (map snd vs)
+  aVal _             = Set.empty
+  aArr vs            = Set.unions vs
+  aUnOp _ v          = v
+  aBinOp _ v1 v2     = v1 `Set.union` v2
+  aStruct _ vs       = Set.unions (map snd vs)
+  aArrRead _ v1 v2 _ = v1 `Set.union` v2
+  aStrProj _ v _     = v
 
 {---------------------------------------------------------------
   Monadic infrastructure 
@@ -159,19 +161,13 @@ instance CmdDom DFM VarSet where
       go (GDVar x) vs = insertUseFree x >> insertUseDefs x vs
       go (GDArr d' idx_vs _) vs = go d' (idx_vs `Set.union` vs)
       go (GDProj d' _) vs       = go d' vs
-      go (GDNewArray {}) _vs        = return ()
-      go (GDNewStruct {}) _vs       = return ()
 
   aDerefRead d = go d
     where
       go (GDVar x)           = insertUseFree x >> lookupVarDef x
       go (GDArr d' vs _)     = go d' >>= \r -> return $ Set.union r vs
       go (GDProj d' _)       = go d'
-      go (GDNewArray _ vs)   = return $ Set.unions vs
-      go (GDNewStruct _ tfs) = return $ Set.unions (map snd tfs)
-  
 
-  
   withImmABind x vs m = extendVar x $
     do aAssign (GDVar x) vs
        res_vs <- m
@@ -235,7 +231,7 @@ inOutVars dfs e = do
                      , vu_allvars = allVars 
                      , vu_ranges  = ranges }
   where action :: AbsT DFM VarSet
-        action = absEval e
+        action = absEvalRVal e
 
 pprVarUsePkg :: VarUsePkg -> Doc
 pprVarUsePkg (VarUsePkg invars outvars allvars rmap)

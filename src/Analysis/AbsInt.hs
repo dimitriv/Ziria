@@ -33,6 +33,7 @@ module AbsInt (
  , AbsT      (..)
  , POrd      (..)
  , absEval 
+ , absEvalRVal
  , inCurrSt
 ) where
 
@@ -175,17 +176,9 @@ instance (AbsInt m v, CmdDom m v) => CmdDomRec (AbsT m) v where
     a <- absEvalRVal e
     aJoin (aWithFact a m1) (aWithFact (aUnOp Not a) m2)
   
-  aWhile e m = loop 
-    where 
-      loop = do 
-        a <- absEvalRVal e
-        aWiden a m' aSkip
-        where m' = do pre  <- get -- ^ get state
-                      x    <- m   -- ^ execute once
-                      post <- get -- ^ get state 
-                      if post `pleq` pre 
-                        then return x -- ^ reached fixpoint
-                        else loop     -- ^ go around the loop
+  aWhile e m = afix $ do 
+    a <- absEvalRVal e
+    aWiden a (aWithFact a m) (aWithFact (aUnOp Not a) aSkip)
 
   -- NB: We could improve by statically inlining when elen is known
   aFor idx estart elen m =
@@ -202,6 +195,14 @@ instance (AbsInt m v, CmdDom m v) => CmdDomRec (AbsT m) v where
 
    where 
       eidx = eVar noLoc idx
+
+afix :: (POrd s, MonadState s m) => m a -> m a
+afix action = loop
+  where loop = do
+          pre <- get
+          x <- action
+          post <- get
+          if post `pleq` pre then return x else loop
 
 
 {---------------------------------------------------------------------------

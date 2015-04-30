@@ -749,8 +749,6 @@ instrLVal loc ms lval = go lval [] MRFull
           rngtest = mk_rangetest arrsiz tmpexp l
       go d ((tmp,estart,rngtest):bnds) (MRArr basety r tmpexp l)
 
-    go _ bnds _r = return (bnds,[])
-
     mk_rangetest :: Int           -- ^ array size
                  -> Exp           -- ^ start expression
                  -> LengthInfo    -- ^ length to address

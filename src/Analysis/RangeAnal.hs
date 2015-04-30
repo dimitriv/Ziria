@@ -266,6 +266,9 @@ instance ValDom RngVal where
     = RngVal { av_range = rbinop bop (av_range rsa) (av_range rsb)
              , av_symex = sbinop bop (av_symex rsa) (av_symex rsb) }
 
+  aArrRead ret_ty _arr _ _ = rngValTop ret_ty
+  aStrProj ret_ty _str _   = rngValTop ret_ty
+
 
 {------------------------------------------------------------------------
   Abstract interpreter for commands
@@ -525,8 +528,6 @@ instance CmdDom Rng RngVal where
              | GDArr (GDVar x) (RngVal ridx _) linfo <- d
              = derefArr x ridx linfo updArrRdRng
              | GDVar x <- d            = derefVar x Rd
-             | GDNewArray _ vs    <- d = return $ aArr vs
-             | GDNewStruct t flds <- d = return $ aStruct t flds
              | GDArr d' _ _ <- d
              = do _ <- go d'
                   return $ rngValTop (ctDerefExp d)
@@ -549,10 +550,6 @@ instance CmdDom Rng RngVal where
               | GDProj d' _ <- d
               = void $ go d' (RngVal (error "aAssign(C)") (error "aAssign(D)"))
               | otherwise = error "aAssign"
-              | GDNewArray {} <- d
-              = return () -- Writing to an unnamed array has no effects
-              | GDNewStruct {} <- d
-              = return () -- Writing to an unnamed struct has no effects
 
   withImmABind nm rng action 
     = do pre <- get
@@ -598,4 +595,4 @@ varRanges _dfs e =
       return (rmap, av_range rngval)
   where 
     action :: AbsT Rng RngVal
-    action = absEval e
+    action = absEvalRVal e
