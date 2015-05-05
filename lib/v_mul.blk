@@ -76,7 +76,7 @@ fun v_mul_complex16_slow(c:arr complex16, a:arr complex16, b:arr complex16, shif
 
 -- c = (a * b) << shift
 -- We need to do shift before casting to complex16 to avoid loss of precision
-fun v_mul_complex16(var c:arr complex16, a:arr complex16, b:arr complex16, shift:int) { 
+fun v_mul_complex16_shift(var c:arr complex16, a:arr complex16, b:arr complex16, shift:int) { 
   var vs1:arr[4] complex16;
   var vs2:arr[4] complex16;
   var re32 : arr[4] int32;
