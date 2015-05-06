@@ -89,7 +89,7 @@ cgBoundsCheck dflags loc arrty cbase linfo
                      LISingleton -> 0
                      LILength n  -> (n-1)
                      LIMeta _    -> panicStr "cgBoundsCheck: meta-variable"
-                   spos = show loc
+                   spos = displayLoc (locOf loc)
                in
                do { cnumexpr
                         <- case numexpr of

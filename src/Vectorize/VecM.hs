@@ -83,7 +83,7 @@ vecMFail loc msg
            text "Vectorization failure!"
          , text "Reason:" 
          , msg 
-         , text "Location:" <+> text (show loc) ]
+         , text "Location:" <+> ppr loc ]
        exitFailure
 
 

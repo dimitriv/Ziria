@@ -392,7 +392,7 @@ codeGenLUTExp dflags stats e mb_resname
 cg_print_vars :: DynFlags -> String -> SrcLoc -> [EId] -> Cg ()
 cg_print_vars dflags dbg_ctx loc vs
   | isDynFlagSet dflags Verbose
-  = do appendStmt $ [cstm| printf("%s> cg_print_vars: %s\n", $string:(dbg_ctx), $string:(show loc));|]
+  = do appendStmt $ [cstm| printf("%s> cg_print_vars: %s\n", $string:(dbg_ctx), $string:(displayLoc (locOf loc)));|]
        sequence_ $ map (codeGenExp dflags . print_var) vs
   | otherwise
   = return ()
@@ -519,7 +519,7 @@ genLUT dflags stats e = do
                                    $id:clutentry,
                                    $int:(lutOutBitWidth stats `div` 8))) {
                      printf("Fatal bug in LUT generation: un/packOutVars mismatch.\n");
-                     printf("Location: %s\n", $string:(show loc));
+                     printf("Location: %s\n", $string:(displayLoc (locOf loc)));
                      exit(-1);
                    }
             |]
@@ -618,7 +618,7 @@ cgDebugLUTIdxPack cidx cidx_ty vupkg loc = do
    appendStmt [cstm| 
      if ($cidx != $id:dbg_cidx) {
         printf("Fatal bug in LUT generation: packIdx/unpackIdx mismatch.\n");
-        printf("Location: %s\n", $string:(show loc));
+        printf("Location: %s\n", $string:(displayLoc (locOf loc)));
         exit(-1); } |]
 
 

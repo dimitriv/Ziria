@@ -1148,7 +1148,7 @@ type SrcStructDef = GStructDef SrcTy
 
 errMutKind :: String -> SrcLoc -> MutKind
 errMutKind s loc =
-    error $ "MutKind missing: " ++ s ++ ", " ++ show loc
+    error $ "MutKind missing: " ++ s ++ ", " ++ displayLoc (locOf loc)
 
 mkVar :: SrcLoc -> String -> SrcExp
 mkVar p x = eVar p (toName x p SrcTyUnknown (errMutKind x p))

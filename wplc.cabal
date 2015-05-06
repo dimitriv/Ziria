@@ -44,7 +44,7 @@ Executable wplc
     mtl                    >= 2.0   && < 3,
     -- parsec 3.1.6 contains a bug (https://github.com/aslatter/parsec/issues/9)
     pretty                 >= 1.1   && < 1.2,
-    srcloc                 >= 0.5   && < 0.6,
+    srcloc                 >= 0.5.0.2 && < 0.6,
     symbol                 >= 0.1   && < 0.3,
     transformers           >= 0.3   && < 0.4,
     hashable               >= 1.2   && < 1.3,
