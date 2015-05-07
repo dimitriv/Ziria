@@ -19,13 +19,12 @@ Here is a starter example with Blink, a simple implementation of a scrambler:
    A scrambler implementation. This is our first toy Blink program.
 -}
 
-let comp scrambler() =
+fun comp scrambler() {
   var scrmbl_st: arr[7] bit := {'1,'1,'1,'1,'1,'1,'1}; 
   var tmp: bit;
   var y:bit;
   
-  repeat
-    seq {
+  repeat {
       x <- take;
     
       do {
@@ -38,20 +37,21 @@ let comp scrambler() =
 
       emit (y)
     }
-in
+}
 
 -- main computation goes here
-read >>> scrambler() >>> write
+let comp main = read >>> scrambler() >>> write
 ```
 
 The above code defines a _computation_ function called `scrambler`, that accepts the empty list of parameters.
-The fact that this is a `comp`-utation function is apparent from the `let comp scrambler() = ...` line. Ignoring
+The fact that this is a `comp`-utation function is apparent from the `fun comp scrambler() { ... }` line. Ignoring
 for a moment the actual definition of the scrambler, let us first see how it is being used:
 
 ```gcc
-let comp scrambler() = ...
-in
-read >>> scrambler() >>> write
+fun comp scrambler() { 
+  ...
+}
+let comp main = read >>> scrambler() >>> write
 ```
 What is happening in the last line above? We have used the `>>>` combinator to stage our first pipeline:
 
@@ -65,13 +65,12 @@ Finally, a rule: *every Blink program must be performing `read` from some input 
 
 Now, it is time to dive into the implementation of the scrambler.
 ```gcc
-let comp scrambler() =
+fun comp scrambler() {
   var scrmbl_st: arr[7] bit := {'1,'1,'1,'1,'1,'1,'1}; 
   var tmp: bit;
   var y:bit;
   
-  repeat
-    seq {
+  repeat {
       x <- take;
     
       do {
@@ -83,7 +82,8 @@ let comp scrambler() =
 
       emit y
     }
-in ...
+}
+...
 ```
 
 We declare some local state, namely `scrmbl_st` (an array of 7 bits), `tmp` (a bit), and `y` (a bit).
@@ -103,7 +103,7 @@ the following `seq`-uence of computations:
 
 Now, the `seq`-uence operator is the temporal analogue of the `>>>` combinator. In any sequence of the form:
 ```gcc
-seq {
+{
   c1;
   c2;
   c3;
@@ -124,7 +124,7 @@ repeat c
 is equivalent to:
 
 ```
-seq {
+{
   c;
   repeat c;
 }
@@ -133,7 +133,7 @@ seq {
 which is also equivalent to:
 
 ```
-seq {
+{
   c;
   c;
   ...
@@ -146,7 +146,7 @@ Here is a summary of the constructs we have seen so far for building stream proc
 
 1. `take`: takes one element from the input stream.
 2. `emit`: emits one element to the output stream.
-3. `seq { c1; c2 }` sequences some stream processors, all of which read/write to the same stream, by
+3. `{ c1; c2 }` sequences some stream processors, all of which read/write to the same stream, by
     first initializing and running `c1`. Whenever `c1` returns, `c2` is initialized and control is transferred
 	to `c2` which then becomes the active block. The computation returns when `c2` returns. 
 4. `c1 >>> c2` streams the output of `c1` to the input of `c2`
@@ -161,13 +161,13 @@ In what follows we will see more examples of these -- and more -- combinators in
 Our `map f` combinator simply applies an expression-level function `f` to every element of the stream.
 
 ```
-let f(x : int) =
+fun f(x : int) {
   var y : int = 42;
   y := y + 1;
   return (x+y);
-in
+}
 
-read >>> map f >>> write
+let comp main = read >>> map f >>> write
 ```
 
 We will go to more details about expression-level functions later
@@ -183,18 +183,18 @@ That said, the Blink compiler will typically detect and optimize this pattern an
 Our `while` combinator allows you to run a stream processor while some condition is true.
 
 ```haskell
-let comp f(x: int) =
+fun comp f(x: int) {
   var y : int;
-  seq { do { y := x; }    -- init
+  { do { y := x; }    -- init
 	  ; while (y > 0)
-	     seq { w <- take
-	         ; emit (w+1)
-		     }
+	    { w <- take
+	    ; emit (w+1)
+	    }
 	  ; do { y := y-1 }   -- decrement
-	  }
-in
+       }
+}
 
-read >>> f(42) >>> write
+let comp main = read >>> f(42) >>> write
 ```
 
 #### Just `return` a value
@@ -204,16 +204,16 @@ Sometimes we simply need to be able to `return` a value without executing some s
 Here is an example:
 
 ```
-let comp f(x : int) =
+fun comp f(x : int) {
   var y : int := 0;
-  seq { a <- seq { do { y := y + x; }
+      { a <-     { do { y := y + x; }
                  ; z <- take
                  ; emit (z+y);
                  ; return y
                  }
       ; emit a
       }
-in ...
+} ...
 ```
 
 In sequence, we first perform another sequence of commands, which involve updating the value of `y`, then
@@ -221,7 +221,7 @@ In sequence, we first perform another sequence of commands, which involve updati
 value. That updated value becomes the return value of the whole sub-sequence
 
 ```
-seq { do { y := y + x; }
+    { do { y := y + x; }
     ; z <- take
     ; emit (z+y);
     ; return y
@@ -236,14 +236,14 @@ that we bind to variable `a` and finally `emit` it on the output stream.
 Here's an example of conditionals:
 
 ```
-let comp f() =
-   seq { x <- take
+fun comp f() {
+       { x <- take
        ; if (x > 0) then
             emit (x+1)
          else return ()
        }
-in
-read >>> f() >>> write
+}
+let comp main = read >>> f() >>> write
 ```
 
 In `seq`-uence, we first consume an element from the input stream with `x <- take`. Subsequently, if `x > 0`
@@ -254,7 +254,7 @@ output stream. However, once it meets the first non-positive one the whole compu
 What will the following code do then?
 
 ```
-read >>> repeat f() >>> write
+let comp main = read >>> repeat f() >>> write
 ```
 It will run `f()` to completion, that is, incrementing all positive input values and emitting them. Once a non-positive value we will reinitialize `f()` and restart. The effect will be that the code above keeps only the positive values of the input stream and emits them, incremented, on the output stream.
 
@@ -264,15 +264,15 @@ It will run `f()` to completion, that is, incrementing all positive input values
 Blink provides a simple looping structure where you do not have to provide the increment value.
 
 ```
-let comp f() =
+fun comp f() {
   for n in [0:4]
-    seq { x <- take; emit x }
-in
-let comp g(y : inr) =
+    { x <- take; emit x }
+}
+fun comp g(y : inr) }
   for n in [0,y]
     emit n -- n is bound in the body
-in
-read >>> seq { f() ; g(100) } >>> write
+}
+let comp main = read >>> { f() ; g(100) } >>> write
 ```
 The syntax `for n in [0:4]` executes the processor in the body for `n = 0, n = 1, ... n = 4` times. The
 syntaxi `for n in [0,y]` executes the processor in the body from `n = 0`, incrementing `n` in the end of the

@@ -29,8 +29,8 @@
 #
 COMPILER?=vs
 
-PP   = ../../../scripts/preprocesscompile-$(COMPILER)32.sh
-DIFF = ../../../tools/BlinkDiff
+PP   = ../../scripts/preprocesscompile-$(COMPILER)-debug.sh
+DIFF = ../../tools/BlinkDiff
 
 # Do not delete outfiles to allow quick recheck of failed tests
 # use make clean to get rid of them
@@ -42,6 +42,10 @@ TGTS = $(patsubst %.zir, %.test, $(wildcard *.zir))
 all: $(TGTS)
 
 %.out : %.zir
+	EXTRAOPTS='$(EXTRAOPTS)' $(PP) $< $@
+#	$(PP) $< $@
+
+%.out : %.blk
 	EXTRAOPTS='$(EXTRAOPTS)' $(PP) $< $@
 #	$(PP) $< $@
 
