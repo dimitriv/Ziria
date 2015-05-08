@@ -112,15 +112,17 @@ fun comp PilotTrack() {
 
      var symbol_out:arr[64] complex16;
 
+     let pilotPos = {64-21, 64-7, 7, 21};
+
      -- Calculate pilots
-     let p1 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[64-21].re; im=-symbol[64-21].im}
-              else complex16{re=symbol[64-21].re;  im=symbol[64-21].im};
-     let p2 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[64-7].re; im=-symbol[64-7].im}
-              else complex16{re=symbol[64-7].re;  im=symbol[64-7].im};
-     let p3 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[7].re; im=-symbol[7].im}
-              else complex16{re=symbol[7].re;  im=symbol[7].im};
-     let p4 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[21].re; im=-symbol[21].im}
-              else complex16{re=symbol[21].re;  im=symbol[21].im};
+     let p1 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[pilotPos[0]].re; im=-symbol[pilotPos[0]].im}
+              else complex16{re=symbol[pilotPos[0]].re;  im=symbol[pilotPos[0]].im};
+     let p2 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[pilotPos[1]].re; im=-symbol[pilotPos[1]].im}
+              else complex16{re=symbol[pilotPos[1]].re;  im=symbol[pilotPos[1]].im};
+     let p3 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[pilotPos[2]].re; im=-symbol[pilotPos[2]].im}
+              else complex16{re=symbol[pilotPos[2]].re;  im=symbol[pilotPos[2]].im};
+     let p4 = if (pilotSgn[symbol_count] == -1) then complex16{re=-symbol[pilotPos[3]].re; im=-symbol[pilotPos[3]].im}
+              else complex16{re=symbol[pilotPos[3]].re;  im=symbol[pilotPos[3]].im};
 
      -- Calculate the subsequent phase shift
      do {
@@ -198,7 +200,9 @@ fun comp PilotTrack() {
                       else if avgTheta32 <= -32768 then int16(avgTheta32 + 2*32768)
                       else int16(avgTheta32) 
 
-       let delTheta = int16(((th[2] - th[0]) / (21 + 7) + (th[3] - th[1]) / (21 + 7)) >> 1) 
+       -- let delTheta = int16(((th[2] - th[0]) / (21 + 7) + (th[3] - th[1]) / (21 + 7)) >> 1) 
+       let delTheta = int16(((th[2] - th[0]) / (64-pilotPos[0] + pilotPos[2]) + 
+                             (th[3] - th[1]) / (pilotPos[3] + 64-pilotPos[1])) >> 1) 
 
        build_coeff(rotate_coeffs, avgTheta, delTheta);
 
@@ -232,7 +236,7 @@ fun comp PilotTrack() {
 --         println "p1: ", p1, ", s1: ", s1;
          
 
---         println "cnt: ", cnt, ", ", symbol[64-21], symbol[64-7], symbol[7], symbol[21];
+--         println "cnt: ", cnt, ", ", symbol[pilotPos[0]], symbol[pilotPos[1]], symbol[pilotPos[2]], symbol[pilotPos[3]];
 
          -- println rotate_coeffs;
        }
