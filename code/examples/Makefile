@@ -60,7 +60,7 @@ all: $(TGTS)
 	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
 
 %.perf: %.out 
-	./$< --input=dummy --dummy-samples=100000000 --output=dummy
+	./$< --input=dummy --dummy-samples=1000000000 --output=dummy
 
 %.accept : %.outfile
 	cp $< $<.ground
