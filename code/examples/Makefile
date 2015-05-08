@@ -29,7 +29,7 @@
 #
 COMPILER?=vs
 
-PP   = ../../scripts/preprocesscompile-$(COMPILER)-debug.sh
+PP   = ../../scripts/preprocesscompile-$(COMPILER)-inline.sh
 DIFF = ../../tools/BlinkDiff
 
 # Do not delete outfiles to allow quick recheck of failed tests
