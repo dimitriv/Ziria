@@ -82,19 +82,19 @@ seq{
     emit complex16{re=0; im=0};
     emit complex16{re=0; im=0};
 
-    emits x[0:4];
-    emit pilots[2];
-    emits x[5:17];
-    emit pilots[3];
-    emits x[18:23];
+    emits x[0:4];                       -- Carriers 38-42
+    emit pilots[2];                     -- Carrier  43
+    emits x[5:17];                      -- Carriers 44-56
+    emit pilots[3];                     -- Carrier  57
+    emits x[18:23];                     -- Carriers 58-63
 
-    emit complex16{re=0; im=0};
+    emit complex16{re=0; im=0};         -- DC (carrier 0)
 
-    emits x[24:29];
-    emit pilots[0];
-    emits x[30:42];
-    emit pilots[1];
-    emits x[43:47];
+    emits x[24:29];                     -- Carriers 1-6
+    emit pilots[0];                     -- Carrier  7
+    emits x[30:42];                     -- Carriers 8-20
+    emit pilots[1];                     -- Carrier  21
+    emits x[43:47];                     -- Carriers 22-26
 
     emit complex16{re=0; im=0};
     emit complex16{re=0; im=0};

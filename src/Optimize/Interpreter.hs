@@ -1393,7 +1393,7 @@ assign = \lhs rhs -> deref lhs (\_ -> return rhs)
               y' <- f y
               return $ MkValue (ValueArray (SA.unsafeWriteArray i y' vs)) eloc
             else
-              throwError $ "Array index out of bounds at position " ++ show p
+              throwError $ "Array index out of bounds at position " ++ displayLoc (locOf p)
         _otherwise ->
           error "updateArray: type error"
 
@@ -1417,7 +1417,7 @@ assign = \lhs rhs -> deref lhs (\_ -> return rhs)
                   -- really a type error?
                   error "updateSlice: type error"
             else
-              throwError $ "Array index out of bounds at position " ++ show p
+              throwError $ "Array index out of bounds at position " ++ displayLoc (locOf p)
         _otherwise ->
           error "updateSlice: type error"
 

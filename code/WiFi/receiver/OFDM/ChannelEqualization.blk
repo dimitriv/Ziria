@@ -38,8 +38,8 @@ fun comp ChannelEqualization(params : struct LTECoeffs) {
     do{
       --fftdata := fftdata_in;
       fftdata[28,8] := fftdata_in[28,8];
-      v_mul_complex16(fftdata[0,28], fftdata_in[0,28], params.channelCoeffs[0,28], norm_shift);
-      v_mul_complex16(fftdata[36,28], fftdata_in[36,28], params.channelCoeffs[36,28], norm_shift);
+      v_mul_complex16_shift(fftdata[0,28], fftdata_in[0,28], params.channelCoeffs[0,28], norm_shift);
+      v_mul_complex16_shift(fftdata[36,28], fftdata_in[36,28], params.channelCoeffs[36,28], norm_shift);
     };
 
     emits fftdata

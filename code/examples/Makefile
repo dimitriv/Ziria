@@ -29,8 +29,8 @@
 #
 COMPILER?=vs
 
-PP   = ../../../scripts/preprocesscompile-$(COMPILER)32.sh
-DIFF = ../../../tools/BlinkDiff
+PP   = ../../scripts/preprocesscompile-$(COMPILER)-inline.sh
+DIFF = ../../tools/BlinkDiff
 
 # Do not delete outfiles to allow quick recheck of failed tests
 # use make clean to get rid of them
@@ -45,6 +45,10 @@ all: $(TGTS)
 	EXTRAOPTS='$(EXTRAOPTS)' $(PP) $< $@
 #	$(PP) $< $@
 
+%.out : %.blk
+	EXTRAOPTS='$(EXTRAOPTS)' $(PP) $< $@
+#	$(PP) $< $@
+
 %.outfile: %.out %.infile
 	./$< --input=file \
              --input-file-name=$*.infile \
@@ -56,7 +60,7 @@ all: $(TGTS)
 	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
 
 %.perf: %.out 
-	./$< --input=dummy --dummy-samples=100000000 --output=dummy
+	./$< --input=dummy --dummy-samples=1000000000 --output=dummy
 
 %.accept : %.outfile
 	cp $< $<.ground

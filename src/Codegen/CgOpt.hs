@@ -429,7 +429,7 @@ codeGenComp dflags comp k =
         let mit_st = prefix ++ "_mit_state"
         let buf = prefix ++ "_mit_buff"
 
-        appendStmt [cstm|ORIGIN($string:(show csp)); |]
+        genOrigin csp
 
         if (i1 >= i2)
           then do { let d = i1 `div` i2
@@ -530,7 +530,7 @@ codeGenComp dflags comp k =
 
         let ecall     = eCall invalloc nm [invalarg]
 
-        appendStmt [cstm|ORIGIN($string:(show csp)); |]
+        genOrigin csp
 
         appendLabeledBlock (tickNmOf prefix) $
             kontConsume k
@@ -566,8 +566,7 @@ codeGenComp dflags comp k =
         appendDecl =<< codeGenDeclVolGroup_init stateVar tint [cexp|0|]
         appendDecl =<< codeGenDeclGroup expVar (ctExp e)
 
-
-        appendStmt [cstm|ORIGIN($string:(show csp)); |]
+        genOrigin csp
         -- Must generate emit_process since runtime code will use name (even
         -- if it never calls the function) when "emit" is the toplevel
         -- program
@@ -616,8 +615,7 @@ codeGenComp dflags comp k =
 
         let ih = inHdl k
 
-
-        appendStmt [cstm|ORIGIN($string:(show csp)); |]
+        genOrigin csp
 
         appendLabeledBlock (tickNmOf prefix) $
             kontConsume k
@@ -660,7 +658,7 @@ codeGenComp dflags comp k =
         yldTmp <- nextName ("__yldarr_" ++ getLnNumInStr csp)
         let yldTmpName = yldTmp
 
-        appendStmt [cstm|ORIGIN($string:(show csp)); |]
+        genOrigin csp
 
         if isArrayTy ty then
           -- Allocate a new array buffer
@@ -726,7 +724,7 @@ codeGenComp dflags comp k =
         -- it never calls the function) when "emit" is the toplevel program
         appendDecl =<< codeGenDeclVolGroup_init stateVar tint [cexp|FALSE|]
 
-        mapM_ appendStmt [cstms| $comment:("/* " ++ show csp ++ " */") |]
+        mapM_ appendStmt [cstms| $comment:("/* " ++ displayLoc (locOf csp) ++ " */") |]
 
         appendLabeledBlock (tickNmOf prefix) $
             if [cexp|!$id:stateVar|]
@@ -876,7 +874,7 @@ codeGenComp dflags comp k =
         -- labeled [branch_var]
         --
         -- And a process that ... ditto
-        appendStmt [cstm|ORIGIN($string:(show csp)); |]
+        genOrigin csp
 
         appendLabeledBlock (tickNmOf bmNamePref) $
             appendStmt [cstm|switch ($id:branch_var) {
@@ -1247,3 +1245,6 @@ codeGenSharedCtxt_ dflags emit_global ctxt action
          fail "codeGenSharedCtxt_: non-empty statements!"
        ; return a
        }
+
+genOrigin :: SrcLoc -> Cg ()
+genOrigin loc = appendStmt [cstm|ORIGIN($string:(displayLoc (locOf loc))); |]

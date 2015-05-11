@@ -88,7 +88,7 @@ cgBoundsCheck dflags loc arrty cbase linfo
           appendStmt [cstm|bounds_check(
                               $(cnumexpr numexpr),
                               $cbase + $int:(leninfo linfo),
-                              $string:(show loc)); 
+                              $string:spops); 
                      |]
    | otherwise = return ()
    where 
@@ -97,6 +97,7 @@ cgBoundsCheck dflags loc arrty cbase linfo
      leninfo (LIMeta {})  = panicStr "cgBoundsCheck: LIMeta!"
      cnumexpr (Literal m) = [cexp| $int:m|]
      cnumexpr (NVar nm)   = [cexp| $id:nm|]
+     spos = displayLoc (locOf loc)
 
 {------------------------------------------------------------------------
   Unary and binary operators

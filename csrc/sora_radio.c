@@ -87,6 +87,7 @@ void InitSoraRx(BlinkParams *params)
     }
     
     // Generate a sample stream from mapped Rx buffer
+	params->radioParams.dev = (SoraRadioParam *)inmem_malloc(sizeof(SoraRadioParam));
 	SoraURadioAllocRxStream(&(params->radioParams.dev->RxStream), params->radioParams.radioId, (PUCHAR)params->pRxBuf, nRxBufSize);
 }
 

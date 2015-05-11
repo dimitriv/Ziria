@@ -78,7 +78,7 @@ logStep :: String -> SrcLoc -> String -> RwM ()
 logStep pass pos str = do
     shouldLog <- debugFold
     when shouldLog $ RwM $ do
-      liftIO $ putStrLn $ "* " ++ pass ++ ": " ++ show pos ++ ": " ++ "\n" ++ str
+      liftIO $ putStrLn $ "* " ++ pass ++ ": " ++ displayLoc (locOf pos) ++ ": " ++ "\n" ++ str
   where
     ppr' p = show p ++ ": "
 
