@@ -28,6 +28,7 @@ module CgValDom
   -- Projections
   , cgStrProj
   , ArrIdx ( .. )
+  , arrIdxPlus
   , cexpOfArrIdx
   , cgArrRead
 
@@ -160,6 +161,11 @@ data ArrIdx
   | AIdxMult Int C.Exp  -- ^ A statically known multiple of unknown C.Exp
   deriving Show 
 
+arrIdxPlus :: ArrIdx -> ArrIdx -> ArrIdx
+arrIdxPlus (AIdxStatic i) (AIdxStatic j) = AIdxStatic (i+j)
+arrIdxPlus a1 a2 = AIdxCExp [cexp| $(cexpOfArrIdx a1) + $(cexpOfArrIdx a2)|]
+
+
 cexpOfArrIdx :: ArrIdx -> C.Exp
 cexpOfArrIdx (AIdxStatic i)  = [cexp| $int:i|]
 cexpOfArrIdx (AIdxCExp ce)   = ce
@@ -183,10 +189,11 @@ cgArrRead_chk :: Ty          -- ^ Return type
               -> LengthInfo  -- ^ Range to read from
               -> Cg C.Exp
 cgArrRead_chk TBit carr start_idx LISingleton = do 
-  res <- genSym "bitres"
-  appendCodeGenDeclGroup res TBit ZeroOut
-  appendStmt $ [cstm| bitRead($carr,$(cexpOfArrIdx start_idx),& $id:res); |]
-  return [cexp| $id:res |]
+  res <- freshName "bitres" TBit Mut 
+  appendCodeGenDeclGroup (name res) TBit ZeroOut
+  appendStmt $ 
+    [cstm| bitRead($carr,$(cexpOfArrIdx start_idx),& $id:(name res)); |]
+  return [cexp| $id:(name res) |]
 
 cgArrRead_chk TBit carr (AIdxStatic i) (LILength {}) 
   | i `mod` 8 == 0 
@@ -197,10 +204,11 @@ cgArrRead_chk TBit carr (AIdxMult i ce) (LILength {})
   = return [cexp| & $carr[$int:(i `div` 8)*$ce]|]
 
 cgArrRead_chk TBit carr start_idx (LILength l) = do
-  res <- genSym "bitarrres"
-  appendCodeGenDeclGroup res (TArray (Literal l) TBit) ZeroOut
-  appendStmt [cstm| bitArrRead($carr,$ce,$int:l,$id:res); |]
-  return [cexp| $id:res |]
+  let res_ty = TArray (Literal l) TBit
+  res <- freshName "bitarrres" res_ty Mut
+  appendCodeGenDeclGroup (name res) res_ty ZeroOut
+  appendStmt [cstm| bitArrRead($carr,$ce,$int:l,$id:(name res)); |]
+  return [cexp| $id:(name res) |]
   where ce = cexpOfArrIdx start_idx
 
 cgArrRead_chk tbase carr start_idx LISingleton

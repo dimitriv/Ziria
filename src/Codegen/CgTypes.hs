@@ -24,6 +24,7 @@ module CgTypes ( bwBitWidth
                , tySizeOf, tySizeOf_C
 
                , isStructPtrType
+               , isPtrType
 
                , HowToInit ( .. ), isInitWith 
                , codeGenDeclGroup
