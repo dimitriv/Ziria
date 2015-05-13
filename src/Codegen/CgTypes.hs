@@ -42,6 +42,8 @@ module CgTypes ( bwBitWidth
                , cgBitValues
                , cgNonBitValues
                
+               , expValMbs 
+
 
                -- , codeGenTy_qual
                -- , codeGenTy_DefaultVal
