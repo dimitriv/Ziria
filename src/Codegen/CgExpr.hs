@@ -79,11 +79,12 @@ import CgPrint
 
 cgLetBind :: DynFlags -> SrcLoc -> EId -> Exp -> Cg a -> Cg a
 cgLetBind dfs loc x e m = do
-  ce <- cgEvalRVal dflags e1
-  x_binding <- case e of 
+  ce <- cgEvalRVal dfs e
+  x_binding <- case unExp e of 
     -- Reuse allocated space
     EValArr {} -> return ce
-    _          -> do x_name <- genSym $ name x ++ getLnNumInStr loc
+    _          -> do 
+      x_name <- genSym $ name x ++ getLnNumInStr loc
       let ty = ctExp e
       appendCodeGenDeclGroup x_name ty ZeroOut 
       let cx = [cexp| $id:x_name|]
@@ -94,13 +95,13 @@ cgLetBind dfs loc x e m = do
 cgMutBind :: DynFlags -> SrcLoc -> EId -> Maybe Exp -> Cg a -> Cg a
 cgMutBind dfs loc x mbe m = do
   x_binding <- case mbe of 
-    Just e@(EValArr {}) -> cgEvalRVal dflags e
+    Just e@(MkExp (EValArr {}) _ _) -> cgEvalRVal dfs e
     Just e -> do 
       x_name <- genSym $ name x ++ getLnNumInStr loc
       let ty = ctExp e
       appendCodeGenDeclGroup x_name ty ZeroOut 
       let cx = [cexp| $id:x_name|]
-      cgEvalRVal dflags e >>= assignByVal ty cx
+      cgEvalRVal dfs e >>= assignByVal ty cx
       return cx
     Nothing -> do
       x_name <- genSym $ name x ++ getLnNumInStr loc
@@ -108,13 +109,10 @@ cgMutBind dfs loc x mbe m = do
       return [cexp| $id:x_name|]
   extendVarEnv [(x,x_binding)] m
 
-cgIf_ :: DynFlags -> C.Exp -> Cg () -> Cg () -> Cg ()
-cgIf_ dflags ccond act1 act2 = if ccond then act1 else act2
-
 cgIf :: DynFlags -> C.Exp -> Cg C.Exp -> Cg C.Exp -> Cg C.Exp
-cgIf dflags ccond act1 act2 = do 
+cgIf _dfs ccond act1 act2 = do
    condvar <- genSym "__c"
-   appendDecl [cdecl| $ty:int $id:condvar;|]
+   appendDecl [cdecl| int $id:condvar;|]
    appendStmt [cstm|  $id:condvar = ccond;|]
 
    (e2_decls, e2_stmts, ce2) <- inNewBlock act1
@@ -135,67 +133,89 @@ codeGenExp :: DynFlags -> Exp -> Cg C.Exp
 codeGenExp = cgEvalRVal  
 
 cgEvalRVal :: DynFlags -> Exp -> Cg C.Exp
-cgEvalRVal dfs e = cgEval e >>= do_ret
- where do_ret (Left lval) = cgDeref dfs lval
+cgEvalRVal dfs e = cgEval dfs e >>= do_ret
+ where do_ret (Left lval) = cgDeref dfs (expLoc e) lval
        do_ret (Right ce)  = return ce
 
 cgEvalLVal :: DynFlags -> Exp -> Cg (LVal ArrIdx)
-cgEvalLVal dfs e = cgEval e >>= do_ret
+cgEvalLVal dfs e = cgEval dfs e >>= do_ret
  where do_ret (Left lval) = return lval
        do_ret (Right ce)  = error "cgEvalLVal"
 
 cgEval :: DynFlags -> Exp -> Cg (Either (LVal ArrIdx) C.Exp)
 cgEval dfs e = go (unExp e) where
-  go (EVal _ v)      = Right <$> codeGenVal v
-  go (EValArr vs)    = Right <$> cgArrVal (ctExp e) vs
-  go (EStruct t tes) = Right <$> cgStruct t tes 
-  go (EVar x)     = Left  <$> varLVal x
+  loc = expLoc e
+
+  go :: Exp0 -> Cg (Either (LVal ArrIdx) C.Exp) 
+
+  go (EVar x)   = return (Left (GDVar x))
+  go (EVal _ v) = return (Right (codeGenVal v)) 
+
+  go (EValArr vs)    = Right <$> cgArrVal dfs loc (ctExp e) vs
+  go (EStruct t tes) = do 
+      ctes <- mapM (\(f,ef) -> 
+        do cef <- cgEvalRVal dfs ef 
+           return (f,cef)) tes
+      Right <$> cgStruct dfs loc t ctes
+
   go (EUnOp u e1) = do 
      ce1 <- cgEvalRVal dfs e1
-     Right <$> cgUnOp u ce1 (ctExp e1) (ctExp e)
+     Right <$> return (cgUnOp (ctExp e) u ce1 (ctExp e1))
+
   go (EBinOp b e1 e2) = do 
      ce1 <- cgEvalRVal dfs e1
      ce2 <- cgEvalRVal dfs e2
-     Right <$> cgBinOp b ce1 (ctExp e1) ce2 (ctExp e2) (ctExp e)
+     Right <$> return (cgBinOp (ctExp e) b ce1 (ctExp e1) ce2 (ctExp e2))
+
   go (EAssign elhs erhs) = do
      clhs <- cgEvalLVal dfs elhs
      crhs <- cgEvalRVal dfs erhs
-     cgAssign (ctExp elhs) clhs crhs 
+     cgAssign dfs loc clhs crhs
+     Right <$> return [cexp|UNIT|]
+
   go (EArrWrite earr ei rng erhs) 
-    = go (EAssign (EArrRead earr ei rng) erhs)
+    = go (EAssign (eArrRead loc earr ei rng) erhs)
+
   go (EArrRead earr ei rng) 
     | EVal _t (VInt i) <- unExp ei
     , let ii :: Int = fromIntegral i
-    , let aidx = ArrIdxStatic ii
+    , let aidx = AIdxStatic ii
     = mk_arr_read (ctExp e) (ctExp earr) aidx
     | otherwise 
-    = do aidx <- ArrIdxCExp <$> cgEvalRVal dfs ei
+    = do aidx <- AIdxCExp <$> cgEvalRVal dfs ei
          mk_arr_read (ctExp e) (ctExp earr) aidx
     where 
       mk_arr_read exp_ty arr_ty aidx = do 
         d <- cgEval dfs earr
-        cgBoundsCheck dflags (expLoc e0) arr_ty (cexpOfArrIdx aidx) r
         case d of 
-          Left lval -> Left  <$> GDArr lval aidx rng
-          Right ce  -> Right <$> cgArrRead (ctExp e) ce (ctExp earr) aidx rng 
+          Left lval -> return (Left (GDArr lval aidx rng))
+          Right ce 
+            -> Right <$> cgArrRead dfs loc exp_ty ce arr_ty aidx rng 
+
   go (EProj e0 f) = do 
     d <- cgEval dfs e0
     case d of 
-      Left lval -> Left  <$> GDProj lval f
-      Right ce  -> return $ Right (cgStrProj (ctExp e) ce (ctExp e0) f
+      Left lval -> Left  <$> return (GDProj lval f)
+      Right ce  -> Right <$> return (cgStrProj (ctExp e) ce (ctExp e0) f)
+
   go (ELet x _fi e1 e2)
-     = cgLetBind dfs x e1 (cgEvalRVal e2 >>= (return . Right))
+     = cgLetBind dfs loc x e1 (cgEvalRVal dfs e2 >>= (return . Right))
+
   go (ELetRef x mb_e1 e2)
-     = cgMutBind dfs x mb_e1 (cgEvalRVal e2 >>= (return . Right))
+     = cgMutBind dfs loc x mb_e1 (cgEvalRVal dfs e2 >>= (return . Right))
+
   go (ESeq e1 e2) = do
       _ce1 <- cgEval dfs e1
-      Right <$> cgEvalRVal dflags e2
+      Right <$> cgEvalRVal dfs e2
+
   go (EIf e1 e2 e3) = do
      ce1 <- cgEvalRVal dfs e1
-     Right <$> cgIf ce1 (cgEvalRVal dfs e2) (cgEvalRVal dfs e3)
+     Right <$> cgIf dfs ce1 (cgEvalRVal dfs e2) (cgEvalRVal dfs e3)
+
   go (EPrint nl e1s) = do 
-      printExps nl dflags e1s
+      printExps nl dfs e1s
       Right <$> return [cexp|UNIT|]
+
   go (EError ty str) = do
       appendStmt [cstm|printf("RUNTIME ERROR: %s\n", $str);|]
       appendStmt [cstm|exit(1);|]
@@ -207,18 +227,18 @@ cgEval dfs e = go (unExp e) where
       Right <$> return [cexp|$id:x|]
   
   go (ELUT r e1) 
-     | isDynFlagSet dflags NoLUT 
-     = codeGenExpAlloc dflags e1
-     | isDynFlagSet dflags MockLUT
-     = cgPrintVars dflags loc (lutVarUsePkg r) $
-       codeGenExpAlloc dflags e1
+     | isDynFlagSet dfs NoLUT 
+     = cgEval dfs e1
+     | isDynFlagSet dfs MockLUT
+     = cgPrintVars dfs loc (lutVarUsePkg r) $
+       cgEval dfs e1
      | otherwise
-     = cgPrintVars dflags loc (lutVarUsePkg r) $
-       codeGenLUTExp dflags r e1 Nothing
+     = cgPrintVars dfs loc (lutVarUsePkg r) $
+       Right <$> codeGenLUTExp dfs r e1 Nothing
 
   go (EWhile econd ebody) = do
-      (init_decls,init_stms,cecond) <- inNewBlock (cgEvalRVal dflags econd)
-      (body_decls,body_stms,cebody) <- inNewBlock (cgEvalRVal dflags ebody)
+      (init_decls,init_stms,cecond) <- inNewBlock (cgEvalRVal dfs econd)
+      (body_decls,body_stms,cebody) <- inNewBlock (cgEvalRVal dfs ebody)
 
       appendDecls init_decls
       appendDecls body_decls
@@ -235,13 +255,12 @@ cgEval dfs e = go (unExp e) where
       k_new <- freshName (name k) (ctExp estart) Imm
 
       (init_decls, init_stms, (ceStart, ceLen)) <- inNewBlock $ do
-          ceStart <- cgEvalRVal dflags estart
-          ceLen   <- cgEvalRVal dflags elen
+          ceStart <- cgEvalRVal dfs estart
+          ceLen   <- cgEvalRVal dfs elen
           return (ceStart, ceLen)
 
       (body_decls, body_stms, cebody) <- inNewBlock $
-          extendVarEnv [(k, [cexp|$id:(name k_new)|])] $
-          cgEvalRVal dflags ebody
+          extendVarEnv [(k, [cexp|$id:(name k_new)|])] $ cgEvalRVal dfs ebody
 
       appendDecls init_decls
       appendDecls body_decls
@@ -255,113 +274,44 @@ cgEval dfs e = go (unExp e) where
                        }|]
       Right <$> return [cexp|UNIT|]
 
-    go (ECall nef eargs) = Right <$> cgCall dfs (expLoc e0) (ctExp e) nef eargs
+  go (ECall nef eargs) = Right <$> cgCall dfs loc (ctExp e) nef eargs
 
 
 cgCall :: DynFlags -> SrcLoc -> Ty -> EId -> [Exp] -> Cg C.Exp
 cgCall dfs loc res_ty fn eargs = do 
   let (TArrow funtys _funres) = nameTyp fn
   let tys_args = zip funtys eargs
-  ceargs <- mapM cgEvalArg tys_args
+  ceargs <- mapM (cgEvalArg dfs) tys_args
   error "IMPLEMENT ME!" 
 
 
-cgEvalArg :: (ArgTy, Exp) -> Cg (Either (LVal ArrIdx) C.Exp
-cgEvalArg (GArgTy _ Mut, earg) = Left  <$> cgEvalLVal earg -- ^ Force mutable
-cgEvalArg (_, earg)            = Right <$> cgEvalRVal earg -- ^ Fully evaluate
+cgEvalArg :: DynFlags -> (ArgTy, Exp) -> Cg (Either (LVal ArrIdx) C.Exp)
+cgEvalArg dfs (GArgTy _ Mut, earg) = Left <$> cgEvalLVal dfs earg 
+cgEvalArg dfs (_, earg) = Right <$> cgEvalRVal dfs earg
  
 
-------------------------------------------------------------------------------
--- | Generation of parameter signatures and argument lists
-------------------------------------------------------------------------------
 
-codeGenParamByRef :: EId -> Cg [C.Param]
-codeGenParamByRef nm = codegen_param_byref nm (nameTyp nm)
+-- ------------------------------------------------------------------------------
+-- -- | Declarations and Globals
+-- ------------------------------------------------------------------------------
 
-codegen_param_byref nm ty@(TArray (Literal l) _) = do
-    unused <- freshVar ("__unused_")
-    return [cparams|$ty:(codeGenTy ty) $id:(name nm), int $id:unused|]
+-- -- ^ Only declare globals
+-- codeGenGlobalDeclsOnlyAlg :: DynFlags
+--                           -> [(EId, Maybe Exp)]
+--                           -> Cg [C.Definition]
+-- codeGenGlobalDeclsOnlyAlg dfs = mapM $ \(nm, me) ->
+--   codeGenDeclDef (name nm) (nameTyp nm)
 
-codegen_param_byref nm ty@(TArray (NVar c) _) =
-    return [cparams|$ty:(codeGenTy ty) $id:(name nm), int $id:c|]
-
-codegen_param_byref nm ty = do
-    return [cparams|$ty:(tyByRef ty) $id:(name nm)|]
-  where
-    tyByRef :: Ty -> C.Type
-    tyByRef ty
-        | isArrayTy ty = codeGenTy ty
-        | otherwise    = [cty|$ty:(codeGenTy ty)*|]
-
-codeGenParamsByRef :: [EId] -> Cg [C.Param]
-codeGenParamsByRef params = concat <$> mapM codeGenParamByRef params
-
-codeGenParam :: EId -> Cg [C.Param]
-codeGenParam nm
-  = codegen_param nm (nameTyp nm)
-
-codegen_param nm (ty@(TArray (Literal l) _)) = do
-     unused <- freshVar ("__unused_")
-     let pname = getNameWithUniq nm
-     return [cparams|$ty:(codeGenTy ty) $id:pname, int $id:unused|]
-
-codegen_param nm (ty@(TArray (NVar c) _)) =
-     let pname = getNameWithUniq nm
-     in
-     return [cparams|$ty:(codeGenTy ty) $id:pname, int $id:c|]
-
-codegen_param nm ty
-  = do { b <- isStructPtrType ty
-       ; let pname = getNameWithUniq nm
-       ; return $
-         -- NB: b = False applies to ordinary arrays
-         if b then [cparams|$ty:(codeGenTy ty) * $id:pname |]
-              else [cparams|$ty:(codeGenTy ty) $id:pname  |]
-       }
-
-codeGenParams :: [EId] -> Cg [C.Param]
-codeGenParams prms = go prms []
-  where go [] acc = return []
-        go (nm:rest) acc
-          | ty@(TArray (NVar c) tybase) <- nameTyp nm
-          , c `elem` acc
-          =  do { c' <- freshVar c
-                  -- NB: avoiding binding the same length var twice
-                ; ps  <- codegen_param nm (TArray (NVar c') tybase)
-                ; ps' <- go rest acc
-                ; return (ps ++ ps')
-                }
-          | ty@(TArray (NVar c) tybase) <- nameTyp nm
-          = do { ps <- codeGenParam nm
-               ; ps' <- go rest (c:acc)
-               ; return (ps ++ ps') }
-        go (other:rest) acc
-          = do { ps <- codeGenParam other
-               ; ps' <- go rest acc
-               ; return (ps ++ ps')
-               }
-
-------------------------------------------------------------------------------
--- | Declarations and Globals
-------------------------------------------------------------------------------
-
--- ^ Only declare globals
-codeGenGlobalDeclsOnlyAlg :: DynFlags
-                          -> [(EId, Maybe Exp)]
-                          -> Cg [C.Definition]
-codeGenGlobalDeclsOnlyAlg dflags = mapM $ \(nm, me) ->
-  codeGenDeclDef (name nm) (nameTyp nm)
-
--- ^ Only initialize globals
-codeGenGlobalInitsOnly :: DynFlags -> [MutVar] -> Cg ()
-codeGenGlobalInitsOnly dflags defs = mapM_ go defs
-  where
-    go :: MutVar -> Cg ()
-    go MutVar{..} =
-      case mutInit of
-        Just e -> do
-          ce <- codeGenExp dflags e
-          assignByVal (ctExp e) (ctExp e) [cexp|$id:(name mutVar)|] ce
-        Nothing ->
-          return ()
+-- -- ^ Only initialize globals
+-- codeGenGlobalInitsOnly :: DynFlags -> [MutVar] -> Cg ()
+-- codeGenGlobalInitsOnly dfs defs = mapM_ go defs
+--   where
+--     go :: MutVar -> Cg ()
+--     go MutVar{..} =
+--       case mutInit of
+--         Just e -> do
+--           ce <- codeGenExp dfs e
+--           assignByVal (ctExp e) (ctExp e) [cexp|$id:(name mutVar)|] ce
+--         Nothing ->
+--           return ()
 

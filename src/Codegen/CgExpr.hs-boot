@@ -26,4 +26,4 @@ import qualified Language.C.Syntax as C
 
 codeGenExp :: DynFlags -> Exp -> Cg C.Exp
 
-codeGenGlobalDeclsOnlyAlg :: DynFlags -> [(GName Ty, Maybe Exp)] -> Cg [C.Definition]
+-- codeGenGlobalDeclsOnlyAlg :: DynFlags -> [(GName Ty, Maybe Exp)] -> Cg [C.Definition]

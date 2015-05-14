@@ -64,6 +64,80 @@ import Data.List ( nub )
 
 import CtExpr
 
+
+
+------------------------------------------------------------------------------
+-- | Generation of parameter signatures and argument lists
+------------------------------------------------------------------------------
+
+-- codeGenParamByRef :: EId -> Cg [C.Param]
+-- codeGenParamByRef nm = codegen_param_byref nm (nameTyp nm)
+
+-- codegen_param_byref nm ty@(TArray (Literal l) _) = do
+--     unused <- freshVar ("__unused_")
+--     return [cparams|$ty:(codeGenTy ty) $id:(name nm), int $id:unused|]
+
+-- codegen_param_byref nm ty@(TArray (NVar c) _) =
+--     return [cparams|$ty:(codeGenTy ty) $id:(name nm), int $id:c|]
+
+-- codegen_param_byref nm ty = do
+--     return [cparams|$ty:(tyByRef ty) $id:(name nm)|]
+--   where
+--     tyByRef :: Ty -> C.Type
+--     tyByRef ty
+--         | isArrayTy ty = codeGenTy ty
+--         | otherwise    = [cty|$ty:(codeGenTy ty)*|]
+
+-- codeGenParamsByRef :: [EId] -> Cg [C.Param]
+-- codeGenParamsByRef params = concat <$> mapM codeGenParamByRef params
+
+-- codeGenParam :: EId -> Cg [C.Param]
+-- codeGenParam nm
+--   = codegen_param nm (nameTyp nm)
+
+-- codegen_param nm (ty@(TArray (Literal l) _)) = do
+--      unused <- freshVar ("__unused_")
+--      let pname = getNameWithUniq nm
+--      return [cparams|$ty:(codeGenTy ty) $id:pname, int $id:unused|]
+
+-- codegen_param nm (ty@(TArray (NVar c) _)) =
+--      let pname = getNameWithUniq nm
+--      in
+--      return [cparams|$ty:(codeGenTy ty) $id:pname, int $id:c|]
+
+-- codegen_param nm ty
+--   = do { b <- isStructPtrType ty
+--        ; let pname = getNameWithUniq nm
+--        ; return $
+--          -- NB: b = False applies to ordinary arrays
+--          if b then [cparams|$ty:(codeGenTy ty) * $id:pname |]
+--               else [cparams|$ty:(codeGenTy ty) $id:pname  |]
+--        }
+
+-- codeGenParams :: [EId] -> Cg [C.Param]
+-- codeGenParams prms = go prms []
+--   where go [] acc = return []
+--         go (nm:rest) acc
+--           | ty@(TArray (NVar c) tybase) <- nameTyp nm
+--           , c `elem` acc
+--           =  do { c' <- freshVar c
+--                   -- NB: avoiding binding the same length var twice
+--                 ; ps  <- codegen_param nm (TArray (NVar c') tybase)
+--                 ; ps' <- go rest acc
+--                 ; return (ps ++ ps')
+--                 }
+--           | ty@(TArray (NVar c) tybase) <- nameTyp nm
+--           = do { ps <- codeGenParam nm
+--                ; ps' <- go rest (c:acc)
+--                ; return (ps ++ ps') }
+--         go (other:rest) acc
+--           = do { ps <- codeGenParam other
+--                ; ps' <- go rest acc
+--                ; return (ps ++ ps')
+--                }
+
+
+
 data RetBody
   = DoReuseLcl (EId, Exp) -- name is just a local
   | NoReuseLcl (EId, Exp) -- name is new
