@@ -41,6 +41,9 @@ import CgTypes
 import CgExpr
 import CgLUT
 
+import Control.Monad.State
+import Control.Applicative
+
 import Control.Monad.Writer
 import qualified Data.DList as DL
 import qualified Data.List
@@ -62,182 +65,244 @@ import Control.Monad.IO.Class (MonadIO(..))
 
 import Data.List ( nub )
 
+import Utils ( panicStr )
+
 import CtExpr
 
+{-------------------------------------------------------------------------------
+   Generation of parameter signatures and argument lists
+-------------------------------------------------------------------------------}
+-- | We may have multiple arguments, all polymorphic in the same length:
+-- ^            (x : arr[n] int, y : arr[n] int)
+-- ^ which should be compiled to:
+-- ^            (int *x_22, int n_1, int* y_34, int n_2) 
+-- ^ I.e. we must not bind 'n' twice. For this reason we introduce a thin state
+-- ^ monad that keeps track of the bound NVar variables.
 
 
-------------------------------------------------------------------------------
--- | Generation of parameter signatures and argument lists
-------------------------------------------------------------------------------
+type CgPrm a =  StateT [LenVar] Cg a
 
--- codeGenParamByRef :: EId -> Cg [C.Param]
--- codeGenParamByRef nm = codegen_param_byref nm (nameTyp nm)
+runCgPrm :: [LenVar] -> CgPrm a -> Cg (a,[LenVar])
+runCgPrm lvs m = runStateT m lvs
 
--- codegen_param_byref nm ty@(TArray (Literal l) _) = do
---     unused <- freshVar ("__unused_")
---     return [cparams|$ty:(codeGenTy ty) $id:(name nm), int $id:unused|]
+liftCg :: Cg a -> CgPrm a
+liftCg m = StateT (\s -> m >>= \r -> return (r,s))
 
--- codegen_param_byref nm ty@(TArray (NVar c) _) =
---     return [cparams|$ty:(codeGenTy ty) $id:(name nm), int $id:c|]
+cgParamsByRef :: [EId] -> CgPrm [C.Param]
+cgParamsByRef params = concat <$> mapM cgParamByRef params
 
--- codegen_param_byref nm ty = do
---     return [cparams|$ty:(tyByRef ty) $id:(name nm)|]
---   where
---     tyByRef :: Ty -> C.Type
---     tyByRef ty
---         | isArrayTy ty = codeGenTy ty
---         | otherwise    = [cty|$ty:(codeGenTy ty)*|]
+cgParamByRef :: EId -> CgPrm [C.Param]
+cgParamByRef nm = cg_param_byref (nameTyp nm)
+  where cg_param_byref ty
+          | isArrayTy ty = cg_array_param nm ty
+          | otherwise    = return [cparams|$ty:(codeGenTyOcc ty) * $id:(name nm)|]
 
--- codeGenParamsByRef :: [EId] -> Cg [C.Param]
--- codeGenParamsByRef params = concat <$> mapM codeGenParamByRef params
+cgParams :: [EId] -> CgPrm [C.Param]
+cgParams params = concat <$> mapM cgParam params
 
--- codeGenParam :: EId -> Cg [C.Param]
--- codeGenParam nm
---   = codegen_param nm (nameTyp nm)
+cgParam :: EId -> CgPrm [C.Param]
+cgParam nm = cg_param (nameTyp nm)
+  where 
+    cg_param ty
+      | isArrayTy ty       = cg_array_param nm ty
+      | isStructPtrType ty = return [cparams|$ty:(codeGenTyOcc ty) * $id:(name nm)|]
+      | otherwise          = return [cparams|$ty:(codeGenTyOcc ty) $id:(name nm)  |]
 
--- codegen_param nm (ty@(TArray (Literal l) _)) = do
---      unused <- freshVar ("__unused_")
---      let pname = getNameWithUniq nm
---      return [cparams|$ty:(codeGenTy ty) $id:pname, int $id:unused|]
-
--- codegen_param nm (ty@(TArray (NVar c) _)) =
---      let pname = getNameWithUniq nm
---      in
---      return [cparams|$ty:(codeGenTy ty) $id:pname, int $id:c|]
-
--- codegen_param nm ty
---   = do { b <- isStructPtrType ty
---        ; let pname = getNameWithUniq nm
---        ; return $
---          -- NB: b = False applies to ordinary arrays
---          if b then [cparams|$ty:(codeGenTy ty) * $id:pname |]
---               else [cparams|$ty:(codeGenTy ty) $id:pname  |]
---        }
-
--- codeGenParams :: [EId] -> Cg [C.Param]
--- codeGenParams prms = go prms []
---   where go [] acc = return []
---         go (nm:rest) acc
---           | ty@(TArray (NVar c) tybase) <- nameTyp nm
---           , c `elem` acc
---           =  do { c' <- freshVar c
---                   -- NB: avoiding binding the same length var twice
---                 ; ps  <- codegen_param nm (TArray (NVar c') tybase)
---                 ; ps' <- go rest acc
---                 ; return (ps ++ ps')
---                 }
---           | ty@(TArray (NVar c) tybase) <- nameTyp nm
---           = do { ps <- codeGenParam nm
---                ; ps' <- go rest (c:acc)
---                ; return (ps ++ ps') }
---         go (other:rest) acc
---           = do { ps <- codeGenParam other
---                ; ps' <- go rest acc
---                ; return (ps ++ ps')
---                }
+cg_array_param :: EId -> Ty -> CgPrm [C.Param]
+cg_array_param nm ty@(TArray (Literal l) _) = do
+  len <- liftCg $ freshName ("__len_unused_") tint Imm 
+  return $ [cparams| $ty:(codeGenTyOcc ty) $id:(name nm), int $id:(name len)|]
+cg_array_param nm ty@(TArray (NVar c) _) = do
+  bnd_lvs <- get
+  new_c <- if c `elem` bnd_lvs then liftCg (genSym "__len_unused") else return c
+  put (new_c : bnd_lvs)
+  return [cparams| $ty:(codeGenTyOcc ty) $id:(name nm), int $id:new_c |]
+cg_array_param _ _ = panicStr "cg_array_param"
 
 
+{-------------------------------------------------------------------------------
+   Transforming functions that return big arrays or by-pointer structs
+-------------------------------------------------------------------------------}
 
-data RetBody
-  = DoReuseLcl (EId, Exp) -- name is just a local
-  | NoReuseLcl (EId, Exp) -- name is new
-  | DoReuseLUT (EId, Exp) -- reuse the result of LUT unpacking
+data RetBody a 
+  = -- | Name is just a local variable returned, new body is of type Unit
+    DoReuseLcl EId a
+    -- | Name is just a local variable returned, new body is of type Unit
+  | NoReuseLcl (EId -> a)                          
+    -- ^ Reuse the result of LUT unpacking, new body is of type Unit
 
-data RetType
-  = RetByVal Exp
-  | RetByRef { -- We
-               --  o either rewrite body so that (ret := body) or
-               --  o simply forget about last instruction (e.g. 'return xvar')
-               --  o ... but record which variable it was.
-               ret_body :: RetBody
-             }
+instance Functor RetBody where
+  fmap h (DoReuseLcl x e) = DoReuseLcl x (h e)
+  fmap h (NoReuseLcl gen) = NoReuseLcl (\x -> h (gen x))
 
 
-retByRef :: EId -> [EId] -> Exp -> Cg RetType
-retByRef f locals body
- = do { is_ret_ptr <- isStructPtrType body_ty
-      ; case is_ret_ptr || isArrayTy body_ty of
-          False -> return $ RetByVal body
-          True  -> return $ RetByRef { ret_body = trans_body [] body  }
-      }
- where
-   lift_ret f (DoReuseLcl (n,e)) = DoReuseLcl (n, f e)
-   lift_ret f (NoReuseLcl (n,e)) = NoReuseLcl (n, f e)
-   lift_ret f (DoReuseLUT (n,e)) = DoReuseLUT (n, f e)
+data RetType = RetByVal Exp | RetByRef (RetBody Exp)
 
-   body_ty = ctExp body
-   loc     = expLoc body
-   retN    = toName ("__retf_" ++ (name f)) noLoc body_ty Mut
-   retE    = eVar (expLoc body) retN
+retByRef :: EId     -- Function name
+         -> Exp     -- Body
+         -> RetType -- Transformed body
+retByRef f body
+  | isArrayTy body_ty = RetByRef (transBodyByRef body)
+  | otherwise         = RetByVal body 
+  where body_ty = ctExp body
 
-   -- precondition: 'e' returns an array type
-   trans_body xs e
-     = case unExp e of
-         ESeq e1 e2
-           -> lift_ret (eSeq loc e1) $
-              trans_body xs e2
-         ELet x fi e1 e2
-           -> lift_ret (eLet loc x fi e1) $
-              trans_body (x:xs) e2
-         EVar x
-           | not (x `elem` xs)
-           , x `elem` locals
-           -> DoReuseLcl (x, eVal loc TUnit VUnit)
-         ELUT {}
-           -> DoReuseLUT (retN, e) -- don't rewrite the body
-         _otherwise
-           -> NoReuseLcl (retN, eAssign loc retE e)
 
-getClosureVars :: Fun -> Cg [(EId, C.Exp)]
-getClosureVars fdef
-  = do { -- DV: What about length variables? Probably we don't need them
-         -- here in accordance with Edsko's plan to just pass the actual
-         -- term variables.  (#76)
-       ; let closure_vars_def = S.toList $ funFVsClos fdef
-       ; let allVars = S.toList $ funFVs fdef
-       ; call_fun_infos <- mapM lookupExpFunEnv_maybe allVars
+transBodyByRef :: Exp -> RetBody Exp
+transBodyByRef = go [] where
+  go env e = go0 (expLoc e) (unExp e) where
+     go0 loc (EVar x) | x `elem` env = DoReuseLcl x (eVal loc TUnit VUnit)
+     go0 loc (ESeq e1 e2)            = fmap (eSeq loc e1) (go env e2)
+     go0 loc (ELet x fi e1 e2) =
+        let e2' = go (x:env) e2
+        in case e2' of
+             DoReuseLcl y _
+               | y == x -> fmap (eSeq loc (eAssign loc (eVar loc x) e1)) e2'
+             _otherwise -> fmap (eLet loc x fi e1) e2'
+     go0 loc (ELetRef x Nothing e2) =
+        let e2' = go (x:env) e2
+        in case e2' of
+             DoReuseLcl y _
+               | y == x -> e2'
+             _otherwise -> fmap (eLetRef loc x Nothing) e2'
+     go0 loc (ELetRef x (Just e1) e2) =
+        let e2' = go (x:env) e2
+        in case e2' of
+             DoReuseLcl y _
+               | y == x -> fmap (eSeq loc (eAssign loc (eVar loc x) e1)) e2'
+             _otherwise -> fmap (eLetRef loc x (Just e1)) e2'
+     go0 loc _e0 = NoReuseLcl $ \retN -> eAssign loc (eVar loc retN) e
 
-         -- Bound function calls
-       ; let call_funs = filter isJust call_fun_infos
-         -- /their/ closure parameters
-             call_funs_clos_params = (concat (map (snd . fromJust) call_funs))
+getClosureVars :: Fun -> Cg [EId]
+getClosureVars fdef = do
+  -- | Get the free variables of this definition
+  let clos_vars_from_body = S.toList (funFVsClos fdef)
+  -- | Get all the closure parameters (recursively) of callees 
+  called_funs <- map fromJust <$> filter isJust <$> 
+                    (mapM lookupExpFunEnv_maybe $ S.toList (funFVs fdef))
+  let clos_vars_from_called = concat (map snd called_funs)
+  -- | Sum the two up and return
+  return $ nub (clos_vars_from_body ++ clos_vars_from_called)
 
-         -- Finally we sum all those up
-       ; let closureVars = nub $ closure_vars_def ++ call_funs_clos_params
-
-       ; let mkClosureVar nm
-               = do { let ty = nameTyp nm -- (ty,_ce) <- lookupVarEnv nm
-                    ; b <- isStructPtrType ty
-                    ; if isArrayTy ty || b then
-                          return (nm, [cexp| $id:(name nm) |])
-                      else
-                          return (nm, [cexp| *$id:(name nm)|])
-                    }
-
-       ; mapM mkClosureVar closureVars
-       }
 
 cgFunDefined :: DynFlags
              -> SrcLoc
-             -> Fun      -- The function definition
-             -> Cg a     -- action for the body
+             -> Fun      -- ^ The function definition
+             -> Cg a     -- ^ Action for the continuation of the function
              -> Cg a
 cgFunDefined dflags csp
-             fdef@(MkFun (MkFunDefined f params orig_body) _ fTy)
-             action
-  = do { let (locals, stripped_body) = extractEMutVars orig_body
+             fdef@(MkFun (MkFunDefined f params orig_body) _ _)
+             action = do 
+  -- | make up a new name for the function
+  newNm <- freshName (name f ++ "_" ++ getLnNumInStr csp) (nameTyp f) Imm
+  let retTy      = ctExp orig_body
+  let (TArrow argtys _) = nameTyp f
+  let ret_by_ref = retByRef f orig_body 
+  -- | get closure variables
+  closureEnv <- getClosureVars fdef
 
-         -- make up a new name for the function
-       ; newNm <- freshName (name f ++ "_" ++ getLnNumInStr csp) (nameTyp f) Imm
+  let fresh :: EId -> Cg EId
+      fresh v = genSym (name v) >>= \x -> return (v { name = x })
 
-       ; let retTy = ctExp orig_body
+  -- Create C bindings for mutable versus immutable arguments
+  let mk_cbind :: EId -> MutKind -> C.Exp
+      mk_cbind p Mut | isPtrType (nameTyp p) 
+                     = [cexp| $id:(name p)  |]
+                     | otherwise
+                     = [cexp| * $id:(name p)|]
+      mk_cbind p Imm | isPtrType (nameTyp p) 
+                     = [cexp| $id:(name p)  |]
+                     | otherwise
+                     = [cexp| $id:(name p)  |]
 
-         -- transform the body if by-ref return
-       ; ret_by_ref <- retByRef f (map mutVar locals) stripped_body
+  -- | Freshen closure environment
+  closureEnv_fresh :: [EId] <- mapM fresh closureEnv
 
-         -- get the closure variables
-       ; closureEnv <- getClosureVars fdef
-       ; let closureParams = map fst closureEnv -- (\(nm,(ty,_)) -> (nm,ty)) closureEnv
+  -- Closure parameters
+  (closureParams :: [C.Param], (lvs :: [LenVar])) <-
+     runCgPrm [] (cgParamsByRef closureEnv_fresh)
+
+  let closureParams_cbinds = map (\p -> mk_cbind p Mut) closureEnv_fresh
+
+  -- Return parameters and new body.
+  (retParamEnv :: [EId], body' :: Exp) <-
+      case ret_by_ref of
+        RetByVal e -> return ([],e)
+        RetByRef (DoReuseLcl lcl e') -> return ([lcl],e')
+        RetByRef (NoReuseLcl gen_e ) -> do 
+          retn <- freshName "_ret" retTy Mut
+          return ([retn], gen_e retn)
+
+  -- Freshen actual parameters
+  paramsEnv_fresh <- mapM fresh params
+
+  let mk_actual_param :: (EId,ArgTy) -> CgPrm [C.Param]
+      mk_actual_param (p,GArgTy _ Mut) = cgParamByRef p
+      mk_actual_param (p,GArgTy _ Imm) = cgParam p
+
+  -- Create actual parameters   
+  let penv = zip paramsEnv_fresh argtys
+  (actualParams :: [C.Param],_lvs') <- runCgPrm lvs $ 
+       do rets <- cgParamsByRef retParamEnv
+          rest <- mapM mk_actual_param penv -- ^ ordinary prms
+          return (rets ++ concat rest)      -- ^ all of them
+
+  -- Create C bindings for the parameters 
+  let actualParams_cbinds = rets ++ rest 
+        where rets = map (\p -> mk_cbind p Mut) retParamEnv
+              rest = map (\(p,GArgTy _ m) -> mk_cbind p m) penv
+
+  -- Total parameter list (excluding potential extra return param)
+  let allParams :: [C.Param]
+      allParams = actualParams ++ closureParams
+
+  -- TODO: do we need to do anything special with the lenvars?
+
+  (cdecls, cstmts, cbody) <-
+     inNewBlock $
+     extendVarEnv (zip closureEnv closureParams_cbinds) $ 
+     extendVarEnv (zip (retParamEnv ++ params) actualParams_cbinds)$ 
+     codeGenExp dflags body'
+
+  -- Emit prototype and definition
+  ----------------------------------------------------------------------
+
+  appendTopDecl $ 
+     [cdecl| $ty:(codeGenTyOcc (ctExp body'))
+                $id:(name newNm)($params:allParams);|]
+
+  appendTopDef $ 
+     [cedecl| $ty:(codeGenTyOcc (ctExp body'))
+              $id:(name newNm)($params:allParams) {
+                      $decls:cdecls    // Define things needed for body
+                      $stms:cstmts     // Emit rest of body
+                      return $(cbody);
+             }
+     |]
+
+  extendExpFunEnv f (newNm, closureEnv) action
+
+
+cgFunDefined _ _ _ _ = error "cgFunDefined: not a FunDefined function!"
+
+
+
+
+
+
+
+
+
+
+   
+{-   
+
+
+  -- | Freshen params and closure variables
+  (fresh_params,fresh_cparams) <- unzip <$> 
+        mapM (\p -> do x <- genSym (name p)
+                       return (p { name = x }
+
+************************* here ... 
 
        ; let (params', locals_defs', locals_inits', body')
                 = case ret_by_ref of
@@ -264,21 +329,6 @@ cgFunDefined dflags csp
 
        ; vars <- getBoundVars 
        ; let ambient_bound = map ppNameUniq vars
-
-{- Too verbose ...
-       ; verbose dflags $ vcat [ text "CgFun (original) parameter environment:"
-                               , nest 2 $ vcat $ map ppr params
-
-                               , text "CgFun parameter environment:"
-                               , nest 2 $ vcat $ map (ppr.fst) paramsEnv 
-
-                               , text "CgFun local environment:"
-                               , nest 2 $ vcat $ map (ppr.fst) localsEnv
-
-                               , text "CgFun ambiently bound:"
-                               , nest 2 $ vcat ambient_bound
-                            ]
--} 
 
 
          -- Create an init group of all locals (just declarations)
@@ -322,6 +372,7 @@ cgFunDefined dflags csp
                                  $id:(name newNm)($params:(cparams++closure_params)) {
                                 $decls:c_decls'         // Define things needed for locals
                                 $decls:clocals_decls    // Define locals
+
                                 $decls:cdecls           // Define things needed for body
 
                                 $stms:c_stmts'          // Emit initialization of locals
@@ -332,4 +383,6 @@ cgFunDefined dflags csp
        ; extendExpFunEnv f (newNm, closureParams) $ action
        }
 
-cgFunDefined _ _ _ _ = error "cgFunDefined: not a FunDefined function!"
+
+
+-}
