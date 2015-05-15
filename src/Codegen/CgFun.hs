@@ -21,6 +21,8 @@
 {-# LANGUAGE RebindableSyntax #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# OPTIONS_GHC -Wall -Werror #-}
+
 module CgFun ( cgFunDefined ) where
 
 import Prelude
@@ -29,42 +31,19 @@ import Rebindables
 import Opts
 import AstExpr
 import AstUnlabelled
-
-import AstComp
-import PpComp
-import PpExpr
-import qualified GenSym as GS
-import CgHeader
-import CgRuntime
 import CgMonad
 import CgTypes
 import CgExpr
-import CgLUT
 
 import Control.Monad.State
 import Control.Applicative
 
-import Control.Monad.Writer
-import qualified Data.DList as DL
-import qualified Data.List
 import Data.Loc
-import Data.Monoid
-import qualified Data.Symbol
 import qualified Language.C.Syntax as C
 import Language.C.Quote.C
-import qualified Language.C.Pretty as P
 import qualified Data.Set as S
-import qualified Data.Map as M
-import Text.PrettyPrint.HughesPJ 
 import Data.Maybe
-
-import Outputable 
-
-import Control.Monad ( when )
-import Control.Monad.IO.Class (MonadIO(..))
-
 import Data.List ( nub )
-
 import Utils ( panicStr )
 
 import CtExpr
@@ -97,9 +76,6 @@ cgParamByRef nm = cg_param_byref (nameTyp nm)
           | isArrayTy ty = cg_array_param nm ty
           | otherwise    = return [cparams|$ty:(codeGenTyOcc ty) * $id:(name nm)|]
 
-cgParams :: [EId] -> CgPrm [C.Param]
-cgParams params = concat <$> mapM cgParam params
-
 cgParam :: EId -> CgPrm [C.Param]
 cgParam nm = cg_param (nameTyp nm)
   where 
@@ -109,7 +85,7 @@ cgParam nm = cg_param (nameTyp nm)
       | otherwise          = return [cparams|$ty:(codeGenTyOcc ty) $id:(name nm)  |]
 
 cg_array_param :: EId -> Ty -> CgPrm [C.Param]
-cg_array_param nm ty@(TArray (Literal l) _) = do
+cg_array_param nm ty@(TArray (Literal _l) _) = do
   len <- liftCg $ freshName ("__len_unused_") tint Imm 
   return $ [cparams| $ty:(codeGenTyOcc ty) $id:(name nm), int $id:(name len)|]
 cg_array_param nm ty@(TArray (NVar c) _) = do
@@ -138,13 +114,12 @@ instance Functor RetBody where
 
 data RetType = RetByVal Exp | RetByRef (RetBody Exp)
 
-retByRef :: EId     -- Function name
-         -> Exp     -- Body
+retByRef :: Exp     -- Body
+         -> Ty      -- body ty 
          -> RetType -- Transformed body
-retByRef f body
+retByRef body body_ty
   | isArrayTy body_ty = RetByRef (transBodyByRef body)
   | otherwise         = RetByVal body 
-  where body_ty = ctExp body
 
 
 transBodyByRef :: Exp -> RetBody Exp
@@ -196,7 +171,7 @@ cgFunDefined dflags csp
   newNm <- freshName (name f ++ "_" ++ getLnNumInStr csp) (nameTyp f) Imm
   let retTy      = ctExp orig_body
   let (TArrow argtys _) = nameTyp f
-  let ret_by_ref = retByRef f orig_body 
+  let ret_by_ref = retByRef orig_body retTy
   -- | get closure variables
   closureEnv <- getClosureVars fdef
 
@@ -256,7 +231,6 @@ cgFunDefined dflags csp
       allParams = actualParams ++ closureParams
 
   -- TODO: do we need to do anything special with the lenvars?
-
   (cdecls, cstmts, cbody) <-
      inNewBlock $
      extendVarEnv (zip closureEnv closureParams_cbinds) $ 
