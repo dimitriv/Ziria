@@ -23,7 +23,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -Wall -Werror #-}
 
-module CgFun ( cgFunDefined ) where
+module CgFun ( cgFunDefined, cgFunExternal ) where
 
 import Prelude
 
@@ -63,6 +63,9 @@ type CgPrm a =  StateT [LenVar] Cg a
 
 runCgPrm :: [LenVar] -> CgPrm a -> Cg (a,[LenVar])
 runCgPrm lvs m = runStateT m lvs
+
+evalCgPrm :: [LenVar] -> CgPrm a -> Cg a
+evalCgPrm lvs m = fst <$> (runStateT m lvs)
 
 liftCg :: Cg a -> CgPrm a
 liftCg m = StateT (\s -> m >>= \r -> return (r,s))
@@ -159,15 +162,19 @@ getClosureVars fdef = do
   return $ nub (clos_vars_from_body ++ clos_vars_from_called)
 
 
+cg_actual_param :: (EId,ArgTy) -> CgPrm [C.Param]
+cg_actual_param (p,GArgTy _ Mut) = cgParamByRef p
+cg_actual_param (p,GArgTy _ Imm) = cgParam p
+
 cgFunDefined :: DynFlags
              -> SrcLoc
-             -> Fun      -- ^ The function definition
-             -> Cg a     -- ^ Action for the continuation of the function
+             -> Fun     -- ^ Function definition 
+             -> Cg a    -- ^ Action for the continuation of the function
              -> Cg a
 cgFunDefined dflags csp
              fdef@(MkFun (MkFunDefined f params orig_body) _ _)
              action = do 
-  -- | make up a new name for the function
+  -- Make up a new name for the function
   newNm <- freshName (name f ++ "_" ++ getLnNumInStr csp) (nameTyp f) Imm
   let retTy      = ctExp orig_body
   let (TArrow argtys _) = nameTyp f
@@ -210,16 +217,12 @@ cgFunDefined dflags csp
   -- Freshen actual parameters
   paramsEnv_fresh <- mapM fresh params
 
-  let mk_actual_param :: (EId,ArgTy) -> CgPrm [C.Param]
-      mk_actual_param (p,GArgTy _ Mut) = cgParamByRef p
-      mk_actual_param (p,GArgTy _ Imm) = cgParam p
-
   -- Create actual parameters   
   let penv = zip paramsEnv_fresh argtys
-  (actualParams :: [C.Param],_lvs') <- runCgPrm lvs $ 
-       do rets <- cgParamsByRef retParamEnv
-          rest <- mapM mk_actual_param penv -- ^ ordinary prms
-          return (rets ++ concat rest)      -- ^ all of them
+  actualParams <- evalCgPrm lvs $
+    do rets <- cgParamsByRef retParamEnv
+       rest <- mapM cg_actual_param penv -- ^ ordinary prms
+       return (rets ++ concat rest)      -- ^ all of them
 
   -- Create C bindings for the parameters 
   let actualParams_cbinds = rets ++ rest 
@@ -252,111 +255,46 @@ cgFunDefined dflags csp
                       return $(cbody);
              }
      |]
-
   extendExpFunEnv f (newNm, closureEnv) action
 
-
-cgFunDefined _ _ _ _ = error "cgFunDefined: not a FunDefined function!"
-
+cgFunDefined _ _ _ _ = panicStr "cgFunDefined"
 
 
 
+cgFunExternal :: DynFlags
+              -> SrcLoc
+              -> Fun     -- ^ Function definition 
+              -> Cg a    -- ^ Action for the continuation of the function
+              -> Cg a
+cgFunExternal _dflags loc
+              (MkFun (MkFunExternal nm ps retTy) _ _) action = go retTy where
+  ret_str  = "__retf_" ++ name nm
+  ext_str  = "__ext_"  ++ name nm
+  fun_ty   = nameTyp nm
+  ext_nm   = toName ext_str loc fun_ty Imm
+  ret_name = toName ret_str loc retTy Mut
+  TArrow argtys _ = fun_ty
+
+  go (TArray {}) = do
+    actuals <- evalCgPrm [] $
+       do rets <- cgParamsByRef [ret_name]
+          rest <- mapM cg_actual_param (zip ps argtys) -- ^ ordinary prms
+          return (rets ++ concat rest)      -- ^ all of them
+
+    appendTopDecl [cdecl|void $id:ext_str ($params:actuals);|]
+    extendExpFunEnv nm (ext_nm,[]) action
+
+  go _ = do
+    actuals <- evalCgPrm [] $ concat <$> mapM cg_actual_param (zip ps argtys)
+    appendTopDecl $
+      [cdecl|$ty:(codeGenTyOcc retTy) $id:ext_str ($params:actuals);|]
+    
+    extendExpFunEnv nm (ext_nm,[]) action
+
+cgFunExternal _ _ _ _ = panicStr "cgFunExternal"
 
 
 
 
 
 
-   
-{-   
-
-
-  -- | Freshen params and closure variables
-  (fresh_params,fresh_cparams) <- unzip <$> 
-        mapM (\p -> do x <- genSym (name p)
-                       return (p { name = x }
-
-************************* here ... 
-
-       ; let (params', locals_defs', locals_inits', body')
-                = case ret_by_ref of
-                     RetByVal ebody
-                       -> (params, locals, locals, ebody)
-                     RetByRef (NoReuseLcl (ret_n, ret_body))
-                       -> let params' = ret_n : params
-                              body'   = ret_body
-                          in (params', locals, locals , body')
-                     RetByRef (DoReuseLcl (ret_lcl, ret_body))
-                       -> let params' = ret_lcl : params
-                              locals' = filter (\lcl -> mutVar lcl /= ret_lcl) locals
-                              locals_inits = locals
-                          in (params', locals', locals_inits, ret_body)
-                     RetByRef (DoReuseLUT (ret_n, ret_body))
-                       -> let params' = ret_n : params
-                              body'   = ret_body
-                          in (params', locals, locals , body')
-
-       ; let name_uniq pn = (pn,[cexp|$id:(getNameWithUniq pn)|])
-             paramsEnv = map name_uniq params'
-             localsEnv = map (name_uniq . mutVar) locals_defs'
-
-
-       ; vars <- getBoundVars 
-       ; let ambient_bound = map ppNameUniq vars
-
-
-         -- Create an init group of all locals (just declarations)
-       ; let decl_local MutVar{..} =
-               codeGenDeclGroup (getNameWithUniq mutVar) (nameTyp mutVar)
-       ; clocals_decls <- mapM decl_local locals_defs'
-         -- Create initialization code for locals (just inits)
-       ; (c_decls', c_stmts')
-           <- inNewBlock_ $
-              extendVarEnv paramsEnv  $
-              extendVarEnv closureEnv $
-              extendVarEnv localsEnv  $
-              codeGenGlobalInitsOnly dflags $
-              map (\mv -> setMutVarName (getNameWithUniq (mutVar mv)) mv) locals_inits'
-
-       ; vars' <- getBoundVars 
-       ; let ambient_bound' = map ppNameUniq vars'
-
-       ; (cdecls, cstmts, cbody) <-
-            inNewBlock $
-            extendVarEnv paramsEnv  $
-            extendVarEnv closureEnv $
-            extendVarEnv localsEnv  $
-            case body' of
-              MkExp (ELUT r body'') _ _
-                  | not (isDynFlagSet dflags NoLUT)               -- if it's a body that is lutted
-                  , RetByRef (DoReuseLUT (ret_n,_)) <- ret_by_ref -- and here's the return name
-                  -> codeGenLUTExp dflags r body'' (Just ret_n)   -- { name = getNameWithUniq ret_n })
-                  | not (isDynFlagSet dflags NoLUT)
-                  -> codeGenLUTExp dflags r body'' Nothing -- the usual thing
-
-              _ -> codeGenExp dflags body'
-
-       ; closure_params <- codeGenParamsByRef closureParams
-       ; cparams <- codeGenParams params'
-
-       ; appendTopDecl [cdecl|$ty:(codeGenTy_qual "" (ctExp body'))
-                                 $id:(name newNm)($params:(cparams++closure_params));|]
-
-       ; appendTopDef [cedecl|$ty:(codeGenTy_qual "" (ctExp body'))
-                                 $id:(name newNm)($params:(cparams++closure_params)) {
-                                $decls:c_decls'         // Define things needed for locals
-                                $decls:clocals_decls    // Define locals
-
-                                $decls:cdecls           // Define things needed for body
-
-                                $stms:c_stmts'          // Emit initialization of locals
-                                $stms:cstmts            // Emit rest of body
-                                return $(cbody);
-                              }|]
-
-       ; extendExpFunEnv f (newNm, closureParams) $ action
-       }
-
-
-
--}
