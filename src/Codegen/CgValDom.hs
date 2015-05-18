@@ -225,16 +225,8 @@ cgArrRead_chk tbase carr start_idx LISingleton
   = return [cexp| $carr[$cestart]   |]
   where cestart = cexpOfArrIdx start_idx
 
-cgArrRead_chk _tbase carr start_idx (LILength _)
+cgArrRead_chk _tbase carr start_idx _
   = return [cexp|&($carr[$(cexpOfArrIdx start_idx)])|]
-
-cgArrRead_chk _tbase carr start_idx li
-  = panic $ vcat [ text "cgArrRead_chk!"
-                 , text "carr     :" <+> text (show carr)
-                 , text "start_idx:" <+> text (show start_idx)
-                 , text "li       :" <+> text (show li)
-                 ]
-
 
 cgStruct :: DynFlags -> SrcLoc -> Ty -> [(FldName,C.Exp)] -> Cg C.Exp
 cgStruct _dfs _loc t@(TStruct _sn fld_tys) fld_exps = do
@@ -248,8 +240,8 @@ cgStruct _dfs _loc t@(TStruct _sn fld_tys) fld_exps = do
 
 cgStruct _ loc t _fld_exps = 
   panic $ vcat [ text "cgStruct"
-               , text "location: "       <+> ppr loc
-               , text "non-array-type: " <+> ppr t ]
+               , text "location:"        <+> ppr loc
+               , text "non-struct-type:" <+> ppr t ]
 
 
 

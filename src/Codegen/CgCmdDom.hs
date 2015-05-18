@@ -23,7 +23,7 @@ module CgCmdDom
   ( cgDeref
   , cgAssign
   , squashArrDeref
-  , cgArrWrite_chk
+  , cgArrWrite, cgArrWrite_chk
   ) where
 
 import Opts
@@ -32,13 +32,9 @@ import CgMonad
 import CgTypes
 import CtExpr
 
-import Outputable
-
 import Data.Loc
 import qualified Language.C.Syntax as C
 import Language.C.Quote.C
-import Text.PrettyPrint.HughesPJ
-import Utils ( panic )
 import CgValDom
 import CgBoundsCheck
              
@@ -85,37 +81,43 @@ cgAssign dfs loc d crhs = go (squashArrDeref d)
 
     go d1@(GDArr d0 aidx lnfo) = do 
       cd0 <- cgDeref dfs loc d0 
-      cgBoundsCheck dfs loc arr_ty (cexpOfArrIdx aidx) lnfo
-      cgArrWrite_chk ret_ty cd0 arr_ty aidx lnfo crhs
+      cgArrWrite dfs loc ret_ty cd0 arr_ty aidx lnfo crhs
       where arr_ty = ctDerefExp d0
             ret_ty = ctDerefExp d1
 
     lval_ty = ctDerefExp d
 
+cgArrWrite :: DynFlags 
+           -> SrcLoc
+           -> Ty          -- ^ Return type
+           -> C.Exp -> Ty -- ^ Array and array type
+           -> ArrIdx      -- ^ Start
+           -> LengthInfo  -- ^ Range to read from
+           -> C.Exp 
+           -> Cg ()
+cgArrWrite dfs loc ty carr arr_ty start_idx li crhs = do 
+  cgBoundsCheck dfs loc arr_ty (cexpOfArrIdx start_idx) li
+  -- | Do bounds checking and call the 'checked' version (chk)
+  cgArrWrite_chk ty carr start_idx li crhs
 
 cgArrWrite_chk :: Ty         -- ^ return type 
                -> C.Exp      -- ^ ce
-               -> Ty         -- ^ array type (of ce)
                -> ArrIdx     -- ^ aidx
                -> LengthInfo -- ^ rng
                -> C.Exp      -- ^ rhs
                -> Cg ()      -- ^ ce[aidx...aidx+rng-1] := rhs
 -- | Bit arrays singletons
-cgArrWrite_chk _ ce (TArray _ TBit) aidx LISingleton crhs = 
+cgArrWrite_chk TBit ce aidx LISingleton crhs = 
   appendStmt $ [cstm| bitRead($ce,$(cexpOfArrIdx aidx),& &($crhs));|]
 -- | Bit arrays length reads 
-cgArrWrite_chk _ ce (TArray _ TBit) aidx (LILength l) crhs
+cgArrWrite_chk (TArray _ TBit) ce aidx (LILength l) crhs
   | Just cidx <- isBitArrByteAligned aidx
   , let clhs = [cexp| & $ce[$cidx]|]
   = assignByVal (TArray (Literal l) TBit) clhs crhs
   | otherwise
   = appendStmt [cstm|bitArrWrite($crhs,$(cexpOfArrIdx aidx),$int:l,$ce);|]
 -- | Non-bit arrays, just assign-by-val
-cgArrWrite_chk ret_ty cd (TArray {}) aidx lnfo crhs = do 
+cgArrWrite_chk ret_ty cd aidx lnfo crhs = do 
   clhs <- cgArrRead_chk ret_ty cd aidx lnfo
   assignByVal ret_ty clhs crhs
-
-cgArrWrite_chk _ _cd ty _aidx li _crhs = panic $ 
-   vcat [ text "cgArrWrite_chk: non-array type" <+> ppr ty
-        , text "li    :" <+> text (show li) ]
 

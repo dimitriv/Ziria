@@ -134,8 +134,9 @@ lenArg (NVar n)    = [[cexp|$id:n|]]
 --     (ii)  call f(result)
 --     (iii) z[3,4] := result
 -- 
--- NB: For large bit arrays this will probably be inefficient, but for performance
--- we need to inline anyway, so there is no point in optimizing this code too much.
+-- NB: For large bit arrays this will probably be inefficient, but for
+-- performance we need to inline anyway, so there is no point in
+-- optimizing this code too much.
 
 codeGenArgs :: DynFlags 
             -> SrcLoc
@@ -207,93 +208,6 @@ cg_bitarr_arg dfs loc lbase astart li ne
   | otherwise -- non-aligned, will have to create new storage
   = do new_e <- cgDeref dfs loc (GDArr lbase astart li)
        cbase <- cgDeref dfs loc lbase
-       let stmt = cgArrWrite_chk ret_ty cbase arr_ty astart li new_e
+       let stmt = cgArrWrite_chk ret_ty cbase astart li new_e
        return (new_e : lenArg ne, stmt)
-  where arr_ty = ctDerefExp lbase
-        ret_ty = ctDerefExp (GDArr lbase astart li)
-
-
-
-
-
-
-
--- **************** leaving this here ...............
-
-
---  Cg [C.Exp]
--- codeGenArg dflags e = do
---     ce   <- codeGenExp dflags e
---     clen <- case ctExp e of
---               TArray (Literal l) _ -> return [[cexp|$int:l|]]
---               TArray (NVar n)    _ -> return [[cexp|$id:n|]]
---               _                    -> return []
---     return $ ce : clen
-
-
-
-
-
--- codeGenArgByRef :: DynFlags -> Exp -> Cg [C.Exp]
--- codeGenArgByRef dflags e
---     | isArrayTy (ctExp e) = codeGenArg dflags e
---     | otherwise
---     = do { ce <- codeGenExp dflags e
---          ; case ce of
---              C.Var (C.Id {}) _
---               -> do { alloc_as_ptr <- isStructPtrType ety
---                     ; if alloc_as_ptr || isArrayTy ety
---                       then return [ [cexp|$ce|] ]
---                       else return [ [cexp|&$ce|] ]
---                     }
---              _otherwise -- A bit of a weird case. Create storage and pass addr of storage
---               -> do { new_tmp <- freshName "clos_ref_arg" ety Mut
---                     ; g <- codeGenDeclGroup (name new_tmp) ety
---                     ; appendDecl g
---                     ; assignByVal ety ety [cexp|$id:(name new_tmp)|] ce
---                     ; alloc_as_ptr <- isStructPtrType ety -- Pointer?
---                     ; if alloc_as_ptr || isArrayTy ety
---                             -- Already a ptr
---                        then return [ [cexp| $id:(name new_tmp)  |] ]
---                             -- Otherwise take address
---                        else return [ [cexp| & $id:(name new_tmp)|] ]
---                     }
---          }
---     where ety = ctExp e
-
-
-
-
-
-
-
--- codeGenCall_alloc :: DynFlags 
---                   -> SrcLoc 
---                   -> Ty 
---                   -> GName Ty 
---                   -> [Exp] -> Cg C.Exp
--- -- Call function and it is your responsibility to allocate space
--- codeGenCall_alloc dflags loc retTy nef eargs
---   = do { is_struct_ptr <- isStructPtrType retTy
---        ; newNm <- genSym $ name nef ++ "_" ++ getLnNumInStr loc
-        
---        ; let retNewN = toName ("__retcall_" ++ newNm) noLoc retTy Mut
---              cer     = [cexp|$id:(name retNewN)|]
-
---        ; unless (retTy == TUnit) $ 
---            appendCodeGenDeclGroup "calign" retNewN retTy
-
---        ; codegen_call dflags loc retTy cer nef eargs 
---        }
-
--- codeGenCall_store :: DynFlags
---                   -> SrcLoc
---                   -> Ty 
---                   -> C.Exp
---                   -> GName Ty
---                   -> [Exp] -> Cg ()
--- -- Call function and store its result in the passed in C.Exp
--- codeGenCall_store dflags loc retTy cer nef eargs
---   = do { _ <- codegen_call dflags loc retTy cer nef eargs
---        ; return () }
-
+  where ret_ty = ctDerefExp (GDArr lbase astart li)
