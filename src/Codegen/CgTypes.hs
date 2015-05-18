@@ -45,6 +45,9 @@ module CgTypes ( bwBitWidth
                
                , expValMbs 
 
+               , appendDeclPkg
+               , appendTopDeclPkg
+
 
                -- , codeGenTy_qual
                -- , codeGenTy_DefaultVal
@@ -347,7 +350,8 @@ codeGenFieldDeclGroup v ty =
   where idx_stack = arrIdxCStack ty
         base_ty   = arrBaseCType Nothing ty
 
-codeGenDeclGroup_qual :: Quals -> CVar -> Ty -> HowToInit -> Cg (DeclPkg C.InitGroup)
+codeGenDeclGroup_qual :: Quals 
+                      -> CVar -> Ty -> HowToInit -> Cg (DeclPkg C.InitGroup)
 codeGenDeclGroup_qual quals v ty mb_init
   | shouldAllocAsPtr ty && not (isInitWith mb_init) 
     -- ^ If the type is big and we do not have a programmer-supplied 
@@ -358,7 +362,8 @@ codeGenDeclGroup_qual quals v ty mb_init
   = return $ DeclPkg (cgDeclStatic quals v ty mb_init) []
 
 -- | codeGenDeclGroup wrappers
-codeGenDeclGroup,codeGenDeclVolGroup :: CVar -> Ty -> HowToInit -> Cg (DeclPkg C.InitGroup)
+codeGenDeclGroup, codeGenDeclVolGroup :: CVar -> Ty -> HowToInit 
+                                      -> Cg (DeclPkg C.InitGroup)
 codeGenDeclGroup    = codeGenDeclGroup_qual "calign"
 codeGenDeclVolGroup = codeGenDeclGroup_qual "volatile"
 
@@ -375,6 +380,17 @@ appendCodeGenDeclGroup x ty minit = do
   (DeclPkg ig stms) <- codeGenDeclGroup x ty minit
   appendDecl ig
   appendStmts stms
+
+appendDeclPkg :: DeclPkg C.InitGroup -> Cg ()
+appendDeclPkg (DeclPkg ig stms) = do 
+  appendDecl ig
+  appendStmts stms
+
+appendTopDeclPkg :: DeclPkg C.InitGroup -> Cg ()
+appendTopDeclPkg (DeclPkg ig stms) = do 
+  appendTopDecl ig
+  appendStmts stms
+
 
 {------------------------------------------------------------------------
   Assign by value

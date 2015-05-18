@@ -103,8 +103,8 @@ codeGenCompilerGlobals :: String
                        -> Ty
                        -> Cg ()
 codeGenCompilerGlobals tid tickHdl procHdl mtv ta tb = do
-    appendDecl =<< codeGenDeclGroup (doneValOf $ threadIdOf tid globalDoneHdl)
-                                    (fromMaybe tint mtv)
+    appendCodeGenDeclGroup (doneValOf $ threadIdOf tid globalDoneHdl)
+                           (fromMaybe tint mtv) ZeroOut
     appendDecl [cdecl| char $id:globalWhatIs;|]
 
 
@@ -175,7 +175,7 @@ codeGenProgram dflags shared_ctxt
           -- Finally emit wpl_global_init()
        ; lut_init_stms <- getLUTHashes >>=
                               (return . map (lgi_lut_gen . snd))
-       ; codeGenWPLGlobalInit (lut_init_stms ++ initstms ++ moreinitstms) module_name
+       ; codeGenWPLGlobalInit (lut_init_stms ++ moreinitstms) module_name
        }
 
   where
