@@ -30,7 +30,8 @@ module CgValDom
   , ArrIdx ( .. )
   , arrIdxPlus
   , cexpOfArrIdx
-  , cgArrRead
+  , cgArrRead, cgArrRead_chk
+  , isBitArrByteAligned
 
   -- New arrays or structs 
   , cgArrVal
@@ -183,6 +184,17 @@ cgArrRead dfs loc ty carr arr_ty start_idx li = do
   -- | Do bounds checking and call the 'checked' version (chk)
   cgArrRead_chk ty carr start_idx li
 
+
+isBitArrByteAligned :: ArrIdx -> Maybe C.Exp
+isBitArrByteAligned (AIdxStatic i)  
+  | i `mod` 8 == 0 
+  = Just [cexp| $int:(i `div` 8)|]
+isBitArrByteAligned (AIdxMult i ce)
+  | i `mod` 8 == 0 
+  = Just [cexp| $int:(i `div` 8)*$ce|]
+isBitArrByteAligned _ = Nothing
+
+
 cgArrRead_chk :: Ty          -- ^ Return type
               -> C.Exp       -- ^ Array 
               -> ArrIdx      -- ^ Start
@@ -195,20 +207,15 @@ cgArrRead_chk TBit carr start_idx LISingleton = do
     [cstm| bitRead($carr,$(cexpOfArrIdx start_idx),& $id:(name res)); |]
   return [cexp| $id:(name res) |]
 
-cgArrRead_chk TBit carr (AIdxStatic i) (LILength {}) 
-  | i `mod` 8 == 0 
-  = return [cexp| & $carr[$int:(i `div` 8)]|]
-
-cgArrRead_chk TBit carr (AIdxMult i ce) (LILength {})
-  | i `mod` 8 == 0 
-  = return [cexp| & $carr[$int:(i `div` 8)*$ce]|]
-
-cgArrRead_chk TBit carr start_idx (LILength l) = do
-  let res_ty = TArray (Literal l) TBit
-  res <- freshName "bitarrres" res_ty Mut
-  appendCodeGenDeclGroup (name res) res_ty ZeroOut
-  appendStmt [cstm| bitArrRead($carr,$ce,$int:l,$id:(name res)); |]
-  return [cexp| $id:(name res) |]
+cgArrRead_chk TBit carr start_idx (LILength l)
+  | Just cidx <- isBitArrByteAligned start_idx 
+  = return [cexp| & $carr[$cidx]|]
+  | otherwise 
+  = do let res_ty = TArray (Literal l) TBit
+       res <- freshName "bitarrres" res_ty Mut
+       appendCodeGenDeclGroup (name res) res_ty ZeroOut
+       appendStmt [cstm| bitArrRead($carr,$ce,$int:l,$id:(name res)); |]
+       return [cexp| $id:(name res) |]
   where ce = cexpOfArrIdx start_idx
 
 cgArrRead_chk tbase carr start_idx LISingleton

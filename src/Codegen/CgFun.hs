@@ -58,6 +58,19 @@ import CtExpr
 -- ^ I.e. we must not bind 'n' twice. For this reason we introduce a thin state
 -- ^ monad that keeps track of the bound NVar variables.
 
+-- | Returned values from function calls
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- ^
+--  (i) internal functions that return arrays or by-pointer structs
+--      accept first argument to be the return storage
+-- ^ 
+--  (ii) external functions that return arrays accept first argument
+--       to be the return storage.  NB: we do not do the same thing as for
+--       internal functions as it's hard to tell external library
+--       implementors, exactly which structs will be passed as pointers and
+--       which not. Moreover this can change all the time but we do not want
+--       the external functions calling convention to change!
+
 
 type CgPrm a =  StateT [LenVar] Cg a
 
@@ -77,15 +90,17 @@ cgParamByRef :: EId -> CgPrm [C.Param]
 cgParamByRef nm = cg_param_byref (nameTyp nm)
   where cg_param_byref ty
           | isArrayTy ty = cg_array_param nm ty
-          | otherwise    = return [cparams|$ty:(codeGenTyOcc ty) * $id:(name nm)|]
+          | otherwise = return [cparams|$ty:(codeGenTyOcc ty) * $id:(name nm)|]
 
 cgParam :: EId -> CgPrm [C.Param]
 cgParam nm = cg_param (nameTyp nm)
   where 
     cg_param ty
       | isArrayTy ty       = cg_array_param nm ty
-      | isStructPtrType ty = return [cparams|$ty:(codeGenTyOcc ty) * $id:(name nm)|]
-      | otherwise          = return [cparams|$ty:(codeGenTyOcc ty) $id:(name nm)  |]
+      | isStructPtrType ty 
+      = return [cparams|$ty:(codeGenTyOcc ty) * $id:(name nm)|]
+      | otherwise          
+      = return [cparams|$ty:(codeGenTyOcc ty) $id:(name nm)  |]
 
 cg_array_param :: EId -> Ty -> CgPrm [C.Param]
 cg_array_param nm ty@(TArray (Literal _l) _) = do
@@ -121,8 +136,9 @@ retByRef :: Exp     -- Body
          -> Ty      -- body ty 
          -> RetType -- Transformed body
 retByRef body body_ty
-  | isArrayTy body_ty = RetByRef (transBodyByRef body)
-  | otherwise         = RetByVal body 
+  | isArrayTy body_ty       = RetByRef (transBodyByRef body)
+  | isStructPtrType body_ty = RetByRef (transBodyByRef body)
+  | otherwise               = RetByVal body 
 
 
 transBodyByRef :: Exp -> RetBody Exp
@@ -275,6 +291,7 @@ cgFunExternal _dflags loc
   ret_name = toName ret_str loc retTy Mut
   TArrow argtys _ = fun_ty
 
+  -- Externals only have an extra argument if return arrays.
   go (TArray {}) = do
     actuals <- evalCgPrm [] $
        do rets <- cgParamsByRef [ret_name]

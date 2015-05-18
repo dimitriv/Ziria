@@ -20,8 +20,7 @@
 {-# OPTIONS_GHC -fwarn-unused-binds -Werror #-}
 
 module CgCall
-  ( codeGenCall_alloc
-  , codeGenCall_store
+  ( cgCall 
   ) where
 
 import Opts
@@ -34,7 +33,6 @@ import CgHeader
 import CgRuntime
 import CgMonad
 import CgTypes
-import CgLUT
 
 import Control.Monad (when, unless)
 
@@ -51,141 +49,251 @@ import Language.C.Quote.Base (ToConst(..))
 import qualified Language.C.Pretty as P
 import Numeric (showHex)
 import qualified Data.Map as M
-import Text.PrettyPrint.HughesPJ 
+import Text.PrettyPrint.HughesPJ
 import Data.Maybe
 
--- Recursive import
-import CgExpr 
-import CtExpr 
-
-codeGenCall_alloc :: DynFlags 
-                  -> SrcLoc 
-                  -> Ty 
-                  -> GName Ty 
-                  -> [Exp] -> Cg C.Exp
--- Call function and it is your responsibility to allocate space
-codeGenCall_alloc dflags loc retTy nef eargs
-  = do { is_struct_ptr <- isStructPtrType retTy
-       ; newNm <- genSym $ name nef ++ "_" ++ getLnNumInStr loc
-        
-       ; let retNewN = toName ("__retcall_" ++ newNm) noLoc retTy Mut
-             cer     = [cexp|$id:(name retNewN)|]
-
-       ; unless (retTy == TUnit) $ 
-           appendCodeGenDeclGroup "calign" retNewN retTy
-
-       ; codegen_call dflags loc retTy cer nef eargs 
-       }
-
-codeGenCall_store :: DynFlags
-                  -> SrcLoc
-                  -> Ty 
-                  -> C.Exp
-                  -> GName Ty
-                  -> [Exp] -> Cg ()
--- Call function and store its result in the passed in C.Exp
-codeGenCall_store dflags loc retTy cer nef eargs
-  = do { _ <- codegen_call dflags loc retTy cer nef eargs
-       ; return () }
+import CtExpr
+import CgValDom 
+import CgCmdDom
+import Utils
 
 
-codegen_call :: DynFlags
-             -> SrcLoc 
-             -> Ty 
-             -> C.Exp 
-             -> GName Ty 
-             -> [Exp]
-             -> Cg C.Exp
-codegen_call dflags loc retTy cer nef eargs
-  = do  -- Here first look if there is a name replacement created due to
-        -- possible multiple calls of the same local function
-        -- Invariant: ef = EVar nm
+cgCall :: DynFlags 
+       -> SrcLoc
+       -> Ty
+       -> GName Ty -> [(Either (LVal ArrIdx) C.Exp)]
+       -> C.Exp -- ^ Where to store result
+       -> Cg C.Exp
+cgCall dfs loc retTy fName eargs cer = do
+  (real_f_name, closure_params) <- lookupExpFunEnv fName
+  let is_external = isPrefixOf "__ext" (name real_f_name)
+    
+  let cef = [cexp|$id:(name real_f_name)|]
+  let (TArrow argtys _) = nameTyp fName
 
-       is_struct_ptr <- isStructPtrType retTy
+  -- Standard function arguments, disable bounds checks when external calls
+  (ceargs,fixup_bitarrs) <- withDisabledBCWhen is_external $ 
+                            codeGenArgs dfs loc argtys eargs
 
-       (real_f_name, closure_params) <- lookupExpFunEnv nef
-       let is_external = isPrefixOf "__ext" (name real_f_name)
+  (clos_ceargs, clos_fixup_bitarrs)
+      <- codeGenArgs dfs loc 
+            (map (\nm -> GArgTy (nameTyp nm) Mut) closure_params)
+            (map (Left . GDVar) closure_params)
 
-       withDisabledBCWhen is_external $ do
+  let cargs = ceargs ++ clos_ceargs
 
-       let cef = [cexp|$id:(name real_f_name)|]
 
-       -- Standard function arguments
-       ceargs <- concat <$> mapM (codeGenArg dflags) eargs
+  case retTy of
+    TArray li _ty
+      -> when_ (not is_external) inAllocFrame $
+         appendStmt [cstm|$(cef)($cer, $args:(lenArg li ++ cargs));|]
 
-       -- Extra closure arguments
-       let closure_args = [MkExp (EVar nm) loc ()
-                               | nm <- closure_params]
-       cclosure_args <- concat <$> mapM (codeGenArgByRef dflags) closure_args
+        -- See CgFun.hs
+    _ | isStructPtrType retTy
+      -> when_ (not is_external) inAllocFrame $
+         if is_external 
+           then appendStmt [cstm| *($cer) = $(cef)($args:cargs);|]
+           else appendStmt [cstm|$(cef)($cer, $args:cargs);|]
+    TUnit
+      -> when_ (not is_external) inAllocFrame $ 
+         appendStmt [cstm| $(cef)($args:cargs);|]
 
-       let cargs = ceargs ++ cclosure_args
+    _otherwise
+     -> when_ (not is_external) inAllocFrame $ 
+        appendStmt [cstm| $cer = $(cef)($args:cargs);|]
 
-       -- [external-retf] GS: It seems like we're relying on some very tricky
-       -- invariants here to ensure that cer =
-       -- retf_<name-of-external-function> when the lookup comes back empty!
-       -- This seems bad :-)
-
-       case retTy of
-         TArray li _ty
-           | let clen = case li of Literal l -> [cexp| $int:l|]
-                                   NVar c -> [cexp| $id:c|]
-           -> when_ (not is_external) inAllocFrame $
-              appendStmt [cstm|$(cef)($cer, $clen, $args:cargs);|]
-
-         _ | is_struct_ptr
-           -> when_ (not is_external) inAllocFrame $
-              appendStmt [cstm|$(cef)($cer, $args:cargs);|]
-
-         TUnit
-           -> when_ (not is_external) inAllocFrame $ 
-              appendStmt [cstm| $(cef)($args:cargs);|]
-
-         _otherwise
-          -> when_ (not is_external) inAllocFrame $ 
-             appendStmt [cstm| $cer = $(cef)($args:cargs);|]
-       
-       return (if retTy == TUnit then [cexp|UNIT|] else [cexp|$cer|])
+  -- Fixup unaligned bit arrays!
+  fixup_bitarrs
+  clos_fixup_bitarrs
+  
+  return (if retTy == TUnit then [cexp|UNIT|] else [cexp|$cer|])
 
 
   where when_ :: Bool -> (Cg a -> Cg a) -> Cg a -> Cg a
         when_ True f  = f 
         when_ False f = id
+
+
+{-------------------------------------------------------------------------------
+  Argument code generation
+-------------------------------------------------------------------------------}
+
+lenArg :: NumExpr -> [C.Exp]
+lenArg (Literal l) = [[cexp|$int:l|]]
+lenArg (NVar n)    = [[cexp|$id:n|]]
+
+-- | codeGenArg: 
+-- Returns arguments for the function, plus "fixup" assignments in the end.
+-- Those fixups account for non byte aligned bitreades. E.g:
+--     int32 f(x : arr[4] bit) { ... }
+-- Call site:
+--     f(z[3,4])
+-- We will emit code for the following:
+-- 
+--     (i)   result <- bitarray read z[3,4]
+--     (ii)  call f(result)
+--     (iii) z[3,4] := result
+-- 
+-- NB: For large bit arrays this will probably be inefficient, but for performance
+-- we need to inline anyway, so there is no point in optimizing this code too much.
+
+codeGenArgs :: DynFlags 
+            -> SrcLoc
+            -> [ArgTy] 
+            -> [Either (LVal ArrIdx) C.Exp] -> Cg ([C.Exp], Cg ())
+codeGenArgs dfs loc argtys lvals = go argtys lvals
+  where go [] [] = return ([], return ())
+        go (a:as) (lv:lvs) = do (es,action) <- codeGenArg dfs loc a lv
+                                (es',action') <- go as lvs
+                                return (es ++ es', action >> action')
+        go _ _ = panicStr "codeGenArgs"
+
+
+codeGenArg :: DynFlags 
+           -> SrcLoc
+           -> ArgTy 
+           -> Either (LVal ArrIdx) C.Exp -> Cg ([C.Exp], Cg ())
+codeGenArg dfs loc argty carg_mb
+
+    -- Immutable array
+  | GArgTy (TArray ne _) Imm <- argty
+  , Right cearg <- carg_mb
+  = return ((cearg : lenArg ne), return ())
+
+    -- Immutable non-array
+  | GArgTy ty Imm <- argty
+  , Right cearg <- carg_mb
+  = return ([cearg], return () ) 
+
+    -- Mutable bit-array
+  | GArgTy (TArray ne TBit) Mut <- argty 
+  , Left lval_pre <- carg_mb
+  , let lval = squashArrDeref lval_pre
+  = case lval of
+      GDArr d idx lnfo -> cg_bitarr_arg dfs loc d idx lnfo ne
+      _ -> do e <- cgDeref dfs loc lval 
+              return ((e : lenArg ne), return ())
+
+    -- Mutable array
+  | GArgTy (TArray ne _tnonbit) Mut <- argty 
+  , Left lval <- carg_mb
+  = do e <- cgDeref dfs loc lval
+       return ((e : lenArg ne), return ())
+
+    -- Pointer-represented type, mutable arg
+  | GArgTy ty Mut <- argty, Left lval <- carg_mb
+  , isPtrType ty 
+  = do { e <- cgDeref dfs loc lval; return ([e], return ()) }
+
+    -- Non-pointer represented type, mutable arg
+  | GArgTy ty Mut <- argty, Left lval <- carg_mb
+  = do { e <- cgDeref dfs loc lval; return ([[cexp| &($e)|]], return ()) }
+
+
+  | otherwise
+  = panicStr "codeGenArg"
+
+
+cg_bitarr_arg :: DynFlags 
+              -> SrcLoc 
+              -> LVal ArrIdx 
+              -> ArrIdx 
+              -> LengthInfo 
+              -> NumExpr -> Cg ([C.Exp],Cg ())
+cg_bitarr_arg dfs loc lbase astart li ne 
+  | Just {} <- isBitArrByteAligned astart 
+  = do e <- cgDeref dfs loc (GDArr lbase astart li)
+       return ((e : lenArg ne), return ())
+  | otherwise -- non-aligned, will have to create new storage
+  = do new_e <- cgDeref dfs loc (GDArr lbase astart li)
+       cbase <- cgDeref dfs loc lbase
+       let stmt = cgArrWrite_chk ret_ty cbase arr_ty astart li new_e
+       return (new_e : lenArg ne, stmt)
+  where arr_ty = ctDerefExp lbase
+        ret_ty = ctDerefExp (GDArr lbase astart li)
+
+
+
+
+
+
+
+-- **************** leaving this here ...............
+
+
+--  Cg [C.Exp]
+-- codeGenArg dflags e = do
+--     ce   <- codeGenExp dflags e
+--     clen <- case ctExp e of
+--               TArray (Literal l) _ -> return [[cexp|$int:l|]]
+--               TArray (NVar n)    _ -> return [[cexp|$id:n|]]
+--               _                    -> return []
+--     return $ ce : clen
+
+
+
+
+
+-- codeGenArgByRef :: DynFlags -> Exp -> Cg [C.Exp]
+-- codeGenArgByRef dflags e
+--     | isArrayTy (ctExp e) = codeGenArg dflags e
+--     | otherwise
+--     = do { ce <- codeGenExp dflags e
+--          ; case ce of
+--              C.Var (C.Id {}) _
+--               -> do { alloc_as_ptr <- isStructPtrType ety
+--                     ; if alloc_as_ptr || isArrayTy ety
+--                       then return [ [cexp|$ce|] ]
+--                       else return [ [cexp|&$ce|] ]
+--                     }
+--              _otherwise -- A bit of a weird case. Create storage and pass addr of storage
+--               -> do { new_tmp <- freshName "clos_ref_arg" ety Mut
+--                     ; g <- codeGenDeclGroup (name new_tmp) ety
+--                     ; appendDecl g
+--                     ; assignByVal ety ety [cexp|$id:(name new_tmp)|] ce
+--                     ; alloc_as_ptr <- isStructPtrType ety -- Pointer?
+--                     ; if alloc_as_ptr || isArrayTy ety
+--                             -- Already a ptr
+--                        then return [ [cexp| $id:(name new_tmp)  |] ]
+--                             -- Otherwise take address
+--                        else return [ [cexp| & $id:(name new_tmp)|] ]
+--                     }
+--          }
+--     where ety = ctExp e
+
+
+
+
+
+
+
+-- codeGenCall_alloc :: DynFlags 
+--                   -> SrcLoc 
+--                   -> Ty 
+--                   -> GName Ty 
+--                   -> [Exp] -> Cg C.Exp
+-- -- Call function and it is your responsibility to allocate space
+-- codeGenCall_alloc dflags loc retTy nef eargs
+--   = do { is_struct_ptr <- isStructPtrType retTy
+--        ; newNm <- genSym $ name nef ++ "_" ++ getLnNumInStr loc
         
+--        ; let retNewN = toName ("__retcall_" ++ newNm) noLoc retTy Mut
+--              cer     = [cexp|$id:(name retNewN)|]
 
+--        ; unless (retTy == TUnit) $ 
+--            appendCodeGenDeclGroup "calign" retNewN retTy
 
+--        ; codegen_call dflags loc retTy cer nef eargs 
+--        }
 
-codeGenArg :: DynFlags -> Exp -> Cg [C.Exp]
-codeGenArg dflags e = do
-    ce   <- codeGenExp dflags e
-    clen <- case ctExp e of
-              TArray (Literal l) _ -> return [[cexp|$int:l|]]
-              TArray (NVar n)    _ -> return [[cexp|$id:n|]]
-              _                    -> return []
-    return $ ce : clen
+-- codeGenCall_store :: DynFlags
+--                   -> SrcLoc
+--                   -> Ty 
+--                   -> C.Exp
+--                   -> GName Ty
+--                   -> [Exp] -> Cg ()
+-- -- Call function and store its result in the passed in C.Exp
+-- codeGenCall_store dflags loc retTy cer nef eargs
+--   = do { _ <- codegen_call dflags loc retTy cer nef eargs
+--        ; return () }
 
-codeGenArgByRef :: DynFlags -> Exp -> Cg [C.Exp]
-codeGenArgByRef dflags e
-    | isArrayTy (ctExp e) = codeGenArg dflags e
-    | otherwise
-    = do { ce <- codeGenExp dflags e
-         ; case ce of
-             C.Var (C.Id {}) _
-              -> do { alloc_as_ptr <- isStructPtrType ety
-                    ; if alloc_as_ptr || isArrayTy ety
-                      then return [ [cexp|$ce|] ]
-                      else return [ [cexp|&$ce|] ]
-                    }
-             _otherwise -- A bit of a weird case. Create storage and pass addr of storage
-              -> do { new_tmp <- freshName "clos_ref_arg" ety Mut
-                    ; g <- codeGenDeclGroup (name new_tmp) ety
-                    ; appendDecl g
-                    ; assignByVal ety ety [cexp|$id:(name new_tmp)|] ce
-                    ; alloc_as_ptr <- isStructPtrType ety -- Pointer?
-                    ; if alloc_as_ptr || isArrayTy ety
-                            -- Already a ptr
-                       then return [ [cexp| $id:(name new_tmp)  |] ]
-                            -- Otherwise take address
-                       else return [ [cexp| & $id:(name new_tmp)|] ]
-                    }
-         }
-    where ety = ctExp e

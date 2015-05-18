@@ -17,10 +17,7 @@
    permissions and limitations under the License.
 -}
 
-module CgCall
-  ( codeGenCall_alloc
-  , codeGenCall_store
-  ) where
+module CgCall ( cgCall ) where
 
 import Opts
 import AstExpr
@@ -29,16 +26,11 @@ import CgMonad
 import Data.Loc
 import qualified Language.C.Syntax as C
 
+import CgValDom
 
-codeGenCall_alloc :: DynFlags
-                  -> SrcLoc
-                  -> Ty 
-                  -> GName Ty 
-                  -> [Exp] -> Cg C.Exp
-
-codeGenCall_store :: DynFlags
-                  -> SrcLoc
-                  -> Ty 
-                  -> C.Exp
-                  -> GName Ty
-                  -> [Exp] -> Cg ()
+cgCall :: DynFlags 
+       -> SrcLoc
+       -> Ty
+       -> GName Ty -> [(Either (LVal ArrIdx) C.Exp)]
+       -> C.Exp -- ^ Where to store result
+       -> Cg C.Exp
