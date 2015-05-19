@@ -265,9 +265,7 @@ codeGenVal v =
 
 cgInitVal :: Ty -> C.Initializer
 -- ^ Generate an initial value (all zeros) for declarations
-cgInitVal ty
-  | isPtrType ty = [cinit|NULL|]
-  | otherwise    = go ty
+cgInitVal ty = go ty
   where go (TStruct _ [])      = compInit [exprInit [cexp|0|]]
         go (TStruct _ fld_tys) = compInit (map (go . snd) fld_tys)
         go (TArray _ ty_base)  = compInit [go ty_base]
@@ -416,7 +414,7 @@ cgBitArrRead :: C.Exp -> Int -> Int -> C.Exp -> Cg ()
 -- ^ Pre: pos and len are multiples of 8; src, tgt are of type BitArrPtr
 cgBitArrRead src_base pos len tgt
   | len >= 128 
-  = appendStmt [cstm| blink_copy((void *) $tgt, $int:byte_len, (void *) $src);|]
+  = appendStmt [cstm| blink_copy((void *) $tgt, (void *) $src, $int:byte_len);|]
   | otherwise
   = sequence_ $ map (appendStmt . mk_stmt) (zip src_ptrs tgt_ptrs)
   where
@@ -438,11 +436,11 @@ assignByVal t ce1 ce2
 
 asgn_arr :: NumExpr -> Ty -> C.Exp -> C.Exp -> Cg ()
 asgn_arr (Literal n) TBit ce1 ce2
-  = cgBitArrRead ce1 0 (((n+7)`div` 8)*8) ce2
+  = cgBitArrRead ce2 0 (((n+7) `div` 8)*8) ce1
 asgn_arr (NVar n) TBit ce1 ce2
   = appendStmt [cstm|bitArrRead($ce2,0,$id:n,$ce1);|]
 asgn_arr (Literal n) ty ce1 ce2
-  = appendStmt [cstm|blink_copy($ce1, $ce2, $int:(tySizeOf ty));|]
+  = appendStmt [cstm|blink_copy($ce1, $ce2, $int:n * $int:(tySizeOf ty));|]
 asgn_arr (NVar n) ty ce1 ce2
   = appendStmt [cstm|blink_copy($ce1, $ce2, $id:n * $int:(tySizeOf ty));|]
 

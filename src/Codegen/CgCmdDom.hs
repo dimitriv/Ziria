@@ -21,7 +21,7 @@
 
 module CgCmdDom
   ( cgDeref
-  , cgAssign
+  , cgAssign, cgAssignAliasing, lvalAlias
   , squashArrDeref
   , cgArrWrite, cgArrWrite_chk
   ) where
@@ -68,6 +68,24 @@ cgDeref dfs loc d = go (squashArrDeref d)
       where arr_ty = ctDerefExp d0
             ret_ty = ctDerefExp d1
 
+-- In this case the RHS comes from an LVal which 
+-- is aliasing the LHS and so we'd better create new storage.
+cgAssignAliasing :: DynFlags -> SrcLoc -> LVal ArrIdx -> C.Exp -> Cg ()
+cgAssignAliasing dfs loc d crhs_pre = do
+  res <- freshName "anti_alias" lval_ty Mut
+  appendCodeGenDeclGroup (name res) lval_ty ZeroOut
+  let crhs = [cexp| $id:(name res)|]
+  -- copy to fresh storage
+  assignByVal lval_ty crhs crhs_pre
+  cgAssign dfs loc d crhs
+  where lval_ty = ctDerefExp d
+
+lvalAlias :: LVal ArrIdx -> LVal ArrIdx -> Bool
+lvalAlias d1 d2 = (lvalBase d1 == lvalBase d2)
+   where lvalBase (GDVar x) = x
+         lvalBase (GDArr d _ _) = lvalBase d
+         lvalBase (GDProj d _)  = lvalBase d
+
 cgAssign :: DynFlags -> SrcLoc -> LVal ArrIdx -> C.Exp -> Cg ()
 cgAssign dfs loc d crhs = go (squashArrDeref d)
   where
@@ -108,10 +126,13 @@ cgArrWrite_chk :: Ty         -- ^ return type
                -> Cg ()      -- ^ ce[aidx...aidx+rng-1] := rhs
 -- | Bit arrays singletons
 cgArrWrite_chk TBit ce aidx LISingleton crhs = 
-  appendStmt $ [cstm| bitRead($ce,$(cexpOfArrIdx aidx),& &($crhs));|]
+  appendStmt $ [cstm| bitWrite($ce,$(cexpOfArrIdx aidx),$crhs);|]
 -- | Bit arrays length reads 
 cgArrWrite_chk (TArray _ TBit) ce aidx (LILength l) crhs
   | Just cidx <- isBitArrByteAligned aidx
+  , l `mod` 8 == 0  
+    -- assignByVal calls bitArrRead, which in turn can overwrite (see bit.c)
+    -- hence we can call this fast path only when the length is aligned too.
   , let clhs = [cexp| & $ce[$cidx]|]
   = assignByVal (TArray (Literal l) TBit) clhs crhs
   | otherwise

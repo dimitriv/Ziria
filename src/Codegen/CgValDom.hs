@@ -207,13 +207,14 @@ cgArrRead_chk TBit carr start_idx LISingleton = do
     [cstm| bitRead($carr,$(cexpOfArrIdx start_idx),& $id:(name res)); |]
   return [cexp| $id:(name res) |]
 
-cgArrRead_chk TBit carr start_idx (LILength l)
+cgArrRead_chk (TArray _ TBit) carr start_idx (LILength l)
   | Just cidx <- isBitArrByteAligned start_idx 
   = return [cexp| & $carr[$cidx]|]
   | otherwise 
   = do let res_ty = TArray (Literal l) TBit
        res <- freshName "bitarrres" res_ty Mut
        appendCodeGenDeclGroup (name res) res_ty ZeroOut
+       -- NB: bitArrRead() may overwrite to the next byte boundary
        appendStmt [cstm| bitArrRead($carr,$ce,$int:l,$id:(name res)); |]
        return [cexp| $id:(name res) |]
   where ce = cexpOfArrIdx start_idx

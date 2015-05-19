@@ -160,8 +160,18 @@ cgEval dfs e = go (unExp e) where
 
   go (EAssign elhs erhs) = do
      clhs <- cgEvalLVal dfs elhs
-     crhs <- cgEvalRVal dfs erhs
-     cgAssign dfs loc clhs crhs
+     mrhs <- cgEval dfs erhs
+     case mrhs of 
+       Left rlval 
+         | lvalAlias clhs rlval -> do 
+             crhs <- cgDeref dfs loc rlval
+             cgAssignAliasing dfs loc clhs crhs
+         | otherwise -> do 
+             crhs <- cgDeref dfs loc rlval
+             cgAssign dfs loc clhs crhs
+       Right crhs -> cgAssign dfs loc clhs crhs
+     -- crhs <- cgEvalRVal dfs erhs
+     -- cgAssign dfs loc clhs crhs
      Right <$> return [cexp|UNIT|]
 
   go (EArrWrite earr ei rng erhs) 

@@ -149,7 +149,8 @@ codeGenProgram :: DynFlags                -- Flags
 codeGenProgram dflags shared_ctxt
                tid_cs bufTys (in_ty,yld_ty)
   = withModuleName module_name $
-    do { (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
+    do { codeGenContexts >>= appendTopDecls
+       ; (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
            do { forM tid_cs $ \(tid,c) -> codeGenThread dflags tid c
               ; if pipeline_flag then
                   do { -- Just to make the SORA code happy we need
