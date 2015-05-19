@@ -4,12 +4,15 @@ var y : arr[24] bit;
     (x1 : arr[12] bit) <- takes 12;
     (x2 : arr[12] bit) <- takes 12;
     do {
-      --println x1;
-      --println x2;
+      println "x1=", x1;
+      println "x2=", x2;
+      println "y(a) =", y;
       y[0, 12] := x1;
+      println "y(b) =", y;
       y[12, 12] := x2;
+      println "y(c) =", y;
       y[0, 12] := x1;
-      --println y;
+      println y;
     };
     emits y;
   }
