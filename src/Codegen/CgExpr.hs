@@ -19,17 +19,7 @@
 {-# LANGUAGE  QuasiQuotes, GADTs, ScopedTypeVariables, RecordWildCards #-}
 {-# OPTIONS_GHC -fwarn-unused-binds -Werror #-}
 
-module CgExpr
-  ( codeGenExp
-  -- , codeGenArrRead
-  -- , codeGenArrWrite
-  -- , codeGenParams
-  -- , codeGenParamsByRef
-  -- , codeGenGlobalDeclsOnlyAlg
-  -- , codeGenGlobalInitsOnly
-  -- , ArrIdx ( .. )
-
-  ) where
+module CgExpr ( codeGenExp ) where
 
 import Opts
 import AstExpr
@@ -114,7 +104,7 @@ cgIf :: DynFlags -> C.Exp -> Cg C.Exp -> Cg C.Exp -> Cg C.Exp
 cgIf _dfs ccond act1 act2 = do
    condvar <- genSym "__c"
    appendDecl [cdecl| int $id:condvar;|]
-   appendStmt [cstm|  $id:condvar = ccond;|]
+   appendStmt [cstm|  $id:condvar = $ccond;|]
 
    (e2_decls, e2_stmts, ce2) <- inNewBlock act1
    (e3_decls, e3_stmts, ce3) <- inNewBlock act2
@@ -297,28 +287,4 @@ cgEvalArg dfs (GArgTy _ Mut, earg) = Left <$> cgEvalLVal dfs earg
 cgEvalArg dfs (_, earg) = Right <$> cgEvalRVal dfs earg
  
 
-
--- ------------------------------------------------------------------------------
--- -- | Declarations and Globals
--- ------------------------------------------------------------------------------
-
--- -- ^ Only declare globals
--- codeGenGlobalDeclsOnlyAlg :: DynFlags
---                           -> [(EId, Maybe Exp)]
---                           -> Cg [C.Definition]
--- codeGenGlobalDeclsOnlyAlg dfs = mapM $ \(nm, me) ->
---   codeGenDeclDef (name nm) (nameTyp nm)
-
--- -- ^ Only initialize globals
--- codeGenGlobalInitsOnly :: DynFlags -> [MutVar] -> Cg ()
--- codeGenGlobalInitsOnly dfs defs = mapM_ go defs
---   where
---     go :: MutVar -> Cg ()
---     go MutVar{..} =
---       case mutInit of
---         Just e -> do
---           ce <- codeGenExp dfs e
---           assignByVal (ctExp e) (ctExp e) [cexp|$id:(name mutVar)|] ce
---         Nothing ->
---           return ()
 

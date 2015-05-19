@@ -57,7 +57,12 @@ import CgValDom
 import CgCmdDom
 import Utils
 
-
+-- TODO: Argument treatment is not yet quite right, because
+-- of aliasing. E.g.
+--     f (var x, y) 
+-- Call site:  
+--     f (x, x) 
+-- 
 cgCall :: DynFlags 
        -> SrcLoc
        -> Ty
