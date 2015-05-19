@@ -40,6 +40,7 @@ module CgMonad
   , collectStmts_
 
   , inAllocFrame
+  , inAllocFrame_mb
 
   , collect
 
@@ -509,6 +510,10 @@ inAllocFrame action
        ; appendStmt
            [cstm| wpl_restore_free_idx($id:heap_context, $id:idx); |]
        ; return x }
+
+inAllocFrame_mb :: Bool -> Cg a -> Cg a 
+inAllocFrame_mb b = if b then inAllocFrame else id
+
 
 collectDefinitions :: Cg a -> Cg ([C.Definition], a)
 collectDefinitions m = do

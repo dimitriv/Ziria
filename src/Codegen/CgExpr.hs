@@ -71,34 +71,44 @@ import CgCall
 cgLetBind :: DynFlags -> SrcLoc -> EId -> Exp -> Cg a -> Cg a
 cgLetBind dfs loc x e m = do
   ce <- cgEvalRVal dfs e
-  x_binding <- case unExp e of 
+  case unExp e of 
     -- Reuse allocated space
-    EValArr {} -> return ce
+    EValArr {} -> extendVarEnv [(x,ce)] m
     _          -> do 
       x_name <- genSym $ name x ++ getLnNumInStr loc
       let ty = ctExp e
+      let wpl_alloca = shouldAllocAsPtr ty
       appendCodeGenDeclGroup x_name ty ZeroOut 
-      let cx = [cexp| $id:x_name|]
-      assignByVal ty cx ce
-      return cx
-  extendVarEnv [(x,x_binding)] m
+      (if wpl_alloca then inAllocFrame else id) $ do 
+         let cx = [cexp| $id:x_name|]
+         assignByVal ty cx ce
+         extendVarEnv [(x,cx)] m
 
 cgMutBind :: DynFlags -> SrcLoc -> EId -> Maybe Exp -> Cg a -> Cg a
 cgMutBind dfs loc x mbe m = do
-  x_binding <- case mbe of 
-    Just e@(MkExp (EValArr {}) _ _) -> cgEvalRVal dfs e
+  case mbe of 
+    Just e@(MkExp (EValArr {}) _ _) -> do 
+        x_binding <- cgEvalRVal dfs e
+        extendVarEnv [(x,x_binding)] m
+
     Just e -> do 
       x_name <- genSym $ name x ++ getLnNumInStr loc
       let ty = ctExp e
-      appendCodeGenDeclGroup x_name ty ZeroOut 
-      let cx = [cexp| $id:x_name|]
-      cgEvalRVal dfs e >>= assignByVal ty cx
-      return cx
+      ce <- cgEvalRVal dfs e
+      inAllocFrame_mb (shouldAllocAsPtr ty) $ do 
+        appendCodeGenDeclGroup x_name ty ZeroOut 
+        let cx = [cexp| $id:x_name|]
+        assignByVal ty cx ce
+        let x_binding = cx
+        extendVarEnv [(x,x_binding)] m
+
     Nothing -> do
       x_name <- genSym $ name x ++ getLnNumInStr loc
-      appendCodeGenDeclGroup x_name (nameTyp x) ZeroOut 
-      return [cexp| $id:x_name|]
-  extendVarEnv [(x,x_binding)] m
+      inAllocFrame_mb (shouldAllocAsPtr $ nameTyp x) $ do
+        appendCodeGenDeclGroup x_name (nameTyp x) ZeroOut
+        let x_binding = [cexp| $id:x_name|]
+        extendVarEnv [(x,x_binding)] m
+
 
 cgIf :: DynFlags -> C.Exp -> Cg C.Exp -> Cg C.Exp -> Cg C.Exp
 cgIf _dfs ccond act1 act2 = do

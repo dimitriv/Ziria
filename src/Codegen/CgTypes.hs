@@ -47,6 +47,7 @@ module CgTypes ( bwBitWidth
 
                , appendDeclPkg
                , appendTopDeclPkg
+               , shouldAllocAsPtr
 
 
                -- , codeGenTy_qual
