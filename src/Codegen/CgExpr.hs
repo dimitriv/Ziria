@@ -280,8 +280,10 @@ cgEval dfs e = go (unExp e) where
 
 cgCall_aux :: DynFlags -> SrcLoc -> Ty -> EId -> [Exp] -> Cg C.Exp
 cgCall_aux dfs loc res_ty fn eargs = do 
-  let (TArrow funtys _funres) = nameTyp fn
-  let tys_args = zip funtys eargs
+  let funtys = map ctExp eargs
+  let (TArrow formal_argtys _) = nameTyp fn
+  let argfuntys = zipWith (\(GArgTy _ m) t -> GArgTy t m) formal_argtys funtys
+  let tys_args = zip argfuntys eargs
   retn <- freshName "ret" res_ty Mut
   let cretn = [cexp| $id:(name retn)|]
   appendCodeGenDeclGroup (name retn) res_ty ZeroOut
@@ -289,7 +291,7 @@ cgCall_aux dfs loc res_ty fn eargs = do
   ceargs <- mapM (cgEvalArg dfs) tys_args
 
   extendVarEnv [(retn,cretn)] $
-     CgCall.cgCall dfs loc res_ty fn ceargs cretn
+     CgCall.cgCall dfs loc res_ty argfuntys fn ceargs cretn
 
 
 cgEvalArg :: DynFlags -> (ArgTy, Exp) -> Cg (Either (LVal ArrIdx) C.Exp)

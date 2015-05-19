@@ -66,15 +66,16 @@ import Utils
 cgCall :: DynFlags 
        -> SrcLoc
        -> Ty
-       -> GName Ty -> [(Either (LVal ArrIdx) C.Exp)]
-       -> C.Exp -- ^ Where to store result
+       -> [ArgTy]  -- ^ instantiated argument types  
+       -> GName Ty 
+       -> [(Either (LVal ArrIdx) C.Exp)]
+       -> C.Exp    -- ^ Where to store result
        -> Cg C.Exp
-cgCall dfs loc retTy fName eargs cer = do
+cgCall dfs loc retTy argtys fName eargs cer = do
   (real_f_name, closure_params) <- lookupExpFunEnv fName
   let is_external = isPrefixOf "__ext" (name real_f_name)
     
   let cef = [cexp|$id:(name real_f_name)|]
-  let (TArrow argtys _) = nameTyp fName
 
   -- Standard function arguments, disable bounds checks when external calls
   (ceargs,fixup_bitarrs) <- withDisabledBCWhen is_external $ 

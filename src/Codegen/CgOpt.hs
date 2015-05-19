@@ -916,8 +916,10 @@ codeGenComp dflags comp k =
             yv_init = cgInitVal yTy
             ydecl | (b && not (isArrayTy yTy)) -- Not already a pointer
                   = [cdecl| $ty:yTy_c * $id:new_yhval = NULL; |]
+                  | isArrayTy yTy
+                  = [cdecl| $ty:yTy_c $id:new_yhval = NULL; |]
                   | otherwise
-                  = [cdecl| $ty:yTy_c $id:new_yhval = $init:yv_init; |]
+                  = [cdecl| $ty:yTy_c $id:new_yhval = $init:yv_init;|]
 
         appendDecl ydecl
 

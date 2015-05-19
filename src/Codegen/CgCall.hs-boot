@@ -31,6 +31,7 @@ import CgValDom
 cgCall :: DynFlags 
        -> SrcLoc
        -> Ty
+       -> [ArgTy]
        -> GName Ty -> [(Either (LVal ArrIdx) C.Exp)]
-       -> C.Exp -- ^ Where to store result
+       -> C.Exp
        -> Cg C.Exp
