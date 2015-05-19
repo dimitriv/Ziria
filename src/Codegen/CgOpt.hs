@@ -479,7 +479,7 @@ codeGenComp dflags comp k =
                   ; appendDeclPkg =<<
                        codeGenDeclVolGroup mit_st tint ZeroOut
                   ; appendDeclPkg =<<
-                       codeGenDeclVolGroup buf (TArray (Literal i2) bty) ZeroOut
+                       codeGenDeclGroup buf (TArray (Literal i2) bty) ZeroOut
 
                     -- trivial tick()
                   ; appendLabeledBlock (tickNmOf prefix) $ do
