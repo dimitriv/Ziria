@@ -16,7 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# OPTIONS_GHC -Wall -Wwarn #-}
+{-# OPTIONS_GHC -Wall -Werror #-}
 {-# LANGUAGE ScopedTypeVariables, RecordWildCards, 
     GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes, DeriveGeneric #-}
 module PassComp (
@@ -775,8 +775,6 @@ inline_mutable loc nm dexpr = do
            idx <- newPassFoldGName "idx" (ctExp estart) loc Imm
            return (bnds `mappend` inlAsLetBound idx estart,
                      eArrRead loc simpl_de (eVar loc idx) li)
-    lift_idx _ = error "inline_mutable" 
-        -- All the rest are *immutable* (values)
 
 
 inlineParam :: GName Ty -> Exp -> RwM InlineData

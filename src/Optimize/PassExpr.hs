@@ -16,7 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# OPTIONS_GHC -Wall -Wwarn #-}
+{-# OPTIONS_GHC -Wall -Werror #-}
 {-# LANGUAGE ScopedTypeVariables, RecordWildCards, 
     GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes, DeriveGeneric #-}
 module PassExpr (
@@ -40,9 +40,6 @@ import Opts
 import PassFoldDebug
 import PpComp ()
 import PpExpr ()
-
-import Outputable
-import Text.PrettyPrint.HughesPJ
 
 import PassFoldM
 
