@@ -77,12 +77,10 @@ cgLetBind dfs loc x e m = do
     _          -> do 
       x_name <- genSym $ name x ++ getLnNumInStr loc
       let ty = ctExp e
-      let wpl_alloca = shouldAllocAsPtr ty
-      appendCodeGenDeclGroup x_name ty ZeroOut 
-      (if wpl_alloca then inAllocFrame else id) $ do 
-         let cx = [cexp| $id:x_name|]
-         assignByVal ty cx ce
-         extendVarEnv [(x,cx)] m
+      appendCodeGenDeclGroup x_name ty ZeroOut   
+      let cx = [cexp| $id:x_name|]
+      assignByVal ty cx ce
+      extendVarEnv [(x,cx)] m
 
 cgMutBind :: DynFlags -> SrcLoc -> EId -> Maybe Exp -> Cg a -> Cg a
 cgMutBind dfs loc x mbe m = do
@@ -95,19 +93,17 @@ cgMutBind dfs loc x mbe m = do
       x_name <- genSym $ name x ++ getLnNumInStr loc
       let ty = ctExp e
       ce <- cgEvalRVal dfs e
-      inAllocFrame_mb (shouldAllocAsPtr ty) $ do 
-        appendCodeGenDeclGroup x_name ty ZeroOut 
-        let cx = [cexp| $id:x_name|]
-        assignByVal ty cx ce
-        let x_binding = cx
-        extendVarEnv [(x,x_binding)] m
+      appendCodeGenDeclGroup x_name ty ZeroOut 
+      let cx = [cexp| $id:x_name|]
+      assignByVal ty cx ce
+      let x_binding = cx
+      extendVarEnv [(x,x_binding)] m
 
     Nothing -> do
       x_name <- genSym $ name x ++ getLnNumInStr loc
-      inAllocFrame_mb (shouldAllocAsPtr $ nameTyp x) $ do
-        appendCodeGenDeclGroup x_name (nameTyp x) ZeroOut
-        let x_binding = [cexp| $id:x_name|]
-        extendVarEnv [(x,x_binding)] m
+      appendCodeGenDeclGroup x_name (nameTyp x) ZeroOut
+      let x_binding = [cexp| $id:x_name|]
+      extendVarEnv [(x,x_binding)] m
 
 
 cgIf :: DynFlags -> C.Exp -> Cg C.Exp -> Cg C.Exp -> Cg C.Exp
@@ -209,7 +205,7 @@ cgEval dfs e = go (unExp e) where
       Left lval -> Left  <$> return (GDProj lval f)
       Right ce  -> Right <$> return (cgStrProj (ctExp e) ce (ctExp e0) f)
 
-  go (ELet x _fi e1 e2)
+  go elet@(ELet x _fi e1 e2)
      = cgLetBind dfs loc x e1 (cgEvalRVal dfs e2 >>= (return . Right))
 
   go (ELetRef x mb_e1 e2)

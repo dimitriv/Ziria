@@ -39,8 +39,9 @@ module CgMonad
   , collectStmts
   , collectStmts_
 
-  , inAllocFrame
-  , inAllocFrame_mb
+  , inAllocFrame, isInsideAllocFrame
+  , getGlobalWplAllocated
+  , addGlobalWplAllocated
 
   , collect
 
@@ -303,6 +304,9 @@ data CgEnv = CgEnv
       -- | This is to be added to global variables, to allow us to link
       -- multiple Ziria modules in the same C project
     , moduleName :: String
+
+      -- Yes means we run no danger of leaking, someone will free memory
+    , inAllocatorFrame :: Bool 
     }
 
 emptyEnv :: GS.Sym -> CgEnv
@@ -315,6 +319,7 @@ emptyEnv sym =
           , symEnv     = sym
           , disableBC  = False
           , moduleName = ""
+          , inAllocatorFrame = False 
           }
 
 
@@ -351,10 +356,13 @@ data CgState = CgState {
       --
       -- if > than this, then allocate on the heap
     , structDefs :: [TyName]
+
+    , globalWplAllocated :: [C.Stm]
+
     }
   deriving Show
 
-emptyState = CgState [] 0 cMAX_STACK_ALLOC [] []
+emptyState = CgState [] 0 cMAX_STACK_ALLOC [] [] []
 
 cMAX_STACK_ALLOC :: Int
 cMAX_STACK_ALLOC = 32 * 1024
@@ -499,20 +507,21 @@ inNewBlock_ m = do
     return (decls, stms)
 
 -- | Execute this action in an allocation frame. Use with moderation!
-inAllocFrame :: Cg a -> Cg a
-inAllocFrame action
+inAllocFrame :: SrcLoc -> Cg a -> Cg a
+inAllocFrame _origin action
   = do { idx <- freshVar "mem_idx"
        ; heap_context <- getHeapContext
        ; appendDecl [cdecl| unsigned int $id:idx; |]
        ; appendStmt
            [cstm| $id:idx = wpl_get_free_idx($id:heap_context); |]
-       ; x <- action
+       ; x <- local (\rho -> rho { inAllocatorFrame = True }) action
        ; appendStmt
            [cstm| wpl_restore_free_idx($id:heap_context, $id:idx); |]
        ; return x }
 
-inAllocFrame_mb :: Bool -> Cg a -> Cg a 
-inAllocFrame_mb b = if b then inAllocFrame else id
+isInsideAllocFrame :: Cg Bool
+isInsideAllocFrame = asks inAllocatorFrame
+
 
 
 collectDefinitions :: Cg a -> Cg ([C.Definition], a)
@@ -569,6 +578,13 @@ getLUTHashes
 setLUTHashes :: [(Int,LUTGenInfo)] -> Cg ()
 setLUTHashes hs
   = modify $ \s -> s { lutHashes = hs }
+
+getGlobalWplAllocated :: Cg [C.Stm]
+getGlobalWplAllocated = gets globalWplAllocated
+
+addGlobalWplAllocated :: C.Stm -> Cg ()
+addGlobalWplAllocated stm
+  = modify $ \s -> s { globalWplAllocated = stm : (globalWplAllocated s) }
 
 
 newHeapAlloc :: Cg ()

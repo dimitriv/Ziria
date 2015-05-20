@@ -309,12 +309,34 @@ arrIdxCStack = go
 cgDeclAllocPtr :: Quals -> CVar -> Ty -> Cg (DeclPkg C.InitGroup)
 -- ^ Declare and heap-allocate (for large types or dynamic arrays)
 cgDeclAllocPtr quals v ty = do 
+  -- Are we already inside an allocator's frame?
+  inside_alloc_ctx <- isInsideAllocFrame
   newHeapAlloc
   heap_ctx <- getHeapContext
-  let ig   = [cdecl| $ty:qty *$id:v = NULL;|]
-      stmt = [cstm| $id:v = ($ty:nonqty *) 
-               wpl_alloca($id:heap_ctx, $exp:(tySizeOf_C ty));|]
-  return $ DeclPkg ig [stmt]
+  -- If yes then proceed as usual -- guaranteed no memory leak
+  if inside_alloc_ctx then do
+     let ig   = [cdecl| $ty:qty *$id:v = NULL;|]
+         stmt = [cstm| $id:v = ($ty:nonqty *) 
+                  wpl_alloca($id:heap_ctx, $exp:(tySizeOf_C ty));|]
+     return $ DeclPkg ig [stmt]
+  else 
+     -- | This is a naked "global" wpl allocation
+     -- ^ hence we can't be allocating a dynamic array whose length is 
+     -- ^ say the argument of a function. Here is the plan then: 
+     -- ^   (i) create global storage + allocation stm in wpl_global_init()
+     -- ^   (ii) declare variable and set it to point to storage.
+     do glob_store <- freshVar ("global_storage_" ++ v)
+        newHeapAlloc
+        -- Declare global storage
+        appendTopDecl [cdecl| $ty:qty *$id:glob_store = NULL;|]
+        -- Emit allocation code in wpl_global_init
+        addGlobalWplAllocated [cstm| $id:glob_store = ($ty:nonqty *) 
+              wpl_alloca($id:heap_ctx, $exp:(tySizeOf_C ty));|]
+        -- Emit declaration and just set pointer 
+        let ig   = [cdecl| $ty:qty *$id:v = NULL;|]
+            stmt = [cstm| $id:v = $id:glob_store;|]
+        return $ DeclPkg ig [stmt]
+
   where qty    = arrBaseCType (Just quals) ty 
         nonqty = arrBaseCType Nothing ty
 

@@ -91,21 +91,21 @@ cgCall dfs loc retTy argtys fName eargs cer = do
 
   case retTy of
     TArray li _ty
-      -> when_ (not is_external) inAllocFrame $
+      -> when_ (not is_external) (inAllocFrame loc) $
          appendStmt [cstm|$(cef)($cer, $args:(lenArg li ++ cargs));|]
 
         -- See CgFun.hs
     _ | isStructPtrType retTy
-      -> when_ (not is_external) inAllocFrame $
+      -> when_ (not is_external) (inAllocFrame loc) $
          if is_external 
            then appendStmt [cstm| *($cer) = $(cef)($args:cargs);|]
            else appendStmt [cstm|$(cef)($cer, $args:cargs);|]
     TUnit
-      -> when_ (not is_external) inAllocFrame $ 
+      -> when_ (not is_external) (inAllocFrame loc) $ 
          appendStmt [cstm| $(cef)($args:cargs);|]
 
     _otherwise
-     -> when_ (not is_external) inAllocFrame $ 
+     -> when_ (not is_external) (inAllocFrame loc) $ 
         appendStmt [cstm| $cer = $(cef)($args:cargs);|]
 
   -- Fixup unaligned bit arrays!

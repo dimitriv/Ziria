@@ -176,7 +176,9 @@ codeGenProgram dflags shared_ctxt
           -- Finally emit wpl_global_init()
        ; lut_init_stms <- getLUTHashes >>=
                               (return . map (lgi_lut_gen . snd))
-       ; codeGenWPLGlobalInit (lut_init_stms ++ moreinitstms) module_name
+
+       ; allocation_stmts <- getGlobalWplAllocated
+       ; codeGenWPLGlobalInit (allocation_stmts ++ lut_init_stms ++ moreinitstms) module_name
        }
 
   where
