@@ -942,14 +942,14 @@ interpret e = guessIfUnevaluated (go . unExp) e
             LISingleton ->
               if 0 <= i && i < SA.size elems
                 then evaldFull $ SA.unsafeReadArray i elems
-                else throwError "Out of bounds"
+                else throwError ("Out of bounds" ++ show (expLoc e))
             LILength len ->
               if 0 <= i && i + len <= SA.size elems
                 then do
                   let slice = ValueArray (SA.unsafeSlice i len elems)
                   evaldFull $ MkValue slice eloc
                 else
-                  throwError "Out of bounds"
+                  throwError ("Out of bounds" ++ show (expLoc e))
             LIMeta _ ->
               error "Unexpected meta variable"
         -- "Full" slice (capturing the entire array)
