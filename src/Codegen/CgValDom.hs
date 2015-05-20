@@ -89,7 +89,9 @@ cgUnOp _target_ty (Cast target_ty) ce src_ty
       (TDouble, TInt _)  -> [cexp|(double) $ce|]
       (TInt bw, TDouble) -> [cexp|($ty:(intty bw)) $ce |]
       (TInt bw, TInt _)  -> [cexp|($ty:(intty bw)) $ce |]
-
+      (TInt bw, TArray _ TBit) -> [cexp| * ($ty:(inttyptr bw)) $ce |]
+     -- [cexp| *  (($ty:(intty bw))*) $ce |]
+      (TArray _ TBit, TInt _) -> [cexp| ($ty:(namedCType "BitArrPtr")) &$ce|]
       -- | For complex types we must emit a proper function, defined 
       --   in csrc/numerics.h
       (TStruct tn _flds, TStruct sn _flds')
@@ -98,6 +100,7 @@ cgUnOp _target_ty (Cast target_ty) ce src_ty
          -> [cexp|$id:castfun($ce)|]
       (_,_) -> panicStr "cgUnOp: invalid cast!"
   where intty bw = namedCType (cgTIntName bw) 
+        inttyptr bw = [cty| $ty:(intty bw) *|]
 
 cgBinOp :: Ty            -- ^ type of (BinOp op ce1 ce2)
         -> BinOp

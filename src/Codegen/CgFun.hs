@@ -252,6 +252,7 @@ cgFunDefined dflags csp
   -- TODO: do we need to do anything special with the lenvars?
   (cdecls, cstmts, cbody) <-
      inNewBlock $
+     pushAllocFrame $ 
      extendVarEnv (zip closureEnv closureParams_cbinds) $ 
      extendVarEnv (zip (retParamEnv ++ params) actualParams_cbinds)$ 
      codeGenExp dflags body'

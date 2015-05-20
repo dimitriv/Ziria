@@ -66,21 +66,22 @@ import Analysis.RangeAnal
 
 import Data.Maybe ( isJust )
 
+import Utils ( assert )
 
 {------------------------------------------------------------------
   Bitwidths of various types needed for LUT
 -------------------------------------------------------------------}
 
-tyBitWidth :: Monad m => Ty -> m Int
+tyBitWidth :: Monad m => Ty -> m Integer
 -- | This gives the /precise/ bitwidth of a type but the actual bit
 -- width may be bigger, e.g. a Bit is declared as unsigned char, and
 -- a bit array of 6 bits is a 1-element byte array.
 tyBitWidth TUnit                   = return 0
 tyBitWidth TBit                    = return 1 -- NB not 8
 tyBitWidth TBool                   = return 1 -- NB not 8
-tyBitWidth (TInt bw)               = return $ bwBitWidth bw
+tyBitWidth (TInt bw)               = return $ fromIntegral $ bwBitWidth bw
 tyBitWidth TDouble                 = return 64
-tyBitWidth (TArray (Literal n) ty) = tyBitWidth ty >>= \w -> return (n*w)
+tyBitWidth (TArray (Literal n) ty) = tyBitWidth ty >>= \w -> return (fromIntegral n * w)
 tyBitWidth t@(TStruct tn _flds)
   | tn == complexTyName   = return 64 -- NB: platform-dependent
   | tn == complex8TyName  = return 16 -- but ok with GCC and VS in
@@ -93,7 +94,7 @@ tyBitWidth t@(TStruct tn _flds)
 tyBitWidth ty
   = fail $ "Cannot calculate bit width of type " ++ show ty
 
-tyBitWidth_ByteAlign :: Monad m => Ty -> m Int
+tyBitWidth_ByteAlign :: Monad m => Ty -> m Integer
 -- | Similar version but overshoots to align to byte boundaries
 tyBitWidth_ByteAlign ty = do 
   w <- tyBitWidth ty
@@ -106,9 +107,9 @@ tyBitWidth_ByteAlign ty = do
 
 -- | LUT statistics
 data LUTStats = LUTStats { 
-     lutInBitWidth      :: Int       -- ^ Index bitwidth
-   , lutOutBitWidth     :: Int       -- ^ Total output bitwidth (contains result!)
-   , lutResultBitWidth  :: Int       -- ^ Result bitwidth
+     lutInBitWidth      :: Integer   -- ^ Index bitwidth
+   , lutOutBitWidth     :: Integer   -- ^ Total output bitwidth (contains result!)
+   , lutResultBitWidth  :: Integer   -- ^ Result bitwidth
    , lutTableSize       :: Integer   -- ^ Size needed (in bytes)
    , lutVarUsePkg       :: VarUsePkg -- ^ Var use info
 
@@ -142,6 +143,11 @@ calcLUTStats :: DynFlags
              -> Exp -> IO (Either Doc LUTStats)
 calcLUTStats dflags e = runErrorT $ do
   pkg <- inOutVars dflags e
+  
+  verbose dflags $ vcat [ text "-- calcLUTStats --"
+                        , ppr e
+                        , pprVarUsePkg pkg ]
+
   -- Input (LUT index) bitwidth
   inBitWidth <- inVarsBitWidth pkg
   
@@ -172,12 +178,13 @@ calcLUTStats dflags e = runErrorT $ do
              }
   where
     -- | How many bytes will this LUT take
-    lutBytes :: Int     -- ^ Input width  (in bits)
-             -> Int     -- ^ Output width (in bits)
+    lutBytes :: Integer -- ^ Input width  (in bits)
+             -> Integer -- ^ Output width (in bits)
              -> Integer -- ^ Table size   (in bytes)
     lutBytes inw outw =
       -- | num entries * bytes per entry
-      2^(fromIntegral inw :: Integer) * ((fromIntegral outw + 7) `div` 8)
+      assert "lutBytes" (inw >= 0) $
+      (2^(fromIntegral inw :: Integer)) * ((fromIntegral outw + 7) `div` 8)
 
     -- | Does this expression return a variable? 
     expResultVar :: Exp -> Maybe EId
@@ -210,7 +217,7 @@ mIN_OP_COUNT :: Int
 mIN_OP_COUNT = 5
 
 shouldLUT :: DynFlags 
-          -> Int     -- ^ LUT output bitwidth
+          -> Integer  -- ^ LUT output bitwidth
           -> Integer -- ^ LUT total size in bytes
           -> Exp -> Either String Bool
 shouldLUT dflags lut_outbitwidth lut_tablesize e = flip evalLM s0 $ do
@@ -361,21 +368,21 @@ is 2^inputwidth * (outputwidth / 8).
 ----------------------------------------------------------------------}
 
 -- | Output variables bitwidth. NB: byte-aligned!
-outVarsBitWidth :: (Functor m, Monad m) => VarUsePkg -> m Int
+outVarsBitWidth :: (Functor m, Monad m) => VarUsePkg -> m Integer
 outVarsBitWidth pkg = outvars_bitwidth (vu_outvars pkg)
 
-outVarBitWidth :: (Functor m, Monad m) => EId -> m Int 
+outVarBitWidth :: (Functor m, Monad m) => EId -> m Integer
 -- | NB: Includes the mask width!
 outVarBitWidth = outvar_bitwidth 
 
-outvar_bitwidth :: (Functor m, Monad m) => EId -> m Int
+outvar_bitwidth :: (Functor m, Monad m) => EId -> m Integer
 outvar_bitwidth x = go (nameTyp x) x
   where go t@(TArray {})  x = double <$> tyBitWidth_ByteAlign t
         go t@(TStruct {}) x = double <$> tyBitWidth_ByteAlign t
         go t otherwise      = tyBitWidth_ByteAlign t
         double n = 2*n
 
-outVarMaskWidth :: Ty -> Maybe Int
+outVarMaskWidth :: Ty -> Maybe Integer
 -- | Original type of variable, return the width 
 -- of the mask if this type is mask-able.
 outVarMaskWidth t@(TArray {})  = tyBitWidth_ByteAlign t
@@ -383,7 +390,7 @@ outVarMaskWidth t@(TStruct {}) = tyBitWidth_ByteAlign t
 outVarMaskWidth t              = Nothing
 
 
-outvars_bitwidth :: (Functor m, Monad m) => [EId] -> m Int
+outvars_bitwidth :: (Functor m, Monad m) => [EId] -> m Integer
 outvars_bitwidth vartys = do
   sizes <- mapM outvar_bitwidth vartys
   return $ sum sizes
@@ -394,22 +401,26 @@ outvars_bitwidth vartys = do
 ----------------------------------------------------------------------}
 
 -- | Input variables bitwidth. NB: densely-packed!
-inVarsBitWidth :: (Functor m, Monad m) => VarUsePkg -> m Int
+inVarsBitWidth :: (Functor m, Monad m, MonadIO m) => VarUsePkg -> m Integer
 inVarsBitWidth pkg = invars_bitwidth pkg (vu_invars pkg)
 
-inVarBitWidth :: (Functor m, Monad m) => VarUsePkg -> EId -> m Int
+inVarBitWidth :: (Functor m, Monad m, MonadIO m) => VarUsePkg -> EId -> m Integer
 inVarBitWidth pkg v = invar_bitwidth pkg v
 
-invars_bitwidth :: (Functor m, Monad m) => VarUsePkg -> [EId] -> m Int
+invars_bitwidth :: (Functor m, MonadIO m, Monad m) => VarUsePkg -> [EId] -> m Integer
 invars_bitwidth pkg vartys = do 
   sizes <- mapM (invar_bitwidth pkg) vartys
+  liftIO $ mapM (putStrLn . show) (zip vartys sizes)
   return (sum sizes)
 
-invar_bitwidth :: (Functor m, Monad m) => VarUsePkg -> EId -> m Int
+invar_bitwidth :: (Functor m, Monad m, MonadIO m) => VarUsePkg -> EId -> m Integer
 invar_bitwidth pkg v
    -- | Integers in known range
   | Just (RInt (IRng l h)) <- neLookup v $ vu_ranges pkg
-  = return (intLog2 (max (abs l) (abs h)))
+  = do liftIO $ putStrLn ("Found range for variable: " ++ show v)
+       liftIO $ putStrLn ("Low:  " ++ show l)
+       liftIO $ putStrLn ("High: " ++ show h)
+       return (intLog2 (max (abs l) (abs h)))
 
   -- | Array variables in known input range
   | Just (_,w) <- inArrSliceBitWidth pkg v
@@ -423,25 +434,25 @@ invar_bitwidth pkg v
   = tyBitWidth (nameTyp v)
 
 
-intLog2 :: Integer -> Int
+intLog2 :: Integer -> Integer
 intLog2 ix = ceiling (logBase 2 dx + 1)
   where dx :: Double
         dx = fromIntegral ix
 
 -- | Input array slice? 
-inArrSlice :: VarUsePkg -> EId -> Maybe (Int,Int)
+inArrSlice :: VarUsePkg -> EId -> Maybe (Integer,Integer)
 inArrSlice pkg x = do 
   RArr rin _ <- neLookup x $ vu_ranges pkg
   case rin of 
-    IRng lidx hidx -> return (fromIntegral lidx, fromIntegral hidx)
+    IRng lidx hidx -> return (lidx, hidx)
     _              -> Nothing
 
 
-inArrSliceBitWidth :: VarUsePkg -> EId -> Maybe (Int,Int)
+inArrSliceBitWidth :: VarUsePkg -> EId -> Maybe (Integer,Integer)
 -- | Returns the start, and length positions of the slice, in bits.
 inArrSliceBitWidth vpkg x = do
   basety <- isArrayTy_maybe (nameTyp x)
   bwidth <- tyBitWidth basety
   (lidx,hidx) <- inArrSlice vpkg x 
-  return $ (bwidth * lidx, bwidth * fromIntegral (hidx - lidx + 1))
+  return $ (bwidth * lidx, bwidth * (hidx - lidx + 1))
   

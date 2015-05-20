@@ -496,11 +496,14 @@ derefVar x rdwr = do
     TInt {}
        -> case rdwr of
             Rd -> do m <- varGetRng x
-             -- liftIO $ print (text "derefVar(rd): " <+> ppr x)
-             -- liftIO $ print (text "current range:" <+> text (show m))
-                     case m of
-                       Nothing -> return $ RngVal (RInt ITop) symx
-                       Just r  -> return $ RngVal r symx
+                     -- liftIO $ print (text "derefVar(rd): " <+> ppr x)
+                     -- liftIO $ print (text "current range:" <+> text (show m))
+                     let r'    = case m of { Nothing -> RInt ITop; Just r -> r }
+                     let rval' = RngVal r' symx 
+                     s <- get
+                     put $ neUpdate x (\_ -> Just r') s  -- update the range of variable
+                     return rval'
+
             Wr r -> do varJoinRng x r
               -- liftIO $ print (text "derefVar(wr):" <+> ppr x)
               -- s <- get

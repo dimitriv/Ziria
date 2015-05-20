@@ -39,7 +39,7 @@ module CgMonad
   , collectStmts
   , collectStmts_
 
-  , inAllocFrame, isInsideAllocFrame
+  , inAllocFrame, isInsideAllocFrame, pushAllocFrame
   , getGlobalWplAllocated
   , addGlobalWplAllocated
 
@@ -514,15 +514,18 @@ inAllocFrame _origin action
        ; appendDecl [cdecl| unsigned int $id:idx; |]
        ; appendStmt
            [cstm| $id:idx = wpl_get_free_idx($id:heap_context); |]
-       ; x <- local (\rho -> rho { inAllocatorFrame = True }) action
+       ; x <- action 
        ; appendStmt
            [cstm| wpl_restore_free_idx($id:heap_context, $id:idx); |]
        ; return x }
 
+pushAllocFrame :: Cg a -> Cg a 
+-- | To be used when generating code for a function
+pushAllocFrame action 
+  = local (\rho -> rho { inAllocatorFrame = True }) action
+
 isInsideAllocFrame :: Cg Bool
 isInsideAllocFrame = asks inAllocatorFrame
-
-
 
 collectDefinitions :: Cg a -> Cg ([C.Definition], a)
 collectDefinitions m = do
