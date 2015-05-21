@@ -94,17 +94,6 @@ instance Outputable ty => Outputable (GExp0 ty a) where
     EArrRead earr eix (LILength n) -> ppr earr <> brackets ((ppr eix) <> text ":+" <> int n)
     EArrRead earr eix (LIMeta   x) -> ppr earr <> brackets ((ppr eix) <> text ":+" <> text  x)
 
-    EArrWrite earr eix LISingleton eval ->
-      ppr earr <> (brackets (ppr eix)) <+> text ":=" <+> text "-- (earrwrite) " $$
-      nest 2 (ppr eval)
-
-    EArrWrite earr eix (LILength r) eval ->
-      ppr earr <> (brackets $ (ppr eix) <> text ":+" <> int r) <+> text ":=" <+> text "-- (earrwrite) " $$
-      nest 2 (ppr eval)
-
-    EArrWrite earr eix (LIMeta x) eval ->
-      ppr earr <> assign ":=" (brackets $ (ppr eix) <> text ":+" <> text x) (ppr eval)
-
     EFor ui ix estart elen ebody ->
       ppr ui <+>
        (text "for" <+>

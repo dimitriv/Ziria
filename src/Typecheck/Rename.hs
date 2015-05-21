@@ -359,11 +359,6 @@ renExp (MkExp exp0 eloc ()) = case exp0 of
         e1' <- renExp e1
         e2' <- renExp e2
         return $ eArrRead eloc e1' e2' r
-      EArrWrite e1 e2 r e3 -> do
-        e1' <- renExp e1
-        e2' <- renExp e2
-        e3' <- renExp e3
-        return $ eArrWrite eloc e1' e2' r e3'
       EFor ui nm1 e1 e2 e3 -> do
         e1' <- renExp e1
         e2' <- renExp e2

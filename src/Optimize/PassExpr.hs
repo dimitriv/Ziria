@@ -120,9 +120,9 @@ passExpInlining = TypedExpBottomUp $ \eloc e -> do
 -- | If we have an assignment to a fresh array variable @y@ to a slice of an
 -- array @x@, we can instead do all operations on @x@ directly.
 passAsgnLetRef :: TypedExpPass
--- TODO: revise this when EAssign and EArrWrite merge!
 passAsgnLetRef = TypedExpBottomUp $ \eloc exp -> if
-  | EArrWrite e0 estart elen erhs <- unExp exp
+  | EAssign elhs erhs <- unExp exp
+    , EArrRead e0 estart elen <- unExp elhs
     , TArray _ ty <- ctExp e0
     , not (ty == TBit)
      -- It has to be LILength so we can just take a pointer
@@ -186,7 +186,8 @@ passAsgnLetRef = TypedExpBottomUp $ \eloc exp -> if
 passExpLetPush :: TypedExpPass
 passExpLetPush = TypedExpBottomUp $ \eloc e -> if
     | ELet nm fi e1 e2 <- unExp e
-      , EArrWrite e0 estart0 elen0 erhs <- unExp e2
+      , EAssign elhs erhs <- unExp e2
+      , EArrRead e0 estart0 elen0 <- unExp elhs
       , EArrRead evals estart rlen <- unExp erhs
       , let fvs = foldr (S.union . exprFVs) S.empty [e0, estart0, evals]
       , not (nm `S.member` fvs)

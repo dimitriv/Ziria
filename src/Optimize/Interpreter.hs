@@ -1057,7 +1057,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
           let !lhs' = unDeref lhsEvald
               !rhs' = unEvald rhsEvald
           evaldPart $ eAssign eloc lhs' rhs'
-    go (EArrWrite arr ix len rhs) = do
+
       -- TODO: Ideally we should just call
       --
       -- > go (EAssign (eArrRead eloc arr ix len) rhs)
@@ -1066,28 +1066,28 @@ interpret e = guessIfUnevaluated (go . unExp) e
       -- nodes to EAssign nodes and this causes a change in semantics due to a
       -- bug in code generation (#88). Instead, we attempt to do the assignment,
       -- and if this fails we leave the node an an EArrWrite.
-      rhsEvald      <- interpret rhs
-      (x, lhsEvald) <- interpretDerefExp (eArrRead eloc arr ix len)
-      didAssign <- case (lhsEvald, rhsEvald) of
-        (Left derefExp, EvaldFull rhs') -> assign derefExp rhs'
-        _otherwise                      -> return False
-      if didAssign
-        then evaldFull $ MkValue ValueUnit eloc
-        else do
-          assignedUnknownValueTo x False
-          let !rhs' = unEvald rhsEvald
-          -- Strip off the top-level EArrRead again (not that we should not
-          -- _re-evaluate_ the LHS because that may duplicate side effects)
-          case unExp (unDeref lhsEvald) of
-            EArrRead arr' ix' len' ->
-              -- Special optimizations
-              case (ctExp arr, unExp ix', len') of
-                (TArray (Literal m) _, EVal _ (VInt 0), LILength n) | m == n ->
-                  evaldPart $ eAssign eloc arr' rhs'
-                _otherwise -> do
-                  evaldPart $ eArrWrite eloc arr' ix' len' rhs'
-            _otherwise ->
-              error "the impossible happened"
+      -- rhsEvald      <- interpret rhs
+      -- (x, lhsEvald) <- interpretDerefExp (eArrRead eloc arr ix len)
+      -- didAssign <- case (lhsEvald, rhsEvald) of
+      --   (Left derefExp, EvaldFull rhs') -> assign derefExp rhs'
+      --   _otherwise                      -> return False
+      -- if didAssign
+      --   then evaldFull $ MkValue ValueUnit eloc
+      --   else do
+      --     assignedUnknownValueTo x False
+      --     let !rhs' = unEvald rhsEvald
+      --     -- Strip off the top-level EArrRead again (not that we should not
+      --     -- _re-evaluate_ the LHS because that may duplicate side effects)
+      --     case unExp (unDeref lhsEvald) of
+      --       EArrRead arr' ix' len' ->
+      --         -- Special optimizations
+      --         case (ctExp arr, unExp ix', len') of
+      --           (TArray (Literal m) _, EVal _ (VInt 0), LILength n) | m == n ->
+      --             evaldPart $ eAssign eloc arr' rhs'
+      --           _otherwise -> do
+      --             evaldPart $ eArrWrite eloc arr' ix' len' rhs'
+      --       _otherwise ->
+      --         error "the impossible happened"
 
     -- Control flow
 

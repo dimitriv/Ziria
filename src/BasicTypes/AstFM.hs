@@ -175,13 +175,11 @@ interpE p fe  = go (toFExp fe)
 -------------------------------------------------------------------------------}
 
 data FStmt s where 
-  FEArrWrite :: FExp -> FExp -> LengthInfo -> FExp -> FStmt s -> FStmt s
   FEAssign   :: FExp -> FExp -> FStmt s -> FStmt s
   FEReturn   :: v -> FStmt v
 
 instance Monad FStmt where 
   return s = FEReturn s
-  (FEArrWrite fe1 fe2 li fe ss) >>= f = FEArrWrite fe1 fe2 li fe (ss >>= f)
   (FEAssign fe1 fe2 ss) >>= f         = FEAssign fe1 fe2 (ss >>= f)
   (FEReturn v) >>= f                  = f v
 
@@ -195,16 +193,6 @@ interpS_aux :: SrcLoc -> (v -> Exp) -> FStmt v -> Exp
 interpS_aux p on_ret = go 
   where 
     go (FEReturn e) = on_ret e
-    go (FEArrWrite fe1 fe2 li fe3 s)
-      = case go s of 
-          es | EVal TUnit VUnit <- unExp es 
-            -> earrwrite
-             | otherwise
-             -> eSeq p earrwrite es
-      where earrwrite = eArrWrite p e1 e2 li e3
-            e1 = interpE p fe1
-            e2 = interpE p fe2
-            e3 = interpE p fe3
     go (FEAssign fe1 fe2 s) 
       = case go s of
           es | EVal TUnit VUnit <- unExp es 
@@ -463,12 +451,8 @@ instance Cmd Zr    where fromStmt s = fexec s
 (.:=) :: (Cmd s, FExpy x, FExpy e) => x -> e -> s ()
 (.:=) x e = fromStmt stm
   where 
-    stm = case toFExp x of
-           FEArrRead earr start len 
-             | let fearr  = toFExp earr
-                   fstart = toFExp start
-             -> FEArrWrite fearr fstart len frhs (return ())
-           fx -> FEAssign fx frhs (return ())
+    stm = let fx = toFExp x 
+          in FEAssign fx frhs (return ())
     frhs = toFExp e
 
 

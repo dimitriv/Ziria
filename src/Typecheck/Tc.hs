@@ -190,25 +190,7 @@ tcExp expr@(MkExp exp0 loc _) =
       ty2 <- tcExp e2
       unify loc ty1 ty2
       return TUnit
-    go (EArrWrite arr idx li rhs) = do
-      -- check arr is a dereference expression
-      when (isNothing $ isMutGDerefExp arr) $ do
-        raiseErrNoVarCtx loc $
-         text "Assignment to non-mutable dereference expression."
-      arrTy <- tcExp arr
-      idxTy <- tcExp idx
-      rhsTy <- tcExp rhs
-      unifyTInt' loc idxTy
-      (_n, a) <- unifyTArray loc Infer Infer arrTy
-      case li of
-        LISingleton 
-          -> unify loc rhsTy a
-        LILength m  
-          -> void $ unifyTArray loc (Check (Literal m)) (Check a) rhsTy
-        LIMeta x    
-          -> raiseErrNoVarCtx loc $
-               text "Unexpected meta-variable" <+> text (show x)
-      return TUnit
+
     go (EArrRead arr idx li) = do
       arrTy <- tcExp arr
       idxTy <- tcExp idx

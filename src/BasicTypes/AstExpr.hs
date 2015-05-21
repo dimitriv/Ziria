@@ -383,12 +383,6 @@ data GExp0 t a where
   -- See semantics for details.
   EAssign :: GExp t a -> GExp t a -> GExp0 t a
 
-  -- | Array write
-  --
-  -- See comments for `EArrRead` and `EAssign`.
-  --
-  -- TODO: Maybe merge with `EAssign`.
-  EArrWrite :: GExp t a -> GExp t a -> LengthInfo -> GExp t a -> GExp0 t a
 
   EFor :: UnrollInfo -> GName t -> GExp t a -> GExp t a -> GExp t a -> GExp0 t a
 
@@ -652,11 +646,6 @@ mapExpM_env onTyp onAnn f extend = goExp
       e1' <- goExp e1
       e2' <- goExp e2
       return $ EArrRead e1' e2' r
-    goExp0 (EArrWrite e1 e2 r e3) = do
-      e1' <- goExp e1
-      e2' <- goExp e2
-      e3' <- goExp e3
-      return $ EArrWrite e1' e2' r e3'
     goExp0 (EFor ui nm1 e1 e2 e3) = do
       nm1' <- mapNameM onTyp nm1
       e1'  <- goExp e1
@@ -858,7 +847,6 @@ exprFVs' takeFuns = goExp
     goExp0 (EBinOp _op e1 e2)         = goExp e1 `mappend` goExp e2
     goExp0 (EAssign e1 e2)            = goExp e1 `mappend` goExp e2
     goExp0 (EArrRead e1 e2 _r)        = goExp e1 `mappend` goExp e2
-    goExp0 (EArrWrite e1 e2 _r e3)    = goExp e1 `mappend` goExp e2 `mappend` goExp e3
     goExp0 (EFor _ui nm1 e1 e2 e3)    = goExp e1 `mappend` goExp e2 `mappend` (goExp e3 `deleting` nm1)
     goExp0 (EWhile e1 e2)             = goExp e1 `mappend` goExp e2
     goExp0 (ELet nm1 _fi e1 e2)       = goExp e1 `mappend` (goExp e2 `deleting` nm1)
@@ -1143,7 +1131,6 @@ mutates_state e = case unExp e of
   EBinOp _ e1 e2               -> any mutates_state [e1,e2]
   EAssign _e1 _e2              -> True
   EArrRead e1 e2 _li           -> any mutates_state [e1,e2]
-  EArrWrite _e1 _e2 _r _e3     -> True
   EFor _ _ e1 e2 e3            -> any mutates_state [e1,e2,e3]
   EWhile e1 e2                 -> any mutates_state [e1,e2]
   ELet _nm _fi e1 e2           -> any mutates_state [e1,e2]

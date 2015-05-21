@@ -677,24 +677,13 @@ stmt_exp :
         in
           mkCall p x $3
       }
-  | ID projs ':=' exp
-      { let { p    = $1 `srcspan` $4
-            ; x    = unintern (getID $1)
-            ; proj = $2
-            ; rhs  = $4
+
+  | ID derefs ':=' exp
+      { let { p = $1 `srcspan` $4
+            ; lhs = $2 (mkVar (srclocOf $1) (unintern (getID $1)))
+            ; rhs = $4
             }
-        in
-          eAssign p (proj (mkVar p x)) rhs
-      }
-  | ID projs range ':=' exp
-      { let { p             = $1 `srcspan` $5
-            ; x             = unintern (getID $1)
-            ; proj          = $2
-            ; (estart, len) = $3
-            ; rhs           = $5
-            }
-        in
-          eArrWrite p (proj (mkVar p x)) estart len rhs
+        in eAssign p lhs rhs
       }
 
 unroll_info :: { L UnrollInfo }

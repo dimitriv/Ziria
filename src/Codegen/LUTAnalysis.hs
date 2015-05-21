@@ -278,10 +278,6 @@ shouldLUT dflags lut_outbitwidth lut_tablesize e = flip evalLM s0 $ do
         modify $ \s -> s { lmOpCount = lmOpCount s + 1 }
         should_many [e1, e2]
 
-    go (EArrWrite e1 e2 _ e3) = do
-        modify $ \s -> s { lmOpCount = lmOpCount s + 1 }
-        should_many [e1,e2,e3]
-
     go (EFor _ _ e1 e2 e3) = do
         modify $ \s -> s { lmHasLoop = True }
         should_many [e1, e2, e3]

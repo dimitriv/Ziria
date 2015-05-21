@@ -186,8 +186,6 @@ cgEval dfs e = go (unExp e) where
      -- cgAssign dfs loc clhs crhs
      Right <$> return [cexp|UNIT|]
 
-  go (EArrWrite earr ei rng erhs) 
-    = go (EAssign (eArrRead loc earr ei rng) erhs)
 
   go (EArrRead earr ei rng) 
     | EVal _t (VInt i) <- unExp ei

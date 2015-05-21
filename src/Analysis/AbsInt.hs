@@ -258,9 +258,6 @@ absEval e = go (unExp e) where
     aAssign alhs arhs
     rValM (aVal VUnit)
 
-  go (EArrWrite earr ei rng erhs) = -- will go away!
-    go $ EAssign (eArrRead noLoc earr ei rng) erhs
-
   go (EVar x) = lValM (varLVal x)
 
   go (EArrRead earr ei rng) = do

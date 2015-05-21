@@ -43,7 +43,6 @@ ctExp0 (EUnOp op a)        = ctUnOp op (ctExp a)
 ctExp0 (EBinOp op a b)     = ctBinOp op (ctExp a) (ctExp b)
 ctExp0 (EAssign _ _)       = TUnit
 ctExp0 (EArrRead a _ l)    = ctArrRead (show a) (ctExp a) l
-ctExp0 (EArrWrite _ _ _ _) = TUnit
 ctExp0 (EFor _ _ _ _ _)    = TUnit
 ctExp0 (EWhile _ _)        = TUnit
 ctExp0 (ELet _ _ _ e2)     = ctExp e2

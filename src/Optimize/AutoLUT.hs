@@ -99,8 +99,6 @@ autolutE dflags = autoE
         go (EAssign e1 e2)   = EAssign <$> autoE e1 <*> autoE e2
         go (EArrRead e1 e2 len) =
             EArrRead <$> autoE e1 <*> autoE e2 <*> pure len
-        go (EArrWrite e1 e2 len e3) =
-            EArrWrite <$> autoE e1 <*> autoE e2 <*> pure len <*> autoE e3
         go (EFor ui i e1 e2 e3) = do
             EFor ui i <$> autoE e1 <*> autoE e2 <*> autoE e3
         go (EWhile e1 e2) = do

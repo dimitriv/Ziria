@@ -63,7 +63,7 @@ eArrRead :: SrcLoc ->  GExp t () -> GExp t () -> LengthInfo -> GExp t ()
 eArrRead loc x y l = MkExp (EArrRead x y l) loc ()
 
 eArrWrite :: SrcLoc ->  GExp t () -> GExp t () -> LengthInfo -> GExp t () -> GExp t ()
-eArrWrite loc x y l e = MkExp (EArrWrite x y l e) loc ()
+eArrWrite loc x y l e = eAssign loc (eArrRead loc x y l) e
 
 eFor :: SrcLoc -> UnrollInfo -> GName t -> GExp t () -> GExp t () -> GExp t () -> GExp t ()
 eFor loc ui n e1 e2 e3 = MkExp (EFor ui n e1 e2 e3) loc ()

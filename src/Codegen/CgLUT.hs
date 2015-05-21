@@ -666,9 +666,6 @@ lutInstrument mask_eids = mapExpM return return do_instr
       | EAssign elhs erhs <- unExp e 
       = do let lval = fromJust $ isMutGDerefExp elhs
            instrAsgn mask_eids loc lval erhs
-      | EArrWrite earr es l erhs <- unExp e
-      = do let lval = fromJust $ isMutGDerefExp (eArrRead loc earr es l)
-           instrAsgn mask_eids loc lval erhs
       | EPrint nl eargs <- unExp e
       = return $ ePrint loc nl (eargs ++ [io_msg])
       | otherwise = return e
