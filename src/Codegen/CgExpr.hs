@@ -72,7 +72,7 @@ cgLetBind :: DynFlags -> SrcLoc -> EId -> Exp -> Cg a -> Cg a
 cgLetBind dfs loc x e m = do
   ce <- cgEvalRVal dfs e
   case unExp e of 
-    -- Reuse allocated space
+    -- Reuse allocated space if we will not be mutating this (let bound)
     EValArr {} -> extendVarEnv [(x,ce)] m
     _          -> do 
       x_name <- genSym $ name x ++ getLnNumInStr loc
@@ -85,9 +85,13 @@ cgLetBind dfs loc x e m = do
 cgMutBind :: DynFlags -> SrcLoc -> EId -> Maybe Exp -> Cg a -> Cg a
 cgMutBind dfs loc x mbe m = do
   case mbe of 
-    Just e@(MkExp (EValArr {}) _ _) -> do 
-        x_binding <- cgEvalRVal dfs e
-        extendVarEnv [(x,x_binding)] m
+    -- NB: the following code is plain wrong because of mutation!
+    -- We can only do something like this if we have an immutable
+    -- let-binding (see above)
+    -- 
+    -- Just e@(MkExp (EValArr {}) _ _) -> do 
+    --     x_binding <- cgEvalRVal dfs e
+    --     extendVarEnv [(x,x_binding)] m
 
     Just e -> do 
       x_name <- genSym $ name x ++ getLnNumInStr loc
@@ -118,11 +122,13 @@ cgIf _dfs ccond act1 act2 = do
    appendDecls e2_decls
    appendDecls e3_decls
 
-   appendStmt [cstm|if ($id:condvar) {
-                      $stms:e2_stmts
-                    } else {
-                      $stms:e3_stmts
-                    } |]
+   unless (null e2_stmts && null e3_stmts) $ 
+      appendStmt [cstm|if ($id:condvar) {
+                         $stms:e2_stmts
+                       } else {
+                         $stms:e3_stmts
+                       } |]
+
    return [cexp| $id:condvar?$ce2:$ce3|]
 
 
