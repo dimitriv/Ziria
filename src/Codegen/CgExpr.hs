@@ -246,8 +246,7 @@ cgEval dfs e = go (unExp e) where
      = cgPrintVars dfs loc (lutVarUsePkg r) $
        cgEval dfs e1
      | otherwise
-     = cgPrintVars dfs loc (lutVarUsePkg r) $
-       Right <$> codeGenLUTExp dfs r e1 Nothing
+     = Right <$> codeGenLUTExp dfs r e1 Nothing
 
   go (EWhile econd ebody) = do
       (init_decls,init_stms,cecond) <- inNewBlock (cgEvalRVal dfs econd)
