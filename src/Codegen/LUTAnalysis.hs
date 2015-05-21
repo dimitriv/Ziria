@@ -410,16 +410,16 @@ inVarBitWidth pkg v = invar_bitwidth pkg v
 invars_bitwidth :: (Functor m, MonadIO m, Monad m) => VarUsePkg -> [EId] -> m Integer
 invars_bitwidth pkg vartys = do 
   sizes <- mapM (invar_bitwidth pkg) vartys
-  liftIO $ mapM (putStrLn . show) (zip vartys sizes)
+  -- liftIO $ mapM (putStrLn . show) (zip vartys sizes)
   return (sum sizes)
 
 invar_bitwidth :: (Functor m, Monad m, MonadIO m) => VarUsePkg -> EId -> m Integer
 invar_bitwidth pkg v
    -- | Integers in known range
   | Just (RInt (IRng l h)) <- neLookup v $ vu_ranges pkg
-  = do liftIO $ putStrLn ("Found range for variable: " ++ show v)
-       liftIO $ putStrLn ("Low:  " ++ show l)
-       liftIO $ putStrLn ("High: " ++ show h)
+  = do {- liftIO $ putStrLn ("Found range for variable: " ++ show v)
+          liftIO $ putStrLn ("Low:  " ++ show l)
+          liftIO $ putStrLn ("High: " ++ show h) -}
        return (intLog2 (max (abs l) (abs h)))
 
   -- | Array variables in known input range
