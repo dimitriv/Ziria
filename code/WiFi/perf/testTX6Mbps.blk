@@ -20,4 +20,4 @@
 #include "../const.blk"
 #include "blocks/TransmitterInfinite.blk"
 
-let comp main = read >>> TransmitterInfinite(HeaderInfo{coding=CR_12;modulation=M_BPSK;len=0}) >>> write;
+let comp main = read >>> TransmitterInfinite(HeaderInfo{coding=CR_12;modulation=M_BPSK;len=0;err=false}) >>> write;
