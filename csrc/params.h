@@ -125,6 +125,7 @@ typedef struct _BlinkParams {
 
 #ifdef SORA_PLATFORM
 	// Latency measurements
+	bool timeStampAtRead;
 	TimeMeasurements measurementInfo;
 #endif
 } BlinkParams;

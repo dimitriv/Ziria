@@ -54,7 +54,7 @@ BlinkFileType parse_type(char *typ)
 	exit(1);
 }
 
- BlinkFileMode parse_mode(char *md) {
+BlinkFileMode parse_mode(char *md) {
   if (strcmp(md,"dbg") == 0)
     return MODE_DBG; 
   if (strcmp(md,"bin") == 0) 
@@ -63,6 +63,14 @@ BlinkFileType parse_type(char *typ)
   exit(1);
 }
 
+bool parse_timeStampAtRead(char *md) {
+	if (strcmp(md, "read") == 0)
+		return true;
+	if (strcmp(md, "write") == 0)
+		return false;
+	fprintf(stderr, "Error: cannot parse mode parameter %s\n", md);
+	exit(1);
+}
 
 
 // TODO: Add error handling
@@ -132,6 +140,7 @@ void init_dummySamples(BlinkParams *params, char *siz)		{ params->dummySamples =
 void init_heapSize(BlinkParams *params, char *siz)			{ params->heapSize = parse_mem_size(siz); }
 void init_inRepeat(BlinkParams *params, char *i)			{ params->inFileRepeats = parse_repeat(i); }
 void init_LatencySampling(BlinkParams *params, char *siz)   { params->latencySampling = parse_size(siz); }
+void init_TimeStampAtRead(BlinkParams *params, char *typ)	{ params->timeStampAtRead = parse_timeStampAtRead(typ); }
 void init_LatencyCDFSize(BlinkParams *params, char *siz)    { params->latencyCDFSize = parse_size(siz); }
 
 
@@ -149,7 +158,7 @@ void init_TXBufferSize(BlinkParams *params, char *i)		{ params->radioParams.TXBu
 
 
 // Here is where we declare the parameters
-#define PARAM_TABLE_LENGTH		21
+#define PARAM_TABLE_LENGTH		22
 
 BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] = 
   {  { "--DEBUG=",
@@ -209,10 +218,15 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
        init_inRepeat },
      { "--latency-sampling=",
 	   "--latency-sampling=0|1|2|...",
-	   "Number of read/writes (edit STAMP_AT_READ to choose between reads/writes) over which the latency is measured (0 - no latency measurements)",
+	   "Number of read/writes over which the latency is measured (0 - no latency measurements)",
 	   "0",
 	   init_LatencySampling },
-     { "--latency-CDF-size=",
+	 { "--latency-sampling-location=",
+	   "--latency-sampling-location=read|write",
+	   "Where to sample intra-sample latency, at read or write",
+	   "read",
+	   init_TimeStampAtRead },
+	 { "--latency-CDF-size=",
 	   "--latency-CDF-size=...",
 	   "Number of latency samples to be stored and printed (for CDF calculation)",
 	   "0",
