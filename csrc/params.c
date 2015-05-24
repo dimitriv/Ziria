@@ -63,11 +63,11 @@ BlinkFileMode parse_mode(char *md) {
   exit(1);
 }
 
-bool parse_timeStampAtRead(char *md) {
+int parse_timeStampAtRead(char *md) {
 	if (strcmp(md, "read") == 0)
-		return true;
+		return 1;
 	if (strcmp(md, "write") == 0)
-		return false;
+		return 0;
 	fprintf(stderr, "Error: cannot parse mode parameter %s\n", md);
 	exit(1);
 }
