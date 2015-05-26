@@ -56,223 +56,191 @@ import qualified Data.Set as S
 import qualified Data.Monoid as M
 import Text.Show.Pretty (PrettyVal)
 
+
+{- The goal of the Range analysis
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   Given an expression, calculate:
+      - for every array variable
+          1) an overapproximation of the input range
+          2) an exact output range or don't know (over or under approx not good)
+   Later we will deal with structs too. -}
+
 {----------------------------------------------------------------------
-  Definition of the Range
+  Intervals
 ----------------------------------------------------------------------}
 
--- | Range
-data Range 
-  = RInt Interval
-  | RArr Interval Interval
-  | ROther 
-  deriving (Generic, Typeable, Data, Eq, Show, Ord)
-
-instance PrettyVal Interval
-instance PrettyVal Range
-
-instance Outputable Range where
-  ppr r = text (show r)
-
-
-rjoin :: Range -> Range -> Range
-rjoin (RInt i1) (RInt i2)       = RInt (i1 `ijoin` i2)
-rjoin (RArr r1 w1) (RArr r2 w2) = RArr (r1 `ijoin` r2) (w1 `ijoin` w2)
-rjoin _ _                       = ROther
-
-rstretch :: Range -> Int -> Range
-rstretch (RInt i1) len = RInt (istretch i1 len)
-rstretch _ _ = error "rstretch!"
-
-istretch :: Interval -> Int -> Interval
-istretch ITop _ = ITop
-istretch (IRng l h) len = IRng l (h + fromIntegral len)
-istretch IBot _len = ITop
- 
-rangeTop :: Ty -> Range 
-rangeTop (TInt {})   = RInt ITop
-rangeTop (TArray {}) = RArr ITop ITop
-rangeTop _           = ROther
-
--- | Symbolic Expressions
-data SymExp
-  = SymVar EId
-  | SymBinOp BinOp SymExp SymExp
-  | SymUnOp UnOp SymExp
-  | SymVal Val
-  deriving (Generic, Typeable, Data, Eq, Ord, Show)
-
-
-symExpFVs :: SymExp -> GNameSet Ty
-symExpFVs (SymVar x) = S.singleton x
-symExpFVs (SymBinOp _ s1 s2) = symExpFVs s1 `M.mappend` symExpFVs s2
-symExpFVs (SymUnOp _ s)      = symExpFVs s
-symExpFVs (SymVal {})        = M.mempty
-
-
-instance Outputable SymExp where
-  ppr s = text (show s)
-
-sjoin :: Maybe SymExp -> Maybe SymExp -> Maybe SymExp
-sjoin ms1 ms2 = do 
-  s1 <- ms1
-  s2 <- ms2
-  if s1 == s2 then return s1 else Nothing
-
 -- | Intervals
-data Interval 
-  = IBot | IRng Integer Integer | ITop
+data Iv = Iv Integer Integer
+type Interval = IVal Iv
   deriving (Generic, Typeable, Data, Eq, Ord, Show)
 
 instance NFData Interval where
   rnf = genericRnf
 
-data RngVal 
-  = RngVal { av_range :: Range, av_symex :: Maybe SymExp}
-  deriving (Generic, Typeable, Data, Eq, Show)
+ijoin_apx :: Interval -> Interval -> Interval 
+ijoin_apx IUnknown _ = IUnknown
+ijoin_apx _ IUnknown = IUnknown
+ijoin_apx (IKnown (Iv i j)) (IKnown (Iv i' j')) 
+  | let l = min i i'
+  , let h = max j j'
+  , let bound = 512
+  = if l < - bound || h > bound then IUnknown else IKnown (Iv l h)
 
-instance Outputable RngVal where
+instance NFData Interval where
+  rnf = genericRnf
+
+ijoin_pcs :: Interval -> Interval -> Interval
+ijoin_pcs i1 i2 
+  | i1 == i2  = i1
+  | otherwise = IUnknown
+
+istretch :: Bool -- ^ precise or not?
+         -> Interval -> IVal i -> LengthInfo -> Interval 
+istretch pcs _ IUnknown _ = IUnknown
+istretch pcs IUnknown _ _ = IUnknown
+istretch pcs (IKnown (Iv i j)) (IKnown s) LISingleton  = stretch pcs (i,j) (s,s)
+istretch pcs (IKnown (Iv i j)) (IKnown s) (LILength n) 
+  = stretch pcs (i,j) (s,s+n)
+
+stretch :: Bool -> (Integer,Integer) -> (Integer,Integer) -> Interval 
+stretch precise (a,b) (c,d)
+  | precise && ( (c-b > 1) || (a-d > 1)) = IUnknown 
+  | otherwise              = IKnown (min a c, max b d)
+
+{- Note: stretching an interval: 
+   -----------a---------b----c---------d  <- bad
+   -----------a-----c------b-----------d
+   -----------c-----a----b-------------d
+   -----------c-----a----d-------------b
+   -----------c-----d-----a------------b  <- bad 
+-------------------------------------------------}
+
+
+{----------------------------------------------------------------------
+  The Range
+----------------------------------------------------------------------}
+-- | Range
+data Range 
+  = RInt  (IVal Int)       -- integers
+  | RBool (IVal Bool)      -- booleans
+  | RArr Interval Interval -- arrays
+  | ROther                 -- other 
+  deriving (Generic, Typeable, Data, Eq, Show, Ord)
+
+data IVal v = IUnknown | IKnown v
+  deriving (Generic, Typeable, Data, Eq, Show, Ord)
+
+instance Monad IVal where
+  return a = IKnown a
+  m >>= f  = case m of 
+    IUnknown -> IUnknown
+    IKnown x -> f x
+
+instance PrettyVal Interval
+instance PrettyVal Range
+instance PrettyVal IVal
+instance Outputable Range where 
   ppr r = text (show r)
 
-rngValJoin :: RngVal -> RngVal -> RngVal
-rngValJoin (RngVal r1 s1) (RngVal r2 s2) 
-  = RngVal (r1 `rjoin` r2) (s1 `sjoin` s2)
+iv_join_discrete :: Eq v => IVal v -> IVal v -> IVal v
+iv_join_discrete IUnknown _ = IUnknown
+iv_join_discrete _ IUnknown = IUnknown
+iv_join_discrete (IKnown v1) (IKnown v2)
+  | v1 == v2  = IKnown v1
+  | otherwise = IUnknown
 
-rngValTop :: Ty -> RngVal
-rngValTop ty = RngVal (rangeTop ty) Nothing
 
-ineg :: Interval -> Interval
-ineg IBot       = ITop
-ineg ITop       = ITop 
-ineg (IRng i j) = IRng (-j) (-i)
+rjoin :: Range -> Range -> Range
+rjoin (RInt iv1)  (RInt iv2)
+  = RInt  (iv1 `iv_join_discrete` iv2)
+rjoin (RBool iv1) (RBool iv2)
+  = RBool (iv1 `iv_join_discrete` iv2)
+rjoin (RArr r1 w1) (RArr r2 w2)
+  = RArr (r1 `ijoin_apx` r2) (w1 `ijoin_pcs` w2)
+rjoin _ _  
+  = ROther
 
-iplus :: Interval -> Interval -> Interval
-iplus IBot x = x 
-iplus x IBot = x
-iplus ITop _ = ITop
-iplus _ ITop = ITop
-iplus (IRng i j) (IRng i' j') = IRng (i+i') (j+j')
-
-ijoin :: Interval -> Interval -> Interval
-ijoin IBot x = x
-ijoin x IBot = x
-ijoin ITop _ = ITop
-ijoin _ ITop = ITop
-ijoin (IRng i j) (IRng i' j')
-  = -- To ensure convergence
-    if l < - bound || h > bound then ITop else IRng l h
-  where l = min i i'
-        h = max j j'
-        -- A modest bound 
-        bound = 512
+rangeTop :: Ty -> Range 
+rangeTop (TInt {})   = RInt IUnknown
+rangeTop (TArray {}) = RArr IUnknown IUnknown
+rangeTop (TBool)     = RBool IUnknown
+rangeTop _           = ROther
 
 
 runop :: UnOp -> Range -> Range
 -- | This is sensitive to the type checker
-runop Neg (RInt i)       = RInt (ineg i)
+runop Neg (RInt i)       = RInt $ liftM negate
 runop Neg _              = ROther
-runop ALength _          = RInt ITop -- That's a bit sad but oh well
-runop (Cast (TInt {})) _ = RInt ITop
+runop ALength _          = RInt IUnknown
+runop (Cast (TInt {})) _ = RInt IUnknown
 runop (Cast _) _         = ROther
-runop Not _              = ROther 
-runop NatExp (RInt {})   = RInt ITop
+runop Not (RBool b)      = RBool $ liftM not
+runop Not _              = ROther
+runop NatExp (RInt {})   = RInt IUnknown
 runop NatExp _           = ROther
-runop BwNeg (RInt {})    = RInt ITop
+runop BwNeg (RInt {})    = RInt IUnknown
 runop BwNeg _            = ROther 
 
-sunop :: UnOp -> Maybe SymExp -> Maybe SymExp
-sunop Neg s = s >>= \x -> return (SymUnOp Neg x)
-sunop Not s = s >>= \x -> return (SymUnOp Not x)
-sunop _ _s  = Nothing
 
 rbinop :: BinOp -> Range -> Range -> Range
 -- | This is sensitive to the type checker
 
 -- Arithmetic binops
-rbinop Add (RInt r1) (RInt r2) = RInt (r1 `iplus` r2)
-rbinop Sub _ _                 = RInt ITop
-rbinop Mult  _r1 _r2 = RInt ITop
-rbinop Div   _r1 _r2 = RInt ITop
-rbinop Rem   _r1 _r2 = RInt ITop
-rbinop Expon _r1 _r2 = RInt ITop
+rbinop Add (RInt r1) (RInt r2) = RInt $ liftM2 (+)
+rbinop Sub _ _                 = RInt IUnknown
+rbinop Mult  _r1 _r2 = RInt IUnknown
+rbinop Div   _r1 _r2 = RInt IUnknown
+rbinop Rem   _r1 _r2 = RInt IUnknown
+rbinop Expon _r1 _r2 = RInt IUnknown
 
 -- Other binops that can return integers
-rbinop ShL _r1 _r2   = RInt ITop
-rbinop ShR _r1 _r2   = RInt ITop
-rbinop BwAnd (RInt {}) _ = RInt ITop
-rbinop BwOr (RInt {}) _  = RInt ITop
-rbinop BwXor (RInt {}) _ = RInt ITop
+rbinop ShL _r1 _r2   = RInt IUnknown
+rbinop ShR _r1 _r2   = RInt IUnknown
+rbinop BwAnd (RInt {}) _ = RInt IUnknown
+rbinop BwOr (RInt {}) _  = RInt IUnknown
+rbinop BwXor (RInt {}) _ = RInt IUnknown
 
--- Boolean-returning: ROther
-rbinop Eq _ _    = ROther
-rbinop Neq _ _   = ROther
-rbinop Lt _ _    = ROther
-rbinop Gt _ _    = ROther
-rbinop Leq _ _   = ROther
-rbinop Geq _ _   = ROther
-rbinop Or _ _    = ROther
-rbinop And _ _   = ROther
-rbinop Add _ _   = ROther
-rbinop BwAnd _ _ = ROther
-rbinop BwOr _ _  = ROther
-rbinop BwXor _ _ = ROther
+-- Booleans 
+rbinop Eq  (RInt i1) (RInt i2) = RBool $ liftM2 (==)
+rbinop Neq (RInt i1) (RInt i2) = RBool $ liftM2 (!=) 
+rbinop Lt  (RInt i1) (RInt i2) = RBool $ liftM2 (<)
+rbinop Gt  (RInt i1) (RInt i2) = RBool $ liftM2 (>)
+rbinop Leq (RInt i1) (RInt i2) = RBool $ liftM2 (<=)
+rbinop Geq (RInt i1) (RIht i2) = RBool $ liftM2 (>=)
+rbinop Or _ _     = RBool IUnknown
+rbinop And _ _    = RBool IUnknown
+rbinop Eq  _ _    = RBool IUnknown
+rbinop Neq _ _    = RBool IUnknown
+rbinop Lt  _ _    = RBool IUnknown
+rbinop Gt  _ _    = RBool IUnknown
+rbinop Leq _ _    = RBool IUnknown
+rbinop Geq _ _    = RBool IUnknown
 
-symBinOp :: BinOp -> SymExp -> SymExp -> SymExp 
-symBinOp Add (SymVal (VInt i)) (SymVal (VInt j)) = SymVal (VInt (i+j))
-symBinOp Sub (SymVal (VInt i)) (SymVal (VInt j)) = SymVal (VInt (i-j))
-symBinOp op s1 s2 = SymBinOp op s1 s2
+-- Default cases 
+rbinop Add _ _    = ROther
+rbinop BwAnd _ _  = ROther
+rbinop BwOr _ _   = ROther
+rbinop BwXor _ _  = ROther
 
-sbinop :: BinOp -> Maybe SymExp -> Maybe SymExp -> Maybe SymExp
-sbinop bop msa msb 
-  | known_bop bop
-  = do x <- msa 
-       y <- msb
-       return $ symBinOp bop x y
-  | otherwise
-  = Nothing
-  where 
-    known_bop Add = True
-    known_bop Sub = True
-    known_bop Eq  = True
-    known_bop Neq = True
-    known_bop Lt  = True
-    known_bop Gt  = True
-    known_bop Geq = True
-    known_bop Leq = True
-    known_bop And = True
-    known_bop Or  = True
-    known_bop _   = False
 
 {----------------------------------------------------------------------
   Abstract domain for values
 ----------------------------------------------------------------------}
 
-instance ValDom RngVal where
-  aVal (VInt i)
-    = RngVal { av_range = RInt (IRng i i)
-             , av_symex = Just $ SymVal (VInt i) }
-  aVal val 
-    = RngVal { av_range = ROther         
-             , av_symex = Just $ SymVal val }
-  aArr _vs     
-    = RngVal { av_range = RArr IBot IBot 
-             , av_symex = Nothing }
-  aStruct _ _
-    = RngVal { av_range = ROther         
-             , av_symex = Nothing }
-  aUnOp uop rs
-    = RngVal { av_range = runop uop (av_range rs)
-             , av_symex = sunop uop (av_symex rs) }
-  aBinOp bop rsa rsb 
-    = RngVal { av_range = rbinop bop (av_range rsa) (av_range rsb)
-             , av_symex = sbinop bop (av_symex rsa) (av_symex rsb) }
+instance ValDom Range where
+  aVal (VInt i)      = RInt (return i)
+  aVal (VBool b)     = RBool (return b)
+  aArr _vs           = RArr IUnknown IUnknown
+  aStruct _ _        = ROther
+  aUnOp uop rs       = runop uop rs
+  aBinOp bop rsa rsb = rbinop bop rsa rsb
 
-  aArrRead ret_ty _arr _ _ = rngValTop ret_ty
-  aStrProj ret_ty _str _   = rngValTop ret_ty
+  aArrRead ret_ty _arr _ _ = rangeTop ret_ty
+  aStrProj ret_ty _str _   = rangeTop ret_ty
 
-
-{------------------------------------------------------------------------
+{--------------------------------------------------------------------
   Abstract interpreter for commands
-------------------------------------------------------------------------}
+---------------------------------------------------------------------}
 
 type RngMap = NameMap Ty Range
 
@@ -475,6 +443,13 @@ arrRdWrRng Rd     n = RArr (IRng 0 (fromIntegral n - 1)) IBot
 arrRdWrRng (Wr _) n = RArr IBot (IRng 0 (fromIntegral n - 1))
 
 
+varSetRng :: EId -> Range -> Rng RngVal
+varSetRng x range = do
+  s <- get
+  put $ neUpdate x upd s
+  return $ RngVal range (Just $ SymVar x)
+  where upd _ = Just range
+
 varJoinRng :: EId -> Range -> Rng RngVal
 varJoinRng x range = do
   s <- get
@@ -504,7 +479,7 @@ derefVar x rdwr = do
                      put $ neUpdate x (\_ -> Just r') s  -- update the range of variable
                      return rval'
 
-            Wr r -> do varJoinRng x r
+            Wr r -> do varSetRng x r
               -- liftIO $ print (text "derefVar(wr):" <+> ppr x)
               -- s <- get
               -- liftIO $ print (text "new range   :" <+> ppr (neLookup x s))
