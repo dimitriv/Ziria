@@ -32,6 +32,7 @@ module CgTypes ( bwBitWidth
                , codeGenDeclVolGroup
                , codeGenFieldDeclGroup
                , codeGenDeclDef
+               , DeclPkg ( .. )
 
                , assignByVal
                , cgBitArrRead, cgBreakDown
