@@ -48,5 +48,5 @@ fun comp DecodeInfinite(h : struct HeaderInfo) {
              else 
                 DemapQAM64() >>> DeinterleaveQAM64() 
       }
-  |>>>| ViterbiInfinite(h.coding,h.modulation) >>> scrambler()
+  |>>>| ViterbiInfinite(h.coding,h.modulation) >>> scrambler(default_scrmbl_st)
 };

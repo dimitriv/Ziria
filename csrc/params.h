@@ -123,8 +123,9 @@ typedef struct _BlinkParams {
 	void * pRxBuf;				// RX
 	void * TXBuffer;			// TX
 
-#ifdef SORA_PLATFORM
 	// Latency measurements
+	int timeStampAtRead;
+#ifdef SORA_PLATFORM
 	TimeMeasurements measurementInfo;
 #endif
 } BlinkParams;

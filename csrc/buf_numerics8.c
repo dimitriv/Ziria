@@ -184,9 +184,8 @@ GetStatus _buf_getint8(BlinkParams *params, BufContextBlock *blk, int8 *x)
 
 GetStatus buf_getint8(BlinkParams *params, BufContextBlock *blk, int8 *x)
 {
-#ifdef STAMP_AT_READ
-	write_time_stamp(params);
-#endif	
+	if (params->timeStampAtRead)
+		write_time_stamp(params);
 	blk->total_in++;
 	return _buf_getint8(params, blk, x);
 }
@@ -234,9 +233,8 @@ GetStatus _buf_getarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, un
 
 GetStatus buf_getarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigned int vlen)
 {
-#ifdef STAMP_AT_READ
-	write_time_stamp(params);
-#endif	
+	if (params->timeStampAtRead)
+		write_time_stamp(params);
 	blk->total_in += vlen;
 	return _buf_getarrint8(params, blk, x, vlen);
 }
@@ -253,9 +251,8 @@ void init_getcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBloc
 
 GetStatus buf_getcomplex8(BlinkParams *params, BufContextBlock *blk, complex8 *x)
 {
-#ifdef STAMP_AT_READ
-	write_time_stamp(params);
-#endif
+	if (params->timeStampAtRead)
+		write_time_stamp(params);
 	blk->total_in++;
 	if (params->inType == TY_DUMMY || params->inType == TY_FILE || params->inType == TY_MEM)
 	{
@@ -281,9 +278,8 @@ GetStatus buf_getcomplex8(BlinkParams *params, BufContextBlock *blk, complex8 *x
 
 GetStatus buf_getarrcomplex8(BlinkParams *params, BufContextBlock *blk, complex8 *x, unsigned int vlen)
 {
-#ifdef STAMP_AT_READ
-	write_time_stamp(params);
-#endif
+	if (params->timeStampAtRead)
+		write_time_stamp(params);
 	blk->total_in += vlen;
 	if (params->inType == TY_DUMMY || params->inType == TY_FILE || params->inType == TY_MEM)
 	{
@@ -412,9 +408,8 @@ void _buf_putint8(BlinkParams *params, BufContextBlock *blk, int8 x)
 void buf_putint8(BlinkParams *params, BufContextBlock *blk, int8 x)
 {
 	blk->total_out ++;
-#ifndef STAMP_AT_READ
-	write_time_stamp(params);
-#endif
+	if (!params->timeStampAtRead)
+		write_time_stamp(params);
 	_buf_putint8(params, blk, x);
 }
 
@@ -478,9 +473,8 @@ void _buf_putarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigne
 void buf_putarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigned int vlen)
 {
 	blk->total_out += vlen;
-#ifndef STAMP_AT_READ
-	write_time_stamp(params);
-#endif
+	if (!params->timeStampAtRead)
+		write_time_stamp(params);
 	_buf_putarrint8(params, blk, x, vlen);
 }
 
@@ -565,9 +559,8 @@ void init_putcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBloc
 void buf_putcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 x)
 {
 	blk->total_out ++;
-#ifndef STAMP_AT_READ
-	write_time_stamp(params);
-#endif
+	if (!params->timeStampAtRead)
+		write_time_stamp(params);
 
 	if (params->outType == TY_DUMMY) return;
 
@@ -588,9 +581,8 @@ void buf_putcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 
 void buf_putarrcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 *x, unsigned int vlen)
 {
 	blk->total_out += vlen;
-#ifndef STAMP_AT_READ
-	write_time_stamp(params);
-#endif
+	if (!params->timeStampAtRead)
+		write_time_stamp(params);
 
 	if (params->outType == TY_DUMMY || params->outType == TY_FILE || params->outType == TY_MEM)
 	{
