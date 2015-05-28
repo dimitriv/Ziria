@@ -582,8 +582,10 @@ setLUTHashes :: [(Int,LUTGenInfo)] -> Cg ()
 setLUTHashes hs
   = modify $ \s -> s { lutHashes = hs }
 
+-- | {get/add}GlobalWplAllocated
+-- ^ NB: statements in reverse order
 getGlobalWplAllocated :: Cg [C.Stm]
-getGlobalWplAllocated = gets globalWplAllocated
+getGlobalWplAllocated = reverse <$> gets globalWplAllocated
 
 addGlobalWplAllocated :: C.Stm -> Cg ()
 addGlobalWplAllocated stm

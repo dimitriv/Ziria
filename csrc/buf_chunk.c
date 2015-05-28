@@ -105,9 +105,8 @@ void init_getchunk(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *
 
 GetStatus buf_getchunk(BlinkParams *params, BufContextBlock* blk, void *x)
 {
-#ifdef STAMP_AT_READ
-	write_time_stamp(params);
-#endif
+	if (params->timeStampAtRead)
+		write_time_stamp(params);
 	blk->total_in++;
 
 	if (params->inType == TY_IP)
@@ -158,9 +157,8 @@ GetStatus buf_getchunk(BlinkParams *params, BufContextBlock* blk, void *x)
 FORCE_INLINE
 GetStatus buf_getarrchunk(BlinkParams *params, BufContextBlock* blk, void *x, unsigned int vlen)
 {
-#ifdef STAMP_AT_READ
-	write_time_stamp(params);
-#endif
+	if (params->timeStampAtRead)
+		write_time_stamp(params);
 	blk->total_in += vlen;
 
 	if (params->inType == TY_IP)
@@ -266,9 +264,8 @@ void init_putchunk(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *
 }
 void buf_putchunk(BlinkParams *params, BufContextBlock* blk, void *x)
 {
-#ifndef STAMP_AT_READ
-	write_time_stamp(params);
-#endif
+	if (!params->timeStampAtRead)
+		write_time_stamp(params);
 	blk->total_out++;
 
 	if (params->outType == TY_IP)
@@ -319,9 +316,8 @@ FORCE_INLINE
 void buf_putarrchunk(BlinkParams *params, BufContextBlock* blk, void *x, unsigned int vlen)
 {
 	blk->total_out+= vlen;
-#ifndef STAMP_AT_READ
-	write_time_stamp(params);
-#endif
+	if (!params->timeStampAtRead)
+		write_time_stamp(params);
 
 	if (params->outType == TY_IP)
 	{

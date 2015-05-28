@@ -161,6 +161,7 @@ mkBranch dflags e c1 k1 c2 k2 csp
        ; branch_var_name <- freshVar ("__branch_var_" ++ (getLnNumInStr csp))
        ; let branch_var = branch_var_name
 
+         -- OK! DV: Checked initialization in compInit
        ; codeGenDeclVolGroup branch_var tint ZeroOut >>= appendDeclPkg
         -- The init function for branch determines the value of
         -- [branch_var], which is used in tick and process to direct control
@@ -436,6 +437,7 @@ codeGenComp dflags comp k =
           then do { let d = i1 `div` i2
 
                     -- declare the state of the mitigator
+                    -- OK! DV: checked initialization in compInit
                   ; appendDeclPkg =<<
                       codeGenDeclVolGroup mit_st tint (InitWith [cinit|$int:d|])
 
@@ -476,10 +478,14 @@ codeGenComp dflags comp k =
           else do { let d = i2 `div` i1
 
                     -- declare the state of the mitigator
+                    -- OK DV: checked initialization 
                   ; appendDeclPkg =<<
                        codeGenDeclVolGroup mit_st tint ZeroOut
-                  ; appendDeclPkg =<<
-                       codeGenDeclGroup buf (TArray (Literal i2) bty) ZeroOut
+
+                  ; DeclPkg buf_decl buf_inits <- codeGenDeclGroup buf (TArray (Literal i2) bty) ZeroOut
+                  ; appendDecl buf_decl
+
+
 
                     -- trivial tick()
                   ; appendLabeledBlock (tickNmOf prefix) $ do
@@ -503,8 +509,8 @@ codeGenComp dflags comp k =
                            else
                                kontConsume k
 
-                  ; return (mkCompInfo prefix False) -- cannot tick
-
+                  ; let cnfo = mkCompInfo prefix False
+                  ; return cnfo { compGenInit = codeStmts buf_inits `mappend` compGenInit cnfo }
                   }
 
     go (MkComp (Map _p nm) csp ()) = do
@@ -564,8 +570,11 @@ codeGenComp dflags comp k =
         -- array data is created in a local variable belonging to a function and
         -- we cannot guarantee it will stay there by the time emits is done.
 
+        -- OK! 
         appendDeclPkg =<< codeGenDeclVolGroup stateVar tint ZeroOut
-        appendDeclPkg =<< codeGenDeclGroup expVar (ctExp e) ZeroOut
+        DeclPkg evar_decl evar_stms <- codeGenDeclGroup expVar (ctExp e) ZeroOut
+        appendDecl evar_decl
+
 
         genOrigin csp
         -- Must generate emit_process since runtime code will use name (even
@@ -598,7 +607,9 @@ codeGenComp dflags comp k =
                                return IMMEDIATE;
                               |]
 
-        return (mkCompInfo prefix True) {compGenInit = codeStmt [cstm|$id:stateVar = 0;|]}
+        return (mkCompInfo prefix True) {compGenInit = codeStmt [cstm| $id:stateVar = 0;|] `mappend` 
+                                                       codeStmts evar_stms
+                                        }
       where
         checkArrayIsLiteral :: Ty -> Cg (Ty,Int)
         checkArrayIsLiteral (TArray (Literal n) bt) =
@@ -723,6 +734,8 @@ codeGenComp dflags comp k =
 
         -- Must generate emit_process since runtime code will use name (even if
         -- it never calls the function) when "emit" is the toplevel program
+
+        -- OK! 
         appendDeclPkg =<< codeGenDeclVolGroup stateVar tint ZeroOut
 
         mapM_ appendStmt $
@@ -790,6 +803,7 @@ codeGenComp dflags comp k =
         branch_var_name <- freshVar ("__branch_var_" ++ (getLnNumInStr csp))
         let branch_var = branch_var_name
 
+        -- OK 
         appendDeclPkg =<< codeGenDeclVolGroup branch_var tint ZeroOut
 
         -- INVARIANT: l is nonempty
@@ -820,6 +834,9 @@ codeGenComp dflags comp k =
 
                 new_dh <- freshName ("__dv_tmp_"  ++ (name nm) ++ "_" ++ (getLnNumInStr csp)) vTy Mut
                 let new_dhval = doneValOf $ name new_dh
+                DeclPkg dv_decl dv_inits <- codeGenDeclGroup new_dhval vTy ZeroOut
+                appendDecl dv_decl 
+{- 
                 appendDeclPkg =<<
                     -- Note [Take Optimization]
                     -- If the component is a Take1 then we can simply make
@@ -836,7 +853,7 @@ codeGenComp dflags comp k =
                       else
                      -}
                         codeGenDeclGroup new_dhval vTy ZeroOut
-
+-}
 
                 let ce = [cexp|$id:new_dhval |]
                 c2Name <- freshLabel ("__bnd_rest_" ++ (getLnNumInStr csp))
@@ -858,12 +875,14 @@ codeGenComp dflags comp k =
 
                 pushName c1Name
                 c1info <- codeGenCompTop dflags c1 (k { kontDone = c1DoneKont, doneHdl = name new_dh})
-                return $ c1info : rest_info
+                let c1info' = c1info { compGenInit = codeStmts dv_inits `mappend` compGenInit c1info }
+                return $ c1info' : rest_info
 
             go branch_var num_branches (c1,c1Name) [] = do
                 pushName c1Name
                 c1info <- codeGenCompTop dflags c1 k
-                return [c1info]
+                let c1info' = c1info
+                return [c1info']
 
         -- INVARIANT: switchTbl is always nonempty (look at go below)
         switchTbl <- go branch_var (length nms_cs + 1) (c1,c1Name) nms_cs
@@ -1006,6 +1025,7 @@ codeGenComp dflags comp k =
 
         let aTy = TArray (Literal n) elemTy
 
+        -- OK! 
         appendDeclPkg =<< codeGenDeclVolGroup stateVar tint ZeroOut
 
         appendLabeledBlock (tickNmOf prefix) $
@@ -1164,7 +1184,7 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
            ; x_name <- freshVar ((name x) ++ "_" ++ (getLnNumInStr csp))
            ; let x_cname = x_name
 
-           ; x_decl <- codeGenDeclGroup x_cname ty ZeroOut
+           ; (DeclPkg x_decl x_stmts) <- codeGenDeclGroup x_cname ty ZeroOut
 
              -- Declare any declarations from e 
            ; if emit_global then appendTopDecls e_decls else appendDecls e_decls
@@ -1172,13 +1192,13 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
            ; (_,asgn_stmts) <- inNewBlock_ $
                                assignByVal ty [cexp|$id:x_cname|] ce
 
-           ; if emit_global then appendTopDeclPkg x_decl 
-                            else appendDeclPkg x_decl
+           ; if emit_global then appendTopDecl x_decl 
+                            else appendDecl x_decl
 
            ; (a,stms) <- extendVarEnv [(x, [cexp|$id:x_cname|])] $ 
                          go ctxt action
 
-           ; return (a,e_stmts ++ asgn_stmts ++ stms)
+           ; return (a,e_stmts ++ x_stmts ++ asgn_stmts ++ stms)
            }
 
     -- CL
@@ -1191,11 +1211,13 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
       = do { x_name <- freshVar ((name x) ++ "_" ++ (getLnNumInStr csp))
            ; let x_cname = x_name
 
-           ; x_decl <- codeGenDeclGroup x_cname (nameTyp x) ZeroOut
+           ; (DeclPkg d asgn_stmts) <- codeGenDeclGroup x_cname (nameTyp x) ZeroOut
 
-           ; if emit_global then appendTopDeclPkg x_decl 
-                            else appendDeclPkg x_decl
-           ; extendVarEnv [(x, [cexp|$id:x_cname|])] $ go ctxt action
+           ; if emit_global then appendTopDecl d 
+                            else appendDecl d
+           ; (a,stmts) <- extendVarEnv [(x, [cexp|$id:x_cname|])] $ go ctxt action
+           ; return (a,asgn_stmts ++ stmts);
+
            }
 
     --

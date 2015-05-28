@@ -31,6 +31,7 @@ module NameEnv (
  , neUpdate
  , neToList
  , neUnionWith
+ , neJoinWith
 ) where 
 
 import AstExpr
@@ -63,6 +64,24 @@ neLookup x (NameEnv env) = go x env
         go nm ((nm1,a):rest)
           | nm1 == nm = Just a
           | otherwise = go nm rest
+
+neJoinWith :: NameEnv t a -> NameEnv t a 
+           -> (GName t -> a -> a)          -- if only one of the two 
+           -> (GName t -> a -> a -> a)     -- if in both
+           -> NameEnv t a
+neJoinWith (NameEnv nea) neb g f 
+  = go2 (unNameEnv $ go1 nea neb) (NameEnv nea) 
+  where
+    go1 [] ne2 = ne2
+    go1 ((n1,a1):ne1') ne2 = neUpdate n1 aux1 $ (go1 ne1' ne2)
+     where aux1 Nothing    = Just (g n1 a1)
+           aux1 (Just a1') = Just (f n1 a1 a1')
+
+    go2 [] ne2 = ne2
+    go2 ((n1,a1):ne1') ne2 = neUpdate n1 aux2 $ (go2 ne1' ne2)
+     where aux2 Nothing    = Just (g n1 a1)
+           aux2 (Just a1') = Just a1'
+
 
 neUnionWith :: NameEnv t a -> NameEnv t a 
             -> (GName t -> a -> a -> a)
