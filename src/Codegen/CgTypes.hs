@@ -283,7 +283,9 @@ type CVar = String
 -- | When declaring a new variable we can choose how to initialize it
 -- ^ by passing a @HowToInit@ value. @ZeroOut@ zeroes the relevant
 -- ^ memory, whereas @InitWith init@ allows you to pass in a C-initializer.
-data HowToInit = ZeroOut | InitWith C.Initializer
+-- 
+data HowToInit = ZeroOut 
+               | InitWith C.Initializer
 
 -- | An InitGroup or Definition plus any statements for initialization
 data DeclPkg d = DeclPkg { dp_decl :: d, dp_init :: [C.Stm] }
