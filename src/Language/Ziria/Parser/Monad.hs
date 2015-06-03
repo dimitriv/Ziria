@@ -17,8 +17,9 @@ module Language.Ziria.Parser.Monad (
     PState,
     emptyPState,
 
-    addCompIdentifier,
-    isCompIdentifier,
+
+    pushStructId,
+    isStructId,
 
     getInput,
     setInput,
@@ -59,10 +60,11 @@ import Language.Ziria.Parser.Tokens
 import Language.Ziria.Parser.Exceptions
 
 data PState = PState
-    { input           :: !AlexInput
-    , curToken        :: L Token
-    , lexState        :: ![Int]
-    , compIdentifiers :: !(Set Symbol)
+    { input             :: !AlexInput
+    , curToken          :: L Token
+    , lexState          :: ![Int]
+    , structIds         :: !(Set Symbol) 
+    -- DEPRECATED: , compIdentifiers :: !(Set Symbol)
     }
 
 emptyPState :: T.Text
@@ -72,7 +74,8 @@ emptyPState buf pos = PState
     { input           = alexInput buf pos
     , curToken        = error "no token"
     , lexState        = [0]
-    , compIdentifiers = Set.empty
+    , structIds       = Set.empty
+    -- DEPRECATED: , compIdentifiers = Set.empty
     }
 
 newtype P a = P { runP :: PState -> Either SomeException (a, PState) }
@@ -90,12 +93,12 @@ instance Monad P where
           Left e         -> Left e
           Right (a, s')  -> runP (k a) s'
 
-    m1 >> m2 = P $ \s ->
-        case runP m1 s of
+    m1 >> m2 = P $ \ s ->
+        case runP m1  s of
           Left e         -> Left e
-          Right (_, s')  -> runP m2 s'
+          Right (_, s')  -> runP m2  s'
 
-    return a = P $ \s -> Right (a, s)
+    return a = P $ \ s -> Right (a, s)
 
     fail msg = do
         inp <- getInput
@@ -103,17 +106,17 @@ instance Monad P where
                                 (ppr (alexPos inp) <> colon <+> text msg)
 
 instance MonadState PState P where
-    get    = P $ \s -> Right (s, s)
-    put s  = P $ \_ -> Right ((), s)
+    get    = P $ \ s -> Right (s, s)
+    put s  = P $ \ _ -> Right ((), s)
 
 instance MonadException P where
     throw e = P $ \_ -> Left (toException e)
 
-    m `catch` h = P $ \s ->
-        case runP m s of
+    m `catch` h = P $ \ s ->
+        case runP m  s of
           Left e ->
               case fromException e of
-                Just e'  -> runP (h e') s
+                Just e'  -> runP (h e')  s
                 Nothing  -> Left e
           Right (a, s')  -> Right (a, s')
 
@@ -123,13 +126,15 @@ evalP comp st =
       Left e        -> Left e
       Right (a, _)  -> Right a
 
-addCompIdentifier :: Symbol -> P ()
-addCompIdentifier ident =
-    modify $ \s -> s { compIdentifiers = Set.insert ident (compIdentifiers s) }
 
-isCompIdentifier :: Symbol -> P Bool
-isCompIdentifier ident =
-    gets (Set.member ident . compIdentifiers)
+
+pushStructId :: Symbol -> P ()
+pushStructId ident =
+    modify $ \s -> s { structIds = Set.insert ident (structIds s) }
+
+isStructId :: Symbol -> P Bool
+isStructId ident =
+    gets (Set.member ident . structIds)
 
 getInput  :: P AlexInput
 getInput = gets input
@@ -224,7 +229,9 @@ expected alts after = do
 
 expectedAt :: L Token -> [String] -> Maybe String -> P b
 expectedAt tok@(L loc _) alts after = do
-    parserError (locStart loc) (text "expected" <+> pprAlts alts <+> pprGot tok <> pprAfter after)
+    parserError 
+          (locStart loc) 
+          (text "expected" <+> pprAlts alts <+> pprGot tok <> pprAfter after)
   where
     pprAlts :: [String] -> Doc
     pprAlts []        = empty

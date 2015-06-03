@@ -233,10 +233,9 @@ keywords = Map.fromList kws
 identifier :: Action P Token
 identifier beg end =
     case Map.lookup ident keywords of
-      Nothing  -> do isComp <- isCompIdentifier ident
-                     if isComp
-                        then token (TcompIdentifier ident) beg end
-                        else token (Tidentifier ident) beg end
+      Nothing  -> do x <- isStructId ident
+                     if x then token (TstructIdentifier ident) beg end
+                          else token (Tidentifier ident) beg end
       Just tok -> token tok beg end
   where
     ident :: Symbol

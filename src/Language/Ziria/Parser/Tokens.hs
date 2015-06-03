@@ -18,7 +18,8 @@ data Token = Teof
            | TcharConst (String, Char)
            | TstringConst (String, String)
            | Tidentifier Symbol
-           | TcompIdentifier Symbol
+           | TstructIdentifier Symbol
+
 
            | TzeroBit
            | ToneBit
@@ -131,7 +132,7 @@ instance Pretty Token where
     ppr (TcharConst (s, _))   = text s
     ppr (TstringConst (s, _)) = text s
     ppr (Tidentifier sym)     = (text . unintern) sym
-    ppr (TcompIdentifier sym) = (text . unintern) sym
+    ppr (TstructIdentifier sym)     = (text . unintern) sym
 
     ppr TzeroBit     = text "'0"
     ppr ToneBit      = text "'1"
