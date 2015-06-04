@@ -218,9 +218,9 @@ import Interpreter (evalSrcInt)
 identifier :: { L String }
 identifier :
     ID       { L (locOf $1) (unintern (getID $1)) }
-  | 'arr'    { L (locOf $1) "arr" }
-  | 'fun'    { L (locOf $1) "fun" }
-  | 'length' { L (locOf $1) "length" }
+  -- | 'arr'    { L (locOf $1) "arr" }
+  -- | 'fun'    { L (locOf $1) "fun" }
+  -- | 'length' { L (locOf $1) "length" }
 
 comp_identifier :: { L String }
 comp_identifier :
@@ -377,14 +377,14 @@ exp_list :
 
 exp_rlist :: { RevList SrcExp }
 exp_rlist :
-    {- empty -}       { rnil }
-  | exp               { rsingleton $1 }
-  | exp_rlist ',' exp { rcons $3 $1 }
+     {- empty -}       { rnil }
+   | exp               { rsingleton $1 }
+   | exp_rlist ',' exp { rcons $3 $1 }
 
 -- List of one or more expressions
 exp_list1 :: { [SrcExp] }
 exp_list1 :
-    exp_rlist1 { rev $1 }
+   exp_rlist1 { rev $1 }
 
 exp_rlist1 :: { RevList SrcExp }
 exp_rlist1 :
@@ -504,7 +504,7 @@ cast_type :: { L SrcTy }
 cast_type :
     'bit'             { L (locOf $1)   $ SrcTBit }
   | 'int'             { L (locOf $1)   $ SrcTInt SrcBW32 }
-  | 'int8'            { L (locOf $1)   $ SrcTInt SrcBW8 }
+  | 'int8'            { L (locOf $1)   $ SrcTInt SrcBW8  }
   | 'int16'           { L (locOf $1)   $ SrcTInt SrcBW16 }
   | 'int32'           { L (locOf $1)   $ SrcTInt SrcBW32 }
   | 'int64'           { L (locOf $1)   $ SrcTInt SrcBW64 }
@@ -517,21 +517,22 @@ cast_type :
 
 arr_length :: { L SrcTy }
 arr_length :
-    '[' 'length' '(' ID ')' ']' base_type
-      { let { p  = $1 `srcspan` $7
-            ; x  = unintern (getID $4)
-            ; nm = toName x p SrcTyUnknown (errMutKind x p)
-            }
-        in
-          L ($1 <--> $7) $ SrcTArray (SrcNArr nm) (unLoc $7)
+    '[' const_len_or_int_exp ']' base_type
+      { L ($1 <--> $4) $ case unLoc $2 of 
+           Left nm -> SrcTArray (SrcNArr nm) (unLoc $4)
+           Right i -> SrcTArray (SrcLiteral i) (unLoc 4)
       }
-  | '[' const_int_exp ']' base_type
-      { L ($1 <--> $4) $ SrcTArray (SrcLiteral (unLoc $2)) (unLoc $4) }
   | base_type
       { let { p = srclocOf $1 }
         in
           L (locOf $1) $ SrcTArray (SrcNVar p) (unLoc $1)
       }
+
+-- Constant integer expressions
+const_len_or_int_exp :: { L (Either (GName SrcTy) Int) }
+const_len_or_int_exp :
+    exp {% fmap (L (locOf $1)) (constLenIntExp $1) }
+
 
 comp_base_type :: { L SrcCTy }
 comp_base_type :
@@ -648,10 +649,18 @@ stmt_exp :
       {% expected ["then clause"] Nothing }
   | 'return' exp
       { $2 }
-  | 'print' exp_list1
-      { ePrint ($1 `srcspan` $2) False $2 }
-  | 'println' exp_list1
-      { ePrint ($1 `srcspan` $2) True $2 }
+  -- | print_rec 
+  --     { ePrint (srcLoc $1) (fst $1) (snd $1) } 
+  -- | 'print' exp_list1
+  --     { ePrint ($1 `srcspan` $2) False $2 }
+  -- | 'println' exp_list1
+  --     { ePrint ($1 `srcspan` $2) True $2 }
+  | 'print' '(' exp_list ')'
+      { ePrint ($1 `srcspan` $4) False $3 } 
+
+  | 'println' '(' exp_list ')'
+      { ePrint ($1 `srcspan` $4) True $3 } 
+
   | 'error' STRING
       { let { p = $1 `srcspan` $2 }
         in
@@ -676,6 +685,13 @@ stmt_exp :
             }
         in eAssign p lhs rhs
       }
+
+print_rec :: { (Bool,[SrcExp]) } 
+print_rec : 
+     'print' exp         { (False,[$2]) }
+   | 'println' exp       { (True, [$2]) }
+   | print_rec ',' exp   { (fst $1, snd $1 ++ [$2]) }
+
 
 unroll_info :: { L UnrollInfo }
 unroll_info :
@@ -749,7 +765,6 @@ acomp :
         in
           cVar p v
       }
-
   | ID '(' args ')'
       { let { p = srclocOf $1
             ; x = unintern (getCOMPID $1)
@@ -758,6 +773,9 @@ acomp :
         in
           cCall p v $3
       }
+
+
+
 
 -- Tight (highest precedence) computations
 tcomp :: { SrcComp } 
@@ -790,7 +808,7 @@ tcomp :
         in
           cTimes p ui estart elen k c
       }
-  
+
   | comp_sequence { $1 } 
 
   | acomp
@@ -842,9 +860,15 @@ comp_sequence :
 
 commands :: { SrcComp } 
 commands :
-    comp_let_decl opt_semi commands 
+    -- SHIFT-REDUCE: changingt ';' to a opt_semi causes ambiguity
+    -- e.g.
+    -- let ... in x ( comp2) 
+    -- The '(' could be shifted as a CCall with x, or we could reduce x.
+    -- The right thing is to shift (and Hapy will do the right thing)
+
+    comp_let_decl ';' commands 
       { cLetDecl $1 $3 }   
-  | var_bind '<-' comp_term opt_semi commands
+  | var_bind '<-' comp_term ';' commands
       { let { p  = $1 `srcspan` $3
             ; x  = $1
             ; c1 = $3
@@ -1178,11 +1202,21 @@ eStruct' :: SrcLoc -> String -> [(String, SrcExp)] -> SrcExp
 eStruct' loc "complex" = eStruct loc (SrcTStruct complex32TyName)
 eStruct' loc tn        = eStruct loc (SrcTStruct tn)
 
+
+constLenOrIntExp :: SrcExp -> P (Either (GName SrcTy) Int)
+constLenOrIntExp e 
+  | EUnOp ALength evar <- unExp e
+  , EVar x <- unExp evar
+  = return (Left x)
+  | otherwise
+  = Right <$> constIntExp e
+
 constIntExp :: SrcExp -> P Int
 constIntExp e =
     case evalSrcInt e of
       (Right i, _) -> return $ fromIntegral i
       (Left _,  _) -> failAt (locOf e) "Non-constant array length expression."
+
 
 extractMain :: [CLetDecl] -> P SrcComp
 extractMain decls = go id decls
