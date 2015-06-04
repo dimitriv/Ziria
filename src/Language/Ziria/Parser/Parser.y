@@ -323,15 +323,7 @@ exp :
   | struct_id '{' struct_init_list1 '}'
       { eStruct' ($1 `srcspan` $4) (unLoc $1) $3 }
 
-  | ID '(' exp_list ')'
-      { let { p = ($1 `srcspan` $3)
-            ; x = unintern (getID $1)
-            }
-        in
-          mkCall p x $3
-      }
-
-  | ID opt_derefs
+  | ID ecall_or_derefs 
       { $2 (mkVar (srclocOf $1) (unintern (getID $1))) }
   
   | cast_type '(' exp ')'
@@ -341,6 +333,15 @@ exp :
   | '(' exp error
       {% unclosed ($1 <--> $2) "(" }
 
+ecall_or_derefs :: { SrcExp -> SrcExp }
+ecall_or_derefs : 
+     { id }
+  | '(' exp_list ')'
+      { \x -> let { p = ($1 `srcspan` $3) }
+        in mkCall p x $2
+      }
+  | derefs { $1 } 
+  
 
 -- '{' stmts '}' -- stmt_block
 --       { $2 } 
@@ -708,8 +709,9 @@ proj :
  -
  ------------------------------------------------------------------------------}
 
-atomic_comp_term :: { SrcComp } 
-atomic_comp_term : 
+-- Atomic computations 
+acomp :: { SrcComp } 
+acomp : 
     '(' comp_term ')' { $2 } 
   | inline_ann 'return' exp
       { cReturn ($1 `srcspan` $3) (unLoc $1) $3 }
@@ -757,22 +759,18 @@ atomic_comp_term :
           cCall p v $3
       }
 
-
-
-non_par_comp_term :: { SrcComp } 
-non_par_comp_term : 
-
-comp_term :: { SrcComp } 
-comp_term : 
-    'standalone' comp_term %prec STANDALONE
+-- Tight (highest precedence) computations
+tcomp :: { SrcComp } 
+tcomp : 
+    'standalone' tcomp %prec STANDALONE
       { cStandalone ($1 `srcspan` $2) $2 }
-  | 'repeat' vect_ann comp_term %prec STANDALONE
+  | 'repeat' vect_ann tcomp %prec STANDALONE
       { cRepeat ($1 `srcspan` $3) $2 $3 }
-  | 'until' exp comp_term %prec STANDALONE
+  | 'until' exp tcomp %prec STANDALONE
       { cUntil ($1 `srcspan` $3) $2 $3 }
-  | 'while' exp comp_term %prec STANDALONE
+  | 'while' exp tcomp %prec STANDALONE
       { cWhile ($1 `srcspan` $3) $2 $3 }
-  | unroll_info 'times' exp comp_term %prec STANDALONE
+  | unroll_info 'times' exp tcomp %prec STANDALONE
       { let { p  = $1 `srcspan` $3
             ; ui = unLoc $1
             ; e  = $3
@@ -782,7 +780,7 @@ comp_term :
         in
           cTimes p ui (eVal p tintSrc (VInt 0)) e nm c
       }
-  | unroll_info 'for' var_bind 'in' gen_interval comp_term %prec STANDALONE
+  | unroll_info 'for' var_bind 'in' gen_interval tcomp %prec STANDALONE
       { let { p              = $1 `srcspan` $6
             ; ui             = unLoc $1
             ; k              = $3
@@ -792,13 +790,33 @@ comp_term :
         in
           cTimes p ui estart elen k c
       }
+  
+  | comp_sequence { $1 } 
 
-  | comp_term '>>>' comp_term
+  | acomp
+      { $1 }
+
+-- Computations with par 
+pcomp :: { SrcComp } 
+pcomp : 
+    tcomp { $1 } 
+  | pcomp '>>>' pcomp
       { cPar ($1 `srcspan` $3) (mkParInfo MaybePipeline) $1 $3 }
-  | comp_term '|>>>|' comp_term
+  | pcomp '|>>>|' pcomp
       { cPar ($1 `srcspan` $3) (mkParInfo (AlwaysPipeline 0 0)) $1 $3 }
-  | comp_term error
-      {% expected [">>> or |>>>|"] Nothing }
+  -- | pcomp error
+  --     {% expected [">>> or |>>>|"] Nothing }
+
+-- Let-bindings and conditionals
+comp_term  :: { SrcComp } 
+comp_term :
+     pcomp { $1 } 
+
+  | comp_let_decl 'in' comp_term
+      { cLetDecl $1 $3 }
+
+  | comp_let_decl error
+      {% expected ["'in'"] Nothing }
 
   | 'if' exp 'then' comp_term comp_maybe_else
       { let { sloc = $1 `srcspan` $5 }
@@ -809,21 +827,11 @@ comp_term :
       {% expected ["command"] Nothing }
   | 'if' exp ';'
       {% expected ["then clause"] Nothing }
-  | comp_let_decl 'in' comp_term
-      { cLetDecl $1 $3 }
-  | comp_let_decl error
-      {% expected ["'in'"] Nothing }
-  
-  | comp_sequence { $1 } 
-
-  | atomic_comp_term
-      { $1 }
 
 comp_maybe_else :: { L (SrcLoc -> SrcComp) }
 comp_maybe_else :
     {- empty -}      { L NoLoc        cUnit }
   | 'else' comp_term { L ($1 <--> $2) (\_ -> $2) }
-
 
 comp_sequence :: { SrcComp } 
 comp_sequence :
