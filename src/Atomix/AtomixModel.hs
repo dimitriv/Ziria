@@ -1,4 +1,4 @@
-module Atomix(
+module AtomixModel (
   node_of_atomid,
   node_of_queueid,
   Atom(..),
@@ -97,12 +97,3 @@ data Deployment anfo qnfo ty e
   = Deployment {  dep_atom_graph :: FlowGraph anfo qnfo ty e
                ,  dep_cores      :: [Core]
                }
-
-
-
--- If (incoming,outgoing) = lookup atom atomGraph 
--- Then:
---   forall n. atom_ty_in !! n  == queue_ty (incoming !! n)
---   forall n. atom_ty_out !! n == queue_ty (outgoing !! n)
---   length (atom_ty_in)  == length incoming
---   length (atom_ty_out) == length outgoing
