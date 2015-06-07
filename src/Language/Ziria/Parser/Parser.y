@@ -46,7 +46,7 @@ import Interpreter (evalSrcInt)
   INT         { L _ (T.TintConst _) }
   FLOAT       { L _ (T.TfloatConst _) }
   ID          { L _ (T.Tidentifier _) }
-  STRUCTID    { L _ (T.TstructIdentifier _) }
+  STRUCTID    { L _ (T.Tidentifier _) }
 
   "'0"          { L _ T.TzeroBit }
   "'1"          { L _ T.ToneBit }
@@ -1187,7 +1187,7 @@ getFLOAT       (L _ (T.TfloatConst x))           = x
 getCHAR        (L _ (T.TcharConst x))            = x
 getSTRING      (L _ (T.TstringConst x))          = x
 getID          (L _ (T.Tidentifier ident))       = ident
-getSTRUCTID    (L _ (T.TstructIdentifier ident)) = ident
+getSTRUCTID    (L _ (T.Tidentifier ident))       = ident
 getCOMPID      (L _ (T.Tidentifier ident))       = ident
 
 lexer :: (L T.Token -> P a) -> P a
