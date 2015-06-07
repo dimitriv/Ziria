@@ -258,49 +258,12 @@ aexp :
 
  | '[' exp_list ']' { eValArr (srclocOf $3) $3 }
 
- | struct_id '{' struct_init_list1 '}'
-      { eStruct' ($1 `srcspan` $4) (unLoc $1) $3 }
-
  | stmt_block { $1 }
 
  | '(' exp ')' { $2 }
 
  | '(' exp error
       {% unclosed ($1 <--> $2) "(" }
-
-
-
-stmt_block :: { SrcExp }
-stmt_block : '{' stmts '}' { $2 }
-
-
-stmts :: { SrcExp }
-stmts :
-    stmt_rlist opt_semi {% desugarStatements (rev $1) }
-
-stmt_rlist :: { RevList Statement }
-stmt_rlist :
-    stmt                     { rsingleton $1 }
-  | stmt_rlist ';' stmt      { rcons $3 $1 }
-
-stmt :: { Statement }
-stmt :
-    let_decl
-       { SLetDecl $1 }
-  | assignment
-      { SExp $1 }
-  | exp
-      { SExp $1 }
-
-assignment :: { SrcExp } 
-assignment :
-    ID opt_derefs ':=' exp -- aexp
-      { let { p = $1 `srcspan` $4
-            ; lhs = $2 (mkVar (srclocOf $1) (unintern (getID $1)))
-            ; rhs = $4
-            }
-        in eAssign p lhs rhs
-      }
 
 texp :: { SrcExp }
 texp :
@@ -331,6 +294,9 @@ texp :
         in
           eError p SrcTyUnknown (snd (getSTRING $2))
       }
+
+  | struct_id '{' struct_init_list1 '}'
+       { eStruct' ($1 `srcspan` $4) (unLoc $1) $3 }
 
   | ID '(' exp_list ')'
       { let { p = ($1 `srcspan` $3)
@@ -400,35 +366,24 @@ pexp :
   | '~' pexp %prec NEG
       { eUnOp' ($1 `srcspan` $2) BwNeg $2 }
 
-  -- | 'if' texp opt_then texp opt_else texp %prec IF
-  --     { eIf ($1 `srcspan` $6) $2 $4 $6 }
-  -- | 'if' texp opt_then texp opt_else error
-  --     {% texpected ["texpression"] Nothing }
-  -- | 'if' texp opt_then texp error
-  --     {% texpected ["else clause"] Nothing }
-  -- | 'if' texp opt_then error
-  --     {% texpected ["texpression"] Nothing }
-  -- | 'if' texp error
-  --     {% expected ["then clause"] Nothing }
-  
   | texp { $1 }
 
 
 exp :: { SrcExp } 
 exp : 
-    'if' aexp opt_then exp opt_else exp
-      { let { p = $1 `srcspan` $6 }
+    'if' aexp opt_then exp 'else' exp
+      { let { p = $1 `srcspan` $5 }
         in
-          eIf p $2 $4 $6
+          eIf p $2 $4 $5
       }
-  | 'if' aexp opt_then exp opt_else error
+  | 'if' aexp opt_then exp 'else' error
       {% expected ["statement block"] Nothing }
   | 'if' aexp opt_then exp
       { let { p = $1 `srcspan` $4 }
         in
           eIf p $2 $4 (eUnit p)
       }
-  | 'if' aexp error
+  | 'if' aexp opt_then error
       {% expected ["then clause"] Nothing }
 
   | let_decl 'in' exp %prec IF -- or_stmts %prec IF
@@ -439,25 +394,49 @@ exp :
   | pexp { $1 } 
 
 
+opt_then :: { () }
+opt_then :
+           { () }
+  | 'then' { () }
 
-opt_then :: { () } 
-opt_then : 'then' { () } 
+{------------------------------------------------------------------------------
+ -
+ - Statements
+ -
+ ------------------------------------------------------------------------------}
 
-opt_else :: { () } 
-opt_else : 'else' { () } 
+stmt_block :: { SrcExp }
+stmt_block : '{' stmts '}' { $2 }
 
 
-ecall_or_derefs :: { SrcExp -> SrcExp }
-ecall_or_derefs : 
-    '(' exp_list ')'
-      { \x -> let { p = ($1 `srcspan` $3) }
-        in mkCall p x $2
+stmts :: { SrcExp }
+stmts :
+    stmt_rlist opt_semi {% desugarStatements (rev $1) }
+
+stmt_rlist :: { RevList Statement }
+stmt_rlist :
+    stmt                     { rsingleton $1 }
+  | stmt_rlist opt_semi stmt { rcons $3 $1 }
+
+stmt :: { Statement }
+stmt :
+    let_decl
+       { SLetDecl $1 }
+  | assignment
+      { SExp $1 }
+  | 'return' exp
+      { SExp $2 }
+
+assignment :: { SrcExp } 
+assignment :
+    ID opt_derefs ':=' exp -- aexp
+      { let { p = $1 `srcspan` $4
+            ; lhs = $2 (mkVar (srclocOf $1) (unintern (getID $1)))
+            ; rhs = $4
+            }
+        in eAssign p lhs rhs
       }
-  | derefs { $1 } 
-  
 
--- '{' stmts '}' -- stmt_block
---       { $2 } 
 
 -- Variable binding
 var_bind :: { SrcName }
@@ -494,15 +473,6 @@ exp_rlist :
    | exp               { rsingleton $1 }
    | exp_rlist ',' exp { rcons $3 $1 }
 
--- List of one or more expressions
-exp_list1 :: { [SrcExp] }
-exp_list1 :
-   exp_rlist1 { rev $1 }
-
-exp_rlist1 :: { RevList SrcExp }
-exp_rlist1 :
-    exp                { rsingleton $1 }
-  | exp_rlist1 ',' exp { rcons $3 $1 }
 
 -- Struct initializers
 struct_id :: { L String }
@@ -702,19 +672,6 @@ maybe_initializer :
     {- empty -} { L NoLoc        Nothing }
   | ':=' exp    { L ($1 <--> $2) (Just $2) }
 
-{------------------------------------------------------------------------------
- -
- - Statements
- -
- ------------------------------------------------------------------------------}
-
-
-print_rec :: { (Bool,[SrcExp]) } 
-print_rec : 
-     'print' exp         { (False,[$2]) }
-   | 'println' exp       { (True, [$2]) }
-   | print_rec ',' exp   { (fst $1, snd $1 ++ [$2]) }
-
 
 unroll_info :: { L UnrollInfo }
 unroll_info :
@@ -722,25 +679,6 @@ unroll_info :
   | 'unroll'    { L (locOf $1) Unroll }
   | 'nounroll'  { L (locOf $1) NoUnroll }
 
-projs :: { SrcExp -> SrcExp }
-projs :
-    proj_rlist { foldr (.) id $1 }
-
--- We want these in reverse order for the foldr
-proj_rlist :: { [SrcExp -> SrcExp] }
-proj_rlist :
-    {- empty -}         { [] }
-  | proj_rlist '.' proj { $3 : $1 }
-
-proj :: { SrcExp -> SrcExp }
-proj :
-    ID
-      { let { p = srclocOf $1
-            ; v = unintern (getID $1)
-            }
-        in
-          \e -> eProj p e v
-      }
 
 {------------------------------------------------------------------------------
  -
@@ -871,7 +809,7 @@ comp_term :
 comp_maybe_else :: { L (SrcLoc -> SrcComp) }
 comp_maybe_else :
     {- empty -}      { L NoLoc        cUnit }
-  | opt_else comp_term { L ($1 <--> $2) (\_ -> $2) }
+  | 'else' comp_term { L ($1 <--> $2) (\_ -> $2) }
 
 comp_sequence :: { SrcComp } 
 comp_sequence :
@@ -882,11 +820,7 @@ comp_sequence :
 
 commands :: { SrcComp } 
 commands :
-    -- SHIFT-REDUCE: changingt ';' to a opt_semi causes ambiguity
-    -- e.g.
-    -- let ... in x ( comp2) 
-    -- The '(' could be shifted as a CCall with x, or we could reduce x.
-    -- The right thing is to shift (and Hapy will do the right thing)
+
     comp_atomic_decl opt_semi commands
       { cLetDecl $1 $3 }   
 
