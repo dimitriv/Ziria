@@ -249,94 +249,207 @@ scalar_value :
  -
  ------------------------------------------------------------------------------}
 
+-- Atomic expressions 
+aexp :: { SrcExp }
+aexp : 
+   ID  { mkVar (srclocOf $1) (unintern (getID $1)) } 
 
-exp :: { SrcExp }
-exp :
-    exp '+' exp
+ | scalar_value { $1 }
+
+ | '[' exp_list ']' { eValArr (srclocOf $3) $3 }
+
+ | struct_id '{' struct_init_list1 '}'
+      { eStruct' ($1 `srcspan` $4) (unLoc $1) $3 }
+
+ | stmt_block { $1 }
+
+ | '(' exp ')' { $2 }
+
+ | '(' exp error
+      {% unclosed ($1 <--> $2) "(" }
+
+
+
+stmt_block :: { SrcExp }
+stmt_block : '{' stmts '}' { $2 }
+
+
+stmts :: { SrcExp }
+stmts :
+    stmt_rlist opt_semi {% desugarStatements (rev $1) }
+
+stmt_rlist :: { RevList Statement }
+stmt_rlist :
+    stmt                     { rsingleton $1 }
+  | stmt_rlist ';' stmt      { rcons $3 $1 }
+
+stmt :: { Statement }
+stmt :
+    let_decl
+       { SLetDecl $1 }
+  | assignment
+      { SExp $1 }
+  | exp
+      { SExp $1 }
+
+assignment :: { SrcExp } 
+assignment :
+    ID opt_derefs ':=' exp -- aexp
+      { let { p = $1 `srcspan` $4
+            ; lhs = $2 (mkVar (srclocOf $1) (unintern (getID $1)))
+            ; rhs = $4
+            }
+        in eAssign p lhs rhs
+      }
+
+texp :: { SrcExp }
+texp :
+    unroll_info 'for' var_bind 'in' gen_interval texp
+      { let { p              = $1 `srcspan` $6
+            ; ui             = unLoc $1
+            ; k              = $3
+            ; (estart, elen) = $5
+            ; body           = $6
+            }
+        in
+          eFor p ui k estart elen body
+      }
+  | 'while' aexp texp
+      { let { p = $1 `srcspan` $3 }
+        in
+          eWhile p $2 $3
+      }
+
+  | 'print' '(' exp_list ')'
+      { ePrint ($1 `srcspan` $4) False $3 } 
+
+  | 'println' '(' exp_list ')'
+      { ePrint ($1 `srcspan` $4) True $3 } 
+
+  | 'error' STRING
+      { let { p = $1 `srcspan` $2 }
+        in
+          eError p SrcTyUnknown (snd (getSTRING $2))
+      }
+
+  | ID '(' exp_list ')'
+      { let { p = ($1 `srcspan` $3)
+            ; x = unintern (getID $1)
+            }
+        in
+          mkCall p x $3
+      }
+
+  | ID derefs 
+      { $2 (mkVar (srclocOf $1) (unintern (getID $1))) }
+
+  | cast_type '(' exp ')'
+      { eUnOp' ($1 `srcspan` $4) (Cast (unLoc $1)) $3 }
+
+  | aexp { $1 } 
+
+
+pexp :: { SrcExp } 
+pexp : 
+    pexp '+' pexp
       { eBinOp ($1 `srcspan` $3) Add $1 $3 }
-  | exp '-' exp
+  | pexp '-' pexp
       { eBinOp ($1 `srcspan` $3) Sub $1 $3 }
-  | exp '*' exp
+  | pexp '*' pexp
       { eBinOp ($1 `srcspan` $3) Mult $1 $3 }
-  | exp '/' exp
+  | pexp '/' pexp
       { eBinOp ($1 `srcspan` $3) Div $1 $3 }
-  | exp '%' exp
+  | pexp '%' pexp
       { eBinOp ($1 `srcspan` $3) Rem $1 $3 }
-  | exp '**' exp
-      { eBinOp ($1 `srcspan` $3) Expon  $1 $3 }
-  | exp '<<' exp
+  | pexp '**' pexp
+      { eBinOp ($1 `srcspan` $3) Pexpon  $1 $3 }
+  | pexp '<<' pexp
       { eBinOp ($1 `srcspan` $3) ShL $1 $3 }
-  | exp '>>' exp
+  | pexp '>>' pexp
       { eBinOp ($1 `srcspan` $3) ShR $1 $3 }
-  | exp '&' exp
+  | pexp '&' pexp
       { eBinOp ($1 `srcspan` $3) BwAnd $1 $3 }
-  | exp '|' exp
+  | pexp '|' pexp
       { eBinOp ($1 `srcspan` $3) BwOr $1 $3 }
-  | exp '^' exp
+  | pexp '^' pexp
       { eBinOp ($1 `srcspan` $3) BwXor $1 $3 }
-  | exp '==' exp
+  | pexp '==' pexp
       { eBinOp ($1 `srcspan` $3) Eq $1 $3 }
-  | exp '!=' exp
+  | pexp '!=' pexp
       { eBinOp ($1 `srcspan` $3) Neq $1 $3 }
-  | exp '<' exp
+  | pexp '<' pexp
       { eBinOp ($1 `srcspan` $3) Lt $1 $3 }
-  | exp '>' exp
+  | pexp '>' pexp
       { eBinOp ($1 `srcspan` $3) Gt $1 $3 }
-  | exp '<=' exp
+  | pexp '<=' pexp
       { eBinOp ($1 `srcspan` $3) Leq $1 $3 }
-  | exp '>=' exp
+  | pexp '>=' pexp
       { eBinOp ($1 `srcspan` $3) Geq $1 $3 }
-  | exp '&&' exp
+  | pexp '&&' pexp
       { eBinOp ($1 `srcspan` $3) And $1 $3 }
-  | exp '||' exp
+  | pexp '||' pexp
       { eBinOp ($1 `srcspan` $3) Or $1 $3 }
 
-  | 'length' exp %prec LENGTH
+  | 'length' pexp %prec LENGTH
       { eUnOp' ($1 `srcspan` $2) ALength $2 }
 
-  | '-' exp %prec NEG
+  | '-' pexp %prec NEG
       { eUnOp' ($1 `srcspan` $2) Neg $2 }
-  | 'not' exp %prec NEG
+  | 'not' pexp %prec NEG
       { eUnOp' ($1 `srcspan` $2) Not $2 }
-  | '~' exp %prec NEG
+  | '~' pexp %prec NEG
       { eUnOp' ($1 `srcspan` $2) BwNeg $2 }
 
-  | 'if' exp 'then' exp 'else' exp %prec IF
-      { eIf ($1 `srcspan` $6) $2 $4 $6 }
-  | 'if' exp 'then' exp 'else' error
-      {% expected ["expression"] Nothing }
-  | 'if' exp 'then' exp error
-      {% expected ["else clause"] Nothing }
-  | 'if' exp 'then' error
-      {% expected ["expression"] Nothing }
-  | 'if' exp error
+  -- | 'if' texp opt_then texp opt_else texp %prec IF
+  --     { eIf ($1 `srcspan` $6) $2 $4 $6 }
+  -- | 'if' texp opt_then texp opt_else error
+  --     {% texpected ["texpression"] Nothing }
+  -- | 'if' texp opt_then texp error
+  --     {% texpected ["else clause"] Nothing }
+  -- | 'if' texp opt_then error
+  --     {% texpected ["texpression"] Nothing }
+  -- | 'if' texp error
+  --     {% expected ["then clause"] Nothing }
+  
+  | texp { $1 }
+
+
+exp :: { SrcExp } 
+exp : 
+    'if' aexp opt_then exp opt_else exp
+      { let { p = $1 `srcspan` $6 }
+        in
+          eIf p $2 $4 $6
+      }
+  | 'if' aexp opt_then exp opt_else error
+      {% expected ["statement block"] Nothing }
+  | 'if' aexp opt_then exp
+      { let { p = $1 `srcspan` $4 }
+        in
+          eIf p $2 $4 (eUnit p)
+      }
+  | 'if' aexp error
       {% expected ["then clause"] Nothing }
+
   | let_decl 'in' exp %prec IF -- or_stmts %prec IF
       { eLetDecl $1 $3 }
   | let_decl error %prec IF
       {% expected ["'in'"] Nothing }
+ 
+  | pexp { $1 } 
 
-  | scalar_value
-      { eValSrc (srclocOf $1) (unLoc $1) }
-  | '[' exp_list ']' { eValArr (srclocOf $3) $3 }
 
-  | struct_id '{' struct_init_list1 '}'
-      { eStruct' ($1 `srcspan` $4) (unLoc $1) $3 }
 
-  | ID ecall_or_derefs 
-      { $2 (mkVar (srclocOf $1) (unintern (getID $1))) }
-  
-  | cast_type '(' exp ')'
-      { eUnOp' ($1 `srcspan` $4) (Cast (unLoc $1)) $3 }
-  | '(' exp ')'
-      { $2 }
-  | '(' exp error
-      {% unclosed ($1 <--> $2) "(" }
+opt_then :: { () } 
+opt_then : 'then' { () } 
+
+opt_else :: { () } 
+opt_else : 'else' { () } 
+
 
 ecall_or_derefs :: { SrcExp -> SrcExp }
 ecall_or_derefs : 
-     { id }
-  | '(' exp_list ')'
+    '(' exp_list ')'
       { \x -> let { p = ($1 `srcspan` $3) }
         in mkCall p x $2
       }
@@ -595,96 +708,6 @@ maybe_initializer :
  -
  ------------------------------------------------------------------------------}
 
-stmt_block :: { SrcExp }
-stmt_block :
-    '{' stmts '}' { $2 }
-  | stmt_exp      { $1 }
-
-stmts :: { SrcExp }
-stmts :
-    stmt_rlist opt_semi {% desugarStatements (rev $1) }
-
-stmt_rlist :: { RevList Statement }
-stmt_rlist :
-    stmt                     { rsingleton $1 }
-  | stmt_rlist opt_semi stmt { rcons $3 $1 }
-
-stmt :: { Statement }
-stmt :
-    let_decl
-      { SLetDecl $1 }
-  | stmt_exp
-      { SExp $1 }
-
-stmt_exp :: { SrcExp }
-stmt_exp :
-    unroll_info 'for' var_bind 'in' gen_interval stmt_block
-      { let { p              = $1 `srcspan` $6
-            ; ui             = unLoc $1
-            ; k              = $3
-            ; (estart, elen) = $5
-            ; body           = $6
-            }
-        in
-          eFor p ui k estart elen body
-      }
-  | 'while' '(' exp ')' stmt_block
-      { let { p = $1 `srcspan` $5 }
-        in
-          eWhile p $3 $5
-      }
-  | 'if' exp 'then' stmt_block 'else' stmt_block
-      { let { p = $1 `srcspan` $6 }
-        in
-          eIf p $2 $4 $6
-      }
-  | 'if' exp 'then' stmt_block 'else' error
-      {% expected ["statement block"] Nothing }
-  | 'if' exp 'then' stmt_block
-      { let { p = $1 `srcspan` $4 }
-        in
-          eIf p $2 $4 (eUnit p)
-      }
-  | 'if' exp error
-      {% expected ["then clause"] Nothing }
-  | 'return' exp
-      { $2 }
-  -- | print_rec 
-  --     { ePrint (srcLoc $1) (fst $1) (snd $1) } 
-  -- | 'print' exp_list1
-  --     { ePrint ($1 `srcspan` $2) False $2 }
-  -- | 'println' exp_list1
-  --     { ePrint ($1 `srcspan` $2) True $2 }
-  | 'print' '(' exp_list ')'
-      { ePrint ($1 `srcspan` $4) False $3 } 
-
-  | 'println' '(' exp_list ')'
-      { ePrint ($1 `srcspan` $4) True $3 } 
-
-  | 'error' STRING
-      { let { p = $1 `srcspan` $2 }
-        in
-          eError p SrcTyUnknown (snd (getSTRING $2))
-      }
-  | let_decl 'in' stmt_block
-      { eLetDecl $1 $3 }
-  | let_decl error
-      {% expected ["'in'"] Nothing }
-  | ID '(' exp_list ')'
-      { let { p = ($1 `srcspan` $3)
-            ; x = unintern (getID $1)
-            }
-        in
-          mkCall p x $3
-      }
-
-  | ID opt_derefs ':=' exp
-      { let { p = $1 `srcspan` $4
-            ; lhs = $2 (mkVar (srclocOf $1) (unintern (getID $1)))
-            ; rhs = $4
-            }
-        in eAssign p lhs rhs
-      }
 
 print_rec :: { (Bool,[SrcExp]) } 
 print_rec : 
@@ -776,7 +799,6 @@ acomp :
 
 
 
-
 -- Tight (highest precedence) computations
 tcomp :: { SrcComp } 
 tcomp : 
@@ -784,11 +806,11 @@ tcomp :
       { cStandalone ($1 `srcspan` $2) $2 }
   | 'repeat' vect_ann tcomp %prec STANDALONE
       { cRepeat ($1 `srcspan` $3) $2 $3 }
-  | 'until' exp tcomp %prec STANDALONE
+  | 'until' aexp tcomp %prec STANDALONE
       { cUntil ($1 `srcspan` $3) $2 $3 }
-  | 'while' exp tcomp %prec STANDALONE
+  | 'while' aexp tcomp %prec STANDALONE
       { cWhile ($1 `srcspan` $3) $2 $3 }
-  | unroll_info 'times' exp tcomp %prec STANDALONE
+  | unroll_info 'times' aexp tcomp %prec STANDALONE
       { let { p  = $1 `srcspan` $3
             ; ui = unLoc $1
             ; e  = $3
@@ -836,20 +858,20 @@ comp_term :
   | comp_let_decl error
       {% expected ["'in'"] Nothing }
 
-  | 'if' exp 'then' comp_term comp_maybe_else
+  | 'if' aexp opt_then comp_term comp_maybe_else
       { let { sloc = $1 `srcspan` $5 }
         in
           cBranch sloc $2 $4 (unLoc $5 sloc)
       }
-  | 'if' exp 'then' error
+  | 'if' aexp opt_then error
       {% expected ["command"] Nothing }
-  | 'if' exp ';'
+  | 'if' aexp ';'
       {% expected ["then clause"] Nothing }
 
 comp_maybe_else :: { L (SrcLoc -> SrcComp) }
 comp_maybe_else :
     {- empty -}      { L NoLoc        cUnit }
-  | 'else' comp_term { L ($1 <--> $2) (\_ -> $2) }
+  | opt_else comp_term { L ($1 <--> $2) (\_ -> $2) }
 
 comp_sequence :: { SrcComp } 
 comp_sequence :
@@ -865,9 +887,12 @@ commands :
     -- let ... in x ( comp2) 
     -- The '(' could be shifted as a CCall with x, or we could reduce x.
     -- The right thing is to shift (and Hapy will do the right thing)
-
-    comp_let_decl ';' commands 
+    comp_atomic_decl opt_semi commands
       { cLetDecl $1 $3 }   
+
+  | comp_nonatom_decl ';' commands
+      { cLetDecl $1 $3 }   
+
   | var_bind '<-' comp_term ';' commands
       { let { p  = $1 `srcspan` $3
             ; x  = $1
@@ -876,19 +901,13 @@ commands :
             }
         in cBindMany p c1 [(x,c2)] 
       }
-  | comp_term { $1 } 
+
+  | comp_term { $1 }   
 
 
-comp_let_decl :: { CLetDecl }
-comp_let_decl :
-    decl
-      { let { p      = srclocOf $1
-            ; (x, e) = unLoc $1
-            }
-        in
-          CLetDeclERef p x e
-      }
-  | struct
+comp_atomic_decl :: { CLetDecl }
+comp_atomic_decl : 
+    struct
       { let { p = srclocOf $1 }
         in
           CLetDeclStruct p (unLoc $1)
@@ -912,14 +931,30 @@ comp_let_decl :
         in
           CLetDeclFunComp p h x ps c
       }
-  | 'fun' var_bind params stmt_block
-      { let { p  = $1 `srcspan` $4
+  | 'fun' var_bind params '{' stmts '}'
+      { let { p  = $1 `srcspan` $6
             ; fn = $2
             ; ps = $3
-            ; e  = $4
+            ; e  = $5
             }
         in
           CLetDeclFunExpr p fn ps e
+      }
+
+comp_let_decl :: { CLetDecl }
+comp_let_decl :
+    comp_atomic_decl  { $1 }
+  | comp_nonatom_decl { $1 }
+
+
+comp_nonatom_decl :: { CLetDecl } 
+comp_nonatom_decl :
+    decl
+      { let { p      = srclocOf $1
+            ; (x, e) = unLoc $1
+            }
+        in
+          CLetDeclERef p x e
       }
   | 'let' 'comp' maybe_comp_range comp_var_bind '=' comp_term
       { let { p  = $1 `srcspan` $6
@@ -976,7 +1011,7 @@ arg_rlist :
 
 arg :: { CallArg SrcExp SrcComp }
 arg :
-    exp                 { CAExp $1  }
+    exp              { CAExp  $1 }
   | 'comp' comp_term { CAComp $2 }
 
 -- Comp ranges
