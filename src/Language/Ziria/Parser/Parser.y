@@ -254,9 +254,9 @@ aexp :: { SrcExp }
 aexp : 
    ID  { mkVar (srclocOf $1) (unintern (getID $1)) } 
 
- | scalar_value { $1 }
+ | scalar_value { eValSrc (srclocOf $1) (unLoc $1) }
 
- | '[' exp_list ']' { eValArr (srclocOf $3) $3 }
+ | '[' exp_list ']' { eValArr (srclocOf $2) $2 }
 
  | stmt_block { $1 }
 
@@ -328,7 +328,7 @@ pexp :
   | pexp '%' pexp
       { eBinOp ($1 `srcspan` $3) Rem $1 $3 }
   | pexp '**' pexp
-      { eBinOp ($1 `srcspan` $3) Pexpon  $1 $3 }
+      { eBinOp ($1 `srcspan` $3) Expon  $1 $3 }
   | pexp '<<' pexp
       { eBinOp ($1 `srcspan` $3) ShL $1 $3 }
   | pexp '>>' pexp
@@ -372,9 +372,9 @@ pexp :
 exp :: { SrcExp } 
 exp : 
     'if' aexp opt_then exp 'else' exp
-      { let { p = $1 `srcspan` $5 }
+      { let { p = $1 `srcspan` $6 }
         in
-          eIf p $2 $4 $5
+          eIf p $2 $4 $6
       }
   | 'if' aexp opt_then exp 'else' error
       {% expected ["statement block"] Nothing }
@@ -456,6 +456,17 @@ var_bind :
         in
           toName i p ty (errMutKind i p)
       }
+
+var_occ :: { SrcName }
+var_occ :
+   '(' identifier ')'
+      { let { p = srclocOf $2
+            ; i = unLoc $2
+            }
+        in
+          toName i p SrcTyUnknown (errMutKind i p)
+      }
+
 
 -- Constant integer expressions
 const_int_exp :: { L Int }
@@ -603,7 +614,7 @@ arr_length :
     '[' const_len_or_int_exp ']' base_type
       { L ($1 <--> $4) $ case unLoc $2 of 
            Left nm -> SrcTArray (SrcNArr nm) (unLoc $4)
-           Right i -> SrcTArray (SrcLiteral i) (unLoc 4)
+           Right i -> SrcTArray (SrcLiteral i) (unLoc $4)
       }
   | base_type
       { let { p = srclocOf $1 }
@@ -614,7 +625,7 @@ arr_length :
 -- Constant integer expressions
 const_len_or_int_exp :: { L (Either (GName SrcTy) Int) }
 const_len_or_int_exp :
-    exp {% fmap (L (locOf $1)) (constLenIntExp $1) }
+    exp {% fmap (L (locOf $1)) (constLenOrIntExp $1) }
 
 
 comp_base_type :: { L SrcCTy }
@@ -690,29 +701,13 @@ unroll_info :
 acomp :: { SrcComp } 
 acomp : 
     '(' comp_term ')' { $2 } 
-  | inline_ann 'return' exp
-      { cReturn ($1 `srcspan` $3) (unLoc $1) $3 }
-  | 'emit' exp
-      { cEmit ($1 `srcspan` $2) $2 }
-  | 'emits' exp
-      { cEmits ($1 `srcspan` $2) $2 }
-  | 'take'
-      { cTake1 (srclocOf $1) SrcTyUnknown }
-  | 'takes' exp
-      {% let { p = $1 `srcspan` $2 }
-         in
-           case evalSrcInt $2 of
-             { (Right n, _) -> return $ cTake p SrcTyUnknown (fromInteger n)
-             ; (Left  _, _) -> fail "Non-constant argument to takes"
-             }
-      }
-  | 'filter' var_bind
+  | 'filter' var_occ
       { cFilter (srclocOf $1) $2 }
   | 'read' type_ann
       { cReadSrc ($1 `srcspan` $2) (unLoc $2) }
   | 'write' type_ann
       { cWriteSnk ($1 `srcspan` $2) (unLoc $2) }
-  | 'map' vect_ann var_bind
+  | 'map' vect_ann var_occ
       { cMap (srclocOf $1) $2 $3 }
 
   | 'do' stmt_block
@@ -771,6 +766,23 @@ tcomp :
 
   | comp_sequence { $1 } 
 
+  | inline_ann 'return' exp
+      { cReturn ($1 `srcspan` $5) (unLoc $1) $4 }
+  | 'emit' '(' exp ')'
+      { cEmit ($1 `srcspan` $4) $3 }
+  | 'emits' '(' exp ')'
+      { cEmits ($1 `srcspan` $4) $3 }
+  | 'take'
+      { cTake1 (srclocOf $1) SrcTyUnknown }
+  | 'takes' '(' exp ')'
+      {% let { p = $1 `srcspan` $4 }
+         in
+           case evalSrcInt $3 of
+             { (Right n, _) -> return $ cTake p SrcTyUnknown (fromInteger n)
+             ; (Left  _, _) -> fail "Non-constant argument to takes"
+             }
+      }
+
   | acomp
       { $1 }
 
@@ -820,20 +832,29 @@ comp_sequence :
 
 commands :: { SrcComp } 
 commands :
-
+    -- NB: we get some shift/reduce conflicts here due to comp_term
+    -- being able to start with '(' which may conflict with the
+    -- previous comp_term being just a variable. Oh well ... 
     comp_atomic_decl opt_semi commands
       { cLetDecl $1 $3 }   
 
-  | comp_nonatom_decl ';' commands
+  | comp_nonatom_decl opt_semi commands
       { cLetDecl $1 $3 }   
 
-  | var_bind '<-' comp_term ';' commands
+  | var_bind '<-' comp_term opt_semi commands
       { let { p  = $1 `srcspan` $3
             ; x  = $1
             ; c1 = $3
             ; c2 = $5
             }
         in cBindMany p c1 [(x,c2)] 
+      }
+  | comp_term opt_semi commands 
+      { let { p  = $1 `srcspan` $3
+            ; c1 = $1
+            ; c2 = $3
+            }
+        in cSeq p c1 c2
       }
 
   | comp_term { $1 }   
