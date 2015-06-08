@@ -12,7 +12,6 @@
 
 module Language.Ziria.Parser.Parser (
     parseExp,
-    parseStmtBlock,
     parseProgram
   ) where
 
@@ -64,6 +63,8 @@ import Interpreter (evalSrcInt)
   'complex32'   { L _ T.Tcomplex32 }
   'complex64'   { L _ T.Tcomplex64 }
   'do'          { L _ T.Tdo }
+  'done'        { L _ T.Tdone }
+
   'double'      { L _ T.Tdouble }
   'else'        { L _ T.Telse }
   'emit'        { L _ T.Temit }
@@ -105,6 +106,10 @@ import Interpreter (evalSrcInt)
   'until'       { L _ T.Tuntil }
   'var'         { L _ T.Tvar }
   'while'       { L _ T.Twhile }
+
+  'begin'       { L _ T.Tbegin }
+  'end'         { L _ T.Tend   }
+
   'write'       { L _ T.Twrite }
 
   '+'  { L _ T.Tplus }
@@ -172,7 +177,7 @@ import Interpreter (evalSrcInt)
 -- We expect shift/reduce conflicts for:
 -- let expressions
 -- if then else expressions
---%expect 2
+%expect 2
 
 %monad { P } { >>= } { return }
 %lexer { lexer } { L _ T.Teof }
@@ -180,7 +185,8 @@ import Interpreter (evalSrcInt)
 %error { happyError }
 
 %name parseExp       exp
-%name parseStmtBlock stmt_block
+%name parseComp      comp
+-- %name parseStmtBlock stmt_block
 %name parseProgram   program
 
 %%
@@ -214,6 +220,7 @@ import Interpreter (evalSrcInt)
  - Identifiers
  -
  ------------------------------------------------------------------------------}
+
 
 identifier :: { L String }
 identifier :
@@ -249,62 +256,39 @@ scalar_value :
  -
  ------------------------------------------------------------------------------}
 
--- Atomic expressions 
-aexp :: { SrcExp }
-aexp : 
-   ID  { mkVar (srclocOf $1) (unintern (getID $1)) } 
+atexp :: { SrcExp } 
+atexp : 
+    ID  { mkVar (srclocOf $1) (unintern (getID $1)) }
+  | scalar_value { eValSrc (srclocOf $1) (unLoc $1) }
 
- | scalar_value { eValSrc (srclocOf $1) (unLoc $1) }
+  | '[' exp_list ']' { eValArr (srclocOf $2) $2 }
 
- | '[' exp_list ']' { eValArr (srclocOf $2) $2 }
+  | '(' exp ')' { $2 }
 
- | stmt_block { $1 }
+  | '(' exp error
+       {% unclosed ($1 <--> $2) "(" }
 
- | '(' exp ')' { $2 }
-
- | '(' exp error
-      {% unclosed ($1 <--> $2) "(" }
-
-texp :: { SrcExp }
-texp :
-    unroll_info 'for' var_bind 'in' gen_interval texp
-      { let { p              = $1 `srcspan` $6
-            ; ui             = unLoc $1
-            ; k              = $3
-            ; (estart, elen) = $5
-            ; body           = $6
-            }
-        in
-          eFor p ui k estart elen body
-      }
-  | 'while' aexp texp
-      { let { p = $1 `srcspan` $3 }
-        in
-          eWhile p $2 $3
-      }
+  | 'begin' expstm 'end' { $2 }
 
   | 'print' '(' exp_list ')'
-      { ePrint ($1 `srcspan` $4) False $3 } 
+       { ePrint ($1 `srcspan` $4) False $3 } 
 
   | 'println' '(' exp_list ')'
-      { ePrint ($1 `srcspan` $4) True $3 } 
+       { ePrint ($1 `srcspan` $4) True $3 } 
 
   | 'error' STRING
-      { let { p = $1 `srcspan` $2 }
-        in
-          eError p SrcTyUnknown (snd (getSTRING $2))
-      }
-
-  | struct_id '{' struct_init_list1 '}'
-       { eStruct' ($1 `srcspan` $4) (unLoc $1) $3 }
+       { let { p = $1 `srcspan` $2 }
+         in
+           eError p SrcTyUnknown (snd (getSTRING $2))
+       }
 
   | ID '(' exp_list ')'
-      { let { p = ($1 `srcspan` $3)
-            ; x = unintern (getID $1)
-            }
-        in
-          mkCall p x $3
-      }
+       { let { p = ($1 `srcspan` $3)
+             ; x = unintern (getID $1)
+             }
+         in
+           mkCall p x $3
+       }
 
   | ID derefs 
       { $2 (mkVar (srclocOf $1) (unintern (getID $1))) }
@@ -312,120 +296,82 @@ texp :
   | cast_type '(' exp ')'
       { eUnOp' ($1 `srcspan` $4) (Cast (unLoc $1)) $3 }
 
-  | aexp { $1 } 
+  | struct_id '{' struct_init_list1 '}'
+        { eStruct' ($1 `srcspan` $4) (unLoc $1) $3 }
 
+  | unroll_info 'for' var_bind 'in' gen_interval 'do' expstm 'done'
+      { let { p              = $1 `srcspan` $8
+            ; ui             = unLoc $1
+            ; k              = $3
+            ; (estart, elen) = $5
+            ; body           = $7
+            }
+        in
+          eFor p ui k estart elen body
+      }
+  | 'while' exp 'do' expstm 'done'
+      { let { p = $1 `srcspan` $5 }
+        in
+          eWhile p $2 $4
+      }
 
-pexp :: { SrcExp } 
-pexp : 
-    pexp '+' pexp
+opexp :: { SrcExp } 
+opexp : 
+    atexp { $1 }
+
+  | opexp '+' opexp
       { eBinOp ($1 `srcspan` $3) Add $1 $3 }
-  | pexp '-' pexp
+  | opexp '-' opexp
       { eBinOp ($1 `srcspan` $3) Sub $1 $3 }
-  | pexp '*' pexp
+  | opexp '*' opexp
       { eBinOp ($1 `srcspan` $3) Mult $1 $3 }
-  | pexp '/' pexp
+  | opexp '/' opexp
       { eBinOp ($1 `srcspan` $3) Div $1 $3 }
-  | pexp '%' pexp
+  | opexp '%' opexp
       { eBinOp ($1 `srcspan` $3) Rem $1 $3 }
-  | pexp '**' pexp
+  | opexp '**' opexp
       { eBinOp ($1 `srcspan` $3) Expon  $1 $3 }
-  | pexp '<<' pexp
+  | opexp '<<' opexp
       { eBinOp ($1 `srcspan` $3) ShL $1 $3 }
-  | pexp '>>' pexp
+  | opexp '>>' opexp
       { eBinOp ($1 `srcspan` $3) ShR $1 $3 }
-  | pexp '&' pexp
+  | opexp '&' opexp
       { eBinOp ($1 `srcspan` $3) BwAnd $1 $3 }
-  | pexp '|' pexp
+  | opexp '|' opexp
       { eBinOp ($1 `srcspan` $3) BwOr $1 $3 }
-  | pexp '^' pexp
+  | opexp '^' opexp
       { eBinOp ($1 `srcspan` $3) BwXor $1 $3 }
-  | pexp '==' pexp
+  | opexp '==' opexp
       { eBinOp ($1 `srcspan` $3) Eq $1 $3 }
-  | pexp '!=' pexp
+  | opexp '!=' opexp
       { eBinOp ($1 `srcspan` $3) Neq $1 $3 }
-  | pexp '<' pexp
+  | opexp '<' opexp
       { eBinOp ($1 `srcspan` $3) Lt $1 $3 }
-  | pexp '>' pexp
+  | opexp '>' opexp
       { eBinOp ($1 `srcspan` $3) Gt $1 $3 }
-  | pexp '<=' pexp
+  | opexp '<=' opexp
       { eBinOp ($1 `srcspan` $3) Leq $1 $3 }
-  | pexp '>=' pexp
+  | opexp '>=' opexp
       { eBinOp ($1 `srcspan` $3) Geq $1 $3 }
-  | pexp '&&' pexp
+  | opexp '&&' opexp
       { eBinOp ($1 `srcspan` $3) And $1 $3 }
-  | pexp '||' pexp
+  | opexp '||' opexp
       { eBinOp ($1 `srcspan` $3) Or $1 $3 }
 
-  | 'length' pexp %prec LENGTH
-      { eUnOp' ($1 `srcspan` $2) ALength $2 }
+  | 'length' '(' exp ')' %prec LENGTH
+      { eUnOp' ($1 `srcspan` $4) ALength $3 }
 
-  | '-' pexp %prec NEG
+  | '-' opexp %prec NEG
       { eUnOp' ($1 `srcspan` $2) Neg $2 }
-  | 'not' pexp %prec NEG
+  | 'not' opexp %prec NEG
       { eUnOp' ($1 `srcspan` $2) Not $2 }
-  | '~' pexp %prec NEG
+  | '~' opexp %prec NEG
       { eUnOp' ($1 `srcspan` $2) BwNeg $2 }
 
-  | texp { $1 }
-
-
-exp :: { SrcExp } 
-exp : 
-    'if' aexp opt_then exp 'else' exp
-      { let { p = $1 `srcspan` $6 }
-        in
-          eIf p $2 $4 $6
-      }
-  | 'if' aexp opt_then exp 'else' error
-      {% expected ["statement block"] Nothing }
-  | 'if' aexp opt_then exp
-      { let { p = $1 `srcspan` $4 }
-        in
-          eIf p $2 $4 (eUnit p)
-      }
-  | 'if' aexp opt_then error
-      {% expected ["then clause"] Nothing }
-
-  | let_decl 'in' exp %prec IF -- or_stmts %prec IF
-      { eLetDecl $1 $3 }
-  | let_decl error %prec IF
-      {% expected ["'in'"] Nothing }
- 
-  | pexp { $1 } 
-
-
-opt_then :: { () }
-opt_then :
-           { () }
-  | 'then' { () }
-
-{------------------------------------------------------------------------------
- -
- - Statements
- -
- ------------------------------------------------------------------------------}
-
-stmt_block :: { SrcExp }
-stmt_block : '{' stmts '}' { $2 }
-
-
-stmts :: { SrcExp }
-stmts :
-    stmt_rlist opt_semi {% desugarStatements (rev $1) }
-
-stmt_rlist :: { RevList Statement }
-stmt_rlist :
-    stmt                     { rsingleton $1 }
-  | stmt_rlist opt_semi stmt { rcons $3 $1 }
-
-stmt :: { Statement }
-stmt :
-    let_decl
-       { SLetDecl $1 }
-  | assignment
-      { SExp $1 }
-  | 'return' exp
-      { SExp $2 }
+opexasgn :: { SrcExp } 
+opexasgn : 
+    opexp      { $1 }
+  | assignment { $1 } 
 
 assignment :: { SrcExp } 
 assignment :
@@ -436,6 +382,49 @@ assignment :
             }
         in eAssign p lhs rhs
       }
+
+expc :: { SrcExp } 
+expc : 
+    opexasgn { $1 }
+
+  | 'if' expc 'then' exp 'else' expc
+      { let { p = $1 `srcspan` $6 }
+        in
+          eIf p $2 $4 $6
+      }
+  | 'if' expc 'then' exp 'else' error
+      {% expected ["statement block"] Nothing }
+
+  | 'if' expc 'then' exp
+      { let { p = $1 `srcspan` $4 }
+        in
+          eIf p $2 $4 (eUnit p)
+      }
+
+  | 'if' expc 'then' error
+      {% expected ["then clause"] Nothing }
+
+
+explet :: { SrcExp } 
+explet : 
+    expc { $1 }
+  | let_decl 'in' explet %prec IF -- or_stmts %prec IF
+      { eLetDecl $1 $3 }
+
+expstm :: { SrcExp }
+expstm :
+    explet { $1 } 
+  | explet ';' expstm  { let { p = $1 `srcspan` $3 }
+                         in eSeq p $1 $3 
+                       }
+
+exp :: { SrcExp }
+exp : explet { $1 }
+
+opt_semi :: { () }
+opt_semi : 
+        { () }
+  | ';' { () } 
 
 
 -- Variable binding
@@ -698,9 +687,10 @@ unroll_info :
  ------------------------------------------------------------------------------}
 
 -- Atomic computations 
-acomp :: { SrcComp } 
-acomp : 
-    '(' comp_term ')' { $2 } 
+
+atcomp :: { SrcComp }
+atcomp : 
+    '(' comp ')' { $2 } 
   | 'filter' var_occ
       { cFilter (srclocOf $1) $2 }
   | 'read' type_ann
@@ -710,7 +700,7 @@ acomp :
   | 'map' vect_ann var_occ
       { cMap (srclocOf $1) $2 $3 }
 
-  | 'do' stmt_block
+  | 'do' expstm 'done' 
       { cReturn ($1 `srcspan` $2) AutoInline $2 }
 
   | ID
@@ -721,6 +711,7 @@ acomp :
         in
           cVar p v
       }
+
   | ID '(' args ')'
       { let { p = srclocOf $1
             ; x = unintern (getCOMPID $1)
@@ -730,44 +721,9 @@ acomp :
           cCall p v $3
       }
 
-
-
--- Tight (highest precedence) computations
-tcomp :: { SrcComp } 
-tcomp : 
-    'standalone' tcomp %prec STANDALONE
-      { cStandalone ($1 `srcspan` $2) $2 }
-  | 'repeat' vect_ann tcomp %prec STANDALONE
-      { cRepeat ($1 `srcspan` $3) $2 $3 }
-  | 'until' aexp tcomp %prec STANDALONE
-      { cUntil ($1 `srcspan` $3) $2 $3 }
-  | 'while' aexp tcomp %prec STANDALONE
-      { cWhile ($1 `srcspan` $3) $2 $3 }
-  | unroll_info 'times' aexp tcomp %prec STANDALONE
-      { let { p  = $1 `srcspan` $3
-            ; ui = unLoc $1
-            ; e  = $3
-            ; c  = $4
-            ; nm = toName "_tmp_count" p tintSrc Imm
-            }
-        in
-          cTimes p ui (eVal p tintSrc (VInt 0)) e nm c
-      }
-  | unroll_info 'for' var_bind 'in' gen_interval tcomp %prec STANDALONE
-      { let { p              = $1 `srcspan` $6
-            ; ui             = unLoc $1
-            ; k              = $3
-            ; (estart, elen) = $5
-            ; c              = $6
-            }
-        in
-          cTimes p ui estart elen k c
-      }
-
-  | comp_sequence { $1 } 
-
-  | inline_ann 'return' exp
+  | inline_ann 'return' '(' exp ')' 
       { cReturn ($1 `srcspan` $5) (unLoc $1) $4 }
+
   | 'emit' '(' exp ')'
       { cEmit ($1 `srcspan` $4) $3 }
   | 'emits' '(' exp ')'
@@ -782,66 +738,77 @@ tcomp :
              ; (Left  _, _) -> fail "Non-constant argument to takes"
              }
       }
+  
+  | 'begin' compstm 'end' { $2 }
 
-  | acomp
-      { $1 }
+  | 'repeat' vect_ann 'do' compstm 'done'
+      { cRepeat ($1 `srcspan` $5) $2 $4 }
+  | 'until' exp 'do' compstm 'done' 
+      { cUntil ($1 `srcspan` $5) $2 $4 }
+  | 'while' exp 'do' compstm 'done'
+      { cWhile ($1 `srcspan` $5) $2 $4 }
+  | unroll_info 'times' exp 'do' compstm 'done'
+      { let { p  = $1 `srcspan` $6
+            ; ui = unLoc $1
+            ; e  = $3
+            ; c  = $5
+            ; nm = toName "_tmp_count" p tintSrc Imm
+            }
+        in
+          cTimes p ui (eVal p tintSrc (VInt 0)) e nm c
+      }
 
--- Computations with par 
-pcomp :: { SrcComp } 
-pcomp : 
-    tcomp { $1 } 
-  | pcomp '>>>' pcomp
+  | unroll_info 'for' var_bind 'in' gen_interval 'do' compstm 'done'
+      { let { p              = $1 `srcspan` $8
+            ; ui             = unLoc $1
+            ; k              = $3
+            ; (estart, elen) = $5
+            ; c              = $7
+            }
+        in
+          cTimes p ui estart elen k c
+      }
+
+opcomp :: { SrcComp } 
+opcomp :  
+    atcomp { $1 }
+  | opcomp '>>>' opcomp
       { cPar ($1 `srcspan` $3) (mkParInfo MaybePipeline) $1 $3 }
-  | pcomp '|>>>|' pcomp
+  | opcomp '|>>>|' opcomp
       { cPar ($1 `srcspan` $3) (mkParInfo (AlwaysPipeline 0 0)) $1 $3 }
-  -- | pcomp error
-  --     {% expected [">>> or |>>>|"] Nothing }
 
--- Let-bindings and conditionals
-comp_term  :: { SrcComp } 
-comp_term :
-     pcomp { $1 } 
+compc :: { SrcComp }
+compc : 
+    opcomp { $1 }
+  | 'if' exp 'then' compc comp_maybe_else
+      { let { sloc = $1 `srcspan` $5 }
+        in cBranch sloc $2 $4 (unLoc $5 sloc)
+      }
+  | 'if' exp 'then' error
+      {% expected ["command"] Nothing }
+  | 'if' exp ';'
+      {% expected ["then clause"] Nothing }
 
-  | comp_let_decl 'in' comp_term
+comp_maybe_else :: { L (SrcLoc -> SrcComp) }
+comp_maybe_else :
+    {- empty -}  { L NoLoc        cUnit }
+  | 'else' compc { L ($1 <--> $2) (\_ -> $2) }
+
+complet :: { SrcComp } 
+complet : 
+    compc { $1 }
+
+  | comp_let_decl 'in' complet
       { cLetDecl $1 $3 }
 
   | comp_let_decl error
       {% expected ["'in'"] Nothing }
 
-  | 'if' aexp opt_then comp_term comp_maybe_else
-      { let { sloc = $1 `srcspan` $5 }
-        in
-          cBranch sloc $2 $4 (unLoc $5 sloc)
-      }
-  | 'if' aexp opt_then error
-      {% expected ["command"] Nothing }
-  | 'if' aexp ';'
-      {% expected ["then clause"] Nothing }
+compstm :: { SrcComp } 
+compstm : 
+    complet { $1 }
 
-comp_maybe_else :: { L (SrcLoc -> SrcComp) }
-comp_maybe_else :
-    {- empty -}      { L NoLoc        cUnit }
-  | 'else' comp_term { L ($1 <--> $2) (\_ -> $2) }
-
-comp_sequence :: { SrcComp } 
-comp_sequence :
-    'seq' '{' commands '}'
-      { $3 }
-  | '{' commands '}'
-      { $2 }
-
-commands :: { SrcComp } 
-commands :
-    -- NB: we get some shift/reduce conflicts here due to comp_term
-    -- being able to start with '(' which may conflict with the
-    -- previous comp_term being just a variable. Oh well ... 
-    comp_atomic_decl opt_semi commands
-      { cLetDecl $1 $3 }   
-
-  | comp_nonatom_decl opt_semi commands
-      { cLetDecl $1 $3 }   
-
-  | var_bind '<-' comp_term opt_semi commands
+  | var_bind '<-' complet ';' compstm
       { let { p  = $1 `srcspan` $3
             ; x  = $1
             ; c1 = $3
@@ -849,15 +816,10 @@ commands :
             }
         in cBindMany p c1 [(x,c2)] 
       }
-  | comp_term opt_semi commands 
-      { let { p  = $1 `srcspan` $3
-            ; c1 = $1
-            ; c2 = $3
-            }
-        in cSeq p c1 c2
-      }
 
-  | comp_term { $1 }   
+comp :: { SrcComp }
+comp : complet { $1 }
+
 
 
 comp_atomic_decl :: { CLetDecl }
@@ -876,8 +838,8 @@ comp_atomic_decl :
         in
           CLetDeclExternal p x ps ty
       }
-  | 'fun' 'comp' maybe_comp_range comp_var_bind comp_params '{' commands '}'
-      { let { p  = $1 `srcspan` $6
+  | 'fun' 'comp' maybe_comp_range comp_var_bind comp_params '=' comp
+      { let { p  = $1 `srcspan` $7
             ; h  = $3
             ; x  = $4
             ; ps = $5
@@ -886,8 +848,8 @@ comp_atomic_decl :
         in
           CLetDeclFunComp p h x ps c
       }
-  | 'fun' var_bind params '{' stmts '}'
-      { let { p  = $1 `srcspan` $6
+  | 'fun' var_bind params '=' exp 
+      { let { p  = $1 `srcspan` $5
             ; fn = $2
             ; ps = $3
             ; e  = $5
@@ -901,7 +863,6 @@ comp_let_decl :
     comp_atomic_decl  { $1 }
   | comp_nonatom_decl { $1 }
 
-
 comp_nonatom_decl :: { CLetDecl } 
 comp_nonatom_decl :
     decl
@@ -911,7 +872,7 @@ comp_nonatom_decl :
         in
           CLetDeclERef p x e
       }
-  | 'let' 'comp' maybe_comp_range comp_var_bind '=' comp_term
+  | 'let' 'comp' maybe_comp_range comp_var_bind '=' comp
       { let { p  = $1 `srcspan` $6
             ; h  = $3
             ; x  = $4
@@ -928,7 +889,6 @@ comp_nonatom_decl :
         in
           CLetDeclExpr p x e
       }
-
 
 inline_ann :: { L ForceInline }
 inline_ann :
@@ -966,8 +926,8 @@ arg_rlist :
 
 arg :: { CallArg SrcExp SrcComp }
 arg :
-    exp              { CAExp  $1 }
-  | 'comp' comp_term { CAComp $2 }
+    exp         { CAExp  $1 }
+  | 'comp' comp { CAComp $2 }
 
 -- Comp ranges
 comp_range :: { (Int, Int) }
@@ -998,6 +958,7 @@ comp_var_bind :
          in
            do { return $ toName i p ty (errMutKind i p) }
       }
+
 
 -- structs:
 -- We parse the struct as an identifier (ID) but augment the state
@@ -1106,7 +1067,7 @@ comp_param :
 
 program :: { SrcProg }
 program :
-    comp_let_decl_rlist opt_semi
+    comp_let_decl_rlist 
       {% do { let decls = rev $1
             ; c <- extractMain decls
             ; return (MkProg c)
@@ -1115,8 +1076,8 @@ program :
 
 comp_let_decl_rlist :: { RevList CLetDecl }
 comp_let_decl_rlist :
-    comp_let_decl                              { rsingleton $1 }
-  | comp_let_decl_rlist opt_semi comp_let_decl { rcons $3 $1 }
+    comp_let_decl                     { rsingleton $1 }
+  | comp_let_decl_rlist comp_let_decl { rcons $2 $1 }
 
 {------------------------------------------------------------------------------
  -
@@ -1124,10 +1085,6 @@ comp_let_decl_rlist :
  -
  ------------------------------------------------------------------------------}
 
-opt_semi :: { () }
-opt_semi :
-    {- empty -} { () }
-  | ';'         { () }
 
 {
 happyError :: L T.Token -> P a
@@ -1234,31 +1191,6 @@ eletDeclName :: ELetDecl -> String
 eletDeclName (ELetDeclERef _ x _) = show x
 eletDeclName (ELetDeclExpr _ x _) = show x
 
--- | Statements
---
--- This is the equivalent to 'Command' in the comp parser.
-data Statement = SLetDecl ELetDecl
-               | SExp SrcExp
-
-desugarStatements :: [Statement] -> P SrcExp
-desugarStatements [] =
-    error "desugarStatements: empty list"
-
-desugarStatements [SLetDecl d] =
-    failAt (locOf d) $
-           unlines [ "A block must end on an expression, it cannot end on a declaration."
-                   , "The declaration for " ++ show (eletDeclName d) ++ " appears unused?"
-                   ]
-
-desugarStatements [SExp e] =
-    return e
-
-desugarStatements (SExp e1 : ss) = do
-    e2 <- desugarStatements ss
-    return $ eSeq (expLoc e2) e1 e2
-
-desugarStatements (SLetDecl d : ss) =
-    eLetDecl d <$> desugarStatements ss
 
 -- | Declarations
 --

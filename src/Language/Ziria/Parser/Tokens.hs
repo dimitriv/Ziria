@@ -18,7 +18,6 @@ data Token = Teof
            | TcharConst (String, Char)
            | TstringConst (String, String)
            | Tidentifier Symbol
---           | TstructIdentifier Symbol
 
 
            | TzeroBit
@@ -37,6 +36,7 @@ data Token = Teof
            | Tcomplex32
            | Tcomplex64
            | Tdo
+           | Tdone
            | Tdouble
            | Telse
            | Temit
@@ -79,6 +79,9 @@ data Token = Teof
            | Tvar
            | Twhile
            | Twrite
+
+           | Tbegin
+           | Tend
 
            | Tplus   -- ^ Addition
            | Tminus  -- ^ Subtraction
@@ -150,6 +153,7 @@ instance Pretty Token where
     ppr Tcomplex32   = text "complex32"
     ppr Tcomplex64   = text "complex64"
     ppr Tdo          = text "do"
+    ppr Tdone        = text "done"
     ppr Tdouble      = text "double"
     ppr Telse        = text "else"
     ppr Temit        = text "emit"
@@ -201,6 +205,9 @@ instance Pretty Token where
     ppr Texp    = text "**"
     ppr Tshiftl = text "<<"
     ppr Tshiftr = text ">>"
+
+    ppr Tbegin  = text "begin"
+    ppr Tend    = text "end"
 
     ppr Teq = text "=="
     ppr Tne = text "!="
