@@ -23,7 +23,7 @@ module PassFold (runFold) where
 
 import Prelude hiding (exp)
 import Control.Arrow (second)
-import Control.Monad.Reader
+-- import Control.Monad.Reader
 import qualified Data.Map as Map
 
 import AstComp
@@ -86,9 +86,9 @@ runFold :: DynFlags -> GS.Sym -> Comp -> IO Comp
 runFold flags sym = \comp -> do
      (comp', mp') <- go (RwStats Map.empty) 0 comp
 
-     when (isDynFlagSet flags Verbose) $ do
-       putStrLn "Optimizer statistics:"
-       printRwStats mp'
+     -- when (isDynFlagSet flags Verbose) $ do
+     putStrLn "Optimizer statistics:"
+     printRwStats mp'
 
      return comp'
   where
