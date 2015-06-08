@@ -150,8 +150,7 @@ main = do
     let ccand_names = zip (cand:cands) (outFile : fnames)
 
     -- Fold, inline, and pipeline
-    icands <- timedPhase dflags "runPostVectorizePhases" $ 
-              mapM (runPostVectorizePhases dflags sym) ccand_names
+    icands <- mapM (runPostVectorizePhases dflags sym) ccand_names
 
     -- Right before code generation let us type check everything
     when (isDynFlagSet dflags Debug) $ 
@@ -171,8 +170,6 @@ main = do
                ; return $ CompiledProgram sc defs fn }
     code_names <- timedPhase dflags "codeGenProgram" $ 
                   forM icands compile_threads
-
-    verbose dflags $ text "outputCompiledProgram .."
 
     mapM_ outputCompiledProgram code_names
 
@@ -236,14 +233,17 @@ main = do
                 , ppCompTyped c ]
 
         -- Second round of folding
-        fc <- runFoldPhase dflags sym 2 c
+        fc <- timedPhase dflags "runFoldPhase (2nd round)" $ 
+              runFoldPhase dflags sym 2 c
 
-        lc <- runAutoLUTPhase dflags sym fc
+        lc <- timedPhase dflags "runAutoLUTPhase" $ 
+              runAutoLUTPhase dflags sym fc
 
         PP.MkPipelineRetPkg { PP.context = comp_ctxt
                             , PP.threads = comp_threads
                             , PP.buf_tys = tys }
-          <- runPipelinePhase dflags sym lc
+          <- timedPhase dflags "runPipelinePhase" $ 
+             runPipelinePhase dflags sym lc
         return (lc, comp_ctxt, comp_threads,tys,fn)
 
 
