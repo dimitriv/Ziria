@@ -26,13 +26,13 @@ import Control.Monad (when, forM)
 import System.Environment
 import System.Exit (exitFailure)
 import System.IO
-import System.Clock as Clock
 import Text.PrettyPrint.HughesPJ
 import qualified Text.PrettyPrint.Mainland as GMPretty
 -- import Text.Show.Pretty (dumpStr)
 import qualified Language.C.Syntax as C
 
 import System.Timeout 
+import Data.Time.Clock
 
 import AstComp
 import AstExpr
@@ -98,11 +98,11 @@ withTimeout dfs action =
 
 timedPhase :: DynFlags -> String -> IO a -> IO a
 timedPhase _dfs pname m = do 
-  cur <- Clock.getTime ProcessCPUTime
+  cur <- getCurrentTime 
   r <- m
-  fin <- Clock.getTime ProcessCPUTime
-  let milis = (Clock.sec fin - Clock.sec cur)
-  putStrLn $ "Phase: " ++ pname ++ "(" ++ show milis ++ "s)"
+  fin <- getCurrentTime
+  let d = diffUTCTime fin cur
+  putStrLn $ "Phase: " ++ pname ++  "(" ++ show d ++ ")"
   return r
 
 
