@@ -722,9 +722,10 @@ extendVarEnv :: [(GName Ty, ExpGen)] -> Cg a -> Cg a
 -- BUG: This seems wrong: We can't inline a potentially
 -- imperative expression anywhere we want! What is this ExpGen stuff????
 extendVarEnv binds a = do
-    mapM_ shadow_warn binds
+    -- mapM_ shadow_warn binds
     -- We need to bind array lengths of polymorphic array as well
-    local (\rho -> rho { varEnv = neExtendMany (binds ++ convTy binds) (varEnv rho) }) a
+    local (\rho -> rho { varEnv = 
+      neExtendMany (binds ++ convTy binds) (varEnv rho) }) a
   where
     -- NOTE: This is the point where we introduce GNames for LenVars.
     getPolymArrTy :: (GName Ty, ExpGen) -> Maybe (GName Ty, ExpGen)
@@ -735,10 +736,11 @@ extendVarEnv binds a = do
     convTy :: [(GName Ty, ExpGen)] -> [(GName Ty, ExpGen)]
     convTy binds = catMaybes (map getPolymArrTy binds)
 
-    shadow_warn (n,_) = do mb <- asks (neLookup n . varEnv)
-                           case mb of 
-                             Just {} -> cgIO $ putStrLn ("Code generation shadowing: " ++ show n)
-                             Nothing -> return ()
+    shadow_warn (n,_) = do 
+       mb <- asks (neLookup n . varEnv)
+       case mb of 
+         Just {} -> cgIO $ putStrLn ("Code generation shadowing: " ++ show n)
+         Nothing -> return ()
 
 
 extendExpFunEnv :: GName Ty -> (GName Ty, [GName Ty]) -> Cg a -> Cg a
