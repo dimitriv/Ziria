@@ -20,7 +20,7 @@ build-type: Simple
 Executable wplc
   hs-source-dirs:   src src/BasicTypes src/Codegen src/Optimize
                     src/Pipeline src/Typecheck src/Utils src/Vectorize
-                    src/Analysis src/ComputeType
+                    src/Analysis src/ComputeType src/Atomix
   main-is:          Main.hs
   -- TODO: We should use a proper module hierarchy and only have 'src' 
   -- as the include dir.
@@ -57,7 +57,8 @@ Executable wplc
     -- deepseq-generics is needed for deepseq < 1.4
     deepseq-generics       >= 0.1   && < 0.2, 
     text                   >= 1.1   && < 1.2, 
-    exception-transformers >= 0.3   && < 0.5, 
+    exception-transformers >= 0.3   && < 0.5,
+    fgl                    >= 5.5,
     -- template-haskell is bundled with ghc; don't insist on a version
     template-haskell,
     ghc-prim

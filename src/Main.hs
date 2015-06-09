@@ -60,6 +60,13 @@ import qualified PassPipeline as PP
 
 import qualified Language.Ziria.Parser as P
 
+
+-- 
+import AtomixModel
+import AutomataModel
+
+
+
 data CompiledProgram
   = CompiledProgram Comp [C.Definition] FilePath
 
