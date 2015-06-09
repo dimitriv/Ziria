@@ -1171,7 +1171,7 @@ extractMain decls = go id decls
         go f (CLetDeclComp _p Nothing nm c:_) 
            | name nm == "main" = return (f c)
            | otherwise         = fail "No `main' found" 
-        go f (d:ds) = go (cLetDecl d) ds
+        go f (d:ds) = go (f . cLetDecl d) ds
 
 -- | Local declarations
 --
