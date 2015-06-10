@@ -71,12 +71,16 @@ import Text.Show.Pretty (PrettyVal)
 
 -- | Intervals
 data Iv = Iv Integer Integer
-type Interval = IVal Iv
   deriving (Generic, Typeable, Data, Eq, Ord, Show)
 
+instance NFData Iv where
+  rnf = genericRnf
+
+type Interval = IVal Iv
 instance NFData Interval where
   rnf = genericRnf
 
+-- | Approximate interval join
 ijoin_apx :: Interval -> Interval -> Interval 
 ijoin_apx IUnknown _ = IUnknown
 ijoin_apx _ IUnknown = IUnknown
@@ -86,26 +90,26 @@ ijoin_apx (IKnown (Iv i j)) (IKnown (Iv i' j'))
   , let bound = 512
   = if l < - bound || h > bound then IUnknown else IKnown (Iv l h)
 
-instance NFData Interval where
-  rnf = genericRnf
 
+-- | Precise interval join
 ijoin_pcs :: Interval -> Interval -> Interval
 ijoin_pcs i1 i2 
   | i1 == i2  = i1
   | otherwise = IUnknown
 
 istretch :: Bool -- ^ precise or not?
-         -> Interval -> IVal i -> LengthInfo -> Interval 
+         -> Interval -> IVal Integer -> LengthInfo -> Interval 
 istretch pcs _ IUnknown _ = IUnknown
 istretch pcs IUnknown _ _ = IUnknown
-istretch pcs (IKnown (Iv i j)) (IKnown s) LISingleton  = stretch pcs (i,j) (s,s)
+istretch pcs (IKnown (Iv i j)) (IKnown s) LISingleton 
+  = stretch pcs (i,j) (s,s)
 istretch pcs (IKnown (Iv i j)) (IKnown s) (LILength n) 
-  = stretch pcs (i,j) (s,s+n)
+  = stretch pcs (i,j) (s,s + fromIntegral n)
 
 stretch :: Bool -> (Integer,Integer) -> (Integer,Integer) -> Interval 
 stretch precise (a,b) (c,d)
   | precise && ( (c-b > 1) || (a-d > 1)) = IUnknown 
-  | otherwise              = IKnown (min a c, max b d)
+  | otherwise = IKnown (Iv (min a c) (max b d))
 
 {- Note: stretching an interval: 
    -----------a---------b----c---------d  <- bad
@@ -121,7 +125,7 @@ stretch precise (a,b) (c,d)
 ----------------------------------------------------------------------}
 -- | Range
 data Range 
-  = RInt  (IVal Int)       -- integers
+  = RInt  (IVal Integer)   -- integers
   | RBool (IVal Bool)      -- booleans
   | RArr Interval Interval -- arrays
   | ROther                 -- other 
@@ -136,9 +140,6 @@ instance Monad IVal where
     IUnknown -> IUnknown
     IKnown x -> f x
 
-instance PrettyVal Interval
-instance PrettyVal Range
-instance PrettyVal IVal
 instance Outputable Range where 
   ppr r = text (show r)
 
@@ -157,8 +158,7 @@ rjoin (RBool iv1) (RBool iv2)
   = RBool (iv1 `iv_join_discrete` iv2)
 rjoin (RArr r1 w1) (RArr r2 w2)
   = RArr (r1 `ijoin_apx` r2) (w1 `ijoin_pcs` w2)
-rjoin _ _  
-  = ROther
+rjoin _ _  = ROther
 
 rangeTop :: Ty -> Range 
 rangeTop (TInt {})   = RInt IUnknown
@@ -169,12 +169,12 @@ rangeTop _           = ROther
 
 runop :: UnOp -> Range -> Range
 -- | This is sensitive to the type checker
-runop Neg (RInt i)       = RInt $ liftM negate
+runop Neg (RInt i)       = RInt $ liftM negate i
 runop Neg _              = ROther
 runop ALength _          = RInt IUnknown
 runop (Cast (TInt {})) _ = RInt IUnknown
 runop (Cast _) _         = ROther
-runop Not (RBool b)      = RBool $ liftM not
+runop Not (RBool b)      = RBool $ liftM not b
 runop Not _              = ROther
 runop NatExp (RInt {})   = RInt IUnknown
 runop NatExp _           = ROther
@@ -186,7 +186,7 @@ rbinop :: BinOp -> Range -> Range -> Range
 -- | This is sensitive to the type checker
 
 -- Arithmetic binops
-rbinop Add (RInt r1) (RInt r2) = RInt $ liftM2 (+)
+rbinop Add (RInt r1) (RInt r2) = RInt $ liftM2 (+) r1 r2
 rbinop Sub _ _                 = RInt IUnknown
 rbinop Mult  _r1 _r2 = RInt IUnknown
 rbinop Div   _r1 _r2 = RInt IUnknown
@@ -201,12 +201,13 @@ rbinop BwOr (RInt {}) _  = RInt IUnknown
 rbinop BwXor (RInt {}) _ = RInt IUnknown
 
 -- Booleans 
-rbinop Eq  (RInt i1) (RInt i2) = RBool $ liftM2 (==)
-rbinop Neq (RInt i1) (RInt i2) = RBool $ liftM2 (!=) 
-rbinop Lt  (RInt i1) (RInt i2) = RBool $ liftM2 (<)
-rbinop Gt  (RInt i1) (RInt i2) = RBool $ liftM2 (>)
-rbinop Leq (RInt i1) (RInt i2) = RBool $ liftM2 (<=)
-rbinop Geq (RInt i1) (RIht i2) = RBool $ liftM2 (>=)
+rbinop Eq  (RInt i1) (RInt i2) = RBool $ liftM2 (==) i1 i2
+rbinop Neq (RInt i1) (RInt i2) 
+  = RBool $ liftM2 (\x y -> not (x == y)) i1 i2
+rbinop Lt  (RInt i1) (RInt i2) = RBool $ liftM2 (<)  i1 i2
+rbinop Gt  (RInt i1) (RInt i2) = RBool $ liftM2 (>)  i1 i2
+rbinop Leq (RInt i1) (RInt i2) = RBool $ liftM2 (<=) i1 i2
+rbinop Geq (RInt i1) (RInt i2) = RBool $ liftM2 (>=) i1 i2
 rbinop Or _ _     = RBool IUnknown
 rbinop And _ _    = RBool IUnknown
 rbinop Eq  _ _    = RBool IUnknown
@@ -237,13 +238,14 @@ instance ValDom Range where
 
   aArrRead ret_ty _arr _ _ = rangeTop ret_ty
   aStrProj ret_ty _str _   = rangeTop ret_ty
-
+ 
 {--------------------------------------------------------------------
   Abstract interpreter for commands
 ---------------------------------------------------------------------}
 
 type RngMap = NameMap Ty Range
 
+{- ************* HERE *************************
 instance POrd Interval where 
   IBot       `pleq` _r         = True
   IRng l1 h1 `pleq` IRng l2 h2 = l2 <= l1 && h1 <= h2
@@ -574,3 +576,6 @@ varRanges _dfs e =
   where 
     action :: AbsT Rng RngVal
     action = absEvalRVal e
+
+
+-}
