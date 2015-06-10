@@ -47,6 +47,10 @@ data Automaton
   = Automaton { automaton_init  :: Node
               , automaton_final :: Set Node }
 
+
+concatAutomata :: Automaton -> Automaton -> GraphM Automaton
+concatAutomata = error "IMPLEMENT ME!" 
+
 newtype ZirGraph = ZirGraph { graph :: Gr NodeLabel () }
 
 data ZirEnv = ZirEnv { chan_binds  :: ChanEnv
@@ -66,7 +70,6 @@ lookupChan x = do
       Nothing   -> fail ("Automata generation: unbound variable " ++ (show x))
       Just chan -> return chan
 
-
 freshChan :: EId -> GraphM Chan
 freshChan x = do 
   u <- liftIO . GS.genSymStr =<< asks chan_gensym
@@ -77,8 +80,42 @@ runGraphM m = do
    new_sym <- GS.initGenSym "automata"
    runReaderT (runStateT m (ZirGraph G.empty)) (ZirEnv [] new_sym)
 
-
 {-------------------- Translation --------------------}
+
+data Channels = Channels { in_chan   :: Chan
+                         , out_chan  :: Chan
+                         , ctrl_chan :: Maybe Chan }
+
+mkAtomGraph :: DynFlags -> Channels -> Comp -> GraphM Automaton
+mkAtomGraph dfs comp = go (unComp comp) 
+  where 
+    loc = compLoc comp
+    go :: Channels -> Comp0 -> GraphM Automaton
+
+    go chans (BindMany c1 []) = mkAtomGraph dfs chans c1
+
+    go chans (BindMany c1 ((x1,c2):xs_s)) = do
+      ctrl <- freshChan x1
+      a1 <- mkAtomGraph dfs (chans { ctrl_chan = Just ctrl }) c1
+      a2 <- extendChan (x1,ctrl) $ 
+            go chans (BindMany c2 xs_cs)
+      concatAutomata a1 a2
+
+    go chans (Seq c1 c2) = do
+      a1 <- mkAtomGraph dfs (chans { ctrl_chan = Nothing }) c1
+      a2 <- mkAtomGraph dfs chans c2 
+      concatAutomata a1 a2 
+
+
+    go chans (Emit e) = do
+        
+ 
+
+
+
+        
+         
+
 
 -- runStateT (ZirGraph G.empty) (runReaderT m [])
 -- type GraphM expr var a = Env var Uniq -> Graph expr var -> (a, Graph expr var)
