@@ -224,8 +224,6 @@ void reset_putcomplex8(BlinkParams *params, BufContextBlock *blk);
 
 #ifdef SORA_PLATFORM
 
-#define STAMP_AT_READ
-
 FINL
 void write_time_stamp(BlinkParams *params) {
 	if (params->latencySampling > 0)

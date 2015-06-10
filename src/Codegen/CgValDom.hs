@@ -265,12 +265,52 @@ cgArrVal_val _ _ t@(TArray _ TBit) vs = do
    appendCodeGenDeclGroup (name snm) t (InitWith inits)
    return csnm
 
-cgArrVal_val _ _ t@(TArray {}) vs = do
-   snm <- freshName "__val_arr" t Mut
-   let csnm = [cexp| $id:(name snm)|]
-   let inits = cgNonBitValues vs
-   appendCodeGenDeclGroup (name snm) t (InitWith inits)
-   return csnm
+cgArrVal_val _dfs loc t@(TArray _ _) ws
+  | length ws <= 8192 
+  = do snm <- freshName "__val_arr" t Mut
+       let csnm = [cexp| $id:(name snm)|]
+       let inits = cgNonBitValues ws
+       appendCodeGenDeclGroup (name snm) t (InitWith inits)
+       return csnm
+  | otherwise -- ^ very large initializer, VS can't deal with that
+  = go t ws
+  where 
+    go (TArray n tval) vs 
+      | length vs <= 8192
+      = do snm <- freshName "__val_arr" t Mut
+           let csnm = [cexp| $id:(name snm)|]
+           let inits = cgNonBitValues vs
+           DeclPkg d istms <- 
+               codeGenDeclGroup (name snm) (TArray n tval) (InitWith inits)
+           appendTopDecl d
+           mapM_ addGlobalWplAllocated istms
+           return csnm
+      | otherwise
+      = do let len = length vs
+               ln1 = len `div` 2
+               ln2 = len - ln1 
+               (vs1,vs2) = splitAt ln1 vs
+           cv1 <- go (TArray (Literal ln1) tval) vs1
+           cv2 <- go (TArray (Literal ln2) tval) vs2
+           snm  <- freshName "__val_arr" t Mut
+           let valsiz = tySizeOf tval
+               csiz1  = ln1 * valsiz
+               csiz2  = ln2 * valsiz
+           DeclPkg d istms <- codeGenDeclGroup (name snm) t ZeroOut
+           appendTopDecl d 
+           mapM_ addGlobalWplAllocated istms
+
+           addGlobalWplAllocated $ 
+              [cstm| blink_copy((void *) $id:(name snm), 
+                                (void *) $cv1, $int:csiz1);|] 
+           addGlobalWplAllocated $
+              [cstm| blink_copy((void *) & $id:(name snm)[$int:ln1], 
+                                (void *) $cv2, $int:csiz2);|]
+
+           let csnm = [cexp| $id:(name snm)|]
+           return csnm
+    go ty _ = panicCgNonArray "cgArrVal_val" loc ty
+
 cgArrVal_val _ loc t _es = panicCgNonArray "cgArrVal_val" loc t
 
 

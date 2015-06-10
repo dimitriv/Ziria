@@ -32,6 +32,7 @@ import qualified Text.PrettyPrint.Mainland as GMPretty
 import qualified Language.C.Syntax as C
 
 import System.Timeout 
+import Data.Time.Clock
 
 import AstComp
 import AstExpr
@@ -95,6 +96,16 @@ withTimeout dfs action =
        case r of Nothing -> error "Timout exceeded!" 
                  Just x  -> return x
 
+timedPhase :: DynFlags -> String -> IO a -> IO a
+timedPhase _dfs pname m = do 
+  cur <- getCurrentTime 
+  r <- m
+  fin <- getCurrentTime
+  let d = diffUTCTime fin cur
+  putStrLn $ "Phase: " ++ pname ++  "(" ++ show d ++ ")"
+  return r
+
+
 main :: IO ()
 main = do 
   hSetBuffering stdout NoBuffering
@@ -114,9 +125,9 @@ main = do
 
     sym <- GS.initGenSym (getName dflags)
     
-    verbose dflags $ text "tyCheckProg .."
 
-    (MkProg c', _unifier) <- failOnError $ runTcM' (tyCheckProg prog) sym
+    (MkProg c', _unifier) <- timedPhase dflags "tyCheckProg" $
+                             failOnError $ runTcM' (tyCheckProg prog) sym
     let in_ty  =  inTyOfCTy (ctComp c')
         yld_ty = yldTyOfCTy (ctComp c')
 
@@ -124,35 +135,29 @@ main = do
 
     dump dflags DumpTypes ".type.dump" $ (text . show) (ppCompTyped c')
 
-    verbose dflags $ text "runFoldPhase .."
-
     -- First let us run some small-scale optimizations
-    folded <- runFoldPhase dflags sym 1 c'
+    folded <- timedPhase dflags "runFoldPhase" $ 
+              runFoldPhase dflags sym 1 c'
 
-
-    verbose dflags $ text "runVectorizePhase .."
 
     initVectorizer
 
-    (cand, cands) <- runVectorizePhase dflags sym folded
+    (cand, cands) <- timedPhase dflags "runVectorizePhase" $ 
+                     runVectorizePhase dflags sym folded
 
     -- Filenames
     let fnames = ["v"++show i++"_"++outFile | (i::Int) <- [0..]]
     let ccand_names = zip (cand:cands) (outFile : fnames)
 
-    verbose dflags $ text "runPostVectorizePhases .." 
     -- Fold, inline, and pipeline
     icands <- mapM (runPostVectorizePhases dflags sym) ccand_names
 
-    verbose dflags $ text "ctComp before code generation .."
-
     -- Right before code generation let us type check everything
     when (isDynFlagSet dflags Debug) $ 
+       timedPhase dflags "ctComp" $ 
        do { verbose dflags $ text "Passing through ctCtomp"
           ; mapM_ (\c -> seq (ctComp c) (return ())) (cand:cands)
           }
-
-    verbose dflags $ text "codeGenProgram .."    
 
     -- Generate code
     -- Use module name to avoid generating the same name in different modules
@@ -163,9 +168,8 @@ main = do
                          evalCg cg_sym (getStkThreshold dflags) $
                          codeGenProgram dflags ctx tid_cs bufTys (in_ty,yld_ty)
                ; return $ CompiledProgram sc defs fn }
-    code_names <- forM icands compile_threads
-
-    verbose dflags $ text "outputCompiledProgram .."
+    code_names <- timedPhase dflags "codeGenProgram" $ 
+                  forM icands compile_threads
 
     mapM_ outputCompiledProgram code_names
 
@@ -229,14 +233,17 @@ main = do
                 , ppCompTyped c ]
 
         -- Second round of folding
-        fc <- runFoldPhase dflags sym 2 c
+        fc <- timedPhase dflags "runFoldPhase (2nd round)" $ 
+              runFoldPhase dflags sym 2 c
 
-        lc <- runAutoLUTPhase dflags sym fc
+        lc <- timedPhase dflags "runAutoLUTPhase" $ 
+              runAutoLUTPhase dflags sym fc
 
         PP.MkPipelineRetPkg { PP.context = comp_ctxt
                             , PP.threads = comp_threads
                             , PP.buf_tys = tys }
-          <- runPipelinePhase dflags sym lc
+          <- timedPhase dflags "runPipelinePhase" $ 
+             runPipelinePhase dflags sym lc
         return (lc, comp_ctxt, comp_threads,tys,fn)
 
 

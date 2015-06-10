@@ -22,4 +22,4 @@
 #define SORA_COMPAT
 #include "blocks/ReceiverInfinite.blk"
 
-let comp main = read >>> ReceiverInfinite(HeaderInfo{coding = CR_12; modulation = M_QPSK; len = 0}) >>> write;
+let comp main = read >>> ReceiverInfinite(HeaderInfo{coding = CR_12; modulation = M_QPSK; len = 0; err = false}) >>> write;
