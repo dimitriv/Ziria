@@ -175,6 +175,11 @@ instance Outputable SrcBitWidth where
     SrcBW32 -> text "32"
     SrcBW64 -> text "64"
 
+instance Outputable SrcSignedness where
+  ppr signedness = case signedness of
+    SrcSigned   -> text ""    
+    SrcUnsigned -> text "u"
+
 instance Outputable MutKind where
   ppr mk = text (show mk)
 
@@ -209,7 +214,7 @@ instance Outputable SrcTy where
   ppr ty = case ty of
     SrcTUnit      -> text "()"
     SrcTBit       -> text "bit"
-    SrcTInt bw    -> text "int" <> ppr bw
+    SrcTInt bw sg -> text "int" <> ppr bw <> ppr sg
     SrcTDouble    -> text "double"
     SrcTBool      -> text "bool"
     SrcTStruct nm -> text nm

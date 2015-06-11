@@ -131,7 +131,7 @@ data SrcTy where
   SrcTBool     :: SrcTy
 
   SrcTArray    :: SrcNumExpr -> SrcTy -> SrcTy
-  SrcTInt      :: SrcBitWidth -> SrcTy
+  SrcTInt      :: SrcBitWidth -> SrcSignedness -> SrcTy
   SrcTDouble   :: SrcTy
   SrcTStruct   :: TyName -> SrcTy
 
@@ -151,6 +151,12 @@ data SrcBitWidth
   | SrcBW32
   | SrcBW64
   deriving (Generic, Typeable, Data, Eq, Show)
+
+-- | Source-language integer types are annotated with a signedness flag.
+data SrcSignedness
+  = SrcSigned
+  | SrcUnsigned
+  deriving (Generic, Typeable, Data, Eq, Show)  
 
 data SrcNumExpr where
   -- | User explicitly specifies the length
@@ -545,11 +551,18 @@ complexTy nm bw = TStruct nm [("re", TInt bw), ("im", TInt bw)]
 -------------------------------------------------------------------------------}
 
 tintSrc, tintSrc8, tintSrc16, tintSrc32, tintSrc64 :: SrcTy
-tintSrc64  = SrcTInt SrcBW64
-tintSrc32  = SrcTInt SrcBW32
-tintSrc16  = SrcTInt SrcBW16
-tintSrc8   = SrcTInt SrcBW8
+tintSrc64  = SrcTInt SrcBW64 SrcSigned
+tintSrc32  = SrcTInt SrcBW32 SrcSigned
+tintSrc16  = SrcTInt SrcBW16 SrcSigned
+tintSrc8   = SrcTInt SrcBW8  SrcSigned
 tintSrc    = tintSrc32
+
+tuintSrc, tuintSrc8, tuintSrc16, tuintSrc32, tuintSrc64 :: SrcTy
+tuintSrc64  = SrcTInt SrcBW64 SrcUnsigned
+tuintSrc32  = SrcTInt SrcBW32 SrcUnsigned
+tuintSrc16  = SrcTInt SrcBW16 SrcUnsigned
+tuintSrc8   = SrcTInt SrcBW8  SrcUnsigned
+tuintSrc    = tuintSrc32
 
 tdoubleSrc :: SrcTy
 tdoubleSrc = SrcTDouble
@@ -1186,6 +1199,7 @@ primComplexStructs
 
 instance PrettyVal BitWidth
 instance PrettyVal SrcBitWidth
+instance PrettyVal SrcSignedness
 instance PrettyVal Ty
 instance PrettyVal SrcTy
 instance PrettyVal BufTy
