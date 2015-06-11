@@ -73,6 +73,8 @@ mkDummyAutomaton = do
   (node,_) <- mkDummyNode
   return $ Automaton node (Set.singleton node)
 
+singletonAutomaton :: Node -> Automaton
+singletonAutomaton node = Automaton node (Set.singleton node)
 
 extendChan :: (EId,Chan) -> GraphM a -> GraphM a
 extendChan (x,c) = local add_bnd
@@ -107,8 +109,7 @@ runGraphM m = do
 concatAutomata :: Automaton -> Automaton -> GraphM Automaton
 concatAutomata a1 a2 = do
     let edges = map (\x -> (x, automaton_init a2, ())) (Set.toList $ automaton_final a1)
-    g <- get
-    put (G.insEdges edges g)
+    modify (G.insEdges edges)
     return $ Automaton (automaton_init a1) (automaton_final a2)
 
 data Channels = Channels { in_chan   :: Chan
@@ -140,7 +141,7 @@ mkAutomaton dfs chans comp = go chans (unComp comp)
       let inp = Set.map (lookupChan env) (exprFVs' False e)
       let outp = Set.singleton (out_chan chans)
       (node,_) <- mkNode (Action inp outp e (chan_binds env))
-      return $ Automaton node (Set.singleton node)
+      return $ singletonAutomaton node
 
     go chans (Return _ e) = do
       env <- ask
@@ -149,7 +150,7 @@ mkAutomaton dfs chans comp = go chans (unComp comp)
                   Just chan -> Set.singleton chan
                   Nothing   -> Set.empty
       (node,_) <- mkNode (Action inp outp e (chan_binds env))
-      return $ Automaton node (Set.singleton node)
+      return $ singletonAutomaton node
 
     go chans (AstComp.Branch e c1 c2) = do
       a1 <- mkAutomaton dfs chans c1
@@ -170,14 +171,16 @@ mkAutomaton dfs chans comp = go chans (unComp comp)
       let code = eAssign noLoc (eVar noLoc ctrl_c) (eVar noLoc in_c)
       let env = [(in_c, in_c), (ctrl_c, ctrl_c)]
       (node,_) <- mkNode (Action inp outp code env)
-      return $ Automaton node (Set.singleton node)
+      return $ singletonAutomaton node
 
-    --go chans (Repeat _ c) = do
-    --  -- TODO: how many times should we loop?
-    --  let loop = mkNode (Loop Nothing)
-    --  a <- mkAutomaton c
-    --  g <- get
-    --  put (g |> insNode loop )
+    go chans (Repeat _ c) = do
+      a <- mkAutomaton dfs (chans { ctrl_chan = Nothing }) c
+       --TODO: how many times should we loop?
+      (loop,_) <- mkNode (Loop Nothing)
+      let edges = map (\f -> (f,loop,())) $ Set.toList (automaton_final a)
+      modify $ G.insEdges edges
+      modify $ G.insEdge (loop,automaton_init a,())
+      return $ a { automaton_final = Set.empty }
 
 
     --go chans (Times _ e1 e2 )
