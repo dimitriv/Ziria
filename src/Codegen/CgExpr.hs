@@ -190,7 +190,7 @@ cgEval dfs e = go (unExp e) where
     = go (EAssign (eArrRead loc earr ei rng) erhs)
 
   go (EArrRead earr ei rng) 
-    | EVal _t (VInt i) <- unExp ei
+    | EVal _t (VInt i Signed) <- unExp ei
     , let ii :: Int = fromIntegral i
     , let aidx = AIdxStatic ii
     = mk_arr_read (ctExp e) (ctExp earr) aidx

@@ -216,9 +216,14 @@ rbinop BwAnd _ _ = ROther
 rbinop BwOr _ _  = ROther
 rbinop BwXor _ _ = ROther
 
+-- XXX: possible bug? The abstract domain won't deal properly
+-- with unsigned integer overflow? For now, I leave undefined 
+-- uint addition and subtraction.
 symBinOp :: BinOp -> SymExp -> SymExp -> SymExp 
-symBinOp Add (SymVal (VInt i)) (SymVal (VInt j)) = SymVal (VInt (i+j))
-symBinOp Sub (SymVal (VInt i)) (SymVal (VInt j)) = SymVal (VInt (i-j))
+symBinOp Add (SymVal (VInt i Signed)) (SymVal (VInt j Signed))
+  = SymVal (VInt (i+j) Signed)
+symBinOp Sub (SymVal (VInt i Signed)) (SymVal (VInt j Signed))
+  = SymVal (VInt (i-j) Signed)
 symBinOp op s1 s2 = SymBinOp op s1 s2
 
 sbinop :: BinOp -> Maybe SymExp -> Maybe SymExp -> Maybe SymExp
@@ -247,9 +252,9 @@ sbinop bop msa msb
 ----------------------------------------------------------------------}
 
 instance ValDom RngVal where
-  aVal (VInt i)
+  aVal (VInt i sg)
     = RngVal { av_range = RInt (IRng i i)
-             , av_symex = Just $ SymVal (VInt i) }
+             , av_symex = Just $ SymVal (VInt i sg) }
   aVal val 
     = RngVal { av_range = ROther         
              , av_symex = Just $ SymVal val }
@@ -386,10 +391,11 @@ instance AbsInt Rng RngVal where
          put pre'
          action
 
+-- XXX: I'm not yet sure what to do about unsigned ints here...
 pushFact :: SymExp -> RngMap -> RngMap
-pushFact (SymBinOp bop  (SymVar x) (SymVal (VInt i)))
+pushFact (SymBinOp bop  (SymVar x) (SymVal (VInt i Signed)))
   = neUpdate x (varop bop i) 
-pushFact (SymBinOp bop (SymVal (VInt i)) (SymVar x))
+pushFact (SymBinOp bop (SymVal (VInt i Signed)) (SymVar x))
   = neUpdate x (varop (sym_bop bop) i)
   where sym_bop Lt  = Gt
         sym_bop Gt  = Lt

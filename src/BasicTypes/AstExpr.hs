@@ -282,7 +282,7 @@ data BinOp =
 
 data Val where
   VBit    :: Bool    -> Val
-  VInt    :: Integer -> Val
+  VInt    :: Integer -> Signedness -> Val
   VDouble :: Double  -> Val
   VBool   :: Bool    -> Val
   VString :: String  -> Val

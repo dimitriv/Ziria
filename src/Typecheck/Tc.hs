@@ -59,7 +59,8 @@ tcVal :: Val -> TcM Ty
 tcVal = go
   where
     go (VBit _)    = return TBit
-    go (VInt _)    = flip TInt Signed <$> freshBitWidth "bw"
+    go (VInt _ Signed)   = flip TInt Signed   <$> freshBitWidth "bw"
+    go (VInt _ Unsigned) = flip TInt Unsigned <$> freshBitWidth "bw"    
     go (VDouble _) = return TDouble
     go (VBool _)   = return TBool
     go (VString _) = return TString

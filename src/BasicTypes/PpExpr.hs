@@ -68,12 +68,13 @@ instance Outputable BinOp where
 
 instance Outputable Val where
   ppr v = case v of
-    VBit b    -> text $ if b then "'1" else "'0"
-    VInt n    -> integer n
-    VDouble d -> double d
-    VBool b   -> if b then text "true" else text "false"
-    VString s -> text s
-    VUnit     -> text "tt"
+    VBit b           -> text $ if b then "'1" else "'0"
+    VInt n Signed    -> integer n
+    VInt n Unsigned  -> integer n <> text "u"    
+    VDouble d        -> double d
+    VBool b          -> if b then text "true" else text "false"
+    VString s        -> text s
+    VUnit            -> text "tt"
 
 instance Outputable ForceInline where
   ppr ForceInline = brackets $ text "ForceInline"

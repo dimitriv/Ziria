@@ -324,7 +324,7 @@ cgArrVal_exp dfs loc t@(TArray _ _tbase) es = do
      return csnm
    where 
      lhs x idx = eArrRead loc (eVar loc x)
-                              (eVal loc tint (VInt idx)) LISingleton
+                              (eVal loc tint (VInt idx Signed)) LISingleton
              
 cgArrVal_exp _dfs loc t _es = panicCgNonArray "cgArrVal_exp" loc t
 

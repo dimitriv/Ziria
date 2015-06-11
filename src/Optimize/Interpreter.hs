@@ -262,10 +262,10 @@ instance Show Value where
 -- TODO: The interpreter doesn't yet handle unsigned integer values.
 scalarValue :: Ty -> Val -> Value0
 scalarValue TBit        (VBit b)        = ValueBit    b
-scalarValue (TInt BW8  Signed) (VInt i) = ValueInt8   (fromInteger i)
-scalarValue (TInt BW16 Signed) (VInt i) = ValueInt16  (fromInteger i)
-scalarValue (TInt BW32 Signed) (VInt i) = ValueInt32  (fromInteger i)
-scalarValue (TInt BW64 Signed) (VInt i) = ValueInt64  (fromInteger i)
+scalarValue (TInt BW8  Signed) (VInt i Signed) = ValueInt8   (fromInteger i)
+scalarValue (TInt BW16 Signed) (VInt i Signed) = ValueInt16  (fromInteger i)
+scalarValue (TInt BW32 Signed) (VInt i Signed) = ValueInt32  (fromInteger i)
+scalarValue (TInt BW64 Signed) (VInt i Signed) = ValueInt64  (fromInteger i)
 scalarValue TDouble     (VDouble d)     = ValueDouble d
 scalarValue TBool       (VBool b)       = ValueBool   b
 scalarValue TString     (VString s)     = ValueString s
@@ -313,10 +313,10 @@ valueExp v = let !e0 = go (unValue v) in MkExp e0 vloc ()
   where
     go :: Value0 -> Exp0
     go (ValueBit    b)         = EVal TBit        (VBit b)
-    go (ValueInt8   i)         = EVal (TInt BW8  Signed) (VInt (toInteger i))
-    go (ValueInt16  i)         = EVal (TInt BW16 Signed) (VInt (toInteger i))
-    go (ValueInt32  i)         = EVal (TInt BW32 Signed) (VInt (toInteger i))
-    go (ValueInt64  i)         = EVal (TInt BW64 Signed) (VInt (toInteger i))
+    go (ValueInt8   i)         = EVal (TInt BW8  Signed) (VInt (toInteger i) Signed)
+    go (ValueInt16  i)         = EVal (TInt BW16 Signed) (VInt (toInteger i) Signed)
+    go (ValueInt32  i)         = EVal (TInt BW32 Signed) (VInt (toInteger i) Signed)
+    go (ValueInt64  i)         = EVal (TInt BW64 Signed) (VInt (toInteger i) Signed)
     go (ValueDouble d)         = EVal TDouble     (VDouble d)
     go (ValueBool   b)         = EVal TBool       (VBool   b)
     go (ValueString s)         = EVal TString     (VString s)
@@ -326,23 +326,23 @@ valueExp v = let !e0 = go (unValue v) in MkExp e0 vloc ()
 
     go (ValueCpx8 Complex{..}) =
       EStruct tcomplex8 [
-          ("re", eVal vloc tint8 (VInt (toInteger re)))
-        , ("im", eVal vloc tint8 (VInt (toInteger im)))
+          ("re", eVal vloc tint8 (VInt (toInteger re) Signed))
+        , ("im", eVal vloc tint8 (VInt (toInteger im) Signed))
         ]
     go (ValueCpx16 Complex{..}) =
       EStruct tcomplex16 [
-          ("re", eVal vloc tint16 (VInt (toInteger re)))
-        , ("im", eVal vloc tint16 (VInt (toInteger im)))
+          ("re", eVal vloc tint16 (VInt (toInteger re) Signed))
+        , ("im", eVal vloc tint16 (VInt (toInteger im) Signed))
         ]
     go (ValueCpx32 Complex{..}) =
       EStruct tcomplex32 [
-          ("re", eVal vloc tint32 (VInt (toInteger re)))
-        , ("im", eVal vloc tint32 (VInt (toInteger im)))
+          ("re", eVal vloc tint32 (VInt (toInteger re) Signed))
+        , ("im", eVal vloc tint32 (VInt (toInteger im) Signed))
         ]
     go (ValueCpx64 Complex{..}) =
       EStruct tcomplex64 [
-         ("re", eVal vloc tint64 (VInt (toInteger re)))
-       , ("im", eVal vloc tint64 (VInt (toInteger im)))
+         ("re", eVal vloc tint64 (VInt (toInteger re) Signed))
+       , ("im", eVal vloc tint64 (VInt (toInteger im) Signed))
        ]
 
     valueFld (fld, v') = let !e' = valueExp v' in (fld, e')
@@ -1083,7 +1083,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
             EArrRead arr' ix' len' ->
               -- Special optimizations
               case (ctExp arr, unExp ix', len') of
-                (TArray (Literal m) _, EVal _ (VInt 0), LILength n) | m == n ->
+                (TArray (Literal m) _, EVal _ (VInt 0 Signed), LILength n) | m == n ->
                   evaldPart $ eAssign eloc arr' rhs'
                 _otherwise -> do
                   evaldPart $ eArrWrite eloc arr' ix' len' rhs'
@@ -1127,7 +1127,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
           let loop n | n == start' + len' =
                 return True
               loop n = do
-                let n' = fromJust $ expValue (eVal eloc (nameTyp x) (VInt n))
+                let n' = fromJust $ expValue (eVal eloc (nameTyp x) (VInt n Signed))
                 bodyEvald <- extendScope evalLets x n' $ interpret body
                 -- Only when we can fully evaluate the body of the loop do we
                 -- continue. If not, we give up completely (alternatively, we
@@ -1809,8 +1809,8 @@ guess _e = mzero
 
 isComparison :: Exp -> Maybe (Exp, BinOp, Integer)
 isComparison e
-    | EBinOp op lhs rhs <- unExp e
-    , EVal _ (VInt i)   <- unExp rhs
+    | EBinOp op lhs rhs       <- unExp e
+    , EVal _ (VInt i Signed)  <- unExp rhs
     , op `elem` comparisonOps
     = Just (lhs, op, i)
   where

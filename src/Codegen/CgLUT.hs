@@ -619,13 +619,13 @@ tyBitWidth' :: Ty -> Int
 tyBitWidth' t = fromIntegral $ runIdentity (tyBitWidth t)
 
 eMultBy :: Exp -> Int -> Exp
-eMultBy e n = eBinOp loc Mult e (eVal loc ety (VInt ni))
+eMultBy e n = eBinOp loc Mult e (eVal loc ety (VInt ni Signed))
   where ety = ctExp e
         loc = expLoc e
         ni  = fromIntegral n
 
 eAddBy :: Exp -> Int -> Exp
-eAddBy e n = eBinOp loc Add e (eVal loc ety (VInt ni))
+eAddBy e n = eBinOp loc Add e (eVal loc ety (VInt ni Signed))
   where ety = ctExp e
         loc = expLoc e
         ni  = fromIntegral n
@@ -677,7 +677,7 @@ lutInstrument mask_eids = mapExpM return return do_instr
             io_msg = eVal loc TString (VString " (NB: IO from LUT _generator_)")
 
 int32Val :: Int -> Exp
-int32Val n = eVal noLoc tint (VInt $ fromIntegral n)
+int32Val n = eVal noLoc tint (VInt (fromIntegral n) Signed)
 
 instrAsgn :: [(EId, Maybe EId)] -> SrcLoc 
           -> LVal Exp -> Exp -> Cg Exp
@@ -776,9 +776,9 @@ instrLVal loc ms lval = go lval [] MRFull
              eBinOp loc Leq (eAddBy estart n) earray_len
       LIMeta {}   -> panicStr "mk_rangetest: LIMeta!"
       where earray_len = eVal loc (ctExp estart) varray_len
-            varray_len = VInt $ fromIntegral array_len
+            varray_len = VInt (fromIntegral array_len) Signed
             estart_non_neg = eBinOp loc Geq estart $ 
-                             eVal loc (ctExp estart) (VInt 0)
+                             eVal loc (ctExp estart) (VInt 0 Signed)
 
 
 

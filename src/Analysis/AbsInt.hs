@@ -186,7 +186,7 @@ instance (AbsInt m v, CmdDom m v) => CmdDomRec (AbsT m) v where
     astart <- absEvalRVal estart
     aAssign (varLVal idx) astart
     let econd = eBinOp noLoc Lt eidx (eBinOp noLoc Add estart elen)
-    let erhs  = eBinOp noLoc Add eidx (eVal noLoc (nameTyp idx) (VInt 1))
+    let erhs  = eBinOp noLoc Add eidx (eVal noLoc (nameTyp idx) (VInt 1 Signed))
         m'    = do x <- m 
                    arhs <- absEvalRVal erhs
                    aAssign (varLVal idx) arhs

@@ -253,8 +253,8 @@ scalar_value :
   | "'0"    { L (locOf $1) $ VBit False }
   | "'1"    { L (locOf $1) $ VBit True }
   | '(' ')' { L (locOf $1) $ VUnit }
-  | INT     { L (locOf $1) $ VInt (snd (getINT $1)) }
-  | UINT    { L (locOf $1) $ VInt (snd (getUINT $1)) }    
+  | INT     { L (locOf $1) $ VInt (snd (getINT $1)) Signed }
+  | UINT    { L (locOf $1) $ VInt (snd (getUINT $1)) Unsigned }    
   | FLOAT   { L (locOf $1) $ VDouble (snd (getFLOAT $1)) }
   | STRING  { L (locOf $1) $ VString (snd (getSTRING $1)) }
 
@@ -855,7 +855,7 @@ command_comp :
             ; nm = toName "_tmp_count" p tintSrc Imm
             }
         in
-          cTimes p ui (eVal p tintSrc (VInt 0)) e nm c
+          cTimes p ui (eVal p tintSrc (VInt 0 Signed)) e nm c
       }
   | unroll_info 'for' var_bind 'in' gen_interval command_comp %prec STANDALONE
       { let { p              = $1 `srcspan` $6
@@ -1197,8 +1197,8 @@ eValSrc p v = eVal p SrcTyUnknown v
 eUnOp' :: SrcLoc -> GUnOp t -> GExp t () -> GExp t ()
 eUnOp' p op e =
     case (op, unExp e) of
-      (Neg, EVal ty (VInt i)) -> eVal eloc ty (VInt (negate i))
-      _                       -> eUnOp p op e
+      (Neg, EVal ty (VInt i Signed)) -> eVal eloc ty (VInt (negate i) Signed)
+      _                              -> eUnOp p op e
   where
     eloc = expLoc e
 

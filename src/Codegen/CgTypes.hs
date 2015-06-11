@@ -249,14 +249,23 @@ mIN_INT32 = -2147483648
 mAX_INT32 :: Integer
 mAX_INT32 = 2147483647
 
+mIN_UINT32 :: Integer
+mIN_UINT32 = -2147483648
+mAX_UINT32 :: Integer
+mAX_UINT32 = 2147483647
+
 codeGenVal :: Val -> C.Exp
 -- ^ Generate code for a value
 codeGenVal v =
   case v of
-    VInt i 
+    VInt i Signed
       | i <= mAX_INT32 && mIN_INT32 <= i
       -> [cexp|$int:i|]
       | otherwise -> [cexp|$lint:i|]
+    VInt i Unsigned
+      | i <= mAX_UINT32 && mIN_UINT32 <= i
+      -> [cexp|$uint:i|]
+      | otherwise -> [cexp|$ulint:i|]
     VBit True   -> [cexp| 1                     |]
     VBit False  -> [cexp| 0                     |]
     VDouble d   -> [cexp| $double:(toRational d)|]

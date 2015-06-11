@@ -64,8 +64,8 @@ class FValy v where
 
 instance FValy Bool where toVal b = VBool b
 
-instance FValy Int      where toVal i = VInt $ fromIntegral i
-instance FValy Integer  where toVal i = VInt $ fromIntegral i
+instance FValy Int      where toVal i = VInt (fromIntegral i) Signed
+instance FValy Integer  where toVal i = VInt (fromIntegral i) Signed
 
 -- Removing that to avoid confusion with meta-language unit 
 -- instance FValy ()   where toVal _ = VUnit
@@ -84,8 +84,8 @@ instance FExpy EId  where toFExp   = FEVar
 instance FExpy Exp  where toFExp   = FELift 
 instance FExpy Bool       where toFExp b = FEVal TBool (VBool b)
 
-instance FExpy Int        where toFExp i = FEVal tint (VInt $ fromIntegral i)
-instance FExpy Integer    where toFExp i = FEVal tint (VInt $ fromIntegral i)
+instance FExpy Int        where toFExp i = FEVal tint (VInt (fromIntegral i) Signed)
+instance FExpy Integer    where toFExp i = FEVal tint (VInt (fromIntegral i) Signed)
 
 instance FExpy ()         where toFExp _ = FEVal TUnit VUnit
 -- Instance for annotated values
@@ -119,7 +119,7 @@ instance FValy v => FExpy (v ::: Ty) where
 
 
 instance Num FExp where
-  fromInteger i = FEVal tint (VInt i)
+  fromInteger i = FEVal tint (VInt i Signed)
   (+) = FEBinOp Add 
   (-) = FEBinOp Sub
   (*) = FEBinOp Mult
