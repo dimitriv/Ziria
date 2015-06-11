@@ -23,6 +23,7 @@ import Opts
 type LNode = G.LNode NodeLabel
 type Chan = EId
 type ChanEnv = [(EId,Chan)]
+type FuncEnv = [()]
 
 data NodeLabel
   = NodeLabel { node_id   :: Node
@@ -52,6 +53,7 @@ type ZirGraph = Gr NodeLabel ()
 
 data ZirEnv = ZirEnv { chan_binds  :: ChanEnv
                      , chan_gensym :: GS.Sym
+                     , func_binds :: FuncEnv
                      }
 
 type GraphM a = StateT ZirGraph (ReaderT ZirEnv IO) a
@@ -182,6 +184,14 @@ mkAutomaton dfs chans comp = go chans (unComp comp)
       modify $ G.insEdge (loop,automaton_init a,())
       return $ a { automaton_final = Set.empty }
 
+    go chans (Map _ f) = do
+      let inc = in_chan chans
+      let outc = out_chan chans
+      let env = [(inc,inc), [outc,outc]]
+      let inp = Set.singleton inc
+      let outp = Set.singleton outc
+      let code = 
+      (node,_) <- mkNode (Action inp out code env)
 
     --go chans (Times _ e1 e2 )
 
