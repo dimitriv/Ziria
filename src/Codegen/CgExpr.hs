@@ -278,7 +278,9 @@ cgEval dfs e = go (unExp e) where
       appendDecls body_decls
       appendStmts init_stms
       let idx_ty = codeGenTyOcc (ctExp estart)
-      appendStmt [cstm|for ($ty:(idx_ty) $id:(name k_new) = $ceStart; 
+
+      appendDecl [cdecl| $ty:(idx_ty) $id:(name k_new);|]
+      appendStmt [cstm| for ($id:(name k_new) = $ceStart; 
                             $id:(name k_new) < ($ceStart + $ceLen); 
                             $id:(name k_new)++) {
                          $stms:init_stms
