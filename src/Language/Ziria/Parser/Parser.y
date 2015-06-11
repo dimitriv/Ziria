@@ -44,6 +44,7 @@ import Interpreter (evalSrcInt)
   CHAR        { L _ (T.TcharConst _) }
   STRING      { L _ (T.TstringConst _) }
   INT         { L _ (T.TintConst _) }
+  UINT        { L _ (T.TuintConst _) }  
   FLOAT       { L _ (T.TfloatConst _) }
   ID          { L _ (T.Tidentifier _) }
   COMPID      { L _ (T.TcompIdentifier _) }
@@ -85,6 +86,11 @@ import Interpreter (evalSrcInt)
   'int16'       { L _ T.Tint16 }
   'int32'       { L _ T.Tint32 }
   'int64'       { L _ T.Tint64 }
+  'uint'        { L _ T.Tuint }
+  'uint8'       { L _ T.Tuint8 }
+  'uint16'      { L _ T.Tuint16 }
+  'uint32'      { L _ T.Tuint32 }
+  'uint64'      { L _ T.Tuint64 }
   'length'      { L _ T.Tlength }
   'let'         { L _ T.Tlet }
   'map'         { L _ T.Tmap }
@@ -248,6 +254,7 @@ scalar_value :
   | "'1"    { L (locOf $1) $ VBit True }
   | '(' ')' { L (locOf $1) $ VUnit }
   | INT     { L (locOf $1) $ VInt (snd (getINT $1)) }
+  | UINT    { L (locOf $1) $ VInt (snd (getUINT $1)) }    
   | FLOAT   { L (locOf $1) $ VDouble (snd (getFLOAT $1)) }
   | STRING  { L (locOf $1) $ VString (snd (getSTRING $1)) }
 
@@ -505,6 +512,11 @@ base_type :
   | 'int16'            { L (locOf $1)   $ SrcTInt SrcBW16 SrcSigned }
   | 'int32'            { L (locOf $1)   $ SrcTInt SrcBW32 SrcSigned }
   | 'int64'            { L (locOf $1)   $ SrcTInt SrcBW64 SrcSigned }
+  | 'uint'             { L (locOf $1)   $ SrcTInt SrcBW32 SrcUnsigned }
+  | 'uint8'            { L (locOf $1)   $ SrcTInt SrcBW8  SrcUnsigned }
+  | 'uint16'           { L (locOf $1)   $ SrcTInt SrcBW16 SrcUnsigned }
+  | 'uint32'           { L (locOf $1)   $ SrcTInt SrcBW32 SrcUnsigned }
+  | 'uint64'           { L (locOf $1)   $ SrcTInt SrcBW64 SrcUnsigned }
   | 'double'           { L (locOf $1)   $ SrcTDouble }
   | 'bool'             { L (locOf $1)   $ SrcTBool }
   | 'complex'          { L (locOf $1)   $ SrcTStruct complex32TyName }
@@ -524,6 +536,11 @@ cast_type :
   | 'int16'           { L (locOf $1)   $ SrcTInt SrcBW16 SrcSigned }
   | 'int32'           { L (locOf $1)   $ SrcTInt SrcBW32 SrcSigned }
   | 'int64'           { L (locOf $1)   $ SrcTInt SrcBW64 SrcSigned }
+  | 'uint'            { L (locOf $1)   $ SrcTInt SrcBW32 SrcUnsigned }
+  | 'uint8'           { L (locOf $1)   $ SrcTInt SrcBW8  SrcUnsigned }
+  | 'uint16'          { L (locOf $1)   $ SrcTInt SrcBW16 SrcUnsigned }
+  | 'uint32'          { L (locOf $1)   $ SrcTInt SrcBW32 SrcUnsigned }
+  | 'uint64'          { L (locOf $1)   $ SrcTInt SrcBW64 SrcUnsigned }
   | 'double'          { L (locOf $1)   $ SrcTDouble }
   | 'complex'         { L (locOf $1)   $ SrcTStruct complex32TyName }
   | 'complex8'        { L (locOf $1)   $ SrcTStruct complex8TyName }
@@ -1135,6 +1152,7 @@ happyError (L loc t) =
     quote = enclose (char '`') (char '\'')
 
 getINT         (L _ (T.TintConst x))           = x
+getUINT        (L _ (T.TuintConst x))          = x
 getFLOAT       (L _ (T.TfloatConst x))         = x
 getCHAR        (L _ (T.TcharConst x))          = x
 getSTRING      (L _ (T.TstringConst x))        = x
