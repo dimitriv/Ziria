@@ -1,10 +1,10 @@
+data Exp t b = ExpFun { expFunNm :: Name t, expFunArgs :: [GName t] }
+             | ExpVar (Name t)
+
 data Comp tc t a b 
   = MkComp { unComp   :: !(Comp0 tc t a b)
            , compLoc  :: !(CompLoc)
            , compInfo :: a }
-
-data Exp t b = ExpFun { expFunNm :: Name t, expFunArgs :: [GName t] }
-             | ExpVar (Name t)
 
 data Comp0 tc t a b where
 
