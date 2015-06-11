@@ -1,5 +1,7 @@
 module AutomataModel where
 
+import Data.Loc
+
 import Data.Set (Set)
 import qualified Data.Set as Set
 
@@ -18,6 +20,7 @@ import AstUnlabelled
 import Opts
 
 -- type Node = int
+type LNode = G.LNode NodeLabel
 type Chan = EId
 type ChanEnv = [(EId,Chan)]
 
@@ -53,14 +56,22 @@ data ZirEnv = ZirEnv { chan_binds  :: ChanEnv
 
 type GraphM a = StateT ZirGraph (ReaderT ZirEnv IO) a
 
-mkActionNode :: Set Chan -> Set Chan -> Exp -> ChanEnv -> GraphM Node
-mkActionNode inp outp code env = do
-  let act = Action inp outp code env
+
+mkNode :: NodeKind -> GraphM LNode
+mkNode kind = do
   g <- get
   let [node] = G.newNodes 1 g
-  let lnode = (node, NodeLabel node act)
+  let lnode = (node, NodeLabel node kind)
   put (G.insNode lnode g)
-  return node
+  return lnode
+
+mkDummyNode :: GraphM LNode
+mkDummyNode = mkNode $ Action Set.empty Set.empty (eint32 0) []
+
+mkDummyAutomaton :: GraphM Automaton
+mkDummyAutomaton = do
+  (node,_) <- mkDummyNode
+  return $ Automaton node (Set.singleton node)
 
 
 extendChan :: (EId,Chan) -> GraphM a -> GraphM a
@@ -104,83 +115,75 @@ data Channels = Channels { in_chan   :: Chan
                          , out_chan  :: Chan
                          , ctrl_chan :: Maybe Chan }
 
-mkAtomGraph :: DynFlags -> Channels -> Comp -> GraphM Automaton
-mkAtomGraph dfs chans comp = go chans (unComp comp)
+mkAutomaton :: DynFlags -> Channels -> Comp -> GraphM Automaton
+mkAutomaton dfs chans comp = go chans (unComp comp)
   where
     loc = compLoc comp
     go :: Channels -> Comp0 -> GraphM Automaton
 
-    go chans (BindMany c1 []) = mkAtomGraph dfs chans c1
+    go chans (BindMany c1 []) = mkAutomaton dfs chans c1
 
     go chans (BindMany c1 ((x1,c2):cs)) = do
       ctrl <- freshChan x1
-      a1 <- mkAtomGraph dfs (chans { ctrl_chan = Just ctrl }) c1
+      a1 <- mkAutomaton dfs (chans { ctrl_chan = Just ctrl }) c1
       a2 <- extendChan (x1,ctrl) $
             go chans (BindMany c2 cs)
       concatAutomata a1 a2
 
     go chans (Seq c1 c2) = do
-      a1 <- mkAtomGraph dfs (chans { ctrl_chan = Nothing }) c1
-      a2 <- mkAtomGraph dfs chans c2
+      a1 <- mkAutomaton dfs (chans { ctrl_chan = Nothing }) c1
+      a2 <- mkAutomaton dfs chans c2
       concatAutomata a1 a2
-
 
     go chans (Emit e) = do
       env <- ask
       let inp = Set.map (lookupChan env) (exprFVs' False e)
-      node <- mkActionNode inp Set.empty e (chan_binds env)
+      let outp = Set.singleton (out_chan chans)
+      (node,_) <- mkNode (Action inp outp e (chan_binds env))
       return $ Automaton node (Set.singleton node)
 
+    go chans (Return _ e) = do
+      env <- ask
+      let inp = Set.map (lookupChan env) (exprFVs' False e)
+      let outp = case ctrl_chan chans of
+                  Just chan -> Set.singleton chan
+                  Nothing   -> Set.empty
+      (node,_) <- mkNode (Action inp outp e (chan_binds env))
+      return $ Automaton node (Set.singleton node)
+
+    go chans (AstComp.Branch e c1 c2) = do
+      a1 <- mkAutomaton dfs chans c1
+      a2 <- mkAutomaton dfs chans c2
+      let branch = (automaton_init a1, automaton_init a2)
+      env <- ask 
+      let inp = Set.map (lookupChan env) (exprFVs' False e)
+      (node,_) <- mkNode (AutomataModel.Branch inp e (chan_binds env) branch)
+      return $ Automaton node (Set.union (automaton_final a1) (automaton_final a2))
+
+    go chans (Take1 _) = do
+      let in_c = in_chan chans
+      ctrl_c <- case ctrl_chan chans of
+                    Just c   -> return c
+                    Nothing -> fail "mkAutomaton: input expression not well-typed"
+      let inp = Set.singleton in_c
+      let outp = Set.singleton ctrl_c
+      let code = eAssign noLoc (eVar noLoc ctrl_c) (eVar noLoc in_c)
+      let env = [(in_c, in_c), (ctrl_c, ctrl_c)]
+      (node,_) <- mkNode (Action inp outp code env)
+      return $ Automaton node (Set.singleton node)
+
+    --go chans (Repeat _ c) = do
+    --  -- TODO: how many times should we loop?
+    --  let loop = mkNode (Loop Nothing)
+    --  a <- mkAutomaton c
+    --  g <- get
+    --  put (g |> insNode loop )
 
 
+    --go chans (Times _ e1 e2 )
 
+    --go chans (While e c) = do
+    --  a <- mkAutomaton dfs chans e
+    --  done <- mkDummyAutomaton
+    --  loop <- mkNode (Loop Nothing)
 
-
-
-
-
-
-
--- runStateT (ZirGraph G.empty) (runReaderT m [])
--- type GraphM expr var a = Env var Uniq -> Graph expr var -> (a, Graph expr var)
-
--- extend :: (var,Uniq) -> GraphM expr var a -> GraphM expr var a
--- lookup :: var -> GraphM expr var Uniq
-
--- put :: ..
--- get :: ..
-
-
--- runGraphM :: GraphM Expr EId a -> (Graph expr var, a
-
-
-
-
--- translate :: Comp -> GraphM Expr EId (Auto
-
-
--- translate (Seq c1 (x,c2)) = do
---    a1 <- translate c1
---    a2 <- extend x (translate c2)
---    return (merge_automata a1 a2)
--- }
-
--- translate (If e c1 c2) = do
---    a1 <- translate c1
---    a2 <- translate c2
---    let vsins = varsOf e
---    c <- mkControl vsins e (start_node a1) (start_node a2)
-
---    return
-
-
-
-
-
-
--- mkAction :: Set var -> Set var -> expr -> GraphM expr var Node
-
-
--- mkAction :: Graph expr var -> Set var -> Set var -> expr -> (Node, Graph expr var)
-
--- mkControl :: Graph expr var -> Set var -> expr -> Node -> Node -> (Node, Graph expr var)
