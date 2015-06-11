@@ -168,6 +168,11 @@ instance Outputable BitWidth where
     BWUnknown _nm -> text ""
     -- Or maybe print the name?
 
+instance Outputable Signedness where
+  ppr signedness = case signedness of
+    Signed   -> text ""    
+    Unsigned -> text "u"
+
 instance Outputable SrcBitWidth where
   ppr bw = case bw of
     SrcBW8  -> text "8"
@@ -191,7 +196,7 @@ instance Outputable Ty where
     TVar x                 -> text "?" <> text x
     TUnit                  -> text "()"
     TBit                   -> text "bit"
-    TInt bw                -> text "int" <> ppr bw
+    TInt bw sg             -> text "int" <> ppr bw <> ppr sg
     TDouble                -> text "double"
     TBool                  -> text "bool"
     TString                -> text "string"

@@ -131,7 +131,8 @@ instance Unify Ty where
       go TBit           TBit           = return ()
       go TDouble        TDouble        = return ()
       go TBool          TBool          = return ()
-      go (TInt bw1)     (TInt bw2)     = unify p bw1 bw2
+      go (TInt bw1 sg1) (TInt bw2 sg2) | sg1 == sg2 = unify p bw1 bw2
+      go (TInt _ sg1)   (TInt _ sg2)   | sg1 /= sg2 = panicStr "Signedness mismatch"
       go (TArray n ty1) (TArray m ty2) = unify p n m >> go ty1 ty2
 
       go (TBuff (IntBuf ta)) (TBuff (IntBuf tb)) = go ta tb
@@ -356,8 +357,9 @@ defaultBitWidths :: Ty -> TcM Ty
 defaultBitWidths ty = do
     ty' <- zonk ty
     case ty' of
-      TInt (BWUnknown _) -> do unify noLoc ty' tint32 ; return tint32
-      _                  -> return ty'
+      TInt (BWUnknown _) Signed   -> do unify noLoc ty' tint32 ; return tint32
+      TInt (BWUnknown _) Unsigned -> do unify noLoc ty' tuint32 ; return tuint32
+      _                           -> return ty'
 
 -- | Zonk all type variables and default the type of `EError` to `TUnit` when
 -- it's still a type variable.
@@ -434,12 +436,13 @@ hint b _ Infer     = b
 unifyTInt :: SrcLoc -> Hint BitWidth -> Ty -> TcM BitWidth
 unifyTInt loc annBW = zonk >=> go
   where
-    go (TInt bw) = do
+    go (TInt bw _) = do
       forM_ annBW $ unify loc bw
       return bw
     go ty = do
       bw <- hint (freshBitWidth "bw") return annBW
-      unify loc ty (TInt bw)
+      firstToSucceed (unify loc ty (TInt bw Signed))
+                     (unify loc ty (TInt bw Unsigned))
       return bw
 
 -- Version of unifyTInt where we don't care about the bitwidths

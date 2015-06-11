@@ -882,7 +882,7 @@ getTyPutGetInfo ty = (buf_typ ty, buf_siz ty)
               -- Arrays should be just fine
               TArray _ bty -> "arr" ++ buf_typ bty
 
-              TInt bw   -> cgTIntName bw
+              TInt bw sg   -> cgTIntName bw sg
 
               -- internal synchronization queue buffers
               (TBuff (IntBuf t)) -> buf_typ t
@@ -897,10 +897,15 @@ getTyPutGetInfo ty = (buf_typ ty, buf_siz ty)
 
 
 
-cgTIntName :: BitWidth -> String
-cgTIntName BW8           = "int8"
-cgTIntName BW16          = "int16"
-cgTIntName BW32          = "int32"
-cgTIntName BW64          = "int64"
-cgTIntName (BWUnknown _) = "int32" -- Defaulting to 32 bits
+cgTIntName :: BitWidth -> Signedness -> String
+cgTIntName BW8  Signed          = "int8"
+cgTIntName BW16 Signed          = "int16"
+cgTIntName BW32 Signed          = "int32"
+cgTIntName BW64 Signed          = "int64"
+cgTIntName (BWUnknown _) Signed = "int32" -- Defaulting to 32 bits
+cgTIntName BW8  Unsigned        = "uint8"
+cgTIntName BW16 Unsigned        = "uint16"
+cgTIntName BW32 Unsigned        = "uint32"
+cgTIntName BW64 Unsigned        = "uint64"
+cgTIntName (BWUnknown _) Unsigned = "uint32" 
 

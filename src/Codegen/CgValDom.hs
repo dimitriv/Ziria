@@ -84,14 +84,14 @@ cgUnOp _target_ty (Cast target_ty) ce src_ty
   = panicStr "cgUnOp: invalid cast!"
   | otherwise
   = case (target_ty, src_ty) of
-      (TBit, TInt _)     -> [cexp|$ce & 1|]
-      (TInt _, TBit)     -> ce
-      (TDouble, TInt _)  -> [cexp|(double) $ce|]
-      (TInt bw, TDouble) -> [cexp|($ty:(intty bw)) $ce |]
-      (TInt bw, TInt _)  -> [cexp|($ty:(intty bw)) $ce |]
-      (TInt bw, TArray _ TBit) -> [cexp| * ($ty:(inttyptr bw)) $ce |]
+      (TBit, TInt _ _)       -> [cexp|$ce & 1|]
+      (TInt _ _, TBit)       -> ce
+      (TDouble, TInt _ _)    -> [cexp|(double) $ce|]
+      (TInt bw sg, TDouble)  -> [cexp|($ty:(intty bw sg)) $ce |]
+      (TInt bw sg, TInt _ _) -> [cexp|($ty:(intty bw sg)) $ce |]
+      (TInt bw Signed, TArray _ TBit) -> [cexp| * ($ty:(inttyptr bw)) $ce |]
      -- [cexp| *  (($ty:(intty bw))*) $ce |]
-      (TArray _ TBit, TInt _) -> [cexp| ($ty:(namedCType "BitArrPtr")) &$ce|]
+      (TArray _ TBit, TInt _ Signed) -> [cexp| ($ty:(namedCType "BitArrPtr")) &$ce|]
       -- | For complex types we must emit a proper function, defined 
       --   in csrc/numerics.h
       (TStruct tn _flds, TStruct sn _flds')
@@ -99,8 +99,8 @@ cgUnOp _target_ty (Cast target_ty) ce src_ty
          , let castfun = sn ++ "_to_" ++ tn
          -> [cexp|$id:castfun($ce)|]
       (_,_) -> panicStr "cgUnOp: invalid cast!"
-  where intty bw = namedCType (cgTIntName bw) 
-        inttyptr bw = [cty| $ty:(intty bw) *|]
+  where intty bw sg = namedCType (cgTIntName bw sg) 
+        inttyptr bw = [cty| $ty:(intty bw Signed) *|]
 
 cgBinOp :: Ty            -- ^ type of (BinOp op ce1 ce2)
         -> BinOp

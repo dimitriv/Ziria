@@ -59,7 +59,7 @@ tcVal :: Val -> TcM Ty
 tcVal = go
   where
     go (VBit _)    = return TBit
-    go (VInt _)    = TInt <$> freshBitWidth "bw"
+    go (VInt _)    = flip TInt Signed <$> freshBitWidth "bw"
     go (VDouble _) = return TDouble
     go (VBool _)   = return TBool
     go (VString _) = return TString
@@ -86,11 +86,11 @@ tcUnOp loc uop = zonk >=> go uop
       return argTy
     go (Cast targetTy) argTy = do
       compat_test <- case (targetTy, argTy) of
-        (TBit,       TInt _)     -> return True
-        (TInt _,     TBit)       -> return True
-        (TDouble,    TInt _)     -> return True
-        (TInt _p,    TDouble)    -> return True
-        (TInt _,     TInt _)     -> return True
+        (TBit,       TInt _ _)   -> return True
+        (TInt _ _,     TBit)     -> return True
+        (TDouble,    TInt _ _)   -> return True
+        (TInt _ _,    TDouble)   -> return True
+        (TInt _ _,     TInt _ _) -> return True
         (TStruct {}, TStruct {}) -> return $ isComplexTy targetTy && isComplexTy argTy
         -- Otherwise just try to unify
         (t1,         t2)         -> unify loc t1 t2 >> return True

@@ -79,7 +79,7 @@ tyBitWidth :: Monad m => Ty -> m Integer
 tyBitWidth TUnit                   = return 0
 tyBitWidth TBit                    = return 1 -- NB not 8
 tyBitWidth TBool                   = return 1 -- NB not 8
-tyBitWidth (TInt bw)               = return $ fromIntegral $ bwBitWidth bw
+tyBitWidth (TInt bw _)             = return $ fromIntegral $ bwBitWidth bw
 tyBitWidth TDouble                 = return 64
 tyBitWidth (TArray (Literal n) ty) = tyBitWidth ty >>= \w -> return (fromIntegral n * w)
 tyBitWidth t@(TStruct tn _flds)

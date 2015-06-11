@@ -500,11 +500,11 @@ base_type :: { L SrcTy }
 base_type :
     '(' ')'            { L ($1 <--> $2) $ SrcTUnit }
   | 'bit'              { L (locOf $1)   $ SrcTBit }
-  | 'int'              { L (locOf $1)   $ SrcTInt SrcBW32 }
-  | 'int8'             { L (locOf $1)   $ SrcTInt SrcBW8 }
-  | 'int16'            { L (locOf $1)   $ SrcTInt SrcBW16 }
-  | 'int32'            { L (locOf $1)   $ SrcTInt SrcBW32 }
-  | 'int64'            { L (locOf $1)   $ SrcTInt SrcBW64 }
+  | 'int'              { L (locOf $1)   $ SrcTInt SrcBW32 SrcSigned }
+  | 'int8'             { L (locOf $1)   $ SrcTInt SrcBW8  SrcSigned }
+  | 'int16'            { L (locOf $1)   $ SrcTInt SrcBW16 SrcSigned }
+  | 'int32'            { L (locOf $1)   $ SrcTInt SrcBW32 SrcSigned }
+  | 'int64'            { L (locOf $1)   $ SrcTInt SrcBW64 SrcSigned }
   | 'double'           { L (locOf $1)   $ SrcTDouble }
   | 'bool'             { L (locOf $1)   $ SrcTBool }
   | 'complex'          { L (locOf $1)   $ SrcTStruct complex32TyName }
@@ -519,11 +519,11 @@ base_type :
 cast_type :: { L SrcTy }
 cast_type :
     'bit'             { L (locOf $1)   $ SrcTBit }
-  | 'int'             { L (locOf $1)   $ SrcTInt SrcBW32 }
-  | 'int8'            { L (locOf $1)   $ SrcTInt SrcBW8 }
-  | 'int16'           { L (locOf $1)   $ SrcTInt SrcBW16 }
-  | 'int32'           { L (locOf $1)   $ SrcTInt SrcBW32 }
-  | 'int64'           { L (locOf $1)   $ SrcTInt SrcBW64 }
+  | 'int'             { L (locOf $1)   $ SrcTInt SrcBW32 SrcSigned }
+  | 'int8'            { L (locOf $1)   $ SrcTInt SrcBW8  SrcSigned }
+  | 'int16'           { L (locOf $1)   $ SrcTInt SrcBW16 SrcSigned }
+  | 'int32'           { L (locOf $1)   $ SrcTInt SrcBW32 SrcSigned }
+  | 'int64'           { L (locOf $1)   $ SrcTInt SrcBW64 SrcSigned }
   | 'double'          { L (locOf $1)   $ SrcTDouble }
   | 'complex'         { L (locOf $1)   $ SrcTStruct complex32TyName }
   | 'complex8'        { L (locOf $1)   $ SrcTStruct complex8TyName }

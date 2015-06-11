@@ -107,11 +107,11 @@ bwBitWidth (BWUnknown _) = 32 -- ^ Defaulting to 32
 
 -- | Returns the size of the type in bytes
 tySizeOf :: Ty -> Int
-tySizeOf TUnit     = 1
-tySizeOf TBit      = 1
-tySizeOf TBool     = 1
-tySizeOf (TInt bw) = ((bwBitWidth bw) + 7) `div` 8
-tySizeOf TDouble   = (64 `div` 8)
+tySizeOf TUnit       = 1
+tySizeOf TBit        = 1
+tySizeOf TBool       = 1
+tySizeOf (TInt bw _) = ((bwBitWidth bw) + 7) `div` 8
+tySizeOf TDouble     = (64 `div` 8)
 tySizeOf (TArray (Literal n) TBit) = bitArrByteLen n
 tySizeOf (TArray (Literal n) ty)   = n * tySizeOf ty
 tySizeOf (TStruct sn flds)         = sum $ map (tySizeOf . snd) flds
@@ -186,7 +186,7 @@ codeGenTyOcc_ q ty =
     TArray _n ty'    -> codeGenArrTyPtrOcc_ q ty
     TDouble          -> namedCType_ q "double"
     TUnit            -> unitTy q
-    TInt bw          -> namedCType_ q (cgTIntName bw)
+    TInt bw sg       -> namedCType_ q (cgTIntName bw sg)
     TStruct sname _  -> namedCType_ q sname
  
     -- Buffer types. NB: we should never have to generate code for

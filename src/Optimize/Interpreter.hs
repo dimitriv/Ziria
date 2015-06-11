@@ -259,17 +259,18 @@ instance Eq Value where
 instance Show Value where
   show = show . valueExp
 
+-- TODO: The interpreter doesn't yet handle unsigned integer values.
 scalarValue :: Ty -> Val -> Value0
-scalarValue TBit        (VBit b)    = ValueBit    b
-scalarValue (TInt BW8)  (VInt i)    = ValueInt8   (fromInteger i)
-scalarValue (TInt BW16) (VInt i)    = ValueInt16  (fromInteger i)
-scalarValue (TInt BW32) (VInt i)    = ValueInt32  (fromInteger i)
-scalarValue (TInt BW64) (VInt i)    = ValueInt64  (fromInteger i)
-scalarValue TDouble     (VDouble d) = ValueDouble d
-scalarValue TBool       (VBool b)   = ValueBool   b
-scalarValue TString     (VString s) = ValueString s
-scalarValue TUnit       VUnit       = ValueUnit
-scalarValue _           _           = error "invalid scalar value"
+scalarValue TBit        (VBit b)        = ValueBit    b
+scalarValue (TInt BW8  Signed) (VInt i) = ValueInt8   (fromInteger i)
+scalarValue (TInt BW16 Signed) (VInt i) = ValueInt16  (fromInteger i)
+scalarValue (TInt BW32 Signed) (VInt i) = ValueInt32  (fromInteger i)
+scalarValue (TInt BW64 Signed) (VInt i) = ValueInt64  (fromInteger i)
+scalarValue TDouble     (VDouble d)     = ValueDouble d
+scalarValue TBool       (VBool b)       = ValueBool   b
+scalarValue TString     (VString s)     = ValueString s
+scalarValue TUnit       VUnit           = ValueUnit
+scalarValue _           _               = error "invalid scalar value"
 
 structValue :: Ty -> [(FldName, Value)] -> Value0
 structValue ty flds =
@@ -312,10 +313,10 @@ valueExp v = let !e0 = go (unValue v) in MkExp e0 vloc ()
   where
     go :: Value0 -> Exp0
     go (ValueBit    b)         = EVal TBit        (VBit b)
-    go (ValueInt8   i)         = EVal (TInt BW8)  (VInt (toInteger i))
-    go (ValueInt16  i)         = EVal (TInt BW16) (VInt (toInteger i))
-    go (ValueInt32  i)         = EVal (TInt BW32) (VInt (toInteger i))
-    go (ValueInt64  i)         = EVal (TInt BW64) (VInt (toInteger i))
+    go (ValueInt8   i)         = EVal (TInt BW8  Signed) (VInt (toInteger i))
+    go (ValueInt16  i)         = EVal (TInt BW16 Signed) (VInt (toInteger i))
+    go (ValueInt32  i)         = EVal (TInt BW32 Signed) (VInt (toInteger i))
+    go (ValueInt64  i)         = EVal (TInt BW64 Signed) (VInt (toInteger i))
     go (ValueDouble d)         = EVal TDouble     (VDouble d)
     go (ValueBool   b)         = EVal TBool       (VBool   b)
     go (ValueString s)         = EVal TString     (VString s)
@@ -359,10 +360,10 @@ initVal :: SrcLoc -> Ty -> Maybe Value
 initVal p ty = (\v0 -> MkValue v0 p) <$> go ty
   where
     go TBit        = return $ ValueBit    False
-    go (TInt BW8)  = return $ ValueInt8   0
-    go (TInt BW16) = return $ ValueInt16  0
-    go (TInt BW32) = return $ ValueInt32  0
-    go (TInt BW64) = return $ ValueInt64  0
+    go (TInt BW8  Signed) = return $ ValueInt8   0
+    go (TInt BW16 Signed) = return $ ValueInt16  0
+    go (TInt BW32 Signed) = return $ ValueInt32  0
+    go (TInt BW64 Signed) = return $ ValueInt64  0
     go TDouble     = return $ ValueDouble 0
     go TBool       = return $ ValueBool   False
     go TString     = return $ ValueString ""
@@ -1661,41 +1662,41 @@ zCast ty = mkUnaryOp (go ty)
     go TBool (ValueInt64 a) = Just $ ValueBool (toBool a)
     go TBool _              = Nothing
 
-    go (TInt BW8)  (ValueBit    a) = Just $ ValueInt8 (fromBool a)
-    go (TInt BW8)  (ValueBool   a) = Just $ ValueInt8 (fromBool a)
-    go (TInt BW8)  (ValueInt8   a) = Just $ ValueInt8 a
-    go (TInt BW8)  (ValueInt16  a) = Just $ ValueInt8 (fromIntegral a)
-    go (TInt BW8)  (ValueInt32  a) = Just $ ValueInt8 (fromIntegral a)
-    go (TInt BW8)  (ValueInt64  a) = Just $ ValueInt8 (fromIntegral a)
-    go (TInt BW8)  (ValueDouble a) = Just $ ValueInt8 (round a)
-    go (TInt BW8)  _               = Nothing
+    go (TInt BW8 Signed)  (ValueBit    a) = Just $ ValueInt8 (fromBool a)
+    go (TInt BW8 Signed)  (ValueBool   a) = Just $ ValueInt8 (fromBool a)
+    go (TInt BW8 Signed)  (ValueInt8   a) = Just $ ValueInt8 a
+    go (TInt BW8 Signed)  (ValueInt16  a) = Just $ ValueInt8 (fromIntegral a)
+    go (TInt BW8 Signed)  (ValueInt32  a) = Just $ ValueInt8 (fromIntegral a)
+    go (TInt BW8 Signed)  (ValueInt64  a) = Just $ ValueInt8 (fromIntegral a)
+    go (TInt BW8 Signed)  (ValueDouble a) = Just $ ValueInt8 (round a)
+    go (TInt BW8 Signed)  _               = Nothing
 
-    go (TInt BW16) (ValueBit    a) = Just $ ValueInt16 (fromBool a)
-    go (TInt BW16) (ValueBool   a) = Just $ ValueInt16 (fromBool a)
-    go (TInt BW16) (ValueInt8   a) = Just $ ValueInt16 (fromIntegral a)
-    go (TInt BW16) (ValueInt16  a) = Just $ ValueInt16 a
-    go (TInt BW16) (ValueInt32  a) = Just $ ValueInt16 (fromIntegral a)
-    go (TInt BW16) (ValueInt64  a) = Just $ ValueInt16 (fromIntegral a)
-    go (TInt BW16) (ValueDouble a) = Just $ ValueInt16 (round a)
-    go (TInt BW16) _               = Nothing
+    go (TInt BW16 Signed) (ValueBit    a) = Just $ ValueInt16 (fromBool a)
+    go (TInt BW16 Signed) (ValueBool   a) = Just $ ValueInt16 (fromBool a)
+    go (TInt BW16 Signed) (ValueInt8   a) = Just $ ValueInt16 (fromIntegral a)
+    go (TInt BW16 Signed) (ValueInt16  a) = Just $ ValueInt16 a
+    go (TInt BW16 Signed) (ValueInt32  a) = Just $ ValueInt16 (fromIntegral a)
+    go (TInt BW16 Signed) (ValueInt64  a) = Just $ ValueInt16 (fromIntegral a)
+    go (TInt BW16 Signed) (ValueDouble a) = Just $ ValueInt16 (round a)
+    go (TInt BW16 Signed) _               = Nothing
 
-    go (TInt BW32) (ValueBit    a) = Just $ ValueInt32 (fromBool a)
-    go (TInt BW32) (ValueBool   a) = Just $ ValueInt32 (fromBool a)
-    go (TInt BW32) (ValueInt8   a) = Just $ ValueInt32 (fromIntegral a)
-    go (TInt BW32) (ValueInt16  a) = Just $ ValueInt32 (fromIntegral a)
-    go (TInt BW32) (ValueInt32  a) = Just $ ValueInt32 a
-    go (TInt BW32) (ValueInt64  a) = Just $ ValueInt32 (fromIntegral a)
-    go (TInt BW32) (ValueDouble a) = Just $ ValueInt32 (round a)
-    go (TInt BW32) _               = Nothing
+    go (TInt BW32 Signed) (ValueBit    a) = Just $ ValueInt32 (fromBool a)
+    go (TInt BW32 Signed) (ValueBool   a) = Just $ ValueInt32 (fromBool a)
+    go (TInt BW32 Signed) (ValueInt8   a) = Just $ ValueInt32 (fromIntegral a)
+    go (TInt BW32 Signed) (ValueInt16  a) = Just $ ValueInt32 (fromIntegral a)
+    go (TInt BW32 Signed) (ValueInt32  a) = Just $ ValueInt32 a
+    go (TInt BW32 Signed) (ValueInt64  a) = Just $ ValueInt32 (fromIntegral a)
+    go (TInt BW32 Signed) (ValueDouble a) = Just $ ValueInt32 (round a)
+    go (TInt BW32 Signed) _               = Nothing
 
-    go (TInt BW64) (ValueBit    a) = Just $ ValueInt64 (fromBool a)
-    go (TInt BW64) (ValueBool   a) = Just $ ValueInt64 (fromBool a)
-    go (TInt BW64) (ValueInt8   a) = Just $ ValueInt64 (fromIntegral a)
-    go (TInt BW64) (ValueInt16  a) = Just $ ValueInt64 (fromIntegral a)
-    go (TInt BW64) (ValueInt32  a) = Just $ ValueInt64 (fromIntegral a)
-    go (TInt BW64) (ValueInt64  a) = Just $ ValueInt64 a
-    go (TInt BW64) (ValueDouble a) = Just $ ValueInt64 (round a)
-    go (TInt BW64) _               = Nothing
+    go (TInt BW64 Signed) (ValueBit    a) = Just $ ValueInt64 (fromBool a)
+    go (TInt BW64 Signed) (ValueBool   a) = Just $ ValueInt64 (fromBool a)
+    go (TInt BW64 Signed) (ValueInt8   a) = Just $ ValueInt64 (fromIntegral a)
+    go (TInt BW64 Signed) (ValueInt16  a) = Just $ ValueInt64 (fromIntegral a)
+    go (TInt BW64 Signed) (ValueInt32  a) = Just $ ValueInt64 (fromIntegral a)
+    go (TInt BW64 Signed) (ValueInt64  a) = Just $ ValueInt64 a
+    go (TInt BW64 Signed) (ValueDouble a) = Just $ ValueInt64 (round a)
+    go (TInt BW64 Signed) _               = Nothing
 
     go (TStruct "complex8"  _) (ValueCpx8  a) = Just $ ValueCpx8 a
 
