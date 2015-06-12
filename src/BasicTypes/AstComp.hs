@@ -221,6 +221,7 @@ data GComp0 tc t a b where
   -- > -------------------------------------------------------------------
   -- >          times <unroll-info> e elen nm c :: ST (C u) a b
   --
+  -- for (nm = e; nm < e + elen; nm++) c
   -- TODO: Replace with
   --
   -- > For :: GName ty -> GExp t b -> GExp t b -> GComp tc t a b -> GComp tc t 0 a a
@@ -345,6 +346,7 @@ mkHOCompSubst fprms fargs = go fprms fargs ([],[],[])
     rev_acc (x,y,z) = (reverse x, reverse y, reverse z)
 
     to_comp_nm nm = updNameTy nm (callArg (error "mkHOCompSubst") id (nameTyp nm))
+
 
 
 checkCAArgMut :: -- Function argument types (expected)

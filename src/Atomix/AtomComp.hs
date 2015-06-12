@@ -1,46 +1,46 @@
-module AtomComp where
+module AtomComp (module AtomComp) where
 
-import AstExpr (GName)
+import AstExpr (Ty,GName,MutKind,Uniq)
 import AstComp (CompLoc,ParInfo)
 
+type NameSpec = GName Ty
 
-data Exp t b
-  = MkExp { unExp   :: !(Exp0 t b)
+data Exp b
+  = MkExp { unExp   :: !(Exp0 b)
           , expLoc  :: !(CompLoc)
           , expInfo :: b }
 
-data Comp tc t a b 
-  = MkComp { unComp   :: !(Comp0 tc t a b)
+data Comp a b
+  = MkComp { unComp   :: !(Comp0 a b)
            , compLoc  :: !(CompLoc)
            , compInfo :: a }
 
-data Exp0 t b 
-  = ExpFun { expFunNm :: GName t, expFunArgs :: [GName t] }
-  | ExpVar (GName t)
+data Exp0 b
+  = ExpFun { expFunNm :: Uniq, expFunArgs :: [(Uniq,MutKind)] } -- pass by name or reference
+  | ExpVar Uniq
 
-data Comp0 tc t a b
-  = Take1 t
-  | TakeN t Int
-  | Emit1 (GName t)
-  | EmitN (GName t)
-  | Return (GName t)
+data Comp0 a b
+  = Take1 Ty
+  | TakeN Ty Int
+  | Emit1 Uniq
+  | EmitN Uniq
+  | Return (Exp b)
 
-  | Bind (GName t) (Comp tc t a b) (Comp tc t a b)
-  | Let  (GName t) (Exp t b) (Comp tc t a b)
-  | NewRef (GName t) (Comp tc t a b)
+  | NewRef NameSpec (Comp a b) -- if immutable, can be initialized exactly once
+  | Bind Uniq (Comp a b)
 
-  | Seq (Comp tc t a b) (Comp tc t a b)
-  | Par ParInfo (Comp tc t a b) (Comp tc t a b)
+  | Seq (Comp a b) (Comp a b)
+  | Par ParInfo (Comp a b) (Comp a b)
 
-  | Branch (GName t) (Comp tc t a b) (Comp tc t a b)
+  | Branch Uniq (Comp a b) (Comp a b)
 
-  | RepeatN Int (Comp tc t a b)
-  | Repeat (Comp tc t a b)
+  | RepeatN Int (Comp a b)
+  | Repeat (Comp a b)
 
-  | While (GName t) (Comp tc t a b)
-  | Until (GName t) (Comp tc t a b)
+  | While Uniq (Comp a b)
+  | Until Uniq (Comp a b)
 
   ----------------------------------------------
-  | Standalone (Comp tc t a b)
-  | Mitigate String  -- just for debugging 
-           t Int Int
+  | Standalone (Comp a b)
+  | Mitigate String  -- just for debugging
+           Ty Int Int

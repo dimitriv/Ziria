@@ -13,13 +13,15 @@ import Control.Exception
 import Control.Monad.Reader
 import Control.Monad.State
 
+--import AtomComp -- simplified Ziria model
+
 import qualified GenSym as GS
 import AstExpr       -- BasicTypes/
 import AstComp       -- BasicTypes/
 import AstUnlabelled
 import Opts
 
--- type Node = int
+--type Node = Int --defined in FGL
 type LNode = G.LNode NodeLabel
 type Chan = EId
 type ChanEnv = [(EId,Chan)]
