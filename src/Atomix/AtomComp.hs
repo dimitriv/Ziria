@@ -1,10 +1,24 @@
-data Exp t b = ExpFun { expFunNm :: Name t, expFunArgs :: [GName t] }
-             | ExpVar (Name t)
+{-# LANGUAGE GADTs #-}
+module AtomComp where
+
+
+import AstExpr (GName)
+import AstComp (CompLoc,ParInfo)
+import Data.Loc
+
+data Exp t b
+  = MkExp { unExp   :: !(Exp0 t b)
+          , expLoc  :: !(CompLoc)
+          , expInfo :: b }
 
 data Comp tc t a b 
   = MkComp { unComp   :: !(Comp0 tc t a b)
            , compLoc  :: !(CompLoc)
            , compInfo :: a }
+
+data Exp0 t b 
+  = ExpFun { expFunNm :: GName t, expFunArgs :: [GName t] }
+  | ExpVar (GName t)
 
 data Comp0 tc t a b where
   Take1 :: t -> Comp0 tc t a b
