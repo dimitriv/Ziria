@@ -63,9 +63,9 @@ data Comp0 a b
 
 
 
-data CompEnv a = CompEnv { funs  :: [Fun a]
+data CompEnv a = CompEnv { fun_binds  :: [(FunName,Fun a)]
                          , funGenSym :: GS.Sym
-                         , vars  :: [Var]
+                         , var_binds  :: [(VarName,Var)]
                          , varGenSym :: GS.Sym
                          }
 

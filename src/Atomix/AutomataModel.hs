@@ -13,6 +13,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 
 import AtomComp -- simplified Ziria model
+import AstExpr (nameTyp)
 import Opts
 
 
@@ -120,6 +121,12 @@ mkDiscard t = fail "not implemented"
 mkIdentity :: Ty -> GraphM FunName
 mkIdentity t = fail "not implemented"
 
+getVarType :: VarName -> GraphM Ty
+getVarType x = do
+  env <- ask
+  case lookup x (var_binds env) of Nothing -> fail "variable not found"
+                                   Just var -> return $ nameTyp var
+
 mkAutomaton :: DynFlags -> Channels -> Comp a b -> GraphM Automaton
 mkAutomaton dfs chans comp = go chans (unComp comp)
   where
@@ -139,7 +146,16 @@ mkAutomaton dfs chans comp = go chans (unComp comp)
 
     go chans (TakeN _ n) = fail "not implemented"
 
-    go chans (Emit1 x) = fail "not implemented"
+    go chans (Emit1 x) = do
+      let inp = Set.singleton x
+      let outp = Set.singleton (out_chan chans)
+      t <- getVarType x
+      code <- mkIdentity t
+      (node,_) <- mkNode (Action inp outp code)
+      return $ singletonAutomaton node
+
+
+
     go chans (EmitN x) = fail "not implemented" 
     go chans (Return e) = fail "not implemented" 
 
