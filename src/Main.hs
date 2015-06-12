@@ -23,42 +23,34 @@ module Main where
 
 import Control.Exception
 import Control.Monad (when, forM)
+import Data.Time.Clock
 import System.Environment
 import System.Exit (exitFailure)
 import System.IO
+import System.Timeout 
 import Text.PrettyPrint.HughesPJ
 import qualified Text.PrettyPrint.Mainland as GMPretty
 -- import Text.Show.Pretty (dumpStr)
 import qualified Language.C.Syntax as C
 
-import System.Timeout 
-import Data.Time.Clock
+import Ziria.BasicTypes.AstComp
+import Ziria.BasicTypes.AstExpr
+import Ziria.BasicTypes.PpComp
+import qualified Ziria.BasicTypes.Outputable as Outputable
+import Ziria.Codegen.CgProgram (codeGenProgram)
+import Ziria.Codegen.CgMonad (evalCg)
+import Ziria.Codegen.CgHeader (cHeader)
+import Ziria.ComputeType.CtComp (ctComp)
+import qualified Ziria.Language.Ziria.Parser as P
+import qualified Ziria.Pipeline.PassPipeline as PP
+import Ziria.Optimize.AutoLUT
+import Ziria.Optimize.PassFold
+import Ziria.Typecheck (tyCheckProg)
+import Ziria.Typecheck.TcMonad
+import qualified Ziria.Utils.GenSym as GS
+import Ziria.Vectorize (initVectorizer, runVectorizer)
 
-import AstComp
-import AstExpr
-
-import CtComp (ctComp)
 import Opts
-import PassFold
-import PpComp
-
-import TcMonad
-import Typecheck      ( tyCheckProg              )
-
-import qualified GenSym         as GS
-import qualified Outputable
-
-import AutoLUT
-
-import Vectorize    ( initVectorizer, runVectorizer  )
-
-import CgProgram    ( codeGenProgram )
-import CgMonad      ( evalCg         )
-import CgHeader     ( cHeader        )
-
-import qualified PassPipeline as PP
-
-import qualified Language.Ziria.Parser as P
 
 data CompiledProgram
   = CompiledProgram Comp [C.Definition] FilePath
@@ -207,7 +199,7 @@ main = do
     runVectorizePhase :: DynFlags -> GS.Sym -> Comp -> IO (Comp,[Comp])
     runVectorizePhase dflags sym c
       | isDynFlagSet dflags Vectorize
-      = Vectorize.runVectorizer dflags sym c
+      = runVectorizer dflags sym c
       | otherwise
       = return (c,[])
 

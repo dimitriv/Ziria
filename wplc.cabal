@@ -18,17 +18,13 @@ description:
 build-type: Simple
 
 Executable wplc
-  hs-source-dirs:   src src/BasicTypes src/Codegen src/Optimize
-                    src/Pipeline src/Typecheck src/Utils src/Vectorize
-                    src/Analysis src/ComputeType
   main-is:          Main.hs
-  -- TODO: We should use a proper module hierarchy and only have 'src' 
-  -- as the include dir.
   default-language: Haskell98
+  hs-source-dirs:   src
   other-modules:
-    Language.Ziria.Parser.Lexer
-    Language.Ziria.Parser.CamlParser
-    Language.Ziria.Parser.Parser
+    Ziria.Language.Ziria.Parser.CamlParser
+    Ziria.Language.Ziria.Parser.Lexer
+    Ziria.Language.Ziria.Parser.Parser
 
   default-extensions: DoAndIfThenElse PatternGuards
   other-extensions: TemplateHaskell, QuasiQuotes
