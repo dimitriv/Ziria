@@ -42,7 +42,8 @@ in `/Users/<username>/AppData/Roaming` to avoid stale state problems.
 
     COMPILER={gcc,winddk,vs} make
 
-
+  Note that when setting the environment variable ZIRIA_VS, the double quotes
+  are necessary.
 
 * Running the WiFi tests:
 
