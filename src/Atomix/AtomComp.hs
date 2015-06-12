@@ -1,4 +1,11 @@
-module AtomComp (module AtomComp) where
+module AtomComp 
+  (module AtomComp
+  ,Uniq
+  ,MutKind
+  ,Ty
+  ,GName
+  ,CompLoc
+  ,ParInfo) where
 
 import AstExpr (Ty,GName,MutKind,Uniq)
 import AstComp (CompLoc,ParInfo)
@@ -26,7 +33,7 @@ data Comp0 a b
   | EmitN Uniq
   | Return (Exp b)
 
-  | NewRef NameSpec (Comp a b) -- if immutable, can be initialized exactly once
+  | NewName NameSpec (Comp a b) -- if immutable, can be initialized exactly once
   | Bind Uniq (Comp a b)
 
   | Seq (Comp a b) (Comp a b)
@@ -41,6 +48,6 @@ data Comp0 a b
   | Until Uniq (Comp a b)
 
   ----------------------------------------------
-  | Standalone (Comp a b)
-  | Mitigate String  -- just for debugging
-           Ty Int Int
+  -- | Standalone (Comp a b)
+  -- | Mitigate String  -- just for debugging
+  --         Ty Int Int
