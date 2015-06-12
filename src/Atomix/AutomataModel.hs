@@ -1,7 +1,5 @@
 module AutomataModel where
 
-import Data.Loc
-
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Maybe (maybeToList)
@@ -30,13 +28,13 @@ data NodeLabel
 data NodeKind
   = Action { action_in   :: Set Chan
            , action_out  :: Set Chan
-           , action_code :: Uniq
+           , action_code :: FunName
            }
 
   | Loop { loop_times :: Maybe Int }
 
   | Branch { branch_in   :: Set Chan
-           , branch_code :: Uniq
+           , branch_code :: FunName
            , branch_next :: (Node,Node)
            }
 
@@ -108,22 +106,39 @@ data Channels = Channels { in_chan   :: Chan
                          , out_chan  :: Chan
                          , ctrl_chan :: Maybe Chan }
 
+
+-- need to define some standard functions
+-- discard t : t -> () = NOP
+-- identity t : t -> t = Var
+-- 
+
+-- builds discard function of the appropriate type
+mkDiscard :: Ty -> GraphM FunName
+mkDiscard t = fail "not implemented"
+
+-- builds identity function of the appropriate type
+mkIdentity :: Ty -> GraphM FunName
+mkIdentity t = fail "not implemented"
+
 mkAutomaton :: DynFlags -> Channels -> Comp a b -> GraphM Automaton
 mkAutomaton dfs chans comp = go chans (unComp comp)
   where
-    go chans (Take1 _) = fail "not implemented"
-      --do
-      --  let in_c = in_chan chans
-      --  let inp = Set.singleton in_c
-      --  let outp = Set.fromList (maybeToList $ ctrl_chan chans)
-      --  let code = eAssign noLoc (eVar noLoc ctrl_c) (eVar noLoc in_c)
-      --  let env = [(in_c, in_c), (ctrl_c, ctrl_c)]
-      --  (node,_) <- mkNode (Action inp outp code env)
-      --  return $ singletonAutomaton node
-
-
+    go chans (Take1 t) = do
+      let inp = Set.singleton (in_chan chans)
+      case ctrl_chan chans of
+        Nothing -> do
+          let outp = Set.empty
+          code <- mkDiscard t
+          (node,_) <- mkNode (Action inp outp code)
+          return $ singletonAutomaton node
+        Just ctrlc -> do
+          let outp = Set.singleton ctrlc
+          code <- mkIdentity t
+          (node,_) <- mkNode (Action inp outp code)
+          return $ singletonAutomaton node
 
     go chans (TakeN _ n) = fail "not implemented"
+
     go chans (Emit1 x) = fail "not implemented"
     go chans (EmitN x) = fail "not implemented" 
     go chans (Return e) = fail "not implemented" 
