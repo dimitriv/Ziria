@@ -9,8 +9,8 @@ data Comp tc t a b
 data Comp0 tc t a b where
   Take1 :: t -> Comp0 tc t a b
   TakeN :: t -> Int -> Comp0 tc t a b
-  Emit :: GName t -> Comp0 tc t a b
-  Emits :: GName t -> Comp0 tc t a b
+  Emit1 :: GName t -> Comp0 tc t a b
+  EmitN :: GName t -> Comp0 tc t a b
   Return :: GName t -> Comp0 tc t a b
 
   Bind :: GName t -> Comp tc t a b -> Comp tc t a b -> Comp0 tc t a b
