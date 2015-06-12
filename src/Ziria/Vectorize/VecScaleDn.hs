@@ -48,7 +48,7 @@ doVectCompDD dfs cty lcomp (SFDD3 (DivsOf i i0 i1) (DivsOf j j0 j1))
   [DD0] ==> no rewriting (when i <= 1, j <= 1)
 -------------------------------------------------------------------------------}
 vect_dd0 :: DynFlags -> CTy -> LComp -> VecM DelayedVectRes
-vect_dd0 dfs cty lcomp
+vect_dd0 _ cty lcomp
   = return $ mkSelf lcomp (inTyOfCTy cty) (yldTyOfCTy cty) 
 
 {-------------------------------------------------------------------------------
@@ -56,7 +56,7 @@ vect_dd0 dfs cty lcomp
 -------------------------------------------------------------------------------}
 vect_dd1 :: DynFlags
          -> CTy -> LComp -> Int -> NDiv -> NDiv -> VecM DelayedVectRes
-vect_dd1 dfs cty lcomp i (NDiv i0) (NDiv i1)
+vect_dd1 _ cty lcomp i (NDiv i0) (NDiv i1)
   = mkDVRes zirbody "DD1" loc vin_ty vout_ty
   where
     loc        = compLoc lcomp
@@ -88,7 +88,7 @@ vect_dd1 dfs cty lcomp i (NDiv i0) (NDiv i1)
 -------------------------------------------------------------------------------}
 vect_dd2 :: DynFlags
          -> CTy -> LComp -> Int -> NDiv -> NDiv -> VecM DelayedVectRes
-vect_dd2 dfs cty lcomp j (NDiv j0) (NDiv j1)
+vect_dd2 _ cty lcomp _j (NDiv j0) (NDiv j1)
   = if is_unit_comp 
       then mkDVRes zirbody1 "DD2" loc orig_inty vout_ty
       else mkDVRes zirbody2 "DD2" loc orig_inty vout_ty
@@ -112,7 +112,7 @@ vect_dd2 dfs cty lcomp j (NDiv j0) (NDiv j1)
       ya <- fneweref ("ya" ::: vout_ty_big)
       let offout = eint32(0)
           st     = RwState { rws_in = DoNotRw, rws_out = DoRw ya offout }
-      (x :: ()) <- fembed (act venv st)
+      (_ :: ()) <- fembed (act venv st)
 
       if vout_ty == vout_ty_big 
         then femit ya
@@ -138,8 +138,8 @@ vect_dd2 dfs cty lcomp j (NDiv j0) (NDiv j1)
 vect_dd3 :: DynFlags -> CTy -> LComp
          -> Int -> NDiv -> NDiv
          -> Int -> NDiv -> NDiv -> VecM DelayedVectRes
-vect_dd3 dfs cty lcomp i (NDiv i0) (NDiv i1)
-                       j (NDiv j0) (NDiv j1) 
+vect_dd3 _ cty lcomp _i (NDiv i0) (NDiv i1)
+                     _j (NDiv j0) (NDiv j1) 
   = if is_unit_comp 
        then mkDVRes zirbody1 "DD3" loc vin_ty vout_ty
        else mkDVRes zirbody2 "DD3" loc vin_ty vout_ty

@@ -53,7 +53,7 @@ doVectCompUD dfs cty lcomp (SFUD3 i m)
 -------------------------------------------------------------------------}
 vect_ud1 :: DynFlags -> CTy -> LComp 
          -> Int -> Int -> NMul -> NMul -> VecM DelayedVectRes
-vect_ud1 dfs cty lcomp i j (NMul m1) (NMul m2) 
+vect_ud1 _ cty lcomp i j (NMul m1) (NMul m2) 
   = mkDVRes zirbody "UD1" loc vin_ty vout_ty
   where
     loc        = compLoc lcomp
@@ -90,7 +90,7 @@ vect_ud1 dfs cty lcomp i j (NMul m1) (NMul m2)
 -------------------------------------------------------------------------}
 vect_ud2 :: DynFlags -> CTy -> LComp
          -> Int -> Int -> NDiv -> NDiv -> NMul -> VecM DelayedVectRes
-vect_ud2 dfs cty lcomp i j (NDiv j0) (NDiv j1) (NMul m)
+vect_ud2 _ cty lcomp i j (NDiv j0) (NDiv j1) (NMul m)
   = mkDVRes zirbody "UD2" loc vin_ty (mkVectTy orig_outty j0)
   where
     loc        = compLoc lcomp
@@ -119,7 +119,7 @@ vect_ud2 dfs cty lcomp i j (NDiv j0) (NDiv j1) (NMul m)
 [UD3] a^i -> X     ~~~>    (a*i*m) -> X^m
 -------------------------------------------------------------------------}
 vect_ud3 :: DynFlags -> CTy -> LComp -> Int -> NMul -> VecM DelayedVectRes
-vect_ud3 dfs cty lcomp i (NMul m) 
+vect_ud3 _ cty lcomp i (NMul m) 
   = mkDVRes zirbody "UD3" loc vin_ty vout_ty
   where
     loc        = compLoc lcomp
@@ -156,7 +156,7 @@ doVectCompDU dfs cty lcomp (SFDU3 j m)
 -------------------------------------------------------------------------}
 vect_du1 :: DynFlags -> CTy -> LComp
          -> Int -> Int -> NMul -> NMul -> VecM DelayedVectRes
-vect_du1 dfs cty lcomp i j (NMul m1) (NMul m2)
+vect_du1 _ cty lcomp i j (NMul m1) (NMul m2)
   = mkDVRes zirbody "DU1" loc vin_ty vout_ty
   where
     loc        = compLoc lcomp
@@ -187,7 +187,7 @@ vect_du1 dfs cty lcomp i j (NMul m1) (NMul m2)
 -------------------------------------------------------------------------}
 vect_du2 :: DynFlags -> CTy -> LComp
          -> Int -> NDiv -> NDiv -> Int -> NMul -> VecM DelayedVectRes
-vect_du2 dfs cty lcomp i (NDiv i0) (NDiv i1) j (NMul m) 
+vect_du2 _ cty lcomp i (NDiv i0) (NDiv i1) j (NMul m) 
   = mkDVRes zirbody "DU2" loc (mkVectTy orig_inty i0) vout_ty
   where
     loc        = compLoc lcomp
@@ -222,7 +222,7 @@ vect_du2 dfs cty lcomp i (NDiv i0) (NDiv i1) j (NMul m)
 [DU3] X         -> b^j       ~~~> X^m           -> (b*j*m)
 -------------------------------------------------------------------------}
 vect_du3 :: DynFlags -> CTy -> LComp -> Int -> NMul -> VecM DelayedVectRes
-vect_du3 dfs cty lcomp j (NMul m)
+vect_du3 _ cty lcomp j (NMul m)
   = mkDVRes zirbody "DU3" loc vin_ty vout_ty
   where
     loc        = compLoc lcomp

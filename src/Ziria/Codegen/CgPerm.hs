@@ -17,7 +17,6 @@
    permissions and limitations under the License.
 -}
 {-# LANGUAGE  QuasiQuotes, GADTs, ScopedTypeVariables #-}
-{-# OPTIONS_GHC -fwarn-unused-binds -Werror #-}
 
 module Ziria.Codegen.CgPerm ( genPermute ) where
 

@@ -68,7 +68,7 @@ cgExtBufInitsAndFins (TBuff in_bty,TBuff out_bty) mfreshId
         fin_name mfreshId = "wpl_output_finalize" ++ mfreshId
         reset_name mfreshId = "wpl_output_reset" ++ mfreshId
 
-cgExtBufInitsAndFins (ty1,ty2) mfreshId
+cgExtBufInitsAndFins _ _
   = fail $ "BUG: cgExtBufInitsAndFins called with non-TBuff types!"
 
 callOutBufFinalizer global_params buf_context (ExtBuf base_ty) =

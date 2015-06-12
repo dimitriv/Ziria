@@ -239,7 +239,7 @@ comp_vect0 dfs (VectPack {..}) (LetStruct sdef c2) =
 comp_vect0 dfs (VectPack {..}) (Call f es) = do
   CFunBind { cfun_params = prms, cfun_body = bdy } <- lookupCFunBind f
 
-  let (prms', cbinds, es') = mkHOCompSubst prms es
+  let (prms', cbinds, _) = mkHOCompSubst prms es
 
   let bdy' = foldl mk_let_bind bdy cbinds
       mk_let_bind c (x,bnd) = AstL.cLet vp_loc (compInfo bdy) x bnd c
@@ -260,25 +260,25 @@ comp_vect0 dfs (VectPack {..}) (Call f es) = do
 
 {------------------------------------------------------------------------------}
 
-comp_vect0 dfs (VectPack {..}) (Interleave {}) = 
+comp_vect0 _ (VectPack {..}) (Interleave {}) = 
   return (singleDVRCands vp_self_dvr)
 
-comp_vect0 dfs (VectPack {..}) (Filter {}) =
+comp_vect0 _ (VectPack {..}) (Filter {}) =
   return (singleDVRCands vp_self_dvr)
 
-comp_vect0 dfs (VectPack {..}) (ReadSrc {}) =
+comp_vect0 _ (VectPack {..}) (ReadSrc {}) =
   return (singleDVRCands vp_self_dvr)
 
-comp_vect0 dfs (VectPack {..}) (WriteSnk {}) =
+comp_vect0 _ (VectPack {..}) (WriteSnk {}) =
   return (singleDVRCands vp_self_dvr)
 
-comp_vect0 dfs (VectPack {..}) (WriteInternal {}) =
+comp_vect0 _ (VectPack {..}) (WriteInternal {}) =
   return (singleDVRCands vp_self_dvr)
 
-comp_vect0 dfs (VectPack {..}) (ReadInternal {}) =
+comp_vect0 _ (VectPack {..}) (ReadInternal {}) =
   return (singleDVRCands vp_self_dvr)
 
-comp_vect0 dfs (VectPack {..}) (Return {}) =
+comp_vect0 _ (VectPack {..}) (Return {}) =
   return (singleDVRCands vp_self_dvr)
 
 {-------------------------------------------------------------------------------}
@@ -304,7 +304,7 @@ comp_vect0 dfs (VectPack {..}) (Branch e c1 c2) = do
 comp_vect0 dfs (VectPack {..}) (Standalone c) = 
   mapDVRCands (updDVRComp $ cStandalone vp_loc) <$> comp_vect dfs vp_vctx c
 
-comp_vect0 dfs (VectPack {..}) (Mitigate {}) =
+comp_vect0 _ (VectPack {..}) (Mitigate {}) =
   vecMFail vp_loc $ text "Unexpected mitigate node in vectorization."
 
 
@@ -334,7 +334,7 @@ comp_vect0 dfs vp (Repeat vann c) =
 
 {------------------------------------------------------------------------------}
 
-comp_vect0 dfs (VectPack {..}) (VectComp (fin,fout) c) = do
+comp_vect0 dfs (VectPack {..}) (VectComp _ c) = do
   -- I am not sure that the VectComp annotations are in fact used
   liftIO $ print $
     vcat [ text "VectComp, ignoring annotation."
@@ -356,8 +356,7 @@ comp_vect0 dfs (VectPack {..}) _other = do
 
 -- | Vectorizing a (finitely) iterated computer (NB: not adding 'self')
 vectIterComp :: DynFlags -> (Comp -> Comp) -> Ty -> Ty -> LComp -> VecM DVRCands
-vectIterComp dfs builder tin tout cbody = do
-  let body_card = compInfo cbody
+vectIterComp dfs builder _ _ cbody = do
   body_cands <- comp_vect dfs CtxExCompLeftAndRight cbody
   --body_cands <- vect_comp_dd dfs cbody $ compSFDD body_card tin tout
   return (mapDVRCands (updDVRComp $ builder) body_cands)
@@ -375,7 +374,7 @@ prependReadSrc loc p orig_ty (DVR { dvr_comp = iocomp, dvr_vres = vres })
     dvr_in_ty = vect_in_ty vres
     new_in_ty = TBuff (ExtBuf new_rd_ty)
     vres' = case vres of 
-     NotVect tin tout -> NotVect new_in_ty tout
+     NotVect _ tout   -> NotVect new_in_ty tout
      DidVect _ tout u -> DidVect new_in_ty tout (parUtility minUtil u dvr_in_ty)
 
 -- | Take a vectorization candidate vc and append an appropriately vectorized
@@ -498,7 +497,7 @@ vectRepeat dfs (VectPack { vp_vctx  = vctx
   
    -- | Vectorize internally to /exactly/ (fin,fout) and externally up
    -- or down depending on the flag f
-   go (Just ann@(Rigid f (fin,fout))) c0 = do
+   go (Just ann@(Rigid _ (fin,fout))) c0 = do
       vcs <- go Nothing c0
       let pred (ty1,ty2) _ = ty_match ty1 fin && ty_match ty2 fout
           vcs_matching     = Map.filterWithKey pred vcs
@@ -515,7 +514,7 @@ vectRepeat dfs (VectPack { vp_vctx  = vctx
 
    -- | Vectorize internally to anything <= (fin,fout) and externally up
    -- or down depending on the flag f
-   go (Just ann@(UpTo f (fin,fout))) c0 = do
+   go (Just ann@(UpTo _ (fin,fout))) c0 = do
       vcs <- go Nothing c0
       -- verbose dfs $ text ("UpTo (fin,fout) = " ++ show (fin,fout))
       -- verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands vcs))
@@ -549,8 +548,8 @@ ty_upto _t j                      = j > 0
 
 -- | Try to create mitigated versions of candidates to all scalefactors
 mitigateFlexi :: VectAnn -> CtxForVect -> DVRCands -> DVRCands
-mitigateFlexi (Rigid False _) vctx cands = cands
-mitigateFlexi (UpTo False _) vctx cands  = cands
+mitigateFlexi (Rigid False _) _ cands = cands
+mitigateFlexi (UpTo False _) _ cands  = cands
 mitigateFlexi vann vctx cands = 
   let is_rigid = case vann of { Rigid {} -> True; _ -> False }
       mitigated r = 
@@ -650,7 +649,7 @@ runVectorizer dflags sym comp = do
          , ppr comp 
          ]
   
-  let do_one (DVR { dvr_comp = io_comp, dvr_vres = vres }) = do
+  let do_one (DVR { dvr_comp = io_comp }) = do
         vc_mit <- io_comp
         -- Optimize mitigators
         let vc_opt_mit = vc_mit
@@ -670,7 +669,7 @@ runVectorizer dflags sym comp = do
   -- in Debug mode optimize compile and type check all candidates
   let maxi = getMaximal vss
  
-  maxi_comp <- dvr_comp maxi  
+  _maxi_comp <- dvr_comp maxi  
   verbose dflags $ vcat [ text "Selected candidate is: "
                         , nest 2 $ text $ show $ dvr_vres maxi
                         -- too verbose: , nest 2 $ ppr maxi_comp

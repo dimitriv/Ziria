@@ -64,7 +64,7 @@ Executable wplc
     build-depends:
       process              >= 1.1 && < 1.2
 
-  ghc-options: -fwarn-incomplete-patterns -fwarn-unused-imports -Werror 
+  ghc-options: -W -Werror 
                -- For profiling
                -threaded -fprof-auto 
                -rtsopts

@@ -20,7 +20,6 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# OPTIONS_GHC -fwarn-unused-binds -Werror #-}
 
 module Ziria.Codegen.CgExpr ( codeGenExp ) where
 
@@ -123,7 +122,7 @@ cgEvalRVal dfs e = cgEval dfs e >>= do_ret
 cgEvalLVal :: DynFlags -> Exp -> Cg (LVal ArrIdx)
 cgEvalLVal dfs e = cgEval dfs e >>= do_ret
  where do_ret (Left lval) = return lval
-       do_ret (Right ce)  = error "cgEvalLVal"
+       do_ret (Right _)   = error "cgEvalLVal"
 
 cgEval :: DynFlags -> Exp -> Cg (Either (LVal ArrIdx) C.Exp)
 cgEval dfs e = go (unExp e) where
@@ -191,7 +190,7 @@ cgEval dfs e = go (unExp e) where
       Left lval -> Left  <$> return (GDProj lval f)
       Right ce  -> Right <$> return (cgStrProj (ctExp e) ce (ctExp e0) f)
 
-  go elet@(ELet x _fi e1 e2)
+  go (ELet x _fi e1 e2)
      = cgLetBind dfs loc x e1 (cgEvalRVal dfs e2 >>= (return . Right))
 
   go (ELetRef x mb_e1 e2)
@@ -230,7 +229,7 @@ cgEval dfs e = go (unExp e) where
 
   go (EWhile econd ebody) = do
       (init_decls,init_stms,cecond) <- inNewBlock (cgEvalRVal dfs econd)
-      (body_decls,body_stms,cebody) <- inNewBlock (cgEvalRVal dfs ebody)
+      (body_decls,body_stms,_)      <- inNewBlock (cgEvalRVal dfs ebody)
 
       appendDecls init_decls
       appendDecls body_decls
@@ -251,7 +250,7 @@ cgEval dfs e = go (unExp e) where
           ceLen   <- cgEvalRVal dfs elen
           return (ceStart, ceLen)
 
-      (body_decls, body_stms, cebody) <- inNewBlock $
+      (body_decls, body_stms, _) <- inNewBlock $
           extendVarEnv [(k, [cexp|$id:(name k_new)|])] $ cgEvalRVal dfs ebody
 
       appendDecls init_decls

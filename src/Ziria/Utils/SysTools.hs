@@ -19,7 +19,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# OPTIONS_GHC -fwarn-unused-imports #-}
 
 module Ziria.Utils.SysTools
   ( compileAndRun

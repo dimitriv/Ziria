@@ -61,7 +61,6 @@ compGenBind :: DynFlags
 compGenBind dflags f params c1 args k = do
 
     appName <- nextName $ "__" ++ (name f) ++ "_"
-    let appId = appName
 
     let (eparams,cparams) = partitionParams params
     let (eargs, cargs)    = partitionCallArgs args
@@ -249,19 +248,15 @@ readCode :: Ty
          -> ReadType
          -> CompKont
          -> Cg CompInfo
-readCode ty csp buf_id read_type k = do
+readCode ty csp buf_id _ k = do
     rdSrcName <- nextName ("__readsrc_" ++ getLnNumInStr csp)
     let prefix = rdSrcName
 
-    let (bufget_suffix, getLen) = getTyPutGetInfo ty
     -- Read input using the [ts_get] family of functions instead of [buf_put*]
     -- These functions are defined in [csrc/ThreadSeparator.cpp]
     let bufGetF = "ts_get" -- ++ bufget_suffix
 
     let yh = yieldHdl k
-
-    let buf_id_as_int :: Integer
-        buf_id_as_int = read buf_id
 
     yldTmp <- nextName ("__yldarr_" ++ getLnNumInStr csp)
     let yldTmpName = yldTmp
@@ -331,7 +326,6 @@ writeCode :: Ty
 writeCode ty csp buf_id k = do
     wrSnkName <- nextName ("__writesnk_" ++ (getLnNumInStr csp))
     let prefix = wrSnkName
-        (bufput_suffix, putLen) = getTyPutGetInfo $ ty
 
     -- Write using the [ts_put] family of functions instead of [buf_put*]
     -- These functions are defined in [csrc/buf_*.h]
@@ -422,8 +416,7 @@ codeGenComp dflags comp k =
                   ; appendDeclPkg =<<
                       codeGenDeclVolGroup mit_st tint (InitWith [cinit|$int:d|])
 
-                  ; let arrty = TArray (Literal i1) bty
-                        leninfo = if i2 == 1 then LISingleton else LILength i2
+                  ; let leninfo = if i2 == 1 then LISingleton else LILength i2
                         rety = if i2 == 1 then bty else TArray (Literal  i2) bty
 
                   ; appendLabeledBlock (tickNmOf prefix) $ do
@@ -472,8 +465,7 @@ codeGenComp dflags comp k =
                   ; appendLabeledBlock (tickNmOf prefix) $ do
                            kontConsume k
 
-                  ; let arrty   = TArray (Literal i2) bty
-                        leninfo = if i1 == 1 then LISingleton else LILength i1
+                  ; let leninfo = if i1 == 1 then LISingleton else LILength i1
                         rety = if i1 == 1 then bty else TArray (Literal i1) bty
 
                   ; appendLabeledBlock (processNmOf prefix) $ do
@@ -531,7 +523,7 @@ codeGenComp dflags comp k =
 
         return (mkCompInfo prefix False)
 
-    go c@(MkComp (Emits e) csp ()) = do
+    go (MkComp (Emits e) csp ()) = do
         emitName <- nextName ("__emits_"  ++ (getLnNumInStr csp))
 
         let prefix   = emitName
@@ -642,7 +634,6 @@ codeGenComp dflags comp k =
         let prefix = rdSrcName
         let (bufget_suffix, getLen) = getTyPutGetInfo ty
         let bufGetF   = "buf_get" ++ bufget_suffix
-        let bufGetEOF = "isEOF"   ++ bufget_suffix
 
         let yh = yieldHdl k
 
@@ -769,17 +760,13 @@ codeGenComp dflags comp k =
         codeGenSharedCtxt_ dflags False (CLetFunC csp f params c1 Hole) $
         codeGenCompTop dflags c2 k
 
-    go (MkComp (BindMany c1 []) csp ()) =
+    go (MkComp (BindMany c1 []) _ ()) =
         codeGenCompTop dflags c1 k
 
-    go cb@(MkComp (BindMany c1 nms_cs) csp ()) = do
+    go (MkComp (BindMany c1 nms_cs) csp ()) = do
         c1Name <- freshLabel ("__bnd_fst_" ++ (getLnNumInStr csp))
-        let c1id = c1Name
         bmName <- nextName ("__bind_" ++ (getLnNumInStr csp))
         let bmNamePref = bmName
-
-        let yh = yieldHdl k
-        let dh = doneHdl k
 
         branch_var_name <- freshVar ("__branch_var_" ++ (getLnNumInStr csp))
         let branch_var = branch_var_name
@@ -810,8 +797,6 @@ codeGenComp dflags comp k =
                -> [(EId, Comp)] -> Cg [CompInfo]
             go branch_var num_branches (c1,c1Name) ((nm,c2):rest) = do
                 let vTy = ctDoneTyOfComp c1
-                let is_take (Take1 {}) = True
-                    is_take _          = False
 
                 new_dh <- freshName ("__dv_tmp_"  ++ (name nm) ++ "_" ++ (getLnNumInStr csp)) vTy Mut
                 let new_dhval = doneValOf $ name new_dh
@@ -842,9 +827,6 @@ codeGenComp dflags comp k =
                              go branch_var num_branches (c2,c2Name) rest
                 let c2info = head rest_info -- rest_info is always nonempty
 
-                let c2TickId = tickNmOf $ tickHdl c2info
-                let c2ProcId = processNmOf $ procHdl c2info
-
                 -- Optimized: when c1 is DONE, c1 calls c2 tick directly - after
                 -- setting [branch_var] to [branch_var+1]
                 let c1DoneKont = do
@@ -859,7 +841,7 @@ codeGenComp dflags comp k =
                 let c1info' = c1info { compGenInit = codeStmts dv_inits `mappend` compGenInit c1info }
                 return $ c1info' : rest_info
 
-            go branch_var num_branches (c1,c1Name) [] = do
+            go _ _ (c1,c1Name) [] = do
                 pushName c1Name
                 c1info <- codeGenCompTop dflags c1 k
                 let c1info' = c1info
@@ -896,7 +878,7 @@ codeGenComp dflags comp k =
                                    compGenInit c1info
                    }
 
-    go c@(MkComp (Par parInfo c1 c2) csp ()) = do
+    go (MkComp (Par _ c1 c2) csp ()) = do
         c1Name <- nextName ("__par_c1_" ++ (getLnNumInStr csp))
         c2Name <- nextName ("__par_c2_" ++ (getLnNumInStr csp))
         let c2id = c2Name
@@ -956,16 +938,16 @@ codeGenComp dflags comp k =
         unusedName <- freshName ("__seq_unused_" ++ (getLnNumInStr csp)) dty Imm
         codeGenCompTop dflags (MkComp (mkBind c1 (unusedName, c2)) csp csinfo) k
 
-    go (MkComp (Var nm) csp _) = do
+    go (MkComp (Var nm) _ _) = do
         f <- lookupCompCode nm
         f k
 
     -- NB: Call is non polymorphic at computation level
-    go (MkComp (Call nm args) csp _) = do
+    go (MkComp (Call nm args) _ _) = do
         f <- lookupCompFunCode nm
         f args k
 
-    go c@(MkComp (Take1 inty) csp ()) = do
+    go (MkComp (Take1 inty) csp ()) = do
         takeName <- nextName ("__take_" ++ (getLnNumInStr csp))
         let prefix = takeName
 
@@ -996,15 +978,13 @@ codeGenComp dflags comp k =
 
         return (mkCompInfo prefix True)
 
-    go c@(MkComp (Take elemTy n) csp ()) = do
+    go (MkComp (Take elemTy n) csp ()) = do
         takeName <- nextName ("__take_" ++ (getLnNumInStr csp))
         let prefix   = takeName
         let stateVar = prefix ++ "_state"
 
         let ih = inHdl k
         let dh = doneHdl k
-
-        let aTy = TArray (Literal n) elemTy
 
         -- OK! 
         appendDeclPkg =<< codeGenDeclVolGroup stateVar tint ZeroOut
@@ -1058,7 +1038,7 @@ codeGenComp dflags comp k =
     go (MkComp (Branch e c1 c2) csp ()) =
         mkBranch dflags e c1 k c2 k csp -- Pass them the same continuation!
 
-    go (MkComp (Repeat wdth c1) csp ()) = do
+    go (MkComp (Repeat _ c1) csp ()) = do
         let vTy = ctDoneTyOfComp c1
         new_dh <- freshName ("__dv_tmp_"  ++ (getLnNumInStr csp)) vTy Mut
         let new_dhval = doneValOf $ name new_dh
@@ -1084,11 +1064,11 @@ codeGenComp dflags comp k =
 
     go (MkComp (VectComp _ c) _ _) = go c  -- Just ignore vectorization annotation if it has survived so far.
 
-    go (MkComp (While e c1) csp ()) =
+    go (MkComp (While e c1) _ ()) =
         codeGenFixpoint (mkWhile dflags e c1) k
 
 
-    go cb@(MkComp (Times _ui estart elen nm c1) csp ()) = do
+    go (MkComp (Times _ui estart elen nm c1) csp ()) = do
         -- For loops generate code via the following desugaring:
         -- for nm in [estart,elen] c1 
         --    ~~> 
@@ -1110,7 +1090,7 @@ codeGenComp dflags comp k =
 
         codeGenCompTop dflags while_comp k
 
-    go c@(MkComp (Standalone c1) csp ()) = do
+    go (MkComp (Standalone c1) _ ()) = do
        codeGenCompTop dflags c1 k
 
 {-
@@ -1142,9 +1122,9 @@ codeGenSharedCtxt :: DynFlags -> Bool -> CompCtxt -> Cg a -> Cg (a, [C.Stm])
 codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
   where
     go Hole action = action >>= \a -> return (a,[])
-    go (CLet csp nm comp ctxt) action
+    go (CLet _ nm comp ctxt) action
       = extendCompEnv nm (codeGenCompTop dflags comp) $ go ctxt action
-    go (CLetStruct csp sdef ctxt) action
+    go (CLetStruct _ sdef ctxt) action
       = do { let struct_defn = [cdecl| typedef struct { $sdecls:cfields }
                                                  $id:(struct_name sdef); |]
                  cfields = map decl_field (struct_flds sdef)
@@ -1202,7 +1182,7 @@ codeGenSharedCtxt dflags emit_global ctxt action = go ctxt action
            }
 
     --
-    go (CLetFunC csp f params c1 ctxt) action
+    go (CLetFunC _ f params c1 ctxt) action
       = extendFunEnv f (compGenBind dflags f params c1) $
         go ctxt action
 

@@ -53,7 +53,7 @@ module Ziria.Codegen.CgMonad
   , CompKont(..)
   , finalCompKont
 
-  , CompFunGen(..)
+  , CompFunGen
 
   , genSym
   , getNames
@@ -397,7 +397,7 @@ evalCg sym stack_alloc_threshold m = do
       Right (_, code, _) -> return $ Right $ DL.toList (defs code)
 
 instance Monad Cg where
-    return x = Cg $ \rho s -> return (Right (x, mempty, s))
+    return x = Cg $ \_ s -> return (Right (x, mempty, s))
 
     (>>=) m f =
         Cg $ \rho s -> do res1 <- runCg m rho s
@@ -616,11 +616,6 @@ printNames = do
   names <- getNames
   liftIO $ mapM_ putStrLn names
 
-printState :: Cg ()
-printState = do
-  s <- get
-  liftIO $ putStrLn $ show s
-
 appendTopDef :: C.Definition -> Cg ()
 appendTopDef newDef =
   tell mempty { defs = DL.singleton newDef }
@@ -719,19 +714,12 @@ extendVarEnv binds a = do
   where
     -- NOTE: This is the point where we introduce GNames for LenVars.
     getPolymArrTy :: (GName Ty, ExpGen) -> Maybe (GName Ty, ExpGen)
-    getPolymArrTy (n, e) = case nameTyp n of
-      TArray (NVar nv) ta -> Just (toName nv noLoc tint Imm, [cexp|$id:nv|])
-      _                   -> Nothing
+    getPolymArrTy (n, _) = case nameTyp n of
+      TArray (NVar nv) _ -> Just (toName nv noLoc tint Imm, [cexp|$id:nv|])
+      _                  -> Nothing
 
     convTy :: [(GName Ty, ExpGen)] -> [(GName Ty, ExpGen)]
     convTy binds = catMaybes (map getPolymArrTy binds)
-
-    shadow_warn (n,_) = do 
-       mb <- asks (neLookup n . varEnv)
-       case mb of 
-         Just {} -> cgIO $ putStrLn ("Code generation shadowing: " ++ show n)
-         Nothing -> return ()
-
 
 extendExpFunEnv :: GName Ty -> (GName Ty,[GName Ty],Bool) -> Cg a -> Cg a
 extendExpFunEnv nm bind =
@@ -844,12 +832,6 @@ lookupTyDefEnv nm = do
         "CodeGen: Unbound struct type " ++ show nm ++ " detected!" ++ "\nBound are: " ++ show (M.keys env)
       Just e  -> return e
 
-
--- Precondition: t is an array type w/ known size
-getLitArrSz :: Ty -> Int
-getLitArrSz (TArray (Literal n) t) = n
-getLitArrSz _                      = error "CodeGen: Got array size of an unresolved array type!"
-
 getTyPutGetInfo :: Ty -> (String,Int)
 -- Get a description of the type that matches the driver description
 getTyPutGetInfo ty = (buf_typ ty, buf_siz ty)
@@ -878,7 +860,7 @@ getTyPutGetInfo ty = (buf_typ ty, buf_siz ty)
               (TBuff (IntBuf t)) -> buf_typ t
 
               -- Arbitrary structure - we use generic buffer read/write called buf_getchunk/buf_puchunk
-              TStruct nm _ -> "chunk"
+              TStruct {} -> "chunk"
 
               -- Others ... Not sure how well-supported they are
               otherty

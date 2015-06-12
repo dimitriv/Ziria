@@ -46,11 +46,11 @@ autolutC dflags
 autolutE :: DynFlags -> Exp -> IO Exp
 autolutE dflags = autoE
   where
-    autoE e0@(MkExp e loc inf) = do
+    autoE e0 = do
       -- | Calculate LUT statistics 
       stats <- calcLUTStats dflags e0
       case stats of 
-        Left err -> do 
+        Left _ -> do 
 {- Too verbose
           verbose dflags $ 
             vcat [ text "Cannot autolut expresion."
@@ -74,9 +74,9 @@ autolutE dflags = autoE
                   , ppr stats ]
 -}
            pure $ eLUT (expLoc e0) stats e0
-    autoE' e0 stats = go_inside e0
+    autoE' e0 _ = go_inside e0
 
-    go_inside e0@(MkExp e loc inf) 
+    go_inside (MkExp e loc inf) 
       = MkExp <$> go e <*> pure loc <*> pure inf
       where
         go :: Exp0 -> IO Exp0
@@ -98,12 +98,12 @@ autolutE dflags = autoE
         go (ELetRef v (Just e1) e2) 
           = autoE e1 >>= \e1' -> ELetRef v (Just e1') <$> autoE e2
         go (ELetRef v Nothing e2) = ELetRef v Nothing <$> autoE e2
-        go (ESeq e1 e2)    = ESeq <$> autoE e1 <*> autoE e2
-        go (ECall f es)    = ECall f <$> mapM autoE es
-        go (EIf e1 e2 e3)  = EIf <$> autoE e1 <*> autoE e2 <*> autoE e3
-        go (EPrint nl es)  = EPrint nl <$> mapM autoE es
-        go (EError _t str) = pure e
-        go (ELUT s e)      = pure $ ELUT s e
+        go (ESeq e1 e2)     = ESeq <$> autoE e1 <*> autoE e2
+        go (ECall f es)     = ECall f <$> mapM autoE es
+        go (EIf e1 e2 e3)   = EIf <$> autoE e1 <*> autoE e2 <*> autoE e3
+        go (EPrint nl es)   = EPrint nl <$> mapM autoE es
+        go (EError _t _str) = pure e
+        go (ELUT s e)       = pure $ ELUT s e
         -- TODO: Revisit this, it seems defensive
-        go (EStruct tn tfs) = pure e
-        go (EProj _ fn)     = pure e
+        go (EStruct {})     = pure e
+        go (EProj {})       = pure e

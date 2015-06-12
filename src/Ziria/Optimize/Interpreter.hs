@@ -89,16 +89,17 @@
 -- assignment to the local variable `x` we also have no other way to refer to
 -- this old value.  We could solve this by using something like SSA form, but
 -- for now we just don't do symbolic evaluation at all.
-{-# OPTIONS_GHC -Wall -Wwarn -funbox-strict-fields #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# OPTIONS_GHC -Wall -funbox-strict-fields #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Ziria.Optimize.Interpreter (
     -- * Values
     Complex(..)
@@ -644,9 +645,6 @@ evalGuessesInt :: L.Lens EvalState (Map Exp IntDomain)
 evalGuessesInt f st 
   = (\x -> st { _evalGuessesInt = x}) <$> f (_evalGuessesInt st)
 
-evalPrints :: L.Lens EvalState Prints
-evalPrints f st = (\x -> st { _evalPrints = x }) <$> f (_evalPrints st)
-
 evalStats :: L.Lens EvalState EvalStats
 evalStats f st = (\x -> st { _evalStats = x }) <$> f (_evalStats st)
 
@@ -723,9 +721,6 @@ mkEval f = Eval $ ErrorT $ ReaderT $ \mode -> StateT $ \st -> f mode st
 
 getMode :: Monad m => Eval m (EvalMode m)
 getMode = Eval ask
-
-logPrint :: Monad m => Bool -> Value -> Eval m ()
-logPrint newline val = L.modifySt evalPrints ((newline, val) :)
 
 -- | Run the second action only if the first one results zero results
 --

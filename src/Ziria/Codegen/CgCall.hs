@@ -21,7 +21,6 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# OPTIONS_GHC -fwarn-unused-binds -Werror #-}
 
 module Ziria.Codegen.CgCall
   ( cgCall 
@@ -118,7 +117,7 @@ cgCall dfs loc retTy argtys fName eargs = do
 
   where when_ :: Bool -> (Cg a -> Cg a) -> Cg a -> Cg a
         when_ True f  = f 
-        when_ False f = id
+        when_ False _ = id
 
 
 {-------------------------------------------------------------------------------
@@ -169,7 +168,7 @@ codeGenArg dfs loc argty carg_mb
   = return ((cearg : lenArg ne), return ())
 
     -- Immutable non-array
-  | GArgTy ty Imm <- argty
+  | GArgTy _ Imm <- argty
   , Right cearg <- carg_mb
   = return ([cearg], return () ) 
 
@@ -194,7 +193,7 @@ codeGenArg dfs loc argty carg_mb
   = do { e <- cgDeref dfs loc lval; return ([e], return ()) }
 
     -- Non-pointer represented type, mutable arg
-  | GArgTy ty Mut <- argty, Left lval <- carg_mb
+  | GArgTy _ Mut <- argty, Left lval <- carg_mb
   = do { e <- cgDeref dfs loc lval; return ([[cexp| &($e)|]], return ()) }
 
 

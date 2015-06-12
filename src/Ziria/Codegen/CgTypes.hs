@@ -153,12 +153,6 @@ compInit cis
 unitVal :: C.Exp
 unitVal = [cexp|0|]
 
-tickTy :: C.Type
-tickTy = [cty|char|]
-
-procTy :: C.Type
-procTy = [cty|char|]
-
 {------------------------------------------------------------------------
   Types to C-types
 ------------------------------------------------------------------------}
@@ -179,7 +173,7 @@ codeGenTyOcc_ q ty =
   case ty of
     TBit             -> namedCType_ q "Bit"
     TBool            -> namedCType_ q "unsigned char"
-    TArray _n ty'    -> codeGenArrTyPtrOcc_ q ty
+    TArray _n _      -> codeGenArrTyPtrOcc_ q ty
     TDouble          -> namedCType_ q "double"
     TUnit            -> unitTy q
     TInt bw sg       -> namedCType_ q (cgTIntName bw sg)
@@ -202,9 +196,6 @@ codeGenArrTyPtrOcc_ q ty
  = panicStr $ "codeGenArrTyPtrOcc: non array type " ++ show ty
  where aux TBit = [cty| $ty:(namedCType_ q "BitArrPtr")  |]
        aux t    = [cty| $ty:(codeGenTyOcc_ q t) * |]
-
-codeGenArrTyPtrOcc :: Ty -> C.Type
-codeGenArrTyPtrOcc t = codeGenArrTyPtrOcc_ Nothing t
 
 codeGenTyOcc :: Ty -> C.Type
 codeGenTyOcc t = codeGenTyOcc_ Nothing t
@@ -523,7 +514,7 @@ expValMbs :: [Exp] -> Maybe [Val]
 expValMbs = mapM expValMb 
 
 expValMb :: Exp -> Maybe Val
-expValMb e = case unExp e of { EVal t v -> return v; _ -> Nothing }
+expValMb e = case unExp e of { EVal _ v -> return v; _ -> Nothing }
 
 
 

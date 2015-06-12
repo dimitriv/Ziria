@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -Wall -Wwarn #-}
+{-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE ScopedTypeVariables, RankNTypes, TemplateHaskell, MultiParamTypeClasses, FlexibleInstances #-}
 module Ziria.BasicTypes.AstQuasiQuote where -- (zexpr, zcomp) where
 

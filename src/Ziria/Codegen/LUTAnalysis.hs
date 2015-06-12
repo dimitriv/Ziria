@@ -25,7 +25,6 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fwarn-unused-binds #-}
-{-# OPTIONS_GHC -fwarn-unused-imports #-}
 
 module Ziria.Codegen.LUTAnalysis (
 
@@ -79,7 +78,7 @@ tyBitWidth TBool                   = return 1 -- NB not 8
 tyBitWidth (TInt bw _)             = return $ fromIntegral $ bwBitWidth bw
 tyBitWidth TDouble                 = return 64
 tyBitWidth (TArray (Literal n) ty) = tyBitWidth ty >>= \w -> return (fromIntegral n * w)
-tyBitWidth t@(TStruct tn _flds)
+tyBitWidth (TStruct tn _flds)
   | tn == complexTyName   = return 64 -- NB: platform-dependent
   | tn == complex8TyName  = return 16 -- but ok with GCC and VS in
   | tn == complex16TyName = return 32 -- Cygwin and in VS
@@ -186,7 +185,7 @@ calcLUTStats dflags e = runErrorT $ do
     -- | Does this expression return a variable? 
     expResultVar :: Exp -> Maybe EId
     expResultVar (MkExp (ESeq _ e2) _ _) = expResultVar e2
-    expResultVar (MkExp (EVar v) _ ty)   = Just v
+    expResultVar (MkExp (EVar v) _ _)    = Just v
     expResultVar _                       = Nothing
 
 
@@ -255,9 +254,9 @@ shouldLUT dflags lut_outbitwidth lut_tablesize e = flip evalLM s0 $ do
     should (MkExp e _ _) = go e
 
     go :: Exp0 -> LM ()
-    go e@(EVal {})    = return ()
-    go e@(EValArr {}) = return ()
-    go e@(EVar {})    = return ()
+    go (EVal {})    = return ()
+    go (EValArr {}) = return ()
+    go (EVar {})    = return ()
 
     go (EUnOp _ e) = do
         modify $ \s -> s { lmOpCount = lmOpCount s + 1 }
@@ -313,15 +312,15 @@ shouldLUT dflags lut_outbitwidth lut_tablesize e = flip evalLM s0 $ do
     go (EPrint _ es) =
         should_many es
 
-    go e@(EError {}) = 
+    go (EError {}) = 
         return ()
 
     go (ELUT _ e) = do
         modify $ \s -> s { lmHasLUT = True }
         should e
 
-    go (EStruct tn tfs)
-       = mapM_ (\(fn,fe) -> should fe) tfs
+    go (EStruct _ tfs)
+       = mapM_ (\(_,fe) -> should fe) tfs
 
     go (EProj e _fn)
        = should e
@@ -391,8 +390,8 @@ outvar_bitwidth rmap x = go (nameTyp x) x
           | isArrVarFullyWritten rmap t x = tyBitWidth_ByteAlign t
             -- use mask, so double the width
           | otherwise = double <$> tyBitWidth_ByteAlign t
-        go t@(TStruct {}) x = double <$> tyBitWidth_ByteAlign t
-        go t otherwise      = tyBitWidth_ByteAlign t
+        go t@(TStruct {}) _ = double <$> tyBitWidth_ByteAlign t
+        go t              _ = tyBitWidth_ByteAlign t
         double n = 2*n
 
 outVarMaskWidth :: RngMap -> EId -> Ty -> Maybe Integer

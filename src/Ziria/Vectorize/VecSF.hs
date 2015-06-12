@@ -256,11 +256,11 @@ sym_sfud (SFUD3 i m)       = SFDU3 i m
 -- decrease the rate of a component? We need those for vectorization
 -- of Repeat nodes in CtxExCompLeftAndRight mode.
 isSteady_sfdu :: SFDU -> Bool 
-isSteady_sfdu (SFDU1 i j (NMul m1) (NMul m2)) 
+isSteady_sfdu (SFDU1 _i _j (NMul _m1) (NMul m2)) 
  | m2 == 1 = True
-isSteady_sfdu (SFDU2 (DivsOf i (NDiv i0) (NDiv i1)) j (NMul m))
+isSteady_sfdu (SFDU2 (DivsOf _i (NDiv _i0) (NDiv i1)) _j (NMul m))
  | i1*m == 1 = True
-isSteady_sfdu (SFDU3 j (NMul m)) 
+isSteady_sfdu (SFDU3 _j (NMul m)) 
  | m == 1 = True
 isSteady_sfdu _ = False
 
@@ -304,7 +304,7 @@ compSFDD_aux _ = []
 -- | Take cardinality info and compute a pair of two CAlphas
 -- for the vectorizer to use when computing scale factors. 
 normalize_card :: Card -> Ty -> Ty -> [(CAlpha,CAlpha)]
-normalize_card OCard ty1 ty2 = []
+normalize_card OCard _ _ = []
 normalize_card (SCard ain aout) tin tout
   = normalize_card_aux ain' aout'
   where ain'  = normalize_alpha ain  tin
@@ -330,12 +330,12 @@ compSFDU card tin tout = normalize_card card tin tout >>= compSFDU_aux
 -- | Convert scale-factors to the arity (size) of the arrays we take or emit
 sfud_arity :: SFUD -> (Maybe Int, Maybe Int)
 sfud_arity (SFUD1 i j (NMul m1) (NMul m2)) = (Just (i*m1*m2), Just (j*m1))
-sfud_arity (SFUD2 i (DivsOf j (NDiv j0) j1) (NMul m)) = (Just (i*m), Just j0)
+sfud_arity (SFUD2 i (DivsOf _j (NDiv j0) _j1) (NMul m)) = (Just (i*m), Just j0)
 sfud_arity (SFUD3 i (NMul m)) = (Just (i*m) , Nothing)
 
 sfdu_arity :: SFDU -> (Maybe Int, Maybe Int)
 sfdu_arity (SFDU1 i j (NMul m1) (NMul m2)) = (Just (i*m1), Just (j*m1*m2))
-sfdu_arity (SFDU2 (DivsOf i (NDiv i0) i1) j (NMul m)) = (Just i0, Just (j*m))
+sfdu_arity (SFDU2 (DivsOf _i (NDiv i0) _i1) j (NMul m)) = (Just i0, Just (j*m))
 sfdu_arity (SFDU3 j (NMul m)) = (Nothing, Just (j*m))
 
 sfdd_arity :: SFDD -> (Maybe Int, Maybe Int) 

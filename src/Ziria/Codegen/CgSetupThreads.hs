@@ -75,7 +75,7 @@ thread_setup affinity_mask name buf_tys tids
         thread_wrappers = h tids (zip [0..] buf_tys)
         h :: [String] -> [(Int,Ty)] -> [C.Definition]
         h [] [] = []
-        h (tid : tids') ((o,oty) : buf_tys') =
+        h (tid : tids') ((o,_) : buf_tys') =
           [cedecl| typename BOOLEAN ($id:("__go" ++ tid))(void * pParam) {
 	             thread_info *ti; 
                      ti = (typename thread_info *)pParam; 
@@ -92,7 +92,7 @@ thread_setup affinity_mask name buf_tys tids
 	             return 0;
                    } 
           |] : h tids' buf_tys'
-        h (tid : tids') [] =
+        h (tid : _) [] =
           [cedecl| typename BOOLEAN ($id:("__go" ++ tid))(void * pParam) {
 	             thread_info *ti; 
                      ti = (typename thread_info *)pParam; 

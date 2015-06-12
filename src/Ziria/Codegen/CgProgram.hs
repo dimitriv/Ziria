@@ -79,7 +79,7 @@ codeGenCompilerGlobals :: String
                        -> Ty
                        -> Ty
                        -> Cg ()
-codeGenCompilerGlobals tid tickHdl procHdl mtv ta tb = do
+codeGenCompilerGlobals tid _ _ mtv _ _ = do
     appendCodeGenDeclGroup (doneValOf $ threadIdOf tid globalDoneHdl)
                            (fromMaybe tint mtv) ZeroOut
     appendDecl [cdecl| char $id:globalWhatIs;|]
@@ -92,7 +92,6 @@ codeGenThread :: DynFlags
               -> Cg ()
 codeGenThread dflags tid c = do
     (maybe_tv, ta, tb) <- checkCompType (ctComp c)
-    (bta, btb) <- checkInOutFiles ta tb
     withThreadId tid $ do
         mkRuntime (Just ((getName dflags) ++ tid)) $ do
         cinfo <- codeGenCompTop dflags c (finalCompKont tid)
@@ -101,11 +100,6 @@ codeGenThread dflags tid c = do
                                    (procHdl cinfo) maybe_tv ta tb
         return cinfo
   where
-    checkInOutFiles :: Ty -> Ty -> Cg (BufTy, BufTy)
-    checkInOutFiles (TBuff bta) (TBuff btb) = return (bta, btb)
-    checkInOutFiles tin tout =
-        fail $ "Missing read/write? Can't determine input or output type(s)."
-
     checkCompType :: CTy -> Cg (Maybe Ty, Ty, Ty)
     checkCompType (CTComp tv ta tb) = return (Just tv, ta, tb)
     checkCompType (CTTrans ta tb)   = return (Nothing, ta, tb)
@@ -160,7 +154,6 @@ codeGenProgram dflags shared_ctxt
 
   where
     tids            = map fst tid_cs
-    isMultiThreaded = length tid_cs > 1
     pipeline_flag   = isDynFlagSet dflags Pipeline
     affinity_mask   = getAffinityMask dflags
     module_name     = getName dflags
