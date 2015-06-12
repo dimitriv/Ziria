@@ -7,10 +7,19 @@ module AtomComp
   ,CompLoc
   ,ParInfo) where
 
-import AstExpr (Ty,GName,MutKind,Uniq)
+import AstExpr (Ty,GName,MutKind,Uniq,GFun0,GFun)
+import qualified AstExpr as AstE
 import AstComp (CompLoc,ParInfo)
+import qualified AstComp as AstC
+import qualified GenSym as GS
+import Control.Monad.State
 
-type NameSpec = GName Ty
+type Fun = GFun Ty
+type Fun0 = GFun0 Ty
+type Var = GName Ty
+
+type FunName = Uniq
+type VarName = Uniq
 
 data Exp b
   = MkExp { unExp   :: !(Exp0 b)
@@ -23,31 +32,52 @@ data Comp a b
            , compInfo :: a }
 
 data Exp0 b
-  = ExpFun { expFunNm :: Uniq, expFunArgs :: [(Uniq,MutKind)] } -- pass by name or reference
-  | ExpVar Uniq
+  = ExpApp { expAppFun :: FunName, expAppArgs :: [(VarName,MutKind)] } -- pass by name or reference
+  | ExpVar VarName
 
 data Comp0 a b
   = Take1 Ty
   | TakeN Ty Int
-  | Emit1 Uniq
-  | EmitN Uniq
+  | Emit1 VarName
+  | EmitN VarName
   | Return (Exp b)
 
-  | NewName NameSpec (Comp a b) -- if immutable, can be initialized exactly once
-  | Bind Uniq (Comp a b)
+  | NewVar Var (Comp a b) -- if immutable, can be initialized exactly once
+  | Bind VarName (Comp a b)
 
   | Seq (Comp a b) (Comp a b)
   | Par ParInfo (Comp a b) (Comp a b)
 
-  | Branch Uniq (Comp a b) (Comp a b)
+  | Branch VarName (Comp a b) (Comp a b)
 
   | RepeatN Int (Comp a b)
   | Repeat (Comp a b)
 
-  | While Uniq (Comp a b)
-  | Until Uniq (Comp a b)
+  | While VarName (Comp a b)
+  | Until VarName (Comp a b)
 
   ----------------------------------------------
   -- | Standalone (Comp a b)
   -- | Mitigate String  -- just for debugging
   --         Ty Int Int
+
+
+
+data CompEnv a = CompEnv { funs  :: [Fun a]
+                         , funGenSym :: GS.Sym
+                         , vars  :: [Var]
+                         , varGenSym :: GS.Sym
+                         }
+
+type CompM a = StateT (CompEnv a) IO
+
+mkCompOfAst :: AstC.GComp tc t a b -> CompM a (Comp a b)
+mkCompOfAst c = fail "not implemented"
+
+runCompM :: CompM a b -> IO (b, CompEnv a)
+runCompM m = do
+  fungen <- GS.initGenSym "f"
+  vargen <- GS.initGenSym "x"
+  let env = CompEnv [] fungen [] vargen
+  runStateT m env
+  

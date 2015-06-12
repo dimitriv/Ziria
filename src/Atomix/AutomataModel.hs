@@ -4,6 +4,7 @@ import Data.Loc
 
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Maybe (maybeToList)
 
 import Data.Graph.Inductive.Graph  ( Node )
 import qualified Data.Graph.Inductive.Graph  as G
@@ -16,16 +17,10 @@ import Control.Monad.State
 import AtomComp -- simplified Ziria model
 import Opts
 
---import qualified GenSym as GS
---import AstExpr       -- BasicTypes/
---import AstComp       -- BasicTypes/
---import AstUnlabelled
-
 
 --type Node = Int --defined in FGL
 type LNode = G.LNode NodeLabel
-type Chan = NameSpec
--- type FunEnv = [(Uniq, Code/Function)]
+type Chan = VarName
 
 data NodeLabel
   = NodeLabel { node_id   :: Node
@@ -51,11 +46,7 @@ data Automaton
 
 type ZirGraph = Gr NodeLabel ()
 
-data ZirEnv = ZirEnv -- { chan_binds  :: ChanEnv
-                     -- , chan_gensym :: GS.Sym
-                     -- }
-
-type GraphM a = StateT ZirGraph (ReaderT ZirEnv IO) a
+type GraphM a = StateT ZirGraph (ReaderT (CompEnv ()) IO) a
 
 
 mkNode :: NodeKind -> GraphM LNode
@@ -121,12 +112,23 @@ mkAutomaton :: DynFlags -> Channels -> Comp a b -> GraphM Automaton
 mkAutomaton dfs chans comp = go chans (unComp comp)
   where
     go chans (Take1 _) = fail "not implemented"
+      --do
+      --  let in_c = in_chan chans
+      --  let inp = Set.singleton in_c
+      --  let outp = Set.fromList (maybeToList $ ctrl_chan chans)
+      --  let code = eAssign noLoc (eVar noLoc ctrl_c) (eVar noLoc in_c)
+      --  let env = [(in_c, in_c), (ctrl_c, ctrl_c)]
+      --  (node,_) <- mkNode (Action inp outp code env)
+      --  return $ singletonAutomaton node
+
+
+
     go chans (TakeN _ n) = fail "not implemented"
     go chans (Emit1 x) = fail "not implemented"
     go chans (EmitN x) = fail "not implemented" 
     go chans (Return e) = fail "not implemented" 
 
-    go chans (NewName x_spec c) = fail "not implemented"
+    go chans (NewVar x_spec c) = fail "not implemented"
     go chans (Bind x c) = fail "not implemented"
 
     go chans (Seq c1 c2) = fail "not implemented"
