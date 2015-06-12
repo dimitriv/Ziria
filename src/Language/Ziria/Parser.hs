@@ -10,7 +10,9 @@
 
 module Language.Ziria.Parser (
     parseProgram,
-    parseProgramFromFile
+    parseProgramFromFile,
+    camlParseProgram,
+    camlParseProgramFromFile
   ) where
 
 import Control.Monad.Exception
@@ -20,6 +22,7 @@ import Data.Loc
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.Encoding as E
 
+import qualified Language.Ziria.Parser.CamlParser as CP
 import qualified Language.Ziria.Parser.Parser as P
 import Language.Ziria.Parser.Monad
 
@@ -32,15 +35,28 @@ parse :: P a
 parse p buf pos =
     evalP p (emptyPState buf pos)
 
+parseFromFile :: P a
+              -> FilePath
+              -> IO a
+parseFromFile p path = do
+    text <- liftIO $ B.readFile path
+    liftException (parse p (E.decodeUtf8 text) start)
+  where
+    start :: Pos
+    start = startPos path
+
 parseProgram :: T.Text
              -> Pos
              -> Either SomeException SrcProg
 parseProgram = parse P.parseProgram
 
 parseProgramFromFile :: FilePath -> IO SrcProg
-parseProgramFromFile path = do
-    text <- liftIO $ B.readFile path
-    liftException (parseProgram (E.decodeUtf8 text) start)
-  where
-    start :: Pos
-    start = startPos path
+parseProgramFromFile = parseFromFile P.parseProgram
+
+camlParseProgram :: T.Text
+                 -> Pos
+                 -> Either SomeException SrcProg
+camlParseProgram = parse CP.parseProgram
+
+camlParseProgramFromFile :: FilePath -> IO SrcProg
+camlParseProgramFromFile = parseFromFile CP.parseProgram

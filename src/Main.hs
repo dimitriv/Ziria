@@ -117,7 +117,9 @@ main = do
 
     inFile  <- getInFile dflags
     outFile <- getOutFile dflags
-    prog    <- P.parseProgramFromFile inFile
+    prog    <- if CamlSyntax `elem` dflags
+               then P.camlParseProgramFromFile inFile
+               else P.parseProgramFromFile inFile
 
     dump dflags DumpAst ".ast.dump" $ (text . show) prog
     -- Disabling Pretty for now
