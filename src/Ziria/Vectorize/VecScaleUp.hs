@@ -19,22 +19,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Ziria.Vectorize.VecScaleUp ( doVectCompUD, doVectCompDU ) where
 
-import Control.Applicative ( (<$>) )
-import Control.Monad ( when )
 import Control.Monad.State
-import Data.List as M
 import Data.Loc
-import qualified Data.Set as S
 
 import Ziria.BasicTypes.AstComp
-import Ziria.BasicTypes.AstExpr
 import Ziria.BasicTypes.AstFM
-import Ziria.BasicTypes.AstUnlabelled
-import Ziria.BasicTypes.PpComp
-import Ziria.BasicTypes.Outputable
-import Ziria.ComputeType.CtComp
-import Ziria.ComputeType.CtExpr 
-import qualified Ziria.Utils.GenSym as GS
 import Ziria.Vectorize.CardAnalysis
 import Ziria.Vectorize.VecM
 import Ziria.Vectorize.VecRewriter

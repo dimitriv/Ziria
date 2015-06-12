@@ -6,7 +6,7 @@
 module Ziria.Utils.Orphans where
 
 import Control.DeepSeq
-import Control.DeepSeq.Generics (NFData(..), genericRnf)
+import Control.DeepSeq.Generics (genericRnf)
 import Control.Monad.Error.Class 
 import Data.Loc
 import qualified Data.Map as Map

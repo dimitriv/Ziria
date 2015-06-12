@@ -21,21 +21,18 @@ module Opts where
 
 import qualified Control.Exception as E
 import Control.Monad.IO.Class (MonadIO, liftIO)
+import System.Console.GetOpt
 import System.IO (Handle,
                   IOMode(..),
                   hClose,
+                  hFlush,
+                  hPutStrLn,
                   openFile,
-                  stderr)
-
+                  stderr,
+                  stdout)
 import Text.PrettyPrint.HughesPJ
 
-import System.Console.GetOpt
-import System.Environment
-import System.Exit (exitFailure)
-import System.IO
-
 import Ziria.Codegen.CgMonad ( cMAX_STACK_ALLOC )
-import System.IO.Unsafe ( unsafePerformIO )
 
 data DynFlag =
     InputFile String

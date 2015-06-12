@@ -39,24 +39,13 @@ module Ziria.Vectorize.VecSF (
   , divsOfMemo
 ) where
 
-import Control.Monad.State
-import Data.Functor.Identity
 import Data.IORef
-import Data.List as M
 import qualified Data.Map as Map
-import qualified Data.Set as S
 import System.IO.Unsafe ( unsafePerformIO ) 
 
-import Ziria.BasicTypes.AstComp
 import Ziria.BasicTypes.AstExpr
-import Ziria.BasicTypes.AstFM
-import Ziria.BasicTypes.Outputable
-import Ziria.BasicTypes.PpComp
 import Ziria.Vectorize.CardAnalysis
 import Ziria.Vectorize.VecM ( isVectorizable )
-import qualified Ziria.Utils.GenSym as GS
-
-import Opts
 
 {- Note [Vectorization Modes] 
    ~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -131,9 +131,7 @@ module Ziria.Codegen.CgMonad
   ) where
 
 import Control.Applicative
-import Control.Monad (ap)
 import Control.Monad.Error
-import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Writer
@@ -141,22 +139,16 @@ import Data.Char (toUpper)
 import Data.DList (DList)
 import qualified Data.DList as DL
 import qualified Data.Map as M
-import Data.Monoid
 import Data.Maybe
-import Data.Monoid
 import Data.Loc
-import qualified Data.Symbol
 import Language.C.Quote.C
 import qualified Language.C.Quote.C as C
 import qualified Language.C.Syntax as C
-import qualified Language.C.Pretty as P
 import Text.PrettyPrint.HughesPJ hiding ( (<>) )
 
 import Ziria.BasicTypes.AstExpr
 import Ziria.BasicTypes.AstComp
 import Ziria.BasicTypes.NameEnv
-import Ziria.BasicTypes.Outputable
-import Ziria.BasicTypes.PpComp
 import Ziria.BasicTypes.PpExpr
 import Ziria.Codegen.CgHeader
 import qualified Ziria.Utils.GenSym as GS

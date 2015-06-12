@@ -56,22 +56,14 @@ module Ziria.Codegen.CgTypes ( bwBitWidth
 
                ) where
 
-import Opts
-
 import qualified Data.Loc
-import qualified Data.Map as M
 import Data.Maybe
-import qualified Data.Symbol
 import qualified Language.C.Syntax as C
 import Language.C.Quote.C
-import qualified Language.C.Pretty as P
 import Text.PrettyPrint.HughesPJ 
 
 import Ziria.BasicTypes.AstExpr
-import Ziria.BasicTypes.AstComp
-import Ziria.BasicTypes.AstUnlabelled 
 import Ziria.BasicTypes.Outputable
-import Ziria.BasicTypes.PpExpr
 import Ziria.Codegen.CgMonad
 import Ziria.Utils.Utils
 

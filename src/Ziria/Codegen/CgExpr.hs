@@ -25,42 +25,22 @@
 module Ziria.Codegen.CgExpr ( codeGenExp ) where
 
 import Control.Applicative
-import Control.Monad ( when, unless )
-import Control.Monad.IO.Class (liftIO)
-import Data.Bits
-import Data.List (elemIndex, foldl', isPrefixOf )
+import Control.Monad (unless)
 import Data.Loc
-import qualified Data.Map as M
-import Data.Maybe
-import qualified Data.Symbol
-import qualified Language.C.Pretty as P
 import Language.C.Quote.C
-import Language.C.Quote.Base (ToConst(..))
 import qualified Language.C.Syntax as C
-import Numeric (showHex)
-import Text.PrettyPrint.HughesPJ
 
-import Ziria.Analysis.DataFlow
 import Ziria.BasicTypes.AstExpr
 import Ziria.BasicTypes.AstUnlabelled
-import Ziria.BasicTypes.AstComp
-import Ziria.BasicTypes.Outputable
-import Ziria.BasicTypes.PpExpr
-import Ziria.BasicTypes.PpComp
-import Ziria.Codegen.CgBoundsCheck
 import Ziria.Codegen.CgCall
 import Ziria.Codegen.CgCmdDom
-import Ziria.Codegen.CgHeader
 import Ziria.Codegen.CgLUT
 import Ziria.Codegen.CgMonad
 import Ziria.Codegen.CgPrint 
-import Ziria.Codegen.CgRuntime
 import Ziria.Codegen.CgTypes
 import Ziria.Codegen.CgValDom
 import Ziria.Codegen.LUTAnalysis
 import Ziria.ComputeType.CtExpr
-import qualified Ziria.Utils.GenSym as GS
-import Ziria.Utils.Utils
 
 import Opts
 

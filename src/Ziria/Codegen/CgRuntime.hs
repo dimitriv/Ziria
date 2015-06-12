@@ -20,22 +20,14 @@
 
 module Ziria.Codegen.CgRuntime where
 
-import qualified Data.Loc
-import qualified Data.Map as M
 import Data.Maybe
-import qualified Data.Symbol
 import Language.C.Quote.C
-import qualified Language.C.Pretty as P
 import qualified Language.C.Syntax as C
-import Text.PrettyPrint.HughesPJ 
 
 import Ziria.BasicTypes.AstExpr
-import Ziria.BasicTypes.AstComp
-import Ziria.BasicTypes.PpComp
 import Ziria.Codegen.CgHeader
 import Ziria.Codegen.CgMonad
 import Ziria.Codegen.CgTypes
-import qualified Ziria.Utils.GenSym as GS
 
 callInBufInitializer  buf_context heap_context 
   = callExtBufInitializer "get" buf_context heap_context

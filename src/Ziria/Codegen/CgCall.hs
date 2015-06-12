@@ -27,35 +27,17 @@ module Ziria.Codegen.CgCall
   ( cgCall 
   ) where
 
-import Control.Monad (when, unless)
-import Control.Applicative
-import Control.Monad (when)
-import Control.Monad.IO.Class (liftIO)
-import Data.Bits
-import Data.List (elemIndex, foldl', isPrefixOf )
+import Data.List (isPrefixOf)
 import Data.Loc
-import qualified Data.Map as M
-import Data.Maybe
-import qualified Data.Symbol
-import qualified Language.C.Pretty as P
 import Language.C.Quote.C
-import Language.C.Quote.Base (ToConst(..))
 import qualified Language.C.Syntax as C
-import Numeric (showHex)
-import Text.PrettyPrint.HughesPJ
 
 import Ziria.BasicTypes.AstExpr
-import Ziria.BasicTypes.AstComp
-import Ziria.BasicTypes.PpExpr
-import Ziria.BasicTypes.PpComp
 import Ziria.Codegen.CgCmdDom
-import Ziria.Codegen.CgHeader
 import Ziria.Codegen.CgMonad
-import Ziria.Codegen.CgRuntime
 import Ziria.Codegen.CgTypes
 import Ziria.Codegen.CgValDom
 import Ziria.ComputeType.CtExpr
-import qualified Ziria.Utils.GenSym as GS
 import Ziria.Utils.Utils
 
 import Opts

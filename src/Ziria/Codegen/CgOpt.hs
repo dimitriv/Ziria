@@ -27,19 +27,8 @@ module Ziria.Codegen.CgOpt where
 import Prelude
 import Ziria.Utils.Rebindables
 
-import Control.Monad ( when )
-import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Writer
-import qualified Data.DList as DL
-import qualified Data.List
-import Data.List ( nub )
 import Data.Loc
-import qualified Data.Map as M
-import Data.Maybe
-import Data.Monoid
-import qualified Data.Set as S
-import qualified Data.Symbol
-import qualified Language.C.Pretty as P
 import Language.C.Quote.C
 import qualified Language.C.Syntax as C
 import Text.PrettyPrint.HughesPJ 
@@ -48,20 +37,15 @@ import Ziria.BasicTypes.AstExpr
 import Ziria.BasicTypes.AstComp
 import Ziria.BasicTypes.AstUnlabelled
 import Ziria.BasicTypes.Outputable
-import Ziria.BasicTypes.PpComp
-import Ziria.BasicTypes.PpExpr
 import Ziria.Codegen.CgCmdDom
 import Ziria.Codegen.CgExpr
 import Ziria.Codegen.CgFun
 import Ziria.Codegen.CgHeader
-import Ziria.Codegen.CgLUT
 import Ziria.Codegen.CgMonad
-import Ziria.Codegen.CgRuntime
 import Ziria.Codegen.CgTypes
 import Ziria.Codegen.CgValDom
 import Ziria.ComputeType.CtExpr
 import Ziria.ComputeType.CtComp
-import qualified Ziria.Utils.GenSym as GS
 
 import Opts
 

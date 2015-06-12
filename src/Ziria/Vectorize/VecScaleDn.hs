@@ -19,23 +19,13 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Ziria.Vectorize.VecScaleDn ( doVectCompDD ) where
 
-import Control.Applicative ( (<$>) )
-import Control.Monad ( when, unless )
 import Control.Monad.State
-import Data.List as M
-import Data.Maybe ( isJust )
-import qualified Data.Set as S
-import Text.PrettyPrint.HughesPJ
 
 import Ziria.BasicTypes.AstComp
 import Ziria.BasicTypes.AstExpr
 import Ziria.BasicTypes.AstFM
 import Ziria.BasicTypes.AstUnlabelled
-import Ziria.BasicTypes.PpComp
-import Ziria.BasicTypes.Outputable
 import Ziria.ComputeType.CtComp
-import Ziria.ComputeType.CtExpr 
-import qualified Ziria.Utils.GenSym as GS
 import Ziria.Vectorize.CardAnalysis
 import Ziria.Vectorize.VecM
 import Ziria.Vectorize.VecSF

@@ -20,11 +20,6 @@
 
 module Ziria.Codegen.CgHeader where
 
-import qualified Language.C.Syntax as C
-import Language.C.Quote.C
-
-
-
 sKIP  = 0x0
 yIELD = 0x1
 dONE  = 0x3

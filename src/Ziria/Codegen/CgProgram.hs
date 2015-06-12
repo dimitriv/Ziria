@@ -26,39 +26,22 @@ module Ziria.Codegen.CgProgram ( codeGenProgram ) where
 
 import Prelude
 
-import Control.Monad ( when )
-import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Writer
-import qualified Data.DList as DL
-import qualified Data.List
-import Data.List ( nub )
 import Data.Loc
-import qualified Data.Map as M
 import Data.Maybe
-import Data.Monoid
-import qualified Data.Set as S
-import qualified Data.Symbol
 import qualified Language.C.Syntax as C
 import Language.C.Quote.C
-import qualified Language.C.Pretty as P
-import Text.PrettyPrint.HughesPJ
 
 import Ziria.BasicTypes.AstExpr
 import Ziria.BasicTypes.AstComp
-import Ziria.BasicTypes.Outputable
-import Ziria.BasicTypes.PpComp
-import Ziria.BasicTypes.PpExpr
 import Ziria.Codegen.CgHeader
 import Ziria.Codegen.CgRuntime
 import Ziria.Codegen.CgMonad
 import Ziria.Codegen.CgTypes
-import Ziria.Codegen.CgExpr
-import Ziria.Codegen.CgLUT
 import Ziria.Codegen.CgOpt
 import qualified Ziria.Codegen.CgSetupThreads as ST
 import Ziria.ComputeType.CtComp
 import qualified Ziria.Pipeline.PassPipeline as PP
-import qualified Ziria.Utils.GenSym as GS
 
 import Opts
 

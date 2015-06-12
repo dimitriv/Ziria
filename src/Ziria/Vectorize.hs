@@ -25,24 +25,18 @@ module Ziria.Vectorize where
 
 import Control.Applicative  ( (<$>) )
 import Control.Monad.State
-import Data.List as M
 import Data.Loc
 import qualified Data.Map  as Map
-import Data.Functor.Identity
 import Data.Maybe ( fromJust )
 import Data.IORef
-import qualified Data.Set as S
-import Debug.Trace
 import qualified Data.Traversable as T
 import Text.PrettyPrint.HughesPJ
 
 import Ziria.BasicTypes.AstExpr
 import Ziria.BasicTypes.AstComp
-import Ziria.BasicTypes.AstFM
 import Ziria.BasicTypes.AstUnlabelled
 import qualified Ziria.BasicTypes.AstLabelled as AstL
 import Ziria.BasicTypes.Outputable
-import Ziria.BasicTypes.PpComp
 import Ziria.ComputeType.CtComp
 import Ziria.Utils.Utils
 import qualified Ziria.Utils.GenSym as GS

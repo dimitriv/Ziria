@@ -22,19 +22,10 @@
 module Ziria.Optimize.AutoLUT (runAutoLUT) where
 
 import Control.Applicative
-import qualified Data.Map as Map
-import Data.Map (Map)
-import Data.Monoid
-import Text.PrettyPrint.HughesPJ 
 
-import qualified Ziria.Analysis.DataFlow as DataFlow
-import qualified Ziria.Analysis.RangeAnal as RangeAnal
 import Ziria.BasicTypes.AstComp
 import Ziria.BasicTypes.AstExpr
 import Ziria.BasicTypes.AstUnlabelled ( eLUT )
-import Ziria.BasicTypes.Outputable
-import Ziria.BasicTypes.PpExpr
-import Ziria.Codegen.CgLUT
 import Ziria.Codegen.LUTAnalysis 
 import Ziria.Utils.GenSym
 import Ziria.Utils.Orphans ()

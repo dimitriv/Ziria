@@ -20,23 +20,11 @@
 
 module Ziria.Codegen.CgSetupThreads ( thread_setup, thread_setup_shim ) where
 
-import qualified Data.Loc
-import qualified Data.Map as M
-import Data.Maybe
-import qualified Data.Symbol
-import qualified Language.C.Syntax as C
 import Language.C.Quote.C
-import qualified Language.C.Pretty as P
-import Text.PrettyPrint.HughesPJ 
+import qualified Language.C.Syntax as C
 
 import Ziria.BasicTypes.AstExpr
-import Ziria.BasicTypes.AstComp
-import Ziria.BasicTypes.PpComp
-import Ziria.Codegen.CgHeader
 import Ziria.Codegen.CgTypes
-import Ziria.Codegen.CgMonad
-import Ziria.Codegen.CgOpt
-import qualified Ziria.Utils.GenSym as GS
 
 thread_setup :: Int      -- affinity mask
              -> String   -- name of the Ziria module
