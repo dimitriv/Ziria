@@ -17,15 +17,20 @@
    permissions and limitations under the License.
 -}
 
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE ExtendedDefaultRules #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE RebindableSyntax #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# OPTIONS_GHC -Wall #-}
-
-{-# LANGUAGE RebindableSyntax, 
-             FlexibleInstances, 
-             MultiParamTypeClasses, QuasiQuotes, GADTs, 
-             TypeFamilies, TypeOperators, ExistentialQuantification,
-             FunctionalDependencies, FlexibleContexts,
-             ExtendedDefaultRules, 
-             EmptyDataDecls #-}
 
 -- | Free monads for convenient construction of AST terms
 --

@@ -18,6 +18,7 @@
 -}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans -fno-warn-name-shadowing #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE PatternGuards #-}
 -- | Pretty-printing type classes instances
 module Ziria.BasicTypes.PpComp
   ( ppCompPipeline

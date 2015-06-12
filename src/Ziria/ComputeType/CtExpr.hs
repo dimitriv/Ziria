@@ -18,6 +18,7 @@
 -}
 -- | Compute the types of expressions
 {-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE RecordWildCards #-}
 module Ziria.ComputeType.CtExpr (ctExp, ctFun, ctDerefExp) where
 

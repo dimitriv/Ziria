@@ -17,6 +17,7 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE RecordWildCards #-}
 -- | Compute the type of computations
 module Ziria.ComputeType.CtComp ( ctComp

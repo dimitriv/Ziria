@@ -16,7 +16,11 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE  QuasiQuotes, GADTs, ScopedTypeVariables #-}
+{-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fwarn-unused-binds -Werror #-}
 
 module Ziria.Codegen.CgCall

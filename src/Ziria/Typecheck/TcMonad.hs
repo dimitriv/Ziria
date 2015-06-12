@@ -27,7 +27,11 @@
 --   it might mean we might tell the user "cannot unify Foo with Baz" while
 --   we should really say "cannot unify Foo with Bar or Baz"
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleInstances, ExistentialQuantification, RecordWildCards #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE RecordWildCards #-}
 module Ziria.Typecheck.TcMonad (
     -- * TcM monad
     TcM -- opaque

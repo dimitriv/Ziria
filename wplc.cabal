@@ -26,9 +26,6 @@ Executable wplc
     Ziria.Language.Ziria.Parser.Lexer
     Ziria.Language.Ziria.Parser.Parser
 
-  default-extensions: DoAndIfThenElse PatternGuards
-  other-extensions: TemplateHaskell, QuasiQuotes
-
   build-depends:
     array                  >= 0.2   && < 0.6,
     base                   >= 4     && < 5,

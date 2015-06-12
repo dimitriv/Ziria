@@ -17,7 +17,10 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall #-}
-{-# LANGUAGE FlexibleInstances, DeriveFunctor, DeriveFoldable #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE PatternGuards #-}
 module Ziria.Typecheck.TcUnify (
     -- * Unification
     Unify

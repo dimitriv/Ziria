@@ -17,7 +17,9 @@
    permissions and limitations under the License.
 -}
 
-{-# LANGUAGE RecordWildCards, BangPatterns #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Ziria.Vectorize where
 

@@ -16,9 +16,13 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE DeriveGeneric, DeriveDataTypeable, MultiParamTypeClasses, 
-             FunctionalDependencies, StandaloneDeriving, 
-             GeneralizedNewtypeDeriving, FlexibleInstances #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -Wall -fno-warn-unused-do-bind -fno-warn-orphans #-}
 
 -- | Range analysis

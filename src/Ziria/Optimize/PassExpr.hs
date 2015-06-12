@@ -17,8 +17,14 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall -Werror #-}
-{-# LANGUAGE ScopedTypeVariables, RecordWildCards, 
-    GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes, DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Ziria.Optimize.PassExpr (
    passForUnroll
  , passElimUnused
