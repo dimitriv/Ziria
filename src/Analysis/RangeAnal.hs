@@ -59,18 +59,35 @@ import Text.Show.Pretty (PrettyVal)
 
 {- The goal of the Range analysis
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   Given an expression, calculate:
-      - for every array variable
-          1) an overapproximation of the input range
-          2) an exact output range or don't know (over or under approx not good)
-   Later we will deal with structs too. -}
+   Given an expression, calculate for every array variable:
+     1) an overapproximation of the input range
+     2) an exact output range or don't know (over or under approx not good)
+   Later we will deal with structs too.
+-}
 
-{----------------------------------------------------------------------
+{-------------------------------------------------------------------------------
   Intervals
-----------------------------------------------------------------------}
+-------------------------------------------------------------------------------}
+
+data IVal v = IUnknown | IKnown v
+  deriving (Generic, Typeable, Data, Eq, Show, Ord)
+
+instance Monad IVal where
+  return a = IKnown a
+  m >>= f  = case m of 
+    IUnknown -> IUnknown
+    IKnown x -> f x
+
+iv_join_discrete :: Eq v => IVal v -> IVal v -> IVal v
+iv_join_discrete IUnknown _ = IUnknown
+iv_join_discrete _ IUnknown = IUnknown
+iv_join_discrete (IKnown v1) (IKnown v2)
+  | v1 == v2  = IKnown v1
+  | otherwise = IUnknown
 
 -- | Intervals
-data Iv = Iv Integer Integer
+data Iv = Iv Integer Integer  -- i1 <= i2
+        | IvEmpty
   deriving (Generic, Typeable, Data, Eq, Ord, Show)
 
 instance NFData Iv where
@@ -117,7 +134,7 @@ stretch precise (a,b) (c,d)
    -----------c-----a----b-------------d
    -----------c-----a----d-------------b
    -----------c-----d-----a------------b  <- bad 
--------------------------------------------------}
+----------------------------------------------------------------------}
 
 
 {----------------------------------------------------------------------
@@ -128,28 +145,11 @@ data Range
   = RInt  (IVal Integer)   -- integers
   | RBool (IVal Bool)      -- booleans
   | RArr Interval Interval -- arrays
-  | ROther                 -- other 
+  | ROther                 -- other but also equivalent to bottom
   deriving (Generic, Typeable, Data, Eq, Show, Ord)
-
-data IVal v = IUnknown | IKnown v
-  deriving (Generic, Typeable, Data, Eq, Show, Ord)
-
-instance Monad IVal where
-  return a = IKnown a
-  m >>= f  = case m of 
-    IUnknown -> IUnknown
-    IKnown x -> f x
 
 instance Outputable Range where 
   ppr r = text (show r)
-
-iv_join_discrete :: Eq v => IVal v -> IVal v -> IVal v
-iv_join_discrete IUnknown _ = IUnknown
-iv_join_discrete _ IUnknown = IUnknown
-iv_join_discrete (IKnown v1) (IKnown v2)
-  | v1 == v2  = IKnown v1
-  | otherwise = IUnknown
-
 
 rjoin :: Range -> Range -> Range
 rjoin (RInt iv1)  (RInt iv2)
@@ -245,23 +245,27 @@ instance ValDom Range where
 
 type RngMap = NameMap Ty Range
 
-{- ************* HERE *************************
-instance POrd Interval where 
-  IBot       `pleq` _r         = True
-  IRng l1 h1 `pleq` IRng l2 h2 = l2 <= l1 && h1 <= h2
-  _          `pleq` ITop       = True
-  _          `pleq` _          = False
+instance POrd Integer where 
+ i1 `pleq` i2 = i1 <= i2
+
+instance POrd v => POrd (IVal v) where
+  _           `pleq` IUnknown    = True
+  (IKnown v1) `pleq` (IKnown v2) = v1 `pleq` v2
+
+instance POrd Iv where 
+  (Iv i1 i2) `pleq` (Iv j1 j2) = (i1 `pleq` j1) && (i2 `pleq` j2)
 
 instance POrd Range where 
   RInt intv1   `pleq` RInt intv2   = intv1 `pleq` intv2
   ROther       `pleq` ROther       = True
   RArr ri1 wi1 `pleq` RArr ri2 wi2 = ri1 `pleq` ri2 && wi1 `pleq` wi2
-  r1 `pleq` r2  = error ("POrd Range:" ++ show r1 ++ " <= " ++ show r2)
-
+  ROther       `pleq` _            = True 
 
 joinRngMap :: RngMap -> RngMap -> RngMap
 joinRngMap rm1 rm2 
-  = neUnionWith rm1 rm2 (\_ r1 r2 -> rjoin r1 r2)
+  = neUnionWithMb rm1 rm2 (\_ mbr1 r2 -> rjoin (aux mbr1) r2)
+  where aux Nothing  = ROther
+        aux (Just r) = r
 
 newtype Rng a = Rng (StateT RngMap (ErrorT Doc IO) a)
   deriving ( Functor
@@ -272,45 +276,8 @@ newtype Rng a = Rng (StateT RngMap (ErrorT Doc IO) a)
            , MonadIO
            )
 
-hasChanged :: RngMap -> RngMap -> EId -> Bool
-hasChanged rm1 rm2 x =
-  case (neLookup x rm1, neLookup x rm2) of
-    (Nothing,Nothing)  -> False
-    (Nothing,Just {})  -> True
-    (Just {},Nothing)  -> True
-    (Just r1, Just r2) -> not (r1 `pleq` r2 && r2 `pleq` r1)
-
-blowRange :: Range -> Range
-blowRange (RInt {}) = RInt ITop
-blowRange (RArr {}) = RArr ITop ITop
-blowRange ROther    = ROther
-
-blowTrue :: (EId -> Bool) -> RngMap -> RngMap
--- Blow the range of all those variables that satisfy the condition
-blowTrue f rm = neFromList (map blow rmelems)
-  where rmelems = neToList rm
-        blow (x,r) = if f x then (x, blowRange r) else (x, r)
-
-instance AbsInt Rng RngVal where
-  aSkip = return $ RngVal ROther Nothing
-
-  aWiden (RngVal _r Nothing) m1 m2 = aJoin m1 m2
-  aWiden (RngVal _r (Just se)) m1 m2 = do
-    let fvs = S.elems $ symExpFVs se
-    (v1, post1) <- inCurrSt m1
-    (v2, post2) <- inCurrSt m2
-
-    -- Heuristic: if any of the ctrl flow variables has changed then
-    -- just join and keep going, else there's a good chance we have
-    -- stabilized, so blow all those that did change.
-    let post = if any (hasChanged post1 post2) fvs
-               then joinRngMap post1 post2
-               else blowTrue (hasChanged post1 post2)
-                             (joinRngMap post1 post2)
-
-    put post
-    return (rngValJoin v1 v2)
-
+instance AbsInt Rng Range where 
+  aSkip = return ROther
 
   aJoin m1 m2 = do
 
@@ -319,7 +286,7 @@ instance AbsInt Rng RngVal where
 
     let post = joinRngMap post1 post2
 
-{- 
+{- Debugging: 
     liftIO $ print $
              vcat [ text "aJoin"
                   , nest 2 $
@@ -337,198 +304,94 @@ instance AbsInt Rng RngVal where
 -}
 
     put post
-    return (rngValJoin v1 v2)
+    return (v1 `rjoin` v2)
 
-  aWithFact (RngVal _r Nothing) action 
-    = action
-  aWithFact (RngVal _r (Just s)) action
-    = do pre <- get 
-{- 
-         liftIO $ print (text "aWithFact" <+> text (show s))
-         liftIO $ print (nest 2 $ text "pre-fact:")
-         liftIO $ print (nest 2 $ ppr pre)
--}
-         let pre' = pushFact s pre
-{-
-         liftIO $ print (nest 2 $ text "post-fact:")
-         liftIO $ print (nest 2 $ ppr pre')
--}
-         put pre'
-         action
-
-pushFact :: SymExp -> RngMap -> RngMap
-pushFact (SymBinOp bop  (SymVar x) (SymVal (VInt i)))
-  = neUpdate x (varop bop i) 
-pushFact (SymBinOp bop (SymVal (VInt i)) (SymVar x))
-  = neUpdate x (varop (sym_bop bop) i)
-  where sym_bop Lt  = Gt
-        sym_bop Gt  = Lt
-        sym_bop Leq = Geq
-        sym_bop Geq = Leq
-        sym_bop Eq  = Eq
-        sym_bop Neq = Neq
-        sym_bop b   = error ("sym_bop:" ++ show b)
-pushFact _ = id
+  aWithFact (RBool (IKnown True))  action = action
+  aWithFact (RBool (IKnown False)) action = aSkip
+  aWithFact _ action                      = action
 
 
-varop :: BinOp -> Integer -> Maybe Range -> Maybe Range
-varop _bop _i Nothing  = Nothing
-varop bop i (Just rng) = Just $ restrict_range bop i rng
-
-restrict_range :: BinOp -> Integer -> Range -> Range
-restrict_range bop i (RInt intv) = RInt $ restrict_ival bop i intv
-restrict_range _bop _i _r        = error "restrict_range"
-
-restrict_ival :: BinOp -> Integer -> Interval -> Interval
-restrict_ival Leq i (IRng rl rh)
-  | i < rl = IBot
-  | i < rh = IRng rl i
-  | otherwise = IRng rl rh
-restrict_ival Geq i (IRng rl rh)
-  | i > rh    = IBot
-  | i > rl    = IRng i rh
-  | otherwise = IRng rl rh
-restrict_ival Lt i (IRng rl rh) 
-  = restrict_ival Leq (i-1) (IRng rl rh)
-restrict_ival Gt i (IRng rl rh) 
-  = restrict_ival Geq (i+1) (IRng rl rh)
-restrict_ival Eq i (IRng rl rh) 
-  | i <= rh && i >= rl = IRng i i
-  | otherwise = IBot
-restrict_ival _ _ (IRng {}) = ITop
-restrict_ival _ _ IBot      = IBot
-restrict_ival Eq i ITop     = IRng i i
-restrict_ival _ _ _         = ITop
-
-
-derefArr :: EId -> Range -> LengthInfo 
-         -> (Range -> Range -> Range)  -- how to update array rng 
-         -> Rng RngVal
-derefArr x idx_range LISingleton upd_arr_rng = do 
-  s <- get
---  liftIO $ print (text "derefArr, s =" <+> ppr s)
-  let rng' = case neLookup x s of 
-                Nothing -> upd_arr_rng (RArr IBot IBot) idx_range
-                Just arr_range -> upd_arr_rng arr_range idx_range
---  liftIO $ print (text "-> rng' =" <+> ppr rng')
-  put $ neUpdate x (\_ -> Just rng') s
-  let TArray _ base_ty = nameTyp x
-  return $ RngVal (rangeTop base_ty) Nothing
-derefArr x idx_range (LILength n) upd_arr_rng = do 
-  s <- get
-  let idx_range' = rstretch idx_range (n-1)
-  let rng' = case neLookup x s of 
-                Nothing -> upd_arr_rng (RArr IBot IBot) idx_range'
-                Just arr_range -> upd_arr_rng arr_range idx_range'
-  put $ neUpdate x (\_ -> Just rng') s
-  return $ RngVal (RArr ITop ITop) Nothing
-derefArr _x _idx_range (LIMeta {}) _upd_arr_rng 
-  = fail "derefArr: LIMeta!"
-
-updArrRdRng :: Range -> Range -> Range
-updArrRdRng arr_range idx_range = 
-  case (arr_range, idx_range) of 
-    (RArr rdintv wrintv, RInt i) -> RArr (rdintv `ijoin` i) wrintv
-    o -> error ("updArrRdRng: " ++ show o)
-
-updArrWrRng :: Range -> Range -> Range
-updArrWrRng arr_range idx_range = 
-  case (arr_range, idx_range) of 
-    (RArr rdintv wrintv, RInt i) -> RArr rdintv (wrintv `ijoin` i)
-    o -> error ("updArrWrRng: " ++ show o)
-
-
-data RdWr = Rd | Wr Range
-
-arrRdWrRng :: RdWr -> Int -> Range
-arrRdWrRng Rd     n = RArr (IRng 0 (fromIntegral n - 1)) IBot 
-arrRdWrRng (Wr _) n = RArr IBot (IRng 0 (fromIntegral n - 1))
-
-
-varSetRng :: EId -> Range -> Rng RngVal
+varSetRng :: EId -> Range -> Rng Range
 varSetRng x range = do
   s <- get
   put $ neUpdate x upd s
-  return $ RngVal range (Just $ SymVar x)
-  where upd _ = Just range
-
-varJoinRng :: EId -> Range -> Rng RngVal
-varJoinRng x range = do
-  s <- get
-  put $ neUpdate x upd s
-  return $ RngVal range (Just $ SymVar x)
-  where upd Nothing  = Just range
-        upd (Just r) = Just (r `rjoin` range)
+  return range
+  where upd _ = range
 
 varGetRng :: EId -> Rng (Maybe Range)
 varGetRng x = get >>= (return . neLookup x)
 
-derefVar :: EId -> RdWr -> Rng RngVal
-derefVar x rdwr = do
-  case nameTyp x of
-    TArray (Literal n) _
-       -> varJoinRng x $ arrRdWrRng rdwr n
-    TArray _meta _
-       -> varJoinRng x $ RArr ITop ITop -- Unknown!
-    TInt {}
-       -> case rdwr of
-            Rd -> do m <- varGetRng x
-                     -- liftIO $ print (text "derefVar(rd): " <+> ppr x)
-                     -- liftIO $ print (text "current range:" <+> text (show m))
-                     let r'    = case m of { Nothing -> RInt ITop; Just r -> r }
-                     let rval' = RngVal r' symx 
-                     s <- get
-                     put $ neUpdate x (\_ -> Just r') s  -- update the range of variable
-                     return rval'
+derefVarRead :: EId -> Rng Range
+derefVarRead x = do 
 
-            Wr r -> do varSetRng x r
-              -- liftIO $ print (text "derefVar(wr):" <+> ppr x)
-              -- s <- get
-              -- liftIO $ print (text "new range   :" <+> ppr (neLookup x s))
-                       return (RngVal r symx)
-    _other
-       -> varJoinRng x $ ROther
-  where symx = Just (SymVar x)
+updArrRdRng :: EId -> Interval -> Maybe Range -> Rng Range
+updArrRdRng x ival Nothing =
+  let new_range = RArr ival IvEmpty
+  in varSetRng x new_range >> return new_range
+updArrRdRng x ival (Just (RArr riv wiv)) = 
+  let new_range = RArr (istretch False riv ival) wiv 
+  in varSetRng x new_range >> return new_range
+updArrRdRng x ival (Just rother) = return rother
 
+updArrWrRng :: EId -> Interval -> Maybe Range -> Rng ()
+updArrWrRng x ival Nothing = varSetRng $ RArr IvEmpty ival
+updArrWrRng x ival (Just (RArr riv wiv))
+  = varSetRng x $ RArr riv (istretch True wiv ival)
+updArrWrRng x ival (Just rother) = return ()
 
-dbgRngSt :: Doc -> Rng a -> Rng a
-dbgRngSt _d action = do
---  liftIO $ print d
---  pre <- get
---  liftIO $ print $ vcat [ nest 2 $ text "Pre:",  nest 2 $ ppr pre  ]
-  x <- action
---  post <- get 
---  liftIO $ print $ vcat [ nest 2 $ text "Post:", nest 2 $ ppr post ]
-  return x
+derefVarRead :: EId -> Rng Range
+derefVarRead x = do 
+  case nameType x of 
+    TInt {}  -> maybe (RInt IUnknown) id  <$> varGetRng x
+    TBool {} -> maybe (RBool IUnknown) id <$> varGetRng x
+    TArray (Literal n) _ -> varGetRng x >>= updArrRdRng x (IKnown (Iv 0 n))
+    TArray _ _           -> varGetRng x >>= updArrRdRng x IUnknown 
+     _other -> maybe ROther id <$> varGetRng x 
+
+derefVarWrite :: EId -> Range -> Rng ()
+derefVarWrite x rng = do 
+  case nameType x of
+    TInt {}  -> setVarRng x rng
+    TBool {} -> setVarRng x rng
+    TArray (Literal n) _ -> varGetRng x >>= updArrWrRng x (IKnown (Iv 0 n))
+    TArray _ _           -> varGetRng x >>= updArrWrRng x IUnknown 
+     _other -> return ()
+
+sliceToInterval :: Range -> LengthInfo -> Interval
+sliceToInterval ROther _ = IUnknown
+sliceToInterval (RInt IUnknown) _ = IUnknown
+sliceToInterval (RInt (IKnown i)) (LILength j)  = IKnown (Iv i (i+j-1))
+sliceToInterval (RInt (IKnown i)) (LISingleton) = IKnown (Iv i i)
+sliceToInterval _ _ = IUnknown
 
 instance CmdDom Rng RngVal where
 
-  aDerefRead lval = dbgRngSt (text $ "aDerefRead, lval= " ++ show lval) (go lval)
+  aDerefRead lval 
+     = let dbg = text $ "aDerefRead, lval = " ++ show lval
+       in dbgRngSt dbg (go lval)
      where go d
-             | GDArr (GDVar x) (RngVal ridx _) linfo <- d
-             = derefArr x ridx linfo updArrRdRng
-             | GDVar x <- d            = derefVar x Rd
-             | GDArr d' _ _ <- d
-             = do _ <- go d'
-                  return $ rngValTop (ctDerefExp d)
-             | GDProj d' _ <- d
-             = do _ <- go d'
-                  return $ rngValTop (ctDerefExp d)
-             | otherwise = error "aDerefRead"
+             | GDVar x <- d = derefVarRead x
+             | GDArr (GDVar x) ridx linfo <- d
+             , let rdival = sliceToInterval ridx linfo
+             = updArrRdRng x ival =<< varGetRng x
+             | GDArr d' _ _ <- d = go d' >> rangeTop (ctDerefExp d)
+             | GDProj d' _ <- d  = go d' >> rangeTop (ctDerefExp d)
+             | otherwise         = error "aDerefRead"
 
   aAssign lval r 
-     = dbgRngSt (vcat [ text $ "aAssign, lval= " ++ show lval
-                      , text $ "rhs range, r = " ++ show r ])
-                (go lval r)
-     where go d (RngVal rng _symexp)
-              | GDArr (GDVar x) (RngVal ridx _) linfo <- d
-              = void $ derefArr x ridx linfo updArrWrRng
-              | GDVar x <- d 
-              = void $ derefVar x (Wr rng)
-              | GDArr d' _ _ <- d
-              = void $ go d' (RngVal (error "aAssign(A)") (error "aAssign(B)"))
-              | GDProj d' _ <- d
-              = void $ go d' (RngVal (error "aAssign(C)") (error "aAssign(D)"))
+     = let dbg = vcat [ text $ "aAssign, lval= " ++ show lval
+                      , text $ "rhs range, r = " ++ show r 
+                      ]
+       in dbgRngSt dbg (go lval r)
+     where go d r 
+              | GDVar x <- d = derefVarWrite x r
+              | otherwise    = effects d 
+           effects d
+              | GDArr (GDVar x) ridx linfo <- d
+              , let wdival = sliceToInterval ridx linfo
+              = updArrWrRng x wdival =<< varGetRng x
+              | GDArr d' _ _ <- d = effects d'
+              | GDProj d' _ <- d  = effects d'
               | otherwise = error "aAssign"
 
   withImmABind nm rng action 
@@ -553,6 +416,7 @@ instance CmdDom Rng RngVal where
 
 
 
+
 {------------------------------------------------------------------------
   Running the analysis
 ------------------------------------------------------------------------}
@@ -574,8 +438,5 @@ varRanges _dfs e =
       (rngval, rmap) <- runRng m
       return (rmap, av_range rngval)
   where 
-    action :: AbsT Rng RngVal
+    action :: AbsT Rng Range
     action = absEvalRVal e
-
-
--}
