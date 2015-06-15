@@ -617,7 +617,7 @@ unsigned int parse_dbg_uint8(char *dbg_buf, uint8 *target)
 {
 	char *s = NULL;
 	unsigned int i = 0;
-	long val;
+	unsigned long val;
 
   char* trailing_comma = delete_trailing_comma(dbg_buf);
 	s = strtok(dbg_buf, ",");
@@ -628,24 +628,24 @@ unsigned int parse_dbg_uint8(char *dbg_buf, uint8 *target)
 		exit(1);
 	}
 
-	val = strtol(s, NULL, 10);
+	val = strtoul(s, NULL, 10);
 	if (errno == EINVAL)
 	{
 		fprintf(stderr, "Parse error when loading debug file.");
 		exit(1);
 	}
 
-	target[i++] = (num8)val;
+	target[i++] = (uint8)val;
 
 	while (s = strtok(NULL, ","))
 	{
-		val = strtol(s, NULL, 10);
+		val = strtoul(s, NULL, 10);
 		if (errno == EINVAL)
 		{
 			fprintf(stderr, "Parse error when loading debug file.");
 			exit(1);
 		}
-		target[i++] = (num8)val;
+		target[i++] = (uint8)val;
 	}
 
   restore_trailing_comma(trailing_comma);

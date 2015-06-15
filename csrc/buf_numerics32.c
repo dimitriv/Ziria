@@ -602,7 +602,7 @@ unsigned int parse_dbg_uint32(char *dbg_buf, uint32 *target)
       exit(1);
   }
 
-  target[i++] = val; 
+  target[i++] = (uint32)val; 
 
   while (s = strtok(NULL, ",")) 
   {
@@ -612,7 +612,7 @@ unsigned int parse_dbg_uint32(char *dbg_buf, uint32 *target)
 		  fprintf(stderr,"Parse error when loading debug file.");
 		  exit(1);
       }
-	  target[i++] = val;
+	  target[i++] = (uint32)val;
   }
 
   restore_trailing_comma(trailing_comma);
