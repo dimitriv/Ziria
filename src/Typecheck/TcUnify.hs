@@ -132,7 +132,8 @@ instance Unify Ty where
       go TDouble        TDouble        = return ()
       go TBool          TBool          = return ()
       go (TInt bw1 sg1) (TInt bw2 sg2) | sg1 == sg2 = unify p bw1 bw2
-      go (TInt _ sg1)   (TInt _ sg2)   | sg1 /= sg2 = panicStr "Signedness mismatch"
+      go (TInt _ sg1)   (TInt _ sg2)
+        = checkWith p (sg1 == sg2) (text "Signedness mismatch")
       go (TArray n ty1) (TArray m ty2) = unify p n m >> go ty1 ty2
 
       go (TBuff (IntBuf ta)) (TBuff (IntBuf tb)) = go ta tb
