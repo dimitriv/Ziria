@@ -97,7 +97,7 @@ mkAutomaton dfs chans comp = go chans (unComp comp)
     go chans (Take1 t) =
       let inp = [in_chan chans]
           outp = maybeToList (ctrl_chan chans)
-          atom = maybe (discardAtom t) (\_ -> idAtom t)
+          atom = maybe (discardAtom t) (\_ -> idAtom t) (ctrl_chan chans)
       in do
         (node,_) <- mkNode (Action $ WiredAtom inp outp atom)
         return $ singletonAutomaton node
@@ -112,29 +112,19 @@ mkAutomaton dfs chans comp = go chans (unComp comp)
       return $ singletonAutomaton node
 
     go chans (EmitN x) = fail "not implemented" 
-
     
     go chans (Return e) = do
       let watom = expToWiredAtom e (ctrl_chan chans)
       (node,_) <- mkNode (Action watom)
       return $ singletonAutomaton node
 
-
     go chans (NewVar x_spec c) = mkAutomaton dfs chans c -- NOP for now
-
-    -- go chans (Bind x c) = mkAutomaton dfs (chans { ctrl_chan = Just x }) c
 
     go chans (Bind mbx c1 c2) = do
       a1 <- mkAutomaton dfs (chans { ctrl_chan = mbx }) c1
       a2 <- mkAutomaton dfs chans c2
       concatAutomata a1 a2
 
-    -- go chans 
-
-    -- go chans (Seq c1 c2) = do
-    --   a1 <- mkAutomaton dfs chans c1
-    --   a2 <- mkAutomaton dfs chans c2
-    --   concatAutomata a1 a2
 
     go chans (Par _ c1 c2) = fail "not implemented" 
 
@@ -145,7 +135,6 @@ mkAutomaton dfs chans comp = go chans (unComp comp)
       let edges = [(node,autom_init a1,()), (node, autom_init a2,())] 
       modify (G.insEdges edges)
       return $ Automaton node (Set.union (autom_final a1) (autom_final a2))
-
 
     go chans (RepeatN n c) = do
       c_autom <- mkAutomaton dfs chans c
