@@ -30,7 +30,11 @@ data Comp a b
            , compInfo :: a }
 
 data Exp0 b
-  = ExpApp { expAppFun :: SymFun, expAppArgs :: [Var] }
+  = ExpApp { expAppFun :: FunName, expAppArgs :: [Var] }
+
+
+
+
 
 data Comp0 a b
   = Take1 Ty
@@ -58,15 +62,10 @@ data Comp0 a b
   -- | Mitigate String  -- just for debugging
   --         Ty Int Int
 
-data SymFun a = SFFun FunName
-              | SFId Ty
-              | SFDiscard Ty 
+data SymFun = SFFun FunName
+            | SFId Ty
+            | SFDiscard Ty 
 
-
-symFunTy :: SymFun a -> Ty
-symFunTy (SFFun fn)     = nameTyp fn
-symFunTy (SFId ty )     = TArrow [(GArgTy ty Imm)] ty
-symFunTy (SFDiscard ty) = 
 
 -- Notes. Here we may want to add:
 --   SFCompose (SymFun a) (SymFun a) ...

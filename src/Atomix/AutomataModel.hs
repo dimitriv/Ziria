@@ -3,59 +3,64 @@ module AutomataModel where
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Maybe (maybeToList)
+import qualified Data.List as List
 
 import Data.Graph.Inductive.Graph  ( Node )
 import qualified Data.Graph.Inductive.Graph  as G
 import Data.Graph.Inductive.PatriciaTree as G
+
+import qualified System.IO as IO
 
 import Control.Exception
 import Control.Monad.Reader
 import Control.Monad.State
 
 import AtomComp -- simplified Ziria model
-import AstExpr (nameTyp)
+import AstExpr (nameTyp, name)
 import Opts
 
 
-type LNode = G.LNode NodeLabel
 type Chan = Var
 
-data AtomixFun a 
-  = AtomixFun { in_tys   :: [Ty]
-              , out_tys  :: [Ty]
-              , fun_code :: a
-              }
+type LNode atom = G.LNode (NodeLabel atom)
 
-
-data NodeLabel
+data NodeLabel atom
   = NodeLabel { node_id   :: Node
-              , node_kind :: NodeKind
+              , node_kind :: NodeKind atom
               }
 
-data NodeKind
-  = Action { action_in     :: [Chan]
-           , action_out    :: [Chan] -- NB: includes the 'return' channel
-           , action_code   :: AtomixFun
-           }
-
-  | Loop { loop_times :: Maybe Int }
- 
- 
-  | Branch { branch_in   :: Set Chan 
-           , branch_code :: SymFun
-           , branch_next :: (Node,Node)
-           }
+data NodeKind atom
+  = Action (WiredAtom atom) 
+  | StaticLoop  { iterations :: Int, loop_body :: Automaton }
+  | Branch { branch_in   :: Chan, branch_next :: (Node,Node) }
 
 data Automaton
   = Automaton { autom_init  :: Node
               , autom_final :: Set Node }
 
-type ZirGraph = Gr NodeLabel ()
+type ZirGraph atom = Gr (NodeLabel atom) ()
 
-type GraphM a = StateT ZirGraph (ReaderT (CompEnv ()) IO) a
+type GraphM atom a = StateT (ZirGraph atom) (ReaderT (CompEnv ()) IO) a
+
+data WiredAtom atom = WiredAtom { wires_in  :: [Var]
+                                , wires_out :: [Var] 
+                                , the_atom  :: atom }
+
+class Atom a where
+  
+  atomInTy  :: a -> [Ty]
+  atomOutTy :: a -> [Ty] 
+
+  -- Constructors of atoms  
+  idAtom      :: Ty -> a
+  discardAtom :: Ty -> a
+  noOpAtom    :: a
+  
+  -- Getting (wired) atoms from expressions 
+  expToWiredAtom :: Exp b -> Maybe Var -> WiredAtom a
 
 
-mkNode :: NodeKind -> GraphM LNode
+mkNode :: NodeKind code -> GraphM code (LNode code)
 mkNode kind = do
   g <- get
   let [node] = G.newNodes 1 g
@@ -63,48 +68,17 @@ mkNode kind = do
   put (G.insNode lnode g)
   return lnode
 
---mkDummyNode :: GraphM LNode
---mkDummyNode = mkNode $ Action Set.empty Set.empty (eint32 0) []
-
---mkDummyAutomaton :: GraphM Automaton
---mkDummyAutomaton = do
---  (node,_) <- mkDummyNode
---  return $ Automaton node (Set.singleton node)
+mkNoOpNode :: Atom code => GraphM code (LNode code)
+mkNoOpNode = mkNode (Action $ WiredAtom [] [] noOpAtom)
 
 singletonAutomaton :: Node -> Automaton
 singletonAutomaton node = Automaton node (Set.singleton node)
 
---extendChan :: (EId,Chan) -> GraphM a -> GraphM a
---extendChan (x,c) = local add_bnd
---  where add_bnd (ZirEnv binds sym) = ZirEnv ((x,c):binds) sym
 
-----lookupChan :: EId -> GraphM Chan
-----lookupChan x = do
-----   env <- ask
-----   case lookup x (chan_binds env) of
-----      Nothing   -> fail ("Automata generation: unbound variable " ++ (show x))
-----      Just chan -> return chan
-
----- TODO: use proper exception
---lookupChan :: ZirEnv -> EId -> Chan
---lookupChan env x =
---   case lookup x (chan_binds env) of
---      Nothing   -> assert False undefined
---      Just chan -> chan
-
---freshChan :: EId -> GraphM Chan
---freshChan x = do
---  u <- liftIO . GS.genSymStr =<< asks chan_gensym
---  return $ x { uniqId = MkUniq u }
-
---runGraphM :: GraphM a -> IO (a,ZirGraph)
---runGraphM m = do
---   new_sym <- GS.initGenSym "automata"
---   runReaderT (runStateT m (G.empty)) (ZirEnv [] new_sym)
 
 {-------------------- Translation --------------------}
 
-concatAutomata :: Automaton -> Automaton -> GraphM Automaton
+concatAutomata :: Automaton -> Automaton -> GraphM atom Automaton
 concatAutomata a1 a2 = do
     let edges = map (\x -> (x, autom_init a2, ())) (Set.toList $ autom_final a1)
     modify (G.insEdges edges)
@@ -115,91 +89,35 @@ data Channels = Channels { in_chan   :: Chan
                          , ctrl_chan :: Maybe Chan }
 
 
--- need to define some standard functions
--- discard t : t -> () = NOP
--- identity t : t -> t = Var
--- 
-
--- builds discard function of the appropriate type
-mkDiscard :: Ty -> GraphM FunName
-mkDiscard t = fail "not implemented"
-
--- builds identity function of the appropriate type
-mkIdentity :: Ty -> GraphM FunName
-mkIdentity t = fail "not implemented"
 
 
-mkAutomaton :: DynFlags -> Channels -> Comp a b -> GraphM Automaton
+mkAutomaton :: Atom e => DynFlags -> Channels -> Comp a b -> GraphM e Automaton
 mkAutomaton dfs chans comp = go chans (unComp comp)
   where
-    go chans (Take1 t) = do
-      let inp = Set.singleton (in_chan chans)
-      case ctrl_chan chans of
-        Nothing -> do
-          let outp = Set.empty
-              code = SFDiscard t
-          (node,_) <- mkNode (Action inp outp code)
-          return $ singletonAutomaton node
-        Just ctrlc -> do
-          let outp = Set.singleton ctrlc
-              code = SFId t
-          (node,_) <- mkNode (Action inp outp code)
-          return $ singletonAutomaton node
+    go chans (Take1 t) =
+      let inp = [in_chan chans]
+          outp = maybeToList (ctrl_chan chans)
+          atom = maybe (discardAtom t) (\_ -> idAtom t)
+      in do
+        (node,_) <- mkNode (Action $ WiredAtom inp outp atom)
+        return $ singletonAutomaton node
 
     go chans (TakeN _ n) = fail "not implemented"
 
     go chans (Emit1 x) = do
-      let inp = Set.singleton x
-      let outp = Set.singleton (out_chan chans)
-          code = SFId (nameTyp x)
-      (node,_) <- mkNode (Action inp outp code)
+      let inp = [x]
+          outp = [out_chan chans]
+          atom = idAtom (nameTyp x)
+      (node,_) <- mkNode (Action $ WiredAtom inp outp atom)
       return $ singletonAutomaton node
 
     go chans (EmitN x) = fail "not implemented" 
 
-    go chans (Return (MkExp (ExpApp fn args) _ _)) = do
-      let TArrow argtys _res = nameTyp fn
-          inp  = Set.fromList args
-          ctr  = maybeToList (ctrl_chan chans)
-          outp = Set.fromList (ctr : outargs) 
-          outargs = concat $ 
-                    zipWith (\arg argty -> 
-                      if argty_mut argty == Mut then [arg] else []) args argtys
-
-      (node,_) <- mkNode (Action inp outp fn args)
+    
+    go chans (Return e) = do
+      let watom = expToWiredAtom e (ctrl_chan chans)
+      (node,_) <- mkNode (Action watom)
       return $ singletonAutomaton node
-      
-
-********
-      
-
-
-
-
-      let ctr = maybeToList (ctrl_chan chans) 
-      let inp = Set.fromList $ case e of ExpVar x -> [x]
-                                         ExpApp _ args -> args
-      let out = Set.fromList $ case e of 
-           ExpVar x -> ctr
-           ExpApp fn args -> 
-             let TArrow argtys _res = nameTyp fn
-                 tmp = zipWith (\arg argty -> if argty_mut argty == Mut then [arg] else []) 
-                               args argtys
-             in concat tmp
-
-
-
-                                           
-                            
-
-
-ctr ++ ... (look at the type of f and filter) 
-                                         -- (map fst . filter (\(_,k) -> k==Mut) $ args)
-
-      fail "TBD"
-      --let code = 
-      --  case (e,ctr) of (ExpApp f _, _) -> f
-      --                  (ExpVar _, []) ->
 
 
     go chans (NewVar x_spec c) = mkAutomaton dfs chans c -- NOP for now
@@ -220,10 +138,45 @@ ctr ++ ... (look at the type of f and filter)
 
     go chans (Par _ c1 c2) = fail "not implemented" 
 
-    go chans (AtomComp.Branch x c1 c2) = fail "not implemented" 
+    go chans (AtomComp.Branch x c1 c2) = do
+      a1 <- mkAutomaton dfs chans c1
+      a2 <- mkAutomaton dfs chans c2
+      (node,_) <- mkNode (AutomataModel.Branch x (autom_init a1, autom_init a2))
+      let edges = [(node,autom_init a1,()), (node, autom_init a2,())] 
+      modify (G.insEdges edges)
+      return $ Automaton node (Set.union (autom_final a1) (autom_final a2))
 
-    go chans (RepeatN n c) = fail "not implemented" 
-    go chans (Repeat c) = fail "not implemented"
 
-    go chans (While x c) = fail "not implemented"
+    go chans (RepeatN n c) = do
+      c_autom <- mkAutomaton dfs chans c
+      (node,_) <- mkNode (StaticLoop n c_autom)
+      modify $ G.insEdge (node, autom_init c_autom, ())
+      modify $ G.insEdges $ map (\f -> (f, node, ())) $ Set.toList $ autom_final c_autom
+      return $ singletonAutomaton node
+
+    go chans (Repeat c) = do
+      c_autom <- mkAutomaton dfs chans c
+      modify $ G.insEdges $ map (\f -> (f,autom_init c_autom, ())) $ Set.toList $ autom_final c_autom
+      return $ c_autom { autom_final = Set.empty }
+
+    go chans (While x c) = do
+      c_autom <- mkAutomaton dfs chans c
+      (final,_) <- mkNoOpNode
+      (while,_) <- mkNode (AutomataModel.Branch x (autom_init c_autom, final))
+      modify $ G.insEdges $ map (\f -> (f,while, ())) $ Set.toList $ autom_final c_autom
+      modify $ G.insEdge (while, autom_init c_autom, ())
+      modify $ G.insEdge (while, final, ())
+      return $ Automaton while (Set.singleton final)
+
+
     go chans (Until x c) = fail "not implemented"
+
+
+
+instance Show (NodeLabel atom) where
+  show (NodeLabel _ (Action watom)) = show' (wires_in watom) ++ "/" ++ show' (wires_out watom)
+    where 
+      show' = List.intercalate "," . map show
+  show (NodeLabel _ (AutomataModel.Branch win _)) = show win ++ "/DQ"
+  show (NodeLabel _ (StaticLoop n _)) = "/DQ="
+    
