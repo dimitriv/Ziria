@@ -17,9 +17,15 @@ import AstExpr (nameTyp)
 import Opts
 
 
---type Node = Int --defined in FGL
 type LNode = G.LNode NodeLabel
-type Chan = VarName
+type Chan = Var
+
+data AtomixFun a 
+  = AtomixFun { in_tys   :: [Ty]
+              , out_tys  :: [Ty]
+              , fun_code :: a
+              }
+
 
 data NodeLabel
   = NodeLabel { node_id   :: Node
@@ -27,15 +33,16 @@ data NodeLabel
               }
 
 data NodeKind
-  = Action { action_in     :: Set Chan
-           , action_out    :: Set Chan
-           , action_code   :: FunName
+  = Action { action_in     :: [Chan]
+           , action_out    :: [Chan] -- NB: includes the 'return' channel
+           , action_code   :: AtomixFun
            }
 
   | Loop { loop_times :: Maybe Int }
-
-  | Branch { branch_in   :: Set Chan
-           , branch_code :: FunName
+ 
+ 
+  | Branch { branch_in   :: Set Chan 
+           , branch_code :: SymFun
            , branch_next :: (Node,Node)
            }
 
@@ -121,11 +128,6 @@ mkDiscard t = fail "not implemented"
 mkIdentity :: Ty -> GraphM FunName
 mkIdentity t = fail "not implemented"
 
-getVarType :: VarName -> GraphM Ty
-getVarType x = do
-  env <- ask
-  case lookup x (var_binds env) of Nothing -> fail "variable not found"
-                                   Just var -> return $ nameTyp var
 
 mkAutomaton :: DynFlags -> Channels -> Comp a b -> GraphM Automaton
 mkAutomaton dfs chans comp = go chans (unComp comp)
@@ -135,12 +137,12 @@ mkAutomaton dfs chans comp = go chans (unComp comp)
       case ctrl_chan chans of
         Nothing -> do
           let outp = Set.empty
-          code <- mkDiscard t
+              code = SFDiscard t
           (node,_) <- mkNode (Action inp outp code)
           return $ singletonAutomaton node
         Just ctrlc -> do
           let outp = Set.singleton ctrlc
-          code <- mkIdentity t
+              code = SFId t
           (node,_) <- mkNode (Action inp outp code)
           return $ singletonAutomaton node
 
@@ -149,20 +151,51 @@ mkAutomaton dfs chans comp = go chans (unComp comp)
     go chans (Emit1 x) = do
       let inp = Set.singleton x
       let outp = Set.singleton (out_chan chans)
-      t <- getVarType x
-      code <- mkIdentity t
+          code = SFId (nameTyp x)
       (node,_) <- mkNode (Action inp outp code)
       return $ singletonAutomaton node
 
     go chans (EmitN x) = fail "not implemented" 
 
-    go chans (Return (MkExp e _ _)) = do
+    go chans (Return (MkExp (ExpApp fn args) _ _)) = do
+      let TArrow argtys _res = nameTyp fn
+          inp  = Set.fromList args
+          ctr  = maybeToList (ctrl_chan chans)
+          outp = Set.fromList (ctr : outargs) 
+          outargs = concat $ 
+                    zipWith (\arg argty -> 
+                      if argty_mut argty == Mut then [arg] else []) args argtys
+
+      (node,_) <- mkNode (Action inp outp fn args)
+      return $ singletonAutomaton node
+      
+
+********
+      
+
+
+
+
       let ctr = maybeToList (ctrl_chan chans) 
       let inp = Set.fromList $ case e of ExpVar x -> [x]
-                                         ExpApp _ args -> map fst args
+                                         ExpApp _ args -> args
       let out = Set.fromList $ case e of 
-                                ExpVar x -> ctr
-                                ExpApp _ args -> ctr ++ (map fst . filter (\(_,k) -> k==Mut) $ args)
+           ExpVar x -> ctr
+           ExpApp fn args -> 
+             let TArrow argtys _res = nameTyp fn
+                 tmp = zipWith (\arg argty -> if argty_mut argty == Mut then [arg] else []) 
+                               args argtys
+             in concat tmp
+
+
+
+                                           
+                            
+
+
+ctr ++ ... (look at the type of f and filter) 
+                                         -- (map fst . filter (\(_,k) -> k==Mut) $ args)
+
       fail "TBD"
       --let code = 
       --  case (e,ctr) of (ExpApp f _, _) -> f
@@ -171,12 +204,19 @@ mkAutomaton dfs chans comp = go chans (unComp comp)
 
     go chans (NewVar x_spec c) = mkAutomaton dfs chans c -- NOP for now
 
-    go chans (Bind x c) = mkAutomaton dfs (chans { ctrl_chan = Just x }) c
+    -- go chans (Bind x c) = mkAutomaton dfs (chans { ctrl_chan = Just x }) c
 
-    go chans (Seq c1 c2) = do
-      a1 <- mkAutomaton dfs chans c1
+    go chans (Bind mbx c1 c2) = do
+      a1 <- mkAutomaton dfs (chans { ctrl_chan = mbx }) c1
       a2 <- mkAutomaton dfs chans c2
       concatAutomata a1 a2
+
+    -- go chans 
+
+    -- go chans (Seq c1 c2) = do
+    --   a1 <- mkAutomaton dfs chans c1
+    --   a2 <- mkAutomaton dfs chans c2
+    --   concatAutomata a1 a2
 
     go chans (Par _ c1 c2) = fail "not implemented" 
 

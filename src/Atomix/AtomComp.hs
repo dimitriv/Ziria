@@ -17,9 +17,7 @@ import Control.Monad.State
 type Fun = GFun Ty
 type Fun0 = GFun0 Ty
 type Var = GName Ty
-
-type FunName = Uniq
-type VarName = Uniq
+type FunName = Var
 
 data Exp b
   = MkExp { unExp   :: !(Exp0 b)
@@ -32,41 +30,50 @@ data Comp a b
            , compInfo :: a }
 
 data Exp0 b
-  = ExpApp { expAppFun :: FunName, expAppArgs :: [(VarName,MutKind)] } -- pass by name or reference
-  | ExpVar VarName
+  = ExpApp { expAppFun :: SymFun, expAppArgs :: [Var] }
 
 data Comp0 a b
   = Take1 Ty
   | TakeN Ty Int
-  | Emit1 VarName
-  | EmitN VarName
+  | Emit1 Var
+  | EmitN Var
+
   | Return (Exp b)
 
-  | NewVar Var (Comp a b) -- if immutable, can be initialized exactly once
-  | Bind VarName (Comp a b)
+  | NewVar Var (Comp a b)
+  | Bind (Maybe Var) (Comp a b) (Comp a b) 
 
-  | Seq (Comp a b) (Comp a b)
   | Par ParInfo (Comp a b) (Comp a b)
 
-  | Branch VarName (Comp a b) (Comp a b)
+  | Branch Var (Comp a b) (Comp a b)
 
   | RepeatN Int (Comp a b)
   | Repeat (Comp a b)
 
-  | While VarName (Comp a b)
-  | Until VarName (Comp a b)
+  | While Var (Comp a b)
+  | Until Var (Comp a b)
 
   ----------------------------------------------
   -- | Standalone (Comp a b)
   -- | Mitigate String  -- just for debugging
   --         Ty Int Int
 
+data SymFun a = SFFun FunName
+              | SFId Ty
+              | SFDiscard Ty 
 
 
-data CompEnv a = CompEnv { fun_binds  :: [(FunName,Fun a)]
+symFunTy :: SymFun a -> Ty
+symFunTy (SFFun fn)     = nameTyp fn
+symFunTy (SFId ty )     = TArrow [(GArgTy ty Imm)] ty
+symFunTy (SFDiscard ty) = 
+
+-- Notes. Here we may want to add:
+--   SFCompose (SymFun a) (SymFun a) ...
+--   SFFunFun  ... some functional representation of actual functions ...
+
+data CompEnv a = CompEnv { fun_binds  :: [(FunName, Fun a)]
                          , funGenSym :: GS.Sym
-                         , var_binds  :: [(VarName,Var)]
-                         , varGenSym :: GS.Sym
                          }
 
 type CompM a = StateT (CompEnv a) IO
@@ -77,7 +84,6 @@ mkCompOfAst c = fail "not implemented"
 runCompM :: CompM a b -> IO (b, CompEnv a)
 runCompM m = do
   fungen <- GS.initGenSym "f"
-  vargen <- GS.initGenSym "x"
-  let env = CompEnv [] fungen [] vargen
+  let env = CompEnv [] fungen
   runStateT m env
   
