@@ -197,7 +197,7 @@ instance Outputable Ty where
     TVar x                 -> text "?" <> text x
     TUnit                  -> text "()"
     TBit                   -> text "bit"
-    TInt bw sg             -> text "int" <> ppr bw <> ppr sg
+    TInt bw sg             -> ppr sg <> text "int" <> ppr bw
     TDouble                -> text "double"
     TBool                  -> text "bool"
     TString                -> text "string"
