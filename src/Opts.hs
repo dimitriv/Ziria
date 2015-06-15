@@ -152,7 +152,7 @@ options =
      , Option ['n']     ["name"]        (ReqArg Name  "NAME")                 "go function name NAME"
 
      -- Boolean flags
-     , Option []    ["caml-syntax"]      (NoArg Debug)         "Caml syntax"
+     , Option []    ["caml-syntax"]      (NoArg CamlSyntax)    "Caml syntax"
      , Option ['d'] ["debug"]            (NoArg Debug)         "debug"
      , Option []    ["debug-fold"]       (NoArg DebugFold)     "debug-fold"
      , Option ['x'] ["optimize"]         (NoArg Opt)           "optimize"
