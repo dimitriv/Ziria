@@ -26,8 +26,8 @@ module Analysis.RangeAnal
      ( Range ( .. )
      , Interval ( .. )
      , RngMap
-     , pprRanges
-     , varRanges
+--     , pprRanges
+--     , varRanges
      )
 where
 
@@ -57,12 +57,24 @@ import qualified Data.Monoid as M
 import Text.Show.Pretty (PrettyVal)
 
 
-{- The goal of the Range analysis
-   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   Given an expression, calculate for every array variable:
-     1) an overapproximation of the input range
-     2) an exact output range or don't know (over or under approx not good)
-   Later we will deal with structs too.
+{- Note [Range Analysis] 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The goal of the range analysis is, given an expression, to identify a
+map from its free array variables to:
+
+  a) an overapproximation of the input range
+  b) a precise interval for the output range
+
+We use (a) to construct a "tighter" input space for LUT generation
+than the default which uses the whole bitwidth of input arrays. If (b)
+determines that we write to the full array range then we do not have
+to use LUT output masks for this variable; instead we can directly
+read it off from the LUT entry.
+
+NB: for the time being the treatment of structs (and arrays of
+structs) is conservative (TODO: improve)
+
 -}
 
 {-------------------------------------------------------------------------------
@@ -90,43 +102,44 @@ data Iv = Iv Integer Integer  -- i1 <= i2
         | IvEmpty
   deriving (Generic, Typeable, Data, Eq, Ord, Show)
 
+ivEmpty :: IVal Iv
+ivEmpty = IKnown IvEmpty
+
+ivIv :: Integral a => a -> a -> IVal Iv
+ivIv i j = IKnown (Iv (fromIntegral i)(fromIntegral j))
+
+ivUnknown :: IVal Iv
+ivUnknown = IUnknown
+
+
 instance NFData Iv where
   rnf = genericRnf
 
 type Interval = IVal Iv
+
 instance NFData Interval where
   rnf = genericRnf
 
--- | Approximate interval join
-ijoin_apx :: Interval -> Interval -> Interval 
-ijoin_apx IUnknown _ = IUnknown
-ijoin_apx _ IUnknown = IUnknown
-ijoin_apx (IKnown (Iv i j)) (IKnown (Iv i' j')) 
+-- | Used to find an over approximation of the interval
+ijoin :: Interval -> Interval -> Interval 
+ijoin IUnknown _ = IUnknown
+ijoin _ IUnknown = IUnknown
+ijoin (IKnown (Iv i j)) (IKnown (Iv i' j')) = stretch False (i,j) (i',j')
+ijoin (IKnown iv) (IKnown IvEmpty) = iv
+ijoin (IKnown IvEmpty) (IKnown iv) = iv
+
+ijoin_pcs :: Interval -> Interval -> Interval
+ijoin_pcs IUnknown _ = IUnknown
+ijoin_pcs _ IUnknown = IUnknown
+ijoin_pcs (IKnown (Iv i j)) (IKnown (Iv i' j'))
   | let l = min i i'
   , let h = max j j'
   , let bound = 512
-  = if l < - bound || h > bound then IUnknown else IKnown (Iv l h)
+  = stretch True (i,j) (i',j')
+if l < - bound || h > bound then IUnknown else IKnown (Iv l h)
+ijoin_pcs (IKnown iv) (IKnown IvEmpty) = iv
+ijoin_pcs (IKnown IvEmpty) (IKnown iv) = iv
 
-
--- | Precise interval join
-ijoin_pcs :: Interval -> Interval -> Interval
-ijoin_pcs i1 i2 
-  | i1 == i2  = i1
-  | otherwise = IUnknown
-
-istretch :: Bool -- ^ precise or not?
-         -> Interval -> IVal Integer -> LengthInfo -> Interval 
-istretch pcs _ IUnknown _ = IUnknown
-istretch pcs IUnknown _ _ = IUnknown
-istretch pcs (IKnown (Iv i j)) (IKnown s) LISingleton 
-  = stretch pcs (i,j) (s,s)
-istretch pcs (IKnown (Iv i j)) (IKnown s) (LILength n) 
-  = stretch pcs (i,j) (s,s + fromIntegral n)
-
-stretch :: Bool -> (Integer,Integer) -> (Integer,Integer) -> Interval 
-stretch precise (a,b) (c,d)
-  | precise && ( (c-b > 1) || (a-d > 1)) = IUnknown 
-  | otherwise = IKnown (Iv (min a c) (max b d))
 
 {- Note: stretching an interval: 
    -----------a---------b----c---------d  <- bad
@@ -263,9 +276,8 @@ instance POrd Range where
 
 joinRngMap :: RngMap -> RngMap -> RngMap
 joinRngMap rm1 rm2 
-  = neUnionWithMb rm1 rm2 (\_ mbr1 r2 -> rjoin (aux mbr1) r2)
-  where aux Nothing  = ROther
-        aux (Just r) = r
+  = neJoinWith rm1 rm2 (\_ r -> rjoin ROther r) 
+                       (\_ r1 r2 -> rjoin r1 r2)
 
 newtype Rng a = Rng (StateT RngMap (ErrorT Doc IO) a)
   deriving ( Functor
@@ -278,6 +290,9 @@ newtype Rng a = Rng (StateT RngMap (ErrorT Doc IO) a)
 
 instance AbsInt Rng Range where 
   aSkip = return ROther
+
+  ***** TODO: implement aWiden to *use* the conditional to avoid taking an actual join
+  ***** this will make sure that static loops will work. 
 
   aJoin m1 m2 = do
 
@@ -311,22 +326,18 @@ instance AbsInt Rng Range where
   aWithFact _ action                      = action
 
 
-varSetRng :: EId -> Range -> Rng Range
+ 
+varSetRng :: EId -> Range -> Rng ()
 varSetRng x range = do
   s <- get
-  put $ neUpdate x upd s
-  return range
-  where upd _ = range
+  put $ neUpdate x (\_ -> Just range) s
 
 varGetRng :: EId -> Rng (Maybe Range)
-varGetRng x = get >>= (return . neLookup x)
-
-derefVarRead :: EId -> Rng Range
-derefVarRead x = do 
+varGetRng x = neLookup x <$> get 
 
 updArrRdRng :: EId -> Interval -> Maybe Range -> Rng Range
 updArrRdRng x ival Nothing =
-  let new_range = RArr ival IvEmpty
+  let new_range = RArr ival ivEmpty
   in varSetRng x new_range >> return new_range
 updArrRdRng x ival (Just (RArr riv wiv)) = 
   let new_range = RArr (istretch False riv ival) wiv 
@@ -334,28 +345,31 @@ updArrRdRng x ival (Just (RArr riv wiv)) =
 updArrRdRng x ival (Just rother) = return rother
 
 updArrWrRng :: EId -> Interval -> Maybe Range -> Rng ()
-updArrWrRng x ival Nothing = varSetRng $ RArr IvEmpty ival
+updArrWrRng x ival Nothing = varSetRng $ RArr ivEmpty ival
 updArrWrRng x ival (Just (RArr riv wiv))
   = varSetRng x $ RArr riv (istretch True wiv ival)
 updArrWrRng x ival (Just rother) = return ()
 
+
 derefVarRead :: EId -> Rng Range
 derefVarRead x = do 
-  case nameType x of 
-    TInt {}  -> maybe (RInt IUnknown) id  <$> varGetRng x
+  case nameTyp x of 
+    TInt  {} -> maybe (RInt IUnknown) id  <$> varGetRng x
     TBool {} -> maybe (RBool IUnknown) id <$> varGetRng x
-    TArray (Literal n) _ -> varGetRng x >>= updArrRdRng x (IKnown (Iv 0 n))
-    TArray _ _           -> varGetRng x >>= updArrRdRng x IUnknown 
-     _other -> maybe ROther id <$> varGetRng x 
+    TArray (Literal n) _ -> updArrRdRng x (ivIv 0 n)  =<< varGetRng x 
+    TArray _ _           -> updArrRdRng x (ivUnknown) =<< varGetRng x
+    _other               -> maybe ROther id <$> varGetRng x
 
 derefVarWrite :: EId -> Range -> Rng ()
 derefVarWrite x rng = do 
-  case nameType x of
-    TInt {}  -> setVarRng x rng
-    TBool {} -> setVarRng x rng
-    TArray (Literal n) _ -> varGetRng x >>= updArrWrRng x (IKnown (Iv 0 n))
-    TArray _ _           -> varGetRng x >>= updArrWrRng x IUnknown 
-     _other -> return ()
+  case nameTyp x of
+    TInt {}  -> varSetRng x rng
+    TBool {} -> varSetRng x rng
+    TArray (Literal n) _ -> varGetRng x >>= updArrWrRng x (ivIv 0 n)
+    TArray _ _           -> varGetRng x >>= updArrWrRng x ivUnknown 
+    _other                -> return ()
+
+{- 
 
 sliceToInterval :: Range -> LengthInfo -> Interval
 sliceToInterval ROther _ = IUnknown
@@ -440,3 +454,5 @@ varRanges _dfs e =
   where 
     action :: AbsT Rng Range
     action = absEvalRVal e
+
+-}

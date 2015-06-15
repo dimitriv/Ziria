@@ -94,24 +94,6 @@ neUnionWith (NameEnv nea) neb f = go nea neb
         aux Nothing    = Just a1
         aux (Just a1') = Just (f n1 a1 a1')
 
-
-neUnionWithMb :: NameEnv t a -> NameEnv t a 
-              -> (GName t -> Maybe a -> a -> a)
-              -> NameEnv t a
-neUnionWithMb (NameEnv nea) (NameEnv neb) f = 
-  [(nm1, f mbres1 res2)  | (nm1,res1) <- nea
-                         , (nm2,res2) <- neb
-                         , (nm1 == nm2)
-                         , let mbres1 = Just res1 
-  ] ++
-  [(nm1, f Nothing res1) | (nm1,res1) <- nea
-                         , isNothing (lookup nm1 neb
-  ] ++ 
-  [(nm1, f Nothing res1) | (nm1,res1) <- neb
-                         , isNothing (lookup nm1 nea) 
-  ]
-
-
 neExtend :: GName t -> a -> NameEnv t a -> NameEnv t a
 neExtend nm a menv = aux (neLookup nm menv)
   where
