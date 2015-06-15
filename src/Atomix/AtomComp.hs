@@ -1,7 +1,7 @@
 module AtomComp 
   (module AtomComp
   ,Uniq
-  ,MutKind
+  ,MutKind(..)
   ,Ty
   ,GName
   ,CompLoc

@@ -27,9 +27,9 @@ data NodeLabel
               }
 
 data NodeKind
-  = Action { action_in   :: Set Chan
-           , action_out  :: Set Chan
-           , action_code :: FunName
+  = Action { action_in     :: Set Chan
+           , action_out    :: Set Chan
+           , action_code   :: FunName
            }
 
   | Loop { loop_times :: Maybe Int }
@@ -154,15 +154,30 @@ mkAutomaton dfs chans comp = go chans (unComp comp)
       (node,_) <- mkNode (Action inp outp code)
       return $ singletonAutomaton node
 
-
-
     go chans (EmitN x) = fail "not implemented" 
-    go chans (Return e) = fail "not implemented" 
 
-    go chans (NewVar x_spec c) = fail "not implemented"
-    go chans (Bind x c) = fail "not implemented"
+    go chans (Return (MkExp e _ _)) = do
+      let ctr = maybeToList (ctrl_chan chans) 
+      let inp = Set.fromList $ case e of ExpVar x -> [x]
+                                         ExpApp _ args -> map fst args
+      let out = Set.fromList $ case e of 
+                                ExpVar x -> ctr
+                                ExpApp _ args -> ctr ++ (map fst . filter (\(_,k) -> k==Mut) $ args)
+      fail "TBD"
+      --let code = 
+      --  case (e,ctr) of (ExpApp f _, _) -> f
+      --                  (ExpVar _, []) ->
 
-    go chans (Seq c1 c2) = fail "not implemented"
+
+    go chans (NewVar x_spec c) = mkAutomaton dfs chans c -- NOP for now
+
+    go chans (Bind x c) = mkAutomaton dfs (chans { ctrl_chan = Just x }) c
+
+    go chans (Seq c1 c2) = do
+      a1 <- mkAutomaton dfs chans c1
+      a2 <- mkAutomaton dfs chans c2
+      concatAutomata a1 a2
+
     go chans (Par _ c1 c2) = fail "not implemented" 
 
     go chans (AtomComp.Branch x c1 c2) = fail "not implemented" 
