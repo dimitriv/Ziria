@@ -415,12 +415,12 @@ invars_bitwidth pkg vartys = do
 
 invar_bitwidth :: (Functor m, Monad m, MonadIO m) => VarUsePkg -> EId -> m Integer
 invar_bitwidth pkg v
-   -- | Integers in known range
-  | Just (RInt (IRng l h)) <- neLookup v $ vu_ranges pkg
-  = do {- liftIO $ putStrLn ("Found range for variable: " ++ show v)
-          liftIO $ putStrLn ("Low:  " ++ show l)
-          liftIO $ putStrLn ("High: " ++ show h) -}
-       return (intLog2 (max (abs l) (abs h)))
+  --  -- | Integers in known range
+  -- | Just (RInt (IRng l h)) <- neLookup v $ vu_ranges pkg
+  -- = do {- liftIO $ putStrLn ("Found range for variable: " ++ show v)
+  --         liftIO $ putStrLn ("Low:  " ++ show l)
+  --         liftIO $ putStrLn ("High: " ++ show h) -}
+  --      return (intLog2 (max (abs l) (abs h)))
 
   -- | Array variables in known input range
   | Just (_,w) <- inArrSliceBitWidth pkg v
@@ -434,18 +434,18 @@ invar_bitwidth pkg v
   = tyBitWidth (nameTyp v)
 
 
-intLog2 :: Integer -> Integer
-intLog2 ix = ceiling (logBase 2 dx + 1)
-  where dx :: Double
-        dx = fromIntegral ix
+-- intLog2 :: Integer -> Integer
+-- intLog2 ix = ceiling (logBase 2 dx + 1)
+--   where dx :: Double
+--         dx = fromIntegral ix
 
 -- | Input array slice? 
 inArrSlice :: VarUsePkg -> EId -> Maybe (Integer,Integer)
 inArrSlice pkg x = do 
   RArr rin _ <- neLookup x $ vu_ranges pkg
   case rin of 
-    IRng lidx hidx -> return (lidx, hidx)
-    _              -> Nothing
+    IKnown (Iv lidx hidx) -> return (lidx, hidx)
+    _                     -> Nothing
 
 
 inArrSliceBitWidth :: VarUsePkg -> EId -> Maybe (Integer,Integer)

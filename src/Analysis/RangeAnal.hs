@@ -19,15 +19,15 @@
 {-# LANGUAGE DeriveGeneric, DeriveDataTypeable, MultiParamTypeClasses, 
              FunctionalDependencies, StandaloneDeriving, 
              GeneralizedNewtypeDeriving, FlexibleInstances #-}
-{-# OPTIONS_GHC -Wall -fno-warn-unused-do-bind #-}
+{-# OPTIONS_GHC -Wall -fno-warn-unused-do-bind -fno-warn-orphans #-}
 
 -- | Range analysis
 module Analysis.RangeAnal 
      ( Range ( .. )
-     , Interval ( .. )
+     , Interval, IVal ( .. ), Iv ( .. )
      , RngMap
---     , pprRanges
---     , varRanges
+     , pprRanges
+     , varRanges
      )
 where
 
@@ -52,9 +52,7 @@ import CtExpr
 
 import Opts
 
-import qualified Data.Set as S
-import qualified Data.Monoid as M
-import Text.Show.Pretty (PrettyVal)
+import Text.Show.Pretty ()
 
 
 {- Note [Range Analysis] 
@@ -90,12 +88,25 @@ instance Monad IVal where
     IUnknown -> IUnknown
     IKnown x -> f x
 
+-- Boilerplate
+instance Functor IVal where
+    fmap f x = x >>= return . f
+instance Applicative IVal where
+    pure   = return
+    (<*>)  = ap
+
+
 iv_join_discrete :: Eq v => IVal v -> IVal v -> IVal v
 iv_join_discrete IUnknown _ = IUnknown
 iv_join_discrete _ IUnknown = IUnknown
 iv_join_discrete (IKnown v1) (IKnown v2)
   | v1 == v2  = IKnown v1
   | otherwise = IUnknown
+
+rint_widen :: IVal Integer -> IVal Integer
+rint_widen IUnknown = IUnknown
+rint_widen (IKnown i) | i >= 256  = IUnknown
+                      | otherwise = IKnown i 
 
 -- | Intervals
 data Iv = Iv Integer Integer  -- i1 <= i2
@@ -124,9 +135,13 @@ instance NFData Interval where
 ijoin :: Interval -> Interval -> Interval 
 ijoin IUnknown _ = IUnknown
 ijoin _ IUnknown = IUnknown
-ijoin (IKnown (Iv i j)) (IKnown (Iv i' j')) = stretch False (i,j) (i',j')
-ijoin (IKnown iv) (IKnown IvEmpty) = iv
-ijoin (IKnown IvEmpty) (IKnown iv) = iv
+ijoin (IKnown (Iv i j)) (IKnown (Iv i' j')) 
+  | let l = min i i'
+  , let h = max j j'
+  , let bound = 512
+  = if l < - bound || h > bound then IUnknown else ivIv l h
+ijoin (IKnown iv) (IKnown IvEmpty) = IKnown iv
+ijoin (IKnown IvEmpty) (IKnown iv) = IKnown iv
 
 ijoin_pcs :: Interval -> Interval -> Interval
 ijoin_pcs IUnknown _ = IUnknown
@@ -135,10 +150,10 @@ ijoin_pcs (IKnown (Iv i j)) (IKnown (Iv i' j'))
   | let l = min i i'
   , let h = max j j'
   , let bound = 512
-  = stretch True (i,j) (i',j')
-if l < - bound || h > bound then IUnknown else IKnown (Iv l h)
-ijoin_pcs (IKnown iv) (IKnown IvEmpty) = iv
-ijoin_pcs (IKnown IvEmpty) (IKnown iv) = iv
+  , let gap = (i - j' > 1) || (i' - j > 1)
+  = if l < - bound || h > bound || gap then IUnknown else ivIv l h
+ijoin_pcs (IKnown iv) (IKnown IvEmpty) = IKnown iv
+ijoin_pcs (IKnown IvEmpty) (IKnown iv) = IKnown iv
 
 
 {- Note: stretching an interval: 
@@ -155,26 +170,36 @@ ijoin_pcs (IKnown IvEmpty) (IKnown iv) = iv
 ----------------------------------------------------------------------}
 -- | Range
 data Range 
-  = RInt  (IVal Integer)   -- integers
-  | RBool (IVal Bool)      -- booleans
-  | RArr Interval Interval -- arrays
-  | ROther                 -- other but also equivalent to bottom
+  = RInt  (IVal Integer)    -- integers
+  | RBool (IVal Bool)       -- booleans
+  | RArr Interval Interval  -- arrays
+  | ROther                  -- other but also equivalent to bottom
   deriving (Generic, Typeable, Data, Eq, Show, Ord)
+
+-- Don't even construct integers above a certain threshold
+mkRInt :: IVal Integer -> Range
+mkRInt iv = RInt $ rint_widen iv
+
+-- TODO:
+-- We should add structs here in the future:
+--  ... | RStruct Ty (IVal [FldName]) (IVal [FldName]
+-- and treat it similarly to RArr. 
+-- --------------------------------------------------
 
 instance Outputable Range where 
   ppr r = text (show r)
 
 rjoin :: Range -> Range -> Range
 rjoin (RInt iv1)  (RInt iv2)
-  = RInt  (iv1 `iv_join_discrete` iv2)
+  = mkRInt  (iv1 `iv_join_discrete` iv2)
 rjoin (RBool iv1) (RBool iv2)
   = RBool (iv1 `iv_join_discrete` iv2)
 rjoin (RArr r1 w1) (RArr r2 w2)
-  = RArr (r1 `ijoin_apx` r2) (w1 `ijoin_pcs` w2)
+  = RArr (r1 `ijoin` r2) (w1 `ijoin_pcs` w2)
 rjoin _ _  = ROther
 
 rangeTop :: Ty -> Range 
-rangeTop (TInt {})   = RInt IUnknown
+rangeTop (TInt {})   = mkRInt IUnknown
 rangeTop (TArray {}) = RArr IUnknown IUnknown
 rangeTop (TBool)     = RBool IUnknown
 rangeTop _           = ROther
@@ -182,16 +207,16 @@ rangeTop _           = ROther
 
 runop :: UnOp -> Range -> Range
 -- | This is sensitive to the type checker
-runop Neg (RInt i)       = RInt $ liftM negate i
+runop Neg (RInt i)       = mkRInt $ liftM negate i
 runop Neg _              = ROther
-runop ALength _          = RInt IUnknown
-runop (Cast (TInt {})) _ = RInt IUnknown
+runop ALength _          = mkRInt IUnknown
+runop (Cast (TInt {})) _ = mkRInt IUnknown
 runop (Cast _) _         = ROther
 runop Not (RBool b)      = RBool $ liftM not b
 runop Not _              = ROther
-runop NatExp (RInt {})   = RInt IUnknown
+runop NatExp (RInt {})   = mkRInt IUnknown
 runop NatExp _           = ROther
-runop BwNeg (RInt {})    = RInt IUnknown
+runop BwNeg (RInt {})    = mkRInt IUnknown
 runop BwNeg _            = ROther 
 
 
@@ -199,7 +224,7 @@ rbinop :: BinOp -> Range -> Range -> Range
 -- | This is sensitive to the type checker
 
 -- Arithmetic binops
-rbinop Add (RInt r1) (RInt r2) = RInt $ liftM2 (+) r1 r2
+rbinop Add (RInt r1) (RInt r2) = mkRInt $ liftM2 (+) r1 r2
 rbinop Sub _ _                 = RInt IUnknown
 rbinop Mult  _r1 _r2 = RInt IUnknown
 rbinop Div   _r1 _r2 = RInt IUnknown
@@ -242,8 +267,9 @@ rbinop BwXor _ _  = ROther
 ----------------------------------------------------------------------}
 
 instance ValDom Range where
-  aVal (VInt i)      = RInt (return i)
+  aVal (VInt i)      = mkRInt (return i)
   aVal (VBool b)     = RBool (return b)
+  aVal _             = ROther
   aArr _vs           = RArr IUnknown IUnknown
   aStruct _ _        = ROther
   aUnOp uop rs       = runop uop rs
@@ -259,20 +285,29 @@ instance ValDom Range where
 type RngMap = NameMap Ty Range
 
 instance POrd Integer where 
- i1 `pleq` i2 = i1 <= i2
+  i1 `pleq` i2 = i1 <= i2
+
+instance POrd Bool where 
+  b1 `pleq` b2 = b1 == b2
 
 instance POrd v => POrd (IVal v) where
   _           `pleq` IUnknown    = True
   (IKnown v1) `pleq` (IKnown v2) = v1 `pleq` v2
+  _           `pleq` _           = False
 
 instance POrd Iv where 
-  (Iv i1 i2) `pleq` (Iv j1 j2) = (i1 `pleq` j1) && (i2 `pleq` j2)
+  (Iv i1 i2)  `pleq` (Iv j1 j2) = (i1 `pleq` j1) && (i2 `pleq` j2)
+  IvEmpty     `pleq` _          = True
+  Iv i j      `pleq` IvEmpty    = (i < j)
+
 
 instance POrd Range where 
   RInt intv1   `pleq` RInt intv2   = intv1 `pleq` intv2
+  RBool b1     `pleq` RBool b2     = b1 `pleq` b2
   ROther       `pleq` ROther       = True
   RArr ri1 wi1 `pleq` RArr ri2 wi2 = ri1 `pleq` ri2 && wi1 `pleq` wi2
-  ROther       `pleq` _            = True 
+  _            `pleq` ROther       = True
+  _            `pleq` _            = False 
 
 joinRngMap :: RngMap -> RngMap -> RngMap
 joinRngMap rm1 rm2 
@@ -288,12 +323,20 @@ newtype Rng a = Rng (StateT RngMap (ErrorT Doc IO) a)
            , MonadIO
            )
 
+dbgRange :: Rng ()
+dbgRange = return () 
+  -- get >>= \x -> liftIO $ putStrLn (render (pprRanges x))
+
+
 instance AbsInt Rng Range where 
+
+  aTrace = dbgRange
+
   aSkip = return ROther
-
-  ***** TODO: implement aWiden to *use* the conditional to avoid taking an actual join
-  ***** this will make sure that static loops will work. 
-
+  aWiden (RBool (IKnown True)) m1 _m2  = m1
+  aWiden (RBool (IKnown False)) _m1 m2 = m2
+  aWiden _ m1 m2 = aJoin m1 m2
+  
   aJoin m1 m2 = do
 
     (v1, post1) <- inCurrSt m1
@@ -321,9 +364,9 @@ instance AbsInt Rng Range where
     put post
     return (v1 `rjoin` v2)
 
-  aWithFact (RBool (IKnown True))  action = action
-  aWithFact (RBool (IKnown False)) action = aSkip
-  aWithFact _ action                      = action
+  aWithFact (RBool (IKnown True))  action  = action
+  aWithFact (RBool (IKnown False)) _action = aSkip
+  aWithFact _ action                       = action
 
 
  
@@ -335,20 +378,21 @@ varSetRng x range = do
 varGetRng :: EId -> Rng (Maybe Range)
 varGetRng x = neLookup x <$> get 
 
+
 updArrRdRng :: EId -> Interval -> Maybe Range -> Rng Range
 updArrRdRng x ival Nothing =
   let new_range = RArr ival ivEmpty
   in varSetRng x new_range >> return new_range
 updArrRdRng x ival (Just (RArr riv wiv)) = 
-  let new_range = RArr (istretch False riv ival) wiv 
+  let new_range = RArr (ijoin riv ival) wiv 
   in varSetRng x new_range >> return new_range
-updArrRdRng x ival (Just rother) = return rother
+updArrRdRng _x _ival (Just rother) = return rother
 
 updArrWrRng :: EId -> Interval -> Maybe Range -> Rng ()
-updArrWrRng x ival Nothing = varSetRng $ RArr ivEmpty ival
+updArrWrRng x ival Nothing = varSetRng x $ RArr ivEmpty ival
 updArrWrRng x ival (Just (RArr riv wiv))
-  = varSetRng x $ RArr riv (istretch True wiv ival)
-updArrWrRng x ival (Just rother) = return ()
+  = varSetRng x $ RArr riv (ijoin_pcs wiv ival)
+updArrWrRng _x _ival (Just _rother) = return ()
 
 
 derefVarRead :: EId -> Rng Range
@@ -369,48 +413,56 @@ derefVarWrite x rng = do
     TArray _ _           -> varGetRng x >>= updArrWrRng x ivUnknown 
     _other                -> return ()
 
-{- 
 
 sliceToInterval :: Range -> LengthInfo -> Interval
 sliceToInterval ROther _ = IUnknown
 sliceToInterval (RInt IUnknown) _ = IUnknown
-sliceToInterval (RInt (IKnown i)) (LILength j)  = IKnown (Iv i (i+j-1))
-sliceToInterval (RInt (IKnown i)) (LISingleton) = IKnown (Iv i i)
+sliceToInterval (RInt (IKnown i)) (LILength j) = ivIv i (i + fromIntegral (j-1))
+sliceToInterval (RInt (IKnown i)) (LISingleton) = ivIv i i
 sliceToInterval _ _ = IUnknown
 
-instance CmdDom Rng RngVal where
+instance CmdDom Rng Range where
 
-  aDerefRead lval 
-     = let dbg = text $ "aDerefRead, lval = " ++ show lval
-       in dbgRngSt dbg (go lval)
-     where go d
-             | GDVar x <- d = derefVarRead x
-             | GDArr (GDVar x) ridx linfo <- d
-             , let rdival = sliceToInterval ridx linfo
-             = updArrRdRng x ival =<< varGetRng x
-             | GDArr d' _ _ <- d = go d' >> rangeTop (ctDerefExp d)
-             | GDProj d' _ <- d  = go d' >> rangeTop (ctDerefExp d)
-             | otherwise         = error "aDerefRead"
+  aDerefRead lval = go lval
+   where 
+     go d
+       | GDVar x <- d = derefVarRead x
+       | GDArr (GDVar x) ridx linfo <- d
+       , let rdival = sliceToInterval ridx linfo
+       = updArrRdRng x rdival =<< varGetRng x
+       | GDArr d' _ _ <- d = do { _ <- go d'; return $ rangeTop (ctDerefExp d)}
+       | GDProj d' _ <- d  = do { _ <- go d'; return $ rangeTop (ctDerefExp d)}
+       | otherwise         = error "aDerefRead"
 
-  aAssign lval r 
-     = let dbg = vcat [ text $ "aAssign, lval= " ++ show lval
-                      , text $ "rhs range, r = " ++ show r 
-                      ]
-       in dbgRngSt dbg (go lval r)
-     where go d r 
-              | GDVar x <- d = derefVarWrite x r
-              | otherwise    = effects d 
-           effects d
-              | GDArr (GDVar x) ridx linfo <- d
-              , let wdival = sliceToInterval ridx linfo
-              = updArrWrRng x wdival =<< varGetRng x
-              | GDArr d' _ _ <- d = effects d'
-              | GDProj d' _ <- d  = effects d'
-              | otherwise = error "aAssign"
+  aAssign lval_lhs rng_rhs = go lval_lhs rng_rhs
+   where
+     go d r 
+        | GDVar x <- d = derefVarWrite x r
+        | GDArr (GDVar x) ridx linfo <- d
+        , let wrival = sliceToInterval ridx linfo
+        = updArrWrRng x wrival =<< varGetRng x
+        | otherwise    = effects_top d 
+
+     -- If the lval is not of the form x or x[i] then our Range cannot
+     -- at the moment represent things like x[i].f so we won't get a
+     -- precise range and it'd be erroneous to consider that we write
+     -- in the full range of x (there may be another frield x[i].g,
+     -- never written too, for instance).
+     -- 
+     -- The cost of this imprecision is that we will be using a
+     -- dynamically generated mask in the LUT entry. Once we improve
+     -- precision we may get rid of more dynamic masks and improve
+     -- performance.
+
+     effects_top d
+        | GDArr d' _ _ <- d = effects_top d'
+        | GDProj d' _ <- d  = effects_top d'
+        | GDVar x <- d      = varSetRng x (rangeTop (nameTyp x))
+        | otherwise         = return ()
 
   withImmABind nm rng action 
     = do pre <- get
-         put $ neExtend nm (av_range rng) pre
+         put $ neExtend nm rng pre
          res <- action
          post <- get
          -- Delete variable from state
@@ -445,14 +497,10 @@ pprRanges r = vcat $
 runRng :: Rng a -> ErrorT Doc IO (a, RngMap)
 runRng (Rng action) = runStateT action neEmpty
 
-varRanges :: DynFlags -> Exp -> ErrorT Doc IO (RngMap, Range)
+varRanges :: DynFlags -> Exp -> ErrorT Doc IO (Range, RngMap)
 varRanges _dfs e =
-  case action of
-    AbsT m -> do
-      (rngval, rmap) <- runRng m
-      return (rmap, av_range rngval)
+  case action of AbsT m -> runRng m
   where 
     action :: AbsT Rng Range
     action = absEvalRVal e
 
--}
