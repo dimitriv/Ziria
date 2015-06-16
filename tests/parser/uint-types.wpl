@@ -1,0 +1,13 @@
+fun f(x : uint) { 
+  return x
+}
+fun f32(x : uint32) { 
+  return x
+}
+fun f16(x : uint16) { 
+  return x
+}
+fun f8(x : uint8) { 
+  return x
+}
+let comp main = read >>> map f >>> write
