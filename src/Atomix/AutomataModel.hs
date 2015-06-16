@@ -157,15 +157,21 @@ mkAutomaton dfs chans comp = go chans (unComp comp)
       modify $ G.insEdge (while, final, ())
       return $ Automaton while (Set.singleton final)
 
-
-    go chans (Until x c) = fail "not implemented"
+    go chans (Until x c) = do
+      c_autom <- mkAutomaton dfs chans c
+      (final,_) <- mkNoOpNode
+      (while,_) <- mkNode (AutomataModel.Branch x (autom_init c_autom, final))
+      modify $ G.insEdges $ map (\f -> (f,while, ())) $ Set.toList $ autom_final c_autom
+      modify $ G.insEdge (while, autom_init c_autom, ())
+      modify $ G.insEdge (while, final, ())
+      return $ Automaton (autom_init c_autom) (Set.singleton final)
 
 
 
 instance Show (NodeLabel atom) where
-  show (NodeLabel _ (Action watom)) = show' (wires_in watom) ++ "/" ++ show' (wires_out watom)
-    where 
-      show' = List.intercalate "," . map show
+  show (NodeLabel _ (Action watom)) =
+    let show_wires = List.intercalate "," . map show
+    in show_wires (wires_in watom) ++ "/" ++ show_wires (wires_out watom)
   show (NodeLabel _ (AutomataModel.Branch win _)) = show win ++ "/DQ"
   show (NodeLabel _ (StaticLoop n _)) = "/DQ="
     
