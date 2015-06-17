@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -67,7 +67,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SORA_ROOT)\src\bb\dot11a;$(SORA_ROOT)\src\bb\dot11a\inc;$(SORA_ROOT)\src\bb\brick11\src;$(SORA_ROOT)\src\util\src;$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\inc;$(SORA_ROOT)\inc\brick;$(DDK_INC_PATH);$(ProjectDir)\..;$(BLADERF_PATH)\include</IncludePath>
-    <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);$(DDK_LIB_PATH);$(SORA_ROOT)\target\chk_wxp_x86\i386\;$(SORA_ROOT)\lib\chk_wxp_x86\i386;$(BLADERF_PATH)\lib\x64</LibraryPath>
+    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(DDK_LIB_PATH);$(SORA_ROOT)\target\chk_win7_amd64\amd64\;$(SORA_ROOT)\lib\chk_win7_amd64\amd64;$(BLADERF_PATH)\lib\x64</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>true</LinkIncremental>
@@ -102,7 +102,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions);USER_MODE;BUILDARCHX86 ;SORA_PLATFORM;_BB11B_KERNEL;$(C_DEFINES)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions);USER_MODE;BUILDARCHX86 ;SORA_PLATFORM;_BB11B_KERNEL;$(C_DEFINES)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <WarningLevel>Level2</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -111,12 +111,14 @@
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
       <CallingConvention>StdCall</CallingConvention>
       <MultiProcessorCompilation>false</MultiProcessorCompilation>
+      <UndefinePreprocessorDefinitions>WIN32</UndefinePreprocessorDefinitions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
-      <AdditionalLibraryDirectories>$(SORA_ROOT)\lib\chk_wxp_x86\i386</AdditionalLibraryDirectories>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;dot11bbbu.lib;dot11bbau.lib;libbba_lutstu.lib;libbba_modu.lib;usora.lib;sora_utility.lib;DebugPlotU.lib;$(LIBS)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>
+      </AdditionalLibraryDirectories>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Ws2_32.lib;dot11bbbu.lib;dot11bbau.lib;libbba_lutstu.lib;libbba_modu.lib;usora.lib;sora_utility.lib;$(LIBS)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
