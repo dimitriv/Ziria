@@ -28,7 +28,7 @@ msbuild CompilerVS13.vcxproj /target:build /p:Configuration=Debug /p:Platform=x6
 
 if %errorlevel% NEQ 0 (
 set errorlev=1
-del CompilerVS13\x64\Release\CompilerVS13.exe 
+del CompilerVS13\x64\Debug\CompilerVS13.exe 
 ) else (
 set errorlev=0
 )
