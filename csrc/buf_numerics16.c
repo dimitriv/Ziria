@@ -726,7 +726,7 @@ void _init_getuint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock
 		}
 		else
 		{
-			blk->num16_input_buffer = (uint16 *)blk->mem_input_buf;
+			blk->num16_input_buffer = (int16 *)blk->mem_input_buf;
 			blk->num16_input_entries = blk->mem_input_buf_size/(blk->size_in/8);
 		}
 	}
@@ -738,7 +738,7 @@ void _init_getuint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock
 		try_read_filebuffer(hblk, params->inFileName, params->inFileMode, &filebuffer, &sz);
 
 		// How many bytes the file buffer has * sizeof should be enough
-		blk->num16_input_buffer = (uint16 *)try_alloc_bytes(hblk, sz * sizeof(uint16));
+		blk->num16_input_buffer = (int16 *)try_alloc_bytes(hblk, sz * sizeof(uint16));
 
 		if (params->inFileMode == MODE_BIN)
 		{
@@ -752,7 +752,7 @@ void _init_getuint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock
 		}
 		else 
 		{
-			blk->num16_input_entries = parse_dbg_uint16(filebuffer, blk->num16_input_buffer);
+			blk->num16_input_entries = parse_dbg_uint16(filebuffer, (uint16 *) blk->num16_input_buffer);
 		}
 	}
 
@@ -902,7 +902,7 @@ void init_putuint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock 
 
 	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
 	{
-		blk->num16_output_buffer = (uint16 *)malloc(params->outBufSize * sizeof(uint16));
+		blk->num16_output_buffer = (int16 *)malloc(params->outBufSize * sizeof(uint16));
 		blk->num16_output_entries = params->outBufSize;
 		if (params->outType == TY_FILE)
 		{
@@ -926,7 +926,7 @@ void init_putuint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock 
 		}
 		else
 		{
-			blk->num16_output_buffer = (uint16*)blk->mem_output_buf;
+			blk->num16_output_buffer = (int16*)blk->mem_output_buf;
 			blk->num16_output_entries = blk->mem_output_buf_size / (blk->size_out / 8);
 		}
 	}

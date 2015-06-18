@@ -104,8 +104,11 @@ iv_join_discrete (IKnown v1) (IKnown v2)
   | otherwise = IUnknown
 
 rint_widen :: IVal Integer -> IVal Integer
+-- Use a small range [0,256] to make the whole 
+-- thing insensitive to signedness
 rint_widen IUnknown = IUnknown
 rint_widen (IKnown i) | i >= 256  = IUnknown
+                      | i < 0     = IUnknown
                       | otherwise = IKnown i 
 
 -- | Intervals
@@ -267,7 +270,7 @@ rbinop BwXor _ _  = ROther
 ----------------------------------------------------------------------}
 
 instance ValDom Range where
-  aVal (VInt i)      = mkRInt (return i)
+  aVal (VInt i _)    = mkRInt (return i)
   aVal (VBool b)     = RBool (return b)
   aVal _             = ROther
   aArr _vs           = RArr IUnknown IUnknown
