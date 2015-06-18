@@ -123,12 +123,13 @@ data RetBody a
     DoReuseLcl EId a
     -- | Name is just a local variable returned, new body is of type Unit
   | NoReuseLcl (EId -> a)                          
-    -- ^ Reuse the result of LUT unpacking, new body is of type Unit
+    -- | Reuse the result of LUT unpacking, don't transform the body!
+  | DoReuseLUT a
 
 instance Functor RetBody where
   fmap h (DoReuseLcl x e) = DoReuseLcl x (h e)
   fmap h (NoReuseLcl gen) = NoReuseLcl (\x -> h (gen x))
-
+  fmap h (DoReuseLUT e)   = DoReuseLUT (h e)
 
 data RetType = RetByVal Exp | RetByRef (RetBody Exp)
 
@@ -144,6 +145,7 @@ retByRef body body_ty
 transBodyByRef :: Exp -> RetBody Exp
 transBodyByRef = go [] where
   go env e = go0 (expLoc e) (unExp e) where
+     go0 _loc (ELUT {})              = DoReuseLUT e 
      go0 loc (EVar x) | x `elem` env = DoReuseLcl x (eVal loc TUnit VUnit)
      go0 loc (ESeq e1 e2)            = fmap (eSeq loc e1) (go env e2)
      go0 loc (ELet x fi e1 e2) =
@@ -173,7 +175,7 @@ getClosureVars fdef = do
   -- | Get all the closure parameters (recursively) of callees 
   called_funs <- map fromJust <$> filter isJust <$> 
                     (mapM lookupExpFunEnv_maybe $ S.toList (funFVs fdef))
-  let clos_vars_from_called = concat (map snd called_funs)
+  let clos_vars_from_called = concat (map (\(_,fs,_) -> fs) called_funs)
   -- | Sum the two up and return
   return $ nub (clos_vars_from_body ++ clos_vars_from_called)
 
@@ -222,13 +224,14 @@ cgFunDefined dflags csp
   let closureParams_cbinds = map (\p -> mk_cbind p Mut) closureEnv_fresh
 
   -- Return parameters and new body.
-  (retParamEnv :: [EId], body' :: Exp) <-
+  (retParamEnv :: [EId], body' :: Exp, lut_returning) <-
       case ret_by_ref of
-        RetByVal e -> return ([],e)
-        RetByRef (DoReuseLcl lcl e') -> return ([lcl],e')
+        RetByVal e -> return ([],e, False)
+        RetByRef (DoReuseLcl lcl e') -> return ([lcl],e',False)
         RetByRef (NoReuseLcl gen_e ) -> do 
           retn <- freshName "_ret" retTy Mut
-          return ([retn], gen_e retn)
+          return ([retn], gen_e retn,False)
+        RetByRef (DoReuseLUT e) -> return ([], e, True)
 
   -- Freshen actual parameters
   paramsEnv_fresh <- mapM fresh params
@@ -272,7 +275,7 @@ cgFunDefined dflags csp
                       return $(cbody);
              }
      |]
-  extendExpFunEnv f (newNm, closureEnv) action
+  extendExpFunEnv f (newNm, closureEnv, lut_returning) action
 
 cgFunDefined _ _ _ _ = panicStr "cgFunDefined"
 
@@ -300,14 +303,14 @@ cgFunExternal _dflags loc
           return (rets ++ concat rest)      -- ^ all of them
 
     appendTopDecl [cdecl|void $id:ext_str ($params:actuals);|]
-    extendExpFunEnv nm (ext_nm,[]) action
+    extendExpFunEnv nm (ext_nm,[],False) action
 
   go _ = do
     actuals <- evalCgPrm [] $ concat <$> mapM cg_actual_param (zip ps argtys)
     appendTopDecl $
       [cdecl|$ty:(codeGenTyOcc retTy) $id:ext_str ($params:actuals);|]
     
-    extendExpFunEnv nm (ext_nm,[]) action
+    extendExpFunEnv nm (ext_nm,[],False) action
 
 cgFunExternal _ _ _ _ = panicStr "cgFunExternal"
 

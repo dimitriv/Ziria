@@ -198,6 +198,7 @@ instance AbsInt DFM VarSet where
   aWithFact vs = extendFlowVars vs
   aWiden _ = aJoin
 
+  aTrace = return ()
 
 
 {---------------------------------------------------------------
@@ -225,7 +226,7 @@ inOutVars dfs e = do
       pureUsed = Set.toList varset
       allVars  = Set.toList ufset
   -- Try now the range analysis
-  (ranges,_ret_rng) <- RA.varRanges dfs e
+  (_ret_rng, ranges) <- RA.varRanges dfs e
   return $ VarUsePkg { vu_invars  = nub $ impUsed ++ pureUsed
                      , vu_outvars = modified
                      , vu_allvars = allVars 
