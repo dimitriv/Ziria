@@ -2,10 +2,6 @@
 -- http://cr.yp.to/salsa20.html or http://cr.yp.to/snuffle/spec.pdf
 -- for details.
 
--- To run:
--- ../../scripts/preprocesscompile-gcc.sh salsa20.zir salsa20.out
--- ./salsa20.out --input=dummy
-
 fun rot32(x : uint32, c : int) = 
   (x << c) | ((x & 0xffffffffu) >> (32 - c))
 
@@ -65,94 +61,69 @@ fun comp unlittleendian() =
          emit(uint8(               x  >> 24))
   done
 
-fun comp salsa20_core() =
+-- salsa20_core: perform 20 rounds of mixing on 'input', a 64-byte array, 
+-- writing the resulting 64 bytes to 'output'.
+fun salsa20_core(var input : arr[16] uint32, var output : arr[16] uint32) =
+  var t : arr[16] uint32 := input in
+  begin output := t;
+        for i in [0,10] do doubleround(t) done;
+        for i in [0,16] do output[i] := output[i] + t[i] done
+  end
+
+-- salsa20_block: given a 256-bit key, a 2-word nonce, and a 2-word block number, 
+-- run salsa20_core on a permutation of key, nonce, and block number, writing
+-- the resulting 64 bytes to 'output'. The size/layout of key, nonce, etc. can 
+-- be found here: http://cr.yp.to/snuffle/salsafamily-20071225.pdf.
+fun salsa20_block( key : arr[8] uint32, 
+                   nonce : arr[2] uint32, block : arr[2] uint32, 
+                   var output : arr[16] uint32 ) =
   var t : arr[16] uint32 in
   var u : arr[16] uint32 in
-  repeat do
-    (x : arr[16] uint32) <- takes(16);
-    _ <- do begin t := x; u := x;
-                  for i in [0,10] do doubleround(t) done;
-                  for i in [0,16] do u[i] := u[i] + t[i] done
-            end
-         done;
-    emits(u)
-  done
+  begin t[0]     := 0x61707865u; 
+        t[1:4]   := key[0:3];
+        t[5]     := 0x3320646eu;
+        t[6:7]   := nonce[0:1];
+        t[8:9]   := block[0:1];
+        t[10]    := 0x79622d32u;
+        t[11:14] := key[4:7];
+        t[15]    := 0x6b206574u;
+        salsa20_core(t, u)
+  end 
 
-fun comp test_rot32() =
-  repeat do 
-    (x : uint32) <- take;
-    (c : uint32) <- take;
-    emit(rot32(x,int(c)))
-  done
-
-fun comp test_quarterround() =
-  var t : arr[4] uint32 in
-  repeat do 
-    x <- takes(4);
-    _ <- do begin t := x; quarterround(t)
-            end
-         done;
-    emits(t)
-  done
-
-fun comp test_rowround() =
+-- salsa20_xor: given a key and a nonce, repeatedly generate 64-byte
+-- stream blocks; xor the stream blocks with the plaintext/ciphertext
+-- blocks coming in from upstream.
+fun comp salsa20_xor(key : arr[8] uint32, nonce : arr[2] uint32) =
   var t : arr[16] uint32 in
+  var block_num : uint64 := 0u in 
+  var block_arr : arr[2] uint32 in
+  var salsa_block : arr[16] uint32 in
   repeat do 
-    x <- takes(16);
-    _ <- do begin t := x; rowround(t)
-            end
+    -- generate a stream-cipher block, into 'salsa_block'
+    _ <- do begin block_arr[0] := uint32(block_num);
+                  block_arr[1] := uint32(block_num >> 32);
+                  salsa20_block(key, nonce, block_arr, salsa_block);
+                  block_num := block_num + 1u
+            end 
          done;
-    emits(t)
+    -- input a 64-byte plaintext/ciphertext block
+    (input_block : arr[16] uint32) <- takes(16);
+    -- xor and emit
+    _ <- do for i in [0,16] do 
+              salsa_block[i] := input_block[i] ^ salsa_block[i]
+            done 
+         done;
+    emits(salsa_block)
   done
 
-fun comp test_colround() =
-  var t : arr[16] uint32 in
-  repeat do 
-    x <- takes(16);
-    _ <- do begin t := x; colround(t)
-            end
-         done;
-    emits(t)
-  done
+fun comp salsa20_xor_test() =
+  littleendian() >>>
+  begin
+    (key : arr[8] uint32) <- takes(8);
+    (nonce : arr[2] uint32) <- takes(2);
+    -- encrypt/decrypt
+    (salsa20_xor(key, nonce) >>> salsa20_xor(key, nonce))
+  end >>>
+  unlittleendian()
 
-fun comp test_doubleround() =
-  var t : arr[16] uint32 in
-  repeat do 
-    x <- takes(16);
-    _ <- do begin t := x; doubleround(t)
-            end
-         done;
-    emits(t)
-  done
-
-fun comp salsa20() = littleendian() >>> salsa20_core() >>> unlittleendian()
-
-let comp main = read[uint8] >>> salsa20() >>> write[uint8]
-
--- UNROLLED:
-fun salsa20_unrolled(x : arr[16] uint32) =
-  var a : arr[16] uint32 := x in
-  begin 
-    -- Execute 10 double rounds, or 20 rounds total:
-    for i in [0,9] do
-      begin 
-        a[ 4] := a[ 4] ^ rot32(a[ 0] + a[12], 7); a[ 8] := a[ 8] ^ rot32(a[ 4] + a[ 0], 9);
-        a[12] := a[12] ^ rot32(a[ 8] + a[ 4],13); a[ 0] := a[ 0] ^ rot32(a[12] + a[ 8],18);
-        a[ 9] := a[ 9] ^ rot32(a[ 5] + a[ 1], 7); a[13] := a[13] ^ rot32(a[ 9] + a[ 5], 9);
-        a[ 1] := a[ 1] ^ rot32(a[13] + a[ 9],13); a[ 5] := a[ 5] ^ rot32(a[ 1] + a[13],18);
-        a[14] := a[14] ^ rot32(a[10] + a[ 6], 7); a[ 2] := a[ 2] ^ rot32(a[14] + a[10], 9);
-        a[ 6] := a[ 6] ^ rot32(a[ 2] + a[14],13); a[10] := a[10] ^ rot32(a[ 6] + a[ 2],18);
-        a[ 3] := a[ 3] ^ rot32(a[15] + a[11], 7); a[ 7] := a[ 7] ^ rot32(a[ 3] + a[15], 9);
-        a[11] := a[11] ^ rot32(a[ 7] + a[ 3],13); a[15] := a[15] ^ rot32(a[11] + a[ 7],18);
-        a[ 1] := a[ 1] ^ rot32(a[ 0] + a[ 3], 7); a[ 2] := a[ 2] ^ rot32(a[ 1] + a[ 0], 9);
-        a[ 3] := a[ 3] ^ rot32(a[ 2] + a[ 1],13); a[ 0] := a[ 0] ^ rot32(a[ 3] + a[ 2],18);
-        a[ 6] := a[ 6] ^ rot32(a[ 5] + a[ 4], 7); a[ 7] := a[ 7] ^ rot32(a[ 6] + a[ 5], 9);
-        a[ 4] := a[ 4] ^ rot32(a[ 7] + a[ 6],13); a[ 5] := a[ 5] ^ rot32(a[ 4] + a[ 7],18);
-        a[11] := a[11] ^ rot32(a[10] + a[ 9], 7); a[ 8] := a[ 8] ^ rot32(a[11] + a[10], 9);
-        a[ 9] := a[ 9] ^ rot32(a[ 8] + a[11],13); a[10] := a[10] ^ rot32(a[ 9] + a[ 8],18);
-        a[12] := a[12] ^ rot32(a[15] + a[14], 7); a[13] := a[13] ^ rot32(a[12] + a[15], 9);
-        a[14] := a[14] ^ rot32(a[13] + a[12],13); a[15] := a[15] ^ rot32(a[14] + a[13],18)
-      end
-    done;
-    a                                              
-  end
+let comp main = read[uint8] >>> salsa20_xor_test() >>> write[uint8]
