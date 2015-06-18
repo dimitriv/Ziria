@@ -78,7 +78,6 @@ fun salsa20_block( key : arr[8] uint32,
                    nonce : arr[2] uint32, block : arr[2] uint32, 
                    var output : arr[16] uint32 ) =
   var t : arr[16] uint32 in
-  var u : arr[16] uint32 in
   begin t[0]     := 0x61707865u; 
         t[1:4]   := key[0:3];
         t[5]     := 0x3320646eu;
@@ -87,7 +86,7 @@ fun salsa20_block( key : arr[8] uint32,
         t[10]    := 0x79622d32u;
         t[11:14] := key[4:7];
         t[15]    := 0x6b206574u;
-        salsa20_core(t, u)
+        salsa20_core(t, output)
   end 
 
 -- salsa20_xor: given a key and a nonce, repeatedly generate 64-byte
