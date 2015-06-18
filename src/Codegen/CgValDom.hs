@@ -293,19 +293,19 @@ cgArrVal_val _dfs loc t@(TArray _ _) ws
            cv1 <- go (TArray (Literal ln1) tval) vs1
            cv2 <- go (TArray (Literal ln2) tval) vs2
            snm  <- freshName "__val_arr" t Mut
-           let valsiz = tySizeOf tval
-               csiz1  = ln1 * valsiz
-               csiz2  = ln2 * valsiz
+           let valsiz = tySizeOf_C tval
+               csiz1  = [cexp| $int:ln1 * $valsiz|]
+               csiz2  = [cexp| $int:ln2 * $valsiz|]
            DeclPkg d istms <- codeGenDeclGroup (name snm) t ZeroOut
            appendTopDecl d 
            mapM_ addGlobalWplAllocated istms
 
            addGlobalWplAllocated $ 
               [cstm| blink_copy((void *) $id:(name snm), 
-                                (void *) $cv1, $int:csiz1);|] 
+                                (void *) $cv1, $csiz1);|] 
            addGlobalWplAllocated $
               [cstm| blink_copy((void *) & $id:(name snm)[$int:ln1], 
-                                (void *) $cv2, $int:csiz2);|]
+                                (void *) $cv2, $csiz2);|]
 
            let csnm = [cexp| $id:(name snm)|]
            return csnm

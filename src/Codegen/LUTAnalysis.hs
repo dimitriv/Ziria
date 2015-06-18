@@ -36,11 +36,14 @@ module LUTAnalysis (
  , inVarsBitWidth
  , inVarBitWidth
  , inArrSliceBitWidth
-   -- | Byte-aligned packed output variable width and assign-masks
 
+   -- | Byte-aligned packed output variable width and assign-masks
+ , isArrVarFullyWritten -- ^ Is this array variable fully written?
  , outVarsBitWidth -- ^ Total output variables and their masks 
- , outVarBitWidth  -- ^ Includes mask width
- , outVarMaskWidth -- ^ Only this variable's width
+ , outVarBitWidth  -- ^ Includes mask width, if needed
+ , outVarMaskWidth -- ^ Only this variable's width 
+
+ , RngMap 
  ) where
 
 import Opts
@@ -367,32 +370,50 @@ is 2^inputwidth * (outputwidth / 8).
   Widths of output variables of LUTs, see note [LUT Packing Strategy]
 ----------------------------------------------------------------------}
 
+-- | Is this an array variable that -- according to the RngMap -- gets
+-- completely overwritten? NB: the output RArr range must be precise!
+isArrVarFullyWritten :: RngMap -> Ty -> EId -> Bool
+isArrVarFullyWritten rmap ty x 
+  | TArray numexp _ <- ty
+  , Literal n <- numexp
+  , Just (RArr _ (IKnown (Iv lo hi))) <- neLookup x rmap
+  , lo == 0, hi + 1 == fromIntegral n
+  = True
+  | otherwise
+  = False 
+
 -- | Output variables bitwidth. NB: byte-aligned!
 outVarsBitWidth :: (Functor m, Monad m) => VarUsePkg -> m Integer
-outVarsBitWidth pkg = outvars_bitwidth (vu_outvars pkg)
+outVarsBitWidth pkg = outvars_bitwidth (vu_ranges pkg) (vu_outvars pkg)
 
-outVarBitWidth :: (Functor m, Monad m) => EId -> m Integer
+outVarBitWidth :: (Functor m, Monad m) => RngMap -> EId -> m Integer
 -- | NB: Includes the mask width!
 outVarBitWidth = outvar_bitwidth 
 
-outvar_bitwidth :: (Functor m, Monad m) => EId -> m Integer
-outvar_bitwidth x = go (nameTyp x) x
-  where go t@(TArray {})  x = double <$> tyBitWidth_ByteAlign t
+outvar_bitwidth :: (Functor m, Monad m) => RngMap -> EId -> m Integer
+outvar_bitwidth rmap x = go (nameTyp x) x
+  where go t@(TArray {}) x 
+            -- no need for mask
+          | isArrVarFullyWritten rmap t x = tyBitWidth_ByteAlign t
+            -- use mask, so double the width
+          | otherwise = double <$> tyBitWidth_ByteAlign t
         go t@(TStruct {}) x = double <$> tyBitWidth_ByteAlign t
         go t otherwise      = tyBitWidth_ByteAlign t
         double n = 2*n
 
-outVarMaskWidth :: Ty -> Maybe Integer
+outVarMaskWidth :: RngMap -> EId -> Ty -> Maybe Integer
 -- | Original type of variable, return the width 
 -- of the mask if this type is mask-able.
-outVarMaskWidth t@(TArray {})  = tyBitWidth_ByteAlign t
-outVarMaskWidth t@(TStruct {}) = tyBitWidth_ByteAlign t
-outVarMaskWidth t              = Nothing
+outVarMaskWidth rmap x t@(TArray {}) 
+  | isArrVarFullyWritten rmap t x = Nothing
+  | otherwise = tyBitWidth_ByteAlign t
+outVarMaskWidth _rmap _x t@(TStruct {}) = tyBitWidth_ByteAlign t
+outVarMaskWidth _rmap _x _t             = Nothing
 
 
-outvars_bitwidth :: (Functor m, Monad m) => [EId] -> m Integer
-outvars_bitwidth vartys = do
-  sizes <- mapM outvar_bitwidth vartys
+outvars_bitwidth :: (Functor m, Monad m) => RngMap -> [EId] -> m Integer
+outvars_bitwidth rmap vartys = do
+  sizes <- mapM (outvar_bitwidth rmap) vartys
   return $ sum sizes
 
 
@@ -415,13 +436,6 @@ invars_bitwidth pkg vartys = do
 
 invar_bitwidth :: (Functor m, Monad m, MonadIO m) => VarUsePkg -> EId -> m Integer
 invar_bitwidth pkg v
-   -- | Integers in known range
-  | Just (RInt (IRng l h)) <- neLookup v $ vu_ranges pkg
-  = do {- liftIO $ putStrLn ("Found range for variable: " ++ show v)
-          liftIO $ putStrLn ("Low:  " ++ show l)
-          liftIO $ putStrLn ("High: " ++ show h) -}
-       return (intLog2 (max (abs l) (abs h)))
-
   -- | Array variables in known input range
   | Just (_,w) <- inArrSliceBitWidth pkg v
   = return w
@@ -434,18 +448,13 @@ invar_bitwidth pkg v
   = tyBitWidth (nameTyp v)
 
 
-intLog2 :: Integer -> Integer
-intLog2 ix = ceiling (logBase 2 dx + 1)
-  where dx :: Double
-        dx = fromIntegral ix
-
 -- | Input array slice? 
 inArrSlice :: VarUsePkg -> EId -> Maybe (Integer,Integer)
 inArrSlice pkg x = do 
   RArr rin _ <- neLookup x $ vu_ranges pkg
   case rin of 
-    IRng lidx hidx -> return (lidx, hidx)
-    _              -> Nothing
+    IKnown (Iv lidx hidx) -> return (lidx, hidx)
+    _                     -> Nothing
 
 
 inArrSliceBitWidth :: VarUsePkg -> EId -> Maybe (Integer,Integer)

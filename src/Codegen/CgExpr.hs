@@ -295,14 +295,13 @@ cgCall_aux dfs loc res_ty fn eargs = do
   let (TArrow formal_argtys _) = nameTyp fn
   let argfuntys = zipWith (\(GArgTy _ m) t -> GArgTy t m) formal_argtys funtys
   let tys_args = zip argfuntys eargs
-  retn <- freshName "ret" res_ty Mut
-  let cretn = [cexp| $id:(name retn)|]
-  appendCodeGenDeclGroup (name retn) res_ty ZeroOut
  
   ceargs <- mapM (cgEvalArg dfs) tys_args
+  CgCall.cgCall dfs loc res_ty argfuntys fn ceargs
 
-  extendVarEnv [(retn,cretn)] $
-     CgCall.cgCall dfs loc res_ty argfuntys fn ceargs cretn
+
+  -- extendVarEnv [(retn,cretn)] $
+  --    CgCall.cgCall dfs loc res_ty argfuntys fn ceargs cretn
 
 
 cgEvalArg :: DynFlags -> (ArgTy, Exp) -> Cg (Either (LVal ArrIdx) C.Exp)

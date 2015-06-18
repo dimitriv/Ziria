@@ -21,7 +21,7 @@
 module CgTypes ( bwBitWidth
                , namedCType, namedCType_
                , codeGenTyOcc, codeGenTyOcc_
-               , tySizeOf, tySizeOf_C
+               , tySizeOfApprox, tySizeOf_C
 
                , isStructPtrType
                , isPtrType
@@ -49,23 +49,6 @@ module CgTypes ( bwBitWidth
                , appendDeclPkg
                , appendTopDeclPkg
                , shouldAllocAsPtr
-
-
-               -- , codeGenTy_qual
-               -- , codeGenTy_DefaultVal
-               -- , codeGenTyAlg
-               -- , codeGenArrTyPtr
-               -- , codeGenArrTyPtrAlg
-               -- , assignByVal
-               -- , tySizeOf_C, tySizeOf
-               -- , codeGenDeclGroup, codeGenDeclVolGroup, codeGenDeclVolGroup_init
-               -- , codeGenDeclGlobalGroups
-               -- , codeGenDeclDef
-               -- , codeGenDeclGlobalDefs
-               -- , initGroupDef
-               -- , codeGenVal
-               -- , codeGenArrVal
-               -- , isStructPtrType
 
                ) where
 
@@ -105,25 +88,43 @@ bwBitWidth BW32          = 32
 bwBitWidth BW64          = 64
 bwBitWidth (BWUnknown _) = 32 -- ^ Defaulting to 32
 
--- | Returns the size of the type in bytes
-tySizeOf :: Ty -> Int
-tySizeOf TUnit       = 1
-tySizeOf TBit        = 1
-tySizeOf TBool       = 1
-tySizeOf (TInt bw _) = ((bwBitWidth bw) + 7) `div` 8
-tySizeOf TDouble     = (64 `div` 8)
-tySizeOf (TArray (Literal n) TBit) = bitArrByteLen n
-tySizeOf (TArray (Literal n) ty)   = n * tySizeOf ty
-tySizeOf (TStruct sn flds)         = sum $ map (tySizeOf . snd) flds
-tySizeOf TVoid                     = 0
-tySizeOf other_ty = 
-  panic $ text "tySizeOf: Cannot determine size of: " <+> ppr other_ty
+-- ^ apx = True  => approximate, due to unknown alignment constraints)
+-- ^     = False => precise, in which case we may fail.
+tySizeOf :: Bool -> Ty -> Int
+tySizeOf apx = go 
+  where
+     go TUnit       = 1
+     go TBit        = 1
+     go TBool       = 1
+     go (TInt bw _) = ((bwBitWidth bw) + 7) `div` 8
+     go TDouble     = (64 `div` 8)
+     go (TArray (Literal n) TBit) = bitArrByteLen n
+     go (TArray (Literal n) ty)   = n * go ty
+     go (TStruct sn flds)
+       | sn == complexTyName   = 8   -- NB: platform-dependent
+       | sn == complex8TyName  = 2   -- but ok with GCC and VS in
+       | sn == complex16TyName = 4   -- Cygwin and in VS
+       | sn == complex32TyName = 8
+       | sn == complex64TyName = 16
+       | apx -- ^ approximate on? 
+       = sum $ map (go . snd) flds
+       | otherwise
+       = panicStr "Can't compute tySizeOf: compiler/architecture specific!"
+     go TVoid 
+       = panicStr "Can't compute go(TVoid)"
+     go other_ty = 
+       panic $ text "go: Cannot determine size of: " <+> ppr other_ty
 
+tySizeOfApprox :: Ty -> Int
+tySizeOfApprox ty = tySizeOf True ty
 
 tySizeOf_C :: Ty -> C.Exp
-tySizeOf_C (TArray (NVar n) TBit) = [cexp| (($id:n + 7) >> 3) |]
-tySizeOf_C (TArray (NVar n) ty)   = [cexp| $id:n * $exp:(tySizeOf_C ty)|]
-tySizeOf_C ty = [cexp| $int:(tySizeOf ty)|]
+tySizeOf_C (TArray (NVar n) TBit)  = [cexp| (($id:n + 7) >> 3) |]
+tySizeOf_C (TArray (NVar n) ty)    = [cexp| $id:n * $exp:(tySizeOf_C ty)|]
+tySizeOf_C (TArray (Literal n) ty) = [cexp| $int:n * $exp:(tySizeOf_C ty)|]
+tySizeOf_C (TStruct sn _) = [cexp| sizeof($id:sn)|]
+tySizeOf_C ty             = [cexp| $int:(tySizeOf False ty)|]
+
 
 {------------------------------------------------------------------------
   Language-c-quote infrastructure and fixed types
@@ -225,7 +226,7 @@ isPtrType ty = isArrayTy ty || isStructPtrType ty
 isStructPtrType :: Ty -> Bool
 isStructPtrType ty
   | isArrayTy ty = False
-  | otherwise    = isLargeTy (tySizeOf ty)
+  | otherwise    = isLargeTy (tySizeOfApprox ty)
 
 isLargeTy :: Int -> Bool
 -- ^ Determine if this type is large. 
@@ -237,7 +238,7 @@ isLargeTy ty_size = ty_size > cMAX_STACK_ALLOC
 shouldAllocAsPtr :: Ty -> Bool
 -- | Should we allocate as pointer
 shouldAllocAsPtr (TArray (NVar {}) _) = True
-shouldAllocAsPtr other = isLargeTy (tySizeOf other)
+shouldAllocAsPtr other = isLargeTy (tySizeOfApprox other)
 
 
 {------------------------------------------------------------------------
@@ -475,13 +476,13 @@ asgn_arr (Literal n) TBit ce1 ce2
 asgn_arr (NVar n) TBit ce1 ce2
   = appendStmt [cstm|bitArrRead($ce2,0,$id:n,$ce1);|]
 asgn_arr (Literal n) ty ce1 ce2
-  = appendStmt [cstm|blink_copy($ce1, $ce2, $int:n * $int:(tySizeOf ty));|]
+  = appendStmt [cstm|blink_copy($ce1, $ce2, $int:n * $(tySizeOf_C ty));|]
 asgn_arr (NVar n) ty ce1 ce2
-  = appendStmt [cstm|blink_copy($ce1, $ce2, $id:n * $int:(tySizeOf ty));|]
+  = appendStmt [cstm|blink_copy($ce1, $ce2, $id:n * $(tySizeOf_C ty));|]
 
 asgn_memcpy :: Ty -> C.Exp -> C.Exp -> Cg ()
 asgn_memcpy t ce1 ce2 
-  = appendStmt [cstm|blink_copy($ce1, $ce2, $int:(tySizeOf t));|]
+  = appendStmt [cstm|blink_copy($ce1, $ce2, $(tySizeOf_C t));|]
 
 asgn_direct :: Ty -> C.Exp -> C.Exp -> Cg ()
 asgn_direct ty ce1 ce2

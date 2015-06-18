@@ -241,9 +241,9 @@ pack_out_var :: VarUsePkg
              -> C.Exp
              -> Int
              -> Cg Int
-pack_out_var _pkg (v,v_asgn_mask) tgt pos = do
+pack_out_var pkg (v,v_asgn_mask) tgt pos = do
   vptr <- varToBitArrPtr v
-  total_width <- fromIntegral <$> outVarBitWidth v
+  total_width <- fromIntegral <$> outVarBitWidth (vu_ranges pkg) v
   -- ^ NB: w includes width for v_asgn_mask already!
   let w = if isJust v_asgn_mask then total_width `div` 2 else total_width
   appendStmt [cstm|bitArrWrite($vptr,$int:pos,$int:w,$tgt); |]
@@ -277,15 +277,15 @@ unpack_out_var :: VarUsePkg
                -> C.Exp
                -> Int
                -> Cg Int
-unpack_out_var _pkg (v, Nothing) src pos = do
+unpack_out_var pkg (v, Nothing) src pos = do
   vptr <- varToBitArrPtr v
-  w    <- fromIntegral <$> outVarBitWidth v -- ^ Post: w is multiple of 8
+  w    <- fromIntegral <$> outVarBitWidth (vu_ranges pkg) v -- ^ Post: w is multiple of 8
   cgBitArrRead src pos w vptr
   return (pos+w)
 
-unpack_out_var _pkg (v, Just {}) src pos = do
+unpack_out_var pkg (v, Just {}) src pos = do
   vptr    <- varToBitArrPtr v
-  total_w <- fromIntegral <$> outVarBitWidth v
+  total_w <- fromIntegral <$> outVarBitWidth (vu_ranges pkg) v
   let w  = total_w `div` 2
   let mask_ptr = [cexp| & $src[$int:((pos+w) `div` 8)]|]
   let src_ptr  = [cexp| & $src[$int:(pos `div` 8)]     |]
@@ -473,7 +473,7 @@ genLUT dflags stats e = do
    -- | Function name that will populate this LUT
    clutgen <- freshVar "clut_gen"
    -- | Generate mask variables for output
-   mask_eids <- mapM genOutVarMask (vu_outvars vupkg)
+   mask_eids <- mapM (genOutVarMask (vu_ranges vupkg)) (vu_outvars vupkg)
    (lut_defs,(lut_decls,lut_stms,_)) <-
       collectDefinitions $ inNewBlock $
       genLocalVarInits dflags (vu_allvars vupkg) $
@@ -558,10 +558,10 @@ genLUT dflags stats e = do
                        , lgi_lut_gen        = [cstm|$id:clutgen();|]
                        , lgi_masked_outvars = mask_eids }
 
-genOutVarMask :: EId -> Cg (EId, Maybe EId)
+genOutVarMask :: RngMap -> EId -> Cg (EId, Maybe EId)
 -- ^ Generate a new output mask variable
-genOutVarMask x = 
-  case outVarMaskWidth x_ty of
+genOutVarMask rmap x = 
+  case outVarMaskWidth rmap x x_ty of
     Nothing -> return (x, Nothing)
     Just bw -> do
       let bitarrty = TArray (Literal $ fromIntegral bw) TBit
@@ -735,7 +735,8 @@ writeMask :: EId
           -> [Exp]
 writeMask x mask_map rng 
   | Just (Just mask_var) <- lookup x mask_map
-  , Just w <- fromIntegral <$> outVarMaskWidth (nameTyp x)
+                               -- outVarMaskWidth (nameTyp x)
+  , Just w <- fromIntegral <$> tyBitWidth_ByteAlign (nameTyp x) 
   , let (estart,mask_len) = maskRangeToRng w rng
   = [eBitArrSet mask_var estart mask_len]
   | otherwise
