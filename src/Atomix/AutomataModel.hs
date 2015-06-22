@@ -1,6 +1,7 @@
 module AutomataModel where
 
 import Data.Set (Set)
+import Data.Map 
 import qualified Data.Set as Set
 import Data.Maybe (maybeToList)
 import qualified Data.List as List
@@ -19,32 +20,54 @@ import AtomComp -- simplified Ziria model
 import AstExpr (nameTyp, name)
 import Opts
 
-
 type Chan = Var
 
-type LNode atom = G.LNode (NodeLabel atom)
 
-data NodeLabel atom
-  = NodeLabel { node_id   :: Node
-              , node_kind :: NodeKind atom
+data NodeKind atom nid 
+  = Action { atoms :: [WiredAtom atom]
+           , next  :: nid 
+           }
+  | Branch { branch_var   :: Chan -- If we read True we go to branch_true, otherwise to branch_false
+           , branch_true  :: nid
+           , branch_false :: nid
+           , is_while     :: Bool -- Is this a while loop? 
+           }
+  | Done
+
+  -- TODO: think about this later 
+  -- | StaticLoop  { iterations :: Int, loop_body :: Automaton }
+
+data Node atom nid
+  = Node { node_id   :: nid
+         , node_kind :: NodeKind atom
+         }
+
+data Automaton atom nid 
+  = Automaton { auto_graph   :: Map nid (Node atom nid)
+              , auto_inchan  :: Chan
+              , auto_outchan :: Chan
+              , auto_start   :: nid
               }
 
-data NodeKind atom
-  = Action (WiredAtom atom) 
-  | StaticLoop  { iterations :: Int, loop_body :: Automaton }
-  | Branch { branch_in   :: Chan, branch_next :: (Node,Node) }
+data WiredAtom atom 
+  = WiredAtom { wires_in  :: [Var]
+              , wires_out :: [Var] 
+              , the_atom  :: atom 
+              }
 
-data Automaton
-  = Automaton { autom_init  :: Node
-              , autom_final :: Set Node }
+type AutoM a = ReaderT (GS.Sym) (IO a)
 
-type ZirGraph atom = Gr (NodeLabel atom) ()
+type NodeId = Uniq
 
-type GraphM atom a = StateT (ZirGraph atom) (ReaderT (CompEnv ()) IO) a
+newNodeId :: AutoM Uniq
+newNodeId = do 
+  sym <- ask
+  liftIO $ genSymStr sym
 
-data WiredAtom atom = WiredAtom { wires_in  :: [Var]
-                                , wires_out :: [Var] 
-                                , the_atom  :: atom }
+
+singletonAutomaton :: Node atom nid -> Automaton atom nid 
+
+
 
 class Atom a where
   
@@ -58,6 +81,126 @@ class Atom a where
   
   -- Getting (wired) atoms from expressions 
   expToWiredAtom :: Exp b -> Maybe Var -> WiredAtom a
+
+
+**************** Yikes, use a state monad instead
+
+
+fuseActions :: Automaton e NodeId -> Automaton e NodeId 
+fuseActions auto = 
+  let nodes_map = auto_graph auto
+      inchan    = auto_inchan auto
+      outchan   = auto_outchan auto
+
+  go :: Node atom NodeId -> Automaton atom NodeId
+  go (Node nid (Branch chan nidl nidr w)) = 
+      let aleft  = go (fromJust (Map.lookup nidl nodes_map))
+          aright = go (fromJust (Map.lookup nidr nodes_map))
+      in insNode (Node nid (Branch chan nidl nidr w)) $ 
+         Automaton { auto_graph  = Map.union (auto_graph aleft) (auto_graph aright)
+                   , auto_start  = nid
+                   , auto_inchan = inchan
+                   , auto_outchan = outchan }
+  go (Node nid (Action wireds next)) = 
+      let anext = go (fromJust (Map.lookup next nodes_map))
+      in case (node_kind $ fromJust (Map.lookup next (auto_graph anext))) of
+           Action more_wireds next' -> 
+             Automaton { auto_graph  = Map.union (auto_graph aleft) (auto_graph aright)
+                   , auto_start  = nid
+                   , auto_inchan = inchan
+                   , auto_outchan = outchan }
+
+
+  
+
+  go (Node nid (Action wireds next)) head_nid prev_wireds
+     | Just node_next <- Map.lookup next nodes_map
+     = case node_kind node_next of 
+         Action {} -> go node_next head_nid (prev_wireds ++ wireds)
+         Branch {} -> 
+
+ Node _ (Action {}) <- node_next
+     = go node_next head_nid (prev_wireds ++ wireds)
+
+     
+
+
+
+
+mkAutomaton :: Atom e 
+            => DynFlags 
+            -> Channels  -- i/o/ctl channel
+            -> Automaton e NodeId -- what to do next
+            -> Comp a b 
+            -> AutoM (Automaton e NodeId)
+mkAutomaton dfs chans k comp = go (unComp comp)
+  where
+    go (Bind mbx c1 c2) = do
+      a2 <- mkAutomaton dfs chans k c2
+      mkAutomaton dfs (chans { ctrl_chan = mbx }) a2 c1
+
+    go (Take1 t) =
+      let inp = [in_chan chans]
+          outp = maybeToList (ctrl_chan chans)
+          atom = maybe (discardAtom t) (\_ -> idAtom t) (ctrl_chan chans)
+          nkind = Action [WiredAtom inp oup atom] (auto_start k)
+      nid <- newNodeId 
+      return $ insNode (Node nid nkind) k { auto_start = nid }
+
+
+
+insNode :: Node atom NodeId 
+        -> Automaton atom NodeId
+        -> Automaton atom NodeId
+insNode (Node nid nkind) a
+  = a { auto_graph = Map.insert nid (Node nid nkind) (auto_graph a) }
+
+-- type LNode atom = G.LNode (NodeLabel atom)
+
+-- data NodeLabel atom
+--   = NodeLabel { node_id   :: Node
+--               , node_kind :: NodeKind atom
+--               }
+
+-- data NodeKind atom
+--   = Action (WiredAtom atom) 
+--   | StaticLoop  { iterations :: Int, loop_body :: Automaton }
+--   | Branch { branch_in   :: Chan, branch_next :: (Node,Node) }
+
+-- data Automaton
+--   = Automaton { autom_init  :: Node
+--               , autom_final :: Set Node }
+-- type ZirGraph atom = Gr (NodeLabel atom) ()
+-- type GraphM atom a = StateT (ZirGraph atom) (ReaderT (CompEnv ()) IO) a
+
+
+
+
+mkNode :: Automaton atom nid      
+       -> NodeKind atom nid
+       -> (nid, Automaton atom nid)
+-- The continuation(s) of this node are already in the automaton
+mkNode 
+
+
+inAutomaton :: nid -> Automaton atom nid -> Bool
+
+nodeIsMarked :: nid -> Auto Bool
+markNode :: nid -> Auto ()
+
+
+
+
+nidSeenAlready :: Automaton atom nid -> nid -> Auto Bool
+
+
+
+
+
+
+
+
+
 
 
 mkNode :: NodeKind code -> GraphM code (LNode code)
@@ -87,7 +230,6 @@ concatAutomata a1 a2 = do
 data Channels = Channels { in_chan   :: Chan
                          , out_chan  :: Chan
                          , ctrl_chan :: Maybe Chan }
-
 
 
 
