@@ -154,8 +154,11 @@ pack_idx_var pkg v idx idx_ty pos
            -- location to a pointer for the maximum index type (uint32), 
            -- and only once you've got the final value truncate
            -- back. Sigh ...
+       let cast_ty = 
+               if vlen <= 8  then [cty| typename uint8*  |] else 
+               if vlen <= 16 then [cty| typename uint16* |] else [cty|typename uint32*|]
 
-           tmp_var = [cexp| ( * (typename uint32 *) 
+           tmp_var = [cexp| ( * ($ty:cast_ty) 
                                               (& ((typename BitArrPtr) $varexp)[$int:byte_start]))
                      |]
 
