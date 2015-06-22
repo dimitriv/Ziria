@@ -35,6 +35,7 @@ module SparseArray (
   , writeArray
   , writeDefault
   , getElems
+  , toList
     -- * "Data.IntMap"-like features
   , size
     -- * "Data.Vector"-like features

@@ -152,7 +152,7 @@ import AstExpr
 import AstUnlabelled
 import CtExpr (ctExp)
 import GenSym (initGenSym)
-import SparseArray (SparseArray)
+import SparseArray (SparseArray, toList)
 import TcMonad (runTcM')
 import Typecheck (tyCheckExpr)
 import qualified Lens        as L
@@ -1261,9 +1261,35 @@ interpretLetRef eloc x v1 e2 = do
         -- Value is _still_ at its implicit default value
         let !e2' = unEvald e2Evald
         evaldPart $ eLetRef eloc x Nothing e2'
-      LetRefUnknown (Just (Explicit v1')) -> do
-        -- Value explicitly specified (either from the letref initial value or
-        -- from a subsequent explicit assignment); must include.
+      LetRefUnknown (Just (Explicit v1')) 
+         -- This optimization comes from test_map_ofdm in WiFi TX
+         -- In particular in that case we created a huge array assignment
+         -- and memcopy, just because 3-4 assignments mutated the default
+         -- value inside! 
+         -- New plan: for those cases just emit assignments.
+
+         --   i) original was implicit large value array
+       | Implicit _orig_v1 <- v1 
+       , ValueArray _orig_arr <- unValue _orig_v1
+         --  ii) new is a value array
+       , ValueArray new_arr  <- unValue v1'
+       , let writes = SparseArray.toList new_arr
+         --  iii) fairly small amount of writes (i.e. ok to inline)
+       , length writes <= 32
+       -> do 
+        let asgns = map (\(i,w) -> 
+              eArrWrite eloc (eVar eloc x) 
+                             (eVal eloc tint (vint i))
+                             LISingleton (valueExp w)) writes
+            !e2' = unEvald e2Evald
+        evaldPart $ eLetRef eloc x Nothing $  --- Nothing! *NOT* v1' 
+                    foldr (eSeq eloc) e2' asgns
+
+       | otherwise -- Original path 
+       -> do
+        -- Value explicitly specified (either from the letref initial
+        -- value or from a subsequent explicit assignment); must
+        -- include.
         let !e1' = valueExp v1'
             !e2' = unEvald e2Evald
         evaldPart $ eLetRef eloc x (Just e1') e2'

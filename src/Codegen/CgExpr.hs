@@ -174,11 +174,11 @@ cgEval dfs e = go (unExp e) where
      clhs <- cgEvalLVal dfs elhs
      mrhs <- cgEval dfs erhs
      case mrhs of 
-       Left rlval 
-         | lvalAlias clhs rlval -> do 
-             crhs <- cgDeref dfs loc rlval
-             cgAssignAliasing dfs loc clhs crhs
-         | otherwise -> do 
+       Left rlval -> do
+         -- | lvalAlias_exact clhs rlval -> do 
+         --     crhs <- cgDeref dfs loc rlval
+         --     cgAssignAliasing dfs loc clhs crhs
+         -- | otherwise -> do 
              crhs <- cgDeref dfs loc rlval
              cgAssign dfs loc clhs crhs
        Right crhs -> cgAssign dfs loc clhs crhs
