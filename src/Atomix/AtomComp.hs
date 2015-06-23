@@ -73,6 +73,7 @@ data SymFun = SFFun FunName
 
 data CompEnv a = CompEnv { fun_binds  :: [(FunName, Fun a)]
                          , funGenSym :: GS.Sym
+                         , varGenSYm :: GS.Sym
                          }
 
 type CompM a = StateT (CompEnv a) IO
@@ -83,6 +84,7 @@ mkCompOfAst c = fail "not implemented"
 runCompM :: CompM a b -> IO (b, CompEnv a)
 runCompM m = do
   fungen <- GS.initGenSym "f"
-  let env = CompEnv [] fungen
+  vargen <- GS.initGenSym "x"
+  let env = CompEnv [] fungen vargen
   runStateT m env
   

@@ -134,12 +134,14 @@ data Channels = Channels { in_chan   :: Chan
                          , out_chan  :: Chan
                          , ctrl_chan :: Maybe Chan }
 
+
+
 mkAutomaton :: Atom e
             => DynFlags
             -> Channels  -- i/o/ctl channel
             -> Comp a b
             -> Automaton e Int -- what to do next (continuation)
-            -> Automaton e Int
+            -> CompM a (Automaton e Int)
 mkAutomaton dfs chans comp k = go (unComp comp)
   where
     go (Take1 t) =
@@ -147,64 +149,67 @@ mkAutomaton dfs chans comp k = go (unComp comp)
           outp = maybeToList (ctrl_chan chans)
           atom = maybe (discardAtom t) (\_ -> idAtom t) (ctrl_chan chans)
           nkind = Action [WiredAtom inp outp atom] (auto_start k)
-      in insert_prepend nkind k
+      in return $ insert_prepend nkind k
 
-    --go (TakeN _ n) = fail "not implemented"
+    go (TakeN _ n) = fail "not implemented"
 
     go (Emit1 x) =
       let inp = [x]
           outp = [out_chan chans]
           atom = idAtom (nameTyp x)
           nkind = Action [WiredAtom inp outp atom] (auto_start k)
-      in insert_prepend nkind k
+      in return $ insert_prepend nkind k
 
-    --go (EmitN x) = fail "not implemented"
+    go (EmitN x) = fail "not implemented"
 
     go (Return e) =
       let watom = expToWiredAtom e (ctrl_chan chans)
           nkind = Action [watom] (auto_start k)
-      in insert_prepend nkind k
+      in return $ insert_prepend nkind k
 
     go (NewVar x_spec c) = mkAutomaton dfs chans c k -- NOP for now
 
-    go (Bind mbx c1 c2) =
-      let a2 = mkAutomaton dfs chans c2 k
-      in mkAutomaton dfs (chans { ctrl_chan = mbx }) c1 a2
+    go (Bind mbx c1 c2) = do
+      a2 <- mkAutomaton dfs chans c2 k
+      mkAutomaton dfs (chans { ctrl_chan = mbx }) c1 a2
 
-    --go (Par _ c1 c2) = fail "not implemented"
+    go (Par _ c1 c2) = fail "not implemented"
+      --zipAutomata
 
-    go (AtomComp.Branch x c1 c2) =
-      let a1 = mkAutomaton dfs chans c1 k
-          a2 = mkAutomaton dfs chans c2 k
-          nkind = AutomataModel.Branch x (auto_start a1) (auto_start a2) False
-      in insert_prepend nkind k
+    go (AtomComp.Branch x c1 c2) = do
+      a1 <- mkAutomaton dfs chans c1 k
+      a2 <- mkAutomaton dfs chans c2 k
+      let nkind = AutomataModel.Branch x (auto_start a1) (auto_start a2) False
+      return $ insert_prepend nkind k
 
     go (RepeatN n c) = applyN n (mkAutomaton dfs chans c) k
-      where applyN 0 f = id
-            applyN n f = f . applyN (n-1) f
+      where applyN 0 f x = return x
+            applyN n f x = do 
+              y <- applyN (n-1) f x
+              f y
 
     go (Repeat c) =
       case nodeKindOfId (auto_start k) k of
-        Done ->
-          let a = mkAutomaton dfs chans c k
-              nid = auto_start k
-              nkind = Loop (auto_start a)
-          in a { auto_start = nid, auto_graph = Map.insert nid (Node nid nkind) (auto_graph a) }
-        --_ -> fail "Repeat should not have a continuation!"
+        Done -> do
+          a <- mkAutomaton dfs chans c k
+          let nid = auto_start k
+          let nkind = Loop (auto_start a)
+          return $ a { auto_start = nid, auto_graph = Map.insert nid (Node nid nkind) (auto_graph a) }
+        _ -> fail "Repeat should not have a continuation!"
 
-    go (While x c) =
+    go (While x c) = do
       let k' = insert_prepend Done k
-          nid = auto_start k'
-          a = mkAutomaton dfs chans c k'
-          nkind = AutomataModel.Branch x (auto_start a) (auto_start k) True
-      in a { auto_start = nid, auto_graph = Map.insert nid (Node nid nkind) (auto_graph a)}
+      let nid = auto_start k'
+      a <- mkAutomaton dfs chans c k'
+      let nkind = AutomataModel.Branch x (auto_start a) (auto_start k) True
+      return $ a { auto_start = nid, auto_graph = Map.insert nid (Node nid nkind) (auto_graph a)}
 
-    go (Until x c) =
+    go (Until x c) = do
       let k' = insert_prepend Done k
-          nid = auto_start k'
-          a = mkAutomaton dfs chans c k'
-          nkind = AutomataModel.Branch x (auto_start a) (auto_start k) True
-      in a { auto_graph = Map.insert nid (Node nid nkind) (auto_graph a)}
+      let nid = auto_start k'
+      a <- mkAutomaton dfs chans c k'
+      let nkind = AutomataModel.Branch x (auto_start a) (auto_start k) True
+      return $ a { auto_graph = Map.insert nid (Node nid nkind) (auto_graph a)}
 
 
 
