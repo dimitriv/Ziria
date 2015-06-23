@@ -149,6 +149,38 @@ cgEval :: DynFlags -> Exp -> Cg (Either (LVal ArrIdx) C.Exp)
 cgEval dfs e = go (unExp e) where
   loc = expLoc e
 
+  -- Any variable is byte aligned 
+  is_lval_aligned (GDVar {}) _ = True 
+  -- Any non-bit array deref exp is not aligned (NB: we could improve that)
+  is_lval_aligned _ TBit            = False
+  is_lval_aligned _ (TArray _ TBit) = False
+
+  -- Any other 
+  is_lval_aligned _ _ = True
+
+  go_assign :: DynFlags -> SrcLoc -> LVal ArrIdx -> Exp -> Cg C.Exp
+  go_assign dfs loc clhs erhs
+    | is_lval_aligned clhs (ctExp erhs)
+    , ECall nef eargs <- unExp erhs
+    = do clhs_c <- cgDeref dfs loc clhs
+         _ <- cgCall_aux dfs loc (ctExp erhs) nef eargs (Just clhs_c)
+         return [cexp|UNIT|]
+    | otherwise = do
+         mrhs <- cgEval dfs erhs
+         case mrhs of
+           Left rlval -> do
+             -- | lvalAlias_exact clhs rlval -> do 
+             --     crhs <- cgDeref dfs loc rlval
+             --     cgAssignAliasing dfs loc clhs crhs
+             -- | otherwise -> do 
+                 crhs <- cgDeref dfs loc rlval
+                 cgAssign dfs loc clhs crhs
+           Right crhs -> cgAssign dfs loc clhs crhs
+         -- crhs <- cgEvalRVal dfs erhs
+         -- cgAssign dfs loc clhs crhs
+         return [cexp|UNIT|]
+             
+
   go :: Exp0 -> Cg (Either (LVal ArrIdx) C.Exp) 
 
   go (EVar x)   = return (Left (GDVar x))
@@ -171,20 +203,8 @@ cgEval dfs e = go (unExp e) where
      Right <$> return (cgBinOp (ctExp e) b ce1 (ctExp e1) ce2 (ctExp e2))
 
   go (EAssign elhs erhs) = do
-     clhs <- cgEvalLVal dfs elhs
-     mrhs <- cgEval dfs erhs
-     case mrhs of 
-       Left rlval -> do
-         -- | lvalAlias_exact clhs rlval -> do 
-         --     crhs <- cgDeref dfs loc rlval
-         --     cgAssignAliasing dfs loc clhs crhs
-         -- | otherwise -> do 
-             crhs <- cgDeref dfs loc rlval
-             cgAssign dfs loc clhs crhs
-       Right crhs -> cgAssign dfs loc clhs crhs
-     -- crhs <- cgEvalRVal dfs erhs
-     -- cgAssign dfs loc clhs crhs
-     Right <$> return [cexp|UNIT|]
+    clhs <- cgEvalLVal dfs elhs
+    Right <$> go_assign dfs loc clhs erhs 
 
   go (EArrWrite earr ei rng erhs) 
     = go (EAssign (eArrRead loc earr ei rng) erhs)
@@ -286,18 +306,18 @@ cgEval dfs e = go (unExp e) where
                        }|]
       Right <$> return [cexp|UNIT|]
 
-  go (ECall nef eargs) = Right <$> cgCall_aux dfs loc (ctExp e) nef eargs
+  go (ECall nef eargs) = Right <$> cgCall_aux dfs loc (ctExp e) nef eargs Nothing
 
 
-cgCall_aux :: DynFlags -> SrcLoc -> Ty -> EId -> [Exp] -> Cg C.Exp
-cgCall_aux dfs loc res_ty fn eargs = do 
+cgCall_aux :: DynFlags -> SrcLoc -> Ty -> EId -> [Exp] -> Maybe C.Exp -> Cg C.Exp
+cgCall_aux dfs loc res_ty fn eargs mb_ret = do 
   let funtys = map ctExp eargs
   let (TArrow formal_argtys _) = nameTyp fn
   let argfuntys = zipWith (\(GArgTy _ m) t -> GArgTy t m) formal_argtys funtys
   let tys_args = zip argfuntys eargs
  
   ceargs <- mapM (cgEvalArg dfs) tys_args
-  CgCall.cgCall dfs loc res_ty argfuntys fn ceargs
+  CgCall.cgCall dfs loc res_ty argfuntys fn ceargs mb_ret
 
 
   -- extendVarEnv [(retn,cretn)] $

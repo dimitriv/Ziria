@@ -33,4 +33,5 @@ cgCall :: DynFlags
        -> Ty
        -> [ArgTy]
        -> GName Ty -> [(Either (LVal ArrIdx) C.Exp)]
+       -> Maybe C.Exp
        -> Cg C.Exp

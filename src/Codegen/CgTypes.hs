@@ -431,7 +431,7 @@ appendTopDeclPkg (DeclPkg ig stms) = do
 ------------------------------------------------------------------------}
 
 cgBreakDown :: Int -> C.Exp -> [(C.Exp, Int)]
--- ^ Breakdown to 64,32,16,8 ... (later we should also add SSE 128/256)
+-- ^ Breakdown to 128,64,32,16,8 ... (later we should also add SSE 128/256)
 -- ^ Also returns the width of each breakdown
 cgBreakDown m ptr  = go m 0
   where 
@@ -446,16 +446,32 @@ cgBreakDown m ptr  = go m 0
       | otherwise  = []
       where offptr = [cexp| (typename BitArrPtr)($ptr + $int:off)|]
 
+cgBreakDown64 :: Int -> C.Exp -> [(C.Exp, Int)]
+-- ^ Breakdown to 64,32,16,8 ... (later we should also add SSE 128/256)
+-- ^ Also returns the width of each breakdown
+cgBreakDown64 m ptr  = go m 0
+  where 
+    go :: Int -> Int -> [(C.Exp, Int)]
+    go n off
+      | n-64  >= 0 = ([cexp|(typename uint64 *) $offptr|],64):go (n-64) (off+8)
+      | n-32  >= 0 = ([cexp|(typename uint32 *) $offptr|],32):go (n-32) (off+4)
+      | n-16  >= 0 = ([cexp|(typename uint16 *) $offptr|],16):go (n-16) (off+2)
+      | n-8   >= 0 = ([cexp|(typename uint8  *) $offptr|], 8):go (n-16) (off+1)
+      | n > 0      = [([cexp|$offptr|],8)]
+      | otherwise  = []
+      where offptr = [cexp| (typename BitArrPtr)($ptr + $int:off)|]
+
+
 cgBitArrRead :: C.Exp -> Int -> Int -> C.Exp -> Cg ()
 -- ^ Pre: pos and len are multiples of 8; src, tgt are of type BitArrPtr
 cgBitArrRead src_base pos len tgt
-  | len >= 128 
+  | len > 288
   = appendStmt [cstm| blink_copy((void *) $tgt, (void *) $src, $int:byte_len);|]
   | otherwise
   = sequence_ $ map (appendStmt . mk_stmt) (zip src_ptrs tgt_ptrs)
   where
-    src_ptrs              = cgBreakDown len src
-    tgt_ptrs              = cgBreakDown len tgt
+    src_ptrs              = cgBreakDown64 len src
+    tgt_ptrs              = cgBreakDown64 len tgt
     mk_stmt ((s,w),(t,_)) = assert "cgBitArrRead" (w < 128) $ 
                             [cstm| * $t = * $s;|]
     sidx                  = pos `div` 8
