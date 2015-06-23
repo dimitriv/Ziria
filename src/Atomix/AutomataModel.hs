@@ -173,8 +173,15 @@ mkAutomaton dfs chans comp k = go (unComp comp)
       a2 <- mkAutomaton dfs chans c2 k
       mkAutomaton dfs (chans { ctrl_chan = mbx }) c1 a2
 
-    go (Par _ c1 c2) = fail "not implemented"
-      --zipAutomata
+    go (Par _ c1 c2) = do
+      -- create new middle channel
+      let middle = undefined
+      let k' = k { auto_graph = Map.singleton 0 (Node 0 Done), auto_start = 0 }
+      let k1 = k' { auto_outchan = middle }
+      let k2 = k' { auto_inchan = middle }
+      a1 <- mkAutomaton dfs chans c1 k1
+      a2 <- mkAutomaton dfs chans c2 k2
+      zipAutomata a1 a2 k
 
     go (AtomComp.Branch x c1 c2) = do
       a1 <- mkAutomaton dfs chans c1 k
@@ -213,6 +220,8 @@ mkAutomaton dfs chans comp k = go (unComp comp)
 
 
 
+zipAutomata :: Automaton e Int -> Automaton e Int -> Automaton e Int -> CompM a (Automaton e Int)
+zipAutomata a1 a2 k = fail "not implemented"
 
 
 
