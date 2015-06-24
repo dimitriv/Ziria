@@ -132,7 +132,8 @@ int32 __ext_int8_to_bits(BitArrPtr arrout, int lengthout, int8* arrin, int lengt
 
 int32 __ext_hexprint_int8(int8* arr, int len, int32 length)
 {
-	for (int i = 0; i < length; i++) {
+	int i; //EYAL C89 style
+	for (i = 0; i < length; i++) {
 		printf("%02X ", (unsigned char) arr[i]);
 	}
 	return 0;

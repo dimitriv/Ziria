@@ -31,7 +31,10 @@ permissions and limitations under the License.
 #include "sora_radio.h"
 #endif
 
-
+//EYAL EINVAL not recognised in TI compiler, used default value in gcc
+#ifndef EINVAL
+#define EINVAL 22
+#endif
 
 unsigned int parse_dbg_int8(char *dbg_buf, int8 *target)
 {

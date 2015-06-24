@@ -62,24 +62,24 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SORA_ROOT)\src\bb\dot11a;$(SORA_ROOT)\src\bb\dot11a\inc;$(SORA_ROOT)\src\bb\brick11\src;$(SORA_ROOT)\src\util\src;$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\inc;$(SORA_ROOT)\inc\brick;$(DDK_INC_PATH);;$(ProjectDir)\..;$(BLADERF_PATH)\include</IncludePath>
-    <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);$(DDK_LIB_PATH);$(SORA_ROOT)\target\chk_wxp_x86\i386\;$(SORA_ROOT)\lib\chk_wxp_x86\i386;$(BLADERF_PATH)\lib\x86</LibraryPath>
+    <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);$(DDK_LIB_PATH);$(SORA_ROOT)\target\chk_wxp_x86\i386\;$(SORA_ROOT)\lib\chk_wxp_x86\i386;$(BLADERF_PATH)\lib\x86;C:\SoraSDK2.0\target\fre_win7_amd64\amd64</LibraryPath>
     <OutDir>$(SolutionDir)$(ProjectName)\$(Platform)\$(Configuration)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SORA_ROOT)\src\bb\dot11a;$(SORA_ROOT)\src\bb\dot11a\inc;$(SORA_ROOT)\src\bb\brick11\src;$(SORA_ROOT)\src\util\src;$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\inc;$(SORA_ROOT)\inc\brick;$(DDK_INC_PATH);$(ProjectDir)\..;$(ProjectDir)\..;$(BLADERF_PATH)\include</IncludePath>
-    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(DDK_LIB_PATH);$(SORA_ROOT)\target\chk_win7_amd64\amd64\;$(SORA_ROOT)\lib\chk_win7_amd64\amd64;$(BLADERF_PATH)\lib\x64</LibraryPath>
+    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(DDK_LIB_PATH);$(SORA_ROOT)\target\chk_win7_amd64\amd64\;$(SORA_ROOT)\lib\chk_win7_amd64\amd64;$(BLADERF_PATH)\lib\x64;C:\SoraSDK2.0\target\fre_win7_amd64\amd64</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SORA_ROOT)\src\bb\dot11a;$(SORA_ROOT)\src\bb\dot11a\inc;$(SORA_ROOT)\src\bb\brick11\src;$(SORA_ROOT)\src\util\src;$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\inc;$(SORA_ROOT)\inc\brick;$(DDK_INC_PATH);;$(ProjectDir)\..;$(BLADERF_PATH)\include</IncludePath>
-    <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);$(DDK_LIB_PATH);$(SORA_ROOT)\target\fre_wxp_x86\i386\;$(SORA_ROOT)\lib\fre_wxp_x86\i386;$(BLADERF_PATH)\lib\x86</LibraryPath>
+    <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);$(DDK_LIB_PATH);$(SORA_ROOT)\target\fre_wxp_x86\i386\;$(SORA_ROOT)\lib\fre_wxp_x86\i386;$(BLADERF_PATH)\lib\x86;C:\SoraSDK2.0\target\fre_win7_amd64\amd64</LibraryPath>
     <OutDir>$(SolutionDir)$(ProjectName)\$(Platform)\$(Configuration)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SORA_ROOT)\src\bb\dot11a;$(SORA_ROOT)\src\bb\dot11a\inc;$(SORA_ROOT)\src\bb\brick11\src;$(SORA_ROOT)\src\util\src;$(SORA_ROOT)\inc\brick;$(SORA_ROOT)\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\src\inc;$(SORA_ROOT)\inc;$(SORA_ROOT)\inc\brick;$(DDK_INC_PATH);$(ProjectDir)\..;$(ProjectDir)\..;$(BLADERF_PATH)\include</IncludePath>
-    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(DDK_LIB_PATH);$(SORA_ROOT)\target\fre_win7_amd64\amd64\;$(SORA_ROOT)\lib\fre_win7_amd64\amd64;$(BLADERF_PATH)\lib\x64</LibraryPath>
+    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(DDK_LIB_PATH);$(SORA_ROOT)\target\fre_win7_amd64\amd64\;$(SORA_ROOT)\lib\fre_win7_amd64\amd64;$(BLADERF_PATH)\lib\x64;C:\SoraSDK2.0\target\fre_win7_amd64\amd64</LibraryPath>
     <OutDir>$(SolutionDir)$(ProjectName)\$(Platform)\$(Configuration)\</OutDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -203,6 +203,9 @@
     <ClInclude Include="..\types.h" />
     <ClInclude Include="..\utils.h" />
     <ClInclude Include="..\wpl_alloc.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\code\WiFi\receiver\tests\testRemoveDC.infile" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -209,7 +209,11 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
      { "--heap-size=", 
        "--heap-size=...",
        "Size of heap to use in the generated program.",
-       "20971520",     // 20MB default
+#ifdef DSP
+       "33280",      //EYAL changed to work with DSP from 20971520
+#else
+       "20971520", // 20MB default
+#endif
        init_heapSize },
      { "--input-file-repeat=",
        "--input-file-repeat=*|1|2|....",
@@ -320,7 +324,8 @@ void try_parse_args(BlinkParams *params, int argc, char ** argv) {
   }
 
   // For every command line parameter, try to initialize it or fail if unknown
-  for (int ai=1; ai < argc; ai++) {
+  int ai; //EYAL C89 style
+  for (ai=1; ai < argc; ai++) {
     int initialized = 0;
     for (pi=0; pi < sizeof(paramTable) / sizeof(BlinkParamInfo); pi++) {
 	  char *pval;

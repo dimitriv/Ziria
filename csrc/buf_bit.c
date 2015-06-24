@@ -37,7 +37,9 @@
 #include "sora_ip.h"
 #endif
 
-
+#ifndef EINVAL
+#define EINVAL 22
+#endif
 
 void resetBufCtxBlock(BufContextBlock *blk)
 {

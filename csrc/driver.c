@@ -67,6 +67,10 @@
 #endif
 #endif
 
+#ifdef DSP
+	#define __cdecl
+#endif
+
 // Contex blocks
 BufContextBlock buf_ctx;
 HeapContextBlock heap_ctx;
@@ -94,10 +98,16 @@ BlinkParams *params;
 // tracks bytes copied 
 extern unsigned long long bytes_copied; 
 
+//EYAL removed __cdecl not recognised
 int __cdecl main(int argc, char **argv) {
 
   // Initialize the global parameters
   params = &Globals;
+#ifdef DSP //EYAL there is no direct way to supply command line arguments for DSP programs so added this stupid hack - to be changed...
+  argc = 6;
+  char* argv_t[] = {"./array1.out","--input=file","--input-file-name=../vecttest.infile","--input-file-mode=dbg","--output-file-name=../vecttest.outfile","--output-file-mode=dbg"};
+  argv = argv_t;
+#endif
   try_parse_args(params, argc, argv);
 
 

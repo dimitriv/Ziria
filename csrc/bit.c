@@ -18,10 +18,14 @@
 */
 #include <stdio.h>
 #include <stdlib.h>
-#include <memory.h>
 
+#ifndef DSP
+#include <memory.h>
 #include <xmmintrin.h>
 #include <emmintrin.h>
+#else
+#include "c6x.h"
+#endif
 
 #include "types.h"
 #include "bit.h"
@@ -70,7 +74,8 @@ void bitArrRead(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPtr
 
 
 	if (off == 0 && vlen & 7 == 0) {
-		for (int i = 0; i < vlen / 8; i++)
+		int i; //EYAL C89 style
+		for (i = 0; i < vlen / 8; i++)
 			tgt[i] = src[sidx + i];
 		return;
 	}
@@ -109,7 +114,8 @@ void bitArrWrite(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPt
 
 	// Fast copy for aligned pointers
 	if (off == 0 && vlen & 7 == 0) {
-		for (int i = 0; i < vlen / 8; i++)
+		int i; //EYAL C89 style
+		for (i = 0; i < vlen / 8; i++)
 			tgt[sidx + i] = src[i];
 		return;
 	}
@@ -236,6 +242,7 @@ void printBitArr(BitArrPtr arr, unsigned int vlen)
 // v = l & m | v & ~ m
 void lutmask128(BitArrPtr v, BitArrPtr m, BitArrPtr l)
 {
+#ifndef DSP
 		// could be unaligned ...
 		__m128i mv = _mm_loadu_si128((__m128i *) v);
 		__m128i mm = _mm_loadu_si128((__m128i *) m);
@@ -243,5 +250,18 @@ void lutmask128(BitArrPtr v, BitArrPtr m, BitArrPtr l)
 
 		mv = _mm_or_si128(_mm_and_si128(ml, mm), _mm_andnot_si128(mm, mv));
 		_mm_storeu_si128((__m128i *) v, mv);
+#else
+	//to be optimised
+	long long mv_u = _amem8(v);
+	long long mv_l = _amem8(v + 4);
+	long long mm_u = _amem8(m);
+	long long mm_l = _amem8(m + 4);
+	long long ml_u = _amem8(l);
+	long long ml_l = _amem8(l + 4);
+	mv_u = (ml_u & mm_u) | (mm_u & ~mv_u);
+	mv_l = (ml_l & mm_l) | (mm_l & ~mv_l);
+	_amem8(v) = mv_u;
+	_amem8(v + 4) = mv_l;
+#endif
 }
 

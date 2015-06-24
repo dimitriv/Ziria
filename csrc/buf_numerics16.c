@@ -33,6 +33,10 @@
 #endif
 #endif
 
+//EYAL EINVAL not recognised in TI compiler, used default value in gcc
+#ifndef EINVAL
+#define EINVAL 22
+#endif
 
 unsigned int parse_dbg_int16(char *dbg_buf, int16 *target)
 {

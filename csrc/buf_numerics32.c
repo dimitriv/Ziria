@@ -26,7 +26,10 @@
 #include "types.h"
 #include "buf.h"
 
-
+//EYAL EINVAL not recognised in TI compiler, used default value in gcc
+#ifndef EINVAL
+#define EINVAL 22
+#endif
 
 unsigned int parse_dbg_int32(char *dbg_buf, num32 *target)
 {
