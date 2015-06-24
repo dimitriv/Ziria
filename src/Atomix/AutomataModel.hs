@@ -222,21 +222,21 @@ isMarked nid = do
 
 
 
--- fusing actions sequences in automata
+-- fuses actions sequences in automata; inserts Loop nodes to make self-loops explicit
 
-fuseActions :: Ord nid => Automaton atom nid -> Automaton atom nid
+fuseActions :: Automaton atom Int -> Automaton atom Int
 fuseActions auto = auto { auto_graph = fused_graph }
   where
     fused_graph = fst $ runState (markAndFuse (auto_start auto) (auto_graph auto)) Set.empty
 
-    markAndFuse :: Ord nid => nid -> NodeMap atom nid -> MarkingM nid (NodeMap atom nid)
+    markAndFuse :: Int -> NodeMap atom Int -> MarkingM Int (NodeMap atom Int)
     markAndFuse nid nmap = do
       marked <- isMarked nid
       if marked then return nmap else do
         mark nid
         fuse (fromJust $ Map.lookup nid nmap) nmap
 
-    fuse :: Ord nid => Node atom nid -> NodeMap atom nid -> MarkingM nid (NodeMap atom nid)
+    fuse :: Node atom Int -> NodeMap atom Int -> MarkingM Int (NodeMap atom Int)
     fuse (Node _ Done) nmap = return nmap
     fuse (Node _ (Loop b)) nmap = markAndFuse b nmap
     fuse (Node _ (AutomataModel.Branch _ b1 b2 _)) nmap = do
@@ -248,10 +248,17 @@ fuseActions auto = auto { auto_graph = fused_graph }
         Node _ Done -> return nmap
         Node _ (Loop _) -> return nmap
         Node _ (AutomataModel.Branch {}) -> return nmap
-        Node nid' (Action atoms' next') ->
-          let new_node = Node nid (Action (atoms++atoms') next')
-              new_nmap = Map.insert nid new_node (Map.delete nid' nmap)
-          in return new_nmap
+        Node nid' (Action atoms' next') 
+          | nid == nid' -> -- self loop detected! Insert loop.
+            let new_next_nid = nextNid auto
+                new_next_node = Node new_next_nid (Loop nid)
+                new_action_node = Node nid (Action atoms new_next_nid)
+                new_nmap = Map.insert nid new_action_node $ Map.insert new_next_nid new_next_node nmap
+            in return new_nmap
+          | otherwise ->
+            let new_node = Node nid (Action (atoms++atoms') next')
+                new_nmap = Map.insert nid new_node $ Map.delete nid' nmap
+            in return new_nmap
 
 
 
