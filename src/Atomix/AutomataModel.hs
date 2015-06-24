@@ -142,7 +142,7 @@ mkAutomaton dfs chans comp k = go (unComp comp)
       let k2 = k' { auto_inchan = middle }
       a1 <- mkAutomaton dfs chans c1 k1
       a2 <- mkAutomaton dfs chans c2 k2
-      zipAutomata a1 a2 k
+      return $ zipAutomata a1 a2 k
 
     go (AtomComp.Branch x c1 c2) = do
       a1 <- mkAutomaton dfs chans c1 k
@@ -183,23 +183,26 @@ mkAutomaton dfs chans comp k = go (unComp comp)
 
 -- Mapping Automata Labels
 
-map_ids :: Ord nid1 => Ord nid2 => (nid1 -> nid2) -> Automaton e nid1 -> Automaton e nid2
-map_ids map_id a = a { auto_graph = new_graph, auto_start = new_start }
- where
-    new_start = map_id (auto_start a)
-    new_graph =  Map.mapKeys map_id $ Map.map map_node $ auto_graph a
-    map_node (Node nid nkind) = Node (map_id nid) (map_nkind nkind)
+map_node_ids :: Ord nid1 => Ord nid2 => (nid1 -> nid2) -> Node e nid1 -> Node e nid2
+map_node_ids map_id (Node nid nkind) = Node (map_id nid) (map_nkind nkind)
+  where
     map_nkind Done =  Done
     map_nkind (Loop bodyId) = Loop (map_id bodyId)
     map_nkind (Action atoms nextId) = Action atoms (map_id nextId)
     map_nkind (AutomataModel.Branch x left right is_while) = 
       AutomataModel.Branch x (map_id left) (map_id right) is_while
 
+map_auto_ids :: Ord nid1 => Ord nid2 => (nid1 -> nid2) -> Automaton e nid1 -> Automaton e nid2
+map_auto_ids map_id a = a { auto_graph = new_graph, auto_start = new_start }
+ where
+    new_start = map_id (auto_start a)
+    new_graph = Map.mapKeys map_id $ Map.map (map_node_ids map_id) $ auto_graph a
+    
 tuple_ids :: Automaton e Int -> Automaton e (Int,Int)
-tuple_ids = map_ids (\nid -> (nid,0))
+tuple_ids = map_auto_ids (\nid -> (nid,0))
 
 untuple_ids :: Automaton e ((Int,Int),(Int,Int)) -> Automaton e Int
-untuple_ids a = map_ids (\nid -> fromJust $ Map.lookup nid untuple_map) a
+untuple_ids a = map_auto_ids (\nid -> fromJust $ Map.lookup nid untuple_map) a
   where
     (_, untuple_map) = Map.foldWithKey f (0, Map.empty) (auto_graph a)
     f nid _ (counter, nid_map) = (counter+1, Map.insert nid counter nid_map)
@@ -254,29 +257,49 @@ fuseActions auto = auto { auto_graph = fused_graph }
 
 -- Zipping Automata
 
+-- Precondition: a1 and a2 should satisfy (auto_outchan a1) == (auto_inchan a2)
 zipAutomata :: Automaton e Int -> Automaton e Int -> Automaton e Int -> Automaton e Int
 zipAutomata a1 a2 k = untuple_ids $ prod_a 
   where
-    prod_a = Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) prod_start
-    prod_start = (auto_start a1', auto_start a2')
-    a1' = tuple_ids (fuseActions a1)
-    a2' = tuple_ids (fuseActions a2)
-    nmap1 = auto_graph a1'
-    nmap2 = auto_graph a2'
-    prod_nmap = go (auto_start a1') (auto_start a2') Map.empty
+    prod_a = Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) (s1,s2)
+    s1 = (auto_start a1, 0)
+    s2 = (auto_start a2, 0)
+    prod_nmap = go s1 s2 Map.empty
+    trans_ch = auto_outchan a1
 
+    lookup :: (Int,Int) -> Automaton e Int -> Node e (Int,Int)
+    lookup nid@(n_baseid,n_offset) a = 
+      case fromJust $ Map.lookup n_baseid (auto_graph a) of
+        Node _ (Action watoms next) -> 
+          if n_offset >= length watoms
+            then assert False undefined
+            else Node nid $ Action (drop n_offset watoms) (next,0)
+        node@(Node _ _) -> 
+          if n_offset > 0 
+            then assert False undefined
+            else map_node_ids (\id -> (id,0)) node
+
+
+    -- go :: (Int,Int) -> (Int,Int) -> NodeMap e ((Int,Int),(Int,Int)) -> NodeMap e ((Int,Int),(Int,Int))
     go nid1 nid2 prod_nmap = 
       case Map.lookup (nid1,nid2) prod_nmap of
-        Nothing -> go' (fromJust $ Map.lookup nid1 nmap1) (fromJust $ Map.lookup nid2 nmap2) prod_nmap
+        Nothing -> go' (lookup nid1 a1) (lookup nid2 a2) prod_nmap
         Just _ -> prod_nmap -- TODO: what should we do here?
 
+    -- go' :: Node e (Int,Int) -> Node e (Int,Int) -> NodeMap e ((Int,Int),(Int,Int)) -> NodeMap e ((Int,Int),(Int,Int))
     go' (Node id1 Done) (Node id2 _) prod_nmap =
       let prod_nid = (id1,id2)
-      in Map.insert prod_nid (Node prod_nid Done)
+      in Map.insert prod_nid (Node prod_nid Done) prod_nmap
 
     go' (Node id1 _) (Node id2 Done) prod_nmap =
       let prod_nid = (id1,id2)
-      in Map.insert prod_nid (Node prod_nid Done)
+      in Map.insert prod_nid (Node prod_nid Done) prod_nmap
+
+    go' (Node id1 (Loop next1)) (Node id2 _) prod_nmap =
+      go next1 id2 prod_nmap
+
+    go' (Node id1 _) (Node id2 (Loop next2)) prod_nmap =
+      go id1 next2 prod_nmap
 
     go' (Node id1 (AutomataModel.Branch x l r w)) (Node id2 _) prod_nmap =
       let prod_nid = (id1,id2)
@@ -290,41 +313,41 @@ zipAutomata a1 a2 k = untuple_ids $ prod_a
           prod_node = Node prod_nid prod_nkind
       in go id1 r $ go id1 l $ Map.insert prod_nid prod_node prod_nmap
 
-    go' (Node id1 (Action watoms1 next1)) (Node id2 (Action watoms2 next2)) =
-      let out_card1 = count_writes watoms1 (auto_outchan a1)
-          in_card2 = count_reades watoms2 (auto_inchan a2)
+    go' (Node id1 (Action watoms1 next1)) (Node id2 (Action watoms2 next2)) prod_nmap =
+      let out_card1 = count_writes watoms1 trans_ch
+          in_card2 = count_reads watoms2 trans_ch
           card = min out_card1 in_card2
-          split watoms1 card (auto_outchan a1)
+          (watoms1',next1') = split card (\wa -> if elem trans_ch (wires_out wa) then 1 else 0) id1 (watoms1, next1)
+          (watoms2',next2') = split card (\wa -> if elem trans_ch (wires_in wa) then 1 else 0) id2 (watoms2, next2)
+          prod_nid = (id1,id2)
+          prod_nkind = Action (watoms1'++watoms2') (next1',next2')
+          prod_node = Node prod_nid prod_nkind
+      in go next1' next2' $ Map.insert prod_nid prod_node prod_nmap
+
+    count :: [a] -> (a -> Bool) -> Int
+    count xs f = List.sum $ List.map (\x -> if f x then 1 else 0) xs
+
+    count_writes :: [WiredAtom atom] -> Chan -> Int
+    count_writes watoms ch = count watoms (\wa -> List.elem ch $ wires_out wa)
+
+    count_reads :: [WiredAtom atom] -> Chan -> Int
+    count_reads watoms ch = count watoms (\wa -> List.elem ch $ wires_in wa)
+
+    split :: Int -> (WiredAtom atom -> Int) -> (Int,Int) -> ([WiredAtom atom], (Int,Int)) -> ([WiredAtom atom], (Int,Int))
+    split budget cost (id_base,id_offset) (watoms,next) = split' budget watoms 0 []
+      where 
+        split' budget [] idx acc = (List.reverse acc,next)
+        split' budget (wa:watoms) idx acc =
+          let budget' = budget - cost wa 
+          in if budget' >= 0 then split' budget' watoms (idx+1) (wa:acc)
+             else (List.reverse acc, (id_base, id_offset + idx))
 
 
 
-
-type MarkingM nid = State (Set nid)
-mark :: Ord nid => nid ->  MarkingM nid ()
-mark nid = do modify (Set.insert nid)
-
-isMarked :: Ord nid => nid -> MarkingM nid Bool
-isMarked nid = do
-  marks <- get
-  return (Set.member nid marks)
-
-
-data NodeKind atom nid
-  = Action { atoms :: [WiredAtom atom]
-           , next  :: nid
-           }
-  | Branch { branch_var   :: Chan -- If we read True we go to branch_true, otherwise to branch_false
-           , branch_true  :: nid
-           , branch_false :: nid
-           , is_while     :: Bool -- Is this a while loop?
-           }
-  | Loop { loop_body :: nid } -- Infinite loop. Only transformers may (and must!) contain one of these.
-  | Done
-
-instance Show (NodeKind atom nid) where
-  show (NodeLabel _ (Action watom)) =
-    let show_wires = List.intercalate "," . map show
-    in show_wires (wires_in watom) ++ "/" ++ show_wires (wires_out watom)
-  show (NodeLabel _ (AutomataModel.Branch win _)) = show win ++ "/DQ"
-  show (NodeLabel _ (StaticLoop n _)) = "/DQ="
+--instance Show (NodeKind atom nid) where
+--  show (NodeLabel _ (Action watom)) =
+--    let show_wires = List.intercalate "," . map show
+--    in show_wires (wires_in watom) ++ "/" ++ show_wires (wires_out watom)
+--  show (NodeLabel _ (AutomataModel.Branch win _)) = show win ++ "/DQ"
+--  show (NodeLabel _ (StaticLoop n _)) = "/DQ="
 
