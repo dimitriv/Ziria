@@ -68,10 +68,58 @@ class Atom a where
   -- Constructors of atoms
   idAtom      :: Ty -> a
   discardAtom :: Ty -> a
-  noOpAtom    :: a
 
   -- Getting (wired) atoms from expressions
   expToWiredAtom :: Exp b -> Maybe Var -> WiredAtom a
+
+
+atomStuffOfFunction :: EId -> ([Ty],[Ty])
+atomStuffOfFunction f = 
+  let TArr argtys resty = nameTyp f
+      intys  = map (\GArgTy t _) -> t) argtys
+      outtys = concat $ map (\GArgTy t k) -> if k == Mut then [t] else []) argtys
+  in (intys,resty:outtys)
+
+argTysOfFunction :: EId -> [ArgTy]
+argTysOfFunction f = 
+  let TArr argtys _ = nameTyp f
+  in argtys
+
+inTysOfFunction  :: EId -> [Ty]
+inTysOfFunction f = fst (atomStuffOfFunction f)
+
+outTysOfFunction :: EId -> [Ty]
+outTysOfFunction f = snd (atomStuffOfFunction f)
+
+
+data FunLikeAtom = FunFun FunName | Id Ty | Discard Ty
+
+
+funAppToWiredAtom :: Exp b -> Maybe Var -> WiredAtom FunLikeAtom
+funAppToWiredAtom e mb = mk_atom (unExp e)
+  where mk_atom (ExpApp f args) = WiredAtom { wires_in = ins
+                                            , wires_out = out
+                                            , the_atom = f }
+        ins  = args
+        outs = mbToList mb ++ ( 
+                 concat $ 
+                 zipWith (\(GArgTy _ m) arg -> if m == Mut then [arg] else []) 
+                  (argTysOfFunction f) args
+                 )
+
+instance Atom FunLikeAtom where
+  atomInTy (FunFun f) = inTysOfFunction f
+  atomInTy (Id t) = [t]
+  atomInTy (Discard t) = [t]
+
+  atomOutTy (FunFun f) = outTysOfFunction f
+  atomOutTy (Id t) = [t]
+  atomOutTy (Discard t) = [t]
+
+  idAtom = Id
+  discardAtom = Discard
+
+  expToWiredAtom = funAppToWiredAtom
 
 
 
