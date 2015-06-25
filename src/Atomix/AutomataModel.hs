@@ -353,34 +353,52 @@ zipAutomata a1 a2 k = concat_auto prod_a k
           prod_node = Node prod_nid prod_nkind
       in go id1 r $ go id1 l $ Map.insert prod_nid prod_node prod_nmap
 
-    go' (Node id1 (Action watoms1 next1)) (Node id2 (Action watoms2 next2)) prod_nmap =
-      let out_card1 = count_writes watoms1 trans_ch
-          in_card2 = count_reads watoms2 trans_ch
-          card = min out_card1 in_card2
-          (watoms1',next1') = split card (\wa -> if elem trans_ch (wires_out wa) then 1 else 0) id1 (watoms1, next1)
-          (watoms2',next2') = split card (\wa -> if elem trans_ch (wires_in wa) then 1 else 0) id2 (watoms2, next2)
+    go' n1@(Node id1 (Action _ _)) n2@(Node id2 (Action _ _)) prod_nmap =
+      let (watoms, next1', next2') = zipActions n1 n2
           prod_nid = (id1,id2)
-          prod_nkind = Action (watoms1'++watoms2') (next1',next2')
+          prod_nkind = Action watoms (next1',next2')
           prod_node = Node prod_nid prod_nkind
       in go next1' next2' $ Map.insert prod_nid prod_node prod_nmap
 
-    count :: [a] -> (a -> Bool) -> Int
-    count xs f = List.sum $ List.map (\x -> if f x then 1 else 0) xs
-
-    count_writes :: [WiredAtom atom] -> Chan -> Int
-    count_writes watoms ch = count watoms (\wa -> List.elem ch $ wires_out wa)
-
-    count_reads :: [WiredAtom atom] -> Chan -> Int
-    count_reads watoms ch = count watoms (\wa -> List.elem ch $ wires_in wa)
-
-    split :: Int -> (WiredAtom atom -> Int) -> (Int,Int) -> ([WiredAtom atom], (Int,Int)) -> ([WiredAtom atom], (Int,Int))
-    split budget cost (id_base,id_offset) (watoms,next) = split' budget watoms 0 []
+    zipActions :: Node atom (Int,Int) -> Node atom (Int,Int) -> ([WiredAtom atom], (Int,Int), (Int,Int))
+    zipActions (Node (base1,offset1) (Action watoms1 next1)) (Node (base2,offset2) (Action watoms2 next2)) 
+      = tickRight [] watoms1 watoms2 offset1 offset2
       where
-        split' budget [] idx acc = (List.reverse acc,next)
-        split' budget (wa:watoms) idx acc =
-          let budget' = budget - cost wa
-          in if budget' >= 0 then split' budget' watoms (idx+1) (wa:acc)
-             else (List.reverse acc, (id_base, id_offset + idx))
+        tickRight acc _ [] offset1 offset2 = (List.reverse acc, (base1,offset1), (base2,offset2))
+        tickRight acc watoms1 watoms2@(wa:watoms2') offset1 offset2
+          | consumes wa = tickLeft acc watoms1 watoms2 offset1 offset2
+          | otherwise = tickRight (wa:acc) watoms1 watoms2' offset1 (offset2+1)
+
+        tickLeft acc [] _ offset1 offset2 = (List.reverse acc, (base1,offset1), (base2,offset2))
+        tickLeft acc (wa:watoms1') watoms2 offset1 offset2
+          | produces wa = procRight (wa::acc) watoms1' watoms2 (offset1+1) offset2
+          | otherwise = tickLeft (wa:acc) watoms1' watoms2 (offset1+1) offset2
+
+        procRight acc watoms1 (wa:watoms2') offset1 offset2
+          = assert (consumes wa) $ tickRight (wa:acc) watoms1 watoms2' offset1 (offset2+1)
+        procRight _ _ [] _ _ = assert False undefined
+
+        consumes wired_atom = List.any (== trans_ch) (wires_in wired_atom)
+        produces wired_atom = List.any (== trans_ch) (wires_out wired_atom)
+
+
+    --count :: [a] -> (a -> Bool) -> Int
+    --count xs f = List.sum $ List.map (\x -> if f x then 1 else 0) xs
+
+    --count_writes :: [WiredAtom atom] -> Chan -> Int
+    --count_writes watoms ch = count watoms (\wa -> List.elem ch $ wires_out wa)
+
+    --count_reads :: [WiredAtom atom] -> Chan -> Int
+    --count_reads watoms ch = count watoms (\wa -> List.elem ch $ wires_in wa)
+
+    --split :: Int -> (WiredAtom atom -> Int) -> (Int,Int) -> ([WiredAtom atom], (Int,Int)) -> ([WiredAtom atom], (Int,Int))
+    --split budget cost (id_base,id_offset) (watoms,next) = split' budget watoms 0 []
+    --  where
+    --    split' budget [] idx acc = (List.reverse acc,next)
+    --    split' budget (wa:watoms) idx acc =
+    --      let budget' = budget - cost wa
+    --      in if budget' >= 0 then split' budget' watoms (idx+1) (wa:acc)
+    --         else (List.reverse acc, (id_base, id_offset + idx))
 
 
 
