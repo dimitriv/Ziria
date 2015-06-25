@@ -2,9 +2,10 @@ module AtomInstantiation where
 
 import AtomComp -- simplified Ziria model
 import AutomataModel
-import AstExpr (Ty (..), EId, GName (..), GArgTy (..), ArgTy)
+import AstExpr (Ty (..), EId, GName (..), GArgTy (..), ArgTy, Uniq (..), MutKind (..))
 
 import Data.Maybe
+
 
 
 
@@ -58,5 +59,20 @@ funAppToWiredAtom e mb = WiredAtom ins outs (FunFun f)
 
 
 
+-- Given an atom instantiation, we can now build toy Ziria programs and translate them to Automata
+-- For simplicity, we will ignore types for now
+ty = TBit
 
+mkApp func args = MkExp { unExp = expr, expLoc = undefined, expInfo = ()}
+  where expr = ExpApp { expAppFun = func, expAppArgs = args}
+
+mkFunc name nins nouts = MkName { name = name
+                               , uniqId = MkUniq name
+                               , nameTyp = funty
+                               , nameLoc = undefined
+                               , nameMut = undefined }
+  where
+    funty = TArrow argtys ty
+    argtys = [ GArgTy { argty_ty = ty, argty_mut = Imm } | _ <- [1..nins] ] ++
+             [ GArgTy { argty_ty = ty, argty_mut = Mut} | _ <- [2..nouts] ]
 
