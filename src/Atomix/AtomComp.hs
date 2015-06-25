@@ -6,7 +6,6 @@ module AtomComp
   ,MutKind(..)
   ,Uniq(..)
   ,CompLoc(..)
-  ,SrcLoc(..)
   ,ParInfo) where
 
 import AstExpr (Ty(..),GName (..),MutKind(..),Uniq (..),ArgTy,GFun0,GFun)
@@ -92,7 +91,7 @@ freshFun pretty_name arg_tys out_ty = do
   env <- get
   uniq <- liftIO $ GS.genSymStr (funGenSym env)
   let t = TArrow arg_tys out_ty
-  return (MkName pretty_name (MkUniq $ pretty_name ++ "$" ++ uniq) t noLoc Imm)
+  return (MkName pretty_name (MkUniq $ pretty_name ++ "$" ++ uniq) t noLoc undefined)
 
 
 mkCompOfAst :: AstC.GComp tc t a b -> CompM a (Comp a b)

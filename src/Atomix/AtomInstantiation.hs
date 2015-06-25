@@ -3,6 +3,7 @@ module AtomInstantiation where
 import AtomComp -- simplified Ziria model
 import AutomataModel
 import AstExpr (GArgTy (..), ArgTy, EId)
+import Data.Loc
 
 import Data.Maybe
 import qualified Data.List as List
@@ -64,29 +65,29 @@ funAppToWiredAtom e mb = WiredAtom ins outs (FunFun f)
 -- For simplicity, we will ignore types for now
 ty = TBit
 
-mkComp c = MkComp c undefined ()
-mkExp e = MkExp e undefined ()
+mkComp c = MkComp c noLoc ()
+mkExp e = MkExp e noLoc ()
 
 mkApp func args = mkExp $ ExpApp { expAppFun = func, expAppArgs = args}
 
-mkFunc name nins nouts = MkName { name = name
-                                , uniqId = MkUniq name
-                                , nameTyp = funty
-                                , nameLoc = undefined
-                                , nameMut = undefined }
+mkFunc name nins nouts = freshFun name argtys ty
   where
-    funty = TArrow argtys ty
     argtys = [ GArgTy { argty_ty = ty, argty_mut = Imm } | _ <- [1..nins] ] ++
              [ GArgTy { argty_ty = ty, argty_mut = Mut} | _ <- [2..nouts] ]
 
 mkPar c1 c2 = mkComp (Par undefined c1 c2)
 
+mkBind mbvar c1 c2 = mkComp $ Bind mbvar c1 c2
+mkRepeat c = mkComp (Repeat c)
+mkReturn e = mkComp (Return e)
 
-ziria_map func = do
-  x <- freshVar "aux" ty Imm
-  return $ mkComp $ Bind (Just x) (mkComp $ Take1 ty) (mkComp $ Return $ mkApp func [x])
+freshMap name = do
+  x <- freshVar ("arg(" ++ name ++ ")") ty Imm
+  f <- mkFunc name 1 1
+  let app = mkApp f [x]
+  return $ mkRepeat $ mkBind (Just x) (mkComp $ Take1 ty) (mkReturn app)
 
-
+mkRepeatN n c = mkComp $ RepeatN n c
 
 
 
@@ -102,33 +103,45 @@ wifi = do
   h <- freshVar "h" ty Imm
 
   -- DetectSTS
-  removeDC <- ziria_map (mkFunc "removeDC" 1 1)
-  let cca = undefined
+  removeDC <- freshMap "removeDC"
+  cca <- do
+    x <- freshVar "cca_cond" ty Mut
+    let body = mkComp (Emit1 x)
+    return $ mkComp $ While x body
   let detectSTS = mkPar removeDC cca
 
   -- LTS
-  let lts = undefined
+  lts <- do
+    x <- freshVar "lts_cond" ty Mut
+    let body = mkRepeatN 4 $ mkComp (Emit1 x)
+    return $ mkComp $ Until x body
 
   -- middle pipeline
-  let dataSymbol = undefined
-  let fft = undefined
-  let channelEqualization = undefined
-  let pilotTrack = undefined
-  let getData = undefined
+  dataSymbol <- freshMap "dataSymbol"
+  fft <- freshMap "fft"
+  channelEqualization <- freshMap "channelEqualization"
+  pilotTrack <- freshMap "pilotTrack"
+  getData <- freshMap "getData"
   let middlePipeline = List.foldr mkPar getData [dataSymbol, fft, channelEqualization, pilotTrack]
 
   -- DecodePLCP
-  let demodBPSK = undefined
-  let deinterleave = undefined
-  let decode = undefined
-  let parseHeader = undefined
+  demodBPSK <- freshMap "demodBPSK"
+  deinterleave <- freshMap "deinterleaveA"
+  decode <- freshMap "decodeA"
+  parseHeader <- do
+    x <- freshVar "parseHeader_cond" ty Mut
+    let body = mkRepeatN 3 $ mkComp (Emit1 x)
+    return $ mkComp $ Until x body
   let decodePLCP = List.foldr mkPar parseHeader [middlePipeline, demodBPSK, deinterleave, decode]
 
   -- Decode
-  let demod = undefined
-  let deinterleave = undefined
-  let decode = undefined
-  let descramble = undefined
+  demod <- freshMap "demod"
+  deinterleave <- freshMap "deinterleaveB"
+  decode <- freshMap "decodeB"
+  descramble <- do
+    x <- freshVar "descramble_cond" ty Mut
+    let body = mkRepeatN 7 $ mkComp (Emit1 x)
+    return $ mkComp $ Until x body
   let decodePipeline = List.foldr mkPar descramble [middlePipeline, demod, deinterleave, decode]
 
   -- overall receiver
