@@ -122,9 +122,9 @@ map_auto_ids map_id a = a { auto_graph = new_graph, auto_start = new_start }
 
 -- replaces arbitrary automata node-ids with Ints >= first_id
 normalize_auto_ids :: Ord nid => Int -> Automaton e nid -> Automaton e Int
-normalize_auto_ids first_id a = map_auto_ids (\nid -> fromJust $ Map.lookup nid untuple_map) a
+normalize_auto_ids first_id a = map_auto_ids (\nid -> fromJust $ Map.lookup nid normalize_map) a
   where
-    (_, untuple_map) = Map.foldWithKey f (first_id, Map.empty) (auto_graph a)
+    (_, normalize_map) = Map.foldWithKey f (first_id, Map.empty) (auto_graph a)
     f nid _ (counter, nid_map) = (counter+1, Map.insert nid counter nid_map)
 
 replace_done_with :: Ord nid => nid -> Automaton e nid -> Automaton e nid
@@ -137,7 +137,7 @@ replace_done_with nid a = map_auto_ids (\nid -> Map.findWithDefault nid nid repl
 
 
 
--- constructiing automata from Ziria Comps
+-- Constructing Automata from Ziria Comps
 
 data Channels = Channels { in_chan   :: Chan
                          , out_chan  :: Chan
@@ -297,7 +297,7 @@ zipAutomata a1 a2 k = concat_auto prod_a k
     prod_nmap = go s1 s2 Map.empty
     trans_ch = auto_outchan a1
 
-    -- this allows us to address nodes in the input automata
+    -- this allows us to address nodes in the input automata using (base_id,offset) pairs
     lookup :: (Int,Int) -> Automaton e Int -> Node e (Int,Int)
     lookup nid@(n_baseid,n_offset) a =
       case fromJust $ Map.lookup n_baseid (auto_graph a) of
