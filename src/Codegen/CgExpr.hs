@@ -145,6 +145,29 @@ cgEvalLVal dfs e = cgEval dfs e >>= do_ret
  where do_ret (Left lval) = return lval
        do_ret (Right ce)  = error "cgEvalLVal"
 
+
+cgIdx :: DynFlags -> Exp -> Cg ArrIdx
+cgIdx dfs x = cg_idx (classify x)
+  where
+   classify :: Exp -> GArrIdx Exp
+   classify ei
+     | EVal _t (VInt i _) <- unExp ei
+     , let ii :: Int = fromIntegral i
+     = AIdxStatic ii
+     | EBinOp bop e1 e2 <- unExp ei
+     = case (classify e1, classify e2, bop) of
+         (AIdxStatic i1, AIdxMult i2 c2, Mult) -> AIdxMult (i1*i2) c2
+         (AIdxStatic i1, AIdxCExp c2, Mult)    -> AIdxMult i1 c2
+         (AIdxMult i2 c2, AIdxStatic i1, Mult) -> AIdxMult (i1*i2) c2
+         (AIdxCExp c2, AIdxStatic i1, Mult)    -> AIdxMult i1 c2
+         _ -> AIdxCExp ei
+     | otherwise = AIdxCExp ei
+
+   cg_idx (AIdxCExp e)   = AIdxCExp <$> cgEvalRVal dfs e
+   cg_idx (AIdxMult i e) = AIdxMult i <$> cgEvalRVal dfs e
+   cg_idx (AIdxStatic i) = return $ AIdxStatic i
+
+
 cgEval :: DynFlags -> Exp -> Cg (Either (LVal ArrIdx) C.Exp)
 cgEval dfs e = go (unExp e) where
   loc = expLoc e
@@ -209,14 +232,17 @@ cgEval dfs e = go (unExp e) where
   go (EArrWrite earr ei rng erhs) 
     = go (EAssign (eArrRead loc earr ei rng) erhs)
 
-  go (EArrRead earr ei rng) 
-    | EVal _t (VInt i Signed) <- unExp ei
-    , let ii :: Int = fromIntegral i
-    , let aidx = AIdxStatic ii
-    = mk_arr_read (ctExp e) (ctExp earr) aidx
-    | otherwise 
-    = do aidx <- AIdxCExp <$> cgEvalRVal dfs ei
-         mk_arr_read (ctExp e) (ctExp earr) aidx
+  go (EArrRead earr ei rng) = do
+    aidx <- cgIdx dfs ei 
+    mk_arr_read (ctExp e) (ctExp earr) aidx
+
+    -- | EVal _t (VInt i Signed) <- unExp ei
+    -- , let ii :: Int = fromIntegral i
+    -- , let aidx = AIdxStatic ii
+    -- = mk_arr_read (ctExp e) (ctExp earr) aidx
+    -- | otherwise 
+    -- = do aidx <- AIdxCExp <$> cgEvalRVal dfs ei
+    --      mk_arr_read (ctExp e) (ctExp earr) aidx
     where 
       mk_arr_read exp_ty arr_ty aidx = do 
         d <- cgEval dfs earr
@@ -307,6 +333,8 @@ cgEval dfs e = go (unExp e) where
       Right <$> return [cexp|UNIT|]
 
   go (ECall nef eargs) = Right <$> cgCall_aux dfs loc (ctExp e) nef eargs Nothing
+
+
 
 
 cgCall_aux :: DynFlags -> SrcLoc -> Ty -> EId -> [Exp] -> Maybe C.Exp -> Cg C.Exp

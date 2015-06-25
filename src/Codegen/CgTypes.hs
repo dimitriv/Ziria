@@ -492,6 +492,9 @@ asgn_arr (Literal n) TBit ce1 ce2
 asgn_arr (NVar n) TBit ce1 ce2
   = appendStmt [cstm|bitArrRead($ce2,0,$id:n,$ce1);|]
 asgn_arr (Literal n) ty ce1 ce2
+  | n > 0 && n < 4 -- Small ones just to direct assignment
+  = mapM_ (\i -> assignByVal ty [cexp| $ce1[$int:i]|] [cexp| $ce2[$int:i]|]) [0..(n-1)]
+  | otherwise
   = appendStmt [cstm|blink_copy($ce1, $ce2, $int:n * $(tySizeOf_C ty));|]
 asgn_arr (NVar n) ty ce1 ce2
   = appendStmt [cstm|blink_copy($ce1, $ce2, $id:n * $(tySizeOf_C ty));|]

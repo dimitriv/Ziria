@@ -27,7 +27,7 @@ module CgValDom
 
   -- Projections
   , cgStrProj
-  , ArrIdx ( .. )
+  , ArrIdx, GArrIdx ( .. )
   , arrIdxPlus
   , cexpOfArrIdx
   , cgArrRead, cgArrRead_chk
@@ -158,12 +158,20 @@ cgStrProj proj_ty cd struct_ty f
     then [cexp| $cd.$id:f |]  else [cexp| &($cd.$id:f) |]
   where is_struct_ptr = isStructPtrType struct_ty -- ^ struct type
         is_proj_ptr   = isStructPtrType proj_ty   -- ^ field type
- 
-data ArrIdx
-  = AIdxCExp C.Exp      -- ^ A C expression index
-  | AIdxStatic Int      -- ^ A statically known index
-  | AIdxMult Int C.Exp  -- ^ A statically known multiple of unknown C.Exp
-  deriving Show 
+
+data GArrIdx e
+  = AIdxCExp e      -- ^ A C expression index
+  | AIdxStatic Int  -- ^ A statically known index
+  | AIdxMult Int e  -- ^ A statically known multiple of unknown C.Exp
+  deriving Show
+
+type ArrIdx = GArrIdx C.Exp
+
+-- data ArrIdx
+--   = AIdxCExp C.Exp      -- ^ A C expression index
+--   | AIdxStatic Int      -- ^ A statically known index
+--   | AIdxMult Int C.Exp  -- ^ A statically known multiple of unknown C.Exp
+--   deriving Show 
 
 arrIdxPlus :: ArrIdx -> ArrIdx -> ArrIdx
 arrIdxPlus (AIdxStatic i) (AIdxStatic j) = AIdxStatic (i+j)
