@@ -32,6 +32,7 @@ data NodeKind atom nid
            }
   | Loop { loop_body :: nid } -- Infinite loop. Only transformers may (and must!) contain one of these.
   | Done
+  deriving Show
 
   -- TODO: think about this later
   -- | StaticLoop  { iterations :: Int, loop_body :: Automaton }
@@ -40,8 +41,10 @@ data Node atom nid
   = Node { node_id   :: nid
          , node_kind :: NodeKind atom nid
          }
+  deriving Show
 
 type NodeMap atom nid = Map nid (Node atom nid)
+  
 
 data Automaton atom nid
   = Automaton { auto_graph   :: NodeMap atom nid
@@ -49,6 +52,7 @@ data Automaton atom nid
               , auto_outchan :: Chan
               , auto_start   :: nid
               }
+  deriving Show
 
 
 data WiredAtom atom
@@ -56,6 +60,7 @@ data WiredAtom atom
               , wires_out :: [Var]
               , the_atom  :: atom
               }
+  deriving Show
 
 
 class Atom a where
@@ -228,6 +233,12 @@ mkAutomaton dfs chans comp k = go (unComp comp)
       return $ a { auto_graph = Map.insert nid (Node nid nkind) (auto_graph a)}
 
 
+mkDoneAutomaton :: Chan -> Chan -> Automaton e Int
+mkDoneAutomaton ic oc
+  = Automaton { auto_graph = Map.singleton 0 (Node 0 Done), auto_start = 0
+              , auto_outchan = oc
+              , auto_inchan  = ic
+              }
 
 
 -- Monad for marking automata nodes; useful for DFS/BFS

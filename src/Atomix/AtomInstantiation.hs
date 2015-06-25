@@ -12,6 +12,7 @@ import qualified Data.List as List
 
 
 data FunLikeAtom = FunFun FunName | Id Ty | Discard Ty
+  deriving Show
 
 instance Atom FunLikeAtom where
   atomInTy (FunFun f) = inTysOfFunction f
