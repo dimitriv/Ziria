@@ -65,6 +65,7 @@ import qualified Language.Ziria.Parser as P
 import AtomComp () 
 import AtomixModel ()
 import AutomataModel ()
+import AtomInstantiation ()
 
 
 
