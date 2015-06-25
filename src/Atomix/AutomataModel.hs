@@ -90,13 +90,16 @@ nodeKindOfId nid a = node_kind $ fromJust $ Map.lookup nid (auto_graph a)
 
 -- precondition: a1 and a2 must agree on auto_inchan and auto_outchan
 concat_auto :: Ord nid1 => Automaton atom nid1 -> Automaton atom Int -> Automaton atom Int
-concat_auto a1 a2 = a2 { auto_graph = concat_graph, auto_start = concat_start }
+concat_auto a1 a2 = a1' { auto_graph = concat_graph }
   where
     a1' = replace_done_with (auto_start a2) $ normalize_auto_ids (nextNid a2) a1
-    concat_start = auto_start a1'
+    graph1 = Map.delete (auto_start a2) (auto_graph a1')
+    graph2 = auto_graph a2
     concat_graph = assert (auto_inchan a1 == auto_inchan a2) $
                    assert (auto_outchan a1 == auto_outchan a2) $
-                   Map.union (auto_graph a2) (auto_graph a1')
+                   assert (Map.null $ Map.difference graph1 graph2) $
+                   assert (Map.null $ Map.difference graph2 graph1) $
+                   Map.union graph1 graph2
 
 
 
