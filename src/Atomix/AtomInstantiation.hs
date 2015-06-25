@@ -2,7 +2,7 @@ module AtomInstantiation where
 
 import AtomComp -- simplified Ziria model
 import AutomataModel
-import AstExpr (Ty (..), EId, GName (..), GArgTy (..), ArgTy, Uniq (..), MutKind (..))
+import AstExpr (GArgTy (..), ArgTy, EId)
 
 import Data.Maybe
 import qualified Data.List as List
@@ -81,11 +81,9 @@ mkFunc name nins nouts = MkName { name = name
 
 mkPar c1 c2 = mkComp (Par undefined c1 c2)
 
-mkChan :: CompM () Var
-mkChan = undefined
 
 ziria_map func = do
-  x <- mkChan
+  x <- freshVar "aux" ty Imm
   return $ mkComp $ Bind (Just x) (mkComp $ Take1 ty) (mkComp $ Return $ mkApp func [x])
 
 
@@ -99,9 +97,9 @@ wifi :: CompM () (Comp () ())
 wifi = do
 
   -- channels for control data
-  det <- mkChan
-  params <- mkChan
-  h <- mkChan
+  det <- freshVar "det" ty Imm
+  params <- freshVar "params" ty Imm
+  h <- freshVar "h" ty Imm
 
   -- DetectSTS
   removeDC <- ziria_map (mkFunc "removeDC" 1 1)

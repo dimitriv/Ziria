@@ -1,17 +1,20 @@
 module AtomComp 
   (module AtomComp
-  ,Uniq
+  ,Ty(..)
+  ,ArgTy
+  ,GName(..)
   ,MutKind(..)
-  ,Ty
-  ,GName
-  ,CompLoc
+  ,Uniq(..)
+  ,CompLoc(..)
+  ,SrcLoc(..)
   ,ParInfo) where
 
-import AstExpr (Ty,GName,MutKind,Uniq,GFun0,GFun)
+import AstExpr (Ty(..),GName (..),MutKind(..),Uniq (..),ArgTy,GFun0,GFun)
 import qualified AstExpr as AstE
 import AstComp (CompLoc,ParInfo)
 import qualified AstComp as AstC
 import qualified GenSym as GS
+import Data.Loc
 import Control.Monad.State
 
 type Fun = GFun Ty
@@ -73,10 +76,24 @@ data SymFun = SFFun FunName
 
 data CompEnv a = CompEnv { fun_binds  :: [(FunName, Fun a)]
                          , funGenSym :: GS.Sym
-                         , varGenSYm :: GS.Sym
+                         , varGenSym :: GS.Sym
                          }
 
 type CompM a = StateT (CompEnv a) IO
+
+freshVar :: String -> Ty -> MutKind -> CompM a Var
+freshVar pretty_name t mk = do
+  env <- get
+  uniq <- liftIO $ GS.genSymStr (varGenSym env)
+  return (MkName pretty_name (MkUniq $ pretty_name ++ "$" ++ uniq) t noLoc mk)
+
+freshFun :: String -> [ArgTy] -> Ty -> CompM a Var
+freshFun pretty_name arg_tys out_ty = do
+  env <- get
+  uniq <- liftIO $ GS.genSymStr (funGenSym env)
+  let t = TArrow arg_tys out_ty
+  return (MkName pretty_name (MkUniq $ pretty_name ++ "$" ++ uniq) t noLoc Imm)
+
 
 mkCompOfAst :: AstC.GComp tc t a b -> CompM a (Comp a b)
 mkCompOfAst c = fail "not implemented"

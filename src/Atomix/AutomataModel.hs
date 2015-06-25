@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module AutomataModel where
 
 import Data.Set (Set)
@@ -288,7 +289,7 @@ fuseActions auto = auto { auto_graph = fused_graph }
 -- Zipping Automata
 
 -- Precondition: a1 and a2 should satisfy (auto_outchan a1) == (auto_inchan a2)
-zipAutomata :: Automaton e Int -> Automaton e Int -> Automaton e Int -> Automaton e Int
+zipAutomata :: forall e. Automaton e Int -> Automaton e Int -> Automaton e Int -> Automaton e Int
 zipAutomata a1 a2 k = concat_auto prod_a k
   where
     prod_a = Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) (s1,s2)
@@ -311,13 +312,13 @@ zipAutomata a1 a2 k = concat_auto prod_a k
             else map_node_ids (\id -> (id,0)) node
 
 
-    -- go :: (Int,Int) -> (Int,Int) -> NodeMap e ((Int,Int),(Int,Int)) -> NodeMap e ((Int,Int),(Int,Int))
+    go :: (Int,Int) -> (Int,Int) -> NodeMap e ((Int,Int),(Int,Int)) -> NodeMap e ((Int,Int),(Int,Int))
     go nid1 nid2 prod_nmap =
       case Map.lookup (nid1,nid2) prod_nmap of
         Nothing -> go' (lookup nid1 a1) (lookup nid2 a2) prod_nmap
         Just _ -> prod_nmap -- TODO: what should we do here?
 
-    -- go' :: Node e (Int,Int) -> Node e (Int,Int) -> NodeMap e ((Int,Int),(Int,Int)) -> NodeMap e ((Int,Int),(Int,Int))
+    go' :: Node e (Int,Int) -> Node e (Int,Int) -> NodeMap e ((Int,Int),(Int,Int)) -> NodeMap e ((Int,Int),(Int,Int))
     go' (Node id1 Done) (Node id2 _) prod_nmap =
       let prod_nid = (id1,id2)
       in Map.insert prod_nid (Node prod_nid Done) prod_nmap
