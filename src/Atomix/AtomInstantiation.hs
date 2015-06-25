@@ -94,8 +94,8 @@ mkRepeatN n c = mkComp $ RepeatN n c
 
 -- Mockup of Wifi Pipeline
 
-wifi :: CompM () (Comp () ())
-wifi = do
+mkWifi :: CompM () (Comp () ())
+mkWifi = do
 
   -- channels for control data
   det <- freshVar "det" ty Imm
