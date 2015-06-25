@@ -183,8 +183,8 @@ mkAutomaton dfs chans comp k = go (unComp comp)
       mkAutomaton dfs (chans { ctrl_chan = mbx }) c1 a2
 
     go (Par _ c1 c2) = do
-      -- TODO: create new transfer channel
-      let transfer_ch = undefined
+      -- TODO: insert right type
+      transfer_ch <- freshVar "transfer" undefined Mut
       let k' = k { auto_graph = Map.singleton 0 (Node 0 Done), auto_start = 0 }
       let k1 = k' { auto_outchan = transfer_ch }
       let k2 = k' { auto_inchan = transfer_ch }
@@ -303,13 +303,10 @@ zipAutomata a1 a2 k = concat_auto prod_a k
     lookup nid@(n_baseid,n_offset) a =
       case fromJust $ Map.lookup n_baseid (auto_graph a) of
         Node _ (Action watoms next) ->
-          if n_offset >= length watoms
-            then assert False undefined
-            else Node nid $ Action (drop n_offset watoms) (next,0)
+          assert (n_offset < length watoms) $
+          Node nid $ Action (drop n_offset watoms) (next,0)
         node@(Node _ _) ->
-          if n_offset > 0
-            then assert False undefined
-            else map_node_ids (\id -> (id,0)) node
+          assert (n_offset == 0) $ map_node_ids (\id -> (id,0)) node
 
 
     go :: (Int,Int) -> (Int,Int) -> NodeMap e ((Int,Int),(Int,Int)) -> NodeMap e ((Int,Int),(Int,Int))
