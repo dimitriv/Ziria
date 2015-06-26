@@ -154,8 +154,11 @@ pack_idx_var pkg v idx idx_ty pos
            -- location to a pointer for the maximum index type (uint32), 
            -- and only once you've got the final value truncate
            -- back. Sigh ...
+       let cast_ty = 
+               if vlen <= 8  then [cty| typename uint8*  |] else 
+               if vlen <= 16 then [cty| typename uint16* |] else [cty|typename uint32*|]
 
-           tmp_var = [cexp| ( * (typename uint32 *) 
+           tmp_var = [cexp| ( * ($ty:cast_ty) 
                                               (& ((typename BitArrPtr) $varexp)[$int:byte_start]))
                      |]
 
@@ -241,9 +244,9 @@ pack_out_var :: VarUsePkg
              -> C.Exp
              -> Int
              -> Cg Int
-pack_out_var _pkg (v,v_asgn_mask) tgt pos = do
+pack_out_var pkg (v,v_asgn_mask) tgt pos = do
   vptr <- varToBitArrPtr v
-  total_width <- fromIntegral <$> outVarBitWidth v
+  total_width <- fromIntegral <$> outVarBitWidth (vu_ranges pkg) v
   -- ^ NB: w includes width for v_asgn_mask already!
   let w = if isJust v_asgn_mask then total_width `div` 2 else total_width
   appendStmt [cstm|bitArrWrite($vptr,$int:pos,$int:w,$tgt); |]
@@ -277,15 +280,15 @@ unpack_out_var :: VarUsePkg
                -> C.Exp
                -> Int
                -> Cg Int
-unpack_out_var _pkg (v, Nothing) src pos = do
+unpack_out_var pkg (v, Nothing) src pos = do
   vptr <- varToBitArrPtr v
-  w    <- fromIntegral <$> outVarBitWidth v -- ^ Post: w is multiple of 8
+  w    <- fromIntegral <$> outVarBitWidth (vu_ranges pkg) v -- ^ Post: w is multiple of 8
   cgBitArrRead src pos w vptr
   return (pos+w)
 
-unpack_out_var _pkg (v, Just {}) src pos = do
+unpack_out_var pkg (v, Just {}) src pos = do
   vptr    <- varToBitArrPtr v
-  total_w <- fromIntegral <$> outVarBitWidth v
+  total_w <- fromIntegral <$> outVarBitWidth (vu_ranges pkg) v
   let w  = total_w `div` 2
   let mask_ptr = [cexp| & $src[$int:((pos+w) `div` 8)]|]
   let src_ptr  = [cexp| & $src[$int:(pos `div` 8)]     |]
@@ -473,7 +476,7 @@ genLUT dflags stats e = do
    -- | Function name that will populate this LUT
    clutgen <- freshVar "clut_gen"
    -- | Generate mask variables for output
-   mask_eids <- mapM genOutVarMask (vu_outvars vupkg)
+   mask_eids <- mapM (genOutVarMask (vu_ranges vupkg)) (vu_outvars vupkg)
    (lut_defs,(lut_decls,lut_stms,_)) <-
       collectDefinitions $ inNewBlock $
       genLocalVarInits dflags (vu_allvars vupkg) $
@@ -558,10 +561,10 @@ genLUT dflags stats e = do
                        , lgi_lut_gen        = [cstm|$id:clutgen();|]
                        , lgi_masked_outvars = mask_eids }
 
-genOutVarMask :: EId -> Cg (EId, Maybe EId)
+genOutVarMask :: RngMap -> EId -> Cg (EId, Maybe EId)
 -- ^ Generate a new output mask variable
-genOutVarMask x = 
-  case outVarMaskWidth x_ty of
+genOutVarMask rmap x = 
+  case outVarMaskWidth rmap x x_ty of
     Nothing -> return (x, Nothing)
     Just bw -> do
       let bitarrty = TArray (Literal $ fromIntegral bw) TBit
@@ -619,13 +622,13 @@ tyBitWidth' :: Ty -> Int
 tyBitWidth' t = fromIntegral $ runIdentity (tyBitWidth t)
 
 eMultBy :: Exp -> Int -> Exp
-eMultBy e n = eBinOp loc Mult e (eVal loc ety (VInt ni))
+eMultBy e n = eBinOp loc Mult e (eVal loc ety (VInt ni Signed))
   where ety = ctExp e
         loc = expLoc e
         ni  = fromIntegral n
 
 eAddBy :: Exp -> Int -> Exp
-eAddBy e n = eBinOp loc Add e (eVal loc ety (VInt ni))
+eAddBy e n = eBinOp loc Add e (eVal loc ety (VInt ni Signed))
   where ety = ctExp e
         loc = expLoc e
         ni  = fromIntegral n
@@ -677,7 +680,7 @@ lutInstrument mask_eids = mapExpM return return do_instr
             io_msg = eVal loc TString (VString " (NB: IO from LUT _generator_)")
 
 int32Val :: Int -> Exp
-int32Val n = eVal noLoc tint (VInt $ fromIntegral n)
+int32Val n = eVal noLoc tint (VInt (fromIntegral n) Signed)
 
 instrAsgn :: [(EId, Maybe EId)] -> SrcLoc 
           -> LVal Exp -> Exp -> Cg Exp
@@ -735,7 +738,8 @@ writeMask :: EId
           -> [Exp]
 writeMask x mask_map rng 
   | Just (Just mask_var) <- lookup x mask_map
-  , Just w <- fromIntegral <$> outVarMaskWidth (nameTyp x)
+                               -- outVarMaskWidth (nameTyp x)
+  , Just w <- fromIntegral <$> tyBitWidth_ByteAlign (nameTyp x) 
   , let (estart,mask_len) = maskRangeToRng w rng
   = [eBitArrSet mask_var estart mask_len]
   | otherwise
@@ -776,9 +780,9 @@ instrLVal loc ms lval = go lval [] MRFull
              eBinOp loc Leq (eAddBy estart n) earray_len
       LIMeta {}   -> panicStr "mk_rangetest: LIMeta!"
       where earray_len = eVal loc (ctExp estart) varray_len
-            varray_len = VInt $ fromIntegral array_len
+            varray_len = VInt (fromIntegral array_len) Signed
             estart_non_neg = eBinOp loc Geq estart $ 
-                             eVal loc (ctExp estart) (VInt 0)
+                             eVal loc (ctExp estart) (VInt 0 Signed)
 
 
 

@@ -102,12 +102,14 @@ fun comp modulate_qpsk () {
 
 
 fun comp modulate_16qam () {
-  var re:int16;
-  var im:int16;
-  var outc : complex16; 
+--  var re:int16;
+--  var im:int16;
+--  var outc : complex16; 
 
   repeat [8, 2] {
     x <- takes 4;
+    var re : int16;
+    var im : int16;
     do {
       if (x[0] == '0 && x[1] == '0) then {
          re := -3*qam16_mod_11a
@@ -136,10 +138,11 @@ fun comp modulate_16qam () {
 	}
       };
 
-      outc := complex16{re=re; im=im}
+--      outc := complex16{re=re; im=im}
     };
 
-    emit outc
+    emit (complex16{re=re; im=im});
+--    emit outc
   }
 }
 

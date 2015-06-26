@@ -14,6 +14,7 @@ import Text.PrettyPrint.Mainland
 
 data Token = Teof
            | TintConst (String, Integer)
+           | TuintConst (String, Integer)             
            | TfloatConst (String, Double)
            | TcharConst (String, Char)
            | TstringConst (String, String)
@@ -36,6 +37,7 @@ data Token = Teof
            | Tcomplex32
            | Tcomplex64
            | Tdo
+           | Tdone
            | Tdouble
            | Telse
            | Temit
@@ -54,6 +56,11 @@ data Token = Teof
            | Tint16
            | Tint32
            | Tint64
+           | Tuint
+           | Tuint8
+           | Tuint16
+           | Tuint32
+           | Tuint64
            | Tlength
            | Tlet
            | Tmap
@@ -78,6 +85,9 @@ data Token = Teof
            | Tvar
            | Twhile
            | Twrite
+
+           | Tbegin
+           | Tend
 
            | Tplus   -- ^ Addition
            | Tminus  -- ^ Subtraction
@@ -127,6 +137,7 @@ instance Pretty Token where
     ppr Teof = text "end of file"
 
     ppr (TintConst (s, _))    = text s
+    ppr (TuintConst (s, _))   = text s <> text "u"   
     ppr (TfloatConst (s, _))  = text s
     ppr (TcharConst (s, _))   = text s
     ppr (TstringConst (s, _)) = text s
@@ -149,6 +160,7 @@ instance Pretty Token where
     ppr Tcomplex32   = text "complex32"
     ppr Tcomplex64   = text "complex64"
     ppr Tdo          = text "do"
+    ppr Tdone        = text "done"
     ppr Tdouble      = text "double"
     ppr Telse        = text "else"
     ppr Temit        = text "emit"
@@ -167,6 +179,11 @@ instance Pretty Token where
     ppr Tint16       = text "int16"
     ppr Tint32       = text "int32"
     ppr Tint64       = text "int64"
+    ppr Tuint        = text "uint"
+    ppr Tuint8       = text "uint8"
+    ppr Tuint16      = text "uint16"
+    ppr Tuint32      = text "uint32"
+    ppr Tuint64      = text "uint64"
     ppr Tlength      = text "length"
     ppr Tlet         = text "let"
     ppr Tmap         = text "map"
@@ -200,6 +217,9 @@ instance Pretty Token where
     ppr Texp    = text "**"
     ppr Tshiftl = text "<<"
     ppr Tshiftr = text ">>"
+
+    ppr Tbegin  = text "begin"
+    ppr Tend    = text "end"
 
     ppr Teq = text "=="
     ppr Tne = text "!="

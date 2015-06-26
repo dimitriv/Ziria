@@ -27,6 +27,7 @@ Executable wplc
   default-language: Haskell98
   other-modules:
     Language.Ziria.Parser.Lexer
+    Language.Ziria.Parser.CamlParser
     Language.Ziria.Parser.Parser
 
   default-extensions: DoAndIfThenElse PatternGuards

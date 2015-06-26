@@ -84,14 +84,14 @@ cgUnOp _target_ty (Cast target_ty) ce src_ty
   = panicStr "cgUnOp: invalid cast!"
   | otherwise
   = case (target_ty, src_ty) of
-      (TBit, TInt _)     -> [cexp|$ce & 1|]
-      (TInt _, TBit)     -> ce
-      (TDouble, TInt _)  -> [cexp|(double) $ce|]
-      (TInt bw, TDouble) -> [cexp|($ty:(intty bw)) $ce |]
-      (TInt bw, TInt _)  -> [cexp|($ty:(intty bw)) $ce |]
-      (TInt bw, TArray _ TBit) -> [cexp| * ($ty:(inttyptr bw)) $ce |]
+      (TBit, TInt _ _)       -> [cexp|$ce & 1|]
+      (TInt _ _, TBit)       -> ce
+      (TDouble, TInt _ _)    -> [cexp|(double) $ce|]
+      (TInt bw sg, TDouble)  -> [cexp|($ty:(intty bw sg)) $ce |]
+      (TInt bw sg, TInt _ _) -> [cexp|($ty:(intty bw sg)) $ce |]
+      (TInt bw Signed, TArray _ TBit) -> [cexp| * ($ty:(inttyptr bw)) $ce |]
      -- [cexp| *  (($ty:(intty bw))*) $ce |]
-      (TArray _ TBit, TInt _) -> [cexp| ($ty:(namedCType "BitArrPtr")) &$ce|]
+      (TArray _ TBit, TInt _ Signed) -> [cexp| ($ty:(namedCType "BitArrPtr")) &$ce|]
       -- | For complex types we must emit a proper function, defined 
       --   in csrc/numerics.h
       (TStruct tn _flds, TStruct sn _flds')
@@ -99,8 +99,8 @@ cgUnOp _target_ty (Cast target_ty) ce src_ty
          , let castfun = sn ++ "_to_" ++ tn
          -> [cexp|$id:castfun($ce)|]
       (_,_) -> panicStr "cgUnOp: invalid cast!"
-  where intty bw = namedCType (cgTIntName bw) 
-        inttyptr bw = [cty| $ty:(intty bw) *|]
+  where intty bw sg = namedCType (cgTIntName bw sg) 
+        inttyptr bw = [cty| $ty:(intty bw Signed) *|]
 
 cgBinOp :: Ty            -- ^ type of (BinOp op ce1 ce2)
         -> BinOp
@@ -293,19 +293,19 @@ cgArrVal_val _dfs loc t@(TArray _ _) ws
            cv1 <- go (TArray (Literal ln1) tval) vs1
            cv2 <- go (TArray (Literal ln2) tval) vs2
            snm  <- freshName "__val_arr" t Mut
-           let valsiz = tySizeOf tval
-               csiz1  = ln1 * valsiz
-               csiz2  = ln2 * valsiz
+           let valsiz = tySizeOf_C tval
+               csiz1  = [cexp| $int:ln1 * $valsiz|]
+               csiz2  = [cexp| $int:ln2 * $valsiz|]
            DeclPkg d istms <- codeGenDeclGroup (name snm) t ZeroOut
            appendTopDecl d 
            mapM_ addGlobalWplAllocated istms
 
            addGlobalWplAllocated $ 
               [cstm| blink_copy((void *) $id:(name snm), 
-                                (void *) $cv1, $int:csiz1);|] 
+                                (void *) $cv1, $csiz1);|] 
            addGlobalWplAllocated $
               [cstm| blink_copy((void *) & $id:(name snm)[$int:ln1], 
-                                (void *) $cv2, $int:csiz2);|]
+                                (void *) $cv2, $csiz2);|]
 
            let csnm = [cexp| $id:(name snm)|]
            return csnm
@@ -324,7 +324,7 @@ cgArrVal_exp dfs loc t@(TArray _ _tbase) es = do
      return csnm
    where 
      lhs x idx = eArrRead loc (eVar loc x)
-                              (eVal loc tint (VInt idx)) LISingleton
+                              (eVal loc tint (VInt idx Signed)) LISingleton
              
 cgArrVal_exp _dfs loc t _es = panicCgNonArray "cgArrVal_exp" loc t
 

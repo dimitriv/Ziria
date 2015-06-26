@@ -33,6 +33,8 @@ COMPILER?=vs
 PP   = ../../../../scripts/preprocesscompile-$(COMPILER)-inline.sh
 DIFF = ../../../../tools/BlinkDiff
 
+.PRECIOUS: %.outfile %.out
+
 # Targets
 TGTS = $(patsubst %.blk, %.perf, $(wildcard *.blk))
 

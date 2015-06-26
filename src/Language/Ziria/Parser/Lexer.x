@@ -115,6 +115,10 @@ ziria :-
   0[oO] @octal        { lexConst TintConst }
   0[xX] @hexadecimal  { lexConst TintConst }
 
+  @decimal [uU]           { lexUint }
+  0[oO] @octal [uU]       { lexUint }
+  0[xX] @hexadecimal [uU] { lexUint }
+
   @decimal (\. @decimal @exponent? | @exponent) { lexConst TfloatConst }
 
   @char   { lexConst TcharConst }
@@ -186,6 +190,7 @@ keywords = Map.fromList kws
           , ("complex32",   Tcomplex32)
           , ("complex64",   Tcomplex64)
           , ("do",          Tdo)
+          , ("done",        Tdone)
           , ("double",      Tdouble)
           , ("else",        Telse)
           , ("emit",        Temit)
@@ -204,6 +209,11 @@ keywords = Map.fromList kws
           , ("int16",       Tint16)
           , ("int32",       Tint32)
           , ("int64",       Tint64)
+          , ("uint",        Tuint)
+          , ("uint8",       Tuint8)
+          , ("uint16",      Tuint16)
+          , ("uint32",      Tuint32)
+          , ("uint64",      Tuint64)
           , ("length",      Tlength)
           , ("let",         Tlet)
           , ("map",         Tmap)
@@ -225,6 +235,8 @@ keywords = Map.fromList kws
           , ("true",        Ttrue)
           , ("unroll",      Tunroll)
           , ("until",       Tuntil)
+          , ("begin",       Tbegin)
+          , ("end",         Tend)
           , ("var",         Tvar)
           , ("while",       Twhile)
           , ("write",       Twrite)
@@ -248,6 +260,12 @@ lexConst tok beg end = do
   where
     s :: String
     s = inputString beg end
+
+lexUint :: Action P Token
+lexUint beg end = lexConst TuintConst beg (stripLast end)
+  where
+    stripLast :: AlexInput -> AlexInput
+    stripLast inp = inp { alexOff = alexOff inp - 1 }
 
 setLineFromPragma :: Action P Token
 setLineFromPragma beg end = do

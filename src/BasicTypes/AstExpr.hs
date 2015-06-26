@@ -131,7 +131,7 @@ data SrcTy where
   SrcTBool     :: SrcTy
 
   SrcTArray    :: SrcNumExpr -> SrcTy -> SrcTy
-  SrcTInt      :: SrcBitWidth -> SrcTy
+  SrcTInt      :: SrcBitWidth -> SrcSignedness -> SrcTy
   SrcTDouble   :: SrcTy
   SrcTStruct   :: TyName -> SrcTy
 
@@ -151,6 +151,12 @@ data SrcBitWidth
   | SrcBW32
   | SrcBW64
   deriving (Generic, Typeable, Data, Eq, Show)
+
+-- | Source-language integer types are annotated with a signedness flag.
+data SrcSignedness
+  = SrcSigned
+  | SrcUnsigned
+  deriving (Generic, Typeable, Data, Eq, Show)  
 
 data SrcNumExpr where
   -- | User explicitly specifies the length
@@ -180,7 +186,7 @@ data Ty where
   TString   :: Ty                       -- Currently we have very limited supports for strings -
                                         -- they can only be printed
   TArray    :: NumExpr -> Ty -> Ty
-  TInt      :: BitWidth -> Ty
+  TInt      :: BitWidth -> Signedness -> Ty
   TDouble   :: Ty
   -- TODO: We could inline GStructDef here?
   TStruct   :: TyName -> [(FldName, Ty)] -> Ty
@@ -220,6 +226,11 @@ data BitWidth
   | BWUnknown BWVar -- TODO: Why is this not a GName t instead of a BWVar?
   deriving (Generic, Typeable, Data, Eq, Ord, Show)
 
+data Signedness
+  = Signed
+  | Unsigned
+  deriving (Generic, Typeable, Data, Eq, Ord, Show)
+           
 data BufTy =
     -- | Internal buffer (for parallelization)
     IntBuf { bufty_ty :: Ty }
@@ -271,7 +282,7 @@ data BinOp =
 
 data Val where
   VBit    :: Bool    -> Val
-  VInt    :: Integer -> Val
+  VInt    :: Integer -> Signedness -> Val
   VDouble :: Double  -> Val
   VBool   :: Bool    -> Val
   VString :: String  -> Val
@@ -476,6 +487,7 @@ funName (MkFun (MkFunExternal nm _ _) _ _) = nm
 
 instance NFData BinOp       where rnf = genericRnf
 instance NFData BitWidth    where rnf = genericRnf
+instance NFData Signedness  where rnf = genericRnf                                  
 instance NFData BufTy       where rnf = genericRnf
 instance NFData ForceInline where rnf = genericRnf
 instance NFData LengthInfo  where rnf = genericRnf
@@ -521,11 +533,18 @@ type SrcFun = GFun SrcTy ()
 -------------------------------------------------------------------------------}
 
 tint, tint8, tint16, tint32, tint64 :: Ty
-tint64  = TInt BW64
-tint32  = TInt BW32
-tint16  = TInt BW16
-tint8   = TInt BW8
+tint64  = TInt BW64 Signed
+tint32  = TInt BW32 Signed
+tint16  = TInt BW16 Signed
+tint8   = TInt BW8  Signed
 tint    = tint32
+
+tuint, tuint8, tuint16, tuint32, tuint64 :: Ty
+tuint64  = TInt BW64 Unsigned
+tuint32  = TInt BW32 Unsigned
+tuint16  = TInt BW16 Unsigned
+tuint8   = TInt BW8  Unsigned
+tuint    = tuint32
 
 tdouble :: Ty
 tdouble = TDouble
@@ -538,18 +557,25 @@ tcomplex64 = complexTy complex64TyName BW64
 tcomplex   = tcomplex32
 
 complexTy :: TyName -> BitWidth -> Ty
-complexTy nm bw = TStruct nm [("re", TInt bw), ("im", TInt bw)]
+complexTy nm bw = TStruct nm [("re", TInt bw Signed), ("im", TInt bw Signed)]
 
 {-------------------------------------------------------------------------------
   Built-in types (source syntax)
 -------------------------------------------------------------------------------}
 
 tintSrc, tintSrc8, tintSrc16, tintSrc32, tintSrc64 :: SrcTy
-tintSrc64  = SrcTInt SrcBW64
-tintSrc32  = SrcTInt SrcBW32
-tintSrc16  = SrcTInt SrcBW16
-tintSrc8   = SrcTInt SrcBW8
+tintSrc64  = SrcTInt SrcBW64 SrcSigned
+tintSrc32  = SrcTInt SrcBW32 SrcSigned
+tintSrc16  = SrcTInt SrcBW16 SrcSigned
+tintSrc8   = SrcTInt SrcBW8  SrcSigned
 tintSrc    = tintSrc32
+
+tuintSrc, tuintSrc8, tuintSrc16, tuintSrc32, tuintSrc64 :: SrcTy
+tuintSrc64  = SrcTInt SrcBW64 SrcUnsigned
+tuintSrc32  = SrcTInt SrcBW32 SrcUnsigned
+tuintSrc16  = SrcTInt SrcBW16 SrcUnsigned
+tuintSrc8   = SrcTInt SrcBW8  SrcUnsigned
+tuintSrc    = tuintSrc32
 
 tdoubleSrc :: SrcTy
 tdoubleSrc = SrcTDouble
@@ -576,7 +602,7 @@ mapTyM f = go
     go TBit                = f $ TBit
     go TBool               = f $ TBool
     go TString             = f $ TString
-    go (TInt bw)           = f $ TInt bw
+    go (TInt bw sg)        = f $ TInt bw sg
     go (TInterval n)       = f $ TInterval n
     go TDouble             = f $ TDouble
     go (TStruct tn ts)     = do ts' <- mapM go (map snd ts)
@@ -1185,7 +1211,9 @@ primComplexStructs
 -------------------------------------------------------------------------------}
 
 instance PrettyVal BitWidth
+instance PrettyVal Signedness
 instance PrettyVal SrcBitWidth
+instance PrettyVal SrcSignedness
 instance PrettyVal Ty
 instance PrettyVal SrcTy
 instance PrettyVal BufTy

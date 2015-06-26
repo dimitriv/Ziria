@@ -32,7 +32,7 @@ import LUTAnalysis
 
 vint :: Int -> Val
 -- Auxiliary function for use in the vectorizer
-vint n = VInt (fromIntegral n)
+vint n = VInt (fromIntegral n) Signed
 
 {-------------------------------------------------------------------------------
   Expressions

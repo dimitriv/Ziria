@@ -662,3 +662,427 @@ void reset_putcomplex16(BlinkParams *params, BufContextBlock *blk)
 {
 	_flush_putint16(params, blk, sizeof(complex16));
 }
+
+
+/*************************************************************** 
+                            uint16 
+ ***************************************************************/
+
+unsigned int parse_dbg_uint16(char *dbg_buf, uint16 *target)
+{
+	
+  char *s = NULL;
+  unsigned int i = 0;
+  unsigned long val;
+
+  char* trailing_comma = delete_trailing_comma(dbg_buf);
+  s = strtok(dbg_buf, ",");
+
+  if (s == NULL) 
+  {
+	  fprintf(stderr,"Input (debug) file contains no samples.");
+	  exit(1);
+  }
+
+  val = strtoul(s,NULL,10);
+  if (errno == EINVAL) 
+  {
+      fprintf(stderr,"Parse error when loading debug file.");
+      exit(1);
+  }
+
+  target[i++] = (uint16) val; 
+
+  while (s = strtok(NULL, ",")) 
+  {
+	  val = strtoul(s,NULL,10);
+	  if (errno == EINVAL) 
+      {
+		  fprintf(stderr,"Parse error when loading debug file.");
+		  exit(1);
+      }
+	  target[i++] = (uint16) val;
+  }
+
+  restore_trailing_comma(trailing_comma);
+  return i; // total number of entries
+}
+
+void _init_getuint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
+{
+	blk->total_in = 0;
+
+	if (params->inType == TY_DUMMY)
+	{
+		blk->num16_max_dummy_samples = params->dummySamples;
+	}
+
+	if (params->inType == TY_MEM)
+	{
+		if (blk->mem_input_buf == NULL || blk->mem_input_buf_size == 0)
+		{
+			fprintf(stderr, "Error: input memory buffer not initialized\n");
+			exit(1);
+		}
+		else
+		{
+			blk->num16_input_buffer = (int16 *)blk->mem_input_buf;
+			blk->num16_input_entries = blk->mem_input_buf_size/(blk->size_in/8);
+		}
+	}
+
+	if (params->inType == TY_FILE)
+	{
+		memsize_int sz;
+		char *filebuffer;
+		try_read_filebuffer(hblk, params->inFileName, params->inFileMode, &filebuffer, &sz);
+
+		// How many bytes the file buffer has * sizeof should be enough
+		blk->num16_input_buffer = (int16 *)try_alloc_bytes(hblk, sz * sizeof(uint16));
+
+		if (params->inFileMode == MODE_BIN)
+		{
+			unsigned int i;
+			uint16 *typed_filebuffer = (uint16 *) filebuffer;
+			blk->num16_input_entries = sz / 2;					// We always count entries in ints and do two reads for complex
+			for (i = 0; i < blk->num16_input_entries; i++)
+			{
+				blk->num16_input_buffer[i] = typed_filebuffer[i];
+			}
+		}
+		else 
+		{
+			blk->num16_input_entries = parse_dbg_uint16(filebuffer, (uint16 *) blk->num16_input_buffer);
+		}
+	}
+
+	/*
+	if (params->inType == TY_SDR)
+	{
+#ifdef SORA_PLATFORM
+		InitSoraRx(params->radioParams);
+#else
+		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
+		exit(1);
+#endif
+	}
+	*/
+}
+
+void init_getuint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
+{
+	// Change the values that differ in complex
+	blk->size_in = 16;
+	// we just need to initialize the input buffer in the same way
+	_init_getuint16(params, blk, hblk, unit_size);
+}
+
+
+FINL
+GetStatus _buf_getuint16(BlinkParams *params, BufContextBlock *blk, uint16 *x)
+{
+	if (params->inType == TY_DUMMY)
+	{
+		if (blk->num16_input_dummy_samples >= blk->num16_max_dummy_samples && params->dummySamples != INF_REPEAT) return GS_EOF;
+		blk->num16_input_dummy_samples++;
+		return GS_SUCCESS;
+	}
+
+	if (params->inType == TY_FILE || params->inType == TY_MEM)
+	{
+		// If we reached the end of the input buffer 
+		if (blk->num16_input_idx >= blk->num16_input_entries)
+		{
+			// If no more repetitions are allowed 
+			if (params->inFileRepeats != INF_REPEAT && blk->num16_input_repeats >= params->inFileRepeats)
+			{
+				return GS_EOF;
+			}
+			// Otherwise we set the index to 0 and increase repetition count
+			blk->num16_input_idx = 0;
+			blk->num16_input_repeats++;
+		}
+
+		*x = blk->num16_input_buffer[blk->num16_input_idx++];
+
+		return GS_SUCCESS;
+	}
+
+	if (params->inType == TY_SDR)
+	{
+#ifdef SORA_PLATFORM
+		fprintf(stderr, "Sora RX supports only Complex16 type.\n");
+		exit(1);
+#endif
+	}
+
+	return GS_EOF;
+}
+
+GetStatus buf_getuint16(BlinkParams *params, BufContextBlock *blk, uint16 *x)
+{
+	if (params->timeStampAtRead)
+		write_time_stamp(params);
+	blk->total_in++;
+	return _buf_getuint16(params, blk, x);
+}
+
+FINL
+GetStatus _buf_getarruint16(BlinkParams *params, BufContextBlock *blk, uint16 *x, unsigned int vlen)
+{
+	if (params->inType == TY_DUMMY)
+	{
+		if (blk->num16_input_dummy_samples >= blk->num16_max_dummy_samples && params->dummySamples != INF_REPEAT) return GS_EOF;
+		blk->num16_input_dummy_samples += vlen;
+		return GS_SUCCESS;
+	}
+
+	if (params->inType == TY_FILE || params->inType == TY_MEM)
+	{
+		if (blk->num16_input_idx + vlen > blk->num16_input_entries)
+		{
+			if (params->inFileRepeats != INF_REPEAT && blk->num16_input_repeats >= params->inFileRepeats)
+			{
+				if (blk->num16_input_idx != blk->num16_input_entries)
+					fprintf(stderr, "Warning: Unaligned data in input file, ignoring final get()!\n");
+				return GS_EOF;
+			}
+			// Otherwise ignore trailing part of the file, not clear what that part may contain ...
+			blk->num16_input_idx = 0;
+			blk->num16_input_repeats++;
+		}
+	
+		memcpy(x, &(blk->num16_input_buffer[blk->num16_input_idx]), vlen * sizeof(uint16));
+		blk->num16_input_idx += vlen;
+		return GS_SUCCESS;
+	}
+
+	if (params->inType == TY_SDR)
+	{
+#ifdef SORA_PLATFORM
+		fprintf(stderr, "Sora RX supports only Complex16 type.\n");
+		exit(1);
+#endif
+	}
+
+	return GS_EOF;
+}
+
+FORCE_INLINE
+GetStatus buf_getarruint16(BlinkParams *params, BufContextBlock *blk, uint16 *x, unsigned int vlen)
+{
+	if (params->timeStampAtRead)
+		write_time_stamp(params);
+	blk->total_in += vlen;
+	return _buf_getarruint16(params, blk, x, vlen);
+}
+
+void fprint_uint16(BufContextBlock *blk, FILE *f, uint16 val)
+{
+	if (blk->num16_fst == 1)
+	{
+		fprintf(f,"%u",val);
+		blk->num16_fst = 0;
+	}
+	else fprintf(f,",%u",val);
+}
+void fprint_arruint16(BufContextBlock *blk, FILE *f, uint16 *val, unsigned int vlen)
+{
+	unsigned int i;
+	for (i=0; i < vlen; i++)
+	{
+		fprint_uint16(blk, f, val[i]);
+	}
+}
+
+void init_putuint16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
+{
+	blk->size_out = 16;
+	blk->total_out = 0;
+
+	if (params->outType == TY_DUMMY || params->outType == TY_FILE)
+	{
+		blk->num16_output_buffer = (int16 *)malloc(params->outBufSize * sizeof(uint16));
+		blk->num16_output_entries = params->outBufSize;
+		if (params->outType == TY_FILE)
+		{
+			if (params->outFileMode == MODE_BIN)
+			{
+				blk->num16_output_file = try_open(params->outFileName, "wb");
+			}
+			else
+			{
+				blk->num16_output_file = try_open(params->outFileName, "w");
+			}
+		}
+	}
+
+	if (params->outType == TY_MEM)
+	{
+		if (blk->mem_output_buf == NULL || blk->mem_output_buf_size == 0)
+		{
+			fprintf(stderr, "Error: output memory buffer not initialized\n");
+			exit(1);
+		}
+		else
+		{
+			blk->num16_output_buffer = (int16*)blk->mem_output_buf;
+			blk->num16_output_entries = blk->mem_output_buf_size / (blk->size_out / 8);
+		}
+	}
+
+	if (params->outType == TY_SDR)
+	{
+#ifdef SORA_PLATFORM
+		fprintf(stderr, "Sora TX supports only Complex16 type.\n");
+		exit(1);
+#else
+		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
+		exit(1);
+#endif
+	}
+
+}
+
+
+FINL
+void _buf_putuint16(BlinkParams *params, BufContextBlock *blk, uint16 x)
+{
+	if (params->outType == TY_DUMMY)
+	{
+		return;
+	}
+
+	if (params->outType == TY_MEM)
+	{
+		blk->num16_output_buffer[blk->num16_output_idx++] = (uint16)x;
+	}
+
+	if (params->outType == TY_FILE)
+	{
+		if (params->outFileMode == MODE_DBG)
+			fprint_uint16(blk, blk->num16_output_file, x);
+		else
+		{
+			if (blk->num16_output_idx == blk->num16_output_entries)
+			{
+				fwrite(blk->num16_output_buffer, blk->num16_output_entries, sizeof(uint16), blk->num16_output_file);
+				blk->num16_output_idx = 0;
+			}
+			blk->num16_output_buffer[blk->num16_output_idx++] = (uint16)x;
+		}
+	}
+
+	if (params->outType == TY_SDR)
+	{
+#ifdef SORA_PLATFORM
+		fprintf(stderr, "Sora TX supports only Complex16 type.\n");
+		exit(1);
+#else
+		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
+		exit(1);
+#endif
+	}
+}
+
+
+void buf_putuint16(BlinkParams *params, BufContextBlock *blk, uint16 x)
+{
+	if (!params->timeStampAtRead)
+		write_time_stamp(params);
+	blk->total_out++;
+	_buf_putuint16(params, blk, x);
+}
+
+
+FINL
+void _buf_putarruint16(BlinkParams *params, BufContextBlock *blk, uint16 *x, unsigned int vlen)
+{
+	if (params->outType == TY_DUMMY) return;
+
+	if (params->outType == TY_MEM)
+	{
+		memcpy((void*)(blk->num16_output_buffer + blk->num16_output_idx), (void*)x, vlen*sizeof(uint16));
+		blk->num16_output_idx += vlen;
+	}
+
+	if (params->outType == TY_FILE)
+	{
+		if (params->outFileMode == MODE_DBG)
+			fprint_arruint16(blk, blk->num16_output_file, x, vlen);
+		else
+		{
+			if (blk->num16_output_idx + vlen >= blk->num16_output_entries)
+			{
+				// first write the first (num16_output_entries - vlen) entries
+				unsigned int i;
+				unsigned int m = blk->num16_output_entries - blk->num16_output_idx;
+
+				for (i = 0; i < m; i++)
+					blk->num16_output_buffer[blk->num16_output_idx + i] = x[i];
+
+				// then flush the buffer
+				fwrite(blk->num16_output_buffer, blk->num16_output_entries, sizeof(uint16), blk->num16_output_file);
+
+				// then write the rest
+				for (blk->num16_output_idx = 0; blk->num16_output_idx < vlen - m; blk->num16_output_idx++)
+					blk->num16_output_buffer[blk->num16_output_idx] = x[blk->num16_output_idx + m];
+			}
+			else
+			{
+				memcpy((void*)(blk->num16_output_buffer + blk->num16_output_idx), (void*)x, vlen*sizeof(uint16));
+				blk->num16_output_idx += vlen;
+			}
+		}
+	}
+
+
+	if (params->outType == TY_SDR)
+	{
+#ifdef SORA_PLATFORM
+		fprintf(stderr, "Sora TX supports only Complex16 type.\n");
+		exit(1);
+#else
+		fprintf(stderr, "Sora supported only on WinDDK platform.\n");
+		exit(1);
+#endif
+	}
+}
+
+
+FORCE_INLINE
+void buf_putarruint16(BlinkParams *params, BufContextBlock *blk, uint16 *x, unsigned int vlen)
+{
+	blk->total_out += vlen;
+	if (!params->timeStampAtRead)
+		write_time_stamp(params);
+	_buf_putarruint16(params, blk, x, vlen);
+}
+
+void _flush_putuint16(BlinkParams *params, BufContextBlock *blk, size_t size)
+{
+	if (params->outType == TY_FILE)
+	{
+		if (params->outFileMode == MODE_BIN) {
+			fwrite(blk->num16_output_buffer, sizeof(uint16), blk->num16_output_idx, blk->num16_output_file);
+		}
+	}
+	blk->num16_output_idx = 0;
+}
+
+void flush_putuint16(BlinkParams *params, BufContextBlock *blk)
+{
+	_flush_putuint16(params, blk, sizeof(uint16));
+	if (params->outType == TY_FILE)
+	{
+		fclose(blk->num16_output_file);
+	}
+}
+
+void reset_putuint16(BlinkParams *params, BufContextBlock *blk)
+{
+	_flush_putuint16(params, blk, sizeof(uint16));
+}
+
+
+

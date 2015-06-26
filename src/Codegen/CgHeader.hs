@@ -81,17 +81,7 @@ globalDoneVal = doneValOf globalDoneHdl
 
 cHeader :: String
 cHeader = unlines l
-  where l = [ "#include <stdio.h>"
-            , "#include <stdlib.h>"
-            , "#include <string.h>"
-            , "#include <math.h>"
-            , "#include <xmmintrin.h>"
-            , "#include <emmintrin.h>"
-
-            , "#include \"types.h\""
-            , "#include \"wpl_alloc.h\""
-            , "#include \"utils.h\""
-            , "#include \"buf.h\""
+  where l = [ "#include \"common.h\""                   -- All required header files are to be added here
 
             , ""
             , "#define SKIP " ++ show sKIP

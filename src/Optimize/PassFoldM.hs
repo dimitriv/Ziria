@@ -31,7 +31,6 @@ import GHC.Generics
 import System.CPUTime
 import Text.PrettyPrint.HughesPJ
 import Text.Printf
-import Text.Show.Pretty (PrettyVal)
 import qualified Data.Map as Map
 
 import AstComp
@@ -79,8 +78,6 @@ logStep pass pos str = do
     shouldLog <- debugFold
     when shouldLog $ RwM $ do
       liftIO $ putStrLn $ "* " ++ pass ++ ": " ++ displayLoc (locOf pos) ++ ": " ++ "\n" ++ str
-  where
-    ppr' p = show p ++ ": "
 
 -- | Record if an action does a local rewrite
 --
