@@ -87,9 +87,7 @@ Executable atomix
   hs-source-dirs:   src src/BasicTypes src/Codegen src/Optimize
                     src/Pipeline src/Typecheck src/Utils src/Vectorize
                     src/Analysis src/ComputeType src/Atomix
-  main-is:          AtomixTestDriver.hs
-  -- TODO: We should use a proper module hierarchy and only have 'src' 
-  -- as the include dir.
+  main-is:          AtomixMain.hs
   default-language: Haskell98
   other-modules:
     Language.Ziria.Parser.Lexer
