@@ -69,6 +69,7 @@ Executable atomix
       process              >= 1.1 && < 1.2
 
   ghc-options: -fwarn-incomplete-patterns -Werror
+               -O0
                -prof
                -fprof-auto
                "-with-rtsopts=-xc"

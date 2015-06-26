@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module AutomataModel where
 
+import Data.Bool
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
@@ -11,6 +12,7 @@ import qualified Data.List as List
 import qualified System.IO as IO
 
 import Control.Exception
+import Debug.Trace
 import Control.Monad.Reader
 import Control.Monad.State
 
@@ -63,7 +65,7 @@ data WiredAtom atom
   deriving Show
 
 
-class Atom a where
+class Show a => Atom a where
 
   atomInTy  :: a -> [Ty]
   atomOutTy :: a -> [Ty]
@@ -95,7 +97,7 @@ nodeKindOfId :: Ord nid => nid -> Automaton atom nid -> NodeKind atom nid
 nodeKindOfId nid a = node_kind $ fromJust $ Map.lookup nid (auto_graph a)
 
 -- precondition: a1 and a2 must agree on auto_inchan and auto_outchan
-concat_auto :: Ord nid1 => Automaton atom nid1 -> Automaton atom Int -> Automaton atom Int
+concat_auto :: Atom atom => Show nid1 => Ord nid1 => Automaton atom nid1 -> Automaton atom Int -> Automaton atom Int
 concat_auto a1 a2 = a1' { auto_graph = concat_graph }
   where
     a1' = replace_done_with (auto_start a2) $ normalize_auto_ids (nextNid a2) a1
@@ -127,9 +129,10 @@ map_auto_ids map_id a = a { auto_graph = new_graph, auto_start = new_start }
     new_graph = Map.mapKeys map_id $ Map.map (map_node_ids map_id) $ auto_graph a
 
 -- replaces arbitrary automata node-ids with Ints >= first_id
-normalize_auto_ids :: Ord nid => Int -> Automaton e nid -> Automaton e Int
-normalize_auto_ids first_id a = map_auto_ids (\nid -> fromJust $ Map.lookup nid normalize_map) a
+normalize_auto_ids :: Atom e => Ord nid => Show nid => Int -> Automaton e nid -> Automaton e Int
+normalize_auto_ids first_id a = map_auto_ids map_id a
   where
+    map_id nid = fromJust $ Map.lookup nid normalize_map
     (_, normalize_map) = Map.foldWithKey f (first_id, Map.empty) (auto_graph a)
     f nid _ (counter, nid_map) = (counter+1, Map.insert nid counter nid_map)
 
@@ -141,6 +144,16 @@ replace_done_with nid a = map_auto_ids (\nid -> Map.findWithDefault nid nid repl
     fold_f _ mp = mp
 
 
+-- debugging
+auto_closed :: Ord nid => Automaton e nid -> Bool
+auto_closed a = Map.fold node_closed (isDefined $ auto_start a) (auto_graph a)
+  where
+    isDefined nid = Map.member nid (auto_graph a)
+    node_closed (Node nid nkind) = (&&) (isDefined nid && nkind_closed nkind)
+    nkind_closed Done = True
+    nkind_closed (Loop nid) = isDefined nid
+    nkind_closed (Action _ nid) = isDefined nid
+    nkind_closed (AutomataModel.Branch _ nid1 nid2 _) = isDefined nid1 && isDefined nid2
 
 
 -- Constructing Automata from Ziria Comps
@@ -300,7 +313,7 @@ fuseActions auto = auto { auto_graph = fused_graph }
 -- Zipping Automata
 
 -- Precondition: a1 and a2 should satisfy (auto_outchan a1) == (auto_inchan a2)
-zipAutomata :: forall e. Automaton e Int -> Automaton e Int -> Automaton e Int -> Automaton e Int
+zipAutomata :: forall e. Atom e => Automaton e Int -> Automaton e Int -> Automaton e Int -> Automaton e Int
 zipAutomata a1 a2 k = concat_auto prod_a k
   where
     prod_a = Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) (s1,s2)
