@@ -118,6 +118,12 @@ concat_auto a1 a2 = a1' { auto_graph = concat_graph }
                    assert (Map.null $ Map.intersection graph1 graph2) $
                    Map.union graph1 graph2
 
+mkDoneAutomaton :: Chan -> Chan -> Automaton e Int
+mkDoneAutomaton ic oc
+  = Automaton { auto_graph = Map.singleton 0 (Node 0 Done), auto_start = 0
+              , auto_outchan = oc
+              , auto_inchan  = ic
+              }
 
 
 -- Mapping Automata Labels
@@ -258,67 +264,6 @@ mkAutomaton dfs chans comp k = go (unComp comp)
       return $ a { auto_graph = Map.insert nid (Node nid nkind) (auto_graph a)}
 
 
-mkDoneAutomaton :: Chan -> Chan -> Automaton e Int
-mkDoneAutomaton ic oc
-  = Automaton { auto_graph = Map.singleton 0 (Node 0 Done), auto_start = 0
-              , auto_outchan = oc
-              , auto_inchan  = ic
-              }
-
-
--- Monad for marking automata nodes; useful for DFS/BFS
-
-type MarkingM nid = State (Set nid)
-mark :: Ord nid => nid ->  MarkingM nid ()
-mark nid = modify (Set.insert nid)
-
-isMarked :: Ord nid => nid -> MarkingM nid Bool
-isMarked nid = do
-  marks <- get
-  return (Set.member nid marks)
-
-
-
-
--- Fuses actions sequences in automata; inserts Loop nodes to make self-loops explicit.
--- This brings automata into a "normalized form" that is convenient for translation to
--- Atomix. DO NOT CALL THIS FUNCTION PREMATURELY AS LOOP NODES WILL BRAKE ZIPAUTOMATA.
-
-fuseActions :: Automaton atom Int -> Automaton atom Int
-fuseActions auto = auto { auto_graph = fused_graph }
-  where
-    fused_graph = fst $ runState (markAndFuse (auto_start auto) (auto_graph auto)) Set.empty
-
-    markAndFuse :: Int -> NodeMap atom Int -> MarkingM Int (NodeMap atom Int)
-    markAndFuse nid nmap = do
-      marked <- isMarked nid
-      if marked then return nmap else do
-        mark nid
-        fuse (fromJust $ Map.lookup nid nmap) nmap
-
-    fuse :: Node atom Int -> NodeMap atom Int -> MarkingM Int (NodeMap atom Int)
-    fuse (Node _ Done) nmap = return nmap
-    fuse (Node _ (Loop b)) nmap = markAndFuse b nmap
-    fuse (Node _ (AutomataModel.Branch _ b1 b2 _)) nmap = do
-      nmap <- markAndFuse b1 nmap
-      markAndFuse b2 nmap
-    fuse (Node nid (Action atoms next)) nmap = do
-      nmap <- markAndFuse next nmap
-      case fromJust (Map.lookup next nmap) of
-        Node _ Done -> return nmap
-        Node _ (Loop _) -> return nmap
-        Node _ (AutomataModel.Branch {}) -> return nmap
-        Node nid' (Action atoms' next')
-          | nid == nid' -> -- self loop detected! Insert loop.
-            let new_next_nid = nextNid auto
-                new_next_node = Node new_next_nid (Loop nid)
-                new_action_node = Node nid (Action atoms new_next_nid)
-                new_nmap = Map.insert nid new_action_node $ Map.insert new_next_nid new_next_node nmap
-            in return new_nmap
-          | otherwise ->
-            let new_node = Node nid (Action (atoms++atoms') next')
-                new_nmap = Map.insert nid new_node $ Map.delete nid' nmap
-            in return new_nmap
 
 
 
@@ -419,10 +364,57 @@ zipAutomata a1 a2 k = concat_auto prod_a k
 
 
 
---instance Show (NodeKind atom nid) where
---  show (NodeLabel _ (Action watom)) =
---    let show_wires = List.intercalate "," . map show
---    in show_wires (wires_in watom) ++ "/" ++ show_wires (wires_out watom)
---  show (NodeLabel _ (AutomataModel.Branch win _)) = show win ++ "/DQ"
---  show (NodeLabel _ (StaticLoop n _)) = "/DQ="
 
+-- Monad for marking automata nodes; useful for DFS/BFS
+
+type MarkingM nid = State (Set nid)
+mark :: Ord nid => nid ->  MarkingM nid ()
+mark nid = modify (Set.insert nid)
+
+isMarked :: Ord nid => nid -> MarkingM nid Bool
+isMarked nid = do
+  marks <- get
+  return (Set.member nid marks)
+
+
+
+
+-- Fuses actions sequences in automata; inserts Loop nodes to make self-loops explicit.
+-- This brings automata into a "normalized form" that is convenient for translation to
+-- Atomix. DO NOT CALL THIS FUNCTION PREMATURELY AS LOOP NODES WILL BRAKE ZIPAUTOMATA.
+
+fuseActions :: Automaton atom Int -> Automaton atom Int
+fuseActions auto = auto { auto_graph = fused_graph }
+  where
+    fused_graph = fst $ runState (markAndFuse (auto_start auto) (auto_graph auto)) Set.empty
+
+    markAndFuse :: Int -> NodeMap atom Int -> MarkingM Int (NodeMap atom Int)
+    markAndFuse nid nmap = do
+      marked <- isMarked nid
+      if marked then return nmap else do
+        mark nid
+        fuse (fromJust $ Map.lookup nid nmap) nmap
+
+    fuse :: Node atom Int -> NodeMap atom Int -> MarkingM Int (NodeMap atom Int)
+    fuse (Node _ Done) nmap = return nmap
+    fuse (Node _ (Loop b)) nmap = markAndFuse b nmap
+    fuse (Node _ (AutomataModel.Branch _ b1 b2 _)) nmap = do
+      nmap <- markAndFuse b1 nmap
+      markAndFuse b2 nmap
+    fuse (Node nid (Action atoms next)) nmap = do
+      nmap <- markAndFuse next nmap
+      case fromJust (Map.lookup next nmap) of
+        Node _ Done -> return nmap
+        Node _ (Loop _) -> return nmap
+        Node _ (AutomataModel.Branch {}) -> return nmap
+        Node nid' (Action atoms' next')
+          | nid == nid' -> -- self loop detected! Insert loop.
+            let new_next_nid = nextNid auto
+                new_next_node = Node new_next_nid (Loop nid)
+                new_action_node = Node nid (Action atoms new_next_nid)
+                new_nmap = Map.insert nid new_action_node $ Map.insert new_next_nid new_next_node nmap
+            in return new_nmap
+          | otherwise ->
+            let new_node = Node nid (Action (atoms++atoms') next')
+                new_nmap = Map.insert nid new_node $ Map.delete nid' nmap
+            in return new_nmap
