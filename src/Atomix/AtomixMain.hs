@@ -39,4 +39,6 @@ main :: IO ()
 main = do 
   (a,_) <- runCompM atomixTest
   putStrLn $ show $ normalize_auto_ids 0 $ fuseActions a
+  putStrLn ""
+  putStrLn $ dotOfAuto a
   return ()

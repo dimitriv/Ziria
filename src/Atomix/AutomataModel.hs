@@ -418,3 +418,26 @@ fuseActions auto = auto { auto_graph = fused_graph }
             let new_node = Node nid (Action (atoms++atoms') next')
                 new_nmap = Map.insert nid new_node $ Map.delete nid' nmap
             in return new_nmap
+
+
+
+-- Automata to DOT files
+
+dotOfAuto :: (Atom e, Show nid) => Automaton e nid -> String
+dotOfAuto a = prefix ++ nodes ++ edges ++ postfix
+  where
+    prefix = "digraph finite_state_machine {\n  rankdir=LR;\n"
+    postfix = "\n}"
+    nodes = "  node [shape = doublecircle];" ++ final ++ ";\n  node [shape = circle];\n" ++ normal ++ "\n  "
+    (finalN,normalN) = Map.partition (\(Node _ nk) -> case nk of { Done -> True; _ -> False }) (auto_graph a)
+    final = List.intercalate "\n" $ List.map (show . fst) $ Map.toList finalN
+    normal = List.intercalate "\n" $ List.map (showNode . snd) $ Map.toList normalN
+    edges = List.intercalate "\n  " $  List.concat $
+            List.map (\(nid,node) -> [show nid ++ " -> " ++ show suc ++ ";"| suc <- sucs (node_kind node)]) $
+            Map.toList normalN
+    sucs Done = []
+    sucs (Loop nxt) = [nxt]
+    sucs (Action _ nxt) = [nxt]
+    sucs (AutomataModel.Branch _ nxt1 nxt2 _) = [nxt1,nxt2]
+
+    showNode (Node nid nk) = "  " ++ show nid ++ " [label=\"" ++ show nk ++ "\"];"
