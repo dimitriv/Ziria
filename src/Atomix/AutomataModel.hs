@@ -306,8 +306,8 @@ zipAutomata a1 a2 k = concat_auto prod_a k
     prod_a = Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) (s1,s2)
     s1 = (auto_start a1, 0)
     s2 = (auto_start a2, 0)
-    prod_nmap = go s1 s2 Map.empty
-    trans_ch = auto_outchan a1
+    prod_nmap = zipNodes s1 s2 Map.empty
+    trans_ch = assert (auto_outchan a1 == auto_inchan a2) $ auto_outchan a1
 
     -- this allows us to address nodes in the input automata using (base_id,offset) pairs
     lookup :: (Int,Int) -> Automaton e Int -> Node e (Int,Int)
@@ -320,58 +320,58 @@ zipAutomata a1 a2 k = concat_auto prod_a k
           assert (n_offset == 0) $ map_node_ids (\id -> (id,0)) node
 
 
-    go :: (Int,Int) -> (Int,Int) -> NodeMap e ((Int,Int),(Int,Int)) -> NodeMap e ((Int,Int),(Int,Int))
-    go nid1 nid2 prod_nmap =
+    zipNodes :: (Int,Int) -> (Int,Int) -> NodeMap e ((Int,Int),(Int,Int)) -> NodeMap e ((Int,Int),(Int,Int))
+    zipNodes nid1 nid2 prod_nmap =
       case Map.lookup (nid1,nid2) prod_nmap of
-        Nothing -> go' (lookup nid1 a1) (lookup nid2 a2) prod_nmap
-        Just _ -> prod_nmap -- TODO: what should we do here?
+        Nothing -> zipNodes' (lookup nid1 a1) (lookup nid2 a2) prod_nmap
+        Just _ -> prod_nmap -- We have already seen this product location. We're done!
 
-    go' :: Node e (Int,Int) -> Node e (Int,Int) -> NodeMap e ((Int,Int),(Int,Int)) -> NodeMap e ((Int,Int),(Int,Int))
-    go' (Node id1 Done) (Node id2 _) prod_nmap =
+    zipNodes' :: Node e (Int,Int) -> Node e (Int,Int) -> NodeMap e ((Int,Int),(Int,Int)) -> NodeMap e ((Int,Int),(Int,Int))
+    zipNodes' (Node id1 Done) (Node id2 _) prod_nmap =
       let prod_nid = (id1,id2)
       in Map.insert prod_nid (Node prod_nid Done) prod_nmap
 
-    go' (Node id1 _) (Node id2 Done) prod_nmap =
+    zipNodes' (Node id1 _) (Node id2 Done) prod_nmap =
       let prod_nid = (id1,id2)
       in Map.insert prod_nid (Node prod_nid Done) prod_nmap
 
-    go' (Node id1 (Loop next1)) (Node id2 _) prod_nmap =
-      go next1 id2 prod_nmap
+    zipNodes' (Node id1 (Loop next1)) (Node id2 _) prod_nmap =
+      zipNodes next1 id2 prod_nmap
 
-    go' (Node id1 _) (Node id2 (Loop next2)) prod_nmap =
-      go id1 next2 prod_nmap
+    zipNodes' (Node id1 _) (Node id2 (Loop next2)) prod_nmap =
+      zipNodes id1 next2 prod_nmap
 
-    go' (Node id1 (AutomataModel.Branch x l r w)) (Node id2 _) prod_nmap =
+    zipNodes' (Node id1 (AutomataModel.Branch x l r w)) (Node id2 _) prod_nmap =
       let prod_nid = (id1,id2)
           prod_nkind = AutomataModel.Branch x (l,id2) (r,id2) w
           prod_node = Node prod_nid prod_nkind
-      in go r id2 $ go l id2 $ Map.insert prod_nid prod_node prod_nmap
+      in zipNodes r id2 $ zipNodes l id2 $ Map.insert prod_nid prod_node prod_nmap
 
-    go' (Node id1 _) (Node id2 (AutomataModel.Branch x l r w)) prod_nmap =
+    zipNodes' (Node id1 _) (Node id2 (AutomataModel.Branch x l r w)) prod_nmap =
       let prod_nid = (id1,id2)
           prod_nkind = AutomataModel.Branch x (id1,l) (id1,r) w
           prod_node = Node prod_nid prod_nkind
-      in go id1 r $ go id1 l $ Map.insert prod_nid prod_node prod_nmap
+      in zipNodes id1 r $ zipNodes id1 l $ Map.insert prod_nid prod_node prod_nmap
 
-    go' n1@(Node id1 (Action _ _)) n2@(Node id2 (Action _ _)) prod_nmap =
-      let (watoms, next1', next2') = zipActions n1 n2
+    zipNodes' n1@(Node id1 (Action _ _)) n2@(Node id2 (Action _ _)) prod_nmap =
+      let (watoms, next1, next2) = zipActions n1 n2
           prod_nid = (id1,id2)
-          prod_nkind = Action watoms (next1',next2')
+          prod_nkind = Action watoms (next1,next2)
           prod_node = Node prod_nid prod_nkind
-      in go next1' next2' $ Map.insert prod_nid prod_node prod_nmap
+      in zipNodes next1 next2 $ Map.insert prod_nid prod_node prod_nmap
 
     zipActions :: Node atom (Int,Int) -> Node atom (Int,Int) -> ([WiredAtom atom], (Int,Int), (Int,Int))
     zipActions (Node (base1,offset1) (Action watoms1 next1)) (Node (base2,offset2) (Action watoms2 next2)) 
       = tickRight [] watoms1 watoms2 offset1 offset2
       where
-        tickRight acc _ [] offset1 offset2 = (List.reverse acc, (base1,offset1), (base2,offset2))
+        tickRight acc _ [] offset1 offset2 = (List.reverse acc, (base1,offset1), next2)
         tickRight acc watoms1 watoms2@(wa:watoms2') offset1 offset2
           | consumes wa = tickLeft acc watoms1 watoms2 offset1 offset2
           | otherwise = tickRight (wa:acc) watoms1 watoms2' offset1 (offset2+1)
 
-        tickLeft acc [] _ offset1 offset2 = (List.reverse acc, (base1,offset1), (base2,offset2))
+        tickLeft acc [] _ offset1 offset2 = (List.reverse acc, next1, (base2,offset2))
         tickLeft acc (wa:watoms1') watoms2 offset1 offset2
-          | produces wa = procRight (wa::acc) watoms1' watoms2 (offset1+1) offset2
+          | produces wa = procRight (wa:acc) watoms1' watoms2 (offset1+1) offset2
           | otherwise = tickLeft (wa:acc) watoms1' watoms2 (offset1+1) offset2
 
         procRight acc watoms1 (wa:watoms2') offset1 offset2
@@ -380,25 +380,8 @@ zipAutomata a1 a2 k = concat_auto prod_a k
 
         consumes wired_atom = List.any (== trans_ch) (wires_in wired_atom)
         produces wired_atom = List.any (== trans_ch) (wires_out wired_atom)
+    zipActions _ _ = assert False undefined
 
-
-    --count :: [a] -> (a -> Bool) -> Int
-    --count xs f = List.sum $ List.map (\x -> if f x then 1 else 0) xs
-
-    --count_writes :: [WiredAtom atom] -> Chan -> Int
-    --count_writes watoms ch = count watoms (\wa -> List.elem ch $ wires_out wa)
-
-    --count_reads :: [WiredAtom atom] -> Chan -> Int
-    --count_reads watoms ch = count watoms (\wa -> List.elem ch $ wires_in wa)
-
-    --split :: Int -> (WiredAtom atom -> Int) -> (Int,Int) -> ([WiredAtom atom], (Int,Int)) -> ([WiredAtom atom], (Int,Int))
-    --split budget cost (id_base,id_offset) (watoms,next) = split' budget watoms 0 []
-    --  where
-    --    split' budget [] idx acc = (List.reverse acc,next)
-    --    split' budget (wa:watoms) idx acc =
-    --      let budget' = budget - cost wa
-    --      in if budget' >= 0 then split' budget' watoms (idx+1) (wa:acc)
-    --         else (List.reverse acc, (id_base, id_offset + idx))
 
 
 
