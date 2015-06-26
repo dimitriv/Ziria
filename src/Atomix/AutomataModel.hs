@@ -35,8 +35,8 @@ data NodeKind atom nid
   | Loop { loop_body :: nid } -- Infinite loop. Only transformers may (and must!) contain one of these.
   | Done
 
-instance Show nid => Show (NodeKind atom nid) where
-  show (Action _ next) = "Action->" ++ (show next) ++ ""
+instance (Atom atom, Show nid) => Show (NodeKind atom nid) where
+  show (Action was next) = "Action" ++ show was ++ "->" ++ (show next) ++ ""
   show (AutomataModel.Branch _ n1 n2 _) = "Branch->(" ++ (show n1) ++ "," ++ (show n2) ++ ")"
   show (Loop next) = "Loop->" ++ (show next)
   show Done = "Done"
@@ -49,7 +49,7 @@ data Node atom nid
          , node_kind :: NodeKind atom nid
          }
 
-instance Show nid => Show (Node atom nid) where
+instance (Atom atom, Show nid) => Show (Node atom nid) where
   show (Node nid nk) = "<" ++ (show nid) ++ ":" ++ (show nk) ++ ">"
 
 type NodeMap atom nid = Map nid (Node atom nid)
@@ -69,7 +69,9 @@ data WiredAtom atom
               , wires_out :: [Var]
               , the_atom  :: atom
               }
-  deriving Show
+
+instance Atom a => Show (WiredAtom a) where
+  show wa = show (wires_in wa) ++ "{" ++ show (the_atom wa) ++ "}" ++ show (wires_out wa)
 
 
 class Show a => Atom a where

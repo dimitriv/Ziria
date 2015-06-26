@@ -12,7 +12,11 @@ import qualified Data.List as List
 
 
 data FunLikeAtom = FunFun FunName | Id Ty | Discard Ty
-  deriving Show
+
+instance Show FunLikeAtom where
+  show (FunFun f) = show f
+  show (Id _) = "ID"
+  show (Discard _) = "DC"
 
 instance Atom FunLikeAtom where
   atomInTy (FunFun f) = inTysOfFunction f
@@ -114,7 +118,7 @@ mkWifi = do
   -- LTS
   lts <- do
     x <- freshVar "lts_cond" ty Mut
-    let body = mkRepeatN 4 $ mkComp (Emit1 x)
+    let body = mkRepeatN 2 $ mkComp (Emit1 x)
     return $ mkComp $ Until x body
 
   -- middle pipeline
@@ -141,7 +145,7 @@ mkWifi = do
   decode <- freshMap "decodeB"
   descramble <- do
     x <- freshVar "descramble_cond" ty Mut
-    let body = mkRepeatN 7 $ mkComp (Emit1 x)
+    let body = mkRepeatN 2 $ mkComp (Emit1 x)
     return $ mkComp $ Until x body
   let decodePipeline = List.foldr mkPar descramble [middlePipeline, demod, deinterleave, decode]
 
