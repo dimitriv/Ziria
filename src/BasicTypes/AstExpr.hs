@@ -20,7 +20,6 @@
 {-# OPTIONS_GHC -Wall #-}
 module AstExpr where
 
-import {-# SOURCE #-} LUTAnalysis
 import Prelude hiding (exp, mapM)
 import Control.DeepSeq.Generics (NFData(..), genericRnf)
 import Data.Loc
@@ -35,6 +34,8 @@ import Text.Show.Pretty (PrettyVal)
 import qualified Data.Set as S
 
 import Orphans ()
+
+type LUTStats = ()
 
 {-------------------------------------------------------------------------------
   Various kinds of variables
