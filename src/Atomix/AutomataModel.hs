@@ -34,7 +34,12 @@ data NodeKind atom nid
            }
   | Loop { loop_body :: nid } -- Infinite loop. Only transformers may (and must!) contain one of these.
   | Done
-  deriving Show
+
+instance Show nid => Show (NodeKind atom nid) where
+  show (Action _ next) = "Action->" ++ (show next) ++ ""
+  show (AutomataModel.Branch _ n1 n2 _) = "Branch->(" ++ (show n1) ++ "," ++ (show n2) ++ ")"
+  show (Loop next) = "Loop->" ++ (show next)
+  show Done = "Done"
 
   -- TODO: think about this later
   -- | StaticLoop  { iterations :: Int, loop_body :: Automaton }
@@ -43,10 +48,12 @@ data Node atom nid
   = Node { node_id   :: nid
          , node_kind :: NodeKind atom nid
          }
-  deriving Show
+
+instance Show nid => Show (Node atom nid) where
+  show (Node nid nk) = "<" ++ (show nid) ++ ":" ++ (show nk) ++ ">"
 
 type NodeMap atom nid = Map nid (Node atom nid)
-  
+
 
 data Automaton atom nid
   = Automaton { auto_graph   :: NodeMap atom nid
@@ -105,8 +112,7 @@ concat_auto a1 a2 = a1' { auto_graph = concat_graph }
     graph2 = auto_graph a2
     concat_graph = assert (auto_inchan a1 == auto_inchan a2) $
                    assert (auto_outchan a1 == auto_outchan a2) $
-                   assert (Map.null $ Map.difference graph1 graph2) $
-                   assert (Map.null $ Map.difference graph2 graph1) $
+                   assert (Map.null $ Map.intersection graph1 graph2) $
                    Map.union graph1 graph2
 
 
@@ -154,6 +160,9 @@ auto_closed a = Map.fold node_closed (isDefined $ auto_start a) (auto_graph a)
     nkind_closed (Loop nid) = isDefined nid
     nkind_closed (Action _ nid) = isDefined nid
     nkind_closed (AutomataModel.Branch _ nid1 nid2 _) = isDefined nid1 && isDefined nid2
+
+ensure :: (a -> Bool) -> a -> a
+ensure f x = assert (f x) x
 
 
 -- Constructing Automata from Ziria Comps
@@ -227,8 +236,8 @@ mkAutomaton dfs chans comp k = go (unComp comp)
         Done -> do
           a <- mkAutomaton dfs chans c k
           let nid = auto_start k
-          let nkind = Loop (auto_start a)
-          return $ a { auto_start = nid, auto_graph = Map.insert nid (Node nid nkind) (auto_graph a) }
+          let node = fromJust $ Map.lookup (auto_start a) (auto_graph a) -- Loop (auto_start a)
+          return $ a { auto_start = nid, auto_graph = Map.insert nid node (auto_graph a) }
         _ -> fail "Repeat should not have a continuation!"
 
     go (While x c) = do
@@ -270,7 +279,7 @@ isMarked nid = do
 
 -- Fuses actions sequences in automata; inserts Loop nodes to make self-loops explicit.
 -- This brings automata into a "normalized form" that is convenient for translation to
--- Atomix.
+-- Atomix. DO NOT CALL THIS FUNCTION PREMATURELY AS LOOP NODES WILL BRAKE ZIPAUTOMATA.
 
 fuseActions :: Automaton atom Int -> Automaton atom Int
 fuseActions auto = auto { auto_graph = fused_graph }
@@ -311,16 +320,22 @@ fuseActions auto = auto { auto_graph = fused_graph }
 
 
 -- Zipping Automata
+type ProdNid = ((Int,Int),(Int,Int))
 
 -- Precondition: a1 and a2 should satisfy (auto_outchan a1) == (auto_inchan a2)
+-- a1 and a2 MUST NOT contain explicit loop nodes (but may contain loops)!!
 zipAutomata :: forall e. Atom e => Automaton e Int -> Automaton e Int -> Automaton e Int -> Automaton e Int
 zipAutomata a1 a2 k = concat_auto prod_a k
   where
-    prod_a = Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) (s1,s2)
+    prod_a = ensure auto_closed      $
+             assert (auto_closed a1) $
+             assert (auto_closed a2) $
+             Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) (s1,s2)
     s1 = (auto_start a1, 0)
     s2 = (auto_start a2, 0)
     prod_nmap = zipNodes s1 s2 Map.empty
     trans_ch = assert (auto_outchan a1 == auto_inchan a2) $ auto_outchan a1
+
 
     -- this allows us to address nodes in the input automata using (base_id,offset) pairs
     lookup :: (Int,Int) -> Automaton e Int -> Node e (Int,Int)
@@ -333,13 +348,13 @@ zipAutomata a1 a2 k = concat_auto prod_a k
           assert (n_offset == 0) $ map_node_ids (\id -> (id,0)) node
 
 
-    zipNodes :: (Int,Int) -> (Int,Int) -> NodeMap e ((Int,Int),(Int,Int)) -> NodeMap e ((Int,Int),(Int,Int))
+    zipNodes :: (Int,Int) -> (Int,Int) -> NodeMap e ProdNid -> NodeMap e ProdNid
     zipNodes nid1 nid2 prod_nmap =
       case Map.lookup (nid1,nid2) prod_nmap of
         Nothing -> zipNodes' (lookup nid1 a1) (lookup nid2 a2) prod_nmap
         Just _ -> prod_nmap -- We have already seen this product location. We're done!
 
-    zipNodes' :: Node e (Int,Int) -> Node e (Int,Int) -> NodeMap e ((Int,Int),(Int,Int)) -> NodeMap e ((Int,Int),(Int,Int))
+    zipNodes' :: Node e (Int,Int) -> Node e (Int,Int) -> NodeMap e ProdNid -> NodeMap e ProdNid
     zipNodes' (Node id1 Done) (Node id2 _) prod_nmap =
       let prod_nid = (id1,id2)
       in Map.insert prod_nid (Node prod_nid Done) prod_nmap
@@ -348,11 +363,14 @@ zipAutomata a1 a2 k = concat_auto prod_a k
       let prod_nid = (id1,id2)
       in Map.insert prod_nid (Node prod_nid Done) prod_nmap
 
+    -- We don't handle eplicit loops since they complicate the algorithm.
+    -- The problem is that loop nodes in one of the source automata do NOT
+    -- give rise to nodes in the product automaton. As a result,
+    -- the algorithm will produce spurious product node ids.
     zipNodes' (Node id1 (Loop next1)) (Node id2 _) prod_nmap =
-      zipNodes next1 id2 prod_nmap
-
+      assert False undefined
     zipNodes' (Node id1 _) (Node id2 (Loop next2)) prod_nmap =
-      zipNodes id1 next2 prod_nmap
+      assert False undefined
 
     zipNodes' (Node id1 (AutomataModel.Branch x l r w)) (Node id2 _) prod_nmap =
       let prod_nid = (id1,id2)
@@ -374,7 +392,7 @@ zipAutomata a1 a2 k = concat_auto prod_a k
       in zipNodes next1 next2 $ Map.insert prod_nid prod_node prod_nmap
 
     zipActions :: Node atom (Int,Int) -> Node atom (Int,Int) -> ([WiredAtom atom], (Int,Int), (Int,Int))
-    zipActions (Node (base1,offset1) (Action watoms1 next1)) (Node (base2,offset2) (Action watoms2 next2)) 
+    zipActions (Node (base1,offset1) (Action watoms1 next1)) (Node (base2,offset2) (Action watoms2 next2))
       = tickRight [] watoms1 watoms2 offset1 offset2
       where
         tickRight acc _ [] offset1 offset2 = (List.reverse acc, (base1,offset1), next2)

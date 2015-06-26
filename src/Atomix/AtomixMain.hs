@@ -38,5 +38,5 @@ atomixTest = do
 main :: IO ()
 main = do 
   (a,_) <- runCompM atomixTest
-  putStrLn $ show a
+  putStrLn $ show $ normalize_auto_ids 0 $ fuseActions a
   return ()
