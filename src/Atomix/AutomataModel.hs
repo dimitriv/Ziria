@@ -37,7 +37,8 @@ data NodeKind atom nid
 
 instance (Atom atom, Show nid) => Show (NodeKind atom nid) where
   show (Action was next) = "Action" ++ show was ++ "->" ++ (show next) ++ ""
-  show (AutomataModel.Branch _ n1 n2 _) = "Branch->(" ++ (show n1) ++ "," ++ (show n2) ++ ")"
+  show (AutomataModel.Branch x n1 n2 True) = "While[" ++ show x ++ "]->(" ++ (show n1) ++ "," ++ (show n2) ++ ")"
+  show (AutomataModel.Branch x n1 n2 False) = "If[" ++ show x ++ "]->(" ++ (show n1) ++ "," ++ (show n2) ++ ")"
   show (Loop next) = "Loop->" ++ (show next)
   show Done = "Done"
 
