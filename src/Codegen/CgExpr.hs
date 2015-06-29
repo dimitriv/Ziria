@@ -17,7 +17,7 @@
    permissions and limitations under the License.
 -}
 {-# LANGUAGE  QuasiQuotes, GADTs, ScopedTypeVariables, RecordWildCards #-}
-{-# OPTIONS_GHC -fwarn-unused-binds -Werror #-}
+{-# OPTIONS_GHC -fwarn-unused-binds #-}
 
 module CgExpr ( codeGenExp ) where
 
@@ -52,6 +52,7 @@ import Language.C.Quote.Base (ToConst(..))
 import qualified Language.C.Pretty as P
 import Numeric (showHex)
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Text.PrettyPrint.HughesPJ
 import Data.Maybe
 
@@ -172,6 +173,7 @@ cgEval :: DynFlags -> Exp -> Cg (Either (LVal ArrIdx) C.Exp)
 cgEval dfs e = go (unExp e) where
   loc = expLoc e
 
+
   -- Any variable is byte aligned 
   is_lval_aligned (GDVar {}) _ = True 
   -- Any non-bit array deref exp is not aligned (NB: we could improve that)
@@ -181,14 +183,30 @@ cgEval dfs e = go (unExp e) where
   -- Any other 
   is_lval_aligned _ _ = True
 
-  go_assign :: DynFlags -> SrcLoc -> LVal ArrIdx -> Exp -> Cg C.Exp
-  go_assign dfs loc clhs erhs
-    | is_lval_aligned clhs (ctExp erhs)
-    , ECall nef eargs <- unExp erhs
-    = do clhs_c <- cgDeref dfs loc clhs
-         _ <- cgCall_aux dfs loc (ctExp erhs) nef eargs (Just clhs_c)
-         return [cexp|UNIT|]
-    | otherwise = do
+
+  go_assign, asgn_slow :: DynFlags -> SrcLoc -> LVal ArrIdx -> Exp -> Cg C.Exp
+  go_assign dfs loc clhs erhs 
+    | is_lval_aligned clhs (ctExp erhs)    -- if lval is aligned
+    , ECall nef eargs <- unExp erhs        -- and rval is function call
+
+    -- Fast, but unsafe in case of aliasing ... 
+    -- = do clhs_c <- cgDeref dfs loc clhs
+    --      _ <- cgCall_aux dfs loc (ctExp erhs) nef eargs (Just clhs_c)
+    --      return [cexp|UNIT|]
+
+    -- Somewhat unsatisfactory compromise: for external functions make it 
+    -- the programmer's responsibility to control aliasing effects. 
+    -- See note [Safe Return Aliasing] in AstExpr.hs
+
+    = do (fn,clos,_) <- lookupExpFunEnv nef -- Get closure arguments
+         let is_external = isPrefixOf "__ext" (name fn)
+         if is_external then do clhs_c <- cgDeref dfs loc clhs
+                                _ <- cgCall_aux dfs loc (ctExp erhs) nef eargs (Just clhs_c)
+                                return [cexp|UNIT|]
+         else asgn_slow dfs loc clhs erhs
+
+    | otherwise = asgn_slow dfs loc clhs erhs 
+  asgn_slow dfs loc clhs erhs = do 
          mrhs <- cgEval dfs erhs
          case mrhs of
            Left rlval -> do
