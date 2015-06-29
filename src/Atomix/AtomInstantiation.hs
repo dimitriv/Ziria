@@ -84,15 +84,19 @@ mkPar c1 c2 = mkComp (Par undefined c1 c2)
 
 mkBind mbvar c1 c2 = mkComp $ Bind mbvar c1 c2
 mkRepeat c = mkComp (Repeat c)
-mkReturn e = mkComp (Return e)
+mkReturn f args = mkComp (Return $ mkApp f args)
+mkEmit x = mkComp (Emit1 x)
 
 freshMap name = do
-  x <- freshVar ("arg(" ++ name ++ ")") ty Imm
+  x <- freshVar ("inp(" ++ name ++ ")") ty Imm
+  y <- freshVar ("out(" ++ name ++ ")") ty Imm
   f <- mkFunc name 1 1
-  let app = mkApp f [x]
-  return $ mkRepeat $ mkBind (Just x) (mkComp $ Take1 ty) (mkReturn app)
+  return $ mkRepeat $ mkBind (Just x) (mkComp $ Take1 ty) $
+                      mkBind (Just y) (mkReturn f [x])      $
+                      mkEmit y
 
 mkRepeatN n c = mkComp $ RepeatN n c
+mkTake = mkComp (Take1 ty)
 
 
 
@@ -111,14 +115,14 @@ mkWifi = do
   removeDC <- freshMap "removeDC"
   cca <- do
     x <- freshVar "cca_cond" ty Mut
-    let body = mkComp (Emit1 x)
+    let body = mkBind (Just x) mkTake (mkEmit x)
     return $ mkComp $ While x body
   let detectSTS = mkPar removeDC cca
 
   -- LTS
   lts <- do
     x <- freshVar "lts_cond" ty Mut
-    let body = mkRepeatN 2 $ mkComp (Emit1 x)
+    let body = mkRepeatN 2 $ mkBind (Just x) mkTake (mkEmit x)
     return $ mkComp $ Until x body
 
   -- middle pipeline
@@ -135,7 +139,9 @@ mkWifi = do
   decode <- freshMap "decodeA"
   parseHeader <- do
     x <- freshVar "parseHeader_cond" ty Mut
-    let body = mkRepeatN 3 $ mkComp (Emit1 x)
+    y <- freshVar "parseHeader_aux" ty Mut
+    f <- mkFunc "parseH_func" 1 2
+    let body = mkBind (Just y) mkTake $ mkReturn f [y,x]
     return $ mkComp $ Until x body
   let decodePLCP = List.foldr mkPar parseHeader [middlePipeline, demodBPSK, deinterleave, decode]
 
@@ -145,13 +151,17 @@ mkWifi = do
   decode <- freshMap "decodeB"
   descramble <- do
     x <- freshVar "descramble_cond" ty Mut
-    let body = mkRepeatN 2 $ mkComp (Emit1 x)
+    y1 <- freshVar "descramble_aux1" ty Mut
+    y2 <- freshVar "descramble_aux2" ty Mut
+    f <- mkFunc "descramble_func" 2 2
+    let body = mkBind (Just y1) mkTake $ mkBind (Just y2) mkTake $ mkReturn f [y1, y2, x]
     return $ mkComp $ Until x body
   let decodePipeline = List.foldr mkPar descramble [middlePipeline, demod, deinterleave, decode]
 
   -- overall receiver
   let mkBind (mbvar, pipeline) acc = mkComp $ Bind mbvar pipeline acc
 
+  --return $ detectSTS
   return $ List.foldr mkBind decodePipeline [ (Just det, detectSTS)
                                             , (Just params, lts)
                                             , (Just h, decodePLCP) ]

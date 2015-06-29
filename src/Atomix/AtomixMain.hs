@@ -26,6 +26,8 @@ import AtomComp
 import AutomataModel
 import AtomInstantiation
 
+import Debug.Trace
+
 atomixTest :: CompM () (Automaton FunLikeAtom Int)
 atomixTest = do
   wifi <- mkWifi
@@ -33,12 +35,13 @@ atomixTest = do
   outch <- freshVar "snk" undefined Mut
   let channels = Channels { in_chan = inch, out_chan = outch, ctrl_chan = Nothing }
       k = mkDoneAutomaton inch outch
-  mkAutomaton undefined channels wifi k
+  mkAutomaton undefined channels (traceShowId wifi) k
 
 main :: IO ()
 main = do 
   (a,_) <- runCompM atomixTest
-  putStrLn $ show $ normalize_auto_ids 0 $ fuseActions a
+  let a' = normalize_auto_ids 0 $ deleteDeadNodes $ fuseActions $ a
   putStrLn ""
-  putStrLn $ dotOfAuto a
+  putStrLn $ show a'
+  writeFile "automaton.dot" $ dotOfAuto a'
   return ()

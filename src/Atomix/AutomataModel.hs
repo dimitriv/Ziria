@@ -92,6 +92,10 @@ class Show a => Atom a where
 
 
 -- auxilliary functions for automata construction & manipulation
+sucs (Node _ Done) = []
+sucs (Node _ (Loop nxt)) = [nxt]
+sucs (Node _ (Action _ nxt)) = [nxt]
+sucs (Node _ (AutomataModel.Branch _ nxt1 nxt2 _)) = [nxt1,nxt2]
 
 nextNid :: Automaton atom Int -> Int
 nextNid a = max+1
@@ -147,7 +151,7 @@ map_auto_ids map_id a = a { auto_graph = new_graph, auto_start = new_start }
 normalize_auto_ids :: Atom e => Ord nid => Show nid => Int -> Automaton e nid -> Automaton e Int
 normalize_auto_ids first_id a = map_auto_ids map_id a
   where
-    map_id nid = fromJust $ Map.lookup nid normalize_map
+    map_id nid = fromJust $ assert (Map.member nid normalize_map) $ Map.lookup nid normalize_map
     (_, normalize_map) = Map.foldWithKey f (first_id, Map.empty) (auto_graph a)
     f nid _ (counter, nid_map) = (counter+1, Map.insert nid counter nid_map)
 
@@ -221,12 +225,11 @@ mkAutomaton dfs chans comp k = go (unComp comp)
     go (Par _ c1 c2) = do
       -- TODO: insert right type
       transfer_ch <- freshVar "transfer" undefined Mut
-      let k' = k { auto_graph = Map.singleton 0 (Node 0 Done), auto_start = 0 }
-      let k1 = k' { auto_outchan = transfer_ch }
-      let k2 = k' { auto_inchan = transfer_ch }
-      a1 <- mkAutomaton dfs chans c1 k1
-      a2 <- mkAutomaton dfs chans c2 k2
-      return $ zipAutomata a1 a2 k
+      let k1 = mkDoneAutomaton (in_chan chans) transfer_ch
+      let k2 = mkDoneAutomaton transfer_ch (out_chan chans)
+      a1 <- mkAutomaton dfs (chans {out_chan = transfer_ch}) c1 k1
+      a2 <- mkAutomaton dfs (chans {in_chan = transfer_ch}) c2 k2
+      return $ trace "Par a1 a2:" $ zipAutomata (traceShowId a1) (traceShowId a2) (traceShowId k)
 
     go (AtomComp.Branch x c1 c2) = do
       a1 <- mkAutomaton dfs chans c1 k
@@ -246,7 +249,8 @@ mkAutomaton dfs chans comp k = go (unComp comp)
           a <- mkAutomaton dfs chans c k
           let nid = auto_start k
           let node = fromJust $ Map.lookup (auto_start a) (auto_graph a) -- Loop (auto_start a)
-          return $ a { auto_start = nid, auto_graph = Map.insert nid node (auto_graph a) }
+          let nmap = Map.insert nid node $ Map.delete (auto_start a) (auto_graph a)
+          return $ map_auto_ids (\id -> if id == (auto_start a) then nid else id) $ a { auto_start = nid, auto_graph = nmap }
         _ -> fail "Repeat should not have a continuation!"
 
     go (While x c) = do
@@ -343,11 +347,13 @@ zipAutomata a1 a2 k = concat_auto prod_a k
     zipActions (Node (base1,offset1) (Action watoms1 next1)) (Node (base2,offset2) (Action watoms2 next2))
       = tickRight [] watoms1 watoms2 offset1 offset2
       where
+        tickRight acc [] [] offset1 offset2 = (List.reverse acc, next1, next2)
         tickRight acc _ [] offset1 offset2 = (List.reverse acc, (base1,offset1), next2)
         tickRight acc watoms1 watoms2@(wa:watoms2') offset1 offset2
           | consumes wa = tickLeft acc watoms1 watoms2 offset1 offset2
           | otherwise = tickRight (wa:acc) watoms1 watoms2' offset1 (offset2+1)
 
+        tickLeft acc [] [] offset1 offset2 = (List.reverse acc, next1, next2)
         tickLeft acc [] _ offset1 offset2 = (List.reverse acc, next1, (base2,offset2))
         tickLeft acc (wa:watoms1') watoms2 offset1 offset2
           | produces wa = procRight (wa:acc) watoms1' watoms2 (offset1+1) offset2
@@ -393,7 +399,7 @@ fuseActions auto = auto { auto_graph = fused_graph }
       marked <- isMarked nid
       if marked then return nmap else do
         mark nid
-        fuse (fromJust $ Map.lookup nid nmap) nmap
+        fuse (fromJust $ assert (Map.member nid nmap) $ Map.lookup nid nmap) nmap
 
     fuse :: Node atom Int -> NodeMap atom Int -> MarkingM Int (NodeMap atom Int)
     fuse (Node _ Done) nmap = return nmap
@@ -401,43 +407,54 @@ fuseActions auto = auto { auto_graph = fused_graph }
     fuse (Node _ (AutomataModel.Branch _ b1 b2 _)) nmap = do
       nmap <- markAndFuse b1 nmap
       markAndFuse b2 nmap
-    fuse (Node nid (Action atoms next)) nmap = do
-      nmap <- markAndFuse next nmap
-      case fromJust (Map.lookup next nmap) of
-        Node _ Done -> return nmap
-        Node _ (Loop _) -> return nmap
-        Node _ (AutomataModel.Branch {}) -> return nmap
-        Node nid' (Action atoms' next')
-          | nid == nid' -> -- self loop detected! Insert loop.
-            let new_next_nid = nextNid auto
-                new_next_node = Node new_next_nid (Loop nid)
-                new_action_node = Node nid (Action atoms new_next_nid)
-                new_nmap = Map.insert nid new_action_node $ Map.insert new_next_nid new_next_node nmap
-            in return new_nmap
-          | otherwise ->
-            let new_node = Node nid (Action (atoms++atoms') next')
-                new_nmap = Map.insert nid new_node $ Map.delete nid' nmap
-            in return new_nmap
+    fuse (Node nid nk@(Action atoms next)) nmap
+      | nid == next = do -- self loop detected! Insert loop.
+        let new_nid = nextNid auto
+        mark new_nid
+        let new_action_node = Node new_nid nk
+        let loop_node = Node nid (Loop new_nid)
+        return $ Map.insert nid loop_node $ Map.insert new_nid new_action_node $ nmap
+      | otherwise =
+        case fromJust $ assert (Map.member next nmap) $ Map.lookup next nmap of
+          Node _ (Action atoms' next') ->
+            let node = Node nid (Action (atoms++atoms') next')
+            in fuse node (Map.insert nid node nmap)
+          Node _ _ -> markAndFuse next nmap
 
+deleteDeadNodes :: Ord nid => Automaton e nid -> Automaton e nid
+deleteDeadNodes auto = auto { auto_graph = insertRecursively Map.empty (auto_start auto)}
+  where
+    insertRecursively nmap nid
+      | Map.member nid nmap = nmap
+      | otherwise = 
+          let node = fromJust $ Map.lookup nid (auto_graph auto)
+          in List.foldl insertRecursively (Map.insert nid node nmap) (sucs node)
 
 
 -- Automata to DOT files
 
 dotOfAuto :: (Atom e, Show nid) => Automaton e nid -> String
-dotOfAuto a = prefix ++ nodes ++ edges ++ postfix
+dotOfAuto a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfix
   where
-    prefix = "digraph finite_state_machine {\n  rankdir=LR;\n"
-    postfix = "\n}"
-    nodes = "  node [shape = doublecircle];" ++ final ++ ";\n  node [shape = circle];\n" ++ normal ++ "\n  "
-    (finalN,normalN) = Map.partition (\(Node _ nk) -> case nk of { Done -> True; _ -> False }) (auto_graph a)
-    final = List.intercalate "\n" $ List.map (show . fst) $ Map.toList finalN
-    normal = List.intercalate "\n" $ List.map (showNode . snd) $ Map.toList normalN
-    edges = List.intercalate "\n  " $  List.concat $
-            List.map (\(nid,node) -> [show nid ++ " -> " ++ show suc ++ ";"| suc <- sucs (node_kind node)]) $
-            Map.toList normalN
-    sucs Done = []
-    sucs (Loop nxt) = [nxt]
-    sucs (Action _ nxt) = [nxt]
-    sucs (AutomataModel.Branch _ nxt1 nxt2 _) = [nxt1,nxt2]
+    prefix = "digraph ziria_automaton {\n"
+    postfix = ";\n}"
+    nodes = ("node [shape = point]":start)++ ("node [shape = doublecircle]":final) ++ ("node [shape = box]":normal)
+    start = ["start [label=\"\"]"]
+    (finalN,normalN) = List.partition (\(Node _ nk) -> case nk of { Done -> True; _ -> False }) $ Map.elems (auto_graph a)
+    final = List.map (\(Node nid _) -> show nid ++ "[label=\"\"]") finalN
+    normal = List.map showNode normalN
+    edges = ("start -> " ++ show (auto_start a)) : (List.concat $ List.map edges_of_node normalN)
+    edges_of_node node = [edge (node_id node) suc | suc <- sucs node]
+    edge nid1 nid2 = show nid1 ++ " -> " ++ show nid2
 
-    showNode (Node nid nk) = "  " ++ show nid ++ " [label=\"" ++ show nk ++ "\"];"
+    showNode (Node nid nk) = "  " ++ show nid ++ "[label=\"" ++ showNk nk ++ "\"]"
+
+    showNk (Action watoms _) = List.intercalate ";\\n" $ List.map showWatom watoms
+    showNk (AutomataModel.Branch x _ _ True) = "WHILE<" ++ show x ++ ">"
+    showNk (AutomataModel.Branch x _ _ False) = "IF<" ++ show x ++ ">"
+    showNk Done = "DONE"
+    showNk (Loop _) = "LOOP"
+
+    showWatom (WiredAtom inp outp atom) = "{" ++ List.intercalate "," (List.map show inp) ++ "}" ++
+                                          show atom ++
+                                          "{" ++ List.intercalate "," (List.map show outp) ++ "}"

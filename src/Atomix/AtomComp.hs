@@ -26,13 +26,20 @@ data Exp b
           , expLoc  :: !(CompLoc)
           , expInfo :: b }
 
+instance Show (Exp b) where
+  show e = show (unExp e)
+
 data Comp a b
   = MkComp { unComp   :: !(Comp0 a b)
            , compLoc  :: !(CompLoc)
            , compInfo :: a }
 
+instance Show (Comp a b) where
+  show c = show (unComp c)
+
 data Exp0 b
   = ExpApp { expAppFun :: FunName, expAppArgs :: [Var] }
+  deriving Show
 
 
 
@@ -58,6 +65,21 @@ data Comp0 a b
 
   | While Var (Comp a b)
   | Until Var (Comp a b)
+
+instance Show (Comp0 a b) where
+  show (Take1 _) = "Take1"
+  show (TakeN _ n) = "Take<n=" ++ show n ++ ">"
+  show (Emit1 x) = "Emit1<" ++ show x ++ ">"
+  show (EmitN x) = "EmitN<" ++ show x ++ ">"
+  show (Return e) = "Return<" ++ show e ++ ">"
+  show (NewVar x c) = "Var<" ++ show x ++ ">[" ++ show c ++ "]"
+  show (Bind x c1 c2) = "Bind<" ++ show x ++ ">[" ++ show c1 ++ "][" ++ show c2 ++ "]"
+  show (Par _ c1 c2) = "(" ++ show c1 ++ ") >>> (" ++ show c2 ++ ")"
+  show (Branch x c1 c2) = "If<" ++ show x ++ ">[" ++ show c1 ++ "][" ++ show c2 ++ "]"
+  show (RepeatN n c) = "RepeatN<n=" ++ show n ++ ">[" ++ show c ++ "]"
+  show (Repeat c) = "Repeat[" ++ show c ++ "]"
+  show (While x c) = "While<" ++ show x ++ ">[" ++ show c ++ "]"
+  show (Until x c) = "DoUntil<" ++ show x ++ ">[" ++ show c ++ "]"
 
   ----------------------------------------------
   -- | Standalone (Comp a b)
