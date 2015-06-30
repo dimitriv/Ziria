@@ -62,7 +62,6 @@ import qualified Language.Ziria.Parser as P
 
 import AtomixCompTransform
 
-
 data CompiledProgram
   = CompiledProgram Comp [C.Definition] FilePath
 

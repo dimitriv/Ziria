@@ -1,0 +1,8 @@
+fun comp flip() {
+  repeat {
+    x <- take;
+    emit (x ^ '1);
+  }
+}
+
+let comp main = read >>> flip() >>> write
