@@ -28,6 +28,9 @@ import AtomInstantiation
 
 import Debug.Trace
 
+import AtomixCompTransform ()
+
+
 atomixTest :: CompM () (Automaton FunLikeAtom Int)
 atomixTest = do
   wifi <- mkWifi

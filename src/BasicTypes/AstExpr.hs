@@ -35,7 +35,7 @@ import qualified Data.Set as S
 
 import Orphans ()
 
-type LUTStats = ()
+import {-# SOURCE #-} LUTAnalysis
 
 {-------------------------------------------------------------------------------
   Various kinds of variables
