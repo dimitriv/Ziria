@@ -60,6 +60,8 @@ import qualified PassPipeline as PP
 
 import qualified Language.Ziria.Parser as P
 
+import TcRename () 
+
 data CompiledProgram
   = CompiledProgram Comp [C.Definition] FilePath
 
