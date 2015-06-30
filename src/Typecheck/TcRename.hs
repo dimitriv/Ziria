@@ -19,11 +19,11 @@
 -- | Renaming already type checked programs by generating fresh term and computation variables
 -- 
 -- 
+{-# LANGUAGE RankNTypes, ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wall #-}
 module TcRename ( tcRenComp ) where
 
 import Prelude hiding (mapM)
-import Control.Arrow ((&&&))
 import Control.Monad.Reader hiding (mapM)
 import Data.Loc ()
 import Data.Traversable (mapM)
@@ -35,7 +35,7 @@ import AstComp
 import AstExpr
 import AstUnlabelled
 import TcMonad
-import Utils
+import Utils ()
 
 import Orphans ()
 
@@ -76,10 +76,10 @@ genRenFree lookupTy nm = do
     return nm{uniqId = uniqId nm', nameTyp = nameTyp nm', nameMut = nameMut nm'}
 
 renFree :: GName Ty -> TcM (GName Ty)
-renFree = genRenFree $ \nm -> lookupEnv (name nm) (nameLoc nm)
+renFree = genRenFree $ \nm -> lookupEnv (getNameWithUniq nm) (nameLoc nm)
 
 renCFree :: GName CTy -> TcM (GName CTy)
-renCFree = genRenFree $ \nm -> lookupCEnv (name nm) (nameLoc nm)
+renCFree = genRenFree $ \nm -> lookupCEnv (getNameWithUniq nm) (nameLoc nm)
 
 {-------------------------------------------------------------------------------
   Recording newly renamed names
@@ -98,24 +98,26 @@ renCFree = genRenFree $ \nm -> lookupCEnv (name nm) (nameLoc nm)
   when we rename the body.
 -------------------------------------------------------------------------------}
 
-recName :: GName Ty -> TcM x -> TcM x
-recName  = recNames . (:[])
+recName :: GName Ty -> GName Ty -> TcM x -> TcM x
+recName old new = recNames [old] [new]
 
-recNames :: [GName Ty] -> TcM x -> TcM x
-recNames = extendEnv . map (name &&& id)
+recNames :: [GName Ty] -> [GName Ty] -> TcM x -> TcM x
+recNames old_xs xs = extendEnv (zip (map getNameWithUniq old_xs) xs)
 
-recCName :: GName CTy -> TcM x -> TcM x
-recCName = recCNames . (:[])
+recCName :: GName CTy -> GName CTy -> TcM x -> TcM x
+recCName old new = recCNames [old] [new]
 
-recCNames :: [GName CTy] -> TcM x -> TcM x
-recCNames = extendCEnv . map (name &&& id)
+recCNames :: [GName CTy] -> [GName CTy] -> TcM x -> TcM x
+recCNames old_xs xs = extendCEnv (zip (map getNameWithUniq old_xs) xs)
 
-recCAName :: GName (CallArg Ty CTy) -> TcM x -> TcM x
-recCAName = recCANames . (:[])
+recCAName :: GName (CallArg Ty CTy) -> GName (CallArg Ty CTy) -> TcM x -> TcM x
+recCAName old new = recCANames [old] [new]
 
-recCANames :: [GName (CallArg Ty CTy)] -> TcM x -> TcM x
-recCANames params = let (names, cnames) = partitionParams params
-                    in recNames names . recCNames cnames
+recCANames :: [GName (CallArg Ty CTy)] -> [GName (CallArg Ty CTy)] -> TcM x -> TcM x
+recCANames old_params params 
+  = let (names, cnames) = partitionParams params
+        (old_names, old_cnames) = partitionParams old_params
+    in recNames old_names names . recCNames old_cnames cnames
 
 
 {-------------------------------------------------------------------------------
@@ -129,6 +131,19 @@ renExpComp = callArg (liftM CAExp . renExp) (liftM CAComp . renComp)
   Renaming computations
 -------------------------------------------------------------------------------}
 
+mapTelescope' :: Monad m
+             => (forall x. a -> b -> m x -> m x)  -- ^ Environment extension
+             -> (a -> m b)                        -- ^ Type check function
+             -> [a]
+             -> m [b]
+mapTelescope' ext tc = go
+  where
+    go []     = return []
+    go (a:as) = do
+      b  <- tc a
+      bs <- ext a b $ go as
+      return (b:bs)
+
 renComp :: Comp -> TcM Comp
 renComp (MkComp comp0 cloc ()) = case comp0 of
       Var nm -> do
@@ -136,7 +151,7 @@ renComp (MkComp comp0 cloc ()) = case comp0 of
         return $ cVar cloc nm'
       BindMany c1 xs_cs -> do
         c1'    <- renComp c1
-        xs_cs' <- mapTelescope (recName . fst) renBind $ xs_cs
+        xs_cs' <- mapTelescope' (\o n -> recName (fst o) (fst n)) renBind $ xs_cs
         return $ cBindMany cloc c1' xs_cs'
       Seq c1 c2 -> do
         c1' <- renComp c1
@@ -149,7 +164,7 @@ renComp (MkComp comp0 cloc ()) = case comp0 of
       Let x c1 c2 -> do
         c1' <- renComp c1
         x'  <- renCBound x
-        c2' <- recCName x' $ renComp c2
+        c2' <- recCName x x' $ renComp c2
         return $ cLet cloc x' c1' c2'
       LetStruct sdef c1 -> do
         c1'   <- extendTDefEnv [sdef] $ renComp c1
@@ -157,23 +172,23 @@ renComp (MkComp comp0 cloc ()) = case comp0 of
       LetE x fi e c1 -> do
         e'  <- renExp e
         x'  <- renBound Imm x
-        c1' <- recName x' $ renComp c1
+        c1' <- recName x x' $ renComp c1
         return $ cLetE cloc x' fi e' c1'
       LetERef x e c1 -> do
         e' <- mapM renExp e
         x' <- renBound Mut x
-        recName x' $ do
+        recName x x' $ do
           c1' <- renComp c1
           return $ cLetERef cloc x' e' c1'
       LetHeader fun c2 -> do
         fun' <- renFun fun
-        c2'  <- recName (funName fun') $ renComp c2
+        c2'  <- recName (funName fun) (funName fun') $ renComp c2
         return $ cLetHeader cloc fun' c2'
       LetFunC nm params c1 c2 -> do
         nm'     <- renCBound nm
-        params' <- mapTelescope recCAName renCAParam params
-        c1'     <- recCANames params' $ renComp c1
-        c2'     <- recCName nm' $ renComp c2
+        params' <- mapTelescope' recCAName renCAParam params
+        c1'     <- recCANames params params' $ renComp c1
+        c2'     <- recCName nm nm' $ renComp c2
         return $ cLetFunC cloc nm' params' c1' c2'
       Call nm es -> do
         es' <- mapM renExpComp es
@@ -213,7 +228,7 @@ renComp (MkComp comp0 cloc ()) = case comp0 of
         e'    <- renExp e
         elen' <- renExp elen
         nm'   <- renBound Imm nm -- NB: Immutable! 
-        c''   <- recName nm' $ renComp c'
+        c''   <- recName nm nm' $ renComp c'
         return $ cTimes cloc ui e' elen' nm' c''
       Repeat wdth c' -> do
         c'' <- renComp c'
@@ -279,7 +294,7 @@ renExp (MkExp exp0 eloc ()) = case exp0 of
         e1' <- renExp e1
         e2' <- renExp e2
         nm1' <- renBound Imm nm1
-        recName nm1' $ do
+        recName nm1 nm1' $ do
           e3' <- renExp e3
           return $ eFor eloc ui nm1' e1' e2' e3'
       EWhile e1 e2 -> do
@@ -289,13 +304,13 @@ renExp (MkExp exp0 eloc ()) = case exp0 of
       ELet nm1 fi e1 e2 -> do
         e1' <- renExp e1
         nm1' <- renBound Imm nm1
-        recName nm1' $ do
+        recName nm1 nm1' $ do
           e2' <- renExp e2
           return $ eLet eloc nm1' fi e1' e2'
       ELetRef nm1 e1 e2 -> do
         e1'  <- mapM renExp e1
         nm1' <- renBound Mut nm1
-        recName nm1' $ do
+        recName nm1 nm1' $ do
           e2' <- renExp e2
           return $ eLetRef eloc nm1' e1' e2'
       ESeq e1 e2 -> do
@@ -330,30 +345,30 @@ renFun :: Fun -> TcM Fun
 renFun (MkFun fun0 floc ()) = case fun0 of
     MkFunDefined nm params body -> do
       nm'     <- renBound Imm nm -- parameters are immutable ... revisit!
-      params' <- mapTelescope recName renParam params
-      body'   <- recNames params' $ renExp body
+      params' <- mapTelescope' recName renParam params
+      body'   <- recNames params params' $ renExp body
       return $ mkFunDefined floc nm' params' body'
     MkFunExternal nm params retTy -> do
       nm'     <- renBound Imm nm
-      params' <- mapTelescope recName renParam params
-      retTy'  <- recNames params' $ return retTy
+      params' <- mapTelescope' recName renParam params
+      retTy'  <- recNames params params' $ return retTy
       return $ mkFunExternal floc nm' params' retTy'
 
 -- | The continuation of a monadic bind
 renBind :: (GName Ty, Comp) -> TcM (GName Ty, Comp)
 renBind (x, c) = do
     x' <- renBound Imm x
-    c' <- recName x' $ renComp c
+    c' <- recName x x' $ renComp c
     return (x', c')
 
 
 {------------------- Top-level --------------------}
 
-tcRenComp :: GS.Sym -> Comp -> IO (GS.Sym, Comp)
+tcRenComp :: GS.Sym -> Comp -> IO Comp
 tcRenComp sym comp = do 
   res <- runTcM' (renComp comp) sym
   case res of 
     Left doc -> fail (render doc)
-    Right (ren_comp,_unifiers) -> return (sym,ren_comp)
+    Right (ren_comp,_unifiers) -> return ren_comp
 
 

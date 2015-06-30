@@ -1,5 +1,3 @@
-
-
 {-# OPTIONS -Wall -Werror #-}
 module AtomixCompTransform (
   atomixCompTransform, 
@@ -12,7 +10,6 @@ import AstComp
 import AstUnlabelled
 import Utils
 
-import NameEnv
 import Control.Applicative ( (<$>) )
 import Outputable 
 
@@ -20,7 +17,6 @@ import Data.Maybe ( fromJust, isJust )
 
 import qualified Data.Set as S
 
-import Control.Monad.Reader
 import Control.Monad.State
 import Data.Loc
 
@@ -33,58 +29,43 @@ import Data.List ( nub )
 import CtExpr 
 import CtComp
 
-{----------- Renaming expression variables bound in computations --------------}
+import TcRename 
 
-data RnEnv = RnEnv { env_vars :: NameEnv Ty EId, env_sym  :: GS.Sym }
+{----------- A-normal forms --------------}
 
-type Rn a = ReaderT RnEnv IO a
-
-rnVar :: EId -> Rn EId
-rnVar x = do 
-  bound <- asks env_vars
-  case neLookup x bound of { Nothing -> return x; Just x' -> return x' }
-
-extEnv :: EId -> Rn a -> Rn a
-extEnv x action = do 
-  sym <- asks env_sym 
-  uniq  <- liftIO $ GS.genSymStr sym
-  let x' = x { uniqId = MkUniq uniq }
-  local (\r -> r { env_vars = neExtend x x' (env_vars r) }) action
-
-freshName :: String -> SrcLoc -> Ty -> MutKind -> Rn EId
-freshName str loc ty mut = do 
-  sym <- asks env_sym 
-  uniq  <- liftIO $ GS.genSymStr sym
+freshName :: GS.Sym -> String -> SrcLoc -> Ty -> MutKind -> IO EId
+freshName sym str loc ty mut = do 
+  uniq  <- GS.genSymStr sym
   return $ (toName str loc ty mut) { uniqId = MkUniq uniq }
 
-alphaNorm :: Comp -> Rn Comp
-alphaNorm = mapCompM return return return return return action
+alphaNorm :: GS.Sym -> Comp -> IO Comp
+alphaNorm sym = mapCompM return return return return return action
   where action c 
           | Emit e <- unComp c
           , let loc = compLoc c
-          = do x <- freshName "emit_tmp" loc (ctExp e) Imm
+          = do x <- freshName sym "emit_tmp" loc (ctExp e) Imm
                return $ cLetE loc x AutoInline e (cEmit loc (eVar loc x))
 
           | Emits e <- unComp c
           , let loc = compLoc c
-          = do x <- freshName "emits_tmp" loc (ctExp e) Imm
+          = do x <- freshName sym "emits_tmp" loc (ctExp e) Imm
                return $ cLetE loc x AutoInline e (cEmits loc (eVar loc x))
 
           | Branch e c1 c2 <- unComp c
           , let loc = compLoc c
-          = do x <- freshName "branch_cond" loc (ctExp e) Imm
+          = do x <- freshName sym "branch_cond" loc (ctExp e) Imm
                return $ cLetE loc x AutoInline e (cBranch loc (eVar loc x) c1 c2)
 
           | While e c1 <- unComp c
           , let loc = compLoc c
-          = do x <- freshName "while_cond" loc (ctExp e) Imm
+          = do x <- freshName sym "while_cond" loc (ctExp e) Imm
                return $ cLetERef loc x (Just e) $
                         cWhile loc (eVar loc x) 
                           (cSeq loc c1 (cReturn loc AutoInline (eAssign loc (eVar loc x) e)))
 
           | Until e c1 <- unComp c
           , let loc = compLoc c
-          = do x <- freshName "until_cond" loc (ctExp e) Imm
+          = do x <- freshName sym "until_cond" loc (ctExp e) Imm
                return $ cLetERef loc x Nothing $
                         cUntil loc (eVar loc x) 
                           (cSeq loc c1 (cReturn loc AutoInline (eAssign loc (eVar loc x) e)))
@@ -94,7 +75,7 @@ alphaNorm = mapCompM return return return return return action
           = return c -- Static times => translate to static loops in atomix
           | Times _ui estart elen cnt c1 <- unComp c
           , let loc = compLoc c 
-          = do x_bound <- freshName "times_bound" loc (ctExp elen) Imm
+          = do x_bound <- freshName sym "times_bound" loc (ctExp elen) Imm
                let cond_expr   = eBinOp loc Lt (eVar loc cnt) (eVar loc x_bound) -- cnt < x_bound
                    cnt_expr    = eVar loc cnt
                    TInt _bw sn = nameTyp cnt
@@ -105,47 +86,17 @@ alphaNorm = mapCompM return return return return return action
                  cLetE loc x_bound AutoInline (eBinOp loc Add (eVar loc cnt) elen) <$>
                  action (cWhile loc cond_expr (cSeq loc c1 (cReturn loc AutoInline upd_cntr)))
 
-          
+          | Map v fn <- unComp c
+          , TArrow [argty] _resty <- nameTyp fn
+          , let loc = compLoc c 
+          = do x <- freshName sym (name fn ++ "_in") loc (argty_ty argty) Imm 
+               alphaNorm sym $ 
+                  cRepeat loc v $ 
+                  cBindMany loc (cTake1 loc (nameTyp x))
+                                [(x, cEmit loc (eCall loc fn [eVar loc x]))]
+
           | otherwise
           = return c
-
-
-renameComp :: GS.Sym -> Comp -> IO Comp 
-renameComp sym comp
-  = runReaderT (alphaNorm =<< ren_comp comp) $ RnEnv { env_vars = neEmpty, env_sym = sym }
-  where 
-    ren_comp = mapCompM_env return 
-                           return 
-                           return 
-                           return 
-                           ren_expr 
-                           on_comp
-                           extEnv 
-                           (\_ m -> m)
-    on_comp c 
-      | Map v fn <- unComp c
-      , TArrow [argty] _resty <- nameTyp fn
-      , let loc = compLoc c 
-      = do fn' <- rnVar fn
-           x <- freshName (name fn ++ "_in") loc (argty_ty argty) Imm 
-           return $ cRepeat loc v $ 
-                    cBindMany loc (cTake1 loc (nameTyp x))
-                                  [(x, cEmit loc (eCall loc fn' [eVar loc x]))]
-     | Filter {} <- unComp c
-     = panicStr "renameExpr: Filter not supported"
-     | otherwise 
-     = return c
-           
-    ren_expr = mapExpM_env return return ren_var extEnv
-    ren_var e | EVar x <- unExp e 
-              = eVar (expLoc e) <$> rnVar x 
-              | ECall fn args <- unExp e
-              = do { fn' <- rnVar fn
-                   ; return $ eCall (expLoc e) fn' args }
-              | otherwise = return e
-
-
-
 
 
 {------------------- Lifting up functions with closure variables --------------}
@@ -298,14 +249,33 @@ getClosureVars fdef = do
 {------------------ Main transform -------------------------------------------}
 
 atomixCompTransform :: GS.Sym -> Comp -> IO (Comp,RnSt)
-atomixCompTransform sym c = do 
-  ren_c <- renameComp sym c
-  (final_comp,st) <- runStateT (liftBindsComp ren_c >>= closConvComp) emptyRnSt
+atomixCompTransform sym c = do
+  -- Rename 
+  ren_c <- tcRenComp sym c
+
+{- 
+  putStrLn "Just renamed ........"
+  putStrLn (show (ppr ren_c))
+-}
+
+  -- Alpha convert 
+  ren_alpha <- alphaNorm sym ren_c
+
+  -- Closure convert / lift 
+  (final_comp,st) <- runStateT (liftBindsComp ren_alpha >>= closConvComp) emptyRnSt
+
   putStrLn "Atomix closure conversion phase finished, typechecking result ..."
   putStrLn $ "Typechecking finished: " ++ show (ctComp final_comp)
   return (final_comp, st)
 
 
 atomixCompToComp :: Comp -> RnSt -> Comp
-atomixCompToComp  = error "implement me!" 
+atomixCompToComp comp (RnSt { st_letref_vars = letrefs
+                            , st_fundefs     = fundefs
+                            , st_structs     = strdefs }) = str_c 
+ where let_c = foldr (\x -> cLetERef loc x Nothing) comp letrefs
+       fun_c = foldr (cLetHeader loc) let_c funs
+       str_c = foldr (cLetStruct loc) fun_c (map snd strdefs)
+       funs = reverse $ map (\(_,(fun,_)) -> fun) fundefs
+       loc  = compLoc comp
 

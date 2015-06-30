@@ -55,6 +55,8 @@ data DynFlag =
   | NativeMitigators
   | NoLUTHashing
 
+  | ClosureConvert
+
   | Opt
   | Verbose
   | DumpVect
@@ -167,6 +169,9 @@ options =
      , Option []    ["vectorize"]        (NoArg Vectorize)     "vectorize program"
      , Option []    ["autolut"]          (NoArg AutoLUT)       "automatically convert function to use LUTs"
      , Option []    ["pipeline"]         (NoArg Pipeline)      "pipeline standalone computations"
+
+     , Option []    ["closure-convert"]  (NoArg ClosureConvert) "generate code via closure conversion"
+
 
      , Option []    ["no-lut-hashing"]   (NoArg NoLUTHashing)  "do not hash lut generation"
 
