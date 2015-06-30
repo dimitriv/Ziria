@@ -165,10 +165,10 @@ replace_done_with nid a = map_auto_ids (\nid -> Map.findWithDefault nid nid repl
 
 -- debugging
 auto_closed :: Ord nid => Automaton e nid -> Bool
-auto_closed a = Map.fold node_closed (isDefined $ auto_start a) (auto_graph a)
+auto_closed a = Map.foldWithKey node_closed (isDefined $ auto_start a) (auto_graph a)
   where
     isDefined nid = Map.member nid (auto_graph a)
-    node_closed (Node nid nkind) = (&&) (isDefined nid && nkind_closed nkind)
+    node_closed nid (Node nid' nkind) = (&&) (nid==nid' && isDefined nid && nkind_closed nkind)
     nkind_closed Done = True
     nkind_closed (Loop nid) = isDefined nid
     nkind_closed (Action _ nid) = isDefined nid
