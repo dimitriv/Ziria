@@ -244,19 +244,24 @@ main = do
         lc <- timedPhase dflags "runAutoLUTPhase" $ 
               runAutoLUTPhase dflags sym fc
 
-        -- stick atomix stuff here 
-        putStrLn "FASSDFASDFASDFASDFSD" 
 
-        _ <- timedPhase dflags "atomixCompTransform" $ 
-             atomixCompTransform sym lc
+        (cc_lc,st) <- timedPhase dflags "atomixCompTransform" $ 
+                      atomixCompTransform sym lc
 
+        let lc' = if isDynFlagSet dflags ClosureConvert 
+                  then atomixCompToComp cc_lc st
+                  else lc
+
+        when (isDynFlagSet dflags ClosureConvert) $ 
+          dump dflags DumpFold (".cc-phase.dump")
+                               ((text . show . Outputable.ppr) lc')
 
         PP.MkPipelineRetPkg { PP.context = comp_ctxt
                             , PP.threads = comp_threads
                             , PP.buf_tys = tys }
           <- timedPhase dflags "runPipelinePhase" $ 
-             runPipelinePhase dflags sym lc
-        return (lc, comp_ctxt, comp_threads,tys,fn)
+             runPipelinePhase dflags sym lc'
+        return (lc', comp_ctxt, comp_threads,tys,fn)
 
 
 failOnError :: Show a => IO (Either a b) -> IO b
