@@ -21,8 +21,10 @@
 all: create-sandbox
 	cabal build wplc 
 	cabal build BlinkDiff
-	cp .cabal-sandbox/bin/wplc* .
-	cp .cabal-sandbox/bin/BlinkDiff* tools/
+	cp dist/build/wplc/wplc .
+	cp dist/build/BlinkDiff/BlinkDiff tools/
+# cp .cabal-sandbox/bin/wplc* .
+# cp .cabal-sandbox/bin/BlinkDiff* tools/
 
 # intentionally no dependency on create-sandbox here, so that we can run
 # `make quick`. Need to make sure to initialize the sandbox first and run
