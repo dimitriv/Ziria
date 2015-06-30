@@ -3,6 +3,7 @@
 {-# OPTIONS -Wall -Werror #-}
 module AtomixCompTransform (
   atomixCompTransform, 
+  atomixCompToComp,
   RnSt ( .. ) 
   ) where
 
@@ -30,7 +31,7 @@ import qualified GenSym as GS
 import Data.List ( nub )
 
 import CtExpr 
-
+import CtComp
 
 {----------- Renaming expression variables bound in computations --------------}
 
@@ -299,4 +300,12 @@ getClosureVars fdef = do
 atomixCompTransform :: GS.Sym -> Comp -> IO (Comp,RnSt)
 atomixCompTransform sym c = do 
   ren_c <- renameComp sym c
-  runStateT (liftBindsComp ren_c >>= closConvComp) emptyRnSt
+  (final_comp,st) <- runStateT (liftBindsComp ren_c >>= closConvComp) emptyRnSt
+  putStrLn "Atomix closure conversion phase finished, typechecking result ..."
+  putStrLn $ "Typechecking finished: " ++ show (ctComp final_comp)
+  return (final_comp, st)
+
+
+atomixCompToComp :: Comp -> RnSt -> Comp
+atomixCompToComp  = error "implement me!" 
+

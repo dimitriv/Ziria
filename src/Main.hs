@@ -60,8 +60,12 @@ import qualified PassPipeline as PP
 
 import qualified Language.Ziria.Parser as P
 
+import AtomixCompTransform
+
+
 data CompiledProgram
   = CompiledProgram Comp [C.Definition] FilePath
+
 
 pprProgInfo :: Comp -> Doc
 pprProgInfo prog =
@@ -240,6 +244,13 @@ main = do
 
         lc <- timedPhase dflags "runAutoLUTPhase" $ 
               runAutoLUTPhase dflags sym fc
+
+        -- stick atomix stuff here 
+        putStrLn "FASSDFASDFASDFASDFSD" 
+
+        _ <- timedPhase dflags "atomixCompTransform" $ 
+             atomixCompTransform sym lc
+
 
         PP.MkPipelineRetPkg { PP.context = comp_ctxt
                             , PP.threads = comp_threads
