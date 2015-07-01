@@ -33,16 +33,11 @@
 #endif
 
 fun comp ifft() {
-   var symbol:arr[FFT_SIZE] complex16;
-   var fftdata:arr[FFT_SIZE+CP_SIZE] complex16;
-
-   do {
-     zero_complex16(symbol);
-   }
 
    repeat seq {
      (s:arr[64] complex16) <- takes 64;
-     
+     var fftdata:arr[FFT_SIZE+CP_SIZE] complex16;
+     var symbol:arr[FFT_SIZE] complex16;
      do {
         symbol[FFT_SIZE-32,32] := s[0,32];
         symbol[0,32] := s[32,32];

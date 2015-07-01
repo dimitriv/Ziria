@@ -107,7 +107,7 @@ rint_widen :: IVal Integer -> IVal Integer
 -- Use a small range [0,256] to make the whole 
 -- thing insensitive to signedness
 rint_widen IUnknown = IUnknown
-rint_widen (IKnown i) | i >= 256  = IUnknown
+rint_widen (IKnown i) | i >= 512  = IUnknown
                       | i < 0     = IUnknown
                       | otherwise = IKnown i 
 
@@ -403,7 +403,7 @@ derefVarRead x = do
   case nameTyp x of 
     TInt  {} -> maybe (RInt IUnknown) id  <$> varGetRng x
     TBool {} -> maybe (RBool IUnknown) id <$> varGetRng x
-    TArray (Literal n) _ -> updArrRdRng x (ivIv 0 n)  =<< varGetRng x 
+    TArray (Literal n) _ -> updArrRdRng x (ivIv 0 (n-1))  =<< varGetRng x 
     TArray _ _           -> updArrRdRng x (ivUnknown) =<< varGetRng x
     _other               -> maybe ROther id <$> varGetRng x
 
@@ -412,7 +412,7 @@ derefVarWrite x rng = do
   case nameTyp x of
     TInt {}  -> varSetRng x rng
     TBool {} -> varSetRng x rng
-    TArray (Literal n) _ -> varGetRng x >>= updArrWrRng x (ivIv 0 n)
+    TArray (Literal n) _ -> varGetRng x >>= updArrWrRng x (ivIv 0 (n-1))
     TArray _ _           -> varGetRng x >>= updArrWrRng x ivUnknown 
     _other                -> return ()
 

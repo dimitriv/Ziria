@@ -339,6 +339,11 @@ derefToExp loc = go
         -- go (GDNewArray _t es)   = MkExp (EValArr es) loc ()
         -- go (GDNewStruct t flds) = MkExp (EStruct t flds) loc ()
 
+derefBase :: AGDerefExp e t -> GName t
+derefBase (GDVar x) = x
+derefBase (GDArr d _ _) = derefBase d
+derefBase (GDProj d _)  = derefBase d
+
 
 isMutGDerefExp :: GExp t a -> Maybe (GDerefExp t a)
 isMutGDerefExp e = case unExp e of
@@ -459,8 +464,70 @@ data GFun0 t a where
   MkFunExternal :: GName t     -- ^ name
                 -> [GName t]   -- ^ params
                 -> t           -- ^ return type
+--                -> Bool        -- ^ see note [Safe Return Aliasing]
                 -> GFun0 t a
-  deriving (Eq, Ord) 
+  deriving (Eq, Ord)
+
+{- Note [Safe Return Aliasing] 
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  
+Consider an external function returns a big array, i.e. has the signature:
+
+     foo (x : arr[512] int) : arr[512] int;
+
+then our calling convention will generate the C stub:
+
+     __ext_foo(int *ret, int ret_len, int *x, int x_len);
+
+and, upon a call site (CgCall) the Ziria code generator will
+allocate a new variable for the return value and store the result
+there. However, this storing and memcopying can be terribly
+inefficient in case the original code looked like this:
+
+     y := foo(x); // Ziria 
+
+
+where we have *already* allocated y and ideally we'd simply like to
+call (at the C level):
+
+     __ext_foo(y,512,x,512) // C 
+
+One may think that this is always safe to do; alas it isnt! The problematic
+cases occur when the programmer is asigning to something that could alias in 
+the same memory location as the arguments. Example:
+
+     x := foo(x);
+
+will be translated to:
+
+     __ext_foo(x,512,x,512);
+   
+and that may -- or may not -- be the right thing to do depending on the
+implementation of "foo" since it may be at the same time reading from x and mutating
+the output (i.e. x again!). 
+
+Classic example from our WiFi testsuite is "invert_bits()" 
+
+
+Hence when it it safe to convert an assignment of the form: 
+      x := foo(y)
+to the C code: 
+      __ext_foo(x,y); 
+versus:
+      __ext_foo(ret,y);
+      memcpy(x,ret);
+?
+
+The current -- somewhat unsatisfactory -- solution adopted in
+CgExpr.hs is to let external function writers worry about undefined
+behaviour due to aliasing. If you are calling an external function you
+have to worry that you may be passing in return expressions that may
+alias to input variables.
+
+-}
+
+
+
 
 {- TODO plug this in at some point
 data FunDef a body

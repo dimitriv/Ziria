@@ -17,7 +17,7 @@
    permissions and limitations under the License.
 -}
 {-# LANGUAGE  QuasiQuotes, GADTs, ScopedTypeVariables, RecordWildCards #-}
-{-# OPTIONS_GHC -fwarn-unused-binds -Werror #-}
+{-# OPTIONS_GHC -fwarn-unused-binds #-}
 
 module CgExpr ( codeGenExp ) where
 
@@ -52,6 +52,7 @@ import Language.C.Quote.Base (ToConst(..))
 import qualified Language.C.Pretty as P
 import Numeric (showHex)
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Text.PrettyPrint.HughesPJ
 import Data.Maybe
 
@@ -145,9 +146,81 @@ cgEvalLVal dfs e = cgEval dfs e >>= do_ret
  where do_ret (Left lval) = return lval
        do_ret (Right ce)  = error "cgEvalLVal"
 
+
+cgIdx :: DynFlags -> Exp -> Cg ArrIdx
+cgIdx dfs x = cg_idx (classify x)
+  where
+   classify :: Exp -> GArrIdx Exp
+   classify ei
+     | EVal _t (VInt i _) <- unExp ei
+     , let ii :: Int = fromIntegral i
+     = AIdxStatic ii
+     | EBinOp bop e1 e2 <- unExp ei
+     = case (classify e1, classify e2, bop) of
+         (AIdxStatic i1, AIdxMult i2 c2, Mult) -> AIdxMult (i1*i2) c2
+         (AIdxStatic i1, AIdxCExp c2, Mult)    -> AIdxMult i1 c2
+         (AIdxMult i2 c2, AIdxStatic i1, Mult) -> AIdxMult (i1*i2) c2
+         (AIdxCExp c2, AIdxStatic i1, Mult)    -> AIdxMult i1 c2
+         _ -> AIdxCExp ei
+     | otherwise = AIdxCExp ei
+
+   cg_idx (AIdxCExp e)   = AIdxCExp <$> cgEvalRVal dfs e
+   cg_idx (AIdxMult i e) = AIdxMult i <$> cgEvalRVal dfs e
+   cg_idx (AIdxStatic i) = return $ AIdxStatic i
+
+
 cgEval :: DynFlags -> Exp -> Cg (Either (LVal ArrIdx) C.Exp)
 cgEval dfs e = go (unExp e) where
   loc = expLoc e
+
+
+  -- Any variable is byte aligned 
+  is_lval_aligned (GDVar {}) _ = True 
+  -- Any non-bit array deref exp is not aligned (NB: we could improve that)
+  is_lval_aligned _ TBit            = False
+  is_lval_aligned _ (TArray _ TBit) = False
+
+  -- Any other 
+  is_lval_aligned _ _ = True
+
+
+  go_assign, asgn_slow :: DynFlags -> SrcLoc -> LVal ArrIdx -> Exp -> Cg C.Exp
+  go_assign dfs loc clhs erhs 
+    | is_lval_aligned clhs (ctExp erhs)    -- if lval is aligned
+    , ECall nef eargs <- unExp erhs        -- and rval is function call
+
+    -- Fast, but unsafe in case of aliasing ... 
+    -- = do clhs_c <- cgDeref dfs loc clhs
+    --      _ <- cgCall_aux dfs loc (ctExp erhs) nef eargs (Just clhs_c)
+    --      return [cexp|UNIT|]
+
+    -- Somewhat unsatisfactory compromise: for external functions make it 
+    -- the programmer's responsibility to control aliasing effects. 
+    -- See note [Safe Return Aliasing] in AstExpr.hs
+
+    = do (fn,clos,_) <- lookupExpFunEnv nef -- Get closure arguments
+         let is_external = isPrefixOf "__ext" (name fn)
+         if is_external then do clhs_c <- cgDeref dfs loc clhs
+                                _ <- cgCall_aux dfs loc (ctExp erhs) nef eargs (Just clhs_c)
+                                return [cexp|UNIT|]
+         else asgn_slow dfs loc clhs erhs
+
+    | otherwise = asgn_slow dfs loc clhs erhs 
+  asgn_slow dfs loc clhs erhs = do 
+         mrhs <- cgEval dfs erhs
+         case mrhs of
+           Left rlval -> do
+             -- | lvalAlias_exact clhs rlval -> do 
+             --     crhs <- cgDeref dfs loc rlval
+             --     cgAssignAliasing dfs loc clhs crhs
+             -- | otherwise -> do 
+                 crhs <- cgDeref dfs loc rlval
+                 cgAssign dfs loc clhs crhs
+           Right crhs -> cgAssign dfs loc clhs crhs
+         -- crhs <- cgEvalRVal dfs erhs
+         -- cgAssign dfs loc clhs crhs
+         return [cexp|UNIT|]
+             
 
   go :: Exp0 -> Cg (Either (LVal ArrIdx) C.Exp) 
 
@@ -171,32 +244,23 @@ cgEval dfs e = go (unExp e) where
      Right <$> return (cgBinOp (ctExp e) b ce1 (ctExp e1) ce2 (ctExp e2))
 
   go (EAssign elhs erhs) = do
-     clhs <- cgEvalLVal dfs elhs
-     mrhs <- cgEval dfs erhs
-     case mrhs of 
-       Left rlval -> do
-         -- | lvalAlias_exact clhs rlval -> do 
-         --     crhs <- cgDeref dfs loc rlval
-         --     cgAssignAliasing dfs loc clhs crhs
-         -- | otherwise -> do 
-             crhs <- cgDeref dfs loc rlval
-             cgAssign dfs loc clhs crhs
-       Right crhs -> cgAssign dfs loc clhs crhs
-     -- crhs <- cgEvalRVal dfs erhs
-     -- cgAssign dfs loc clhs crhs
-     Right <$> return [cexp|UNIT|]
+    clhs <- cgEvalLVal dfs elhs
+    Right <$> go_assign dfs loc clhs erhs 
 
   go (EArrWrite earr ei rng erhs) 
     = go (EAssign (eArrRead loc earr ei rng) erhs)
 
-  go (EArrRead earr ei rng) 
-    | EVal _t (VInt i Signed) <- unExp ei
-    , let ii :: Int = fromIntegral i
-    , let aidx = AIdxStatic ii
-    = mk_arr_read (ctExp e) (ctExp earr) aidx
-    | otherwise 
-    = do aidx <- AIdxCExp <$> cgEvalRVal dfs ei
-         mk_arr_read (ctExp e) (ctExp earr) aidx
+  go (EArrRead earr ei rng) = do
+    aidx <- cgIdx dfs ei 
+    mk_arr_read (ctExp e) (ctExp earr) aidx
+
+    -- | EVal _t (VInt i Signed) <- unExp ei
+    -- , let ii :: Int = fromIntegral i
+    -- , let aidx = AIdxStatic ii
+    -- = mk_arr_read (ctExp e) (ctExp earr) aidx
+    -- | otherwise 
+    -- = do aidx <- AIdxCExp <$> cgEvalRVal dfs ei
+    --      mk_arr_read (ctExp e) (ctExp earr) aidx
     where 
       mk_arr_read exp_ty arr_ty aidx = do 
         d <- cgEval dfs earr
@@ -286,18 +350,20 @@ cgEval dfs e = go (unExp e) where
                        }|]
       Right <$> return [cexp|UNIT|]
 
-  go (ECall nef eargs) = Right <$> cgCall_aux dfs loc (ctExp e) nef eargs
+  go (ECall nef eargs) = Right <$> cgCall_aux dfs loc (ctExp e) nef eargs Nothing
 
 
-cgCall_aux :: DynFlags -> SrcLoc -> Ty -> EId -> [Exp] -> Cg C.Exp
-cgCall_aux dfs loc res_ty fn eargs = do 
+
+
+cgCall_aux :: DynFlags -> SrcLoc -> Ty -> EId -> [Exp] -> Maybe C.Exp -> Cg C.Exp
+cgCall_aux dfs loc res_ty fn eargs mb_ret = do 
   let funtys = map ctExp eargs
   let (TArrow formal_argtys _) = nameTyp fn
   let argfuntys = zipWith (\(GArgTy _ m) t -> GArgTy t m) formal_argtys funtys
   let tys_args = zip argfuntys eargs
  
   ceargs <- mapM (cgEvalArg dfs) tys_args
-  CgCall.cgCall dfs loc res_ty argfuntys fn ceargs
+  CgCall.cgCall dfs loc res_ty argfuntys fn ceargs mb_ret
 
 
   -- extendVarEnv [(retn,cretn)] $
