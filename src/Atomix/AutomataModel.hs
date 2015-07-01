@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 module AutomataModel where
 
 import Data.Bool
@@ -72,7 +73,12 @@ data WiredAtom atom
               }
 
 instance Atom a => Show (WiredAtom a) where
-  show wa = show (wires_in wa) ++ "{" ++ show (the_atom wa) ++ "}" ++ show (wires_out wa)
+  show (WiredAtom inw outw atom) = showWires inw ++ show atom ++ showWires outw
+    where
+      showWires ws = "{" ++ (List.intercalate "," $ map showWire ws) ++ "}"
+      showWire (n,var)
+        | n==1      = show var
+        | otherwise = show var ++ "^" ++ show n
 
 
 class Show a => Atom a where
@@ -82,14 +88,13 @@ class Show a => Atom a where
 
   -- Constructors of atoms
   discardAtom :: Ty -> a
-
   castAtom    :: (Int,Ty) -> (Int,Ty) -> a
 
   -- Getting (wired) atoms from expressions
   expToWiredAtom :: Exp b -> Maybe Var -> WiredAtom a
 
   idAtom      :: Ty -> a
-  idAtom t = castAtom (t,1) (t,1)
+  idAtom t = castAtom (1,t) (1,t)
  
 
 -- 
@@ -214,8 +219,8 @@ mkAutomaton :: Atom e
 mkAutomaton dfs chans comp k = go (unComp comp)
   where
     go (Take1 t) =
-      let inp = [in_chan chans]
-          outp = maybeToList (ctrl_chan chans)
+      let inp = [(1,in_chan chans)]
+          outp = map (1,) $ maybeToList (ctrl_chan chans)
           atom = maybe (discardAtom t) (\_ -> idAtom t) (ctrl_chan chans)
           nkind = Action [WiredAtom inp outp atom] (auto_start k)
       in return $ insert_prepend nkind k
@@ -223,8 +228,8 @@ mkAutomaton dfs chans comp k = go (unComp comp)
     go (TakeN _ n) = fail "not implemented"
 
     go (Emit1 x) =
-      let inp = [x]
-          outp = [out_chan chans]
+      let inp = [(1, x)]
+          outp = [(1, out_chan chans)]
           atom = idAtom (nameTyp x)
           nkind = Action [WiredAtom inp outp atom] (auto_start k)
       in return $ insert_prepend nkind k
@@ -249,7 +254,7 @@ mkAutomaton dfs chans comp k = go (unComp comp)
       let k2 = mkDoneAutomaton transfer_ch (out_chan chans)
       a1 <- mkAutomaton dfs (chans {out_chan = transfer_ch}) c1 k1
       a2 <- mkAutomaton dfs (chans {in_chan = transfer_ch}) c2 k2
-      return $ trace "Par a1 a2:" $ zipAutomata (traceShowId a1) (traceShowId a2) (traceShowId k)
+      return $ zipAutomata a1 a2 k
 
     go (AtomComp.Branch x c1 c2) = do
       a1 <- mkAutomaton dfs chans c1 k
@@ -291,8 +296,9 @@ mkAutomaton dfs chans comp k = go (unComp comp)
 
 
 
--- Zipping Automata
-type ProdNid = ((Int,Int),(Int,Int))
+---- Zipping Automata
+-- outstanding resource requests ("balance"), state of left automaton, state of right automaton
+type ProdNid = (Int, (Int,Int), (Int,Int))
 
 -- Precondition: a1 and a2 should satisfy (auto_outchan a1) == (auto_inchan a2)
 -- a1 and a2 MUST NOT contain explicit loop nodes (but may contain loops)!!
@@ -302,90 +308,88 @@ zipAutomata a1 a2 k = concat_auto prod_a k
     prod_a = ensure auto_closed      $
              assert (auto_closed a1) $
              assert (auto_closed a2) $
-             Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) (s1,s2)
+             Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) (0,s1,s2)
     s1 = (auto_start a1, 0)
     s2 = (auto_start a2, 0)
-    prod_nmap = zipNodes s1 s2 Map.empty
+    prod_nmap = zipNodes 0 s1 s2 Map.empty
     trans_ch = assert (auto_outchan a1 == auto_inchan a2) $ auto_outchan a1
 
 
     -- this allows us to address nodes in the input automata using (base_id,offset) pairs
     lookup :: (Int,Int) -> Automaton e Int -> Node e (Int,Int)
-    lookup nid@(n_baseid,n_offset) a =
-      case fromJust $ Map.lookup n_baseid (auto_graph a) of
+    lookup nid@(baseId,offset) a =
+      case fromJust $ Map.lookup baseId (auto_graph a) of
         Node _ (Action watoms next) ->
-          assert (n_offset < length watoms) $
-          Node nid $ Action (drop n_offset watoms) (next,0)
+          assert (offset < length watoms) $
+          Node nid $ Action (drop offset watoms) (next,0)
         node@(Node _ _) ->
-          assert (n_offset == 0) $ map_node_ids (\id -> (id,0)) node
+          assert (offset == 0) $ map_node_ids (\id -> (id,0)) node
 
 
-    zipNodes :: (Int,Int) -> (Int,Int) -> NodeMap e ProdNid -> NodeMap e ProdNid
-    zipNodes nid1 nid2 prod_nmap =
-      case Map.lookup (nid1,nid2) prod_nmap of
-        Nothing -> zipNodes' (lookup nid1 a1) (lookup nid2 a2) prod_nmap
+    zipNodes :: Int -> (Int,Int) -> (Int,Int) -> NodeMap e ProdNid -> NodeMap e ProdNid
+    zipNodes balance nid1 nid2 prod_nmap =
+      case Map.lookup (balance,nid1,nid2) prod_nmap of
+        Nothing -> zipNodes' balance (lookup nid1 a1) (lookup nid2 a2) prod_nmap
         Just _ -> prod_nmap -- We have already seen this product location. We're done!
 
-    zipNodes' :: Node e (Int,Int) -> Node e (Int,Int) -> NodeMap e ProdNid -> NodeMap e ProdNid
-    zipNodes' (Node id1 Done) (Node id2 _) prod_nmap =
-      let prod_nid = (id1,id2)
+    zipNodes' :: Int -> Node e (Int,Int) -> Node e (Int,Int) -> NodeMap e ProdNid -> NodeMap e ProdNid
+    zipNodes' balance (Node id1 Done) (Node id2 _) prod_nmap =
+      let prod_nid = (balance,id1,id2)
       in Map.insert prod_nid (Node prod_nid Done) prod_nmap
 
-    zipNodes' (Node id1 _) (Node id2 Done) prod_nmap =
-      let prod_nid = (id1,id2)
+    zipNodes' balance (Node id1 _) (Node id2 Done) prod_nmap =
+      let prod_nid = (balance,id1,id2)
       in Map.insert prod_nid (Node prod_nid Done) prod_nmap
 
     -- We don't handle eplicit loops since they complicate the algorithm.
     -- The problem is that loop nodes in one of the source automata do NOT
     -- give rise to nodes in the product automaton. As a result,
     -- the algorithm will produce spurious product node ids.
-    zipNodes' (Node id1 (Loop next1)) (Node id2 _) prod_nmap =
+    zipNodes' _ (Node _ (Loop _)) (Node {}) _ =
       assert False undefined
-    zipNodes' (Node id1 _) (Node id2 (Loop next2)) prod_nmap =
+    zipNodes' _ (Node {}) (Node _ (Loop _)) _ =
       assert False undefined
 
-    zipNodes' (Node id1 (AutomataModel.Branch x l r w)) (Node id2 _) prod_nmap =
-      let prod_nid = (id1,id2)
-          prod_nkind = AutomataModel.Branch x (l,id2) (r,id2) w
+    zipNodes' balance (Node id1 (AutomataModel.Branch x l r w)) (Node id2 _) prod_nmap =
+      let prod_nid = (balance,id1,id2)
+          prod_nkind = AutomataModel.Branch x (balance,l,id2) (balance,r,id2) w
           prod_node = Node prod_nid prod_nkind
-      in zipNodes r id2 $ zipNodes l id2 $ Map.insert prod_nid prod_node prod_nmap
+      in zipNodes balance r id2 $ zipNodes balance l id2 $ Map.insert prod_nid prod_node prod_nmap
 
-    zipNodes' (Node id1 _) (Node id2 (AutomataModel.Branch x l r w)) prod_nmap =
-      let prod_nid = (id1,id2)
-          prod_nkind = AutomataModel.Branch x (id1,l) (id1,r) w
+    zipNodes' balance (Node id1 _) (Node id2 (AutomataModel.Branch x l r w)) prod_nmap =
+      let prod_nid = (balance,id1,id2)
+          prod_nkind = AutomataModel.Branch x (balance,id1,l) (balance,id1,r) w
           prod_node = Node prod_nid prod_nkind
-      in zipNodes id1 r $ zipNodes id1 l $ Map.insert prod_nid prod_node prod_nmap
+      in zipNodes balance id1 r $ zipNodes balance id1 l $ Map.insert prod_nid prod_node prod_nmap
 
-    zipNodes' n1@(Node id1 (Action _ _)) n2@(Node id2 (Action _ _)) prod_nmap =
-      let (watoms, next1, next2) = zipActions n1 n2
-          prod_nid = (id1,id2)
-          prod_nkind = Action watoms (next1,next2)
+    zipNodes' balance n1@(Node id1 (Action _ _)) n2@(Node id2 (Action _ _)) prod_nmap =
+      let prod_nid = (balance,id1,id2)
+          (watoms, balance', next1, next2) = zipActions balance n1 n2
+          prod_nkind = Action watoms (balance',next1,next2)
           prod_node = Node prod_nid prod_nkind
-      in zipNodes next1 next2 $ Map.insert prod_nid prod_node prod_nmap
+      in zipNodes balance' next1 next2 $ Map.insert prod_nid prod_node prod_nmap
 
-    zipActions :: Node atom (Int,Int) -> Node atom (Int,Int) -> ([WiredAtom atom], (Int,Int), (Int,Int))
-    zipActions (Node (base1,offset1) (Action watoms1 next1)) (Node (base2,offset2) (Action watoms2 next2))
-      = tickRight [] watoms1 watoms2 offset1 offset2
+    zipActions :: Int -> Node atom (Int,Int) -> Node atom (Int,Int) -> ([WiredAtom atom], Int, (Int,Int), (Int,Int))
+    zipActions balance (Node (base1,offset1) (Action watoms1 next1)) (Node (base2,offset2) (Action watoms2 next2))
+      = tickRight [] balance watoms1 watoms2 offset1 offset2 
       where
-        tickRight acc [] [] offset1 offset2 = (List.reverse acc, next1, next2)
-        tickRight acc _ [] offset1 offset2 = (List.reverse acc, (base1,offset1), next2)
-        tickRight acc watoms1 watoms2@(wa:watoms2') offset1 offset2
-          | consumes wa = tickLeft acc watoms1 watoms2 offset1 offset2
-          | otherwise = tickRight (wa:acc) watoms1 watoms2' offset1 (offset2+1)
+        -- INVARIANT: the balance must always remain >= 0
 
-        tickLeft acc [] [] offset1 offset2 = (List.reverse acc, next1, next2)
-        tickLeft acc [] _ offset1 offset2 = (List.reverse acc, next1, (base2,offset2))
-        tickLeft acc (wa:watoms1') watoms2 offset1 offset2
-          | produces wa = procRight (wa:acc) watoms1' watoms2 (offset1+1) offset2
-          | otherwise = tickLeft (wa:acc) watoms1' watoms2 (offset1+1) offset2
+        tickRight acc balance [] [] offset1 offset2 = (List.reverse acc, balance, next1, next2)
+        tickRight acc balance _ [] offset1 offset2 = (List.reverse acc, balance, (base1,offset1), next2)
+        tickRight acc balance watoms1 watoms2@(wa:watoms2') offset1 offset2
+          | let cost = consumption wa,
+            cost <= balance            = tickRight (wa:acc) (balance-cost) watoms1 watoms2' offset1 (offset2+1)
+          | otherwise                  = tickLeft acc balance watoms1 watoms2 offset1 offset2
 
-        procRight acc watoms1 (wa:watoms2') offset1 offset2
-          = assert (consumes wa) $ tickRight (wa:acc) watoms1 watoms2' offset1 (offset2+1)
-        procRight _ _ [] _ _ = assert False undefined
+        tickLeft acc balance [] [] offset1 offset2 = (List.reverse acc, balance, next1, next2)
+        tickLeft acc balance [] _ offset1 offset2 = (List.reverse acc, balance, next1, (base2,offset2))
+        tickLeft acc balance (wa:watoms1') watoms2 offset1 offset2 =
+          tickRight (wa:acc) (balance + production wa) watoms1' watoms2 (offset1+1) offset2
 
-        consumes wired_atom = List.any (== trans_ch) (wires_in wired_atom)
-        produces wired_atom = List.any (== trans_ch) (wires_out wired_atom)
-    zipActions _ _ = assert False undefined
+        consumption wired_atom = sum $ map fst $ filter ((== trans_ch) . snd) (wires_in wired_atom)
+        production wired_atom = sum $ map fst $ filter ((== trans_ch) . snd) (wires_out wired_atom)
+    zipActions _ _ _ = assert False undefined
 
 
 
@@ -469,12 +473,8 @@ dotOfAuto a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfix
 
     showNode (Node nid nk) = "  " ++ show nid ++ "[label=\"" ++ showNk nk ++ "\"]"
 
-    showNk (Action watoms _) = List.intercalate ";\\n" $ List.map showWatom watoms
+    showNk (Action watoms _) = List.intercalate ";\\n" $ List.map show watoms
     showNk (AutomataModel.Branch x _ _ True) = "WHILE<" ++ show x ++ ">"
     showNk (AutomataModel.Branch x _ _ False) = "IF<" ++ show x ++ ">"
     showNk Done = "DONE"
     showNk (Loop _) = "LOOP"
-
-    showWatom (WiredAtom inp outp atom) = "{" ++ List.intercalate "," (List.map show inp) ++ "}" ++
-                                          show atom ++
-                                          "{" ++ List.intercalate "," (List.map show outp) ++ "}"

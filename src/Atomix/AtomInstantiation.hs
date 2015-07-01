@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 module AtomInstantiation where
 
 import AtomComp -- simplified Ziria model
@@ -11,23 +12,25 @@ import qualified Data.List as List
 
 
 
-data FunLikeAtom = FunFun FunName | Id Ty | Discard Ty
+data FunLikeAtom = FunFun FunName | Cast (Int,Ty) (Int,Ty) | Discard Ty
 
 instance Show FunLikeAtom where
   show (FunFun f) = show f
-  show (Id _) = "ID"
+  show (Cast (n,t1) (m,t2)) 
+    | t1 == t2 = "ID"
+    | otherwise = "CAST<" ++ (List.intercalate "," $ [show n,show t1,show m,show t2]) ++ ">"
   show (Discard _) = "DC"
 
 instance Atom FunLikeAtom where
-  atomInTy (FunFun f) = inTysOfFunction f
-  atomInTy (Id t) = [t]
-  atomInTy (Discard t) = [t]
+  atomInTy (FunFun f) = map (1,) $ inTysOfFunction f
+  atomInTy (Cast in_ty _) = [in_ty]
+  atomInTy (Discard t) = [(1,t)]
 
-  atomOutTy (FunFun f) = outTysOfFunction f
-  atomOutTy (Id t) = [t]
+  atomOutTy (FunFun f) = map (1,) $ outTysOfFunction f
+  atomOutTy (Cast _ out_ty) = [out_ty]
   atomOutTy (Discard t) = []
 
-  idAtom = Id
+  castAtom = Cast
   discardAtom = Discard
 
   expToWiredAtom = funAppToWiredAtom
@@ -53,7 +56,7 @@ outTysOfFunction f = snd (atomStuffOfFunction f)
 
 
 funAppToWiredAtom :: Exp b -> Maybe Var -> WiredAtom FunLikeAtom
-funAppToWiredAtom e mb = WiredAtom ins outs (FunFun f)
+funAppToWiredAtom e mb = WiredAtom (map (1,) ins) (map (1,) outs) (FunFun f)
   where
     (ExpApp f args) = unExp e
     ins  = args
