@@ -154,10 +154,11 @@ pack_idx_var pkg v idx idx_ty pos
            -- location to a pointer for the maximum index type (uint32), 
            -- and only once you've got the final value truncate
            -- back. Sigh ...
-       let cast_ty = 
+       let cast_ty = [cty| $ty:idx_ty * |]
+{- 
                if vlen <= 8  then [cty| typename uint8*  |] else 
                if vlen <= 16 then [cty| typename uint16* |] else [cty|typename uint32*|]
-
+-}
            tmp_var = [cexp| ( * ($ty:cast_ty) 
                                               (& ((typename BitArrPtr) $varexp)[$int:byte_start]))
                      |]
@@ -170,7 +171,7 @@ pack_idx_var pkg v idx idx_ty pos
   | isArrayTy (nameTyp v)
   = do w <- fromIntegral <$> inVarBitWidth pkg v
        varexp <- lookupVarEnv v
-       let tmp_var = [cexp| * (typename uint32 *) $varexp |]
+       let tmp_var = [cexp| * ($ty:idx_ty *) $varexp |]
        let rhs = tmp_var `cMask` w `cExpShL` pos
        appendStmt $ [cstm| $idx |= ( $ty:idx_ty ) $rhs; |]
        return (pos+w)
