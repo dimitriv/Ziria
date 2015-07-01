@@ -47,6 +47,7 @@ data Comp0 a b
   | TakeN Ty Int
   | Emit1 Var
   | EmitN Var
+-- Maybe:  | Map1  FunName
 
   | Return (Exp b)
 

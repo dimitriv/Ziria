@@ -66,8 +66,8 @@ data Automaton atom nid
 
 
 data WiredAtom atom
-  = WiredAtom { wires_in  :: [Var]
-              , wires_out :: [Var]
+  = WiredAtom { wires_in  :: [(Int,Var)]
+              , wires_out :: [(Int,Var)]
               , the_atom  :: atom
               }
 
@@ -77,15 +77,35 @@ instance Atom a => Show (WiredAtom a) where
 
 class Show a => Atom a where
 
-  atomInTy  :: a -> [Ty]
-  atomOutTy :: a -> [Ty]
+  atomInTy  :: a -> [(Int,Ty)]
+  atomOutTy :: a -> [(Int,Ty)]
 
   -- Constructors of atoms
-  idAtom      :: Ty -> a
   discardAtom :: Ty -> a
+
+  castAtom    :: (Int,Ty) -> (Int,Ty) -> a
 
   -- Getting (wired) atoms from expressions
   expToWiredAtom :: Exp b -> Maybe Var -> WiredAtom a
+
+  idAtom      :: Ty -> a
+  idAtom t = castAtom (t,1) (t,1)
+ 
+
+-- 
+-- TakeN t N  ~~~>    
+--       castAtom (t,N) (arr[N] t, 1)
+-- 
+-- Emits x    ~~~>    
+--       castAtom (arr[N] t,1) (t,N)
+--
+--   n1 = k*n2
+--  ~~~>  castAtom (arr[n1] t, 1) (arr[n2] t, k)
+--   n2 = k*n1
+--  ~~~> castAtom  (arr[n1] t, k) (arr[n2] t, 1)
+--
+--
+-- 
 
 
 
