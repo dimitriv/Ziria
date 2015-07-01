@@ -14,6 +14,7 @@ import AstComp (CompLoc,ParInfo)
 import qualified AstComp as AstC
 import qualified GenSym as GS
 import Data.Loc
+import qualified Data.List as List
 import Control.Monad.State
 
 type Fun = GFun Ty
@@ -22,7 +23,7 @@ type Var = GName Ty
 type FunName = Var
 
 data Exp b
-  = MkExp { unExp   :: !(Exp0 b)
+  = MkExp { unExp   :: !(Exp0)
           , expLoc  :: !(CompLoc)
           , expInfo :: b }
 
@@ -37,9 +38,11 @@ data Comp a b
 instance Show (Comp a b) where
   show c = show (unComp c)
 
-data Exp0 b
+data Exp0
   = ExpApp { expAppFun :: FunName, expAppArgs :: [Var] }
-  deriving Show
+
+instance Show Exp0 where
+  show (ExpApp fun args) = show fun ++ "(" ++ (List.intercalate "," $ map show args) ++ ")"
 
 
 data Comp0 a b
@@ -47,7 +50,7 @@ data Comp0 a b
   | TakeN Ty Int
   | Emit1 Var
   | EmitN Var
--- Maybe:  | Map1  FunName
+  | MapOnce FunName [Var]
 
   | Return (Exp b)
 
@@ -69,6 +72,7 @@ instance Show (Comp0 a b) where
   show (TakeN _ n) = "Take<n=" ++ show n ++ ">"
   show (Emit1 x) = "Emit1<" ++ show x ++ ">"
   show (EmitN x) = "EmitN<" ++ show x ++ ">"
+  show (MapOnce f closure) = "MapOnce"
   show (Return e) = "Return<" ++ show e ++ ">"
   show (NewVar x c) = "Var<" ++ show x ++ ">[" ++ show c ++ "]"
   show (Bind x c1 c2) = "Bind<" ++ show x ++ ">[" ++ show c1 ++ "][" ++ show c2 ++ "]"

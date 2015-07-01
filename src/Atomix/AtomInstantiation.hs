@@ -91,13 +91,17 @@ mkRepeat c = mkComp (Repeat c)
 mkReturn f args = mkComp (Return $ mkApp f args)
 mkEmit x = mkComp (Emit1 x)
 
+--freshMap name closure = do
+--  x <- freshVar ("inp(" ++ name ++ ")") ty Imm
+--  y <- freshVar ("out(" ++ name ++ ")") ty Imm
+--  f <- mkFunc name (1 + length closure) 1
+--  return $ mkRepeat $ mkBind (Just x) (mkComp $ Take1 ty) $
+--                      mkBind (Just y) (mkReturn f (x:closure)) $
+--                      mkEmit y
+
 freshMap name closure = do
-  x <- freshVar ("inp(" ++ name ++ ")") ty Imm
-  y <- freshVar ("out(" ++ name ++ ")") ty Imm
-  f <- mkFunc name 1 (1 + length closure)
-  return $ mkRepeat $ mkBind (Just x) (mkComp $ Take1 ty) $
-                      mkBind (Just y) (mkReturn f (x:closure)) $
-                      mkEmit y
+  f <- mkFunc name (1 + length closure) 1
+  return $ mkRepeat $ mkComp $ MapOnce f closure
 
 mkRepeatN n c = mkComp $ RepeatN n c
 mkTake = mkComp (Take1 ty)

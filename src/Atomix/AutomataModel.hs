@@ -9,6 +9,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
 import qualified Data.List as List
+import Data.Loc
 
 import qualified System.IO as IO
 
@@ -235,6 +236,13 @@ mkAutomaton dfs chans comp k = go (unComp comp)
       in return $ insert_prepend nkind k
 
     go (EmitN x) = fail "not implemented"
+
+    go (MapOnce f closure) =
+      let args = in_chan chans : closure
+          expr = MkExp (ExpApp f args) noLoc ()
+          watom = expToWiredAtom expr (Just $ out_chan chans)
+          nkind = Action [watom] (auto_start k)
+      in return $ insert_prepend nkind k
 
     go (Return e) =
       let watom = expToWiredAtom e (ctrl_chan chans)

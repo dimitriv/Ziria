@@ -17,7 +17,6 @@
    permissions and limitations under the License.
 -}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# OPTIONS -Wall #-}
 
 module Main where
 
