@@ -297,7 +297,7 @@ mkAutomaton dfs chans comp k = go (unComp comp)
 
 
 ---- Zipping Automata
--- outstanding resource requests ("balance"), state of left automaton, state of right automaton
+-- remaining resources in pipe ("balance"), state of left automaton, state of right automaton
 type ProdNid = (Int, (Int,Int), (Int,Int))
 
 -- Precondition: a1 and a2 should satisfy (auto_outchan a1) == (auto_inchan a2)

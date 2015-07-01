@@ -5,6 +5,7 @@ import AtomComp -- simplified Ziria model
 import AutomataModel
 import AstExpr (GArgTy (..), ArgTy, EId)
 import Data.Loc
+import Control.Exception
 
 import Data.Maybe
 import qualified Data.List as List
@@ -17,7 +18,7 @@ data FunLikeAtom = FunFun FunName | Cast (Int,Ty) (Int,Ty) | Discard Ty
 instance Show FunLikeAtom where
   show (FunFun f) = show f
   show (Cast (n,t1) (m,t2)) 
-    | t1 == t2 = "ID"
+    | t1 == t2 = assert (n==m) "ID"
     | otherwise = "CAST<" ++ (List.intercalate "," $ [show n,show t1,show m,show t2]) ++ ">"
   show (Discard _) = "DC"
 
