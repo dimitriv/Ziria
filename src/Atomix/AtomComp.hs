@@ -42,9 +42,6 @@ data Exp0 b
   deriving Show
 
 
-
-
-
 data Comp0 a b
   = Take1 Ty
   | TakeN Ty Int

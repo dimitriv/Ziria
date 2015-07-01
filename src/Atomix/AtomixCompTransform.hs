@@ -40,63 +40,64 @@ freshName sym str loc ty mut = do
 
 alphaNorm :: GS.Sym -> Comp -> IO Comp
 alphaNorm sym = mapCompM return return return return return action
-  where action c 
-          | Emit e <- unComp c
-          , let loc = compLoc c
-          = do x <- freshName sym "emit_tmp" loc (ctExp e) Imm
-               return $ cLetE loc x AutoInline e (cEmit loc (eVar loc x))
+  where 
+    action c 
+      | Emit e <- unComp c
+      , let loc = compLoc c
+      = do x <- freshName sym "emit_tmp" loc (ctExp e) Imm
+           return $ cLetE loc x AutoInline e (cEmit loc (eVar loc x))
 
-          | Emits e <- unComp c
-          , let loc = compLoc c
-          = do x <- freshName sym "emits_tmp" loc (ctExp e) Imm
-               return $ cLetE loc x AutoInline e (cEmits loc (eVar loc x))
+      | Emits e <- unComp c
+      , let loc = compLoc c
+      = do x <- freshName sym "emits_tmp" loc (ctExp e) Imm
+           return $ cLetE loc x AutoInline e (cEmits loc (eVar loc x))
 
-          | Branch e c1 c2 <- unComp c
-          , let loc = compLoc c
-          = do x <- freshName sym "branch_cond" loc (ctExp e) Imm
-               return $ cLetE loc x AutoInline e (cBranch loc (eVar loc x) c1 c2)
+      | Branch e c1 c2 <- unComp c
+      , let loc = compLoc c
+      = do x <- freshName sym "branch_cond" loc (ctExp e) Imm
+           return $ cLetE loc x AutoInline e (cBranch loc (eVar loc x) c1 c2)
 
-          | While e c1 <- unComp c
-          , let loc = compLoc c
-          = do x <- freshName sym "while_cond" loc (ctExp e) Imm
-               return $ cLetERef loc x (Just e) $
-                        cWhile loc (eVar loc x) 
-                          (cSeq loc c1 (cReturn loc AutoInline (eAssign loc (eVar loc x) e)))
+      | While e c1 <- unComp c
+      , let loc = compLoc c
+      = do x <- freshName sym "while_cond" loc (ctExp e) Imm
+           return $ cLetERef loc x (Just e) $
+                    cWhile loc (eVar loc x) 
+                      (cSeq loc c1 (cReturn loc AutoInline (eAssign loc (eVar loc x) e)))
 
-          | Until e c1 <- unComp c
-          , let loc = compLoc c
-          = do x <- freshName sym "until_cond" loc (ctExp e) Imm
-               return $ cLetERef loc x Nothing $
-                        cUntil loc (eVar loc x) 
-                          (cSeq loc c1 (cReturn loc AutoInline (eAssign loc (eVar loc x) e)))
+      | Until e c1 <- unComp c
+      , let loc = compLoc c
+      = do x <- freshName sym "until_cond" loc (ctExp e) Imm
+           return $ cLetERef loc x Nothing $
+                    cUntil loc (eVar loc x) 
+                      (cSeq loc c1 (cReturn loc AutoInline (eAssign loc (eVar loc x) e)))
 
-          | Times _ui _estart elen _cnt _c1 <- unComp c
-          , EVal {} <- unExp elen
-          = return c -- Static times => translate to static loops in atomix
-          | Times _ui estart elen cnt c1 <- unComp c
-          , let loc = compLoc c 
-          = do x_bound <- freshName sym "times_bound" loc (ctExp elen) Imm
-               let cond_expr   = eBinOp loc Lt (eVar loc cnt) (eVar loc x_bound) -- cnt < x_bound
-                   cnt_expr    = eVar loc cnt
-                   TInt _bw sn = nameTyp cnt
-                   one         = eVal loc (nameTyp cnt) (VInt 1 sn)
-                   upd_cntr    = eAssign loc cnt_expr (eBinOp loc Add cnt_expr one)
+      | Times _ui _estart elen _cnt _c1 <- unComp c
+      , EVal {} <- unExp elen
+      = return c -- Static times => translate to static loops in atomix
+      | Times _ui estart elen cnt c1 <- unComp c
+      , let loc = compLoc c 
+      = do x_bound <- freshName sym "times_bound" loc (ctExp elen) Imm
+           let cond_expr   = eBinOp loc Lt (eVar loc cnt) (eVar loc x_bound) -- cnt < x_bound
+               cnt_expr    = eVar loc cnt
+               TInt _bw sn = nameTyp cnt
+               one         = eVal loc (nameTyp cnt) (VInt 1 sn)
+               upd_cntr    = eAssign loc cnt_expr (eBinOp loc Add cnt_expr one)
 
-               cLetERef loc cnt (Just estart) <$> 
-                 cLetE loc x_bound AutoInline (eBinOp loc Add (eVar loc cnt) elen) <$>
-                 action (cWhile loc cond_expr (cSeq loc c1 (cReturn loc AutoInline upd_cntr)))
+           cLetERef loc cnt (Just estart) <$> 
+             cLetE loc x_bound AutoInline (eBinOp loc Add (eVar loc cnt) elen) <$>
+             action (cWhile loc cond_expr (cSeq loc c1 (cReturn loc AutoInline upd_cntr)))
 
-          | Map v fn <- unComp c
-          , TArrow [argty] _resty <- nameTyp fn
-          , let loc = compLoc c 
-          = do x <- freshName sym (name fn ++ "_in") loc (argty_ty argty) Imm 
-               alphaNorm sym $ 
-                  cRepeat loc v $ 
-                  cBindMany loc (cTake1 loc (nameTyp x))
-                                [(x, cEmit loc (eCall loc fn [eVar loc x]))]
+      | Map v fn <- unComp c
+      , TArrow [argty] _resty <- nameTyp fn
+      , let loc = compLoc c 
+      = do x <- freshName sym (name fn ++ "_in") loc (argty_ty argty) Imm 
+           alphaNorm sym $ 
+              cRepeat loc v $ 
+              cBindMany loc (cTake1 loc (nameTyp x))
+                            [(x, cEmit loc (eCall loc fn [eVar loc x]))]
 
-          | otherwise
-          = return c
+      | otherwise
+      = return c
 
 
 {------------------- Lifting up functions with closure variables --------------}
@@ -164,22 +165,23 @@ liftBindsComp = mapCompM return return return return return action
 closConvComp :: Comp -> RnStM Comp
 closConvComp comp = clos_conv comp >>= fixup_call_sites
   where 
-   fixup_call_sites = mapCompM return 
-                               return
-                               return
-                               return
-                               fixup_call_site
-                               return
+   fixup_call_sites 
+      = mapCompM return 
+                 return
+                 return
+                 return
+                 fixup_call_site
+                 return
    fixup_call_site e
      | ECall fn eargs <- unExp e
      = do mb <- lkpFunDef fn
-          case mb of 
-            Nothing 
-              -> panic $ text "closConvTop: function definition missing!" <+> ppr fn
-            Just (fdef,clos_vars)
-              -> let loc = expLoc e
-                     clos_args = map (eVar loc) clos_vars
-                 in return $ eCall loc (funName fdef) (eargs ++ clos_args)
+          case mb of
+            Nothing -> 
+              panic $ text "closConvTop: unbound function " <+> ppr fn
+            Just (fdef,clos_vars) -> 
+              let loc = expLoc e
+                  clos_args = map (eVar loc) clos_vars
+              in return $ eCall loc (funName fdef) (eargs ++ clos_args)
      | otherwise = return e
 
 
@@ -230,9 +232,9 @@ closConvFun (MkFun (MkFunDefined fn prms body) loc _) closvars
   where new_fn = fn { nameTyp = clos_conv_funty (nameTyp fn) }
         clos_conv_funty :: Ty -> Ty
         clos_conv_funty (TArrow argtys resty)
-           = TArrow (argtys ++ closvartys) resty
-           where closvartys = map (\x -> GArgTy (nameTyp x) (nameMut x)) closvars
+           = TArrow (argtys ++ clos_vartys) resty
         clos_conv_funty _ty = panicStr "clos_conv_funty: not an arrow!"
+        clos_vartys = map (\x -> GArgTy (nameTyp x) (nameMut x)) closvars
 
 
 getClosureVars :: Fun -> RnStM [EId]
@@ -262,10 +264,11 @@ atomixCompTransform sym c = do
   ren_alpha <- alphaNorm sym ren_c
 
   -- Closure convert / lift 
-  (final_comp,st) <- runStateT (liftBindsComp ren_alpha >>= closConvComp) emptyRnSt
+  (final_comp,st) <- runStateT (liftBindsComp ren_alpha >>= closConvComp) $
+                     emptyRnSt
 
-  putStrLn "Atomix closure conversion phase finished, typechecking result ..."
-  putStrLn $ "Typechecking finished: " ++ show (ctComp final_comp)
+  putStrLn $ "Closure conversion phase finished, result type: " ++ 
+             show (ctComp final_comp)
   return (final_comp, st)
 
 
@@ -278,4 +281,5 @@ atomixCompToComp comp (RnSt { st_letref_vars = letrefs
        str_c = foldr (cLetStruct loc) fun_c (map snd strdefs)
        funs = reverse $ map (\(_,(fun,_)) -> fun) fundefs
        loc  = compLoc comp
+
 
