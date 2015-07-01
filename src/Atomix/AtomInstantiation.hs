@@ -91,16 +91,21 @@ mkRepeat c = mkComp (Repeat c)
 mkReturn f args = mkComp (Return $ mkApp f args)
 mkEmit x = mkComp (Emit1 x)
 
-freshMap name = do
-  x <- freshVar ("inp(" ++ name ++ ")") ty Imm
-  y <- freshVar ("out(" ++ name ++ ")") ty Imm
-  f <- mkFunc name 1 1
-  return $ mkRepeat $ mkBind (Just x) (mkComp $ Take1 ty) $
-                      mkBind (Just y) (mkReturn f [x])      $
-                      mkEmit y
+--freshMap name closure = do
+--  x <- freshVar ("inp(" ++ name ++ ")") ty Imm
+--  y <- freshVar ("out(" ++ name ++ ")") ty Imm
+--  f <- mkFunc name (1 + length closure) 1
+--  return $ mkRepeat $ mkBind (Just x) (mkComp $ Take1 ty) $
+--                      mkBind (Just y) (mkReturn f (x:closure)) $
+--                      mkEmit y
+
+freshMap name closure = do
+  f <- mkFunc name (1 + length closure) 1
+  return $ mkRepeat $ mkComp $ MapOnce f closure
 
 mkRepeatN n c = mkComp $ RepeatN n c
 mkTake = mkComp (Take1 ty)
+mkWhile x b = mkComp $ While x b
 
 
 
@@ -110,17 +115,19 @@ mkTake = mkComp (Take1 ty)
 mkWifi :: CompM () (Comp () ())
 mkWifi = do
 
+  constf <- mkFunc "CONST" 0 1
+
   -- channels for control data
   det <- freshVar "det" ty Imm
   params <- freshVar "params" ty Imm
   h <- freshVar "h" ty Imm
 
   -- DetectSTS
-  removeDC <- freshMap "removeDC"
+  removeDC <- freshMap "removeDC" []
   cca <- do
     x <- freshVar "cca_cond" ty Mut
     let body = mkBind (Just x) mkTake (mkEmit x)
-    return $ mkComp $ While x body
+    return $ mkBind Nothing (mkWhile x body) (mkReturn constf [])
   let detectSTS = mkPar removeDC cca
 
   -- LTS
@@ -130,17 +137,17 @@ mkWifi = do
     return $ mkComp $ Until x body
 
   -- middle pipeline
-  dataSymbol <- freshMap "dataSymbol"
-  fft <- freshMap "fft"
-  channelEqualization <- freshMap "channelEqualization"
-  pilotTrack <- freshMap "pilotTrack"
-  getData <- freshMap "getData"
+  dataSymbol <- freshMap "dataSymbol" [det]
+  fft <- freshMap "fft" []
+  channelEqualization <- freshMap "channelEqualization" [params]
+  pilotTrack <- freshMap "pilotTrack" []
+  getData <- freshMap "getData" []
   let middlePipeline = List.foldr mkPar getData [dataSymbol, fft, channelEqualization, pilotTrack]
 
   -- DecodePLCP
-  demodBPSK <- freshMap "demodBPSK"
-  deinterleave <- freshMap "deinterleaveA"
-  decode <- freshMap "decodeA"
+  demodBPSK <- freshMap "demodBPSK" []
+  deinterleave <- freshMap "deinterleaveA" []
+  decode <- freshMap "decodeA" []
   parseHeader <- do
     x <- freshVar "parseHeader_cond" ty Mut
     y <- freshVar "parseHeader_aux" ty Mut
@@ -150,9 +157,9 @@ mkWifi = do
   let decodePLCP = List.foldr mkPar parseHeader [middlePipeline, demodBPSK, deinterleave, decode]
 
   -- Decode
-  demod <- freshMap "demod"
-  deinterleave <- freshMap "deinterleaveB"
-  decode <- freshMap "decodeB"
+  demod <- freshMap "demod" [h]
+  deinterleave <- freshMap "deinterleaveB" []
+  decode <- freshMap "decodeB" [h]
   descramble <- do
     x <- freshVar "descramble_cond" ty Mut
     y1 <- freshVar "descramble_aux1" ty Mut
@@ -165,7 +172,6 @@ mkWifi = do
   -- overall receiver
   let mkBind (mbvar, pipeline) acc = mkComp $ Bind mbvar pipeline acc
 
-  --return $ detectSTS
   return $ List.foldr mkBind decodePipeline [ (Just det, detectSTS)
                                             , (Just params, lts)
                                             , (Just h, decodePLCP) ]
