@@ -33,21 +33,17 @@ module CgValDom
   , cgArrRead, cgArrRead_chk
   , isBitArrByteAligned
 
-  -- New arrays or structs 
-  , cgArrVal
+  -- New structs 
   , cgStruct 
 
   ) where
 
 import Opts
 import AstExpr
-import AstUnlabelled
 import CgMonad
 import CgTypes
 import Utils
-import {-# SOURCE #-} CgExpr
 
-import Control.Monad ( zipWithM )
 import Data.Loc
 import qualified Language.C.Syntax as C
 import Language.C.Quote.C
@@ -256,88 +252,3 @@ cgStruct _ loc t _fld_exps =
                , text "non-struct-type:" <+> ppr t ]
 
 
-
--- | Here we deviate a bit from AbsInt.hs and the reason is the
---   special-case code for value arrays versus array expressions that
---   contain expressions.
-cgArrVal :: DynFlags -> SrcLoc -> Ty -> [Exp] -> Cg C.Exp
-cgArrVal dfs loc arr_ty es 
-  | Just vs <- expValMbs es = cgArrVal_val dfs loc arr_ty vs 
-  | otherwise               = cgArrVal_exp dfs loc arr_ty es
-
-cgArrVal_val :: DynFlags -> SrcLoc -> Ty -> [Val] -> Cg C.Exp
-cgArrVal_val _ _ t@(TArray _ TBit) vs = do
-   snm <- freshName "__bit_arr" t Mut
-   let csnm = [cexp| $id:(name snm)|]
-   let inits = cgBitValues vs
-   appendCodeGenDeclGroup (name snm) t (InitWith inits)
-   return csnm
-
-cgArrVal_val _dfs loc t@(TArray _ _) ws
-  | length ws <= 8192 
-  = do snm <- freshName "__val_arr" t Mut
-       let csnm = [cexp| $id:(name snm)|]
-       let inits = cgNonBitValues ws
-       appendCodeGenDeclGroup (name snm) t (InitWith inits)
-       return csnm
-  | otherwise -- ^ very large initializer, VS can't deal with that
-  = go t ws
-  where 
-    go (TArray n tval) vs 
-      | length vs <= 8192
-      = do snm <- freshName "__val_arr" t Mut
-           let csnm = [cexp| $id:(name snm)|]
-           let inits = cgNonBitValues vs
-           DeclPkg d istms <- 
-               codeGenDeclGroup (name snm) (TArray n tval) (InitWith inits)
-           appendTopDecl d
-           mapM_ addGlobalWplAllocated istms
-           return csnm
-      | otherwise
-      = do let len = length vs
-               ln1 = len `div` 2
-               ln2 = len - ln1 
-               (vs1,vs2) = splitAt ln1 vs
-           cv1 <- go (TArray (Literal ln1) tval) vs1
-           cv2 <- go (TArray (Literal ln2) tval) vs2
-           snm  <- freshName "__val_arr" t Mut
-           let valsiz = tySizeOf_C tval
-               csiz1  = [cexp| $int:ln1 * $valsiz|]
-               csiz2  = [cexp| $int:ln2 * $valsiz|]
-           DeclPkg d istms <- codeGenDeclGroup (name snm) t ZeroOut
-           appendTopDecl d 
-           mapM_ addGlobalWplAllocated istms
-
-           addGlobalWplAllocated $ 
-              [cstm| blink_copy((void *) $id:(name snm), 
-                                (void *) $cv1, $csiz1);|] 
-           addGlobalWplAllocated $
-              [cstm| blink_copy((void *) & $id:(name snm)[$int:ln1], 
-                                (void *) $cv2, $csiz2);|]
-
-           let csnm = [cexp| $id:(name snm)|]
-           return csnm
-    go ty _ = panicCgNonArray "cgArrVal_val" loc ty
-
-cgArrVal_val _ loc t _es = panicCgNonArray "cgArrVal_val" loc t
-
-
-cgArrVal_exp :: DynFlags -> SrcLoc -> Ty -> [Exp] -> Cg C.Exp
-cgArrVal_exp dfs loc t@(TArray _ _tbase) es = do
-   snm <- freshName "__exp_arr" t Mut
-   let csnm = [cexp| $id:(name snm)|]
-   appendCodeGenDeclGroup (name snm) t ZeroOut
-   extendVarEnv [(snm,csnm)] $ do 
-     _ <- zipWithM (\e i -> codeGenExp dfs (eAssign loc (lhs snm i) e)) es [0..]
-     return csnm
-   where 
-     lhs x idx = eArrRead loc (eVar loc x)
-                              (eVal loc tint (VInt idx Signed)) LISingleton
-             
-cgArrVal_exp _dfs loc t _es = panicCgNonArray "cgArrVal_exp" loc t
-
-panicCgNonArray :: String -> SrcLoc -> Ty -> Cg a
-panicCgNonArray msg loc t = 
-  panic $ vcat [ text "cgArr" <+> text msg
-               , text "location: " <+> ppr loc
-               , text "non-array-type: " <+> ppr t ]

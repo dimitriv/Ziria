@@ -65,6 +65,8 @@ import CgCmdDom
 import CgPrint 
 import CgCall
 
+import Control.Monad ( zipWithM )
+
 {------------------------------------------------------------------------
   Code Generation Proper
 ------------------------------------------------------------------------}
@@ -290,7 +292,7 @@ cgEval dfs e = go (unExp e) where
      Right <$> cgIf dfs ce1 (cgEvalRVal dfs e2) (cgEvalRVal dfs e3)
 
   go (EPrint nl e1s) = do 
-      printExps nl dfs e1s
+      printExps codeGenExp nl dfs e1s
       Right <$> return [cexp|UNIT|]
 
   go (EError ty str) = do
@@ -310,7 +312,7 @@ cgEval dfs e = go (unExp e) where
      = cgPrintVars dfs loc (lutVarUsePkg r) $
        cgEval dfs e1
      | otherwise
-     = Right <$> codeGenLUTExp dfs r e1 Nothing
+     = Right <$> codeGenLUTExp codeGenExp dfs r e1 Nothing
 
   go (EWhile econd ebody) = do
       (init_decls,init_stms,cecond) <- inNewBlock (cgEvalRVal dfs econd)
@@ -353,7 +355,27 @@ cgEval dfs e = go (unExp e) where
   go (ECall nef eargs) = Right <$> cgCall_aux dfs loc (ctExp e) nef eargs Nothing
 
 
+cgPrintVars :: DynFlags -> SrcLoc -> VarUsePkg -> Cg a -> Cg a
+cgPrintVars dflags loc vpkg action = do
+  cg_print_vars dflags "Invars" loc (vu_invars vpkg)
+  r <- action
+  cg_print_vars dflags "Outvars" loc (vu_outvars vpkg)
+  return r
 
+cg_print_vars :: DynFlags -> String -> SrcLoc -> [EId] -> Cg ()
+cg_print_vars dflags dbg_ctx loc vs
+  | isDynFlagSet dflags Verbose
+  = do appendStmt $ [cstm| printf("%s> cg_print_vars: %s\n", 
+                             $string:(dbg_ctx), 
+                             $string:(displayLoc (locOf loc)));|]
+       sequence_ $ map (codeGenExp dflags . print_var) vs
+  | otherwise
+  = return ()
+  where
+    preamb = dbg_ctx ++ ">   "
+    print_var v = ePrint loc True $ 
+                  [ eVal loc TString (VString (preamb ++ show v ++ ":"))
+                  , eVar loc v ]
 
 cgCall_aux :: DynFlags -> SrcLoc -> Ty -> EId -> [Exp] -> Maybe C.Exp -> Cg C.Exp
 cgCall_aux dfs loc res_ty fn eargs mb_ret = do 
@@ -374,5 +396,94 @@ cgEvalArg :: DynFlags -> (ArgTy, Exp) -> Cg (Either (LVal ArrIdx) C.Exp)
 cgEvalArg dfs (GArgTy _ Mut, earg) = Left <$> cgEvalLVal dfs earg 
 cgEvalArg dfs (_, earg) = Right <$> cgEvalRVal dfs earg
  
+
+{- Code generation for array values (belonging in ValDom in AbsInt.hs but 
+   implemented here, due to some performance-oriented specialization
+ ---------------------------------------------------------------------------------}
+
+-- | Here we deviate a bit from AbsInt.hs and the reason is the
+--   special-case code for value arrays versus array expressions that
+--   contain expressions.
+cgArrVal :: DynFlags -> SrcLoc -> Ty -> [Exp] -> Cg C.Exp
+cgArrVal dfs loc arr_ty es 
+  | Just vs <- expValMbs es = cgArrVal_val dfs loc arr_ty vs 
+  | otherwise               = cgArrVal_exp dfs loc arr_ty es
+
+cgArrVal_val :: DynFlags -> SrcLoc -> Ty -> [Val] -> Cg C.Exp
+cgArrVal_val _ _ t@(TArray _ TBit) vs = do
+   snm <- freshName "__bit_arr" t Mut
+   let csnm = [cexp| $id:(name snm)|]
+   let inits = cgBitValues vs
+   appendCodeGenDeclGroup (name snm) t (InitWith inits)
+   return csnm
+
+cgArrVal_val _dfs loc t@(TArray _ _) ws
+  | length ws <= 8192 
+  = do snm <- freshName "__val_arr" t Mut
+       let csnm = [cexp| $id:(name snm)|]
+       let inits = cgNonBitValues ws
+       appendCodeGenDeclGroup (name snm) t (InitWith inits)
+       return csnm
+  | otherwise -- ^ very large initializer, VS can't deal with that
+  = go t ws
+  where 
+    go (TArray n tval) vs 
+      | length vs <= 8192
+      = do snm <- freshName "__val_arr" t Mut
+           let csnm = [cexp| $id:(name snm)|]
+           let inits = cgNonBitValues vs
+           DeclPkg d istms <- 
+               codeGenDeclGroup (name snm) (TArray n tval) (InitWith inits)
+           appendTopDecl d
+           mapM_ addGlobalWplAllocated istms
+           return csnm
+      | otherwise
+      = do let len = length vs
+               ln1 = len `div` 2
+               ln2 = len - ln1 
+               (vs1,vs2) = splitAt ln1 vs
+           cv1 <- go (TArray (Literal ln1) tval) vs1
+           cv2 <- go (TArray (Literal ln2) tval) vs2
+           snm  <- freshName "__val_arr" t Mut
+           let valsiz = tySizeOf_C tval
+               csiz1  = [cexp| $int:ln1 * $valsiz|]
+               csiz2  = [cexp| $int:ln2 * $valsiz|]
+           DeclPkg d istms <- codeGenDeclGroup (name snm) t ZeroOut
+           appendTopDecl d 
+           mapM_ addGlobalWplAllocated istms
+
+           addGlobalWplAllocated $ 
+              [cstm| blink_copy((void *) $id:(name snm), 
+                                (void *) $cv1, $csiz1);|] 
+           addGlobalWplAllocated $
+              [cstm| blink_copy((void *) & $id:(name snm)[$int:ln1], 
+                                (void *) $cv2, $csiz2);|]
+
+           let csnm = [cexp| $id:(name snm)|]
+           return csnm
+    go ty _ = panicCgNonArray "cgArrVal_val" loc ty
+
+cgArrVal_val _ loc t _es = panicCgNonArray "cgArrVal_val" loc t
+
+
+cgArrVal_exp :: DynFlags -> SrcLoc -> Ty -> [Exp] -> Cg C.Exp
+cgArrVal_exp dfs loc t@(TArray _ _tbase) es = do
+   snm <- freshName "__exp_arr" t Mut
+   let csnm = [cexp| $id:(name snm)|]
+   appendCodeGenDeclGroup (name snm) t ZeroOut
+   extendVarEnv [(snm,csnm)] $ do 
+     _ <- zipWithM (\e i -> codeGenExp dfs (eAssign loc (lhs snm i) e)) es [0..]
+     return csnm
+   where 
+     lhs x idx = eArrRead loc (eVar loc x)
+                              (eVal loc tint (VInt idx Signed)) LISingleton
+             
+cgArrVal_exp _dfs loc t _es = panicCgNonArray "cgArrVal_exp" loc t
+
+panicCgNonArray :: String -> SrcLoc -> Ty -> Cg a
+panicCgNonArray msg loc t = 
+  panic $ vcat [ text "cgArr" <+> text msg
+               , text "location: " <+> ppr loc
+               , text "non-array-type: " <+> ppr t ]
 
 
