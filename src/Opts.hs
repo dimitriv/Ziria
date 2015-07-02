@@ -63,6 +63,8 @@ data DynFlag =
   | DumpTypes
   | DumpAst
   | DumpAstPretty
+  | DumpAutomaton
+
   | Vectorize
   | AutoLUT
   | MaxLUTSize Integer -- ^ Max size of LUT, in bytes
@@ -165,6 +167,10 @@ options =
      , Option []    ["ddump-types"]      (NoArg DumpTypes)     "dump a typechecked version of program"
      , Option []    ["ddump-vect-types"] (NoArg DumpVectTypes) "dump typechecked vectorized program"
      , Option []    ["ddump-ast"]        (NoArg DumpAst)       "dump the parsed AST"
+
+     , Option []    ["ddump-automaton"]  (NoArg DumpAutomaton) "dump automaton for Atomix"
+
+
      , Option []    ["ddump-ast-pretty"] (NoArg DumpAstPretty) "dump the parsed AST (pretty-printed)"
      , Option []    ["vectorize"]        (NoArg Vectorize)     "vectorize program"
      , Option []    ["autolut"]          (NoArg AutoLUT)       "automatically convert function to use LUTs"

@@ -61,6 +61,8 @@ import qualified PassPipeline as PP
 import qualified Language.Ziria.Parser as P
 
 import AtomixCompTransform
+import AutomataModel
+import AtomInstantiation
 
 data CompiledProgram
   = CompiledProgram Comp [C.Definition] FilePath
@@ -244,13 +246,20 @@ main = do
         lc <- timedPhase dflags "runAutoLUTPhase" $ 
               runAutoLUTPhase dflags sym fc
 
+        when (isDynFlagSet dflags DumpAutomaton) $ do 
+          (ac,_rnst) <- zirToAtomZir sym lc
+          (automaton :: Automaton SymAtom Int) 
+             <- automatonPipeline dflags sym undefined undefined ac
+          dump dflags DumpAutomaton (".automaton-phase.dump")
+                                    (text $ dotOfAuto automaton)
+
 
         (cc_lc,st) <- timedPhase dflags "atomixCompTransform" $ 
                       atomixCompTransform sym lc
-
-        let lc' = if isDynFlagSet dflags ClosureConvert 
+        let lc' = if isDynFlagSet dflags ClosureConvert
                   then atomixCompToComp cc_lc st
                   else lc
+
 
         when (isDynFlagSet dflags ClosureConvert) $ 
           dump dflags DumpFold (".cc-phase.dump")

@@ -28,6 +28,13 @@ import AtomInstantiation
 import Debug.Trace
 import AtomixCompTransform ()
 
+import qualified GenSym as GS
+
+
+ 
+--  mkAutomaton undefined channels (traceShowId wifi) k
+-
+
 {- 
 atomixTest :: CompM () (Automaton FunLikeAtom Int)
 atomixTest = do

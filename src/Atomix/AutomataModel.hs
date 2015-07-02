@@ -509,3 +509,19 @@ dotOfAuto a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfix
     showNk (AutomataModel.Branch x _ _ False) = "IF<" ++ show x ++ ">"
     showNk Done = "DONE"
     showNk (Loop _) = "LOOP"
+
+
+{-------------------- Top-level pipeline ---------------------------}
+
+automatonPipeline :: Atom e => DynFlags -> GS.Sym -> Ty -> Ty -> AComp () () -> IO (Automaton e Int)
+automatonPipeline dfs sym inty outty acomp = do 
+ inch  <- freshName sym "src"  (acomp_loc acomp) inty Imm
+ outch <- freshName sym "snk" (acomp_loc acomp) outty Mut
+ let channels = Channels { in_chan = inch, out_chan = outch, ctrl_chan = Nothing }
+     k = mkDoneAutomaton inch outch
+ a <- mkAutomaton dfs sym channels acomp k
+ let a' = normalize_auto_ids 0 $ deleteDeadNodes $ fuseActions $ a
+ return a'
+
+
+

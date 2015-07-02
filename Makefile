@@ -41,8 +41,10 @@ create-sandbox:
 # A profiling sandbox 
 create-sandbox-prof:
 	cabal sandbox init
+	cabal install --dependencies-only --enable-executable-profiling --enable-library-profiling
+
 	cabal configure --enable-executable-profiling --enable-library-profiling
-	cabal install --dependencies-only
+#	cabal install --dependencies-only
 
 
 clean:
