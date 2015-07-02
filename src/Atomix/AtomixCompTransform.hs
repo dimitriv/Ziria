@@ -2,6 +2,7 @@
 module AtomixCompTransform (
   atomixCompTransform, 
   atomixCompToComp,
+  zirToAtomZir,
   RnSt ( .. ) 
   ) where
 
@@ -9,27 +10,21 @@ import AstExpr
 import AstComp
 import AstUnlabelled
 import Utils
-
 import Control.Applicative ( (<$>) )
 import Outputable 
-
 import Data.Maybe ( fromJust, isJust )
-
 import qualified Data.Set as S
-
 import Control.Monad.State
 import Data.Loc
-
 import Text.PrettyPrint.HughesPJ
-
 import qualified GenSym as GS
-
 import Data.List ( nub )
-
 import CtExpr 
 import CtComp
-
 import TcRename 
+import AtomComp 
+import Data.Char ( isAlphaNum )
+
 
 {----------- A-normal forms --------------}
 
@@ -60,32 +55,38 @@ alphaNorm sym = mapCompM return return return return return action
       | While e c1 <- unComp c
       , let loc = compLoc c
       = do x <- freshName sym "while_cond" loc (ctExp e) Imm
-           return $ cLetERef loc x (Just e) $
-                    cWhile loc (eVar loc x) 
-                      (cSeq loc c1 (cReturn loc AutoInline (eAssign loc (eVar loc x) e)))
+           return $ 
+             cLetERef loc x (Just e) $
+               cWhile loc (eVar loc x) 
+                  (cSeq loc c1 
+                     (cReturn loc AutoInline (eAssign loc (eVar loc x) e)))
 
       | Until e c1 <- unComp c
       , let loc = compLoc c
       = do x <- freshName sym "until_cond" loc (ctExp e) Imm
-           return $ cLetERef loc x Nothing $
-                    cUntil loc (eVar loc x) 
-                      (cSeq loc c1 (cReturn loc AutoInline (eAssign loc (eVar loc x) e)))
+           return $ 
+             cLetERef loc x Nothing $
+               cUntil loc (eVar loc x) 
+                  (cSeq loc c1 
+                     (cReturn loc AutoInline (eAssign loc (eVar loc x) e)))
 
       | Times _ui _estart elen _cnt _c1 <- unComp c
       , EVal {} <- unExp elen
       = return c -- Static times => translate to static loops in atomix
       | Times _ui estart elen cnt c1 <- unComp c
       , let loc = compLoc c 
-      = do x_bound <- freshName sym "times_bound" loc (ctExp elen) Imm
-           let cond_expr   = eBinOp loc Lt (eVar loc cnt) (eVar loc x_bound) -- cnt < x_bound
+      = do x_bnd <- freshName sym "times_bound" loc (ctExp elen) Imm
+           let cond_expr   = eBinOp loc Lt (eVar loc cnt) 
+                                           (eVar loc x_bnd) -- cnt < x_bound
                cnt_expr    = eVar loc cnt
                TInt _bw sn = nameTyp cnt
                one         = eVal loc (nameTyp cnt) (VInt 1 sn)
                upd_cntr    = eAssign loc cnt_expr (eBinOp loc Add cnt_expr one)
 
            cLetERef loc cnt (Just estart) <$> 
-             cLetE loc x_bound AutoInline (eBinOp loc Add (eVar loc cnt) elen) <$>
-             action (cWhile loc cond_expr (cSeq loc c1 (cReturn loc AutoInline upd_cntr)))
+            cLetE loc x_bnd AutoInline (eBinOp loc Add (eVar loc cnt) elen) <$>
+             action (cWhile loc cond_expr 
+                       (cSeq loc c1 (cReturn loc AutoInline upd_cntr)))
 
       | Map v fn <- unComp c
       , TArrow [argty] _resty <- nameTyp fn
@@ -281,5 +282,94 @@ atomixCompToComp comp (RnSt { st_letref_vars = letrefs
        str_c = foldr (cLetStruct loc) fun_c (map snd strdefs)
        funs = reverse $ map (\(_,(fun,_)) -> fun) fundefs
        loc  = compLoc comp
+
+
+
+zirToAtomZir :: GS.Sym -> Comp -> IO (AComp () (), RnSt)
+zirToAtomZir sym comp = do
+  -- Closure convert and lift
+  (comp0,rnst) <- atomixCompTransform sym comp 
+  -- Transform lifted
+  (acomp,xs) <- runStateT (transLifted sym comp0) []
+  return (acomp,rnst { st_letref_vars = st_letref_vars rnst ++ xs } )
+
+
+transLiftedExp :: GS.Sym -> Exp -> IO (AExp ())
+transLiftedExp sym e = do 
+  u <- GS.genSymStr sym
+  let block_id = to_lbl (show (expLoc e)) ++ "_block_" ++ u
+      expvars  = S.toList (exprFVs' False e)
+      mutvars  = filter isMutable expvars
+      to_lbl   = map (\c -> if isAlphaNum c then c else '_')
+
+  return $ MkAExp { aexp_lbl = block_id
+                  , aexp_exp = e
+                  , aexp_ivs = expvars
+                  , aexp_ovs = mutvars
+                  , aexp_nfo = ()
+                  , aexp_ret = ctExp e 
+                  }
+
+transLifted :: GS.Sym -> Comp -> StateT [EId] IO (AComp () ())
+transLifted sym = go_comp 
+  where 
+    go_comp comp = go (unComp comp)
+      where 
+        loc = compLoc comp
+        go (Return _ e) = aReturn loc () <$> (liftIO $ transLiftedExp sym e)
+
+        go (Times _ estrt (MkExp (EVal _ (VInt i _)) _ _) cnt c) = do
+           let cnt_expr    = eVar loc cnt
+               TInt _bw sn = nameTyp cnt
+               one         = eVal loc (nameTyp cnt) (VInt 1 sn)
+               upd_cntr    = eAssign loc cnt_expr (eBinOp loc Add cnt_expr one)
+               asg_cntr    = eAssign loc cnt_expr estrt
+
+               c_upd       = cSeq loc c (cReturn loc AutoInline upd_cntr)
+           
+           a1 <- go_comp (cReturn loc AutoInline asg_cntr)
+           a2 <- aRepeatN loc () (fromIntegral i) <$> go_comp c_upd
+           -- Record the counter variable 
+           modify (\xs -> cnt:xs)        
+           -- and return 
+           return (aBind loc () Nothing a1 a2)
+
+
+        go (BindMany c1 []) = go_comp c1
+        go (BindMany c1 ((x,c2):xscs)) 
+           | x `S.notMember` (fst $ compFVs c2) -- not in c2 and not in xscs
+           , x `S.notMember` (S.unions (map (fst. compFVs. snd) xscs)) 
+           = liftM2 (aBind loc () Nothing) (go_comp c1) (go (BindMany c2 xscs))
+           | otherwise
+           = liftM2 (aBind loc () (Just x)) (go_comp c1) (go (BindMany c2 xscs))
+
+        go (Seq c1 c2)
+           = liftM2 (aBind loc () Nothing) (go_comp c1) (go_comp c2)
+
+        go (Par p c1 c2)
+           = liftM2 (aPar loc () p) (go_comp c1) (go_comp c2)
+
+        go (Emit (MkExp (EVar x) _ _))  = return $ aEmit1 loc () x
+        go (Emits (MkExp (EVar x) _ _)) = return $ aEmitN loc () x
+
+        go (Take1 t)  = return $ aTake1 loc () t
+        go (Take t n) = return $ aTakeN loc () t n
+
+        go (Until (MkExp (EVar x) _ _) c) = aUntil loc () x <$> go_comp c
+        go (While (MkExp (EVar x) _ _) c) = aWhile loc () x <$> go_comp c 
+
+        go (Repeat _ c) = aRepeat loc () <$> go_comp c
+        go (VectComp _ c) = go_comp c
+
+        go (Mitigate s t n1 n2) = return $ aMitigate loc () s t n1 n2
+        go (Standalone c) = go_comp c
+        go (Branch (MkExp (EVar x) _ _) c1 c2) 
+          = liftM2 (aBranch loc () x) (go_comp c1) (go_comp c2)
+        go (ReadSrc t)  = return $ aReadSrc loc () t
+        go (WriteSnk t) = return $ aWriteSnk loc () t
+        go _other = panic $ 
+                    vcat [ text "Unexpected comp in transLifted!"
+                         , nest 2 $ ppr comp
+                         ] 
 
 
