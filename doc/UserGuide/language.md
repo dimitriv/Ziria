@@ -1,22 +1,22 @@
-# Blink Language User Guide
+# Ziria Language User Guide
 
 
 
-## Blink by example
+## Ziria by example
 
-Blink is a 2-layer language: 
+Ziria is a 2-layer language: 
 
 1. The lower layer is the _expression_ language. It is a language with imperative fieatures, similar to C and Matlab, for manipulating basic data types, such as bits, bytes, integers, complex numbers, structured types, and arrays.
 
-2. The higher layer is the _computation_ language. The computation language is useful for structuring complex stream processing pipelines out of simpler stream processing blocks -- these blocks ultimately execute functions from the lower-level expression language fragment. The design of the computation language builds on the abstractions of _arrows_ and _monads_ from functional progamming, though familiarity with these concepts is definitely *not* a prerequisite for mastering Blink.
+2. The higher layer is the _computation_ language. The computation language is useful for structuring complex stream processing pipelines out of simpler stream processing blocks -- these blocks ultimately execute functions from the lower-level expression language fragment. The design of the computation language builds on the abstractions of _arrows_ and _monads_ from functional progamming, though familiarity with these concepts is definitely *not* a prerequisite for mastering Ziria.
 
 ### The scrambler example
-Here is a starter example with Blink, a simple implementation of a scrambler:
+Here is a starter example with Ziria, a simple implementation of a scrambler:
 
 ```gcc
 
 {-
-   A scrambler implementation. This is our first toy Blink program.
+   A scrambler implementation. This is our first toy Ziria program.
 -}
 
 fun comp scrambler() {
@@ -61,7 +61,7 @@ What is happening in the last line above? We have used the `>>>` combinator to s
 
 The fact that we pipe the output of the primitive `read` combinator to the input of the `scrambler()` block and its output to the input of the `write` block is clear from our use of `>>>` in-between these blocks. 
 
-Finally, a rule: *every Blink program must be performing `read` from some input and `write` to some output*. The Blink type checker will reject programs with unspecified input or output.
+Finally, a rule: *every Ziria program must be performing `read` from some input and `write` to some output*. The Ziria type checker will reject programs with unspecified input or output.
 
 Now, it is time to dive into the implementation of the scrambler.
 ```gcc
@@ -162,7 +162,7 @@ Our `map f` combinator simply applies an expression-level function `f` to every 
 
 ```
 fun f(x : int) {
-  var y : int = 42;
+  var y : int := 42;
   y := y + 1;
   return (x+y);
 }
@@ -175,7 +175,7 @@ on. For the moment you may think of them as ordinary C functions.
 
 For computations that are structured as sequences of `take`-ing one element, `do`-ing some computation without keeping local state and `emit`-ing the result on the output, it is recommended that they are structured as `map`s of
 some function, because this fuses 3 dataflow processing blocks to just one so the execution overheads are smaller. 
-That said, the Blink compiler will typically detect and optimize this pattern anyway. 
+That said, the Ziria compiler will typically detect and optimize this pattern anyway. 
 	
 
 #### `while`: Running computations until some condition is met
@@ -208,7 +208,7 @@ fun comp f(x : int) {
   var y : int := 0;
       { a <-     { do { y := y + x; }
                  ; z <- take
-                 ; emit (z+y);
+                 ; emit (z+y)
                  ; return y
                  }
       ; emit a
@@ -223,7 +223,7 @@ value. That updated value becomes the return value of the whole sub-sequence
 ```
     { do { y := y + x; }
     ; z <- take
-    ; emit (z+y);
+    ; emit (z+y)
     ; return y
     }
 ```
@@ -248,8 +248,7 @@ let comp main = read >>> f() >>> write
 
 In `seq`-uence, we first consume an element from the input stream with `x <- take`. Subsequently, if `x > 0`
 then we emit an element in the output stream (`emit (x+1)`), or `return` control otherwise. The effect of this
-computer is that it will keep on incrementing all positive values of the input stream and emitting those to the
-output stream. However, once it meets the first non-positive one the whole computation will stop.
+computer is that it will take the first value, increment it if it is positive, and do nothing if it is non-positive.
 
 What will the following code do then?
 
@@ -261,14 +260,14 @@ It will run `f()` to completion, that is, incrementing all positive input values
 
 #### `for`: loops
 
-Blink provides a simple looping structure where you do not have to provide the increment value.
+Ziria provides a simple looping structure where you do not have to provide the increment value.
 
 ```
 fun comp f() {
   for n in [0:4]
     { x <- take; emit x }
 }
-fun comp g(y : inr) }
+fun comp g(y : int) {
   for n in [0,y]
     emit n -- n is bound in the body
 }
