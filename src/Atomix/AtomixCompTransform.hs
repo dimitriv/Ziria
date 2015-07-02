@@ -3,6 +3,7 @@ module AtomixCompTransform (
   atomixCompTransform, 
   atomixCompToComp,
   zirToAtomZir,
+  freshName, 
   RnSt ( .. ) 
   ) where
 
@@ -346,11 +347,17 @@ transLifted sym = go_comp
         go (Seq c1 c2)
            = liftM2 (aBind loc () Nothing) (go_comp c1) (go_comp c2)
 
+
         go (Par p c1 c2)
-           = liftM2 (aPar loc () p) (go_comp c1) (go_comp c2)
+          | ReadSrc {} <- unComp c1 = go_comp c2
+          | WriteSnk {} <- unComp c2 = go_comp c1
+          | otherwise
+          = liftM3 (aPar loc () p) (go_comp c1) (return t) (go_comp c2)
+            where t = yldTyOfCTy (ctComp c1)
 
         go (Emit (MkExp (EVar x) _ _))  = return $ aEmit1 loc () x
-        go (Emits (MkExp (EVar x) _ _)) = return $ aEmitN loc () x
+        go (Emits (MkExp (EVar x) _ _)) = return $ aEmitN loc () t n x
+          where TArray (Literal n) t = nameTyp x
 
         go (Take1 t)  = return $ aTake1 loc () t
         go (Take t n) = return $ aTakeN loc () t n
@@ -361,12 +368,36 @@ transLifted sym = go_comp
         go (Repeat _ c) = aRepeat loc () <$> go_comp c
         go (VectComp _ c) = go_comp c
 
-        go (Mitigate s t n1 n2) = return $ aMitigate loc () s t n1 n2
+        go (Mitigate s t 1 1)  
+          = return $ aRepeat loc () $ aCast loc () s (1,t) (1,t)
+        go (Mitigate s t n1 1) 
+          = return $ aRepeat loc () $ 
+            aCast loc () s (1, TArray (Literal n1) t) (n1,t)
+        go (Mitigate s t 1 n2) 
+          = return $ aRepeat loc () $
+            aCast loc () s (n2,t) (1,TArray (Literal n2) t)
+
+        go (Mitigate s t n1 n2)
+          | n1 `mod` n2 == 0 -- n1 = k*n2
+          , let k = n1 `div` n2
+          = return $ aRepeat loc () $ 
+            aCast loc () s (1,TArray (Literal n1) t) (k,TArray (Literal n2) t)
+
+          | n2 `mod` n1 == 0
+          , let k = n2 `div` n1
+          = return $ aRepeat loc () $ 
+            aCast loc () s (k,TArray (Literal n1) t) (1,TArray (Literal n2) t)
+   
+          | otherwise
+          = panicStr "Ill typed mitigate node during Atomix translation!"
+                   
         go (Standalone c) = go_comp c
         go (Branch (MkExp (EVar x) _ _) c1 c2) 
           = liftM2 (aBranch loc () x) (go_comp c1) (go_comp c2)
-        go (ReadSrc t)  = return $ aReadSrc loc () t
-        go (WriteSnk t) = return $ aWriteSnk loc () t
+
+        go (ReadSrc _t)  = panicStr "Standalone ReadSrc!?"  
+        go (WriteSnk _t) = panicStr "Standalone WriteSnk!?"
+
         go _other = panic $ 
                     vcat [ text "Unexpected comp in transLifted!"
                          , nest 2 $ ppr comp

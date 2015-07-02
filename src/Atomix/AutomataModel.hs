@@ -18,12 +18,14 @@ import Debug.Trace
 import Control.Monad.Reader
 import Control.Monad.State
 
-import AtomComp -- simplified Ziria model
-import AstExpr (nameTyp, name)
+import AtomComp
+import AstExpr
 import Opts
+import AtomixCompTransform ( freshName )
 
-type Chan = Var
+import qualified GenSym as GS
 
+type Chan = EId
 
 data NodeKind atom nid
   = Action { action_atoms :: [WiredAtom atom]
@@ -68,8 +70,8 @@ data Automaton atom nid
 
 
 data WiredAtom atom
-  = WiredAtom { wires_in  :: [(Int,Var)]
-              , wires_out :: [(Int,Var)]
+  = WiredAtom { wires_in  :: [(Int,EId)]
+              , wires_out :: [(Int,EId)]
               , the_atom  :: atom
               }
 
@@ -88,11 +90,11 @@ class Show a => Atom a where
   atomOutTy :: a -> [(Int,Ty)]
 
   -- Constructors of atoms
-  discardAtom :: Ty -> a
+  discardAtom :: (Int,Ty) -> a
   castAtom    :: (Int,Ty) -> (Int,Ty) -> a
 
   -- Getting (wired) atoms from expressions
-  expToWiredAtom :: Exp b -> Maybe Var -> WiredAtom a
+  expToWiredAtom :: AExp () -> Maybe EId -> WiredAtom a
 
   idAtom      :: Ty -> a
   idAtom t = castAtom (1,t) (1,t)
@@ -213,90 +215,111 @@ data Channels = Channels { in_chan   :: Chan
 
 mkAutomaton :: Atom e
             => DynFlags
+            -> GS.Sym
             -> Channels  -- i/o/ctl channel
-            -> Comp a b
+            -> AComp a ()
             -> Automaton e Int -- what to do next (continuation)
-            -> CompM a (Automaton e Int)
-mkAutomaton dfs chans comp k = go (unComp comp)
+            -> IO (Automaton e Int)
+mkAutomaton dfs sym chans comp k = go (acomp_comp comp)
   where
-    go (Take1 t) =
+    loc = acomp_loc comp
+    go (ATake1 t) =
       let inp = [(1,in_chan chans)]
           outp = map (1,) $ maybeToList (ctrl_chan chans)
-          atom = maybe (discardAtom t) (\_ -> idAtom t) (ctrl_chan chans)
+          atom = maybe (discardAtom (1,t)) (\_ -> idAtom t) (ctrl_chan chans)
           nkind = Action [WiredAtom inp outp atom] (auto_start k)
       in return $ insert_prepend nkind k
 
-    go (TakeN _ n) = fail "not implemented"
+    go (ATakeN t n) = 
+       let inp  = [(n,in_chan chans)]
+           outp = map (1,) $ maybeToList (ctrl_chan chans)
+           outty = TArray (Literal n) t 
+           atom = maybe (discardAtom (n,t)) (\_ -> castAtom (n,t) (1,outty)) (ctrl_chan chans)
+           nkind = Action [WiredAtom inp outp atom] (auto_start k)
+       in return $ insert_prepend nkind k
 
-    go (Emit1 x) =
+    go (AEmit1 x) =
       let inp = [(1, x)]
           outp = [(1, out_chan chans)]
           atom = idAtom (nameTyp x)
           nkind = Action [WiredAtom inp outp atom] (auto_start k)
       in return $ insert_prepend nkind k
 
-    go (EmitN x) = fail "not implemented"
+    go (AEmitN t n x) =
+      let inp = [(1, x)]
+          outp = [(n, out_chan chans)]
+          atom = castAtom (1, nameTyp x) (n,t)
+          nkind = Action [WiredAtom inp outp atom] (auto_start k)
+      in return $ insert_prepend nkind k
 
+    go (ACast s (n1,t1) (n2,t2)) =
+      let inp  = [(n1, in_chan chans)]
+          outp = [(n2, out_chan chans)]
+          atom = castAtom (n1,t1) (n2,t2)
+          nkind = Action [WiredAtom inp outp atom] (auto_start k)
+      in return $ insert_prepend nkind k
+
+ 
+{- 
     go (MapOnce f closure) =
       let args = in_chan chans : closure
           expr = MkExp (ExpApp f args) noLoc ()
           watom = expToWiredAtom expr (Just $ out_chan chans)
           nkind = Action [watom] (auto_start k)
       in return $ insert_prepend nkind k
+-}
 
-    go (Return e) =
+    go (AReturn e) =
       let watom = expToWiredAtom e (ctrl_chan chans)
           nkind = Action [watom] (auto_start k)
       in return $ insert_prepend nkind k
 
-    go (NewVar x_spec c) = mkAutomaton dfs chans c k -- NOP for now
 
-    go (Bind mbx c1 c2) = do
-      a2 <- mkAutomaton dfs chans c2 k
-      mkAutomaton dfs (chans { ctrl_chan = mbx }) c1 a2
+    go (ABind mbx c1 c2) = do
+      a2 <- mkAutomaton dfs sym chans c2 k
+      mkAutomaton dfs sym (chans { ctrl_chan = mbx }) c1 a2
 
-    go (Par _ c1 c2) = do
-      -- TODO: insert right type
-      transfer_ch <- freshVar "transfer" undefined Mut
+    go (APar _ c1 t c2) = do
+      transfer_ch <- freshName sym "transfer" loc t Mut
       let k1 = mkDoneAutomaton (in_chan chans) transfer_ch
       let k2 = mkDoneAutomaton transfer_ch (out_chan chans)
-      a1 <- mkAutomaton dfs (chans {out_chan = transfer_ch}) c1 k1
-      a2 <- mkAutomaton dfs (chans {in_chan = transfer_ch}) c2 k2
+      a1 <- mkAutomaton dfs sym (chans {out_chan = transfer_ch}) c1 k1
+      a2 <- mkAutomaton dfs sym (chans {in_chan = transfer_ch}) c2 k2
       return $ zipAutomata a1 a2 k
 
-    go (AtomComp.Branch x c1 c2) = do
-      a1 <- mkAutomaton dfs chans c1 k
-      a2 <- mkAutomaton dfs chans c2 k
+    go (ABranch x c1 c2) = do
+      a1 <- mkAutomaton dfs sym chans c1 k
+      a2 <- mkAutomaton dfs sym chans c2 k
       let nkind = AutomataModel.Branch x (auto_start a1) (auto_start a2) False
       return $ insert_prepend nkind k
 
-    go (RepeatN n c) = applyN n (mkAutomaton dfs chans c) k
+    go (ARepeatN n c) = applyN n (mkAutomaton dfs sym chans c) k
       where applyN 0 f x = return x
             applyN n f x = do
               y <- applyN (n-1) f x
               f y
 
-    go (Repeat c) =
+    go (ARepeat c) =
       case nodeKindOfId (auto_start k) k of
         Done -> do
-          a <- mkAutomaton dfs chans c k
+          a <- mkAutomaton dfs sym  chans c k
           let nid = auto_start k
           let node = fromJust $ Map.lookup (auto_start a) (auto_graph a) -- Loop (auto_start a)
           let nmap = Map.insert nid node $ Map.delete (auto_start a) (auto_graph a)
           return $ map_auto_ids (\id -> if id == (auto_start a) then nid else id) $ a { auto_start = nid, auto_graph = nmap }
         _ -> fail "Repeat should not have a continuation!"
 
-    go (While x c) = do
+    go (AWhile x c) = do
       let k' = insert_prepend Done k
       let nid = auto_start k'
-      a <- mkAutomaton dfs chans c k'
+      a <- mkAutomaton dfs sym chans c k'
       let nkind = AutomataModel.Branch x (auto_start a) (auto_start k) True
       return $ a { auto_start = nid, auto_graph = Map.insert nid (Node nid nkind) (auto_graph a)}
 
-    go (Until x c) = do
+    go (AUntil x c) = do
       let k' = insert_prepend Done k
       let nid = auto_start k'
-      a <- mkAutomaton dfs chans c k'
+      a <- mkAutomaton dfs sym chans c k'
       let nkind = AutomataModel.Branch x (auto_start a) (auto_start k) True
       return $ a { auto_graph = Map.insert nid (Node nid nkind) (auto_graph a)}
 

@@ -26,10 +26,9 @@ import AutomataModel
 import AtomInstantiation
 
 import Debug.Trace
-
 import AtomixCompTransform ()
 
-
+{- 
 atomixTest :: CompM () (Automaton FunLikeAtom Int)
 atomixTest = do
   wifi <- mkWifi
@@ -38,8 +37,11 @@ atomixTest = do
   let channels = Channels { in_chan = inch, out_chan = outch, ctrl_chan = Nothing }
       k = mkDoneAutomaton inch outch
   mkAutomaton undefined channels (traceShowId wifi) k
+-}
 
 main :: IO ()
+main = return () 
+{- 
 main = do 
   (a,_) <- runCompM atomixTest
   let a' = normalize_auto_ids 0 $ deleteDeadNodes $ fuseActions $ a
@@ -47,3 +49,4 @@ main = do
   putStrLn $ show a'
   writeFile "automaton.dot" $ dotOfAuto a'
   return ()
+-}
