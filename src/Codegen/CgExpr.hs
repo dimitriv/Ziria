@@ -35,7 +35,7 @@ import CgTypes
 import CgLUT
 import Utils
 import CtExpr
-import {-# SOURCE #-} CgCall
+import CgCall
 
 import Outputable
 
