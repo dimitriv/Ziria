@@ -130,7 +130,7 @@ nextNid a = max+1
   where (max,_) = Map.findMax (auto_graph a)
 
 insert_prepend :: NodeKind atom Int -> Automaton atom Int -> Automaton atom Int
-insert_prepend nkind a =
+insert_prepend nkind a = ensure auto_closed $
   a { auto_graph = Map.insert nid (Node nid nkind) (auto_graph a)
     , auto_start = nid }
   where nid = nextNid a
@@ -205,6 +205,12 @@ auto_closed a = Map.foldWithKey node_closed (isDefined $ auto_start a) (auto_gra
 ensure :: (a -> Bool) -> a -> a
 ensure f x = assert (f x) x
 
+ensureM :: Functor m => (a -> Bool) -> m a -> m a
+ensureM f = fmap (ensure f)
+
+traceShowId' :: Show a => a -> a
+traceShowId' = trace "\n" . traceShowId . trace "\n"
+
 
 -- Constructing Automata from Ziria Comps
 
@@ -220,7 +226,7 @@ mkAutomaton :: Atom e
             -> AComp a ()
             -> Automaton e Int -- what to do next (continuation)
             -> IO (Automaton e Int)
-mkAutomaton dfs sym chans comp k = go (acomp_comp comp)
+mkAutomaton dfs sym chans comp k = ensureM auto_closed $ go (acomp_comp comp)
   where
     loc = acomp_loc comp
     go (ATake1 t) =
