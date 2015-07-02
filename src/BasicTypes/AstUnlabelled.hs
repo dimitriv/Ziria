@@ -24,7 +24,6 @@ import Prelude hiding (pi)
 import Data.Loc
 import AstExpr
 import AstComp
-import {-# SOURCE #-} LUTAnalysis
 
 {-------------------------------------------------------------------------------
   Values

@@ -31,7 +31,6 @@ import CtExpr
 import {-# SOURCE #-} CgExpr
 import CgMonad
 import CgTypes
-import Analysis.DataFlow
 import Control.Applicative ( (<$>) )
 import Data.Loc
 import Data.Maybe ( isJust, catMaybes, fromJust )
