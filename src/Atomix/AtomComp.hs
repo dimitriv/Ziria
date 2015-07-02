@@ -101,10 +101,10 @@ aUntil loc a x c = MkAComp loc a (AUntil x c)
 
 
 
-ppAComp  :: (Outputable a, Outputable b) => AComp a b -> Doc
+ppAComp  :: AComp a b -> Doc
 ppAComp ac = ppAComp0 (acomp_comp ac)
 
-ppAComp0 :: (Outputable a, Outputable b) => AComp0 a b -> Doc
+ppAComp0 :: AComp0 a b -> Doc
 ppAComp0 (ATake1 t)   = text "take" <> brackets (ppr t)
 ppAComp0 (ATakeN t n) = text "takes" <+> int n
 ppAComp0 (AEmit1 x)   = text "emit" <+> ppr x
@@ -129,10 +129,10 @@ ppAComp0 (AWhile x c)   = text "while" <> parens (ppr x) <> braces (ppr c)
 ppAComp0 (AUntil x c)   = text "do-unitl" <> parens (ppr x) <> braces (ppr c)
 
 
-instance (Outputable a, Outputable b) => Outputable (AComp a b) where
+instance Outputable (AComp a b) where
   ppr = ppAComp
 
-instance (Outputable a, Outputable b) => Show (AComp a b) where
+instance Show (AComp a b) where
   show = render . ppr 
 
 {-
