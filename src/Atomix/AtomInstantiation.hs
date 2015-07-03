@@ -25,9 +25,9 @@ instance Outputable SymAtom where
 
   ppr (SACast (n1,t1) (n2,t2)) 
     | t1 == t2  = assert (n1 == n2) (text "ID")
-    | otherwise = brackets (int n1 <> (text "*") <> parens (ppr t1)) <> 
-                  (text "-CAST") <> (text "-") <> 
-                  brackets (int n2 <> (text "*") <> parens (ppr t2))
+    | otherwise = parens (pprTy n1 t1) <> text "-CAST-" <> parens (pprTy n2 t2)
+    where pprTy 1 t = ppr t
+          pprTy n t = ppr n <> text "*" <> ppr t
 
   ppr (SADiscard _) = text "DISCARD"
 
