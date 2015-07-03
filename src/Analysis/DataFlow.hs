@@ -37,14 +37,12 @@ import qualified Data.Set as Set
 import Text.PrettyPrint.HughesPJ
 import Data.List ( nub )
 import AstExpr
-import Outputable 
 import Opts
 import AbsInt
 import NameEnv
-import Data.Data (Data)
-import Data.Typeable (Typeable)
 import qualified Analysis.RangeAnal as RA
 import Orphans ()
+
 
 type VarSet = Set (GName Ty)
 
@@ -209,14 +207,6 @@ deriving instance Monad   (AbsT DFM)
 deriving instance MonadIO (AbsT DFM)
 
 
-data VarUsePkg 
-  = VarUsePkg { vu_invars   :: [EId]
-              , vu_outvars  :: [EId]
-              , vu_allvars  :: [EId]
-              , vu_ranges   :: RA.RngMap }
-  deriving (Typeable, Data, Eq, Ord) 
-
-
 inOutVars :: DynFlags -> Exp -> ErrorT Doc IO VarUsePkg
 inOutVars dfs e = do
   (varset, DFState udmap ufset) <- runDFM (unAbsT action)
@@ -233,11 +223,3 @@ inOutVars dfs e = do
                      , vu_ranges  = ranges }
   where action :: AbsT DFM VarSet
         action = absEvalRVal e
-
-pprVarUsePkg :: VarUsePkg -> Doc
-pprVarUsePkg (VarUsePkg invars outvars allvars rmap)
-  = vcat [ text "  input variables:" <+> ppr invars
-         , text " output variables:" <+> ppr outvars
-         , text "    all variables:" <+> ppr allvars
-         , text "      ranges used:" <+> RA.pprRanges rmap
-         ]

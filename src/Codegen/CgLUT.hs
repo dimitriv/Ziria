@@ -22,16 +22,14 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# OPTIONS_GHC -Wall #-}
 
-module CgLUT ( codeGenLUTExp, cgPrintVars ) where
+module CgLUT ( codeGenLUTExp ) where
 
 import Opts
 import AstExpr
 import AstUnlabelled
 import CtExpr
-import {-# SOURCE #-} CgExpr
 import CgMonad
 import CgTypes
-import Analysis.DataFlow
 import Control.Applicative ( (<$>) )
 import Data.Loc
 import Data.Maybe ( isJust, catMaybes, fromJust )
@@ -301,25 +299,26 @@ unpack_out_var pkg (v, Just {}) src pos = do
    Compile an epxression to LUTs
 ---------------------------------------------------------------------------}
 
-codeGenLUTExp :: DynFlags
+codeGenLUTExp :: CodeGen   -- ^ Main code generator 
+              -> DynFlags
               -> LUTStats  -- ^ LUT stats for the expression to LUT-compile
               -> Exp       -- ^ The expression to LUT-compile
               -> Maybe EId -- ^ If set then use this variable as output
               -> Cg C.Exp
-codeGenLUTExp dflags stats e mb_resname
+codeGenLUTExp cg_expr dflags stats e mb_resname
 
     -- | We simply cannot LUT, fullstop.
   | Left err <- lutShould stats
   = do let msg = text "Compiling without LUT."
        verbose dflags $ cannot_lut (text err) msg
-       codeGenExp dflags e
+       cg_expr dflags e
 
     -- | Below we were forced to LUT although analysis recommends we don't
   | Right False <- lutShould stats
   , lutTableSize stats >= aBSOLUTE_MAX_LUT_SIZE
   = do let msg = text "LUT size way too large, compiling without LUT!"
        verbose dflags $ cannot_lut empty msg
-       codeGenExp dflags e
+       cg_expr dflags e
 
     -- | Otherwise just LUT it
   | otherwise = lutIt
@@ -338,7 +337,7 @@ codeGenLUTExp dflags stats e mb_resname
     -- ^ Call genLUT, but use existing LUT if we have compiled
     -- ^ this expression before to a LUT.
     hashGenLUT
-      | isDynFlagSet dflags NoLUTHashing = genLUT dflags stats e
+      | isDynFlagSet dflags NoLUTHashing = genLUT cg_expr dflags stats e
       | otherwise
       = do hs <- getLUTHashes
            let h = H.hash (show e)
@@ -356,7 +355,7 @@ codeGenLUTExp dflags stats e mb_resname
                       , nest 4 $ vcat [ text "LUT stats"
                                       , ppr stats ] ]
 
-               lgi <- genLUT dflags stats e
+               lgi <- genLUT cg_expr dflags stats e
                setLUTHashes $ (h,lgi):hs
                return lgi
 
@@ -366,26 +365,6 @@ codeGenLUTExp dflags stats e mb_resname
       -- Do generate LUT lookup code.
       genLUTLookup dflags (expLoc e) stats clut (ctExp e) mb_resname
 
-
-cgPrintVars :: DynFlags -> SrcLoc -> VarUsePkg -> Cg a -> Cg a
-cgPrintVars dflags loc vpkg action = do
-  cg_print_vars dflags "Invars" loc (vu_invars vpkg)
-  r <- action
-  cg_print_vars dflags "Outvars" loc (vu_outvars vpkg)
-  return r
-
-cg_print_vars :: DynFlags -> String -> SrcLoc -> [EId] -> Cg ()
-cg_print_vars dflags dbg_ctx loc vs
-  | isDynFlagSet dflags Verbose
-  = do appendStmt $ [cstm| printf("%s> cg_print_vars: %s\n", $string:(dbg_ctx), $string:(displayLoc (locOf loc)));|]
-       sequence_ $ map (codeGenExp dflags . print_var) vs
-  | otherwise
-  = return ()
-  where
-    preamb = dbg_ctx ++ ">   "
-    print_var v = ePrint loc True $ 
-                  [ eVal loc TString (VString (preamb ++ show v ++ ":"))
-                  , eVar loc v ]
 
 {---------------------------------------------------------------------------
    Generate the code for looking up a LUT value
@@ -453,11 +432,12 @@ store_var (Just res_var) ety cres = do
    Generate the code for generating a LUT 
 ---------------------------------------------------------------------------}
 
-genLUT :: DynFlags
+genLUT :: CodeGen        -- ^ Main code generator
+       -> DynFlags
        -> LUTStats       -- ^ LUT stats and info
        -> Exp            -- ^ The expression to LUT
        -> Cg LUTGenInfo  -- ^ Generated LUT handles
-genLUT dflags stats e = do
+genLUT cg_expr dflags stats e = do
    let vupkg = lutVarUsePkg stats
        ety   = ctExp e
        -- NB: ety is a non-nested array (if an array), see LUTAnalysis
@@ -496,7 +476,7 @@ genLUT dflags stats e = do
 
          -- | Instrument e and compile
          e' <- lutInstrument mask_eids e
-         ce <- codeGenExp dflags e'
+         ce <- cg_expr dflags e'
          clut_fin <- packOutVars vupkg mask_eids [cexp| $id:clutentry|]
 
          -- | For debugging let us try to unpack to the outvars

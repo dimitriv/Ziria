@@ -63,13 +63,10 @@ import Control.Monad.State
 import Control.Monad.Error
 
 import NameEnv ( neLookup )
-
 import Analysis.DataFlow
-import Analysis.RangeAnal 
-
 import Data.Maybe ( isJust )
-
 import Utils ( assert )
+
 
 {------------------------------------------------------------------
   Bitwidths of various types needed for LUT
@@ -103,44 +100,6 @@ tyBitWidth_ByteAlign ty = do
   w <- tyBitWidth ty
   return $ ((w + 7) `div` 8) * 8
 
-
-{------------------------------------------------------------------
-  LUT statistics
--------------------------------------------------------------------}
-
--- | LUT statistics
-data LUTStats = LUTStats { 
-     lutInBitWidth      :: Integer   -- ^ Index bitwidth
-   , lutOutBitWidth     :: Integer   -- ^ Total output bitwidth (contains result!)
-   , lutResultBitWidth  :: Integer   -- ^ Result bitwidth
-   , lutTableSize       :: Integer   -- ^ Size needed (in bytes)
-   , lutVarUsePkg       :: VarUsePkg -- ^ Var use info
-
-     -- | If @lutResultInOutVars = Just v@ then 
-     --   (a) @v@ is the result variable
-     --   (b) and is in @vu_outvars lutVarUsePkg@
-   , lutResultInOutVars :: Maybe EId
-   , lutShould          :: Either String Bool -- ^ Should we LUT?
-   } 
-   deriving (Eq, Ord)
-
-instance Outputable LUTStats where
-  ppr s = vcat $
-      [ pprVarUsePkg (lutVarUsePkg s)
-      , text "   result bitsize:" <+> resdoc
-      , text "    input bitsize:" <+> ppr (lutInBitWidth s)
-      , text "   output bitsize:" <+> ppr (lutOutBitWidth s)
-      , text "lut size in bytes:" <+> ppr (lutTableSize s)
-      , text " should be lutted:" <+> should (lutShould s) 
-      ]
-   where
-    should :: Either String Bool -> Doc
-    should (Left err)    = text "No, because" <+> text err
-    should (Right False) = text "No"
-    should (Right True)  = text "Yes"
-    resdoc = if isJust $ lutResultInOutVars s
-             then text "included in output variables"
-             else ppr (lutResultBitWidth s)
 
 calcLUTStats :: DynFlags
              -> Exp -> IO (Either Doc LUTStats)

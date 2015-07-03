@@ -25,19 +25,13 @@
 module Analysis.RangeAnal 
      ( Range ( .. )
      , Interval, IVal ( .. ), Iv ( .. )
-     , RngMap
-     , pprRanges
      , varRanges
      )
 where
 
 import Control.Applicative
-import Control.DeepSeq.Generics (NFData(..), genericRnf)
 import Control.Monad.Error
 import Control.Monad.State
-import Data.Data (Data)
-import Data.Typeable (Typeable)
-import GHC.Generics (Generic)
 import Text.PrettyPrint.HughesPJ
 
 import AstExpr
@@ -79,23 +73,6 @@ structs) is conservative (TODO: improve)
   Intervals
 -------------------------------------------------------------------------------}
 
-data IVal v = IUnknown | IKnown v
-  deriving (Generic, Typeable, Data, Eq, Show, Ord)
-
-instance Monad IVal where
-  return a = IKnown a
-  m >>= f  = case m of 
-    IUnknown -> IUnknown
-    IKnown x -> f x
-
--- Boilerplate
-instance Functor IVal where
-    fmap f x = x >>= return . f
-instance Applicative IVal where
-    pure   = return
-    (<*>)  = ap
-
-
 iv_join_discrete :: Eq v => IVal v -> IVal v -> IVal v
 iv_join_discrete IUnknown _ = IUnknown
 iv_join_discrete _ IUnknown = IUnknown
@@ -111,10 +88,6 @@ rint_widen (IKnown i) | i >= 512  = IUnknown
                       | i < 0     = IUnknown
                       | otherwise = IKnown i 
 
--- | Intervals
-data Iv = Iv Integer Integer  -- i1 <= i2
-        | IvEmpty
-  deriving (Generic, Typeable, Data, Eq, Ord, Show)
 
 ivEmpty :: IVal Iv
 ivEmpty = IKnown IvEmpty
@@ -125,14 +98,6 @@ ivIv i j = IKnown (Iv (fromIntegral i)(fromIntegral j))
 ivUnknown :: IVal Iv
 ivUnknown = IUnknown
 
-
-instance NFData Iv where
-  rnf = genericRnf
-
-type Interval = IVal Iv
-
-instance NFData Interval where
-  rnf = genericRnf
 
 -- | Used to find an over approximation of the interval
 ijoin :: Interval -> Interval -> Interval 
@@ -171,13 +136,6 @@ ijoin_pcs (IKnown IvEmpty) (IKnown iv) = IKnown iv
 {----------------------------------------------------------------------
   The Range
 ----------------------------------------------------------------------}
--- | Range
-data Range 
-  = RInt  (IVal Integer)    -- integers
-  | RBool (IVal Bool)       -- booleans
-  | RArr Interval Interval  -- arrays
-  | ROther                  -- other but also equivalent to bottom
-  deriving (Generic, Typeable, Data, Eq, Show, Ord)
 
 -- Don't even construct integers above a certain threshold
 mkRInt :: IVal Integer -> Range
@@ -284,8 +242,6 @@ instance ValDom Range where
 {--------------------------------------------------------------------
   Abstract interpreter for commands
 ---------------------------------------------------------------------}
-
-type RngMap = NameMap Ty Range
 
 instance POrd Integer where 
   i1 `pleq` i2 = i1 <= i2
@@ -491,10 +447,6 @@ instance CmdDom Rng Range where
 ------------------------------------------------------------------------}
 deriving instance MonadState RngMap (AbsT Rng) 
 deriving instance Monad (AbsT Rng)
-
-pprRanges :: RngMap -> Doc
-pprRanges r = vcat $
-  map (\(k,v) -> ppr k <> char ':' <+> text (show v)) (neToList r)
 
 
 runRng :: Rng a -> ErrorT Doc IO (a, RngMap)

@@ -140,7 +140,7 @@ main = do
 
     when (isDynFlagSet dflags Debug) $ outputProgram c' (outFile ++ ".debug")
 
-    dump dflags DumpTypes ".type.dump" $ (text . show) (ppCompTyped c')
+    dump dflags DumpTypes ".type.dump" $ (text . show) (ppCompTyped ctComp c')
 
     -- First let us run some small-scale optimizations
     folded <- timedPhase dflags "runFoldPhase" $ 
@@ -234,10 +234,10 @@ main = do
            text "Result in file:" <+> text fn
         dump dflags DumpVect ".vec.dump" $
            vcat [ text "Result:"
-                , ppCompTypedVect c ]
+                , ppCompTypedVect ctComp c ]
         dump dflags DumpVectTypes ".vec-types.dump" $
            vcat [ text "Result (with types):" 
-                , ppCompTyped c ]
+                , ppCompTyped ctComp c ]
 
         -- Second round of folding
         fc <- timedPhase dflags "runFoldPhase (2nd round)" $ 

@@ -34,8 +34,7 @@ module NameEnv (
  , neJoinWith
 ) where 
 
-import AstExpr
-import PpExpr
+import AstName
 import Utils ( warn )
 import Text.PrettyPrint.HughesPJ
 import Outputable

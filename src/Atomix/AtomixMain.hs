@@ -33,7 +33,6 @@ import qualified GenSym as GS
 
  
 --  mkAutomaton undefined channels (traceShowId wifi) k
--
 
 {- 
 atomixTest :: CompM () (Automaton FunLikeAtom Int)
