@@ -3,6 +3,7 @@
 *~
 *.hi-boot
 *.o-boot
+*.dump
 .cabal-sandbox/
 cabal.sandbox.config
 tmp
