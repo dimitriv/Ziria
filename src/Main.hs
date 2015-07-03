@@ -251,7 +251,7 @@ main = do
           (automaton :: Automaton SymAtom Int) 
              <- automatonPipeline dflags sym undefined undefined ac
           dump dflags DumpAutomaton (".automaton-phase.dump")
-                                    (text $ dotOfAuto automaton)
+                                    (text $ dotOfAuto False automaton)
 
 
         (cc_lc,st) <- timedPhase dflags "atomixCompTransform" $ 

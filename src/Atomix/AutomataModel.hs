@@ -25,6 +25,8 @@ import AtomixCompTransform ( freshName )
 
 import qualified GenSym as GS
 
+import Utils(panicStr)
+
 type Chan = EId
 
 data NodeKind atom nid
@@ -68,7 +70,7 @@ data Automaton atom nid
               }
 
 instance (Atom atom, Show nid) => Show (Automaton atom nid) where
-  show = dotOfAuto
+  show = dotOfAuto True
 
 
 data WiredAtom atom
@@ -138,7 +140,8 @@ insert_prepend nkind a = -- this may be too strict -- ensure auto_closed $
   where nid = nextNid a
 
 nodeKindOfId :: Ord nid => nid -> Automaton atom nid -> NodeKind atom nid
-nodeKindOfId nid a = node_kind $ fromJust $ Map.lookup nid (auto_graph a)
+nodeKindOfId nid a = node_kind $ fromJust $ assert (Map.member nid (auto_graph a)) $
+                                            Map.lookup nid (auto_graph a)
 
 -- precondition: a1 and a2 must agree on auto_inchan and auto_outchan
 concat_auto :: Atom atom => Show nid1 => Ord nid1 => Automaton atom nid1 -> Automaton atom Int -> Automaton atom Int
@@ -204,12 +207,6 @@ auto_closed a = Map.foldWithKey node_closed (isDefined $ auto_start a) (auto_gra
     nkind_closed (Action _ nid) = isDefined nid
     nkind_closed (AutomataModel.Branch _ nid1 nid2 _) = isDefined nid1 && isDefined nid2
 
-ensure :: (a -> Bool) -> a -> a
-ensure f x = assert (f x) x
-
-ensureM :: Functor m => (a -> Bool) -> m a -> m a
-ensureM f = fmap (ensure f)
-
 
 -- Constructing Automata from Ziria Comps
 
@@ -225,7 +222,7 @@ mkAutomaton :: Atom e
             -> AComp a ()
             -> Automaton e Int -- what to do next (continuation)
             -> IO (Automaton e Int)
-mkAutomaton dfs sym chans comp k = {-ensureM auto_closed $-} go (acomp_comp comp)
+mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
   where
     loc = acomp_loc comp
     go (ATake1 t) =
@@ -233,36 +230,41 @@ mkAutomaton dfs sym chans comp k = {-ensureM auto_closed $-} go (acomp_comp comp
           outp = map (1,) $ maybeToList (ctrl_chan chans)
           atom = maybe (discardAtom (1,t)) (\_ -> idAtom t) (ctrl_chan chans)
           nkind = Action [WiredAtom inp outp atom] (auto_start k)
-      in return $ insert_prepend nkind k
+          a = insert_prepend nkind k
+      in return $ assert (auto_closed a) a
 
     go (ATakeN t n) =
-       let inp  = [(n,in_chan chans)]
-           outp = map (1,) $ maybeToList (ctrl_chan chans)
-           outty = TArray (Literal n) t
-           atom = maybe (discardAtom (n,t)) (\_ -> castAtom (n,t) (1,outty)) (ctrl_chan chans)
-           nkind = Action [WiredAtom inp outp atom] (auto_start k)
-       in return $ insert_prepend nkind k
+      let inp  = [(n,in_chan chans)]
+          outp = map (1,) $ maybeToList (ctrl_chan chans)
+          outty = TArray (Literal n) t
+          atom = maybe (discardAtom (n,t)) (\_ -> castAtom (n,t) (1,outty)) (ctrl_chan chans)
+          nkind = Action [WiredAtom inp outp atom] (auto_start k)
+          a = insert_prepend nkind k
+      in return $ assert (auto_closed a) a
 
     go (AEmit1 x) =
       let inp = [(1, x)]
           outp = [(1, out_chan chans)]
           atom = idAtom (nameTyp x)
           nkind = Action [WiredAtom inp outp atom] (auto_start k)
-      in return $ insert_prepend nkind k
+          a = insert_prepend nkind k
+      in return $ assert (auto_closed a) a
 
     go (AEmitN t n x) =
       let inp = [(1, x)]
           outp = [(n, out_chan chans)]
           atom = castAtom (1, nameTyp x) (n,t)
           nkind = Action [WiredAtom inp outp atom] (auto_start k)
-      in return $ insert_prepend nkind k
+          a = insert_prepend nkind k
+      in return $ assert (auto_closed a) a
 
     go (ACast s (n1,t1) (n2,t2)) =
       let inp  = [(n1, in_chan chans)]
           outp = [(n2, out_chan chans)]
           atom = castAtom (n1,t1) (n2,t2)
           nkind = Action [WiredAtom inp outp atom] (auto_start k)
-      in return $ insert_prepend nkind k
+          a = insert_prepend nkind k
+      in return $ assert (auto_closed a) a
 
 
 {-
@@ -277,12 +279,14 @@ mkAutomaton dfs sym chans comp k = {-ensureM auto_closed $-} go (acomp_comp comp
     go (AReturn e) =
       let watom = expToWiredAtom e (ctrl_chan chans)
           nkind = Action [watom] (auto_start k)
-      in return $ insert_prepend nkind k
+          a = insert_prepend nkind k
+      in return $ assert (auto_closed a) a
 
 
     go (ABind mbx c1 c2) = do
       a2 <- mkAutomaton dfs sym chans c2 k
-      mkAutomaton dfs sym (chans { ctrl_chan = mbx }) c1 a2
+      a <- mkAutomaton dfs sym (chans { ctrl_chan = mbx }) c1 a2
+      return $ assert (auto_closed a2) $ assert (auto_closed a) a
 
     go (APar _ c1 t c2) = do
       transfer_ch <- freshName sym "transfer" loc t Mut
@@ -294,11 +298,14 @@ mkAutomaton dfs sym chans comp k = {-ensureM auto_closed $-} go (acomp_comp comp
 
     go (ABranch x c1 c2) = do
       a1 <- mkAutomaton dfs sym chans c1 k
-      a2 <- mkAutomaton dfs sym chans c2 k
+      a2 <- mkAutomaton dfs sym chans c2 (a1 { auto_start = auto_start k})
       let nkind = AutomataModel.Branch x (auto_start a1) (auto_start a2) False
-      return $ insert_prepend nkind k
+      let a = insert_prepend nkind a2
+      return $ assert (auto_closed a1) $ assert (auto_closed a2) $ assert (auto_closed a) a
 
-    go (ARepeatN n c) = applyN n (mkAutomaton dfs sym chans c) k
+    go (ARepeatN n c) = do
+      a <- applyN n (mkAutomaton dfs sym chans c) k
+      return $ assert (auto_closed a) a
       where applyN 0 f x = return x
             applyN n f x = do
               y <- applyN (n-1) f x
@@ -307,26 +314,31 @@ mkAutomaton dfs sym chans comp k = {-ensureM auto_closed $-} go (acomp_comp comp
     go (ARepeat c) =
       case nodeKindOfId (auto_start k) k of
         Done -> do
-          a <- mkAutomaton dfs sym  chans c k
+          a0 <- mkAutomaton dfs sym chans c k
           let nid = auto_start k
-          let node = fromJust $ Map.lookup (auto_start a) (auto_graph a) -- Loop (auto_start a)
-          let nmap = Map.insert nid node $ Map.delete (auto_start a) (auto_graph a)
-          return $ map_auto_ids (\id -> if id == (auto_start a) then nid else id) $ a { auto_start = nid, auto_graph = nmap }
+          let node = fromJust $ assert (Map.member (auto_start a0) (auto_graph a0)) $ 
+                     Map.lookup (auto_start a0) (auto_graph a0) -- Loop (auto_start a)
+          let nmap = Map.insert nid node $ Map.delete (auto_start a0) (auto_graph a0)
+          let a = map_auto_ids (\id -> if id == (auto_start a0) then nid else id) $
+                    a0 { auto_start = nid, auto_graph = nmap }
+          return $ assert (auto_closed a0) $ assert (auto_closed a) a
         _ -> fail "Repeat should not have a continuation!"
 
     go (AWhile x c) = do
       let k' = insert_prepend Done k
       let nid = auto_start k'
-      a <- mkAutomaton dfs sym chans c k'
-      let nkind = AutomataModel.Branch x (auto_start a) (auto_start k) True
-      return $ a { auto_start = nid, auto_graph = Map.insert nid (Node nid nkind) (auto_graph a)}
+      a0 <- mkAutomaton dfs sym chans c k'
+      let nkind = AutomataModel.Branch x (auto_start a0) (auto_start k) True
+      let a = a0 { auto_start = nid, auto_graph = Map.insert nid (Node nid nkind) (auto_graph a0)}
+      return $ assert (auto_closed a0) $ assert (auto_closed a) a
 
     go (AUntil x c) = do
       let k' = insert_prepend Done k
       let nid = auto_start k'
-      a <- mkAutomaton dfs sym chans c k'
-      let nkind = AutomataModel.Branch x (auto_start a) (auto_start k) True
-      return $ a { auto_graph = Map.insert nid (Node nid nkind) (auto_graph a)}
+      a0 <- mkAutomaton dfs sym chans c k'
+      let nkind = AutomataModel.Branch x (auto_start a0) (auto_start k) True
+      let a = a0 { auto_graph = Map.insert nid (Node nid nkind) (auto_graph a0)}
+      return $ assert (auto_closed a0) $ assert (auto_closed a) a
 
 
 
@@ -354,7 +366,7 @@ zipAutomata a1 a2 k = concat_auto prod_a k
     -- this allows us to address nodes in the input automata using (base_id,offset) pairs
     lookup :: (Int,Int) -> Automaton e Int -> Node e (Int,Int)
     lookup nid@(baseId,offset) a =
-      case fromJust $ Map.lookup baseId (auto_graph a) of
+      case fromJust $ assert (Map.member baseId (auto_graph a)) $ Map.lookup baseId (auto_graph a) of
         Node _ (Action watoms next) ->
           assert (offset < length watoms) $
           Node nid $ Action (drop offset watoms) (next,0)
@@ -515,8 +527,9 @@ deleteDeadNodes auto = auto { auto_graph = insertRecursively Map.empty (auto_sta
     insertRecursively nmap nid
       | Map.member nid nmap = nmap
       | otherwise =
-          let node = fromJust $ Map.lookup nid (auto_graph auto)
-          in List.foldl insertRecursively (Map.insert nid node nmap) (sucs node)
+          case Map.lookup nid (auto_graph auto) of
+            Nothing -> panicStr "deleteDeadNodes: input graph is not closed!"
+            Just node -> List.foldl insertRecursively (Map.insert nid node nmap) (sucs node)
 
 
 markSelfLoops :: Automaton e Int -> Automaton e Int
@@ -531,8 +544,8 @@ markSelfLoops a = a { auto_graph = go (auto_graph a)}
 
 -- Automata to DOT files
 
-dotOfAuto :: (Atom e, Show nid) => Automaton e nid -> String
-dotOfAuto a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfix
+dotOfAuto :: (Atom e, Show nid) => Bool -> Automaton e nid -> String
+dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfix
   where
     prefix = "digraph ziria_automaton {\n"
     postfix = ";\n}"
@@ -547,7 +560,7 @@ dotOfAuto a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfix
 
     showNode (Node nid nk) = "  " ++ show nid ++ "[label=\"" ++ showNk nk ++ "\"]"
 
-    showNk (Action watoms _) = List.intercalate ";\\n" $ List.map show watoms
+    showNk (Action watoms _) = if showActions then List.intercalate ";\\n" $ List.map show watoms else ""
     showNk (AutomataModel.Branch x _ _ True) = "WHILE<" ++ show x ++ ">"
     showNk (AutomataModel.Branch x _ _ False) = "IF<" ++ show x ++ ">"
     showNk Done = "DONE"
@@ -565,27 +578,27 @@ automatonPipeline dfs sym inty outty acomp = do
 
   putStrLn ">>>>>>>>>> mkAutomaton"
   a <- mkAutomaton dfs sym channels acomp k
+  --putStrLn (dotOfAuto True a)
   putStrLn "<<<<<<<<<<< mkAutomaton"
-  putStrLn (dotOfAuto a)
 
   putStrLn ">>>>>>>>>>> fuseActions"
   let a_f = fuseActions a
-  putStrLn (dotOfAuto a_f)
+  --putStrLn (dotOfAuto True a_f)
   putStrLn "<<<<<<<<<<< fuseActions"
 
   putStrLn ">>>>>>>>>>> deleteDeadNodes"
   let a_d = deleteDeadNodes a_f
-  putStrLn (dotOfAuto a_d)
+  --putStrLn (dotOfAuto True a_d)
   putStrLn "<<<<<<<<<<< deleteDeadNodes"
 
   putStrLn ">>>>>>>>>>> markSelfLoops"
   let a_l = markSelfLoops a_d
-  putStrLn (dotOfAuto a_l)
+  --putStrLn (dotOfAuto True a_l)
   putStrLn "<<<<<<<<<<< markSelfLoops"
 
   putStrLn ">>>>>>>>>>> normalize_auto_ids"
   let a_n = normalize_auto_ids 0 a_l
-  putStrLn (dotOfAuto a_n)
+  --putStrLn (dotOfAuto True a_n)
   putStrLn "<<<<<<<<<<< normalize_auto_ids"
 
   return a_n
