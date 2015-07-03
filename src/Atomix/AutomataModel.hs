@@ -526,8 +526,26 @@ automatonPipeline dfs sym inty outty acomp = do
  let channels = Channels { in_chan = inch, out_chan = outch, ctrl_chan = Nothing }
      k = mkDoneAutomaton inch outch
  a <- mkAutomaton dfs sym channels acomp k
- let a' = normalize_auto_ids 0 $ deleteDeadNodes $ fuseActions $ a
- return a'
+
+ putStrLn ">>>>>>>>>> Done creating automaton!" 
+ putStrLn (dotOfAuto a) 
+
+ putStrLn ">>>>>>>>>>> fuseActions" 
+ let a_f = fuseActions a
+ putStrLn (dotOfAuto a_f) 
+ putStrLn "<<<<<<<<<<< fuseActions"
+
+ putStrLn ">>>>>>>>>>> deleteDeadNodes" 
+ let a_d = deleteDeadNodes a_f 
+ putStrLn (dotOfAuto a_d) 
+ putStrLn "<<<<<<<<<<< deleteDeadNodes"
+
+ putStrLn ">>>>>>>>>>> normalize_auto_ids" 
+ let a_n = normalize_auto_ids 0 a_d
+ putStrLn (dotOfAuto a_n) 
+ putStrLn "<<<<<<<<<<< normalize_auto_ids"
+
+ return a_n
 
 
 
