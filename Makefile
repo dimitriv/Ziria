@@ -19,10 +19,9 @@
 #
 
 all: create-sandbox
-	cabal build wplc 
-	cabal build BlinkDiff
-	cp dist/build/wplc/wplc .
-	cp dist/build/BlinkDiff/BlinkDiff tools/
+	cabal install
+	cp .cabal-sandbox/bin/wplc* .
+	cp .cabal-sandbox/bin/BlinkDiff* tools/
 # cp .cabal-sandbox/bin/wplc* .
 # cp .cabal-sandbox/bin/BlinkDiff* tools/
 
@@ -42,7 +41,6 @@ create-sandbox:
 create-sandbox-prof:
 	cabal sandbox init
 	cabal install --dependencies-only --enable-executable-profiling --enable-library-profiling
-
 	cabal configure --enable-executable-profiling --enable-library-profiling
 #	cabal install --dependencies-only
 
