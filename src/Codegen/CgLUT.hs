@@ -152,16 +152,20 @@ pack_idx_var pkg v idx idx_ty pos
            -- location to a pointer for the maximum index type (uint32), 
            -- and only once you've got the final value truncate
            -- back. Sigh ...
-       let cast_ty = [cty| $ty:idx_ty * |]
-{- 
-               if vlen <= 8  then [cty| typename uint8*  |] else 
-               if vlen <= 16 then [cty| typename uint16* |] else [cty|typename uint32*|]
--}
-           tmp_var = [cexp| ( * ($ty:cast_ty) 
-                                              (& ((typename BitArrPtr) $varexp)[$int:byte_start]))
-                     |]
+       -- let cast_ty = [cty| $ty:idx_ty * |]
 
            slice_shift = vstart - byte_start * 8
+    
+           cast_width = vlen + slice_shift 
+           cast_ty 
+             | cast_width <= 8  = [cty| typename uint8*  |] 
+             | cast_width <= 16 = [cty| typename uint16* |]
+             | otherwise        = [cty|typename uint32*  |]
+
+           tmp_var = [cexp| ( * ($ty:cast_ty) 
+                                  (& ((typename BitArrPtr) $varexp)[$int:byte_start]))
+                     |]
+
            slice   = tmp_var `cExpShR` slice_shift `cMask` vlen
            rhs     = slice `cExpShL` pos
        appendStmt $ [cstm| $idx |= ( $ty:idx_ty ) $rhs; |]
