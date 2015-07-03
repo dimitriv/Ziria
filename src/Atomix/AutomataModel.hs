@@ -100,13 +100,13 @@ class Show a => Atom a where
 
   idAtom      :: Ty -> a
   idAtom t = castAtom (1,t) (1,t)
- 
 
--- 
--- TakeN t N  ~~~>    
+
+--
+-- TakeN t N  ~~~>
 --       castAtom (t,N) (arr[N] t, 1)
--- 
--- Emits x    ~~~>    
+--
+-- Emits x    ~~~>
 --       castAtom (arr[N] t,1) (t,N)
 --
 --   n1 = k*n2
@@ -115,7 +115,7 @@ class Show a => Atom a where
 --  ~~~> castAtom  (arr[n1] t, k) (arr[n2] t, 1)
 --
 --
--- 
+--
 
 
 
@@ -235,10 +235,10 @@ mkAutomaton dfs sym chans comp k = {-ensureM auto_closed $-} go (acomp_comp comp
           nkind = Action [WiredAtom inp outp atom] (auto_start k)
       in return $ insert_prepend nkind k
 
-    go (ATakeN t n) = 
+    go (ATakeN t n) =
        let inp  = [(n,in_chan chans)]
            outp = map (1,) $ maybeToList (ctrl_chan chans)
-           outty = TArray (Literal n) t 
+           outty = TArray (Literal n) t
            atom = maybe (discardAtom (n,t)) (\_ -> castAtom (n,t) (1,outty)) (ctrl_chan chans)
            nkind = Action [WiredAtom inp outp atom] (auto_start k)
        in return $ insert_prepend nkind k
@@ -264,8 +264,8 @@ mkAutomaton dfs sym chans comp k = {-ensureM auto_closed $-} go (acomp_comp comp
           nkind = Action [WiredAtom inp outp atom] (auto_start k)
       in return $ insert_prepend nkind k
 
- 
-{- 
+
+{-
     go (MapOnce f closure) =
       let args = in_chan chans : closure
           expr = MkExp (ExpApp f args) noLoc ()
@@ -407,7 +407,7 @@ zipAutomata a1 a2 k = concat_auto prod_a k
 
     zipActions :: Int -> Node atom (Int,Int) -> Node atom (Int,Int) -> ([WiredAtom atom], Int, (Int,Int), (Int,Int))
     zipActions balance (Node (base1,offset1) (Action watoms1 next1)) (Node (base2,offset2) (Action watoms2 next2))
-      = tickRight [] balance watoms1 watoms2 offset1 offset2 
+      = tickRight [] balance watoms1 watoms2 offset1 offset2
       where
         -- INVARIANT: the balance must always remain >= 0
 
@@ -445,18 +445,18 @@ pushActive nid m = do
   m
 
 inNewFrame :: Ord nid => MarkingM nid a -> MarkingM nid a
-inNewFrame m = do 
+inNewFrame m = do
   modify (\(active,done) -> (Set.empty, Set.union active done))
   m
 
 isActive :: Ord nid => nid -> MarkingM nid Bool
-isActive nid = do 
-  (active,_) <- get 
+isActive nid = do
+  (active,_) <- get
   return $ Set.member nid active
 
 isDone :: Ord nid => nid -> MarkingM nid Bool
-isDone nid = do 
-  (_,done) <- get 
+isDone nid = do
+  (_,done) <- get
   return $ Set.member nid done
 
 
@@ -484,7 +484,7 @@ fuseActions auto = auto { auto_graph = fused_graph }
     markAndFuse :: nid -> NodeMap atom nid -> MarkingM nid ([nid], NodeMap atom nid)
     markAndFuse nid nmap = do
       done <- isDone nid
-      if done 
+      if done
         then return ([],nmap)
         else pushActive nid $ fuse (fromJust $ assert (Map.member nid nmap) $ Map.lookup nid nmap) nmap
 
@@ -514,7 +514,7 @@ deleteDeadNodes auto = auto { auto_graph = insertRecursively Map.empty (auto_sta
   where
     insertRecursively nmap nid
       | Map.member nid nmap = nmap
-      | otherwise = 
+      | otherwise =
           let node = fromJust $ Map.lookup nid (auto_graph auto)
           in List.foldl insertRecursively (Map.insert nid node nmap) (sucs node)
 
@@ -522,7 +522,7 @@ deleteDeadNodes auto = auto { auto_graph = insertRecursively Map.empty (auto_sta
 markSelfLoops :: Automaton e Int -> Automaton e Int
 markSelfLoops a = a { auto_graph = go (auto_graph a)}
   where go nmap = Map.fold markNode nmap nmap
-        markNode (Node nid nk@(Action watoms next)) nmap 
+        markNode (Node nid nk@(Action watoms next)) nmap
           = if nid /= next then nmap else
               let nid' = nextNid a
               in Map.insert nid (Node nid (Loop nid')) $ Map.insert nid' (Node nid' nk) $ nmap
@@ -557,14 +557,38 @@ dotOfAuto a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfix
 {-------------------- Top-level pipeline ---------------------------}
 
 automatonPipeline :: Atom e => DynFlags -> GS.Sym -> Ty -> Ty -> AComp () () -> IO (Automaton e Int)
-automatonPipeline dfs sym inty outty acomp = do 
- inch  <- freshName sym "src"  (acomp_loc acomp) inty Imm
- outch <- freshName sym "snk" (acomp_loc acomp) outty Mut
- let channels = Channels { in_chan = inch, out_chan = outch, ctrl_chan = Nothing }
- let k = mkDoneAutomaton inch outch
- a <- mkAutomaton dfs sym channels acomp k
- let a' = normalize_auto_ids 0 $ markSelfLoops $ deleteDeadNodes $ fuseActions a
- return a'
+automatonPipeline dfs sym inty outty acomp = do
+  inch  <- freshName sym "src"  (acomp_loc acomp) inty Imm
+  outch <- freshName sym "snk" (acomp_loc acomp) outty Mut
+  let channels = Channels { in_chan = inch, out_chan = outch, ctrl_chan = Nothing }
+  let k = mkDoneAutomaton inch outch
+
+  putStrLn ">>>>>>>>>> mkAutomaton"
+  a <- mkAutomaton dfs sym channels acomp k
+  putStrLn "<<<<<<<<<<< mkAutomaton"
+  putStrLn (dotOfAuto a)
+
+  putStrLn ">>>>>>>>>>> fuseActions"
+  let a_f = fuseActions a
+  putStrLn (dotOfAuto a_f)
+  putStrLn "<<<<<<<<<<< fuseActions"
+
+  putStrLn ">>>>>>>>>>> deleteDeadNodes"
+  let a_d = deleteDeadNodes a_f
+  putStrLn (dotOfAuto a_d)
+  putStrLn "<<<<<<<<<<< deleteDeadNodes"
+
+  putStrLn ">>>>>>>>>>> markSelfLoops"
+  let a_l = markSelfLoops a_d
+  putStrLn (dotOfAuto a_l)
+  putStrLn "<<<<<<<<<<< markSelfLoops"
+
+  putStrLn ">>>>>>>>>>> normalize_auto_ids"
+  let a_n = normalize_auto_ids 0 a_l
+  putStrLn (dotOfAuto a_n)
+  putStrLn "<<<<<<<<<<< normalize_auto_ids"
+
+  return a_n
 
 
 
