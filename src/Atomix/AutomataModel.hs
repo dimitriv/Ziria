@@ -66,7 +66,9 @@ data Automaton atom nid
               , auto_outchan :: Chan
               , auto_start   :: nid
               }
-  deriving Show
+
+instance (Atom atom, Show nid) => Show (Automaton atom nid) where
+  show = dotOfAuto
 
 
 data WiredAtom atom
@@ -130,7 +132,7 @@ nextNid a = max+1
   where (max,_) = Map.findMax (auto_graph a)
 
 insert_prepend :: NodeKind atom Int -> Automaton atom Int -> Automaton atom Int
-insert_prepend nkind a = ensure auto_closed $
+insert_prepend nkind a = -- this may be too strict -- ensure auto_closed $
   a { auto_graph = Map.insert nid (Node nid nkind) (auto_graph a)
     , auto_start = nid }
   where nid = nextNid a
@@ -208,9 +210,6 @@ ensure f x = assert (f x) x
 ensureM :: Functor m => (a -> Bool) -> m a -> m a
 ensureM f = fmap (ensure f)
 
-traceShowId' :: Show a => a -> a
-traceShowId' = trace "\n" . traceShowId . trace "\n"
-
 
 -- Constructing Automata from Ziria Comps
 
@@ -226,7 +225,7 @@ mkAutomaton :: Atom e
             -> AComp a ()
             -> Automaton e Int -- what to do next (continuation)
             -> IO (Automaton e Int)
-mkAutomaton dfs sym chans comp k = ensureM auto_closed $ go (acomp_comp comp)
+mkAutomaton dfs sym chans comp k = {-ensureM auto_closed $-} go (acomp_comp comp)
   where
     loc = acomp_loc comp
     go (ATake1 t) =
@@ -342,7 +341,7 @@ type ProdNid = (Int, (Int,Int), (Int,Int))
 zipAutomata :: forall e. Atom e => Automaton e Int -> Automaton e Int -> Automaton e Int -> Automaton e Int
 zipAutomata a1 a2 k = concat_auto prod_a k
   where
-    prod_a = ensure auto_closed      $
+    prod_a = (\a -> assert (auto_closed a) a) $
              assert (auto_closed a1) $
              assert (auto_closed a2) $
              Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) (0,s1,s2)
@@ -434,53 +433,81 @@ zipAutomata a1 a2 k = concat_auto prod_a k
 
 -- Monad for marking automata nodes; useful for DFS/BFS
 
-type MarkingM nid = State (Set nid)
-mark :: Ord nid => nid ->  MarkingM nid ()
-mark nid = modify (Set.insert nid)
+-- We maintain two sets: active, and done
+-- Invariant: every node starts as inactive and not done,
+-- is eventially marked active, and finally marked done.
+-- `active` and `done` are disjoint at all times
+type MarkingM nid = State (Set nid,Set nid)
 
-isMarked :: Ord nid => nid -> MarkingM nid Bool
-isMarked nid = do
-  marks <- get
-  return (Set.member nid marks)
+pushActive :: Ord nid => nid -> MarkingM nid a -> MarkingM nid a
+pushActive nid m = do
+  modify (\(active,done) -> (Set.insert nid active, done))
+  m
+
+inNewFrame :: Ord nid => MarkingM nid a -> MarkingM nid a
+inNewFrame m = do 
+  modify (\(active,done) -> (Set.empty, Set.union active done))
+  m
+
+isActive :: Ord nid => nid -> MarkingM nid Bool
+isActive nid = do 
+  (active,_) <- get 
+  return $ Set.member nid active
+
+isDone :: Ord nid => nid -> MarkingM nid Bool
+isDone nid = do 
+  (_,done) <- get 
+  return $ Set.member nid done
 
 
-
-
--- Fuses actions sequences in automata; inserts Loop nodes to make self-loops explicit.
--- This brings automata into a "normalized form" that is convenient for translation to
--- Atomix. DO NOT CALL THIS FUNCTION PREMATURELY AS LOOP NODES WILL BRAKE ZIPAUTOMATA.
-
-fuseActions :: Automaton atom Int -> Automaton atom Int
+-- Fuses actions sequences in automata. This brings automata into a from that
+-- is convenient for printing and further processing.
+fuseActions :: forall atom nid. Ord nid => Automaton atom nid -> Automaton atom nid
 fuseActions auto = auto { auto_graph = fused_graph }
   where
-    fused_graph = fst $ runState (markAndFuse (auto_start auto) (auto_graph auto)) Set.empty
+    fused_graph = fst $ runState (doAll [auto_start auto] (auto_graph auto)) (Set.empty, Set.empty)
 
-    markAndFuse :: Int -> NodeMap atom Int -> MarkingM Int (NodeMap atom Int)
+    doAll :: [nid] -> NodeMap atom nid -> MarkingM nid (NodeMap atom nid)
+    doAll work_list nmap =
+      case work_list of
+        [] -> return nmap
+        nid:wl -> do
+          (wl',nmap') <- markAndFuse nid nmap
+          inNewFrame (doAll (wl'++wl) nmap')
+
+
+   -- Invariant: if isDone nid then all
+   -- its successors either satisfy isDone or are in the worklist, and the node is
+   --  (a) a decision node (i.e. not an action node), or
+    -- (b) an action node with its next node being a decision node
+
+    markAndFuse :: nid -> NodeMap atom nid -> MarkingM nid ([nid], NodeMap atom nid)
     markAndFuse nid nmap = do
-      marked <- isMarked nid
-      if marked then return nmap else do
-        mark nid
-        fuse (fromJust $ assert (Map.member nid nmap) $ Map.lookup nid nmap) nmap
+      done <- isDone nid
+      if done 
+        then return ([],nmap)
+        else pushActive nid $ fuse (fromJust $ assert (Map.member nid nmap) $ Map.lookup nid nmap) nmap
 
-    fuse :: Node atom Int -> NodeMap atom Int -> MarkingM Int (NodeMap atom Int)
-    fuse (Node _ Done) nmap = return nmap
-    fuse (Node _ (Loop b)) nmap = markAndFuse b nmap
-    fuse (Node _ (AutomataModel.Branch _ b1 b2 _)) nmap = do
-      nmap <- markAndFuse b1 nmap
-      markAndFuse b2 nmap
-    fuse (Node nid nk@(Action atoms next)) nmap
-      | nid == next = do -- self loop detected! Insert loop.
-        let new_nid = nextNid auto
-        mark new_nid
-        let new_action_node = Node new_nid nk
-        let loop_node = Node nid (Loop new_nid)
-        return $ Map.insert nid loop_node $ Map.insert new_nid new_action_node $ nmap
-      | otherwise =
-        case fromJust $ assert (Map.member next nmap) $ Map.lookup next nmap of
-          Node _ (Action atoms' next') ->
-            let node = Node nid (Action (atoms++atoms') next')
-            in fuse node (Map.insert nid node nmap)
-          Node _ _ -> markAndFuse next nmap
+
+    -- precondition: input node is marked active
+    fuse :: Node atom nid -> NodeMap atom nid -> MarkingM nid ([nid], NodeMap atom nid)
+    fuse (Node _ Done) nmap = return ([],nmap)
+    fuse (Node _ (Loop b)) nmap = return ([b],nmap)
+    fuse (Node _ (AutomataModel.Branch _ b1 b2 _)) nmap = return ([b1,b2],nmap)
+
+    fuse (Node nid nk@(Action atoms next)) nmap = do
+        active <- isActive next
+        -- don't fuse back-edges (including self-loops)!
+        if active then return ([],nmap) else do
+          -- fuse sucessor node(s) first, ...
+          (wl,nmap) <- markAndFuse next nmap
+          -- ... then perform merger if possible
+          return $ case fromJust $ assert (Map.member next nmap) $ Map.lookup next nmap of
+            Node _ (Action atoms' next') ->
+              let node = Node nid (Action (atoms++atoms') next')
+              in (wl, Map.insert nid node nmap)
+            Node _ _ -> (wl,nmap)
+
 
 deleteDeadNodes :: Ord nid => Automaton e nid -> Automaton e nid
 deleteDeadNodes auto = auto { auto_graph = insertRecursively Map.empty (auto_start auto)}
@@ -490,6 +517,16 @@ deleteDeadNodes auto = auto { auto_graph = insertRecursively Map.empty (auto_sta
       | otherwise = 
           let node = fromJust $ Map.lookup nid (auto_graph auto)
           in List.foldl insertRecursively (Map.insert nid node nmap) (sucs node)
+
+
+markSelfLoops :: Automaton e Int -> Automaton e Int
+markSelfLoops a = a { auto_graph = go (auto_graph a)}
+  where go nmap = Map.fold markNode nmap nmap
+        markNode (Node nid nk@(Action watoms next)) nmap 
+          = if nid /= next then nmap else
+              let nid' = nextNid a
+              in Map.insert nid (Node nid (Loop nid')) $ Map.insert nid' (Node nid' nk) $ nmap
+        markNode _ nmap = nmap
 
 
 -- Automata to DOT files
@@ -524,9 +561,9 @@ automatonPipeline dfs sym inty outty acomp = do
  inch  <- freshName sym "src"  (acomp_loc acomp) inty Imm
  outch <- freshName sym "snk" (acomp_loc acomp) outty Mut
  let channels = Channels { in_chan = inch, out_chan = outch, ctrl_chan = Nothing }
-     k = mkDoneAutomaton inch outch
+ let k = mkDoneAutomaton inch outch
  a <- mkAutomaton dfs sym channels acomp k
- let a' = normalize_auto_ids 0 $ deleteDeadNodes $ fuseActions $ a
+ let a' = normalize_auto_ids 0 $ markSelfLoops $ deleteDeadNodes $ fuseActions a
  return a'
 
 
