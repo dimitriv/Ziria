@@ -250,8 +250,9 @@ main = do
           (ac,_rnst) <- zirToAtomZir sym lc
           (automaton :: Automaton SymAtom Int) 
              <- automatonPipeline dflags sym undefined undefined ac
+          let showActions = isDynFlagSet dflags Verbose
           dump dflags DumpAutomaton (".automaton-phase.dump")
-                                    (text $ dotOfAuto False automaton)
+                                    (text $ dotOfAuto showActions automaton)
 
 
         (cc_lc,st) <- timedPhase dflags "atomixCompTransform" $ 
