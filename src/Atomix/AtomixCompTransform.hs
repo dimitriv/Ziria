@@ -15,6 +15,7 @@ import Control.Applicative ( (<$>) )
 import Outputable 
 import Data.Maybe ( fromJust, isJust )
 import qualified Data.Set as S
+import Control.Monad.Identity
 import Control.Monad.State
 import Data.Loc
 import Text.PrettyPrint.HughesPJ
@@ -71,9 +72,9 @@ alphaNorm sym = mapCompM return return return return return action
                   (cSeq loc c1 
                      (cReturn loc AutoInline (eAssign loc (eVar loc x) e)))
 
-      | Times _ui _estart elen _cnt _c1 <- unComp c
-      , EVal {} <- unExp elen
-      = return c -- Static times => translate to static loops in atomix
+      -- | Times _ui _estart elen _cnt _c1 <- unComp c
+      -- , EVal {} <- unExp elen
+      -- = return c -- Static times => translate to static loops in atomix
       | Times _ui estart elen cnt c1 <- unComp c
       , let loc = compLoc c 
       = do x_bnd <- freshName sym "times_bound" loc (ctExp elen) Imm
@@ -98,7 +99,7 @@ alphaNorm sym = mapCompM return return return return return action
               cBindMany loc (cTake1 loc (nameTyp x))
                             [(x, cEmit loc (eCall loc fn [eVar loc x]))]
 
-      | otherwise
+      | otherwise  
       = return c
 
 
@@ -250,6 +251,38 @@ getClosureVars fdef = do
   -- | Sum the two up and return
   return $ nub (clos_vars_from_body ++ clos_vars_from_called)
 
+
+
+collectPars :: Comp -> [Comp]
+collectPars c = go (unComp c)
+  where go (Par _p c1 c2) = collectPars c1 ++ collectPars c2
+        go _other        = [c]
+
+
+parCompSplit :: [Comp] -> Either [Comp] ([Comp],Comp,[Comp])
+parCompSplit xs = 
+     let (ts,rest) = span isTrans xs in
+     case rest of { [] -> Left xs; (c:ts') -> Right (ts,c,ts')}
+     where isTrans c = not (isComputer (ctComp c))
+
+normalizePars :: Comp -> Comp
+normalizePars = runIdentity . mapCompM return return return return return (return . action)
+  where 
+    action c = 
+      case parCompSplit $ collectPars c of
+        Left [c0] -> c0
+        Right ([],c0,[]) -> c0
+        Left (t:ts) -> foldl mkPar t ts
+        Right ([],c0,t:ts) -> mkPar c0 $ foldl mkPar t ts
+        Right (t:ts,c0,[]) -> mkPar (foldl mkPar t ts) c0
+        Right (t:ts,c0,t':ts') -> mkPar (foldl mkPar t ts) $ mkPar c0 $ foldl mkPar t' ts'
+        _ -> panicStr "normalizePars: impossible case"
+      where mkPar = cPar (compLoc c) undefined
+        
+
+
+
+
 {------------------ Main transform -------------------------------------------}
 
 atomixCompTransform :: GS.Sym -> Comp -> IO (Comp,RnSt)
@@ -266,8 +299,10 @@ atomixCompTransform sym c = do
   ren_alpha <- alphaNorm sym ren_c
 
   -- Closure convert / lift 
-  (final_comp,st) <- runStateT (liftBindsComp ren_alpha >>= closConvComp) $
+  (closure_comp,st) <- runStateT (liftBindsComp ren_alpha >>= closConvComp) $
                      emptyRnSt
+
+  let final_comp = normalizePars closure_comp
 
   putStrLn $ "Closure conversion phase finished, result type: " ++ 
              show (ctComp final_comp)
@@ -319,21 +354,21 @@ transLifted sym = go_comp
         loc = compLoc comp
         go (Return _ e) = aReturn loc () <$> (liftIO $ transLiftedExp sym e)
 
-        go (Times _ estrt (MkExp (EVal _ (VInt i _)) _ _) cnt c) = do
-           let cnt_expr    = eVar loc cnt
-               TInt _bw sn = nameTyp cnt
-               one         = eVal loc (nameTyp cnt) (VInt 1 sn)
-               upd_cntr    = eAssign loc cnt_expr (eBinOp loc Add cnt_expr one)
-               asg_cntr    = eAssign loc cnt_expr estrt
+        --go (Times _ estrt (MkExp (EVal _ (VInt i _)) _ _) cnt c) = do
+        --   let cnt_expr    = eVar loc cnt
+        --       TInt _bw sn = nameTyp cnt
+        --       one         = eVal loc (nameTyp cnt) (VInt 1 sn)
+        --       upd_cntr    = eAssign loc cnt_expr (eBinOp loc Add cnt_expr one)
+        --       asg_cntr    = eAssign loc cnt_expr estrt
 
-               c_upd       = cSeq loc c (cReturn loc AutoInline upd_cntr)
+        --       c_upd       = cSeq loc c (cReturn loc AutoInline upd_cntr)
            
-           a1 <- go_comp (cReturn loc AutoInline asg_cntr)
-           a2 <- aRepeatN loc () (fromIntegral i) <$> go_comp c_upd
-           -- Record the counter variable 
-           modify (\xs -> cnt:xs)        
-           -- and return 
-           return (aBind loc () Nothing a1 a2)
+        --   a1 <- go_comp (cReturn loc AutoInline asg_cntr)
+        --   a2 <- aRepeatN loc () (fromIntegral i) <$> go_comp c_upd
+        --   -- Record the counter variable 
+        --   modify (\xs -> cnt:xs)        
+        --   -- and return 
+        --   return (aBind loc () Nothing a1 a2)
 
 
         go (BindMany c1 []) = go_comp c1

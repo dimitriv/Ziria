@@ -435,6 +435,8 @@ zipAutomata a1 a2 k = concat_auto prod_a k
         tickLeft acc balance (wa:watoms1') watoms2 offset1 offset2 =
           tickRight (wa:acc) (balance + production wa) watoms1' watoms2 (offset1+1) offset2
 
+        --consumption wired_atom = if any ((== trans_ch) . snd) (wires_in wired_atom) then 1 else 0
+        --production wired_atom = if any ((== trans_ch) . snd) (wires_out wired_atom) then 1 else 0
         consumption wired_atom = sum $ map fst $ filter ((== trans_ch) . snd) (wires_in wired_atom)
         production wired_atom = sum $ map fst $ filter ((== trans_ch) . snd) (wires_out wired_atom)
     zipActions _ _ _ = assert False undefined
