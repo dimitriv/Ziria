@@ -1,0 +1,88 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+
+fun update_crc(x:bit, crc_state:arr[4] bit) {
+  let base = {'1, '0, '1, '1} in 
+  if crc_state[0] == '1 then {
+    for i in [0,length(crc_state)] {
+      crc_state[i] := crc_state[i]^base[i];
+    }
+  };
+  crc_state[0,3] := crc_state[1,3];
+  crc_state[3] := x
+};
+
+
+
+fun comp check_crc(crc_state : arr[4] bit) {
+  var ret : bool;
+  (x:arr[8] bit) <- takes 8;
+  do {
+  if (crc_state[0] == x[0] && crc_state[1] == x[1] && crc_state[2] == x[2] && crc_state[3] == x[3]) then {
+     println "CRC passed!";
+     ret := true;
+  } else {
+     println "CRC failed!";
+     ret := false;
+  }
+  }
+  return ret;
+};
+
+
+
+-- Here we use preprocessor to create a simple template-like functionality
+
+#define CRC_VEC         8
+#define CRC_NAME        crc
+#include "crc_template.blk"
+
+#define CRC_VEC         24
+#define CRC_NAME        crc24
+#include "crc_template.blk"
+
+#define CRC_VEC         36
+#define CRC_NAME        crc36
+#include "crc_template.blk"
+
+#define CRC_VEC         48
+#define CRC_NAME        crc48
+#include "crc_template.blk"
+
+#define CRC_VEC         72
+#define CRC_NAME        crc72
+#include "crc_template.blk"
+
+#define CRC_VEC         96
+#define CRC_NAME        crc96
+#include "crc_template.blk"
+
+#define CRC_VEC         144
+#define CRC_NAME        crc144
+#include "crc_template.blk"
+
+#define CRC_VEC         192
+#define CRC_NAME        crc192
+#include "crc_template.blk"
+
+#define CRC_VEC         216
+#define CRC_NAME        crc216
+#include "crc_template.blk"
+

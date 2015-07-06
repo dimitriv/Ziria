@@ -1,0 +1,79 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+
+#include <bits.blk>
+#include "../crc.blk"
+
+
+fun comp convert_i2b() {
+var ai : arr[1] int8;
+var ao : arr[8] bit;
+
+  repeat{
+    x<-take;
+    do{
+      ai[0] := x;
+      int8_to_bits(ao, ai);
+      ao := invert_bits(ao);
+    }
+    emits ao;
+  }
+}
+
+fun comp convert_b2i() {
+var ai : arr[8] bit;
+var ao : arr[1] int8;
+var s : int8;
+
+  repeat{
+    x<-takes 8;
+    do{
+      ai := invert_bits(x);
+      bits_to_int8(ao, ai);
+    }
+    emits ao;
+  }
+}
+    
+
+fun comp crc_test() {
+var crc_state:arr[CRC_S_WIDTH] bit := 
+    {'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,
+     '1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1,'1};
+
+  times 96*8/CRC_X_WIDTH {
+    x <- takes CRC_X_WIDTH;
+    do {
+      update_crc_generic(x, base32, crc_state)
+    };
+  }
+  do {
+    for i in [0, CRC_S_WIDTH/8] {
+      for j in [0, 8] {
+        crc_state[i*8+j] := ~crc_state[i*8+j];
+      }
+    }
+    -- println crc_state;
+  };
+  emits crc_state;
+    
+}
+
+let comp main = read >>> convert_i2b() >>> crc_test() >>> convert_b2i() >>> write

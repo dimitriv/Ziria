@@ -1,0 +1,151 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#pragma once 
+#include <externals.blk>
+
+#define CRC_X_WIDTH     8
+#define CRC_S_WIDTH     32
+
+
+let (base32:arr[CRC_S_WIDTH+1] bit) = {'1,'0,'0,'0,'0,'0,'1,'0,'0,'1,'1,'0,'0,'0,'0,'0,'1,'0,'0,'0,'1,'1,'1,'0,'1,'1,'0,'1,'1,'0,'1,'1,'1};
+
+
+-- For a full description see http://www.hackersdelight.org/crc.pdf, Page 8, Figure 14-4, and in particular
+-- note that "The CRC-32 protocol initializes the CRC register to all 1's, transmits each byte 
+-- least significant bit first, and complements the checksum."
+-- In particular, CRC is calculated on the most-siginificant bit first, 
+-- but the data is transmitted least significant bit first.
+-- For example, 0x04, 0x02, 0x00, 0x2e is fed into CRC-32 state machine as:
+-- 00000100:00000010:00000000:00101110
+-- but it is further transmitted (to scrambler, encoder, etc) as
+-- 00100000:01000000:00000000:01110100
+-- (see Table G.13 in 802.11a)
+
+fun update_crc_generic(x:arr[CRC_X_WIDTH] bit, base:arr[CRC_S_WIDTH+1] bit, var crc_state:arr[CRC_S_WIDTH] bit) {
+var out : arr[CRC_X_WIDTH + CRC_S_WIDTH] bit;
+var start_state : arr[CRC_X_WIDTH] bit;
+var s : arr[1] bit;
+
+  -- We create a smaller subset of crc_state to make the code amenable to LUTting
+  start_state := crc_state[0, CRC_X_WIDTH];
+
+  -- This is expected to be autoLUTtted
+  for i in [0, CRC_X_WIDTH] {
+    start_state[i] := start_state[i] ^ x[i];
+  }
+
+  zero_bit(out);
+
+  -- This is expected to be autoLUTtted
+  -- Inputs: start_state, Output: out, start_state
+  for i in [0, CRC_X_WIDTH] {
+    if (start_state[i] == '1) then {
+      for j in [0, CRC_S_WIDTH - 1] {
+        out[i+1+j] := out[i+1+j] ^ base[1+j];
+      }
+      for j in [0,CRC_X_WIDTH-i-1] {
+        start_state[i+1+j] := start_state[i+1+j] ^ base[1+j];
+      }
+    }
+  }
+
+  crc_state[0,CRC_S_WIDTH-CRC_X_WIDTH] := crc_state[CRC_X_WIDTH, CRC_S_WIDTH-CRC_X_WIDTH];
+  crc_state[CRC_S_WIDTH-CRC_X_WIDTH, CRC_X_WIDTH] := start_state;
+
+-- Serialized version of crc_state := crc_state ^ out[CRC_X_WIDTH, CRC_S_WIDTH];
+  for i in [0, CRC_S_WIDTH/8] {
+    -- This is expected to be autoLUTtted
+    for j in [0, 8] { 
+      crc_state[i*8+j] := crc_state[i*8+j] ^ out[CRC_X_WIDTH + i*8+j];
+    }
+  }
+}
+
+
+
+
+
+fun comp check_crc(crc_state : arr[32] bit) { 
+var ac : arr[4] int8;
+var ax : arr[4] int8;
+var ret : bool;
+
+  (x:arr[32] bit) <- takes 32;
+  do {
+    bits_to_int8(ax, x);
+    bits_to_int8(ac, crc_state);
+
+    if (ax[0] == ac[0] && ax[1] == ac[1] && ax[2] == ac[2] && ax[3] == ac[3]) then {
+#ifndef FAST
+--      println "CRC passed!";
+#endif
+      ret := true;
+    } else {
+#ifndef FAST
+--      println "CRC failed!";
+--      println "Expected: ", ac;
+--      println "Received: ", ax;
+#endif
+      ret := false;
+    }
+  }
+  return ret;
+}
+
+
+
+-- Here we use preprocessor to create a simple template-like functionality
+
+#define CRC_VEC         8
+#define CRC_NAME        crc
+#include "crc_template.blk"
+
+#define CRC_VEC         24
+#define CRC_NAME        crc24
+#include "crc_template.blk"
+
+#define CRC_VEC         36
+#define CRC_NAME        crc36
+#include "crc_template.blk"
+
+#define CRC_VEC         48
+#define CRC_NAME        crc48
+#include "crc_template.blk"
+
+#define CRC_VEC         72
+#define CRC_NAME        crc72
+#include "crc_template.blk"
+
+#define CRC_VEC         96
+#define CRC_NAME        crc96
+#include "crc_template.blk"
+
+#define CRC_VEC         144
+#define CRC_NAME        crc144
+#include "crc_template.blk"
+
+#define CRC_VEC         192
+#define CRC_NAME        crc192
+#include "crc_template.blk"
+
+#define CRC_VEC         216
+#define CRC_NAME        crc216
+#include "crc_template.blk"
+

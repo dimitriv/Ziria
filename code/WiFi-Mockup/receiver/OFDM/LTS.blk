@@ -1,0 +1,207 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#pragma once 
+
+#include "../../const.blk"
+#include <externals.blk>
+#include <v_conj_mul.blk>
+#include <abs.blk>
+#include <v_correlate.blk>
+
+
+
+fun comp LTS(shift:int16, amp:int32) {
+  var params : struct LTECoeffs;
+
+  var preamble:arr[64] complex16;
+  var origPreamble:arr[64] complex16;
+  var delayedPreamble:arr[64] complex16;
+
+  var pH:arr[64] int16;
+  var fftdata:arr[64] complex16;
+  var delayedFftdata:arr[64] complex16;
+
+  fun LTSInit() {
+     var ret : arr[64] complex16; 
+
+     let norm_one = complex16{re=1600;im=0}
+    
+     let lts11a = 
+        {0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 
+         1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 
+         0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 
+         1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1}
+
+     for i in [0,64] {
+         ret[i] := ( complex16{re=(2*lts11a[i]-1); im=0}*norm_one);
+     };
+
+     return ret
+
+  } in
+
+  let aLTSSeq11a = LTSInit() in
+
+
+  fun arr_shift(a : arr complex16, agc_shift : int) { 
+    if (agc_shift > 0) then {
+      v_shift_left_complex16(a,a,agc_shift);
+    } else {
+      v_shift_right_complex16(a,a,-agc_shift);
+    }
+  } in 
+
+
+  fun calcCoeff(fftdata:arr[64] complex16) { 
+     var re32:arr[28] int;
+     var im32:arr[28] int;    
+     var sq_norm32:arr[64] int;
+     var ret:arr[64] complex16;
+
+     -- let lts_norm_shift = 2 in
+     let lts_norm_shift = 6
+
+     -- Calculate sq_norm
+     v_conj_mul_complex16_int32(re32,im32,fftdata[0,28],fftdata[0,28]);
+     v_shift_right_int32(sq_norm32[0,28],re32,int(lts_norm_shift))
+
+     v_conj_mul_complex16_int32(re32,im32,fftdata[36,28],fftdata[36,28]);
+     v_shift_right_int32(sq_norm32[36,28],re32,int(lts_norm_shift))
+
+     -- Calculate ret
+     v_conj_mul_complex16_int32(re32,im32,aLTSSeq11a[0,28],fftdata[0,28]);
+
+     for i in [0,28] {
+       if sq_norm32[i] > 1 then { -- precision, 0.1 is 100
+         ret[i] := complex16{re=int16(re32[i]/sq_norm32[i]);im=int16(im32[i]/sq_norm32[i])}
+       } else {
+         ret[i] := complex16{re=0;im=0}
+       }
+     };
+
+     zero_complex16(ret[28,8]);
+
+     v_conj_mul_complex16_int32(re32,im32,aLTSSeq11a[36,28],fftdata[36,28]);
+
+     for i in [36,28] {
+       if sq_norm32[i] > 1 then { -- precision, 0.1 is 100
+         ret[i] := complex16{re=int16(re32[i-36]/sq_norm32[i]);im=int16(im32[i-36]/sq_norm32[i])}
+       } else {
+         ret[i] := complex16{re=0;im=0} 
+       }
+     };
+
+     return ret;
+  } in 
+
+seq{
+
+  (xp:arr[144] complex16) <- takes 144;
+ 
+--  do { println "xp/LTS: ", xp; };
+
+  do{
+     preamble := xp[16-shift,64];
+     delayedPreamble := xp[80-shift,64];
+
+#ifndef SORA_COMPAT
+     -- Very simple AGC
+     -- This is slow, but it is only a single number.
+     -- Roughly on Sora-MIMO:
+     --        * amp == 215487 corresponds to signal level abs(I + iQ) = 550
+     --          noise is typically abs(I + iQ) = 180 so that is 10dB SNR
+     --          After equalization, QPSK point is ~ (1000, 1000), thus amplitude is ~ 1414.
+     --          Corresponding params.channelCoeffs is ~ 10000. 
+     --        * amp == 45815 corresponds to signal level abs(I + iQ) = 225
+     --          After equalization, QPSK point is ~ (1000, 1000), thus amplitude is ~ 1414.
+     --          Corresponding params.channelCoeffs is ~ 20000. 
+     --        * amp == 55189406 corresponds to signal level abs(I + iQ) = 880
+     --          After equalization, QPSK point is ~ (1000, 1000), thus amplitude is ~ 1414.
+     --          Corresponding params.channelCoeffs is ~ 500. 
+     -- Notes:
+     --        * We cannot go much below signal amplitude 225 because we will saturate 
+     --          params.channelCoeffs. But this is fine as this is already ~4dB
+     --        * We lose some precision for high SNR due to low bits used in 
+     --          params.channelCoeffs. But this is probably ok for large SNRs, 
+     --          unless we want to do high-order modulation. 
+     --        * To increase precision of hign SNR one might want to increase lts_norm_shift 
+     --          It can probably be increased to 7 or 8 without affecting low SNR
+     --          (saturating params.channelCoeffs) but this needs to be tested.
+     let agc_shift = round_int32(log2(1000.0 / sqrt(double(amp))));
+     if (agc_shift > 0) then {
+       v_shift_left_complex16(preamble,preamble,agc_shift);
+       v_shift_left_complex16(delayedPreamble,delayedPreamble,agc_shift);
+     } else {
+       v_shift_right_complex16(preamble,preamble,-agc_shift);
+       v_shift_right_complex16(delayedPreamble,delayedPreamble,-agc_shift);
+     }
+#endif
+
+     let corr = v_correlate(preamble, delayedPreamble) 
+     -- TODO: cfo is currently not used, but add AGC if you want to start using it.
+     let cr = corr.re >> 5 
+     let ci = corr.im >> 5 
+
+
+     let phase = if (ci == 0) then 42000000
+                 else atan2_int32(ci, cr) 
+
+     let cfo_est = int16(phase/(1 << 6)) 
+
+
+     for i in [0,64] {
+       pH[i] := cfo_est*int16(i);
+       params.freqCoeffs[i] := complex16{re=cos_int16(pH[i]); im=sin_int16(pH[i])}
+     };
+
+     fftdata := sora_fft(preamble);
+
+     -- Below we shift back to the original scale to make sure euqalized amplitudes are
+     -- always in the same range, regardless of RX power
+     -- In particular, the range of symbols after qeualized FFT seems to be +- 2000
+
+#ifndef SORA_COMPAT
+     delayedFftdata := sora_fft(delayedPreamble);
+     v_add_complex16(params.channelCoeffs, calcCoeff(fftdata), calcCoeff(delayedFftdata));
+     --v_shift_right_complex16(params.channelCoeffs,params.channelCoeffs,1);
+     let agcs = agc_shift - 1
+     if (agcs > 0) then {
+       v_shift_left_complex16(params.channelCoeffs,params.channelCoeffs,agcs);
+     } else {
+       v_shift_right_complex16(params.channelCoeffs,params.channelCoeffs,-agcs);
+     }
+#else
+     -- We use simple LTS as comparison to Sora 
+     -- since this is what Sora does by default
+     params.channelCoeffs := calcCoeff(fftdata);
+     {- No AGC in Sora:
+     if (agc_shift > 0) then {
+       v_shift_left_complex16(params.channelCoeffs,params.channelCoeffs,agc_shift);
+     } else {
+       v_shift_right_complex16(params.channelCoeffs,params.channelCoeffs,-agc_shift);
+     }
+     -}
+#endif
+     return (params)
+   }
+}
+}
+
+

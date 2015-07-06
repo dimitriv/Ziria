@@ -1,0 +1,107 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#pragma once 
+
+fun comp map_ofdm() {
+  var state : arr[7] int := {1,1,1,1,1,1,1};
+  var pilotIndex : int := 127;
+  var x : arr[48] complex;
+  var pilots : arr[4] complex16;
+  var allPilots : arr[4*128] complex16;
+
+  fun generateAllPilots() {
+    var allPilotSgn:arr[128] int16 := 
+        {0,  0,  0, -1, -1, -1,  0, -1, -1, -1, -1,  0,  0, -1,  0, -1, 
+        -1,  0,  0, -1,  0,  0, -1,  0,  0,  0,  0,  0,  0, -1,  0,  0, 
+         0, -1,  0,  0, -1, -1,  0,  0,  0, -1,  0, -1, -1, -1,  0, -1, 
+         0, -1, -1,  0,  0, -1,  0,  0,  0,  0,  0, -1, -1,  0,  0, -1, 
+        -1,  0, -1,  0, -1,  0,  0, -1, -1, -1,  0,  0, -1, -1, -1, -1, 
+         0, -1, -1,  0, -1,  0,  0,  0,  0, -1,  0, -1,  0, -1,  0, -1, 
+        -1, -1, -1, -1,  0, -1,  0,  0, -1,  0, -1,  0,  0,  0, -1, -1, 
+         0, -1, -1, -1,  0,  0,  0, -1, -1, -1, -1, -1, -1, -1,  0,  0};
+    for i in [0, 128] {
+      if (allPilotSgn[i] == 0) then {
+        allPilots[4*i+0] := complex16{re= bpsk_mod_11a; im=0}
+        allPilots[4*i+1] := complex16{re=-bpsk_mod_11a; im=0}
+        allPilots[4*i+2] := complex16{re= bpsk_mod_11a; im=0}
+        allPilots[4*i+3] := complex16{re= bpsk_mod_11a; im=0}
+      } else {
+        allPilots[4*i+0] := complex16{re=-bpsk_mod_11a; im=0}
+        allPilots[4*i+1] := complex16{re= bpsk_mod_11a; im=0}
+        allPilots[4*i+2] := complex16{re=-bpsk_mod_11a; im=0}
+        allPilots[4*i+3] := complex16{re=-bpsk_mod_11a; im=0}
+      }
+    }
+  } in 
+
+
+  fun getNextPilot() {
+    var oldPilotIndex : int;
+
+    oldPilotIndex := pilotIndex;
+    pilotIndex := pilotIndex+1;
+    if (pilotIndex >= 127) then pilotIndex := 0;
+
+    return allPilots[4*oldPilotIndex,4];
+  } in 
+
+
+
+seq{
+  do{
+    generateAllPilots();
+  }
+
+
+  repeat
+  seq {
+    x <- takes 48;
+    do {pilots := getNextPilot()};
+
+    emit complex16{re=0; im=0};
+    emit complex16{re=0; im=0};
+    emit complex16{re=0; im=0};
+    emit complex16{re=0; im=0};
+    emit complex16{re=0; im=0};
+    emit complex16{re=0; im=0};
+
+    emits x[0:4];                       -- Carriers 38-42
+    emit pilots[2];                     -- Carrier  43
+    emits x[5:17];                      -- Carriers 44-56
+    emit pilots[3];                     -- Carrier  57
+    emits x[18:23];                     -- Carriers 58-63
+
+    emit complex16{re=0; im=0};         -- DC (carrier 0)
+
+    emits x[24:29];                     -- Carriers 1-6
+    emit pilots[0];                     -- Carrier  7
+    emits x[30:42];                     -- Carriers 8-20
+    emit pilots[1];                     -- Carrier  21
+    emits x[43:47];                     -- Carriers 22-26
+
+    emit complex16{re=0; im=0};
+    emit complex16{re=0; im=0};
+    emit complex16{re=0; im=0};
+    emit complex16{re=0; im=0};
+    emit complex16{re=0; im=0};
+  }
+}
+
+}

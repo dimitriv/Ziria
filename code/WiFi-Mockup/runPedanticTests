@@ -1,0 +1,47 @@
+#!/bin/bash
+#Use COMPILER={winddk, vs} to set the compiler
+
+echo "========================== DEFAULT ======================"
+./runTests
+if [[ $? -ne 0 ]]
+then
+    exit 1
+fi
+#read -p "DEFAULT tests passed, press any key to continue... " -n1 -s
+
+echo "========================= NO-EXP-FOLD NO-FOLD ==========="
+EXTRAOPTS='--no-exp-fold --no-fold' ./runTests
+if [[ $? -ne 0 ]]
+then
+    exit 1
+fi
+# #read -p "NO-EXP-FOLD,NO-FOLD tests passed, press any key to continue... " -n1 -s
+
+echo "========================= VECTORIZE ====================="
+DIFFOPTS='-p' EXTRAOPTS='--vectorize' ./runTests
+if [[ $? -ne 0 ]]
+then
+    exit 1
+fi
+#read -p "VECTORIZE tests passed, press any key to continue... " -n1 -s
+
+echo "========================= AUTOLUT ======================="
+EXTRAOPTS='--autolut' ./runTests
+if [[ $? -ne 0 ]]
+then
+    exit 1
+fi
+#read -p "AUTOLUT tests passed, press any key to continue... " -n1 -s
+
+echo "================== VECTORIZE - AUTOLUT =================="
+DIFFOPTS='-p' EXTRAOPTS='--vectorize --autolut' ./runTests
+if [[ $? -ne 0 ]]
+then
+    exit 1
+fi
+#read -p "VECTORIZE, AUTOLUT tests passed, press any key to continue... " -n1 -s
+
+
+
+
+

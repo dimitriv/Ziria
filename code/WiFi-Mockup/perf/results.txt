@@ -1,0 +1,674 @@
+### DESKTOP, WINDDK, not native
+
+# TX Blocks
+
+scramble		1074.38
+encoding_12 		956.965
+encoding_23 		578.128
+encoding_34 		867.385
+interleaving_bpsk 	395.032
+interleaving_qpsk 	334.322
+interleaving_16qam 	261.228
+interleaving_64qam 	232.631
+modulating_bpsk 	1131.04
+modulating_qpsk 	576.778
+modulating_16qam 	990.962
+modulating_64qam 	1273.38
+map_ofdm 		1260.45
+ifft 			173.381
+
+# RX Blocks
+
+DownSample 		2831.1
+RemoveDC 		1036.3
+CCA 			140.238
+LTS 			174.792
+FFT 			403.379
+ChannelEqualization 	1013.52
+PilotTrack 		298.107
+DataSymbol 		2027.53
+DemapBPSK 		1210.9
+DemapQPSK 		768.386
+DemapQAM16 		568.305
+DemapQAM64 		408.178
+DeinterleaveBPSK 	1682.51
+DeinterleaveQPSK 	1592.79
+DeinterleaveQAM16 	1589.45
+DeinterleaveQAM64 	1735.75
+Viterbi 1/2 		98.6499
+
+# TX
+
+TX6Mbps 		31.8753
+TX9Mbps 		38.9454
+TX12Mbps 		40.7738
+TX18Mbps 		49.7342
+TX24Mbps 		49.0296
+TX36Mbps 		57.2263
+TX48Mbps 		56.8559
+TX54Mbps 		58.4923
+
+# RX
+
+RXCCA			183.418
+RX6Mbps			123.432
+RX9Mbps 		103.26
+RX12Mbps 		85.8221
+RX18Mbps 		70.5938
+RX24Mbps 		54.2329
+RX36Mbps 		44.7146
+RX48Mbps 		34.0536
+RX54Mbps 		32.1559
+
+# 2 threads
+
+TX6Mbps			45.0586
+TX9Mbps 		52.4099
+TX12Mbps 		42.6226
+TX18Mbps 		43.389
+TX24Mbps 		41.8877
+TX36Mbps 		47.975
+TX48Mbps 		47.5031
+TX54Mbps 		52.4645
+
+RX6Mbps 		187.667
+RX9Mbps 		185.084
+RX12Mbps 		134.291
+RX18Mbps 		109.267
+RX24Mbps 		73.1361
+RX36Mbps 		58.4953
+RX48Mbps 		42.6657
+RX54Mbps 		39.8716
+
+
+
+### DESKTOP, WINDDK, native
+
+# TX Blocks
+
+scramble		1049.86
+encoding_12 		1035.09
+encoding_23 		564.169
+encoding_34 		822.849
+interleaving_bpsk 	402.917
+interleaving_qpsk 	338.49
+interleaving_16qam 	261.686
+interleaving_64qam 	240.626
+modulating_bpsk 	998.044
+modulating_qpsk 	608.721
+modulating_16qam 	1076.96
+modulating_64qam 	1466.23
+map_ofdm 		1229.77
+ifft 			175.104
+
+# RX Blocks
+
+DownSample 		1650.85
+RemoveDC		1147.09
+CCA 			140.887
+LTS 			174.107
+FFT 			356.577
+ChannelEqualization 	982.28
+PilotTrack 		298.132
+DataSymbol 		2159.27
+DemapBPSK 		1072.93
+DemapQPSK 		792.732
+DemapQAM16 		538.268
+DemapQAM64 		398.818
+DeinterleaveBPSK 	2243.81
+DeinterleaveQPSK 	1700.97
+DeinterleaveQAM16 	1795.72
+DeinterleaveQAM64 	1700.36
+Viterbi 		107.469
+
+# TX
+
+TX6Mbps			52.6928
+TX9Mbps 		73.7344
+TX12Mbps 		62.5988
+TX18Mbps 		89.2485
+TX24Mbps 		58.431
+TX36Mbps 		86.5106
+TX48Mbps 		68.6824
+TX54Mbps 		98.0176
+
+# RX
+
+RXCCA			184.369
+RX6Mbps 		148.725
+RX9Mbps 		125.299
+RX12Mbps 		110.26
+RX18Mbps 		97.0764
+RX24Mbps 		55.6284
+RX36Mbps 		46.2938
+RX48Mbps 		34.5115
+RX54Mbps 		33.2811
+
+# 2 threads 
+
+TX6Mbps			78.7172
+TX9Mbps 		89.7081
+TX12Mbps 		60.0057
+TX18Mbps 		78.0291
+TX24Mbps 		56.792
+TX36Mbps 		75.1033
+TX48Mbps 		61.9834
+TX54Mbps 		83.5481
+
+RX6Mbps 		176.088
+RX9Mbps 		193.268
+RX12Mbps 		164.096
+RX18Mbps 		165.598
+RX24Mbps 		80.7439
+RX36Mbps 		62.3978
+RX48Mbps 		44.2803
+RX54Mbps 		41.9064
+
+
+
+
+####### Visual studio compiler
+
+
+
+### DESKTOP, VS, not native
+
+# TX Blocks
+
+scramble     	     984.339
+encoding_12 	     970.553
+encoding_23 	     527.557
+encoding_34 	     869.376
+interleaving_qpsk    268.062
+interleaving_bpsk    342.398
+interleaving_16qam   303.409
+interleaving_64qam   288.806
+modulating_bpsk      895.143
+modulating_qpsk      582.808
+modulating_16qam     944.787
+modulating_64qam     1243.26
+map_ofdm 	     1573.81
+ifft 		     196.193
+
+# RX Blocks
+
+DownSample	     2262.75
+RemoveDC 	     1260.73
+CCA 		     131.698
+LTS 		     177.777
+FFT 		     431.254
+ChannelEqualization  893.192
+PilotTrack 	     278.895
+DataSymbol 	     2140.37
+DemapBPSK 	     1529.43
+DemapQPSK 	     790.683
+DemapQAM16 	     487.204
+DemapQAM64 	     389.14
+DeinterleaveBPSK     1642.47
+DeinterleaveQPSK     1841.59
+DeinterleaveQAM16    2635.18
+DeinterleaveQAM64    2005.5
+Viterbi 	     95.6836
+
+# TX
+
+TX6Mbps		     37.8502
+TX9Mbps 	     45.1974
+TX12Mbps 	     46.9771
+TX18Mbps 	     54.9189
+TX24Mbps 	     60.4914
+TX36Mbps 	     67.0971
+TX48Mbps 	     61.2574
+TX54Mbps 	     64.887
+
+# RX
+
+RXCCA
+RX6Mbps		     122.603
+RX9Mbps 	     106.623
+RX12Mbps 	     84.375
+RX18Mbps 	     69.7714
+RX24Mbps 	     53.363
+RX36Mbps 	     43.7975
+RX48Mbps 	     33.057
+RX54Mbps 	     31.1512
+
+# 2 threads
+
+TX6Mbps 44.0436
+TX9Mbps 56.3573
+TX12Mbps 51.7201
+TX18Mbps 60.7892
+TX24Mbps 64.583
+TX48Mbps 61.6751
+TX36Mbps 73.63
+TX54Mbps 68.9405
+
+RX6Mbps 156.867
+RX9Mbps 156.351
+RX12Mbps 121.729
+RX18Mbps 101.237
+RX24Mbps 71.9589
+RX36Mbps 55.7951
+RX48Mbps 41.0242
+RX54Mbps 39.9287
+
+
+
+
+### DESKTOP, VS, native
+
+test_scramble_perf 757.909
+test_modulating_16qam_perf 932.644
+test_interleaving_qpsk_perf 267.551
+test_ifft 198.629
+test_modulating_bpsk_perf 918.755
+test_encoding_12_perf 975.087
+test_encoding_23_perf 528.483
+test_map_ofdm_perf 1574.43
+test_interleaving_bpsk_perf 359.975
+test_encoding_34_perf 705.199
+test_interleaving_64qam_perf 291.243
+test_modulating_64qam_perf 1214.42
+test_interleaving_16qam_perf 307.899
+test_modulating_qpsk_perf 591.328
+testDeinterleaveQAM64 1718.45
+testDeinterleaveQPSK 2495.51
+testLTS 174.821
+testCCA 130.524
+testDownSample 3357.17
+testDeinterleaveQAM16 1522.88
+testChannelEqualization 893.144
+testDemapQAM64 366.461
+testDeinterleaveBPSK 1606.12
+testDemapQAM16 466.39
+testFFT 429.539
+testDemapQPSK 742.661
+testPilotTrack 281.444
+testDemapBPSK 1157.15
+testDataSymbol 2246.18
+testRemoveDC 1355.16
+testViterbi 97.6305
+
+# TX
+
+TX6Mbps		    61.9053
+TX9Mbps 	    88.941
+TX12Mbps 	    71.0216
+TX18Mbps 	    98.5192
+TX24Mbps 	    72.8863
+TX36Mbps 	    103.062
+TX48Mbps 	    72.0376
+TX54Mbps 	    104.632
+
+# RX
+
+RXCCA
+RX6Mbps 	    132.534
+RX9Mbps 	    122.61
+RX12Mbps 	    108.853
+RX18Mbps 	    90.8575
+RX24Mbps 	    53.2945
+RX36Mbps 	    44.7621
+RX48Mbps 	    33.5199
+RX54Mbps 	    33.0392
+
+# 2 threads
+
+testTX18Mbps 104.945
+testTX48Mbps 74.4845
+testRX48Mbps 44.0443
+testTX6Mbps 72.246
+testTX54Mbps 107.624
+testRX9Mbps 192.697
+testRX54Mbps 41.6026
+testTX12Mbps 73.5991
+testRX36Mbps 63.2736
+testTX24Mbps 74.2544
+testRX12Mbps 171.755
+testRX24Mbps 79.401
+testRX18Mbps 169.835
+testTX9Mbps 102.599
+testTX36Mbps 103.709
+testRX6Mbps 197.841
+
+
+
+
+### DESKTOP, WINDDK, with memcopy-opt
+
+test_scramble_perf 1136.88
+test_modulating_16qam_perf 1280.33
+test_interleaving_qpsk_perf 319.789
+test_ifft 181.462
+test_modulating_bpsk_perf 1346.64
+test_encoding_12_perf 1203.22
+test_encoding_23_perf 604.767
+test_map_ofdm_perf 1936.82
+test_interleaving_bpsk_perf 420.513
+test_encoding_34_perf 866.912
+test_interleaving_64qam_perf 239.573
+test_modulating_64qam_perf 1923.04
+test_interleaving_16qam_perf 256.197
+test_modulating_qpsk_perf 751.021
+testDeinterleaveQAM64 2561.61
+testDeinterleaveQPSK 2349.96
+testLTS 173.512
+testCCA 142.355
+testDownSample 3412.27
+testDeinterleaveQAM16 2396.47
+testChannelEqualization 1576.07
+testDemapQAM64 439.385
+testDeinterleaveBPSK 2232.69
+testDemapQAM16 611.606
+testFFT 384.045
+testDemapQPSK 919.084
+testPilotTrack 291.018
+testDemapBPSK 1534.45
+testDataSymbol 2666.95
+testRemoveDC 1385.64
+testViterbi 109.269
+testTX18Mbps 57.1021
+testRX48Mbps 33.6389
+testTX6Mbps 38.2776
+testTX54Mbps 59.6663
+testRX9Mbps 107.035
+testRXCCA 214.037
+testRX54Mbps 31.8288
+testTX9Mbps 48.6416
+testTX12Mbps 46.6347
+testRX36Mbps 45.1156
+testTX24Mbps 55.7906
+testRX12Mbps 82.4769
+testRX24Mbps 52.2381
+testRX18Mbps 70.9253
+testTX48Mbps 57.5417
+testTX36Mbps 66.8906
+testRX6Mbps 128.525
+
+# 2 threads
+
+???
+
+
+
+
+### DESKTOP, WINDDK, without memcopy-opt
+
+test_scramble_perf 1103.31
+test_modulating_16qam_perf 1253.73
+test_interleaving_qpsk_perf 309.205
+test_ifft 157.62
+test_modulating_bpsk_perf 1296.19
+test_encoding_12_perf 1150.62
+test_encoding_23_perf 579.593
+test_map_ofdm_perf 1860.95
+test_interleaving_bpsk_perf 403.856
+test_encoding_34_perf 865.546
+test_interleaving_64qam_perf 218.511
+test_modulating_64qam_perf 1791.89
+test_interleaving_16qam_perf 246.533
+test_modulating_qpsk_perf 721.319
+testDeinterleaveQAM64 2397.39
+testDeinterleaveQPSK 2292.32
+testLTS 166.362
+testCCA 136.439
+testDownSample 2558.92
+testDeinterleaveQAM16 2277.07
+testChannelEqualization 1254.41
+testDemapQAM64 424.818
+testDeinterleaveBPSK 2182.69
+testDemapQAM16 587.309
+testFFT 359.891
+testDemapQPSK 868.87
+testPilotTrack 272.256
+testDemapBPSK 1510.51
+testDataSymbol 2498
+testRemoveDC 1292.69
+testViterbi 109.185
+testTX18Mbps 56.0144
+testTX48Mbps 56.0566
+testRX48Mbps 32.7325
+testTX6Mbps 37.1277
+testTX54Mbps 59.9703
+testRXCCA 184.377
+testRX9Mbps 104.174
+testRX54Mbps 31.5561
+testTX12Mbps 45.7651
+testRX36Mbps 44.4404
+testTX24Mbps 54.7863
+testRX12Mbps 83.6557
+testRX24Mbps 52.9577
+testRX18Mbps 71.8318
+testTX9Mbps 46.9966
+testTX36Mbps 66.3474
+testRX6Mbps 119.12
+testTX18Mbps 53.8938
+testTX48Mbps 48.3743
+testRX48Mbps 43.6647
+testTX6Mbps 52.9454
+testTX54Mbps 52.781
+testRXCCA 185.275
+testRX9Mbps 156.574
+testRX54Mbps 41.2911
+testTX12Mbps 43.9972
+testRX36Mbps 61.2966
+testTX24Mbps 48.2104
+testRX12Mbps 142.905
+testRX24Mbps 76.6205
+testRX18Mbps 117.472
+testTX9Mbps 76.8059
+testTX36Mbps 56.9859
+testRX6Mbps 171.171
+
+
+
+
+
+# MAC branch (measurement 1)
+
+test_scramble_perf 883.525
+test_modulating_16qam_perf 808.29
+test_interleaving_qpsk_perf 250.768
+test_ifft 182.595
+test_modulating_bpsk_perf 884.956
+test_encoding_12_perf 1060.91
+test_encoding_23_perf 536.685
+test_map_ofdm_perf 1889.64
+test_interleaving_bpsk_perf 306.643
+test_encoding_34_perf 688.449
+test_interleaving_64qam_perf 239.668
+test_modulating_64qam_perf 1131.09
+test_interleaving_16qam_perf 211.857
+test_modulating_qpsk_perf 682.063
+testDeinterleaveQAM64 1574.31
+testDeinterleaveQPSK 1904.4
+testLTS 178.912
+testCCA 136.99
+testDownSample 2737.1
+testDeinterleaveQAM16 1429.49
+testChannelEqualization 1420.49
+testDemapQAM64 437.505
+testDeinterleaveBPSK 1510.85
+testDemapQAM16 597.882
+testFFT 377.551
+testDemapQPSK 909.107
+testPilotTrack 294.734
+testDemapBPSK 1370.71
+testDataSymbol 2496.63
+testRemoveDC 1293.06
+testViterbi 106.996
+testTX18Mbps 57.1468
+testTX48Mbps 56.3031
+testRX48Mbps 33.2603
+testTX54Mbps 59.1716
+testRXCCA 249.261
+testRX9Mbps 104.593
+testRX54Mbps 31.5163
+testTX6Mbps 38.115
+testTX12Mbps 46.3199
+testRX36Mbps 43.3459
+testTX24Mbps 55.4563
+testRX12Mbps 81.307
+testRX24Mbps 52.9262
+testRX18Mbps 69.1727
+testTX9Mbps 48.6262
+testTX36Mbps 66.241
+testRX6Mbps 117.475
+testTX18Mbps 49.3827
+testTX48Mbps 48.4232
+testRX48Mbps 43.9601
+testTX54Mbps 48.7655
+testRXCCA 226.261
+testRX9Mbps 192.318
+testRX54Mbps 41.5737
+testTX6Mbps 50.3119
+testTX12Mbps 42.1538
+testRX36Mbps 58.6263
+testTX24Mbps 46.8403
+testRX12Mbps 142.831
+testRX24Mbps 71.535
+testRX18Mbps 120.577
+testTX9Mbps 61.5656
+testTX36Mbps 54.2271
+testRX6Mbps 198.974
+
+
+
+# MAC branch (measurement 2)
+
+test_scramble_perf 1047.01
+test_modulating_16qam_perf 949.632
+test_interleaving_qpsk_perf 247.325
+test_ifft 178.894
+test_modulating_bpsk_perf 979.71
+test_encoding_12_perf 1051.56
+test_encoding_23_perf 539.354
+test_map_ofdm_perf 2520.67
+test_interleaving_bpsk_perf 306.482
+test_encoding_34_perf 803.968
+test_interleaving_64qam_perf 237.734
+test_modulating_64qam_perf 1403.71
+test_interleaving_16qam_perf 210.511
+test_modulating_qpsk_perf 748.643
+testDeinterleaveQAM64 2795.17
+testDeinterleaveQPSK 2522.83
+testLTS 177.652
+testCCA 135.732
+testDownSample 5704.83
+testDeinterleaveQAM16 2743.79
+testChannelEqualization 2090
+testDemapQAM64 464.065
+testDeinterleaveBPSK 2375.86
+testDemapQAM16 657.095
+testFFT 391.008
+testDemapQPSK 1052.29
+testPilotTrack 292.852
+testDemapBPSK 1864.38
+testDataSymbol 4160.95
+testRemoveDC 1719.31
+testViterbi 101.546
+testTX18Mbps 57.2439
+testTX48Mbps 56.2647
+testRX48Mbps 33.6818
+testTX54Mbps 59.1349
+testRXCCA 246.573
+testRX9Mbps 104.758
+testRX54Mbps 31.9385
+testTX6Mbps 37.9701
+testTX12Mbps 45.899
+testRX36Mbps 44.3473
+testTX24Mbps 55.2889
+testRX12Mbps 80.7861
+testRX24Mbps 53.0411
+testRX18Mbps 69.1377
+testTX9Mbps 47.0969
+testTX36Mbps 65.9662
+testRX6Mbps 116.821
+testTX18Mbps 51.4131
+testTX48Mbps 48.5625
+testRX48Mbps 42.679
+testTX54Mbps 50.7465
+testRXCCA 222.4
+testRX9Mbps 190.493
+testRX54Mbps 41.0928
+testTX6Mbps 50.2795
+testTX12Mbps 42.4849
+testRX36Mbps 56.6562
+testTX24Mbps 45.5775
+testRX12Mbps 150.684
+testRX24Mbps 77.2878
+testRX18Mbps 118.755
+testTX9Mbps 59.8497
+testTX36Mbps 53.3767
+testRX6Mbps 193.658
+
+
+
+# MAC branch (measurement 3)
+
+test_scramble_perf 1050.08
+test_modulating_16qam_perf 954.299
+test_interleaving_qpsk_perf 247.88
+test_ifft 180.474
+test_modulating_bpsk_perf 981.643
+test_encoding_12_perf 1052.93
+test_encoding_23_perf 539.91
+test_map_ofdm_perf 2539.62
+test_interleaving_bpsk_perf 309.116
+test_encoding_34_perf 804.292
+test_interleaving_64qam_perf 237.173
+test_modulating_64qam_perf 1428.84
+test_interleaving_16qam_perf 209.72
+test_modulating_qpsk_perf 754.404
+testDeinterleaveQAM64 2815.79
+testDeinterleaveQPSK 2544.53
+testLTS 177.669
+testCCA 135.97
+testDownSample 5576.62
+testDeinterleaveQAM16 2799.4
+testChannelEqualization 2033.8
+testDemapQAM64 463.508
+testDeinterleaveBPSK 2430.25
+testDemapQAM16 661.065
+testFFT 390.535
+testDemapQPSK 1056.09
+testPilotTrack 292.901
+testDemapBPSK 1880.72
+testDataSymbol 4192.7
+testRemoveDC 1686.06
+testViterbi 109.044
+testTX18Mbps 57.2679
+testTX48Mbps 56.09
+testRX48Mbps 33.0695
+testTX54Mbps 59.2111
+testRXCCA 247.115
+testRX9Mbps 104.551
+testRX54Mbps 31.3936
+testTX6Mbps 38.0339
+testTX12Mbps 46.3271
+testRX36Mbps 43.4385
+testTX24Mbps 55.3148
+testRX12Mbps 80.6083
+testRX24Mbps 52.9238
+testRX18Mbps 69.4301
+testTX9Mbps 48.8242
+testTX36Mbps 66.2097
+testRX6Mbps 116.507
+testTX18Mbps 51.6658
+testTX48Mbps 47.7457
+testRX48Mbps 42.6793
+testTX54Mbps 49.6173
+testRXCCA 219.912
+testRX9Mbps 170.044
+testRX54Mbps 41.5018
+testTX6Mbps 49.9707
+testTX12Mbps 44.3156
+testRX36Mbps 58.2366
+testTX24Mbps 47.6458
+testRX12Mbps 131.083
+testRX24Mbps 78.2663
+testRX18Mbps 111.607
+testTX9Mbps 62.3146
+testTX36Mbps 53.1306
+testRX6Mbps 120.814

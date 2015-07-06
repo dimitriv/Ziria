@@ -1,0 +1,75 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#pragma once 
+
+#include <externals.blk>
+#include "cca/cca_tufv.blk"
+#include "OFDM/LTS.blk"
+#include "removeDC.blk"
+#include "downSample.blk"
+#include "OFDM/DataSymbol.blk"
+#include "OFDM/FreqCompensation.blk"
+#include "OFDM/FFT.blk"
+#include "OFDM/ChannelEqualization.blk"
+#include "OFDM/PilotTrack.blk"
+#include "OFDM/GetData.blk"
+#include "decoding/DecodePLCP.blk"
+#include "decoding/Decode.blk"
+#include "../transmitter/crc.blk"
+
+
+fun comp detectPreamble(energy_threshold : int32) { 
+  (removeDC() >>> cca(energy_threshold))
+} 
+
+
+fun comp receiveBits() {
+       seq { hdata <- DecodePLCP()
+           ; Decode(hdata) >>> 
+             seq { (c : arr[32] bit) <- crc(hdata.len-4, false); check_crc(c) } >>>
+             repeat{
+               x<-takes 8;
+               if (not hdata.err) then {
+                  emits x;
+               }
+             }
+       }
+}
+
+
+fun comp receiver() {
+  seq{ det<-detectPreamble(1000)
+#ifndef FAST
+     ; do{let normMaxCorr = if (det.energy == 0) then 0 else det.maxCorr / det.energy;
+          println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
+                  ", energy: ", det.energy, ", noise: ", det.noise, 
+                  ", maxCorr: ", det.maxCorr, ", normMaxCorr: ", normMaxCorr}
+#endif
+     ; params <- (LTS(det.shift, det.maxCorr))
+     ; DataSymbol(det.shift) 
+       >>> FFT() 
+       >>> ChannelEqualization(params)
+       >>> PilotTrack()
+       >>> GetData() 
+       >>> receiveBits()
+  }
+}
+
+
