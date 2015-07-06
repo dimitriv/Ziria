@@ -50,12 +50,12 @@ alphaNorm sym = mapCompM return return return return return action
 
       | Branch e c1 c2 <- unComp c
       , let loc = compLoc c
-      = do x <- freshName sym "branch_cond" loc (ctExp e) Imm
+      = do x <- freshName sym (show e) loc (ctExp e) Imm
            return $ cLetE loc x AutoInline e (cBranch loc (eVar loc x) c1 c2)
 
       | While e c1 <- unComp c
       , let loc = compLoc c
-      = do x <- freshName sym "while_cond" loc (ctExp e) Imm
+      = do x <- freshName sym (show e) loc (ctExp e) Imm
            return $ 
              cLetERef loc x (Just e) $
                cWhile loc (eVar loc x) 
@@ -64,7 +64,7 @@ alphaNorm sym = mapCompM return return return return return action
 
       | Until e c1 <- unComp c
       , let loc = compLoc c
-      = do x <- freshName sym "until_cond" loc (ctExp e) Imm
+      = do x <- freshName sym (show e) loc (ctExp e) Imm
            return $ 
              cLetERef loc x Nothing $
                cUntil loc (eVar loc x) 
