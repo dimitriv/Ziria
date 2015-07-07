@@ -28,7 +28,7 @@ import Outputable
 import qualified GenSym as GS
 
 import qualified Data.Set as S
-import Control.Monad.State
+import Control.Monad.State hiding ( (>=>) )
 
 import Data.List as M
 import Data.Maybe ( isJust )
@@ -87,17 +87,12 @@ vect_dd1 dfs cty lcomp i (NDiv i0) (NDiv i1)
     act venv st = rwTakeEmitIO venv st lcomp
 
     zirbody :: VecEnv -> Zr EId
-    zirbody venv = do
-      let eqtys = vin_ty_big == vin_ty
-      xa <- if eqtys then ftake vin_ty else fneweref ("xa" ::: vin_ty_big)
-      unless eqtys $
-        ftimes zERO i1 $ \cnt -> 
-          do x <- ftake vin_ty
-             vectAssign xa cnt arin x
-
-      let offin = eint32 (0)
-          st    = RwState { rws_in = DoRw xa offin, rws_out = DoNotRw }
-      fembed (act venv st)
+    zirbody venv = 
+      fmitigate orig_inty arin i >=> 
+        do { xa <- ftake vin_ty_big
+           ; let offin = eint32 (0)
+                 st    = RwState { rws_in = DoRw xa offin, rws_out = DoNotRw }
+           ; fembed (act venv st) }
 
 
 {-------------------------------------------------------------------------------
@@ -125,28 +120,25 @@ vect_dd2 dfs cty lcomp j (NDiv j0) (NDiv j1)
 
     -- Slightly annoying duplication with specal-casing on unit
     zirbody1 :: VecEnv -> Zr ()
-    zirbody1 venv = do 
-      ya <- fneweref ("ya" ::: vout_ty_big)
-      let offout = eint32(0)
-          st     = RwState { rws_in = DoNotRw, rws_out = DoRw ya offout }
-      (x :: ()) <- fembed (act venv st)
+    zirbody1 venv = 
+      do { ya <- fneweref ("ya" ::: vout_ty_big)
+         ; let offout = eint32(0)
+               st     = RwState { rws_in = DoNotRw, rws_out = DoRw ya offout }
+         ; (x :: ()) <- fembed (act venv st)
+         ; femit ya 
+         } >=> fmitigate orig_outty (j0*j1) arout
 
-      if vout_ty == vout_ty_big 
-        then femit ya
-        else ftimes zERO j1 $ \cnt -> vectEmit ya cnt arout 
 
     zirbody2 :: VecEnv -> Zr EId
-    zirbody2 venv = do 
-      ya <- fneweref ("ya" ::: vout_ty_big)
-      let offout = eint32(0)
-          st     = RwState { rws_in = DoNotRw, rws_out = DoRw ya offout }
-      v <- fembed (act venv st)
+    zirbody2 venv = 
+      do { ya <- fneweref ("ya" ::: vout_ty_big)
+         ; let offout = eint32(0)
+               st     = RwState { rws_in = DoNotRw, rws_out = DoRw ya offout }
+         ; v <- fembed (act venv st)
 
-      if vout_ty == vout_ty_big
-        then femit ya
-        else ftimes zERO j1 $ \cnt -> vectEmit ya cnt arout
-
-      freturn _aI v
+         ; femit ya
+         ; freturn _aI v 
+         } >=> fmitigate orig_outty (j0*j1) arout
 
 
 {-------------------------------------------------------------------------------
@@ -180,47 +172,29 @@ vect_dd3 dfs cty lcomp i (NDiv i0) (NDiv i1)
 
 
     zirbody1 :: VecEnv -> Zr ()
-    zirbody1 venv = do
-      let eqtys = vin_ty_big == vin_ty
-      xa <- if eqtys then ftake vin_ty else fneweref ("xa" ::: vin_ty_big)
-      unless eqtys $
-         ftimes zERO i1 $ \cnt -> 
-            do x <- ftake vin_ty
-               vectAssign xa cnt arin x
+    zirbody1 venv = 
+      fmitigate orig_inty arin (i0*i1) >=> 
+      do { xa <- ftake vin_ty_big
+         ; ya <- fneweref ("ya" ::: vout_ty_big)
+         ; let offin  = eint32 (0)
+               offout = eint32 (0) 
+               st     = RwState { rws_in = DoRw xa offin, rws_out = DoRw ya offout }
 
-      ya <- fneweref ("ya" ::: vout_ty_big)
-
-      let offin  = eint32 (0)
-          offout = eint32 (0) 
-          st     = RwState { rws_in = DoRw xa offin, rws_out = DoRw ya offout }
-
-      (_ :: ()) <- fembed (act venv st)
-
-
-      if vout_ty == vout_ty_big
-        then femit ya
-        else ftimes zERO j1 $ \cnt -> vectEmit ya cnt arout
+         ; (_ :: ()) <- fembed (act venv st)
+         ; femit ya
+         } >=> fmitigate orig_outty (j0*j1) arout
 
 
     zirbody2 :: VecEnv -> Zr EId
-    zirbody2 venv = do
-      let eqtys = vin_ty_big == vin_ty
-      xa <- if eqtys then ftake vin_ty else fneweref ("xa" ::: vin_ty_big)
-      unless eqtys $
-         ftimes zERO i1 $ \cnt -> 
-            do x <- ftake vin_ty
-               vectAssign xa cnt arin x
+    zirbody2 venv = 
+      fmitigate orig_inty arin (i0*i1) >=> 
+      do { xa <- ftake vin_ty_big
+         ; ya <- fneweref ("ya" ::: vout_ty_big)
+         ; let offin  = eint32 (0)
+               offout = eint32 (0) 
+               st     = RwState { rws_in = DoRw xa offin, rws_out = DoRw ya offout }
 
-      ya <- fneweref ("ya" ::: vout_ty_big)
-
-      let offin  = eint32 (0)
-          offout = eint32 (0) 
-          st     = RwState { rws_in = DoRw xa offin, rws_out = DoRw ya offout }
-
-      v <- fembed (act venv st)
-
-      if vout_ty == vout_ty_big
-        then femit ya
-        else ftimes zERO j1 $ \cnt -> vectEmit ya cnt arout
-
-      freturn _aI v
+         ; v <- fembed (act venv st)
+         ; femit ya
+         ; freturn _aI v
+         } >=> fmitigate orig_outty (j0*j1) arout
