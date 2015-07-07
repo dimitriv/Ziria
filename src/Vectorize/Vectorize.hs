@@ -40,7 +40,7 @@ import Data.List as M
 import Data.Loc
 import qualified Data.Map  as Map
 import Data.Functor.Identity
-import Data.Maybe ( fromJust )
+import Data.Maybe ( fromJust, catMaybes )
 import Data.IORef
 
 import Control.Applicative  ( (<$>) )
@@ -61,6 +61,8 @@ import CtComp
 import Debug.Trace
 
 import CardAnalysis
+
+import Debug.Trace
 
 {-------------------------------------------------------------------------------
   Vectorizer proper
@@ -479,7 +481,7 @@ vectRepeat dfs (VectPack { vp_vctx  = vctx
                          , vp_tyout = tyout
                          , vp_loc   = loc 
                          , vp_comp  = orig_repeat_comp }) c vann 
-  = do cands <- go vann c
+  = do (_,cands) <- go vann c
        when (Map.null cands) $
          vecMFail loc $
            vcat [ text "Empty vectorization, check vectorization annotations."
@@ -489,9 +491,11 @@ vectRepeat dfs (VectPack { vp_vctx  = vctx
        return cands
  
   where
+   wrap_repeat c = cRepeat (compLoc c) Nothing c
+
    -- | Vectorize without restrictions and up/dn mitigate
    go Nothing c0 = do 
-     let (sfuds,sfdus,sfdds)
+     let sfss@(sfuds,sfdus,sfdds)
             = repeat_scalefactors vctx (compInfo c0) tyin tyout
      vecuds <- vect_comp_ud dfs c0 sfuds >>= logCands dfs False "vect_comp_ud"
      vecdus <- vect_comp_du dfs c0 sfdus >>= logCands dfs False "vect_comp_du"
@@ -506,43 +510,54 @@ vectRepeat dfs (VectPack { vp_vctx  = vctx
      -- Add self too here:
      let self = mkSelf orig_repeat_comp tyin tyout
      let res = self `addDVR` 
-                 mapDVRCands (updDVRComp $ cRepeat loc Nothing) cands
-     logCands dfs True "VectRepeat" res
+                 mapDVRCands (updDVRComp wrap_repeat) cands
+
+     _ <- logCands dfs True "VectRepeat" res
+     return (sfss,res)
   
    -- | Vectorize internally to /exactly/ (fin,fout) and externally up
    -- or down depending on the flag f
    go (Just ann@(Rigid f (fin,fout))) c0 = do
-      vcs <- go Nothing c0
+      (sfss,vcs) <- go Nothing c0
       let pred (ty1,ty2) _ = ty_match ty1 fin && ty_match ty2 fout
           vcs_matching     = Map.filterWithKey pred vcs
 
-      -- verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands vcs))
+      -- vcs_rest         = Map.filterWithKey (not . pred) vcs 
+
+      verbose dfs $ text ("Rigid (fin,fout) = " ++ show (fin,fout))
+      verbose dfs $ text ("Context is: " ++ show vctx)
+      verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands vcs))
 
       res <- logCands dfs False "VectRepeat" $ 
-               mitigateFlexi ann vctx vcs_matching
+               mitigateFlexi ann vctx sfss vcs_matching
       -- Force mitigation result
       res `seq` do 
-         -- verbose dfs $ text "After mitigateFlexi:"
-         -- verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands res))
-         return res
+         verbose dfs $ text "After mitigateFlexi (Rigid):"
+         verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands res))
+         return (sfss,res)
 
    -- | Vectorize internally to anything <= (fin,fout) and externally up
    -- or down depending on the flag f
    go (Just ann@(UpTo f (fin,fout))) c0 = do
-      vcs <- go Nothing c0
-      -- verbose dfs $ text ("UpTo (fin,fout) = " ++ show (fin,fout))
-      -- verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands vcs))
+      (sfss,vcs) <- go Nothing c0
+
+      verbose dfs $ text ("UpTo (fin,fout) = " ++ show (fin,fout))
+      verbose dfs $ text ("Context is: " ++ show vctx)
+      verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands vcs))
 
       let pred (ty1,ty2) _ = ty_upto ty1 fin && ty_upto ty2 fout
           vcs_matching     = Map.filterWithKey pred vcs
+
+      _ <- logCands dfs True "Matching (UpTo) are:" $ vcs_matching
+
       res <- logCands dfs False "VectRepeat" $ 
-                mitigateFlexi ann vctx vcs_matching
+                mitigateFlexi ann vctx sfss vcs_matching
 
       res `seq` do 
 
-        -- verbose dfs $ text "After mitigateFlexi:"
-        -- verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands res))
-        return res
+        verbose dfs $ text "After mitigateFlexi (UpTo):"
+        verbose dfs $ nest 2 $ vcat (map (text . show) (dvResDVRCands res))
+        return (sfss,res)
  
 
 -- | Somewhat delicate arity equality and up-to comparisons
@@ -561,10 +576,10 @@ ty_upto _t j                      = j > 0
 -------------------------------------------------------------------------------}
 
 -- | Try to create mitigated versions of candidates to all scalefactors
-mitigateFlexi :: VectAnn -> CtxForVect -> DVRCands -> DVRCands
-mitigateFlexi (Rigid False _) vctx cands = cands
-mitigateFlexi (UpTo False _) vctx cands  = cands
-mitigateFlexi vann vctx cands = 
+mitigateFlexi :: VectAnn -> CtxForVect -> ScaleFactors -> DVRCands -> DVRCands
+mitigateFlexi (Rigid False _) vctx _sfss cands = cands
+mitigateFlexi (UpTo False _)  vctx _sfss cands = cands
+mitigateFlexi vann vctx sfss cands = 
   let is_rigid = case vann of { Rigid {} -> True; _ -> False }
       mitigated r = 
        let ain  = tyArity (vect_in_ty  $ dvr_vres r)
@@ -580,10 +595,20 @@ mitigateFlexi vann vctx cands =
                     then compSFDD_aux dummy_card
                     else []
            (sfuds,sfdus,sfdds) = select_scalefactors vctx (sfuds0,sfdus0,sfdds0)
-           arities = map sfud_arity sfuds ++
-                     map sfdu_arity sfdus ++
-                     map sfdd_arity sfdds
-       in map (\ar -> mit_one "MF" ar r) arities
+{- Alternatively, it's entirely valid to do the following, 
+   but I am keeping the arguably less efficient current 
+   version as the approximation we do with the dummy_card
+   seems to give slightly less 'mitigated' final code.
+
+       let (sfuds,sfdus,sfdds) = sfss
+ -}
+           arities1 = map sfud_arity sfuds
+           arities2 = map sfdu_arity sfdus
+           arities3 = map sfdd_arity sfdds
+           arities  = arities1 ++ arities2 ++ arities3 
+
+       in catMaybes $ map (\ar -> mit_one_mb "MF" ar r) arities
+
   in fromListDVRCands (concatMap mitigated (Map.elems cands))
 
 

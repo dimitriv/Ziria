@@ -289,6 +289,7 @@ data Zr v where
  FPure     :: v -> Zr v
 
  FEmbed    :: Bindable v => IO Comp -> Zr v
+ FMitigate :: Ty -> Int -> Int -> Zr Void
 
 instance Monad Zr where
   return e                      = FPure e 
@@ -300,7 +301,8 @@ instance Monad Zr where
   (>>=) (FEmit v) f             = FBind (FEmit v) f
   (>>=) (FEmits v) f            = FBind (FEmits v) f
   (>>=) (FBind m g)   f         = FBind m (\v -> g v >>= f)
-  (>>=) (FRepeat v c) f         = FBind (FRepeat v c) f 
+  (>>=) (FRepeat _v _c) _f        = error "Ill typed Zr() construction!" -- FBind (FRepeat v c) f 
+  (>>=) (FMitigate _t _n1 _n2) _f = error "Ill typed Zr() construction!" -- FBind (FMitigate t n1 n2) f
   (>>=) (FParA p m1 m2) f       = FBind (FParA p m1 m2) f
   (>>=) (FParB p m1 m2) f       = FBind (FParB p m1 m2) f
   (>>=) (FExec stms)  f         = FBind (FExec stms) f
@@ -342,7 +344,9 @@ interpC pref sym loc = go
                                return $ cBindMany loc c1 [(nm,c2)]
         (_,BndResU _)    -> cSeq loc c1 <$> go fc2
 
-    go (FRepeat v stc)   = cRepeat loc v <$> go stc
+    go (FRepeat v stc)     = cRepeat loc v <$> go stc
+    go (FMitigate t n1 n2) = return $ cMitigate loc "ZR" t n1 n2
+    
     go (FParA p st1 st2) = do c1 <- go st1 
                               c2 <- go st2
                               return $ cPar loc p c1 c2
@@ -396,12 +400,17 @@ freturn = FReturn
 
 class ArrComp a b c | a b -> c where 
   (>->) :: ParInfo -> Zr a -> Zr b -> Zr c
+  (>=>) :: Zr a -> Zr b -> Zr c
+  (>=>) z1 z2 = (>->) pnever z1 z2
 
 instance Bindable v => ArrComp Void v v where (>->) = FParA 
 instance Bindable v => ArrComp v Void v where (>->) = FParB
 
 frepeat :: Zr () -> Zr Void
 frepeat = FRepeat Nothing
+
+fmitigate :: Ty -> Int -> Int -> Zr Void
+fmitigate = FMitigate
 
 fexec :: Bindable v => FStmt v -> Zr v
 fexec = FExec 
