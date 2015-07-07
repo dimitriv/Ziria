@@ -555,18 +555,25 @@ dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ p
   where
     prefix = "digraph ziria_automaton {\n"
     postfix = ";\n}"
-    nodes = ("node [shape = point]":start)++ ("node [shape = doublecircle]":final) ++ ("node [shape = box]":normal)
+    nodes = ("node [shape = point]":start) ++
+            ("node [shape = doublecircle]":final) ++
+            ("node [shape = box]":decision) ++
+            ("node [shape = box]":action)
     start = ["start [label=\"\"]"]
     (finalN,normalN) = List.partition (\(Node _ nk) -> case nk of { Done -> True; _ -> False }) $ Map.elems (auto_graph a)
+    (actionN,decisionN) = List.partition (\(Node _ nk) -> case nk of { Action {} -> True; _ -> False }) normalN
     final = List.map (\(Node nid _) -> show nid ++ "[label=\"\"]") finalN
-    normal = List.map showNode normalN
+    action = List.map showNode actionN
+    decision = List.map showNode decisionN
     edges = ("start -> " ++ show (auto_start a)) : (List.map edges_of_node normalN)
     edges_of_node node = List.intercalate "; " [edge (node_id node) suc | suc <- sucs node]
     edge nid1 nid2 = show nid1 ++ " -> " ++ show nid2
 
     showNode (Node nid nk) = "  " ++ show nid ++ "[label=\"" ++ showNk nk ++ "\"]"
 
-    showNk (Action watoms _) = if showActions then List.intercalate ";\\n" $ List.map show watoms else ""
+    showNk (Action watoms _)
+      | showActions = List.intercalate "\\n" $ List.map show watoms
+      | otherwise =  ""
     showNk (AutomataModel.Branch x _ _ True) = "WHILE<" ++ show x ++ ">"
     showNk (AutomataModel.Branch x _ _ False) = "IF<" ++ show x ++ ">"
     showNk Done = "DONE"
