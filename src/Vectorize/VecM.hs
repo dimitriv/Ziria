@@ -548,23 +548,42 @@ mitigate_all vcs = map (mit_one "MA" (Just final_ty_in, Just final_ty_out)) vcs
    final_ty_out = tyArity $ gcdTys $ map (vect_out_ty . dvr_vres) vcs
 
 
-mit_one :: String -> (Maybe Int, Maybe Int) -> DelayedVectRes -> DelayedVectRes
-mit_one _orig (Nothing, Nothing) dvr = fixup_util_out (fixup_util_in dvr)
-mit_one orig (Just n,  Nothing) dvr  = fixup_util_out (mit_in orig n dvr)
-mit_one orig (Nothing, Just n)  dvr  = fixup_util_in  (mit_out orig dvr n)
-mit_one orig (Just n, Just m)   dvr  = mit_in orig n  (mit_out orig dvr m)
 
-mit_in :: String -> Int -> DelayedVectRes -> DelayedVectRes
+mit_one_mb :: String -> (Maybe Int, Maybe Int) -> DelayedVectRes -> Maybe DelayedVectRes
+mit_one_mb _orig (Nothing, Nothing) dvr = return $ fixup_util_out $ fixup_util_in dvr
+mit_one_mb orig (Just n,  Nothing) dvr  = fixup_util_out <$> mit_in orig n dvr 
+mit_one_mb orig (Nothing, Just n)  dvr  = fixup_util_in  <$> mit_out orig dvr n
+mit_one_mb orig (Just n, Just m)   dvr  = mit_in orig n =<< mit_out orig dvr m
+
+mit_one :: String -> (Maybe Int, Maybe Int) -> DelayedVectRes -> DelayedVectRes
+mit_one orig ar dvr = fromJust $ mit_one_mb orig ar dvr
+
+-- mit_one :: String -> (Maybe Int, Maybe Int) -> DelayedVectRes -> DelayedVectRes
+-- -- Precondition: (a) input arity  divides the input type of dvr
+-- --               (b) output arity divides the output type of dvr
+-- mit_one _orig (Nothing, Nothing) dvr = fixup_util_out (fixup_util_in dvr )
+-- mit_one orig (Just n,  Nothing) dvr  = fixup_util_out (mit_in orig n dvr )
+-- mit_one orig (Nothing, Just n)  dvr  = fixup_util_in  (mit_out orig dvr n)
+-- mit_one orig (Just n, Just m)   dvr  = mit_in orig n  (mit_out orig dvr m)
+
+
+mit_in :: String -> Int -> DelayedVectRes -> Maybe DelayedVectRes
 mit_in orig n (DVR { dvr_comp = io_comp, dvr_vres = vres })
-  | Just (final_in_ty, cmit) <- mitin
-  = -- trace ("mit_in:" ++ show final_in_ty ++ " ~~> " ++ show vinty ++ " ~~> " ++ show voutty) $ 
-    DVR { dvr_comp = cPar noLoc pnever cmit <$> io_comp
-        , dvr_vres = DidVect final_in_ty voutty u }
+  = do (final_in_ty, cmit) <- mk_in_mitigator orig n vinty
+       return $ DVR { dvr_comp = cPar noLoc pnever cmit <$> io_comp
+                    , dvr_vres = DidVect final_in_ty voutty u }
   where vinty  = vect_in_ty vres  -- type in the middle!
         voutty = vect_out_ty vres
-        mitin  = mk_in_mitigator orig n vinty
         u      = parUtility minUtil (vResUtil vres) vinty
-mit_in _ _ dvr = fixup_util_in dvr
+
+mit_out :: String -> DelayedVectRes -> Int -> Maybe DelayedVectRes
+mit_out orig (DVR { dvr_comp = io_comp, dvr_vres = vres }) m 
+  = do (final_out_ty, cmit) <- mk_out_mitigator orig voutty m
+       return $ DVR { dvr_comp = (\c -> cPar noLoc pnever c cmit) <$> io_comp
+                    , dvr_vres = DidVect vinty final_out_ty u }
+  where vinty  = vect_in_ty vres
+        voutty = vect_out_ty vres -- type in the middle!
+        u      = parUtility minUtil (vResUtil vres) voutty
 
 -- | Fixes-up utility /as if/ mitigation has happened
 -- This is to ensure all candidates are compared fairly, whether mitigation happened or not.
@@ -575,17 +594,6 @@ fixup_util_in dvr = dvr { dvr_vres = DidVect vinty voutty u }
         voutty = vect_out_ty vres
         u = parUtility minUtil (vResUtil vres) vinty
 
-mit_out :: String -> DelayedVectRes -> Int -> DelayedVectRes
-mit_out orig (DVR { dvr_comp = io_comp, dvr_vres = vres }) m 
-  | Just (final_out_ty, cmit) <- mitout
-  = -- trace ("mit_out:" ++ show vinty ++ " ~~> " ++ show voutty ++ " ~~> " ++ show final_out_ty) $ 
-    DVR { dvr_comp = (\c -> cPar noLoc pnever c cmit) <$> io_comp
-        , dvr_vres = DidVect vinty final_out_ty u }
-  where vinty  = vect_in_ty vres
-        voutty = vect_out_ty vres -- type in the middle!
-        mitout = mk_out_mitigator orig voutty m
-        u      = parUtility minUtil (vResUtil vres) voutty
-mit_out _ dvr _ = fixup_util_out dvr
 
 fixup_util_out :: DelayedVectRes -> DelayedVectRes
 fixup_util_out dvr = dvr { dvr_vres = DidVect vinty voutty u } 
@@ -594,20 +602,46 @@ fixup_util_out dvr = dvr { dvr_vres = DidVect vinty voutty u }
         voutty = vect_out_ty vres
         u = parUtility minUtil (vResUtil vres) voutty
 
+
 -- | Mitigate on the input, return final input type
+-- ^ Nothing => failure, NOT that we don't need a mitigator!
 mk_in_mitigator :: String -> Int -> Ty -> Maybe (Ty, Comp)
-mk_in_mitigator orig n (TArray (Literal m) tbase) 
-  | n > 1 || m > 1
-  , n <= m        
-  , n `mod` m == 0 || m `mod` n == 0
+mk_in_mitigator orig n (TArray (Literal m) tbase)
+  | m > 1 && n == 1
   = Just (mkVectTy tbase n, cMitigate noLoc orig tbase n m)
-  | otherwise = Nothing 
-mk_in_mitigator _ _n TVoid = Nothing -- nothing to mitigate
-mk_in_mitigator orig n t -- non-array
-  | n > 1     = Just (mkVectTy t n, cMitigate noLoc orig t n 1)
-  | otherwise = Nothing 
+  | m > 1 && n > 1 && (n `mod` m == 0 || m `mod` n == 0)
+  = Just (mkVectTy tbase n, cMitigate noLoc orig tbase n m)
+  | otherwise = Nothing
+mk_in_mitigator orig n tother
+  = Just (mkVectTy tother n, cMitigate noLoc orig tother n 1)
 
 -- | Mitigate on the output, return final output type
+-- ^ Nothing => failure, NOT that we don't need a mitigator!
+mk_out_mitigator :: String -> Ty -> Int -> Maybe (Ty, Comp)
+mk_out_mitigator orig (TArray (Literal n) tbase) m
+  | n > 1 && m == 1
+  = Just (mkVectTy tbase m, cMitigate noLoc orig tbase n m)
+  | m > 1 && n > 1 && (n `mod` m == 0 || m `mod` n == 0)
+  = Just (mkVectTy tbase m, cMitigate noLoc orig tbase n m)
+  | otherwise
+  = Nothing
+
+mk_out_mitigator orig tother m
+  = Just (mkVectTy tother m, cMitigate noLoc orig tother 1 m)
+
+{- 
+mk_out_mitigator orig (TArray (Literal n) tbase) m
+  | n > 1 || m > 1 
+  , m <= n
+  , n `mod` m == 0 || m `mod` n == 0
+  = Just (mkVectTy tbase m, cMitigate noLoc orig tbase n m)
+  | otherwise = Nothing
+mk_out_mitigator _ TVoid _m = Nothing -- nothing to mitigate
+mk_out_mitigator orig t m -- non-array
+  | m > 1     = Just (mkVectTy t m, cMitigate noLoc orig t 1 m)
+  | otherwise = Nothing
+
+
 mk_out_mitigator :: String -> Ty -> Int -> Maybe (Ty, Comp)
 mk_out_mitigator orig (TArray (Literal n) tbase) m
   | n > 1 || m > 1 
@@ -620,6 +654,7 @@ mk_out_mitigator orig t m -- non-array
   | m > 1     = Just (mkVectTy t m, cMitigate noLoc orig t 1 m)
   | otherwise = Nothing
 
+-}
         
 
 -- | Match vectorization candidates composed on the control path
