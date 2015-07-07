@@ -22,9 +22,6 @@ fun comp crc24 () {
 
 
 fun comp interleaver_bpsk() {
-  var y : arr[48] bit;
-  var ids3 : arr[288] int;
-
   repeat <= [48,48] {
     (x : arr[48] bit) <- takes 48;
     emits x
