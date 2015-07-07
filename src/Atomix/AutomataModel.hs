@@ -124,6 +124,10 @@ class Show a => Atom a where
 
 
 -- auxilliary functions for automata construction & manipulation
+size :: Automaton atom nid -> Int
+size = Map.size . auto_graph
+
+sucs :: Node atom nid -> [nid]
 sucs (Node _ Done) = []
 sucs (Node _ (Loop nxt)) = [nxt]
 sucs (Node _ (Action _ nxt)) = [nxt]
@@ -581,30 +585,27 @@ automatonPipeline dfs sym inty outty acomp = do
   putStrLn ">>>>>>>>>> mkAutomaton"
   a <- mkAutomaton dfs sym channels acomp k
   --putStrLn (dotOfAuto True a)
-  putStrLn "<<<<<<<<<<< mkAutomaton"
+  putStrLn $ "<<<<<<<<<<< mkAutomaton (" ++ show (size a) ++ " states)"
 
   putStrLn ">>>>>>>>>>> fuseActions"
   let a_f = fuseActions a
   --putStrLn (dotOfAuto True a_f)
-  putStrLn "<<<<<<<<<<< fuseActions"
+  putStrLn $ "<<<<<<<<<<< fuseActions (" ++ show (size a_f) ++ " states)"
 
   putStrLn ">>>>>>>>>>> deleteDeadNodes"
   let a_d = deleteDeadNodes a_f
   --putStrLn (dotOfAuto True a_d)
-  putStrLn "<<<<<<<<<<< deleteDeadNodes"
+  putStrLn $ "<<<<<<<<<<< deleteDeadNodes (" ++ show (size a_d) ++ " states)"
 
   putStrLn ">>>>>>>>>>> markSelfLoops"
   let a_l = markSelfLoops a_d
   --putStrLn (dotOfAuto True a_l)
-  putStrLn "<<<<<<<<<<< markSelfLoops"
+  putStrLn $ "<<<<<<<<<<< markSelfLoops (" ++ show (size a_l) ++ " states)"
 
   putStrLn ">>>>>>>>>>> normalize_auto_ids"
   let a_n = normalize_auto_ids 0 a_l
   --putStrLn (dotOfAuto True a_n)
-  putStrLn "<<<<<<<<<<< normalize_auto_ids"
-
-  putStrLn ">>>>>>>>>>> COMPLETED AUTOMATON CONSTRUCTION"
-  putStrLn $ "  number of automaton states = " ++ show (nextNid a_n)
+  putStrLn $ "<<<<<<<<<<< normalize_auto_ids (" ++ show (size a_n) ++ " states)"
   putStrLn "<<<<<<<<<<< COMPLETED AUTOMATON CONSTRUCTION\n"
 
   return a_n
