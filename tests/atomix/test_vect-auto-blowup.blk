@@ -1,0 +1,50 @@
+{-
+
+This concise example should compile to a two-state Atomix automaton.
+However, with vectorization enabled, we may observe a blow-up to hundred
+of state due to problems in the vectorizer.
+
+-}
+
+
+-- CRC24 --------------------------------------------------
+
+fun comp crc24 () {
+  (x:arr[8] bit) <- takes 8;
+  emits x;  
+
+  -- merging the two emits will prevent blow-up
+  emits {'0,'0,'0,'0};
+  emits {'0,'0,'0,'0};
+}
+
+
+-- ENCODE 12 ----------------------------------------------
+
+fun comp encode12() {
+  -- removing the "<=" will prevent blow-up
+  repeat <= [8,16] seq {
+    (x : bit) <- take;
+    emits {x,x}
+  }
+}
+
+
+-- BPSK ---------------------------------------------------
+
+fun comp modulate_bpsk() {
+  repeat { 
+      (x : bit) <- take;
+      emit complex16{re=-1; im=0}
+  }
+}
+
+
+-- MAIN ---------------------------------------------------
+
+let comp main = 
+  read >>>
+  crc24() >>>
+  encode12() >>>
+  modulate_bpsk() >>>
+  write
