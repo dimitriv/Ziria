@@ -247,12 +247,13 @@ main = do
               runAutoLUTPhase dflags sym fc
 
         when (isDynFlagSet dflags DumpAutomaton) $ do 
-          (ac,_rnst) <- zirToAtomZir sym lc
+          (ac,rnst) <- zirToAtomZir sym lc
           (automaton :: Automaton SymAtom Int) 
              <- automatonPipeline dflags sym undefined undefined ac
           let showActions = isDynFlagSet dflags Verbose
-          dump dflags DumpAutomaton (".automaton-phase.dump")
+          dump dflags DumpAutomaton (".automaton.dump")
                                     (text $ dotOfAuto showActions automaton)
+          dump dflags DumpBlocks (".blocks.dump") (Outputable.ppr rnst)
 
 
         (cc_lc,st) <- timedPhase dflags "atomixCompTransform" $ 

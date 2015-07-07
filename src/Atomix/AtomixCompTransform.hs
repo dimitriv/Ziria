@@ -115,6 +115,15 @@ data RnSt = RnSt { st_letref_vars :: [EId]
                  , st_structs     :: [(TyName, StructDef)]
                  }
 
+instance Outputable RnSt where
+  ppr (RnSt _ fundefs _) = vcat $ map (pprFun . unFun . fst . snd) fundefs
+    where
+      pprFun (MkFunDefined f args body) = ppr f <> (parens $ hsep $ punctuate comma $ map ppr args) <+> 
+        text ":=" <+> ppr body
+      pprFun (MkFunExternal f args _body) = ppr f <> (parens $ hsep $ punctuate comma $ map ppr args) <+> 
+        text ":=" <+> text "<EXTERNAL>"
+
+
 type RnStM a = StateT RnSt IO a
 
 recLetRef :: EId -> RnStM ()
