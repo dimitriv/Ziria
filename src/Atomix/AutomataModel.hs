@@ -560,8 +560,8 @@ dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ p
     (finalN,normalN) = List.partition (\(Node _ nk) -> case nk of { Done -> True; _ -> False }) $ Map.elems (auto_graph a)
     final = List.map (\(Node nid _) -> show nid ++ "[label=\"\"]") finalN
     normal = List.map showNode normalN
-    edges = ("start -> " ++ show (auto_start a)) : (List.concat $ List.map edges_of_node normalN)
-    edges_of_node node = [edge (node_id node) suc | suc <- sucs node]
+    edges = ("start -> " ++ show (auto_start a)) : (List.map edges_of_node normalN)
+    edges_of_node node = List.intercalate "; " [edge (node_id node) suc | suc <- sucs node]
     edge nid1 nid2 = show nid1 ++ " -> " ++ show nid2
 
     showNode (Node nid nk) = "  " ++ show nid ++ "[label=\"" ++ showNk nk ++ "\"]"
