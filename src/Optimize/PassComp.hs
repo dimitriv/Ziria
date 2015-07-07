@@ -408,6 +408,12 @@ passTakeEmit = TypedCompBottomUp $ \cloc comp -> if
            fun = mkFunDefined eloc fname [x] e
        rewrite letfun
 
+    | BindMany c [(x,ret)] <- unComp comp
+      , Return _ e <- unComp ret
+      , EVar x' <- unExp e
+      , x == x'
+      -> rewrite c
+
     | otherwise
      -> return comp
 
