@@ -603,6 +603,10 @@ automatonPipeline dfs sym inty outty acomp = do
   --putStrLn (dotOfAuto True a_n)
   putStrLn "<<<<<<<<<<< normalize_auto_ids"
 
+  putStrLn ">>>>>>>>>>> COMPLETED AUTOMATON CONSTRUCTION"
+  putStrLn $ "  number of automaton states = " ++ show (nextNid a_n)
+  putStrLn "<<<<<<<<<<< COMPLETED AUTOMATON CONSTRUCTION\n"
+
   return a_n
 
 
