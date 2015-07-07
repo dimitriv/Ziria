@@ -407,6 +407,15 @@ passTakeEmit = TypedCompBottomUp $ \cloc comp -> if
                    -- to preserve vectorization hints!
            fun = mkFunDefined eloc fname [x] e
        rewrite letfun
+ 
+    | Repeat nfo bm <- unComp comp
+      , BindMany mit_tk [(x,emt)] <- unComp bm
+      , Par p mit tk <- unComp mit_tk
+      , Take1 {} <- unComp tk
+      , Emit {}  <- unComp emt
+      -> rewrite $ 
+         cPar cloc p mit $ 
+         cRepeat cloc nfo (cBindMany cloc tk [(x,emt)])
 
     | BindMany c [(x,ret)] <- unComp comp
       , Return _ e <- unComp ret
