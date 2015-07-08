@@ -43,6 +43,7 @@ import Interpreter (evalSrcInt)
   CHAR        { L _ (T.TcharConst _) }
   STRING      { L _ (T.TstringConst _) }
   INT         { L _ (T.TintConst _) }
+  UINT        { L _ (T.TuintConst _) }    
   FLOAT       { L _ (T.TfloatConst _) }
   ID          { L _ (T.Tidentifier _) }
   STRUCTID    { L _ (T.Tidentifier _) }
@@ -83,6 +84,11 @@ import Interpreter (evalSrcInt)
   'int16'       { L _ T.Tint16 }
   'int32'       { L _ T.Tint32 }
   'int64'       { L _ T.Tint64 }
+  'uint'        { L _ T.Tuint }
+  'uint8'       { L _ T.Tuint8 }
+  'uint16'      { L _ T.Tuint16 }
+  'uint32'      { L _ T.Tuint32 }
+  'uint64'      { L _ T.Tuint64 }
   'length'      { L _ T.Tlength }
   'let'         { L _ T.Tlet }
   'map'         { L _ T.Tmap }
@@ -246,8 +252,8 @@ scalar_value :
   | "'0"    { L (locOf $1) $ VBit False }
   | "'1"    { L (locOf $1) $ VBit True }
   | '(' ')' { L (locOf $1) $ VUnit }
-  | INT     { L (locOf $1) $ VInt (snd (getINT $1)) }
-  | FLOAT   { L (locOf $1) $ VDouble (snd (getFLOAT $1)) }
+  | INT     { L (locOf $1) $ VInt (snd (getINT $1)) Signed }
+  | UINT    { L (locOf $1) $ VInt (snd (getUINT $1)) Unsigned }    
   | STRING  { L (locOf $1) $ VString (snd (getSTRING $1)) }
 
 {------------------------------------------------------------------------------
@@ -567,11 +573,16 @@ base_type :: { L SrcTy }
 base_type :
     '(' ')'            { L ($1 <--> $2) $ SrcTUnit }
   | 'bit'              { L (locOf $1)   $ SrcTBit }
-  | 'int'              { L (locOf $1)   $ SrcTInt SrcBW32 }
-  | 'int8'             { L (locOf $1)   $ SrcTInt SrcBW8 }
-  | 'int16'            { L (locOf $1)   $ SrcTInt SrcBW16 }
-  | 'int32'            { L (locOf $1)   $ SrcTInt SrcBW32 }
-  | 'int64'            { L (locOf $1)   $ SrcTInt SrcBW64 }
+  | 'int'              { L (locOf $1)   $ SrcTInt SrcBW32 SrcSigned }
+  | 'int8'             { L (locOf $1)   $ SrcTInt SrcBW8  SrcSigned }
+  | 'int16'            { L (locOf $1)   $ SrcTInt SrcBW16 SrcSigned }
+  | 'int32'            { L (locOf $1)   $ SrcTInt SrcBW32 SrcSigned }
+  | 'int64'            { L (locOf $1)   $ SrcTInt SrcBW64 SrcSigned }
+  | 'uint'             { L (locOf $1)   $ SrcTInt SrcBW32 SrcUnsigned }
+  | 'uint8'            { L (locOf $1)   $ SrcTInt SrcBW8  SrcUnsigned }
+  | 'uint16'           { L (locOf $1)   $ SrcTInt SrcBW16 SrcUnsigned }
+  | 'uint32'           { L (locOf $1)   $ SrcTInt SrcBW32 SrcUnsigned }
+  | 'uint64'           { L (locOf $1)   $ SrcTInt SrcBW64 SrcUnsigned }
   | 'double'           { L (locOf $1)   $ SrcTDouble }
   | 'bool'             { L (locOf $1)   $ SrcTBool }
   | 'complex'          { L (locOf $1)   $ SrcTStruct complex32TyName }
@@ -586,11 +597,16 @@ base_type :
 cast_type :: { L SrcTy }
 cast_type :
     'bit'             { L (locOf $1)   $ SrcTBit }
-  | 'int'             { L (locOf $1)   $ SrcTInt SrcBW32 }
-  | 'int8'            { L (locOf $1)   $ SrcTInt SrcBW8  }
-  | 'int16'           { L (locOf $1)   $ SrcTInt SrcBW16 }
-  | 'int32'           { L (locOf $1)   $ SrcTInt SrcBW32 }
-  | 'int64'           { L (locOf $1)   $ SrcTInt SrcBW64 }
+  | 'int'             { L (locOf $1)   $ SrcTInt SrcBW32 SrcSigned }
+  | 'int8'            { L (locOf $1)   $ SrcTInt SrcBW8  SrcSigned }
+  | 'int16'           { L (locOf $1)   $ SrcTInt SrcBW16 SrcSigned }
+  | 'int32'           { L (locOf $1)   $ SrcTInt SrcBW32 SrcSigned }
+  | 'int64'           { L (locOf $1)   $ SrcTInt SrcBW64 SrcSigned }
+  | 'uint'            { L (locOf $1)   $ SrcTInt SrcBW32 SrcUnsigned }
+  | 'uint8'           { L (locOf $1)   $ SrcTInt SrcBW8  SrcUnsigned }
+  | 'uint16'          { L (locOf $1)   $ SrcTInt SrcBW16 SrcUnsigned }
+  | 'uint32'          { L (locOf $1)   $ SrcTInt SrcBW32 SrcUnsigned }
+  | 'uint64'          { L (locOf $1)   $ SrcTInt SrcBW64 SrcUnsigned }
   | 'double'          { L (locOf $1)   $ SrcTDouble }
   | 'complex'         { L (locOf $1)   $ SrcTStruct complex32TyName }
   | 'complex8'        { L (locOf $1)   $ SrcTStruct complex8TyName }
@@ -755,7 +771,7 @@ atcomp :
             ; nm = toName "_tmp_count" p tintSrc Imm
             }
         in
-          cTimes p ui (eVal p tintSrc (VInt 0)) e nm c
+          cTimes p ui (eVal p tintSrc (VInt 0 Signed)) e nm c
       }
 
   | unroll_info 'for' var_bind 'in' gen_interval 'do' compstm 'done'
@@ -1095,6 +1111,7 @@ happyError (L loc t) =
     quote = enclose (char '`') (char '\'')
 
 getINT         (L _ (T.TintConst x))             = x
+getUINT        (L _ (T.TuintConst x))            = x
 getFLOAT       (L _ (T.TfloatConst x))           = x
 getCHAR        (L _ (T.TcharConst x))            = x
 getSTRING      (L _ (T.TstringConst x))          = x
@@ -1140,8 +1157,8 @@ eValSrc p v = eVal p SrcTyUnknown v
 eUnOp' :: SrcLoc -> GUnOp t -> GExp t () -> GExp t ()
 eUnOp' p op e =
     case (op, unExp e) of
-      (Neg, EVal ty (VInt i)) -> eVal eloc ty (VInt (negate i))
-      _                       -> eUnOp p op e
+      (Neg, EVal ty (VInt i Signed)) -> eVal eloc ty (VInt (negate i) Signed)
+      _                              -> eUnOp p op e
   where
     eloc = expLoc e
 

@@ -1,0 +1,6 @@
+fun foo(x : uint8) { 
+   var y : uint8 := 255u;
+   return x + y
+}
+
+let comp main = read[uint8] >>> map foo >>> write[uint8]

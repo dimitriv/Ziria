@@ -44,7 +44,7 @@ then
    popd
    # cp -f is sometimes not sufficient on cygwin
    rm -f $2
-   cp -f $TOP/csrc/CompilerVS/x64/Debug/CompilerVS13.exe $2
+   cp -f $TOP/csrc/CompilerVS/CompilerVS13/x64/Debug/CompilerVS13.exe $2
 else
    popd
 fi

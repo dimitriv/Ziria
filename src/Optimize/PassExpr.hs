@@ -57,8 +57,8 @@ passForUnroll = TypedExpBottomUp $ \eloc e -> do
         mk_eseq_many (x:xs) = eSeq (expLoc x) x (mk_eseq_many xs)
 
     if | EFor ui nm estart elen ebody <- unExp e
-         , EVal valTy (VInt 0) <- unExp estart
-         , EVal _     (VInt n) <- unExp elen
+         , EVal valTy (VInt 0 Signed) <- unExp estart
+         , EVal _     (VInt n Signed) <- unExp elen
          , (n < 8 && n > 0 && ui == AutoUnroll) || ui == Unroll
         -> do
           logStep "for-unroll" eloc [step| Unrolling loop |]

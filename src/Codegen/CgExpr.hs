@@ -174,11 +174,11 @@ cgEval dfs e = go (unExp e) where
      clhs <- cgEvalLVal dfs elhs
      mrhs <- cgEval dfs erhs
      case mrhs of 
-       Left rlval 
-         | lvalAlias clhs rlval -> do 
-             crhs <- cgDeref dfs loc rlval
-             cgAssignAliasing dfs loc clhs crhs
-         | otherwise -> do 
+       Left rlval -> do
+         -- | lvalAlias_exact clhs rlval -> do 
+         --     crhs <- cgDeref dfs loc rlval
+         --     cgAssignAliasing dfs loc clhs crhs
+         -- | otherwise -> do 
              crhs <- cgDeref dfs loc rlval
              cgAssign dfs loc clhs crhs
        Right crhs -> cgAssign dfs loc clhs crhs
@@ -190,7 +190,7 @@ cgEval dfs e = go (unExp e) where
     = go (EAssign (eArrRead loc earr ei rng) erhs)
 
   go (EArrRead earr ei rng) 
-    | EVal _t (VInt i) <- unExp ei
+    | EVal _t (VInt i Signed) <- unExp ei
     , let ii :: Int = fromIntegral i
     , let aidx = AIdxStatic ii
     = mk_arr_read (ctExp e) (ctExp earr) aidx
@@ -297,14 +297,13 @@ cgCall_aux dfs loc res_ty fn eargs = do
   let (TArrow formal_argtys _) = nameTyp fn
   let argfuntys = zipWith (\(GArgTy _ m) t -> GArgTy t m) formal_argtys funtys
   let tys_args = zip argfuntys eargs
-  retn <- freshName "ret" res_ty Mut
-  let cretn = [cexp| $id:(name retn)|]
-  appendCodeGenDeclGroup (name retn) res_ty ZeroOut
  
   ceargs <- mapM (cgEvalArg dfs) tys_args
+  CgCall.cgCall dfs loc res_ty argfuntys fn ceargs
 
-  extendVarEnv [(retn,cretn)] $
-     CgCall.cgCall dfs loc res_ty argfuntys fn ceargs cretn
+
+  -- extendVarEnv [(retn,cretn)] $
+  --    CgCall.cgCall dfs loc res_ty argfuntys fn ceargs cretn
 
 
 cgEvalArg :: DynFlags -> (ArgTy, Exp) -> Cg (Either (LVal ArrIdx) C.Exp)

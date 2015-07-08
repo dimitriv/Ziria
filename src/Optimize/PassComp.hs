@@ -271,8 +271,8 @@ passTimesUnroll = TypedCompBottomUp $ \cloc comp -> do
 
     case unComp comp of
       Times ui e elen i c
-       | EVal valTy (VInt 0) <- unExp e
-       , EVal _     (VInt n) <- unExp elen
+       | EVal valTy (VInt 0 Signed) <- unExp e
+       , EVal _     (VInt n Signed) <- unExp elen
        , n > 0 -- NOTE: We don't unroll even if explicitly requested
        , (n < 3 && ui == AutoUnroll) || (ui == Unroll)
 -- BOZIDAR: this will currently fail perf test for TX/test_encoding_34

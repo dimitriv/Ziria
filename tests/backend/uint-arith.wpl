@@ -1,0 +1,5 @@
+fun foo(x : uint) { 
+   return (((((((((x + x) - x) * x) / x) % 0xffffffffu) << 2u) >> 2u) & 0xffffffffu) | 0u) ^ 0u
+}
+
+let comp main = read[uint] >>> map foo >>> write[uint]

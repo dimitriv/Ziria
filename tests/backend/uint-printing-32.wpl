@@ -1,0 +1,5 @@
+fun foo(x : uint) { 
+   return x
+}
+
+let comp main = read[uint] >>> map foo >>> write[uint]

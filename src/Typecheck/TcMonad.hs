@@ -480,9 +480,9 @@ instance Zonk Ty where
                   Nothing  -> return (TVar x)
                   Just xty -> zonk xty
              }
-      do_zonk (TInt bw)
+      do_zonk (TInt bw sg)
         = do { bw' <- zonk bw
-             ; return (TInt bw')
+             ; return (TInt bw' sg)
              }
       do_zonk (TArray n ty)
         = do { n' <- zonk n

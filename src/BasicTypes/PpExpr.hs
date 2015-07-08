@@ -68,12 +68,13 @@ instance Outputable BinOp where
 
 instance Outputable Val where
   ppr v = case v of
-    VBit b    -> text $ if b then "'1" else "'0"
-    VInt n    -> integer n
-    VDouble d -> double d
-    VBool b   -> if b then text "true" else text "false"
-    VString s -> text s
-    VUnit     -> text "tt"
+    VBit b           -> text $ if b then "'1" else "'0"
+    VInt n Signed    -> integer n
+    VInt n Unsigned  -> integer n <> text "u"    
+    VDouble d        -> double d
+    VBool b          -> if b then text "true" else text "false"
+    VString s        -> text s
+    VUnit            -> text "tt"
 
 instance Outputable ForceInline where
   ppr ForceInline = brackets $ text "ForceInline"
@@ -168,12 +169,22 @@ instance Outputable BitWidth where
     BWUnknown _nm -> text ""
     -- Or maybe print the name?
 
+instance Outputable Signedness where
+  ppr signedness = case signedness of
+    Signed   -> text ""    
+    Unsigned -> text "u"
+
 instance Outputable SrcBitWidth where
   ppr bw = case bw of
     SrcBW8  -> text "8"
     SrcBW16 -> text "16"
     SrcBW32 -> text "32"
     SrcBW64 -> text "64"
+
+instance Outputable SrcSignedness where
+  ppr signedness = case signedness of
+    SrcSigned   -> text ""    
+    SrcUnsigned -> text "u"
 
 instance Outputable MutKind where
   ppr mk = text (show mk)
@@ -186,7 +197,7 @@ instance Outputable Ty where
     TVar x                 -> text "?" <> text x
     TUnit                  -> text "()"
     TBit                   -> text "bit"
-    TInt bw                -> text "int" <> ppr bw
+    TInt bw sg             -> ppr sg <> text "int" <> ppr bw
     TDouble                -> text "double"
     TBool                  -> text "bool"
     TString                -> text "string"
@@ -209,7 +220,7 @@ instance Outputable SrcTy where
   ppr ty = case ty of
     SrcTUnit      -> text "()"
     SrcTBit       -> text "bit"
-    SrcTInt bw    -> text "int" <> ppr bw
+    SrcTInt bw sg -> text "int" <> ppr bw <> ppr sg
     SrcTDouble    -> text "double"
     SrcTBool      -> text "bool"
     SrcTStruct nm -> text nm

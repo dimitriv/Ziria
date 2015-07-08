@@ -135,7 +135,7 @@ renReqTy p = go
     go SrcTBit                = return TBit
     go SrcTBool               = return TBool
     go (SrcTArray numExpr ty) = TArray <$> renNumExpr p numExpr <*> go ty
-    go (SrcTInt bw)           = TInt   <$> renBitWidth bw
+    go (SrcTInt bw sg)        = flip TInt (renSignedness sg) <$> renBitWidth bw
     go SrcTDouble             = return TDouble
     go (SrcTStruct tn)        = do sdef <- lookupTDefEnv tn p
                                    return $ TStruct tn (struct_flds sdef)
@@ -169,6 +169,10 @@ renBitWidth SrcBW8  = return BW8
 renBitWidth SrcBW16 = return BW16
 renBitWidth SrcBW32 = return BW32
 renBitWidth SrcBW64 = return BW64
+
+renSignedness :: SrcSignedness -> Signedness
+renSignedness SrcSigned    = Signed
+renSignedness SrcUnsigned  = Unsigned
 
 renStructDef :: SrcLoc -> GStructDef SrcTy -> TcM StructDef
 renStructDef p (StructDef nm flds) = do
