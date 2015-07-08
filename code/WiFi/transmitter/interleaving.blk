@@ -71,10 +71,7 @@ fun comp interleaver_bpsk() {
 
   repeat <= [48,48] {
     (x : arr[48] bit) <- takes 48;
--- We break it in two because heavy inlining done by the compiler
--- will miss the LUTing opportunity
---    emits perm(ids2[0,48], perm(ids1[0,48], x));
---    do { y := perm(ids1[0,48], x) };
+
     emits perm(ids3[0,48], x);
   }
 }
@@ -88,12 +85,7 @@ fun comp interleaver_qpsk() {
   
   repeat <= [96,96] {
     (x : arr[96] bit) <- takes 96;
--- We break it in two because heavy inlining done by the compiler
--- will miss the LUTing opportunity
---    emits perm(ids2[0,96], perm(ids1[0,96], x));
---    do { y := perm(ids1[0,96], x) };
     emits perm(ids3[0,96], x);
---    emits perm(ids2[0,96], y);
   }
 }
 
@@ -106,11 +98,7 @@ fun comp interleaver_m16qam() {
   
   repeat <= [192, 192] {
     (x : arr[192] bit) <- takes 192;
--- We break it in two because heavy inlining done by the compiler
--- will miss the LUTing opportunity
---    emits perm(ids2[0,192], perm(ids1[0,192], x));
---    do { y := perm(ids1[0,192], x) };
-    emits perm_192(ids3[0,192], x);
+    emits perm(ids3[0,192], x);
   }
 }
 
@@ -123,11 +111,7 @@ fun comp interleaver_m64qam() {
 
   repeat <= [288, 288]{
     (x : arr[288] bit) <- takes 288;
--- We break it in two because heavy inlining done by the compiler
--- will miss the LUTing opportunity
---    emits perm(ids2[0,288], perm(ids1[0,288], x));
---    do { y := perm(ids1[0,288], x) };
-    emits perm_288(ids3[0,288], x);
+    emits perm(ids3[0,288], x);
   }
 }
 

@@ -22,16 +22,14 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# OPTIONS_GHC -Wall #-}
 
-module CgLUT ( codeGenLUTExp, cgPrintVars ) where
+module CgLUT ( codeGenLUTExp ) where
 
 import Opts
 import AstExpr
 import AstUnlabelled
 import CtExpr
-import {-# SOURCE #-} CgExpr
 import CgMonad
 import CgTypes
-import Analysis.DataFlow
 import Control.Applicative ( (<$>) )
 import Data.Loc
 import Data.Maybe ( isJust, catMaybes, fromJust )
@@ -154,12 +152,20 @@ pack_idx_var pkg v idx idx_ty pos
            -- location to a pointer for the maximum index type (uint32), 
            -- and only once you've got the final value truncate
            -- back. Sigh ...
-
-           tmp_var = [cexp| ( * (typename uint32 *) 
-                                              (& ((typename BitArrPtr) $varexp)[$int:byte_start]))
-                     |]
+       -- let cast_ty = [cty| $ty:idx_ty * |]
 
            slice_shift = vstart - byte_start * 8
+    
+           cast_width = vlen + slice_shift 
+           cast_ty 
+             | cast_width <= 8  = [cty| typename uint8*  |] 
+             | cast_width <= 16 = [cty| typename uint16* |]
+             | otherwise        = [cty|typename uint32*  |]
+
+           tmp_var = [cexp| ( * ($ty:cast_ty) 
+                                  (& ((typename BitArrPtr) $varexp)[$int:byte_start]))
+                     |]
+
            slice   = tmp_var `cExpShR` slice_shift `cMask` vlen
            rhs     = slice `cExpShL` pos
        appendStmt $ [cstm| $idx |= ( $ty:idx_ty ) $rhs; |]
@@ -167,7 +173,7 @@ pack_idx_var pkg v idx idx_ty pos
   | isArrayTy (nameTyp v)
   = do w <- fromIntegral <$> inVarBitWidth pkg v
        varexp <- lookupVarEnv v
-       let tmp_var = [cexp| * (typename uint32 *) $varexp |]
+       let tmp_var = [cexp| * ($ty:idx_ty *) $varexp |]
        let rhs = tmp_var `cMask` w `cExpShL` pos
        appendStmt $ [cstm| $idx |= ( $ty:idx_ty ) $rhs; |]
        return (pos+w)
@@ -241,9 +247,9 @@ pack_out_var :: VarUsePkg
              -> C.Exp
              -> Int
              -> Cg Int
-pack_out_var _pkg (v,v_asgn_mask) tgt pos = do
+pack_out_var pkg (v,v_asgn_mask) tgt pos = do
   vptr <- varToBitArrPtr v
-  total_width <- fromIntegral <$> outVarBitWidth v
+  total_width <- fromIntegral <$> outVarBitWidth (vu_ranges pkg) v
   -- ^ NB: w includes width for v_asgn_mask already!
   let w = if isJust v_asgn_mask then total_width `div` 2 else total_width
   appendStmt [cstm|bitArrWrite($vptr,$int:pos,$int:w,$tgt); |]
@@ -277,15 +283,15 @@ unpack_out_var :: VarUsePkg
                -> C.Exp
                -> Int
                -> Cg Int
-unpack_out_var _pkg (v, Nothing) src pos = do
+unpack_out_var pkg (v, Nothing) src pos = do
   vptr <- varToBitArrPtr v
-  w    <- fromIntegral <$> outVarBitWidth v -- ^ Post: w is multiple of 8
+  w    <- fromIntegral <$> outVarBitWidth (vu_ranges pkg) v -- ^ Post: w is multiple of 8
   cgBitArrRead src pos w vptr
   return (pos+w)
 
-unpack_out_var _pkg (v, Just {}) src pos = do
+unpack_out_var pkg (v, Just {}) src pos = do
   vptr    <- varToBitArrPtr v
-  total_w <- fromIntegral <$> outVarBitWidth v
+  total_w <- fromIntegral <$> outVarBitWidth (vu_ranges pkg) v
   let w  = total_w `div` 2
   let mask_ptr = [cexp| & $src[$int:((pos+w) `div` 8)]|]
   let src_ptr  = [cexp| & $src[$int:(pos `div` 8)]     |]
@@ -297,25 +303,26 @@ unpack_out_var _pkg (v, Just {}) src pos = do
    Compile an epxression to LUTs
 ---------------------------------------------------------------------------}
 
-codeGenLUTExp :: DynFlags
+codeGenLUTExp :: CodeGen   -- ^ Main code generator 
+              -> DynFlags
               -> LUTStats  -- ^ LUT stats for the expression to LUT-compile
               -> Exp       -- ^ The expression to LUT-compile
               -> Maybe EId -- ^ If set then use this variable as output
               -> Cg C.Exp
-codeGenLUTExp dflags stats e mb_resname
+codeGenLUTExp cg_expr dflags stats e mb_resname
 
     -- | We simply cannot LUT, fullstop.
   | Left err <- lutShould stats
   = do let msg = text "Compiling without LUT."
        verbose dflags $ cannot_lut (text err) msg
-       codeGenExp dflags e
+       cg_expr dflags e
 
     -- | Below we were forced to LUT although analysis recommends we don't
   | Right False <- lutShould stats
   , lutTableSize stats >= aBSOLUTE_MAX_LUT_SIZE
   = do let msg = text "LUT size way too large, compiling without LUT!"
        verbose dflags $ cannot_lut empty msg
-       codeGenExp dflags e
+       cg_expr dflags e
 
     -- | Otherwise just LUT it
   | otherwise = lutIt
@@ -334,7 +341,7 @@ codeGenLUTExp dflags stats e mb_resname
     -- ^ Call genLUT, but use existing LUT if we have compiled
     -- ^ this expression before to a LUT.
     hashGenLUT
-      | isDynFlagSet dflags NoLUTHashing = genLUT dflags stats e
+      | isDynFlagSet dflags NoLUTHashing = genLUT cg_expr dflags stats e
       | otherwise
       = do hs <- getLUTHashes
            let h = H.hash (show e)
@@ -352,7 +359,7 @@ codeGenLUTExp dflags stats e mb_resname
                       , nest 4 $ vcat [ text "LUT stats"
                                       , ppr stats ] ]
 
-               lgi <- genLUT dflags stats e
+               lgi <- genLUT cg_expr dflags stats e
                setLUTHashes $ (h,lgi):hs
                return lgi
 
@@ -362,26 +369,6 @@ codeGenLUTExp dflags stats e mb_resname
       -- Do generate LUT lookup code.
       genLUTLookup dflags (expLoc e) stats clut (ctExp e) mb_resname
 
-
-cgPrintVars :: DynFlags -> SrcLoc -> VarUsePkg -> Cg a -> Cg a
-cgPrintVars dflags loc vpkg action = do
-  cg_print_vars dflags "Invars" loc (vu_invars vpkg)
-  r <- action
-  cg_print_vars dflags "Outvars" loc (vu_outvars vpkg)
-  return r
-
-cg_print_vars :: DynFlags -> String -> SrcLoc -> [EId] -> Cg ()
-cg_print_vars dflags dbg_ctx loc vs
-  | isDynFlagSet dflags Verbose
-  = do appendStmt $ [cstm| printf("%s> cg_print_vars: %s\n", $string:(dbg_ctx), $string:(displayLoc (locOf loc)));|]
-       sequence_ $ map (codeGenExp dflags . print_var) vs
-  | otherwise
-  = return ()
-  where
-    preamb = dbg_ctx ++ ">   "
-    print_var v = ePrint loc True $ 
-                  [ eVal loc TString (VString (preamb ++ show v ++ ":"))
-                  , eVar loc v ]
 
 {---------------------------------------------------------------------------
    Generate the code for looking up a LUT value
@@ -449,11 +436,12 @@ store_var (Just res_var) ety cres = do
    Generate the code for generating a LUT 
 ---------------------------------------------------------------------------}
 
-genLUT :: DynFlags
+genLUT :: CodeGen        -- ^ Main code generator
+       -> DynFlags
        -> LUTStats       -- ^ LUT stats and info
        -> Exp            -- ^ The expression to LUT
        -> Cg LUTGenInfo  -- ^ Generated LUT handles
-genLUT dflags stats e = do
+genLUT cg_expr dflags stats e = do
    let vupkg = lutVarUsePkg stats
        ety   = ctExp e
        -- NB: ety is a non-nested array (if an array), see LUTAnalysis
@@ -473,7 +461,7 @@ genLUT dflags stats e = do
    -- | Function name that will populate this LUT
    clutgen <- freshVar "clut_gen"
    -- | Generate mask variables for output
-   mask_eids <- mapM genOutVarMask (vu_outvars vupkg)
+   mask_eids <- mapM (genOutVarMask (vu_ranges vupkg)) (vu_outvars vupkg)
    (lut_defs,(lut_decls,lut_stms,_)) <-
       collectDefinitions $ inNewBlock $
       genLocalVarInits dflags (vu_allvars vupkg) $
@@ -492,7 +480,7 @@ genLUT dflags stats e = do
 
          -- | Instrument e and compile
          e' <- lutInstrument mask_eids e
-         ce <- codeGenExp dflags e'
+         ce <- cg_expr dflags e'
          clut_fin <- packOutVars vupkg mask_eids [cexp| $id:clutentry|]
 
          -- | For debugging let us try to unpack to the outvars
@@ -558,10 +546,10 @@ genLUT dflags stats e = do
                        , lgi_lut_gen        = [cstm|$id:clutgen();|]
                        , lgi_masked_outvars = mask_eids }
 
-genOutVarMask :: EId -> Cg (EId, Maybe EId)
+genOutVarMask :: RngMap -> EId -> Cg (EId, Maybe EId)
 -- ^ Generate a new output mask variable
-genOutVarMask x = 
-  case outVarMaskWidth x_ty of
+genOutVarMask rmap x = 
+  case outVarMaskWidth rmap x x_ty of
     Nothing -> return (x, Nothing)
     Just bw -> do
       let bitarrty = TArray (Literal $ fromIntegral bw) TBit
@@ -619,13 +607,13 @@ tyBitWidth' :: Ty -> Int
 tyBitWidth' t = fromIntegral $ runIdentity (tyBitWidth t)
 
 eMultBy :: Exp -> Int -> Exp
-eMultBy e n = eBinOp loc Mult e (eVal loc ety (VInt ni))
+eMultBy e n = eBinOp loc Mult e (eVal loc ety (VInt ni Signed))
   where ety = ctExp e
         loc = expLoc e
         ni  = fromIntegral n
 
 eAddBy :: Exp -> Int -> Exp
-eAddBy e n = eBinOp loc Add e (eVal loc ety (VInt ni))
+eAddBy e n = eBinOp loc Add e (eVal loc ety (VInt ni Signed))
   where ety = ctExp e
         loc = expLoc e
         ni  = fromIntegral n
@@ -677,7 +665,7 @@ lutInstrument mask_eids = mapExpM return return do_instr
             io_msg = eVal loc TString (VString " (NB: IO from LUT _generator_)")
 
 int32Val :: Int -> Exp
-int32Val n = eVal noLoc tint (VInt $ fromIntegral n)
+int32Val n = eVal noLoc tint (VInt (fromIntegral n) Signed)
 
 instrAsgn :: [(EId, Maybe EId)] -> SrcLoc 
           -> LVal Exp -> Exp -> Cg Exp
@@ -735,7 +723,8 @@ writeMask :: EId
           -> [Exp]
 writeMask x mask_map rng 
   | Just (Just mask_var) <- lookup x mask_map
-  , Just w <- fromIntegral <$> outVarMaskWidth (nameTyp x)
+                               -- outVarMaskWidth (nameTyp x)
+  , Just w <- fromIntegral <$> tyBitWidth_ByteAlign (nameTyp x) 
   , let (estart,mask_len) = maskRangeToRng w rng
   = [eBitArrSet mask_var estart mask_len]
   | otherwise
@@ -776,9 +765,9 @@ instrLVal loc ms lval = go lval [] MRFull
              eBinOp loc Leq (eAddBy estart n) earray_len
       LIMeta {}   -> panicStr "mk_rangetest: LIMeta!"
       where earray_len = eVal loc (ctExp estart) varray_len
-            varray_len = VInt $ fromIntegral array_len
+            varray_len = VInt (fromIntegral array_len) Signed
             estart_non_neg = eBinOp loc Geq estart $ 
-                             eVal loc (ctExp estart) (VInt 0)
+                             eVal loc (ctExp estart) (VInt 0 Signed)
 
 
 

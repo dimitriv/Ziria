@@ -34,8 +34,10 @@ import System.Environment
 import System.Exit (exitFailure)
 import System.IO
 
-import CgMonad ( cMAX_STACK_ALLOC )
 import System.IO.Unsafe ( unsafePerformIO )
+
+cMAX_STACK_ALLOC :: Int
+cMAX_STACK_ALLOC = 32 * 1024
 
 data DynFlag =
     InputFile String
@@ -44,6 +46,7 @@ data DynFlag =
   | CSrcPathPosix FilePath
   | CSrcPathNative FilePath
   | Name String
+  | CamlSyntax
   | Debug
   | DebugFold
   | StdoutDump
@@ -151,6 +154,7 @@ options =
      , Option ['n']     ["name"]        (ReqArg Name  "NAME")                 "go function name NAME"
 
      -- Boolean flags
+     , Option []    ["caml-syntax"]      (NoArg CamlSyntax)    "Caml syntax"
      , Option ['d'] ["debug"]            (NoArg Debug)         "debug"
      , Option []    ["debug-fold"]       (NoArg DebugFold)     "debug-fold"
      , Option ['x'] ["optimize"]         (NoArg Opt)           "optimize"
@@ -209,7 +213,7 @@ parseTimeout :: String -> DynFlag
 parseTimeout i = Timeout (read i)
 
 defaultMaxStkThreshold :: Int
-defaultMaxStkThreshold = CgMonad.cMAX_STACK_ALLOC
+defaultMaxStkThreshold = cMAX_STACK_ALLOC
 
 defaultAffinityMask :: Int
 defaultAffinityMask = 255

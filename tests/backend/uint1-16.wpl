@@ -1,0 +1,6 @@
+fun foo(x : uint16) { 
+   var y : uint16 := 0u;
+   return x + y
+}
+
+let comp main = read[uint16] >>> map foo >>> write[uint16]

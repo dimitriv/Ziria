@@ -1,0 +1,128 @@
+-- An implementation of salsa20 core.  See
+-- http://cr.yp.to/salsa20.html or http://cr.yp.to/snuffle/spec.pdf
+-- for details.
+
+fun rot32(x : uint32, c : int) = 
+  (x << c) | ((x & 0xffffffffu) >> (32 - c))
+
+fun quarterround(var a : arr[4] uint32) =
+  begin
+    a[ 1] := a[ 1] ^ rot32(a[ 0] + a[ 3], 7);
+    a[ 2] := a[ 2] ^ rot32(a[ 1] + a[ 0], 9);
+    a[ 3] := a[ 3] ^ rot32(a[ 2] + a[ 1],13);
+    a[ 0] := a[ 0] ^ rot32(a[ 3] + a[ 2],18)
+  end
+
+-- 'rowround' and 'colround' would really benefit from generalized (i.e.,
+-- noncontiguous) array views.
+fun rowround(var a : arr[16] uint32) =
+  var t : arr[4] uint32 in
+  begin
+    quarterround(a[0:3]);
+    t[0:2]:=a[5:7];   t[3]:=a[4];       quarterround(t); a[5:7]:=t[0:2]; a[4]:=t[3];
+    t[0:1]:=a[10:11]; t[2:3]:=a[8:9];   quarterround(t); a[10:11]:=t[0:1]; a[8:9]:=t[2:3];
+    t[0]:=a[15];      t[1:3]:=a[12:14]; quarterround(t); a[15]:=t[0]; a[12:14]:=t[1:3]
+  end
+
+fun colround(var a : arr[16] uint32) =
+  var t : arr[4] uint32 in
+  begin
+    t[ 0]:=a[ 0]; t[ 1]:=a[ 4]; t[ 2]:=a[ 8]; t[ 3]:=a[12]; quarterround(t);
+    a[ 0]:=t[ 0]; a[ 4]:=t[ 1]; a[ 8]:=t[ 2]; a[12]:=t[ 3];
+
+    t[ 0]:=a[ 5]; t[ 1]:=a[ 9]; t[ 2]:=a[13]; t[ 3]:=a[ 1]; quarterround(t);
+    a[ 5]:=t[ 0]; a[ 9]:=t[ 1]; a[13]:=t[ 2]; a[ 1]:=t[ 3];
+
+    t[ 0]:=a[10]; t[ 1]:=a[14]; t[ 2]:=a[ 2]; t[ 3]:=a[ 6]; quarterround(t);
+    a[10]:=t[ 0]; a[14]:=t[ 1]; a[ 2]:=t[ 2]; a[ 6]:=t[ 3];
+
+    t[ 0]:=a[15]; t[ 1]:=a[ 3]; t[ 2]:=a[ 7]; t[ 3]:=a[11]; quarterround(t);
+    a[15]:=t[ 0]; a[ 3]:=t[ 1]; a[ 7]:=t[ 2]; a[11]:=t[ 3]
+  end
+
+fun doubleround(var a : arr[16] uint32) =
+  begin
+    colround(a);
+    rowround(a)
+  end
+
+fun comp littleendian() =
+  repeat do
+    (x : arr[4] uint8) <- takes(4);
+    emit(uint32(x[0]) + 256u*uint32(x[1]) + 65536u*uint32(x[2]) + 16777216u*uint32(x[3]))
+  done
+
+fun comp unlittleendian() =
+  repeat do
+    (x : uint32) <- take;
+    _ <- emit(uint8( 255u        & x)); 
+    _ <- emit(uint8((65535u      & x) >> 8));
+    _ <- emit(uint8((16777215u   & x) >> 16));
+         emit(uint8(               x  >> 24))
+  done
+
+-- salsa20_core: perform 20 rounds of mixing on 'input', a 64-byte array, 
+-- writing the resulting 64 bytes to 'output'.
+fun salsa20_core(var input : arr[16] uint32, var output : arr[16] uint32) =
+  var t : arr[16] uint32 := input in
+  begin output := t;
+        for i in [0,10] do doubleround(t) done;
+        for i in [0,16] do output[i] := output[i] + t[i] done
+  end
+
+-- salsa20_block: given a 256-bit key, a 2-word nonce, and a 2-word block number, 
+-- run salsa20_core on a permutation of key, nonce, and block number, writing
+-- the resulting 64 bytes to 'output'. The size/layout of key, nonce, etc. can 
+-- be found here: http://cr.yp.to/snuffle/salsafamily-20071225.pdf.
+fun salsa20_block( key : arr[8] uint32, 
+                   nonce : arr[2] uint32, block : arr[2] uint32, 
+                   var output : arr[16] uint32 ) =
+  var t : arr[16] uint32 in
+  begin t[0]     := 0x61707865u; 
+        t[1:4]   := key[0:3];
+        t[5]     := 0x3320646eu;
+        t[6:7]   := nonce[0:1];
+        t[8:9]   := block[0:1];
+        t[10]    := 0x79622d32u;
+        t[11:14] := key[4:7];
+        t[15]    := 0x6b206574u;
+        salsa20_core(t, output)
+  end 
+
+-- salsa20_xor: given a key and a nonce, repeatedly generate 64-byte
+-- stream blocks; xor the stream blocks with the plaintext/ciphertext
+-- blocks coming in from upstream.
+fun comp salsa20_xor(key : arr[8] uint32, nonce : arr[2] uint32) =
+  var t : arr[16] uint32 in
+  var block_num : uint64 := 0u in 
+  var block_arr : arr[2] uint32 in
+  var salsa_block : arr[16] uint32 in
+  repeat do 
+    -- generate a stream-cipher block, into 'salsa_block'
+    _ <- do begin block_arr[0] := uint32(block_num);
+                  block_arr[1] := uint32(block_num >> 32);
+                  salsa20_block(key, nonce, block_arr, salsa_block);
+                  block_num := block_num + 1u
+            end 
+         done;
+    -- input a 64-byte plaintext/ciphertext block
+    (input_block : arr[16] uint32) <- takes(16);
+    -- xor and emit
+    _ <- do for i in [0,16] do 
+              salsa_block[i] := input_block[i] ^ salsa_block[i]
+            done 
+         done;
+    emits(salsa_block)
+  done
+
+fun comp salsa20_xor_test() =
+  littleendian() >>>
+  begin
+    (key : arr[8] uint32) <- takes(8);
+    (nonce : arr[2] uint32) <- takes(2);
+    -- encrypt/decrypt
+    (salsa20_xor(key, nonce) >>> salsa20_xor(key, nonce))
+  end >>>
+  unlittleendian()
+
+let comp main = read[uint8] >>> salsa20_xor_test() >>> write[uint8]

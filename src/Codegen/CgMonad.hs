@@ -54,6 +54,7 @@ module CgMonad
   , finalCompKont
 
   , CompFunGen(..)
+  , CodeGen            -- type of expression code generator
 
   , genSym
   , getNames
@@ -164,6 +165,8 @@ import PpComp
 import PpExpr
 import qualified GenSym as GS
 import CgHeader
+
+import Opts
 
 instance IfThenElse Bool a where
     ifThenElse True  th _  = th
@@ -292,7 +295,8 @@ data CgEnv = CgEnv
       -- local function name to the unique name of the lifted global fiunction,
       -- as well as the list of additional "closure" parameters that we
       -- introduced.
-    , funEnv :: NameEnv Ty (GName Ty, [GName Ty])
+    , funEnv :: NameEnv Ty (GName Ty, [GName Ty],Bool)
+      -- | Boolean flag: True => returns an already allocated LUT, False => otherwise
 
       -- | Reference to a symbol, for gensym'ing
     , symEnv :: GS.Sym
@@ -362,10 +366,8 @@ data CgState = CgState {
     }
   deriving Show
 
-emptyState = CgState [] 0 cMAX_STACK_ALLOC [] [] []
+emptyState = CgState [] 0 Opts.cMAX_STACK_ALLOC [] [] []
 
-cMAX_STACK_ALLOC :: Int
-cMAX_STACK_ALLOC = 32 * 1024
 
 data Code = Code
     { -- Top-level definitions
@@ -743,7 +745,7 @@ extendVarEnv binds a = do
          Nothing -> return ()
 
 
-extendExpFunEnv :: GName Ty -> (GName Ty, [GName Ty]) -> Cg a -> Cg a
+extendExpFunEnv :: GName Ty -> (GName Ty,[GName Ty],Bool) -> Cg a -> Cg a
 extendExpFunEnv nm bind =
    local $ \rho -> rho { funEnv = neExtend nm bind (funEnv rho) }
 
@@ -802,7 +804,7 @@ lookupCompFunCode nm = do
       Nothing  -> fail ("CodeGen: unbound computation function: " ++ show nm)
       Just gen -> return gen
 
-lookupExpFunEnv :: GName Ty -> Cg (GName Ty, [GName Ty])
+lookupExpFunEnv :: GName Ty -> Cg (GName Ty, [GName Ty],Bool)
 lookupExpFunEnv nm  = do
     maybe_x <- asks $ \rho -> neLookup nm (funEnv rho)
     case maybe_x of
@@ -812,7 +814,7 @@ lookupExpFunEnv nm  = do
                           " bound = " ++ show bound ++ " pos = " ++ (displayLoc . locOf . nameLoc) nm)
       Just x  -> return x
 
-lookupExpFunEnv_maybe :: GName Ty -> Cg (Maybe (GName Ty, [GName Ty]))
+lookupExpFunEnv_maybe :: GName Ty -> Cg (Maybe (GName Ty, [GName Ty],Bool))
 lookupExpFunEnv_maybe nm  =
     asks $ \rho -> neLookup nm (funEnv rho)
 
@@ -882,7 +884,7 @@ getTyPutGetInfo ty = (buf_typ ty, buf_siz ty)
               -- Arrays should be just fine
               TArray _ bty -> "arr" ++ buf_typ bty
 
-              TInt bw   -> cgTIntName bw
+              TInt bw sg   -> cgTIntName bw sg
 
               -- internal synchronization queue buffers
               (TBuff (IntBuf t)) -> buf_typ t
@@ -897,10 +899,17 @@ getTyPutGetInfo ty = (buf_typ ty, buf_siz ty)
 
 
 
-cgTIntName :: BitWidth -> String
-cgTIntName BW8           = "int8"
-cgTIntName BW16          = "int16"
-cgTIntName BW32          = "int32"
-cgTIntName BW64          = "int64"
-cgTIntName (BWUnknown _) = "int32" -- Defaulting to 32 bits
+cgTIntName :: BitWidth -> Signedness -> String
+cgTIntName BW8  Signed          = "int8"
+cgTIntName BW16 Signed          = "int16"
+cgTIntName BW32 Signed          = "int32"
+cgTIntName BW64 Signed          = "int64"
+cgTIntName (BWUnknown _) Signed = "int32" -- Defaulting to 32 bits
+cgTIntName BW8  Unsigned        = "uint8"
+cgTIntName BW16 Unsigned        = "uint16"
+cgTIntName BW32 Unsigned        = "uint32"
+cgTIntName BW64 Unsigned        = "uint64"
+cgTIntName (BWUnknown _) Unsigned = "uint32" 
 
+
+type CodeGen = DynFlags -> Exp -> Cg C.Exp

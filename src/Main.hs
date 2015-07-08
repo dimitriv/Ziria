@@ -60,6 +60,8 @@ import qualified PassPipeline as PP
 
 import qualified Language.Ziria.Parser as P
 
+import TcRename () 
+
 data CompiledProgram
   = CompiledProgram Comp [C.Definition] FilePath
 
@@ -117,7 +119,9 @@ main = do
 
     inFile  <- getInFile dflags
     outFile <- getOutFile dflags
-    prog    <- P.parseProgramFromFile inFile
+    prog    <- if CamlSyntax `elem` dflags
+               then P.camlParseProgramFromFile inFile
+               else P.parseProgramFromFile inFile
 
     dump dflags DumpAst ".ast.dump" $ (text . show) prog
     -- Disabling Pretty for now
@@ -133,7 +137,7 @@ main = do
 
     when (isDynFlagSet dflags Debug) $ outputProgram c' (outFile ++ ".debug")
 
-    dump dflags DumpTypes ".type.dump" $ (text . show) (ppCompTyped c')
+    dump dflags DumpTypes ".type.dump" $ (text . show) (ppCompTyped ctComp c')
 
     -- First let us run some small-scale optimizations
     folded <- timedPhase dflags "runFoldPhase" $ 
@@ -227,10 +231,10 @@ main = do
            text "Result in file:" <+> text fn
         dump dflags DumpVect ".vec.dump" $
            vcat [ text "Result:"
-                , ppCompTypedVect c ]
+                , ppCompTypedVect ctComp c ]
         dump dflags DumpVectTypes ".vec-types.dump" $
            vcat [ text "Result (with types):" 
-                , ppCompTyped c ]
+                , ppCompTyped ctComp c ]
 
         -- Second round of folding
         fc <- timedPhase dflags "runFoldPhase (2nd round)" $ 

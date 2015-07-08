@@ -24,7 +24,6 @@ import Prelude hiding (pi)
 import Data.Loc
 import AstExpr
 import AstComp
-import {-# SOURCE #-} LUTAnalysis
 
 {-------------------------------------------------------------------------------
   Values
@@ -32,7 +31,7 @@ import {-# SOURCE #-} LUTAnalysis
 
 vint :: Integral a => a -> Val
 -- Auxiliary function for use in the vectorizer
-vint n = VInt (fromIntegral n)
+vint n = VInt (fromIntegral n) Signed
 
 eint32 :: Integral a => a -> Exp
 eint32 n = eVal noLoc tint (vint n) 

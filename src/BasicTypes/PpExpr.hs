@@ -68,12 +68,13 @@ instance Outputable BinOp where
 
 instance Outputable Val where
   ppr v = case v of
-    VBit b    -> text $ if b then "'1" else "'0"
-    VInt n    -> integer n
-    VDouble d -> double d
-    VBool b   -> if b then text "true" else text "false"
-    VString s -> text s
-    VUnit     -> text "tt"
+    VBit b           -> text $ if b then "'1" else "'0"
+    VInt n Signed    -> integer n
+    VInt n Unsigned  -> integer n <> text "u"    
+    VDouble d        -> double d
+    VBool b          -> if b then text "true" else text "false"
+    VString s        -> text s
+    VUnit            -> text "tt"
 
 instance Outputable ForceInline where
   ppr ForceInline = brackets $ text "ForceInline"
@@ -159,68 +160,10 @@ instance Outputable UnrollInfo where
 instance Outputable ty => Outputable (GExp ty a) where
   ppr = ppr . unExp
 
-instance Outputable BitWidth where
-  ppr bw = case bw of
-    BW8  -> text "8"
-    BW16 -> text "16"
-    BW32 -> text "32"
-    BW64 -> text "64"
-    BWUnknown _nm -> text ""
-    -- Or maybe print the name?
-
-instance Outputable SrcBitWidth where
-  ppr bw = case bw of
-    SrcBW8  -> text "8"
-    SrcBW16 -> text "16"
-    SrcBW32 -> text "32"
-    SrcBW64 -> text "64"
-
-instance Outputable MutKind where
-  ppr mk = text (show mk)
-
-instance Outputable t => Outputable (GArgTy t) where
-  ppr (GArgTy t m) = parens (ppr m <+> ppr t)
-
-instance Outputable Ty where
-  ppr ty = case ty of
-    TVar x                 -> text "?" <> text x
-    TUnit                  -> text "()"
-    TBit                   -> text "bit"
-    TInt bw                -> text "int" <> ppr bw
-    TDouble                -> text "double"
-    TBool                  -> text "bool"
-    TString                -> text "string"
-    TArray (Literal n) ty' -> text "arr" <> brackets (int n) <+> ppr ty'
-    TArray (NVar n)    ty' -> text "arr" <> brackets (text (show n)) <+> ppr ty'
-    TArrow tys tyres       -> parens (hsep (punctuate comma (map ppr tys))) <+> text "->" <+> ppr tyres
-    TInterval n            -> text "interval" <> brackets (int n)
-    TBuff (IntBuf t)       -> parens $ text "INTBUF" <> brackets (ppr t)
-    TBuff (ExtBuf bt)      -> parens $ text "EXTBUF" <> brackets (text "base=" <> ppr bt)
-    TStruct tyname _       -> text tyname 
-    -- NOTE: If we change this to be the full type the instance for EStruct breaks
-
-    TVoid                  -> text "void"
-
 instance Outputable ty => Outputable (GStructDef ty) where
   -- TODO: Perhaps it would make more sense to show the entire thing
   ppr (StructDef nm _) = text nm
 
-instance Outputable SrcTy where
-  ppr ty = case ty of
-    SrcTUnit      -> text "()"
-    SrcTBit       -> text "bit"
-    SrcTInt bw    -> text "int" <> ppr bw
-    SrcTDouble    -> text "double"
-    SrcTBool      -> text "bool"
-    SrcTStruct nm -> text nm
-    SrcInject  ty -> ppr ty
-    SrcTyUnknown  -> empty
-    SrcTArray (SrcLiteral n) ty'
-      -> text "arr" <> brackets (int n) <+> ppr ty'
-    SrcTArray (SrcNVar _loc) ty'
-      -> text "arr" <> brackets empty <+> ppr ty'
-    SrcTArray (SrcNArr n) ty'
-      -> text "arr" <> brackets (text "length" <> parens (ppName n)) <+> ppr ty'
 
 instance Outputable ty => Outputable (GFun ty a) where
   ppr fn = case unFun fn of
@@ -230,14 +173,6 @@ instance Outputable ty => Outputable (GFun ty a) where
     MkFunExternal f params ty ->
       text (name f) <> parens (ppParams params) <+> text ":" <+> ppr ty
 
-instance Outputable NumExpr where
-  ppr ne = case ne of
-    Literal i -> int i
-    NVar n    -> text n
-    -- TODO: here and elsewhere, are the quotes around the name intentional?
-
-instance Outputable ty => Outputable (GName ty) where
-  ppr ix = ppName ix
 
 {-------------------------------------------------------------------------------
   Utility
@@ -255,13 +190,6 @@ ppEs f sep eargs = case eargs of
     []         -> empty
     e : []     -> f e
     e : eargs' -> f e <> sep <+> ppEs f sep eargs'
-
-ppName :: GName ty -> Doc
-ppName nm = ppNameUniq nm
-            -- text (name nm)
-
-ppNameUniq :: GName ty -> Doc
-ppNameUniq nm = text (name nm) <> braces (text $ show $ uniqId nm)
 
 ppBind :: Outputable ty => GName ty -> Doc
 ppBind nm = ppName nm <+> colon <+> ppr (nameTyp nm)

@@ -27,27 +27,23 @@ module CgValDom
 
   -- Projections
   , cgStrProj
-  , ArrIdx ( .. )
+  , ArrIdx, GArrIdx ( .. )
   , arrIdxPlus
   , cexpOfArrIdx
   , cgArrRead, cgArrRead_chk
   , isBitArrByteAligned
 
-  -- New arrays or structs 
-  , cgArrVal
+  -- New structs 
   , cgStruct 
 
   ) where
 
 import Opts
 import AstExpr
-import AstUnlabelled
 import CgMonad
 import CgTypes
 import Utils
-import {-# SOURCE #-} CgExpr
 
-import Control.Monad ( zipWithM )
 import Data.Loc
 import qualified Language.C.Syntax as C
 import Language.C.Quote.C
@@ -84,14 +80,14 @@ cgUnOp _target_ty (Cast target_ty) ce src_ty
   = panicStr "cgUnOp: invalid cast!"
   | otherwise
   = case (target_ty, src_ty) of
-      (TBit, TInt _)     -> [cexp|$ce & 1|]
-      (TInt _, TBit)     -> ce
-      (TDouble, TInt _)  -> [cexp|(double) $ce|]
-      (TInt bw, TDouble) -> [cexp|($ty:(intty bw)) $ce |]
-      (TInt bw, TInt _)  -> [cexp|($ty:(intty bw)) $ce |]
-      (TInt bw, TArray _ TBit) -> [cexp| * ($ty:(inttyptr bw)) $ce |]
+      (TBit, TInt _ _)       -> [cexp|$ce & 1|]
+      (TInt _ _, TBit)       -> ce
+      (TDouble, TInt _ _)    -> [cexp|(double) $ce|]
+      (TInt bw sg, TDouble)  -> [cexp|($ty:(intty bw sg)) $ce |]
+      (TInt bw sg, TInt _ _) -> [cexp|($ty:(intty bw sg)) $ce |]
+      (TInt bw Signed, TArray _ TBit) -> [cexp| * ($ty:(inttyptr bw)) $ce |]
      -- [cexp| *  (($ty:(intty bw))*) $ce |]
-      (TArray _ TBit, TInt _) -> [cexp| ($ty:(namedCType "BitArrPtr")) &$ce|]
+      (TArray _ TBit, TInt _ Signed) -> [cexp| ($ty:(namedCType "BitArrPtr")) &$ce|]
       -- | For complex types we must emit a proper function, defined 
       --   in csrc/numerics.h
       (TStruct tn _flds, TStruct sn _flds')
@@ -99,8 +95,8 @@ cgUnOp _target_ty (Cast target_ty) ce src_ty
          , let castfun = sn ++ "_to_" ++ tn
          -> [cexp|$id:castfun($ce)|]
       (_,_) -> panicStr "cgUnOp: invalid cast!"
-  where intty bw = namedCType (cgTIntName bw) 
-        inttyptr bw = [cty| $ty:(intty bw) *|]
+  where intty bw sg = namedCType (cgTIntName bw sg) 
+        inttyptr bw = [cty| $ty:(intty bw Signed) *|]
 
 cgBinOp :: Ty            -- ^ type of (BinOp op ce1 ce2)
         -> BinOp
@@ -158,12 +154,20 @@ cgStrProj proj_ty cd struct_ty f
     then [cexp| $cd.$id:f |]  else [cexp| &($cd.$id:f) |]
   where is_struct_ptr = isStructPtrType struct_ty -- ^ struct type
         is_proj_ptr   = isStructPtrType proj_ty   -- ^ field type
- 
-data ArrIdx
-  = AIdxCExp C.Exp      -- ^ A C expression index
-  | AIdxStatic Int      -- ^ A statically known index
-  | AIdxMult Int C.Exp  -- ^ A statically known multiple of unknown C.Exp
-  deriving Show 
+
+data GArrIdx e
+  = AIdxCExp e      -- ^ A C expression index
+  | AIdxStatic Int  -- ^ A statically known index
+  | AIdxMult Int e  -- ^ A statically known multiple of unknown C.Exp
+  deriving Show
+
+type ArrIdx = GArrIdx C.Exp
+
+-- data ArrIdx
+--   = AIdxCExp C.Exp      -- ^ A C expression index
+--   | AIdxStatic Int      -- ^ A statically known index
+--   | AIdxMult Int C.Exp  -- ^ A statically known multiple of unknown C.Exp
+--   deriving Show 
 
 arrIdxPlus :: ArrIdx -> ArrIdx -> ArrIdx
 arrIdxPlus (AIdxStatic i) (AIdxStatic j) = AIdxStatic (i+j)
@@ -248,88 +252,3 @@ cgStruct _ loc t _fld_exps =
                , text "non-struct-type:" <+> ppr t ]
 
 
-
--- | Here we deviate a bit from AbsInt.hs and the reason is the
---   special-case code for value arrays versus array expressions that
---   contain expressions.
-cgArrVal :: DynFlags -> SrcLoc -> Ty -> [Exp] -> Cg C.Exp
-cgArrVal dfs loc arr_ty es 
-  | Just vs <- expValMbs es = cgArrVal_val dfs loc arr_ty vs 
-  | otherwise               = cgArrVal_exp dfs loc arr_ty es
-
-cgArrVal_val :: DynFlags -> SrcLoc -> Ty -> [Val] -> Cg C.Exp
-cgArrVal_val _ _ t@(TArray _ TBit) vs = do
-   snm <- freshName "__bit_arr" t Mut
-   let csnm = [cexp| $id:(name snm)|]
-   let inits = cgBitValues vs
-   appendCodeGenDeclGroup (name snm) t (InitWith inits)
-   return csnm
-
-cgArrVal_val _dfs loc t@(TArray _ _) ws
-  | length ws <= 8192 
-  = do snm <- freshName "__val_arr" t Mut
-       let csnm = [cexp| $id:(name snm)|]
-       let inits = cgNonBitValues ws
-       appendCodeGenDeclGroup (name snm) t (InitWith inits)
-       return csnm
-  | otherwise -- ^ very large initializer, VS can't deal with that
-  = go t ws
-  where 
-    go (TArray n tval) vs 
-      | length vs <= 8192
-      = do snm <- freshName "__val_arr" t Mut
-           let csnm = [cexp| $id:(name snm)|]
-           let inits = cgNonBitValues vs
-           DeclPkg d istms <- 
-               codeGenDeclGroup (name snm) (TArray n tval) (InitWith inits)
-           appendTopDecl d
-           mapM_ addGlobalWplAllocated istms
-           return csnm
-      | otherwise
-      = do let len = length vs
-               ln1 = len `div` 2
-               ln2 = len - ln1 
-               (vs1,vs2) = splitAt ln1 vs
-           cv1 <- go (TArray (Literal ln1) tval) vs1
-           cv2 <- go (TArray (Literal ln2) tval) vs2
-           snm  <- freshName "__val_arr" t Mut
-           let valsiz = tySizeOf tval
-               csiz1  = ln1 * valsiz
-               csiz2  = ln2 * valsiz
-           DeclPkg d istms <- codeGenDeclGroup (name snm) t ZeroOut
-           appendTopDecl d 
-           mapM_ addGlobalWplAllocated istms
-
-           addGlobalWplAllocated $ 
-              [cstm| blink_copy((void *) $id:(name snm), 
-                                (void *) $cv1, $int:csiz1);|] 
-           addGlobalWplAllocated $
-              [cstm| blink_copy((void *) & $id:(name snm)[$int:ln1], 
-                                (void *) $cv2, $int:csiz2);|]
-
-           let csnm = [cexp| $id:(name snm)|]
-           return csnm
-    go ty _ = panicCgNonArray "cgArrVal_val" loc ty
-
-cgArrVal_val _ loc t _es = panicCgNonArray "cgArrVal_val" loc t
-
-
-cgArrVal_exp :: DynFlags -> SrcLoc -> Ty -> [Exp] -> Cg C.Exp
-cgArrVal_exp dfs loc t@(TArray _ _tbase) es = do
-   snm <- freshName "__exp_arr" t Mut
-   let csnm = [cexp| $id:(name snm)|]
-   appendCodeGenDeclGroup (name snm) t ZeroOut
-   extendVarEnv [(snm,csnm)] $ do 
-     _ <- zipWithM (\e i -> codeGenExp dfs (eAssign loc (lhs snm i) e)) es [0..]
-     return csnm
-   where 
-     lhs x idx = eArrRead loc (eVar loc x)
-                              (eVal loc tint (VInt idx)) LISingleton
-             
-cgArrVal_exp _dfs loc t _es = panicCgNonArray "cgArrVal_exp" loc t
-
-panicCgNonArray :: String -> SrcLoc -> Ty -> Cg a
-panicCgNonArray msg loc t = 
-  panic $ vcat [ text "cgArr" <+> text msg
-               , text "location: " <+> ppr loc
-               , text "non-array-type: " <+> ppr t ]

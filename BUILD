@@ -10,22 +10,39 @@ need:
 * cabal 1.18 or greater
   This is included with the Haskell Platform 2014.2 or later.
 
-  NOTE: Make sure yous Haskell Platform path
+  NOTE: Order of paths may make a difference, consult this if
+		an error occurs when running 'make'.
+		Try changing your Haskell Platform path
         (e.g. C:\Program Files\Haskell Platform\2014.2.0.0\mingw\bin)
-        is before your Cygwin GCC path in Windows PATHs because cabal needs
+        to be before your Cygwin GCC path in Windows PATHs because cabal needs
         the Haskell Platform ld and not the Cygwin GCC one (otherwise horrible
-        errors will occur)
+        errors will occur) 
+		Do this by going to 'Advanced system settings'->'Enviroment variables'
+		and then edit the system variable called 'Path'.
+		Then for example we would want to replace for example:
+		C:\cygwin64\bin;C:\Program Files\Haskell Platform\2014.2.0.0\mingw\bin
+		with 
+		C:\Program Files\Haskell Platform\2014.2.0.0\mingw\bin;C:\cygwin64\bin 
+		
 
-In the root directory, run `cabal update` and then `make`.
+
+In the root directory, run `cabal update` and then `make`. This may take some
+time to compile. If an error occurs, try changing the paths as mentioned above,
+or just try running it again.
 
 The Makefile creates a cabal sandbox, installs dependencies from Hackage, and
 finally. You will be left with a `wplc` binary.
 
 For many examples outside of the main path one needs to set Ziria path:
-set `ZIRIA_ROOT=/path/to/Ziria/wplc/compiler`
+I.e. go to 'Advanced system settings'->'Enviroment variables' and 
+enter a new system variable with name ZIRIA_ROOT and value (e.g.)
+"C:\cygwin\users\name\Ziria\wplc" or whatever your path to Ziria is.
+
 
 NOTE: If you update GHC on Windows, make sure you delete ghc and cabal dirs 
-in `/Users/<username>/AppData/Roaming` to avoid stale state problems.
+in `/Users/<username>/AppData/Roaming` to avoid stale state problems.    
+
+Go to Ziria/tests/backend and run 'make', this should compile with no errors.
 
 * Running the basic tests:
 
@@ -37,23 +54,25 @@ in `/Users/<username>/AppData/Roaming` to avoid stale state problems.
   environments: gcc, WinDDK v7 and Visual Studio.  In order to use
   WinDDK, you need to set WINDDK_ROOT path.  In order to use VS, you
   need to set ZIRIA_VS to point to where vcvarsall.bat file is located
-  (e.g. ZIRIA_VS="C:\Program Files (x86)\Microsoft Visual Studio
-  12.0\VC" for VS2013). To use different C compiler with tests, run:
+  (e.g. create a new system variable with name "ZIRIA_VS" and value
+  "C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC" for VS2013).
+  To use different C compiler with tests, run:
 
     COMPILER={gcc,winddk,vs} make
 
-
+  Note that when setting the environment variable ZIRIA_VS, the double quotes
+  are necessary.
 
 * Running the WiFi tests:
 
   To compile and run performance tests and the WiFi testsuite (in
   code/WiFi) you must have SORA installed. We currently support Sora
-  2.0, although older versions can easily be adapted.  To build Sora,
-  you need WinDDK version 7 (see Sora pages for more details).  Once
-  Sora is build, you can use either WinDDK or Visual Studio
-  environments. More documentation can be found in doc/
-
-
+  2.0, found at https://sora.codeplex.com/, although older versions
+  can easily be adapted.  To build Sora, you need WinDDK version 7 
+  (see Sora pages for more details).  Once Sora is built, you can
+  use either WinDDK or Visual Studio environments. 
+  More documentation and instructions about how to download and install
+  Sora and WinDDK can be found in /doc.
 
 * Linking with Blade-RF
 

@@ -35,6 +35,7 @@ module AbsInt (
  , absEval 
  , absEvalRVal
  , inCurrSt
+ , AVal      (..)
 ) where
 
 
@@ -115,8 +116,8 @@ class CmdDom m v | m -> v where
   withMutABind :: EId -> m v -> m v
 
   aCall     :: EId -> [(AVal v)] -> m v
-  aError    :: m a
-  aPrint    :: Bool -> [v] -> m ()
+  aError    :: m ()
+  aPrint    :: Bool -> [v] -> m v
 
 -- | Commands plus controls flow 
 class CmdDom m v => CmdDomRec m v | m -> v where 
@@ -128,7 +129,9 @@ class CmdDom m v => CmdDomRec m v | m -> v where
           => Exp -> m v -> m v -> m v
 
 -- | Specific operations for abstract domains
-class AbsInt m v where
+class AbsInt m v | m -> v where
+
+  aTrace :: m () -- For debugging
 
   aSkip  :: m v
   aJoin  :: m v -> m v -> m v
@@ -160,6 +163,7 @@ instance AbsInt m a => AbsInt (AbsT m) a where
   aJoin (AbsT m1) (AbsT m2)    = AbsT (aJoin m1 m2)
   aWithFact v (AbsT m)         = AbsT (aWithFact v m)
   aWiden v (AbsT m1) (AbsT m2) = AbsT (aWiden v m1 m2)
+  aTrace                       = AbsT (aTrace :: m ())
 
 instance CmdDom m v => CmdDom (AbsT m) v where
   aAssign lval val          = AbsT (aAssign lval val)
@@ -176,7 +180,7 @@ instance (AbsInt m v, CmdDom m v) => CmdDomRec (AbsT m) v where
     a <- absEvalRVal e
     aJoin (aWithFact a m1) (aWithFact (aUnOp Not a) m2)
   
-  aWhile e m = afix $ do 
+  aWhile e m = afix (aTrace :: AbsT m ()) $ do 
     a <- absEvalRVal e
     aWiden a (aWithFact a m) (aWithFact (aUnOp Not a) aSkip)
 
@@ -186,7 +190,7 @@ instance (AbsInt m v, CmdDom m v) => CmdDomRec (AbsT m) v where
     astart <- absEvalRVal estart
     aAssign (varLVal idx) astart
     let econd = eBinOp noLoc Lt eidx (eBinOp noLoc Add estart elen)
-    let erhs  = eBinOp noLoc Add eidx (eVal noLoc (nameTyp idx) (VInt 1))
+    let erhs  = eBinOp noLoc Add eidx (eVal noLoc (nameTyp idx) (VInt 1 Signed))
         m'    = do x <- m 
                    arhs <- absEvalRVal erhs
                    aAssign (varLVal idx) arhs
@@ -196,9 +200,10 @@ instance (AbsInt m v, CmdDom m v) => CmdDomRec (AbsT m) v where
    where 
       eidx = eVar noLoc idx
 
-afix :: (POrd s, MonadState s m) => m a -> m a
-afix action = loop
+afix :: (POrd s, MonadState s m) => m () -> m a -> m a
+afix trace action = loop
   where loop = do
+          trace -- just for debugging 
           pre <- get
           x <- action
           post <- get
@@ -285,10 +290,10 @@ absEval e = go (unExp e) where
 
   go (EPrint nl es) = do 
     as <- mapM absEvalRVal es 
-    aPrint nl as
-    rValM (aVal VUnit)
+    v <- aPrint nl as
+    rValM v 
 
-  go (EError {}) = aError 
+  go (EError {}) = aError >> rValM (aVal VUnit)
 
   go (ECall fn es) = do
     let (TArrow funtys _funres) = nameTyp fn

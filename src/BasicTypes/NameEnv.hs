@@ -34,8 +34,7 @@ module NameEnv (
  , neJoinWith
 ) where 
 
-import AstExpr
-import PpExpr
+import AstName
 import Utils ( warn )
 import Text.PrettyPrint.HughesPJ
 import Outputable
@@ -93,8 +92,6 @@ neUnionWith (NameEnv nea) neb f = go nea neb
       where 
         aux Nothing    = Just a1
         aux (Just a1') = Just (f n1 a1 a1')
-
-
 
 neExtend :: GName t -> a -> NameEnv t a -> NameEnv t a
 neExtend nm a menv = aux (neLookup nm menv)

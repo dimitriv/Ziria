@@ -1,0 +1,8 @@
+fun f(x : uint) { 
+  return x + 0xffffffffu + -2u + 25U + -25U + 0o25u - 0O25u + -8U
+}
+let comp main = read >>> map f >>> write
+
+
+
+

@@ -18,9 +18,13 @@
 -}
 {-# LANGUAGE GADTs, DeriveGeneric, DeriveDataTypeable, ScopedTypeVariables, RecordWildCards #-}
 {-# OPTIONS_GHC -Wall #-}
-module AstExpr where
+module AstExpr ( 
+    module AstName
+  , module AstExprTypes
+  , module LUTBasicTypes
+  , module AstExpr 
+  ) where
 
-import {-# SOURCE #-} LUTAnalysis
 import Prelude hiding (exp, mapM)
 import Control.DeepSeq.Generics (NFData(..), genericRnf)
 import Data.Loc
@@ -35,201 +39,10 @@ import Text.Show.Pretty (PrettyVal)
 import qualified Data.Set as S
 
 import Orphans ()
+import AstName
+import AstExprTypes
+import LUTBasicTypes
 
-{-------------------------------------------------------------------------------
-  Various kinds of variables
--------------------------------------------------------------------------------}
-
-type TyName  = String
-type FldName = String
-
--- | Type variables (ranging over Ty or CTy)
-type TyVar = String
-
--- | Arrow length variables (ranging over type level naturals)
-type LenVar = String
-
--- | Bitwidth variables (ranging over type level bitwidth annotations)
-type BWVar = String
-
--- | Buffer IDs
-type BufId = String
-
-{-------------------------------------------------------------------------------
-  Names
--------------------------------------------------------------------------------}
-
--- Unique identifiers
-newtype Uniq = MkUniq { unUniq :: String }
-  deriving (Generic, Typeable, Data, Eq, Ord)
-
-instance Show Uniq where
-  show (MkUniq s) = s
-
--- | Mutability kind (mutable or immutable)
-data MutKind = Imm | Mut
-  deriving (Generic, Typeable, Data, Eq, Ord, Show)
-
-data GName t
-  = MkName { name    :: String
-           , uniqId  :: Uniq
-           , nameTyp :: t
-           , nameLoc :: SrcLoc
-           , nameMut :: MutKind
-           }
-  deriving (Generic, Typeable, Data)
-
-instance Located (GName t) where
-    locOf = locOf . nameLoc
-
-isMutable :: GName t -> Bool
-isMutable nm = case nameMut nm of { Imm -> False ; Mut -> True }
-
-instance Eq (GName t) where
-  nm1 == nm2 = (name nm1 == name nm2) && (uniqId nm1 == uniqId nm2)
-
--- NB: The Ord class is suspicious in the light of the above Eq class.
--- We should revisit uses of Maps from GNames.
-
-instance Ord (GName t) where
-  nm1 <= nm2 = (uniqId nm1 <= uniqId nm2)
-
-instance Show (GName t) where
-  show (MkName x _id _ _ _loc)    = x
-
-
-toName :: String -> SrcLoc -> t -> MutKind -> GName t
-toName s mpos typ mk =
-    MkName { name    = s
-           , uniqId  = MkUniq s
-           , nameLoc = mpos
-           , nameMut = mk
-           , nameTyp = typ
-           }
-
-nameArgTy :: GName t -> GArgTy t
-nameArgTy nm = GArgTy (nameTyp nm) (nameMut nm)
-
-updNameId :: Uniq -> GName t -> GName t
-updNameId uid nm = nm { uniqId = uid }
-
-updNameTy :: GName t -> u -> GName u
-updNameTy (MkName n i _ mk l) utyp = MkName n i utyp mk l
-
-getNameWithUniq :: GName t -> String
-getNameWithUniq nm = name nm ++ "_blk" ++ unUniq (uniqId nm)
-
-{-------------------------------------------------------------------------------
-  Types in the source language
-
-  (No type variables, "length" expressions)
--------------------------------------------------------------------------------}
-
-data SrcTy where
-  SrcTUnit     :: SrcTy
-  SrcTBit      :: SrcTy
-  SrcTBool     :: SrcTy
-
-  SrcTArray    :: SrcNumExpr -> SrcTy -> SrcTy
-  SrcTInt      :: SrcBitWidth -> SrcTy
-  SrcTDouble   :: SrcTy
-  SrcTStruct   :: TyName -> SrcTy
-
-  -- Just useful for the embedding
-  SrcInject    :: Ty -> SrcTy
-
-  -- We record the absense of a type annotation here
-  SrcTyUnknown :: SrcTy
-
-  deriving (Generic, Typeable, Data, Eq)
-
--- | Bit widths in the source language are _always_ given (unknown bit widths
--- are only used in the type checker for the types of literals).
-data SrcBitWidth
-  = SrcBW8
-  | SrcBW16
-  | SrcBW32
-  | SrcBW64
-  deriving (Generic, Typeable, Data, Eq, Show)
-
-data SrcNumExpr where
-  -- | User explicitly specifies the length
-  SrcLiteral :: Int -> SrcNumExpr
-
-  -- | NArr: Length is the same as the length of the array of the given name
-  SrcNArr :: GName SrcTy -> SrcNumExpr
-
-  -- | User doesn't specify array length.
-  -- We record the the location for the sake of error messages.
-  SrcNVar :: SrcLoc -> SrcNumExpr
-
-  deriving (Generic, Typeable, Data, Eq)
-
-{-------------------------------------------------------------------------------
-  Types in the internal language
-
-  (Type variables, no "length" expressions)
--------------------------------------------------------------------------------}
-
-data Ty where
-  -- TVars are just strings since they don't appear in user programs
-  TVar      :: TyVar -> Ty
-  TUnit     :: Ty
-  TBit      :: Ty
-  TBool     :: Ty
-  TString   :: Ty                       -- Currently we have very limited supports for strings -
-                                        -- they can only be printed
-  TArray    :: NumExpr -> Ty -> Ty
-  TInt      :: BitWidth -> Ty
-  TDouble   :: Ty
-  -- TODO: We could inline GStructDef here?
-  TStruct   :: TyName -> [(FldName, Ty)] -> Ty
-  TInterval :: Int -> Ty
-
-  -- Arrow and buffer types
-  TArrow :: [ArgTy] -> Ty -> Ty
-  TBuff  :: BufTy -> Ty
-
-  TVoid  :: Ty
-
-  deriving (Generic, Typeable, Data, Eq, Ord)
-
--- An argument type (we record the mutability)
-data GArgTy t
-  = GArgTy { argty_ty  :: t
-           , argty_mut :: MutKind
-           }
-  deriving (Generic, Typeable, Data, Eq, Ord)
-
-type ArgTy = GArgTy Ty
-
-
-data NumExpr where
-  Literal :: Int -> NumExpr
-
-  -- | NVar: Length to be inferred from the context (or polymorphic)
-  NVar :: LenVar -> NumExpr
-
-  deriving (Generic, Typeable, Data, Eq, Ord)
-
-data BitWidth
-  = BW8
-  | BW16
-  | BW32
-  | BW64
-  | BWUnknown BWVar -- TODO: Why is this not a GName t instead of a BWVar?
-  deriving (Generic, Typeable, Data, Eq, Ord, Show)
-
-data BufTy =
-    -- | Internal buffer (for parallelization)
-    IntBuf { bufty_ty :: Ty }
-
-    -- | External buffer (for the `ReadSrc` or `WriteSnk`)
-    --
-    -- NOTE: We record the type that the program is reading/writing, _NOT_
-    -- its base type (in previous versions we recorded the base type here).
-  | ExtBuf { bufty_ty :: Ty }
-  deriving (Generic, Typeable, Data, Eq, Ord)
 
 {------------------------------------------------------------------------
   Expressions (parameterized by the (Haskell) type of (Ziria) types
@@ -271,7 +84,7 @@ data BinOp =
 
 data Val where
   VBit    :: Bool    -> Val
-  VInt    :: Integer -> Val
+  VInt    :: Integer -> Signedness -> Val
   VDouble :: Double  -> Val
   VBool   :: Bool    -> Val
   VString :: String  -> Val
@@ -327,6 +140,11 @@ derefToExp loc = go
         -- go (GDNewArray _t es)   = MkExp (EValArr es) loc ()
         -- go (GDNewStruct t flds) = MkExp (EStruct t flds) loc ()
 
+derefBase :: AGDerefExp e t -> GName t
+derefBase (GDVar x) = x
+derefBase (GDArr d _ _) = derefBase d
+derefBase (GDProj d _)  = derefBase d
+
 
 isMutGDerefExp :: GExp t a -> Maybe (GDerefExp t a)
 isMutGDerefExp e = case unExp e of
@@ -340,6 +158,8 @@ isMutGDerefExp e = case unExp e of
     return (GDArr gdarr estart elen)
   _ -> Nothing -- All other cases are immutable
 
+nameArgTy :: GName t -> GArgTy t
+nameArgTy nm = GArgTy (nameTyp nm) (nameMut nm)
 
 checkArgMut :: [ArgTy]    -- Function argument types (expected)
             -> [GExp t a] -- Arguments
@@ -447,8 +267,70 @@ data GFun0 t a where
   MkFunExternal :: GName t     -- ^ name
                 -> [GName t]   -- ^ params
                 -> t           -- ^ return type
+--                -> Bool        -- ^ see note [Safe Return Aliasing]
                 -> GFun0 t a
-  deriving (Eq, Ord) 
+  deriving (Eq, Ord)
+
+{- Note [Safe Return Aliasing] 
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  
+Consider an external function returns a big array, i.e. has the signature:
+
+     foo (x : arr[512] int) : arr[512] int;
+
+then our calling convention will generate the C stub:
+
+     __ext_foo(int *ret, int ret_len, int *x, int x_len);
+
+and, upon a call site (CgCall) the Ziria code generator will
+allocate a new variable for the return value and store the result
+there. However, this storing and memcopying can be terribly
+inefficient in case the original code looked like this:
+
+     y := foo(x); // Ziria 
+
+
+where we have *already* allocated y and ideally we'd simply like to
+call (at the C level):
+
+     __ext_foo(y,512,x,512) // C 
+
+One may think that this is always safe to do; alas it isnt! The problematic
+cases occur when the programmer is asigning to something that could alias in 
+the same memory location as the arguments. Example:
+
+     x := foo(x);
+
+will be translated to:
+
+     __ext_foo(x,512,x,512);
+   
+and that may -- or may not -- be the right thing to do depending on the
+implementation of "foo" since it may be at the same time reading from x and mutating
+the output (i.e. x again!). 
+
+Classic example from our WiFi testsuite is "invert_bits()" 
+
+
+Hence when it it safe to convert an assignment of the form: 
+      x := foo(y)
+to the C code: 
+      __ext_foo(x,y); 
+versus:
+      __ext_foo(ret,y);
+      memcpy(x,ret);
+?
+
+The current -- somewhat unsatisfactory -- solution adopted in
+CgExpr.hs is to let external function writers worry about undefined
+behaviour due to aliasing. If you are calling an external function you
+have to worry that you may be passing in return expressions that may
+alias to input variables.
+
+-}
+
+
+
 
 {- TODO plug this in at some point
 data FunDef a body
@@ -475,20 +357,12 @@ funName (MkFun (MkFunExternal nm _ _) _ _) = nm
 -------------------------------------------------------------------------------}
 
 instance NFData BinOp       where rnf = genericRnf
-instance NFData BitWidth    where rnf = genericRnf
-instance NFData BufTy       where rnf = genericRnf
 instance NFData ForceInline where rnf = genericRnf
 instance NFData LengthInfo  where rnf = genericRnf
-instance NFData NumExpr     where rnf = genericRnf
-instance NFData Ty          where rnf = genericRnf
 instance NFData UnrollInfo  where rnf = genericRnf
 instance NFData Val         where rnf = genericRnf
-instance NFData MutKind     where rnf = genericRnf
-instance NFData t => NFData (GArgTy t) where rnf = genericRnf
 
-instance NFData Uniq        where rnf = genericRnf
 instance NFData t => NFData (GUnOp t) where rnf = genericRnf
-instance NFData t => NFData (GName t) where rnf = genericRnf
 
 -- instance (NFData t, NFData a) => NFData (GExp0 t a) where rnf = genericRnf
 -- instance (NFData t, NFData a) => NFData (GExp  t a) where rnf = genericRnf
@@ -505,7 +379,6 @@ type Exp       = GExp       Ty ()
 type StructDef = GStructDef Ty
 type Fun0      = GFun0      Ty ()
 type Fun       = GFun       Ty ()
-type EId       = GName      Ty
 
 {-------------------------------------------------------------------------------
   Specializations of the AST to SrcTy (source level types)
@@ -521,11 +394,18 @@ type SrcFun = GFun SrcTy ()
 -------------------------------------------------------------------------------}
 
 tint, tint8, tint16, tint32, tint64 :: Ty
-tint64  = TInt BW64
-tint32  = TInt BW32
-tint16  = TInt BW16
-tint8   = TInt BW8
+tint64  = TInt BW64 Signed
+tint32  = TInt BW32 Signed
+tint16  = TInt BW16 Signed
+tint8   = TInt BW8  Signed
 tint    = tint32
+
+tuint, tuint8, tuint16, tuint32, tuint64 :: Ty
+tuint64  = TInt BW64 Unsigned
+tuint32  = TInt BW32 Unsigned
+tuint16  = TInt BW16 Unsigned
+tuint8   = TInt BW8  Unsigned
+tuint    = tuint32
 
 tdouble :: Ty
 tdouble = TDouble
@@ -538,18 +418,25 @@ tcomplex64 = complexTy complex64TyName BW64
 tcomplex   = tcomplex32
 
 complexTy :: TyName -> BitWidth -> Ty
-complexTy nm bw = TStruct nm [("re", TInt bw), ("im", TInt bw)]
+complexTy nm bw = TStruct nm [("re", TInt bw Signed), ("im", TInt bw Signed)]
 
 {-------------------------------------------------------------------------------
   Built-in types (source syntax)
 -------------------------------------------------------------------------------}
 
 tintSrc, tintSrc8, tintSrc16, tintSrc32, tintSrc64 :: SrcTy
-tintSrc64  = SrcTInt SrcBW64
-tintSrc32  = SrcTInt SrcBW32
-tintSrc16  = SrcTInt SrcBW16
-tintSrc8   = SrcTInt SrcBW8
+tintSrc64  = SrcTInt SrcBW64 SrcSigned
+tintSrc32  = SrcTInt SrcBW32 SrcSigned
+tintSrc16  = SrcTInt SrcBW16 SrcSigned
+tintSrc8   = SrcTInt SrcBW8  SrcSigned
 tintSrc    = tintSrc32
+
+tuintSrc, tuintSrc8, tuintSrc16, tuintSrc32, tuintSrc64 :: SrcTy
+tuintSrc64  = SrcTInt SrcBW64 SrcUnsigned
+tuintSrc32  = SrcTInt SrcBW32 SrcUnsigned
+tuintSrc16  = SrcTInt SrcBW16 SrcUnsigned
+tuintSrc8   = SrcTInt SrcBW8  SrcUnsigned
+tuintSrc    = tuintSrc32
 
 tdoubleSrc :: SrcTy
 tdoubleSrc = SrcTDouble
@@ -576,7 +463,7 @@ mapTyM f = go
     go TBit                = f $ TBit
     go TBool               = f $ TBool
     go TString             = f $ TString
-    go (TInt bw)           = f $ TInt bw
+    go (TInt bw sg)        = f $ TInt bw sg
     go (TInterval n)       = f $ TInterval n
     go TDouble             = f $ TDouble
     go (TStruct tn ts)     = do ts' <- mapM go (map snd ts)
@@ -995,15 +882,6 @@ expEq e e' = expEq0 (unExp e) (unExp e')
       = (b == b') && expEq e1 e1' && expEq e2 e2'
     expEq0 _e _e' = False
 
-toExp :: a -> GExp0 t a -> GExp t a
-toExp a e = MkExp { unExp = e, expLoc = noLoc, info = a }
-
-toExpPos :: a -> SrcLoc -> GExp0 t a -> GExp t a
-toExpPos a pos e = MkExp { unExp = e, expLoc = pos, info = a }
-
-binopList :: BinOp -> a -> GExp t a -> [GExp t a] -> GExp t a
-binopList _  _ e0 []       = e0
-binopList op a e0 (e : es) = toExp a $ EBinOp op e (binopList op a e0 es)
 
 dotDotName :: String
 dotDotName = "..."
@@ -1184,24 +1062,13 @@ primComplexStructs
   PrettyVal instances (used for dumping the AST)
 -------------------------------------------------------------------------------}
 
-instance PrettyVal BitWidth
-instance PrettyVal SrcBitWidth
-instance PrettyVal Ty
-instance PrettyVal SrcTy
-instance PrettyVal BufTy
-instance PrettyVal NumExpr
-instance PrettyVal SrcNumExpr
 instance PrettyVal BinOp
 instance PrettyVal ForceInline
 instance PrettyVal LengthInfo
 instance PrettyVal UnrollInfo
 instance PrettyVal Val
-instance PrettyVal Uniq
-instance PrettyVal MutKind
-instance PrettyVal t => PrettyVal (GArgTy t)
 
 
-instance PrettyVal t => PrettyVal (GName t)
 instance PrettyVal t => PrettyVal (GUnOp t)
 instance PrettyVal t => PrettyVal (GStructDef t)
 

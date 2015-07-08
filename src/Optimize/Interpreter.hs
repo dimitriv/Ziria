@@ -138,20 +138,21 @@ import Data.Int
 import Data.List (intercalate)
 import Data.Loc
 import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Maybe
 import Data.Monoid
+import qualified Data.Set        as Set
 import Data.Set (Set)
+import Data.Word
 import GHC.Generics
 import Outputable
 import System.IO.Unsafe (unsafePerformIO)
-import qualified Data.Map.Strict as Map
-import qualified Data.Set        as Set
 
 import AstExpr
 import AstUnlabelled
 import CtExpr (ctExp)
 import GenSym (initGenSym)
-import SparseArray (SparseArray)
+import SparseArray (SparseArray, toList)
 import TcMonad (runTcM')
 import Typecheck (tyCheckExpr)
 import qualified Lens        as L
@@ -234,6 +235,10 @@ data Value0 =
   | ValueInt16  !Int16
   | ValueInt32  !Int32
   | ValueInt64  !Int64
+  | ValueUInt8  !Word8
+  | ValueUInt16 !Word16
+  | ValueUInt32 !Word32
+  | ValueUInt64 !Word64
   | ValueCpx8   !(Complex Int8)
   | ValueCpx16  !(Complex Int16)
   | ValueCpx32  !(Complex Int32)
@@ -260,16 +265,20 @@ instance Show Value where
   show = show . valueExp
 
 scalarValue :: Ty -> Val -> Value0
-scalarValue TBit        (VBit b)    = ValueBit    b
-scalarValue (TInt BW8)  (VInt i)    = ValueInt8   (fromInteger i)
-scalarValue (TInt BW16) (VInt i)    = ValueInt16  (fromInteger i)
-scalarValue (TInt BW32) (VInt i)    = ValueInt32  (fromInteger i)
-scalarValue (TInt BW64) (VInt i)    = ValueInt64  (fromInteger i)
-scalarValue TDouble     (VDouble d) = ValueDouble d
-scalarValue TBool       (VBool b)   = ValueBool   b
-scalarValue TString     (VString s) = ValueString s
-scalarValue TUnit       VUnit       = ValueUnit
-scalarValue _           _           = error "invalid scalar value"
+scalarValue TBit        (VBit b)        = ValueBit    b
+scalarValue (TInt BW8  Signed) (VInt i Signed)     = ValueInt8   (fromInteger i)
+scalarValue (TInt BW16 Signed) (VInt i Signed)     = ValueInt16  (fromInteger i)
+scalarValue (TInt BW32 Signed) (VInt i Signed)     = ValueInt32  (fromInteger i)
+scalarValue (TInt BW64 Signed) (VInt i Signed)     = ValueInt64  (fromInteger i)
+scalarValue (TInt BW8  Unsigned) (VInt i Unsigned) = ValueUInt8  (fromInteger i)
+scalarValue (TInt BW16 Unsigned) (VInt i Unsigned) = ValueUInt16 (fromInteger i)
+scalarValue (TInt BW32 Unsigned) (VInt i Unsigned) = ValueUInt32 (fromInteger i)
+scalarValue (TInt BW64 Unsigned) (VInt i Unsigned) = ValueUInt64 (fromInteger i)
+scalarValue TDouble     (VDouble d)     = ValueDouble d
+scalarValue TBool       (VBool b)       = ValueBool   b
+scalarValue TString     (VString s)     = ValueString s
+scalarValue TUnit       VUnit           = ValueUnit
+scalarValue _           _               = error "invalid scalar value"
 
 structValue :: Ty -> [(FldName, Value)] -> Value0
 structValue ty flds =
@@ -312,10 +321,14 @@ valueExp v = let !e0 = go (unValue v) in MkExp e0 vloc ()
   where
     go :: Value0 -> Exp0
     go (ValueBit    b)         = EVal TBit        (VBit b)
-    go (ValueInt8   i)         = EVal (TInt BW8)  (VInt (toInteger i))
-    go (ValueInt16  i)         = EVal (TInt BW16) (VInt (toInteger i))
-    go (ValueInt32  i)         = EVal (TInt BW32) (VInt (toInteger i))
-    go (ValueInt64  i)         = EVal (TInt BW64) (VInt (toInteger i))
+    go (ValueInt8   i)         = EVal (TInt BW8  Signed) (VInt (toInteger i) Signed)
+    go (ValueInt16  i)         = EVal (TInt BW16 Signed) (VInt (toInteger i) Signed)
+    go (ValueInt32  i)         = EVal (TInt BW32 Signed) (VInt (toInteger i) Signed)
+    go (ValueInt64  i)         = EVal (TInt BW64 Signed) (VInt (toInteger i) Signed)
+    go (ValueUInt8  i)         = EVal (TInt BW8  Unsigned) (VInt (toInteger i) Unsigned)
+    go (ValueUInt16 i)         = EVal (TInt BW16 Unsigned) (VInt (toInteger i) Unsigned)
+    go (ValueUInt32 i)         = EVal (TInt BW32 Unsigned) (VInt (toInteger i) Unsigned)
+    go (ValueUInt64 i)         = EVal (TInt BW64 Unsigned) (VInt (toInteger i) Unsigned)
     go (ValueDouble d)         = EVal TDouble     (VDouble d)
     go (ValueBool   b)         = EVal TBool       (VBool   b)
     go (ValueString s)         = EVal TString     (VString s)
@@ -325,23 +338,23 @@ valueExp v = let !e0 = go (unValue v) in MkExp e0 vloc ()
 
     go (ValueCpx8 Complex{..}) =
       EStruct tcomplex8 [
-          ("re", eVal vloc tint8 (VInt (toInteger re)))
-        , ("im", eVal vloc tint8 (VInt (toInteger im)))
+          ("re", eVal vloc tint8 (VInt (toInteger re) Signed))
+        , ("im", eVal vloc tint8 (VInt (toInteger im) Signed))
         ]
     go (ValueCpx16 Complex{..}) =
       EStruct tcomplex16 [
-          ("re", eVal vloc tint16 (VInt (toInteger re)))
-        , ("im", eVal vloc tint16 (VInt (toInteger im)))
+          ("re", eVal vloc tint16 (VInt (toInteger re) Signed))
+        , ("im", eVal vloc tint16 (VInt (toInteger im) Signed))
         ]
     go (ValueCpx32 Complex{..}) =
       EStruct tcomplex32 [
-          ("re", eVal vloc tint32 (VInt (toInteger re)))
-        , ("im", eVal vloc tint32 (VInt (toInteger im)))
+          ("re", eVal vloc tint32 (VInt (toInteger re) Signed))
+        , ("im", eVal vloc tint32 (VInt (toInteger im) Signed))
         ]
     go (ValueCpx64 Complex{..}) =
       EStruct tcomplex64 [
-         ("re", eVal vloc tint64 (VInt (toInteger re)))
-       , ("im", eVal vloc tint64 (VInt (toInteger im)))
+         ("re", eVal vloc tint64 (VInt (toInteger re) Signed))
+       , ("im", eVal vloc tint64 (VInt (toInteger im) Signed))
        ]
 
     valueFld (fld, v') = let !e' = valueExp v' in (fld, e')
@@ -359,10 +372,14 @@ initVal :: SrcLoc -> Ty -> Maybe Value
 initVal p ty = (\v0 -> MkValue v0 p) <$> go ty
   where
     go TBit        = return $ ValueBit    False
-    go (TInt BW8)  = return $ ValueInt8   0
-    go (TInt BW16) = return $ ValueInt16  0
-    go (TInt BW32) = return $ ValueInt32  0
-    go (TInt BW64) = return $ ValueInt64  0
+    go (TInt BW8  Signed)   = return $ ValueInt8   0
+    go (TInt BW16 Signed)   = return $ ValueInt16  0
+    go (TInt BW32 Signed)   = return $ ValueInt32  0
+    go (TInt BW64 Signed)   = return $ ValueInt64  0
+    go (TInt BW8  Unsigned) = return $ ValueUInt8  0
+    go (TInt BW16 Unsigned) = return $ ValueUInt16 0
+    go (TInt BW32 Unsigned) = return $ ValueUInt32 0
+    go (TInt BW64 Unsigned) = return $ ValueUInt64 0
     go TDouble     = return $ ValueDouble 0
     go TBool       = return $ ValueBool   False
     go TString     = return $ ValueString ""
@@ -439,6 +456,10 @@ evalInt e = case evalFull e of
     (Right (MkValue (ValueInt16 i) _) , prints) -> (Right (toInteger i)   , prints)
     (Right (MkValue (ValueInt32 i) _) , prints) -> (Right (toInteger i)   , prints)
     (Right (MkValue (ValueInt64 i) _) , prints) -> (Right (toInteger i)   , prints)
+    (Right (MkValue (ValueUInt8  i) _) , prints)-> (Right (toInteger i)   , prints)
+    (Right (MkValue (ValueUInt16 i) _) , prints)-> (Right (toInteger i)   , prints)
+    (Right (MkValue (ValueUInt32 i) _) , prints)-> (Right (toInteger i)   , prints)
+    (Right (MkValue (ValueUInt64 i) _) , prints)-> (Right (toInteger i)   , prints)
     (Right _                          , prints) -> (Left "Not an integer" , prints)
     (Left  err                        , prints) -> (Left err              , prints)
 
@@ -895,6 +916,10 @@ evaldInt (EvaldFull (MkValue (ValueInt8  i) _)) = Left (fromIntegral i)
 evaldInt (EvaldFull (MkValue (ValueInt16 i) _)) = Left (fromIntegral i)
 evaldInt (EvaldFull (MkValue (ValueInt32 i) _)) = Left (fromIntegral i)
 evaldInt (EvaldFull (MkValue (ValueInt64 i) _)) = Left (fromIntegral i)
+evaldInt (EvaldFull (MkValue (ValueUInt8  i) _))= Left (fromIntegral i)
+evaldInt (EvaldFull (MkValue (ValueUInt16 i) _))= Left (fromIntegral i)
+evaldInt (EvaldFull (MkValue (ValueUInt32 i) _))= Left (fromIntegral i)
+evaldInt (EvaldFull (MkValue (ValueUInt64 i) _))= Left (fromIntegral i)
 evaldInt e = Right $! unEvald e
 
 evaldUnit :: Evald -> Bool
@@ -1082,7 +1107,7 @@ interpret e = guessIfUnevaluated (go . unExp) e
             EArrRead arr' ix' len' ->
               -- Special optimizations
               case (ctExp arr, unExp ix', len') of
-                (TArray (Literal m) _, EVal _ (VInt 0), LILength n) | m == n ->
+                (TArray (Literal m) _, EVal _ (VInt 0 Signed), LILength n) | m == n ->
                   evaldPart $ eAssign eloc arr' rhs'
                 _otherwise -> do
                   evaldPart $ eArrWrite eloc arr' ix' len' rhs'
@@ -1122,11 +1147,13 @@ interpret e = guessIfUnevaluated (go . unExp) e
       lenEvald   <- interpret len
       beforeSt   <- get
       fullEv <- case (evaldInt startEvald, evaldInt lenEvald) of
-        (Left start', Left len') -> do
+        (Left start', Left len') 
+          | len' <= 512 -- Do not evaluate very large loops. 
+          -> do
           let loop n | n == start' + len' =
                 return True
               loop n = do
-                let n' = fromJust $ expValue (eVal eloc (nameTyp x) (VInt n))
+                let n' = fromJust $ expValue (eVal eloc (nameTyp x) (VInt n Signed))
                 bodyEvald <- extendScope evalLets x n' $ interpret body
                 -- Only when we can fully evaluate the body of the loop do we
                 -- continue. If not, we give up completely (alternatively, we
@@ -1236,9 +1263,35 @@ interpretLetRef eloc x v1 e2 = do
         -- Value is _still_ at its implicit default value
         let !e2' = unEvald e2Evald
         evaldPart $ eLetRef eloc x Nothing e2'
-      LetRefUnknown (Just (Explicit v1')) -> do
-        -- Value explicitly specified (either from the letref initial value or
-        -- from a subsequent explicit assignment); must include.
+      LetRefUnknown (Just (Explicit v1')) 
+         -- This optimization comes from test_map_ofdm in WiFi TX
+         -- In particular in that case we created a huge array assignment
+         -- and memcopy, just because 3-4 assignments mutated the default
+         -- value inside! 
+         -- New plan: for those cases just emit assignments.
+
+         --   i) original was implicit large value array
+       | Implicit _orig_v1 <- v1 
+       , ValueArray _orig_arr <- unValue _orig_v1
+         --  ii) new is a value array
+       , ValueArray new_arr  <- unValue v1'
+       , let writes = SparseArray.toList new_arr
+         --  iii) fairly small amount of writes (i.e. ok to inline)
+       , length writes <= 32
+       -> do 
+        let asgns = map (\(i,w) -> 
+              eArrWrite eloc (eVar eloc x) 
+                             (eVal eloc tint (vint i))
+                             LISingleton (valueExp w)) writes
+            !e2' = unEvald e2Evald
+        evaldPart $ eLetRef eloc x Nothing $  --- Nothing! *NOT* v1' 
+                    foldr (eSeq eloc) e2' asgns
+
+       | otherwise -- Original path 
+       -> do
+        -- Value explicitly specified (either from the letref initial
+        -- value or from a subsequent explicit assignment); must
+        -- include.
         let !e1' = valueExp v1'
             !e2' = unEvald e2Evald
         evaldPart $ eLetRef eloc x (Just e1') e2'
@@ -1492,6 +1545,10 @@ zNum2 f = mkBinaryOp go
     go (ValueInt16  a) (ValueInt16  b) = Just $ ValueInt16  (f a b)
     go (ValueInt32  a) (ValueInt32  b) = Just $ ValueInt32  (f a b)
     go (ValueInt64  a) (ValueInt64  b) = Just $ ValueInt64  (f a b)
+    go (ValueUInt8  a) (ValueUInt8  b) = Just $ ValueUInt8  (f a b)
+    go (ValueUInt16 a) (ValueUInt16 b) = Just $ ValueUInt16 (f a b)
+    go (ValueUInt32 a) (ValueUInt32 b) = Just $ ValueUInt32 (f a b)
+    go (ValueUInt64 a) (ValueUInt64 b) = Just $ ValueUInt64 (f a b)
     go (ValueCpx8   a) (ValueCpx8   b) = Just $ ValueCpx8   (f a b)
     go (ValueCpx16  a) (ValueCpx16  b) = Just $ ValueCpx16  (f a b)
     go (ValueCpx32  a) (ValueCpx32  b) = Just $ ValueCpx32  (f a b)
@@ -1506,6 +1563,10 @@ zIntegral f = mkBinaryOp go
     go (ValueInt16  a) (ValueInt16  b) = Just $ ValueInt16  (f a b)
     go (ValueInt32  a) (ValueInt32  b) = Just $ ValueInt32  (f a b)
     go (ValueInt64  a) (ValueInt64  b) = Just $ ValueInt64  (f a b)
+    go (ValueUInt8  a) (ValueUInt8  b) = Just $ ValueUInt8   (f a b)
+    go (ValueUInt16 a) (ValueUInt16 b) = Just $ ValueUInt16  (f a b)
+    go (ValueUInt32 a) (ValueUInt32 b) = Just $ ValueUInt32  (f a b)
+    go (ValueUInt64 a) (ValueUInt64 b) = Just $ ValueUInt64  (f a b)
     go (ValueCpx8   a) (ValueCpx8   b) = Just $ ValueCpx8   (f a b)
     go (ValueCpx16  a) (ValueCpx16  b) = Just $ ValueCpx16  (f a b)
     go (ValueCpx32  a) (ValueCpx32  b) = Just $ ValueCpx32  (f a b)
@@ -1527,11 +1588,16 @@ zBits2 f = mkBinaryOp go
     go (ValueInt16  a) (ValueInt16  b) = Just $ ValueInt16  (f a b)
     go (ValueInt32  a) (ValueInt32  b) = Just $ ValueInt32  (f a b)
     go (ValueInt64  a) (ValueInt64  b) = Just $ ValueInt64  (f a b)
+    go (ValueUInt8  a) (ValueUInt8  b) = Just $ ValueUInt8   (f a b)
+    go (ValueUInt16 a) (ValueUInt16 b) = Just $ ValueUInt16  (f a b)
+    go (ValueUInt32 a) (ValueUInt32 b) = Just $ ValueUInt32  (f a b)
+    go (ValueUInt64 a) (ValueUInt64 b) = Just $ ValueUInt64  (f a b)
     go _               _               = Nothing
 
 zShift :: (forall a. Bits a => a -> Int -> a) -> BinaryOp
 zShift f = mkBinaryOp go
   where
+    -- signed by signed
     go (ValueInt8  a) (ValueInt8  b) = Just $ ValueInt8  (f' a b)
     go (ValueInt8  a) (ValueInt16 b) = Just $ ValueInt8  (f' a b)
     go (ValueInt8  a) (ValueInt32 b) = Just $ ValueInt8  (f' a b)
@@ -1548,6 +1614,61 @@ zShift f = mkBinaryOp go
     go (ValueInt64 a) (ValueInt16 b) = Just $ ValueInt64 (f' a b)
     go (ValueInt64 a) (ValueInt32 b) = Just $ ValueInt64 (f' a b)
     go (ValueInt64 a) (ValueInt64 b) = Just $ ValueInt64 (f' a b)
+
+    -- signed by unsigned
+    go (ValueInt8  a) (ValueUInt8  b) = Just $ ValueInt8  (f' a b)
+    go (ValueInt8  a) (ValueUInt16 b) = Just $ ValueInt8  (f' a b)
+    go (ValueInt8  a) (ValueUInt32 b) = Just $ ValueInt8  (f' a b)
+    go (ValueInt8  a) (ValueUInt64 b) = Just $ ValueInt8  (f' a b)
+    go (ValueInt16 a) (ValueUInt8  b) = Just $ ValueInt16 (f' a b)
+    go (ValueInt16 a) (ValueUInt16 b) = Just $ ValueInt16 (f' a b)
+    go (ValueInt16 a) (ValueUInt32 b) = Just $ ValueInt16 (f' a b)
+    go (ValueInt16 a) (ValueUInt64 b) = Just $ ValueInt16 (f' a b)
+    go (ValueInt32 a) (ValueUInt8  b) = Just $ ValueInt32 (f' a b)
+    go (ValueInt32 a) (ValueUInt16 b) = Just $ ValueInt32 (f' a b)
+    go (ValueInt32 a) (ValueUInt32 b) = Just $ ValueInt32 (f' a b)
+    go (ValueInt32 a) (ValueUInt64 b) = Just $ ValueInt32 (f' a b)
+    go (ValueInt64 a) (ValueUInt8  b) = Just $ ValueInt64 (f' a b)
+    go (ValueInt64 a) (ValueUInt16 b) = Just $ ValueInt64 (f' a b)
+    go (ValueInt64 a) (ValueUInt32 b) = Just $ ValueInt64 (f' a b)
+    go (ValueInt64 a) (ValueUInt64 b) = Just $ ValueInt64 (f' a b)
+
+    -- usigned by signed
+    go (ValueUInt8  a) (ValueInt8  b) = Just $ ValueUInt8  (f' a b)
+    go (ValueUInt8  a) (ValueInt16 b) = Just $ ValueUInt8  (f' a b)
+    go (ValueUInt8  a) (ValueInt32 b) = Just $ ValueUInt8  (f' a b)
+    go (ValueUInt8  a) (ValueInt64 b) = Just $ ValueUInt8  (f' a b)
+    go (ValueUInt16 a) (ValueInt8  b) = Just $ ValueUInt16 (f' a b)
+    go (ValueUInt16 a) (ValueInt16 b) = Just $ ValueUInt16 (f' a b)
+    go (ValueUInt16 a) (ValueInt32 b) = Just $ ValueUInt16 (f' a b)
+    go (ValueUInt16 a) (ValueInt64 b) = Just $ ValueUInt16 (f' a b)
+    go (ValueUInt32 a) (ValueInt8  b) = Just $ ValueUInt32 (f' a b)
+    go (ValueUInt32 a) (ValueInt16 b) = Just $ ValueUInt32 (f' a b)
+    go (ValueUInt32 a) (ValueInt32 b) = Just $ ValueUInt32 (f' a b)
+    go (ValueUInt32 a) (ValueInt64 b) = Just $ ValueUInt32 (f' a b)
+    go (ValueUInt64 a) (ValueInt8  b) = Just $ ValueUInt64 (f' a b)
+    go (ValueUInt64 a) (ValueInt16 b) = Just $ ValueUInt64 (f' a b)
+    go (ValueUInt64 a) (ValueInt32 b) = Just $ ValueUInt64 (f' a b)
+    go (ValueUInt64 a) (ValueInt64 b) = Just $ ValueUInt64 (f' a b)
+
+    -- unsigned by unsigned
+    go (ValueUInt8  a) (ValueUInt8  b) = Just $ ValueUInt8  (f' a b)
+    go (ValueUInt8  a) (ValueUInt16 b) = Just $ ValueUInt8  (f' a b)
+    go (ValueUInt8  a) (ValueUInt32 b) = Just $ ValueUInt8  (f' a b)
+    go (ValueUInt8  a) (ValueUInt64 b) = Just $ ValueUInt8  (f' a b)
+    go (ValueUInt16 a) (ValueUInt8  b) = Just $ ValueUInt16 (f' a b)
+    go (ValueUInt16 a) (ValueUInt16 b) = Just $ ValueUInt16 (f' a b)
+    go (ValueUInt16 a) (ValueUInt32 b) = Just $ ValueUInt16 (f' a b)
+    go (ValueUInt16 a) (ValueUInt64 b) = Just $ ValueUInt16 (f' a b)
+    go (ValueUInt32 a) (ValueUInt8  b) = Just $ ValueUInt32 (f' a b)
+    go (ValueUInt32 a) (ValueUInt16 b) = Just $ ValueUInt32 (f' a b)
+    go (ValueUInt32 a) (ValueUInt32 b) = Just $ ValueUInt32 (f' a b)
+    go (ValueUInt32 a) (ValueUInt64 b) = Just $ ValueUInt32 (f' a b)
+    go (ValueUInt64 a) (ValueUInt8  b) = Just $ ValueUInt64 (f' a b)
+    go (ValueUInt64 a) (ValueUInt16 b) = Just $ ValueUInt64 (f' a b)
+    go (ValueUInt64 a) (ValueUInt32 b) = Just $ ValueUInt64 (f' a b)
+    go (ValueUInt64 a) (ValueUInt64 b) = Just $ ValueUInt64 (f' a b)
+
     go _              _              = Nothing
 
     f' :: (Bits a, Integral b) => a -> b -> a
@@ -1563,6 +1684,10 @@ zOrd f = mkBinaryOp $ go
     go (ValueInt16  a) (ValueInt16  b) = Just $ ValueBool (f a b)
     go (ValueInt32  a) (ValueInt32  b) = Just $ ValueBool (f a b)
     go (ValueInt64  a) (ValueInt64  b) = Just $ ValueBool (f a b)
+    go (ValueUInt8  a) (ValueUInt8  b) = Just $ ValueBool (f a b)
+    go (ValueUInt16 a) (ValueUInt16 b) = Just $ ValueBool (f a b)
+    go (ValueUInt32 a) (ValueUInt32 b) = Just $ ValueBool (f a b)
+    go (ValueUInt64 a) (ValueUInt64 b) = Just $ ValueBool (f a b)
     go (ValueDouble a) (ValueDouble b) = Just $ ValueBool (f a b)
     go (ValueString a) (ValueString b) = Just $ ValueBool (f a b)
     go _               _               = Nothing
@@ -1614,19 +1739,27 @@ zNum1 f = mkUnaryOp go
     go (ValueInt16  a) = Just $ ValueInt16  (f a)
     go (ValueInt32  a) = Just $ ValueInt32  (f a)
     go (ValueInt64  a) = Just $ ValueInt64  (f a)
+    go (ValueUInt8  a) = Just $ ValueUInt8   (f a)
+    go (ValueUInt16 a) = Just $ ValueUInt16  (f a)
+    go (ValueUInt32 a) = Just $ ValueUInt32  (f a)
+    go (ValueUInt64 a) = Just $ ValueUInt64  (f a)
     go (ValueDouble a) = Just $ ValueDouble (f a)
     go _               = Nothing
 
 zBits1 :: (forall a. Bits a => a -> a) -> UnaryOp
 zBits1 f = mkUnaryOp go
   where
-    go (ValueBit   a) = Just $ ValueBit   (f a)
-    go (ValueBool  a) = Just $ ValueBool  (f a)
-    go (ValueInt8  a) = Just $ ValueInt8  (f a)
-    go (ValueInt16 a) = Just $ ValueInt16 (f a)
-    go (ValueInt32 a) = Just $ ValueInt32 (f a)
-    go (ValueInt64 a) = Just $ ValueInt64 (f a)
-    go _              = Nothing
+    go (ValueBit   a)  = Just $ ValueBit   (f a)
+    go (ValueBool  a)  = Just $ ValueBool  (f a)
+    go (ValueInt8  a)  = Just $ ValueInt8  (f a)
+    go (ValueInt16 a)  = Just $ ValueInt16 (f a)
+    go (ValueInt32 a)  = Just $ ValueInt32 (f a)
+    go (ValueInt64 a)  = Just $ ValueInt64 (f a)
+    go (ValueUInt8  a) = Just $ ValueUInt8  (f a)
+    go (ValueUInt16 a) = Just $ ValueUInt16 (f a)
+    go (ValueUInt32 a) = Just $ ValueUInt32 (f a)
+    go (ValueUInt64 a) = Just $ ValueUInt64 (f a)
+    go _               = Nothing
 
 zBool1 :: (Bool -> Bool) -> UnaryOp
 zBool1 f = mkUnaryOp $ go
@@ -1651,6 +1784,10 @@ zCast ty = mkUnaryOp (go ty)
     go TBit  (ValueInt16 a) = Just $ ValueBit (toBool a)
     go TBit  (ValueInt32 a) = Just $ ValueBit (toBool a)
     go TBit  (ValueInt64 a) = Just $ ValueBit (toBool a)
+    go TBit  (ValueUInt8  a) = Just $ ValueBit (toBool a)
+    go TBit  (ValueUInt16 a) = Just $ ValueBit (toBool a)
+    go TBit  (ValueUInt32 a) = Just $ ValueBit (toBool a)
+    go TBit  (ValueUInt64 a) = Just $ ValueBit (toBool a)
     go TBit  _              = Nothing
 
     go TBool (ValueBit  a)  = Just $ ValueBool a
@@ -1659,43 +1796,117 @@ zCast ty = mkUnaryOp (go ty)
     go TBool (ValueInt16 a) = Just $ ValueBool (toBool a)
     go TBool (ValueInt32 a) = Just $ ValueBool (toBool a)
     go TBool (ValueInt64 a) = Just $ ValueBool (toBool a)
+    go TBool (ValueUInt8  a) = Just $ ValueBool (toBool a)
+    go TBool (ValueUInt16 a) = Just $ ValueBool (toBool a)
+    go TBool (ValueUInt32 a) = Just $ ValueBool (toBool a)
+    go TBool (ValueUInt64 a) = Just $ ValueBool (toBool a)
     go TBool _              = Nothing
 
-    go (TInt BW8)  (ValueBit    a) = Just $ ValueInt8 (fromBool a)
-    go (TInt BW8)  (ValueBool   a) = Just $ ValueInt8 (fromBool a)
-    go (TInt BW8)  (ValueInt8   a) = Just $ ValueInt8 a
-    go (TInt BW8)  (ValueInt16  a) = Just $ ValueInt8 (fromIntegral a)
-    go (TInt BW8)  (ValueInt32  a) = Just $ ValueInt8 (fromIntegral a)
-    go (TInt BW8)  (ValueInt64  a) = Just $ ValueInt8 (fromIntegral a)
-    go (TInt BW8)  (ValueDouble a) = Just $ ValueInt8 (round a)
-    go (TInt BW8)  _               = Nothing
+    -- cast to signed
+    go (TInt BW8 Signed)  (ValueBit    a) = Just $ ValueInt8 (fromBool a)
+    go (TInt BW8 Signed)  (ValueBool   a) = Just $ ValueInt8 (fromBool a)
+    go (TInt BW8 Signed)  (ValueInt8   a) = Just $ ValueInt8 a
+    go (TInt BW8 Signed)  (ValueInt16  a) = Just $ ValueInt8 (fromIntegral a)
+    go (TInt BW8 Signed)  (ValueInt32  a) = Just $ ValueInt8 (fromIntegral a)
+    go (TInt BW8 Signed)  (ValueInt64  a) = Just $ ValueInt8 (fromIntegral a)
+    go (TInt BW8 Signed)  (ValueUInt8  a) = Just $ ValueInt8 (fromIntegral a)
+    go (TInt BW8 Signed)  (ValueUInt16 a) = Just $ ValueInt8 (fromIntegral a)
+    go (TInt BW8 Signed)  (ValueUInt32 a) = Just $ ValueInt8 (fromIntegral a)
+    go (TInt BW8 Signed)  (ValueUInt64 a) = Just $ ValueInt8 (fromIntegral a)
+    go (TInt BW8 Signed)  (ValueDouble a) = Just $ ValueInt8 (round a)
+    go (TInt BW8 Signed)  _               = Nothing
 
-    go (TInt BW16) (ValueBit    a) = Just $ ValueInt16 (fromBool a)
-    go (TInt BW16) (ValueBool   a) = Just $ ValueInt16 (fromBool a)
-    go (TInt BW16) (ValueInt8   a) = Just $ ValueInt16 (fromIntegral a)
-    go (TInt BW16) (ValueInt16  a) = Just $ ValueInt16 a
-    go (TInt BW16) (ValueInt32  a) = Just $ ValueInt16 (fromIntegral a)
-    go (TInt BW16) (ValueInt64  a) = Just $ ValueInt16 (fromIntegral a)
-    go (TInt BW16) (ValueDouble a) = Just $ ValueInt16 (round a)
-    go (TInt BW16) _               = Nothing
+    go (TInt BW16 Signed) (ValueBit    a) = Just $ ValueInt16 (fromBool a)
+    go (TInt BW16 Signed) (ValueBool   a) = Just $ ValueInt16 (fromBool a)
+    go (TInt BW16 Signed) (ValueInt8   a) = Just $ ValueInt16 (fromIntegral a)
+    go (TInt BW16 Signed) (ValueInt16  a) = Just $ ValueInt16 a
+    go (TInt BW16 Signed) (ValueInt32  a) = Just $ ValueInt16 (fromIntegral a)
+    go (TInt BW16 Signed) (ValueInt64  a) = Just $ ValueInt16 (fromIntegral a)
+    go (TInt BW16 Signed) (ValueUInt8  a) = Just $ ValueInt16 (fromIntegral a)
+    go (TInt BW16 Signed) (ValueUInt16 a) = Just $ ValueInt16 (fromIntegral a)
+    go (TInt BW16 Signed) (ValueUInt32 a) = Just $ ValueInt16 (fromIntegral a)
+    go (TInt BW16 Signed) (ValueUInt64 a) = Just $ ValueInt16 (fromIntegral a)
+    go (TInt BW16 Signed) (ValueDouble a) = Just $ ValueInt16 (round a)
+    go (TInt BW16 Signed) _               = Nothing
 
-    go (TInt BW32) (ValueBit    a) = Just $ ValueInt32 (fromBool a)
-    go (TInt BW32) (ValueBool   a) = Just $ ValueInt32 (fromBool a)
-    go (TInt BW32) (ValueInt8   a) = Just $ ValueInt32 (fromIntegral a)
-    go (TInt BW32) (ValueInt16  a) = Just $ ValueInt32 (fromIntegral a)
-    go (TInt BW32) (ValueInt32  a) = Just $ ValueInt32 a
-    go (TInt BW32) (ValueInt64  a) = Just $ ValueInt32 (fromIntegral a)
-    go (TInt BW32) (ValueDouble a) = Just $ ValueInt32 (round a)
-    go (TInt BW32) _               = Nothing
+    go (TInt BW32 Signed) (ValueBit    a) = Just $ ValueInt32 (fromBool a)
+    go (TInt BW32 Signed) (ValueBool   a) = Just $ ValueInt32 (fromBool a)
+    go (TInt BW32 Signed) (ValueInt8   a) = Just $ ValueInt32 (fromIntegral a)
+    go (TInt BW32 Signed) (ValueInt16  a) = Just $ ValueInt32 (fromIntegral a)
+    go (TInt BW32 Signed) (ValueInt32  a) = Just $ ValueInt32 a
+    go (TInt BW32 Signed) (ValueInt64  a) = Just $ ValueInt32 (fromIntegral a)
+    go (TInt BW32 Signed) (ValueUInt8  a) = Just $ ValueInt32 (fromIntegral a)
+    go (TInt BW32 Signed) (ValueUInt16 a) = Just $ ValueInt32 (fromIntegral a)
+    go (TInt BW32 Signed) (ValueUInt32 a) = Just $ ValueInt32 (fromIntegral a)
+    go (TInt BW32 Signed) (ValueUInt64 a) = Just $ ValueInt32 (fromIntegral a)
+    go (TInt BW32 Signed) (ValueDouble a) = Just $ ValueInt32 (round a)
+    go (TInt BW32 Signed) _               = Nothing
 
-    go (TInt BW64) (ValueBit    a) = Just $ ValueInt64 (fromBool a)
-    go (TInt BW64) (ValueBool   a) = Just $ ValueInt64 (fromBool a)
-    go (TInt BW64) (ValueInt8   a) = Just $ ValueInt64 (fromIntegral a)
-    go (TInt BW64) (ValueInt16  a) = Just $ ValueInt64 (fromIntegral a)
-    go (TInt BW64) (ValueInt32  a) = Just $ ValueInt64 (fromIntegral a)
-    go (TInt BW64) (ValueInt64  a) = Just $ ValueInt64 a
-    go (TInt BW64) (ValueDouble a) = Just $ ValueInt64 (round a)
-    go (TInt BW64) _               = Nothing
+    go (TInt BW64 Signed) (ValueBit    a) = Just $ ValueInt64 (fromBool a)
+    go (TInt BW64 Signed) (ValueBool   a) = Just $ ValueInt64 (fromBool a)
+    go (TInt BW64 Signed) (ValueInt8   a) = Just $ ValueInt64 (fromIntegral a)
+    go (TInt BW64 Signed) (ValueInt16  a) = Just $ ValueInt64 (fromIntegral a)
+    go (TInt BW64 Signed) (ValueInt32  a) = Just $ ValueInt64 (fromIntegral a)
+    go (TInt BW64 Signed) (ValueInt64  a) = Just $ ValueInt64 a
+    go (TInt BW64 Signed) (ValueUInt8  a) = Just $ ValueInt64 (fromIntegral a)
+    go (TInt BW64 Signed) (ValueUInt16 a) = Just $ ValueInt64 (fromIntegral a)
+    go (TInt BW64 Signed) (ValueUInt32 a) = Just $ ValueInt64 (fromIntegral a)
+    go (TInt BW64 Signed) (ValueUInt64 a) = Just $ ValueInt64 (fromIntegral a)
+    go (TInt BW64 Signed) (ValueDouble a) = Just $ ValueInt64 (round a)
+    go (TInt BW64 Signed) _               = Nothing
+
+    -- cast to unsigned
+    go (TInt BW8 Unsigned)  (ValueBit    a) = Just $ ValueUInt8 (fromBool a)
+    go (TInt BW8 Unsigned)  (ValueBool   a) = Just $ ValueUInt8 (fromBool a)
+    go (TInt BW8 Unsigned)  (ValueInt8   a) = Just $ ValueUInt8 (fromIntegral a)
+    go (TInt BW8 Unsigned)  (ValueInt16  a) = Just $ ValueUInt8 (fromIntegral a)
+    go (TInt BW8 Unsigned)  (ValueInt32  a) = Just $ ValueUInt8 (fromIntegral a)
+    go (TInt BW8 Unsigned)  (ValueInt64  a) = Just $ ValueUInt8 (fromIntegral a)
+    go (TInt BW8 Unsigned)  (ValueUInt8  a) = Just $ ValueUInt8 a
+    go (TInt BW8 Unsigned)  (ValueUInt16 a) = Just $ ValueUInt8 (fromIntegral a)
+    go (TInt BW8 Unsigned)  (ValueUInt32 a) = Just $ ValueUInt8 (fromIntegral a)
+    go (TInt BW8 Unsigned)  (ValueUInt64 a) = Just $ ValueUInt8 (fromIntegral a)
+    go (TInt BW8 Unsigned)  (ValueDouble a) = Just $ ValueUInt8 (round a)
+    go (TInt BW8 Unsigned)  _               = Nothing
+
+    go (TInt BW16 Unsigned) (ValueBit    a) = Just $ ValueUInt16 (fromBool a)
+    go (TInt BW16 Unsigned) (ValueBool   a) = Just $ ValueUInt16 (fromBool a)
+    go (TInt BW16 Unsigned) (ValueInt8   a) = Just $ ValueUInt16 (fromIntegral a)
+    go (TInt BW16 Unsigned) (ValueInt16  a) = Just $ ValueUInt16 (fromIntegral a)
+    go (TInt BW16 Unsigned) (ValueInt32  a) = Just $ ValueUInt16 (fromIntegral a)
+    go (TInt BW16 Unsigned) (ValueInt64  a) = Just $ ValueUInt16 (fromIntegral a)
+    go (TInt BW16 Unsigned) (ValueUInt8  a) = Just $ ValueUInt16 (fromIntegral a)
+    go (TInt BW16 Unsigned) (ValueUInt16 a) = Just $ ValueUInt16 a
+    go (TInt BW16 Unsigned) (ValueUInt32 a) = Just $ ValueUInt16 (fromIntegral a)
+    go (TInt BW16 Unsigned) (ValueUInt64 a) = Just $ ValueUInt16 (fromIntegral a)
+    go (TInt BW16 Unsigned) (ValueDouble a) = Just $ ValueUInt16 (round a)
+    go (TInt BW16 Unsigned) _               = Nothing
+
+    go (TInt BW32 Unsigned) (ValueBit    a) = Just $ ValueUInt32 (fromBool a)
+    go (TInt BW32 Unsigned) (ValueBool   a) = Just $ ValueUInt32 (fromBool a)
+    go (TInt BW32 Unsigned) (ValueInt8   a) = Just $ ValueUInt32 (fromIntegral a)
+    go (TInt BW32 Unsigned) (ValueInt16  a) = Just $ ValueUInt32 (fromIntegral a)
+    go (TInt BW32 Unsigned) (ValueInt32  a) = Just $ ValueUInt32 (fromIntegral a)
+    go (TInt BW32 Unsigned) (ValueInt64  a) = Just $ ValueUInt32 (fromIntegral a)
+    go (TInt BW32 Unsigned) (ValueUInt8  a) = Just $ ValueUInt32 (fromIntegral a)
+    go (TInt BW32 Unsigned) (ValueUInt16 a) = Just $ ValueUInt32 (fromIntegral a)
+    go (TInt BW32 Unsigned) (ValueUInt32 a) = Just $ ValueUInt32 a
+    go (TInt BW32 Unsigned) (ValueUInt64 a) = Just $ ValueUInt32 (fromIntegral a)
+    go (TInt BW32 Unsigned) (ValueDouble a) = Just $ ValueUInt32 (round a)
+    go (TInt BW32 Unsigned) _               = Nothing
+
+    go (TInt BW64 Unsigned) (ValueBit    a) = Just $ ValueUInt64 (fromBool a)
+    go (TInt BW64 Unsigned) (ValueBool   a) = Just $ ValueUInt64 (fromBool a)
+    go (TInt BW64 Unsigned) (ValueInt8   a) = Just $ ValueUInt64 (fromIntegral a)
+    go (TInt BW64 Unsigned) (ValueInt16  a) = Just $ ValueUInt64 (fromIntegral a)
+    go (TInt BW64 Unsigned) (ValueInt32  a) = Just $ ValueUInt64 (fromIntegral a)
+    go (TInt BW64 Unsigned) (ValueInt64  a) = Just $ ValueUInt64 (fromIntegral a)
+    go (TInt BW64 Unsigned) (ValueUInt8  a) = Just $ ValueUInt64 (fromIntegral a)
+    go (TInt BW64 Unsigned) (ValueUInt16 a) = Just $ ValueUInt64 (fromIntegral a)
+    go (TInt BW64 Unsigned) (ValueUInt32 a) = Just $ ValueUInt64 (fromIntegral a)
+    go (TInt BW64 Unsigned) (ValueUInt64 a) = Just $ ValueUInt64 a
+    go (TInt BW64 Unsigned) (ValueDouble a) = Just $ ValueUInt64 (round a)
+    go (TInt BW64 Unsigned) _               = Nothing
 
     go (TStruct "complex8"  _) (ValueCpx8  a) = Just $ ValueCpx8 a
 
@@ -1735,6 +1946,10 @@ zCast ty = mkUnaryOp (go ty)
     go TDouble (ValueInt16  a) = Just $ ValueDouble (fromIntegral a)
     go TDouble (ValueInt32  a) = Just $ ValueDouble (fromIntegral a)
     go TDouble (ValueInt64  a) = Just $ ValueDouble (fromIntegral a)
+    go TDouble (ValueUInt8  a) = Just $ ValueDouble (fromIntegral a)
+    go TDouble (ValueUInt16 a) = Just $ ValueDouble (fromIntegral a)
+    go TDouble (ValueUInt32 a) = Just $ ValueDouble (fromIntegral a)
+    go TDouble (ValueUInt64 a) = Just $ ValueDouble (fromIntegral a)
     go TDouble (ValueDouble a) = Just $ ValueDouble a
     go TDouble _               = Nothing
 
@@ -1745,6 +1960,10 @@ zCast ty = mkUnaryOp (go ty)
     go TString (ValueInt16  a) = Just $ ValueString (show a)
     go TString (ValueInt32  a) = Just $ ValueString (show a)
     go TString (ValueInt64  a) = Just $ ValueString (show a)
+    go TString (ValueUInt8  a) = Just $ ValueString (show a)
+    go TString (ValueUInt16 a) = Just $ ValueString (show a)
+    go TString (ValueUInt32 a) = Just $ ValueString (show a)
+    go TString (ValueUInt64 a) = Just $ ValueString (show a)
     go TString (ValueDouble a) = Just $ ValueString (show a)
     go TString (ValueString a) = Just $ ValueString a
     go TString _               = Nothing
@@ -1808,8 +2027,8 @@ guess _e = mzero
 
 isComparison :: Exp -> Maybe (Exp, BinOp, Integer)
 isComparison e
-    | EBinOp op lhs rhs <- unExp e
-    , EVal _ (VInt i)   <- unExp rhs
+    | EBinOp op lhs rhs       <- unExp e
+    , EVal _ (VInt i Signed)  <- unExp rhs
     , op `elem` comparisonOps
     = Just (lhs, op, i)
   where
@@ -1900,6 +2119,10 @@ sizeOf = go . unValue
     go (ValueInt16    _) = 1
     go (ValueInt32    _) = 1
     go (ValueInt64    _) = 1
+    go (ValueUInt8    _) = 1
+    go (ValueUInt16   _) = 1
+    go (ValueUInt32   _) = 1
+    go (ValueUInt64   _) = 1
     go (ValueCpx8     _) = 2
     go (ValueCpx16    _) = 2
     go (ValueCpx32    _) = 2

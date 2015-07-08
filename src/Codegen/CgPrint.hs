@@ -27,8 +27,6 @@ import AstUnlabelled
 import CgMonad
 import CgTypes
 import CtExpr
-import {-# SOURCE #-} CgExpr
-
 
 import Control.Monad ( when )
 import Data.Loc
@@ -38,26 +36,28 @@ import qualified Language.C.Syntax as C
 
 -- TODO (minor): cg-prefix the function definitions in this module
 
-printExps :: Bool -> DynFlags -> [Exp] -> Cg ()
-printExps nl dflags es = do
-  _ <- mapM (printExp dflags) es
+
+printExps :: CodeGen -- ^ How to generate code
+          -> Bool -> DynFlags -> [Exp] -> Cg ()
+printExps cg_expr nl dflags es = do
+  _ <- mapM (printExp cg_expr dflags) es
   when nl $ appendStmt [cstm|printf("\n");|]
 
-printExp :: DynFlags -> Exp -> Cg ()
-printExp dflags e1 = go e1 (ctExp e1)
+printExp :: CodeGen -> DynFlags -> Exp -> Cg ()
+printExp cg_expr dflags e1 = go e1 (ctExp e1)
   where
     go :: Exp -> Ty -> Cg ()
-    go e (TArray l t) = printArray dflags e cUpperBound t
+    go e (TArray l t) = printArray cg_expr dflags e cUpperBound t
       where cUpperBound
               | Literal len <- l = [cexp|$exp:len|]
               | NVar len    <- l = [cexp|$id:len|]
               | otherwise = error "printExp: unknown upper bound!"
-    go e _ = printScalar dflags e
+    go e _ = printScalar cg_expr dflags e
 
-printArray :: DynFlags -> Exp -> C.Exp -> Ty -> Cg ()
-printArray dflags e cupper t
+printArray :: CodeGen -> DynFlags -> Exp -> C.Exp -> Ty -> Cg ()
+printArray cg_expr dflags e cupper t
   | TBit <- t
-  = do { ce <- codeGenExp dflags e
+  = do { ce <- cg_expr dflags e
        ; appendStmt [cstm|printBitArr($ce, $cupper); |]
        }
   | otherwise
@@ -78,10 +78,11 @@ printArray dflags e cupper t
        ; extendVarEnv [(pcdeclN, [cexp|$id:pcdeclN_c|])
                       ,(pvdeclN, [cexp|$id:pvdeclN_c|])] $ do 
 
-           (e1_decls, e1_stms, _ce1) <- inNewBlock $ codeGenExp dflags pvAssign
-           (e2_decls, e2_stms, _ce2) <- inNewBlock $ printScalar dflags pvDeclE
+           (e1_decls, e1_stms, _ce1) <- inNewBlock $ cg_expr dflags pvAssign
+           (e2_decls, e2_stms, _ce2) <- inNewBlock $ 
+                                        printScalar cg_expr dflags pvDeclE
            (e3_decls, e3_stms, _ce3) <- inNewBlock $ 
-               printScalar dflags (eVal noLoc TString (VString ","))
+               printScalar cg_expr dflags (eVal noLoc TString (VString ","))
 
            appendDecls e1_decls
            appendDecls e2_decls
@@ -95,9 +96,9 @@ printArray dflags e cupper t
                             }|]
        }
 
-printScalar :: DynFlags -> Exp -> Cg ()
-printScalar dflags e = do
-   ce1 <- codeGenExp dflags e
+printScalar :: CodeGen -> DynFlags -> Exp -> Cg ()
+printScalar cg_expr dflags e = do
+   ce1 <- cg_expr dflags e
    appendStmt $
      case ctExp e of
        TUnit        -> [cstm|printf("UNIT");      |]

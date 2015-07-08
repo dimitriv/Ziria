@@ -33,7 +33,6 @@ import Text.PrettyPrint.HughesPJ
 
 import AstExpr
 import AstComp
-import {-# SOURCE #-} CtComp (ctComp)
 import PpExpr
 
 import Outputable
@@ -256,10 +255,10 @@ ppCompLoc :: GComp tc t a b -> Doc
 ppCompLoc c = ppr (compLoc c)
 
 
-ppCompTyped :: GComp CTy Ty a b -> Doc
-ppCompTyped x =
-  let p1 = ppComp0 ppCompTyped True False False $ unComp x
-      pty = ppr (ctComp x)
+ppCompTyped :: (GComp CTy Ty a b -> CTy) -> GComp CTy Ty a b -> Doc
+ppCompTyped ct_comp x =
+  let p1 = ppComp0 (ppCompTyped ct_comp) True False False $ unComp x
+      pty = ppr (ct_comp x)
   in parens (p1 <+> text "::" <+> pty)
 
 ppCompParams :: (Outputable tc, Outputable t) => [GName (CallArg tc t)] -> Doc
@@ -271,10 +270,10 @@ ppCompParams params =
 
 -- TODO: Not sure this makes sense anymore, as it used to print the stuff
 -- in labels?
-ppCompTypedVect :: GComp CTy Ty a b -> Doc
-ppCompTypedVect x =
-  let p1    = ppComp0 ppCompTypedVect False True True $ unComp x
-      cty   = ctComp x
+ppCompTypedVect :: (GComp CTy Ty a b -> CTy) -> GComp CTy Ty a b -> Doc
+ppCompTypedVect ct_comp x =
+  let p1    = ppComp0 (ppCompTypedVect ct_comp) False True True $ unComp x
+      cty   = ct_comp x
       inty  = inTyOfCTy cty
       yldty = yldTyOfCTy cty
       arity (TArray (Literal n) _) = show n

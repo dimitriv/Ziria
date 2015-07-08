@@ -122,7 +122,6 @@ import qualified Data.Set as S
 import AstComp
 import AstExpr
 import Outputable
-import PpExpr (ppName)
 import PpComp ()
 import qualified GenSym as GS
 
@@ -480,9 +479,9 @@ instance Zonk Ty where
                   Nothing  -> return (TVar x)
                   Just xty -> zonk xty
              }
-      do_zonk (TInt bw)
+      do_zonk (TInt bw sg)
         = do { bw' <- zonk bw
-             ; return (TInt bw')
+             ; return (TInt bw' sg)
              }
       do_zonk (TArray n ty)
         = do { n' <- zonk n

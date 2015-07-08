@@ -1119,7 +1119,7 @@ codeGenComp dflags comp k =
         -- change the mutability flag, but the code generator should not really 
         -- care (or check).
         let nmexpr      = eVar csp nm 
-            nmexprplus  = eBinOp csp Add nmexpr (eVal csp (nameTyp nm) (VInt 1))
+            nmexprplus  = eBinOp csp Add nmexpr (eVal csp (nameTyp nm) (VInt 1 Signed))
             eincr  = eAssign csp nmexpr nmexprplus
             efinal = eBinOp csp Add elen estart
             mtest  = eBinOp csp Lt nmexpr efinal

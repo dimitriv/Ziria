@@ -20,7 +20,7 @@
 #include <assert.h>
 #include <limits.h>
 #include <windows.h>
-#include <conio.h>
+//#include <conio.h>
 
 #include <thread_func.h>
 
@@ -90,13 +90,15 @@ int StartThreads(ULONGLONG * ttstart,
 			{
 				not_finished = not_finished || t_info[i].fRunning;
 			}
-			Sleep (100);
+			Sleep (1); // NB: not Sleep(100) (!!)
 			// Flush stdout to get any printout that could be out there
 			fflush(stdout);
+			/* Removed as it fails to compile with WinDDK
 			if (kbhit())
 			{
 				stop_program = 1;
 			}
+			*/
 		}
 	}
 	else

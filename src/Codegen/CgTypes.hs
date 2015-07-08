@@ -21,7 +21,7 @@
 module CgTypes ( bwBitWidth
                , namedCType, namedCType_
                , codeGenTyOcc, codeGenTyOcc_
-               , tySizeOf, tySizeOf_C
+               , tySizeOfApprox, tySizeOf_C
 
                , isStructPtrType
                , isPtrType
@@ -49,23 +49,6 @@ module CgTypes ( bwBitWidth
                , appendDeclPkg
                , appendTopDeclPkg
                , shouldAllocAsPtr
-
-
-               -- , codeGenTy_qual
-               -- , codeGenTy_DefaultVal
-               -- , codeGenTyAlg
-               -- , codeGenArrTyPtr
-               -- , codeGenArrTyPtrAlg
-               -- , assignByVal
-               -- , tySizeOf_C, tySizeOf
-               -- , codeGenDeclGroup, codeGenDeclVolGroup, codeGenDeclVolGroup_init
-               -- , codeGenDeclGlobalGroups
-               -- , codeGenDeclDef
-               -- , codeGenDeclGlobalDefs
-               -- , initGroupDef
-               -- , codeGenVal
-               -- , codeGenArrVal
-               -- , isStructPtrType
 
                ) where
 
@@ -105,25 +88,43 @@ bwBitWidth BW32          = 32
 bwBitWidth BW64          = 64
 bwBitWidth (BWUnknown _) = 32 -- ^ Defaulting to 32
 
--- | Returns the size of the type in bytes
-tySizeOf :: Ty -> Int
-tySizeOf TUnit     = 1
-tySizeOf TBit      = 1
-tySizeOf TBool     = 1
-tySizeOf (TInt bw) = ((bwBitWidth bw) + 7) `div` 8
-tySizeOf TDouble   = (64 `div` 8)
-tySizeOf (TArray (Literal n) TBit) = bitArrByteLen n
-tySizeOf (TArray (Literal n) ty)   = n * tySizeOf ty
-tySizeOf (TStruct sn flds)         = sum $ map (tySizeOf . snd) flds
-tySizeOf TVoid                     = 0
-tySizeOf other_ty = 
-  panic $ text "tySizeOf: Cannot determine size of: " <+> ppr other_ty
+-- ^ apx = True  => approximate, due to unknown alignment constraints)
+-- ^     = False => precise, in which case we may fail.
+tySizeOf :: Bool -> Ty -> Int
+tySizeOf apx = go 
+  where
+     go TUnit       = 1
+     go TBit        = 1
+     go TBool       = 1
+     go (TInt bw _) = ((bwBitWidth bw) + 7) `div` 8
+     go TDouble     = (64 `div` 8)
+     go (TArray (Literal n) TBit) = bitArrByteLen n
+     go (TArray (Literal n) ty)   = n * go ty
+     go (TStruct sn flds)
+       | sn == complexTyName   = 8   -- NB: platform-dependent
+       | sn == complex8TyName  = 2   -- but ok with GCC and VS in
+       | sn == complex16TyName = 4   -- Cygwin and in VS
+       | sn == complex32TyName = 8
+       | sn == complex64TyName = 16
+       | apx -- ^ approximate on? 
+       = sum $ map (go . snd) flds
+       | otherwise
+       = panicStr "Can't compute tySizeOf: compiler/architecture specific!"
+     go TVoid 
+       = panicStr "Can't compute go(TVoid)"
+     go other_ty = 
+       panic $ text "go: Cannot determine size of: " <+> ppr other_ty
 
+tySizeOfApprox :: Ty -> Int
+tySizeOfApprox ty = tySizeOf True ty
 
 tySizeOf_C :: Ty -> C.Exp
-tySizeOf_C (TArray (NVar n) TBit) = [cexp| (($id:n + 7) >> 3) |]
-tySizeOf_C (TArray (NVar n) ty)   = [cexp| $id:n * $exp:(tySizeOf_C ty)|]
-tySizeOf_C ty = [cexp| $int:(tySizeOf ty)|]
+tySizeOf_C (TArray (NVar n) TBit)  = [cexp| (($id:n + 7) >> 3) |]
+tySizeOf_C (TArray (NVar n) ty)    = [cexp| $id:n * $exp:(tySizeOf_C ty)|]
+tySizeOf_C (TArray (Literal n) ty) = [cexp| $int:n * $exp:(tySizeOf_C ty)|]
+tySizeOf_C (TStruct sn _) = [cexp| sizeof($id:sn)|]
+tySizeOf_C ty             = [cexp| $int:(tySizeOf False ty)|]
+
 
 {------------------------------------------------------------------------
   Language-c-quote infrastructure and fixed types
@@ -186,7 +187,7 @@ codeGenTyOcc_ q ty =
     TArray _n ty'    -> codeGenArrTyPtrOcc_ q ty
     TDouble          -> namedCType_ q "double"
     TUnit            -> unitTy q
-    TInt bw          -> namedCType_ q (cgTIntName bw)
+    TInt bw sg       -> namedCType_ q (cgTIntName bw sg)
     TStruct sname _  -> namedCType_ q sname
  
     -- Buffer types. NB: we should never have to generate code for
@@ -225,7 +226,7 @@ isPtrType ty = isArrayTy ty || isStructPtrType ty
 isStructPtrType :: Ty -> Bool
 isStructPtrType ty
   | isArrayTy ty = False
-  | otherwise    = isLargeTy (tySizeOf ty)
+  | otherwise    = isLargeTy (tySizeOfApprox ty)
 
 isLargeTy :: Int -> Bool
 -- ^ Determine if this type is large. 
@@ -237,7 +238,7 @@ isLargeTy ty_size = ty_size > cMAX_STACK_ALLOC
 shouldAllocAsPtr :: Ty -> Bool
 -- | Should we allocate as pointer
 shouldAllocAsPtr (TArray (NVar {}) _) = True
-shouldAllocAsPtr other = isLargeTy (tySizeOf other)
+shouldAllocAsPtr other = isLargeTy (tySizeOfApprox other)
 
 
 {------------------------------------------------------------------------
@@ -249,14 +250,23 @@ mIN_INT32 = -2147483648
 mAX_INT32 :: Integer
 mAX_INT32 = 2147483647
 
+mIN_UINT32 :: Integer
+mIN_UINT32 = -2147483648
+mAX_UINT32 :: Integer
+mAX_UINT32 = 2147483647
+
 codeGenVal :: Val -> C.Exp
 -- ^ Generate code for a value
 codeGenVal v =
   case v of
-    VInt i 
+    VInt i Signed
       | i <= mAX_INT32 && mIN_INT32 <= i
       -> [cexp|$int:i|]
       | otherwise -> [cexp|$lint:i|]
+    VInt i Unsigned
+      | i <= mAX_UINT32 && mIN_UINT32 <= i
+      -> [cexp|$uint:i|]
+      | otherwise -> [cexp|$ulint:i|]
     VBit True   -> [cexp| 1                     |]
     VBit False  -> [cexp| 0                     |]
     VDouble d   -> [cexp| $double:(toRational d)|]
@@ -421,7 +431,7 @@ appendTopDeclPkg (DeclPkg ig stms) = do
 ------------------------------------------------------------------------}
 
 cgBreakDown :: Int -> C.Exp -> [(C.Exp, Int)]
--- ^ Breakdown to 64,32,16,8 ... (later we should also add SSE 128/256)
+-- ^ Breakdown to 128,64,32,16,8 ... (later we should also add SSE 128/256)
 -- ^ Also returns the width of each breakdown
 cgBreakDown m ptr  = go m 0
   where 
@@ -436,16 +446,32 @@ cgBreakDown m ptr  = go m 0
       | otherwise  = []
       where offptr = [cexp| (typename BitArrPtr)($ptr + $int:off)|]
 
+cgBreakDown64 :: Int -> C.Exp -> [(C.Exp, Int)]
+-- ^ Breakdown to 64,32,16,8 ... (later we should also add SSE 128/256)
+-- ^ Also returns the width of each breakdown
+cgBreakDown64 m ptr  = go m 0
+  where 
+    go :: Int -> Int -> [(C.Exp, Int)]
+    go n off
+      | n-64  >= 0 = ([cexp|(typename uint64 *) $offptr|],64):go (n-64) (off+8)
+      | n-32  >= 0 = ([cexp|(typename uint32 *) $offptr|],32):go (n-32) (off+4)
+      | n-16  >= 0 = ([cexp|(typename uint16 *) $offptr|],16):go (n-16) (off+2)
+      | n-8   >= 0 = ([cexp|(typename uint8  *) $offptr|], 8):go (n-16) (off+1)
+      | n > 0      = [([cexp|$offptr|],8)]
+      | otherwise  = []
+      where offptr = [cexp| (typename BitArrPtr)($ptr + $int:off)|]
+
+
 cgBitArrRead :: C.Exp -> Int -> Int -> C.Exp -> Cg ()
 -- ^ Pre: pos and len are multiples of 8; src, tgt are of type BitArrPtr
 cgBitArrRead src_base pos len tgt
-  | len >= 128 
+  | len > 288
   = appendStmt [cstm| blink_copy((void *) $tgt, (void *) $src, $int:byte_len);|]
   | otherwise
   = sequence_ $ map (appendStmt . mk_stmt) (zip src_ptrs tgt_ptrs)
   where
-    src_ptrs              = cgBreakDown len src
-    tgt_ptrs              = cgBreakDown len tgt
+    src_ptrs              = cgBreakDown64 len src
+    tgt_ptrs              = cgBreakDown64 len tgt
     mk_stmt ((s,w),(t,_)) = assert "cgBitArrRead" (w < 128) $ 
                             [cstm| * $t = * $s;|]
     sidx                  = pos `div` 8
@@ -466,13 +492,16 @@ asgn_arr (Literal n) TBit ce1 ce2
 asgn_arr (NVar n) TBit ce1 ce2
   = appendStmt [cstm|bitArrRead($ce2,0,$id:n,$ce1);|]
 asgn_arr (Literal n) ty ce1 ce2
-  = appendStmt [cstm|blink_copy($ce1, $ce2, $int:n * $int:(tySizeOf ty));|]
+  | n > 0 && n < 4 -- Small ones just to direct assignment
+  = mapM_ (\i -> assignByVal ty [cexp| $ce1[$int:i]|] [cexp| $ce2[$int:i]|]) [0..(n-1)]
+  | otherwise
+  = appendStmt [cstm|blink_copy($ce1, $ce2, $int:n * $(tySizeOf_C ty));|]
 asgn_arr (NVar n) ty ce1 ce2
-  = appendStmt [cstm|blink_copy($ce1, $ce2, $id:n * $int:(tySizeOf ty));|]
+  = appendStmt [cstm|blink_copy($ce1, $ce2, $id:n * $(tySizeOf_C ty));|]
 
 asgn_memcpy :: Ty -> C.Exp -> C.Exp -> Cg ()
 asgn_memcpy t ce1 ce2 
-  = appendStmt [cstm|blink_copy($ce1, $ce2, $int:(tySizeOf t));|]
+  = appendStmt [cstm|blink_copy($ce1, $ce2, $(tySizeOf_C t));|]
 
 asgn_direct :: Ty -> C.Exp -> C.Exp -> Cg ()
 asgn_direct ty ce1 ce2

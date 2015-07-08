@@ -69,13 +69,29 @@ cgCall :: DynFlags
        -> [ArgTy]  -- ^ instantiated argument types  
        -> GName Ty 
        -> [(Either (LVal ArrIdx) C.Exp)]
-       -> C.Exp    -- ^ Where to store result
+       -> Maybe C.Exp -- ^ Maybe return expression
        -> Cg C.Exp
-cgCall dfs loc retTy argtys fName eargs cer = do
-  (real_f_name, closure_params) <- lookupExpFunEnv fName
+cgCall dfs loc retTy argtys fName eargs mb_ret = do
+  (real_f_name, closure_params,lut_returning) <- lookupExpFunEnv fName
   let is_external = isPrefixOf "__ext" (name real_f_name)
-    
+
   let cef = [cexp|$id:(name real_f_name)|]
+  
+  cer <- case mb_ret of 
+     Just already_declared          -- If we pass storage in 
+       | not lut_returning          -- and the function does not return LUT address
+       -> return already_declared   -- then use it
+
+     _otherwise ->
+       do { retn <- freshName "ret" retTy Mut
+          ; let cer = [cexp| $id:(name retn)|]
+            -- Declare storage only if we are not returning a LUT!
+          ; if lut_returning
+            then appendDecl $ [cdecl| $ty:(codeGenTyOcc retTy) $id:(name retn);|]
+            else appendCodeGenDeclGroup (name retn) retTy ZeroOut
+          ; return cer 
+          }
+
 
   -- Standard function arguments, disable bounds checks when external calls
   (ceargs,fixup_bitarrs) <- withDisabledBCWhen is_external $ 
@@ -91,15 +107,22 @@ cgCall dfs loc retTy argtys fName eargs cer = do
 
   case retTy of
     TArray li _ty
+      | not lut_returning
       -> when_ (not is_external) (inAllocFrame loc) $
          appendStmt [cstm|$(cef)($cer, $args:(lenArg li ++ cargs));|]
 
         -- See CgFun.hs
-    _ | isStructPtrType retTy
-      -> when_ (not is_external) (inAllocFrame loc) $
-         if is_external 
-           then appendStmt [cstm| *($cer) = $(cef)($args:cargs);|]
-           else appendStmt [cstm|$(cef)($cer, $args:cargs);|]
+    TStruct {}
+      | isStructPtrType retTy
+      -> if not lut_returning then 
+             when_ (not is_external) (inAllocFrame loc) $
+             if is_external 
+               then appendStmt [cstm| *($cer) = $(cef)($args:cargs);|]
+               else appendStmt [cstm|$(cef)($cer, $args:cargs);|]
+         else when_ (not is_external) (inAllocFrame loc) $
+              appendStmt [cstm| *($cer) = $(cef)($args:cargs);|]
+              -- ^ either external returning a large pointer, 
+              -- ^ or internal and returning a large LUT
     TUnit
       -> when_ (not is_external) (inAllocFrame loc) $ 
          appendStmt [cstm| $(cef)($args:cargs);|]
@@ -112,6 +135,15 @@ cgCall dfs loc retTy argtys fName eargs cer = do
   fixup_bitarrs
   clos_fixup_bitarrs
   
+  -- If it was lut returning we will have the result in 'cer' but
+  -- we may potentially need to assign it to the mb_ret value!!!! 
+  when lut_returning $ case mb_ret of 
+      Nothing -> return () 
+      Just v  -> assignByVal retTy v cer
+
+  -- Finally, if someone did pass in storage, but we did not use
+  -- it (e.g. because the function returned a LUT
+
   return (if retTy == TUnit then [cexp|UNIT|] else [cexp|$cer|])
 
 

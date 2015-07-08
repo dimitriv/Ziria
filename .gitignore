@@ -302,6 +302,30 @@ code/WiFi/mac/CompilerVS/CompilerVS13-mac.vcxproj.user
 
 code/WiFi/testbed/samples/*
 
+csrc/CompilerVS/CompilerVS13-inline
+csrc/CompilerVS/*psess
+
+
+code/examples/*.c
+code/examples/*.exe
+code/examples/*.expanded
+code/examples/*.outfile
+code/examples/*~
+code/examples/compout
+code/examples/perfout
+code/examples/*dump
+
+code/tutorial/*.c
+code/tutorial/*.exe
+code/tutorial/*.expanded
+code/tutorial/*.outfile
+code/tutorial/*~
+code/tutorial/compout
+code/tutorial/perfout
+code/tutorial/*dump
+
+code/WiFi/sniffer/*dll
+
 # for now, ignore AST dumps
 *.ast.dump
 *.ast.dump.ground
