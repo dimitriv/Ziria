@@ -24,8 +24,7 @@ import Data.List ( nub )
 import CtExpr 
 import CtComp
 import TcRename 
-import AtomComp 
-import Data.Char ( isAlphaNum )
+import AtomComp
 
 
 {----------- A-normal forms --------------}
@@ -342,10 +341,9 @@ zirToAtomZir sym comp = do
 transLiftedExp :: GS.Sym -> Exp -> IO (AExp ())
 transLiftedExp sym e = do 
   u <- GS.genSymStr sym
-  let block_id = to_lbl (show (expLoc e)) ++ "_block_" ++ u
+  let block_id = (render $ ppr $ expLoc e) ++ "$" ++ u
       expvars  = S.toList (exprFVs' False e)
       mutvars  = filter isMutable expvars
-      to_lbl   = map (\c -> if isAlphaNum c then c else '_')
 
   return $ MkAExp { aexp_lbl = block_id
                   , aexp_exp = e
