@@ -60,7 +60,7 @@ fun comp LTS(shift:int16, amp:int32) {
   let aLTSSeq11a = LTSInit() in
 
 
-  fun arr_shift(a : arr complex16, agc_shift : int) { 
+  fun arr_shift(var a : arr complex16, agc_shift : int) { 
     if (agc_shift > 0) then {
       v_shift_left_complex16(a,a,agc_shift);
     } else {

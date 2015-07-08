@@ -47,7 +47,7 @@ fun v_conj_mul_complex16_int32(var re32:arr int, var im32:arr int, a:arr complex
 }
 
 
-fun v_conj_mul_complex16(c:arr complex16, a:arr complex16, b:arr complex16, shift:int) {
+fun v_conj_mul_complex16(var c:arr complex16, a:arr complex16, b:arr complex16, shift:int) {
   var re32 : arr[length(a)] int32;
   var im32 : arr[length(a)] int32;
 
