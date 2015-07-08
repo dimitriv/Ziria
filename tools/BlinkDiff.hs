@@ -208,14 +208,17 @@ do_compare prefix_on verbose_on fmtr hin hgnd
           ; hgnd_eof <- hIsEOF hgnd
           ; if hin_eof then
                if prefix_on then 
-                   do { let msg = if hgnd_eof then "Matching! (EOF)"
+                  if cnt > 0 then
+                     do { let msg = if hgnd_eof then "Matching! (EOF)"
                                   else "Matching! (Prefix of " ++ 
                                             show cnt ++ " entries)"
-                      ; when verbose_on $ 
-                        do { putStr msg
-                           ; r <- readIORef aref 
-                           ; putStrLn (" (Accuracy " ++ show (to_pc r) ++"%)") }
-                      ; exitWith ExitSuccess }
+                        ; when verbose_on $ 
+                          do { putStr msg
+                             ; r <- readIORef aref 
+                             ; putStrLn (" (Accuracy " ++ show (to_pc r) ++"%)") }
+                        ; exitWith ExitSuccess }
+                  else mismatchWithMsg verbose_on $
+                         "Empty outfile!"
                else if hgnd_eof then 
                       do { when verbose_on $ 
                            do { putStr "Matching! (EOF)"
