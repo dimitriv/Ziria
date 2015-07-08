@@ -189,7 +189,7 @@ interpS_FExpy :: FExpy e => SrcLoc -> FStmt e -> Exp
 interpS_FExpy p = interpS_aux p (interpE p . toFExp)
 
 interpS_Bindable :: Bindable e => SrcLoc -> FStmt e -> Exp
-interpS_Bindable p = interpS_aux p genexp
+interpS_Bindable p = interpS_aux p (genexp p)
 
 interpS_aux :: SrcLoc -> (v -> Exp) -> FStmt v -> Exp
 interpS_aux p on_ret = go 
@@ -227,39 +227,39 @@ data BndRes v = BndResB { bnd_res_id :: EId
                         , bnd_res_val :: v } 
               | BndResU { bnd_res_val :: v }
 
-gen_name :: GS.Sym -> Ty -> MutKind -> IO EId
-gen_name sym ty mk = gen_name_pref sym "" ty mk
+gen_name :: SrcLoc -> GS.Sym -> Ty -> MutKind -> IO EId
+gen_name loc sym ty mk = gen_name_pref loc sym "" ty mk
 
-gen_name_pref :: GS.Sym -> String -> Ty -> MutKind -> IO EId
-gen_name_pref sym x ty mk = do
+gen_name_pref :: SrcLoc -> GS.Sym -> String -> Ty -> MutKind -> IO EId
+gen_name_pref loc sym x ty mk = do
     suff <- GS.genSymStr sym
-    return $ toName (x ++ "_free_" ++ suff) noLoc ty mk
+    return $ toName (x ++ "_free_" ++ suff) loc ty mk
 
 -- Generated from >>= hence immutable!
 class Bindable v where
-  genbnd :: GS.Sym -> String -> Ty -> IO (BndRes v)
-  genexp :: v -> Exp
+  genbnd :: SrcLoc -> GS.Sym -> String -> Ty -> IO (BndRes v)
+  genexp :: SrcLoc -> v -> Exp
 
 instance Bindable EId where
-  genbnd sym str ty = do
-    nm <- gen_name_pref sym str ty Imm
+  genbnd loc sym str ty = do
+    nm <- gen_name_pref loc sym str ty Imm
     return $ BndResB nm nm
-  genexp nm = eVar noLoc nm
+  genexp loc nm = eVar loc nm
 
 instance Bindable FExp where
-  genbnd sym str t
-    = do nm <- gen_name_pref sym str t Imm
+  genbnd loc sym str t
+    = do nm <- gen_name_pref loc sym str t Imm
          return $ BndResB nm (FEVar nm)
-  genexp fe = interpE noLoc fe
+  genexp loc fe = interpE loc fe
 
 instance Bindable () where
-  genbnd _sym _str _ty = return $ BndResU ()
-  genexp _ = eVal noLoc TUnit VUnit
+  genbnd _ _sym _str _ty = return $ BndResU ()
+  genexp loc _ = eVal loc TUnit VUnit
 
 instance Bindable Void where 
-  genbnd _sym _ _
+  genbnd _ _sym _ _
     = error "Bindable: Cannot bind result of transformer (Void)"
-  genexp _ 
+  genexp _ _ 
     = error "Bindable: Cannot bind result of transformer (Void)"
 
 data Zr v where
@@ -301,8 +301,10 @@ instance Monad Zr where
   (>>=) (FEmit v) f             = FBind (FEmit v) f
   (>>=) (FEmits v) f            = FBind (FEmits v) f
   (>>=) (FBind m g)   f         = FBind m (\v -> g v >>= f)
-  (>>=) (FRepeat _v _c) _f        = error "Ill typed Zr() construction!" -- FBind (FRepeat v c) f 
-  (>>=) (FMitigate _t _n1 _n2) _f = error "Ill typed Zr() construction!" -- FBind (FMitigate t n1 n2) f
+  (>>=) (FRepeat _v _c) _f        
+     = error "Ill typed Zr() construction!" -- FBind (FRepeat v c) f 
+  (>>=) (FMitigate _t _n1 _n2) _f 
+     = error "Ill typed Zr() construction!" -- FBind (FMitigate t n1 n2) f
   (>>=) (FParA p m1 m2) f       = FBind (FParA p m1 m2) f
   (>>=) (FParB p m1 m2) f       = FBind (FParB p m1 m2) f
   (>>=) (FExec stms)  f         = FBind (FExec stms) f
@@ -315,7 +317,7 @@ instance Monad Zr where
   (>>=) (FBranch e c1 c2) f     = FBind (FBranch e c1 c2) f
   (>>=) (FEmbed io_c) f         = FBind (FEmbed io_c) f
 
-interpC :: Bindable v => String -> -- a prefix to prepend to names (for debugging)
+interpC :: Bindable v => String -> -- Prefix (for debugging)
            GS.Sym -> SrcLoc -> Zr v -> IO Comp
 interpC pref sym loc = go
   where 
@@ -328,13 +330,13 @@ interpC pref sym loc = go
     go (FTakeMany t i) = return $ cTake loc t i
     go (FEmit e)       = return $ cEmit loc (interpE loc e)
     go (FEmits e)      = return $ cEmits loc (interpE loc e)
-    go (FReturn fi e)  = return $ cReturn loc fi (genexp e)
+    go (FReturn fi e)  = return $ cReturn loc fi (genexp loc e)
     go (FExec stmts)   = return $ 
                          cReturn loc AutoInline (interpS_Bindable loc stmts)
     go (FBind st1 f) = do 
       c1 <- go st1
       let t = ctDoneTyOfComp c1
-      bnd <- genbnd sym pref t
+      bnd <- genbnd loc sym pref t
       let fc2 = f (bnd_res_val bnd)
       case (fc2,bnd) of 
         -- If continuation is pure then just return c1 
@@ -354,12 +356,12 @@ interpC pref sym loc = go
                               c2 <- go st2
                               return $ cPar loc p c1 c2
     go (FLetE fi x ty fe k) = do
-       nm <- gen_name_pref sym x ty Imm
+       nm <- gen_name_pref loc sym x ty Imm
        c <- go (k nm)
        let e = interpE loc fe
        return $ cLetE loc nm fi e c
     go (FLetERef x ty mfe k) = do
-       nm <- gen_name_pref sym x ty Mut
+       nm <- gen_name_pref loc sym x ty Mut
        let me = fmap (interpE loc) mfe
        c <- go (k nm) 
        return $ cLetERef loc nm me c
@@ -374,7 +376,7 @@ interpC pref sym loc = go
     go (FTimes ui fe1 fe2 k) = do
        let e1 = interpE loc (toFExp fe1)
            e2 = interpE loc (toFExp fe2)
-       nm <- gen_name_pref sym "idx" tint Imm
+       nm <- gen_name_pref loc sym "idx" tint Imm
        c <- go (k nm) 
        return $ cTimes loc ui e1 e2 nm c
  

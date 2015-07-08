@@ -199,8 +199,9 @@ vResEqQ _ _ = False
 -- thunk. Hence we can manipulate thousands of results without
 -- actually having done the rewriting.
 data DelayedVectRes
-   = DVR { dvr_comp :: !(IO Comp) -- Delayed result
-         , dvr_vres :: !VectRes }  -- Information about the result
+   = DVR { dvr_comp   :: !(IO Comp)  -- Delayed result
+         , dvr_srcloc :: !SrcLoc    -- Location 
+         , dvr_vres   :: !VectRes }  -- Information about the result
 
 -- | Lift an operation on VectRes to be on a DelayedVectRes
 lift_dvr :: (VectRes -> a) -> DelayedVectRes -> a
@@ -280,7 +281,10 @@ getMaximal = fromJust . Map.foldr aux Nothing
 -- | The very same component, non-vectorized
 mkSelf :: LComp -> Ty -> Ty -> DelayedVectRes
 mkSelf lcomp tin tout 
-  = DVR { dvr_comp = return (eraseComp lcomp), dvr_vres = NotVect tin tout }
+  = DVR { dvr_comp = return (eraseComp lcomp)
+        , dvr_vres = NotVect tin tout
+        , dvr_srcloc = compLoc lcomp
+        }
 
 -- | Warn if DVRCands is empty
 warnIfEmpty :: DynFlags -> LComp -> DVRCands -> String -> VecM ()
@@ -444,7 +448,7 @@ combine_par :: ParInfo -> SrcLoc
             -> DelayedVectRes -> DelayedVectRes -> Maybe DelayedVectRes
 combine_par pnfo loc dp1 dp2 = do
   vres <- mk_vres (dvr_vres dp1) (dvr_vres dp2)
-  return $ DVR { dvr_comp = iopar, dvr_vres = vres }
+  return $ DVR { dvr_comp = iopar, dvr_vres = vres, dvr_srcloc = loc }
   where
     ioc1  = dvr_comp dp1
     ioc2  = dvr_comp dp2 
@@ -497,7 +501,8 @@ combine_bind_mb loc is_computer pre_dvr1 xs pre_dvrs = do
             c1 <- dvr_comp dvr1
             cs <- mapM dvr_comp dvrs
             return $ cBindMany loc c1 (zip xs cs)
-        , dvr_vres = res }
+        , dvr_vres = res 
+        , dvr_srcloc = loc }
   where (dvr1:dvrs) = 
            if is_computer then 
              mitigate_all (pre_dvr1:pre_dvrs)
@@ -518,7 +523,8 @@ combine_branch_mb loc is_computer e pre_dvr1 pre_dvr2 = do
             c1 <- dvr_comp dvr1
             c2 <- dvr_comp dvr2 
             return $ cBranch loc e c1 c2
-        , dvr_vres = res }
+        , dvr_vres = res 
+        , dvr_srcloc = loc }
   where
      [dvr1,dvr2] = 
        if is_computer 
@@ -549,8 +555,10 @@ mitigate_all vcs = map (mit_one "MA" (Just final_ty_in, Just final_ty_out)) vcs
 
 
 
-mit_one_mb :: String -> (Maybe Int, Maybe Int) -> DelayedVectRes -> Maybe DelayedVectRes
-mit_one_mb _orig (Nothing, Nothing) dvr = return $ fixup_util_out $ fixup_util_in dvr
+mit_one_mb :: String 
+           -> (Maybe Int, Maybe Int) -> DelayedVectRes -> Maybe DelayedVectRes
+mit_one_mb _orig (Nothing, Nothing) dvr 
+  = return $ fixup_util_out $ fixup_util_in dvr
 mit_one_mb orig (Just n,  Nothing) dvr  = fixup_util_out <$> mit_in orig n dvr 
 mit_one_mb orig (Nothing, Just n)  dvr  = fixup_util_in  <$> mit_out orig dvr n
 mit_one_mb orig (Just n, Just m)   dvr  = mit_in orig n =<< mit_out orig dvr m
@@ -558,35 +566,30 @@ mit_one_mb orig (Just n, Just m)   dvr  = mit_in orig n =<< mit_out orig dvr m
 mit_one :: String -> (Maybe Int, Maybe Int) -> DelayedVectRes -> DelayedVectRes
 mit_one orig ar dvr = fromJust $ mit_one_mb orig ar dvr
 
--- mit_one :: String -> (Maybe Int, Maybe Int) -> DelayedVectRes -> DelayedVectRes
--- -- Precondition: (a) input arity  divides the input type of dvr
--- --               (b) output arity divides the output type of dvr
--- mit_one _orig (Nothing, Nothing) dvr = fixup_util_out (fixup_util_in dvr )
--- mit_one orig (Just n,  Nothing) dvr  = fixup_util_out (mit_in orig n dvr )
--- mit_one orig (Nothing, Just n)  dvr  = fixup_util_in  (mit_out orig dvr n)
--- mit_one orig (Just n, Just m)   dvr  = mit_in orig n  (mit_out orig dvr m)
-
 
 mit_in :: String -> Int -> DelayedVectRes -> Maybe DelayedVectRes
-mit_in orig n (DVR { dvr_comp = io_comp, dvr_vres = vres })
-  = do (final_in_ty, cmit) <- mk_in_mitigator orig n vinty
-       return $ DVR { dvr_comp = cPar noLoc pnever cmit <$> io_comp
-                    , dvr_vres = DidVect final_in_ty voutty u }
+mit_in orig n (DVR { dvr_comp = io_comp, dvr_vres = vres, dvr_srcloc = loc })
+  = do (final_in_ty, cmit) <- mk_in_mitigator loc orig n vinty
+       return $ DVR { dvr_comp   = cPar loc pnever cmit <$> io_comp
+                    , dvr_vres   = DidVect final_in_ty voutty u 
+                    , dvr_srcloc = loc }
   where vinty  = vect_in_ty vres  -- type in the middle!
         voutty = vect_out_ty vres
         u      = parUtility minUtil (vResUtil vres) vinty
 
 mit_out :: String -> DelayedVectRes -> Int -> Maybe DelayedVectRes
-mit_out orig (DVR { dvr_comp = io_comp, dvr_vres = vres }) m 
-  = do (final_out_ty, cmit) <- mk_out_mitigator orig voutty m
-       return $ DVR { dvr_comp = (\c -> cPar noLoc pnever c cmit) <$> io_comp
-                    , dvr_vres = DidVect vinty final_out_ty u }
+mit_out orig (DVR { dvr_comp = io_comp, dvr_vres = vres, dvr_srcloc = loc }) m 
+  = do (final_out_ty, cmit) <- mk_out_mitigator loc orig voutty m
+       return $ DVR { dvr_comp = (\c -> cPar loc pnever c cmit) <$> io_comp
+                    , dvr_vres = DidVect vinty final_out_ty u 
+                    , dvr_srcloc = loc }
   where vinty  = vect_in_ty vres
         voutty = vect_out_ty vres -- type in the middle!
         u      = parUtility minUtil (vResUtil vres) voutty
 
 -- | Fixes-up utility /as if/ mitigation has happened
--- This is to ensure all candidates are compared fairly, whether mitigation happened or not.
+-- ^ This is to ensure all candidates are compared fairly, 
+-- ^ whether mitigation happened or not.
 fixup_util_in :: DelayedVectRes -> DelayedVectRes
 fixup_util_in dvr = dvr { dvr_vres = DidVect vinty voutty u } 
   where vres   = dvr_vres dvr
@@ -605,56 +608,30 @@ fixup_util_out dvr = dvr { dvr_vres = DidVect vinty voutty u }
 
 -- | Mitigate on the input, return final input type
 -- ^ Nothing => failure, NOT that we don't need a mitigator!
-mk_in_mitigator :: String -> Int -> Ty -> Maybe (Ty, Comp)
-mk_in_mitigator orig n (TArray (Literal m) tbase)
+mk_in_mitigator :: SrcLoc -> String -> Int -> Ty -> Maybe (Ty, Comp)
+mk_in_mitigator loc orig n (TArray (Literal m) tbase)
   | m > 1 && n == 1
-  = Just (mkVectTy tbase n, cMitigate noLoc orig tbase n m)
+  = Just (mkVectTy tbase n, cMitigate loc orig tbase n m)
   | m > 1 && n > 1 && (n `mod` m == 0 || m `mod` n == 0)
-  = Just (mkVectTy tbase n, cMitigate noLoc orig tbase n m)
+  = Just (mkVectTy tbase n, cMitigate loc orig tbase n m)
   | otherwise = Nothing
-mk_in_mitigator orig n tother
-  = Just (mkVectTy tother n, cMitigate noLoc orig tother n 1)
+mk_in_mitigator loc orig n tother
+  = Just (mkVectTy tother n, cMitigate loc orig tother n 1)
 
 -- | Mitigate on the output, return final output type
 -- ^ Nothing => failure, NOT that we don't need a mitigator!
-mk_out_mitigator :: String -> Ty -> Int -> Maybe (Ty, Comp)
-mk_out_mitigator orig (TArray (Literal n) tbase) m
+mk_out_mitigator :: SrcLoc -> String -> Ty -> Int -> Maybe (Ty, Comp)
+mk_out_mitigator loc orig (TArray (Literal n) tbase) m
   | n > 1 && m == 1
-  = Just (mkVectTy tbase m, cMitigate noLoc orig tbase n m)
+  = Just (mkVectTy tbase m, cMitigate loc orig tbase n m)
   | m > 1 && n > 1 && (n `mod` m == 0 || m `mod` n == 0)
-  = Just (mkVectTy tbase m, cMitigate noLoc orig tbase n m)
+  = Just (mkVectTy tbase m, cMitigate loc orig tbase n m)
   | otherwise
   = Nothing
 
-mk_out_mitigator orig tother m
-  = Just (mkVectTy tother m, cMitigate noLoc orig tother 1 m)
+mk_out_mitigator loc orig tother m
+  = Just (mkVectTy tother m, cMitigate loc orig tother 1 m)
 
-{- 
-mk_out_mitigator orig (TArray (Literal n) tbase) m
-  | n > 1 || m > 1 
-  , m <= n
-  , n `mod` m == 0 || m `mod` n == 0
-  = Just (mkVectTy tbase m, cMitigate noLoc orig tbase n m)
-  | otherwise = Nothing
-mk_out_mitigator _ TVoid _m = Nothing -- nothing to mitigate
-mk_out_mitigator orig t m -- non-array
-  | m > 1     = Just (mkVectTy t m, cMitigate noLoc orig t 1 m)
-  | otherwise = Nothing
-
-
-mk_out_mitigator :: String -> Ty -> Int -> Maybe (Ty, Comp)
-mk_out_mitigator orig (TArray (Literal n) tbase) m
-  | n > 1 || m > 1 
-  , m <= n
-  , n `mod` m == 0 || m `mod` n == 0
-  = Just (mkVectTy tbase m, cMitigate noLoc orig tbase n m)
-  | otherwise = Nothing
-mk_out_mitigator _ TVoid _m = Nothing -- nothing to mitigate
-mk_out_mitigator orig t m -- non-array
-  | m > 1     = Just (mkVectTy t m, cMitigate noLoc orig t 1 m)
-  | otherwise = Nothing
-
--}
         
 
 -- | Match vectorization candidates composed on the control path
@@ -702,11 +679,14 @@ mkDVRes gen_zir kind loc vin_ty vout_ty = do
   let srcn = sourceName' loc
   zirc_wrapped <- wrapCFunCall (srcn ++ "_vect_" ++ kind) loc zirc
   return $ DVR { dvr_comp = return zirc_wrapped
-               , dvr_vres = DidVect vin_ty vout_ty minUtil }
+               , dvr_vres = DidVect vin_ty vout_ty minUtil 
+               , dvr_srcloc = loc 
+               }
 
-  where 
-    sourceName' (SrcLoc (Loc p _)) = map (\c -> if isAlphaNum c then c else '_') (posFile p)
-    sourceName' (SrcLoc NoLoc)     = ""
+  where
+    sourceName' (SrcLoc (Loc p _)) 
+       = map (\c -> if isAlphaNum c then c else '_') (posFile p)
+    sourceName' (SrcLoc NoLoc) = ""
 
 
 liftZr :: Bindable v => String -> SrcLoc -> Zr v -> VecM Comp
