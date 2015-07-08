@@ -882,15 +882,6 @@ expEq e e' = expEq0 (unExp e) (unExp e')
       = (b == b') && expEq e1 e1' && expEq e2 e2'
     expEq0 _e _e' = False
 
-toExp :: a -> GExp0 t a -> GExp t a
-toExp a e = MkExp { unExp = e, expLoc = noLoc, info = a }
-
-toExpPos :: a -> SrcLoc -> GExp0 t a -> GExp t a
-toExpPos a pos e = MkExp { unExp = e, expLoc = pos, info = a }
-
-binopList :: BinOp -> a -> GExp t a -> [GExp t a] -> GExp t a
-binopList _  _ e0 []       = e0
-binopList op a e0 (e : es) = toExp a $ EBinOp op e (binopList op a e0 es)
 
 dotDotName :: String
 dotDotName = "..."

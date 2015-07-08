@@ -1154,21 +1154,14 @@ isComputer (CTArrow {}) = False
 isComputer (CTVar   {}) = panicStr "isComputer: type variable"
 
 
-toComp :: a -> GComp0 tc t a b -> GComp tc t a b
-toComp a c0 = MkComp c0 noLoc a
-
-toCompPos :: a -> SrcLoc -> GComp0 tc t a b -> GComp tc t a b
-toCompPos a pos c0 = MkComp c0 pos a
-
-
-
 
 -- TODO: The cases for Repeat, VectComp, Interleave and Standalone look
 -- suspicious? Why no +1? Fix or document.
 compSize :: GComp tc t a b -> Int
 compSize c = case unComp c of
   Var _nm                   -> 1
-  BindMany c1 xs_cs         -> foldr (\(_x,c') _s -> compSize c') (compSize c1) xs_cs
+  BindMany c1 xs_cs         -> 
+      foldr (\(_x,c') _s -> compSize c') (compSize c1) xs_cs
   Seq c1 c2                 -> 1 + compSize c1 + compSize c2
   Par _ c1 c2               -> 1 + compSize c1 + compSize c2
   Let _nm c1 c2             -> 1 + compSize c1 + compSize c2
