@@ -26,6 +26,9 @@ import CtComp
 import TcRename 
 import AtomComp
 
+import Analysis.DataFlow 
+
+import Opts
 
 {----------- A-normal forms --------------}
 
@@ -329,37 +332,36 @@ atomixCompToComp comp (RnSt { st_letref_vars = letrefs
 
 
 
-zirToAtomZir :: GS.Sym -> Comp -> IO (AComp () (), RnSt)
-zirToAtomZir sym comp = do
+zirToAtomZir :: DynFlags -> GS.Sym -> Comp -> IO (AComp () (), RnSt)
+zirToAtomZir dfs sym comp = do
   -- Closure convert and lift
   (comp0,rnst) <- atomixCompTransform sym comp 
   -- Transform lifted
-  (acomp,xs) <- runStateT (transLifted sym comp0) []
+  (acomp,xs) <- runStateT (transLifted dfs sym comp0) []
   return (acomp,rnst { st_letref_vars = st_letref_vars rnst ++ xs } )
 
 
-transLiftedExp :: GS.Sym -> Exp -> IO (AExp ())
-transLiftedExp sym e = do 
+transLiftedExp :: DynFlags -> GS.Sym -> Exp -> IO (AExp ())
+transLiftedExp dfs sym e = do
+  vupkg <- inOutVarsDefinite dfs e
   u <- GS.genSymStr sym
   let block_id = (render $ ppr $ expLoc e) ++ "$" ++ u
-      expvars  = S.toList (exprFVs' False e)
-      mutvars  = filter isMutable expvars
 
   return $ MkAExp { aexp_lbl = block_id
                   , aexp_exp = e
-                  , aexp_ivs = expvars
-                  , aexp_ovs = mutvars
+                  , aexp_ivs = vu_invars vupkg
+                  , aexp_ovs = vu_outvars vupkg
                   , aexp_nfo = ()
                   , aexp_ret = ctExp e 
                   }
 
-transLifted :: GS.Sym -> Comp -> StateT [EId] IO (AComp () ())
-transLifted sym = go_comp 
+transLifted :: DynFlags -> GS.Sym -> Comp -> StateT [EId] IO (AComp () ())
+transLifted dfs sym = go_comp 
   where 
     go_comp comp = go (unComp comp)
       where 
         loc = compLoc comp
-        go (Return _ e) = aReturn loc () <$> (liftIO $ transLiftedExp sym e)
+        go (Return _ e) = aReturn loc () <$> (liftIO $ transLiftedExp dfs sym e)
 
         --go (Times _ estrt (MkExp (EVal _ (VInt i _)) _ _) cnt c) = do
         --   let cnt_expr    = eVar loc cnt
