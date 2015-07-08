@@ -270,15 +270,12 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a
 
-
-{-
-    go (MapOnce f closure) =
-      let args = in_chan chans : closure
-          expr = MkExp (ExpApp f args) noLoc ()
-          watom = expToWiredAtom expr (Just $ out_chan chans)
-          nkind = Action [watom] (auto_start k)
-      in return $ insert_prepend nkind k
--}
+--    go (MapOnce f closure) =
+--      let args = in_chan chans : closure
+--          expr = MkExp (ExpApp f args) noLoc ()
+--          watom = expToWiredAtom expr (Just $ out_chan chans)
+--          nkind = Action [watom] (auto_start k)
+--      in return $ insert_prepend nkind k
 
     go (AReturn e) =
       let watom = expToWiredAtom e (ctrl_chan chans)
