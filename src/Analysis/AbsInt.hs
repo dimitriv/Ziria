@@ -35,6 +35,7 @@ module AbsInt (
  , absEval 
  , absEvalRVal
  , inCurrSt
+ , AVal      (..)
 ) where
 
 
@@ -115,8 +116,8 @@ class CmdDom m v | m -> v where
   withMutABind :: EId -> m v -> m v
 
   aCall     :: EId -> [(AVal v)] -> m v
-  aError    :: m a
-  aPrint    :: Bool -> [v] -> m ()
+  aError    :: m ()
+  aPrint    :: Bool -> [v] -> m v
 
 -- | Commands plus controls flow 
 class CmdDom m v => CmdDomRec m v | m -> v where 
@@ -289,10 +290,10 @@ absEval e = go (unExp e) where
 
   go (EPrint nl es) = do 
     as <- mapM absEvalRVal es 
-    aPrint nl as
-    rValM (aVal VUnit)
+    v <- aPrint nl as
+    rValM v 
 
-  go (EError {}) = aError 
+  go (EError {}) = aError >> rValM (aVal VUnit)
 
   go (ECall fn es) = do
     let (TArrow funtys _funres) = nameTyp fn
