@@ -430,9 +430,9 @@ zipAutomata a1 a2 k = concat_auto prod_a k
 
     zipNodes' balance n1@(Node id1 (Action _ _ pipes1)) n2@(Node id2 (Action _ _ pipes2)) prod_nmap =
       let prod_nid = (balance,id1,id2)
-          (watoms, balance', next1, next2) = zipActions balance n1 n2
           noDups = const (assert False)
-          pipes = Map.insertWith noDups pipe_ch balance' $ Map.unionWith noDups pipes1 pipes2
+          pipes = Map.insertWith noDups pipe_ch balance $ Map.unionWith noDups pipes1 pipes2
+          (watoms, balance', next1, next2) = zipActions balance n1 n2
           prod_nkind = Action watoms (balance',next1,next2) pipes
           prod_node = Node prod_nid prod_nkind
       in zipNodes balance' next1 next2 $ Map.insert prod_nid prod_node prod_nmap
@@ -588,8 +588,8 @@ dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ p
     showNode (Node nid nk) = "  " ++ show nid ++ "[label=\"" ++ showNk nk ++ "\"]"
 
     showNk (Action watoms _ pipes)
-      | showActions = List.intercalate "\\n" (showPipes pipes : showWatoms watoms)
-      | otherwise =  ""
+      | showActions = List.intercalate "\\n" (showPipes True pipes : showWatoms watoms)
+      | otherwise = showPipes False pipes
     showNk (AutomataModel.Branch x _ _ True) = "WHILE<" ++ show x ++ ">"
     showNk (AutomataModel.Branch x _ _ False) = "IF<" ++ show x ++ ">"
     showNk Done = "DONE"
@@ -599,8 +599,10 @@ dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ p
     showWatomGroup wa = case length wa of 1 -> show (head wa) 
                                           n -> show n ++ " TIMES DO " ++ show (head wa)
 
-    showPipes pipes = "BALANCE = {" ++ (List.intercalate "," $ map showPipe $ Map.toAscList pipes) ++ "}"
-    showPipe (chan, balance) = showChan chan ++ " = " ++ show balance
+    showPipes True pipes = "BALANCE {" ++ (List.intercalate ", " $ map (showPipe True) $ Map.toAscList pipes) ++ "}"
+    showPipes False pipes = List.intercalate "\n" $ map (showPipe False) $ Map.toAscList pipes
+    showPipe True (chan, balance) = showChan chan ++ "=" ++ show balance
+    showPipe False (chan, balance) = (show . uniqId) chan ++ "=" ++ show balance
 
 
 {-------------------- Top-level pipeline ---------------------------}
