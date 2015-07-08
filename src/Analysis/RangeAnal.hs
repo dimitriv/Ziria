@@ -437,7 +437,7 @@ instance CmdDom Rng Range where
 
   aCall  _ _ = fail "Calls not supported in range analysis"
   aError     = fail "Error not supported in range analysis"
-  aPrint _ _ = return ()
+  aPrint _ _ = return (aVal VUnit)
 
 
 
