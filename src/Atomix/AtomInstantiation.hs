@@ -35,8 +35,8 @@ instance Show SymAtom where
   show sa = render (pprShort sa)
 
 pprShort :: SymAtom -> Doc
-pprShort (SAExp e) = ppr (aexp_lbl e)
-pprShort (SAExpIgnoreRet e) = ppr (aexp_lbl e)
+pprShort (SAExp e) = ppr (expLoc $ aexp_exp e)
+pprShort (SAExpIgnoreRet e) = ppr (expLoc $ aexp_exp e)
 pprShort sa = ppr sa
 
 
