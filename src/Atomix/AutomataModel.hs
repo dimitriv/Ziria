@@ -28,10 +28,13 @@ import qualified GenSym as GS
 import Utils(panicStr)
 
 type Chan = EId
+showVar var = name var ++ "$" ++ show (uniqId var)
+showChan = showVar
 
 data NodeKind atom nid
   = Action { action_atoms :: [WiredAtom atom]
            , action_next  :: nid
+           , action_pipeline_balance :: Map Chan Int -- initial balance of pipeline queues
            }
   | Branch { branch_var   :: Chan -- If we read True we go to branch_true, otherwise to branch_false
            , branch_true  :: nid
@@ -42,7 +45,7 @@ data NodeKind atom nid
   | Done
 
 instance (Atom atom, Show nid) => Show (NodeKind atom nid) where
-  show (Action was next) = "Action" ++ show was ++ "->" ++ (show next) ++ ""
+  show (Action was next _) = "Action" ++ show was ++ "->" ++ (show next) ++ ""
   show (AutomataModel.Branch x n1 n2 True) = "While[" ++ show x ++ "]->(" ++ (show n1) ++ "," ++ (show n2) ++ ")"
   show (AutomataModel.Branch x n1 n2 False) = "If[" ++ show x ++ "]->(" ++ (show n1) ++ "," ++ (show n2) ++ ")"
   show (Loop next) = "Loop->" ++ (show next)
@@ -80,6 +83,7 @@ data WiredAtom atom
               }
   deriving Eq
 
+
 instance Atom a => Show (WiredAtom a) where
   show (WiredAtom inw outw atom) = showWires inw ++ show atom ++ showWires outw
     where
@@ -87,7 +91,13 @@ instance Atom a => Show (WiredAtom a) where
       showWire (n,var)
         | n==1      = showVar var
         | otherwise = showVar var ++ "^" ++ show n
-      showVar var = name var ++ "$" ++ show (uniqId var)
+
+
+countWrites :: Chan -> WiredAtom a -> Int
+countWrites ch wa = sum $ map fst $ filter ((== ch) . snd) $ wires_out wa
+countReads :: Chan -> WiredAtom a -> Int
+countReads  ch wa = sum $ map fst $ filter ((== ch) . snd) $ wires_in  wa
+
 
 
 class (Show a, Eq a) => Atom a where
@@ -132,7 +142,7 @@ size = Map.size . auto_graph
 sucs :: Node atom nid -> [nid]
 sucs (Node _ Done) = []
 sucs (Node _ (Loop nxt)) = [nxt]
-sucs (Node _ (Action _ nxt)) = [nxt]
+sucs (Node _ (Action _ nxt _)) = [nxt]
 sucs (Node _ (AutomataModel.Branch _ nxt1 nxt2 _)) = [nxt1,nxt2]
 
 nextNid :: Automaton atom Int -> Int
@@ -176,7 +186,7 @@ map_node_ids map_id (Node nid nkind) = Node (map_id nid) (map_nkind nkind)
   where
     map_nkind Done =  Done
     map_nkind (Loop bodyId) = Loop (map_id bodyId)
-    map_nkind (Action atoms nextId) = Action atoms (map_id nextId)
+    map_nkind (Action atoms nextId pipes) = Action atoms (map_id nextId) pipes
     map_nkind (AutomataModel.Branch x left right is_while) =
       AutomataModel.Branch x (map_id left) (map_id right) is_while
 
@@ -210,7 +220,7 @@ auto_closed a = Map.foldWithKey node_closed (isDefined $ auto_start a) (auto_gra
     node_closed nid (Node nid' nkind) = (&&) (nid==nid' && isDefined nid && nkind_closed nkind)
     nkind_closed Done = True
     nkind_closed (Loop nid) = isDefined nid
-    nkind_closed (Action _ nid) = isDefined nid
+    nkind_closed (Action _ nid _) = isDefined nid
     nkind_closed (AutomataModel.Branch _ nid1 nid2 _) = isDefined nid1 && isDefined nid2
 
 
@@ -235,7 +245,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       let inp = [(1,in_chan chans)]
           outp = map (1,) $ maybeToList (ctrl_chan chans)
           atom = maybe (discardAtom (1,t)) (\_ -> idAtom t) (ctrl_chan chans)
-          nkind = Action [WiredAtom inp outp atom] (auto_start k)
+          nkind = Action [WiredAtom inp outp atom] (auto_start k) Map.empty
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a
 
@@ -244,7 +254,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
           outp = map (1,) $ maybeToList (ctrl_chan chans)
           outty = TArray (Literal n) t
           atom = maybe (discardAtom (n,t)) (\_ -> castAtom (n,t) (1,outty)) (ctrl_chan chans)
-          nkind = Action [WiredAtom inp outp atom] (auto_start k)
+          nkind = Action [WiredAtom inp outp atom] (auto_start k) Map.empty
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a
 
@@ -252,7 +262,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       let inp = [(1, x)]
           outp = [(1, out_chan chans)]
           atom = idAtom (nameTyp x)
-          nkind = Action [WiredAtom inp outp atom] (auto_start k)
+          nkind = Action [WiredAtom inp outp atom] (auto_start k) Map.empty
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a
 
@@ -260,7 +270,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       let inp = [(1, x)]
           outp = [(n, out_chan chans)]
           atom = castAtom (1, nameTyp x) (n,t)
-          nkind = Action [WiredAtom inp outp atom] (auto_start k)
+          nkind = Action [WiredAtom inp outp atom] (auto_start k) Map.empty
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a
 
@@ -268,7 +278,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       let inp  = [(n1, in_chan chans)]
           outp = [(n2, out_chan chans)]
           atom = castAtom (n1,t1) (n2,t2)
-          nkind = Action [WiredAtom inp outp atom] (auto_start k)
+          nkind = Action [WiredAtom inp outp atom] (auto_start k) Map.empty
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a
 
@@ -281,7 +291,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
 
     go (AReturn e) =
       let watom = expToWiredAtom e (ctrl_chan chans)
-          nkind = Action [watom] (auto_start k)
+          nkind = Action [watom] (auto_start k) Map.empty
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a
 
@@ -292,11 +302,11 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       return $ assert (auto_closed a2) $ assert (auto_closed a) a
 
     go (APar _ c1 t c2) = do
-      transfer_ch <- freshName sym "transfer" loc t Mut
-      let k1 = mkDoneAutomaton (in_chan chans) transfer_ch
-      let k2 = mkDoneAutomaton transfer_ch (out_chan chans)
-      a1 <- mkAutomaton dfs sym (chans {out_chan = transfer_ch}) c1 k1
-      a2 <- mkAutomaton dfs sym (chans {in_chan = transfer_ch}) c2 k2
+      pipe_ch <- freshName sym "pipe" loc t Mut
+      let k1 = mkDoneAutomaton (in_chan chans) pipe_ch
+      let k2 = mkDoneAutomaton pipe_ch (out_chan chans)
+      a1 <- mkAutomaton dfs sym (chans {out_chan = pipe_ch}) c1 k1
+      a2 <- mkAutomaton dfs sym (chans {in_chan = pipe_ch}) c2 k2
       return $ zipAutomata a1 a2 k
 
     go (ABranch x c1 c2) = do
@@ -349,7 +359,8 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
 
 ---- Zipping Automata
 -- remaining resources in pipe ("balance"), state of left automaton, state of right automaton
-type ProdNid = (Int, (Int,Int), (Int,Int))
+type ProdNid = (Balance, (Int,Int), (Int,Int))
+type Balance = Int
 
 -- Precondition: a1 and a2 should satisfy (auto_outchan a1) == (auto_inchan a2)
 -- a1 and a2 MUST NOT contain explicit loop nodes (but may contain loops)!!
@@ -363,27 +374,31 @@ zipAutomata a1 a2 k = concat_auto prod_a k
     s1 = (auto_start a1, 0)
     s2 = (auto_start a2, 0)
     prod_nmap = zipNodes 0 s1 s2 Map.empty
-    trans_ch = assert (auto_outchan a1 == auto_inchan a2) $ auto_outchan a1
+    pipe_ch = assert (auto_outchan a1 == auto_inchan a2) $ auto_outchan a1
 
 
     -- this allows us to address nodes in the input automata using (base_id,offset) pairs
     lookup :: (Int,Int) -> Automaton e Int -> Node e (Int,Int)
     lookup nid@(baseId,offset) a =
       case fromJust $ assert (Map.member baseId (auto_graph a)) $ Map.lookup baseId (auto_graph a) of
-        Node _ (Action watoms next) ->
+        Node _ (Action watoms next pipes) ->
           assert (offset < length watoms) $
-          Node nid $ Action (drop offset watoms) (next,0)
+          Node nid $ Action (drop offset watoms) (next,0) pipes'
+            where 
+              pipes' = Map.mapWithKey updatePipe pipes
+              updatePipe q n = n + (sum $ map (atomBalance q) $ take offset watoms)
+              atomBalance q wa = countWrites q wa - countReads q wa
         node@(Node _ _) ->
           assert (offset == 0) $ map_node_ids (\id -> (id,0)) node
 
 
-    zipNodes :: Int -> (Int,Int) -> (Int,Int) -> NodeMap e ProdNid -> NodeMap e ProdNid
+    zipNodes :: Balance -> (Int,Int) -> (Int,Int) -> NodeMap e ProdNid -> NodeMap e ProdNid
     zipNodes balance nid1 nid2 prod_nmap =
       case Map.lookup (balance,nid1,nid2) prod_nmap of
         Nothing -> zipNodes' balance (lookup nid1 a1) (lookup nid2 a2) prod_nmap
         Just _ -> prod_nmap -- We have already seen this product location. We're done!
 
-    zipNodes' :: Int -> Node e (Int,Int) -> Node e (Int,Int) -> NodeMap e ProdNid -> NodeMap e ProdNid
+    zipNodes' :: Balance -> Node e (Int,Int) -> Node e (Int,Int) -> NodeMap e ProdNid -> NodeMap e ProdNid
     zipNodes' balance (Node id1 Done) (Node id2 _) prod_nmap =
       let prod_nid = (balance,id1,id2)
       in Map.insert prod_nid (Node prod_nid Done) prod_nmap
@@ -413,15 +428,17 @@ zipAutomata a1 a2 k = concat_auto prod_a k
           prod_node = Node prod_nid prod_nkind
       in zipNodes balance id1 r $ zipNodes balance id1 l $ Map.insert prod_nid prod_node prod_nmap
 
-    zipNodes' balance n1@(Node id1 (Action _ _)) n2@(Node id2 (Action _ _)) prod_nmap =
+    zipNodes' balance n1@(Node id1 (Action _ _ pipes1)) n2@(Node id2 (Action _ _ pipes2)) prod_nmap =
       let prod_nid = (balance,id1,id2)
           (watoms, balance', next1, next2) = zipActions balance n1 n2
-          prod_nkind = Action watoms (balance',next1,next2)
+          noDups = const (assert False)
+          pipes = Map.insertWith noDups pipe_ch balance' $ Map.unionWith noDups pipes1 pipes2
+          prod_nkind = Action watoms (balance',next1,next2) pipes
           prod_node = Node prod_nid prod_nkind
       in zipNodes balance' next1 next2 $ Map.insert prod_nid prod_node prod_nmap
 
-    zipActions :: Int -> Node atom (Int,Int) -> Node atom (Int,Int) -> ([WiredAtom atom], Int, (Int,Int), (Int,Int))
-    zipActions balance (Node (base1,offset1) (Action watoms1 next1)) (Node (base2,offset2) (Action watoms2 next2))
+    zipActions :: Balance -> Node atom (Int,Int) -> Node atom (Int,Int) -> ([WiredAtom atom], Int, (Int,Int), (Int,Int))
+    zipActions balance (Node (base1,offset1) (Action watoms1 next1 _)) (Node (base2,offset2) (Action watoms2 next2 _))
       = tickRight [] balance watoms1 watoms2 offset1 offset2
       where
         -- INVARIANT: the balance must always remain >= 0
@@ -438,10 +455,10 @@ zipAutomata a1 a2 k = concat_auto prod_a k
         tickLeft acc balance (wa:watoms1') watoms2 offset1 offset2 =
           tickRight (wa:acc) (balance + production wa) watoms1' watoms2 (offset1+1) offset2
 
-        --consumption wired_atom = if any ((== trans_ch) . snd) (wires_in wired_atom) then 1 else 0
-        --production wired_atom = if any ((== trans_ch) . snd) (wires_out wired_atom) then 1 else 0
-        consumption wired_atom = sum $ map fst $ filter ((== trans_ch) . snd) (wires_in wired_atom)
-        production wired_atom = sum $ map fst $ filter ((== trans_ch) . snd) (wires_out wired_atom)
+        --consumption wired_atom = if any ((== pipe) . snd) (wires_in wired_atom) then 1 else 0
+        --production wired_atom = if any ((== pipe) . snd) (wires_out wired_atom) then 1 else 0
+        consumption = countReads pipe_ch
+        production  = countWrites pipe_ch
     zipActions _ _ _ = assert False undefined
 
 
@@ -512,7 +529,7 @@ fuseActions auto = auto { auto_graph = fused_graph }
     fuse (Node _ (Loop b)) nmap = return ([b],nmap)
     fuse (Node _ (AutomataModel.Branch _ b1 b2 _)) nmap = return ([b1,b2],nmap)
 
-    fuse (Node nid nk@(Action atoms next)) nmap = do
+    fuse (Node nid nk@(Action atoms next pipes)) nmap = do
         active <- isActive next
         -- don't fuse back-edges (including self-loops)!
         if active then return ([],nmap) else do
@@ -520,8 +537,8 @@ fuseActions auto = auto { auto_graph = fused_graph }
           (wl,nmap) <- markAndFuse next nmap
           -- ... then perform merger if possible
           return $ case fromJust $ assert (Map.member next nmap) $ Map.lookup next nmap of
-            Node _ (Action atoms' next') ->
-              let node = Node nid (Action (atoms++atoms') next')
+            Node _ (Action atoms' next' _) ->
+              let node = Node nid (Action (atoms++atoms') next' pipes)
               in (wl, Map.insert nid node nmap)
             Node _ _ -> (wl,nmap)
 
@@ -540,7 +557,7 @@ deleteDeadNodes auto = auto { auto_graph = insertRecursively Map.empty (auto_sta
 markSelfLoops :: Automaton e Int -> Automaton e Int
 markSelfLoops a = a { auto_graph = go (auto_graph a)}
   where go nmap = Map.fold markNode nmap nmap
-        markNode (Node nid nk@(Action watoms next)) nmap
+        markNode (Node nid nk@(Action watoms next _)) nmap
           = if nid /= next then nmap else
               let nid' = nextNid a
               in Map.insert nid (Node nid (Loop nid')) $ Map.insert nid' (Node nid' nk) $ nmap
@@ -570,8 +587,8 @@ dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ p
 
     showNode (Node nid nk) = "  " ++ show nid ++ "[label=\"" ++ showNk nk ++ "\"]"
 
-    showNk (Action watoms _)
-      | showActions = List.intercalate "\\n" $ showWatoms watoms
+    showNk (Action watoms _ pipes)
+      | showActions = List.intercalate "\\n" (showPipes pipes : showWatoms watoms)
       | otherwise =  ""
     showNk (AutomataModel.Branch x _ _ True) = "WHILE<" ++ show x ++ ">"
     showNk (AutomataModel.Branch x _ _ False) = "IF<" ++ show x ++ ">"
@@ -581,6 +598,9 @@ dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ p
     showWatoms = map showWatomGroup . List.group
     showWatomGroup wa = case length wa of 1 -> show (head wa) 
                                           n -> show n ++ " TIMES DO " ++ show (head wa)
+
+    showPipes pipes = "BALANCE = {" ++ (List.intercalate "," $ map showPipe $ Map.toAscList pipes) ++ "}"
+    showPipe (chan, balance) = showChan chan ++ " = " ++ show balance
 
 
 {-------------------- Top-level pipeline ---------------------------}
