@@ -808,15 +808,16 @@ inline_length :: GName Ty -> Ty -> InlineData
 inline_length prm argty
   | TArray (NVar siz_nm) _ <- nameTyp prm
   , TArray nexpr _ <- argty
-  , let siz_var  = toName siz_nm noLoc tint Imm
+  , let siz_var  = toName siz_nm loc tint Imm
   , let siz_expr = nexpr_to_expr nexpr
   = InlineData { inl_let_bound = []
                , inl_subst     = [(siz_var,siz_expr)]
                , inl_len_subst = [(siz_nm,nexpr)] }
   | otherwise = mempty
   where
-    nexpr_to_expr (NVar s)    = eVar noLoc (toName s noLoc tint Imm)
-    nexpr_to_expr (Literal s) = eVal noLoc tint (vint s)  
+    nexpr_to_expr (NVar s)    = eVar loc (toName s loc tint Imm)
+    nexpr_to_expr (Literal s) = eVal loc tint (vint s)  
+    loc = nameLoc prm 
 
 
 -- | How to inline an immutable parameter: effectively by let-binding it
