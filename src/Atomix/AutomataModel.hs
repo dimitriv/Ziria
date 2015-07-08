@@ -84,8 +84,9 @@ instance Atom a => Show (WiredAtom a) where
     where
       showWires ws = "{" ++ (List.intercalate "," $ map showWire ws) ++ "}"
       showWire (n,var)
-        | n==1      = show var
-        | otherwise = show var ++ "^" ++ show n
+        | n==1      = showVar var
+        | otherwise = showVar var ++ "^" ++ show n
+      showVar var = name var ++ "$" ++ show (uniqId var)
 
 
 class Show a => Atom a where
