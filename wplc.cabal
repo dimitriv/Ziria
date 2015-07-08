@@ -143,7 +143,9 @@ Executable atomix
     exception-transformers >= 0.3   && < 0.5,
     -- template-haskell is bundled with ghc; don't insist on a version
     template-haskell,
-    ghc-prim
+    ghc-prim,
+
+    fgl                    >= 5.5.0.1
 
   -- Process 1.1 doesn't build with GHC 7.8
   if impl(ghc >= 7.8)

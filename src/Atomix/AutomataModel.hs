@@ -78,6 +78,7 @@ data WiredAtom atom
               , wires_out :: [(Int,EId)]
               , the_atom  :: atom
               }
+  deriving Eq
 
 instance Atom a => Show (WiredAtom a) where
   show (WiredAtom inw outw atom) = showWires inw ++ show atom ++ showWires outw
@@ -89,7 +90,7 @@ instance Atom a => Show (WiredAtom a) where
       showVar var = name var ++ "$" ++ show (uniqId var)
 
 
-class Show a => Atom a where
+class (Show a, Eq a) => Atom a where
 
   atomInTy  :: a -> [(Int,Ty)]
   atomOutTy :: a -> [(Int,Ty)]
@@ -570,12 +571,16 @@ dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ p
     showNode (Node nid nk) = "  " ++ show nid ++ "[label=\"" ++ showNk nk ++ "\"]"
 
     showNk (Action watoms _)
-      | showActions = List.intercalate "\\n" $ List.map show watoms
+      | showActions = List.intercalate "\\n" $ showWatoms watoms
       | otherwise =  ""
     showNk (AutomataModel.Branch x _ _ True) = "WHILE<" ++ show x ++ ">"
     showNk (AutomataModel.Branch x _ _ False) = "IF<" ++ show x ++ ">"
     showNk Done = "DONE"
     showNk (Loop _) = "LOOP"
+
+    showWatoms = map showWatomGroup . List.group
+    showWatomGroup wa = case length wa of 1 -> show (head wa) 
+                                          n -> show n ++ " TIMES DO " ++ show (head wa)
 
 
 {-------------------- Top-level pipeline ---------------------------}

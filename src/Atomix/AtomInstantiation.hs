@@ -18,6 +18,7 @@ data SymAtom = SAExp (AExp ())
              | SAExpIgnoreRet (AExp ())
              | SACast (Int,Ty) (Int,Ty) 
              | SADiscard (Int,Ty)
+  deriving Eq
 
 instance Outputable SymAtom where
   ppr (SAExp e) = ppr e

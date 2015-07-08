@@ -21,15 +21,11 @@
 module Main where
 
 --
-import AtomComp
-import AutomataModel
-import AtomInstantiation
-
-import Debug.Trace
+import AtomComp ()
+import AtomInstantiation ()
 import AtomixCompTransform ()
-
-import qualified GenSym as GS
-
+import AtomixModel ()
+import AutomataModel ()
 
  
 --  mkAutomaton undefined channels (traceShowId wifi) k

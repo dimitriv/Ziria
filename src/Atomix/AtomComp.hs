@@ -19,6 +19,7 @@ data AExp b
            , aexp_ovs :: [EId]   -- ^ output variables
            , aexp_ret :: Ty      -- ^ return type
            , aexp_nfo :: b }     -- ^ other stuff
+  deriving Eq
 
 instance Outputable (AExp b) where
   ppr ae = vcat [ ppr (aexp_lbl ae) <> colon
