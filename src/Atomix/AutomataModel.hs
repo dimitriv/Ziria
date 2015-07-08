@@ -600,9 +600,9 @@ dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ p
                                           n -> show n ++ " TIMES DO " ++ show (head wa)
 
     showPipes True pipes = "BALANCE {" ++ (List.intercalate ", " $ map (showPipe True) $ Map.toAscList pipes) ++ "}"
-    showPipes False pipes = List.intercalate "\n" $ map (showPipe False) $ Map.toAscList pipes
+    showPipes False pipes = List.intercalate "|" $ map (showPipe False) $ Map.toAscList pipes
     showPipe True (chan, balance) = showChan chan ++ "=" ++ show balance
-    showPipe False (chan, balance) = (show . uniqId) chan ++ "=" ++ show balance
+    showPipe False (chan, balance) = show balance
 
 
 {-------------------- Top-level pipeline ---------------------------}
