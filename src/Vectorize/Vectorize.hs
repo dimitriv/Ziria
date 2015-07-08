@@ -383,7 +383,7 @@ vectIterComp dfs builder tin tout cbody = do
 prependReadSrc :: SrcLoc -> ParInfo
                -> Ty -> DelayedVectRes -> DelayedVectRes
 prependReadSrc loc p orig_ty (DVR { dvr_comp = iocomp, dvr_vres = vres })
-  = DVR { dvr_comp = iocomp', dvr_vres = vres' }
+  = DVR { dvr_comp = iocomp', dvr_vres = vres', dvr_srcloc = loc }
   where 
     iocomp'   = cPar loc p (cReadSrc loc new_rd_ty) <$> iocomp
     new_rd_ty = if dvr_in_ty == TVoid then orig_ty else dvr_in_ty
@@ -398,7 +398,7 @@ prependReadSrc loc p orig_ty (DVR { dvr_comp = iocomp, dvr_vres = vres })
 appendWriteSnk :: SrcLoc -> ParInfo
                -> Ty -> DelayedVectRes -> DelayedVectRes
 appendWriteSnk loc p orig_ty (DVR { dvr_comp = iocomp, dvr_vres = vres })
-  = DVR { dvr_comp = iocomp', dvr_vres = vres' }
+  = DVR { dvr_comp = iocomp', dvr_vres = vres', dvr_srcloc = loc }
   where 
     iocomp' = do
       c <- iocomp

@@ -146,7 +146,7 @@ upd_out_offset new_off = modify upd
 
 -- Shorthand for incrementing an offset
 offset_plus :: Exp -> Int -> Exp
-offset_plus off i = interpE noLoc $ (off .+ I(i))
+offset_plus off i = interpE (expLoc off) $ (off .+ I(i))
 
 -- | What to do on Take1
 on_take :: TakeTransf RwState
@@ -296,7 +296,7 @@ iterInvRwState body_ain body_aout eidx elen action = do
     updStQ _x (CAUnknown ) (DoNotRw     ) = DoNotRw
     updStQ _x _            (DoNotRw     ) = DoNotRw
     updStQ  x (CAStatic i) (DoRw vec off) = DoRw vec off'
-      where off' = interpE noLoc (off .+ (i .* x))
+      where off' = interpE (expLoc eidx) (off .+ (i .* x))
     updStQ _x _            _              = panicStr "updInStQ: impossible!"
 
 

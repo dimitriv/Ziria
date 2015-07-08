@@ -52,7 +52,6 @@ optzr :: Bool -> Zr v -> Zr v
 optzr True  m  = m
 optzr False _m = return (error "Illegal access!") 
 
-embed = interpE noLoc
 
 -- | UD driver
 doVectCompUD :: DynFlags -> CTy -> LComp -> SFUD -> VecM DelayedVectRes
@@ -90,8 +89,8 @@ vect_ud1 dfs cty lcomp i j (NMul m1) (NMul m2)
       ftimes zERO m2 $ \c2 -> 
         do ya <- optzr (arout > 1) $ fneweref ("ya" ::: vout_ty)
            ftimes zERO m1 $ \c1 ->
-              let offin  = embed (c2 .* i .* m1 .+ c1 .* i)
-                  offout = embed (c1 .* j)
+              let offin  = interpE loc (c2 .* i .* m1 .+ c1 .* i)
+                  offout = interpE loc (c1 .* j)
                   -- if arin  <= 1 then we won't rewrite input
                   -- if arout <= 1 (hence j*m1 <= 1) so just
                   -- emit every time (and do not emit in the end)
@@ -125,8 +124,8 @@ vect_ud2 dfs cty lcomp i j (NDiv j0) (NDiv j1) (NMul m)
       do { xa <- optzr (arin > 1)  $ ftake vin_ty
          ; ya <- fneweref ("ya" ::: vout_ty) 
          ; ftimes zERO m $ \cnt ->
-              let offin  = embed (cnt .* i)
-                  offout = embed (cnt .* j)
+              let offin  = interpE loc (cnt .* i)
+                  offout = interpE loc (cnt .* j)
                   st = RwState { rws_in  = doRw arin xa offin
                                , rws_out = DoRw ya offout }
               in fembed (act venv st)
@@ -154,7 +153,7 @@ vect_ud3 dfs cty lcomp i (NMul m)
     zirbody venv = do
       xa <- optzr (arin > 1) $ ftake vin_ty
       ftimes zERO m $ \cnt ->
-         let offin = embed (cnt .* i)
+         let offin = interpE loc (cnt .* i)
              st    = RwState { rws_in = doRw arin xa offin, rws_out = DoNotRw }
          in fembed (act venv st)
 
@@ -195,8 +194,8 @@ vect_du1 dfs cty lcomp i j (NMul m1) (NMul m2)
       ftimes zERO m2 $ \c2 -> 
         do xa <- optzr (arin > 1) $ ftake vin_ty
            ftimes zERO m1 $ \c1 ->
-              let offin  = embed (c1 .* i)
-                  offout = embed (c2 .* j .* m1 .+ c1 .* j)
+              let offin  = interpE loc (c1 .* i)
+                  offout = interpE loc (c2 .* j .* m1 .+ c1 .* j)
                   st = RwState { rws_in  = doRw arin xa offin
                                , rws_out = doRw arout ya offout }
               in fembed (act venv st)
@@ -226,8 +225,8 @@ vect_du2 dfs cty lcomp i (NDiv i0) (NDiv i1) j (NMul m)
          do { xa <- ftake vin_ty
             ; ya <- optzr (arout > 1) $ fneweref ("ya" ::: vout_ty)
             ; ftimes zERO m $ \cnt -> 
-                 let offin  = embed (cnt .* i)
-                     offout = embed (cnt .* j)
+                 let offin  = interpE loc (cnt .* i)
+                     offout = interpE loc (cnt .* j)
                      st = RwState { rws_in = DoRw xa offin
                                   , rws_out = doRw arout ya offout }
                  in fembed (act venv st)
@@ -254,7 +253,7 @@ vect_du3 dfs cty lcomp j (NMul m)
     zirbody venv = do
       ya <- optzr (arout > 1) $ fneweref ("ya" ::: vout_ty) 
       ftimes zERO m $ \cnt ->
-        let offout = embed (cnt .* j)
+        let offout = interpE loc (cnt .* j)
             st = RwState { rws_in = DoNotRw, rws_out = doRw arout ya offout }
         in fembed (act venv st)
       when (arout > 1) $ femit ya
