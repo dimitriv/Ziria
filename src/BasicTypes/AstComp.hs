@@ -344,7 +344,8 @@ mkHOCompSubst fprms fargs = go fprms fargs ([],[],[])
 
     rev_acc (x,y,z) = (reverse x, reverse y, reverse z)
 
-    to_comp_nm nm = updNameTy nm (callArg (error "mkHOCompSubst") id (nameTyp nm))
+    to_comp_nm nm = updNameTy nm $ 
+                    callArg (error "mkHOCompSubst") id (nameTyp nm)
 
 
 checkCAArgMut :: -- Function argument types (expected)
