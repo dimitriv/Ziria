@@ -302,6 +302,9 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       return $ assert (auto_closed a2) $ assert (auto_closed a) a
 
     go (APar _ c1 t c2) = do
+      let l1 = acomp_loc c1
+          l2 = acomp_loc c2
+ *********
       pipe_ch <- freshName sym "pipe" loc t Mut
       let k1 = mkDoneAutomaton (in_chan chans) pipe_ch
       let k2 = mkDoneAutomaton pipe_ch (out_chan chans)
@@ -589,7 +592,7 @@ dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ p
 
     showNk (Action watoms _ pipes)
       | showActions = List.intercalate "\\n" (showPipes True pipes : showWatoms watoms)
-      | otherwise = showPipes False pipes
+      | otherwise = showPipes False pipes ++ "\n" ++ showNextPipes watoms pipes 
     showNk (AutomataModel.Branch x _ _ True) = "WHILE<" ++ show x ++ ">"
     showNk (AutomataModel.Branch x _ _ False) = "IF<" ++ show x ++ ">"
     showNk Done = "DONE"
@@ -603,6 +606,11 @@ dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ p
     showPipes False pipes = List.intercalate "|" $ map (showPipe False) $ Map.toAscList pipes
     showPipe True (chan, balance) = showChan chan ++ "=" ++ show balance
     showPipe False (chan, balance) = show balance
+
+    showNextPipes watoms pipes 
+      = List.intercalate "|" $ map (showNextPipe watoms) $ Map.toAscList pipes
+    showNextPipe watoms (chan,n) 
+      = showPipe False (chan,n + sum (map (countWrites chan) watoms) - sum (map (countReads chan) watoms)) 
 
 
 {-------------------- Top-level pipeline ---------------------------}
