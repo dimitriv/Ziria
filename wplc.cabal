@@ -36,6 +36,7 @@ Executable wplc
   build-depends:
     array                  >= 0.2   && < 0.6,
     base                   >= 4     && < 5,
+    boxes                  >= 0.1.4,
     bytestring             >= 0.10  && < 0.11,
     containers             >= 0.4   && < 0.6,
     dlist                  >= 0.6   && < 0.7,
@@ -118,6 +119,7 @@ Executable atomix
   build-depends:
     array                  >= 0.2   && < 0.6,
     base                   >= 4     && < 5,
+    boxes                  >= 0.1.4,
     bytestring             >= 0.10  && < 0.11,
     containers             >= 0.4   && < 0.6,
     dlist                  >= 0.6   && < 0.7,

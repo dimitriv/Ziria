@@ -610,8 +610,10 @@ dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ p
     showWatomGroup wa = case length wa of 1 -> show (head wa) 
                                           n -> show n ++ " TIMES DO " ++ show (head wa)
 
-    showPipes watoms pipes = List.intercalate "," $ map showPipe $ Map.toAscList $ Map.intersectionWith (,) pipes (nextPipes watoms pipes)
-    showPipe (pipe, (old,new)) = ""
+    showPipes watoms pipes = render $ hcat top $ boxedPipes
+      where boxedPipes = map boxPipe $ Map.toAscList $
+                         Map.intersectionWith (,) pipes (nextPipes watoms pipes)
+            boxPipe (pipe, state) = vcat center1 $ map text [show pipe, show state]
 
 
 {-------------------- Top-level pipeline ---------------------------}
