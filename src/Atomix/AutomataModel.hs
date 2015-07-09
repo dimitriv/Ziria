@@ -308,7 +308,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
     go (APar _ c1 t c2) = do
       let getName = takeWhile (/= '.') . reverse . takeWhile (/= '\\') . takeWhile (/= '/') . reverse
       let pipe_name = List.intercalate ">>>" $ 
-                      map (getName . PPR.render . ppr) [acomp_loc c1,  acomp_loc c2]
+                      map (getName . PPR.render . ppr) [get_loc (Left ()) c1,  get_loc (Right ()) c2]
       pipe_ch <- freshName sym pipe_name loc t Mut
       let k1 = mkDoneAutomaton (in_chan chans) pipe_ch
       let k2 = mkDoneAutomaton pipe_ch (out_chan chans)
@@ -360,6 +360,12 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       let a = a0 { auto_graph = Map.insert nid (Node nid nkind) (auto_graph a0)}
       return $ assert (auto_closed a0) $ assert (auto_closed a) a
 
+    get_loc side c
+      | APar _ cl _ cr <- acomp_comp c
+      , Left () <- side = get_loc side cr
+      | APar _ cl _ cr <- acomp_comp c
+      , Right () <- side = get_loc side cl
+      | otherwise = acomp_loc c
 
 
 
@@ -585,7 +591,7 @@ dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ p
     nodes = ("node [shape = point]":start) ++
             ("node [shape = doublecircle]":final) ++
             ("node [shape = box]":decision) ++
-            ("node [shape = box]":action)
+            ("node [shape = box, fontname=monospace, fontsize=11]":action)
     start = ["start [label=\"\"]"]
     (finalN,normalN) = List.partition (\(Node _ nk) -> case nk of { Done -> True; _ -> False }) $ Map.elems (auto_graph a)
     (actionN,decisionN) = List.partition (\(Node _ nk) -> case nk of { Action {} -> True; _ -> False }) normalN
@@ -610,7 +616,7 @@ dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ p
     showWatomGroup wa = case length wa of 1 -> show (head wa) 
                                           n -> show n ++ " TIMES DO " ++ show (head wa)
 
-    showPipes watoms pipes = render $ hcat top $ boxedPipes
+    showPipes watoms pipes = render $ punctuateH top (text " | ") $ boxedPipes
       where boxedPipes = map boxPipe $ Map.toAscList $
                          Map.intersectionWith (,) pipes (nextPipes watoms pipes)
             boxPipe (pipe, state) = vcat center1 $ map text [show pipe, show state]
