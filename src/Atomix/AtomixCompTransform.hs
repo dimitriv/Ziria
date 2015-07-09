@@ -112,7 +112,7 @@ alphaNorm sym = mapCompM return return return return return action
        (c) a bunch of global struct definitions
  ------------------------------------------------------------------------------}
 
-data RnSt = RnSt { st_letref_vars :: [EId]
+data RnSt = RnSt { st_bound_vars  :: [EId]
                  , st_fundefs     :: [(EId,(Fun,[EId]))]
                  , st_structs     :: [(TyName, StructDef)]
                  }
@@ -128,8 +128,8 @@ instance Outputable RnSt where
 
 type RnStM a = StateT RnSt IO a
 
-recLetRef :: EId -> RnStM ()
-recLetRef x = modify $ \s -> s { st_letref_vars = x : st_letref_vars s }
+recBound :: EId -> RnStM ()
+recBound x = modify $ \s -> s { st_bound_vars = x : st_bound_vars s }
 
 recFunDef :: EId -> Fun -> [EId] -> RnStM ()
 recFunDef x fn clos 
@@ -141,7 +141,7 @@ recStruct sn sd
 
 
 emptyRnSt :: RnSt
-emptyRnSt = RnSt { st_letref_vars = []
+emptyRnSt = RnSt { st_bound_vars  = []
                  , st_fundefs     = []
                  , st_structs     = [] 
                  }
@@ -150,28 +150,40 @@ lkpFunDef :: EId -> RnStM (Maybe (Fun, [EId]))
 lkpFunDef f = lookup f <$> gets st_fundefs
 
 
--- Deal with Let/LetRef/LetStruct
+-- Deal with Let/LetRef/LetStruct/Bind
 liftBindsComp :: Comp -> RnStM Comp
 liftBindsComp = mapCompM return return return return return action
   where action c 
           | LetE x _fi e c1 <- unComp c
           , let loc = compLoc c
-          = return $ cBindMany loc (cReturn loc AutoInline e) [(x,c1)]
+          = do recBound x
+               return $ cBindMany loc (cReturn loc AutoInline e) [(x,c1)]
 
           | LetERef x Nothing c1 <- unComp c
-          = recLetRef x >> return c1
+          = recBound x >> return c1
 
           | LetERef x (Just e) c1 <- unComp c
           , let loc = compLoc c 
           = let easgn = eAssign loc (eVar loc x) e
                 ret   = cReturn loc AutoInline easgn
-            in recLetRef x >> return (cSeq loc ret c1)
+            in recBound x >> return (cSeq loc ret c1)
 
           | LetStruct sdef c1 <- unComp c
           = recStruct (struct_name sdef) sdef >> return c1 
-          
+
+          | BindMany c1 rest <- unComp c
+          = go c1 rest
           | otherwise
           = return c
+          where go c1 [] = return c1
+                go c1 ((x,c2):xscs)
+                 | x `S.notMember` (fst $ compFVs c2) -- not in c2 and not in xscs
+                 , x `S.notMember` (S.unions (map (fst. compFVs. snd) xscs)) 
+                 = cSeq (compLoc c) c1 <$> go c2 xscs
+                 | otherwise 
+                 = do recBound x
+                      rest' <- go c2 xscs 
+                      return $ cBindMany (compLoc c) c1 [(x, rest')]
 
 
 {---------------------------- Closure conversion ------------------------------}
@@ -321,7 +333,7 @@ atomixCompTransform sym c = do
 
 
 atomixCompToComp :: Comp -> RnSt -> Comp
-atomixCompToComp comp (RnSt { st_letref_vars = letrefs
+atomixCompToComp comp (RnSt { st_bound_vars  = letrefs
                             , st_fundefs     = fundefs
                             , st_structs     = strdefs }) = str_c 
  where let_c = foldr (\x -> cLetERef loc x Nothing) comp letrefs
@@ -338,7 +350,7 @@ zirToAtomZir dfs sym comp = do
   (comp0,rnst) <- atomixCompTransform sym comp 
   -- Transform lifted
   (acomp,xs) <- runStateT (transLifted dfs sym comp0) []
-  return (acomp,rnst { st_letref_vars = st_letref_vars rnst ++ xs } )
+  return (acomp,rnst { st_bound_vars = st_bound_vars rnst ++ xs } )
 
 
 transLiftedExp :: DynFlags -> GS.Sym -> Exp -> IO (AExp ())
