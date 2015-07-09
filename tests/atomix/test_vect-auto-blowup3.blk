@@ -20,6 +20,7 @@ fun comp crc24 () {
 -- INTERLEAVER --------------------------------------------
 
 fun comp interleaver_bpsk() {
+  -- REMOVING THIS ANNOTATION FIXES THE PROBLEM
   repeat <= [48,48] {
     (x : arr[48] bit) <- takes 48;
     emits x
