@@ -1,0 +1,56 @@
+{-
+
+This concise example should compile to a 14-state Atomix automaton.
+However, with vectorization enabled, we may observe a blow-up due
+to problems in the vectorizer.
+
+-}
+
+-- CRC24 --------------------------------------------------
+
+fun comp crc24 () {
+  var len : int32;
+  times len seq {
+    (x:arr[8] bit) <- takes 8;
+    emits x;
+  }
+}
+
+
+-- INTERLEAVER --------------------------------------------
+
+fun comp interleaver_bpsk() {
+  repeat <= [48,48] {
+    (x : arr[48] bit) <- takes 48;
+    emits x
+  }
+}
+
+
+-- BPSK ---------------------------------------------------
+
+fun comp modulate_bpsk() {
+  repeat { 
+      (x : bit) <- take;
+      emit complex16{re=-1; im=0}
+  }
+}
+
+
+-- HEADER -------------------------------------------------
+
+fun comp emitHeader() {
+  (x : arr[24] bit) <- takes 24;
+  emits x;
+}
+
+
+-- MAIN ---------------------------------------------------
+
+fun comp transmitter() {
+  emitHeader();
+  crc24();
+}
+
+
+let comp main = read >>> transmitter() >>> interleaver_bpsk() >>> modulate_bpsk() >>> write
