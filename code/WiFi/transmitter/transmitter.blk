@@ -52,27 +52,27 @@ fun comp tx_driver(h : struct HeaderInfo) {
  --  6 Mbps
  if h.coding == CR_12 && h.modulation == M_BPSK then 
    (crc24(len, true) >>> scrambler(default_scrmbl_st) >>> encode12() >>> interleaver_bpsk() >>> modulate_bpsk())
--- --  9 Mbps
--- else if h.coding == CR_34 && h.modulation == M_BPSK then 
---   (crc36(len, true) >>> scrambler(default_scrmbl_st) >>> encode34() >>> interleaver_bpsk() >>> modulate_bpsk())
--- -- 12 Mbps
--- else if h.coding == CR_12 && h.modulation == M_QPSK then 
---   (crc48(len, true) >>> scrambler(default_scrmbl_st) >>> encode12() >>> interleaver_qpsk() >>> modulate_qpsk())
--- -- 18 Mbps
--- else if h.coding == CR_34 && h.modulation == M_QPSK then 
---   (crc72(len, true) >>> scrambler(default_scrmbl_st) >>> encode34() >>> interleaver_qpsk() >>> modulate_qpsk())
--- -- 24 Mbps
--- else if h.coding == CR_12 && h.modulation == M_16QAM then 
---   (crc96(len, true) >>> scrambler(default_scrmbl_st) >>> encode12() >>> interleaver_m16qam() >>> modulate_16qam())
--- -- 36 Mbps
--- else if h.coding == CR_34 && h.modulation == M_16QAM then 
---   (crc144(len, true) >>> scrambler(default_scrmbl_st) >>> encode34() >>> interleaver_m16qam() >>> modulate_16qam())
--- -- 48 Mbps
--- else if h.coding == CR_23 && h.modulation == M_64QAM then 
---   (crc192(len, true) >>> scrambler(default_scrmbl_st) >>> encode23() >>> interleaver_m64qam() >>> modulate_64qam())
--- -- 56 Mbps
--- else if h.coding == CR_34 && h.modulation == M_64QAM then 
---   (crc216(len, true) >>> scrambler(default_scrmbl_st) >>> encode34() >>> interleaver_m64qam() >>> modulate_64qam())
+--  9 Mbps
+else if h.coding == CR_34 && h.modulation == M_BPSK then 
+  (crc36(len, true) >>> scrambler(default_scrmbl_st) >>> encode34() >>> interleaver_bpsk() >>> modulate_bpsk())
+-- 12 Mbps
+else if h.coding == CR_12 && h.modulation == M_QPSK then 
+  (crc48(len, true) >>> scrambler(default_scrmbl_st) >>> encode12() >>> interleaver_qpsk() >>> modulate_qpsk())
+-- 18 Mbps
+else if h.coding == CR_34 && h.modulation == M_QPSK then 
+  (crc72(len, true) >>> scrambler(default_scrmbl_st) >>> encode34() >>> interleaver_qpsk() >>> modulate_qpsk())
+-- 24 Mbps
+else if h.coding == CR_12 && h.modulation == M_16QAM then 
+  (crc96(len, true) >>> scrambler(default_scrmbl_st) >>> encode12() >>> interleaver_m16qam() >>> modulate_16qam())
+-- 36 Mbps
+else if h.coding == CR_34 && h.modulation == M_16QAM then 
+  (crc144(len, true) >>> scrambler(default_scrmbl_st) >>> encode34() >>> interleaver_m16qam() >>> modulate_16qam())
+-- 48 Mbps
+else if h.coding == CR_23 && h.modulation == M_64QAM then 
+  (crc192(len, true) >>> scrambler(default_scrmbl_st) >>> encode23() >>> interleaver_m64qam() >>> modulate_64qam())
+-- 56 Mbps
+else if h.coding == CR_34 && h.modulation == M_64QAM then 
+  (crc216(len, true) >>> scrambler(default_scrmbl_st) >>> encode34() >>> interleaver_m64qam() >>> modulate_64qam())
  else
    do{error "Unknown coding rate!"}
 }
