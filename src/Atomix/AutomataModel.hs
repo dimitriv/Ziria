@@ -5,8 +5,8 @@ module AutomataModel where
 import Data.Bool
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Maybe
 import qualified Data.List as List
 import Data.Loc
@@ -27,8 +27,12 @@ import qualified GenSym as GS
 
 import Utils(panicStr)
 
+import Outputable
+import qualified Text.PrettyPrint.HughesPJ as PPR
+import Text.PrettyPrint.Boxes
+
 type Chan = EId
-showVar var = name var ++ "$" ++ show (uniqId var)
+showVar withUnique var = name var ++ (if withUnique then "$" ++ show (uniqId var) else "")
 showChan = showVar
 
 data NodeKind atom nid
@@ -89,8 +93,8 @@ instance Atom a => Show (WiredAtom a) where
     where
       showWires ws = "{" ++ (List.intercalate "," $ map showWire ws) ++ "}"
       showWire (n,var)
-        | n==1      = showVar var
-        | otherwise = showVar var ++ "^" ++ show n
+        | n==1      = showVar True var
+        | otherwise = showVar True var ++ "^" ++ show n
 
 
 countWrites :: Chan -> WiredAtom a -> Int
@@ -201,20 +205,20 @@ normalize_auto_ids :: Atom e => Ord nid => Show nid => Int -> Automaton e nid ->
 normalize_auto_ids first_id a = map_auto_ids map_id a
   where
     map_id nid = fromJust $ assert (Map.member nid normalize_map) $ Map.lookup nid normalize_map
-    (_, normalize_map) = Map.foldWithKey f (first_id, Map.empty) (auto_graph a)
+    (_, normalize_map) = Map.foldrWithKey f (first_id, Map.empty) (auto_graph a)
     f nid _ (counter, nid_map) = (counter+1, Map.insert nid counter nid_map)
 
 replace_done_with :: Ord nid => nid -> Automaton e nid -> Automaton e nid
 replace_done_with nid a = map_auto_ids (\nid -> Map.findWithDefault nid nid replace_map) a
   where
-    replace_map = Map.fold fold_f Map.empty (auto_graph a)
+    replace_map = Map.foldr fold_f Map.empty (auto_graph a)
     fold_f (Node nid' Done) mp = Map.insert nid' nid mp
     fold_f _ mp = mp
 
 
 -- debugging
 auto_closed :: Ord nid => Automaton e nid -> Bool
-auto_closed a = Map.foldWithKey node_closed (isDefined $ auto_start a) (auto_graph a)
+auto_closed a = Map.foldrWithKey node_closed (isDefined $ auto_start a) (auto_graph a)
   where
     isDefined nid = Map.member nid (auto_graph a)
     node_closed nid (Node nid' nkind) = (&&) (nid==nid' && isDefined nid && nkind_closed nkind)
@@ -302,10 +306,10 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       return $ assert (auto_closed a2) $ assert (auto_closed a) a
 
     go (APar _ c1 t c2) = do
-      let l1 = acomp_loc c1
-          l2 = acomp_loc c2
- *********
-      pipe_ch <- freshName sym "pipe" loc t Mut
+      let getName = takeWhile (/= '.') . reverse . takeWhile (/= '\\') . takeWhile (/= '/') . reverse
+      let pipe_name = List.intercalate ">>>" $ 
+                      map (getName . PPR.render . ppr) [acomp_loc c1,  acomp_loc c2]
+      pipe_ch <- freshName sym pipe_name loc t Mut
       let k1 = mkDoneAutomaton (in_chan chans) pipe_ch
       let k2 = mkDoneAutomaton pipe_ch (out_chan chans)
       a1 <- mkAutomaton dfs sym (chans {out_chan = pipe_ch}) c1 k1
@@ -559,7 +563,7 @@ deleteDeadNodes auto = auto { auto_graph = insertRecursively Map.empty (auto_sta
 
 markSelfLoops :: Automaton e Int -> Automaton e Int
 markSelfLoops a = a { auto_graph = go (auto_graph a)}
-  where go nmap = Map.fold markNode nmap nmap
+  where go nmap = Map.foldr markNode nmap nmap
         markNode (Node nid nk@(Action watoms next _)) nmap
           = if nid /= next then nmap else
               let nid' = nextNid a
@@ -568,6 +572,10 @@ markSelfLoops a = a { auto_graph = go (auto_graph a)}
 
 
 -- Automata to DOT files
+
+nextPipes watoms pipes = Map.mapWithKey updatePipe pipes
+  where updatePipe pipe n = n + sum (map (countWrites pipe) watoms)
+                              - sum (map (countReads pipe) watoms)
 
 dotOfAuto :: (Atom e, Show nid) => Bool -> Automaton e nid -> String
 dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfix
@@ -591,8 +599,8 @@ dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ p
     showNode (Node nid nk) = "  " ++ show nid ++ "[label=\"" ++ showNk nk ++ "\"]"
 
     showNk (Action watoms _ pipes)
-      | showActions = List.intercalate "\\n" (showPipes True pipes : showWatoms watoms)
-      | otherwise = showPipes False pipes ++ "\n" ++ showNextPipes watoms pipes 
+      | showActions = List.intercalate "\\n" (showPipes watoms pipes : showWatoms watoms)
+      | otherwise = showPipes watoms pipes
     showNk (AutomataModel.Branch x _ _ True) = "WHILE<" ++ show x ++ ">"
     showNk (AutomataModel.Branch x _ _ False) = "IF<" ++ show x ++ ">"
     showNk Done = "DONE"
@@ -602,15 +610,8 @@ dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ p
     showWatomGroup wa = case length wa of 1 -> show (head wa) 
                                           n -> show n ++ " TIMES DO " ++ show (head wa)
 
-    showPipes True pipes = "BALANCE {" ++ (List.intercalate ", " $ map (showPipe True) $ Map.toAscList pipes) ++ "}"
-    showPipes False pipes = List.intercalate "|" $ map (showPipe False) $ Map.toAscList pipes
-    showPipe True (chan, balance) = showChan chan ++ "=" ++ show balance
-    showPipe False (chan, balance) = show balance
-
-    showNextPipes watoms pipes 
-      = List.intercalate "|" $ map (showNextPipe watoms) $ Map.toAscList pipes
-    showNextPipe watoms (chan,n) 
-      = showPipe False (chan,n + sum (map (countWrites chan) watoms) - sum (map (countReads chan) watoms)) 
+    showPipes watoms pipes = List.intercalate "," $ map showPipe $ Map.toAscList $ Map.intersectionWith (,) pipes (nextPipes watoms pipes)
+    showPipe (pipe, (old,new)) = ""
 
 
 {-------------------- Top-level pipeline ---------------------------}
