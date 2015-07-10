@@ -119,6 +119,29 @@ cgAtom dfs qs (WiredAtom [(n,x)] [(m,y)] (SACast (n',inty) (m',outty)) = do
   appendSmtt [cstm| read_buf(cy,cq,n,...)|]
   appendStmt [cstm| put_buf(cy ...............
   ... 
+
+{- How to initialize Sora queues
+
+   Initialization time: 
+
+   (A) declare:   size_t queue_sizes[NUM_OF_QUEUES];
+   (B) set    :   queue_sizes[i] = tySizeOf_C (corresponding queue type);
+   (C) call   :   ts_init(NUM_OF_QUEUES,queue_sizes)
+
+   How to use sora queues. 
+   (A) putting:
+         -- while(ts_isFull(i)) ;
+         ts_put (i, (char *) ...)
+
+   (B) getting:
+         -- while(ts_isEmpty(i)) {
+         --   if (ts_isFinished($id:buf_id)) return 3
+         -- }         
+         ts_get(i, (char *) ...)
+
+ -------------------------------------------------------------------------------------}
+
+
   
 
 cg_mk_call zir_nm (Cast (n,t1) (m,t2)) = 
