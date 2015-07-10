@@ -63,30 +63,41 @@ cgDeclQueues = error "foo"
 lblOfNid :: Int -> CLabel
 lblOfNid x = "BLOCK_" ++ show x
 
-extractQueues :: Automaton SymAtom Int -> Map EId Int
--- | Extract all introduced queues 
+-- | Datatype with queue information of this automaton 
+data QueueInfo 
+  = QI { qi_inch   :: EId          -- ^ Input queue 
+       , qi_outch  :: EId          -- ^ Output queue
+       , qi_interm :: Map EId Int  -- ^ Intermediate queues and max sizes
+       }
+
+extractQueues :: Automaton SymAtom Int -> Map EId Int  -- should return QueueInfo
+-- | Extract all introduced queues, and for each 
+-- calculate the maximum size we should allocate it with. 
 extractQueues auto = unionsWith max pre
   where pre = map extract_queue (Map.elems (auto_graph auto))
-        extract_queue (Action atoms _ init_pipes) = updatePipes atoms init_pipes
-        extract_queue _ = Map.empty 
+        extract_queue (Action atoms _ init_pipes) = update_pipes atoms init_pipes
+        extract_queue _ = Map.empty
 
-updatePipes :: [WiredAtom SymAtom] -> Map Chan Int -> Map Chan Int
-updatePipes watoms pipes 
-  = Map.map snd $ foldl upd_one (Map.map (\r -> (r,r)) pipes) watoms
-  where upd ps wa = Map.mapWithKey (\q (cur,m) -> 
+        update_pipes :: [WiredAtom SymAtom] -> Map Chan Int -> Map Chan Int
+        update_pipes watoms pipes 
+          = Map.map snd $ foldl upd_one (Map.map (\r -> (r,r)) pipes) watoms
+          where upd ps wa = 
+                   Map.mapWithKey (\q (cur,m) -> 
                        let cur' = cur + countWrite q wa - countRead q wa
                            m'   = max m cur'
                        in (cur',m')) ps
 
+
+
 cgAutomaton :: DynFlags 
-            -> RnSt       -- ^ Record global declarations
-            -> Automaton SymAtom Int
-            -> Cg CLabel
+            -> RnSt                   -- ^ Records all variables (but no queues)
+            -> Automaton SymAtom Int  -- ^ The automaton
+            -> Cg CLabel              -- ^ Label of starting state we jump to
 cgAutomaton dfs st (Automaton { auto_graph   = graph
                               , auto_inchan  = inch
                               , auto_outchan = outch 
                               , auto_start   = start })
-  = do cgRnSt st $ cgDeclareQueues qs $ cg_automaton
+  = do cgRnSt st $ cgDeclareQueues inch outch qs $ cg_automaton
        return $ lblOfNid start
   where 
    cg_automaton = Map.map cg_node graph
@@ -100,14 +111,16 @@ cgAutomaton dfs st (Automaton { auto_graph   = graph
                        else goto $id:(lblOfNid r);|]
 
    cg_nkind (Action atoms next pipes) = do 
-     let qs = inch : outch : Map.keys pipes
-     mapM (cgAtom dfs qs) atoms
+     let qs = Map.keys pipes
+     mapM (cgAtom dfs inch outch qs) atoms
      appendStmt [cstm| goto $id:(lblOfNid next);|]
 
-cgAtom :: DynFlags 
-       -> [EId] -- Which variables are actually queues
+cgAtom :: DynFlags
+       -> EId   -- *The* program input channel (src)
+       -> EId   -- *The* program output channel (snk)
+       -> [EId] -- All intermediate queues introduced
        -> WiredAtom SymAtom -> Cg ()
-cgAtom dfs qs (WiredAtom win wout the_atom) = do
+cgAtom dfs inch outch qs (WiredAtom win wout the_atom) = do
    -- Create a new function declaration and get back C name 
    ziria_nm <- cg_atom the_atom   
    cg_wiring qs win wout (cg_mk_call ziria_nm)
