@@ -14,8 +14,8 @@ import Outputable
 import Text.PrettyPrint.HughesPJ
 
 
-data SymAtom = SAExp (AExp ())
-             | SAExpIgnoreRet (AExp ())
+data SymAtom = SAExp [EId] (AExp ())
+             | SAExpIgnoreRet [EId] (AExp ())
              | SACast (Int,Ty) (Int,Ty) 
              | SADiscard (Int,Ty)
   deriving Eq
