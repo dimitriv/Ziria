@@ -75,9 +75,7 @@ data Automaton atom nid
               , auto_outchan :: Chan
               , auto_start   :: nid
               }
-
-instance (Atom atom, Show nid) => Show (Automaton atom nid) where
-  show = dotOfAuto True
+  deriving Show
 
 
 data WiredAtom atom
@@ -306,10 +304,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       return $ assert (auto_closed a2) $ assert (auto_closed a) a
 
     go (APar _ c1 t c2) = do
-      let getName = takeWhile (/= '.') . reverse . takeWhile (/= '\\') . takeWhile (/= '/') . reverse
-      let pipe_name = List.intercalate ">>>" $ 
-                      map (getName . PPR.render . ppr) [get_loc (Left ()) c1,  get_loc (Right ()) c2]
-      pipe_ch <- freshName sym pipe_name loc t Mut
+      pipe_ch <- freshName sym (pipeName c1 c2) loc t Mut
       let k1 = mkDoneAutomaton (in_chan chans) pipe_ch
       let k2 = mkDoneAutomaton pipe_ch (out_chan chans)
       a1 <- mkAutomaton dfs sym (chans {out_chan = pipe_ch}) c1 k1
@@ -360,11 +355,16 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       let a = a0 { auto_graph = Map.insert nid (Node nid nkind) (auto_graph a0)}
       return $ assert (auto_closed a0) $ assert (auto_closed a) a
 
-    get_loc side c
+
+    -- pipe name
+    pipeName c1 c2 = List.intercalate ">>>" $ 
+                     map (getName . PPR.render . ppr) [parLoc (Left ()) c1, parLoc (Right ()) c2]
+    getName = takeWhile (/= '.') . reverse . takeWhile (/= '\\') . takeWhile (/= '/') . reverse
+    parLoc side c
       | APar _ cl _ cr <- acomp_comp c
-      , Left () <- side = get_loc side cr
+      , Left c0 <- side = parLoc side cr
       | APar _ cl _ cr <- acomp_comp c
-      , Right () <- side = get_loc side cl
+      , Right () <- side = parLoc side cl
       | otherwise = acomp_loc c
 
 
@@ -583,9 +583,11 @@ nextPipes watoms pipes = Map.mapWithKey updatePipe pipes
   where updatePipe pipe n = n + sum (map (countWrites pipe) watoms)
                               - sum (map (countReads pipe) watoms)
 
-dotOfAuto :: (Atom e, Show nid) => Bool -> Automaton e nid -> String
-dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfix
+dotOfAuto :: (Atom e, Show nid) => DynFlags -> Automaton e nid -> String
+dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfix
   where
+    printActions = isDynFlagSet dflags Verbose
+    printPipeNames = isDynFlagSet dflags PrintPipeNames
     prefix = "digraph ziria_automaton {\n"
     postfix = ";\n}"
     nodes = ("node [shape = point]":start) ++
@@ -605,7 +607,7 @@ dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ p
     showNode (Node nid nk) = "  " ++ show nid ++ "[label=\"" ++ showNk nk ++ "\"]"
 
     showNk (Action watoms _ pipes)
-      | showActions = List.intercalate "\\n" (showPipes watoms pipes : showWatoms watoms)
+      | printActions = List.intercalate "\\n" (showPipes watoms pipes : showWatoms watoms)
       | otherwise = showPipes watoms pipes
     showNk (AutomataModel.Branch x _ _ True) = "WHILE<" ++ show x ++ ">"
     showNk (AutomataModel.Branch x _ _ False) = "IF<" ++ show x ++ ">"
@@ -616,10 +618,15 @@ dotOfAuto showActions a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ p
     showWatomGroup wa = case length wa of 1 -> show (head wa) 
                                           n -> show n ++ " TIMES DO " ++ show (head wa)
 
-    showPipes watoms pipes = render $ punctuateH top (text " | ") $ boxedPipes
-      where boxedPipes = map boxPipe $ Map.toAscList $
-                         Map.intersectionWith (,) pipes (nextPipes watoms pipes)
-            boxPipe (pipe, state) = vcat center1 $ map text [show pipe, show state]
+    showPipes watoms pipes 
+      | printPipeNames = render $ punctuateH top (text " | ") $ boxedPipes
+      | otherwise     = List.intercalate "\\n" $ map printPipes [pipes, nextPipes watoms pipes]
+        where
+          boxedPipes = map boxPipe $ Map.toAscList $
+                       Map.intersectionWith (,) pipes (nextPipes watoms pipes)
+          boxPipe (pipe, state) = vcat center1 $ map text [show pipe, show state]
+          printPipes = List.intercalate "|" . map printPipe . Map.toAscList
+          printPipe (_pipe_ch, val) = show val
 
 
 {-------------------- Top-level pipeline ---------------------------}

@@ -65,7 +65,7 @@ data DynFlag =
   | DumpAst
   | DumpAstPretty
   | DumpAutomaton
-  | DumpBlocks
+  | PrintPipeNames
 
   | Vectorize
   | AutoLUT
@@ -171,7 +171,7 @@ options =
      , Option []    ["ddump-ast"]        (NoArg DumpAst)       "dump the parsed AST"
 
      , Option []    ["ddump-automaton"]  (NoArg DumpAutomaton) "dump automaton for Atomix"
-     , Option []    ["ddump-blocks"]  (NoArg DumpBlocks) "dump code blocks for Atomix"
+     , Option []    ["print-pipe-names"]  (NoArg PrintPipeNames) "show names of pipes in Automaton"
 
 
      , Option []    ["ddump-ast-pretty"] (NoArg DumpAstPretty) "dump the parsed AST (pretty-printed)"
