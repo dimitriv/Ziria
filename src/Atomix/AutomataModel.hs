@@ -593,7 +593,7 @@ dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfi
     nodes = ("node [shape = point]":start) ++
             ("node [shape = doublecircle]":final) ++
             ("node [shape = box]":decision) ++
-            ("node [shape = box, fontname=monospace, fontsize=11]":action)
+            ("node [shape = box, fontname=monospace, fontsize=11, style=filled, fillcolor=\"white\"]":action)
     start = ["start [label=\"\"]"]
     (finalN,normalN) = List.partition (\(Node _ nk) -> case nk of { Done -> True; _ -> False }) $ Map.elems (auto_graph a)
     (actionN,decisionN) = List.partition (\(Node _ nk) -> case nk of { Action {} -> True; _ -> False }) normalN
@@ -604,7 +604,7 @@ dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfi
     edges_of_node node = List.intercalate "; " [edge (node_id node) suc | suc <- sucs node]
     edge nid1 nid2 = show nid1 ++ " -> " ++ show nid2
 
-    showNode (Node nid nk) = "  " ++ show nid ++ "[label=\"" ++ showNk nk ++ "\"]"
+    showNode (Node nid nk) = "  " ++ show nid ++ "[label=\"" ++ showNk nk ++ "\"" ++ maybeToolTip nk ++ "]"
 
     showNk (Action watoms _ pipes)
       | printActions = List.intercalate "\\n" (showPipes watoms pipes : showWatoms watoms)
@@ -628,6 +628,9 @@ dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfi
           printPipes = List.intercalate "|" . map printPipe . Map.toAscList
           printPipe (_pipe_ch, val) = show val
 
+    maybeToolTip (Action watoms _ pipes) = " tooltip=\"" ++ showPipeNames pipes ++ "\""
+    maybeToolTip _ = ""
+    showPipeNames = List.intercalate " | " . map show . Map.keys 
 
 {-------------------- Top-level pipeline ---------------------------}
 
