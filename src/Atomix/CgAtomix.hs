@@ -57,9 +57,6 @@ cgRnSt :: RnStr -> Cg a -> Cg a
 cgRnSt = error "foo"
 
 
-cgDeclQueues :: Map EId Int -> Cg a -> Cg a
-cgDeclQueues = error "foo" 
-
 lblOfNid :: Int -> CLabel
 lblOfNid x = "BLOCK_" ++ show x
 
@@ -70,10 +67,18 @@ data QueueInfo
        , qi_interm :: Map EId Int  -- ^ Intermediate queues and max sizes
        }
 
-extractQueues :: Automaton SymAtom Int -> Map EId Int  -- should return QueueInfo
--- | Extract all introduced queues, and for each 
--- calculate the maximum size we should allocate it with. 
-extractQueues auto = unionsWith max pre
+-- | Declare queues 
+cgDeclQueues :: QueueInfo -> Cg a -> Cg a
+cgDeclQueues = error "foo" 
+
+-- | Extract all introduced queues, and for each calculate the maximum
+-- size we should allocate it with.
+extractQueues :: Automaton SymAtom Int -> QueueInfo
+extractQueues auto 
+  = QI { qi_inchan  = auto_inchan auto
+       , qi_outchan = auto_outchan auto
+       , qi_interm  = unionsWith max pre
+       }
   where pre = map extract_queue (Map.elems (auto_graph auto))
         extract_queue (Action atoms _ init_pipes) = update_pipes atoms init_pipes
         extract_queue _ = Map.empty
@@ -88,39 +93,57 @@ extractQueues auto = unionsWith max pre
                        in (cur',m')) ps
 
 
-
 cgAutomaton :: DynFlags 
             -> RnSt                   -- ^ Records all variables (but no queues)
             -> Automaton SymAtom Int  -- ^ The automaton
             -> Cg CLabel              -- ^ Label of starting state we jump to
-cgAutomaton dfs st (Automaton { auto_graph   = graph
-                              , auto_inchan  = inch
-                              , auto_outchan = outch 
-                              , auto_start   = start })
-  = do cgRnSt st $ cgDeclareQueues inch outch qs $ cg_automaton
-       return $ lblOfNid start
+cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
+                                   , auto_inchan  = inch
+                                   , auto_outchan = outch 
+                                   , auto_start   = start })
+  = do cgRnSt st $ cgDeclareQueues queues $ cg_automaton
+       return (lblOfNid start)
   where 
+   queues = extractQueues auto
+
    cg_automaton = Map.map cg_node graph
-   cg_node (Node nid nk) 
-     = appendLabeledBlock (lblOfNid nid) (cg_nkind nk)
-   cg_nkind Done        = appendStmt [cstm| return 0; |]
-   cg_nkind (Loop next) = appendStmt [cstm| goto $id:(lblOfNid next);|]
+   cg_node (Node nid nk) = appendLabeledBlock (lblOfNid nid) (cg_nkind nk)
+   cg_nkind Done         = appendStmt [cstm| return 0; |]
+   cg_nkind (Loop next)  = appendStmt [cstm| goto $id:(lblOfNid next);|]
    cg_nkind (Branch c l r _) = do
      cc <- lookupVarEnv c
-     appendStmt [cstm| if ($cc) goto $id:(lblOfNid l)
-                       else goto $id:(lblOfNid r);|]
+     appendStmt [cstm| if ($cc) goto $id:(lblOfNid l) else goto $id:(lblOfNid r);|]
 
    cg_nkind (Action atoms next pipes) = do 
      let qs = Map.keys pipes
-     mapM (cgAtom dfs inch outch qs) atoms
+     mapM (cgAtom dfs queues) atoms
      appendStmt [cstm| goto $id:(lblOfNid next);|]
 
+
+-- | Code generation for an atom
 cgAtom :: DynFlags
-       -> EId   -- *The* program input channel (src)
-       -> EId   -- *The* program output channel (snk)
-       -> [EId] -- All intermediate queues introduced
-       -> WiredAtom SymAtom -> Cg ()
-cgAtom dfs inch outch qs (WiredAtom win wout the_atom) = do
+       -> QueueInfo         -- ^ Queues of this program
+       -> WiredAtom SymAtom -- ^ The wired atom
+       -> Cg ()
+cgAtom dfs qnfo (WiredAtom win wout the_atom) 
+  = case the_atom of
+      SAExp aexp          -> cgAExpAtom dfs qnfo win wout False aexp
+      SAExpIgnoreRet aexp -> cgAExpAtom dfs qnfo win wout True  aexp
+      SACast intty outty  -> cgCastAtom dfs qnfo win wout inty outty
+      SADiscard inty      -> cgDiscAtom dfs qnfo win wout inty 
+
+******** here ************* 
+cgAExpAtom :: DynFlags
+           -> QueueInfo
+           -> [(Int,EId)] -- ^ in wires
+           -> [(Int,EId)] -- ^ out wires
+           -> Bool        -- ^ True <-> IgnoreRet
+           -> AExp ()
+           -> Cg ()
+cgAExpAtom dfs qnfo wins wouts aexp = 
+
+
+= do
    -- Create a new function declaration and get back C name 
    ziria_nm <- cg_atom the_atom   
    cg_wiring qs win wout (cg_mk_call ziria_nm)
@@ -169,9 +192,7 @@ cg_mk_call zir_nm (Cast (n,t1) (m,t2)) =
     
 
 cg_wiring qs win wout m = do
-  cg_wire_inputs win
-  m 
-  cg_wire_outputs win
+  cg_wire_inputs win >> m cg_wire_outputs win
 
 cg_wire_inputs qs win = mapM cg_wire_input win
   where cg_wire_input (n,x)
