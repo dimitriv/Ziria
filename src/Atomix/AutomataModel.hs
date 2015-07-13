@@ -1,5 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FlexibleContexts #-}
 module AutomataModel where
 
 import Data.Bool
@@ -35,7 +36,7 @@ type Chan = EId
 showVar withUnique var = name var ++ (if withUnique then "$" ++ show (uniqId var) else "")
 showChan = showVar
 
-data NodeKind atom nid
+data ZirNk atom nid
   = Action { action_atoms :: [WiredAtom atom]
            , action_next  :: nid
            , action_pipeline_balance :: Map Chan Int -- initial balance of pipeline queues
@@ -48,7 +49,7 @@ data NodeKind atom nid
   | Loop { loop_body :: nid } -- Infinite loop. Only transformers may (and must!) contain one of these.
   | Done
 
-instance (Atom atom, Show nid) => Show (NodeKind atom nid) where
+instance (Atom atom, Show nid) => Show (ZirNk atom nid) where
   show (Action was next _) = "Action" ++ show was ++ "->" ++ (show next) ++ ""
   show (AutomataModel.Branch x n1 n2 True) = "While[" ++ show x ++ "]->(" ++ (show n1) ++ "," ++ (show n2) ++ ")"
   show (AutomataModel.Branch x n1 n2 False) = "If[" ++ show x ++ "]->(" ++ (show n1) ++ "," ++ (show n2) ++ ")"
@@ -58,24 +59,28 @@ instance (Atom atom, Show nid) => Show (NodeKind atom nid) where
   -- TODO: think about this later
   -- | StaticLoop  { iterations :: Int, loop_body :: Automaton }
 
-data Node atom nid
+data Node atom nid nkind
   = Node { node_id   :: nid
-         , node_kind :: NodeKind atom nid
+         , node_kind :: nkind atom nid
          }
 
-instance (Atom atom, Show nid) => Show (Node atom nid) where
+instance (Atom atom, Show nid, Show (nkind atom nid)) => Show (Node atom nid nkind) where
   show (Node nid nk) = "<" ++ (show nid) ++ ":" ++ (show nk) ++ ">"
 
-type NodeMap atom nid = Map nid (Node atom nid)
+type NodeMap atom nid nkind = Map nid (Node atom nid nkind)
 
 
-data Automaton atom nid
-  = Automaton { auto_graph   :: NodeMap atom nid
+data Automaton atom nid nkind
+  = Automaton { auto_graph   :: NodeMap atom nid nkind
               , auto_inchan  :: Chan
               , auto_outchan :: Chan
               , auto_start   :: nid
               }
   deriving Show
+
+type ZAuto atom nid = Automaton atom nid ZirNk
+type ZNode atom nid = Node atom nid ZirNk
+type ZNodeMap atom nid = NodeMap atom nid ZirNk
 
 
 data WiredAtom atom
@@ -137,36 +142,46 @@ class (Show a, Eq a) => Atom a where
 --
 --
 
+class NodeKind nkind where
+  sucsOfNk :: nkind a nid -> [nid]
+  mapNkIds :: (nid1 -> nid2) -> nkind a nid1 -> nkind a nid2
 
+instance NodeKind ZirNk where
+  sucsOfNk Done = []
+  sucsOfNk (Loop nxt)  = [nxt]
+  sucsOfNk (Action _ nxt _) = [nxt]
+  sucsOfNk (AutomataModel.Branch _ nxt1 nxt2 _) = [nxt1,nxt2]
+
+  mapNkIds _ Done = Done
+  mapNkIds f (Loop nxt)  = Loop (f nxt)
+  mapNkIds f (Action watoms nxt pipes) = Action watoms (f nxt) pipes
+  mapNkIds f (AutomataModel.Branch x nxt1 nxt2 l) = AutomataModel.Branch x (f nxt1) (f nxt2) l
 
 
 
 -- auxilliary functions for automata construction & manipulation
-size :: Automaton atom nid -> Int
+size :: Automaton atom nid nkind -> Int
 size = Map.size . auto_graph
 
-sucs :: Node atom nid -> [nid]
-sucs (Node _ Done) = []
-sucs (Node _ (Loop nxt)) = [nxt]
-sucs (Node _ (Action _ nxt _)) = [nxt]
-sucs (Node _ (AutomataModel.Branch _ nxt1 nxt2 _)) = [nxt1,nxt2]
+sucs :: NodeKind nkind => Node atom nid nkind -> [nid]
+sucs (Node _ nk) = sucsOfNk nk
 
-nextNid :: Automaton atom Int -> Int
+nextNid :: Automaton atom Int nkind -> Int
 nextNid a = max+1
   where (max,_) = Map.findMax (auto_graph a)
 
-insert_prepend :: NodeKind atom Int -> Automaton atom Int -> Automaton atom Int
+insert_prepend :: nkind atom Int -> Automaton atom Int nkind -> Automaton atom Int nkind
 insert_prepend nkind a = -- this may be too strict -- ensure auto_closed $
   a { auto_graph = Map.insert nid (Node nid nkind) (auto_graph a)
     , auto_start = nid }
   where nid = nextNid a
 
-nodeKindOfId :: Ord nid => nid -> Automaton atom nid -> NodeKind atom nid
+nodeKindOfId :: Ord nid => nid -> Automaton atom nid nkind -> nkind atom nid
 nodeKindOfId nid a = node_kind $ fromJust $ assert (Map.member nid (auto_graph a)) $
                                             Map.lookup nid (auto_graph a)
 
 -- precondition: a1 and a2 must agree on auto_inchan and auto_outchan
-concat_auto :: Atom atom => Show nid1 => Ord nid1 => Automaton atom nid1 -> Automaton atom Int -> Automaton atom Int
+concat_auto :: Atom atom => Ord nid => ZAuto atom nid -> ZAuto atom Int -> ZAuto atom Int
 concat_auto a1 a2 = a1' { auto_graph = concat_graph }
   where
     a1' = replace_done_with (auto_start a2) $ normalize_auto_ids (nextNid a2) a1
@@ -177,7 +192,7 @@ concat_auto a1 a2 = a1' { auto_graph = concat_graph }
                    assert (Map.null $ Map.intersection graph1 graph2) $
                    Map.union graph1 graph2
 
-mkDoneAutomaton :: Chan -> Chan -> Automaton e Int
+mkDoneAutomaton :: Chan -> Chan -> ZAuto e Int
 mkDoneAutomaton ic oc
   = Automaton { auto_graph = Map.singleton 0 (Node 0 Done), auto_start = 0
               , auto_outchan = oc
@@ -187,30 +202,24 @@ mkDoneAutomaton ic oc
 
 -- Mapping Automata Labels
 
-map_node_ids :: Ord nid1 => Ord nid2 => (nid1 -> nid2) -> Node e nid1 -> Node e nid2
-map_node_ids map_id (Node nid nkind) = Node (map_id nid) (map_nkind nkind)
-  where
-    map_nkind Done =  Done
-    map_nkind (Loop bodyId) = Loop (map_id bodyId)
-    map_nkind (Action atoms nextId pipes) = Action atoms (map_id nextId) pipes
-    map_nkind (AutomataModel.Branch x left right is_while) =
-      AutomataModel.Branch x (map_id left) (map_id right) is_while
+map_node_ids :: NodeKind nk => (nid1 -> nid2) -> Node e nid1 nk -> Node e nid2 nk
+map_node_ids map_id (Node nid nkind) = Node (map_id nid) (mapNkIds map_id nkind)
 
-map_auto_ids :: Ord nid1 => Ord nid2 => (nid1 -> nid2) -> Automaton e nid1 -> Automaton e nid2
+map_auto_ids :: (NodeKind nk, Ord nid1, Ord nid2) => (nid1 -> nid2) -> Automaton e nid1 nk -> Automaton e nid2 nk
 map_auto_ids map_id a = a { auto_graph = new_graph, auto_start = new_start }
  where
     new_start = map_id (auto_start a)
     new_graph = Map.mapKeys map_id $ Map.map (map_node_ids map_id) $ auto_graph a
 
 -- replaces arbitrary automata node-ids with Ints >= first_id
-normalize_auto_ids :: Atom e => Ord nid => Show nid => Int -> Automaton e nid -> Automaton e Int
+normalize_auto_ids :: (NodeKind nk, Atom e, Ord nid) => Int -> Automaton e nid nk -> Automaton e Int nk
 normalize_auto_ids first_id a = map_auto_ids map_id a
   where
     map_id nid = fromJust $ assert (Map.member nid normalize_map) $ Map.lookup nid normalize_map
     (_, normalize_map) = Map.foldrWithKey f (first_id, Map.empty) (auto_graph a)
     f nid _ (counter, nid_map) = (counter+1, Map.insert nid counter nid_map)
 
-replace_done_with :: Ord nid => nid -> Automaton e nid -> Automaton e nid
+replace_done_with :: Ord nid => nid -> ZAuto e nid -> ZAuto e nid
 replace_done_with nid a = map_auto_ids (\nid -> Map.findWithDefault nid nid replace_map) a
   where
     replace_map = Map.foldr fold_f Map.empty (auto_graph a)
@@ -219,15 +228,13 @@ replace_done_with nid a = map_auto_ids (\nid -> Map.findWithDefault nid nid repl
 
 
 -- debugging
-auto_closed :: Ord nid => Automaton e nid -> Bool
+auto_closed :: (NodeKind nk, Ord nid) => Automaton e nid nk -> Bool
 auto_closed a = Map.foldrWithKey node_closed (isDefined $ auto_start a) (auto_graph a)
   where
     isDefined nid = Map.member nid (auto_graph a)
-    node_closed nid (Node nid' nkind) = (&&) (nid==nid' && isDefined nid && nkind_closed nkind)
-    nkind_closed Done = True
-    nkind_closed (Loop nid) = isDefined nid
-    nkind_closed (Action _ nid _) = isDefined nid
-    nkind_closed (AutomataModel.Branch _ nid1 nid2 _) = isDefined nid1 && isDefined nid2
+    node_closed nid (Node nid' nkind) closed = closed && nid==nid' &&
+      foldl suc_closed (isDefined nid) (sucsOfNk nkind)
+    suc_closed closed suc = closed && isDefined suc
 
 
 -- Constructing Automata from Ziria Comps
@@ -242,8 +249,8 @@ mkAutomaton :: Atom e
             -> GS.Sym
             -> Channels  -- i/o/ctl channel
             -> AComp a ()
-            -> Automaton e Int -- what to do next (continuation)
-            -> IO (Automaton e Int)
+            -> ZAuto e Int -- what to do next (continuation)
+            -> IO (ZAuto e Int)
 mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
   where
     loc = acomp_loc comp
@@ -381,7 +388,7 @@ type Balance = Int
 
 -- Precondition: a1 and a2 should satisfy (auto_outchan a1) == (auto_inchan a2)
 -- a1 and a2 MUST NOT contain explicit loop nodes (but may contain loops)!!
-zipAutomata :: forall e. Atom e => Automaton e Int -> Automaton e Int -> Automaton e Int -> Automaton e Int
+zipAutomata :: forall e. Atom e => ZAuto e Int -> ZAuto e Int -> ZAuto e Int -> ZAuto e Int
 zipAutomata a1 a2 k = concat_auto prod_a k
   where
     prod_a = (\a -> assert (auto_closed a) a) $
@@ -395,7 +402,7 @@ zipAutomata a1 a2 k = concat_auto prod_a k
 
 
     -- this allows us to address nodes in the input automata using (base_id,offset) pairs
-    lookup :: (Int,Int) -> Automaton e Int -> Node e (Int,Int)
+    lookup :: (Int,Int) -> ZAuto e Int -> ZNode e (Int,Int)
     lookup nid@(baseId,offset) a =
       case fromJust $ assert (Map.member baseId (auto_graph a)) $ Map.lookup baseId (auto_graph a) of
         Node _ (Action watoms next pipes) ->
@@ -409,13 +416,13 @@ zipAutomata a1 a2 k = concat_auto prod_a k
           assert (offset == 0) $ map_node_ids (\id -> (id,0)) node
 
 
-    zipNodes :: Balance -> (Int,Int) -> (Int,Int) -> NodeMap e ProdNid -> NodeMap e ProdNid
+    zipNodes :: Balance -> (Int,Int) -> (Int,Int) -> ZNodeMap e ProdNid -> ZNodeMap e ProdNid
     zipNodes balance nid1 nid2 prod_nmap =
       case Map.lookup (balance,nid1,nid2) prod_nmap of
         Nothing -> zipNodes' balance (lookup nid1 a1) (lookup nid2 a2) prod_nmap
         Just _ -> prod_nmap -- We have already seen this product location. We're done!
 
-    zipNodes' :: Balance -> Node e (Int,Int) -> Node e (Int,Int) -> NodeMap e ProdNid -> NodeMap e ProdNid
+    zipNodes' :: Balance -> ZNode e (Int,Int) -> ZNode e (Int,Int) -> ZNodeMap e ProdNid -> ZNodeMap e ProdNid
     zipNodes' balance (Node id1 Done) (Node id2 _) prod_nmap =
       let prod_nid = (balance,id1,id2)
       in Map.insert prod_nid (Node prod_nid Done) prod_nmap
@@ -454,7 +461,7 @@ zipAutomata a1 a2 k = concat_auto prod_a k
           prod_node = Node prod_nid prod_nkind
       in zipNodes balance' next1 next2 $ Map.insert prod_nid prod_node prod_nmap
 
-    zipActions :: Balance -> Node atom (Int,Int) -> Node atom (Int,Int) -> ([WiredAtom atom], Int, (Int,Int), (Int,Int))
+    zipActions :: Balance -> ZNode atom (Int,Int) -> ZNode atom (Int,Int) -> ([WiredAtom atom], Int, (Int,Int), (Int,Int))
     zipActions balance (Node (base1,offset1) (Action watoms1 next1 _)) (Node (base2,offset2) (Action watoms2 next2 _))
       = tickRight [] balance watoms1 watoms2 offset1 offset2
       where
@@ -513,12 +520,12 @@ isDone nid = do
 
 -- Fuses actions sequences in automata. This brings automata into a from that
 -- is convenient for printing and further processing.
-fuseActions :: forall atom nid. Ord nid => Automaton atom nid -> Automaton atom nid
+fuseActions :: forall atom nid. Ord nid => ZAuto atom nid -> ZAuto atom nid
 fuseActions auto = auto { auto_graph = fused_graph }
   where
     fused_graph = fst $ runState (doAll [auto_start auto] (auto_graph auto)) (Set.empty, Set.empty)
 
-    doAll :: [nid] -> NodeMap atom nid -> MarkingM nid (NodeMap atom nid)
+    doAll :: [nid] -> ZNodeMap atom nid -> MarkingM nid (ZNodeMap atom nid)
     doAll work_list nmap =
       case work_list of
         [] -> return nmap
@@ -532,7 +539,7 @@ fuseActions auto = auto { auto_graph = fused_graph }
    --  (a) a decision node (i.e. not an action node), or
     -- (b) an action node with its next node being a decision node
 
-    markAndFuse :: nid -> NodeMap atom nid -> MarkingM nid ([nid], NodeMap atom nid)
+    markAndFuse :: nid -> ZNodeMap atom nid -> MarkingM nid ([nid], ZNodeMap atom nid)
     markAndFuse nid nmap = do
       done <- isDone nid
       if done
@@ -541,7 +548,7 @@ fuseActions auto = auto { auto_graph = fused_graph }
 
 
     -- precondition: input node is marked active
-    fuse :: Node atom nid -> NodeMap atom nid -> MarkingM nid ([nid], NodeMap atom nid)
+    fuse :: ZNode atom nid -> ZNodeMap atom nid -> MarkingM nid ([nid], ZNodeMap atom nid)
     fuse (Node _ Done) nmap = return ([],nmap)
     fuse (Node _ (Loop b)) nmap = return ([b],nmap)
     fuse (Node _ (AutomataModel.Branch _ b1 b2 _)) nmap = return ([b1,b2],nmap)
@@ -560,7 +567,7 @@ fuseActions auto = auto { auto_graph = fused_graph }
             Node _ _ -> (wl,nmap)
 
 
-deleteDeadNodes :: Ord nid => Automaton e nid -> Automaton e nid
+deleteDeadNodes :: (NodeKind nk, Ord nid) => Automaton e nid nk -> Automaton e nid nk
 deleteDeadNodes auto = auto { auto_graph = insertRecursively Map.empty (auto_start auto)}
   where
     insertRecursively nmap nid
@@ -571,7 +578,7 @@ deleteDeadNodes auto = auto { auto_graph = insertRecursively Map.empty (auto_sta
             Just node -> List.foldl insertRecursively (Map.insert nid node nmap) (sucs node)
 
 
-markSelfLoops :: Automaton e Int -> Automaton e Int
+markSelfLoops :: ZAuto e Int -> ZAuto e Int
 markSelfLoops a = a { auto_graph = go (auto_graph a)}
   where go nmap = Map.foldr markNode nmap nmap
         markNode (Node nid nk@(Action watoms next _)) nmap
@@ -581,7 +588,7 @@ markSelfLoops a = a { auto_graph = go (auto_graph a)}
         markNode _ nmap = nmap
 
 
-predecessors :: forall e nid. Ord nid => Automaton e nid -> Map nid (Set nid)
+predecessors :: forall e nid nk. (NodeKind nk, Ord nid) => Automaton e nid nk -> Map nid (Set nid)
 predecessors a = go (auto_start a) Map.empty
   where
     nmap = auto_graph a
@@ -594,18 +601,18 @@ predecessors a = go (auto_start a) Map.empty
 
 
 -- prune action that are known to be unreachable
-pruneUnreachable :: forall e nid. (Atom e, Ord nid) => nid -> Automaton e nid -> Automaton e nid
+pruneUnreachable :: forall e nid. (Atom e, Ord nid) => nid -> ZAuto e nid -> ZAuto e nid
 pruneUnreachable nid a = a { auto_graph = prune (auto_graph a) nid }
   where
     preds = let predMap = predecessors a in (\nid -> fromJust $ Map.lookup nid predMap)
 
-    prune :: NodeMap e nid -> nid -> NodeMap e nid
+    prune :: ZNodeMap e nid -> nid -> ZNodeMap e nid
     prune nmap nid = 
       case Map.lookup nid nmap of
         Nothing -> nmap -- already pruned
         Just _ -> Set.foldl (pruneBkw nid) (Map.delete nid nmap) (preds nid)
 
-    pruneBkw :: nid -> NodeMap e nid -> nid -> NodeMap e nid
+    pruneBkw :: nid -> ZNodeMap e nid -> nid -> ZNodeMap e nid
     pruneBkw suc nmap nid =
       case Map.lookup nid nmap of
         Nothing -> nmap
@@ -629,7 +636,7 @@ nextPipes watoms pipes = Map.mapWithKey updatePipe pipes
   where updatePipe pipe n = n + sum (map (countWrites pipe) watoms)
                               - sum (map (countReads pipe) watoms)
 
-dotOfAuto :: (Atom e, Show nid) => DynFlags -> Automaton e nid -> String
+dotOfAuto :: (Atom e, Show nid) => DynFlags -> ZAuto e nid -> String
 dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfix
   where
     printActions = isDynFlagSet dflags Verbose
@@ -680,7 +687,7 @@ dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfi
 
 {-------------------- Top-level pipeline ---------------------------}
 
-automatonPipeline :: Atom e => DynFlags -> GS.Sym -> Ty -> Ty -> AComp () () -> IO (Automaton e Int)
+automatonPipeline :: Atom e => DynFlags -> GS.Sym -> Ty -> Ty -> AComp () () -> IO (ZAuto e Int)
 automatonPipeline dfs sym inty outty acomp = do
   inch  <- freshName sym "src"  (acomp_loc acomp) inty Imm
   outch <- freshName sym "snk" (acomp_loc acomp) outty Mut
