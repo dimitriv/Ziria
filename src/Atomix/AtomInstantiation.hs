@@ -18,6 +18,7 @@ data SymAtom = SAExp (AExp ())
              | SAExpIgnoreRet (AExp ())
              | SACast (Int,Ty) (Int,Ty) 
              | SADiscard (Int,Ty)
+             | SAAssert Bool -- assert true and assert false
   deriving Eq
 
 instance Outputable SymAtom where
@@ -31,6 +32,8 @@ instance Outputable SymAtom where
           pprTy n t = ppr n <> text "*" <> ppr t
 
   ppr (SADiscard _) = text "DISCARD"
+
+  ppr (SAAssert b) = text "ASSERT_" <> text (show b)
 
 instance Show SymAtom where
   show sa = render (pprShort sa)
@@ -50,15 +53,17 @@ instance Atom SymAtom where
   atomInTy (SAExpIgnoreRet e) = map ((1,) . nameTyp) (aexp_ivs e)
   atomInTy (SACast inty _)  = [inty]
   atomInTy (SADiscard inty) = [inty]
+  atomInTy (SAAssert _) = [(1,TBool)]
 
   atomOutTy (SAExp e) = (1, aexp_ret e) : map ((1,) . nameTyp) (aexp_ovs e)
   atomOutTy (SAExpIgnoreRet e) = map ((1,) . nameTyp) (aexp_ovs e)
-
   atomOutTy (SACast _ outty) = [outty]
   atomOutTy (SADiscard _)    = []
+  atomOutTy (SAAssert _) = []
 
   castAtom    = SACast
   discardAtom = SADiscard
+  assertAtom = SAAssert
 
   expToWiredAtom :: AExp () -> Maybe EId -> WiredAtom SymAtom
   expToWiredAtom e mb_out = 
@@ -66,4 +71,3 @@ instance Atom SymAtom where
                 , wires_out = map (1,) (maybeToList mb_out ++ aexp_ovs e)
                 , the_atom  = (if isNothing mb_out then SAExpIgnoreRet else SAExp) e
                 }
-                

@@ -110,12 +110,16 @@ class (Show a, Eq a) => Atom a where
   -- Constructors of atoms
   discardAtom :: (Int,Ty) -> a
   castAtom    :: (Int,Ty) -> (Int,Ty) -> a
+  assertAtom :: Bool -> a
 
   -- Getting (wired) atoms from expressions
   expToWiredAtom :: AExp () -> Maybe EId -> WiredAtom a
 
   idAtom      :: Ty -> a
   idAtom t = castAtom (1,t) (1,t)
+
+  assertWAtom :: Bool -> Chan -> WiredAtom a
+  assertWAtom b x = WiredAtom [(1,x)] [] (assertAtom b)
 
 
 --
@@ -575,6 +579,48 @@ markSelfLoops a = a { auto_graph = go (auto_graph a)}
               let nid' = nextNid a
               in Map.insert nid (Node nid (Loop nid')) $ Map.insert nid' (Node nid' nk) $ nmap
         markNode _ nmap = nmap
+
+
+predecessors :: forall e nid. Ord nid => Automaton e nid -> Map nid (Set nid)
+predecessors a = go (auto_start a) Map.empty
+  where
+    nmap = auto_graph a
+    go nid pred_map =
+      foldl (go' nid) pred_map (sucs $ fromJust $ assert (Map.member nid nmap) $ Map.lookup nid nmap)
+    go' pred pred_map nid = 
+      case Map.lookup nid pred_map of
+        Just preds -> Map.insert nid (Set.insert pred preds) pred_map
+        Nothing -> go nid $ Map.insert nid (Set.singleton pred) pred_map
+
+
+-- prune action that are known to be unreachable
+pruneUnreachable :: forall e nid. (Atom e, Ord nid) => nid -> Automaton e nid -> Automaton e nid
+pruneUnreachable nid a = a { auto_graph = prune (auto_graph a) nid }
+  where
+    preds = let predMap = predecessors a in (\nid -> fromJust $ Map.lookup nid predMap)
+
+    prune :: NodeMap e nid -> nid -> NodeMap e nid
+    prune nmap nid = 
+      case Map.lookup nid nmap of
+        Nothing -> nmap -- already pruned
+        Just _ -> Set.foldl (pruneBkw nid) (Map.delete nid nmap) (preds nid)
+
+    pruneBkw :: nid -> NodeMap e nid -> nid -> NodeMap e nid
+    pruneBkw suc nmap nid =
+      case Map.lookup nid nmap of
+        Nothing -> nmap
+        Just (Node _ Done) -> assert False undefined
+        Just (Node _ (Action _ next _)) -> if next==suc then prune nmap nid else nmap
+        Just (Node _ (Loop next)) -> if next==suc then prune nmap nid else nmap
+        Just (Node _ (Branch x suc1 suc2 _)) 
+          | suc == suc1 -> -- suc2 becomes the unique sucessor (since suc1 is unreachable)
+            let nk = Action [assertWAtom False x] suc2 Map.empty
+            in Map.insert nid (Node nid nk) nmap
+          | suc == suc2 -> -- suc1 becomes the unique sucessor (since suc2 is unreachable)
+            let nk = Action [assertWAtom True x] suc1 Map.empty
+            in Map.insert nid (Node nid nk) nmap
+          | otherwise -> assert False undefined
+
 
 
 -- Automata to DOT files
