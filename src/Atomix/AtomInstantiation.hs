@@ -39,10 +39,14 @@ instance Show SymAtom where
   show sa = render (pprShort sa)
 
 pprShort :: SymAtom -> Doc
-pprShort (SAExp e) = ppr (aexp_lbl e)
-pprShort (SAExpIgnoreRet e) = ppr (aexp_lbl e)
+pprShort (SAExp e) =  pprFileLoc (aexp_lbl e)
+pprShort (SAExpIgnoreRet e) = pprFileLoc (aexp_lbl e)
 pprShort sa = ppr sa
 
+pprFileLoc =
+  text . takeWhile (/= '$') .
+  reverse . takeWhile (/= '\\') . takeWhile (/= '/') . reverse .
+  render . ppr
 
 
 {--------------- Instantiation of Atom class -------------}
