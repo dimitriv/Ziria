@@ -248,7 +248,7 @@ main = do
 
         when (isDynFlagSet dflags DumpAutomaton) $ do 
           (ac,_rnst) <- zirToAtomZir dflags sym lc
-          (automaton :: ZAuto SymAtom Int) 
+          (automaton :: CfgAuto SymAtom Int) 
              <- automatonPipeline dflags sym undefined undefined ac
           dump dflags DumpAutomaton (".automaton.dump")
                                     (text $ dotOfAuto dflags automaton)
