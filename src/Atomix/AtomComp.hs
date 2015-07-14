@@ -3,14 +3,9 @@ module AtomComp  where
 import AstExpr 
 import AstComp
 
-
 import Outputable
 import Text.PrettyPrint.HughesPJ
-
-import qualified GenSym as GS
 import Data.Loc
-import qualified Data.List as List
-import Control.Monad.State
 
 data AExp b
   = MkAExp { aexp_lbl :: String  -- ^ unique label
@@ -107,7 +102,7 @@ ppAComp ac = ppAComp0 (acomp_comp ac)
 
 ppAComp0 :: AComp0 a b -> Doc
 ppAComp0 (ATake1 t)   = text "take" <> brackets (ppr t)
-ppAComp0 (ATakeN t n) = text "takes" <+> int n
+ppAComp0 (ATakeN _t n) = text "takes" <+> int n
 ppAComp0 (AEmit1 x)   = text "emit" <+> ppr x
 ppAComp0 (AEmitN _t _n x) = text "emits" <+> ppr x
 ppAComp0 (ACast s (n1,t1) (n2,t2))
@@ -118,7 +113,7 @@ ppAComp0 (ACast s (n1,t1) (n2,t2))
 ppAComp0 (ABind mx c1 c2) = vcat [ ppr mx <+> text "<-" <+> ppr c1 
                                  , ppr c2 ]
 ppAComp0 (AReturn e) = text "ret" <+> braces (ppr e) 
-ppAComp0 (APar p c1 _ c2) = ppr c1 <+> text ">>>" <+> ppr c2
+ppAComp0 (APar _p c1 _ c2) = ppr c1 <+> text ">>>" <+> ppr c2
 ppAComp0 (ABranch x c1 c2) 
   = text "if" <+> ppr x $$
          text "then" <+> ppr c1 $$

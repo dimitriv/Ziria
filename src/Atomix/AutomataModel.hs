@@ -729,12 +729,12 @@ dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfi
   Top-level Pipeline
 ------------------------------------------------------------------------}
 
-zzToZ :: SAuto e nid -> CfgAuto e nid
-zzToZ a = a { auto_graph = Map.map nToZ $ auto_graph a }
-  where nToZ (Node nid nkind) = Node nid (nkToZ nkind)
-        nkToZ SDone = CfgDone
-        nkToZ (SAtom wa nxt pipes) = CfgAction [wa] nxt pipes
-        nkToZ (SBranch x nxt1 nxt2 l) = CfgBranch x nxt1 nxt2 l
+simplToCfg :: SAuto e nid -> CfgAuto e nid
+simplToCfg a = a { auto_graph = Map.map nodeToCfg $ auto_graph a }
+  where nodeToCfg (Node nid nkind) = Node nid (nkToCfg nkind)
+        nkToCfg SDone = CfgDone
+        nkToCfg (SAtom wa nxt pipes) = CfgAction [wa] nxt pipes
+        nkToCfg (SBranch x nxt1 nxt2 l) = CfgBranch x nxt1 nxt2 l
 
 
 automatonPipeline :: Atom e => DynFlags -> GS.Sym -> Ty -> Ty -> AComp () () -> IO (CfgAuto e Int)
@@ -745,7 +745,7 @@ automatonPipeline dfs sym inty outty acomp = do
   let k = mkDoneAutomaton inch outch
 
   putStrLn ">>>>>>>>>> mkAutomaton"
-  a <- zzToZ <$> mkAutomaton dfs sym channels acomp k
+  a <- simplToCfg <$> mkAutomaton dfs sym channels acomp k
   --putStrLn (dotOfAuto True a)
   putStrLn $ "<<<<<<<<<<< mkAutomaton (" ++ show (size a) ++ " states)"
 
