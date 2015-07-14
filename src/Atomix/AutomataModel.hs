@@ -78,9 +78,6 @@ data Automaton atom nid
   deriving Show
 
 
-Wire = Queue EId | Var EId
-
-
 data WiredAtom atom
   = WiredAtom { wires_in  :: [(Int,EId)]      -- [(Int,Wire)]
               , wires_out :: [(Int,EId)]      -- [(Int,Wire)]

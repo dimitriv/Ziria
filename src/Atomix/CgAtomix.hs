@@ -18,79 +18,139 @@
 -}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE RebindableSyntax #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS -Wall -Werror #-}
 module CgAtomix where
 
 
+import AstName
 import AstExpr
-import AstComp
+-- import AstComp
 import AstUnlabelled
 import Utils
-import Control.Applicative ( (<$>) )
-import Outputable 
-import Data.Maybe ( fromJust, isJust )
-import qualified Data.Set as S
-import Control.Monad.Identity
-import Control.Monad.State
+-- import Control.Applicative ( (<$>) )
+-- import Outputable 
+-- import Data.Maybe ( fromJust, isJust )
+-- import qualified Data.Set as S
+
+import Data.Map.Strict ( Map ) 
+import qualified Data.Map.Strict as Map
+
+-- import qualified Language.C.Syntax as C
+import Language.C.Quote.C
+
+-- import Control.Monad.Identity
+-- import Control.Monad.State
 import Data.Loc
-import Text.PrettyPrint.HughesPJ
-import qualified GenSym as GS
+-- import Text.PrettyPrint.HughesPJ
+-- import qualified GenSym as GS
 import Data.List ( nub )
-import CtExpr 
-import CtComp
-import TcRename 
+-- import CtExpr 
+-- import CtComp
+-- import TcRename 
 import AtomComp
 
-import Analysis.DataFlow 
-
+-- import Analysis.DataFlow 
 import Opts
-
 import CgMonad
+import CgTypes
+import CgFun
+import CgExpr
+-- import CgCmdDom
 
-type CLabel = String
+import AtomixCompTransform 
+import AutomataModel
+import AtomInstantiation
 
 
-cgRnSt :: RnStr -> Cg a -> Cg a 
-cgRnSt = error "foo"
-
+cgRnSt :: DynFlags -> RnSt -> Cg a -> Cg a
+cgRnSt dfs (RnSt { st_bound_vars = bound
+                 , st_fundefs    = fdefs
+                 , st_structs    = sdefs }) action
+  = cg_sdefs sdefs $
+    cg_fdefs fdefs $
+    cg_bound bound $ action
+  where
+    cg_sdefs [] m = m
+    cg_sdefs ((_,sd):sds) m = cgStructDef sd (cg_sdefs sds m)
+    cg_fdefs [] m = m
+    cg_fdefs ((_,(fun,clos)):fds) m
+      = cgFunDefined_clos dfs (funLoc fun) fun clos (cg_fdefs fds m)
+    cg_bound [] m = m 
+    cg_bound (x:xs) m = cgMutBind dfs noLoc x Nothing (cg_bound xs m)
 
 lblOfNid :: Int -> CLabel
 lblOfNid x = "BLOCK_" ++ show x
 
+
+mkCastTyArray :: Int -> Ty -> Ty
+mkCastTyArray 1 t = t
+mkCastTyArray n t = TArray (Literal n) t
+
 -- | Datatype with queue information of this automaton 
 data QueueInfo 
-  = QI { qi_inch   :: EId          -- ^ Input queue 
-       , qi_outch  :: EId          -- ^ Output queue
-       , qi_interm :: Map EId Int  -- ^ Intermediate queues and max sizes
+  = QI { qi_inch   :: EId                   -- ^ THE Input queue 
+       , qi_outch  :: EId                   -- ^ THE Output queue
+       , qi_interm :: Map.Map EId (QId,Int) -- ^ Intermediate queues, their ids and max sizes
        }
+
+newtype QId = QId { unQId :: Int }
+data QueueId = QIn | QOut | QMid QId
+
+qiQueueId :: EId -> QueueInfo -> Maybe QueueId
+-- | Return Just the QueueId, if this variable is a queue; Nothing otherwise.
+qiQueueId x qs | x == qi_inch qs  = Just QIn
+qiQueueId x qs | x == qi_outch qs = Just QOut
+qiQueueId x qs | Just (qid,_) <- Map.lookup x (qi_interm qs) = Just (QMid qid)
+qiQueueId _ _ = Nothing
+
 
 -- | Declare queues 
 cgDeclQueues :: QueueInfo -> Cg a -> Cg a
-cgDeclQueues = error "foo" 
+cgDeclQueues qs action = do
+  let numqs = Map.size (qi_interm qs)
+  let my_sizes_decl = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
+      ts_init_stmts = if numqs > 0
+                      then [ [cstm| ts_init($int:(numqs),my_sizes); |] ] else []
+      my_sizes_inits = Map.mapWithKey (\qvar (QId i,_siz) -- Ignore # of slots for now
+              -> [cstm| my_sizes[$int:i] = $(tySizeOf_C (nameTyp qvar));|]) (qi_interm qs)
+
+  -- Append top declarations  
+  appendTopDecl my_sizes_decl
+
+  -- Add code to initialize queues in wpl global init
+  _ <- mapM addGlobalWplAllocated (ts_init_stmts ++ Map.elems my_sizes_inits)
+
+  action
+
 
 -- | Extract all introduced queues, and for each calculate the maximum
 -- size we should allocate it with.
 extractQueues :: Automaton SymAtom Int -> QueueInfo
 extractQueues auto 
-  = QI { qi_inchan  = auto_inchan auto
-       , qi_outchan = auto_outchan auto
-       , qi_interm  = unionsWith max pre
+  = QI { qi_inch   = auto_inchan auto
+       , qi_outch  = auto_outchan auto
+       , qi_interm = interms
        }
-  where pre = map extract_queue (Map.elems (auto_graph auto))
-        extract_queue (Action atoms _ init_pipes) = update_pipes atoms init_pipes
-        extract_queue _ = Map.empty
+  where
+    interms = Map.fromList $ 
+               zipWith (\(k,siz) n -> (k,(QId n,siz))) (Map.toList (unions_with max pre)) [0..]
 
-        update_pipes :: [WiredAtom SymAtom] -> Map Chan Int -> Map Chan Int
-        update_pipes watoms pipes 
-          = Map.map snd $ foldl upd_one (Map.map (\r -> (r,r)) pipes) watoms
-          where upd ps wa = 
-                   Map.mapWithKey (\q (cur,m) -> 
-                       let cur' = cur + countWrite q wa - countRead q wa
-                           m'   = max m cur'
-                       in (cur',m')) ps
+    unions_with f = foldl (Map.unionWith f) Map.empty
+
+    pre = map (extract_queue . node_kind) (Map.elems (auto_graph auto))
+    extract_queue (Action atoms _ init_pipes) = update_pipes atoms init_pipes
+    extract_queue _ = Map.empty
+
+    update_pipes :: [WiredAtom SymAtom] -> Map Chan Int -> Map Chan Int
+    update_pipes watoms pipes 
+      = Map.map snd $ foldl upd (Map.map (\r -> (r,r)) pipes) watoms
+      where upd ps wa = 
+               Map.mapWithKey (\q (cur,m) -> 
+                   let cur' = cur + countWrites q wa - countReads q wa
+                       m'   = max m cur'
+                   in (cur',m')) ps
 
 
 cgAutomaton :: DynFlags 
@@ -98,25 +158,22 @@ cgAutomaton :: DynFlags
             -> Automaton SymAtom Int  -- ^ The automaton
             -> Cg CLabel              -- ^ Label of starting state we jump to
 cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
-                                   , auto_inchan  = inch
-                                   , auto_outchan = outch 
                                    , auto_start   = start })
-  = do cgRnSt st $ cgDeclareQueues queues $ cg_automaton
+  = do cgRnSt dfs st $ cgDeclQueues queues cg_automaton
        return (lblOfNid start)
   where 
    queues = extractQueues auto
 
-   cg_automaton = Map.map cg_node graph
+   cg_automaton = mapM_ cg_node (Map.elems graph)
    cg_node (Node nid nk) = appendLabeledBlock (lblOfNid nid) (cg_nkind nk)
    cg_nkind Done         = appendStmt [cstm| return 0; |]
    cg_nkind (Loop next)  = appendStmt [cstm| goto $id:(lblOfNid next);|]
-   cg_nkind (Branch c l r _) = do
+   cg_nkind (AutomataModel.Branch c l r _) = do
      cc <- lookupVarEnv c
-     appendStmt [cstm| if ($cc) goto $id:(lblOfNid l) else goto $id:(lblOfNid r);|]
+     appendStmt [cstm| if ($cc) { goto $id:(lblOfNid l); } else { goto $id:(lblOfNid r); } |]
 
-   cg_nkind (Action atoms next pipes) = do 
-     let qs = Map.keys pipes
-     mapM (cgAtom dfs queues) atoms
+   cg_nkind (Action atoms next _pipes) = do
+     mapM_ (cgAtom dfs queues) atoms
      appendStmt [cstm| goto $id:(lblOfNid next);|]
 
 
@@ -127,139 +184,194 @@ cgAtom :: DynFlags
        -> Cg ()
 cgAtom dfs qnfo (WiredAtom win wout the_atom) 
   = case the_atom of
-      SAExp aexp          -> cgAExpAtom dfs qnfo win wout False aexp
-      SAExpIgnoreRet aexp -> cgAExpAtom dfs qnfo win wout True  aexp
-      SACast intty outty  -> cgCastAtom dfs qnfo win wout inty outty
-      SADiscard inty      -> cgDiscAtom dfs qnfo win wout inty 
+      SAExp aexp -> 
+        cgAExpAtom dfs qnfo win wout aexp
+      SACast intty outty  -> 
+        assert "cgAtom/Cast" (singleton win)  $
+        assert "cgAtom/Cast" (singleton wout) $
+        cgCastAtom dfs qnfo (head win) (head wout) intty outty
+      SADiscard inty -> 
+        assert "cgAtom/Cast" (singleton win) $
+        assert "cgAtom/Discard" (null wout)  $
+        cgDiscAtom dfs qnfo (head win) inty
 
-******** here ************* 
+  where singleton [_] = True
+        singleton _   = False
+        
+
+cgCastAtom :: DynFlags 
+           -> QueueInfo
+           -> (Int,EId) -- ^ inwire
+           -> (Int,EId) -- ^ outwire
+           -> (Int,Ty)  -- ^ inty
+           -> (Int,Ty)  -- ^ outty
+           -> Cg ()
+cgCastAtom dfs qs (n,inwire) 
+                  (m,outwire) 
+                  (n',inty) 
+                  (m',_outty)
+  = assert "cgCastAtom" (n == n' && m == m') $ do 
+
+      let storage_in_ty  = mkCastTyArray n inty 
+      storage <- CgMonad.freshName "cast_storage" storage_in_ty Mut
+   
+
+      cgMutBind dfs noLoc storage Nothing $ do
+         cgInWiring  qs [(n,inwire) ] [storage]
+         cgOutWiring qs [(m,outwire)] [storage]
+
+
+cgDiscAtom :: DynFlags
+           -> QueueInfo
+           -> (Int,EId) -- ^ inwire
+           -> (Int,Ty)  -- ^ inty
+           -> Cg ()
+cgDiscAtom dfs qs (n,inwire) (n',inty) 
+  = assert "cgDiscAtom" (n == n') $ do
+ 
+      let storage_in_ty = mkCastTyArray n inty
+      storage <- CgMonad.freshName "disc_storage" storage_in_ty Mut
+
+      cgMutBind dfs noLoc storage Nothing $
+         cgInWiring qs [(n,inwire)] [storage]
+
+
 cgAExpAtom :: DynFlags
            -> QueueInfo
            -> [(Int,EId)] -- ^ in wires
            -> [(Int,EId)] -- ^ out wires
-           -> Bool        -- ^ True <-> IgnoreRet
            -> AExp ()
            -> Cg ()
-cgAExpAtom dfs qnfo wins wouts aexp = 
+cgAExpAtom dfs qs wins wouts aexp 
+  = assert "cgAExpAtom" (all (\x -> fst x == 1) wins)  $
+    assert "cgAExpAtom" (all (\x -> fst x == 1) wouts) $ 
+    do  cgInWiring qs wins (map snd wins) 
 
+        there_already <- lookupExpFunEnv_maybe fun_name 
 
-= do
-   -- Create a new function declaration and get back C name 
-   ziria_nm <- cg_atom the_atom   
-   cg_wiring qs win wout (cg_mk_call ziria_nm)
+        _ <- case there_already of 
+                Just {} -> codeGenExp dfs call
+                Nothing -> cgFunDefined_clos dfs loc fun [] $ 
+                           codeGenExp dfs call
 
-cgAtom dfs qs (WiredAtom [(n,x)] [(m,y)] (SACast (n',inty) (m',outty)) = do
-  assert (n == n') && (m == m') $ 
-  cq <- lookupVarEnv (queueNameOf x)
-  cy <- lookupVarEnv y
-  appendSmtt [cstm| read_buf(cy,cq,n,...)|]
-  appendStmt [cstm| put_buf(cy ...............
-  ... 
+        cgOutWiring qs wouts (map snd wouts)
+       
 
-{- How to initialize Sora queues
-
-   Initialization time: 
-
-   (A) declare:   size_t queue_sizes[NUM_OF_QUEUES];
-   (B) set    :   queue_sizes[i] = tySizeOf_C (corresponding queue type);
-   (C) call   :   ts_init(NUM_OF_QUEUES,queue_sizes)
-
-   How to use sora queues. 
-   (A) putting:
-         -- while(ts_isFull(i)) ;
-         ts_put (i, (char *) ...)
-
-   (B) getting:
-         -- while(ts_isEmpty(i)) {
-         --   if (ts_isFinished($id:buf_id)) return 3
-         -- }         
-         ts_get(i, (char *) ...)
-
- -------------------------------------------------------------------------------------}
-
-
-  
-
-cg_mk_call zir_nm (Cast (n,t1) (m,t2)) = 
-
-
-  let exp_to_compile = if care_about_result then 
-                         eAssign ret_var (eCall zir_nm (nub $ invars ++ outvars))
-                       else 
-                         eCall zir_nm (nub $ invars++ outvars)
-  in cgExp exp_to_compile
-
-    
-
-cg_wiring qs win wout m = do
-  cg_wire_inputs win >> m cg_wire_outputs win
-
-cg_wire_inputs qs win = mapM cg_wire_input win
-  where cg_wire_input (n,x)
-         | x `elem` qs = do
-          cx <- lookupVarEnv x
-          cq <- lookupVarEnv (queueNameOf x)
-          appendStmt [cstm| read_buf(cx,cq,$int:n, sizeof(...))|]
-         | otherwise = return ()
-
-cg_wire_outputs qs win = mapM cg_wire_output win
-  where cg_wire_output (n,x)
-         | x `elem` qs = do
-          cx <- lookupVarEnv x
-          cq <- lookupVarEnv (queueNameOf x)
-          appendStmt [cstm| put_buf(cx,cq,$int:n,sizeof(...))|]
-         | otherwise = return ()
-
-
-  
-
-{------
-
-
-
-
-
-    arr[512] int x; 
-
-    read_buf(xq,x);
-
-    f(x)
-
-    put_buf(xq,x);
-
-----}
-
-
-
-cg_aexp_atom :: AExp () 
-             -> Bool      -- True <-> Use return value
-             -> Cg C.Id,
-cg_aexp_atom (MkAExp blk_lbl body ivs ovs ret_ty) b = do
-  there_already <- lookupExpFunEnv_maybe blk_lbl
-  case there_already of 
-    Just (cfn,_,_) -> return $ C.Id (name cfn) loc
-    Nothing  -> do -- Not there, we need to declare
-
-
-  
-  
   where 
+    loc  = expLoc body
+    body = aexp_exp aexp
 
-    fun   = mkFunDefined loc fun_name params body'
+    -- input wires
+    wires_in  = map snd wins
 
-    fun_name = ...
+    -- output wires
+    wires_out = map snd wouts
 
-    body' = if b then body 
-            else eSeq loc body (eVal loc TUnit VUnit)
-    loc = expLoc body 
+    input_only x = (x `elem` wires_in) && not (x `elem` wires_out)
+    args   = nub (wires_in ++ wires_out)
+    params = map (\x -> if input_only x then x { nameMut = Imm } else x) args
+    argtys = map (\x -> GArgTy (nameTyp x) 
+                               (if isMutable x then Mut else Imm)) params
+
+    resty     = TUnit
+    fun_body  = body
+    funty  = TArrow argtys resty
+    fun_name = toName (aexp_lbl aexp) loc funty Imm
+    fun  = mkFunDefined loc fun_name params fun_body
+    call = eCall loc fun_name (map (eVar loc) args)
 
 
 
+cgInWiring :: QueueInfo 
+           -> [(Int,EId)] -- Input wires
+           -> [EId]       -- Where to store things
+           -> Cg ()
+cgInWiring qs ws vs = mapM_ (uncurry (cgInWire qs)) (zip ws vs)
 
-   
+cgInWire :: QueueInfo -> (Int,EId) -> EId -> Cg ()
+cgInWire qs (n,qvar) v
+  = case qiQueueId qvar qs of
+
+      -- Not a queue
+      Nothing -> return ()
+
+      -- Some intermediate SORA queue
+      Just (QMid (QId qid)) -> do
+        cv <- lookupVarEnv v
+        let ptr = if isPtrType (nameTyp v)
+                  then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
+        appendStmt [cstm| if (ts_getManyBlocking($int:qid,$int:n,$ptr) != $int:n) 
+                            return 3;
+                   |]
+
+      -- Unexpected output queue
+      Just QOut -> panicStr "cg_in_wire: encountered output queue!"
 
 
+      -- TODO: the main input queue
+      Just QIn -> do
+        let qtype = squashedQueueType n (nameTyp qvar)
+        
+        let (bufget_suffix, getLen) = getTyPutGetInfo qtype
+        let bufGetF = "buf_get" ++ bufget_suffix
+
+        buf_context  <- getBufContext
+        global_params <- getGlobalParams
+
+        cv <- lookupVarEnv v
+        let ptr = if isPtrType (nameTyp v) then [cexp| (char *) $cv|] 
+                  else [cexp| (char *) & $cv|]
+        appendStmt [cstm| if ($id:(bufGetF)($id:global_params,
+                            $id:buf_context,
+                            $ptr, $(getLen)) == GS_EOF) return 3; |]
 
 
+squashedQueueType :: Int -> Ty -> Ty
+-- | Squash a queue type to expose an array of base elements
+squashedQueueType 1 t = t
+squashedQueueType n (TArray (Literal m) bt) = TArray (Literal (n*m)) bt
+squashedQueueType n t = TArray (Literal n) t
 
-   
+
+cgOutWiring :: QueueInfo
+              -> [(Int,EId)] -- Output wires
+              -> [EId]       -- Where to read from
+              -> Cg ()
+cgOutWiring qs ws vs = mapM_ (uncurry (cgOutWire qs)) (zip ws vs)
+
+
+cgOutWire :: QueueInfo -> (Int,EId) -> EId -> Cg ()
+cgOutWire qs (n,qvar) v
+  = case qiQueueId qvar qs of
+
+      -- Not a queue
+      Nothing -> return ()
+
+      -- Some intermediate SORA queue
+      Just (QMid (QId qid)) -> do
+        cv <- lookupVarEnv v
+        let ptr = if isPtrType (nameTyp v) 
+                  then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
+        appendStmt [cstm| ts_putManyBlocking($int:qid,$int:n,$ptr);|]
+
+      -- Unexpected input queue
+      Just QIn -> panicStr "cg_out_wire: encountered the input queue!"
+
+      -- The actual output queu 
+      Just QOut -> do
+
+        let qtype = squashedQueueType n (nameTyp qvar)
+
+        let (bufput_suffix, putLen) = getTyPutGetInfo qtype
+        let bufPutF = "buf_put" ++ bufput_suffix
+
+        buf_context   <- getBufContext
+        global_params <- getGlobalParams
+
+        cv <- lookupVarEnv v
+        let ptr = if isPtrType (nameTyp v)
+                  then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
+
+        appendStmt [cstm| $id:(bufPutF)($id:global_params,
+                                     $id:buf_context,
+                                     $ptr, $(putLen)); |]
