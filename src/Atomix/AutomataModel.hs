@@ -253,15 +253,15 @@ concat_auto a1 a2 = a1' { auto_graph = concat_graph }
                    Map.union graph1 graph2
 
 mkDoneAutomaton :: Chan -> Chan -> ZAuto e Int
-mkDoneAutomaton ic oc
+mkDoneAutomaton in_ch out_ch
   = Automaton { auto_graph = Map.singleton 0 (Node 0 Done), auto_start = 0
-              , auto_outchan = oc
-              , auto_inchan  = ic
+              , auto_outchan = out_ch
+              , auto_inchan  = in_ch
               }
 mkZDoneAutomaton :: Chan -> Chan -> ZZAuto e Int
-mkZDoneAutomaton ic oc
+mkZDoneAutomaton in_ch out_ch
   = Automaton { auto_graph = Map.singleton 0 (Node 0 ZDone), auto_start = 0
-              , auto_outchan = oc
+              , auto_outchan = out_ch
               , auto_inchan  = ic
               }
 
