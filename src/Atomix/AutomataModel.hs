@@ -504,7 +504,7 @@ zipAutomata a1 a2 k = concat_auto prod_a k
           prod_node = Node prod_nid prod_nkind
       in zipNodes balance' next1 next2 $ Map.insert prod_nid prod_node prod_nmap
 
-    zipCfgActions :: Balance -> SNode atom Int -> SNode atom Int -> (WiredAtom atom, Int, Int, Int)
+    zipCfgActions :: Balance -> SNode atom Int -> SNode atom Int -> (WiredAtom atom, Balance, Int, Int)
     zipCfgActions balance (Node nid1 (SAtom wa1 next1 _)) (Node nid2 (SAtom wa2 next2 _))
       | let cost = consumption wa2,
         cost <= balance             = (wa2, balance-cost, nid1, next2)
