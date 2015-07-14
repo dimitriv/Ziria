@@ -1,47 +1,92 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables, TupleSections, FlexibleContexts #-}
+{-# OPTIONS #-}
 module AutomataModel where
 
-import Data.Bool
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe
 import qualified Data.List as List
-import Data.Loc
-
-import qualified System.IO as IO
 
 import Control.Exception
-import Debug.Trace
-import Control.Monad.Reader
 import Control.Monad.State
 
 import AtomComp
 import AstExpr
 import Opts
 import AtomixCompTransform ( freshName )
-
 import qualified GenSym as GS
 
 import Utils(panicStr)
+import Control.Applicative ( (<$>) )
 
 import Outputable
 import qualified Text.PrettyPrint.HughesPJ as PPR
 import Text.PrettyPrint.Boxes
 
-import Control.Applicative ( (<$>) )
+
+
+{------------------------------------------------------------------------
+  Generic Atomix Automata Model
+  (polymorp over atoms, node IDs, and node kinds)
+------------------------------------------------------------------------}
 
 type Chan = EId
-showVar withUnique var = name var ++ (if withUnique then "$" ++ show (uniqId var) else "")
-showChan = showVar
 
+data Automaton atom nid nkind
+  = Automaton { auto_graph   :: NodeMap atom nid nkind
+              , auto_inchan  :: Chan
+              , auto_outchan :: Chan
+              , auto_start   :: nid
+              }
+  deriving Show
+
+type NodeMap atom nid nkind = Map nid (Node atom nid nkind)
+
+data Node atom nid nkind
+  = Node { node_id   :: nid
+         , node_kind :: nkind atom nid
+         }
 
 class NodeKind nkind where
-  sucsOfNk :: nkind a nid -> [nid]
-  mapNkIds :: (nid1 -> nid2) -> nkind a nid1 -> nkind a nid2
+  sucsOfNk :: nkind atom nid -> [nid]
+  mapNkIds :: (nid1 -> nid2) -> nkind atom nid1 -> nkind atom nid2
+
+data WiredAtom atom
+  = WiredAtom { wires_in  :: [(Int,Chan)]
+              , wires_out :: [(Int,Chan)]
+              , the_atom  :: atom
+              }
+  deriving Eq
+
+
+{-- Generic Atom Interfae --------------------------------------------}
+class (Show a, Eq a) => Atom a where
+
+  atomInTy  :: a -> [(Int,Ty)]
+  atomOutTy :: a -> [(Int,Ty)]
+
+  -- Constructors of atoms
+  discardAtom :: (Int,Ty) -> a
+  castAtom    :: (Int,Ty) -> (Int,Ty) -> a
+  assertAtom :: Bool -> a
+
+  -- Getting (wired) atoms from expressions
+  expToWiredAtom :: AExp () -> Maybe Chan -> WiredAtom a
+
+  idAtom      :: Ty -> a
+  idAtom t = castAtom (1,t) (1,t)
+
+  assertWAtom :: Bool -> Chan -> WiredAtom a
+  assertWAtom b x = WiredAtom [(1,x)] [] (assertAtom b)
+
+
+
+
+{------------------------------------------------------------------------
+  Concrete NodeKind Instances
+------------------------------------------------------------------------}
 
 
 data ZNk atom nid
@@ -49,7 +94,7 @@ data ZNk atom nid
           , atom_next  :: nid
           , atom_pipes :: Map Chan Int -- balance of pipeline queues
           }
-  | ZBranch { zbranch_var   :: Chan -- If we read True we go to branch_true, otherwise to branch_false
+  | ZBranch { zbranch_ch   :: Chan -- If we read True we go to branch_true, otherwise to branch_false
             , zbranch_true  :: nid
             , zbranch_false :: nid
             , zbranch_while :: Bool -- Is this a while loop?
@@ -67,12 +112,13 @@ instance NodeKind ZNk where
 
 
 
+
 data ZirNk atom nid
   = Action { action_atoms :: [WiredAtom atom]
            , action_next  :: nid
            , action_pipeline_balance :: Map Chan Int -- initial balance of pipeline queues
            }
-  | Branch { branch_var   :: Chan -- If we read True we go to branch_true, otherwise to branch_false
+  | Branch { branch_ch   :: Chan -- If we read True we go to branch_true, otherwise to branch_false
            , branch_true  :: nid
            , branch_false :: nid
            , is_while     :: Bool -- Is this a while loop?
@@ -91,35 +137,46 @@ instance NodeKind ZirNk where
   mapNkIds f (Action watoms nxt pipes) = Action watoms (f nxt) pipes
   mapNkIds f (AutomataModel.Branch x nxt1 nxt2 l) = AutomataModel.Branch x (f nxt1) (f nxt2) l
 
-instance (Atom atom, Show nid) => Show (ZirNk atom nid) where
-  show (Action was next _) = "Action" ++ show was ++ "->" ++ (show next) ++ ""
-  show (AutomataModel.Branch x n1 n2 True) = "While[" ++ show x ++ "]->(" ++ (show n1) ++ "," ++ (show n2) ++ ")"
-  show (AutomataModel.Branch x n1 n2 False) = "If[" ++ show x ++ "]->(" ++ (show n1) ++ "," ++ (show n2) ++ ")"
-  show (Loop next) = "Loop->" ++ (show next)
-  show Done = "Done"
 
-  -- TODO: think about this later
-  -- | StaticLoop  { iterations :: Int, loop_body :: Automaton }
 
-data Node atom nid nkind
-  = Node { node_id   :: nid
-         , node_kind :: nkind atom nid
-         }
+{-- Pretty Printing ------------------------------------------------------------}
 
 instance (Atom atom, Show nid, Show (nkind atom nid)) => Show (Node atom nid nkind) where
   show (Node nid nk) = "<" ++ (show nid) ++ ":" ++ (show nk) ++ ">"
 
-type NodeMap atom nid nkind = Map nid (Node atom nid nkind)
+
+instance (Atom atom, Show nid) => Show (ZirNk atom nid) where
+
+  show (Action was next _) = "Action" ++ show was ++ "->" ++ (show next) ++ ""
+
+  show (AutomataModel.Branch x n1 n2 True)
+    = "While[" ++ show x ++ "]->(" ++ (show n1) ++ "," ++ (show n2) ++ ")"
+
+  show (AutomataModel.Branch x n1 n2 False)
+    = "If[" ++ show x ++ "]->(" ++ (show n1) ++ "," ++ (show n2) ++ ")"
+
+  show (Loop next) = "Loop->" ++ (show next)
+
+  show Done = "Done"
 
 
-data Automaton atom nid nkind
-  = Automaton { auto_graph   :: NodeMap atom nid nkind
-              , auto_inchan  :: Chan
-              , auto_outchan :: Chan
-              , auto_start   :: nid
-              }
-  deriving Show
+instance Atom a => Show (WiredAtom a) where
+  show (WiredAtom inw outw atom) = showWires inw ++ show atom ++ showWires outw
+    where
+      showWires ws = "{" ++ (List.intercalate "," $ map showWire ws) ++ "}"
+      showWire (n,ch)
+        | n==1      = showChan True ch
+        | otherwise = showChan True ch ++ "^" ++ show n
 
+
+showChan :: Bool -> GName t -> String
+showChan withUnique ch
+  = name ch ++ (if withUnique then "$" ++ show (uniqId ch) else "")
+
+
+
+
+{-- Type Abreviations ------------------------}
 
 type ZZAuto atom nid = Automaton atom nid ZNk
 type ZZNode atom nid = Node atom nid ZNk
@@ -131,87 +188,57 @@ type ZNodeMap atom nid = NodeMap atom nid ZirNk
 
 
 
-data WiredAtom atom
-  = WiredAtom { wires_in  :: [(Int,EId)]
-              , wires_out :: [(Int,EId)]
-              , the_atom  :: atom
-              }
-  deriving Eq
-
-
-instance Atom a => Show (WiredAtom a) where
-  show (WiredAtom inw outw atom) = showWires inw ++ show atom ++ showWires outw
-    where
-      showWires ws = "{" ++ (List.intercalate "," $ map showWire ws) ++ "}"
-      showWire (n,var)
-        | n==1      = showVar True var
-        | otherwise = showVar True var ++ "^" ++ show n
-
-
-countWrites :: Chan -> WiredAtom a -> Int
-countWrites ch wa = sum $ map fst $ filter ((== ch) . snd) $ wires_out wa
-countReads :: Chan -> WiredAtom a -> Int
-countReads  ch wa = sum $ map fst $ filter ((== ch) . snd) $ wires_in  wa
 
 
 
-class (Show a, Eq a) => Atom a where
-
-  atomInTy  :: a -> [(Int,Ty)]
-  atomOutTy :: a -> [(Int,Ty)]
-
-  -- Constructors of atoms
-  discardAtom :: (Int,Ty) -> a
-  castAtom    :: (Int,Ty) -> (Int,Ty) -> a
-  assertAtom :: Bool -> a
-
-  -- Getting (wired) atoms from expressions
-  expToWiredAtom :: AExp () -> Maybe EId -> WiredAtom a
-
-  idAtom      :: Ty -> a
-  idAtom t = castAtom (1,t) (1,t)
-
-  assertWAtom :: Bool -> Chan -> WiredAtom a
-  assertWAtom b x = WiredAtom [(1,x)] [] (assertAtom b)
-
-
---
--- TakeN t N  ~~~>
---       castAtom (t,N) (arr[N] t, 1)
---
--- Emits x    ~~~>
---       castAtom (arr[N] t,1) (t,N)
---
---   n1 = k*n2
---  ~~~>  castAtom (arr[n1] t, 1) (arr[n2] t, k)
---   n2 = k*n1
---  ~~~> castAtom  (arr[n1] t, k) (arr[n2] t, 1)
---
---
---
 
 
 
--- auxilliary functions for automata construction & manipulation
+{------------------------------------------------------------------------
+  Auxilliary Functions for Automata Construction & Manipulation
+------------------------------------------------------------------------}
+
 size :: Automaton atom nid nkind -> Int
 size = Map.size . auto_graph
 
 sucs :: NodeKind nkind => Node atom nid nkind -> [nid]
 sucs (Node _ nk) = sucsOfNk nk
 
+-- create predecessor map
+predecessors :: forall e nid nk. (NodeKind nk, Ord nid) => Automaton e nid nk -> Map nid (Set nid)
+predecessors a = go (auto_start a) Map.empty
+  where
+    go nid pred_map = foldl (insertPred nid) pred_map (sucs node)
+      where node = fromJust $ assert (Map.member nid nmap) $ Map.lookup nid nmap
+            nmap = auto_graph a
+    insertPred pred pred_map nid =
+      case Map.lookup nid pred_map of
+        Just preds -> Map.insert nid (Set.insert pred preds) pred_map
+        Nothing -> go nid $ Map.insert nid (Set.singleton pred) pred_map
+
+nodeKindOfId :: Ord nid => nid -> Automaton atom nid nkind -> nkind atom nid
+nodeKindOfId nid a = node_kind $ fromJust $ assert (Map.member nid (auto_graph a)) $
+                                            Map.lookup nid (auto_graph a)
+countWrites :: Chan -> WiredAtom a -> Int
+countWrites ch wa = sum $ map fst $ filter ((== ch) . snd) $ wires_out wa
+
+countReads :: Chan -> WiredAtom a -> Int
+countReads  ch wa = sum $ map fst $ filter ((== ch) . snd) $ wires_in  wa
+
+nextPipes :: [WiredAtom a] -> Map Chan Int -> Map Chan Int
+nextPipes watoms pipes = Map.mapWithKey updatePipe pipes
+  where updatePipe pipe n = n + sum (map (countWrites pipe) watoms)
+                              - sum (map (countReads pipe) watoms)
+
 nextNid :: Automaton atom Int nkind -> Int
-nextNid a = max+1
-  where (max,_) = Map.findMax (auto_graph a)
+nextNid a = maxId+1
+  where (maxId,_) = Map.findMax (auto_graph a)
 
 insert_prepend :: nkind atom Int -> Automaton atom Int nkind -> Automaton atom Int nkind
 insert_prepend nkind a = -- this may be too strict -- ensure auto_closed $
   a { auto_graph = Map.insert nid (Node nid nkind) (auto_graph a)
     , auto_start = nid }
   where nid = nextNid a
-
-nodeKindOfId :: Ord nid => nid -> Automaton atom nid nkind -> nkind atom nid
-nodeKindOfId nid a = node_kind $ fromJust $ assert (Map.member nid (auto_graph a)) $
-                                            Map.lookup nid (auto_graph a)
 
 -- precondition: a1 and a2 must agree on auto_inchan and auto_outchan
 concat_auto :: Atom atom => Ord nid => ZZAuto atom nid -> ZZAuto atom Int -> ZZAuto atom Int
@@ -238,9 +265,6 @@ mkZDoneAutomaton ic oc
               , auto_inchan  = ic
               }
 
-
--- Mapping Automata Labels
-
 map_node_ids :: NodeKind nk => (nid1 -> nid2) -> Node e nid1 nk -> Node e nid2 nk
 map_node_ids map_id (Node nid nkind) = Node (map_id nid) (mapNkIds map_id nkind)
 
@@ -250,13 +274,6 @@ map_auto_ids map_id a = a { auto_graph = new_graph, auto_start = new_start }
     new_start = map_id (auto_start a)
     new_graph = Map.mapKeys map_id $ Map.map (map_node_ids map_id) $ auto_graph a
 
--- replaces arbitrary automata node-ids with Ints >= first_id
-normalize_auto_ids :: (NodeKind nk, Atom e, Ord nid) => Int -> Automaton e nid nk -> Automaton e Int nk
-normalize_auto_ids first_id a = map_auto_ids map_id a
-  where
-    map_id nid = fromJust $ assert (Map.member nid normalize_map) $ Map.lookup nid normalize_map
-    (_, normalize_map) = Map.foldrWithKey f (first_id, Map.empty) (auto_graph a)
-    f nid _ (counter, nid_map) = (counter+1, Map.insert nid counter nid_map)
 
 replace_done_with :: Ord nid => nid -> ZZAuto e nid -> ZZAuto e nid
 replace_done_with nid a = map_auto_ids (\nid -> Map.findWithDefault nid nid replace_map) a
@@ -276,7 +293,17 @@ auto_closed a = Map.foldrWithKey node_closed (isDefined $ auto_start a) (auto_gr
     suc_closed closed suc = closed && isDefined suc
 
 
--- Constructing Automata from Ziria Comps
+
+
+
+
+
+
+
+{------------------------------------------------------------------------
+  Automata Construction from Ziria Comps
+------------------------------------------------------------------------}
+
 
 data Channels = Channels { in_chan   :: Chan
                          , out_chan  :: Chan
@@ -327,7 +354,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a
 
-    go (ACast s (n1,t1) (n2,t2)) =
+    go (ACast _ (n1,t1) (n2,t2)) =
       let inp  = [(n1, in_chan chans)]
           outp = [(n2, out_chan chans)]
           atom = castAtom (n1,t1) (n2,t2)
@@ -372,7 +399,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
     go (ARepeatN n c) = do
       a <- applyN n (mkAutomaton dfs sym chans c) k
       return $ assert (auto_closed a) a
-      where applyN 0 f x = return x
+      where applyN 0 _ x = return x
             applyN n f x = do
               y <- applyN (n-1) f x
               f y
@@ -382,7 +409,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
         ZDone -> do
           a0 <- mkAutomaton dfs sym chans c k
           let nid = auto_start k
-          let node = fromJust $ assert (Map.member (auto_start a0) (auto_graph a0)) $ 
+          let node = fromJust $ assert (Map.member (auto_start a0) (auto_graph a0)) $
                      Map.lookup (auto_start a0) (auto_graph a0) -- Loop (auto_start a)
           let nmap = Map.insert nid node $ Map.delete (auto_start a0) (auto_graph a0)
           let a = map_auto_ids (\id -> if id == (auto_start a0) then nid else id) $
@@ -408,13 +435,13 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
 
 
     -- pipe name
-    pipeName c1 c2 = List.intercalate ">>>" $ 
-                     map (getName . PPR.render . ppr) [parLoc (Left ()) c1, parLoc (Right ()) c2]
-    getName = takeWhile (/= '.') . reverse . takeWhile (/= '\\') . takeWhile (/= '/') . reverse
+    pipeName c1 c2 = List.intercalate ">>>" $
+                     map (extractName . PPR.render . ppr) [parLoc (Left ()) c1, parLoc (Right ()) c2]
+    extractName = takeWhile (/= '.') . reverse . takeWhile (/= '\\') . takeWhile (/= '/') . reverse
     parLoc side c
-      | APar _ cl _ cr <- acomp_comp c
+      | APar _ _cl _ cr <- acomp_comp c
       , Left c0 <- side = parLoc side cr
-      | APar _ cl _ cr <- acomp_comp c
+      | APar _ cl _ _cr <- acomp_comp c
       , Right () <- side = parLoc side cl
       | otherwise = acomp_loc c
 
@@ -439,9 +466,9 @@ zipAutomata a1 a2 k = concat_auto prod_a k
     s2 = auto_start a2
     prod_nmap = zipNodes 0 s1 s2 Map.empty
     pipe_ch = assert (auto_outchan a1 == auto_inchan a2) $ auto_outchan a1
-    
 
-    lookup nid a = 
+
+    lookup nid a =
       let nmap = auto_graph a
       in fromJust $ assert (Map.member nid nmap) $ Map.lookup nid nmap
 
@@ -488,7 +515,7 @@ zipAutomata a1 a2 k = concat_auto prod_a k
         cost <= balance             = (wa2, balance-cost, nid1, next2)
       | let profit = production wa1 = (wa1, balance+profit, next1, nid2)
     zipActions _ _ _ = assert False undefined
-    
+
     consumption = countReads pipe_ch
     production  = countWrites pipe_ch
 
@@ -496,10 +523,76 @@ zipAutomata a1 a2 k = concat_auto prod_a k
 
 
 
--- Monad for marking automata nodes; useful for DFS/BFS
+
+
+
+
+{------------------------------------------------------------------------
+  Automaton Normalization, Transformation, Translation
+------------------------------------------------------------------------}
+
+
+-- replaces arbitrary automata node-ids with Ints >= first_id
+normalize_auto_ids :: (NodeKind nk, Atom e, Ord nid) => Int -> Automaton e nid nk -> Automaton e Int nk
+normalize_auto_ids first_id a = map_auto_ids map_id a
+  where
+    map_id nid = fromJust $ assert (Map.member nid normalize_map) $ Map.lookup nid normalize_map
+    (_, normalize_map) = Map.foldrWithKey f (first_id, Map.empty) (auto_graph a)
+    f nid _ (counter, nid_map) = (counter+1, Map.insert nid counter nid_map)
+
+deleteDeadNodes :: (NodeKind nk, Ord nid) => Automaton e nid nk -> Automaton e nid nk
+deleteDeadNodes auto = auto { auto_graph = insertRecursively Map.empty (auto_start auto)}
+  where
+    insertRecursively nmap nid
+      | Map.member nid nmap = nmap
+      | otherwise =
+          case Map.lookup nid (auto_graph auto) of
+            Nothing -> panicStr "deleteDeadNodes: input graph is not closed!"
+            Just node -> List.foldl insertRecursively (Map.insert nid node nmap) (sucs node)
+
+
+markSelfLoops :: ZAuto e Int -> ZAuto e Int
+markSelfLoops a = a { auto_graph = go (auto_graph a)}
+  where go nmap = Map.foldr markNode nmap nmap
+        markNode (Node nid nk@(Action _ next _)) nmap
+          = if nid /= next then nmap else
+              let nid' = nextNid a
+              in Map.insert nid (Node nid (Loop nid')) $ Map.insert nid' (Node nid' nk) $ nmap
+        markNode _ nmap = nmap
+
+
+-- prune action that are known to be unreachable
+pruneUnreachable :: forall e nid. (Atom e, Ord nid) => nid -> ZAuto e nid -> ZAuto e nid
+pruneUnreachable nid a = a { auto_graph = prune (auto_graph a) nid }
+  where
+    preds = let predMap = predecessors a in (\nid -> fromJust $ Map.lookup nid predMap)
+
+    prune :: ZNodeMap e nid -> nid -> ZNodeMap e nid
+    prune nmap nid =
+      case Map.lookup nid nmap of
+        Nothing -> nmap -- already pruned
+        Just _ -> Set.foldl (pruneBkw nid) (Map.delete nid nmap) (preds nid)
+
+    pruneBkw :: nid -> ZNodeMap e nid -> nid -> ZNodeMap e nid
+    pruneBkw suc nmap nid =
+      case Map.lookup nid nmap of
+        Nothing -> nmap
+        Just (Node _ Done) -> assert False undefined
+        Just (Node _ (Action _ next _)) -> if next==suc then prune nmap nid else nmap
+        Just (Node _ (Loop next)) -> if next==suc then prune nmap nid else nmap
+        Just (Node _ (Branch x suc1 suc2 _))
+          | suc == suc1 -> -- suc2 becomes the unique sucessor (since suc1 is unreachable)
+            let nk = Action [assertWAtom False x] suc2 Map.empty
+            in Map.insert nid (Node nid nk) nmap
+          | suc == suc2 -> -- suc1 becomes the unique sucessor (since suc2 is unreachable)
+            let nk = Action [assertWAtom True x] suc1 Map.empty
+            in Map.insert nid (Node nid nk) nmap
+          | otherwise -> assert False undefined
+
+
 
 -- We maintain two sets: active, and done
--- Invariant: every node starts as inactive and not done,
+-- Inchiant: every node starts as inactive and not done,
 -- is eventially marked active, and finally marked done.
 -- `active` and `done` are disjoint at all times
 type MarkingM nid = State (Set nid,Set nid)
@@ -541,7 +634,7 @@ fuseActions auto = auto { auto_graph = fused_graph }
           inNewFrame (doAll (wl'++wl) nmap')
 
 
-   -- Invariant: if isDone nid then all
+   -- Inchiant: if isDone nid then all
    -- its successors either satisfy isDone or are in the worklist, and the node is
    --  (a) a decision node (i.e. not an action node), or
     -- (b) an action node with its next node being a decision node
@@ -560,7 +653,7 @@ fuseActions auto = auto { auto_graph = fused_graph }
     fuse (Node _ (Loop b)) nmap = return ([b],nmap)
     fuse (Node _ (AutomataModel.Branch _ b1 b2 _)) nmap = return ([b1,b2],nmap)
 
-    fuse (Node nid nk@(Action atoms next pipes)) nmap = do
+    fuse (Node nid (Action atoms next pipes)) nmap = do
         active <- isActive next
         -- don't fuse back-edges (including self-loops)!
         if active then return ([],nmap) else do
@@ -574,74 +667,15 @@ fuseActions auto = auto { auto_graph = fused_graph }
             Node _ _ -> (wl,nmap)
 
 
-deleteDeadNodes :: (NodeKind nk, Ord nid) => Automaton e nid nk -> Automaton e nid nk
-deleteDeadNodes auto = auto { auto_graph = insertRecursively Map.empty (auto_start auto)}
-  where
-    insertRecursively nmap nid
-      | Map.member nid nmap = nmap
-      | otherwise =
-          case Map.lookup nid (auto_graph auto) of
-            Nothing -> panicStr "deleteDeadNodes: input graph is not closed!"
-            Just node -> List.foldl insertRecursively (Map.insert nid node nmap) (sucs node)
-
-
-markSelfLoops :: ZAuto e Int -> ZAuto e Int
-markSelfLoops a = a { auto_graph = go (auto_graph a)}
-  where go nmap = Map.foldr markNode nmap nmap
-        markNode (Node nid nk@(Action watoms next _)) nmap
-          = if nid /= next then nmap else
-              let nid' = nextNid a
-              in Map.insert nid (Node nid (Loop nid')) $ Map.insert nid' (Node nid' nk) $ nmap
-        markNode _ nmap = nmap
-
-
-predecessors :: forall e nid nk. (NodeKind nk, Ord nid) => Automaton e nid nk -> Map nid (Set nid)
-predecessors a = go (auto_start a) Map.empty
-  where
-    nmap = auto_graph a
-    go nid pred_map =
-      foldl (go' nid) pred_map (sucs $ fromJust $ assert (Map.member nid nmap) $ Map.lookup nid nmap)
-    go' pred pred_map nid = 
-      case Map.lookup nid pred_map of
-        Just preds -> Map.insert nid (Set.insert pred preds) pred_map
-        Nothing -> go nid $ Map.insert nid (Set.singleton pred) pred_map
-
-
--- prune action that are known to be unreachable
-pruneUnreachable :: forall e nid. (Atom e, Ord nid) => nid -> ZAuto e nid -> ZAuto e nid
-pruneUnreachable nid a = a { auto_graph = prune (auto_graph a) nid }
-  where
-    preds = let predMap = predecessors a in (\nid -> fromJust $ Map.lookup nid predMap)
-
-    prune :: ZNodeMap e nid -> nid -> ZNodeMap e nid
-    prune nmap nid = 
-      case Map.lookup nid nmap of
-        Nothing -> nmap -- already pruned
-        Just _ -> Set.foldl (pruneBkw nid) (Map.delete nid nmap) (preds nid)
-
-    pruneBkw :: nid -> ZNodeMap e nid -> nid -> ZNodeMap e nid
-    pruneBkw suc nmap nid =
-      case Map.lookup nid nmap of
-        Nothing -> nmap
-        Just (Node _ Done) -> assert False undefined
-        Just (Node _ (Action _ next _)) -> if next==suc then prune nmap nid else nmap
-        Just (Node _ (Loop next)) -> if next==suc then prune nmap nid else nmap
-        Just (Node _ (Branch x suc1 suc2 _)) 
-          | suc == suc1 -> -- suc2 becomes the unique sucessor (since suc1 is unreachable)
-            let nk = Action [assertWAtom False x] suc2 Map.empty
-            in Map.insert nid (Node nid nk) nmap
-          | suc == suc2 -> -- suc1 becomes the unique sucessor (since suc2 is unreachable)
-            let nk = Action [assertWAtom True x] suc1 Map.empty
-            in Map.insert nid (Node nid nk) nmap
-          | otherwise -> assert False undefined
 
 
 
--- Automata to DOT files
 
-nextPipes watoms pipes = Map.mapWithKey updatePipe pipes
-  where updatePipe pipe n = n + sum (map (countWrites pipe) watoms)
-                              - sum (map (countReads pipe) watoms)
+
+
+{------------------------------------------------------------------------
+  Automaton to DOT file translation
+------------------------------------------------------------------------}
 
 dotOfAuto :: (Atom e, Show nid) => DynFlags -> ZAuto e nid -> String
 dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfix
@@ -675,10 +709,10 @@ dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfi
     showNk (Loop _) = "LOOP"
 
     showWatoms = map showWatomGroup . List.group
-    showWatomGroup wa = case length wa of 1 -> show (head wa) 
+    showWatomGroup wa = case length wa of 1 -> show (head wa)
                                           n -> show n ++ " TIMES DO " ++ show (head wa)
 
-    showPipes watoms pipes 
+    showPipes watoms pipes
       | printPipeNames = render $ punctuateH top (text " | ") $ boxedPipes
       | otherwise     = List.intercalate "\\n" $ map printPipes [pipes, nextPipes watoms pipes]
         where
@@ -688,11 +722,17 @@ dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfi
           printPipes = List.intercalate "|" . map printPipe . Map.toAscList
           printPipe (_pipe_ch, val) = show val
 
-    maybeToolTip (Action watoms _ pipes) = " tooltip=\"" ++ showPipeNames pipes ++ "\""
+    maybeToolTip (Action _ _ pipes) = " tooltip=\"" ++ showPipeNames pipes ++ "\""
     maybeToolTip _ = ""
-    showPipeNames = List.intercalate " | " . map show . Map.keys 
+    showPipeNames = List.intercalate " | " . map show . Map.keys
 
-{-------------------- Top-level pipeline ---------------------------}
+
+
+
+
+{------------------------------------------------------------------------
+  Top-level Pipeline
+------------------------------------------------------------------------}
 
 zzToZ :: ZZAuto e nid -> ZAuto e nid
 zzToZ a = a { auto_graph = Map.map nToZ $ auto_graph a }
@@ -736,6 +776,3 @@ automatonPipeline dfs sym inty outty acomp = do
   putStrLn "<<<<<<<<<<< COMPLETED AUTOMATON CONSTRUCTION\n"
 
   return a_n
-
-
-
