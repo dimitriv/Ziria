@@ -8,6 +8,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe
 import qualified Data.List as List
+import Data.Either
 
 import Control.Exception
 import Control.Monad.State
@@ -234,9 +235,12 @@ nextNid :: Automaton atom Int nkind -> Int
 nextNid a = maxId+1
   where (maxId,_) = Map.findMax (auto_graph a)
 
+insertNk :: Ord nid => nid -> nkind atom nid -> NodeMap atom nid nkind -> NodeMap atom nid nkind
+insertNk nid nk nmap = Map.insert nid (Node nid nk) nmap
+
 insert_prepend :: nkind atom Int -> Automaton atom Int nkind -> Automaton atom Int nkind
 insert_prepend nkind a = -- this may be too strict -- ensure auto_closed $
-  a { auto_graph = Map.insert nid (Node nid nkind) (auto_graph a)
+  a { auto_graph = insertNk nid nkind (auto_graph a)
     , auto_start = nid }
   where nid = nextNid a
 
@@ -417,7 +421,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       let nid = auto_start k'
       a0 <- mkAutomaton dfs sym chans c k'
       let nkind = SBranch x (auto_start a0) (auto_start k) True
-      let a = a0 { auto_start = nid, auto_graph = Map.insert nid (Node nid nkind) (auto_graph a0)}
+      let a = a0 { auto_start = nid, auto_graph = insertNk nid nkind (auto_graph a0)}
       return $ assert (auto_closed a0) $ assert (auto_closed a) a
 
     go (AUntil x c) = do
@@ -425,7 +429,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       let nid = auto_start k'
       a0 <- mkAutomaton dfs sym chans c k'
       let nkind = SBranch x (auto_start a0) (auto_start k) True
-      let a = a0 { auto_graph = Map.insert nid (Node nid nkind) (auto_graph a0)}
+      let a = a0 { auto_graph = insertNk nid nkind (auto_graph a0)}
       return $ assert (auto_closed a0) $ assert (auto_closed a) a
 
 
@@ -445,8 +449,41 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
 
 ---- Zipping Automata
 -- remaining resources in pipe ("balance"), state of left automaton, state of right automaton
-type ProdNid = (Balance, Int, Int)
-type Balance = Int
+type Queue e = [e]
+
+push :: e -> Queue e -> Queue e
+push = (:)
+
+pop :: Queue e -> Maybe (e, Queue e)
+pop [] = Nothing
+pop es = Just (List.last es, List.init es)
+
+type ExtraState = Int -- map done-distance to rollback-amount
+type ProdNid = (ExtraState, Int, Int)
+type PipeState = Queue (Either Int Int) -- left n means n reads, right m means m writes
+
+budget :: PipeState -> Int
+budget = sum . rights
+
+
+--doneDist :: forall e nid. (Ord nid) => (SimplNk e nid -> Int) -> SAuto e nid -> Map nid (Bool, Int)
+--doneDist cost a = addDist Map.empty (auto_start a) where
+--  nmap = auto_graph a
+
+--  addDist :: Map nid (Bool,Int) -> nid -> Map nid (Bool,Int)
+--  addDist dist_map nid = case Map.lookup nid dist_map of
+--    Just _ -> dist_map
+--    Nothing -> addDist' dist_map nid (nodeKindOfId nid a)
+
+--  addDist' :: Map nid (Bool,Int) -> nid -> SimplNk e nid -> Map nid (Bool,Int)
+--  addDist' dist_map nid nk@SDone = Map.insert nid (True,cost nk) dist_map
+--  addDist' dist_map nid nk =
+--    let sucs = sucsOfNk nk
+--        dist_map' = foldl addDist dist_map sucs
+--        dist = cost nk + minimum [snd $ fromJust $ Map.lookup s dist_map' | s <- sucs ]
+--        precise = case sucs of { _:_:_ -> False; [s] -> fst $ fromJust $ Map.lookup s dist_map'; [] -> True }
+--    in Map.insert nid (precise, dist) dist_map'
+
 
 -- Precondition: a1 and a2 should satisfy (auto_outchan a1) == (auto_inchan a2)
 -- a1 and a2 MUST NOT contain explicit loop nodes (but may contain loops)!!
@@ -456,63 +493,73 @@ zipAutomata a1 a2 k = concat_auto prod_a k
     prod_a = (\a -> assert (auto_closed a) a) $
              assert (auto_closed a1) $
              assert (auto_closed a2) $
-             Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) (0,s1,s2)
-    s1 = auto_start a1
-    s2 = auto_start a2
-    prod_nmap = zipNodes 0 s1 s2 Map.empty
+             Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) start_prod_nid
+    start_balance = []
+    start_prod_nid = mkProdNid start_balance (auto_start a1) (auto_start a2)
+    prod_nmap = zipNodes start_balance start_prod_nid Map.empty
     pipe_ch = assert (auto_outchan a1 == auto_inchan a2) $ auto_outchan a1
 
 
-    lookup nid a =
-      let nmap = auto_graph a
-      in fromJust $ assert (Map.member nid nmap) $ Map.lookup nid nmap
+    mkProdNid :: PipeState -> Int -> Int -> ProdNid
+    mkProdNid b nid1 nid2 = (budget b, nid1, nid2)
 
-
-    zipNodes :: Balance -> Int -> Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
-    zipNodes balance nid1 nid2 prod_nmap =
-      case Map.lookup (balance,nid1,nid2) prod_nmap of
-        Nothing -> zipNodes' balance (lookup nid1 a1) (lookup nid2 a2) prod_nmap
+    zipNodes :: PipeState -> ProdNid -> SNodeMap e ProdNid -> SNodeMap e ProdNid
+    zipNodes balance prod_nid@(_,nid1,nid2) prod_nmap =
+      case Map.lookup prod_nid prod_nmap of
+        Nothing -> zipNodes' balance prod_nid (nodeKindOfId nid1 a1) (nodeKindOfId nid2 a2) prod_nmap
         Just _ -> prod_nmap -- We have already seen this product location. We're done!
 
-    zipNodes' :: Balance -> SNode e Int -> SNode e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
-    zipNodes' balance (Node id1 SDone) (Node id2 _) prod_nmap =
-      let prod_nid = (balance,id1,id2)
-      in Map.insert prod_nid (Node prod_nid SDone) prod_nmap
+    zipNodes' :: PipeState -> ProdNid -> SimplNk e Int -> SimplNk e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
+    zipNodes' balance prod_nid SDone _ = insertNk prod_nid SDone
 
-    zipNodes' balance (Node id1 _) (Node id2 SDone) prod_nmap =
-      let prod_nid = (balance,id1,id2)
-      in Map.insert prod_nid (Node prod_nid SDone) prod_nmap
+    zipNodes' balance prod_nid _ SDone = insertNk prod_nid SDone
 
-    zipNodes' balance (Node id1 (SBranch x l r w)) (Node id2 _) prod_nmap =
-      let prod_nid = (balance,id1,id2)
-          prod_nkind = SBranch x (balance,l,id2) (balance,r,id2) w
-          prod_node = Node prod_nid prod_nkind
-      in zipNodes balance r id2 $ zipNodes balance l id2 $ Map.insert prod_nid prod_node prod_nmap
+    zipNodes' balance prod_nid@(rollback,id1,id2) (SBranch x l r w) _ =
+      let prod_nid_l = (rollback,l,id2)
+          prod_nid_r = (rollback,r,id2)
+          prod_nkind = SBranch x prod_nid_l prod_nid_r w
+      in zipNodes balance prod_nid_r . zipNodes balance prod_nid_l . insertNk prod_nid prod_nkind
 
-    zipNodes' balance (Node id1 _) (Node id2 (SBranch x l r w)) prod_nmap =
-      let prod_nid = (balance,id1,id2)
-          prod_nkind = SBranch x (balance,id1,l) (balance,id1,r) w
-          prod_node = Node prod_nid prod_nkind
-      in zipNodes balance id1 r $ zipNodes balance id1 l $ Map.insert prod_nid prod_node prod_nmap
+    zipNodes' balance prod_nid@(rollback,id1,id2) _ (SBranch x l r w) =
+      let prod_nid_l = mkProdNid balance id1 l
+          prod_nid_r = mkProdNid balance id1 r
+          prod_nkind = SBranch x prod_nid_l prod_nid_r w
+      in zipNodes balance prod_nid_r . zipNodes balance prod_nid_l . insertNk prod_nid prod_nkind
 
-    zipNodes' balance n1@(Node id1 (SAtom _ _ pipes1)) n2@(Node id2 (SAtom _ _ pipes2)) prod_nmap =
-      let prod_nid = (balance,id1,id2)
-          noDups = const (assert False)
-          pipes = Map.insertWith noDups pipe_ch balance $ Map.unionWith noDups pipes1 pipes2
-          (watom, balance', next1, next2) = zipCfgActions balance n1 n2
-          prod_nkind = SAtom watom (balance',next1,next2) pipes
-          prod_node = Node prod_nid prod_nkind
-      in zipNodes balance' next1 next2 $ Map.insert prod_nid prod_node prod_nmap
+    zipNodes' balance prod_nid@(_,id1,id2) nk1@(SAtom _ _ pipes1) nk2@(SAtom _ _ pipes2) =
+      let noDups = const (assert False)
+          pipes = Map.insertWith noDups pipe_ch (budget balance) $ Map.unionWith noDups pipes1 pipes2
+          (watom, balance', next1, next2) = zipCfgActions balance (Node id1 nk1) (Node id2 nk2)
+          prod_nid_next = mkProdNid balance' next1 next2
+          prod_nkind = SAtom watom prod_nid_next pipes
+      in zipNodes balance' prod_nid_next . insertNk prod_nid prod_nkind
 
-    zipCfgActions :: Balance -> SNode atom Int -> SNode atom Int -> (WiredAtom atom, Balance, Int, Int)
-    zipCfgActions balance (Node nid1 (SAtom wa1 next1 _)) (Node nid2 (SAtom wa2 next2 _))
-      | let cost = consumption wa2,
-        cost <= balance             = (wa2, balance-cost, nid1, next2)
-      | let profit = production wa1 = (wa1, balance+profit, next1, nid2)
+    zipCfgActions :: PipeState -> SNode atom Int -> SNode atom Int -> (WiredAtom atom, PipeState, Int, Int)
+    zipCfgActions balance (Node nid1 (SAtom wa1 next1 _)) (Node nid2 (SAtom wa2 next2 _)) =
+      case try_consume wa2 balance of
+        -- can't afford wa2!
+        Nothing -> (wa1, produce wa1 balance, next1, nid2)
+        Just balance' -> (wa2, balance', nid1, next2)
     zipCfgActions _ _ _ = assert False undefined
 
-    consumption = countReads pipe_ch
-    production  = countWrites pipe_ch
+
+    try_consume :: WiredAtom atom -> PipeState -> Maybe PipeState
+    try_consume wa q = try (countReads pipe_ch wa) q
+      where try 0 q = Just q
+            try n q = case pop q of
+              Nothing                      -> Nothing
+              Just (Left _,q)              -> try n q
+              Just (Right m,q) | m<=n      -> try (n-m) q
+                               | otherwise -> Just $ q ++ [Right (m-n)]
+
+    produce :: WiredAtom atom -> PipeState -> PipeState
+    produce wa q =
+      (if writes > 0 then push (Right writes) else id) $
+      (if reads > 0 then push (Left reads) else id) $ q
+      where
+        writes = countWrites pipe_ch wa
+        reads = countReads (auto_inchan a1) wa
+
 
 
 
@@ -660,9 +707,6 @@ fuseActions auto = auto { auto_graph = fused_graph }
               let node = Node nid (CfgAction (atoms++atoms') next' pipes)
               in (wl, Map.insert nid node nmap)
             Node _ _ -> (wl,nmap)
-
-
-
 
 
 
