@@ -30,7 +30,7 @@ import AstExpr
 import AstUnlabelled
 import Utils
 -- import Control.Applicative ( (<$>) )
--- import Outputable 
+import Outputable 
 -- import Data.Maybe ( fromJust, isJust )
 -- import qualified Data.Set as S
 
@@ -43,7 +43,7 @@ import Language.C.Quote.C
 -- import Control.Monad.Identity
 -- import Control.Monad.State
 import Data.Loc
--- import Text.PrettyPrint.HughesPJ
+import Text.PrettyPrint.HughesPJ
 -- import qualified GenSym as GS
 import Data.List ( nub )
 -- import CtExpr 
@@ -108,21 +108,21 @@ qiQueueId _ _ = Nothing
 
 -- | Declare queues 
 cgDeclQueues :: QueueInfo -> Cg a -> Cg a
-cgDeclQueues qs action = do
+cgDeclQueues qs action = 
   let numqs = Map.size (qi_interm qs)
-  let my_sizes_decl = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
-      ts_init_stmts = if numqs > 0
-                      then [ [cstm| ts_init($int:(numqs),my_sizes); |] ] else []
-      my_sizes_inits = Map.mapWithKey (\qvar (QId i,_siz) -- Ignore # of slots for now
-              -> [cstm| my_sizes[$int:i] = $(tySizeOf_C (nameTyp qvar));|]) (qi_interm qs)
+  in if numqs == 0 then action else do 
+         let my_sizes_decl = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
+             ts_init_stmts = [cstm| ts_init($int:(numqs),my_sizes); |]
+             my_sizes_inits = Map.mapWithKey (\qvar (QId i,_siz) -- Ignore # of slots for now
+                     -> [cstm| my_sizes[$int:i] = $(tySizeOf_C (nameTyp qvar));|]) (qi_interm qs)
 
-  -- Append top declarations  
-  appendTopDecl my_sizes_decl
+         -- Append top declarations  
+         appendTopDecl my_sizes_decl
 
-  -- Add code to initialize queues in wpl global init
-  _ <- mapM addGlobalWplAllocated (ts_init_stmts ++ Map.elems my_sizes_inits)
+         -- Add code to initialize queues in wpl global init
+         _ <- mapM addGlobalWplAllocated (ts_init_stmts : Map.elems my_sizes_inits)
 
-  action
+         action
 
 
 -- | Extract all introduced queues, and for each calculate the maximum
@@ -274,6 +274,13 @@ cgAExpAtom dfs qs wins wouts aexp
     assert "cgAExpAtom" (all (\x -> fst x == 1) wouts) $ 
     do  cgInWiring qs wins (map snd wins) 
 
+        cgIO $ print $ vcat [ text "cgAExpAtom:" <+> ppr fun_name
+                            , text "ivs       :" <+> ppr wires_in
+                            , text "ovs       :" <+> ppr wires_out
+                            , text "param list:" <+> ppr params
+                            , text "argtys    :" <+> ppr argtys
+                            ]
+
         fdefs <- getFunDefs 
         _ccall <- if fun_name `elem` fdefs 
                   then codeGenExp dfs call
@@ -298,14 +305,14 @@ cgAExpAtom dfs qs wins wouts aexp
 
     input_only x = (x `elem` wires_in) && not (x `elem` wires_out)
     args   = nub (wires_in ++ wires_out)
-    params = map (\x -> if input_only x then x { nameMut = Imm } else x) args
+    params = map (\x -> if input_only x then x { nameMut = Imm } else x { nameMut = Mut }) args
     argtys = map (\x -> GArgTy (nameTyp x) 
                                (if isMutable x then Mut else Imm)) params
 
     resty     = TUnit
     fun_body  = body
     funty  = TArrow argtys resty
-    fun_name = toName (aexp_lbl aexp) loc funty Imm
+    fun_name = toName (alphaNumStr $ aexp_lbl aexp) loc funty Imm
     fun  = mkFunDefined loc fun_name params fun_body
     call = eCall loc fun_name (map (eVar loc) args)
 
@@ -348,11 +355,14 @@ cgInWire qs (n,qvar) v
         global_params <- getGlobalParams
 
         cv <- lookupVarEnv v
-        let ptr = if isPtrType (nameTyp v) then [cexp| (char *) $cv|] 
-                  else [cexp| (char *) & $cv|]
-        appendStmt [cstm| if ($id:(bufGetF)($id:global_params,
-                            $id:buf_context,
-                            $ptr, $(getLen)) == GS_EOF) return 3; |]
+        let ptr = if isPtrType (nameTyp v) then [cexp| $cv|] else [cexp| & $cv|]
+        if isArrayTy qtype 
+          then appendStmt [cstm| if ($id:(bufGetF)($id:global_params,
+                                     $id:buf_context,
+                                     $ptr, $(getLen)) == GS_EOF) return 3; |]
+          else appendStmt [cstm| if ($id:(bufGetF)($id:global_params,
+                                     $id:buf_context,
+                                     $ptr) == GS_EOF) return 3; |]
 
 
 squashedQueueType :: Int -> Ty -> Ty
@@ -399,8 +409,15 @@ cgOutWire qs (n,qvar) v
 
         cv <- lookupVarEnv v
         let ptr = if isPtrType (nameTyp v)
-                  then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
+                  then [cexp| $cv|] else [cexp| & $cv|]
 
-        appendStmt [cstm| $id:(bufPutF)($id:global_params,
-                                     $id:buf_context,
-                                     $ptr, $(putLen)); |]
+        if isArrayTy qtype 
+          then 
+            appendStmt [cstm| $id:(bufPutF)($id:global_params,
+                                            $id:buf_context,
+                                            $ptr, $(putLen)); |]
+          else
+            appendStmt [cstm| $id:(bufPutF)($id:global_params,
+                                            $id:buf_context,
+                                            $cv); |]
+        

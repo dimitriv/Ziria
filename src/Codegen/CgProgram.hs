@@ -47,6 +47,13 @@ import qualified Language.C.Syntax as C
 import Language.C.Quote.C
 import Data.Maybe
 
+import Text.PrettyPrint.HughesPJ
+
+
+import CgAtomix
+import AtomixCompTransform
+import AutomataModel
+import AtomInstantiation
 
 codeGenContexts :: Cg [C.InitGroup]
 -- Declare external context blocks
@@ -108,16 +115,19 @@ codeGenThread dflags tid c
   | isDynFlagSet dflags Pipeline
   = fail "AtomixCodeGen cannot be used simultaneously with Pipeline!"
   | otherwise -- Atomix case
-  = do (maybe_tv, ta, tb) <- checkCompType (ctComp c)
-       (_bta, _btb) <- checkInOutFiles ta tb
+  = do (_maybe_tv, ta, tb) <- checkCompType (ctComp c)
+       (bta, btb) <- checkInOutFiles ta tb
        withThreadId tid $ do
-          mkRuntime (Just ((getName dflags) ++ tid)) $ do
+          mkAtomixRuntime (Just ((getName dflags) ++ tid)) $ do
+             sym <- getSymEnv
+             (ac,rnst) <- cgIO $ zirToAtomZir dflags sym c
+             (automaton :: CfgAuto SymAtom Int) 
+                <- cgIO $ automatonPipeline dflags sym (bufty_ty bta) (bufty_ty btb) ac 
 
-            cinfo <- codeGenCompTop dflags c (finalCompKont tid)
+             dump dflags DumpAutomaton (".automaton.dump")
+                                       (text $ dotOfAuto dflags automaton)
 
-            codeGenCompilerGlobals tid (tickHdl cinfo)
-                                       (procHdl cinfo) maybe_tv ta tb
-            return cinfo
+             cgAutomaton dflags rnst automaton
   
   where
     checkInOutFiles :: Ty -> Ty -> Cg (BufTy, BufTy)

@@ -37,6 +37,11 @@ freshName sym str loc ty mut = do
   uniq  <- GS.genSymStr sym
   return $ (toName str loc ty mut) { uniqId = MkUniq uniq }
 
+freshNameDoc :: GS.Sym -> String -> SrcLoc -> Ty -> MutKind -> String -> IO EId
+freshNameDoc sym str loc ty mut doc = do
+  x <- freshName sym str loc ty mut
+  return (x { nameDoc = doc })
+
 alphaNorm :: GS.Sym -> Comp -> IO Comp
 alphaNorm sym = mapCompM return return return return return action
   where 
@@ -53,12 +58,12 @@ alphaNorm sym = mapCompM return return return return return action
 
       | Branch e c1 c2 <- unComp c
       , let loc = compLoc c
-      = do x <- freshName sym (show e) loc (ctExp e) Imm
+      = do x <- freshNameDoc sym "cond_if" loc (ctExp e) Imm (show e)
            return $ cLetE loc x AutoInline e (cBranch loc (eVar loc x) c1 c2)
 
       | While e c1 <- unComp c
       , let loc = compLoc c
-      = do x <- freshName sym (show e) loc (ctExp e) Mut -- needs to be refreshed in each iteration
+      = do x <- freshNameDoc sym "cond_while" loc (ctExp e) Mut (show e) -- needs to be refreshed in each iteration
            return $ 
              cLetERef loc x (Just e) $
                cWhile loc (eVar loc x) 
@@ -67,7 +72,7 @@ alphaNorm sym = mapCompM return return return return return action
 
       | Until e c1 <- unComp c
       , let loc = compLoc c
-      = do x <- freshName sym (show e) loc (ctExp e) Mut -- needs to be refreshed in each iteration
+      = do x <- freshNameDoc sym "cond_until" loc (ctExp e) Mut (show e) -- needs to be refreshed in each iteration
            return $ 
              cLetERef loc x Nothing $
                cUntil loc (eVar loc x) 
@@ -82,6 +87,9 @@ alphaNorm sym = mapCompM return return return return return action
       = do x_bnd <- freshName sym "times_bound" loc (ctExp elen) Imm
            let cond_expr   = eBinOp loc Lt (eVar loc cnt) 
                                            (eVar loc x_bnd) -- cnt < x_bound
+               -- It is a bit naughty to assign to a variable that started life
+               -- as immutable -- however we will fix this in the next phase of
+               -- translation to atomix (mkMutableBound)
                cnt_expr    = eVar loc cnt
                TInt _bw sn = nameTyp cnt
                one         = eVal loc (nameTyp cnt) (VInt 1 sn)
@@ -95,7 +103,7 @@ alphaNorm sym = mapCompM return return return return return action
       | Map v fn <- unComp c
       , TArrow [argty] _resty <- nameTyp fn
       , let loc = compLoc c 
-      = do x <- freshName sym (name fn ++ "_in") loc (argty_ty argty) Imm 
+      = do x <- freshName sym (alphaNumStr (name fn) ++ "_in") loc (argty_ty argty) Imm
            alphaNorm sym $ 
               cRepeat loc v $ 
               cBindMany loc (cTake1 loc (nameTyp x))
@@ -129,7 +137,7 @@ instance Outputable RnSt where
 type RnStM a = StateT RnSt IO a
 
 recBound :: EId -> RnStM ()
-recBound x = modify $ \s -> s { st_bound_vars = x : st_bound_vars s }
+recBound x = modify $ \s -> s { st_bound_vars = x { nameMut = Mut } : st_bound_vars s }
 
 recFunDef :: EId -> Fun -> [EId] -> RnStM ()
 recFunDef x fn clos 
@@ -185,6 +193,21 @@ liftBindsComp = mapCompM return return return return return action
                       rest' <- go c2 xscs 
                       return $ cBindMany (compLoc c) c1 [(x, rest')]
 
+mkMutableBound :: [EId] -> Comp -> IO Comp
+-- | All 'recBound' variables should become mutable because we write
+-- to them in the automata level (perhaps just once if they originate
+-- in Ziria immutables, but still)
+mkMutableBound bound = mapCompM return return return return exp_action comp_action
+  where exp_action = mapExpM return return action
+        action e   = return $ case unExp e of
+          EVar x | x `elem` bound -> eVar (expLoc e) (x { nameMut = Mut })
+          _otherwise -> e
+
+        comp_action c = return $ case unComp c of 
+          BindMany c1 xs_cs -> 
+            let xs_cs' = map (\(x,d) -> (x { nameMut = Mut },d)) xs_cs
+            in cBindMany (compLoc c) c1 xs_cs'
+          _ -> c
 
 {---------------------------- Closure conversion ------------------------------}
 
@@ -323,9 +346,11 @@ atomixCompTransform sym c = do
 
   -- Closure convert / lift 
   (closure_comp,st) <- runStateT (liftBindsComp ren_alpha >>= closConvComp) $
-                     emptyRnSt
+                       emptyRnSt
 
-  let final_comp = normalizePars closure_comp
+  mut_closure_comp <- mkMutableBound (st_bound_vars st) closure_comp
+
+  let final_comp = normalizePars mut_closure_comp
 
   putStrLn $ "Closure conversion phase finished, result type: " ++ 
              show (ctComp final_comp)

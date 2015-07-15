@@ -44,6 +44,7 @@ module CgMonad
   , addGlobalWplAllocated
 
   , getFunDefs
+  , getSymEnv
 
   , collect
 
@@ -560,6 +561,10 @@ genSym prefix = do
     sym       <- asks symEnv
     str       <- liftIO $ GS.genSymStr sym
     return $ prefix ++ str
+
+getSymEnv :: Cg GS.Sym
+getSymEnv = asks symEnv
+
 
 
 -- TODO: remove this nameStack management of component ids!

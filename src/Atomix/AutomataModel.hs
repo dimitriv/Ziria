@@ -172,8 +172,7 @@ instance Atom a => Show (WiredAtom a) where
 
 showChan :: Bool -> GName t -> String
 showChan withUnique ch
-  = name ch ++ (if withUnique then "$" ++ show (uniqId ch) else "")
-
+  = nameDoc ch ++ (if withUnique then "$" ++ show (uniqId ch) else "")
 
 
 
