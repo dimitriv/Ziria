@@ -54,6 +54,7 @@ module CgMonad
   , finalCompKont
 
   , CompFunGen(..)
+  , CodeGen            -- type of expression code generator
 
   , genSym
   , getNames
@@ -164,6 +165,8 @@ import PpComp
 import PpExpr
 import qualified GenSym as GS
 import CgHeader
+
+import Opts
 
 instance IfThenElse Bool a where
     ifThenElse True  th _  = th
@@ -363,10 +366,8 @@ data CgState = CgState {
     }
   deriving Show
 
-emptyState = CgState [] 0 cMAX_STACK_ALLOC [] [] []
+emptyState = CgState [] 0 Opts.cMAX_STACK_ALLOC [] [] []
 
-cMAX_STACK_ALLOC :: Int
-cMAX_STACK_ALLOC = 32 * 1024
 
 data Code = Code
     { -- Top-level definitions
@@ -910,3 +911,5 @@ cgTIntName BW32 Unsigned        = "uint32"
 cgTIntName BW64 Unsigned        = "uint64"
 cgTIntName (BWUnknown _) Unsigned = "uint32" 
 
+
+type CodeGen = DynFlags -> Exp -> Cg C.Exp

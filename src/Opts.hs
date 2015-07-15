@@ -34,8 +34,10 @@ import System.Environment
 import System.Exit (exitFailure)
 import System.IO
 
-import CgMonad ( cMAX_STACK_ALLOC )
 import System.IO.Unsafe ( unsafePerformIO )
+
+cMAX_STACK_ALLOC :: Int
+cMAX_STACK_ALLOC = 32 * 1024
 
 data DynFlag =
     InputFile String
@@ -211,7 +213,7 @@ parseTimeout :: String -> DynFlag
 parseTimeout i = Timeout (read i)
 
 defaultMaxStkThreshold :: Int
-defaultMaxStkThreshold = CgMonad.cMAX_STACK_ALLOC
+defaultMaxStkThreshold = cMAX_STACK_ALLOC
 
 defaultAffinityMask :: Int
 defaultAffinityMask = 255

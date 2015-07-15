@@ -54,8 +54,7 @@ unsigned int parse_dbg_int32(char *dbg_buf, num32 *target)
       exit(1);
   }
 
-  //QUESTION: Why cast to 'num16' here?
-  target[i++] = (num16) val; 
+  target[i++] = val; 
 
   while (s = strtok(NULL, ",")) 
   {
@@ -65,7 +64,7 @@ unsigned int parse_dbg_int32(char *dbg_buf, num32 *target)
 		  fprintf(stderr,"Parse error when loading debug file.");
 		  exit(1);
       }
-	  target[i++] = (num16) val;
+	  target[i++] = val;
   }
 
   restore_trailing_comma(trailing_comma);

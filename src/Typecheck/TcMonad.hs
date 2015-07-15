@@ -122,7 +122,6 @@ import qualified Data.Set as S
 import AstComp
 import AstExpr
 import Outputable
-import PpExpr (ppName)
 import PpComp ()
 import qualified GenSym as GS
 

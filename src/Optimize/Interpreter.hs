@@ -1147,7 +1147,9 @@ interpret e = guessIfUnevaluated (go . unExp) e
       lenEvald   <- interpret len
       beforeSt   <- get
       fullEv <- case (evaldInt startEvald, evaldInt lenEvald) of
-        (Left start', Left len') -> do
+        (Left start', Left len') 
+          | len' <= 512 -- Do not evaluate very large loops. 
+          -> do
           let loop n | n == start' + len' =
                 return True
               loop n = do

@@ -25,6 +25,7 @@ module Analysis.DataFlow (
     inOutVars
   , pprVarUsePkg
   , VarUsePkg (..)
+  , inOutVarsDefinite
 ) where
 
 
@@ -37,14 +38,13 @@ import qualified Data.Set as Set
 import Text.PrettyPrint.HughesPJ
 import Data.List ( nub )
 import AstExpr
-import Outputable 
 import Opts
 import AbsInt
 import NameEnv
-import Data.Data (Data)
-import Data.Typeable (Typeable)
 import qualified Analysis.RangeAnal as RA
 import Orphans ()
+
+import Utils ( panic )
 
 type VarSet = Set (GName Ty)
 
@@ -89,6 +89,14 @@ newtype DFM a = DFM (ReaderT DFEnv (StateT DFState (ErrorT Doc IO)) a)
 runDFM :: DFM a -> ErrorT Doc IO (a, DFState)
 runDFM (DFM act) 
   = runStateT (runReaderT act initDFEnv) initDFState
+
+-- | Run the ErrorT as well
+runDFMIO :: DFM a -> IO (a, DFState)
+runDFMIO act = do 
+  r <- runErrorT (runDFM act)
+  case r of 
+    Left doc -> panic (text "runDFMIO failure: " $$ doc)
+    Right s  -> return s
 
 -- | Union of two states
 unionDFState :: DFState -> DFState -> DFState
@@ -177,9 +185,21 @@ instance CmdDom DFM VarSet where
     do res_vs <- m
        return $ Set.delete x res_vs
 
-  aCall  _ _ = fail "Calls not supported in range analysis"
-  aError     = fail "Error not supported in range analysis"
-  aPrint _ _ = return ()
+  aCall _f args = foldM do_arg Set.empty args
+    -- Pre: All LVal arguments correspond to mutable arguments
+    -- Hence we must treat those as read and write variables. The
+    -- trick we employ here is that we first read, get an rval, and
+    -- then assign it back out to the same lval. 
+    where do_arg vs (LVal lv) = do 
+            v <- aDerefRead lv 
+            aAssign lv v
+            return (Set.union v vs)
+          do_arg vs (RVal v) = return (Set.union v vs)
+
+  aError       = return ()
+  aPrint _ _vs = return (aVal VUnit) 
+               -- NB: We could return (Set.unions vs)
+               -- but I am not sure we really care ...
 
 
 {---------------------------------------------------------------
@@ -209,12 +229,26 @@ deriving instance Monad   (AbsT DFM)
 deriving instance MonadIO (AbsT DFM)
 
 
-data VarUsePkg 
-  = VarUsePkg { vu_invars   :: [EId]
-              , vu_outvars  :: [EId]
-              , vu_allvars  :: [EId]
-              , vu_ranges   :: RA.RngMap }
-  deriving (Typeable, Data, Eq, Ord) 
+
+inOutVarsDefinite :: DynFlags -> Exp -> IO VarUsePkg
+inOutVarsDefinite dfs e = do
+  (varset, DFState udmap ufset) <- runDFMIO (unAbsT action)
+  let modified, impUsed, pureUsed, allVars :: [GName Ty]
+      modified = neKeys udmap
+      impUsed  = Set.toList $ Set.unions (map snd (neToList udmap))
+      pureUsed = Set.toList varset
+      allVars  = Set.toList ufset
+  -- Try now the range analysis, but suppress any errors
+  res <- runErrorT (RA.varRanges dfs e)
+  let ranges = case res of 
+                 Left _ -> neEmpty
+                 Right rngs -> snd rngs
+  return $ VarUsePkg { vu_invars  = nub $ impUsed ++ pureUsed
+                     , vu_outvars = modified
+                     , vu_allvars = allVars 
+                     , vu_ranges  = ranges }
+  where action :: AbsT DFM VarSet
+        action = absEvalRVal e
 
 
 inOutVars :: DynFlags -> Exp -> ErrorT Doc IO VarUsePkg
@@ -233,11 +267,3 @@ inOutVars dfs e = do
                      , vu_ranges  = ranges }
   where action :: AbsT DFM VarSet
         action = absEvalRVal e
-
-pprVarUsePkg :: VarUsePkg -> Doc
-pprVarUsePkg (VarUsePkg invars outvars allvars rmap)
-  = vcat [ text "  input variables:" <+> ppr invars
-         , text " output variables:" <+> ppr outvars
-         , text "    all variables:" <+> ppr allvars
-         , text "      ranges used:" <+> RA.pprRanges rmap
-         ]

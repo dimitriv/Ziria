@@ -407,6 +407,21 @@ passTakeEmit = TypedCompBottomUp $ \cloc comp -> if
                    -- to preserve vectorization hints!
            fun = mkFunDefined eloc fname [x] e
        rewrite letfun
+ 
+    | Repeat nfo bm <- unComp comp
+      , BindMany mit_tk [(x,emt)] <- unComp bm
+      , Par p mit tk <- unComp mit_tk
+      , Take1 {} <- unComp tk
+      , Emit {}  <- unComp emt
+      -> rewrite $ 
+         cPar cloc p mit $ 
+         cRepeat cloc nfo (cBindMany cloc tk [(x,emt)])
+
+    | BindMany c [(x,ret)] <- unComp comp
+      , Return _ e <- unComp ret
+      , EVar x' <- unExp e
+      , x == x'
+      -> rewrite c
 
     | otherwise
      -> return comp
@@ -554,6 +569,7 @@ passIfReturn = TypedCompBottomUp $ \_cloc comp -> if
 -- | Push mitigators under seq 
 passPushMit :: TypedCompPass
 passPushMit = TypedCompBottomUp $ \cloc  comp -> if 
+{- 
   | Par p mit1 c2 <- unComp comp
     , BindMany ch xs_cs <- unComp c2
     , Mitigate {} <- unComp mit1
@@ -575,16 +591,72 @@ passPushMit = TypedCompBottomUp $ \cloc  comp -> if
     , Mitigate {} <- unComp mit2
    -> rewrite $ cSeq cloc (cMitOut cloc p ch mit2) (cMitOut cloc p ct mit2)
 
+-}
+
+    -- These two have to do with the vectorizer 
+
+  | Repeat va cbody <- unComp comp
+   , Par p mit1 c2 <- unComp cbody
+   , Mitigate {} <- unComp mit1
+   -> rewrite $ cPar cloc p mit1 (cRepeat cloc va c2)
+
+  | Repeat va cbody <- unComp comp
+   , Par p c1 mit2  <- unComp cbody
+   , Mitigate {} <- unComp mit2
+   -> rewrite $ cPar cloc p (cRepeat cloc va c1) mit2
+
+
+  | Let x c cbody <- unComp comp
+   , Par p mit1 c2 <- unComp cbody
+   , Mitigate {} <- unComp mit1
+   -> rewrite $ cPar cloc p mit1 (cLet cloc x c c2)
+
+  | Let x c cbody <- unComp comp
+   , Par p c1 mit2 <- unComp cbody
+   , Mitigate {} <- unComp mit2
+   -> rewrite $ cPar cloc p (cLet cloc x c c1) mit2
+
+  | LetE x f e cbody <- unComp comp
+   , Par p mit1 c2 <- unComp cbody
+   , Mitigate {} <- unComp mit1
+   -> rewrite $ cPar cloc p mit1 (cLetE cloc x f e c2)
+
+  | LetE x f e cbody <- unComp comp
+   , Par p c1 mit2 <- unComp cbody
+   , Mitigate {} <- unComp mit2
+   -> rewrite $ cPar cloc p (cLetE cloc x f e c1) mit2
+
+  | LetERef x e cbody <- unComp comp
+   , Par p mit1 c2 <- unComp cbody
+   , Mitigate {} <- unComp mit1
+   -> rewrite $ cPar cloc p mit1 (cLetERef cloc x e c2)
+
+  | LetERef x e cbody <- unComp comp
+   , Par p c1 mit2 <- unComp cbody
+   , Mitigate {} <- unComp mit2
+   -> rewrite $ cPar cloc p (cLetERef cloc x e c1) mit2
+
+  | LetHeader f cbody <- unComp comp
+   , Par p mit1 c2 <- unComp cbody
+   , Mitigate {} <- unComp mit1
+   -> rewrite $ cPar cloc p mit1 (cLetHeader cloc f c2)
+
+  | LetHeader f cbody <- unComp comp
+   , Par p c1 mit2 <- unComp cbody
+   , Mitigate {} <- unComp mit2
+   -> rewrite $ cPar cloc p (cLetHeader cloc f c1) mit2
+
   | otherwise
    -> return comp
   
+{-
   where cMitIn l p m c 
           | TVoid <- inTyOfCTy (ctComp c) = c
           | otherwise = cPar l p m c
         cMitOut l p c m 
           | TVoid <- yldTyOfCTy (ctComp c) = c
           | otherwise = cPar l p c m
-
+-}
 
   --   -- Input mitigation on an emit/emits
   -- | Par _p mit1 c2 <- unComp comp
@@ -736,15 +808,16 @@ inline_length :: GName Ty -> Ty -> InlineData
 inline_length prm argty
   | TArray (NVar siz_nm) _ <- nameTyp prm
   , TArray nexpr _ <- argty
-  , let siz_var  = toName siz_nm noLoc tint Imm
+  , let siz_var  = toName siz_nm loc tint Imm
   , let siz_expr = nexpr_to_expr nexpr
   = InlineData { inl_let_bound = []
                , inl_subst     = [(siz_var,siz_expr)]
                , inl_len_subst = [(siz_nm,nexpr)] }
   | otherwise = mempty
   where
-    nexpr_to_expr (NVar s)    = eVar noLoc (toName s noLoc tint Imm)
-    nexpr_to_expr (Literal s) = eVal noLoc tint (vint s)  
+    nexpr_to_expr (NVar s)    = eVar loc (toName s loc tint Imm)
+    nexpr_to_expr (Literal s) = eVal loc tint (vint s)  
+    loc = nameLoc prm 
 
 
 -- | How to inline an immutable parameter: effectively by let-binding it
