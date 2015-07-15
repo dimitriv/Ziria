@@ -206,8 +206,8 @@ sucs :: NodeKind nkind => Node atom nid nkind -> [nid]
 sucs (Node _ nk) = sucsOfNk nk
 
 -- create predecessor map
-predecessors :: forall e nid nk. (NodeKind nk, Ord nid) => Automaton e nid nk -> Map nid (Set nid)
-predecessors a = go (auto_start a) Map.empty
+mkPreds :: forall e nid nk. (NodeKind nk, Ord nid) => Automaton e nid nk -> Map nid (Set nid)
+mkPreds a = go (auto_start a) Map.empty
   where
     go nid pred_map = foldl (insertPred nid) pred_map (sucs node)
       where node = fromJust $ assert (Map.member nid nmap) $ Map.lookup nid nmap
@@ -479,9 +479,9 @@ data DoneDist
 
 data DistUpdate = Imprecise | NewDist Int
 
--- calculate "done distance" of automaton (measured in reads from input-queue upto Done)
-doneDist :: forall nid e. Ord nid => Int -> SAuto e nid -> Map nid DoneDist
-doneDist threshold a = go dones init where
+-- compute "done distance" map of automaton (measured in reads from input-queue upto Done)
+mkDoneDist :: forall nid e. Ord nid => Int -> SAuto e nid -> Map nid DoneDist
+mkDoneDist threshold a = go dones init where
   dones = map (,NewDist 0) $
           filter (\nid -> case nodeKindOfId a nid of { SDone -> True; _ -> False }) $
           Map.keys (auto_graph a)
@@ -505,7 +505,7 @@ doneDist threshold a = go dones init where
     | otherwise
     = go work_list dist_map
 
-  preds nid = let p = predecessors a in Set.toList $ fromJust $ Map.lookup nid p
+  preds nid = let p = mkPreds a in Set.toList $ fromJust $ Map.lookup nid p
   
   mkUpdate dist nid = (nid,) $
     let new_dist = dist + cost nid in
@@ -515,24 +515,6 @@ doneDist threshold a = go dones init where
     SAtom watom _ _ -> countReads (auto_inchan a) watom
     _ -> 0
 
-
-  
-
-  fix dist_map dist_map'
-    | dist_map == dist_map' = dist_map
-    | otherwise             = fix dist_map' (update dist_map')
-
-  update dist_map = Map.mapWithKey updateNode dist_map
-    where
-      updateNode nid = Set.union (new $ nodeKindOfId a nid)
-
-      new SDone = Set.singleton 0
-      new (SBranch _ next1 next2 _) =
-        Set.union (fromJust $ Map.lookup next1 dist_map) (fromJust $ Map.lookup next2 dist_map)
-      new (SAtom watom next _) =
-        let suc_dists = fromJust $ Map.lookup next dist_map
-            cost = countReads (auto_inchan a) watom
-        in Set.filter (<= threshold) $ Set.map (+ cost) $ suc_dists
 
 
 -- Precondition: a1 and a2 should satisfy (auto_outchan a1) == (auto_inchan a2)
@@ -657,7 +639,7 @@ markSelfLoops a = a { auto_graph = go (auto_graph a)}
 pruneUnreachable :: forall e nid. (Atom e, Ord nid) => nid -> CfgAuto e nid -> CfgAuto e nid
 pruneUnreachable nid a = a { auto_graph = prune (auto_graph a) nid }
   where
-    preds = let predMap = predecessors a in (\nid -> fromJust $ Map.lookup nid predMap)
+    preds = let predMap = mkPreds a in (\nid -> fromJust $ Map.lookup nid predMap)
 
     prune :: CfgNodeMap e nid -> nid -> CfgNodeMap e nid
     prune nmap nid =
