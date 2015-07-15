@@ -18,6 +18,7 @@ import AstUnlabelled
 data SymAtom = SAExp (AExp ())
              | SACast (Int,Ty) (Int,Ty) 
              | SADiscard (Int,Ty)
+             | SAAssert Bool -- assert true and assert false
   deriving Eq
 
 instance Outputable SymAtom where
@@ -32,13 +33,19 @@ instance Outputable SymAtom where
 
   ppr (SADiscard _) = text "DISCARD"
 
+  ppr (SAAssert b) = text "ASSERT_" <> text (show b)
+
 instance Show SymAtom where
   show sa = render (pprShort sa)
 
 pprShort :: SymAtom -> Doc
-pprShort (SAExp e) = ppr (aexp_lbl e)
+pprShort (SAExp e) =  pprFileLoc (aexp_lbl e)
 pprShort sa = ppr sa
 
+pprFileLoc =
+  text . takeWhile (/= '$') .
+  reverse . takeWhile (/= '\\') . takeWhile (/= '/') . reverse .
+  render . ppr
 
 
 {--------------- Instantiation of Atom class -------------}
@@ -48,14 +55,16 @@ instance Atom SymAtom where
   atomInTy (SAExp e) = map ((1,) . nameTyp) (aexp_ivs e)
   atomInTy (SACast inty _)  = [inty]
   atomInTy (SADiscard inty) = [inty]
+  atomInTy (SAAssert _) = [(1,TBool)]
 
   atomOutTy (SAExp e) = map ((1,) . nameTyp) (aexp_ovs e)
-
   atomOutTy (SACast _ outty) = [outty]
   atomOutTy (SADiscard _)    = []
+  atomOutTy (SAAssert _) = []
 
   castAtom    = SACast
   discardAtom = SADiscard
+  assertAtom = SAAssert
 
   expToWiredAtom :: AExp () -> Maybe EId -> WiredAtom SymAtom
   expToWiredAtom e mb_out = 
