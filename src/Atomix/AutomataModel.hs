@@ -205,8 +205,8 @@ sucs :: NodeKind nkind => Node atom nid nkind -> [nid]
 sucs (Node _ nk) = sucsOfNk nk
 
 -- create predecessor map
-predecessors :: forall e nid nk. (NodeKind nk, Ord nid) => Automaton e nid nk -> Map nid (Set nid)
-predecessors a = go (auto_start a) Map.empty
+mkPreds :: forall e nid nk. (NodeKind nk, Ord nid) => Automaton e nid nk -> Map nid (Set nid)
+mkPreds a = go (auto_start a) Map.empty
   where
     go nid pred_map = foldl (insertPred nid) pred_map (sucs node)
       where node = fromJust $ assert (Map.member nid nmap) $ Map.lookup nid nmap
@@ -216,8 +216,8 @@ predecessors a = go (auto_start a) Map.empty
         Just preds -> Map.insert nid (Set.insert pred preds) pred_map
         Nothing -> go nid $ Map.insert nid (Set.singleton pred) pred_map
 
-nodeKindOfId :: Ord nid => nid -> Automaton atom nid nkind -> nkind atom nid
-nodeKindOfId nid a = node_kind $ fromJust $ assert (Map.member nid (auto_graph a)) $
+nodeKindOfId :: Ord nid => Automaton atom nid nkind -> nid -> nkind atom nid
+nodeKindOfId a nid = node_kind $ fromJust $ assert (Map.member nid (auto_graph a)) $
                                             Map.lookup nid (auto_graph a)
 countWrites :: Chan -> WiredAtom a -> Int
 countWrites ch wa = sum $ map fst $ filter ((== ch) . snd) $ wires_out wa
@@ -403,7 +403,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
               f y
 
     go (ARepeat c) =
-      case nodeKindOfId (auto_start k) k of
+      case nodeKindOfId k (auto_start k) of
         SDone -> do
           a0 <- mkAutomaton dfs sym chans c k
           let nid = auto_start k
@@ -457,38 +457,67 @@ pop :: Queue e -> Maybe (e, Queue e)
 pop [] = Nothing
 pop es = Just (List.last es, List.init es)
 
-type ExtraState = Int -- map done-distance to rollback-amount
+
+type ExtraState = (Int, Map Int Int) -- map done-distance to rollback-amount
 type ProdNid = (ExtraState, Int, Int)
 type PipeState = Queue (Either Int Int) -- left n means n reads, right m means m writes
 
-budget :: PipeState -> Int
-budget = sum . rights
+getBudget = sum . rights
 
+data DoneDist 
+  = DoneDist { dists        :: Set Int
+             , dist_precise :: Bool
+             }
+  deriving Eq
 
---doneDist :: forall e nid. (Ord nid) => (SimplNk e nid -> Int) -> SAuto e nid -> Map nid (Bool, Int)
---doneDist cost a = addDist Map.empty (auto_start a) where
---  nmap = auto_graph a
+data DistUpdate = Imprecise | NewDist Int
 
---  addDist :: Map nid (Bool,Int) -> nid -> Map nid (Bool,Int)
---  addDist dist_map nid = case Map.lookup nid dist_map of
---    Just _ -> dist_map
---    Nothing -> addDist' dist_map nid (nodeKindOfId nid a)
+-- compute "done distance" map of automaton (measured in reads from input-queue upto Done)
+mkDoneDist :: forall nid e. Ord nid => Int -> SAuto e nid -> Map nid DoneDist
+mkDoneDist threshold a' = go dones init where
+  a = deleteDeadNodes a'
+  dones = map (,NewDist 0) $
+          filter (\nid -> case nodeKindOfId a nid of { SDone -> True; _ -> False }) $
+          Map.keys (auto_graph a)
+  init = Map.map (const $ DoneDist Set.empty True) (auto_graph a)
 
---  addDist' :: Map nid (Bool,Int) -> nid -> SimplNk e nid -> Map nid (Bool,Int)
---  addDist' dist_map nid nk@SDone = Map.insert nid (True,cost nk) dist_map
---  addDist' dist_map nid nk =
---    let sucs = sucsOfNk nk
---        dist_map' = foldl addDist dist_map sucs
---        dist = cost nk + minimum [snd $ fromJust $ Map.lookup s dist_map' | s <- sucs ]
---        precise = case sucs of { _:_:_ -> False; [s] -> fst $ fromJust $ Map.lookup s dist_map'; [] -> True }
---    in Map.insert nid (precise, dist) dist_map'
+  go :: [(nid, DistUpdate)] -> Map nid DoneDist -> Map nid DoneDist
+  go [] dist_map = dist_map
+  go ((nid,update):work_list) dist_map
+    | Imprecise <- update
+    , dist_precise $ fromJust $ assert (Map.member nid dist_map) $  Map.lookup nid dist_map
+    = let dist_map' = Map.adjust (\d -> d { dist_precise = False }) nid dist_map in
+      let new_work = map (,Imprecise) (preds nid) in
+      go (new_work ++ work_list) dist_map'
+    
+    | NewDist n <- update
+    , Set.notMember n $ dists $ fromJust $ assert (Map.member nid dist_map) $ Map.lookup nid dist_map
+    = let dist_map' = Map.adjust (\d -> d { dists = Set.insert n (dists d) }) nid dist_map in
+      let new_work = map (mkUpdate n) (preds nid) in
+      go (new_work ++ work_list) dist_map'
+    
+    | otherwise
+    = go work_list dist_map
+
+  preds = let p = mkPreds a in (\nid -> Set.toList $ Map.findWithDefault Set.empty nid p)
+  
+  mkUpdate dist nid = (nid,) $
+    let new_dist = dist + cost nid in
+    if new_dist > threshold then Imprecise else NewDist new_dist
+  
+  cost nid = case nodeKindOfId a nid of
+    SAtom watom _ _ -> countReads (auto_inchan a) watom
+    _ -> 0
+
 
 
 -- Precondition: a1 and a2 should satisfy (auto_outchan a1) == (auto_inchan a2)
 -- a1 and a2 MUST NOT contain explicit loop nodes (but may contain loops)!!
 zipAutomata :: forall e. Atom e => SAuto e Int -> SAuto e Int -> SAuto e Int -> SAuto e Int
-zipAutomata a1 a2 k = concat_auto prod_a k
+zipAutomata a1' a2' k = concat_auto prod_a k
   where
+    a1 = deleteDeadNodes a1'
+    a2 = deleteDeadNodes a2'
     prod_a = (\a -> assert (auto_closed a) a) $
              assert (auto_closed a1) $
              assert (auto_closed a2) $
@@ -498,14 +527,25 @@ zipAutomata a1 a2 k = concat_auto prod_a k
     prod_nmap = zipNodes start_balance start_prod_nid Map.empty
     pipe_ch = assert (auto_outchan a1 == auto_inchan a2) $ auto_outchan a1
 
+    threshold = 1000 -- FIXME: replace this with a sensible value instead of a random one
+    done_dist = let d = mkDoneDist threshold a2 in (\nid -> fromJust $ assert (Map.member nid d) $ Map.lookup nid d)
+
 
     mkProdNid :: PipeState -> Int -> Int -> ProdNid
-    mkProdNid b nid1 nid2 = (budget b, nid1, nid2)
+    mkProdNid ps nid1 nid2 = (,nid1,nid2) $
+      let budget = getBudget ps
+          rollback_behavior = Map.fromList $ map (\d -> (d, getRollback d ps)) $
+                              filter (<= budget) $ Set.toList $ dists $ done_dist nid2
+      in (budget, rollback_behavior)
+
+    getRollback d ps = case try_consume' d ps of
+      Nothing -> 0
+      Just ps' -> sum $ lefts ps'
 
     zipNodes :: PipeState -> ProdNid -> SNodeMap e ProdNid -> SNodeMap e ProdNid
     zipNodes balance prod_nid@(_,nid1,nid2) prod_nmap =
       case Map.lookup prod_nid prod_nmap of
-        Nothing -> zipNodes' balance prod_nid (nodeKindOfId nid1 a1) (nodeKindOfId nid2 a2) prod_nmap
+        Nothing -> zipNodes' balance prod_nid (nodeKindOfId a1 nid1) (nodeKindOfId a2 nid2) prod_nmap
         Just _ -> prod_nmap -- We have already seen this product location. We're done!
 
     zipNodes' :: PipeState -> ProdNid -> SimplNk e Int -> SimplNk e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
@@ -527,7 +567,7 @@ zipAutomata a1 a2 k = concat_auto prod_a k
 
     zipNodes' balance prod_nid@(_,id1,id2) nk1@(SAtom _ _ pipes1) nk2@(SAtom _ _ pipes2) =
       let noDups = const (assert False)
-          pipes = Map.insertWith noDups pipe_ch (budget balance) $ Map.unionWith noDups pipes1 pipes2
+          pipes = Map.insertWith noDups pipe_ch (getBudget balance) $ Map.unionWith noDups pipes1 pipes2
           (watom, balance', next1, next2) = zipCfgActions balance (Node id1 nk1) (Node id2 nk2)
           prod_nid_next = mkProdNid balance' next1 next2
           prod_nkind = SAtom watom prod_nid_next pipes
@@ -543,13 +583,15 @@ zipAutomata a1 a2 k = concat_auto prod_a k
 
 
     try_consume :: WiredAtom atom -> PipeState -> Maybe PipeState
-    try_consume wa q = try (countReads pipe_ch wa) q
-      where try 0 q = Just q
-            try n q = case pop q of
-              Nothing                      -> Nothing
-              Just (Left _,q)              -> try n q
-              Just (Right m,q) | m<=n      -> try (n-m) q
-                               | otherwise -> Just $ q ++ [Right (m-n)]
+    try_consume wa q = try_consume' (countReads pipe_ch wa) q
+
+    try_consume' :: Int -> PipeState -> Maybe PipeState
+    try_consume' 0 q = Just q
+    try_consume' n q = case pop q of
+      Nothing                      -> Nothing
+      Just (Left _,q)              -> try_consume' n q
+      Just (Right m,q) | m<=n      -> try_consume' (n-m) q
+                       | otherwise -> Just $ q ++ [Right (m-n)]
 
     produce :: WiredAtom atom -> PipeState -> PipeState
     produce wa q =
@@ -606,7 +648,7 @@ markSelfLoops a = a { auto_graph = go (auto_graph a)}
 pruneUnreachable :: forall e nid. (Atom e, Ord nid) => nid -> CfgAuto e nid -> CfgAuto e nid
 pruneUnreachable nid a = a { auto_graph = prune (auto_graph a) nid }
   where
-    preds = let predMap = predecessors a in (\nid -> fromJust $ Map.lookup nid predMap)
+    preds = let predMap = mkPreds a in (\nid -> fromJust $ assert (Map.member nid predMap) $ Map.lookup nid predMap)
 
     prune :: CfgNodeMap e nid -> nid -> CfgNodeMap e nid
     prune nmap nid =
