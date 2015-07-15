@@ -1,0 +1,14 @@
+#include <externals.blk>
+
+fun test_and(a : arr bit, b : arr bit) {
+{-
+  var c : arr [length(a)] bit;
+  for i in [0, length(a)] {
+    c[i] := a[i] & b[i];
+  } 
+  return c;
+-}
+  return v_and(a, b);
+}
+
+let comp main = read[bit] >>> repeat{ x <- takes 64; emits test_and(x,x)} >>> write[bit]

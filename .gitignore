@@ -325,6 +325,17 @@ code/tutorial/compout
 code/tutorial/perfout
 code/tutorial/*dump
 
+tests/libs/*.c
+tests/libs/*.exe
+tests/libs/*.expanded
+tests/libs/*.outfile
+tests/libs/*~
+tests/libs/compout
+tests/libs/perfout
+tests/libs/*dump
+tests/libs/*outp
+
+
 code/WiFi/sniffer/*dll
 
 # for now, ignore AST dumps

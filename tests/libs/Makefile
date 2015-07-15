@@ -1,0 +1,114 @@
+# 
+# Copyright (c) Microsoft Corporation
+# All rights reserved. 
+#
+# Licensed under the Apache License, Version 2.0 (the ""License""); you
+# may not use this file except in compliance with the License. You may
+# obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+# CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+# LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+# A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+#
+# See the Apache Version 2.0 License for specific language governing
+# permissions and limitations under the License.
+#
+#
+
+# Disable default rules for C files
+.SUFFIXES:
+
+# Uncomment the following if you want winddk to be the default compiler. 
+# NB: you can override this from the command line, e.g: 
+# prompt> COMPILER=gcc make
+#
+# COMPILER?=winddk
+#
+COMPILER?=vs
+
+PP     = ../../scripts/preprocesscompile-$(COMPILER).sh
+PPPERF = ../../scripts/preprocesscompile-$(COMPILER)-inline.sh
+DIFF   = ../../tools/BlinkDiff
+
+# Do not delete outfiles to allow quick recheck of failed tests
+# use make clean to get rid of them
+.PRECIOUS: %.outfile %.outp %.out
+
+# Targets
+TGTS = $(patsubst %.wpl, %.test, $(wildcard *.wpl))
+
+all: $(TGTS)
+
+%.out : %.wpl
+	EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PP) $< $@
+#	$(PP) $< $@
+
+%.outp : %.wpl
+	EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS)' $(PPPERF) $< $@
+
+
+# Special name prefix for programs that need binary inputs and outputs
+# These are required to test struct-related I/O drivers which only support binary format
+bin_%.outfile: bin_%.out bin_%.infile
+	./$< --input=file \
+             --input-file-name=bin_$*.infile \
+             --input-file-mode=bin \
+             --output-file-name=$@ \
+             --output-file-mode=bin
+
+%.outfile: %.out %.infile
+	./$< --input=file \
+             --input-file-name=$*.infile \
+             --input-file-mode=dbg \
+             --output-file-name=$@ \
+             --output-file-mode=dbg
+
+%.test: %.outfile
+	$(DIFF) -f $< -g $<.ground -d -v -p
+
+#	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
+
+
+
+%.perf: %.outp %.infile
+	./$< --input=dummy \
+	     --dummy-samples=10000000000 \
+             --output=dummy $(EXTRARUNOPTS)
+
+
+%.accept : %.outfile
+	cp $< $<.ground
+
+
+clean:
+	rm -f ./*expanded
+	rm -f ./*exe ./*exec ./*out
+	rm -f ./*.outfile
+	rm -f ./compout ./perfout
+	rm -f ./*.c
+
+all-clean: clean
+	rm -f ./*~
+	rm -f ./*dump
+
+# Parser tests
+
+.PRECIOUS: %.wpl.expanded.ast.dump
+
+PARSERTESTS = $(patsubst %.wpl, %.parsertest, $(wildcard *.wpl))
+
+parsertests: $(PARSERTESTS)
+
+%.parsertest: %.wpl.expanded.ast.dump 
+	-diff -Nur $< $<.ground 
+
+%.wpl.expanded.ast.dump: %.wpl
+	EXTRAOPTS='--ddump-ast'	../../scripts/preprocesscompile.sh $< 
+
+%.ast.accept: %.wpl.expanded.ast.dump
+	cp $< $<.ground
+
+# vi:set noexpandtab:

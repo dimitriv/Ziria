@@ -147,14 +147,23 @@ derefBase (GDProj d _)  = derefBase d
 
 
 isMutGDerefExp :: GExp t a -> Maybe (GDerefExp t a)
-isMutGDerefExp e = case unExp e of
-  EVar nm | not (isMutable nm) -> Nothing
-          | otherwise          -> Just (GDVar nm)
+-- | Is this a dereference expression with a mutable base?
+isMutGDerefExp e
+  | Just d <- isGDerefExp e
+  , isMutable (derefBase d) 
+  = Just d
+  | otherwise
+  = Nothing
+
+isGDerefExp :: GExp t a -> Maybe (GDerefExp t a)
+-- | Is this a dereference expression? (lvalue)
+isGDerefExp  e = case unExp e of
+  EVar nm -> Just (GDVar nm)
   EProj estruct fld -> do
-    gde <- isMutGDerefExp estruct
+    gde <- isGDerefExp  estruct
     return (GDProj gde fld)
   EArrRead earr estart elen -> do
-    gdarr <- isMutGDerefExp earr
+    gdarr <- isGDerefExp earr
     return (GDArr gdarr estart elen)
   _ -> Nothing -- All other cases are immutable
 
