@@ -217,8 +217,8 @@ predecessors a = go (auto_start a) Map.empty
         Just preds -> Map.insert nid (Set.insert pred preds) pred_map
         Nothing -> go nid $ Map.insert nid (Set.singleton pred) pred_map
 
-nodeKindOfId :: Ord nid => nid -> Automaton atom nid nkind -> nkind atom nid
-nodeKindOfId nid a = node_kind $ fromJust $ assert (Map.member nid (auto_graph a)) $
+nodeKindOfId :: Ord nid => Automaton atom nid nkind -> nid -> nkind atom nid
+nodeKindOfId a nid = node_kind $ fromJust $ assert (Map.member nid (auto_graph a)) $
                                             Map.lookup nid (auto_graph a)
 countWrites :: Chan -> WiredAtom a -> Int
 countWrites ch wa = sum $ map fst $ filter ((== ch) . snd) $ wires_out wa
@@ -404,7 +404,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
               f y
 
     go (ARepeat c) =
-      case nodeKindOfId (auto_start k) k of
+      case nodeKindOfId k (auto_start k) of
         SDone -> do
           a0 <- mkAutomaton dfs sym chans c k
           let nid = auto_start k
@@ -458,6 +458,12 @@ pop :: Queue e -> Maybe (e, Queue e)
 pop [] = Nothing
 pop es = Just (List.last es, List.init es)
 
+data Rollback 
+  = Rollback { rollback_map     :: Map Int Int
+             , rollback_precise :: Bool
+             }
+
+
 type ExtraState = Int -- map done-distance to rollback-amount
 type ProdNid = (ExtraState, Int, Int)
 type PipeState = Queue (Either Int Int) -- left n means n reads, right m means m writes
@@ -465,24 +471,68 @@ type PipeState = Queue (Either Int Int) -- left n means n reads, right m means m
 budget :: PipeState -> Int
 budget = sum . rights
 
+data DoneDist 
+  = DoneDist { dists        :: Set Int
+             , dist_precise :: Bool
+             }
+  deriving Eq
 
---doneDist :: forall e nid. (Ord nid) => (SimplNk e nid -> Int) -> SAuto e nid -> Map nid (Bool, Int)
---doneDist cost a = addDist Map.empty (auto_start a) where
---  nmap = auto_graph a
+data DistUpdate = Imprecise | NewDist Int
 
---  addDist :: Map nid (Bool,Int) -> nid -> Map nid (Bool,Int)
---  addDist dist_map nid = case Map.lookup nid dist_map of
---    Just _ -> dist_map
---    Nothing -> addDist' dist_map nid (nodeKindOfId nid a)
+-- calculate "done distance" of automaton (measured in reads from input-queue upto Done)
+doneDist :: forall nid e. Ord nid => Int -> SAuto e nid -> Map nid DoneDist
+doneDist threshold a = go dones init where
+  dones = map (,NewDist 0) $
+          filter (\nid -> case nodeKindOfId a nid of { SDone -> True; _ -> False }) $
+          Map.keys (auto_graph a)
+  init = Map.map (const $ DoneDist Set.empty True) (auto_graph a)
 
---  addDist' :: Map nid (Bool,Int) -> nid -> SimplNk e nid -> Map nid (Bool,Int)
---  addDist' dist_map nid nk@SDone = Map.insert nid (True,cost nk) dist_map
---  addDist' dist_map nid nk =
---    let sucs = sucsOfNk nk
---        dist_map' = foldl addDist dist_map sucs
---        dist = cost nk + minimum [snd $ fromJust $ Map.lookup s dist_map' | s <- sucs ]
---        precise = case sucs of { _:_:_ -> False; [s] -> fst $ fromJust $ Map.lookup s dist_map'; [] -> True }
---    in Map.insert nid (precise, dist) dist_map'
+  go :: [(nid, DistUpdate)] -> Map nid DoneDist -> Map nid DoneDist
+  go [] dist_map = dist_map
+  go ((nid,update):work_list) dist_map
+    | Imprecise <- update
+    , dist_precise $ fromJust $ Map.lookup nid dist_map
+    = let dist_map' = Map.adjust (\d -> d { dist_precise = False }) nid dist_map in
+      let new_work = map (,Imprecise) (preds nid) in
+      go (new_work ++ work_list) dist_map'
+    
+    | NewDist n <- update
+    , Set.notMember n $ dists $ fromJust $ Map.lookup nid dist_map
+    = let dist_map' = Map.adjust (\d -> d { dists = Set.insert n (dists d) }) nid dist_map in
+      let new_work = map (mkUpdate n) (preds nid) in
+      go (new_work ++ work_list) dist_map'
+    
+    | otherwise
+    = go work_list dist_map
+
+  preds nid = let p = predecessors a in Set.toList $ fromJust $ Map.lookup nid p
+  
+  mkUpdate dist nid = (nid,) $
+    let new_dist = dist + cost nid in
+    if new_dist > threshold then Imprecise else NewDist new_dist
+  
+  cost nid = case nodeKindOfId a nid of
+    SAtom watom _ _ -> countReads (auto_inchan a) watom
+    _ -> 0
+
+
+  
+
+  fix dist_map dist_map'
+    | dist_map == dist_map' = dist_map
+    | otherwise             = fix dist_map' (update dist_map')
+
+  update dist_map = Map.mapWithKey updateNode dist_map
+    where
+      updateNode nid = Set.union (new $ nodeKindOfId a nid)
+
+      new SDone = Set.singleton 0
+      new (SBranch _ next1 next2 _) =
+        Set.union (fromJust $ Map.lookup next1 dist_map) (fromJust $ Map.lookup next2 dist_map)
+      new (SAtom watom next _) =
+        let suc_dists = fromJust $ Map.lookup next dist_map
+            cost = countReads (auto_inchan a) watom
+        in Set.filter (<= threshold) $ Set.map (+ cost) $ suc_dists
 
 
 -- Precondition: a1 and a2 should satisfy (auto_outchan a1) == (auto_inchan a2)
@@ -506,7 +556,7 @@ zipAutomata a1 a2 k = concat_auto prod_a k
     zipNodes :: PipeState -> ProdNid -> SNodeMap e ProdNid -> SNodeMap e ProdNid
     zipNodes balance prod_nid@(_,nid1,nid2) prod_nmap =
       case Map.lookup prod_nid prod_nmap of
-        Nothing -> zipNodes' balance prod_nid (nodeKindOfId nid1 a1) (nodeKindOfId nid2 a2) prod_nmap
+        Nothing -> zipNodes' balance prod_nid (nodeKindOfId a1 nid1) (nodeKindOfId a2 nid2) prod_nmap
         Just _ -> prod_nmap -- We have already seen this product location. We're done!
 
     zipNodes' :: PipeState -> ProdNid -> SimplNk e Int -> SimplNk e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
