@@ -127,7 +127,7 @@ cgDeclQueues qs action = do
 
 -- | Extract all introduced queues, and for each calculate the maximum
 -- size we should allocate it with.
-extractQueues :: Automaton SymAtom Int -> QueueInfo
+extractQueues :: CfgAuto SymAtom Int -> QueueInfo
 extractQueues auto 
   = QI { qi_inch   = auto_inchan auto
        , qi_outch  = auto_outchan auto
@@ -140,7 +140,7 @@ extractQueues auto
     unions_with f = foldl (Map.unionWith f) Map.empty
 
     pre = map (extract_queue . node_kind) (Map.elems (auto_graph auto))
-    extract_queue (Action atoms _ init_pipes) = update_pipes atoms init_pipes
+    extract_queue (CfgAction atoms _ init_pipes) = update_pipes atoms init_pipes
     extract_queue _ = Map.empty
 
     update_pipes :: [WiredAtom SymAtom] -> Map Chan Int -> Map Chan Int
@@ -154,9 +154,9 @@ extractQueues auto
 
 
 cgAutomaton :: DynFlags 
-            -> RnSt                   -- ^ Records all variables (but no queues)
-            -> Automaton SymAtom Int  -- ^ The automaton
-            -> Cg CLabel              -- ^ Label of starting state we jump to
+            -> RnSt                 -- ^ Records all variables (but no queues)
+            -> CfgAuto SymAtom Int  -- ^ The automaton
+            -> Cg CLabel            -- ^ Label of starting state we jump to
 cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
                                    , auto_start   = start })
   = do cgRnSt dfs st $ cgDeclQueues queues cg_automaton
@@ -166,13 +166,13 @@ cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
 
    cg_automaton = mapM_ cg_node (Map.elems graph)
    cg_node (Node nid nk) = appendLabeledBlock (lblOfNid nid) (cg_nkind nk)
-   cg_nkind Done         = appendStmt [cstm| return 0; |]
-   cg_nkind (Loop next)  = appendStmt [cstm| goto $id:(lblOfNid next);|]
-   cg_nkind (AutomataModel.Branch c l r _) = do
+   cg_nkind CfgDone         = appendStmt [cstm| return 0; |]
+   cg_nkind (CfgLoop next)  = appendStmt [cstm| goto $id:(lblOfNid next);|]
+   cg_nkind (CfgBranch c l r _) = do
      cc <- lookupVarEnv c
      appendStmt [cstm| if ($cc) { goto $id:(lblOfNid l); } else { goto $id:(lblOfNid r); } |]
 
-   cg_nkind (Action atoms next _pipes) = do
+   cg_nkind (CfgAction atoms next _pipes) = do
      mapM_ (cgAtom dfs queues) atoms
      appendStmt [cstm| goto $id:(lblOfNid next);|]
 
@@ -184,6 +184,10 @@ cgAtom :: DynFlags
        -> Cg ()
 cgAtom dfs qnfo (WiredAtom win wout the_atom) 
   = case the_atom of
+      SAAssert b -> 
+        assert "cgAtom/Assert" (singleton win) $
+        cgAssertAtom dfs qnfo (head win) b
+
       SAExp aexp -> 
         cgAExpAtom dfs qnfo win wout aexp
       SACast intty outty  -> 
@@ -198,6 +202,29 @@ cgAtom dfs qnfo (WiredAtom win wout the_atom)
   where singleton [_] = True
         singleton _   = False
         
+
+cgAssertAtom :: DynFlags
+             -> QueueInfo
+             -> (Int,EId)
+             -> Bool
+             -> Cg ()
+cgAssertAtom dfs qs (_,inwire) b = do 
+      let loc = nameLoc inwire
+
+      storage <- CgMonad.freshName "assert_storage" TBool Mut
+
+      cgMutBind dfs noLoc storage Nothing $ do 
+
+         cgInWiring qs [(1,inwire)] [storage]
+         
+         let err   = eError loc TUnit "Atomix dead code assertion violation!"
+             vunit = eVal loc TUnit VUnit
+
+         _ <- codeGenExp dfs $ 
+              if b then eIf loc (eUnOp loc Neg (eVar loc storage)) err vunit
+                   else eIf loc (eVar loc storage) err vunit
+
+         return ();
 
 cgCastAtom :: DynFlags 
            -> QueueInfo
@@ -247,12 +274,14 @@ cgAExpAtom dfs qs wins wouts aexp
     assert "cgAExpAtom" (all (\x -> fst x == 1) wouts) $ 
     do  cgInWiring qs wins (map snd wins) 
 
-        there_already <- lookupExpFunEnv_maybe fun_name 
+        fdefs <- getFunDefs 
+        _ccall <- if fun_name `elem` fdefs 
+                  then codeGenExp dfs call
+                  else cgFunDefined_clos dfs loc fun [] $ 
+                       codeGenExp dfs call
 
-        _ <- case there_already of 
-                Just {} -> codeGenExp dfs call
-                Nothing -> cgFunDefined_clos dfs loc fun [] $ 
-                           codeGenExp dfs call
+        -- Can safely always discard _ccal because it is going to be UNIT, 
+        -- see CgCall.hs 
 
         cgOutWiring qs wouts (map snd wouts)
        
