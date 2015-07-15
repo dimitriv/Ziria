@@ -73,14 +73,21 @@ cgRnSt dfs (RnSt { st_bound_vars = bound
     cg_bound bound $ action
   where
     cg_sdefs [] m = m
-    cg_sdefs ((_,sd):sds) m 
+    cg_sdefs ((_,sd):sds) m
       = cg_sdefs sds (cgStructDef sd m)
     cg_fdefs [] m = m
     cg_fdefs ((_,(fun,clos)):fds) m
-      = cg_fdefs fds (cgFunDefined_clos dfs (funLoc fun) fun clos m) 
-    cg_bound [] m = m 
-    cg_bound (x:xs) m 
+      | is_external fun
+      = cg_fdefs fds (cgFunExternal dfs (funLoc fun) fun m)
+      | otherwise
+      = cg_fdefs fds (cgFunDefined_clos dfs (funLoc fun) fun clos m)
+    cg_bound [] m = m
+    cg_bound (x:xs) m
       = cg_bound xs (cgMutBind dfs noLoc x Nothing m)
+
+    is_external (MkFun (MkFunExternal {}) _ _) = True
+    is_external _ = False
+
 
 lblOfNid :: Int -> CLabel
 lblOfNid x = "BLOCK_" ++ show x
@@ -123,8 +130,8 @@ cgDeclQueues qs action =
          appendTopDecl my_sizes_decl
 
          -- Add code to initialize queues in wpl global init
-         _ <- mapM addGlobalWplAllocated
-                     (ts_init_stmts : Map.elems my_sizes_inits)
+         _ <- mapM addGlobalWplAllocated $
+                     (Map.elems my_sizes_inits) ++ [ts_init_stmts]
 
          action
 
@@ -460,10 +467,16 @@ cgOutWire dfs qs (n,qvar) v
       -- Unexpected input queue
       Just QIn -> panicStr "cg_out_wire: encountered the input queue!"
 
-      -- The actual output queu 
+      -- The actual output queue
       Just QOut -> do
 
         let qtype = squashedQueueType n (nameTyp qvar)
+
+        cgIO $ print $ vcat [ text "Out-Wiring:"
+                            , text "Queue type:" <+> ppr (nameTyp qvar)
+                            , text "  Squashed:" <+> ppr qtype
+                            , text "  Var type:" <+> ppr (nameTyp v) ]
+
 
         let (bufput_suffix, putLen) = getTyPutGetInfo qtype
         let bufPutF = "buf_put" ++ bufput_suffix
@@ -483,5 +496,5 @@ cgOutWire dfs qs (n,qvar) v
           else
             appendStmt [cstm| $id:(bufPutF)($id:global_params,
                                             $id:buf_context,
-                                            $cv); |]
+                                            *$ptr); |]
         
