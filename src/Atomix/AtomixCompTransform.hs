@@ -121,23 +121,25 @@ alphaNorm sym = mapCompM return return return return return action
  ------------------------------------------------------------------------------}
 
 data RnSt = RnSt { st_bound_vars  :: [EId]
-                 , st_fundefs     :: [(EId,(Fun,[EId]))]
+                 , st_fundefs     :: [(EId,(Fun,[EId]))] -- NB: in reverse order
                  , st_structs     :: [(TyName, StructDef)]
                  }
 
 instance Outputable RnSt where
   ppr (RnSt _ fundefs _) = vcat $ map (pprFun . unFun . fst . snd) fundefs
     where
-      pprFun (MkFunDefined f args body) = ppr f <> (parens $ hsep $ punctuate comma $ map ppr args) <+> 
-        text ":=" <+> ppr body
-      pprFun (MkFunExternal f args _body) = ppr f <> (parens $ hsep $ punctuate comma $ map ppr args) <+> 
-        text ":=" <+> text "<EXTERNAL>"
-
+      pprFun (MkFunDefined f args body) 
+         = ppr f <> (parens $ hsep $ punctuate comma $ map ppr args) <+> 
+           text ":=" <+> ppr body
+      pprFun (MkFunExternal f args _body) 
+         = ppr f <> (parens $ hsep $ punctuate comma $ map ppr args) <+> 
+           text ":=" <+> text "<EXTERNAL>"
 
 type RnStM a = StateT RnSt IO a
 
 recBound :: EId -> RnStM ()
-recBound x = modify $ \s -> s { st_bound_vars = x { nameMut = Mut } : st_bound_vars s }
+recBound x 
+  = modify $ \s -> s { st_bound_vars = x { nameMut = Mut } : st_bound_vars s }
 
 recFunDef :: EId -> Fun -> [EId] -> RnStM ()
 recFunDef x fn clos 
@@ -185,7 +187,7 @@ liftBindsComp = mapCompM return return return return return action
           = return c
           where go c1 [] = return c1
                 go c1 ((x,c2):xscs)
-                 | x `S.notMember` (fst $ compFVs c2) -- not in c2 and not in xscs
+                 | x `S.notMember` (fst $ compFVs c2) -- not in c2 & not in xscs
                  , x `S.notMember` (S.unions (map (fst. compFVs. snd) xscs)) 
                  = cSeq (compLoc c) c1 <$> go c2 xscs
                  | otherwise 
@@ -197,7 +199,8 @@ mkMutableBound :: [EId] -> Comp -> IO Comp
 -- | All 'recBound' variables should become mutable because we write
 -- to them in the automata level (perhaps just once if they originate
 -- in Ziria immutables, but still)
-mkMutableBound bound = mapCompM return return return return exp_action comp_action
+mkMutableBound bound 
+  = mapCompM return return return return exp_action comp_action
   where exp_action = mapExpM return return action
         action e   = return $ case unExp e of
           EVar x | x `elem` bound -> eVar (expLoc e) (x { nameMut = Mut })
@@ -312,7 +315,8 @@ parCompSplit xs =
      where isTrans c = not (isComputer (ctComp c))
 
 normalizePars :: Comp -> Comp
-normalizePars = runIdentity . mapCompM return return return return return (return . action)
+normalizePars 
+  = runIdentity . mapCompM return return return return return (return . action)
   where 
     action c = 
       case parCompSplit $ collectPars c of
@@ -321,7 +325,8 @@ normalizePars = runIdentity . mapCompM return return return return return (retur
         Left (t:ts) -> foldl mkPar t ts
         Right ([],c0,t:ts) -> mkPar c0 $ foldl mkPar t ts
         Right (t:ts,c0,[]) -> mkPar (foldl mkPar t ts) c0
-        Right (t:ts,c0,t':ts') -> mkPar (foldl mkPar t ts) $ mkPar c0 $ foldl mkPar t' ts'
+        Right (t:ts,c0,t':ts') 
+          -> mkPar (foldl mkPar t ts) $ mkPar c0 $ foldl mkPar t' ts'
         _ -> panicStr "normalizePars: impossible case"
       where mkPar = cPar (compLoc c) undefined
         
@@ -361,11 +366,11 @@ atomixCompToComp :: Comp -> RnSt -> Comp
 atomixCompToComp comp (RnSt { st_bound_vars  = letrefs
                             , st_fundefs     = fundefs
                             , st_structs     = strdefs }) = str_c 
- where let_c = foldr (\x -> cLetERef loc x Nothing) comp letrefs
-       fun_c = foldr (cLetHeader loc) let_c funs
-       str_c = foldr (cLetStruct loc) fun_c (map snd strdefs)
-       funs = reverse $ map (\(_,(fun,_)) -> fun) fundefs
-       loc  = compLoc comp
+ where let_c = foldl (\c x -> cLetERef loc x Nothing c) comp letrefs
+       fun_c = foldl (\c f -> cLetHeader loc f c) let_c funs 
+       str_c = foldl (\c s -> cLetStruct loc s c) fun_c (map snd strdefs)
+       funs  = map (\(_,(fun,_)) -> fun) fundefs
+       loc   = compLoc comp
 
 
 
@@ -400,14 +405,14 @@ transLifted dfs sym = go_comp
         loc = compLoc comp
         go (Return _ e) = aReturn loc () <$> (liftIO $ transLiftedExp dfs sym e)
 
-        --go (Times _ estrt (MkExp (EVal _ (VInt i _)) _ _) cnt c) = do
+        -- go (Times _ estrt (MkExp (EVal _ (VInt i _)) _ _) cnt c) = do
         --   let cnt_expr    = eVar loc cnt
         --       TInt _bw sn = nameTyp cnt
         --       one         = eVal loc (nameTyp cnt) (VInt 1 sn)
-        --       upd_cntr    = eAssign loc cnt_expr (eBinOp loc Add cnt_expr one)
-        --       asg_cntr    = eAssign loc cnt_expr estrt
+        --       upd_cntr   = eAssign loc cnt_expr (eBinOp loc Add cnt_expr one)
+        --       asg_cntr   = eAssign loc cnt_expr estrt
 
-        --       c_upd       = cSeq loc c (cReturn loc AutoInline upd_cntr)
+        --       c_upd      = cSeq loc c (cReturn loc AutoInline upd_cntr)
            
         --   a1 <- go_comp (cReturn loc AutoInline asg_cntr)
         --   a2 <- aRepeatN loc () (fromIntegral i) <$> go_comp c_upd

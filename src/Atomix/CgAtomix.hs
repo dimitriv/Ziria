@@ -41,7 +41,7 @@ import qualified Data.Map.Strict as Map
 import Language.C.Quote.C
 
 -- import Control.Monad.Identity
--- import Control.Monad.State
+import Control.Monad ( unless, void )
 import Data.Loc
 import Text.PrettyPrint.HughesPJ
 -- import qualified GenSym as GS
@@ -73,12 +73,14 @@ cgRnSt dfs (RnSt { st_bound_vars = bound
     cg_bound bound $ action
   where
     cg_sdefs [] m = m
-    cg_sdefs ((_,sd):sds) m = cgStructDef sd (cg_sdefs sds m)
+    cg_sdefs ((_,sd):sds) m 
+      = cg_sdefs sds (cgStructDef sd m)
     cg_fdefs [] m = m
     cg_fdefs ((_,(fun,clos)):fds) m
-      = cgFunDefined_clos dfs (funLoc fun) fun clos (cg_fdefs fds m)
+      = cg_fdefs fds (cgFunDefined_clos dfs (funLoc fun) fun clos m) 
     cg_bound [] m = m 
-    cg_bound (x:xs) m = cgMutBind dfs noLoc x Nothing (cg_bound xs m)
+    cg_bound (x:xs) m 
+      = cg_bound xs (cgMutBind dfs noLoc x Nothing m)
 
 lblOfNid :: Int -> CLabel
 lblOfNid x = "BLOCK_" ++ show x
@@ -113,14 +115,16 @@ cgDeclQueues qs action =
   in if numqs == 0 then action else do 
          let my_sizes_decl = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
              ts_init_stmts = [cstm| ts_init($int:(numqs),my_sizes); |]
-             my_sizes_inits = Map.mapWithKey (\qvar (QId i,_siz) -- Ignore # of slots for now
-                     -> [cstm| my_sizes[$int:i] = $(tySizeOf_C (nameTyp qvar));|]) (qi_interm qs)
+             my_sizes_inits = Map.mapWithKey (\qvar (QId i,_siz) -- ignore slots
+                     -> [cstm| my_sizes[$int:i] = 
+                                 $(tySizeOf_C (nameTyp qvar));|]) (qi_interm qs)
 
          -- Append top declarations  
          appendTopDecl my_sizes_decl
 
          -- Add code to initialize queues in wpl global init
-         _ <- mapM addGlobalWplAllocated (ts_init_stmts : Map.elems my_sizes_inits)
+         _ <- mapM addGlobalWplAllocated
+                     (ts_init_stmts : Map.elems my_sizes_inits)
 
          action
 
@@ -135,7 +139,8 @@ extractQueues auto
        }
   where
     interms = Map.fromList $ 
-               zipWith (\(k,siz) n -> (k,(QId n,siz))) (Map.toList (unions_with max pre)) [0..]
+               zipWith (\(k,siz) n -> (k,(QId n,siz))) 
+                       (Map.toList (unions_with max pre)) [0..]
 
     unions_with f = foldl (Map.unionWith f) Map.empty
 
@@ -159,23 +164,49 @@ cgAutomaton :: DynFlags
             -> Cg CLabel            -- ^ Label of starting state we jump to
 cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
                                    , auto_start   = start })
-  = do cgRnSt dfs st $ cgDeclQueues queues cg_automaton
-       return (lblOfNid start)
+  = do { cgRnSt dfs st $
+         cgDeclQueues queues $
+         cg_define_atoms $
+         cg_automaton
+       ; return (lblOfNid start) }
   where 
    queues = extractQueues auto
 
-   cg_automaton = mapM_ cg_node (Map.elems graph)
-   cg_node (Node nid nk) = appendLabeledBlock (lblOfNid nid) (cg_nkind nk)
+   cg_automaton             = mapM_ cg_node (Map.elems graph)
+   cg_node (Node nid nk)    = appendLabeledBlock (lblOfNid nid) (cg_nkind nk)
    cg_nkind CfgDone         = appendStmt [cstm| return 0; |]
    cg_nkind (CfgLoop next)  = appendStmt [cstm| goto $id:(lblOfNid next);|]
    cg_nkind (CfgBranch c l r _) = do
      cc <- lookupVarEnv c
-     appendStmt [cstm| if ($cc) { goto $id:(lblOfNid l); } else { goto $id:(lblOfNid r); } |]
-
+     appendStmt [cstm| if ($cc) { goto $id:(lblOfNid l); } 
+                       else { goto $id:(lblOfNid r); } |]
    cg_nkind (CfgAction atoms next _pipes) = do
      mapM_ (cgAtom dfs queues) atoms
      appendStmt [cstm| goto $id:(lblOfNid next);|]
 
+   cg_define_atoms       = cg_def_atoms (Map.elems graph)
+   cg_def_atoms [] m     = m
+   cg_def_atoms (n:ns) m = cg_def_node n (cg_def_atoms ns m)
+   cg_def_node (Node _nid nk)    = cg_def_nkind nk
+   cg_def_nkind CfgDone m        = m
+   cg_def_nkind (CfgLoop _n) m   = m
+   cg_def_nkind (CfgBranch {}) m = m
+   cg_def_nkind (CfgAction atoms _ _) m = cg_def_atoms' atoms m 
+
+   cg_def_atoms' [] m = m
+   cg_def_atoms' (a:as) m = cgDefAtom dfs a (cg_def_atoms' as m)
+
+
+cgDefAtom :: DynFlags
+          -> WiredAtom SymAtom
+          -> Cg a
+          -> Cg a
+cgDefAtom dfs (WiredAtom win wout the_atom) m
+  = case the_atom of
+      SAAssert {}  -> m
+      SACast {}    -> m
+      SADiscard {} -> m
+      SAExp aexp   -> cgAExpDefAtom dfs win wout aexp m
 
 -- | Code generation for an atom
 cgAtom :: DynFlags
@@ -215,7 +246,7 @@ cgAssertAtom dfs qs (_,inwire) b = do
 
       cgMutBind dfs noLoc storage Nothing $ do 
 
-         cgInWiring qs [(1,inwire)] [storage]
+         cgInWiring dfs qs [(1,inwire)] [storage]
          
          let err   = eError loc TUnit "Atomix dead code assertion violation!"
              vunit = eVal loc TUnit VUnit
@@ -244,8 +275,8 @@ cgCastAtom dfs qs (n,inwire)
    
 
       cgMutBind dfs noLoc storage Nothing $ do
-         cgInWiring  qs [(n,inwire) ] [storage]
-         cgOutWiring qs [(m,outwire)] [storage]
+         cgInWiring dfs qs [(n,inwire) ] [storage]
+         cgOutWiring dfs qs [(m,outwire)] [storage]
 
 
 cgDiscAtom :: DynFlags
@@ -260,8 +291,55 @@ cgDiscAtom dfs qs (n,inwire) (n',inty)
       storage <- CgMonad.freshName "disc_storage" storage_in_ty Mut
 
       cgMutBind dfs noLoc storage Nothing $
-         cgInWiring qs [(n,inwire)] [storage]
+         cgInWiring dfs qs [(n,inwire)] [storage]
 
+
+mkAExpFunName :: [EId] -> [EId] -> AExp () -> (EId,[EId])
+mkAExpFunName wires_in wires_out aexp = (fun_name, params)
+  where 
+    loc  = expLoc (aexp_exp aexp)
+    input_only x = (x `elem` wires_in) && not (x `elem` wires_out)
+    args   = nub (wires_in ++ wires_out)
+    params = map (\x -> if input_only x then x { nameMut = Imm } 
+                        else x { nameMut = Mut }) args
+    argtys = map (\x -> GArgTy (nameTyp x) 
+                               (if isMutable x then Mut else Imm)) params
+
+    resty     = TUnit
+    funty  = TArrow argtys resty
+    fun_name = toName (alphaNumStr $ aexp_lbl aexp) loc funty Imm
+
+mkAExpFunDef :: [EId] -> [EId] -> AExp () -> Fun
+mkAExpFunDef wires_in wires_out aexp = mkFunDefined loc fun_name params fun_body
+  where 
+    (fun_name,params) = mkAExpFunName wires_in wires_out aexp
+    loc      = expLoc fun_body
+    fun_body = aexp_exp aexp
+
+cgAExpDefAtom :: DynFlags 
+              -> [(Int,EId)] -- ^ in wires
+              -> [(Int,EId)] -- ^ out wires
+              -> AExp ()
+              -> Cg a
+              -> Cg a
+cgAExpDefAtom dfs wins wouts aexp m
+  = do mb <- lookupExpFunEnv_maybe fun_name
+       case mb of Just {} -> m
+                  Nothing -> cgFunDefined_clos dfs loc fun [] (dbg_m >> m)
+  where
+    dbg_m = cgIO $ print $ vcat [ text "cgAExpAtom:" <+> ppr fun_name
+                                , text "ivs       :" <+> ppr wires_in
+                                , text "ovs       :" <+> ppr wires_out
+                                , text "fun_ty    :" <+> ppr (nameTyp fun_name)
+                                ]
+
+    loc  = expLoc (aexp_exp aexp)
+    -- input wires
+    wires_in  = map snd wins
+    -- output wires
+    wires_out = map snd wouts
+    fun_name = funName fun
+    fun = mkAExpFunDef wires_in wires_out aexp
 
 cgAExpAtom :: DynFlags
            -> QueueInfo
@@ -272,97 +350,79 @@ cgAExpAtom :: DynFlags
 cgAExpAtom dfs qs wins wouts aexp 
   = assert "cgAExpAtom" (all (\x -> fst x == 1) wins)  $
     assert "cgAExpAtom" (all (\x -> fst x == 1) wouts) $ 
-    do  cgInWiring qs wins (map snd wins) 
+    do  cgInWiring dfs qs wins (map snd wins) 
 
-        cgIO $ print $ vcat [ text "cgAExpAtom:" <+> ppr fun_name
-                            , text "ivs       :" <+> ppr wires_in
-                            , text "ovs       :" <+> ppr wires_out
-                            , text "param list:" <+> ppr params
-                            , text "argtys    :" <+> ppr argtys
-                            ]
-
-        fdefs <- getFunDefs 
-        _ccall <- if fun_name `elem` fdefs 
-                  then codeGenExp dfs call
-                  else cgFunDefined_clos dfs loc fun [] $ 
-                       codeGenExp dfs call
+        _ccall <- codeGenExp dfs call
 
         -- Can safely always discard _ccal because it is going to be UNIT, 
         -- see CgCall.hs 
 
-        cgOutWiring qs wouts (map snd wouts)
-       
+        cgOutWiring dfs qs wouts (map snd wouts)
 
-  where 
+  where
     loc  = expLoc body
     body = aexp_exp aexp
-
     -- input wires
     wires_in  = map snd wins
-
     -- output wires
     wires_out = map snd wouts
 
-    input_only x = (x `elem` wires_in) && not (x `elem` wires_out)
-    args   = nub (wires_in ++ wires_out)
-    params = map (\x -> if input_only x then x { nameMut = Imm } else x { nameMut = Mut }) args
-    argtys = map (\x -> GArgTy (nameTyp x) 
-                               (if isMutable x then Mut else Imm)) params
-
-    resty     = TUnit
-    fun_body  = body
-    funty  = TArrow argtys resty
-    fun_name = toName (alphaNumStr $ aexp_lbl aexp) loc funty Imm
-    fun  = mkFunDefined loc fun_name params fun_body
+    fun_name = fst $ mkAExpFunName wires_in wires_out aexp
+    args = nub (wires_in ++ wires_out)
     call = eCall loc fun_name (map (eVar loc) args)
 
 
 
-cgInWiring :: QueueInfo 
+cgInWiring :: DynFlags 
+           -> QueueInfo 
            -> [(Int,EId)] -- Input wires
            -> [EId]       -- Where to store things
            -> Cg ()
-cgInWiring qs ws vs = mapM_ (uncurry (cgInWire qs)) (zip ws vs)
+cgInWiring dfs qs ws vs = mapM_ (uncurry (cgInWire dfs qs)) (zip ws vs)
 
-cgInWire :: QueueInfo -> (Int,EId) -> EId -> Cg ()
-cgInWire qs (n,qvar) v
-  = case qiQueueId qvar qs of
+cgInWire :: DynFlags -> QueueInfo -> (Int,EId) -> EId -> Cg ()
+cgInWire dfs qs (n,qvar) v = 
+  case qiQueueId qvar qs of
 
-      -- Not a queue
-      Nothing -> return ()
-
-      -- Some intermediate SORA queue
-      Just (QMid (QId qid)) -> do
-        cv <- lookupVarEnv v
-        let ptr = if isPtrType (nameTyp v)
-                  then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
-        appendStmt [cstm| if (ts_getManyBlocking($int:qid,$int:n,$ptr) != $int:n) 
-                            return 3;
-                   |]
-
-      -- Unexpected output queue
-      Just QOut -> panicStr "cg_in_wire: encountered output queue!"
-
-
-      -- TODO: the main input queue
-      Just QIn -> do
-        let qtype = squashedQueueType n (nameTyp qvar)
+    -- Not a queue
+    Nothing 
+       -> assert "cgInWire/non-queue" (n == 1) $
+          unless (qvar == v) $
+          void $ codeGenExp dfs $
+                 eAssign noLoc (eVar noLoc v) (eVar noLoc qvar)
         
-        let (bufget_suffix, getLen) = getTyPutGetInfo qtype
-        let bufGetF = "buf_get" ++ bufget_suffix
+    -- Some intermediate SORA queue
+    Just (QMid (QId qid)) -> do
+      cv <- lookupVarEnv v
+      let ptr = if isPtrType (nameTyp v)
+                then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
+      appendStmt [cstm| if (ts_getManyBlocking($int:qid,$int:n,$ptr) != $int:n) 
+                          return 3;
+                 |]
 
-        buf_context  <- getBufContext
-        global_params <- getGlobalParams
+    -- Unexpected output queue
+    Just QOut -> panicStr "cg_in_wire: encountered output queue!"
 
-        cv <- lookupVarEnv v
-        let ptr = if isPtrType (nameTyp v) then [cexp| $cv|] else [cexp| & $cv|]
-        if isArrayTy qtype 
-          then appendStmt [cstm| if ($id:(bufGetF)($id:global_params,
-                                     $id:buf_context,
-                                     $ptr, $(getLen)) == GS_EOF) return 3; |]
-          else appendStmt [cstm| if ($id:(bufGetF)($id:global_params,
-                                     $id:buf_context,
-                                     $ptr) == GS_EOF) return 3; |]
+
+    -- TODO: the main input queue
+    Just QIn -> do
+      let qtype = squashedQueueType n (nameTyp qvar)
+      
+      let (bufget_suffix, getLen) = getTyPutGetInfo qtype
+      let bufGetF = "buf_get" ++ bufget_suffix
+
+      buf_context  <- getBufContext
+      global_params <- getGlobalParams
+
+      cv <- lookupVarEnv v
+      let ptr = if isPtrType (nameTyp v) then [cexp| $cv|] else [cexp| & $cv|]
+      if isArrayTy qtype 
+        then appendStmt [cstm| if ($id:(bufGetF)($id:global_params,
+                                   $id:buf_context,
+                                   $ptr, $(getLen)) == GS_EOF) return 3; |]
+        else appendStmt [cstm| if ($id:(bufGetF)($id:global_params,
+                                   $id:buf_context,
+                                   $ptr) == GS_EOF) return 3; |]
 
 
 squashedQueueType :: Int -> Ty -> Ty
@@ -372,19 +432,23 @@ squashedQueueType n (TArray (Literal m) bt) = TArray (Literal (n*m)) bt
 squashedQueueType n t = TArray (Literal n) t
 
 
-cgOutWiring :: QueueInfo
-              -> [(Int,EId)] -- Output wires
-              -> [EId]       -- Where to read from
-              -> Cg ()
-cgOutWiring qs ws vs = mapM_ (uncurry (cgOutWire qs)) (zip ws vs)
+cgOutWiring :: DynFlags 
+            -> QueueInfo
+            -> [(Int,EId)] -- Output wires
+            -> [EId]       -- Where to read from
+            -> Cg ()
+cgOutWiring dfs qs ws vs = mapM_ (uncurry (cgOutWire dfs qs)) (zip ws vs)
 
 
-cgOutWire :: QueueInfo -> (Int,EId) -> EId -> Cg ()
-cgOutWire qs (n,qvar) v
+cgOutWire :: DynFlags -> QueueInfo -> (Int,EId) -> EId -> Cg ()
+cgOutWire dfs qs (n,qvar) v
   = case qiQueueId qvar qs of
 
       -- Not a queue
-      Nothing -> return ()
+      Nothing ->
+         assert "cgOutWire/non-queue" (n == 1) $
+         unless (qvar == v) $
+         void $ codeGenExp dfs (eAssign noLoc (eVar noLoc qvar) (eVar noLoc v))
 
       -- Some intermediate SORA queue
       Just (QMid (QId qid)) -> do
