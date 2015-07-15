@@ -455,7 +455,7 @@ cgOutWire dfs qs (n,qvar) v
         cv <- lookupVarEnv v
         let ptr = if isPtrType (nameTyp v) 
                   then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
-        appendStmt [cstm| ts_putManyBlocking($int:qid,$int:n,$ptr);|]
+        appendStmt [cstm| ts_putMany($int:qid,$int:n,$ptr);|]
 
       -- Unexpected input queue
       Just QIn -> panicStr "cg_out_wire: encountered the input queue!"
