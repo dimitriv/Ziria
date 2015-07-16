@@ -206,13 +206,15 @@ size = Map.size . auto_graph
 sucs :: NodeKind nkind => Node atom nid nkind -> [nid]
 sucs (Node _ nk) = sucsOfNk nk
 
--- create predecessor map
-mkPreds :: forall e nid nk. (NodeKind nk, Ord nid) => Automaton e nid nk -> Map nid (Set nid)
-mkPreds a = go (auto_start a) Map.empty
+-- Create predecessor map. For efficieny reasons, should be cached locally:
+-- let preds = mkPreds a in ...
+mkPreds :: forall e nid nk. (NodeKind nk, Ord nid) => Automaton e nid nk -> nid -> Set nid
+mkPreds a = (\nid -> assert (Map.member nid nmap) $ Map.findWithDefault Set.empty nid pred_map)
   where
+    nmap = auto_graph a
+    pred_map = go (auto_start a) Map.empty
     go nid pred_map = foldl (insertPred nid) pred_map (sucs node)
       where node = fromJust $ assert (Map.member nid nmap) $ Map.lookup nid nmap
-            nmap = auto_graph a
     insertPred pred pred_map nid =
       case Map.lookup nid pred_map of
         Just preds -> Map.insert nid (Set.insert pred preds) pred_map
@@ -474,10 +476,12 @@ data DoneDist
 
 data DistUpdate = Imprecise | NewDist Int
 
--- compute "done distance" map of automaton (measured in reads from input-queue upto Done)
-mkDoneDist :: forall nid e. Ord nid => Int -> SAuto e nid -> Map nid DoneDist
-mkDoneDist threshold a' = go dones init where
-  a = deleteDeadNodes a'
+-- Compute "done distance" map of automaton (measured in reads from input-queue upto Done)
+-- For efficieny reasons, should be cached locally:
+--   let doneDist = mkDoneDist treshold a in ...
+mkDoneDist :: forall nid e. Ord nid => Int -> SAuto e nid -> nid -> DoneDist
+mkDoneDist threshold a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph a) $ Map.lookup nid dist_map) where
+  dist_map = go dones init
   dones = map (,NewDist 0) $
           filter (\nid -> case nodeKindOfId a nid of { SDone _ -> True; _ -> False }) $
           Map.keys (auto_graph a)
@@ -501,7 +505,7 @@ mkDoneDist threshold a' = go dones init where
     | otherwise
     = go work_list dist_map
 
-  preds = let p = mkPreds a in (\nid -> Set.toList $ Map.findWithDefault Set.empty nid p)
+  preds = Set.toList . mkPreds a
 
   mkUpdate dist nid = (nid,) $
     let new_dist = dist + cost nid in
@@ -530,7 +534,7 @@ zipAutomata a1' a2' k = concat_auto prod_a k
     pipe_ch = assert (auto_outchan a1 == auto_inchan a2) $ auto_outchan a1
 
     threshold = 1000 -- FIXME: replace this with a sensible value instead of a random one
-    done_dist = let d = mkDoneDist threshold a2 in (\nid -> fromJust $ assert (Map.member nid d) $ Map.lookup nid d)
+    done_dist = mkDoneDist threshold a2
 
 
     mkProdNid :: PipeState -> Int -> Int -> ProdNid
@@ -668,7 +672,7 @@ markSelfLoops a = a { auto_graph = go (auto_graph a)}
 pruneUnreachable :: forall e nid. (Atom e, Ord nid) => nid -> CfgAuto e nid -> CfgAuto e nid
 pruneUnreachable nid a = a { auto_graph = prune (auto_graph a) nid }
   where
-    preds = let predMap = mkPreds a in (\nid -> fromJust $ assert (Map.member nid predMap) $ Map.lookup nid predMap)
+    preds = mkPreds a
 
     prune :: CfgNodeMap e nid -> nid -> CfgNodeMap e nid
     prune nmap nid =
