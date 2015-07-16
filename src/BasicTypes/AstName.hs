@@ -31,6 +31,7 @@ import Text.Show.Pretty (PrettyVal)
 import Text.PrettyPrint.HughesPJ
 import Outputable
 
+import Data.Char ( isAlphaNum )
 
 import Orphans ()
 
@@ -55,6 +56,7 @@ data GName t
            , nameTyp :: t
            , nameLoc :: SrcLoc
            , nameMut :: MutKind
+           , nameDoc :: String
            }
   deriving (Generic, Typeable, Data)
 
@@ -74,7 +76,7 @@ instance Ord (GName t) where
   nm1 <= nm2 = (uniqId nm1 <= uniqId nm2)
 
 instance Show (GName t) where
-  show (MkName x _id _ _ _loc)    = x
+  show (MkName x _id _ _ _loc _)    = x
 
 
 toName :: String -> SrcLoc -> t -> MutKind -> GName t
@@ -84,17 +86,20 @@ toName s mpos typ mk =
            , nameLoc = mpos
            , nameMut = mk
            , nameTyp = typ
+           , nameDoc = s
            }
 
 updNameId :: Uniq -> GName t -> GName t
 updNameId uid nm = nm { uniqId = uid }
 
 updNameTy :: GName t -> u -> GName u
-updNameTy (MkName n i _ mk l) utyp = MkName n i utyp mk l
+updNameTy (MkName n i _ mk l s) utyp = MkName n i utyp mk l s
 
 getNameWithUniq :: GName t -> String
 getNameWithUniq nm = name nm ++ "_blk" ++ unUniq (uniqId nm)
 
+alphaNumStr :: String -> String
+alphaNumStr s = map (\c -> if isAlphaNum c then c else '_') s
 
 
 {---------------- Printing names ---------------------------------}

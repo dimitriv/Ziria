@@ -43,6 +43,9 @@ module CgMonad
   , getGlobalWplAllocated
   , addGlobalWplAllocated
 
+  , getFunDefs
+  , getSymEnv
+
   , collect
 
   , Handle
@@ -360,13 +363,15 @@ data CgState = CgState {
       --
       -- if > than this, then allocate on the heap
     , structDefs :: [TyName]
+    
+    , funDefs    :: [EId]
 
     , globalWplAllocated :: [C.Stm]
 
     }
   deriving Show
 
-emptyState = CgState [] 0 Opts.cMAX_STACK_ALLOC [] [] []
+emptyState = CgState [] 0 Opts.cMAX_STACK_ALLOC [] [] [] []
 
 
 data Code = Code
@@ -557,6 +562,10 @@ genSym prefix = do
     str       <- liftIO $ GS.genSymStr sym
     return $ prefix ++ str
 
+getSymEnv :: Cg GS.Sym
+getSymEnv = asks symEnv
+
+
 
 -- TODO: remove this nameStack management of component ids!
 getNames :: Cg [CLabel]
@@ -746,8 +755,14 @@ extendVarEnv binds a = do
 
 
 extendExpFunEnv :: GName Ty -> (GName Ty,[GName Ty],Bool) -> Cg a -> Cg a
-extendExpFunEnv nm bind =
-   local $ \rho -> rho { funEnv = neExtend nm bind (funEnv rho) }
+extendExpFunEnv nm bind action = do
+   modify (\s -> s { funDefs = nm : funDefs s })
+   local  (\rho -> rho { funEnv = neExtend nm bind (funEnv rho) }) action
+
+
+getFunDefs :: Cg [GName Ty]
+getFunDefs = gets funDefs
+
 
 extendTyDefEnv :: TyName -> StructDef -> Cg a -> Cg a
 extendTyDefEnv nm bind =

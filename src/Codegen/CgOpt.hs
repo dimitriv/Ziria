@@ -532,7 +532,8 @@ codeGenComp dflags comp k =
                                , uniqId  = MkUniq $ inValOf ih -- yikes
                                , nameTyp = invalty
                                , nameMut = Imm
-                               , nameLoc = invalloc }
+                               , nameLoc = invalloc 
+                               , nameDoc = inValOf ih }
             invalarg  = eVar invalloc invalname
 
         let ecall     = eCall invalloc nm [invalarg]

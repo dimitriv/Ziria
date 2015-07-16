@@ -55,9 +55,9 @@ class NodeKind nkind where
   mapNkIds :: (nid1 -> nid2) -> nkind atom nid1 -> nkind atom nid2
 
 data WiredAtom atom
-  = WiredAtom { wires_in  :: [(Int,Chan)]
-              , wires_out :: [(Int,Chan)]
-              , the_atom  :: atom
+  = WiredAtom { wires_in  :: [(Int,EId)]      -- [(Int,Wire)]
+              , wires_out :: [(Int,EId)]      -- [(Int,Wire)]
+              , the_atom  :: atom            
               }
   deriving Eq
 
@@ -174,8 +174,7 @@ instance Atom a => Show (WiredAtom a) where
 
 showChan :: Bool -> GName t -> String
 showChan withUnique ch
-  = name ch ++ (if withUnique then "$" ++ show (uniqId ch) else "")
-
+  = nameDoc ch ++ (if withUnique then "$" ++ show (uniqId ch) else "")
 
 
 
