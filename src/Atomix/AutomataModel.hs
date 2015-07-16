@@ -101,7 +101,7 @@ data SimplNk atom nid
             , zbranch_while :: Bool -- Is this a while loop?
             , pipe_balance :: Map Chan Int -- balance of pipeline queues
             }
-  | SDone { pipe_balance :: Map Chan Int -- balance of pipeline queues 
+  | SDone { pipe_balance :: Map Chan Int -- balance of pipeline queues
           }
 
 instance NodeKind SimplNk where
@@ -466,7 +466,7 @@ type PipeState = Queue (Either Int Int) -- left n means n reads, right m means m
 
 getBudget = sum . rights
 
-data DoneDist 
+data DoneDist
   = DoneDist { dists        :: Set Int
              , dist_precise :: Bool
              }
@@ -491,22 +491,22 @@ mkDoneDist threshold a' = go dones init where
     = let dist_map' = Map.adjust (\d -> d { dist_precise = False }) nid dist_map in
       let new_work = map (,Imprecise) (preds nid) in
       go (new_work ++ work_list) dist_map'
-    
+
     | NewDist n <- update
     , Set.notMember n $ dists $ fromJust $ assert (Map.member nid dist_map) $ Map.lookup nid dist_map
     = let dist_map' = Map.adjust (\d -> d { dists = Set.insert n (dists d) }) nid dist_map in
       let new_work = map (mkUpdate n) (preds nid) in
       go (new_work ++ work_list) dist_map'
-    
+
     | otherwise
     = go work_list dist_map
 
   preds = let p = mkPreds a in (\nid -> Set.toList $ Map.findWithDefault Set.empty nid p)
-  
+
   mkUpdate dist nid = (nid,) $
     let new_dist = dist + cost nid in
     if new_dist > threshold then Imprecise else NewDist new_dist
-  
+
   cost nid = case nodeKindOfId a nid of
     SAtom watom _ _ -> countReads (auto_inchan a) watom
     _ -> 0
@@ -532,7 +532,7 @@ zipAutomata a1' a2' k = concat_auto prod_a k
     threshold = 1000 -- FIXME: replace this with a sensible value instead of a random one
     done_dist = let d = mkDoneDist threshold a2 in (\nid -> fromJust $ assert (Map.member nid d) $ Map.lookup nid d)
 
-    
+
     mkProdNid :: PipeState -> Int -> Int -> ProdNid
     mkProdNid ps nid1 nid2 = (,nid1,nid2) $
       let budget = getBudget ps
@@ -547,22 +547,28 @@ zipAutomata a1' a2' k = concat_auto prod_a k
     zipNodes :: PipeState -> ProdNid -> SNodeMap e ProdNid -> SNodeMap e ProdNid
     zipNodes balance prod_nid@(_,nid1,nid2) prod_nmap =
       case Map.lookup prod_nid prod_nmap of
-        Nothing -> zipNodes' balance prod_nid (nodeKindOfId a1 nid1) (nodeKindOfId a2 nid2) prod_nmap
         Just _ -> prod_nmap -- We have already seen this product location. We're done!
+        Nothing ->
+          let nk1 = nodeKindOfId a1 nid1
+              nk2 = nodeKindOfId a2 nid2
+              noDups = const (assert False)
+              pipes = Map.insertWith noDups pipe_ch (getBudget balance) $
+                      Map.unionWith noDups (pipe_balance nk1) (pipe_balance nk2)
+          in zipNodes' balance pipes prod_nid nk1 nk2 prod_nmap
 
-    noDups = const (assert False)
 
-    zipNodes' :: PipeState -> ProdNid -> SimplNk e Int -> SimplNk e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
+
+
+    zipNodes' :: PipeState -> Map Chan Int -> ProdNid -> SimplNk e Int -> SimplNk e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
 
     -- Try executing right automaton first! (in accordance with lazy, right-biased semantics)
 
-    zipNodes' balance prod_nid nk1 (SDone pipes2) = 
-      insertNk prod_nid $ SDone (Map.unionWith noDups pipes2 $ pipe_balance nk1)
+    zipNodes' balance pipes prod_nid nk1 (SDone _) =
+      insertNk prod_nid (SDone pipes)
 
-    zipNodes' balance prod_nid@(_,id1,_) nk1 (SBranch x l r w pipes2) =
+    zipNodes' balance pipes prod_nid@(_,id1,_) nk1 (SBranch x l r w _) =
       let prod_nid_l = mkProdNid balance id1 l
           prod_nid_r = mkProdNid balance id1 r
-          pipes = Map.unionWith noDups (pipe_balance nk1) pipes2
           prod_nkind = SBranch x prod_nid_l prod_nid_r w pipes
       in zipNodes balance prod_nid_r . zipNodes balance prod_nid_l . insertNk prod_nid prod_nkind
 
@@ -571,32 +577,29 @@ zipAutomata a1' a2' k = concat_auto prod_a k
        We prefer handling branches first, as it will potentially allow us to merge several
        decision nodes into a single decision.
     -}
-    zipNodes' balance prod_nid@(_,_,id2) (SBranch x l r w pipes1) nk2 =
+    zipNodes' balance pipes prod_nid@(_,_,id2) (SBranch x l r w _) nk2 =
       let prod_nid_l = mkProdNid balance l id2
           prod_nid_r = mkProdNid balance r id2
-          pipes = Map.unionWith noDups pipes1 (pipe_balance nk2)
           prod_nkind = SBranch x prod_nid_l prod_nid_r w pipes
       in zipNodes balance prod_nid_r . zipNodes balance prod_nid_l . insertNk prod_nid prod_nkind
 
-    zipNodes' balance prod_nid@(_,id1,_) nk1 (SAtom wa2 next2 pipes2)
+    zipNodes' balance pipes prod_nid@(_,id1,_) nk1 (SAtom wa2 next2 _)
       | Just balance' <- try_consume wa2 balance
-      = let pipes = Map.unionWith noDups (pipe_balance nk1) pipes2
-            next_prod_nid = mkProdNid balance' id1 next2
+      = let next_prod_nid = mkProdNid balance' id1 next2
             prod_nkind = SAtom wa2 next_prod_nid pipes
         in zipNodes balance' next_prod_nid . insertNk prod_nid prod_nkind
 
     -- Can't proceed in right automaton -- execute left automaton
 
-    zipNodes' balance prod_nid@(_,_,id2) (SAtom wa1 next1 pipes1) nk2 =
+    zipNodes' balance pipes prod_nid@(_,_,id2) (SAtom wa1 next1 _) nk2 =
       let balance' = produce wa1 balance
-          pipes = Map.unionWith noDups pipes1 (pipe_balance nk2)
           next_prod_nid = mkProdNid balance' next1 id2
           prod_nkind = SAtom wa1 next_prod_nid pipes
       in zipNodes balance' next_prod_nid . insertNk prod_nid prod_nkind
 
      -- if we reach this case, the pipeline is already drained as far as possible
-    zipNodes' balance prod_nid (SDone pipes1) nk2 =
-      insertNk prod_nid $ SDone (Map.unionWith noDups pipes1 $ pipe_balance nk2)
+    zipNodes' balance pipes prod_nid (SDone _) nk2 =
+      insertNk prod_nid (SDone pipes)
 
 
     try_consume :: WiredAtom atom -> PipeState -> Maybe PipeState
