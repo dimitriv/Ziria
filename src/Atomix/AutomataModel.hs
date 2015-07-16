@@ -93,23 +93,25 @@ class (Show a, Eq a) => Atom a where
 data SimplNk atom nid
   = SAtom { wired_atom :: WiredAtom atom
           , atom_next  :: nid
-          , atom_pipes :: Map Chan Int -- balance of pipeline queues
+          , pipe_balance :: Map Chan Int -- balance of pipeline queues
           }
   | SBranch { zbranch_ch   :: Chan -- If we read True we go to branch_true, otherwise to branch_false
             , zbranch_true  :: nid
             , zbranch_false :: nid
             , zbranch_while :: Bool -- Is this a while loop?
+            , pipe_balance :: Map Chan Int -- balance of pipeline queues
             }
-  | SDone
+  | SDone { pipe_balance :: Map Chan Int -- balance of pipeline queues 
+          }
 
 instance NodeKind SimplNk where
-  sucsOfNk SDone = []
+  sucsOfNk (SDone _) = []
   sucsOfNk (SAtom _ nxt _) = [nxt]
-  sucsOfNk (SBranch _ nxt1 nxt2 _) = [nxt1,nxt2]
+  sucsOfNk (SBranch _ nxt1 nxt2 _ _) = [nxt1,nxt2]
 
-  mapNkIds _ SDone = SDone
+  mapNkIds _ (SDone pipes) = SDone pipes
   mapNkIds f (SAtom watoms nxt pipes) = SAtom watoms (f nxt) pipes
-  mapNkIds f (SBranch x nxt1 nxt2 l) = SBranch x (f nxt1) (f nxt2) l
+  mapNkIds f (SBranch x nxt1 nxt2 l pipes) = SBranch x (f nxt1) (f nxt2) l pipes
 
 
 
@@ -258,7 +260,7 @@ concat_auto a1 a2 = a1' { auto_graph = concat_graph }
 
 mkDoneAutomaton :: Chan -> Chan -> SAuto e Int
 mkDoneAutomaton in_ch out_ch
-  = Automaton { auto_graph = Map.singleton 0 (Node 0 SDone), auto_start = 0
+  = Automaton { auto_graph = Map.singleton 0 (Node 0 $ SDone Map.empty), auto_start = 0
               , auto_outchan = out_ch
               , auto_inchan  = in_ch
               }
@@ -277,7 +279,7 @@ replace_done_with :: Ord nid => nid -> SAuto e nid -> SAuto e nid
 replace_done_with nid a = map_auto_ids (\nid -> Map.findWithDefault nid nid replace_map) a
   where
     replace_map = Map.foldr fold_f Map.empty (auto_graph a)
-    fold_f (Node nid' SDone) mp = Map.insert nid' nid mp
+    fold_f (Node nid' (SDone _)) mp = Map.insert nid' nid mp
     fold_f _ mp = mp
 
 
@@ -390,7 +392,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
     go (ABranch x c1 c2) = do
       a1 <- mkAutomaton dfs sym chans c1 k
       a2 <- mkAutomaton dfs sym chans c2 (a1 { auto_start = auto_start k})
-      let nkind = SBranch x (auto_start a1) (auto_start a2) False
+      let nkind = SBranch x (auto_start a1) (auto_start a2) False Map.empty
       let a = insert_prepend nkind a2
       return $ assert (auto_closed a1) $ assert (auto_closed a2) $ assert (auto_closed a) a
 
@@ -404,7 +406,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
 
     go (ARepeat c) =
       case nodeKindOfId k (auto_start k) of
-        SDone -> do
+        SDone _ -> do
           a0 <- mkAutomaton dfs sym chans c k
           let nid = auto_start k
           let node = fromJust $ assert (Map.member (auto_start a0) (auto_graph a0)) $
@@ -416,18 +418,18 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
         _ -> fail "Repeat should not have a continuation!"
 
     go (AWhile x c) = do
-      let k' = insert_prepend SDone k
+      let k' = insert_prepend (SDone Map.empty) k
       let nid = auto_start k'
       a0 <- mkAutomaton dfs sym chans c k'
-      let nkind = SBranch x (auto_start a0) (auto_start k) True
+      let nkind = SBranch x (auto_start a0) (auto_start k) True Map.empty
       let a = a0 { auto_start = nid, auto_graph = insertNk nid nkind (auto_graph a0)}
       return $ assert (auto_closed a0) $ assert (auto_closed a) a
 
     go (AUntil x c) = do
-      let k' = insert_prepend SDone k
+      let k' = insert_prepend (SDone Map.empty) k
       let nid = auto_start k'
       a0 <- mkAutomaton dfs sym chans c k'
-      let nkind = SBranch x (auto_start a0) (auto_start k) True
+      let nkind = SBranch x (auto_start a0) (auto_start k) True Map.empty
       let a = a0 { auto_graph = insertNk nid nkind (auto_graph a0)}
       return $ assert (auto_closed a0) $ assert (auto_closed a) a
 
@@ -477,7 +479,7 @@ mkDoneDist :: forall nid e. Ord nid => Int -> SAuto e nid -> Map nid DoneDist
 mkDoneDist threshold a' = go dones init where
   a = deleteDeadNodes a'
   dones = map (,NewDist 0) $
-          filter (\nid -> case nodeKindOfId a nid of { SDone -> True; _ -> False }) $
+          filter (\nid -> case nodeKindOfId a nid of { SDone _ -> True; _ -> False }) $
           Map.keys (auto_graph a)
   init = Map.map (const $ DoneDist Set.empty True) (auto_graph a)
 
@@ -530,7 +532,7 @@ zipAutomata a1' a2' k = concat_auto prod_a k
     threshold = 1000 -- FIXME: replace this with a sensible value instead of a random one
     done_dist = let d = mkDoneDist threshold a2 in (\nid -> fromJust $ assert (Map.member nid d) $ Map.lookup nid d)
 
-
+    
     mkProdNid :: PipeState -> Int -> Int -> ProdNid
     mkProdNid ps nid1 nid2 = (,nid1,nid2) $
       let budget = getBudget ps
@@ -548,38 +550,53 @@ zipAutomata a1' a2' k = concat_auto prod_a k
         Nothing -> zipNodes' balance prod_nid (nodeKindOfId a1 nid1) (nodeKindOfId a2 nid2) prod_nmap
         Just _ -> prod_nmap -- We have already seen this product location. We're done!
 
+    noDups = const (assert False)
+
     zipNodes' :: PipeState -> ProdNid -> SimplNk e Int -> SimplNk e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
-    zipNodes' balance prod_nid SDone _ = insertNk prod_nid SDone
 
-    zipNodes' balance prod_nid _ SDone = insertNk prod_nid SDone
+    -- Try executing right automaton first! (in accordance with lazy, right-biased semantics)
 
-    zipNodes' balance prod_nid@(rollback,id1,id2) (SBranch x l r w) _ =
-      let prod_nid_l = (rollback,l,id2)
-          prod_nid_r = (rollback,r,id2)
-          prod_nkind = SBranch x prod_nid_l prod_nid_r w
-      in zipNodes balance prod_nid_r . zipNodes balance prod_nid_l . insertNk prod_nid prod_nkind
+    zipNodes' balance prod_nid nk1 (SDone pipes2) = 
+      insertNk prod_nid $ SDone (Map.unionWith noDups pipes2 $ pipe_balance nk1)
 
-    zipNodes' balance prod_nid@(rollback,id1,id2) _ (SBranch x l r w) =
+    zipNodes' balance prod_nid@(_,id1,_) nk1 (SBranch x l r w pipes2) =
       let prod_nid_l = mkProdNid balance id1 l
           prod_nid_r = mkProdNid balance id1 r
-          prod_nkind = SBranch x prod_nid_l prod_nid_r w
+          pipes = Map.unionWith noDups (pipe_balance nk1) pipes2
+          prod_nkind = SBranch x prod_nid_l prod_nid_r w pipes
       in zipNodes balance prod_nid_r . zipNodes balance prod_nid_l . insertNk prod_nid prod_nkind
 
-    zipNodes' balance prod_nid@(_,id1,id2) nk1@(SAtom _ _ pipes1) nk2@(SAtom _ _ pipes2) =
-      let noDups = const (assert False)
-          pipes = Map.insertWith noDups pipe_ch (getBudget balance) $ Map.unionWith noDups pipes1 pipes2
-          (watom, balance', next1, next2) = zipCfgActions balance (Node id1 nk1) (Node id2 nk2)
-          prod_nid_next = mkProdNid balance' next1 next2
-          prod_nkind = SAtom watom prod_nid_next pipes
-      in zipNodes balance' prod_nid_next . insertNk prod_nid prod_nkind
+    {- Treating this case here is not strictly in accordance with Ziria's lazy (right-biased)
+       semantics; however, since branching has no side effects, this should be a legal reordering.
+       We prefer handling branches first, as it will potentially allow us to merge several
+       decision nodes into a single decision.
+    -}
+    zipNodes' balance prod_nid@(_,_,id2) (SBranch x l r w pipes1) nk2 =
+      let prod_nid_l = mkProdNid balance l id2
+          prod_nid_r = mkProdNid balance r id2
+          pipes = Map.unionWith noDups pipes1 (pipe_balance nk2)
+          prod_nkind = SBranch x prod_nid_l prod_nid_r w pipes
+      in zipNodes balance prod_nid_r . zipNodes balance prod_nid_l . insertNk prod_nid prod_nkind
 
-    zipCfgActions :: PipeState -> SNode atom Int -> SNode atom Int -> (WiredAtom atom, PipeState, Int, Int)
-    zipCfgActions balance (Node nid1 (SAtom wa1 next1 _)) (Node nid2 (SAtom wa2 next2 _)) =
-      case try_consume wa2 balance of
-        -- can't afford wa2!
-        Nothing -> (wa1, produce wa1 balance, next1, nid2)
-        Just balance' -> (wa2, balance', nid1, next2)
-    zipCfgActions _ _ _ = assert False undefined
+    zipNodes' balance prod_nid@(_,id1,_) nk1 (SAtom wa2 next2 pipes2)
+      | Just balance' <- try_consume wa2 balance
+      = let pipes = Map.unionWith noDups (pipe_balance nk1) pipes2
+            next_prod_nid = mkProdNid balance' id1 next2
+            prod_nkind = SAtom wa2 next_prod_nid pipes
+        in zipNodes balance' next_prod_nid . insertNk prod_nid prod_nkind
+
+    -- Can't proceed in right automaton -- execute left automaton
+
+    zipNodes' balance prod_nid@(_,_,id2) (SAtom wa1 next1 pipes1) nk2 =
+      let balance' = produce wa1 balance
+          pipes = Map.unionWith noDups pipes1 (pipe_balance nk2)
+          next_prod_nid = mkProdNid balance' next1 id2
+          prod_nkind = SAtom wa1 next_prod_nid pipes
+      in zipNodes balance' next_prod_nid . insertNk prod_nid prod_nkind
+
+     -- if we reach this case, the pipeline is already drained as far as possible
+    zipNodes' balance prod_nid (SDone pipes1) nk2 =
+      insertNk prod_nid $ SDone (Map.unionWith noDups pipes1 $ pipe_balance nk2)
 
 
     try_consume :: WiredAtom atom -> PipeState -> Maybe PipeState
@@ -817,9 +834,9 @@ dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfi
 simplToCfg :: SAuto e nid -> CfgAuto e nid
 simplToCfg a = a { auto_graph = Map.map nodeToCfg $ auto_graph a }
   where nodeToCfg (Node nid nkind) = Node nid (nkToCfg nkind)
-        nkToCfg SDone = CfgDone
+        nkToCfg (SDone _) = CfgDone
         nkToCfg (SAtom wa nxt pipes) = CfgAction [wa] nxt pipes
-        nkToCfg (SBranch x nxt1 nxt2 l) = CfgBranch x nxt1 nxt2 l
+        nkToCfg (SBranch x nxt1 nxt2 l _) = CfgBranch x nxt1 nxt2 l
 
 
 automatonPipeline :: Atom e => DynFlags -> GS.Sym -> Ty -> Ty -> AComp () () -> IO (CfgAuto e Int)
