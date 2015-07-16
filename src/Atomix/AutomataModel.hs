@@ -72,6 +72,7 @@ class (Show a, Eq a) => Atom a where
   discardAtom :: (Int,Ty) -> a
   castAtom    :: (Int,Ty) -> (Int,Ty) -> a
   assertAtom :: Bool -> a
+  rollbackAtom :: Chan -> Int -> a
 
   -- Getting (wired) atoms from expressions
   expToWiredAtom :: AExp () -> Maybe Chan -> WiredAtom a
@@ -81,6 +82,9 @@ class (Show a, Eq a) => Atom a where
 
   assertWAtom :: Bool -> Chan -> WiredAtom a
   assertWAtom b x = WiredAtom [(1,x)] [] (assertAtom b)
+
+  rollbackWAtom :: Chan -> Int -> WiredAtom a
+  rollbackWAtom ch n = WiredAtom [] [(n,ch)] (rollbackAtom ch n)
 
 
 
@@ -533,8 +537,32 @@ zipAutomata a1' a2' k = concat_auto prod_a k
     prod_nmap = zipNodes start_balance start_prod_nid Map.empty
     pipe_ch = assert (auto_outchan a1 == auto_inchan a2) $ auto_outchan a1
 
-    threshold = 1000 -- FIXME: replace this with a sensible value instead of a random one
-    done_dist = mkDoneDist threshold a2
+    optimism = 10.0
+
+    largest_write = maximum $ map (getSize . node_kind) $ Map.elems (auto_graph a1)
+      where getSize (SAtom wa _ _) = countWrites pipe_ch wa
+            getSize _ = 0
+
+    largest_read = maximum $ map (getSize . node_kind) $ Map.elems (auto_graph a2)
+      where getSize (SAtom wa _ _) = countReads pipe_ch wa
+            getSize _ = 0
+
+    -- we won't consume unless the pipe contains >= elements than indicated
+    -- by this threshold
+    consumption_threshold = ceiling ((1 + optimism) * (fromIntegral largest_read))
+
+    threshold nid2 
+      | not (dist_precise $ done_dist nid2) = consumption_threshold
+      | otherwise = 
+        let ds = dists (done_dist nid2) in
+        let d = if Set.null ds then 0 else Set.findMax ds in
+        d - largest_write + 1
+
+    max_q_size :: Int
+    max_q_size = largest_write + consumption_threshold
+
+    done_dist = mkDoneDist max_q_size a2
+
 
 
     mkProdNid :: PipeState -> Int -> Int -> ProdNid
@@ -544,7 +572,7 @@ zipAutomata a1' a2' k = concat_auto prod_a k
                               filter (<= budget) $ Set.toList $ dists $ done_dist nid2
       in (budget, rollback_behavior)
 
-    getRollback d ps = case try_consume' d ps of
+    getRollback n ps = case try_consume' n ps of
       Nothing -> 0
       Just ps' -> sum $ lefts ps'
 
@@ -567,8 +595,20 @@ zipAutomata a1' a2' k = concat_auto prod_a k
 
     -- Try executing right automaton first! (in accordance with lazy, right-biased semantics)
 
+    zipNodes' balance pipes prod_nid nk1 (SDone _)
+      | let rollback = sum (lefts balance)
+      , rollback > 0 
+      = -- Hack to create unique fresh product node id
+        let final_prod_nid = ((0,Map.empty)
+                             , 1 + (fst $ Map.findMax $ auto_graph a1)
+                             , 1 + (fst $ Map.findMax $ auto_graph a2))
+            final_pipes = Map.adjust (+ rollback) (auto_inchan a1) pipes
+            final_nk = SDone final_pipes
+            rollback_nk = SAtom (rollbackWAtom pipe_ch rollback) final_prod_nid pipes
+        in insertNk final_prod_nid final_nk . insertNk prod_nid rollback_nk
+
     zipNodes' balance pipes prod_nid nk1 (SDone _) =
-      insertNk prod_nid (SDone pipes)
+        insertNk prod_nid (SDone pipes)
 
     zipNodes' balance pipes prod_nid@(_,id1,_) nk1 (SBranch x l r w _) =
       let prod_nid_l = mkProdNid balance id1 l
@@ -587,8 +627,9 @@ zipAutomata a1' a2' k = concat_auto prod_a k
           prod_nkind = SBranch x prod_nid_l prod_nid_r w pipes
       in zipNodes balance prod_nid_r . zipNodes balance prod_nid_l . insertNk prod_nid prod_nkind
 
-    zipNodes' balance pipes prod_nid@(_,id1,_) nk1 (SAtom wa2 next2 _)
-      | Just balance' <- try_consume wa2 balance
+    zipNodes' balance pipes prod_nid@(_,id1,id2) nk1 (SAtom wa2 next2 _)
+      | getBudget balance >= threshold id2
+      , Just balance' <- try_consume wa2 balance
       = let next_prod_nid = mkProdNid balance' id1 next2
             prod_nkind = SAtom wa2 next_prod_nid pipes
         in zipNodes balance' next_prod_nid . insertNk prod_nid prod_nkind

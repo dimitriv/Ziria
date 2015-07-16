@@ -19,6 +19,7 @@ data SymAtom = SAExp (AExp ())
              | SACast (Int,Ty) (Int,Ty) 
              | SADiscard (Int,Ty)
              | SAAssert Bool -- assert true and assert false
+             | SARollback EId Int
   deriving Eq
 
 instance Outputable SymAtom where
@@ -34,6 +35,8 @@ instance Outputable SymAtom where
   ppr (SADiscard _) = text "DISCARD"
 
   ppr (SAAssert b) = text "ASSERT_" <> text (show b)
+
+  ppr (SARollback q n) = text "ROLLBACK<" <> text (show q) <> comma <> text (show n ++ ">")
 
 instance Show SymAtom where
   show sa = render (pprShort sa)
@@ -56,15 +59,18 @@ instance Atom SymAtom where
   atomInTy (SACast inty _)  = [inty]
   atomInTy (SADiscard inty) = [inty]
   atomInTy (SAAssert _) = [(1,TBool)]
+  atomInTy (SARollback _ _) = []
 
   atomOutTy (SAExp e) = map ((1,) . nameTyp) (aexp_ovs e)
   atomOutTy (SACast _ outty) = [outty]
   atomOutTy (SADiscard _)    = []
   atomOutTy (SAAssert _) = []
+  atomOutTy (SARollback q n) = [(n,nameTyp q)]
 
   castAtom    = SACast
   discardAtom = SADiscard
   assertAtom = SAAssert
+  rollbackAtom = SARollback
 
   expToWiredAtom :: AExp () -> Maybe EId -> WiredAtom SymAtom
   expToWiredAtom e mb_out = 

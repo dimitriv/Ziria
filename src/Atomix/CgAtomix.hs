@@ -210,10 +210,11 @@ cgDefAtom :: DynFlags
           -> Cg a
 cgDefAtom dfs (WiredAtom win wout the_atom) m
   = case the_atom of
-      SAAssert {}  -> m
-      SACast {}    -> m
-      SADiscard {} -> m
-      SAExp aexp   -> cgAExpDefAtom dfs win wout aexp m
+      SAAssert {}   -> m
+      SACast {}     -> m
+      SADiscard {}  -> m
+      SARollback {} -> m
+      SAExp aexp    -> cgAExpDefAtom dfs win wout aexp m
 
 -- | Code generation for an atom
 cgAtom :: DynFlags
@@ -236,6 +237,8 @@ cgAtom dfs qnfo (WiredAtom win wout the_atom)
         assert "cgAtom/Cast" (singleton win) $
         assert "cgAtom/Discard" (null wout)  $
         cgDiscAtom dfs qnfo (head win) inty
+      SARollback _queue _n ->
+        fail "NOT IMPLEMENTED!!"
 
   where singleton [_] = True
         singleton _   = False
