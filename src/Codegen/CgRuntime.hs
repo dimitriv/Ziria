@@ -97,7 +97,7 @@ callOutBufReset global_params buf_context (ExtBuf base_ty) =
 callOutBufReset _global_params _buf_context (IntBuf _) 
   = error "BUG: callOutBufReset called with IntBuf!" 
 
-
+   
 mkRuntime :: Maybe String   -- | Optional unique suffix for name generation
           -> Cg CompInfo    -- | Computation that generates code for a computation
           -> Cg ()
@@ -163,38 +163,3 @@ mkRuntime mfreshId m = do
 go_name mfreshId = 
   let goName = "wpl_go" 
   in goName ++ fromMaybe "" mfreshId
-
-
-
-
-
-mkAtomixRuntime :: Maybe String   -- | Optional unique suffix for name generation
-                -> Cg CLabel      -- | Computation that generates code for a computation
-                -> Cg ()
-mkAtomixRuntime mfreshId m = do
-    (local_decls, local_stmts, clabel) <- inNewBlock m
-    go clabel local_decls local_stmts
-    -- go True  cinfo local_decls local_stmts
-  where
-
-    go :: CLabel -> [C.InitGroup] -> [C.Stm] -> Cg ()
-    go clabel local_decls local_stmts = do
-
-        appendTopDef $ 
-          [cedecl|int $id:(go_name mfreshId ++ "_aux")(int initialized) {
-                       unsigned int loop_counter = 0;
-
-                       $decls:local_decls 
-                       goto $id:clabel;
-
-                       $stms:local_stmts
-
-                       return 2;
-
-                  } |]
-
-        appendTopDef $ 
-          [cedecl|int $id:(go_name mfreshId)() {
-                     return ($id:(go_name mfreshId ++ "_aux")(0));
-                  }
-          |]

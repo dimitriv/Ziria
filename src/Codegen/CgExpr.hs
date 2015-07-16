@@ -19,7 +19,7 @@
 {-# LANGUAGE  QuasiQuotes, GADTs, ScopedTypeVariables, RecordWildCards #-}
 {-# OPTIONS_GHC -fwarn-unused-binds #-}
 
-module CgExpr ( codeGenExp, cgMutBind ) where
+module CgExpr ( codeGenExp ) where
 
 import Opts
 import AstExpr

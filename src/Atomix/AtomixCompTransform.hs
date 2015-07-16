@@ -37,11 +37,6 @@ freshName sym str loc ty mut = do
   uniq  <- GS.genSymStr sym
   return $ (toName str loc ty mut) { uniqId = MkUniq uniq }
 
-freshNameDoc :: GS.Sym -> String -> SrcLoc -> Ty -> MutKind -> String -> IO EId
-freshNameDoc sym str loc ty mut doc = do
-  x <- freshName sym str loc ty mut
-  return (x { nameDoc = doc })
-
 alphaNorm :: GS.Sym -> Comp -> IO Comp
 alphaNorm sym = mapCompM return return return return return action
   where 
@@ -58,12 +53,12 @@ alphaNorm sym = mapCompM return return return return return action
 
       | Branch e c1 c2 <- unComp c
       , let loc = compLoc c
-      = do x <- freshNameDoc sym "cond_if" loc (ctExp e) Imm (show e)
+      = do x <- freshName sym (show e) loc (ctExp e) Imm
            return $ cLetE loc x AutoInline e (cBranch loc (eVar loc x) c1 c2)
 
       | While e c1 <- unComp c
       , let loc = compLoc c
-      = do x <- freshNameDoc sym "cond_while" loc (ctExp e) Mut (show e) -- needs to be refreshed in each iteration
+      = do x <- freshName sym (show e) loc (ctExp e) Mut -- needs to be refreshed in each iteration
            return $ 
              cLetERef loc x (Just e) $
                cWhile loc (eVar loc x) 
@@ -72,7 +67,7 @@ alphaNorm sym = mapCompM return return return return return action
 
       | Until e c1 <- unComp c
       , let loc = compLoc c
-      = do x <- freshNameDoc sym "cond_until" loc (ctExp e) Mut (show e) -- needs to be refreshed in each iteration
+      = do x <- freshName sym (show e) loc (ctExp e) Mut -- needs to be refreshed in each iteration
            return $ 
              cLetERef loc x Nothing $
                cUntil loc (eVar loc x) 
@@ -87,9 +82,6 @@ alphaNorm sym = mapCompM return return return return return action
       = do x_bnd <- freshName sym "times_bound" loc (ctExp elen) Imm
            let cond_expr   = eBinOp loc Lt (eVar loc cnt) 
                                            (eVar loc x_bnd) -- cnt < x_bound
-               -- It is a bit naughty to assign to a variable that started life
-               -- as immutable -- however we will fix this in the next phase of
-               -- translation to atomix (mkMutableBound)
                cnt_expr    = eVar loc cnt
                TInt _bw sn = nameTyp cnt
                one         = eVal loc (nameTyp cnt) (VInt 1 sn)
@@ -103,7 +95,7 @@ alphaNorm sym = mapCompM return return return return return action
       | Map v fn <- unComp c
       , TArrow [argty] _resty <- nameTyp fn
       , let loc = compLoc c 
-      = do x <- freshName sym (alphaNumStr (name fn) ++ "_in") loc (argty_ty argty) Imm
+      = do x <- freshName sym (name fn ++ "_in") loc (argty_ty argty) Imm 
            alphaNorm sym $ 
               cRepeat loc v $ 
               cBindMany loc (cTake1 loc (nameTyp x))
@@ -121,25 +113,23 @@ alphaNorm sym = mapCompM return return return return return action
  ------------------------------------------------------------------------------}
 
 data RnSt = RnSt { st_bound_vars  :: [EId]
-                 , st_fundefs     :: [(EId,(Fun,[EId]))] -- NB: in reverse order
+                 , st_fundefs     :: [(EId,(Fun,[EId]))]
                  , st_structs     :: [(TyName, StructDef)]
                  }
 
 instance Outputable RnSt where
   ppr (RnSt _ fundefs _) = vcat $ map (pprFun . unFun . fst . snd) fundefs
     where
-      pprFun (MkFunDefined f args body) 
-         = ppr f <> (parens $ hsep $ punctuate comma $ map ppr args) <+> 
-           text ":=" <+> ppr body
-      pprFun (MkFunExternal f args _body) 
-         = ppr f <> (parens $ hsep $ punctuate comma $ map ppr args) <+> 
-           text ":=" <+> text "<EXTERNAL>"
+      pprFun (MkFunDefined f args body) = ppr f <> (parens $ hsep $ punctuate comma $ map ppr args) <+> 
+        text ":=" <+> ppr body
+      pprFun (MkFunExternal f args _body) = ppr f <> (parens $ hsep $ punctuate comma $ map ppr args) <+> 
+        text ":=" <+> text "<EXTERNAL>"
+
 
 type RnStM a = StateT RnSt IO a
 
 recBound :: EId -> RnStM ()
-recBound x 
-  = modify $ \s -> s { st_bound_vars = x { nameMut = Mut } : st_bound_vars s }
+recBound x = modify $ \s -> s { st_bound_vars = x : st_bound_vars s }
 
 recFunDef :: EId -> Fun -> [EId] -> RnStM ()
 recFunDef x fn clos 
@@ -187,7 +177,7 @@ liftBindsComp = mapCompM return return return return return action
           = return c
           where go c1 [] = return c1
                 go c1 ((x,c2):xscs)
-                 | x `S.notMember` (fst $ compFVs c2) -- not in c2 & not in xscs
+                 | x `S.notMember` (fst $ compFVs c2) -- not in c2 and not in xscs
                  , x `S.notMember` (S.unions (map (fst. compFVs. snd) xscs)) 
                  = cSeq (compLoc c) c1 <$> go c2 xscs
                  | otherwise 
@@ -195,22 +185,6 @@ liftBindsComp = mapCompM return return return return return action
                       rest' <- go c2 xscs 
                       return $ cBindMany (compLoc c) c1 [(x, rest')]
 
-mkMutableBound :: [EId] -> Comp -> IO Comp
--- | All 'recBound' variables should become mutable because we write
--- to them in the automata level (perhaps just once if they originate
--- in Ziria immutables, but still)
-mkMutableBound bound 
-  = mapCompM return return return return exp_action comp_action
-  where exp_action = mapExpM return return action
-        action e   = return $ case unExp e of
-          EVar x | x `elem` bound -> eVar (expLoc e) (x { nameMut = Mut })
-          _otherwise -> e
-
-        comp_action c = return $ case unComp c of 
-          BindMany c1 xs_cs -> 
-            let xs_cs' = map (\(x,d) -> (x { nameMut = Mut },d)) xs_cs
-            in cBindMany (compLoc c) c1 xs_cs'
-          _ -> c
 
 {---------------------------- Closure conversion ------------------------------}
 
@@ -315,8 +289,7 @@ parCompSplit xs =
      where isTrans c = not (isComputer (ctComp c))
 
 normalizePars :: Comp -> Comp
-normalizePars 
-  = runIdentity . mapCompM return return return return return (return . action)
+normalizePars = runIdentity . mapCompM return return return return return (return . action)
   where 
     action c = 
       case parCompSplit $ collectPars c of
@@ -325,8 +298,7 @@ normalizePars
         Left (t:ts) -> foldl mkPar t ts
         Right ([],c0,t:ts) -> mkPar c0 $ foldl mkPar t ts
         Right (t:ts,c0,[]) -> mkPar (foldl mkPar t ts) c0
-        Right (t:ts,c0,t':ts') 
-          -> mkPar (foldl mkPar t ts) $ mkPar c0 $ foldl mkPar t' ts'
+        Right (t:ts,c0,t':ts') -> mkPar (foldl mkPar t ts) $ mkPar c0 $ foldl mkPar t' ts'
         _ -> panicStr "normalizePars: impossible case"
       where mkPar = cPar (compLoc c) undefined
         
@@ -351,11 +323,9 @@ atomixCompTransform sym c = do
 
   -- Closure convert / lift 
   (closure_comp,st) <- runStateT (liftBindsComp ren_alpha >>= closConvComp) $
-                       emptyRnSt
+                     emptyRnSt
 
-  mut_closure_comp <- mkMutableBound (st_bound_vars st) closure_comp
-
-  let final_comp = normalizePars mut_closure_comp
+  let final_comp = normalizePars closure_comp
 
   putStrLn $ "Closure conversion phase finished, result type: " ++ 
              show (ctComp final_comp)
@@ -366,11 +336,11 @@ atomixCompToComp :: Comp -> RnSt -> Comp
 atomixCompToComp comp (RnSt { st_bound_vars  = letrefs
                             , st_fundefs     = fundefs
                             , st_structs     = strdefs }) = str_c 
- where let_c = foldl (\c x -> cLetERef loc x Nothing c) comp letrefs
-       fun_c = foldl (\c f -> cLetHeader loc f c) let_c funs 
-       str_c = foldl (\c s -> cLetStruct loc s c) fun_c (map snd strdefs)
-       funs  = map (\(_,(fun,_)) -> fun) fundefs
-       loc   = compLoc comp
+ where let_c = foldr (\x -> cLetERef loc x Nothing) comp letrefs
+       fun_c = foldr (cLetHeader loc) let_c funs
+       str_c = foldr (cLetStruct loc) fun_c (map snd strdefs)
+       funs = reverse $ map (\(_,(fun,_)) -> fun) fundefs
+       loc  = compLoc comp
 
 
 
@@ -405,14 +375,14 @@ transLifted dfs sym = go_comp
         loc = compLoc comp
         go (Return _ e) = aReturn loc () <$> (liftIO $ transLiftedExp dfs sym e)
 
-        -- go (Times _ estrt (MkExp (EVal _ (VInt i _)) _ _) cnt c) = do
+        --go (Times _ estrt (MkExp (EVal _ (VInt i _)) _ _) cnt c) = do
         --   let cnt_expr    = eVar loc cnt
         --       TInt _bw sn = nameTyp cnt
         --       one         = eVal loc (nameTyp cnt) (VInt 1 sn)
-        --       upd_cntr   = eAssign loc cnt_expr (eBinOp loc Add cnt_expr one)
-        --       asg_cntr   = eAssign loc cnt_expr estrt
+        --       upd_cntr    = eAssign loc cnt_expr (eBinOp loc Add cnt_expr one)
+        --       asg_cntr    = eAssign loc cnt_expr estrt
 
-        --       c_upd      = cSeq loc c (cReturn loc AutoInline upd_cntr)
+        --       c_upd       = cSeq loc c (cReturn loc AutoInline upd_cntr)
            
         --   a1 <- go_comp (cReturn loc AutoInline asg_cntr)
         --   a2 <- aRepeatN loc () (fromIntegral i) <$> go_comp c_upd

@@ -92,8 +92,6 @@ data DynFlag =
 
   | MockLUT -- just for debugging LUT
 
-  | AtomixCodeGen
-
   deriving (Eq,Show)
 
 type DynFlags = [DynFlag]
@@ -173,8 +171,6 @@ options =
      , Option []    ["ddump-ast"]        (NoArg DumpAst)       "dump the parsed AST"
 
      , Option []    ["ddump-automaton"]  (NoArg DumpAutomaton) "dump automaton for Atomix"
-     , Option []    ["atomix-codegen"]   (NoArg AtomixCodeGen) "generate code a la Atomix"
-
      , Option []    ["print-pipe-names"]  (NoArg PrintPipeNames) "show names of pipes in Automaton"
 
 

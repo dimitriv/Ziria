@@ -211,41 +211,6 @@ void ts_put(int nc, char *input)
 
 
 
-// Called by the uplink thread
-// Blocking
-void s_ts_putMany(ts_context *locCont, int nc, int n, char *input)
-{
-	int write = n;
-	char *ptr = input;
-	while (write > 0)
-	{
-		// Blocking:
-		s_ts_put(locCont, nc, ptr);
-		ptr += locCont[nc].size;
-		write--;
-	}
-}
-
-
-
-
-// Blocking
-void ts_putMany(int nc, int n, char *input)
-{
-	if (nc >= no_contexts)
-	{
-		printf("There are only %d queues! %d\n", no_contexts, nc);
-		return;
-	}
-
-	s_ts_putMany(contexts, nc, n, input);
-}
-
-
-
-
-
-
 // Called by the downlink thread
 bool s_ts_get(ts_context *locCont, int nc, char *output)
 {
@@ -310,7 +275,6 @@ bool s_ts_get(ts_context *locCont, int nc, char *output)
 }
 
 
-
 bool ts_get(int nc, char *output)
 //FINL bool Process() // ISource::Process
 {
@@ -323,76 +287,6 @@ bool ts_get(int nc, char *output)
 	return s_ts_get(contexts, nc, output);
 }
 
-
-
-
-
-
-
-// Reads as many chunks as available but at most n, and returns the number of chunks read
-int s_ts_getMany(ts_context *locCont, int nc, int n, char *output)
-{
-	int read = 0;
-	char *ptr = output;
-	while (read < n && s_ts_get(locCont, nc, ptr))
-	{
-		ptr += locCont[nc].size;
-		read++;
-	}
-
-	return read;
-}
-
-
-
-int ts_getMany(int nc, int n, char *output)
-{
-	if (nc >= no_contexts)
-	{
-		printf("There are only %d queues! %d\n", no_contexts, nc);
-		return false;
-	}
-
-	return s_ts_getMany(contexts, nc, n, output);
-}
-
-
-
-
-
-// Reads n chunks and blocks if not available. Return number of chunks read (which could be less than n if finished)
-int s_ts_getManyBlocking(ts_context *locCont, int nc, int n, char *output)
-{
-	int read = 0;
-	char *ptr = output;
-	while (read < n)
-	{
-		bool last = s_ts_get(locCont, nc, ptr);
-		if (last)
-		{
-			ptr += locCont[nc].size;
-			read++;
-		}
-		if (s_ts_isFinished(locCont, nc))
-		{
-			break;
-		}
-	}
-
-	return read;
-}
-
-
-int ts_getManyBlocking(int nc, int n, char *output)
-{
-	if (nc >= no_contexts)
-	{
-		printf("There are only %d queues! %d\n", no_contexts, nc);
-		return false;
-	}
-
-	return s_ts_getManyBlocking(contexts, nc, n, output);
-}
 
 
 

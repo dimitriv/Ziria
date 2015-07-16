@@ -20,9 +20,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RebindableSyntax #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-
-{-# OPTIONS -Wall -Werror #-}
+    {-# LANGUAGE ScopedTypeVariables #-}
 
 module CgProgram ( codeGenProgram ) where
 
@@ -31,10 +29,17 @@ import Prelude
 import Opts
 import AstExpr
 import AstComp
+import Outputable
+import PpComp
+import PpExpr
+import qualified GenSym as GS
 import CgHeader
 import CgRuntime
 import CgMonad
 import CgTypes
+import CgExpr
+import CgLUT
+
 import CgOpt
 import CtComp
 
@@ -42,18 +47,26 @@ import qualified CgSetupThreads as ST
 import qualified PassPipeline as PP
 
 import Control.Monad.Writer
+import qualified Data.DList as DL
+import qualified Data.List
 import Data.Loc
+import Data.Monoid
+import qualified Data.Symbol
 import qualified Language.C.Syntax as C
 import Language.C.Quote.C
+import qualified Language.C.Pretty as P
+import qualified Data.Set as S
+import qualified Data.Map as M
+import Text.PrettyPrint.HughesPJ
 import Data.Maybe
 
-import Text.PrettyPrint.HughesPJ
+import Control.Monad ( when )
+import Control.Monad.IO.Class (MonadIO(..))
+
+import Data.List ( nub )
 
 
-import CgAtomix
-import AtomixCompTransform
-import AutomataModel
-import AtomInstantiation
+
 
 codeGenContexts :: Cg [C.InitGroup]
 -- Declare external context blocks
@@ -72,14 +85,14 @@ codeGenWPLGlobalInit :: [C.Stm] -> String -> Cg ()
 codeGenWPLGlobalInit stms mfreshId
   = do { heap_context  <- getHeapContext
        ; appendTopDef $
-         [cedecl|void $id:(wpl_global_name) ($ty:(namedCType("memsize_int")) max_heap_siz)
+         [cedecl|void $id:(wpl_global_name mfreshId) ($ty:(namedCType("memsize_int")) max_heap_siz)
             {
               wpl_init_heap ($id:heap_context, max_heap_siz);
               $stms:stms
             }
          |]
        }
-  where wpl_global_name = "wpl_global_init" ++ mfreshId
+  where wpl_global_name mfreshId = "wpl_global_init" ++ mfreshId
 
 
 codeGenCompilerGlobals :: String
@@ -89,7 +102,7 @@ codeGenCompilerGlobals :: String
                        -> Ty
                        -> Ty
                        -> Cg ()
-codeGenCompilerGlobals tid _tickHdl _procHdl mtv _ta _tb = do
+codeGenCompilerGlobals tid tickHdl procHdl mtv ta tb = do
     appendCodeGenDeclGroup (doneValOf $ threadIdOf tid globalDoneHdl)
                            (fromMaybe tint mtv) ZeroOut
     appendDecl [cdecl| char $id:globalWhatIs;|]
@@ -100,39 +113,20 @@ codeGenThread :: DynFlags
               -> Comp    -- computation (split) to be compiled
                          -- already including the right read/write buffers
               -> Cg ()
-codeGenThread dflags tid c
-  | not (isDynFlagSet dflags AtomixCodeGen)
-  = do (maybe_tv, ta, tb) <- checkCompType (ctComp c)
-       (_bta, _btb) <- checkInOutFiles ta tb
-       withThreadId tid $ do
-          mkRuntime (Just ((getName dflags) ++ tid)) $ do
-            cinfo <- codeGenCompTop dflags c (finalCompKont tid)
+codeGenThread dflags tid c = do
+    (maybe_tv, ta, tb) <- checkCompType (ctComp c)
+    (bta, btb) <- checkInOutFiles ta tb
+    withThreadId tid $ do
+        mkRuntime (Just ((getName dflags) ++ tid)) $ do
+        cinfo <- codeGenCompTop dflags c (finalCompKont tid)
 
-            codeGenCompilerGlobals tid (tickHdl cinfo)
-                                       (procHdl cinfo) maybe_tv ta tb
-            return cinfo
-
-  | isDynFlagSet dflags Pipeline
-  = fail "AtomixCodeGen cannot be used simultaneously with Pipeline!"
-  | otherwise -- Atomix case
-  = do (_maybe_tv, ta, tb) <- checkCompType (ctComp c)
-       (bta, btb) <- checkInOutFiles ta tb
-       withThreadId tid $ do
-          mkAtomixRuntime (Just ((getName dflags) ++ tid)) $ do
-             sym <- getSymEnv
-             (ac,rnst) <- cgIO $ zirToAtomZir dflags sym c
-             (automaton :: CfgAuto SymAtom Int) 
-                <- cgIO $ automatonPipeline dflags sym (bufty_ty bta) (bufty_ty btb) ac 
-
-             dump dflags DumpAutomaton (".automaton.dump")
-                                       (text $ dotOfAuto dflags automaton)
-
-             cgAutomaton dflags rnst automaton
-  
+        codeGenCompilerGlobals tid (tickHdl cinfo)
+                                   (procHdl cinfo) maybe_tv ta tb
+        return cinfo
   where
     checkInOutFiles :: Ty -> Ty -> Cg (BufTy, BufTy)
     checkInOutFiles (TBuff bta) (TBuff btb) = return (bta, btb)
-    checkInOutFiles _tin _tout =
+    checkInOutFiles tin tout =
         fail $ "Missing read/write? Can't determine input or output type(s)."
 
     checkCompType :: CTy -> Cg (Maybe Ty, Ty, Ty)
@@ -157,7 +151,7 @@ codeGenProgram dflags shared_ctxt
   = withModuleName module_name $
     do { codeGenContexts >>= appendTopDecls
        ; (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
-           do { forM_ tid_cs $ \(tid,c) -> codeGenThread dflags tid c
+           do { forM tid_cs $ \(tid,c) -> codeGenThread dflags tid c
               ; if pipeline_flag then
                   do { -- Just to make the SORA code happy we need
                        -- to implement a dummy wpl_go
@@ -189,6 +183,7 @@ codeGenProgram dflags shared_ctxt
 
   where
     tids            = map fst tid_cs
+    isMultiThreaded = length tid_cs > 1
     pipeline_flag   = isDynFlagSet dflags Pipeline
     affinity_mask   = getAffinityMask dflags
     module_name     = getName dflags

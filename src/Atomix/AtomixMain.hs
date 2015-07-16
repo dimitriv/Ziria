@@ -27,7 +27,6 @@ import AtomixCompTransform ()
 import AtomixModel ()
 import AutomataModel ()
 
-import CgAtomix ()
  
 --  mkAutomaton undefined channels (traceShowId wifi) k
 

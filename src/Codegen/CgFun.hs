@@ -23,7 +23,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -Wall -Werror #-}
 
-module CgFun ( cgFunDefined, cgFunExternal, cgFunDefined_clos ) where
+module CgFun ( cgFunDefined, cgFunExternal ) where
 
 import Prelude
 
@@ -184,38 +184,21 @@ cg_actual_param :: (EId,ArgTy) -> CgPrm [C.Param]
 cg_actual_param (p,GArgTy _ Mut) = cgParamByRef p
 cg_actual_param (p,GArgTy _ Imm) = cgParam p
 
-
 cgFunDefined :: DynFlags
              -> SrcLoc
              -> Fun     -- ^ Function definition 
              -> Cg a    -- ^ Action for the continuation of the function
              -> Cg a
-cgFunDefined dflags csp fdef action = do
-  clos <- getClosureVars fdef
-  cgFunDefined_clos dflags csp fdef clos action
-
-
-cgFunDefined_clos :: DynFlags
-                  -> SrcLoc
-                  -> Fun     -- ^ Function definition 
-                  -> [EId]   -- ^ Closure variables 
-                  -> Cg a    -- ^ Action for the continuation of the function
-                  -> Cg a
-cgFunDefined_clos dflags csp
-             (MkFun (MkFunDefined f params orig_body) _ _)
-             closureEnv
+cgFunDefined dflags csp
+             fdef@(MkFun (MkFunDefined f params orig_body) _ _)
              action = do 
   -- Make up a new name for the function
   newNm <- freshName (name f ++ "_" ++ getLnNumInStr csp) (nameTyp f) Imm
   let retTy      = ctExp orig_body
   let (TArrow argtys _) = nameTyp f
   let ret_by_ref = retByRef orig_body retTy
-
-{- 
   -- | get closure variables
   closureEnv <- getClosureVars fdef
--}
-
 
   let fresh :: EId -> Cg EId
       fresh v = genSym (name v) >>= \x -> return (v { name = x })
@@ -294,7 +277,7 @@ cgFunDefined_clos dflags csp
      |]
   extendExpFunEnv f (newNm, closureEnv, lut_returning) action
 
-cgFunDefined_clos _ _ _ _ _ = panicStr "cgFunDefined"
+cgFunDefined _ _ _ _ = panicStr "cgFunDefined"
 
 
 
