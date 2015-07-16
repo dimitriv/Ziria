@@ -29,6 +29,9 @@
 #
 COMPILER?=winddk
 
+# Do not delete outfiles to allow quick recheck of failed tests
+# use make clean to get rid of them
+.PRECIOUS: %.outfile
 
 
 PP   = ../../scripts/preprocesscompile-$(COMPILER).sh

@@ -1,4 +1,4 @@
-let f1(x : arr[3] bit) = 
+fun f1(x : arr[3] bit) {
    var y : int := 0;
    var z : arr [3] bit;
   
@@ -14,6 +14,6 @@ let f1(x : arr[3] bit) =
    z[1] := bit(y);
    z[2] := bit(y);
    return z;
-in
+}
 
-read >>> map f1 |>>>| map f1 >>> write[arr [3] bit]
+let comp main = read >>> map f1 |>>>| map f1 >>> write[arr [3] bit]

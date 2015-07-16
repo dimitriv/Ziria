@@ -1,16 +1,18 @@
-let f1(x : arr[3] int) = 
+fun f1(x : arr[3] int) {
    var y : int := 0;
    var z : arr [3] int;
+
    for i in [0, 20000] {
        y := x[0] * i;
        y := x[1] * y;
        y := y * x[2];
        y := x[1] + y + 1
    };
+
    z[0] := x[0];
    z[1] := y;
    z[2] := y;
    return z
-in
+}
 
-read >>> map f1 |>>>| map f1 >>> write[arr [3] int]
+let comp main = read >>> map f1 |>>>| map f1 >>> write[arr [3] int]

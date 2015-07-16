@@ -1,19 +1,20 @@
 
 var w : int := 3;
 
-let f1(x:int) =
+fun f1(x:int){
   var y : int := 0;
   y := x;
   y := x + x * x;
   y := y * (x + 1);
   return (y % 7)
-in
+}
 
+let comp main = 
 seq { x <- do { w := f1(42); w := w + f1(43) ; return w; }
-    ; let g(r : int) =
+    ; fun g(r : int) {
              let z = f1(x+r);
              return z;
-      in 
+      };
       read >>> map g |>>>| map f1 >>> write 
     }
 
