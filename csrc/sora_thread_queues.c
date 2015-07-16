@@ -135,6 +135,16 @@ ts_context *s_ts_init(int no, size_t *sizes)
 }
 
 
+
+// Init <no> queues, each with a different size
+int ts_init_var(int no, size_t *sizes, int *queue_sizes)
+{
+	contexts = s_ts_init_var(no, sizes, queue_sizes);
+	no_contexts = no;
+	return no;
+}
+
+
 // Init <no> queues
 int ts_init(int no, size_t *sizes)
 {
