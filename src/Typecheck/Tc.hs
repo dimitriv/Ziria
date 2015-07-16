@@ -33,7 +33,7 @@ import TcMonad
 import TcUnify
 import Utils
 
-import Data.Maybe ( isNothing )
+import Data.Maybe ( isNothing, isJust, fromJust )
 
 {-------------------------------------------------------------------------------
   Top-level API
@@ -260,8 +260,7 @@ tcExp expr@(MkExp exp0 loc _) =
       -- liftIO $ print $ vcat [ ppr f, ppr fTy ]
       case fTy of 
         TArrow funtys _funres -> do 
-          checkWith loc (checkArgMut funtys args) $ 
-             text "Mutable argument(s) not dereference expression(s)!"
+          tcCheckArgMuts loc f funtys args 
           checkWith loc (length funtys == length args) $
              text "Formal parameters vs. actual arguments length mismatch!"
 
@@ -275,7 +274,8 @@ tcExp expr@(MkExp exp0 loc _) =
           raiseErr True loc $
             vcat [ text "Call to function" <+> ppr f 
                  , text "Which is of non-function type: " <+> ppr fTy 
-                 , text "Maybe " <+> ppr f <+> text "is shadowed, or declared as non-function?" 
+                 , text "Maybe " <+> ppr f <+> 
+                          text "is shadowed, or declared as non-function?" 
                  ]
 
     go (EIf be e1 e2) = do
@@ -306,7 +306,8 @@ tcExp expr@(MkExp exp0 loc _) =
           case lookup fld flds of
             Nothing ->
               raiseErrNoVarCtx loc $
-                text ("Unknown field " ++ fld ++ " projected out of type " ++ nm)
+                text ("Unknown field " ++ fld ++ 
+                          " projected out of type " ++ nm)
             Just fty ->
               return fty
         _other -> do
@@ -347,7 +348,7 @@ tcComp comp@(MkComp comp0 loc _) =
       (mu, a, b) <- unifyCompOrTrans loc Infer Infer cty1
       case mu of
         Nothing -> void $ unifyTrans loc (Check a) (Check b) (nameTyp x)
-        Just u  -> void $ unifyComp loc (Check u) (Check a) (Check b) (nameTyp x)
+        Just u -> void $ unifyComp loc (Check u) (Check a) (Check b) (nameTyp x)
       tcComp c2
     go (LetE x _fi e c) = do
       ety <- tcExp e
@@ -376,8 +377,8 @@ tcComp comp@(MkComp comp0 loc _) =
       fTy@(CTArrow funtys _funres) <- zonk (nameTyp f)
 
       -- Check that mutability agrees with deref exprs
-      checkWith loc (checkCAArgMut funtys args) $
-          text "Mutable argument(s) not dereference expression(s)!"
+      tcCheckCAArgMuts loc f funtys args
+
       checkWith loc (length funtys == length args) $ 
           text "Formal parameters vs. actual arguments length mismatch!"
 
@@ -509,6 +510,31 @@ tcComp comp@(MkComp comp0 loc _) =
       unify loc ety TBool
       ctyJoin loc cty1 cty2
 
+tcCheckArgMut :: (Outputable w, Outputable t) 
+              => SrcLoc -> GName w -> ArgTy -> GExp t a -> TcM ()
+tcCheckArgMut loc fn (GArgTy _ Mut) earg = do 
+  let md = isGDerefExp earg
+  checkWith loc (isJust md) $ 
+    vcat [ text "Function"  <+> ppr fn <+> text "expects mutable argument,"
+         , text "but was given non-lvalue: " <+> ppr earg ]
+  checkWith loc (isMutable (derefBase (fromJust md))) $
+    vcat [ text "Function"  <+> ppr fn <+> text "expects mutable argument,"
+         , text "but was given non-mutable argument:" <+> ppr earg ]
+tcCheckArgMut _ _ _ _ = return ()
+
+
+tcCheckArgMuts :: (Outputable w, Outputable t) 
+               => SrcLoc -> GName w -> [ArgTy] -> [GExp t a] -> TcM ()
+tcCheckArgMuts loc fn fun_tys args = mapM_ check_mut (zip fun_tys args)
+  where check_mut (argty, earg) = tcCheckArgMut loc fn argty earg
+
+tcCheckCAArgMuts :: (Outputable w, Outputable t) => SrcLoc
+                 -> GName w
+                 -> [CallArg ArgTy CTy]
+                 -> [CallArg (GExp t b) (GComp tc t a b)] -> TcM ()
+tcCheckCAArgMuts loc fn fun_tys args = mapM_ check_mut (zip fun_tys args)
+  where check_mut (CAExp argty, CAExp earg) = tcCheckArgMut loc fn argty earg
+        check_mut _ = return ()
 
 tcFun :: GFun Ty a -> TcM Ty
 tcFun (MkFun fun0 loc _) = go fun0
