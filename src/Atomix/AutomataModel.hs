@@ -454,8 +454,68 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
 
 
 
----- Zipping Automata
--- remaining resources in pipe ("balance"), state of left automaton, state of right automaton
+
+{------------------------------------------------------------------------
+  Automata Zipping (aka static scheduling)
+------------------------------------------------------------------------}
+
+-- Represents the distances of an automaton State to Done nodes.
+-- This may not be a single distance, since there could be many
+-- pahts to a done node.
+data DoneDist
+  = DoneDist { dists           :: Set Int -- set of distances of node to some done node
+             , dists_truncated :: Bool    -- True if the set is incomplete, False otherwise
+             }
+  deriving Eq
+
+
+data DistUpdate = Truncation | NewDist Int
+
+-- Compute "done distances" of automaton states (measured in # of reads from input-queue upto Done)
+-- Distances above the threshold are not computed (to ensure termination);
+-- however, if such uncomputed distances exists, we record this fact in the DoneDist data structure.
+--
+-- For efficieny reasons, should be cached locally:
+--   let doneDist = mkDoneDist treshold a in ...
+mkDoneDist :: forall nid e. Ord nid => Int -> SAuto e nid -> nid -> DoneDist
+mkDoneDist threshold a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph a) $ Map.lookup nid dist_map) where
+  dist_map = go dones init
+  dones = map (,NewDist 0) $
+          filter (\nid -> case nodeKindOfId a nid of { SDone _ -> True; _ -> False }) $
+          Map.keys (auto_graph a)
+  init = Map.map (const $ DoneDist Set.empty False) (auto_graph a)
+
+  go :: [(nid, DistUpdate)] -> Map nid DoneDist -> Map nid DoneDist
+  go [] dist_map = dist_map
+  go ((nid,update):work_list) dist_map
+    | Truncation <- update
+    , not $ dist_truncated $ fromJust $ assert (Map.member nid dist_map) $  Map.lookup nid dist_map
+    = let dist_map' = Map.adjust (\d -> d { dist_truncated = True }) nid dist_map in
+      let new_work = map (,Truncation) (preds nid) in
+      go (new_work ++ work_list) dist_map'
+
+    | NewDist n <- update
+    , Set.notMember n $ dists $ fromJust $ assert (Map.member nid dist_map) $ Map.lookup nid dist_map
+    = let dist_map' = Map.adjust (\d -> d { dists = Set.insert n (dists d) }) nid dist_map in
+      let new_work = map (mkUpdate n) (preds nid) in
+      go (new_work ++ work_list) dist_map'
+
+    | otherwise
+    = go work_list dist_map
+
+  preds = Set.toList . mkPreds a
+
+  mkUpdate dist nid = (nid,) $
+    let new_dist = dist + cost nid in
+    if new_dist > threshold then Truncation else NewDist new_dist
+
+  cost nid = case nodeKindOfId a nid of
+    SAtom watom _ _ -> countReads (auto_inchan a) watom
+    _ -> 0
+
+
+
+-- simple queue interface
 type Queue e = [e]
 
 push :: e -> Queue e -> Queue e
@@ -472,52 +532,7 @@ type PipeState = Queue (Either Int Int) -- left n means n reads, right m means m
 
 getBudget = sum . rights
 
-data DoneDist
-  = DoneDist { dists        :: Set Int
-             , dist_precise :: Bool
-             }
-  deriving Eq
 
-data DistUpdate = Imprecise | NewDist Int
-
--- Compute "done distance" map of automaton (measured in reads from input-queue upto Done)
--- For efficieny reasons, should be cached locally:
---   let doneDist = mkDoneDist treshold a in ...
-mkDoneDist :: forall nid e. Ord nid => Int -> SAuto e nid -> nid -> DoneDist
-mkDoneDist threshold a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph a) $ Map.lookup nid dist_map) where
-  dist_map = go dones init
-  dones = map (,NewDist 0) $
-          filter (\nid -> case nodeKindOfId a nid of { SDone _ -> True; _ -> False }) $
-          Map.keys (auto_graph a)
-  init = Map.map (const $ DoneDist Set.empty True) (auto_graph a)
-
-  go :: [(nid, DistUpdate)] -> Map nid DoneDist -> Map nid DoneDist
-  go [] dist_map = dist_map
-  go ((nid,update):work_list) dist_map
-    | Imprecise <- update
-    , dist_precise $ fromJust $ assert (Map.member nid dist_map) $  Map.lookup nid dist_map
-    = let dist_map' = Map.adjust (\d -> d { dist_precise = False }) nid dist_map in
-      let new_work = map (,Imprecise) (preds nid) in
-      go (new_work ++ work_list) dist_map'
-
-    | NewDist n <- update
-    , Set.notMember n $ dists $ fromJust $ assert (Map.member nid dist_map) $ Map.lookup nid dist_map
-    = let dist_map' = Map.adjust (\d -> d { dists = Set.insert n (dists d) }) nid dist_map in
-      let new_work = map (mkUpdate n) (preds nid) in
-      go (new_work ++ work_list) dist_map'
-
-    | otherwise
-    = go work_list dist_map
-
-  preds = Set.toList . mkPreds a
-
-  mkUpdate dist nid = (nid,) $
-    let new_dist = dist + cost nid in
-    if new_dist > threshold then Imprecise else NewDist new_dist
-
-  cost nid = case nodeKindOfId a nid of
-    SAtom watom _ _ -> countReads (auto_inchan a) watom
-    _ -> 0
 
 
 
@@ -552,7 +567,7 @@ zipAutomata a1' a2' k = concat_auto prod_a k
     consumption_threshold = ceiling ((1 + optimism) * (fromIntegral largest_read))
 
     threshold nid2 
-      | not (dist_precise $ done_dist nid2) = consumption_threshold
+      | dist_truncated $ done_dist nid2 = consumption_threshold
       | otherwise = 
         let ds = dists (done_dist nid2) in
         let d = if Set.null ds then 0 else Set.findMax ds in
