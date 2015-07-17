@@ -328,7 +328,7 @@ normalizePars
         Right (t:ts,c0,t':ts') 
           -> mkPar (foldl mkPar t ts) $ mkPar c0 $ foldl mkPar t' ts'
         _ -> panicStr "normalizePars: impossible case"
-      where mkPar = cPar (compLoc c) undefined
+      where mkPar = cPar (compLoc c) (mkParInfo MaybePipeline)
         
 
 
