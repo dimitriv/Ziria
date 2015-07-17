@@ -455,15 +455,19 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
 
 
 
+
+
 {------------------------------------------------------------------------
   Automata Zipping (aka static scheduling)
 ------------------------------------------------------------------------}
 
--- Represents the distances of an automaton State to Done nodes.
--- This may not be a single distance, since there could be many
--- pahts to a done node.
+-- Represents the distances of a particular automaton state to the done node(s).
+-- Since there may be several (possibly infinitely many) paths to the done node(s),
+-- this is not a single distance, but rather a set of distances.
+-- Since we cannot compute inifinite sets, we allow truncating these sets by
+-- omitting all distances above a given threshold.
 data DoneDist
-  = DoneDist { dists           :: Set Int -- set of distances of node to some done node
+  = DoneDist { dists           :: Set Int -- distances of node to done node(s).
              , dists_truncated :: Bool    -- True if the set is incomplete, False otherwise
              }
   deriving Eq
@@ -473,33 +477,45 @@ data DistUpdate = Truncation | NewDist Int
 
 -- Compute "done distances" of automaton states (measured in # of reads from input-queue upto Done)
 -- Distances above the threshold are not computed (to ensure termination);
--- however, if such uncomputed distances exists, we record this fact in the DoneDist data structure.
+-- however, if such uncomputed distances exists, we record this fact in the DoneDist data structure
+-- (by setting dists_truncated = True).
 --
 -- For efficieny reasons, should be cached locally:
 --   let doneDist = mkDoneDist treshold a in ...
 mkDoneDist :: forall nid e. Ord nid => Int -> SAuto e nid -> nid -> DoneDist
 mkDoneDist threshold a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph a) $ Map.lookup nid dist_map) where
+  
   dist_map = go dones init
+
+  -- we compute the done-distances in a backwards-fashion, starting from the Done node(s).
   dones = map (,NewDist 0) $
           filter (\nid -> case nodeKindOfId a nid of { SDone _ -> True; _ -> False }) $
           Map.keys (auto_graph a)
+  
+  -- Inital distance-map.
   init = Map.map (const $ DoneDist Set.empty False) (auto_graph a)
 
+  -- Iteratively updates distance map by backwards-propagation of distance updates.
+  -- Terminates since only true updates are propagated, and because distances above the
+  -- given threshold are not propagated.
   go :: [(nid, DistUpdate)] -> Map nid DoneDist -> Map nid DoneDist
   go [] dist_map = dist_map
   go ((nid,update):work_list) dist_map
-    | Truncation <- update
-    , not $ dist_truncated $ fromJust $ assert (Map.member nid dist_map) $  Map.lookup nid dist_map
-    = let dist_map' = Map.adjust (\d -> d { dist_truncated = True }) nid dist_map in
-      let new_work = map (,Truncation) (preds nid) in
-      go (new_work ++ work_list) dist_map'
-
+    -- true distance update
     | NewDist n <- update
     , Set.notMember n $ dists $ fromJust $ assert (Map.member nid dist_map) $ Map.lookup nid dist_map
     = let dist_map' = Map.adjust (\d -> d { dists = Set.insert n (dists d) }) nid dist_map in
       let new_work = map (mkUpdate n) (preds nid) in
       go (new_work ++ work_list) dist_map'
 
+    -- true truncation update
+    | Truncation <- update
+    , not $ dists_truncated $ fromJust $ assert (Map.member nid dist_map) $  Map.lookup nid dist_map
+    = let dist_map' = Map.adjust (\d -> d { dists_truncated = True }) nid dist_map in
+      let new_work = map (,Truncation) (preds nid) in
+      go (new_work ++ work_list) dist_map'
+
+    -- all other updates have no effect and are therefore not back-propagated.
     | otherwise
     = go work_list dist_map
 
@@ -509,9 +525,8 @@ mkDoneDist threshold a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph
     let new_dist = dist + cost nid in
     if new_dist > threshold then Truncation else NewDist new_dist
 
-  cost nid = case nodeKindOfId a nid of
-    SAtom watom _ _ -> countReads (auto_inchan a) watom
-    _ -> 0
+  cost nid | SAtom watom _ _ <- nodeKindOfId a nid = countReads (auto_inchan a) watom
+           | otherwise                             = 0
 
 
 
@@ -526,13 +541,16 @@ pop [] = Nothing
 pop es = Just (List.last es, List.init es)
 
 
+
+
+type ProdNid = (Int, Int, ExtraState)
 type ExtraState = (Int, Map Int Int) -- map done-distance to rollback-amount
-type ProdNid = (ExtraState, Int, Int)
+
+
+
+
 type PipeState = Queue (Either Int Int) -- left n means n reads, right m means m writes
-
 getBudget = sum . rights
-
-
 
 
 
@@ -567,7 +585,7 @@ zipAutomata a1' a2' k = concat_auto prod_a k
     consumption_threshold = ceiling ((1 + optimism) * (fromIntegral largest_read))
 
     threshold nid2 
-      | dist_truncated $ done_dist nid2 = consumption_threshold
+      | dists_truncated $ done_dist nid2 = consumption_threshold
       | otherwise = 
         let ds = dists (done_dist nid2) in
         let d = if Set.null ds then 0 else Set.findMax ds in
@@ -581,7 +599,7 @@ zipAutomata a1' a2' k = concat_auto prod_a k
 
 
     mkProdNid :: PipeState -> Int -> Int -> ProdNid
-    mkProdNid ps nid1 nid2 = (,nid1,nid2) $
+    mkProdNid ps nid1 nid2 = (nid1,nid2,) $
       let budget = getBudget ps
           rollback_behavior = Map.fromList $ map (\d -> (d, getRollback d ps)) $
                               filter (<= budget) $ Set.toList $ dists $ done_dist nid2
@@ -592,7 +610,7 @@ zipAutomata a1' a2' k = concat_auto prod_a k
       Just ps' -> sum $ lefts ps'
 
     zipNodes :: PipeState -> ProdNid -> SNodeMap e ProdNid -> SNodeMap e ProdNid
-    zipNodes balance prod_nid@(_,nid1,nid2) prod_nmap =
+    zipNodes balance prod_nid@(nid1,nid2,_) prod_nmap =
       case Map.lookup prod_nid prod_nmap of
         Just _ -> prod_nmap -- We have already seen this product location. We're done!
         Nothing ->
@@ -614,9 +632,9 @@ zipAutomata a1' a2' k = concat_auto prod_a k
       | let rollback = sum (lefts balance)
       , rollback > 0 
       = -- Hack to create unique fresh product node id
-        let final_prod_nid = ((0,Map.empty)
-                             , 1 + (fst $ Map.findMax $ auto_graph a1)
-                             , 1 + (fst $ Map.findMax $ auto_graph a2))
+        let final_prod_nid = ( 1 + (fst $ Map.findMax $ auto_graph a1)
+                             , 1 + (fst $ Map.findMax $ auto_graph a2)
+                             , (0,Map.empty) )
             final_pipes = Map.adjust (+ rollback) (auto_inchan a1) pipes
             final_nk = SDone final_pipes
             rollback_nk = SAtom (rollbackWAtom pipe_ch rollback) final_prod_nid pipes
@@ -636,13 +654,13 @@ zipAutomata a1' a2' k = concat_auto prod_a k
        We prefer handling branches first, as it will potentially allow us to merge several
        decision nodes into a single decision.
     -}
-    zipNodes' balance pipes prod_nid@(_,_,id2) (SBranch x l r w _) nk2 =
+    zipNodes' balance pipes prod_nid@(_,id2,_) (SBranch x l r w _) nk2 =
       let prod_nid_l = mkProdNid balance l id2
           prod_nid_r = mkProdNid balance r id2
           prod_nkind = SBranch x prod_nid_l prod_nid_r w pipes
       in zipNodes balance prod_nid_r . zipNodes balance prod_nid_l . insertNk prod_nid prod_nkind
 
-    zipNodes' balance pipes prod_nid@(_,id1,id2) nk1 (SAtom wa2 next2 _)
+    zipNodes' balance pipes prod_nid@(id1,id2,_) nk1 (SAtom wa2 next2 _)
       | getBudget balance >= threshold id2
       , Just balance' <- try_consume wa2 balance
       = let next_prod_nid = mkProdNid balance' id1 next2
@@ -651,7 +669,7 @@ zipAutomata a1' a2' k = concat_auto prod_a k
 
     -- Can't proceed in right automaton -- execute left automaton
 
-    zipNodes' balance pipes prod_nid@(_,_,id2) (SAtom wa1 next1 _) nk2 =
+    zipNodes' balance pipes prod_nid@(_,id2,_) (SAtom wa1 next1 _) nk2 =
       let balance' = produce wa1 balance
           next_prod_nid = mkProdNid balance' next1 id2
           prod_nkind = SAtom wa1 next_prod_nid pipes
