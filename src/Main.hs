@@ -256,7 +256,7 @@ main = do
                   else lc
 
         when (isDynFlagSet dflags DumpAutomaton && not (isDynFlagSet dflags AtomixCodeGen)) $ do
-          (ac,_rnst) <- zirToAtomZir dflags sym c
+          (ac,_rnst) <- zirToAtomZir dflags sym lc
           (automaton :: CfgAuto SymAtom Int) 
             <- automatonPipeline dflags sym undefined undefined ac
           dump dflags DumpAutomaton (".automaton.dump")
