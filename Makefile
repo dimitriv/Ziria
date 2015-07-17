@@ -50,6 +50,7 @@ clean:
 	-rm -rf wplc.exe
 	-rm -rf tools/BlinkDiff
 	-rm -rf tools/BlinkDiff.exe
+	cabal clean
 
 clean-sandbox:
 	-rm -rf .cabal-sandbox
