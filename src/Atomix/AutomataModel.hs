@@ -890,19 +890,16 @@ fuseActions auto = auto { auto_graph = fused_graph }
     fused_graph = fst $ runState (doAll [auto_start auto] (auto_graph auto)) (Set.empty, Set.empty)
 
     doAll :: [nid] -> CfgNodeMap atom nid -> MarkingM nid (CfgNodeMap atom nid)
-    doAll work_list nmap =
-      case work_list of
-        [] -> return nmap
-        nid:wl -> do
-          (wl',nmap') <- markAndFuse nid nmap
-          inNewFrame (doAll (wl'++wl) nmap')
+    doAll [] nmap = return nmap
+    doAll (nid:work_list) nmap = do
+      (wl',nmap') <- markAndFuse nid nmap
+      inNewFrame (doAll (wl'++work_list) nmap')
 
 
-   -- Inchiant: if isDone nid then all
+   -- Invariant: if isDone nid then all
    -- its successors either satisfy isDone or are in the worklist, and the node is
    --  (a) a decision node (i.e. not an action node), or
     -- (b) an action node with its next node being a decision node
-
     markAndFuse :: nid -> CfgNodeMap atom nid -> MarkingM nid ([nid], CfgNodeMap atom nid)
     markAndFuse nid nmap = do
       done <- isDone nid
@@ -918,17 +915,18 @@ fuseActions auto = auto { auto_graph = fused_graph }
     fuse (Node _ (CfgBranch _ b1 b2 _)) nmap = return ([b1,b2],nmap)
 
     fuse (Node nid (CfgAction atoms next pipes)) nmap = do
-        active <- isActive next
-        -- don't fuse back-edges (including self-loops)!
-        if active then return ([],nmap) else do
-          -- fuse sucessor node(s) first, ...
-          (wl,nmap) <- markAndFuse next nmap
-          -- ... then perform merger if possible
-          return $ case fromJust $ assert (Map.member next nmap) $ Map.lookup next nmap of
-            Node _ (CfgAction atoms' next' _) ->
-              let node = Node nid (CfgAction (atoms++atoms') next' pipes)
-              in (wl, Map.insert nid node nmap)
-            Node _ _ -> (wl,nmap)
+      active <- isActive next
+      -- don't fuse back-edges (including self-loops)!
+      if active then return ([],nmap) else do
+        -- fuse sucessor node(s) first, ...
+        (wl,nmap) <- markAndFuse next nmap
+        -- ... then perform merger if possible
+        return $ case fromJust $ assert (Map.member next nmap) $ Map.lookup next nmap of
+          Node _ (CfgAction atoms' next' pipes') ->
+            let pipes'' = Map.unionWith (curry fst) pipes pipes' in
+            let node = Node nid (CfgAction (atoms++atoms') next' pipes'') in
+            (wl, Map.insert nid node nmap)
+          Node _ _ -> (wl,nmap)
 
 
 

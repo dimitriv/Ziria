@@ -66,6 +66,7 @@ data DynFlag =
   | DumpAstPretty
   | DumpAutomaton
   | PrintPipeNames
+  | PruneIncompleteStates
 
   | Vectorize
   | AutoLUT
@@ -176,6 +177,7 @@ options =
      , Option []    ["atomix-codegen"]   (NoArg AtomixCodeGen) "generate code a la Atomix"
 
      , Option []    ["print-pipe-names"]  (NoArg PrintPipeNames) "show names of pipes in Automaton"
+     , Option []    ["prune-incomplete-states"]  (NoArg PruneIncompleteStates) "prune automaton states that terminate with data still in the pipeline"
 
 
      , Option []    ["ddump-ast-pretty"] (NoArg DumpAstPretty) "dump the parsed AST (pretty-printed)"
