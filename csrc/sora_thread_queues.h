@@ -24,6 +24,7 @@
 
 // Init the queue
 int ts_init(int nc, size_t *sizes);
+int ts_init_var(int no, size_t *sizes, int *queue_sizes);
 
 // Called by the uplink thread
 // Blocking
