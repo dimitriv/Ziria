@@ -25,6 +25,7 @@ import Control.Applicative ( (<$>) )
 import Outputable
 import qualified Text.PrettyPrint.HughesPJ as PPR
 import Text.PrettyPrint.Boxes
+import Debug.Trace
 
 
 
@@ -107,6 +108,7 @@ data SimplNk atom nid
             }
   | SDone { pipe_balances :: Map Chan Int -- balance of pipeline queues
           }
+  deriving Show
 
 instance NodeKind SimplNk where
   sucsOfNk (SDone _) = []
@@ -237,6 +239,10 @@ nextPipes :: [WiredAtom a] -> Map Chan Int -> Map Chan Int
 nextPipes watoms pipes = Map.mapWithKey updatePipe pipes
   where updatePipe pipe n = n + sum (map (countWrites pipe) watoms)
                               - sum (map (countReads pipe) watoms)
+next_pipe_balances :: SimplNk atom nid -> Map Chan Int
+next_pipe_balances (SAtom wa _ pipes) = Map.mapWithKey updatePipe pipes 
+  where updatePipe pipe n = n + countWrites pipe wa - countReads pipe wa
+next_pipe_balances nk = pipe_balances nk 
 
 nextNid :: Automaton atom Int nkind -> Int
 nextNid a = maxId+1
@@ -579,6 +585,7 @@ zipAutomata a1' a2' k = concat_auto prod_a k
     start_prod_nid = mkProdNid start_balance (auto_start a1) (auto_start a2)
     prod_nmap = zipNodes start_balance start_prod_nid Map.empty
     pipe_ch = assert (auto_outchan a1 == auto_inchan a2) $ auto_outchan a1
+    optimism :: Double
     optimism = 0.0
     lazy = optimism == 0.0
 
@@ -804,32 +811,47 @@ markSelfLoops a = a { auto_graph = go (auto_graph a)}
 
 
 -- prune action that are known to be unreachable
-pruneUnreachable :: forall e nid. (Atom e, Ord nid) => nid -> CfgAuto e nid -> CfgAuto e nid
-pruneUnreachable nid a = a { auto_graph = prune (auto_graph a) nid }
+pruneUnreachable :: forall e nid. (Atom e, Ord nid) => SAuto e nid -> nid -> SAuto e nid
+pruneUnreachable a nid = a { auto_graph = prune (auto_graph a) nid }
   where
     preds = mkPreds a
 
-    prune :: CfgNodeMap e nid -> nid -> CfgNodeMap e nid
+    prune :: SNodeMap e nid -> nid -> SNodeMap e nid
     prune nmap nid =
       case Map.lookup nid nmap of
         Nothing -> nmap -- already pruned
         Just _ -> Set.foldl (pruneBkw nid) (Map.delete nid nmap) (preds nid)
 
-    pruneBkw :: nid -> CfgNodeMap e nid -> nid -> CfgNodeMap e nid
+    pruneBkw :: nid -> SNodeMap e nid -> nid -> SNodeMap e nid
     pruneBkw suc nmap nid =
       case Map.lookup nid nmap of
         Nothing -> nmap
-        Just (Node _ CfgDone) -> assert False undefined
-        Just (Node _ (CfgAction _ next _)) -> if next==suc then prune nmap nid else nmap
-        Just (Node _ (CfgLoop next)) -> if next==suc then prune nmap nid else nmap
-        Just (Node _ (CfgBranch x suc1 suc2 _))
+        Just (Node _ (SDone {})) -> assert False undefined
+        Just (Node _ (SAtom _ next _)) -> if next==suc then prune nmap nid else nmap
+        Just (Node _ (SBranch x suc1 suc2 _ pipes))
           | suc == suc1 -> -- suc2 becomes the unique sucessor (since suc1 is unreachable)
-            let nk = CfgAction [assertWAtom False x] suc2 Map.empty
+            let nk = SAtom (assertWAtom False x) suc2 pipes
             in Map.insert nid (Node nid nk) nmap
           | suc == suc2 -> -- suc1 becomes the unique sucessor (since suc2 is unreachable)
-            let nk = CfgAction [assertWAtom True x] suc1 Map.empty
+            let nk = SAtom (assertWAtom True x) suc1 pipes
             in Map.insert nid (Node nid nk) nmap
           | otherwise -> assert False undefined
+
+
+-- Prune all nodes that terminate with data still in the pipeline.
+pruneUnfinished :: forall atom. Atom atom => SAuto atom Int -> SAuto atom Int
+pruneUnfinished a = foldl pruneUnreachable a $ traceShowId $ map node_id unfinished where
+  unfinished = traceShowId $ filter isUnfinished $ filter isDonePred $ Map.elems $ auto_graph a
+
+  isDonePred :: SNode atom Int -> Bool
+  isDonePred = any (isDone . nodeKindOfId a) . sucs
+
+  isDone :: SimplNk atom Int -> Bool 
+  isDone (SDone {}) = True
+  isDone _ = False
+  isUnfinished = const True
+  -- isUnfinished = any (/= 0) . Map.elems . next_pipe_balances . node_kind
+
 
 
 
@@ -987,14 +1009,19 @@ automatonPipeline dfs sym inty outty acomp = do
   outch <- freshName sym "snk" (acomp_loc acomp) outty Mut
   let channels = Channels { in_chan = inch, out_chan = outch, ctrl_chan = Nothing }
   let k = mkDoneAutomaton inch outch
+  let prune = isDynFlagSet dfs PruneIncompleteStates
 
   putStrLn ">>>>>>>>>> mkAutomaton"
-  a <- simplToCfg <$> mkAutomaton dfs sym channels acomp k
+  a <- mkAutomaton dfs sym channels acomp k
   --putStrLn (dotOfAuto True a)
   putStrLn $ "<<<<<<<<<<< mkAutomaton (" ++ show (size a) ++ " states)"
 
+  when prune $ putStrLn ">>>>>>>>>> pruneUnfinished"
+  let a_p = simplToCfg $ (if prune then pruneUnfinished else id) $ a
+  when prune $ putStrLn $ "<<<<<<<<<<< pruneUnfinished (" ++ show (size a_p) ++ " states)"
+
   putStrLn ">>>>>>>>>>> fuseActions"
-  let a_f = fuseActions a
+  let a_f = fuseActions a_p
   --putStrLn (dotOfAuto True a_f)
   putStrLn $ "<<<<<<<<<<< fuseActions (" ++ show (size a_f) ++ " states)"
 
