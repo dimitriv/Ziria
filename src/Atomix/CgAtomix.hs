@@ -120,20 +120,26 @@ cgDeclQueues :: QueueInfo -> Cg a -> Cg a
 cgDeclQueues qs action = 
   let numqs = Map.size (qi_interm qs)
   in if numqs == 0 then action else do 
-         let my_sizes_decl = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
-             ts_init_stmts = [cstm| ts_init($int:(numqs),my_sizes); |]
-             my_sizes_inits = Map.mapWithKey (\qvar (QId i,_siz) -- ignore slots
-                     -> [cstm| my_sizes[$int:i] = 
-                                 $(tySizeOf_C (nameTyp qvar));|]) (qi_interm qs)
+      let my_sizes_decl = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
+          my_slots_decl = [cdecl|int my_slots[$int:(numqs)];|]
+          ts_init_stmts = [cstm| ts_init_var($int:(numqs),my_sizes,my_slots); |]
+          my_sizes_inits 
+            = concat $
+              Map.elems $ 
+              Map.mapWithKey (\qvar (QId i,siz) -- ignore slots
+                     -> [ [cstm| my_sizes[$int:i] = 
+                                 $(tySizeOf_C (nameTyp qvar));|]
+                        , [cstm| my_slots[$int:i] = $int:siz;|]
+                        ]) (qi_interm qs)
 
          -- Append top declarations  
-         appendTopDecl my_sizes_decl
+      appendTopDecl my_sizes_decl
+      appendTopDecl my_slots_decl
 
          -- Add code to initialize queues in wpl global init
-         _ <- mapM addGlobalWplAllocated $
-                     (Map.elems my_sizes_inits) ++ [ts_init_stmts]
+      _ <- mapM addGlobalWplAllocated (my_sizes_inits ++ [ts_init_stmts])
 
-         action
+      action
 
 
 -- | Extract all introduced queues, and for each calculate the maximum
