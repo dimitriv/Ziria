@@ -1,13 +1,15 @@
-let f1(x:complex32) = 
+fun f1(x:complex32){
    var y : int := 0;
+   var z:complex32;
    for i in [0, 20000] {
        y := x.re * i;
        y := x.im * y;
        y := y * x.re;
        y := x.im + y 
    };
-   x.re := y;
-   return x;
-in
+   z.re := y;
+   z.im := x.im;
+   return z;
+}
 
-read >>> map f1 |>>>| map f1 >>> write[complex32]
+let comp main = read >>> map f1 |>>>| map f1 >>> write[complex32]

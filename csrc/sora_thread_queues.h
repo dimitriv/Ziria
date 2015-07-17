@@ -77,6 +77,8 @@ struct ts_context
 	MEM_ALIGN(ST_CACHE_LINE) volatile bool evFinish;
 	MEM_ALIGN(ST_CACHE_LINE) volatile bool evFlush;
 	MEM_ALIGN(ST_CACHE_LINE) volatile bool evProcessDone;
+
+	MEM_ALIGN(ST_CACHE_LINE) int queue_size;
 };
 
 
@@ -86,6 +88,7 @@ struct ts_context
 // TODO: rewrite the compiler to use explicit queues, 
 // and get rid of the functions above.
 
+ts_context *s_ts_init_var(int no, size_t *sizes, int *queue_sizes);
 ts_context *s_ts_init(int no, size_t *sizes);
 void s_ts_put(ts_context *locCont, int nc, char *input);
 bool s_ts_get(ts_context *locCont, int nc, char *output);
