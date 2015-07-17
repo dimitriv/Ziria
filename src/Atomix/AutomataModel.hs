@@ -25,7 +25,6 @@ import Control.Applicative ( (<$>) )
 import Outputable
 import qualified Text.PrettyPrint.HughesPJ as PPR
 import Text.PrettyPrint.Boxes
-import Debug.Trace 
 
 
 
@@ -58,7 +57,7 @@ class NodeKind nkind where
 data WiredAtom atom
   = WiredAtom { wires_in  :: [(Int,EId)]      -- [(Int,Wire)]
               , wires_out :: [(Int,EId)]      -- [(Int,Wire)]
-              , the_atom  :: atom            
+              , the_atom  :: atom
               }
   deriving Eq
 
@@ -98,15 +97,15 @@ class (Show a, Eq a) => Atom a where
 data SimplNk atom nid
   = SAtom { wired_atom :: WiredAtom atom
           , atom_next  :: nid
-          , pipe_balance :: Map Chan Int -- balance of pipeline queues
+          , pipe_balances :: Map Chan Int -- balance of pipeline queues
           }
   | SBranch { zbranch_ch   :: Chan -- If we read True we go to branch_true, otherwise to branch_false
             , zbranch_true  :: nid
             , zbranch_false :: nid
             , zbranch_while :: Bool -- Is this a while loop?
-            , pipe_balance :: Map Chan Int -- balance of pipeline queues
+            , pipe_balances :: Map Chan Int -- balance of pipeline queues
             }
-  | SDone { pipe_balance :: Map Chan Int -- balance of pipeline queues
+  | SDone { pipe_balances :: Map Chan Int -- balance of pipeline queues
           }
 
 instance NodeKind SimplNk where
@@ -485,14 +484,14 @@ data DistUpdate = Truncation | NewDist Int
 --   let doneDist = mkDoneDist treshold a in ...
 mkDoneDist :: forall nid e. Ord nid => Int -> SAuto e nid -> nid -> DoneDist
 mkDoneDist threshold a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph a) $ Map.lookup nid dist_map) where
-  
+
   dist_map = go dones init
 
   -- we compute the done-distances in a backwards-fashion, starting from the Done node(s).
   dones = map (,NewDist 0) $
           filter (\nid -> case nodeKindOfId a nid of { SDone _ -> True; _ -> False }) $
           Map.keys (auto_graph a)
-  
+
   -- Inital distance-map.
   init = Map.map (const $ DoneDist Set.empty False) (auto_graph a)
 
@@ -560,7 +559,7 @@ type RollbackBehavior = Map Int Int
 -- (i.e. optimistic) reads of the left automaton.
 type PipeState = Queue (Either Int Int) -- left n means n reads, right m means m writes
 getUncommitted = sum . lefts
-getBudget = sum . rights
+getBalance = sum . rights
 
 
 
@@ -583,143 +582,150 @@ zipAutomata a1' a2' k = concat_auto prod_a k
     optimism = 0.0
     lazy = optimism == 0.0
 
-   
+
     mkProdNid :: PipeState -> Int -> Int -> ProdNid
     mkProdNid ps nid1 nid2 = (nid1,nid2,) $
-      let budget = getBudget ps
+      let budget = getBalance ps
           rollback_behavior | lazy = Map.empty
-                            | otherwise = Map.fromList $ map (\d -> (d, getRollback d ps)) $
+                            | otherwise = Map.fromList $ map (\d -> (d, rollbackInDistance d ps)) $
                                           filter (<= budget) $ Set.toList $ dists $ done_dist nid2
       in (budget, rollback_behavior)
 
 
 
     zipNodes :: PipeState -> ProdNid -> SNodeMap e ProdNid -> SNodeMap e ProdNid
-    zipNodes balance prod_nid@(nid1,nid2,_) prod_nmap =
+    zipNodes pipe_state prod_nid@(nid1,nid2,_) prod_nmap =
       case Map.lookup prod_nid prod_nmap of
         Just _ -> prod_nmap -- We have already seen this product location. We're done!
         Nothing ->
           let nk1 = assert (Map.member nid1 (auto_graph a1)) $ nodeKindOfId a1 nid1
               nk2 = assert (Map.member nid2 (auto_graph a2)) $ nodeKindOfId a2 nid2
               noDups = const (assert False)
-              pipes = Map.insertWith noDups pipe_ch (getBudget balance) $
-                      Map.unionWith noDups (pipe_balance nk1) (pipe_balance nk2)
-          in (if lazy then zipLazy else zipOptimistic) balance pipes prod_nid nk1 nk2 prod_nmap
+              new_balances = Map.insertWith noDups pipe_ch (getBalance pipe_state) $
+                             Map.unionWith noDups (pipe_balances nk1) (pipe_balances nk2)
+          in (if lazy then zipLazy else zipOptimistic) pipe_state new_balances prod_nid nk1 nk2 prod_nmap
 
 
-     -- Try executing right automaton first! (in accordance with lazy, right-biased semantics)
+    -- Zips automata in accordance with the tick/proc-based standard Ziria semantics
+    -- (i.e. lazy, right-biased, pull-style semantics).
     zipLazy :: PipeState -> Map Chan Int -> ProdNid -> SimplNk e Int -> SimplNk e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
 
-    zipLazy balance pipes prod_nid nk1 (SDone _) =
-        insertNk prod_nid (SDone pipes)
+    zipLazy pipe_state pipe_balances prod_nid nk1 (SDone _) =
+        insertNk prod_nid (SDone pipe_balances)
 
-    zipLazy balance pipes prod_nid@(id1,_,_) nk1 (SBranch x l r w _) =
-      let prod_nid_l = mkProdNid balance id1 l
-          prod_nid_r = mkProdNid balance id1 r
-          prod_nkind = SBranch x prod_nid_l prod_nid_r w pipes
-      in zipNodes balance prod_nid_r . zipNodes balance prod_nid_l . insertNk prod_nid prod_nkind
+    zipLazy pipe_state pipe_balances prod_nid@(id1,_,_) nk1 (SBranch x l r w _) =
+      let prod_nid_l = mkProdNid pipe_state id1 l
+          prod_nid_r = mkProdNid pipe_state id1 r
+          prod_nkind = SBranch x prod_nid_l prod_nid_r w pipe_balances
+      in zipNodes pipe_state prod_nid_r . zipNodes pipe_state prod_nid_l . insertNk prod_nid prod_nkind
 
     {- Treating this case here is not strictly in accordance with Ziria's lazy (right-biased)
        semantics; however, since branching has no side effects, this should be a legal reordering.
        We prefer handling branches first, as it will potentially allow us to merge several
        decision nodes into a single decision.
     -}
-    zipLazy balance pipes prod_nid@(_,id2,_) (SBranch x l r w _) nk2 =
-      let prod_nid_l = mkProdNid balance l id2
-          prod_nid_r = mkProdNid balance r id2
-          prod_nkind = SBranch x prod_nid_l prod_nid_r w pipes
-      in zipNodes balance prod_nid_r . zipNodes balance prod_nid_l . insertNk prod_nid prod_nkind
+    zipLazy pipe_state pipe_balances prod_nid@(_,id2,_) (SBranch x l r w _) nk2 =
+      let prod_nid_l = mkProdNid pipe_state l id2
+          prod_nid_r = mkProdNid pipe_state r id2
+          prod_nkind = SBranch x prod_nid_l prod_nid_r w pipe_balances
+      in zipNodes pipe_state prod_nid_r . zipNodes pipe_state prod_nid_l . insertNk prod_nid prod_nkind
 
-    zipLazy balance pipes prod_nid@(id1,id2,_) nk1 (SAtom wa2 next2 _)
-      | Just balance' <- try_consume wa2 balance
-      = let next_prod_nid = mkProdNid balance' id1 next2
-            prod_nkind = SAtom wa2 next_prod_nid pipes
-        in zipNodes balance' next_prod_nid . insertNk prod_nid prod_nkind
+    zipLazy pipe_state pipe_balances prod_nid@(id1,id2,_) nk1 (SAtom wa2 next2 _)
+      | Just pipe_state' <- exec_right wa2 pipe_state
+      = let next_prod_nid = mkProdNid pipe_state' id1 next2
+            prod_nkind = SAtom wa2 next_prod_nid pipe_balances
+        in zipNodes pipe_state' next_prod_nid . insertNk prod_nid prod_nkind
 
     -- Can't proceed in right automaton -- execute left automaton
 
-    zipLazy balance pipes prod_nid@(_,id2,_) (SAtom wa1 next1 _) nk2 =
-      let balance' = produce wa1 balance
-          next_prod_nid = mkProdNid balance' next1 id2
-          prod_nkind = SAtom wa1 next_prod_nid pipes
-      in zipNodes balance' next_prod_nid . insertNk prod_nid prod_nkind
+    zipLazy pipe_state pipe_balances prod_nid@(_,id2,_) (SAtom wa1 next1 _) nk2 =
+      let pipe_state' = exec_left wa1 pipe_state
+          next_prod_nid = mkProdNid pipe_state' next1 id2
+          prod_nkind = SAtom wa1 next_prod_nid pipe_balances
+      in zipNodes pipe_state' next_prod_nid . insertNk prod_nid prod_nkind
 
      -- if we reach this case, the pipeline is already drained as far as possible
-    zipLazy balance pipes prod_nid (SDone _) nk2 =
-      insertNk prod_nid (SDone pipes)
+    zipLazy pipe_state pipe_balances prod_nid (SDone _) nk2 =
+      insertNk prod_nid (SDone pipe_balances)
 
 
 
-
+    -- Zips automata optimistically, i.e. running the left automaton slightly ahead of the right automaton,
+    -- in order to keep the pipeline filled up at all times so greater parallelism can be achieved.
     zipOptimistic :: PipeState -> Map Chan Int -> ProdNid -> SimplNk e Int -> SimplNk e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
 
-    -- Try executing right automaton first! (in accordance with lazy, right-biased semantics)
-
-    zipOptimistic balance pipes prod_nid nk1 (SDone _)
-      | let rollback = sum (lefts balance)
-      , rollback > 0 
-      = -- Hack to create unique fresh product node id
+    zipOptimistic pipe_state pipe_balances prod_nid nk1 (SDone _)
+      | let rollback = rollbackInDistance 0 pipe_state
+      , rollback > 0
+      = -- Hack to create fresh product-node id
         let final_prod_nid = ( 1 + (fst $ Map.findMax $ auto_graph a1)
                              , 1 + (fst $ Map.findMax $ auto_graph a2)
                              , (0,Map.empty) )
-            final_pipes = Map.adjust (+ rollback) (auto_inchan a1) pipes
-            final_nk = SDone final_pipes
-            rollback_nk = SAtom (rollbackWAtom pipe_ch rollback) final_prod_nid pipes
+            final_pipe_balances = Map.adjust (+ rollback) (auto_inchan a1) pipe_balances
+            final_nk = SDone final_pipe_balances
+            rollback_nk = SAtom (rollbackWAtom pipe_ch rollback) final_prod_nid pipe_balances
         in insertNk final_prod_nid final_nk . insertNk prod_nid rollback_nk
 
-    zipOptimistic balance pipes prod_nid nk1 (SDone _) =
-        insertNk prod_nid (SDone pipes)
+    zipOptimistic pipe_state pipe_balances prod_nid nk1 (SDone _) =
+        insertNk prod_nid (SDone pipe_balances)
 
-    zipOptimistic balance pipes prod_nid@(id1,_,_) nk1 (SBranch x l r w _) =
-      let prod_nid_l = mkProdNid balance id1 l
-          prod_nid_r = mkProdNid balance id1 r
-          prod_nkind = SBranch x prod_nid_l prod_nid_r w pipes
-      in zipNodes balance prod_nid_r . zipNodes balance prod_nid_l . insertNk prod_nid prod_nkind
+    zipOptimistic pipe_state pipe_balances prod_nid@(id1,_,_) nk1 (SBranch x l r w _) =
+      let prod_nid_l = mkProdNid pipe_state id1 l
+          prod_nid_r = mkProdNid pipe_state id1 r
+          prod_nkind = SBranch x prod_nid_l prod_nid_r w pipe_balances
+      in zipNodes pipe_state prod_nid_r . zipNodes pipe_state prod_nid_l . insertNk prod_nid prod_nkind
 
     {- Treating this case here is not strictly in accordance with Ziria's lazy (right-biased)
        semantics; however, since branching has no side effects, this should be a legal reordering.
        We prefer handling branches first, as it will potentially allow us to merge several
        decision nodes into a single decision.
     -}
-    zipOptimistic balance pipes prod_nid@(_,id2,_) (SBranch x l r w _) nk2 =
-      let prod_nid_l = mkProdNid balance l id2
-          prod_nid_r = mkProdNid balance r id2
-          prod_nkind = SBranch x prod_nid_l prod_nid_r w pipes
-      in zipNodes balance prod_nid_r . zipNodes balance prod_nid_l . insertNk prod_nid prod_nkind
+    zipOptimistic pipe_state pipe_balances prod_nid@(_,id2,_) (SBranch x l r w _) nk2 =
+      let prod_nid_l = mkProdNid pipe_state l id2
+          prod_nid_r = mkProdNid pipe_state r id2
+          prod_nkind = SBranch x prod_nid_l prod_nid_r w pipe_balances
+      in zipNodes pipe_state prod_nid_r . zipNodes pipe_state prod_nid_l . insertNk prod_nid prod_nkind
 
-    zipOptimistic balance pipes prod_nid@(id1,id2,_) nk1 (SAtom wa2 next2 _)
-      | getBudget balance >= threshold id2
-      , Just balance' <- try_consume wa2 balance
-      = let next_prod_nid = mkProdNid balance' id1 next2
-            prod_nkind = SAtom wa2 next_prod_nid pipes
-        in zipNodes balance' next_prod_nid . insertNk prod_nid prod_nkind
+    zipOptimistic pipe_state pipe_balances prod_nid@(id1,id2,_) nk1 (SAtom wa2 next2 _)
+      | getBalance pipe_state >= threshold id2
+      , Just pipe_state' <- exec_right wa2 pipe_state
+      = let next_prod_nid = mkProdNid pipe_state' id1 next2
+            prod_nkind = SAtom wa2 next_prod_nid pipe_balances
+        in zipNodes pipe_state' next_prod_nid . insertNk prod_nid prod_nkind
 
     -- Can't proceed in right automaton -- execute left automaton
 
-    zipOptimistic balance pipes prod_nid@(_,id2,_) (SAtom wa1 next1 _) nk2 =
-      let balance' = produce wa1 balance
-          next_prod_nid = mkProdNid balance' next1 id2
-          prod_nkind = SAtom wa1 next_prod_nid pipes
-      in zipNodes balance' next_prod_nid . insertNk prod_nid prod_nkind
+    zipOptimistic pipe_state pipe_balances prod_nid@(_,id2,_) (SAtom wa1 next1 _) nk2 =
+      let pipe_state' = exec_left wa1 pipe_state
+          next_prod_nid = mkProdNid pipe_state' next1 id2
+          prod_nkind = SAtom wa1 next_prod_nid pipe_balances
+      in zipNodes pipe_state' next_prod_nid . insertNk prod_nid prod_nkind
 
      -- if we reach this case, the pipeline is already drained as far as possible
-    zipOptimistic balance pipes prod_nid (SDone _) nk2 =
-      insertNk prod_nid (SDone pipes)
+    zipOptimistic pipe_state pipe_balances prod_nid (SDone _) nk2 =
+      insertNk prod_nid (SDone pipe_balances)
 
 
-    try_consume :: WiredAtom atom -> PipeState -> Maybe PipeState
-    try_consume wa q = try_consume' (countReads pipe_ch wa) q
+    -- Try executing a wired atom from the right automaton.
+    -- This will fail if there is not enough data in the pipe, or succeed and
+    -- change the pipe state otherwise.
+    exec_right :: WiredAtom atom -> PipeState -> Maybe PipeState
+    exec_right wa q = try_consume (countReads pipe_ch wa) q
 
-    try_consume' :: Int -> PipeState -> Maybe PipeState
-    try_consume' 0 q = Just q
-    try_consume' n q = case pop q of
+    -- try consuming n elements from the transfer-pipe.
+    try_consume :: Int -> PipeState -> Maybe PipeState
+    try_consume n q | n < 0 = assert False undefined
+    try_consume 0 q = Just q
+    try_consume n q = case pop q of
       Nothing                      -> Nothing
-      Just (Left _,q)              -> try_consume' n q
-      Just (Right m,q) | m<=n      -> try_consume' (n-m) q
+      Just (Left _,q)              -> try_consume n q
+      Just (Right m,q) | m<=n      -> try_consume (n-m) q
                        | otherwise -> Just $ q ++ [Right (m-n)]
 
-    produce :: WiredAtom atom -> PipeState -> PipeState
-    produce wa q =
+    -- Execute a wired atom from the left automaton, and update the pipe state
+    -- to track the atoms consumption/production behavior.
+    exec_left :: WiredAtom atom -> PipeState -> PipeState
+    exec_left wa q =
       (if writes > 0 then push (Right writes) else id) $
       (if reads > 0 then push (Left reads) else id) $ q
       where
@@ -728,7 +734,7 @@ zipAutomata a1' a2' k = concat_auto prod_a k
 
 
 
-     
+
 
     largest_write = maximum $ map (getSize . node_kind) $ Map.elems (auto_graph a1)
       where getSize (SAtom wa _ _) = countWrites pipe_ch wa
@@ -742,9 +748,9 @@ zipAutomata a1' a2' k = concat_auto prod_a k
     -- by this threshold
     consumption_threshold = ceiling ((1 + optimism) * (fromIntegral largest_read))
 
-    threshold nid2 
+    threshold nid2
       | dists_truncated $ done_dist nid2 = consumption_threshold
-      | otherwise = 
+      | otherwise =
         let ds = dists (done_dist nid2) in
         let d = if Set.null ds then 0 else Set.findMax ds in
         d - largest_write + 1
@@ -752,9 +758,9 @@ zipAutomata a1' a2' k = concat_auto prod_a k
     max_q_size :: Int
     max_q_size = largest_write + consumption_threshold
 
-    done_dist = trace "done_dist" $ mkDoneDist (trace "done_dist" max_q_size) a2
+    done_dist = mkDoneDist max_q_size a2
 
-    getRollback n ps = case try_consume' n ps of
+    rollbackInDistance n ps = case try_consume n ps of
       Nothing -> 0
       Just ps' -> getUncommitted ps'
 
