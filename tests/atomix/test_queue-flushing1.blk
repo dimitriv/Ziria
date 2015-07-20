@@ -17,7 +17,7 @@ the program will produce output.
 
 
 fun comp driver() {
-  var (xs : arr[2] bit) = [0,0];
+  var xs : arr[2] bit := {'0,'0};
   emits xs;
 }
 
@@ -38,4 +38,4 @@ fun comp t() {
 
 -- MAIN ---------------------------------------------------
 
-let comp main = read >>> driver() >>> repeat { c() >>> t() } >>> write
+let comp main = read[int] >>> driver() >>> repeat { c() >>> t() } >>> write

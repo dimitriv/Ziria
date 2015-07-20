@@ -1,0 +1,41 @@
+{-
+
+This test checks whether pipeline queues are correctly
+flushed.
+
+Consider the pipe from c1 to t2: the semantics require that
+this pipe is emptied (i.e. (re-)initialized) before each
+iteration of the enclosing repeat. Hence, t should never
+receive enough data to fire, and the program should not
+produce any output.
+
+However, if the pipe is not correctly reset in each iteration,
+the program will produce output.
+
+-}
+
+
+
+fun comp driver() {
+  var xs : arr[2] int := {0,0};
+  emits xs;
+}
+
+fun comp c() {
+  (x : int) <- take;
+  emit x;
+}
+
+fun comp t() {
+  repeat {
+    (xs : arr[2] int) <- takes 2;
+    emit xs;
+  }
+}
+
+
+
+
+-- MAIN ---------------------------------------------------
+
+let comp main = read[int] >>> driver() >>> repeat { c() >>> t() } >>> write
