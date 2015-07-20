@@ -18,8 +18,9 @@ import AstUnlabelled
 data SymAtom = SAExp (AExp ())
              | SACast (Int,Ty) (Int,Ty) 
              | SADiscard (Int,Ty)
-             | SAAssert Bool -- assert true and assert false
+             | SAAssert Bool -- ^ assert true and assert false
              | SARollback EId Int
+             -- | SAFlush EId Int
   deriving Eq
 
 instance Outputable SymAtom where
@@ -36,7 +37,9 @@ instance Outputable SymAtom where
 
   ppr (SAAssert b) = text "ASSERT_" <> text (show b)
 
-  ppr (SARollback q n) = text "ROLLBACK<" <> text (show q) <> comma <> text (show n ++ ">")
+  ppr (SARollback q n) = text "ROLLBACK"
+
+  --ppr (SAFlush q n) = text "FLUSH"
 
 instance Show SymAtom where
   show sa = render (pprShort sa)
@@ -60,17 +63,20 @@ instance Atom SymAtom where
   atomInTy (SADiscard inty) = [inty]
   atomInTy (SAAssert _) = [(1,TBool)]
   atomInTy (SARollback _ _) = []
+  --atomInTy (SAFlush q n) = [(n, nameTyp q)]
 
   atomOutTy (SAExp e) = map ((1,) . nameTyp) (aexp_ovs e)
   atomOutTy (SACast _ outty) = [outty]
   atomOutTy (SADiscard _)    = []
   atomOutTy (SAAssert _) = []
   atomOutTy (SARollback q n) = [(n,nameTyp q)]
+  --atomOutTy (SAFlush q n) = []
 
   castAtom    = SACast
   discardAtom = SADiscard
   assertAtom = SAAssert
   rollbackAtom = SARollback
+  flushAtom q n = SADiscard (n, nameTyp q) -- SAFlush
 
   expToWiredAtom :: AExp () -> Maybe EId -> WiredAtom SymAtom
   expToWiredAtom e mb_out = 

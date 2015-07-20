@@ -74,6 +74,7 @@ class (Show a, Eq a) => Atom a where
   castAtom    :: (Int,Ty) -> (Int,Ty) -> a
   assertAtom :: Bool -> a
   rollbackAtom :: Chan -> Int -> a
+  flushAtom :: Chan -> Int -> a
 
   -- Getting (wired) atoms from expressions
   expToWiredAtom :: AExp () -> Maybe Chan -> WiredAtom a
@@ -86,6 +87,9 @@ class (Show a, Eq a) => Atom a where
 
   rollbackWAtom :: Chan -> Int -> WiredAtom a
   rollbackWAtom ch n = WiredAtom [] [(n,ch)] (rollbackAtom ch n)
+
+  flushWAtom :: Chan -> Int -> WiredAtom a
+  flushWAtom ch n = WiredAtom [(n,ch)] [] (flushAtom ch n)
 
 
 
@@ -240,9 +244,9 @@ nextPipes watoms pipes = Map.mapWithKey updatePipe pipes
   where updatePipe pipe n = n + sum (map (countWrites pipe) watoms)
                               - sum (map (countReads pipe) watoms)
 next_pipe_balances :: SimplNk atom nid -> Map Chan Int
-next_pipe_balances (SAtom wa _ pipes) = Map.mapWithKey updatePipe pipes 
+next_pipe_balances (SAtom wa _ pipes) = Map.mapWithKey updatePipe pipes
   where updatePipe pipe n = n + countWrites pipe wa - countReads pipe wa
-next_pipe_balances nk = pipe_balances nk 
+next_pipe_balances nk = pipe_balances nk
 
 nextNid :: Automaton atom Int nkind -> Int
 nextNid a = maxId+1
@@ -406,7 +410,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       let k2 = mkDoneAutomaton pipe_ch (out_chan chans)
       a1 <- mkAutomaton dfs sym (chans {out_chan = pipe_ch}) c1 k1
       a2 <- mkAutomaton dfs sym (chans {in_chan = pipe_ch}) c2 k2
-      return $ zipAutomata a1 a2 k
+      return $ zipAutomata dfs a1 a2 k
 
     go (ABranch x c1 c2) = do
       a1 <- mkAutomaton dfs sym chans c1 k
@@ -429,7 +433,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
           a0 <- mkAutomaton dfs sym chans c k
           let nid = auto_start k
           let node = fromJust $ assert (Map.member (auto_start a0) (auto_graph a0)) $
-                     Map.lookup (auto_start a0) (auto_graph a0) -- CfgLoop (auto_start a)
+                     Map.lookup (auto_start a0) (auto_graph a0)
           let nmap = Map.insert nid node $ Map.delete (auto_start a0) (auto_graph a0)
           let a = map_auto_ids (\id -> if id == (auto_start a0) then nid else id) $
                     a0 { auto_start = nid, auto_graph = nmap }
@@ -508,7 +512,7 @@ mkDoneDist threshold a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph
   -- Inital distance-map.
   init = Map.map (const $ DoneDist Set.empty False) (auto_graph a)
 
-  -- Iteratively updates distance map by backwards-propagation of distance updates.
+  -- Iteratively updates distance map through backwards-propagation of distance updates.
   -- Terminates since only true updates are propagated, and because distances above the
   -- given threshold are not propagated.
   go :: [(nid, DistUpdate)] -> Map nid DoneDist -> Map nid DoneDist
@@ -579,22 +583,29 @@ getBalance = sum . rights
 
 -- Precondition: a1 and a2 should satisfy (auto_outchan a1) == (auto_inchan a2)
 -- a1 and a2 MUST NOT contain explicit loop nodes (but may contain loops)!!
-zipAutomata :: forall e. Atom e => SAuto e Int -> SAuto e Int -> SAuto e Int -> SAuto e Int
-zipAutomata a1' a2' k = concat_auto prod_a k
+zipAutomata :: forall e. Atom e
+            => DynFlags
+            -> SAuto e Int -- left automaton ("producer")
+            -> SAuto e Int -- right automaton ("consumer")
+            -> SAuto e Int -- continuation
+            -> SAuto e Int
+zipAutomata dfs a1' a2' k = concat_auto prod_a k
   where
     a1 = deleteDeadNodes a1'
     a2 = deleteDeadNodes a2'
     prod_a = (\a -> assert (auto_closed a) a) $
              assert (auto_closed a1) $
              assert (auto_closed a2) $
+             (if prune then pruneUnfinished pipe_ch else id) $
              Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) start_prod_nid
-    start_balance = []
-    start_prod_nid = mkProdNid start_balance (auto_start a1) (auto_start a2)
-    prod_nmap = zipNodes start_balance start_prod_nid Map.empty
+    pipe_state = []
+    start_prod_nid = mkProdNid pipe_state (auto_start a1) (auto_start a2)
+    prod_nmap = zipNodes pipe_state start_prod_nid Map.empty
     pipe_ch = assert (auto_outchan a1 == auto_inchan a2) $ auto_outchan a1
     optimism :: Double
     optimism = 0.0
     lazy = optimism == 0.0
+    prune = isDynFlagSet dfs PruneIncompleteStates
 
 
     mkProdNid :: PipeState -> Int -> Int -> ProdNid
@@ -624,8 +635,16 @@ zipAutomata a1' a2' k = concat_auto prod_a k
     -- (i.e. lazy, right-biased, pull-style semantics).
     zipLazy :: PipeState -> Map Chan Int -> ProdNid -> SimplNk e Int -> SimplNk e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
 
-    zipLazy pipe_state pipe_balances prod_nid nk1 (SDone _) =
-        insertNk prod_nid (SDone pipe_balances)
+    zipLazy pipe_state pipe_balances prod_nid nk1 (SDone _)
+      | prune || (getBalance pipe_state == 0) = insertNk prod_nid (SDone pipe_balances)
+      | otherwise = insertNk final_prod_nid (SDone final_pipe_balances) . insertNk prod_nid flush_nk
+      where
+        -- Hack to create fresh product-node id
+        final_prod_nid = ( 1 + (fst $ Map.findMax $ auto_graph a1)
+                         , 1 + (fst $ Map.findMax $ auto_graph a2)
+                         , (0,Map.empty) )
+        final_pipe_balances = Map.insert pipe_ch 0 pipe_balances
+        flush_nk = SAtom (flushWAtom pipe_ch (getBalance pipe_state)) final_prod_nid pipe_balances
 
     zipLazy pipe_state pipe_balances prod_nid@(id1,_,_) nk1 (SBranch x l r w _) =
       let prod_nid_l = mkProdNid pipe_state id1 l
@@ -659,8 +678,8 @@ zipAutomata a1' a2' k = concat_auto prod_a k
       in zipNodes pipe_state' next_prod_nid . insertNk prod_nid prod_nkind
 
      -- if we reach this case, the pipeline is already drained as far as possible
-    zipLazy pipe_state pipe_balances prod_nid (SDone _) nk2 =
-      insertNk prod_nid (SDone pipe_balances)
+    zipLazy pipe_state pipe_balances prod_nid nk1@(SDone {}) _nk2 =
+      zipLazy pipe_state pipe_balances prod_nid nk1 nk1
 
 
 
@@ -819,7 +838,7 @@ markSelfLoops a = a { auto_graph = go (auto_graph a)}
 
 -- prune action that are known to be unreachable
 pruneUnreachable :: forall e nid. (Atom e, Ord nid) => SAuto e nid -> nid -> SAuto e nid
-pruneUnreachable a nid = a { auto_graph = prune (auto_graph a) nid }
+pruneUnreachable a nid = fixup $ a { auto_graph = prune (auto_graph a) nid }
   where
     preds = mkPreds a
 
@@ -844,20 +863,25 @@ pruneUnreachable a nid = a { auto_graph = prune (auto_graph a) nid }
             in Map.insert nid (Node nid nk) nmap
           | otherwise -> assert False undefined
 
+    fixup a =
+      let s = auto_start a in
+      let nmap = auto_graph a in
+      if Map.member s nmap then a
+      else a { auto_graph = Map.insert s (Node s $ SDone Map.empty) nmap }
 
--- Prune all nodes that terminate with data still in the pipeline.
-pruneUnfinished :: forall atom. Atom atom => SAuto atom Int -> SAuto atom Int
-pruneUnfinished a = foldl pruneUnreachable a $ traceShowId $ map node_id unfinished where
-  unfinished = traceShowId $ filter isUnfinished $ filter isDonePred $ Map.elems $ auto_graph a
 
-  isDonePred :: SNode atom Int -> Bool
+-- Prune all nodes that terminate with data still in the pipe.
+pruneUnfinished :: forall e nid. (Atom e, Ord nid) => Chan -> SAuto e nid -> SAuto e nid
+pruneUnfinished chan a = foldl pruneUnreachable a $ map node_id unfinished where
+  unfinished = filter isUnfinished $ filter isDonePred $ Map.elems $ auto_graph a
+
+  isDonePred :: SNode e nid -> Bool
   isDonePred = any (isDone . nodeKindOfId a) . sucs
 
-  isDone :: SimplNk atom Int -> Bool 
+  isDone :: SimplNk e nid -> Bool
   isDone (SDone {}) = True
   isDone _ = False
-  isUnfinished = const True
-  -- isUnfinished = any (/= 0) . Map.elems . next_pipe_balances . node_kind
+  isUnfinished = (>0) . Map.findWithDefault 0 chan . next_pipe_balances . node_kind
 
 
 
@@ -1014,19 +1038,14 @@ automatonPipeline dfs sym inty outty acomp = do
   outch <- freshName sym "snk" (acomp_loc acomp) outty Mut
   let channels = Channels { in_chan = inch, out_chan = outch, ctrl_chan = Nothing }
   let k = mkDoneAutomaton inch outch
-  let prune = isDynFlagSet dfs PruneIncompleteStates
 
   putStrLn ">>>>>>>>>> mkAutomaton"
-  a <- mkAutomaton dfs sym channels acomp k
+  a <- simplToCfg <$> mkAutomaton dfs sym channels acomp k
   --putStrLn (dotOfAuto True a)
   putStrLn $ "<<<<<<<<<<< mkAutomaton (" ++ show (size a) ++ " states)"
 
-  when prune $ putStrLn ">>>>>>>>>> pruneUnfinished"
-  let a_p = simplToCfg $ (if prune then pruneUnfinished else id) $ a
-  when prune $ putStrLn $ "<<<<<<<<<<< pruneUnfinished (" ++ show (size a_p) ++ " states)"
-
   putStrLn ">>>>>>>>>>> fuseActions"
-  let a_f = fuseActions a_p
+  let a_f = fuseActions a
   --putStrLn (dotOfAuto True a_f)
   putStrLn $ "<<<<<<<<<<< fuseActions (" ++ show (size a_f) ++ " states)"
 
