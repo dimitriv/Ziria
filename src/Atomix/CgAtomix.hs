@@ -120,31 +120,34 @@ qiQueueId _ _ = Nothing
 cgDeclQueues :: DynFlags -> QueueInfo -> Cg a -> Cg a
 cgDeclQueues dfs qs action 
   = let numqs = Map.size (qi_interm qs)
-    in if numqs == 0 then action else do 
-        let my_sizes_decl = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
-            my_slots_decl = [cdecl|int my_slots[$int:(numqs)];|]
-            ts_init_stmts = [cstm| ts_init_var($int:(numqs),my_sizes,my_slots); |]
-            my_sizes_inits 
-              = concat $
-                Map.elems $ 
-                Map.mapWithKey (\qvar (QId i,siz) -- ignore slots
-                       -> [ [cstm| my_sizes[$int:i] = 
-                                   $(tySizeOf_C (nameTyp qvar));|]
-                          , [cstm| my_slots[$int:i] = $int:siz;|]
-                          ]) (qi_interm qs)
+    in if numqs == 0 then do 
+           bind_queue_vars action (qi_inch qs : qi_outch qs : []) 
+        else do 
+          let my_sizes_decl = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
+              my_slots_decl = [cdecl|int my_slots[$int:(numqs)];|]
+              ts_init_stmts = [cstm| ts_init_var($int:(numqs),my_sizes,my_slots); |]
+              my_sizes_inits 
+                = concat $
+                  Map.elems $ 
+                  Map.mapWithKey (\qvar (QId i,siz) -- ignore slots
+                         -> [ [cstm| my_sizes[$int:i] = 
+                                     $(tySizeOf_C (nameTyp qvar));|]
+                            , [cstm| my_slots[$int:i] = $int:siz;|]
+                            ]) (qi_interm qs)
 
-           -- Append top declarations  
-        appendTopDecl my_sizes_decl
-        appendTopDecl my_slots_decl
+             -- Append top declarations  
+          appendTopDecl my_sizes_decl
+          appendTopDecl my_slots_decl
 
-           -- Add code to initialize queues in wpl global init
-        _ <- mapM addGlobalWplAllocated (my_sizes_inits ++ [ts_init_stmts])
+             -- Add code to initialize queues in wpl global init
+          _ <- mapM addGlobalWplAllocated (my_sizes_inits ++ [ts_init_stmts])
 
-        bind_queue_vars action (qi_inch qs : qi_outch qs : Map.keys (qi_interm qs))
+          bind_queue_vars action (qi_inch qs : qi_outch qs : Map.keys (qi_interm qs))
 
   where bind_queue_vars m [] = m
         bind_queue_vars m (q1:qss)
-          = cgMutBind dfs noLoc q1 Nothing (bind_queue_vars m qss)
+          = do cgIO $ putStrLn ("Declaring temporary variable for queue: " ++ show q1)
+               cgMutBind dfs noLoc q1 Nothing (bind_queue_vars m qss)
 
 
 -- | Extract all introduced queues, and for each calculate the maximum
@@ -182,10 +185,7 @@ cgAutomaton :: DynFlags
             -> Cg CLabel            -- ^ Label of starting state we jump to
 cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
                                    , auto_start   = start })
-  = do { cgRnSt dfs st $
-         cgDeclQueues dfs queues $
-         cg_define_atoms $
-         cg_automaton
+  = do { cgRnSt dfs st $ cgDeclQueues dfs queues (cg_define_atoms cg_automaton)
        ; return (lblOfNid start) }
   where 
    queues = extractQueues auto
@@ -401,7 +401,8 @@ calcTsLen 1 TBit = 1
 calcTsLen n TBit = (n+7) `div` 8
 calcTsLen n (TArray (Literal m) TBit)
   | m `mod` 8 == 0
-  = (n * (m `div` 8))
+  = n 
+--   = (n * (m `div` 8)) WRONG!
   | otherwise 
   = error $ "Unaligned ts_get/put: not implemented yet, n =" ++ show n ++ ", m =" ++ show m
 calcTsLen n _ = n
