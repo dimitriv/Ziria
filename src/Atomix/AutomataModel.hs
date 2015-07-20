@@ -16,7 +16,7 @@ import Control.Monad.State
 import AtomComp
 import AstExpr
 import Opts
-import AtomixCompTransform ( freshName )
+import AtomixCompTransform ( freshName, freshNameDoc )
 import qualified GenSym as GS
 
 import Utils(panicStr)
@@ -350,13 +350,20 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a
 
-    go (AEmit1 x) =
+    go (AEmit1 e) =
+      let watom = expToWiredAtom e (Just (out_chan chans))
+          nkind = SAtom watom (auto_start k) Map.empty
+          a = insert_prepend nkind k
+      in return $ assert (auto_closed a) a
+
+{------ OLD: 
       let inp = [(1, x)]
           outp = [(1, out_chan chans)]
           atom = idAtom (nameTyp x)
           nkind = SAtom (WiredAtom inp outp atom) (auto_start k) Map.empty
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a
+-----------}
 
     go (AEmitN t n x) =
       let inp = [(1, x)]
@@ -394,7 +401,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       return $ assert (auto_closed a2) $ assert (auto_closed a) a
 
     go (APar _ c1 t c2) = do
-      pipe_ch <- freshName sym (pipeName c1 c2) loc t Mut
+      pipe_ch <- freshNameDoc sym "par" loc t Mut (pipeName c1 c2)
       let k1 = mkDoneAutomaton (in_chan chans) pipe_ch
       let k2 = mkDoneAutomaton pipe_ch (out_chan chans)
       a1 <- mkAutomaton dfs sym (chans {out_chan = pipe_ch}) c1 k1

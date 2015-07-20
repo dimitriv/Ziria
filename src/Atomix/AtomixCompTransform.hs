@@ -3,7 +3,7 @@ module AtomixCompTransform (
   atomixCompTransform, 
   atomixCompToComp,
   zirToAtomZir,
-  freshName, 
+  freshName, freshNameDoc,
   RnSt ( .. ) 
   ) where
 
@@ -46,10 +46,13 @@ alphaNorm :: GS.Sym -> Comp -> IO Comp
 alphaNorm sym = mapCompM return return return return return action
   where 
     action c 
-      | Emit e <- unComp c
-      , let loc = compLoc c
-      = do x <- freshName sym "emit_tmp" loc (ctExp e) Imm
-           return $ cLetE loc x AutoInline e (cEmit loc (eVar loc x))
+      -- | Emit e <- unComp c
+      -- , let loc = compLoc c
+      -- = do x <- freshName sym "emit_tmp" loc (ctExp e) Imm
+      --      return $ cLetE loc x AutoInline e (cEmit loc (eVar loc x))
+      | Emits evar <- unComp c
+      , EVar {} <- unExp evar
+      = return c
 
       | Emits e <- unComp c
       , let loc = compLoc c
@@ -441,7 +444,7 @@ transLifted dfs sym = go_comp
           = liftM3 (aPar loc () p) (go_comp c1) (return t) (go_comp c2)
             where t = yldTyOfCTy (ctComp c1)
 
-        go (Emit (MkExp (EVar x) _ _))  = return $ aEmit1 loc () x
+        go (Emit e)                     = aEmit1 loc () <$> (liftIO $ transLiftedExp dfs sym e)
         go (Emits (MkExp (EVar x) _ _)) = return $ aEmitN loc () t n x
           where TArray (Literal n) t = nameTyp x
 

@@ -35,8 +35,8 @@ data AComp a b
 data AComp0 a b
   = ATake1 Ty
   | ATakeN Ty Int
-  | AEmit1 EId
-  | AEmitN Ty Int EId              -- AEmitN t n x invariant:  x : arr[n] t
+  | AEmit1 (AExp b)
+  | AEmitN Ty Int EId              -- AEmitN t n e invariant:  e : arr[n] 
   | ACast String (Int,Ty) (Int,Ty) -- ACast (n1,t1) (n2,t2)
                                    -- takes n1*t1 and emits n2*t2 (and n1*sizeof(t1) = n2*sizeof(t2))
   | AReturn (AExp b)
@@ -62,8 +62,8 @@ aTake1 loc a x = MkAComp loc a (ATake1 x)
 aTakeN :: SrcLoc -> a -> Ty -> Int -> AComp a b
 aTakeN loc a t n = MkAComp loc a (ATakeN t n)
 
-aEmit1 :: SrcLoc -> a -> EId -> AComp a b
-aEmit1 loc a x = MkAComp loc a (AEmit1 x)
+aEmit1 :: SrcLoc -> a -> AExp b -> AComp a b
+aEmit1 loc a e = MkAComp loc a (AEmit1 e)
 
 aEmitN :: SrcLoc -> a -> Ty -> Int -> EId -> AComp a b
 aEmitN loc a t n x = MkAComp loc a (AEmitN t n x)
@@ -103,7 +103,7 @@ ppAComp ac = ppAComp0 (acomp_comp ac)
 ppAComp0 :: AComp0 a b -> Doc
 ppAComp0 (ATake1 t)   = text "take" <> brackets (ppr t)
 ppAComp0 (ATakeN _t n) = text "takes" <+> int n
-ppAComp0 (AEmit1 x)   = text "emit" <+> ppr x
+ppAComp0 (AEmit1 e)   = text "emit" <+> braces (ppr e)
 ppAComp0 (AEmitN _t _n x) = text "emits" <+> ppr x
 ppAComp0 (ACast s (n1,t1) (n2,t2))
   = brackets (int n1 <> (text "*") <> parens (ppr t1)) <> 

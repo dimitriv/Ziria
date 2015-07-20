@@ -76,14 +76,14 @@ instance Atom SymAtom where
   expToWiredAtom e mb_out = 
     let loc = expLoc body 
         body = aexp_exp e
-    in 
-    WiredAtom { 
+    in WiredAtom { 
         wires_in  = map (1,) (aexp_ivs e)
       , wires_out = map (1,) (maybeToList mb_out ++ aexp_ovs e)
-      , the_atom  = case mb_out of 
-          Nothing 
-             -> SAExp e { aexp_exp = eSeq loc body (eVal loc TUnit VUnit) }
-          Just retvar 
-             -> SAExp e { aexp_exp = eAssign loc (eVar loc retvar) body
-                        , aexp_ovs = retvar : aexp_ovs e }
-      } 
+      , the_atom  = 
+            case (unExp body,mb_out) of 
+              (EVar x, Just retvar) -> SACast (1,nameTyp x) (1,nameTyp x)
+              (_, Nothing) -> SAExp e { aexp_exp = eSeq loc body (eVal loc TUnit VUnit) }
+              (_, Just retvar)
+                 -> SAExp e { aexp_exp = eAssign loc (eVar loc retvar) body
+                            , aexp_ovs = retvar : aexp_ovs e }
+      }

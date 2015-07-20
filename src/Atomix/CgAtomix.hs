@@ -95,7 +95,8 @@ lblOfNid x = "BLOCK_" ++ show x
 
 mkCastTyArray :: Int -> Ty -> Ty
 mkCastTyArray 1 t = t
-mkCastTyArray n t = TArray (Literal n) t
+mkCastTyArray n (TArray (Literal m) t) = TArray (Literal (m*n)) t
+mkCastTyArray n t                      = TArray (Literal n) t
 
 -- | Datatype with queue information of this automaton 
 data QueueInfo 
@@ -116,30 +117,34 @@ qiQueueId _ _ = Nothing
 
 
 -- | Declare queues 
-cgDeclQueues :: QueueInfo -> Cg a -> Cg a
-cgDeclQueues qs action = 
-  let numqs = Map.size (qi_interm qs)
-  in if numqs == 0 then action else do 
-      let my_sizes_decl = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
-          my_slots_decl = [cdecl|int my_slots[$int:(numqs)];|]
-          ts_init_stmts = [cstm| ts_init_var($int:(numqs),my_sizes,my_slots); |]
-          my_sizes_inits 
-            = concat $
-              Map.elems $ 
-              Map.mapWithKey (\qvar (QId i,siz) -- ignore slots
-                     -> [ [cstm| my_sizes[$int:i] = 
-                                 $(tySizeOf_C (nameTyp qvar));|]
-                        , [cstm| my_slots[$int:i] = $int:siz;|]
-                        ]) (qi_interm qs)
+cgDeclQueues :: DynFlags -> QueueInfo -> Cg a -> Cg a
+cgDeclQueues dfs qs action 
+  = let numqs = Map.size (qi_interm qs)
+    in if numqs == 0 then action else do 
+        let my_sizes_decl = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
+            my_slots_decl = [cdecl|int my_slots[$int:(numqs)];|]
+            ts_init_stmts = [cstm| ts_init_var($int:(numqs),my_sizes,my_slots); |]
+            my_sizes_inits 
+              = concat $
+                Map.elems $ 
+                Map.mapWithKey (\qvar (QId i,siz) -- ignore slots
+                       -> [ [cstm| my_sizes[$int:i] = 
+                                   $(tySizeOf_C (nameTyp qvar));|]
+                          , [cstm| my_slots[$int:i] = $int:siz;|]
+                          ]) (qi_interm qs)
 
-         -- Append top declarations  
-      appendTopDecl my_sizes_decl
-      appendTopDecl my_slots_decl
+           -- Append top declarations  
+        appendTopDecl my_sizes_decl
+        appendTopDecl my_slots_decl
 
-         -- Add code to initialize queues in wpl global init
-      _ <- mapM addGlobalWplAllocated (my_sizes_inits ++ [ts_init_stmts])
+           -- Add code to initialize queues in wpl global init
+        _ <- mapM addGlobalWplAllocated (my_sizes_inits ++ [ts_init_stmts])
 
-      action
+        bind_queue_vars action (qi_inch qs : qi_outch qs : Map.keys (qi_interm qs))
+
+  where bind_queue_vars m [] = m
+        bind_queue_vars m (q1:qss)
+          = cgMutBind dfs noLoc q1 Nothing (bind_queue_vars m qss)
 
 
 -- | Extract all introduced queues, and for each calculate the maximum
@@ -178,7 +183,7 @@ cgAutomaton :: DynFlags
 cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
                                    , auto_start   = start })
   = do { cgRnSt dfs st $
-         cgDeclQueues queues $
+         cgDeclQueues dfs queues $
          cg_define_atoms $
          cg_automaton
        ; return (lblOfNid start) }
@@ -193,9 +198,10 @@ cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
      cc <- lookupVarEnv c
      appendStmt [cstm| if ($cc) { goto $id:(lblOfNid l); } 
                        else { goto $id:(lblOfNid r); } |]
-   cg_nkind (CfgAction atoms next _pipes) = do
-     mapM_ (cgAtom dfs queues) atoms
+   cg_nkind (CfgAction atoms next _pipes) = do 
+     inAllocFrame noLoc $ pushAllocFrame $ mapM_ (cgAtom dfs queues) atoms
      appendStmt [cstm| goto $id:(lblOfNid next);|]
+
 
    cg_define_atoms       = cg_def_atoms (Map.elems graph)
    cg_def_atoms [] m     = m
@@ -285,15 +291,16 @@ cgCastAtom dfs qs (n,inwire)
                   (n',inty) 
                   (m',_outty)
   = assert "cgCastAtom" (n == n' && m == m') $ do 
-
-      let storage_in_ty  = mkCastTyArray n inty 
-      storage <- CgMonad.freshName "cast_storage" storage_in_ty Mut
-   
-
-      cgMutBind dfs noLoc storage Nothing $ do
-         cgInWiring dfs qs [(n,inwire) ] [storage]
-         cgOutWiring dfs qs [(m,outwire)] [storage]
-
+    case (qiQueueId inwire qs, qiQueueId outwire qs) of 
+      (Nothing, _) -> assert "cgCastAtom" (n == 1) $
+                      cgOutWiring dfs qs [(m,outwire)] [inwire]
+      (_,Nothing)  -> assert "cgCastAtom" (m == 1) $
+                      cgInWiring dfs qs [(n,inwire)] [outwire]
+      _ -> let storage_in_ty  = mkCastTyArray n inty 
+           in do storage <- CgMonad.freshName "cast_storage" storage_in_ty Mut
+                 cgMutBind dfs noLoc storage Nothing $ do 
+                    cgInWiring dfs qs [(n,inwire) ] [storage]
+                    cgOutWiring dfs qs [(m,outwire)] [storage]
 
 cgDiscAtom :: DynFlags
            -> QueueInfo
@@ -347,6 +354,7 @@ cgAExpDefAtom dfs wins wouts aexp m
                                 , text "ivs       :" <+> ppr wires_in
                                 , text "ovs       :" <+> ppr wires_out
                                 , text "fun_ty    :" <+> ppr (nameTyp fun_name)
+                                , text "body was  :" <+> ppr (aexp_exp aexp)
                                 ]
 
     loc  = expLoc (aexp_exp aexp)
@@ -388,7 +396,17 @@ cgAExpAtom dfs qs wins wouts aexp
     call = eCall loc fun_name (map (eVar loc) args)
 
 
+calcTsLen :: Int -> Ty -> Int
+calcTsLen 1 TBit = 1
+calcTsLen n TBit = (n+7) `div` 8
+calcTsLen n (TArray (Literal m) TBit)
+  | m `mod` 8 == 0
+  = (n * (m `div` 8))
+  | otherwise 
+  = error $ "Unaligned ts_get/put: not implemented yet, n =" ++ show n ++ ", m =" ++ show m
+calcTsLen n _ = n
 
+          
 cgInWiring :: DynFlags 
            -> QueueInfo 
            -> [(Int,EId)] -- Input wires
@@ -410,11 +428,11 @@ cgInWire dfs qs (n,qvar) v =
     -- Some intermediate SORA queue
     Just (QMid (QId qid)) -> do
       cv <- lookupVarEnv v
+      let realn = calcTsLen n (nameTyp qvar)
       let ptr = if isPtrType (nameTyp v)
                 then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
-      appendStmt [cstm| if (ts_getManyBlocking($int:qid,$int:n,$ptr) != $int:n) 
-                          return 3;
-                 |]
+      appendStmt [cstm| if (ts_getManyBlocking($int:qid,$int:realn,$ptr) != $int:realn) 
+                          return 3; |]
 
     -- Unexpected output queue
     Just QOut -> panicStr "cg_in_wire: encountered output queue!"
@@ -469,9 +487,10 @@ cgOutWire dfs qs (n,qvar) v
       -- Some intermediate SORA queue
       Just (QMid (QId qid)) -> do
         cv <- lookupVarEnv v
-        let ptr = if isPtrType (nameTyp v) 
+        let realn = calcTsLen n (nameTyp qvar)
+        let ptr = if isPtrType (nameTyp v)
                   then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
-        appendStmt [cstm| ts_putMany($int:qid,$int:n,$ptr);|]
+        appendStmt [cstm| ts_putMany($int:qid,$int:realn,$ptr);|]
 
       -- Unexpected input queue
       Just QIn -> panicStr "cg_out_wire: encountered the input queue!"
