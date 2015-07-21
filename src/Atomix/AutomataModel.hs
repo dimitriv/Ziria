@@ -2,13 +2,14 @@
 {-# OPTIONS #-}
 module AutomataModel where
 
+import Data.Either
+import Data.Tuple
+import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe
 import qualified Data.List as List
-import Data.Either
 
 import Control.Exception
 import Control.Monad.State
@@ -26,7 +27,6 @@ import Outputable
 import qualified Text.PrettyPrint.HughesPJ as PPR
 import Text.PrettyPrint.Boxes
 import Debug.Trace
-
 
 
 {------------------------------------------------------------------------
@@ -74,11 +74,14 @@ class (Show a, Eq a) => Atom a where
   castAtom    :: (Int,Ty) -> (Int,Ty) -> a
   assertAtom :: Bool -> a
   rollbackAtom :: Chan -> Int -> a
-  flushAtom :: Chan -> Int -> a
+  isRollbackAtom :: a -> Maybe (Int, Chan)
+  clearAtom :: Map Chan Int -> a
 
   -- Getting (wired) atoms from expressions
   expToWiredAtom :: AExp () -> Maybe Chan -> WiredAtom a
 
+
+  -- Default implementations based on this abstract interface
   idAtom      :: Ty -> a
   idAtom t = castAtom (1,t) (1,t)
 
@@ -88,9 +91,18 @@ class (Show a, Eq a) => Atom a where
   rollbackWAtom :: Chan -> Int -> WiredAtom a
   rollbackWAtom ch n = WiredAtom [] [(n,ch)] (rollbackAtom ch n)
 
-  flushWAtom :: Chan -> Int -> WiredAtom a
-  flushWAtom ch n = WiredAtom [(n,ch)] [] (flushAtom ch n)
+  isRollbackWAtom :: WiredAtom a -> Maybe (Int, Chan)
+  isRollbackWAtom (WiredAtom in_tys out_tys a)
+    | res@(Just x) <- isRollbackAtom a
+    = assert (null out_tys) $
+      assert (null (tail in_tys)) $
+      assert (head in_tys == x) $ res
+    | otherwise = Nothing
 
+  clearWAtom :: Map Chan Int -> WiredAtom a
+  clearWAtom pipes' = WiredAtom in_tys [] (clearAtom pipes)
+    where in_tys = map swap (Map.toList pipes)
+          pipes = Map.filter (>0) pipes'
 
 
 
@@ -216,6 +228,13 @@ size = Map.size . auto_graph
 sucs :: NodeKind nkind => Node atom nid nkind -> [nid]
 sucs (Node _ nk) = sucsOfNk nk
 
+isDoneNk :: SimplNk e nid -> Bool
+isDoneNk (SDone {}) = True
+isDoneNk _ = False
+
+isDonePred :: Ord nid => SAuto e nid -> SNode e nid -> Bool
+isDonePred a = any (isDoneNk . nodeKindOfId a) . sucs
+
 -- Create predecessor map. For efficieny reasons, should be cached locally:
 -- let preds = mkPreds a in ...
 mkPreds :: forall e nid nk. (NodeKind nk, Ord nid) => Automaton e nid nk -> nid -> Set nid
@@ -256,7 +275,7 @@ insertNk :: Ord nid => nid -> nkind atom nid -> NodeMap atom nid nkind -> NodeMa
 insertNk nid nk nmap = Map.insert nid (Node nid nk) nmap
 
 insert_prepend :: nkind atom Int -> Automaton atom Int nkind -> Automaton atom Int nkind
-insert_prepend nkind a = -- this may be too strict -- ensure auto_closed $
+insert_prepend nkind a =
   a { auto_graph = insertNk nid nkind (auto_graph a)
     , auto_start = nid }
   where nid = nextNid a
@@ -297,7 +316,6 @@ replace_done_with nid a = map_auto_ids (\nid -> Map.findWithDefault nid nid repl
     replace_map = Map.foldr fold_f Map.empty (auto_graph a)
     fold_f (Node nid' (SDone _)) mp = Map.insert nid' nid mp
     fold_f _ mp = mp
-
 
 -- debugging
 auto_closed :: (NodeKind nk, Ord nid) => Automaton e nid nk -> Bool
@@ -360,7 +378,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a
 
-{------ OLD: 
+{------ OLD:
       let inp = [(1, x)]
           outp = [(1, out_chan chans)]
           atom = idAtom (nameTyp x)
@@ -542,20 +560,26 @@ mkDoneDist threshold a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph
     let new_dist = dist + cost nid in
     if new_dist > threshold then Truncation else NewDist new_dist
 
-  cost nid | SAtom watom _ _ <- nodeKindOfId a nid = countReads (auto_inchan a) watom
-           | otherwise                             = 0
-
+  cost nid
+    | SAtom watom _ _ <- nodeKindOfId a nid = countReads (auto_inchan a) watom
+                                            - countWrites (auto_inchan a) watom -- there may be rollbacks...
+    | otherwise                             = 0
 
 
 -- simple queue interface for lists
 type Queue e = [e]
+type Stack e = [e]
 
 push :: e -> Queue e -> Queue e
-push = (:)
+push x q = q ++ [x]
+
+pushFront :: e -> Queue e -> Queue e
+pushFront = (:)
 
 pop :: Queue e -> Maybe (e, Queue e)
 pop [] = Nothing
-pop es = Just (List.last es, List.init es)
+pop (e:es) = Just (e, es)
+
 
 
 
@@ -574,9 +598,34 @@ type RollbackBehavior = Map Int Int
 -- behavior of the left automaton ("PipeState"). This data structure allows us to calculate
 -- both the current number of elements in the pipe, and the current number of "uncommited"
 -- (i.e. optimistic) reads of the left automaton.
-type PipeState = Queue (Either Int Int) -- left n means n reads, right m means m writes
-getUncommitted = sum . lefts
-getBalance = sum . rights
+data PipeState
+  = PipeState { pipe_state :: Queue (Either Int Int) -- left n means n reads, right m means m writes
+              , pipe_history :: Stack (Either Int Int)
+              }
+
+empty_pipe_state :: PipeState
+empty_pipe_state = PipeState [] []
+
+getUncommitted = sum . lefts . pipe_state
+getBalance = sum . rights . pipe_state
+
+
+-- try consuming n elements from the transfer-pipe.
+try_consume :: Int -> PipeState -> Maybe PipeState
+try_consume n ps | n < 0 = assert False undefined
+try_consume 0 ps = Just ps
+try_consume n (PipeState q h) =
+  case pop q of
+    Nothing              -> Nothing
+    Just (x@(Left _),q)  -> try_consume n (PipeState q (x:h))
+    Just (x@(Right m),q)
+      | m<=n             -> try_consume (n-m) (PipeState q (x `pushFront` h))
+      | otherwise        -> Just $ PipeState (Right (m-n) `pushFront` q) (Right n:h)
+
+rollback n (PipeState q h) =
+  case try_consume n (PipeState h q) of
+    Just (PipeState h' q') -> PipeState q' h'
+    Nothing -> panicStr "rollback: Bug in Automata Model!!"
 
 
 
@@ -586,6 +635,7 @@ getBalance = sum . rights
 zipAutomata :: forall e. Atom e
             => DynFlags
             -> SAuto e Int -- left automaton ("producer")
+            -- NOTE: In the presence of rollbacks, the consumer may also produce!
             -> SAuto e Int -- right automaton ("consumer")
             -> SAuto e Int -- continuation
             -> SAuto e Int
@@ -596,17 +646,16 @@ zipAutomata dfs a1' a2' k = concat_auto prod_a k
     prod_a = (\a -> assert (auto_closed a) a) $
              assert (auto_closed a1) $
              assert (auto_closed a2) $
-             (if prune then pruneUnfinished else id) $
+             (if prune then pruneUnfinished else clearUnfinished) $
+             normalize_auto_ids 0 $
              Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) start_prod_nid
-    pipe_state = []
-    start_prod_nid = mkProdNid pipe_state (auto_start a1) (auto_start a2)
-    prod_nmap = zipNodes pipe_state start_prod_nid Map.empty
+    start_prod_nid = mkProdNid empty_pipe_state (auto_start a1) (auto_start a2)
+    prod_nmap = zipNodes empty_pipe_state start_prod_nid Map.empty
     pipe_ch = assert (auto_outchan a1 == auto_inchan a2) $ auto_outchan a1
     optimism :: Double
     optimism = 0.0
     lazy = optimism == 0.0
     prune = isDynFlagSet dfs PruneIncompleteStates
-
 
     mkProdNid :: PipeState -> Int -> Int -> ProdNid
     mkProdNid ps nid1 nid2 = (nid1,nid2,) $
@@ -636,15 +685,7 @@ zipAutomata dfs a1' a2' k = concat_auto prod_a k
     zipLazy :: PipeState -> Map Chan Int -> ProdNid -> SimplNk e Int -> SimplNk e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
 
     zipLazy pipe_state pipe_balances prod_nid nk1 (SDone _)
-      | prune || (getBalance pipe_state == 0) = insertNk prod_nid (SDone pipe_balances)
-      | otherwise = insertNk final_prod_nid (SDone final_pipe_balances) . insertNk prod_nid flush_nk
-      where
-        -- Hack to create fresh product-node id
-        final_prod_nid = ( 1 + (fst $ Map.findMax $ auto_graph a1)
-                         , 1 + (fst $ Map.findMax $ auto_graph a2)
-                         , (0,Map.empty) )
-        final_pipe_balances = Map.insert pipe_ch 0 pipe_balances
-        flush_nk = SAtom (flushWAtom pipe_ch (getBalance pipe_state)) final_prod_nid pipe_balances
+      = insertNk prod_nid (SDone pipe_balances)
 
     zipLazy pipe_state pipe_balances prod_nid@(id1,_,_) nk1 (SBranch x l r w _) =
       let prod_nid_l = mkProdNid pipe_state id1 l
@@ -679,7 +720,7 @@ zipAutomata dfs a1' a2' k = concat_auto prod_a k
 
      -- if we reach this case, the pipeline is already drained as far as possible
     zipLazy pipe_state pipe_balances prod_nid nk1@(SDone {}) _nk2 =
-      zipLazy pipe_state pipe_balances prod_nid nk1 nk1
+      insertNk prod_nid (SDone pipe_balances)
 
 
 
@@ -687,6 +728,9 @@ zipAutomata dfs a1' a2' k = concat_auto prod_a k
     -- in order to keep the pipeline filled up at all times so greater parallelism can be achieved.
     zipOptimistic :: PipeState -> Map Chan Int -> ProdNid -> SimplNk e Int -> SimplNk e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
 
+
+
+------------------------------------------------- OLD ------------------------------------------------------
     zipOptimistic pipe_state pipe_balances prod_nid nk1 (SDone _)
       | let rollback = rollbackInDistance 0 pipe_state
       , rollback > 0
@@ -735,36 +779,29 @@ zipAutomata dfs a1' a2' k = concat_auto prod_a k
       in zipNodes pipe_state' next_prod_nid . insertNk prod_nid prod_nkind
 
      -- if we reach this case, the pipeline is already drained as far as possible
-    zipOptimistic pipe_state pipe_balances prod_nid (SDone _) nk2 =
-      insertNk prod_nid (SDone pipe_balances)
+    zipOptimistic pipe_state pipe_balances prod_nid (SDone _) nk2
+      = insertNk prod_nid (SDone pipe_balances)
 
 
     -- Try executing a wired atom from the right automaton.
     -- This will fail if there is not enough data in the pipe, or succeed and
     -- change the pipe state otherwise.
-    exec_right :: WiredAtom atom -> PipeState -> Maybe PipeState
-    exec_right wa q = try_consume (countReads pipe_ch wa) q
-
-    -- try consuming n elements from the transfer-pipe.
-    try_consume :: Int -> PipeState -> Maybe PipeState
-    try_consume n q | n < 0 = assert False undefined
-    try_consume 0 q = Just q
-    try_consume n q = case pop q of
-      Nothing                      -> Nothing
-      Just (Left _,q)              -> try_consume n q
-      Just (Right m,q) | m<=n      -> try_consume (n-m) q
-                       | otherwise -> Just $ q ++ [Right (m-n)]
+    exec_right :: WiredAtom e -> PipeState -> Maybe PipeState
+    exec_right wa ps
+      | Just (n,ch) <- isRollbackWAtom wa
+      , ch == pipe_ch
+      = Just (rollback n ps) -- rollback must always succeed!
+      | otherwise = try_consume (countReads pipe_ch wa) ps
 
     -- Execute a wired atom from the left automaton, and update the pipe state
     -- to track the atoms consumption/production behavior.
-    exec_left :: WiredAtom atom -> PipeState -> PipeState
-    exec_left wa q =
-      (if writes > 0 then push (Right writes) else id) $
-      (if reads > 0 then push (Left reads) else id) $ q
+    exec_left :: WiredAtom e -> PipeState -> PipeState
+    exec_left wa (PipeState q h) = PipeState q' h
       where
+        q' = (if writes > 0 then push (Right writes) else id) $
+             (if reads > 0 then push (Left reads) else id) $ q
         writes = countWrites pipe_ch wa
         reads = countReads (auto_inchan a1) wa
-
 
 
 
@@ -872,16 +909,31 @@ pruneUnreachable a nid = fixup $ a { auto_graph = prune (auto_graph a) nid }
 
 -- Prune all nodes that terminate with data still in the pipe.
 pruneUnfinished :: forall e nid. (Atom e, Ord nid) => SAuto e nid -> SAuto e nid
-pruneUnfinished a = foldl pruneUnreachable a $ map node_id unfinished where
-  unfinished = filter isUnfinished $ filter isDonePred $ Map.elems $ auto_graph a
-
-  isDonePred :: SNode e nid -> Bool
-  isDonePred = any (isDone . nodeKindOfId a) . sucs
-
-  isDone :: SimplNk e nid -> Bool
-  isDone (SDone {}) = True
-  isDone _ = False
+pruneUnfinished a = foldl pruneUnreachable a (map node_id unfinished) where
+  unfinished = filter isUnfinished $ filter (isDonePred a) $ Map.elems $ auto_graph a
   isUnfinished = any (>0) . Map.elems . next_pipe_balances . node_kind
+
+-- Insert clear-atoms to clear all queues upon automaton-termination. In the process,
+-- replaces all done states with a single done state (in which all pipes are empty).
+clearUnfinished :: forall e. Atom e => SAuto e Int -> SAuto e Int
+clearUnfinished a = fixup $  Map.foldl clear (nmap, []) nmap
+  where
+    nmap = auto_graph a
+    done_nid = nextNid a
+    done_nk = SDone Map.empty -- an empty map is equivalent to a map with range = {0}
+
+    clear :: (SNodeMap e Int, [Int]) -> SNode e Int -> (SNodeMap e Int, [Int])
+    clear (nmap, done_ids) (Node nid (SDone pipes))
+      | all (==0) (Map.elems pipes) = (nmap, nid:done_ids)
+      | otherwise = (insertNk nid clear_nk nmap, done_ids)
+      where clear_nk = SAtom (clearWAtom pipes) done_nid pipes
+    clear acc _ = acc
+
+    fixup :: (SNodeMap e Int, [Int]) -> SAuto e Int
+    fixup (nmap', done_ids) = map_auto_ids map_nid $ a { auto_graph = nmap }
+      where nmap = insertNk done_nid done_nk nmap'
+            map_nid nid | nid `elem` done_ids = done_nid
+                        | otherwise           = nid
 
 
 

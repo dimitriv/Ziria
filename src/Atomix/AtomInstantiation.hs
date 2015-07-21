@@ -8,7 +8,10 @@ import Data.Loc
 import Control.Exception
 
 import Data.Maybe
+import Data.Tuple
 import qualified Data.List as List
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 
 import Outputable 
 import Text.PrettyPrint.HughesPJ
@@ -20,7 +23,7 @@ data SymAtom = SAExp (AExp ())
              | SADiscard (Int,Ty)
              | SAAssert Bool -- ^ assert true and assert false
              | SARollback EId Int
-             -- | SAFlush EId Int
+             | SAClear (Map EId Int)
   deriving Eq
 
 instance Outputable SymAtom where
@@ -39,7 +42,7 @@ instance Outputable SymAtom where
 
   ppr (SARollback q n) = text "ROLLBACK"
 
-  --ppr (SAFlush q n) = text "FLUSH"
+  ppr (SAClear pipes) = text "CLEAR"
 
 instance Show SymAtom where
   show sa = render (pprShort sa)
@@ -63,20 +66,23 @@ instance Atom SymAtom where
   atomInTy (SADiscard inty) = [inty]
   atomInTy (SAAssert _) = [(1,TBool)]
   atomInTy (SARollback _ _) = []
-  --atomInTy (SAFlush q n) = [(n, nameTyp q)]
+  atomInTy (SAClear pipes) = map (\(ch,n) -> (n, nameTyp ch)) $ Map.toList pipes
 
   atomOutTy (SAExp e) = map ((1,) . nameTyp) (aexp_ovs e)
   atomOutTy (SACast _ outty) = [outty]
   atomOutTy (SADiscard _)    = []
   atomOutTy (SAAssert _) = []
   atomOutTy (SARollback q n) = [(n,nameTyp q)]
-  --atomOutTy (SAFlush q n) = []
+  atomOutTy (SAClear _) = []
 
   castAtom    = SACast
   discardAtom = SADiscard
   assertAtom = SAAssert
   rollbackAtom = SARollback
-  flushAtom q n = SADiscard (n, nameTyp q) -- SAFlush
+  clearAtom = SAClear
+
+  isRollbackAtom (SARollback q n) = Just (n,q)
+  isRollbackAtom _ = Nothing
 
   expToWiredAtom :: AExp () -> Maybe EId -> WiredAtom SymAtom
   expToWiredAtom e mb_out = 
