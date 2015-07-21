@@ -119,7 +119,8 @@ tySizeOfApprox :: Ty -> Int
 tySizeOfApprox ty = tySizeOf True ty
 
 tySizeOf_C :: Ty -> C.Exp
-tySizeOf_C (TArray (NVar n) TBit)  = [cexp| (($id:n + 7) >> 3) |]
+tySizeOf_C (TArray (NVar n) TBit)    = [cexp| (($id:n  + 7) >> 3) |]
+tySizeOf_C (TArray (Literal n) TBit) = [cexp| (($int:n + 7) >> 3) |]
 tySizeOf_C (TArray (NVar n) ty)    = [cexp| $id:n * $exp:(tySizeOf_C ty)|]
 tySizeOf_C (TArray (Literal n) ty) = [cexp| $int:n * $exp:(tySizeOf_C ty)|]
 tySizeOf_C (TStruct sn _) = [cexp| sizeof($id:sn)|]
