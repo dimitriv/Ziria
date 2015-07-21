@@ -9,6 +9,7 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe
 import qualified Data.List as List
 import Data.Either
+import Data.Tuple
 
 import Control.Exception
 import Control.Monad.State
@@ -74,7 +75,7 @@ class (Show a, Eq a) => Atom a where
   castAtom    :: (Int,Ty) -> (Int,Ty) -> a
   assertAtom :: Bool -> a
   rollbackAtom :: Chan -> Int -> a
-  flushAtom :: Chan -> Int -> a
+  clearAtom :: Map Chan Int -> a
 
   -- Getting (wired) atoms from expressions
   expToWiredAtom :: AExp () -> Maybe Chan -> WiredAtom a
@@ -88,9 +89,10 @@ class (Show a, Eq a) => Atom a where
   rollbackWAtom :: Chan -> Int -> WiredAtom a
   rollbackWAtom ch n = WiredAtom [] [(n,ch)] (rollbackAtom ch n)
 
-  flushWAtom :: Chan -> Int -> WiredAtom a
-  flushWAtom ch n = WiredAtom [(n,ch)] [] (flushAtom ch n)
-
+  clearWAtom :: Map Chan Int -> WiredAtom a
+  clearWAtom pipes' = WiredAtom in_tys [] (clearAtom pipes)
+    where in_tys = map swap (Map.toList pipes)
+          pipes = Map.filter (>0) pipes'
 
 
 
@@ -216,6 +218,13 @@ size = Map.size . auto_graph
 sucs :: NodeKind nkind => Node atom nid nkind -> [nid]
 sucs (Node _ nk) = sucsOfNk nk
 
+isDoneNk :: SimplNk e nid -> Bool
+isDoneNk (SDone {}) = True
+isDoneNk _ = False
+
+isDonePred :: Ord nid => SAuto e nid -> SNode e nid -> Bool
+isDonePred a = any (isDoneNk . nodeKindOfId a) . sucs
+
 -- Create predecessor map. For efficieny reasons, should be cached locally:
 -- let preds = mkPreds a in ...
 mkPreds :: forall e nid nk. (NodeKind nk, Ord nid) => Automaton e nid nk -> nid -> Set nid
@@ -298,7 +307,6 @@ replace_done_with nid a = map_auto_ids (\nid -> Map.findWithDefault nid nid repl
     fold_f (Node nid' (SDone _)) mp = Map.insert nid' nid mp
     fold_f _ mp = mp
 
-
 -- debugging
 auto_closed :: (NodeKind nk, Ord nid) => Automaton e nid nk -> Bool
 auto_closed a = Map.foldrWithKey node_closed (isDefined $ auto_start a) (auto_graph a)
@@ -360,7 +368,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a
 
-{------ OLD: 
+{------ OLD:
       let inp = [(1, x)]
           outp = [(1, out_chan chans)]
           atom = idAtom (nameTyp x)
@@ -596,7 +604,8 @@ zipAutomata dfs a1' a2' k = concat_auto prod_a k
     prod_a = (\a -> assert (auto_closed a) a) $
              assert (auto_closed a1) $
              assert (auto_closed a2) $
-             (if prune then pruneUnfinished else id) $
+             (if prune then pruneUnfinished else clearUnfinished) $
+             normalize_auto_ids 0 $
              Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) start_prod_nid
     pipe_state = []
     start_prod_nid = mkProdNid pipe_state (auto_start a1) (auto_start a2)
@@ -606,7 +615,6 @@ zipAutomata dfs a1' a2' k = concat_auto prod_a k
     optimism = 0.0
     lazy = optimism == 0.0
     prune = isDynFlagSet dfs PruneIncompleteStates
-
 
     mkProdNid :: PipeState -> Int -> Int -> ProdNid
     mkProdNid ps nid1 nid2 = (nid1,nid2,) $
@@ -636,15 +644,7 @@ zipAutomata dfs a1' a2' k = concat_auto prod_a k
     zipLazy :: PipeState -> Map Chan Int -> ProdNid -> SimplNk e Int -> SimplNk e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
 
     zipLazy pipe_state pipe_balances prod_nid nk1 (SDone _)
-      | prune || (getBalance pipe_state == 0) = insertNk prod_nid (SDone pipe_balances)
-      | otherwise = insertNk final_prod_nid (SDone final_pipe_balances) . insertNk prod_nid flush_nk
-      where
-        -- Hack to create fresh product-node id
-        final_prod_nid = ( 1 + (fst $ Map.findMax $ auto_graph a1)
-                         , 1 + (fst $ Map.findMax $ auto_graph a2)
-                         , (0,Map.empty) )
-        final_pipe_balances = Map.insert pipe_ch 0 pipe_balances
-        flush_nk = SAtom (flushWAtom pipe_ch (getBalance pipe_state)) final_prod_nid pipe_balances
+      = insertNk prod_nid (SDone pipe_balances)
 
     zipLazy pipe_state pipe_balances prod_nid@(id1,_,_) nk1 (SBranch x l r w _) =
       let prod_nid_l = mkProdNid pipe_state id1 l
@@ -679,7 +679,7 @@ zipAutomata dfs a1' a2' k = concat_auto prod_a k
 
      -- if we reach this case, the pipeline is already drained as far as possible
     zipLazy pipe_state pipe_balances prod_nid nk1@(SDone {}) _nk2 =
-      zipLazy pipe_state pipe_balances prod_nid nk1 nk1
+      insertNk prod_nid (SDone pipe_balances)
 
 
 
@@ -735,8 +735,8 @@ zipAutomata dfs a1' a2' k = concat_auto prod_a k
       in zipNodes pipe_state' next_prod_nid . insertNk prod_nid prod_nkind
 
      -- if we reach this case, the pipeline is already drained as far as possible
-    zipOptimistic pipe_state pipe_balances prod_nid (SDone _) nk2 =
-      insertNk prod_nid (SDone pipe_balances)
+    zipOptimistic pipe_state pipe_balances prod_nid (SDone _) nk2
+      = insertNk prod_nid (SDone pipe_balances)
 
 
     -- Try executing a wired atom from the right automaton.
@@ -872,16 +872,31 @@ pruneUnreachable a nid = fixup $ a { auto_graph = prune (auto_graph a) nid }
 
 -- Prune all nodes that terminate with data still in the pipe.
 pruneUnfinished :: forall e nid. (Atom e, Ord nid) => SAuto e nid -> SAuto e nid
-pruneUnfinished a = foldl pruneUnreachable a $ map node_id unfinished where
-  unfinished = filter isUnfinished $ filter isDonePred $ Map.elems $ auto_graph a
-
-  isDonePred :: SNode e nid -> Bool
-  isDonePred = any (isDone . nodeKindOfId a) . sucs
-
-  isDone :: SimplNk e nid -> Bool
-  isDone (SDone {}) = True
-  isDone _ = False
+pruneUnfinished a = foldl pruneUnreachable a (map node_id unfinished) where
+  unfinished = filter isUnfinished $ filter (isDonePred a) $ Map.elems $ auto_graph a
   isUnfinished = any (>0) . Map.elems . next_pipe_balances . node_kind
+
+-- Insert clear-atoms to clear all queues upon automaton-termination. In the process,
+-- replaces all done states with a single done state (in which all pipes are empty).
+clearUnfinished :: forall e. Atom e => SAuto e Int -> SAuto e Int
+clearUnfinished a = fixup $  Map.foldl clear (nmap, []) nmap
+  where
+    nmap = auto_graph a
+    done_nid = nextNid a
+    done_nk = SDone Map.empty -- an empty map is equivalent to a map with range = {0}
+
+    clear :: (SNodeMap e Int, [Int]) -> SNode e Int -> (SNodeMap e Int, [Int])
+    clear (nmap, done_ids) (Node nid (SDone pipes))
+      | all (==0) (Map.elems pipes) = (nmap, nid:done_ids)
+      | otherwise = (insertNk nid clear_nk nmap, done_ids)
+      where clear_nk = SAtom (clearWAtom pipes) done_nid pipes
+    clear acc _ = acc
+
+    fixup :: (SNodeMap e Int, [Int]) -> SAuto e Int
+    fixup (nmap', done_ids) = map_auto_ids map_nid $ a { auto_graph = nmap }
+      where nmap = insertNk done_nid done_nk nmap'
+            map_nid nid | nid `elem` done_ids = done_nid
+                        | otherwise           = nid
 
 
 

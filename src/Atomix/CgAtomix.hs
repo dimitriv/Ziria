@@ -226,6 +226,7 @@ cgDefAtom dfs (WiredAtom win wout the_atom) m
       SACast {}     -> m
       SADiscard {}  -> m
       SARollback {} -> m
+      SAClear {}    -> m
       SAExp aexp    -> cgAExpDefAtom dfs win wout aexp m
 
 -- | Code generation for an atom
@@ -250,6 +251,8 @@ cgAtom dfs qnfo (WiredAtom win wout the_atom)
         assert "cgAtom/Discard" (null wout)  $
         cgDiscAtom dfs qnfo (head win) inty
       SARollback _queue _n ->
+        fail "NOT IMPLEMENTED!!"
+      SAClear {} ->
         fail "NOT IMPLEMENTED!!"
 
   where singleton [_] = True
