@@ -81,6 +81,9 @@ instance Atom SymAtom where
   rollbackAtom = SARollback
   clearAtom = SAClear
 
+  isRollbackAtom (SARollback q n) = Just (n,q)
+  isRollbackAtom _ = Nothing
+
   expToWiredAtom :: AExp () -> Maybe EId -> WiredAtom SymAtom
   expToWiredAtom e mb_out = 
     let loc = expLoc body 

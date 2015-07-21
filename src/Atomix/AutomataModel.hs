@@ -75,11 +75,14 @@ class (Show a, Eq a) => Atom a where
   castAtom    :: (Int,Ty) -> (Int,Ty) -> a
   assertAtom :: Bool -> a
   rollbackAtom :: Chan -> Int -> a
+  isRollbackAtom :: a -> Maybe (Int, Chan)
   clearAtom :: Map Chan Int -> a
 
   -- Getting (wired) atoms from expressions
   expToWiredAtom :: AExp () -> Maybe Chan -> WiredAtom a
 
+
+  -- Default implementations based on this abstract interface
   idAtom      :: Ty -> a
   idAtom t = castAtom (1,t) (1,t)
 
@@ -88,6 +91,14 @@ class (Show a, Eq a) => Atom a where
 
   rollbackWAtom :: Chan -> Int -> WiredAtom a
   rollbackWAtom ch n = WiredAtom [] [(n,ch)] (rollbackAtom ch n)
+
+  isRollbackWAtom :: WiredAtom a -> Maybe (Int, Chan)
+  isRollbackWAtom (WiredAtom in_tys out_tys a)
+    | res@(Just x) <- isRollbackAtom a 
+    = assert (null out_tys) $
+      assert (null (tail in_tys)) $
+      assert (head in_tys == x) $ res
+    | otherwise = Nothing
 
   clearWAtom :: Map Chan Int -> WiredAtom a
   clearWAtom pipes' = WiredAtom in_tys [] (clearAtom pipes)
