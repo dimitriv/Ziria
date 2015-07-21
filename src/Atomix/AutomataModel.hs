@@ -561,8 +561,10 @@ mkDoneDist threshold a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph
     let new_dist = dist + cost nid in
     if new_dist > threshold then Truncation else NewDist new_dist
 
-  cost nid | SAtom watom _ _ <- nodeKindOfId a nid = countReads (auto_inchan a) watom
-           | otherwise                             = 0
+  cost nid
+    | SAtom watom _ _ <- nodeKindOfId a nid = countReads (auto_inchan a) watom
+                                            - countWrites (auto_inchan a) watom -- there may be rollbacks...
+    | otherwise                             = 0
 
 
 
@@ -605,6 +607,7 @@ getBalance = sum . rights
 zipAutomata :: forall e. Atom e
             => DynFlags
             -> SAuto e Int -- left automaton ("producer")
+            -- NOTE: In the presence of rollbacks, the consumer may also produce!
             -> SAuto e Int -- right automaton ("consumer")
             -> SAuto e Int -- continuation
             -> SAuto e Int
