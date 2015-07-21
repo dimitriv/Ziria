@@ -16,6 +16,7 @@ import Control.Monad.State
 
 import AtomComp
 import AstExpr
+import AstComp ( ParInfo (..), plInfo, PlInfo (..) )
 import Opts
 import AtomixCompTransform ( freshName, freshNameDoc )
 import qualified GenSym as GS
@@ -422,13 +423,13 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       a <- mkAutomaton dfs sym (chans { ctrl_chan = mbx }) c1 a2
       return $ assert (auto_closed a2) $ assert (auto_closed a) a
 
-    go (APar _ c1 t c2) = do
-      pipe_ch <- freshNameDoc sym "par" loc t Mut (pipeName c1 c2)
+    go (APar par_info c1 t c2) = do
+      pipe_ch <- freshNameDoc sym "par" loc t Mut (pipeName par_info c1 c2)
       let k1 = mkDoneAutomaton (in_chan chans) pipe_ch
       let k2 = mkDoneAutomaton pipe_ch (out_chan chans)
       a1 <- mkAutomaton dfs sym (chans {out_chan = pipe_ch}) c1 k1
       a2 <- mkAutomaton dfs sym (chans {in_chan = pipe_ch}) c2 k2
-      return $ zipAutomata dfs a1 a2 k
+      return $ zipAutomata dfs par_info a1 a2 k
 
     go (ABranch x c1 c2) = do
       a1 <- mkAutomaton dfs sym chans c1 k
@@ -476,8 +477,9 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
 
 
     -- pipe name
-    pipeName c1 c2 = List.intercalate ">>>" $
-                     map (extractName . PPR.render . ppr) [parLoc (Left ()) c1, parLoc (Right ()) c2]
+    pipeName pinfo c1 c2 =
+      List.intercalate (pipeSymbol pinfo) $
+      map (extractName . PPR.render . ppr) [parLoc (Left ()) c1, parLoc (Right ()) c2]
     extractName = takeWhile (/= '.') . reverse . takeWhile (/= '\\') . takeWhile (/= '/') . reverse
     parLoc side c
       | APar _ _cl _ cr <- acomp_comp c
@@ -485,6 +487,8 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       | APar _ cl _ _cr <- acomp_comp c
       , Right () <- side = parLoc side cl
       | otherwise = acomp_loc c
+    pipeSymbol pinfo | NeverPipeline <- plInfo pinfo = ".>>>."
+                     | otherwise = ">>>"
 
 
 
@@ -588,7 +592,7 @@ mkExecutionCost n a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph a)
 
   go' 0 nk = return 0
   go' n (SAtom wa next _)
-    | let atom_cost = countReads (auto_inchan a) wa
+    | let atom_cost = countReads (auto_inchan a) wa - countWrites (auto_inchan a) wa
     , atom_cost > 0
     = (+ atom_cost) <$> go (n-1) next
   go' n nk = maximum <$> mapM (go n) (sucsOfNk nk)
@@ -641,15 +645,17 @@ getBalance = sum . rights . pipe_state
 
 -- try consuming n elements from the transfer-pipe.
 try_consume :: Int -> PipeState -> Maybe PipeState
-try_consume n ps | n < 0 = assert False undefined
+try_consume n ps | n < 0 = trace "!! try_consume: Called with negative argument!" $
+                           trace "!!              Performing rollback" $
+                           Just (rollback (-n) ps)
 try_consume 0 ps = Just ps
 try_consume n (PipeState q h) =
   case pop q of
     Nothing              -> Nothing
-    Just (x@(Left _),q)  -> try_consume n (PipeState q (x:h))
+    Just (x@(Left _),q)  -> try_consume n (PipeState q (x `pushFront` h))
     Just (x@(Right m),q)
       | m<=n             -> try_consume (n-m) (PipeState q (x `pushFront` h))
-      | otherwise        -> Just $ PipeState (Right (m-n) `pushFront` q) (Right n:h)
+      | otherwise        -> Just $ PipeState (Right (m-n) `pushFront` q) (Right n `pushFront` h)
 
 rollback n (PipeState q h) =
   case try_consume n (PipeState h q) of
@@ -667,11 +673,12 @@ rollback n (PipeState q h) =
 -}
 zipAutomata :: forall e. Atom e
             => DynFlags
+            -> ParInfo
             -> SAuto e Int -- left automaton ("producer")
             -> SAuto e Int -- right automaton ("consumer")
             -> SAuto e Int -- continuation
             -> SAuto e Int
-zipAutomata dfs a1' a2' k = concat_auto prod_a k
+zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
   where
     a1 = deleteDeadNodes a1'
     a2 = deleteDeadNodes a2'
@@ -679,14 +686,16 @@ zipAutomata dfs a1' a2' k = concat_auto prod_a k
              assert (auto_closed a1) $
              assert (auto_closed a2) $
              (if prune then pruneUnfinished else clearUnfinished) $
+             insertRollbacks lazy pipe_ch $
              normalize_auto_ids 0 $
              Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) start_prod_nid
     start_prod_nid = mkProdNid empty_pipe_state (auto_start a1) (auto_start a2)
     prod_nmap = zipNodes empty_pipe_state start_prod_nid Map.empty
+
+    -- paramters
     pipe_ch = assert (auto_outchan a1 == auto_inchan a2) $ auto_outchan a1
-    optimism :: Double
-    optimism = 0.0
-    lazy = optimism == 0.0
+    optimism = 0::Int -- case plInfo pinfo of { NeverPipeline -> 0; _ -> (1::Int) }
+    lazy = optimism == 0
     prune = isDynFlagSet dfs PruneIncompleteStates
 
     mkProdNid :: PipeState -> Int -> Int -> ProdNid
@@ -848,7 +857,7 @@ zipAutomata dfs a1' a2' k = concat_auto prod_a k
 
     -- we won't consume unless the pipe contains >= elements than indicated
     -- by this threshold
-    consumption_threshold = ceiling ((1 + optimism) * (fromIntegral largest_read))
+    consumption_threshold = (1 + optimism) *  largest_read
 
     threshold nid2
       | dists_truncated $ done_dist nid2 = consumption_threshold
@@ -966,6 +975,27 @@ clearUnfinished a = fixup $  Map.foldl clear (nmap, []) nmap
       where nmap = insertNk done_nid done_nk nmap'
             map_nid nid | nid `elem` done_ids = done_nid
                         | otherwise           = nid
+
+insertRollbacks :: forall e. Atom e => Bool -> Chan -> SAuto e Int -> SAuto e Int
+insertRollbacks lazy pipe_ch a = a { auto_graph = Map.foldl go nmap nmap } where
+  nmap = auto_graph a
+
+  go :: SNodeMap e Int -> SNode e Int -> SNodeMap e Int
+  go nmap (Node nid (SDone pipes)) = case Map.lookup pipe_ch pipes of
+    Nothing -> panicStr "insertRollbacks: pipe_ch should be in scope!"
+    Just n | n<0  -> panicStr "insertRollbacks: can't have negative pipe balance!"
+           | n==0 -> nmap -- nothing to do
+           | otherwise ->
+      assert (not lazy) $
+      insertNk nid rollback_nk $
+      insertNk final_nid final_nk $ nmap
+      where
+        rollback_nk = SAtom (rollbackWAtom pipe_ch n) final_nid pipes
+        final_nid = fst (Map.findMax nmap) + 1
+        final_nk = SDone $ Map.insert pipe_ch 0 pipes
+  go nmap _ = nmap
+
+
 
 
 
