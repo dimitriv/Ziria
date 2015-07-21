@@ -243,9 +243,9 @@ nextPipes :: [WiredAtom a] -> Map Chan Int -> Map Chan Int
 nextPipes watoms pipes = Map.mapWithKey updatePipe pipes
   where updatePipe pipe n = n + sum (map (countWrites pipe) watoms)
                               - sum (map (countReads pipe) watoms)
+
 next_pipe_balances :: SimplNk atom nid -> Map Chan Int
-next_pipe_balances (SAtom wa _ pipes) = Map.mapWithKey updatePipe pipes
-  where updatePipe pipe n = n + countWrites pipe wa - countReads pipe wa
+next_pipe_balances (SAtom wa _ pipes) = nextPipes [wa] pipes
 next_pipe_balances nk = pipe_balances nk
 
 nextNid :: Automaton atom Int nkind -> Int
@@ -596,7 +596,7 @@ zipAutomata dfs a1' a2' k = concat_auto prod_a k
     prod_a = (\a -> assert (auto_closed a) a) $
              assert (auto_closed a1) $
              assert (auto_closed a2) $
-             (if prune then pruneUnfinished pipe_ch else id) $
+             (if prune then pruneUnfinished else id) $
              Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) start_prod_nid
     pipe_state = []
     start_prod_nid = mkProdNid pipe_state (auto_start a1) (auto_start a2)
@@ -871,8 +871,8 @@ pruneUnreachable a nid = fixup $ a { auto_graph = prune (auto_graph a) nid }
 
 
 -- Prune all nodes that terminate with data still in the pipe.
-pruneUnfinished :: forall e nid. (Atom e, Ord nid) => Chan -> SAuto e nid -> SAuto e nid
-pruneUnfinished chan a = foldl pruneUnreachable a $ map node_id unfinished where
+pruneUnfinished :: forall e nid. (Atom e, Ord nid) => SAuto e nid -> SAuto e nid
+pruneUnfinished a = foldl pruneUnreachable a $ map node_id unfinished where
   unfinished = filter isUnfinished $ filter isDonePred $ Map.elems $ auto_graph a
 
   isDonePred :: SNode e nid -> Bool
@@ -881,7 +881,7 @@ pruneUnfinished chan a = foldl pruneUnreachable a $ map node_id unfinished where
   isDone :: SimplNk e nid -> Bool
   isDone (SDone {}) = True
   isDone _ = False
-  isUnfinished = (>0) . Map.findWithDefault 0 chan . next_pipe_balances . node_kind
+  isUnfinished = any (>0) . Map.elems . next_pipe_balances . node_kind
 
 
 
@@ -1014,7 +1014,7 @@ dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfi
 
     maybeToolTip (CfgAction _ _ pipes) = " tooltip=\"" ++ showPipeNames pipes ++ "\""
     maybeToolTip _ = ""
-    showPipeNames = List.intercalate " | " . map show . Map.keys
+    showPipeNames = List.intercalate " | " . map (showChan True) . Map.keys
 
 
 
