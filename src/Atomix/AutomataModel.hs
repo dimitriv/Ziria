@@ -470,7 +470,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       let k' = insert_prepend (SDone Map.empty) k
       let nid = auto_start k'
       a0 <- mkAutomaton dfs sym chans c k'
-      let nkind = SBranch x (auto_start a0) (auto_start k) True Map.empty
+      let nkind = SBranch x (auto_start k) (auto_start a0) True Map.empty
       let a = a0 { auto_graph = insertNk nid nkind (auto_graph a0)}
       return $ assert (auto_closed a0) $ assert (auto_closed a) a
 
