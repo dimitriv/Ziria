@@ -2,14 +2,14 @@
 {-# OPTIONS #-}
 module AutomataModel where
 
+import Data.Either
+import Data.Tuple
+import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Maybe
 import qualified Data.List as List
-import Data.Either
-import Data.Tuple
 
 import Control.Exception
 import Control.Monad.State
@@ -27,7 +27,6 @@ import Outputable
 import qualified Text.PrettyPrint.HughesPJ as PPR
 import Text.PrettyPrint.Boxes
 import Debug.Trace
-
 
 
 {------------------------------------------------------------------------
@@ -94,7 +93,7 @@ class (Show a, Eq a) => Atom a where
 
   isRollbackWAtom :: WiredAtom a -> Maybe (Int, Chan)
   isRollbackWAtom (WiredAtom in_tys out_tys a)
-    | res@(Just x) <- isRollbackAtom a 
+    | res@(Just x) <- isRollbackAtom a
     = assert (null out_tys) $
       assert (null (tail in_tys)) $
       assert (head in_tys == x) $ res
@@ -276,7 +275,7 @@ insertNk :: Ord nid => nid -> nkind atom nid -> NodeMap atom nid nkind -> NodeMa
 insertNk nid nk nmap = Map.insert nid (Node nid nk) nmap
 
 insert_prepend :: nkind atom Int -> Automaton atom Int nkind -> Automaton atom Int nkind
-insert_prepend nkind a = -- this may be too strict -- ensure auto_closed $
+insert_prepend nkind a =
   a { auto_graph = insertNk nid nkind (auto_graph a)
     , auto_start = nid }
   where nid = nextNid a
@@ -567,16 +566,20 @@ mkDoneDist threshold a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph
     | otherwise                             = 0
 
 
-
 -- simple queue interface for lists
 type Queue e = [e]
+type Stack e = [e]
 
 push :: e -> Queue e -> Queue e
-push = (:)
+push x q = q ++ [x]
+
+pushFront :: e -> Queue e -> Queue e
+pushFront = (:)
 
 pop :: Queue e -> Maybe (e, Queue e)
 pop [] = Nothing
-pop es = Just (List.last es, List.init es)
+pop (e:es) = Just (e, es)
+
 
 
 
@@ -595,9 +598,34 @@ type RollbackBehavior = Map Int Int
 -- behavior of the left automaton ("PipeState"). This data structure allows us to calculate
 -- both the current number of elements in the pipe, and the current number of "uncommited"
 -- (i.e. optimistic) reads of the left automaton.
-type PipeState = Queue (Either Int Int) -- left n means n reads, right m means m writes
-getUncommitted = sum . lefts
-getBalance = sum . rights
+data PipeState
+  = PipeState { pipe_state :: Queue (Either Int Int) -- left n means n reads, right m means m writes
+              , pipe_history :: Stack (Either Int Int)
+              }
+
+empty_pipe_state :: PipeState
+empty_pipe_state = PipeState [] []
+
+getUncommitted = sum . lefts . pipe_state
+getBalance = sum . rights . pipe_state
+
+
+-- try consuming n elements from the transfer-pipe.
+try_consume :: Int -> PipeState -> Maybe PipeState
+try_consume n ps | n < 0 = assert False undefined
+try_consume 0 ps = Just ps
+try_consume n (PipeState q h) =
+  case pop q of
+    Nothing              -> Nothing
+    Just (x@(Left _),q)  -> try_consume n (PipeState q (x:h))
+    Just (x@(Right m),q)
+      | m<=n             -> try_consume (n-m) (PipeState q (x `pushFront` h))
+      | otherwise        -> Just $ PipeState (Right (m-n) `pushFront` q) (Right n:h)
+
+rollback n (PipeState q h) =
+  case try_consume n (PipeState h q) of
+    Just (PipeState h' q') -> PipeState q' h'
+    Nothing -> panicStr "rollback: Bug in Automata Model!!"
 
 
 
@@ -621,9 +649,8 @@ zipAutomata dfs a1' a2' k = concat_auto prod_a k
              (if prune then pruneUnfinished else clearUnfinished) $
              normalize_auto_ids 0 $
              Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) start_prod_nid
-    pipe_state = []
-    start_prod_nid = mkProdNid pipe_state (auto_start a1) (auto_start a2)
-    prod_nmap = zipNodes pipe_state start_prod_nid Map.empty
+    start_prod_nid = mkProdNid empty_pipe_state (auto_start a1) (auto_start a2)
+    prod_nmap = zipNodes empty_pipe_state start_prod_nid Map.empty
     pipe_ch = assert (auto_outchan a1 == auto_inchan a2) $ auto_outchan a1
     optimism :: Double
     optimism = 0.0
@@ -701,6 +728,9 @@ zipAutomata dfs a1' a2' k = concat_auto prod_a k
     -- in order to keep the pipeline filled up at all times so greater parallelism can be achieved.
     zipOptimistic :: PipeState -> Map Chan Int -> ProdNid -> SimplNk e Int -> SimplNk e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
 
+
+
+------------------------------------------------- OLD ------------------------------------------------------
     zipOptimistic pipe_state pipe_balances prod_nid nk1 (SDone _)
       | let rollback = rollbackInDistance 0 pipe_state
       , rollback > 0
@@ -756,29 +786,22 @@ zipAutomata dfs a1' a2' k = concat_auto prod_a k
     -- Try executing a wired atom from the right automaton.
     -- This will fail if there is not enough data in the pipe, or succeed and
     -- change the pipe state otherwise.
-    exec_right :: WiredAtom atom -> PipeState -> Maybe PipeState
-    exec_right wa q = try_consume (countReads pipe_ch wa) q
-
-    -- try consuming n elements from the transfer-pipe.
-    try_consume :: Int -> PipeState -> Maybe PipeState
-    try_consume n q | n < 0 = assert False undefined
-    try_consume 0 q = Just q
-    try_consume n q = case pop q of
-      Nothing                      -> Nothing
-      Just (Left _,q)              -> try_consume n q
-      Just (Right m,q) | m<=n      -> try_consume (n-m) q
-                       | otherwise -> Just $ q ++ [Right (m-n)]
+    exec_right :: WiredAtom e -> PipeState -> Maybe PipeState
+    exec_right wa ps
+      | Just (n,ch) <- isRollbackWAtom wa
+      , ch == pipe_ch
+      = Just (rollback n ps) -- rollback must always succeed!
+      | otherwise = try_consume (countReads pipe_ch wa) ps
 
     -- Execute a wired atom from the left automaton, and update the pipe state
     -- to track the atoms consumption/production behavior.
-    exec_left :: WiredAtom atom -> PipeState -> PipeState
-    exec_left wa q =
-      (if writes > 0 then push (Right writes) else id) $
-      (if reads > 0 then push (Left reads) else id) $ q
+    exec_left :: WiredAtom e -> PipeState -> PipeState
+    exec_left wa (PipeState q h) = PipeState q' h
       where
+        q' = (if writes > 0 then push (Right writes) else id) $
+             (if reads > 0 then push (Left reads) else id) $ q
         writes = countWrites pipe_ch wa
         reads = countReads (auto_inchan a1) wa
-
 
 
 
