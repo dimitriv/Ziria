@@ -566,6 +566,35 @@ mkDoneDist threshold a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph
     | otherwise                             = 0
 
 
+
+-- Calculates an upper bound on the cost (measured in reads) to execute n more non-trivial atoms,
+-- starting from a gived node nid. An atom is considered non-trivial if it consumes resources.
+--
+-- For efficieny reasons, should be cached locally:
+--   let productionCost = mkExecutionCost n a in ...
+mkExecutionCost :: forall e nid. Ord nid => Int -> SAuto e nid -> nid -> Int
+mkExecutionCost n a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph a) $ Map.lookup (nid,n) cost_map) where
+  cost_map = Map.filterWithKey (\(_nid,m) _ -> m==n) $
+             snd $ runState (mapM (go n) (Map.keys $ auto_graph a)) Map.empty
+
+  go n nid = do
+    mb_cost <- Map.lookup (nid,n) <$> get
+    case mb_cost of
+      Just cost -> return cost
+      Nothing -> do
+        cost <- go' n (nodeKindOfId a nid)
+        modify (Map.insert (nid,n) cost)
+        return cost
+
+  go' 0 nk = return 0
+  go' n (SAtom wa next _)
+    | let atom_cost = countReads (auto_inchan a) wa
+    , atom_cost > 0
+    = (+ atom_cost) <$> go (n-1) next
+  go' n nk = maximum <$> mapM (go n) (sucsOfNk nk)
+
+
+
 -- simple queue interface for lists
 type Queue e = [e]
 type Stack e = [e]
@@ -632,10 +661,13 @@ rollback n (PipeState q h) =
 
 -- Precondition: a1 and a2 should satisfy (auto_outchan a1) == (auto_inchan a2)
 -- a1 and a2 MUST NOT contain explicit loop nodes (but may contain loops)!!
+{- NOTE: In the presence of rollbacks, the consumer a2 may also produce, i.e. write
+   to the pipe/middle queue connecting a1 and a2.
+   (This breaks an earlier invariant).
+-}
 zipAutomata :: forall e. Atom e
             => DynFlags
             -> SAuto e Int -- left automaton ("producer")
-            -- NOTE: In the presence of rollbacks, the consumer may also produce!
             -> SAuto e Int -- right automaton ("consumer")
             -> SAuto e Int -- continuation
             -> SAuto e Int
