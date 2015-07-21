@@ -37,7 +37,7 @@ import Outputable
 import Data.Map.Strict ( Map ) 
 import qualified Data.Map.Strict as Map
 
--- import qualified Language.C.Syntax as C
+import qualified Language.C.Syntax as C
 import Language.C.Quote.C
 
 -- import Control.Monad.Identity
@@ -125,15 +125,20 @@ cgDeclQueues dfs qs action
         else do 
           let my_sizes_decl = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
               my_slots_decl = [cdecl|int my_slots[$int:(numqs)];|]
-              ts_init_stmts = [cstm| ts_init_var($int:(numqs),my_sizes,my_slots); |]
+              ts_init_stmts 
+                = [cstm| ts_init_var($int:(numqs),my_sizes,my_slots); |]
+             
               my_sizes_inits 
                 = concat $
                   Map.elems $ 
                   Map.mapWithKey (\qvar (QId i,siz) -- ignore slots
-                         -> [ [cstm| my_sizes[$int:i] = 
-                                     $(tySizeOf_C (nameTyp qvar));|]
-                            , [cstm| my_slots[$int:i] = $int:siz;|]
-                            ]) (qi_interm qs)
+                         -> let orig = "qvar type = " ++ show (nameTyp qvar)
+                            in [ [cstm| ORIGIN($string:orig);|]
+                               , [cstm|
+                                  my_sizes[$int:i] = 
+                                        $(tySizeOf_C (nameTyp qvar));|]
+                               , [cstm| my_slots[$int:i] = $int:siz;|]
+                               ]) (qi_interm qs)
 
              -- Append top declarations  
           appendTopDecl my_sizes_decl
@@ -396,16 +401,38 @@ cgAExpAtom dfs qs wins wouts aexp
     call = eCall loc fun_name (map (eVar loc) args)
 
 
-calcTsLen :: Int -> Ty -> Int
-calcTsLen 1 TBit = 1
-calcTsLen n TBit = (n+7) `div` 8
-calcTsLen n (TArray (Literal m) TBit)
-  | m `mod` 8 == 0
-  = n 
---   = (n * (m `div` 8)) WRONG!
-  | otherwise 
-  = error $ "Unaligned ts_get/put: not implemented yet, n =" ++ show n ++ ", m =" ++ show m
-calcTsLen n _ = n
+{--------------- Reading from TS queues -----------------------------}
+
+ts_read_n :: QId -> Int -> C.Exp -> C.Stm
+ts_read_n (QId qid) n ptr 
+  = [cstm| if (ts_getManyBlocking($int:qid,$int:n,$ptr) != $int:n) return 3; |]
+
+
+readFromTs :: DynFlags 
+           -> Int -> Ty -- # number of reads, and type of each read
+           -> QId       -- Queue id
+           -> C.Exp     -- Target variable to store to
+           -> Cg ()
+readFromTs _ 1 TBit q ptr = appendStmt $ ts_read_n q 1 ptr
+readFromTs _ n TBit q ptr = appendStmt $ ts_read_n q ((n+7) `div` 8) ptr
+readFromTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
+  | m `mod` 8 == 0 = appendStmt $ ts_read_n q n ptr
+  | otherwise -- Not byte-aligned byte array, a bit sad and slow
+  = do x <- CgMonad.freshName "ts_rdx" (TArray (Literal m) TBit) Mut
+       i <- CgMonad.freshName "ts_idx" tint Mut
+       cgMutBind dfs noLoc i Nothing $ do 
+       cgMutBind dfs noLoc x Nothing $ do
+         cx <- lookupVarEnv x
+         ci <- lookupVarEnv i
+         appendStmt $ [cstm| for ($ci = 0; $ci < $int:n; $ci++) {
+                                if (!ts_get($int:qid,(char *) $cx)) return 3;
+                                bitArrWrite((typename BitArrPtr) $cx,
+                                              $ci*$int:m,
+                                              $int:m,
+                                            (typename BitArrPtr) $ptr);
+                             } |]
+readFromTs _ n _ q ptr = appendStmt $ ts_read_n q n ptr
+
 
           
 cgInWiring :: DynFlags 
@@ -427,13 +454,11 @@ cgInWire dfs qs (n,qvar) v =
                  eAssign noLoc (eVar noLoc v) (eVar noLoc qvar)
         
     -- Some intermediate SORA queue
-    Just (QMid (QId qid)) -> do
+    Just (QMid q) -> do
       cv <- lookupVarEnv v
-      let realn = calcTsLen n (nameTyp qvar)
-      let ptr = if isPtrType (nameTyp v)
+      let ptr = if isPtrType (nameTyp v) 
                 then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
-      appendStmt [cstm| if (ts_getManyBlocking($int:qid,$int:realn,$ptr) != $int:realn) 
-                          return 3; |]
+      readFromTs dfs n (nameTyp qvar) q ptr
 
     -- Unexpected output queue
     Just QOut -> panicStr "cg_in_wire: encountered output queue!"
@@ -467,6 +492,40 @@ squashedQueueType n (TArray (Literal m) bt) = TArray (Literal (n*m)) bt
 squashedQueueType n t = TArray (Literal n) t
 
 
+
+{--------------- Writing to TS queues -----------------------------------------}
+
+ts_write_n :: QId -> Int -> C.Exp -> C.Stm
+ts_write_n (QId qid) n ptr = [cstm| ts_putMany($int:qid,$int:n,$ptr); |]
+
+
+writeToTs :: DynFlags 
+           -> Int -> Ty -- # number of writes, and type of each write
+           -> QId       -- Queue id
+           -> C.Exp     -- Source variable to read from
+           -> Cg ()
+writeToTs _ 1 TBit q ptr = appendStmt $ ts_write_n q 1 ptr
+writeToTs _ n TBit q ptr = appendStmt $ ts_write_n q ((n+7) `div` 8) ptr
+writeToTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
+  | m `mod` 8 == 0 = appendStmt $ ts_write_n q n ptr
+  | otherwise -- Not byte-aligned byte array, a bit sad and slow
+  = do x <- CgMonad.freshName "ts_rdx" (TArray (Literal m) TBit) Mut 
+       i <- CgMonad.freshName "ts_idx" tint Mut
+       cgMutBind dfs noLoc i Nothing $ do 
+       cgMutBind dfs noLoc x Nothing $ do
+         cx <- lookupVarEnv x
+         ci <- lookupVarEnv i
+         appendStmt $ [cstm| for ($ci = 0; $ci < $int:n; $ci++) {
+                                bitArrRead((typename BitArrPtr) $ptr,
+                                            $ci*$int:m,
+                                            $int:m,
+                                           (typename BitArrPtr) $cx);
+                                ts_put($int:qid,(char *) $cx);
+                             }|]
+
+writeToTs _ n _ q ptr = appendStmt $ ts_write_n q n ptr
+
+
 cgOutWiring :: DynFlags 
             -> QueueInfo
             -> [(Int,EId)] -- Output wires
@@ -486,12 +545,11 @@ cgOutWire dfs qs (n,qvar) v
          void $ codeGenExp dfs (eAssign noLoc (eVar noLoc qvar) (eVar noLoc v))
 
       -- Some intermediate SORA queue
-      Just (QMid (QId qid)) -> do
+      Just (QMid q) -> do
         cv <- lookupVarEnv v
-        let realn = calcTsLen n (nameTyp qvar)
         let ptr = if isPtrType (nameTyp v)
                   then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
-        appendStmt [cstm| ts_putMany($int:qid,$int:realn,$ptr);|]
+        writeToTs dfs n (nameTyp qvar) q ptr
 
       -- Unexpected input queue
       Just QIn -> panicStr "cg_out_wire: encountered the input queue!"
