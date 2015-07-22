@@ -124,15 +124,16 @@ data SimplNk atom nid
             , pipe_balances :: Map Chan Int -- balance of pipeline queues
             }
   | SDone { pipe_balances :: Map Chan Int -- balance of pipeline queues
-          }
+          , must_insert_rollback :: Maybe Int -- temporary info for zipping algorithm: record how far the
+          }                                   -- input queue of the left automaton has to be rolled back.
   deriving Show
 
 instance NodeKind SimplNk where
-  sucsOfNk (SDone _) = []
+  sucsOfNk (SDone {}) = []
   sucsOfNk (SAtom _ nxt _) = [nxt]
   sucsOfNk (SBranch _ nxt1 nxt2 _ _) = [nxt1,nxt2]
 
-  mapNkIds _ (SDone pipes) = SDone pipes
+  mapNkIds _ (SDone pipes rollback) = SDone pipes rollback
   mapNkIds f (SAtom watoms nxt pipes) = SAtom watoms (f nxt) pipes
   mapNkIds f (SBranch x nxt1 nxt2 l pipes) = SBranch x (f nxt1) (f nxt2) l pipes
 
@@ -296,7 +297,7 @@ concat_auto a1 a2 = a1' { auto_graph = concat_graph }
 
 mkDoneAutomaton :: Chan -> Chan -> SAuto e Int
 mkDoneAutomaton in_ch out_ch
-  = Automaton { auto_graph = Map.singleton 0 (Node 0 $ SDone Map.empty), auto_start = 0
+  = Automaton { auto_graph = Map.singleton 0 (Node 0 $ SDone Map.empty Nothing), auto_start = 0
               , auto_outchan = out_ch
               , auto_inchan  = in_ch
               }
@@ -315,7 +316,7 @@ replace_done_with :: Ord nid => nid -> SAuto e nid -> SAuto e nid
 replace_done_with nid a = map_auto_ids (\nid -> Map.findWithDefault nid nid replace_map) a
   where
     replace_map = Map.foldr fold_f Map.empty (auto_graph a)
-    fold_f (Node nid' (SDone _)) mp = Map.insert nid' nid mp
+    fold_f (Node nid' (SDone {})) mp = Map.insert nid' nid mp
     fold_f _ mp = mp
 
 -- debugging
@@ -448,7 +449,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
 
     go (ARepeat c) =
       case nodeKindOfId k (auto_start k) of
-        SDone _ -> do
+        SDone {} -> do
           a0 <- mkAutomaton dfs sym chans c k
           let nid = auto_start k
           let node = fromJust $ assert (Map.member (auto_start a0) (auto_graph a0)) $
@@ -460,7 +461,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
         _ -> fail "Repeat should not have a continuation!"
 
     go (AWhile x c) = do
-      let k' = insert_prepend (SDone Map.empty) k
+      let k' = insert_prepend (SDone Map.empty Nothing) k
       let nid = auto_start k'
       a0 <- mkAutomaton dfs sym chans c k'
       let nkind = SBranch x (auto_start a0) (auto_start k) True Map.empty
@@ -468,7 +469,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       return $ assert (auto_closed a0) $ assert (auto_closed a) a
 
     go (AUntil x c) = do
-      let k' = insert_prepend (SDone Map.empty) k
+      let k' = insert_prepend (SDone Map.empty Nothing) k
       let nid = auto_start k'
       a0 <- mkAutomaton dfs sym chans c k'
       let nkind = SBranch x (auto_start k) (auto_start a0) True Map.empty
@@ -528,7 +529,7 @@ mkDoneDist threshold a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph
 
   -- we compute the done-distances in a backwards-fashion, starting from the Done node(s).
   dones = map (,NewDist 0) $
-          filter (\nid -> case nodeKindOfId a nid of { SDone _ -> True; _ -> False }) $
+          filter (\nid -> case nodeKindOfId a nid of { SDone {} -> True; _ -> False }) $
           Map.keys (auto_graph a)
 
   -- Inital distance-map.
@@ -724,9 +725,9 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
     -- Zips automata in accordance with the tick/proc-based standard Ziria semantics
     -- (i.e. lazy, right-biased, pull-style semantics).
     zipLazy :: PipeState -> Map Chan Int -> ProdNid -> SimplNk e Int -> SimplNk e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
-
-    zipLazy pipe_state pipe_balances prod_nid nk1 (SDone _)
-      = insertNk prod_nid (SDone pipe_balances)
+ 
+    zipLazy pipe_state pipe_balances prod_nid nk1 (SDone {})
+      = insertNk prod_nid (SDone pipe_balances Nothing)
 
     zipLazy pipe_state pipe_balances prod_nid@(id1,_,_) nk1 (SBranch x l r w _) =
       let prod_nid_l = mkProdNid pipe_state id1 l
@@ -760,8 +761,8 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
       in zipNodes pipe_state' next_prod_nid . insertNk prod_nid prod_nkind
 
      -- if we reach this case, the pipeline is already drained as far as possible
-    zipLazy pipe_state pipe_balances prod_nid nk1@(SDone {}) _nk2 =
-      insertNk prod_nid (SDone pipe_balances)
+    zipLazy pipe_state pipe_balances prod_nid (SDone {}) _nk2 =
+      insertNk prod_nid (SDone pipe_balances Nothing)
 
 
 
@@ -772,7 +773,7 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
 
 
 ------------------------------------------------- OLD ------------------------------------------------------
-    zipOptimistic pipe_state pipe_balances prod_nid nk1 (SDone _)
+    zipOptimistic pipe_state pipe_balances prod_nid nk1 (SDone {})
       | let rollback = rollbackInDistance 0 pipe_state
       , rollback > 0
       = -- Hack to create fresh product-node id
@@ -780,12 +781,12 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
                              , 1 + (fst $ Map.findMax $ auto_graph a2)
                              , (0,Map.empty) )
             final_pipe_balances = Map.adjust (+ rollback) (auto_inchan a1) pipe_balances
-            final_nk = SDone final_pipe_balances
+            final_nk = SDone final_pipe_balances (Just rollback)
             rollback_nk = SAtom (rollbackWAtom pipe_ch rollback) final_prod_nid pipe_balances
         in insertNk final_prod_nid final_nk . insertNk prod_nid rollback_nk
 
-    zipOptimistic pipe_state pipe_balances prod_nid nk1 (SDone _) =
-        insertNk prod_nid (SDone pipe_balances)
+    zipOptimistic pipe_state pipe_balances prod_nid nk1 (SDone {}) =
+        insertNk prod_nid (SDone pipe_balances Nothing)
 
     zipOptimistic pipe_state pipe_balances prod_nid@(id1,_,_) nk1 (SBranch x l r w _) =
       let prod_nid_l = mkProdNid pipe_state id1 l
@@ -820,8 +821,8 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
       in zipNodes pipe_state' next_prod_nid . insertNk prod_nid prod_nkind
 
      -- if we reach this case, the pipeline is already drained as far as possible
-    zipOptimistic pipe_state pipe_balances prod_nid (SDone _) nk2
-      = insertNk prod_nid (SDone pipe_balances)
+    zipOptimistic pipe_state pipe_balances prod_nid (SDone {}) nk2
+      = insertNk prod_nid (SDone pipe_balances Nothing)
 
 
     -- Try executing a wired atom from the right automaton.
@@ -930,7 +931,7 @@ pruneUnreachable a nid = fixup $ a { auto_graph = prune (auto_graph a) nid }
     pruneBkw suc nmap nid =
       case Map.lookup nid nmap of
         Nothing -> nmap
-        Just (Node _ (SDone {})) -> assert False undefined
+        Just (Node _ (SDone {})) -> panicStr "pruneBkw: impossible predecessor!"
         Just (Node _ (SAtom _ next _)) -> if next==suc then prune nmap nid else nmap
         Just (Node _ (SBranch x suc1 suc2 _ pipes))
           | suc == suc1 -> -- suc2 becomes the unique sucessor (since suc1 is unreachable)
@@ -939,13 +940,13 @@ pruneUnreachable a nid = fixup $ a { auto_graph = prune (auto_graph a) nid }
           | suc == suc2 -> -- suc1 becomes the unique sucessor (since suc2 is unreachable)
             let nk = SAtom (assertWAtom True x) suc1 pipes
             in Map.insert nid (Node nid nk) nmap
-          | otherwise -> assert False undefined
+          | otherwise -> panicStr "pruneBkw: impossible predecessor!"
 
     fixup a =
       let s = auto_start a in
       let nmap = auto_graph a in
       if Map.member s nmap then a
-      else a { auto_graph = Map.insert s (Node s $ SDone Map.empty) nmap }
+      else a { auto_graph = Map.insert s (Node s $ SDone Map.empty Nothing) nmap }
 
 
 -- Prune all nodes that terminate with data still in the pipe.
@@ -961,10 +962,11 @@ clearUnfinished a = fixup $  Map.foldl clear (nmap, []) nmap
   where
     nmap = auto_graph a
     done_nid = nextNid a
-    done_nk = SDone Map.empty -- an empty map is equivalent to a map with range = {0}
+    done_nk = SDone Map.empty Nothing -- an empty map is equivalent to a map with range = {0}
 
     clear :: (SNodeMap e Int, [Int]) -> SNode e Int -> (SNodeMap e Int, [Int])
-    clear (nmap, done_ids) (Node nid (SDone pipes))
+    clear (nmap, done_ids) (Node nid (SDone pipes rollback))
+      | Just _ <- rollback = panicStr "clear: bug in implementation: did not insert rollback!"
       | all (==0) (Map.elems pipes) = (nmap, nid:done_ids)
       | otherwise = (insertNk nid clear_nk nmap, done_ids)
       where clear_nk = SAtom (clearWAtom pipes) done_nid pipes
@@ -977,22 +979,19 @@ clearUnfinished a = fixup $  Map.foldl clear (nmap, []) nmap
                         | otherwise           = nid
 
 insertRollbacks :: forall e. Atom e => Bool -> Chan -> SAuto e Int -> SAuto e Int
-insertRollbacks lazy pipe_ch a = a { auto_graph = Map.foldl go nmap nmap } where
+insertRollbacks lazy rollback_ch a = a { auto_graph = Map.foldl go nmap nmap } where
   nmap = auto_graph a
 
   go :: SNodeMap e Int -> SNode e Int -> SNodeMap e Int
-  go nmap (Node nid (SDone pipes)) = case Map.lookup pipe_ch pipes of
-    Nothing -> panicStr "insertRollbacks: pipe_ch should be in scope!"
-    Just n | n<0  -> panicStr "insertRollbacks: can't have negative pipe balance!"
-           | n==0 -> nmap -- nothing to do
-           | otherwise ->
-      assert (not lazy) $
-      insertNk nid rollback_nk $
-      insertNk final_nid final_nk $ nmap
-      where
-        rollback_nk = SAtom (rollbackWAtom pipe_ch n) final_nid pipes
-        final_nid = fst (Map.findMax nmap) + 1
-        final_nk = SDone $ Map.insert pipe_ch 0 pipes
+  go nmap (Node nid (SDone pipes rollback))
+    | Nothing <- rollback = nmap
+    | Just 0 <- rollback = insertNk nid (SDone pipes Nothing) nmap
+    | Just n <- rollback, n>0, not lazy =
+      let rollback_nk = SAtom (rollbackWAtom rollback_ch n) final_nid pipes
+          final_nid = fst (Map.findMax nmap) + 1
+          final_nk = SDone (Map.insert rollback_ch 0 pipes) Nothing
+      in insertNk nid rollback_nk $ insertNk final_nid final_nk $ nmap
+    | otherwise = panicStr "insertRollbacks: impossible case!"
   go nmap _ = nmap
 
 
@@ -1146,7 +1145,8 @@ dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfi
 simplToCfg :: SAuto e nid -> CfgAuto e nid
 simplToCfg a = a { auto_graph = Map.map nodeToCfg $ auto_graph a }
   where nodeToCfg (Node nid nkind) = Node nid (nkToCfg nkind)
-        nkToCfg (SDone _) = CfgDone
+        nkToCfg (SDone _ Nothing) = CfgDone
+        nkToCfg (SDone _ (Just _)) = panicStr "simplToCfg: missing rollback encountered!"
         nkToCfg (SAtom wa nxt pipes) = CfgAction [wa] nxt pipes
         nkToCfg (SBranch x nxt1 nxt2 l _) = CfgBranch x nxt1 nxt2 l
 
