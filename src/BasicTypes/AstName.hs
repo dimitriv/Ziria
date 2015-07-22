@@ -76,7 +76,7 @@ instance Ord (GName t) where
   nm1 <= nm2 = (uniqId nm1 <= uniqId nm2)
 
 instance Show (GName t) where
-  show (MkName x _id _ _ _loc _)    = x
+  show (MkName _x _id _ _ _loc d)    = d
 
 
 toName :: String -> SrcLoc -> t -> MutKind -> GName t
@@ -111,6 +111,9 @@ instance Outputable ty => Outputable (GName ty) where
 ppName :: GName ty -> Doc
 ppName nm = ppNameUniq nm
             -- text (name nm)
+
+ppNameDoc :: Outputable ty => GName ty -> Doc
+ppNameDoc nm = ppr nm <> braces (text (nameDoc nm))
 
 ppNameUniq :: GName ty -> Doc
 ppNameUniq nm = text (name nm) <> braces (text $ show $ uniqId nm)

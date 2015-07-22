@@ -87,6 +87,7 @@ module CgMonad
   , appendStmt
   , appendStmts
   , appendLabeledBlock
+  , appendLabeledBlockNoScope
   , appendStructDef
 
   , codeStmt
@@ -726,6 +727,12 @@ appendLabeledBlock i m
   = do { (decls, stms) <- inNewBlock_ m
        ; appendDecls decls -- Propagate those out!
        ; appendStmt [cstm|$id:i: { $stms:stms }|] }
+
+appendLabeledBlockNoScope :: C.ToIdent i => i -> Cg () -> Cg ()
+appendLabeledBlockNoScope i m
+  = do { (decls, stms) <- inNewBlock_ m
+       ; appendDecls decls -- Propagate those out!
+       ; appendStmts $ ([cstm|$id:i: ORIGIN(""); |] : stms) }
 
 
 extendFunEnv :: GName CTy -> CompFunGen -> Cg a -> Cg a

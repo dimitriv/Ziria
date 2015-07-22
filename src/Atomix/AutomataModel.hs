@@ -686,7 +686,7 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
              assert (auto_closed a1) $
              assert (auto_closed a2) $
              (if prune then pruneUnfinished else clearUnfinished) $
-             insertRollbacks lazy pipe_ch $
+             -- insertRollbacks lazy pipe_ch $
              normalize_auto_ids 0 $
              Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) start_prod_nid
     start_prod_nid = mkProdNid empty_pipe_state (auto_start a1) (auto_start a2)

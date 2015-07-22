@@ -196,13 +196,12 @@ cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
    queues = extractQueues auto
 
    cg_automaton             = mapM_ cg_node (Map.elems graph)
-   cg_node (Node nid nk)    = appendLabeledBlock (lblOfNid nid) (cg_nkind nk)
+   cg_node (Node nid nk)    = appendLabeledBlockNoScope (lblOfNid nid) (cg_nkind nk)
    cg_nkind CfgDone         = appendStmt [cstm| return 0; |]
    cg_nkind (CfgLoop next)  = appendStmt [cstm| goto $id:(lblOfNid next);|]
    cg_nkind (CfgBranch c l r _) = do
      cc <- lookupVarEnv c
-     appendStmt [cstm| if ($cc) { goto $id:(lblOfNid l); } 
-                       else { goto $id:(lblOfNid r); } |]
+     appendStmt [cstm| if ($cc) goto $id:(lblOfNid l); else goto $id:(lblOfNid r); |]
    cg_nkind (CfgAction atoms next _pipes) = do 
      inAllocFrame noLoc $ pushAllocFrame $ mapM_ (cgAtom dfs queues) atoms
      appendStmt [cstm| goto $id:(lblOfNid next);|]
@@ -252,14 +251,15 @@ cgAtom dfs qnfo (WiredAtom win wout the_atom)
         assert "cgAtom/Cast" (singleton wout) $
         cgCastAtom dfs qnfo (head win) (head wout) intty outty
       SADiscard inty -> 
-        assert "cgAtom/Cast" (singleton win) $
+        assert "cgAtom/Cast" (singleton win) $ 
         assert "cgAtom/Discard" (null wout)  $
         cgDiscAtom dfs qnfo (head win) inty
       SARollback _queue _n ->
-        fail "NOT IMPLEMENTED (SARollback)!!"
-      SAClear {} ->
-        fail "NOT IMPLEMENTED (SAClear)!!"
-
+        fail ("NOT IMPLEMENTED (SARollback), queue = " ++ (show _queue) ++ ", n = " ++ show _n)
+      SAClear qmap -> do 
+        let mk_disc (q,n) = WiredAtom [(n,q)] [] (SADiscard (n, nameTyp q))
+        mapM_ (cgAtom dfs qnfo . mk_disc) (Map.toList qmap)
+      
   where singleton [_] = True
         singleton _   = False
         
@@ -282,7 +282,7 @@ cgAssertAtom dfs qs (_,inwire) b = do
              vunit = eVal loc TUnit VUnit
 
          _ <- codeGenExp dfs $ 
-              if b then eIf loc (eUnOp loc Neg (eVar loc storage)) err vunit
+              if b then eIf loc (eUnOp loc Not (eVar loc storage)) err vunit
                    else eIf loc (eVar loc storage) err vunit
 
          return ();
