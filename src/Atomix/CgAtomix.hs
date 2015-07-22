@@ -45,7 +45,7 @@ import Control.Monad ( unless, void )
 import Data.Loc
 import Text.PrettyPrint.HughesPJ
 -- import qualified GenSym as GS
-import Data.List ( nub )
+-- import Data.List ( nub )
 -- import CtExpr 
 -- import CtComp
 -- import TcRename 
@@ -83,7 +83,7 @@ cgRnSt dfs (RnSt { st_bound_vars = bound
       = cg_fdefs fds (cgFunDefined_clos dfs (funLoc fun) fun clos m)
     cg_bound [] m = m
     cg_bound (x:xs) m
-      = cg_bound xs (cgMutBind dfs noLoc x Nothing m)
+      = cg_bound xs (cgGlobMutBind dfs noLoc x m)
 
     is_external (MkFun (MkFunExternal {}) _ _) = True
     is_external _ = False
@@ -91,6 +91,10 @@ cgRnSt dfs (RnSt { st_bound_vars = bound
 
 lblOfNid :: Int -> CLabel
 lblOfNid x = "BLOCK_" ++ show x
+
+wiredAtomNameOfLbl :: String -> SrcLoc -> Ty -> EId
+wiredAtomNameOfLbl str loc ty = toName (alphaNumStr str) loc ty Imm
+
 
 
 mkCastTyArray :: Int -> Ty -> Ty
@@ -152,7 +156,7 @@ cgDeclQueues dfs qs action
   where bind_queue_vars m [] = m
         bind_queue_vars m (q1:qss)
           = do cgIO $ putStrLn ("Declaring temporary variable for queue: " ++ show q1)
-               cgMutBind dfs noLoc q1 Nothing (bind_queue_vars m qss)
+               cgGlobMutBind dfs noLoc q1 (bind_queue_vars m qss)
 
 
 -- | Extract all introduced queues, and for each calculate the maximum
@@ -217,21 +221,22 @@ cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
    cg_def_nkind (CfgAction atoms _ _) m = cg_def_atoms' atoms m 
 
    cg_def_atoms' [] m = m
-   cg_def_atoms' (a:as) m = cgDefAtom dfs a (cg_def_atoms' as m)
+   cg_def_atoms' (a:as) m = cgDefAtom dfs queues a (cg_def_atoms' as m)
 
 
 cgDefAtom :: DynFlags
+          -> QueueInfo
           -> WiredAtom SymAtom
           -> Cg a
           -> Cg a
-cgDefAtom dfs (WiredAtom win wout the_atom) m
+cgDefAtom dfs qs (WiredAtom win wout the_atom) m
   = case the_atom of
       SAAssert {}   -> m
       SACast {}     -> m
       SADiscard {}  -> m
       SARollback {} -> m
       SAClear {}    -> m
-      SAExp aexp    -> cgAExpDefAtom dfs win wout aexp m
+      SAExp aexp    -> cgAExpDefAtom dfs qs win wout aexp m
 
 -- | Code generation for an atom
 cgAtom :: DynFlags
@@ -246,18 +251,20 @@ cgAtom dfs qnfo (WiredAtom win wout the_atom)
 
       SAExp aexp -> 
         cgAExpAtom dfs qnfo win wout aexp
-      SACast intty outty  -> 
+      SACast _ intty outty  -> 
         assert "cgAtom/Cast" (singleton win)  $
         assert "cgAtom/Cast" (singleton wout) $
         cgCastAtom dfs qnfo (head win) (head wout) intty outty
-      SADiscard inty -> 
+      SADiscard _ inty -> 
         assert "cgAtom/Cast" (singleton win) $ 
         assert "cgAtom/Discard" (null wout)  $
         cgDiscAtom dfs qnfo (head win) inty
       SARollback _queue _n ->
         fail ("NOT IMPLEMENTED (SARollback), queue = " ++ (show _queue) ++ ", n = " ++ show _n)
       SAClear qmap -> do 
-        let mk_disc (q,n) = WiredAtom [(n,q)] [] (SADiscard (n, nameTyp q))
+        sym <- getSymEnv
+        b <- cgIO $ newBlockId sym noLoc "clr" 
+        let mk_disc (q,n) = WiredAtom [(n,q)] [] (SADiscard b (n, nameTyp q))
         mapM_ (cgAtom dfs qnfo . mk_disc) (Map.toList qmap)
       
   where singleton [_] = True
@@ -297,8 +304,8 @@ cgCastAtom :: DynFlags
 cgCastAtom dfs qs (n,inwire) 
                   (m,outwire) 
                   (n',inty) 
-                  (m',_outty)
-  = assert "cgCastAtom" (n == n' && m == m') $ do 
+                  (m',_outty) 
+  = assert "cgCastAtom" (n == n' && m == m') $ do
     case (qiQueueId inwire qs, qiQueueId outwire qs) of 
       (Nothing, _) -> assert "cgCastAtom" (n == 1) $
                       cgOutWiring dfs qs [(m,outwire)] [inwire]
@@ -325,6 +332,9 @@ cgDiscAtom dfs qs (n,inwire) (n',inty)
          cgInWiring dfs qs [(n,inwire)] [storage]
 
 
+
+{- OLD: generating code for an Atom, not a wired atom. Not deleting as we may 
+ - want to re-introduce at some point. 
 mkAExpFunName :: [EId] -> [EId] -> AExp () -> (EId,[EId])
 mkAExpFunName wires_in wires_out aexp = (fun_name, params)
   where 
@@ -346,18 +356,46 @@ mkAExpFunDef wires_in wires_out aexp = mkFunDefined loc fun_name params fun_body
     (fun_name,params) = mkAExpFunName wires_in wires_out aexp
     loc      = expLoc fun_body
     fun_body = aexp_exp aexp
+-}
+
 
 cgAExpDefAtom :: DynFlags 
+              -> QueueInfo
               -> [(Int,EId)] -- ^ in wires
               -> [(Int,EId)] -- ^ out wires
               -> AExp ()
               -> Cg a
               -> Cg a
-cgAExpDefAtom dfs wins wouts aexp m
+cgAExpDefAtom dfs qs wins wouts aexp m 
   = do mb <- lookupExpFunEnv_maybe fun_name
-       case mb of Just {} -> m
-                  Nothing -> cgFunDefined_clos dfs loc fun [] (dbg_m >> m)
+       case mb of 
+        Just {} -> m
+        Nothing -> cg_define_atom (dbg_m >> m)
   where
+    cg_define_atom action
+      = assert "cgAExpDefAtom: TUnit return" (ret_ty == TUnit) $ do
+          (cdecls,cstmts,cbody)
+             <- inNewBlock $ pushAllocFrame $
+                do { cgInWiring dfs qs wins wires_in       -- wiring 
+                   ; b <- codeGenExp dfs fun_body          -- body
+                   ; cgOutWiring dfs qs wouts  wires_out   -- wiring
+                   ; return b }
+
+          -- Prototype
+          appendTopDecl [cdecl| $ty:(codeGenTyOcc TUnit) $id:(name fun_name)();|]
+
+          -- Implementation 
+          appendTopDef $
+            [cedecl| $ty:(codeGenTyOcc TUnit)
+                  $id:(name fun_name)() {
+                          $decls:cdecls    // Define things needed for body
+                          $stms:cstmts     // Emit rest of body
+                          return $(cbody);
+                 } |]
+
+          -- Extend environment and go on
+          extendExpFunEnv fun_name (fun_name, [], False) action
+
     dbg_m = cgIO $ print $ vcat [ text "cgAExpAtom:" <+> ppr fun_name
                                 , text "ivs       :" <+> ppr wires_in
                                 , text "ovs       :" <+> ppr wires_out
@@ -370,8 +408,9 @@ cgAExpDefAtom dfs wins wouts aexp m
     wires_in  = map snd wins
     -- output wires
     wires_out = map snd wouts
-    fun_name = funName fun
-    fun = mkAExpFunDef wires_in wires_out aexp
+    fun_name  = wiredAtomNameOfLbl (aexp_lbl aexp) loc (TArrow [] TUnit)
+    fun_body  = aexp_exp aexp   
+    ret_ty    = aexp_ret aexp -- Must be Unit!
 
 cgAExpAtom :: DynFlags
            -> QueueInfo
@@ -379,29 +418,17 @@ cgAExpAtom :: DynFlags
            -> [(Int,EId)] -- ^ out wires
            -> AExp ()
            -> Cg ()
-cgAExpAtom dfs qs wins wouts aexp 
+cgAExpAtom dfs _qs wins wouts aexp
   = assert "cgAExpAtom" (all (\x -> fst x == 1) wins)  $
     assert "cgAExpAtom" (all (\x -> fst x == 1) wouts) $ 
-    do  cgInWiring dfs qs wins (map snd wins) 
-
-        _ccall <- codeGenExp dfs call
-
-        -- Can safely always discard _ccal because it is going to be UNIT, 
+    do _ccall <- codeGenExp dfs call
+        -- Can safely always discard _ccall because it is going to be UNIT, 
         -- see CgCall.hs 
-
-        cgOutWiring dfs qs wouts (map snd wouts)
-
+       return ()
   where
-    loc  = expLoc body
-    body = aexp_exp aexp
-    -- input wires
-    wires_in  = map snd wins
-    -- output wires
-    wires_out = map snd wouts
-
-    fun_name = fst $ mkAExpFunName wires_in wires_out aexp
-    args = nub (wires_in ++ wires_out)
-    call = eCall loc fun_name (map (eVar loc) args)
+    loc      = expLoc (aexp_exp aexp)
+    fun_name = wiredAtomNameOfLbl (aexp_lbl aexp) loc (TArrow [] TUnit)
+    call     = eCall loc fun_name []
 
 
 {--------------- Reading from TS queues -----------------------------}
@@ -420,6 +447,7 @@ readFromTs _ 1 TBit q ptr = appendStmt $ ts_read_n q 1 ptr
 readFromTs _ n TBit q ptr = appendStmt $ ts_read_n q ((n+7) `div` 8) ptr
 readFromTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
   | m `mod` 8 == 0 = appendStmt $ ts_read_n q n ptr
+  | n == 1         = appendStmt $ ts_read_n q 1 ptr
   | otherwise -- Not byte-aligned byte array, a bit sad and slow
   = do x <- CgMonad.freshName "ts_rdx" (TArray (Literal m) TBit) Mut
        i <- CgMonad.freshName "ts_idx" tint Mut
@@ -511,6 +539,7 @@ writeToTs _ 1 TBit q ptr = appendStmt $ ts_write_n q 1 ptr
 writeToTs _ n TBit q ptr = appendStmt $ ts_write_n q ((n+7) `div` 8) ptr
 writeToTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
   | m `mod` 8 == 0 = appendStmt $ ts_write_n q n ptr
+  | n == 1 = appendStmt $ ts_write_n q 1 ptr
   | otherwise -- Not byte-aligned byte array, a bit sad and slow
   = do x <- CgMonad.freshName "ts_rdx" (TArray (Literal m) TBit) Mut 
        i <- CgMonad.freshName "ts_idx" tint Mut
