@@ -256,9 +256,9 @@ cgAtom dfs qnfo (WiredAtom win wout the_atom)
         assert "cgAtom/Discard" (null wout)  $
         cgDiscAtom dfs qnfo (head win) inty
       SARollback _queue _n ->
-        fail "NOT IMPLEMENTED!!"
+        fail "NOT IMPLEMENTED (SARollback)!!"
       SAClear {} ->
-        fail "NOT IMPLEMENTED!!"
+        fail "NOT IMPLEMENTED (SAClear)!!"
 
   where singleton [_] = True
         singleton _   = False
