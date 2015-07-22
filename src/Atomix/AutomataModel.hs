@@ -1067,11 +1067,11 @@ fuseActions auto = auto { auto_graph = fused_graph }
         (wl,nmap) <- markAndFuse next nmap
         -- ... then perform merger if possible
         return $ case fromJust $ assert (Map.member next nmap) $ Map.lookup next nmap of
+          -- Don't fuse shared nodes in order to avoid code duplication.
+          -- TODO: we may want to allow more aggressive fusing with a compiler flag,
+          -- as it can lead to better performance under parallel execution (since state
+          -- transitions require synchronization and are hence expensive).
           Node _ (CfgAction atoms' next' pipes') | Set.size (preds next) <= 1 ->
-                                                   -- NB: Don't fuse if original graph
-                                                   -- contained > 1 predecessors. Reason
-                                                   -- is to avoid duplicating code.
-                                                   -- TODO: Steffen add example.
             let pipes'' = Map.unionWith (curry fst) pipes pipes' in
             let node = Node nid (CfgAction (atoms++atoms') next' pipes'') in
             (wl, Map.insert nid node nmap)
