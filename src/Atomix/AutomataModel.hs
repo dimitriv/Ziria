@@ -260,10 +260,13 @@ countWrites ch wa = sum $ map fst $ filter ((== ch) . snd) $ wires_out wa
 countReads :: Chan -> WiredAtom a -> Int
 countReads  ch wa = sum $ map fst $ filter ((== ch) . snd) $ wires_in  wa
 
+-- in the presence of rollbacks, an atom may consume from and produce for the same queue
+atomCost :: Chan -> WiredAtom a -> Int
+atomCost ch wa = countReads ch wa - countWrites ch wa
+
 nextPipes :: [WiredAtom a] -> Map Chan Int -> Map Chan Int
 nextPipes watoms pipes = Map.mapWithKey updatePipe pipes
-  where updatePipe pipe n = n + sum (map (countWrites pipe) watoms)
-                              - sum (map (countReads pipe) watoms)
+  where updatePipe pipe n = n - sum (map (atomCost pipe) watoms)
 
 next_pipe_balances :: SimplNk atom nid -> Map Chan Int
 next_pipe_balances (SAtom wa _ pipes) = nextPipes [wa] pipes
@@ -566,8 +569,7 @@ mkDoneDist threshold a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph
     if new_dist > threshold then Truncation else NewDist new_dist
 
   cost nid
-    | SAtom watom _ _ <- nodeKindOfId a nid = countReads (auto_inchan a) watom
-                                            - countWrites (auto_inchan a) watom -- there may be rollbacks...
+    | SAtom watom _ _ <- nodeKindOfId a nid = atomCost (auto_inchan a) watom
     | otherwise                             = 0
 
 
@@ -593,7 +595,7 @@ mkExecutionCost n a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph a)
 
   go' 0 nk = return 0
   go' n (SAtom wa next _)
-    | let atom_cost = countReads (auto_inchan a) wa - countWrites (auto_inchan a) wa
+    | let atom_cost = atomCost (auto_inchan a) wa
     , atom_cost > 0
     = (+ atom_cost) <$> go (n-1) next
   go' n nk = maximum <$> mapM (go n) (sucsOfNk nk)
@@ -687,7 +689,7 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
              assert (auto_closed a1) $
              assert (auto_closed a2) $
              (if prune then pruneUnfinished else clearUnfinished) $
-             -- insertRollbacks lazy pipe_ch $
+             (if lazy then id else insertRollbacks lazy (auto_outchan a1)) $
              normalize_auto_ids 0 $
              Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) start_prod_nid
     start_prod_nid = mkProdNid empty_pipe_state (auto_start a1) (auto_start a2)
