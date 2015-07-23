@@ -67,6 +67,7 @@ data DynFlag =
   | DumpAutomaton
   | PrintPipeNames
   | PruneIncompleteStates
+  | Optimism Int
 
   | Vectorize
   | AutoLUT
@@ -178,6 +179,7 @@ options =
 
      , Option []    ["print-pipe-names"]  (NoArg PrintPipeNames) "show names of pipes in Automaton"
      , Option []    ["prune-incomplete-states"]  (NoArg PruneIncompleteStates) "prune automaton states that terminate with data still in the pipeline"
+     , Option []    ["optimism"]         (OptArg parseOptimism "INTEGER") "pipeline optimism"
 
 
      , Option []    ["ddump-ast-pretty"] (NoArg DumpAstPretty) "dump the parsed AST (pretty-printed)"
@@ -219,6 +221,13 @@ options =
 
 usage :: String
 usage = "Usage: wpl [OPTION...] files..."
+
+parseOptimism :: Maybe String -> DynFlag
+parseOptimism Nothing = Optimism defaultOptimism
+parseOptimism (Just i) = Optimism (read i)
+
+defaultOptimism :: Int
+defaultOptimism = 0
 
 parseAffinityMask :: Maybe String -> DynFlag
 parseAffinityMask Nothing  = AffinityMask defaultAffinityMask
@@ -286,3 +295,10 @@ getName opts =
     [] -> ""
     (Name name : _) -> name
     (_ : opts') -> getName opts'
+
+getOptimism :: DynFlags -> Int
+getOptimism dfs =
+  case dfs of
+    [] -> defaultOptimism
+    (Optimism optimism : _) -> optimism
+    (_ : dfs) -> getOptimism dfs
