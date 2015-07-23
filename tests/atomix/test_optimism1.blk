@@ -1,0 +1,12 @@
+{-
+
+Test to investigate the behavior of optimistic zipping.
+Note also that vectorization seems to have an unpleasant effect.
+
+-}
+
+let comp main = 
+  read[int] >>>
+  repeat emit 1 >>>
+  repeat take >>>
+  write[int]
