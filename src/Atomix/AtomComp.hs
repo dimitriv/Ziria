@@ -1,6 +1,7 @@
 module AtomComp  where 
 
 import AstExpr 
+import AstUnlabelled ( eVar )
 import AstComp
 
 import Outputable
@@ -15,6 +16,12 @@ data AExp b
            , aexp_ret :: Ty      -- ^ return type
            , aexp_nfo :: b }     -- ^ other stuff
   deriving Eq
+
+substAExp :: EId -> EId -> AExp b -> AExp b
+substAExp x t (MkAExp lbl e ivs ovs ret nfo) = MkAExp lbl e' ivs' ovs' ret nfo
+  where e'   = substExp [] [(x, eVar (nameLoc t) t)] e
+        ivs' = map (\v -> if v == x then t else v) ivs
+        ovs' = map (\v -> if v == x then t else v) ovs
 
 instance Outputable (AExp b) where
   ppr ae = vcat [ ppr (aexp_lbl ae) <> colon
@@ -35,19 +42,20 @@ data AComp a b
 data AComp0 a b
   = ATake1 String Ty               -- String is a uniq label
   | ATakeN String Ty Int           -- String is a uniq label
-  | AEmit1 (AExp b)
   | AEmitN String Ty Int EId       -- AEmitN t n e invariant:  e : arr[n] 
   | ACast String (Int,Ty) (Int,Ty) -- ACast (n1,t1) (n2,t2)
-                                   -- takes n1*t1 and emits n2*t2 (and n1*sizeof(t1) = n2*sizeof(t2))
-  | AReturn (AExp b)
+                                   -- takes n1*t1 and emits n2*t2 
+                                   --   where n1*sizeof(t1) = n2*sizeof(t2))
 
+  | AReturn (AExp b)       -- Maybe EId -> AExp b
+  | AEmit1 (AExp b)        -- EId -> AExp b
 
-  | ABind (Maybe EId) (AComp a b) (AComp a b) 
+  | ATakeEmit   EId (AExp b)
+  | ATakeReturn EId (AExp b)
 
+  | ABind (Maybe EId) (AComp a b) (AComp a b)
   | APar ParInfo (AComp a b) Ty (AComp a b)
-
   | ABranch EId (AComp a b) (AComp a b)
-
   | ARepeatN Int (AComp a b)
   | ARepeat (AComp a b)
 
@@ -75,7 +83,17 @@ aReturn   :: SrcLoc -> a -> AExp b -> AComp a b
 aReturn loc a e = MkAComp loc a (AReturn e)
 
 aBind :: SrcLoc -> a -> Maybe EId -> AComp a b -> AComp a b -> AComp a b
-aBind loc a mx c1 c2 = MkAComp loc a (ABind mx c1 c2)
+aBind loc a mx c1 c2 
+  | ATake1 {}   <- acomp_comp c1
+  , Just x      <- mx
+  , AEmit1 aexp <- acomp_comp c2
+  = MkAComp loc a (ATakeEmit x aexp)
+  | ATake1 {}    <- acomp_comp c1
+  , Just x       <- mx
+  , AReturn aexp <- acomp_comp c2
+  = MkAComp loc a (ATakeReturn x aexp)
+  | otherwise
+  = MkAComp loc a (ABind mx c1 c2)
 
 aPar :: SrcLoc -> a -> ParInfo -> AComp a b -> Ty -> AComp a b -> AComp a b
 aPar loc a p c1 t c2 = MkAComp loc a (APar p c1 t c2)
@@ -109,6 +127,9 @@ ppAComp0 (ACast s (n1,t1) (n2,t2))
   = brackets (int n1 <> (text "*") <> parens (ppr t1)) <> 
     (text "-cast") <> parens (text s) <> (text "-") <> 
     brackets (int n2 <> (text "*") <> parens (ppr t2))
+
+ppAComp0 (ATakeEmit x e)   = text "take-emit" <+> ppr x <+> braces (ppr e)
+ppAComp0 (ATakeReturn x e) = text "take-retn" <+> ppr x <+> braces (ppr e)
 
 ppAComp0 (ABind mx c1 c2) = vcat [ ppr mx <+> text "<-" <+> ppr c1 
                                  , ppr c2 ]
