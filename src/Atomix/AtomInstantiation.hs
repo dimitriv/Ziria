@@ -96,7 +96,8 @@ instance Atom SymAtom where
               (EVar x, Just retvar) 
                  -> SACast (aexp_lbl e) (1,nameTyp x) (1,nameTyp x)
               (_, Nothing) 
-                 -> SAExp e { aexp_exp = eSeq loc body (eVal loc TUnit VUnit), aexp_ret = TUnit }
+                 -> SAExp e { aexp_exp = eSeq loc body (eVal loc TUnit VUnit)
+                            , aexp_ret = TUnit }
               (_, Just retvar)
                  -> SAExp e { aexp_exp = eAssign loc (eVar loc retvar) body
                             , aexp_ovs = retvar : aexp_ovs e 
