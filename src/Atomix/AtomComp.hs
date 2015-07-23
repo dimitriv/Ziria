@@ -33,10 +33,10 @@ data AComp a b
 
 
 data AComp0 a b
-  = ATake1 Ty
-  | ATakeN Ty Int
+  = ATake1 String Ty               -- String is a uniq label
+  | ATakeN String Ty Int           -- String is a uniq label
   | AEmit1 (AExp b)
-  | AEmitN Ty Int EId              -- AEmitN t n e invariant:  e : arr[n] 
+  | AEmitN String Ty Int EId       -- AEmitN t n e invariant:  e : arr[n] 
   | ACast String (Int,Ty) (Int,Ty) -- ACast (n1,t1) (n2,t2)
                                    -- takes n1*t1 and emits n2*t2 (and n1*sizeof(t1) = n2*sizeof(t2))
   | AReturn (AExp b)
@@ -56,17 +56,17 @@ data AComp0 a b
 
 
 
-aTake1 :: SrcLoc -> a -> Ty -> AComp a b 
-aTake1 loc a x = MkAComp loc a (ATake1 x) 
+aTake1 :: SrcLoc -> a -> String -> Ty -> AComp a b 
+aTake1 loc a s x = MkAComp loc a (ATake1 s x) 
 
-aTakeN :: SrcLoc -> a -> Ty -> Int -> AComp a b
-aTakeN loc a t n = MkAComp loc a (ATakeN t n)
+aTakeN :: SrcLoc -> a -> String -> Ty -> Int -> AComp a b
+aTakeN loc a s t n = MkAComp loc a (ATakeN s t n)
 
 aEmit1 :: SrcLoc -> a -> AExp b -> AComp a b
 aEmit1 loc a e = MkAComp loc a (AEmit1 e)
 
-aEmitN :: SrcLoc -> a -> Ty -> Int -> EId -> AComp a b
-aEmitN loc a t n x = MkAComp loc a (AEmitN t n x)
+aEmitN :: SrcLoc -> a -> String -> Ty -> Int -> EId -> AComp a b
+aEmitN loc a s t n x = MkAComp loc a (AEmitN s t n x)
 
 aCast :: SrcLoc -> a -> String -> (Int,Ty) -> (Int,Ty) -> AComp a b
 aCast loc a s (n1,t1) (n2,t2) = MkAComp loc a (ACast s (n1,t1) (n2,t2))
@@ -101,10 +101,10 @@ ppAComp  :: AComp a b -> Doc
 ppAComp ac = ppAComp0 (acomp_comp ac)
 
 ppAComp0 :: AComp0 a b -> Doc
-ppAComp0 (ATake1 t)   = text "take" <> brackets (ppr t)
-ppAComp0 (ATakeN _t n) = text "takes" <+> int n
-ppAComp0 (AEmit1 e)   = text "emit" <+> braces (ppr e)
-ppAComp0 (AEmitN _t _n x) = text "emits" <+> ppr x
+ppAComp0 (ATake1 _s t)      = text "take" <> brackets (ppr t)
+ppAComp0 (ATakeN _s _t n)   = text "takes" <+> int n
+ppAComp0 (AEmit1 e)         = text "emit" <+> braces (ppr e)
+ppAComp0 (AEmitN _ _t _n x) = text "emits" <+> ppr x
 ppAComp0 (ACast s (n1,t1) (n2,t2))
   = brackets (int n1 <> (text "*") <> parens (ppr t1)) <> 
     (text "-cast") <> parens (text s) <> (text "-") <> 

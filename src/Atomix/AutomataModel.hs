@@ -64,6 +64,8 @@ data WiredAtom atom
   deriving Eq
 
 
+type AId = String 
+
 {-- Generic Atom Interfae --------------------------------------------}
 class (Show a, Eq a) => Atom a where
 
@@ -71,9 +73,9 @@ class (Show a, Eq a) => Atom a where
   atomOutTy :: a -> [(Int,Ty)]
 
   -- Constructors of atoms
-  discardAtom :: (Int,Ty) -> a
-  castAtom    :: (Int,Ty) -> (Int,Ty) -> a
-  assertAtom :: Bool -> a
+  discardAtom  :: AId -> (Int,Ty) -> a
+  castAtom     :: AId -> (Int,Ty) -> (Int,Ty) -> a
+  assertAtom   :: Bool -> a
   rollbackAtom :: Chan -> Int -> a
   isRollbackAtom :: a -> Maybe (Int, Chan)
   clearAtom :: Map Chan Int -> a
@@ -83,8 +85,8 @@ class (Show a, Eq a) => Atom a where
 
 
   -- Default implementations based on this abstract interface
-  idAtom      :: Ty -> a
-  idAtom t = castAtom (1,t) (1,t)
+  idAtom     :: AId -> Ty -> a
+  idAtom x t = castAtom x (1,t) (1,t)
 
   assertWAtom :: Bool -> Chan -> WiredAtom a
   assertWAtom b x = WiredAtom [(1,x)] [] (assertAtom b)
@@ -360,19 +362,19 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
   where
     loc = acomp_loc comp
     go :: AComp0 a () -> IO (SAuto e Int)
-    go (ATake1 t) =
+    go (ATake1 aid t) =
       let inp = [(1,in_chan chans)]
           outp = map (1,) $ maybeToList (ctrl_chan chans)
-          atom = maybe (discardAtom (1,t)) (\_ -> idAtom t) (ctrl_chan chans)
+          atom = maybe (discardAtom aid (1,t)) (\_ -> idAtom aid t) (ctrl_chan chans)
           nkind = SAtom (WiredAtom inp outp atom) (auto_start k) Map.empty
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a
 
-    go (ATakeN t n) =
+    go (ATakeN aid t n) =
       let inp  = [(n,in_chan chans)]
           outp = map (1,) $ maybeToList (ctrl_chan chans)
           outty = TArray (Literal n) t
-          atom = maybe (discardAtom (n,t)) (\_ -> castAtom (n,t) (1,outty)) (ctrl_chan chans)
+          atom = maybe (discardAtom aid (n,t)) (\_ -> castAtom aid (n,t) (1,outty)) (ctrl_chan chans)
           nkind = SAtom (WiredAtom inp outp atom) (auto_start k) Map.empty
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a
@@ -392,18 +394,18 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       in return $ assert (auto_closed a) a
 -----------}
 
-    go (AEmitN t n x) =
+    go (AEmitN aid  t n x) =
       let inp = [(1, x)]
           outp = [(n, out_chan chans)]
-          atom = castAtom (1, nameTyp x) (n,t)
+          atom = castAtom aid (1, nameTyp x) (n,t)
           nkind = SAtom (WiredAtom inp outp atom) (auto_start k) Map.empty
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a
 
-    go (ACast _ (n1,t1) (n2,t2)) =
+    go (ACast aid (n1,t1) (n2,t2)) =
       let inp  = [(n1, in_chan chans)]
           outp = [(n2, out_chan chans)]
-          atom = castAtom (n1,t1) (n2,t2)
+          atom = castAtom aid (n1,t1) (n2,t2)
           nkind = SAtom (WiredAtom inp outp atom) (auto_start k) Map.empty
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a

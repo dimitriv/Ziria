@@ -19,8 +19,8 @@ import Text.PrettyPrint.HughesPJ
 import AstUnlabelled
 
 data SymAtom = SAExp (AExp ())
-             | SACast (Int,Ty) (Int,Ty) 
-             | SADiscard (Int,Ty)
+             | SACast String (Int,Ty) (Int,Ty) 
+             | SADiscard String (Int,Ty)
              | SAAssert Bool -- ^ assert true and assert false
              | SARollback EId Int
              | SAClear (Map EId Int)
@@ -29,14 +29,14 @@ data SymAtom = SAExp (AExp ())
 instance Outputable SymAtom where
   ppr (SAExp e) = ppr e
 
-  ppr (SACast (n1,t1) (n2,t2)) 
+  ppr (SACast _ (n1,t1) (n2,t2)) 
     | t1 == t2  = assert (n1 == n2) (text "ID")
     | otherwise 
     = parens (pprTy n1 t1) <> text "-CAST-" <> parens (pprTy n2 t2)
     where pprTy 1 t = ppr t
           pprTy n t = ppr n <> text "*" <> ppr t
 
-  ppr (SADiscard _) = text "DISCARD"
+  ppr (SADiscard _ _) = text "DISCARD"
 
   ppr (SAAssert b) = text "ASSERT_" <> text (show b)
 
@@ -62,15 +62,15 @@ pprFileLoc =
 
 instance Atom SymAtom where
   atomInTy (SAExp e) = map ((1,) . nameTyp) (aexp_ivs e)
-  atomInTy (SACast inty _)  = [inty]
-  atomInTy (SADiscard inty) = [inty]
+  atomInTy (SACast _ inty _)  = [inty]
+  atomInTy (SADiscard _ inty) = [inty]
   atomInTy (SAAssert _) = [(1,TBool)]
   atomInTy (SARollback _ _) = []
   atomInTy (SAClear pipes) = map (\(ch,n) -> (n, nameTyp ch)) $ Map.toList pipes
 
   atomOutTy (SAExp e) = map ((1,) . nameTyp) (aexp_ovs e)
-  atomOutTy (SACast _ outty) = [outty]
-  atomOutTy (SADiscard _)    = []
+  atomOutTy (SACast _ _ outty) = [outty]
+  atomOutTy (SADiscard _ _)    = []
   atomOutTy (SAAssert _) = []
   atomOutTy (SARollback q n) = [(n,nameTyp q)]
   atomOutTy (SAClear _) = []
@@ -93,9 +93,13 @@ instance Atom SymAtom where
       , wires_out = map (1,) (maybeToList mb_out ++ aexp_ovs e)
       , the_atom  = 
             case (unExp body,mb_out) of 
-              (EVar x, Just retvar) -> SACast (1,nameTyp x) (1,nameTyp x)
-              (_, Nothing) -> SAExp e { aexp_exp = eSeq loc body (eVal loc TUnit VUnit) }
+              (EVar x, Just retvar) 
+                 -> SACast (aexp_lbl e) (1,nameTyp x) (1,nameTyp x)
+              (_, Nothing) 
+                 -> SAExp e { aexp_exp = eSeq loc body (eVal loc TUnit VUnit)
+                            , aexp_ret = TUnit }
               (_, Just retvar)
                  -> SAExp e { aexp_exp = eAssign loc (eVar loc retvar) body
-                            , aexp_ovs = retvar : aexp_ovs e }
+                            , aexp_ovs = retvar : aexp_ovs e 
+                            , aexp_ret = TUnit }
       }

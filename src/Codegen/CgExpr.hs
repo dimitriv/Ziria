@@ -19,7 +19,7 @@
 {-# LANGUAGE  QuasiQuotes, GADTs, ScopedTypeVariables, RecordWildCards #-}
 {-# OPTIONS_GHC -fwarn-unused-binds #-}
 
-module CgExpr ( codeGenExp, cgMutBind ) where
+module CgExpr ( codeGenExp, cgMutBind, cgGlobMutBind ) where
 
 import Opts
 import AstExpr
@@ -84,6 +84,14 @@ cgLetBind dfs loc x e m = do
       let cx = [cexp| $id:x_name|]
       assignByVal ty cx ce
       extendVarEnv [(x,cx)] m
+
+-- | Declare globally a mutable uninitialized variable
+cgGlobMutBind :: DynFlags -> SrcLoc -> EId -> Cg a -> Cg a
+cgGlobMutBind dfs loc x m = do 
+  x_name <- genSym $ name x ++ getLnNumInStr loc
+  codeGenDeclGroup x_name (nameTyp x) ZeroOut >>= appendTopDeclPkg
+  let x_binding = [cexp| $id:x_name|]
+  extendVarEnv [(x,x_binding)] m
 
 cgMutBind :: DynFlags -> SrcLoc -> EId -> Maybe Exp -> Cg a -> Cg a
 cgMutBind dfs loc x mbe m = do

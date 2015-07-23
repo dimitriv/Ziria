@@ -45,7 +45,7 @@ import Control.Monad ( unless, void )
 import Data.Loc
 import Text.PrettyPrint.HughesPJ
 -- import qualified GenSym as GS
-import Data.List ( nub )
+-- import Data.List ( nub )
 -- import CtExpr 
 -- import CtComp
 -- import TcRename 
@@ -83,7 +83,7 @@ cgRnSt dfs (RnSt { st_bound_vars = bound
       = cg_fdefs fds (cgFunDefined_clos dfs (funLoc fun) fun clos m)
     cg_bound [] m = m
     cg_bound (x:xs) m
-      = cg_bound xs (cgMutBind dfs noLoc x Nothing m)
+      = cg_bound xs (cgGlobMutBind dfs noLoc x m)
 
     is_external (MkFun (MkFunExternal {}) _ _) = True
     is_external _ = False
@@ -91,6 +91,9 @@ cgRnSt dfs (RnSt { st_bound_vars = bound
 
 lblOfNid :: Int -> CLabel
 lblOfNid x = "BLOCK_" ++ show x
+
+wiredAtomNameOfLbl :: String -> SrcLoc -> Ty -> EId
+wiredAtomNameOfLbl str loc ty = toName (alphaNumStr str) loc ty Imm
 
 
 mkCastTyArray :: Int -> Ty -> Ty
@@ -102,7 +105,8 @@ mkCastTyArray n t                      = TArray (Literal n) t
 data QueueInfo 
   = QI { qi_inch   :: EId                   -- ^ THE Input queue 
        , qi_outch  :: EId                   -- ^ THE Output queue
-       , qi_interm :: Map.Map EId (QId,Int) -- ^ Intermediate queues, their ids and max sizes
+       , qi_interm :: Map.Map EId (QId,Int) -- ^ Intermediate queues, 
+                                            -- ^ their ids and max sizes
        }
 
 newtype QId = QId { unQId :: Int }
@@ -147,16 +151,17 @@ cgDeclQueues dfs qs action
              -- Add code to initialize queues in wpl global init
           _ <- mapM addGlobalWplAllocated (my_sizes_inits ++ [ts_init_stmts])
 
-          bind_queue_vars action (qi_inch qs : qi_outch qs : Map.keys (qi_interm qs))
+          bind_queue_vars action $ 
+              (qi_inch qs : qi_outch qs : Map.keys (qi_interm qs))
 
-  where bind_queue_vars m [] = m
-        bind_queue_vars m (q1:qss)
-          = do cgIO $ putStrLn ("Declaring temporary variable for queue: " ++ show q1)
-               cgMutBind dfs noLoc q1 Nothing (bind_queue_vars m qss)
-
+  where
+    bind_queue_vars m [] = m
+    bind_queue_vars m (q1:qss)
+      = do cgIO $ putStrLn ("Declaring temp variable for queue: " ++ show q1)
+           cgGlobMutBind dfs noLoc q1 (bind_queue_vars m qss)
 
 -- | Extract all introduced queues, and for each calculate the maximum
--- size we should allocate it with.
+-- ^ size we should allocate it with.
 extractQueues :: CfgAuto SymAtom Int -> QueueInfo
 extractQueues auto 
   = QI { qi_inch   = auto_inchan auto
@@ -183,7 +188,7 @@ extractQueues auto
                        m'   = max m cur'
                    in (cur',m')) ps
 
-
+-- | Main driver for code generation
 cgAutomaton :: DynFlags 
             -> RnSt                 -- ^ Records all variables (but no queues)
             -> CfgAuto SymAtom Int  -- ^ The automaton
@@ -195,15 +200,16 @@ cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
   where 
    queues = extractQueues auto
 
-   cg_automaton             = mapM_ cg_node (Map.elems graph)
-   cg_node (Node nid nk)    = appendLabeledBlockNoScope (lblOfNid nid) (cg_nkind nk)
+   cg_automaton         = mapM_ cg_node (Map.elems graph)
+   cg_node (Node nid nk)= appendLabeledBlockNoScope (lblOfNid nid) (cg_nkind nk)
    cg_nkind CfgDone         = appendStmt [cstm| return 0; |]
    cg_nkind (CfgLoop next)  = appendStmt [cstm| goto $id:(lblOfNid next);|]
    cg_nkind (CfgBranch c l r _) = do
      cc <- lookupVarEnv c
-     appendStmt [cstm| if ($cc) goto $id:(lblOfNid l); else goto $id:(lblOfNid r); |]
+     appendStmt 
+        [cstm| if ($cc) goto $id:(lblOfNid l); else goto $id:(lblOfNid r); |]
    cg_nkind (CfgAction atoms next _pipes) = do 
-     inAllocFrame noLoc $ pushAllocFrame $ mapM_ (cgAtom dfs queues) atoms
+     inAllocFrame noLoc $ pushAllocFrame $ mapM_ (cgCallAtom dfs) atoms
      appendStmt [cstm| goto $id:(lblOfNid next);|]
 
 
@@ -217,194 +223,223 @@ cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
    cg_def_nkind (CfgAction atoms _ _) m = cg_def_atoms' atoms m 
 
    cg_def_atoms' [] m = m
-   cg_def_atoms' (a:as) m = cgDefAtom dfs a (cg_def_atoms' as m)
+   cg_def_atoms' (a:as) m = cgDefAtom dfs queues a (cg_def_atoms' as m)
 
+-- | The unique identifier of an atom
+wiredAtomId :: WiredAtom SymAtom -> String
+wiredAtomId (WiredAtom win _wout the_atom) = case the_atom of 
+  SACast s _ _      -> "cast" ++ "$" ++ s
+  SADiscard s _     -> "disc" ++ "$" ++ s
+  SAExp ae          -> "aexp" ++ "$" ++ aexp_lbl ae
+  SARollback qvar n -> "rbck" ++ "$" ++ show_uniq qvar ++ "$" ++ show n
+  SAClear qsns      ->
+     let qsns_list = Map.toList qsns
+         u = concat $ 
+             map (\(q,n) -> show_uniq q ++ "$" ++ show n ++ ":") qsns_list
+     in "_clr" ++ "$" ++ u
+  SAAssert b   -> let u = render (ppNameUniq (snd (head win)))
+                  in "asrt" ++ "$" ++ u ++ "$" ++ show b
+  where show_uniq = render . ppNameUniq
+
+{---------------------- Defining and calling an atom -------------------------}
 
 cgDefAtom :: DynFlags
+          -> QueueInfo
           -> WiredAtom SymAtom
           -> Cg a
           -> Cg a
-cgDefAtom dfs (WiredAtom win wout the_atom) m
+cgDefAtom dfs qs w@(WiredAtom win wout the_atom)
   = case the_atom of
-      SAAssert {}   -> m
-      SACast {}     -> m
-      SADiscard {}  -> m
-      SARollback {} -> m
-      SAClear {}    -> m
-      SAExp aexp    -> cgAExpDefAtom dfs win wout aexp m
+      SACast _ inty outty ->
+        let inwire  = head win
+            outwire = head wout
+        in cg_def_atom dfs wid $ cgACastBody dfs qs inwire outwire inty outty
 
--- | Code generation for an atom
-cgAtom :: DynFlags
-       -> QueueInfo         -- ^ Queues of this program
-       -> WiredAtom SymAtom -- ^ The wired atom
-       -> Cg ()
-cgAtom dfs qnfo (WiredAtom win wout the_atom) 
-  = case the_atom of
-      SAAssert b -> 
-        assert "cgAtom/Assert" (singleton win) $
-        cgAssertAtom dfs qnfo (head win) b
+      SADiscard _ inty 
+        -> cg_def_atom dfs wid $ cgADiscBody dfs qs (head win) inty
 
-      SAExp aexp -> 
-        cgAExpAtom dfs qnfo win wout aexp
-      SACast intty outty  -> 
-        assert "cgAtom/Cast" (singleton win)  $
-        assert "cgAtom/Cast" (singleton wout) $
-        cgCastAtom dfs qnfo (head win) (head wout) intty outty
-      SADiscard inty -> 
-        assert "cgAtom/Cast" (singleton win) $ 
-        assert "cgAtom/Discard" (null wout)  $
-        cgDiscAtom dfs qnfo (head win) inty
-      SARollback _queue _n ->
-        fail ("NOT IMPLEMENTED (SARollback), queue = " ++ (show _queue) ++ ", n = " ++ show _n)
-      SAClear qmap -> do 
-        let mk_disc (q,n) = WiredAtom [(n,q)] [] (SADiscard (n, nameTyp q))
-        mapM_ (cgAtom dfs qnfo . mk_disc) (Map.toList qmap)
-      
-  where singleton [_] = True
-        singleton _   = False
-        
+      SAExp aexp 
+        -> cg_def_atom dfs wid $ cgAExpBody dfs qs win wout aexp
 
-cgAssertAtom :: DynFlags
-             -> QueueInfo
-             -> (Int,EId)
-             -> Bool
-             -> Cg ()
-cgAssertAtom dfs qs (_,inwire) b = do 
+      SARollback qvar n 
+        -> cg_def_atom dfs wid $ cgARollbackBody dfs qs qvar n
+
+      SAClear qsns      
+        -> cg_def_atom dfs wid $ cgAClearBody dfs qs qsns
+
+      SAAssert b 
+        -> cg_def_atom dfs wid $ cgAAssertBody dfs qs (head win) b
+
+  where wid = wiredAtomId w
+
+cg_def_atom :: DynFlags 
+            -> String   -- atom identifier
+            -> Cg C.Exp -- Body 
+            -> Cg a     -- Continuation
+            -> Cg a
+cg_def_atom _dfs aid mbody mkont
+  = do mb <- lookupExpFunEnv_maybe fun_name
+       case mb of { Just {} -> mkont; Nothing -> cg_define_atom }
+  where
+    fun_name = wiredAtomNameOfLbl aid noLoc (TArrow [] TUnit)
+    cg_define_atom = do 
+      (cdecls,cstmts,cbody) <- inNewBlock (pushAllocFrame mbody)
+
+      -- Prototype
+      appendTopDecl [cdecl| $ty:(codeGenTyOcc TUnit) $id:(name fun_name)();|]
+
+      -- Implementation 
+      appendTopDef $
+        [cedecl| $ty:(codeGenTyOcc TUnit)
+              $id:(name fun_name)() {
+                      $decls:cdecls    // Define things needed for body
+                      $stms:cstmts     // Emit rest of body
+                      return $(cbody);                          
+             } |]
+
+      -- Extend environment and go on
+      extendExpFunEnv fun_name (fun_name, [], False) mkont
+
+
+cgCallAtom :: DynFlags
+           -> WiredAtom SymAtom 
+           -> Cg ()
+cgCallAtom dfs w = codeGenExp dfs call >>= \_ -> return ()
+     -- Can safely always discard call result 
+     -- because it is going to be UNIT, see CgCall.hs 
+  where
+    fun_name = wiredAtomNameOfLbl aid noLoc (TArrow [] TUnit)
+    call     = eCall noLoc fun_name []
+    aid      = wiredAtomId w
+
+
+
+{---------------------------- Assert atom implementation ----------------------}
+
+-- NB: In the future we can define this one too. 
+cgAAssertBody :: DynFlags
+              -> QueueInfo
+              -> (Int,EId)
+              -> Bool
+              -> Cg C.Exp
+cgAAssertBody dfs qs (_,inwire) b = do 
       let loc = nameLoc inwire
-
       storage <- CgMonad.freshName "assert_storage" TBool Mut
-
-      cgMutBind dfs noLoc storage Nothing $ do 
-
+      cgMutBind dfs noLoc storage Nothing $ do
          cgInWiring dfs qs [(1,inwire)] [storage]
-         
          let err   = eError loc TUnit "Atomix dead code assertion violation!"
              vunit = eVal loc TUnit VUnit
-
          _ <- codeGenExp dfs $ 
               if b then eIf loc (eUnOp loc Not (eVar loc storage)) err vunit
                    else eIf loc (eVar loc storage) err vunit
+         return [cexp|UNIT|]
 
-         return ();
 
-cgCastAtom :: DynFlags 
-           -> QueueInfo
-           -> (Int,EId) -- ^ inwire
-           -> (Int,EId) -- ^ outwire
-           -> (Int,Ty)  -- ^ inty
-           -> (Int,Ty)  -- ^ outty
-           -> Cg ()
-cgCastAtom dfs qs (n,inwire) 
-                  (m,outwire) 
-                  (n',inty) 
-                  (m',_outty)
-  = assert "cgCastAtom" (n == n' && m == m') $ do 
+{---------------------------- Rollback atom implementation --------------------}
+
+cgARollbackBody :: DynFlags
+                -> QueueInfo
+                -> EId
+                -> Int
+                -> Cg C.Exp
+cgARollbackBody _dfs _qs x n = 
+   panic $ vcat [ text "SARollback not implemented yet"
+                , nest 2 $ text "queue = " <+> ppr x
+                , nest 2 $ text "n     = " <+> ppr n 
+                ]
+
+{------------------------------- Cast atom implementation ---------------------}
+
+cgACastBody :: DynFlags 
+            -> QueueInfo
+            -> (Int,EId) -- ^ inwire
+            -> (Int,EId) -- ^ outwire
+            -> (Int,Ty)  -- ^ inty
+            -> (Int,Ty)  -- ^ outty
+            -> Cg C.Exp
+cgACastBody dfs qs (n,inwire) 
+                      (m,outwire) 
+                      (n',inty) 
+                      (m',_outty) 
+  = assert "cgCastAtom" (n == n' && m == m') $ do
     case (qiQueueId inwire qs, qiQueueId outwire qs) of 
-      (Nothing, _) -> assert "cgCastAtom" (n == 1) $
+      (Nothing, _) -> assert "cgCastAtom" (n == 1) $ do 
                       cgOutWiring dfs qs [(m,outwire)] [inwire]
-      (_,Nothing)  -> assert "cgCastAtom" (m == 1) $
+                      return [cexp|UNIT|]
+      (_,Nothing)  -> assert "cgCastAtom" (m == 1) $ do 
                       cgInWiring dfs qs [(n,inwire)] [outwire]
+                      return [cexp|UNIT|]
       _ -> let storage_in_ty  = mkCastTyArray n inty 
            in do storage <- CgMonad.freshName "cast_storage" storage_in_ty Mut
                  cgMutBind dfs noLoc storage Nothing $ do 
                     cgInWiring dfs qs [(n,inwire) ] [storage]
                     cgOutWiring dfs qs [(m,outwire)] [storage]
+                    return [cexp|UNIT|]
 
-cgDiscAtom :: DynFlags
-           -> QueueInfo
-           -> (Int,EId) -- ^ inwire
-           -> (Int,Ty)  -- ^ inty
-           -> Cg ()
-cgDiscAtom dfs qs (n,inwire) (n',inty) 
+{---------------------- Discard/Clear atom implementation ---------------------}
+
+cgADiscBody :: DynFlags
+            -> QueueInfo
+            -> (Int,EId) -- ^ inwire
+            -> (Int,Ty)  -- ^ inty
+            -> Cg C.Exp
+cgADiscBody dfs qs (n,inwire) (n',inty) 
   = assert "cgDiscAtom" (n == n') $ do
  
       let storage_in_ty = mkCastTyArray n inty
       storage <- CgMonad.freshName "disc_storage" storage_in_ty Mut
 
-      cgMutBind dfs noLoc storage Nothing $
+      cgMutBind dfs noLoc storage Nothing $ do 
          cgInWiring dfs qs [(n,inwire)] [storage]
+         return [cexp|UNIT|]
 
+cgAClearBody :: DynFlags 
+             -> QueueInfo
+             -> Map EId Int
+             -> Cg C.Exp
+cgAClearBody dfs qs qmap = do 
+  -- For now implement clear via discard
+  mapM_ (\(q,n) -> cgADiscBody dfs qs (n,q) (n,nameTyp q)) (Map.toList qmap)
+  return [cexp|UNIT|]
 
-mkAExpFunName :: [EId] -> [EId] -> AExp () -> (EId,[EId])
-mkAExpFunName wires_in wires_out aexp = (fun_name, params)
+{--------------------------- AExp atom implementation -------------------------}
+
+cgAExpBody :: DynFlags 
+           -> QueueInfo
+           -> [(Int,EId)] -- ^ in wires
+           -> [(Int,EId)] -- ^ out wires
+           -> AExp ()
+           -> Cg C.Exp
+cgAExpBody dfs qs wins wouts aexp
+  = dbg_m >> 
+    do { cgInWiring dfs qs wins wires_in       -- wiring 
+       ; b <- codeGenExp dfs fun_body          -- body
+       ; cgOutWiring dfs qs wouts  wires_out   -- wiring
+       ; return b 
+       }
   where 
-    loc  = expLoc (aexp_exp aexp)
-    input_only x = (x `elem` wires_in) && not (x `elem` wires_out)
-    args   = nub (wires_in ++ wires_out)
-    params = map (\x -> if input_only x then x { nameMut = Imm } 
-                        else x { nameMut = Mut }) args
-    argtys = map (\x -> GArgTy (nameTyp x) 
-                               (if isMutable x then Mut else Imm)) params
-
-    resty     = TUnit
-    funty  = TArrow argtys resty
-    fun_name = toName (alphaNumStr $ aexp_lbl aexp) loc funty Imm
-
-mkAExpFunDef :: [EId] -> [EId] -> AExp () -> Fun
-mkAExpFunDef wires_in wires_out aexp = mkFunDefined loc fun_name params fun_body
-  where 
-    (fun_name,params) = mkAExpFunName wires_in wires_out aexp
-    loc      = expLoc fun_body
-    fun_body = aexp_exp aexp
-
-cgAExpDefAtom :: DynFlags 
-              -> [(Int,EId)] -- ^ in wires
-              -> [(Int,EId)] -- ^ out wires
-              -> AExp ()
-              -> Cg a
-              -> Cg a
-cgAExpDefAtom dfs wins wouts aexp m
-  = do mb <- lookupExpFunEnv_maybe fun_name
-       case mb of Just {} -> m
-                  Nothing -> cgFunDefined_clos dfs loc fun [] (dbg_m >> m)
-  where
     dbg_m = cgIO $ print $ vcat [ text "cgAExpAtom:" <+> ppr fun_name
                                 , text "ivs       :" <+> ppr wires_in
                                 , text "ovs       :" <+> ppr wires_out
                                 , text "fun_ty    :" <+> ppr (nameTyp fun_name)
                                 , text "body was  :" <+> ppr (aexp_exp aexp)
                                 ]
-
     loc  = expLoc (aexp_exp aexp)
     -- input wires
     wires_in  = map snd wins
     -- output wires
     wires_out = map snd wouts
-    fun_name = funName fun
-    fun = mkAExpFunDef wires_in wires_out aexp
-
-cgAExpAtom :: DynFlags
-           -> QueueInfo
-           -> [(Int,EId)] -- ^ in wires
-           -> [(Int,EId)] -- ^ out wires
-           -> AExp ()
-           -> Cg ()
-cgAExpAtom dfs qs wins wouts aexp 
-  = assert "cgAExpAtom" (all (\x -> fst x == 1) wins)  $
-    assert "cgAExpAtom" (all (\x -> fst x == 1) wouts) $ 
-    do  cgInWiring dfs qs wins (map snd wins) 
-
-        _ccall <- codeGenExp dfs call
-
-        -- Can safely always discard _ccal because it is going to be UNIT, 
-        -- see CgCall.hs 
-
-        cgOutWiring dfs qs wouts (map snd wouts)
-
-  where
-    loc  = expLoc body
-    body = aexp_exp aexp
-    -- input wires
-    wires_in  = map snd wins
-    -- output wires
-    wires_out = map snd wouts
-
-    fun_name = fst $ mkAExpFunName wires_in wires_out aexp
-    args = nub (wires_in ++ wires_out)
-    call = eCall loc fun_name (map (eVar loc) args)
+    fun_name  = wiredAtomNameOfLbl (aexp_lbl aexp) loc (TArrow [] TUnit)
+    fun_body  = aexp_exp aexp   
 
 
-{--------------- Reading from TS queues -----------------------------}
+{- Wiring and infrastructure
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-}
+
+
+
+{--------------- Reading from TS queues ---------------------------------------}
 
 ts_read_n :: QId -> Int -> C.Exp -> C.Stm
 ts_read_n (QId qid) n ptr 
@@ -420,6 +455,7 @@ readFromTs _ 1 TBit q ptr = appendStmt $ ts_read_n q 1 ptr
 readFromTs _ n TBit q ptr = appendStmt $ ts_read_n q ((n+7) `div` 8) ptr
 readFromTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
   | m `mod` 8 == 0 = appendStmt $ ts_read_n q n ptr
+  | n == 1         = appendStmt $ ts_read_n q 1 ptr
   | otherwise -- Not byte-aligned byte array, a bit sad and slow
   = do x <- CgMonad.freshName "ts_rdx" (TArray (Literal m) TBit) Mut
        i <- CgMonad.freshName "ts_idx" tint Mut
@@ -511,6 +547,7 @@ writeToTs _ 1 TBit q ptr = appendStmt $ ts_write_n q 1 ptr
 writeToTs _ n TBit q ptr = appendStmt $ ts_write_n q ((n+7) `div` 8) ptr
 writeToTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
   | m `mod` 8 == 0 = appendStmt $ ts_write_n q n ptr
+  | n == 1 = appendStmt $ ts_write_n q 1 ptr
   | otherwise -- Not byte-aligned byte array, a bit sad and slow
   = do x <- CgMonad.freshName "ts_rdx" (TArray (Literal m) TBit) Mut 
        i <- CgMonad.freshName "ts_idx" tint Mut

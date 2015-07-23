@@ -3,7 +3,7 @@ module AtomixCompTransform (
   atomixCompTransform, 
   atomixCompToComp,
   zirToAtomZir,
-  freshName, freshNameDoc,
+  freshName, freshNameDoc, newBlockId,
   RnSt ( .. ) 
   ) where
 
@@ -386,11 +386,16 @@ zirToAtomZir dfs sym comp = do
   return (acomp,rnst { st_bound_vars = st_bound_vars rnst ++ xs } )
 
 
+newBlockId :: GS.Sym -> SrcLoc -> String -> IO String
+newBlockId sym loc pref = do
+  u <- GS.genSymStr sym
+  let block_id = pref ++ "$" ++ (render $ ppr $ loc) ++ "$" ++ u
+  return block_id
+
 transLiftedExp :: DynFlags -> GS.Sym -> Exp -> IO (AExp ())
 transLiftedExp dfs sym e = do
   vupkg <- inOutVarsDefinite dfs e
-  u <- GS.genSymStr sym
-  let block_id = (render $ ppr $ expLoc e) ++ "$" ++ u
+  block_id <- newBlockId sym (expLoc e) "aexp"
 
   return $ MkAExp { aexp_lbl = block_id
                   , aexp_exp = e
@@ -445,11 +450,14 @@ transLifted dfs sym = go_comp
             where t = yldTyOfCTy (ctComp c1)
 
         go (Emit e)                     = aEmit1 loc () <$> (liftIO $ transLiftedExp dfs sym e)
-        go (Emits (MkExp (EVar x) _ _)) = return $ aEmitN loc () t n x
+        go (Emits (MkExp (EVar x) _ _)) = do s <- liftIO $ newBlockId sym loc "tk1"
+                                             return $ aEmitN loc () s t n x
           where TArray (Literal n) t = nameTyp x
 
-        go (Take1 t)  = return $ aTake1 loc () t
-        go (Take t n) = return $ aTakeN loc () t n
+        go (Take1 t)  = do s <- liftIO $ newBlockId sym loc "tk1"
+                           return $ aTake1 loc () s t
+        go (Take t n) = do s <- liftIO $ newBlockId sym loc "tkN"
+                           return $ aTakeN loc () s t n
 
         go (Until (MkExp (EVar x) _ _) c) = aUntil loc () x <$> go_comp c
         go (While (MkExp (EVar x) _ _) c) = aWhile loc () x <$> go_comp c 
@@ -457,25 +465,29 @@ transLifted dfs sym = go_comp
         go (Repeat _ c) = aRepeat loc () <$> go_comp c
         go (VectComp _ c) = go_comp c
 
-        go (Mitigate s t 1 1)  
-          = return $ aRepeat loc () $ aCast loc () s (1,t) (1,t)
+        go (Mitigate s t 1 1)
+          = do b <- liftIO $ newBlockId sym loc s
+               return $ aRepeat loc () $ aCast loc () b (1,t) (1,t)
         go (Mitigate s t n1 1) 
-          = return $ aRepeat loc () $ 
-            aCast loc () s (1, TArray (Literal n1) t) (n1,t)
+          = do b <- liftIO $ newBlockId sym loc s
+               return $ aRepeat loc () $ 
+                 aCast loc () b (1, TArray (Literal n1) t) (n1,t)
         go (Mitigate s t 1 n2) 
-          = return $ aRepeat loc () $
-            aCast loc () s (n2,t) (1,TArray (Literal n2) t)
-
+          = do b <- liftIO $ newBlockId sym loc s 
+               return $ aRepeat loc () $
+                 aCast loc () b (n2,t) (1,TArray (Literal n2) t)
         go (Mitigate s t n1 n2)
           | n1 `mod` n2 == 0 -- n1 = k*n2
           , let k = n1 `div` n2
-          = return $ aRepeat loc () $ 
-            aCast loc () s (1,TArray (Literal n1) t) (k,TArray (Literal n2) t)
+          = do b <- liftIO $ newBlockId sym loc s 
+               return $ aRepeat loc () $ 
+                 aCast loc () b (1,TArray (Literal n1) t) (k,TArray (Literal n2) t)
 
           | n2 `mod` n1 == 0
           , let k = n2 `div` n1
-          = return $ aRepeat loc () $ 
-            aCast loc () s (k,TArray (Literal n1) t) (1,TArray (Literal n2) t)
+          = do b <- liftIO $ newBlockId sym loc s 
+               return $ aRepeat loc () $ 
+                 aCast loc () b (k,TArray (Literal n1) t) (1,TArray (Literal n2) t)
    
           | otherwise
           = panicStr "Ill typed mitigate node during Atomix translation!"
