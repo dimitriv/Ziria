@@ -1,0 +1,13 @@
+{-
+
+Tests if optimistic zipping is blindly optimistic,
+or anticipates termination.
+
+-}
+
+let comp main = 
+  	  read[int]
+  >>> repeat emit 1 
+  >>> 				-- this pipeline should never be optimistically filled up...
+  	  takes 10		-- ...since this 'takes' can only fire once (and then terminates)
+  >>> write[int]
