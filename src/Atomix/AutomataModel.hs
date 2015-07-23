@@ -262,10 +262,13 @@ countWrites ch wa = sum $ map fst $ filter ((== ch) . snd) $ wires_out wa
 countReads :: Chan -> WiredAtom a -> Int
 countReads  ch wa = sum $ map fst $ filter ((== ch) . snd) $ wires_in  wa
 
+-- in the presence of rollbacks, an atom may consume from and produce for the same queue
+atomCost :: Chan -> WiredAtom a -> Int
+atomCost ch wa = countReads ch wa - countWrites ch wa
+
 nextPipes :: [WiredAtom a] -> Map Chan Int -> Map Chan Int
 nextPipes watoms pipes = Map.mapWithKey updatePipe pipes
-  where updatePipe pipe n = n + sum (map (countWrites pipe) watoms)
-                              - sum (map (countReads pipe) watoms)
+  where updatePipe pipe n = n - sum (map (atomCost pipe) watoms)
 
 next_pipe_balances :: SimplNk atom nid -> Map Chan Int
 next_pipe_balances (SAtom wa _ pipes) = nextPipes [wa] pipes
@@ -563,37 +566,46 @@ mkDoneDist threshold a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph
     if new_dist > threshold then Truncation else NewDist new_dist
 
   cost nid
-    | SAtom watom _ _ <- nodeKindOfId a nid = countReads (auto_inchan a) watom
-                                            - countWrites (auto_inchan a) watom -- there may be rollbacks...
+    | SAtom watom _ _ <- nodeKindOfId a nid = atomCost (auto_inchan a) watom
     | otherwise                             = 0
 
 
 
--- Calculates an upper bound on the cost (measured in reads) to execute n more non-trivial atoms,
+-- Calculates the lowest upper bound on the cost (measured in reads) to execute n more non-trivial atoms,
 -- starting from a gived node nid. An atom is considered non-trivial if it consumes resources.
+-- The algorithm requires O(n * |a|^2) iterations.
 --
 -- For efficieny reasons, should be cached locally:
---   let productionCost = mkExecutionCost n a in ...
-mkExecutionCost :: forall e nid. Ord nid => Int -> SAuto e nid -> nid -> Int
-mkExecutionCost n a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph a) $ Map.lookup (nid,n) cost_map) where
-  cost_map = Map.filterWithKey (\(_nid,m) _ -> m==n) $
-             snd $ runState (mapM (go n) (Map.keys $ auto_graph a)) Map.empty
+--   let executionCost = mkExecutionCost n a in ...
+mkExecutionCost :: forall e nid. Show nid => Ord nid => Int -> SAuto e nid -> nid -> Int
+mkExecutionCost n a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph a) $ Map.lookup nid cost_map) where
+  cost_map = iterate incr_cost_map (Map.map (const 0) (auto_graph a)) !! n
 
-  go n nid = do
-    mb_cost <- Map.lookup (nid,n) <$> get
-    case mb_cost of
-      Just cost -> return cost
-      Nothing -> do
-        cost <- go' n (nodeKindOfId a nid)
-        modify (Map.insert (nid,n) cost)
-        return cost
+  incr_cost_map :: Map nid Int -> Map nid Int
+  incr_cost_map cmap =
+    foldl spreadUpdates (foldl (incr cmap) cmap non_trivial) trivial
 
-  go' 0 nk = return 0
-  go' n (SAtom wa next _)
-    | let atom_cost = countReads (auto_inchan a) wa - countWrites (auto_inchan a) wa
-    , atom_cost > 0
-    = (+ atom_cost) <$> go (n-1) next
-  go' n nk = maximum <$> mapM (go n) (sucsOfNk nk)
+  incr :: Map nid Int -> Map nid Int -> SNode e nid -> Map nid Int
+  incr previous_cmap cmap (Node nid (SAtom wa next _))
+    | let own_cost = atomCost (auto_inchan a) wa
+    , own_cost > 0
+    = let new_cost = own_cost + fromJust (Map.lookup next previous_cmap)
+      in Map.insert nid new_cost cmap
+  incr _ _ _ = panicStr "mkExecutionCost: unreachable code!"
+
+  spreadUpdates :: Map nid Int -> SNode e nid -> Map nid Int
+  spreadUpdates cmap (Node nid nk)
+    | let new_cost = maximum $ 0 : [ Map.findWithDefault 0 suc cmap | suc <- sucsOfNk nk ]
+    , new_cost > (fromJust $ Map.lookup nid cmap)
+    = foldl spreadUpdates (Map.insert nid new_cost cmap)
+        [ fromJust $ Map.lookup pred (auto_graph a) | pred <- Set.toList (preds nid) ]
+    | otherwise = cmap
+
+  preds = mkPreds a
+
+  (non_trivial, trivial) = List.partition (is_consuming . node_kind) $ Map.elems (auto_graph a)
+    where is_consuming (SAtom wa _ _) = atomCost (auto_inchan a) wa > 0
+          is_consuming _ = False
 
 
 
@@ -660,6 +672,10 @@ rollback n (PipeState q h) =
     Just (PipeState h' q') -> PipeState q' h'
     Nothing -> panicStr "rollback: Bug in Automata Model!!"
 
+rollbackInDistance n ps = case try_consume n ps of
+  Nothing -> 0
+  Just ps' -> getUncommitted ps'
+
 
 
 
@@ -684,7 +700,7 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
              assert (auto_closed a1) $
              assert (auto_closed a2) $
              (if prune then pruneUnfinished else clearUnfinished) $
-             -- insertRollbacks lazy pipe_ch $
+             (if lazy then id else insertRollbacks lazy (auto_outchan a1)) $
              normalize_auto_ids 0 $
              Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) start_prod_nid
     start_prod_nid = mkProdNid empty_pipe_state (auto_start a1) (auto_start a2)
@@ -692,7 +708,7 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
 
     -- paramters
     pipe_ch = assert (auto_outchan a1 == auto_inchan a2) $ auto_outchan a1
-    optimism = 0::Int -- case plInfo pinfo of { NeverPipeline -> 0; _ -> (1::Int) }
+    optimism = case plInfo pinfo of { NeverPipeline -> 0; _ -> getOptimism dfs }
     lazy = optimism == 0
     prune = isDynFlagSet dfs PruneIncompleteStates
 
@@ -716,76 +732,20 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
               noDups = const (assert False)
               new_balances = Map.insertWith noDups pipe_ch (getBalance pipe_state) $
                              Map.unionWith noDups (pipe_balances nk1) (pipe_balances nk2)
-          in (if lazy then zipLazy else zipOptimistic) pipe_state new_balances prod_nid nk1 nk2 prod_nmap
+          in zipNodes' pipe_state new_balances prod_nid nk1 nk2 prod_nmap
 
 
     -- Zips automata in accordance with the tick/proc-based standard Ziria semantics
     -- (i.e. lazy, right-biased, pull-style semantics).
-    zipLazy :: PipeState -> Map Chan Int -> ProdNid -> SimplNk e Int -> SimplNk e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
- 
-    zipLazy pipe_state pipe_balances prod_nid nk1 (SDone {})
-      = insertNk prod_nid (SDone pipe_balances Nothing)
+    zipNodes' :: PipeState -> Map Chan Int -> ProdNid -> SimplNk e Int -> SimplNk e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
 
-    zipLazy pipe_state pipe_balances prod_nid@(id1,_,_) nk1 (SBranch x l r w _) =
-      let prod_nid_l = mkProdNid pipe_state id1 l
-          prod_nid_r = mkProdNid pipe_state id1 r
-          prod_nkind = SBranch x prod_nid_l prod_nid_r w pipe_balances
-      in zipNodes pipe_state prod_nid_r . zipNodes pipe_state prod_nid_l . insertNk prod_nid prod_nkind
-
-    {- Treating this case here is not strictly in accordance with Ziria's lazy (right-biased)
-       semantics; however, since branching has no side effects, this should be a legal reordering.
-       We prefer handling branches first, as it will potentially allow us to merge several
-       decision nodes into a single decision.
-    -}
-    zipLazy pipe_state pipe_balances prod_nid@(_,id2,_) (SBranch x l r w _) nk2 =
-      let prod_nid_l = mkProdNid pipe_state l id2
-          prod_nid_r = mkProdNid pipe_state r id2
-          prod_nkind = SBranch x prod_nid_l prod_nid_r w pipe_balances
-      in zipNodes pipe_state prod_nid_r . zipNodes pipe_state prod_nid_l . insertNk prod_nid prod_nkind
-
-    zipLazy pipe_state pipe_balances prod_nid@(id1,id2,_) nk1 (SAtom wa2 next2 _)
-      | Just pipe_state' <- exec_right wa2 pipe_state
-      = let next_prod_nid = mkProdNid pipe_state' id1 next2
-            prod_nkind = SAtom wa2 next_prod_nid pipe_balances
-        in zipNodes pipe_state' next_prod_nid . insertNk prod_nid prod_nkind
-
-    -- Can't proceed in right automaton -- execute left automaton
-
-    zipLazy pipe_state pipe_balances prod_nid@(_,id2,_) (SAtom wa1 next1 _) nk2 =
-      let pipe_state' = exec_left wa1 pipe_state
-          next_prod_nid = mkProdNid pipe_state' next1 id2
-          prod_nkind = SAtom wa1 next_prod_nid pipe_balances
-      in zipNodes pipe_state' next_prod_nid . insertNk prod_nid prod_nkind
-
-     -- if we reach this case, the pipeline is already drained as far as possible
-    zipLazy pipe_state pipe_balances prod_nid (SDone {}) _nk2 =
-      insertNk prod_nid (SDone pipe_balances Nothing)
-
-
-
-    -- Zips automata optimistically, i.e. running the left automaton slightly ahead of the right automaton,
-    -- in order to keep the pipeline filled up at all times so greater parallelism can be achieved.
-    zipOptimistic :: PipeState -> Map Chan Int -> ProdNid -> SimplNk e Int -> SimplNk e Int -> SNodeMap e ProdNid -> SNodeMap e ProdNid
-
-
-
-------------------------------------------------- OLD ------------------------------------------------------
-    zipOptimistic pipe_state pipe_balances prod_nid nk1 (SDone {})
+    zipNodes' pipe_state pipe_balances prod_nid nk1 (SDone {})
       | let rollback = rollbackInDistance 0 pipe_state
       , rollback > 0
-      = -- Hack to create fresh product-node id
-        let final_prod_nid = ( 1 + (fst $ Map.findMax $ auto_graph a1)
-                             , 1 + (fst $ Map.findMax $ auto_graph a2)
-                             , (0,Map.empty) )
-            final_pipe_balances = Map.adjust (+ rollback) (auto_inchan a1) pipe_balances
-            final_nk = SDone final_pipe_balances (Just rollback)
-            rollback_nk = SAtom (rollbackWAtom pipe_ch rollback) final_prod_nid pipe_balances
-        in insertNk final_prod_nid final_nk . insertNk prod_nid rollback_nk
+      = assert (not lazy) $ insertNk prod_nid (SDone pipe_balances (Just rollback))
+      | otherwise = insertNk prod_nid (SDone pipe_balances Nothing)
 
-    zipOptimistic pipe_state pipe_balances prod_nid nk1 (SDone {}) =
-        insertNk prod_nid (SDone pipe_balances Nothing)
-
-    zipOptimistic pipe_state pipe_balances prod_nid@(id1,_,_) nk1 (SBranch x l r w _) =
+    zipNodes' pipe_state pipe_balances prod_nid@(id1,_,_) nk1 (SBranch x l r w _) =
       let prod_nid_l = mkProdNid pipe_state id1 l
           prod_nid_r = mkProdNid pipe_state id1 r
           prod_nkind = SBranch x prod_nid_l prod_nid_r w pipe_balances
@@ -796,14 +756,14 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
        We prefer handling branches first, as it will potentially allow us to merge several
        decision nodes into a single decision.
     -}
-    zipOptimistic pipe_state pipe_balances prod_nid@(_,id2,_) (SBranch x l r w _) nk2 =
+    zipNodes' pipe_state pipe_balances prod_nid@(_,id2,_) (SBranch x l r w _) nk2 =
       let prod_nid_l = mkProdNid pipe_state l id2
           prod_nid_r = mkProdNid pipe_state r id2
           prod_nkind = SBranch x prod_nid_l prod_nid_r w pipe_balances
       in zipNodes pipe_state prod_nid_r . zipNodes pipe_state prod_nid_l . insertNk prod_nid prod_nkind
 
-    zipOptimistic pipe_state pipe_balances prod_nid@(id1,id2,_) nk1 (SAtom wa2 next2 _)
-      | getBalance pipe_state >= threshold id2
+    zipNodes' pipe_state pipe_balances prod_nid@(id1,id2,_) nk1 (SAtom wa2 next2 _)
+      | (lazy || isDoneNk nk1 || getBalance pipe_state >= threshold id2)
       , Just pipe_state' <- exec_right wa2 pipe_state
       = let next_prod_nid = mkProdNid pipe_state' id1 next2
             prod_nkind = SAtom wa2 next_prod_nid pipe_balances
@@ -811,15 +771,33 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
 
     -- Can't proceed in right automaton -- execute left automaton
 
-    zipOptimistic pipe_state pipe_balances prod_nid@(_,id2,_) (SAtom wa1 next1 _) nk2 =
+    zipNodes' pipe_state pipe_balances prod_nid@(_,id2,_) (SAtom wa1 next1 _) nk2 =
       let pipe_state' = exec_left wa1 pipe_state
           next_prod_nid = mkProdNid pipe_state' next1 id2
           prod_nkind = SAtom wa1 next_prod_nid pipe_balances
       in zipNodes pipe_state' next_prod_nid . insertNk prod_nid prod_nkind
 
      -- if we reach this case, the pipeline is already drained as far as possible
-    zipOptimistic pipe_state pipe_balances prod_nid (SDone {}) nk2
-      = insertNk prod_nid (SDone pipe_balances Nothing)
+    zipNodes' pipe_state pipe_balances prod_nid (SDone {}) _nk2 =
+      insertNk prod_nid (SDone pipe_balances Nothing)
+
+
+
+    {-- threshold for optimistic execution --}
+
+    threshold nid_right
+      -- if automaton is know to halt soon, don't be stupidly optimistic!
+      | DoneDist dists False <- done_dist nid_right
+      = minimum (executionCost nid_right : Set.toList dists)
+      | otherwise = executionCost nid_right
+
+    executionCost = mkExecutionCost (optimism+1) a2
+    done_dist = mkDoneDist max_q_size a2
+    max_q_size = largest_write + maximum (0:[ executionCost nid | nid <- Map.keys (auto_graph a2) ]) - 1
+    largest_write = maximum $ 0 : [ writes (node_kind n) | n <- Map.elems (auto_graph a1) ]
+      where writes (SAtom wa _ _) = countWrites pipe_ch wa
+            writes _ = 0
+
 
 
     -- Try executing a wired atom from the right automaton.
@@ -833,45 +811,16 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
       | otherwise = try_consume (countReads pipe_ch wa) ps
 
     -- Execute a wired atom from the left automaton, and update the pipe state
-    -- to track the atoms consumption/production behavior.
+    -- to track the atom's consumption/production behavior.
     exec_left :: WiredAtom e -> PipeState -> PipeState
     exec_left wa (PipeState q h) = PipeState q' h
       where
-        q' = (if writes > 0 then push (Right writes) else id) $
-             (if reads > 0 then push (Left reads) else id) $ q
-        writes = countWrites pipe_ch wa
-        reads = countReads (auto_inchan a1) wa
+        q' = (if production > 0 then push (Right production) else id) $
+             (if consumption > 0 then push (Left consumption) else id) $ q
+        production = countWrites pipe_ch wa
+        consumption = atomCost (auto_inchan a1) wa
 
 
-
-
-    largest_write = maximum $ map (getSize . node_kind) $ Map.elems (auto_graph a1)
-      where getSize (SAtom wa _ _) = countWrites pipe_ch wa
-            getSize _ = 0
-
-    largest_read = maximum $ map (getSize . node_kind) $ Map.elems (auto_graph a2)
-      where getSize (SAtom wa _ _) = countReads pipe_ch wa
-            getSize _ = 0
-
-    -- we won't consume unless the pipe contains >= elements than indicated
-    -- by this threshold
-    consumption_threshold = (1 + optimism) *  largest_read
-
-    threshold nid2
-      | dists_truncated $ done_dist nid2 = consumption_threshold
-      | otherwise =
-        let ds = dists (done_dist nid2) in
-        let d = if Set.null ds then 0 else Set.findMax ds in
-        d - largest_write + 1
-
-    max_q_size :: Int
-    max_q_size = largest_write + consumption_threshold
-
-    done_dist = mkDoneDist max_q_size a2
-
-    rollbackInDistance n ps = case try_consume n ps of
-      Nothing -> 0
-      Just ps' -> getUncommitted ps'
 
 
 
