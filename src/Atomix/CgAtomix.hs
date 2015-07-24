@@ -200,16 +200,20 @@ cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
   where 
    queues = extractQueues auto
 
-   cg_automaton         = mapM_ cg_node (Map.elems graph)
-   cg_node (Node nid nk)= appendLabeledBlockNoScope (lblOfNid nid) (cg_nkind nk)
-   cg_nkind CfgDone         = appendStmt [cstm| exit(0); |]
-   cg_nkind (CfgLoop next)  = appendStmt [cstm| goto $id:(lblOfNid next);|]
-   cg_nkind (CfgBranch c l r _) = do
+   cg_automaton = do 
+      frameVar <- freshVar "mem_idx"
+      appendDecl [cdecl| unsigned int $id:frameVar; |]
+      mapM_ (cg_node frameVar) (Map.elems graph)
+
+   cg_node frameVar (Node nid nk) = appendLabeledBlockNoScope (lblOfNid nid) (cg_nkind frameVar nk)
+   cg_nkind _ CfgDone        = appendStmt [cstm| exit(0); |]
+   cg_nkind _ (CfgLoop next) = appendStmt [cstm| goto $id:(lblOfNid next);|]
+   cg_nkind _ (CfgBranch c l r _) = do
      cc <- lookupVarEnv c
      appendStmt 
         [cstm| if ($cc) goto $id:(lblOfNid l); else goto $id:(lblOfNid r); |]
-   cg_nkind (CfgAction atoms next _pipes) = do 
-     inAllocFrame noLoc $ pushAllocFrame $ mapM_ (cgCallAtom dfs) atoms
+   cg_nkind frameVar (CfgAction atoms next _pipes) = do 
+     inAllocFrame' frameVar noLoc $ pushAllocFrame $ mapM_ (cgCallAtom dfs) atoms
      appendStmt [cstm| goto $id:(lblOfNid next);|]
 
 

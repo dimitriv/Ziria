@@ -39,7 +39,7 @@ module CgMonad
   , collectStmts
   , collectStmts_
 
-  , inAllocFrame, isInsideAllocFrame, pushAllocFrame
+  , inAllocFrame, inAllocFrame', isInsideAllocFrame, pushAllocFrame
   , getGlobalWplAllocated
   , addGlobalWplAllocated
 
@@ -516,17 +516,26 @@ inNewBlock_ m = do
 
 -- | Execute this action in an allocation frame. Use with moderation!
 inAllocFrame :: SrcLoc -> Cg a -> Cg a
-inAllocFrame _origin action
+inAllocFrame origin action
   = do { inside <- isInsideAllocFrame 
        ; if inside then action else
             do { idx <- freshVar "mem_idx"
-               ; heap_context <- getHeapContext
                ; appendDecl [cdecl| unsigned int $id:idx; |]
+               ; inAllocFrame' idx origin action
+               }
+      }
+
+-- | Execute this action in an allocation frame. Use with moderation!
+inAllocFrame' :: String -> SrcLoc -> Cg a -> Cg a
+inAllocFrame' var _origin action
+  = do { inside <- isInsideAllocFrame 
+       ; if inside then action else
+            do { heap_context <- getHeapContext
                ; appendStmt
-                   [cstm| $id:idx = wpl_get_free_idx($id:heap_context); |]
+                   [cstm| $id:var = wpl_get_free_idx($id:heap_context); |]
                ; x <- action 
                ; appendStmt
-                   [cstm| wpl_restore_free_idx($id:heap_context, $id:idx); |]
+                   [cstm| wpl_restore_free_idx($id:heap_context, $id:var); |]
                ; return x }
       }
 
