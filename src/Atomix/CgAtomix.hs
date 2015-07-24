@@ -202,7 +202,7 @@ cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
 
    cg_automaton         = mapM_ cg_node (Map.elems graph)
    cg_node (Node nid nk)= appendLabeledBlockNoScope (lblOfNid nid) (cg_nkind nk)
-   cg_nkind CfgDone         = appendStmt [cstm| return 0; |]
+   cg_nkind CfgDone         = appendStmt [cstm| exit(0); |]
    cg_nkind (CfgLoop next)  = appendStmt [cstm| goto $id:(lblOfNid next);|]
    cg_nkind (CfgBranch c l r _) = do
      cc <- lookupVarEnv c
@@ -443,7 +443,7 @@ cgAExpBody dfs qs wins wouts aexp
 
 ts_read_n :: QId -> Int -> C.Exp -> C.Stm
 ts_read_n (QId qid) n ptr 
-  = [cstm| if (ts_getManyBlocking($int:qid,$int:n,$ptr) != $int:n) return 3; |]
+  = [cstm| if (ts_getManyBlocking($int:qid,$int:n,$ptr) != $int:n) exit(3); |]
 
 
 readFromTs :: DynFlags 
@@ -464,7 +464,7 @@ readFromTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
          cx <- lookupVarEnv x
          ci <- lookupVarEnv i
          appendStmt $ [cstm| for ($ci = 0; $ci < $int:n; $ci++) {
-                                if (!ts_get($int:qid,(char *) $cx)) return 3;
+                                if (!ts_get($int:qid,(char *) $cx)) exit(3);
                                 bitArrWrite((typename BitArrPtr) $cx,
                                               $ci*$int:m,
                                               $int:m,
@@ -518,10 +518,10 @@ cgInWire dfs qs (n,qvar) v =
       if isArrayTy qtype 
         then appendStmt [cstm| if ($id:(bufGetF)($id:global_params,
                                    $id:buf_context,
-                                   $ptr, $(getLen)) == GS_EOF) return 3; |]
+                                   $ptr, $(getLen)) == GS_EOF) exit(0); |]
         else appendStmt [cstm| if ($id:(bufGetF)($id:global_params,
                                    $id:buf_context,
-                                   $ptr) == GS_EOF) return 3; |]
+                                   $ptr) == GS_EOF) exit(0); |]
 
 
 squashedQueueType :: Int -> Ty -> Ty

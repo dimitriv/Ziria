@@ -763,8 +763,8 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
       in zipNodes pipe_state prod_nid_r . zipNodes pipe_state prod_nid_l . insertNk prod_nid prod_nkind
 
     zipNodes' pipe_state pipe_balances prod_nid@(id1,id2,_) nk1 (SAtom wa2 next2 _)
-      | (lazy || isDoneNk nk1 || getBalance pipe_state >= threshold id2)
-      , Just pipe_state' <- exec_right wa2 pipe_state
+      | Just pipe_state' <- exec_right wa2 pipe_state
+      , (lazy || isDoneNk nk1 || getBalance pipe_state >= threshold id2)
       = let next_prod_nid = mkProdNid pipe_state' id1 next2
             prod_nkind = SAtom wa2 next_prod_nid pipe_balances
         in zipNodes pipe_state' next_prod_nid . insertNk prod_nid prod_nkind
