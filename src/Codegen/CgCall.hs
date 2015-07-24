@@ -82,6 +82,9 @@ cgCall dfs loc retTy argtys fName eargs mb_ret = do
        | not lut_returning          -- and the function does not return LUT address
        -> return already_declared   -- then use it
 
+     -- if the return type is unit, we will never use "cer", and can savely leave it undefined
+     _ | TUnit <- retTy -> return undefined
+
      _otherwise ->
        do { retn <- freshName "ret" retTy Mut
           ; let cer = [cexp| $id:(name retn)|]
