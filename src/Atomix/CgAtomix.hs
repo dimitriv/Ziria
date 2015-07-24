@@ -449,14 +449,18 @@ ts_read_n :: QId -> Int -> C.Exp -> C.Stm
 ts_read_n (QId qid) n ptr 
   = [cstm| if (ts_getManyBlocking($int:qid,$int:n,$ptr) != $int:n) exit(3); |]
 
+ts_read_n_bits :: QId -> Int -> C.Exp -> C.Stm
+ts_read_n_bits (QId qid) n ptr 
+  = [cstm| if (ts_getManyBitsBlocking($int:qid,$int:n,$ptr) != $int:n) exit(3); |]
+
 
 readFromTs :: DynFlags 
            -> Int -> Ty -- # number of reads, and type of each read
            -> QId       -- Queue id
            -> C.Exp     -- Target variable to store to
            -> Cg ()
-readFromTs _ 1 TBit q ptr = appendStmt $ ts_read_n q 1 ptr
-readFromTs _ n TBit q ptr = appendStmt $ ts_read_n q ((n+7) `div` 8) ptr
+readFromTs _ n TBit q ptr = appendStmt $ ts_read_n_bits q n ptr
+
 readFromTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
   | m `mod` 8 == 0 = appendStmt $ ts_read_n q n ptr
   | n == 1         = appendStmt $ ts_read_n q 1 ptr
@@ -541,14 +545,16 @@ squashedQueueType n t = TArray (Literal n) t
 ts_write_n :: QId -> Int -> C.Exp -> C.Stm
 ts_write_n (QId qid) n ptr = [cstm| ts_putMany($int:qid,$int:n,$ptr); |]
 
+ts_write_n_bits :: QId -> Int -> C.Exp -> C.Stm
+ts_write_n_bits (QId qid) n ptr = [cstm| ts_putManyBits($int:qid,$int:n,$ptr); |]
+
 
 writeToTs :: DynFlags 
            -> Int -> Ty -- # number of writes, and type of each write
            -> QId       -- Queue id
            -> C.Exp     -- Source variable to read from
            -> Cg ()
-writeToTs _ 1 TBit q ptr = appendStmt $ ts_write_n q 1 ptr
-writeToTs _ n TBit q ptr = appendStmt $ ts_write_n q ((n+7) `div` 8) ptr
+writeToTs _ n TBit q ptr = appendStmt $ ts_write_n_bits q n ptr
 writeToTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
   | m `mod` 8 == 0 = appendStmt $ ts_write_n q n ptr
   | n == 1 = appendStmt $ ts_write_n q 1 ptr

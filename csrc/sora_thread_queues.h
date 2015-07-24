@@ -32,6 +32,8 @@ void ts_put(int nc, char *input);
 
 // Blocking
 void ts_putMany(int nc, int n, char *input);
+// unpack bits into one byte each, and put them into the queue 
+void ts_putManyBits(int nc, int n, char *input);
 
 // Called by the downlink thread
 bool ts_isFinished(int nc);
@@ -42,6 +44,9 @@ bool ts_get(int nc, char *output);
 int ts_getMany(int nc, int n, char *output);
 
 int ts_getManyBlocking(int nc, int n, char *output);
+
+// get n bits (stored in 1 byte each), and pack them into (n+7)/8 bytes
+int ts_getManyBitsBlocking(int nc, int n, char *output);
 
 
 // Issued from upstream to downstream

@@ -20,6 +20,7 @@
 #include <sora.h>
 #include "sora_threads.h"
 #include "sora_thread_queues.h"
+#include "bit.h"
 
 #define ST_QUEUE_SIZE	64
 
@@ -252,7 +253,6 @@ void s_ts_putMany(ts_context *locCont, int nc, int n, char *input)
 
 
 
-
 // Blocking
 void ts_putMany(int nc, int n, char *input)
 {
@@ -265,6 +265,30 @@ void ts_putMany(int nc, int n, char *input)
 	s_ts_putMany(contexts, nc, n, input);
 }
 
+
+// Blocking
+// unpack bits into one byte each, and put them into the queue 
+void s_ts_putManyBits(ts_context *locCont, int nc, int n, char *input)
+{
+	unsigned char unpacked_bit[1];
+	for (int i = 0; i < n; i++)
+	{
+		bitRead((BitArrPtr)input, i, unpacked_bit);
+		s_ts_putMany(locCont, nc, 1, (char *)unpacked_bit);
+	}
+}
+
+// Blocking
+void ts_putManyBits(int nc, int n, char *input)
+{
+	if (nc >= no_contexts)
+	{
+		printf("There are only %d queues! %d\n", no_contexts, nc);
+		return;
+	}
+
+	s_ts_putManyBits(contexts, nc, n, input);
+}
 
 
 
@@ -419,7 +443,44 @@ int ts_getManyBlocking(int nc, int n, char *output)
 }
 
 
+void packBitsIntoByte(BitArrPtr bits, unsigned char *byte)
+{
+	for (int i = 0; i < 8; i++)
+	{
+		bitWrite(byte, i, bits[i]);
+	}
+}
 
+
+
+// Get n bits (stored in 1 byte each), and pack them into (n+7)/8 bytes
+// Return number of bits read (which could be less than n if finished)
+int s_ts_getManyBitsBlocking(ts_context *locCont, int nc, int n, char *output)
+{
+	char tmp_output[1];
+	int read = 0;
+
+	for (int i = 0; i<n; i++)
+	{
+		read += s_ts_getManyBlocking(locCont, nc, 1, tmp_output);
+		bitWrite((BitArrPtr) output, i, tmp_output[0]);
+	}
+
+	return read;
+}
+
+
+
+int ts_getManyBitsBlocking(int nc, int n, char *output)
+{
+	if (nc >= no_contexts)
+	{
+		printf("There are only %d queues! %d\n", no_contexts, nc);
+		return false;
+	}
+
+	return s_ts_getManyBitsBlocking(contexts, nc, n, output);
+}
 
 
 
