@@ -22,8 +22,6 @@ all: create-sandbox
 	cabal install
 	cp .cabal-sandbox/bin/wplc* .
 	cp .cabal-sandbox/bin/BlinkDiff* tools/
-# cp .cabal-sandbox/bin/wplc* .
-# cp .cabal-sandbox/bin/BlinkDiff* tools/
 
 # intentionally no dependency on create-sandbox here, so that we can run
 # `make quick`. Need to make sure to initialize the sandbox first and run
@@ -42,7 +40,6 @@ create-sandbox-prof:
 	cabal sandbox init
 	cabal install --dependencies-only --enable-executable-profiling --enable-library-profiling
 	cabal configure --enable-executable-profiling --enable-library-profiling
-#	cabal install --dependencies-only
 
 
 clean:
