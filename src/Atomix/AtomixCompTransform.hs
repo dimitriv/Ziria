@@ -305,33 +305,33 @@ getClosureVars fdef = do
 
 
 
-collectPars :: Comp -> [Comp]
-collectPars c = go (unComp c)
-  where go (Par _p c1 c2) = collectPars c1 ++ collectPars c2
-        go _other        = [c]
+--collectPars :: Comp -> [Comp]
+--collectPars c = go (unComp c)
+--  where go (Par _p c1 c2) = collectPars c1 ++ collectPars c2
+--        go _other        = [c]
 
 
-parCompSplit :: [Comp] -> Either [Comp] ([Comp],Comp,[Comp])
-parCompSplit xs = 
-     let (ts,rest) = span isTrans xs in
-     case rest of { [] -> Left xs; (c:ts') -> Right (ts,c,ts')}
-     where isTrans c = not (isComputer (ctComp c))
+--parCompSplit :: [Comp] -> Either [Comp] ([Comp],Comp,[Comp])
+--parCompSplit xs = 
+--     let (ts,rest) = span isTrans xs in
+--     case rest of { [] -> Left xs; (c:ts') -> Right (ts,c,ts')}
+--     where isTrans c = not (isComputer (ctComp c))
 
-normalizePars :: Comp -> Comp
-normalizePars 
-  = runIdentity . mapCompM return return return return return (return . action)
-  where 
-    action c = 
-      case parCompSplit $ collectPars c of
-        Left [c0] -> c0
-        Right ([],c0,[]) -> c0
-        Left (t:ts) -> foldl mkPar t ts
-        Right ([],c0,t:ts) -> mkPar c0 $ foldl mkPar t ts
-        Right (t:ts,c0,[]) -> mkPar (foldl mkPar t ts) c0
-        Right (t:ts,c0,t':ts') 
-          -> mkPar (foldl mkPar t ts) $ mkPar c0 $ foldl mkPar t' ts'
-        _ -> panicStr "normalizePars: impossible case"
-      where mkPar = cPar (compLoc c) (mkParInfo MaybePipeline)
+--normalizePars :: Comp -> Comp
+--normalizePars 
+--  = runIdentity . mapCompM return return return return return (return . action)
+--  where 
+--    action c = 
+--      case parCompSplit $ collectPars c of
+--        Left [c0] -> c0
+--        Right ([],c0,[]) -> c0
+--        Left (t:ts) -> foldl mkPar t ts
+--        Right ([],c0,t:ts) -> mkPar c0 $ foldl mkPar t ts
+--        Right (t:ts,c0,[]) -> mkPar (foldl mkPar t ts) c0
+--        Right (t:ts,c0,t':ts') 
+--          -> mkPar (foldl mkPar t ts) $ mkPar c0 $ foldl mkPar t' ts'
+--        _ -> panicStr "normalizePars: impossible case"
+--      where mkPar = cPar (compLoc c) (mkParInfo MaybePipeline)
         
 
 
@@ -358,7 +358,7 @@ atomixCompTransform sym c = do
 
   mut_closure_comp <- mkMutableBound (st_bound_vars st) closure_comp
 
-  let final_comp = normalizePars mut_closure_comp
+  let final_comp = {- normalizePars -} mut_closure_comp
 
   putStrLn $ "Closure conversion phase finished, result type: " ++ 
              show (ctComp final_comp)

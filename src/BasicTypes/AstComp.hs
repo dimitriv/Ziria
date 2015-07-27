@@ -376,13 +376,13 @@ data PlInfo where
                     -> PlInfo
   NeverPipeline  :: PlInfo
   MaybePipeline  :: PlInfo
-  deriving (Generic, Typeable, Data)
+  deriving (Generic, Typeable, Data, Show)
 
 data ParInfo
   = ParInfo { plInfo     :: PlInfo
             , inBurstSz  :: Maybe Int
             , outBurstSz :: Maybe Int }
-  deriving (Generic, Typeable, Data)
+  deriving (Generic, Typeable, Data, Show)
 
 -- See Note [Standalone Reads]
 data ReadType

@@ -181,7 +181,7 @@ options =
      , Option []    ["atomix-codegen"]   (NoArg AtomixCodeGen) "generate code a la Atomix"
 
      , Option []    ["print-pipe-names"]  (NoArg PrintPipeNames) "show names of pipes in Automaton"
-     , Option []    ["print-atoms"]  (NoArg PrintPipeNames)    "print atoms in automaton-dump"
+     , Option []    ["print-atoms"]  (NoArg PrintAtoms)        "print atoms in automaton-dump"
      , Option []    ["prune-incomplete-states"]  (NoArg PruneIncompleteStates) "prune automaton states that terminate with data still in the pipeline"
      , Option []    ["optimism"]         (OptArg parseOptimism "INTEGER") "pipeline optimism"
 

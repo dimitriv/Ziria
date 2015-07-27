@@ -41,7 +41,7 @@ import qualified Language.C.Syntax as C
 import Language.C.Quote.C
 
 -- import Control.Monad.Identity
-import Control.Monad ( unless, void )
+import Control.Monad ( unless, void, when )
 import Data.Loc
 import Text.PrettyPrint.HughesPJ
 -- import qualified GenSym as GS
@@ -415,7 +415,7 @@ cgAExpBody :: DynFlags
            -> AExp ()
            -> Cg C.Exp
 cgAExpBody dfs qs wins wouts aexp
-  = dbg_m >> 
+  = when (isDynFlagSet dfs Verbose) dbg_m >> 
     do { cgInWiring dfs qs wins wires_in       -- wiring 
        ; b <- codeGenExp dfs fun_body          -- body
        ; cgOutWiring dfs qs wouts  wires_out   -- wiring
