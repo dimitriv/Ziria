@@ -346,7 +346,7 @@ cgARollbackBody :: DynFlags
                 -> EId
                 -> Int
                 -> Cg C.Exp
-cgARollbackBody _dfs _qs x n = 
+cgARollbackBody _dfs _qs x n =
    panic $ vcat [ text "SARollback not implemented yet"
                 , nest 2 $ text "queue = " <+> ppr x
                 , nest 2 $ text "n     = " <+> ppr n 

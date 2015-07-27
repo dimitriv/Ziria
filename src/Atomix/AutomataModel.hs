@@ -1104,7 +1104,7 @@ automatonPipeline dfs sym inty outty acomp = do
   let channels = Channels { in_chan = inch, out_chan = outch, ctrl_chan = Nothing }
   let k = mkDoneAutomaton inch outch
 
-  putStrLn ">>>>>>>>>> mkAutomaton"
+  putStrLn "\n>>>>>>>>>> mkAutomaton"
   a <- simplToCfg <$> mkAutomaton dfs sym channels acomp k
   --putStrLn (dotOfAuto True a)
   putStrLn $ "<<<<<<<<<<< mkAutomaton (" ++ show (size a) ++ " states)"
