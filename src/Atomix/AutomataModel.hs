@@ -64,7 +64,7 @@ data WiredAtom atom
   deriving Eq
 
 
-type AId = String 
+type AId = String
 
 {-- Generic Atom Interfae --------------------------------------------}
 class (Show a, Eq a) => Atom a where
@@ -382,13 +382,13 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a
 
-    go (ATakeEmit x e) = 
+    go (ATakeEmit x e) =
       let watom = expToWiredAtom (substAExp x (in_chan chans) e) (Just (out_chan chans))
           nkind = SAtom watom (auto_start k) Map.empty
           a     = insert_prepend nkind k
       in return $ assert (auto_closed a) a
- 
-    go (ATakeReturn x e) = 
+
+    go (ATakeReturn x e) =
       let watom = expToWiredAtom (substAExp x (in_chan chans) e) (ctrl_chan chans)
           nkind = SAtom watom (auto_start k) Map.empty
           a     = insert_prepend nkind k
@@ -1034,7 +1034,7 @@ fuseActions auto = auto { auto_graph = fused_graph }
 dotOfAuto :: (Atom e, Show nid) => DynFlags -> CfgAuto e nid -> String
 dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfix
   where
-    printActions = isDynFlagSet dflags Verbose
+    printAtoms = isDynFlagSet dflags PrintAtoms
     printPipeNames = isDynFlagSet dflags PrintPipeNames
     prefix = "digraph ziria_automaton {\n"
     postfix = ";\n}"
@@ -1055,7 +1055,7 @@ dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfi
     showNode (Node nid nk) = "  " ++ show nid ++ "[label=\"" ++ showNk nk ++ "\"" ++ maybeToolTip nk ++ "]"
 
     showNk (CfgAction watoms _ pipes)
-      | printActions = List.intercalate "\\n" (showPipes watoms pipes : showWatoms watoms)
+      | printAtoms = List.intercalate "\\n" (showPipes watoms pipes : showWatoms watoms)
       | otherwise = showPipes watoms pipes
     showNk (CfgBranch x _ _ True) = "WHILE<" ++ show x ++ ">"
     showNk (CfgBranch x _ _ False) = "IF<" ++ show x ++ ">"
