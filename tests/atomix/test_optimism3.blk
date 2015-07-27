@@ -1,7 +1,6 @@
 {-
 
 Test that demonstrates blowup caused by optimistic zipping.
-The test also shows incorrect behavior w.r.t. rollbacks.
 
 -}
 
@@ -12,7 +11,7 @@ fun id (x:int) {
 
 let comp main = 
   var x : bool in
-  
+
   	  read[int]
   >>> 
       repeat emit 1
