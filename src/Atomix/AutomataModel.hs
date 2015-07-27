@@ -533,7 +533,7 @@ mkDoneDist threshold a = (\nid -> fromJust $ assert (Map.member nid $ auto_graph
           Map.keys (auto_graph a)
 
   -- Inital distance-map.
-  init = Map.map (const $ DoneDist Set.empty False) (auto_graph a)
+  init = Map.map (const $ DoneDist Set.empty $ if null dones then True else False) (auto_graph a)
 
   -- Iteratively updates distance map through backwards-propagation of distance updates.
   -- Terminates since only true updates are propagated, and because distances above the
@@ -789,7 +789,8 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
       -- if automaton is know to halt soon, don't be stupidly optimistic!
       | DoneDist dists False <- done_dist nid_right
       = minimum (executionCost nid_right : Set.toList dists)
-      | otherwise = executionCost nid_right
+      | otherwise
+      = executionCost nid_right
 
     executionCost = mkExecutionCost (optimism+1) a2
     done_dist = mkDoneDist max_q_size a2
