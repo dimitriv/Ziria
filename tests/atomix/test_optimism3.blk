@@ -1,0 +1,30 @@
+{-
+
+Test that demonstrates blowup caused by optimistic zipping.
+The test also shows incorrect behavior w.r.t. rollbacks.
+
+-}
+
+
+fun id (x:int) {
+	return x;
+}
+
+let comp main = 
+  var x : bool in
+  
+  	  read[int]
+  >>> 
+      repeat emit 1
+  >>> 					-- this pipeline should be filled up with (n+1) elements (for optimism=n)
+  	  map id
+  >>>					-- and so should this pipe
+  	  map id
+  >>>                   -- and this
+  	  while(x) { y <- take; emit y; }
+  >>>					-- and this
+  	  map id
+  >>>					-- and this					
+  	  map id
+  >>> 
+  	  write[int]
