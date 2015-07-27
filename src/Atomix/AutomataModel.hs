@@ -700,7 +700,7 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
              assert (auto_closed a1) $
              assert (auto_closed a2) $
              (if prune then pruneUnfinished else clearUnfinished) $
-             (if lazy then id else insertRollbacks lazy (auto_outchan a1)) $
+             (if lazy then id else insertRollbacks lazy $ auto_inchan a1) $
              normalize_auto_ids 0 $
              Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) start_prod_nid
     start_prod_nid = mkProdNid empty_pipe_state (auto_start a1) (auto_start a2)
@@ -936,7 +936,7 @@ insertRollbacks lazy rollback_ch a = a { auto_graph = Map.foldl go nmap nmap } w
     | Just n <- rollback, n>0, not lazy =
       let rollback_nk = SAtom (rollbackWAtom rollback_ch n) final_nid pipes
           final_nid = fst (Map.findMax nmap) + 1
-          final_nk = SDone (Map.insert rollback_ch 0 pipes) Nothing
+          final_nk = SDone (Map.adjust (+n) rollback_ch pipes) Nothing
       in insertNk nid rollback_nk $ insertNk final_nid final_nk $ nmap
     | otherwise = panicStr "insertRollbacks: impossible case!"
   go nmap _ = nmap
