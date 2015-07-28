@@ -71,6 +71,7 @@ data DynFlag =
   | PrintAtoms
   | PruneIncompleteStates
   | Optimism Int
+  | FuseAggressively
 
   | Vectorize
   | AutoLUT
@@ -184,6 +185,7 @@ options =
      , Option []    ["print-atoms"]  (NoArg PrintAtoms)        "print atoms in automaton-dump"
      , Option []    ["prune-incomplete-states"]  (NoArg PruneIncompleteStates) "prune automaton states that terminate with data still in the pipeline"
      , Option []    ["optimism"]         (OptArg parseOptimism "INTEGER") "pipeline optimism"
+     , Option []    ["fuse-aggressively"] (NoArg FuseAggressively) "fuse atoms at the cost of duplicating code"
 
 
      , Option []    ["ddump-ast-pretty"] (NoArg DumpAstPretty) "dump the parsed AST (pretty-printed)"

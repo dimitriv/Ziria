@@ -984,8 +984,8 @@ isDone nid = do
 
 -- Fuses actions sequences in automata. This brings automata into a from that
 -- is convenient for printing and further processing.
-fuseActions :: forall atom nid. Ord nid => CfgAuto atom nid -> CfgAuto atom nid
-fuseActions auto = auto { auto_graph = fused_graph }
+fuseActions :: forall atom nid. Ord nid => DynFlags -> CfgAuto atom nid -> CfgAuto atom nid
+fuseActions dfs auto = auto { auto_graph = fused_graph }
   where
     fused_graph = fst $ runState (doAll [auto_start auto] (auto_graph auto)) (Set.empty, Set.empty)
 
@@ -1026,7 +1026,7 @@ fuseActions auto = auto { auto_graph = fused_graph }
           -- TODO: we may want to allow more aggressive fusing with a compiler flag,
           -- as it can lead to better performance under parallel execution (since state
           -- transitions require synchronization and are hence expensive).
-          Node _ (CfgAction atoms' next' pipes') | Set.size (preds next) <= 1 ->
+          Node _ (CfgAction atoms' next' pipes') | Set.size (preds next) <= 1 || isDynFlagSet dfs FuseAggressively ->
             let pipes'' = Map.unionWith (curry fst) pipes pipes' in
             let node = Node nid (CfgAction (atoms++atoms') next' pipes'') in
             (wl, Map.insert nid node nmap)
@@ -1120,7 +1120,7 @@ automatonPipeline dfs sym inty outty acomp = do
   putStrLn $ "<<<<<<<<<<< mkAutomaton (" ++ show (size a) ++ " states)"
 
   putStrLn ">>>>>>>>>>> fuseActions"
-  let a_f = fuseActions a
+  let a_f = fuseActions dfs a
   --putStrLn (dotOfAuto True a_f)
   putStrLn $ "<<<<<<<<<<< fuseActions (" ++ show (size a_f) ++ " states)"
 
