@@ -83,7 +83,7 @@ cgCall dfs loc retTy argtys fName eargs mb_ret = do
        -> return already_declared   -- then use it
 
      -- if the return type is unit, we will never use "cer", and can savely leave it undefined
-     _ | TUnit <- retTy -> return undefined
+     _ | TUnit <- retTy -> return $ panicStr "cgCall: unit-returning function"
 
      _otherwise ->
        do { retn <- freshName "ret" retTy Mut
