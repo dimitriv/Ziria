@@ -260,7 +260,7 @@ main = do
           (automaton :: CfgAuto SymAtom Int) 
             <- automatonPipeline dflags sym undefined undefined ac
           dump dflags DumpAutomaton (".automaton.dump")
-                                   (text $ dotOfAuto dflags automaton)
+                                   (text $ dotOfAuto dflags Nothing automaton)
 
 
         when (isDynFlagSet dflags ClosureConvert) $ 

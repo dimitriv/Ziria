@@ -123,9 +123,11 @@ codeGenThread dflags tid c
              (ac,rnst) <- cgIO $ zirToAtomZir dflags sym c
              (automaton :: CfgAuto SymAtom Int) 
                 <- cgIO $ automatonPipeline dflags sym (bufty_ty bta) (bufty_ty btb) ac 
-
+             let atomPrinter = if isDynFlagSet dflags CLikeNames 
+                                  then (Just $ alphaNumStr . wiredAtomId)
+                                  else Nothing
              dump dflags DumpAutomaton (".automaton.dump")
-                                       (text $ dotOfAuto dflags automaton)
+                                       (text $ dotOfAuto dflags atomPrinter automaton)
 
              cgAutomaton dflags rnst automaton
   

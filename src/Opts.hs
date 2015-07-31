@@ -72,6 +72,7 @@ data DynFlag =
   | PruneIncompleteStates
   | Optimism Int
   | FuseAggressively
+  | CLikeNames
 
   | Vectorize
   | AutoLUT
@@ -186,6 +187,7 @@ options =
      , Option []    ["prune-incomplete-states"]  (NoArg PruneIncompleteStates) "prune automaton states that terminate with data still in the pipeline"
      , Option []    ["optimism"]         (OptArg parseOptimism "INTEGER") "pipeline optimism"
      , Option []    ["fuse-aggressively"] (NoArg FuseAggressively) "fuse atoms at the cost of duplicating code"
+     , Option []    ["c-like-names"]     (NoArg CLikeNames) "use same atom names as code generator"
 
 
      , Option []    ["ddump-ast-pretty"] (NoArg DumpAstPretty) "dump the parsed AST (pretty-printed)"

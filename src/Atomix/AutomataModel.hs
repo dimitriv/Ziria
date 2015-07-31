@@ -1041,8 +1041,8 @@ fuseActions dfs auto = auto { auto_graph = fused_graph }
   Automaton to DOT file translation
 ------------------------------------------------------------------------}
 
-dotOfAuto :: (Atom e, Show nid) => DynFlags -> CfgAuto e nid -> String
-dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfix
+dotOfAuto :: (Atom e, Show nid) => DynFlags -> Maybe (WiredAtom e -> String) -> CfgAuto e nid -> String
+dotOfAuto dflags atomPrinter a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfix
   where
     printAtoms = isDynFlagSet dflags PrintAtoms
     printPipeNames = isDynFlagSet dflags PrintPipeNames
@@ -1073,8 +1073,17 @@ dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfi
     showNk (CfgLoop _) = "LOOP"
 
     showWatoms = map showWatomGroup . List.group
-    showWatomGroup wa = case length wa of 1 -> show (head wa)
-                                          n -> show n ++ " TIMES DO " ++ show (head wa)
+    showWatomGroup wa = case length wa of 1 -> showWatom (head wa)
+                                          n -> show n ++ " TIMES DO " ++ showWatom (head wa)
+    
+    showWatom wa@(WiredAtom inw outw _) | Just showAtom <- atomPrinter 
+      = showWires inw ++ showAtom wa ++ showWires outw where
+          showWires ws = "{" ++ (List.intercalate "," $ map showWire ws) ++ "}"
+          showWire (n,ch)
+            | n==1      = showChan True ch
+            | otherwise = showChan True ch ++ "^" ++ show n
+    showWatom wa | otherwise = show wa
+      
 
     showPipes watoms pipes
       | printPipeNames = render $ punctuateH top (text " | ") $ boxedPipes
