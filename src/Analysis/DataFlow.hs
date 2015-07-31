@@ -166,7 +166,8 @@ lookupVarDef v = do
 instance CmdDom DFM VarSet where
   aAssign d varset = go d varset
     where
-      go (GDVar x) vs = insertUseFree x >> insertUseDefs x vs
+      go (GDVar x) vs -- OLD and wrong: = insertUseFree x >> insertUseDefs x vs
+                      = insertUseDefs x vs
       go (GDArr d' idx_vs _) vs = go d' (idx_vs `Set.union` vs)
       go (GDProj d' _) vs       = go d' vs
 
@@ -240,7 +241,7 @@ inOutVarsDefinite dfs e = do
       impUsed   = Set.toList impUsed_s
       -- pureUsed = Set.toList varset 
       pureUsed = Set.toList $ ((Set.union varset ufset) Set.\\ impUsed_s)
-      allVars  = Set.toList ufset
+      allVars  = nub (pureUsed ++ impUsed ++ modified)
   -- Try now the range analysis, but suppress any errors
   res <- runErrorT (RA.varRanges dfs e)
   let ranges = case res of 
@@ -260,10 +261,12 @@ inOutVars :: DynFlags -> Exp -> ErrorT Doc IO VarUsePkg
 inOutVars dfs e = do
   (varset, DFState udmap ufset) <- runDFM (unAbsT action)
   let modified, impUsed, pureUsed, allVars :: [GName Ty]
-      modified = neKeys udmap
-      impUsed  = Set.toList $ Set.unions (map snd (neToList udmap))
-      pureUsed = Set.toList varset
-      allVars  = Set.toList ufset
+      modified  = neKeys udmap
+      impUsed_s = Set.unions (map snd (neToList udmap))
+      impUsed   = Set.toList impUsed_s
+      -- pureUsed = Set.toList varset 
+      pureUsed = Set.toList $ ((Set.union varset ufset) Set.\\ impUsed_s)
+      allVars  = nub (pureUsed ++ impUsed ++ modified)
   -- Try now the range analysis
   (_ret_rng, ranges) <- RA.varRanges dfs e
   return $ VarUsePkg { vu_invars  = nub $ impUsed ++ pureUsed
