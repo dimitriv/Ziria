@@ -462,13 +462,14 @@ select_scalefactors vctx (sfuds,sfdus,sfdds)
 
 
 logCands :: DynFlags -> Bool -> String -> DVRCands -> VecM DVRCands
-logCands dfs full_blown origin cands = do
+logCands _dfs _full_blown _origin cands = return cands
+{- do
   verbose dfs $ text origin <>
     parens (text (show (Map.size cands)) <+> text "candidates")
   when full_blown $
     verbose dfs (vcat (map (text . show . dvr_vres) (Map.elems cands)))
   return cands
-
+-}
 
 -- | NB: Not including 'self'
 vectRepeat :: DynFlags
