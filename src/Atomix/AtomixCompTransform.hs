@@ -358,7 +358,7 @@ newBlockId sym loc pref = do
 transLiftedExp :: DynFlags -> GS.Sym -> Exp -> IO (AExp ())
 transLiftedExp dfs sym e = do
   vupkg <- inOutVarsDefinite dfs e
-  block_id <- newBlockId sym (expLoc e) "aexp"
+  block_id <- newBlockId sym (expLoc e) ""
 
   return $ MkAExp { aexp_lbl = block_id
                   , aexp_exp = e
