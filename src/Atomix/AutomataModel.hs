@@ -1084,41 +1084,37 @@ fuseActions dfs auto = auto { auto_graph = fused_graph }
   Building constraint graph from Control flow graph
 ------------------------------------------------------------------------}
 
-cfgToAtomix :: forall e nid. Ord nid => CfgAuto e nid -> AxAuto e Int
-cfgToAtomix a = a { auto_graph = state_graph, auto_start = 0 } where
-  state_graph = fst $ runState (fromCfg (auto_start a) 0 Map.empty) Set.empty
+cfgToAtomix :: forall e.CfgAuto e Int -> AxAuto e Int
+cfgToAtomix a = a { auto_graph = state_graph} where
+  state_graph = fst $ runState (fromCfg (auto_start a) Map.empty) Set.empty
 
-  fromCfg :: nid -> Int -> AxNodeMap e Int -> State (Set nid) (AxNodeMap e Int)
-  fromCfg nid new_id nmap = do
+  fromCfg :: Int -> AxNodeMap e Int -> State (Set Int) (AxNodeMap e Int)
+  fromCfg nid nmap = do
     done <- gets (Set.member nid)
     modify (Set.insert nid)
     if done
       then return nmap
-      else fromCfg' new_id Nothing [] (nodeKindOfId a nid) nmap
+      else fromCfg' nid Map.empty [] (nodeKindOfId a nid) nmap
 
-  fromCfg' :: Int -> Maybe (Map Chan Int) -> [WiredAtom e] -> CfgNk e nid -> 
-              AxNodeMap e Int -> State (Set nid) (AxNodeMap e Int)
+  fromCfg' :: Int -> Map Chan Int -> [WiredAtom e] -> CfgNk e Int -> 
+              AxNodeMap e Int -> State (Set Int) (AxNodeMap e Int)
 
-  fromCfg' nid mb_pipes watoms (CfgAction was nxt pipes) nmap =
-    fromCfg' nid (maybe (Just pipes) Just mb_pipes) (watoms++was) (nodeKindOfId a nxt) nmap
+  fromCfg' nid pipes watoms (CfgAction was nxt pipes') nmap =
+    -- left-biased union!
+    fromCfg' nid (Map.union pipes pipes') (watoms++was) (nodeKindOfId a nxt) nmap
 
-  fromCfg' nid mb_pipes watoms CfgDone nmap =
-    let nk = AtomixState watoms (mk_constraints mb_pipes watoms Nothing) AtomixDone in
+  fromCfg' nid pipes watoms CfgDone nmap =
+    let nk = AtomixState watoms (mk_constraints pipes watoms Nothing) AtomixDone in
     return $ insertNk nid nk nmap
 
-  fromCfg' nid mb_pipes watoms (CfgLoop next) nmap =
-    let new_next_id = nextNid nmap in
-    let nk = AtomixState watoms (mk_constraints mb_pipes watoms Nothing) (AtomixLoop new_next_id) in
-    fromCfg next new_next_id $ insertNk nid nk nmap
+  fromCfg' nid pipes watoms (CfgLoop next) nmap =
+    let nk = AtomixState watoms (mk_constraints pipes watoms Nothing) (AtomixLoop next) in
+    fromCfg next $ insertNk nid nk nmap
 
-  fromCfg' nid mb_pipes watoms (CfgBranch x left right is_while) nmap =
-    let new_left = nextNid nmap in
-    let new_right = new_left + 1 in
-    let constrs = mk_constraints mb_pipes watoms (Just x) in
-    let nk = AtomixState watoms constrs (AtomixBranch x new_left new_right) in
-    fromCfg left new_left =<< fromCfg right new_right (insertNk nid nk nmap)
-
-  nextNid nmap = if Map.null nmap then 0 else (fst (Map.findMax nmap) + 1)
+  fromCfg' nid pipes watoms (CfgBranch x left right is_while) nmap =
+    let constrs = mk_constraints pipes watoms (Just x) in
+    let nk = AtomixState watoms constrs (AtomixBranch x left right) in
+    fromCfg left =<< fromCfg right (insertNk nid nk nmap)
 
 
 
@@ -1131,9 +1127,9 @@ type PipeBalances = Map Chan Int
 
 type Acc = (QDependencyEnv, VDependencyEnv, [(Int,Int,Dependency)])
 
-mk_constraints :: forall e. Maybe (Map Chan Int) -> [WiredAtom e] -> Maybe Chan -> Map (Int,Int) [Dependency]
-mk_constraints Nothing [] _ = Map.empty
-mk_constraints (Just pipes) watoms@(_:_) mb_decision 
+mk_constraints :: forall e. Map Chan Int -> [WiredAtom e] -> Maybe Chan -> Map (Int,Int) [Dependency]
+mk_constraints _ [] _ = Map.empty
+mk_constraints pipes watoms mb_decision 
   = trans_reduction $ go_decision mb_decision $ foldl go_watom (qenv0, venv0, []) (zip watoms [0..]) where
 
     -- queue and variable dependency environments
@@ -1209,14 +1205,9 @@ mk_constraints (Just pipes) watoms@(_:_) mb_decision
          map ( \(a,b,c) -> ((a,b),c) ) $
          dec_constr ++ constrs
 
-mk_constraints _ _ _ = error "mk_constraints: unexpected case"
-
 
 -- Naive transitivity-reduction (i.e. removal of transitive edges)
 trans_reduction :: Map (Int,Int) a -> Map (Int,Int) a
-{- DV: temporarily ...  
-trans_reduction = id 
--}
 trans_reduction mp = foldl (flip Map.delete) mp redundant
   where
     redundant = [ (i,i) | i <- idxs ] ++
