@@ -10,6 +10,7 @@ import qualified Data.Set as Set
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.List as List
+import Data.Function
 
 import Control.Exception
 import Control.Monad.State
@@ -168,6 +169,31 @@ instance NodeKind CfgNk where
 
 
 
+data AtomixNk atom nid
+  = AtomixState { state_atoms :: [WiredAtom atom]
+                , constraints :: Map (Int,Int) [Dependency]
+                , state_decision :: Decision nid
+                }
+
+data Dependency
+  = RW
+  | WR
+  | WW
+  | CC
+  | PP
+  | PC
+  deriving (Show, Eq)
+
+data Decision nid
+  = AtomixDone
+  | AtomixLoop { atomix_loop_body :: nid}
+  | AtomixBranch { atomix_branch_ch :: Chan
+                 , atomix_branch_true :: nid
+                 , atomix_branch_false :: nid
+                 }
+  deriving Show
+
+
 {-- Pretty Printing ------------------------------------------------------------}
 
 instance (Atom atom, Show nid, Show (nkind atom nid)) => Show (Node atom nid nkind) where
@@ -213,6 +239,10 @@ type SNodeMap atom nid = NodeMap atom nid SimplNk
 type CfgAuto atom nid = Automaton atom nid CfgNk
 type CfgNode atom nid = Node atom nid CfgNk
 type CfgNodeMap atom nid = NodeMap atom nid CfgNk
+
+type AxAuto atom nid = Automaton atom nid AtomixNk
+type AxNode atom nid = Node atom nid AtomixNk
+type AxNodeMap atom nid = NodeMap atom nid AtomixNk
 
 
 
@@ -623,6 +653,15 @@ pop :: Queue e -> Maybe (e, Queue e)
 pop [] = Nothing
 pop (e:es) = Just (e, es)
 
+peek :: Queue e -> Maybe e
+peek q = fst <$> pop q
+
+popN :: Int -> Queue a -> Maybe ([a], Queue a)
+popN = popN' [] where
+  popN' acc 0 q  = Just (reverse acc, q)
+  popN' acc n q | Just (a,q') <- pop q = popN' (a:acc) (n-1) q'
+  popN' _ _ _ = Nothing
+
 
 
 
@@ -708,7 +747,7 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
 
     -- paramters
     pipe_ch = assert (auto_outchan a1 == auto_inchan a2) $ auto_outchan a1
-    optimism = case plInfo pinfo of { NeverPipeline -> 0; _ -> getOptimism dfs }
+    optimism = case plInfo pinfo of { AlwaysPipeline {} -> getOptimism dfs; _ -> 0 }
     lazy = optimism == 0
     prune = isDynFlagSet dfs PruneIncompleteStates
 
@@ -1037,6 +1076,150 @@ fuseActions dfs auto = auto { auto_graph = fused_graph }
 
 
 
+
+
+
+{------------------------------------------------------------------------
+  Building constraint graph from Control flow graph
+------------------------------------------------------------------------}
+
+cfgToAtomix :: forall e nid. Ord nid => CfgAuto e nid -> AxAuto e Int
+cfgToAtomix a = a { auto_graph = state_graph, auto_start = 0 } where
+  state_graph = fst $ runState (fromCfg (auto_start a) 0 Map.empty) Set.empty
+
+  fromCfg :: nid -> Int -> AxNodeMap e Int -> State (Set nid) (AxNodeMap e Int)
+  fromCfg nid new_id nmap = do
+    done <- gets (Set.member nid)
+    modify (Set.insert nid)
+    if done
+      then return nmap
+      else fromCfg' new_id Nothing [] (nodeKindOfId a nid) nmap
+
+  fromCfg' :: Int -> Maybe (Map Chan Int) -> [WiredAtom e] -> CfgNk e nid -> 
+              AxNodeMap e Int -> State (Set nid) (AxNodeMap e Int)
+
+  fromCfg' nid mb_pipes watoms (CfgAction was nxt pipes) nmap =
+    fromCfg' nid (maybe (Just pipes) Just mb_pipes) (watoms++was) (nodeKindOfId a nxt) nmap
+
+  fromCfg' nid mb_pipes watoms CfgDone nmap =
+    let nk = AtomixState watoms (mk_constraints mb_pipes watoms Nothing) AtomixDone in
+    return $ insertNk nid nk nmap
+
+  fromCfg' nid mb_pipes watoms (CfgLoop next) nmap =
+    let new_next_id = fst (Map.findMax nmap) + 1 in
+    let nk = AtomixState watoms (mk_constraints mb_pipes watoms Nothing) (AtomixLoop new_next_id) in
+    fromCfg next new_next_id $ insertNk nid nk nmap
+
+  fromCfg' nid mb_pipes watoms (CfgBranch x left right is_while) nmap =
+    let new_left = fst (Map.findMax nmap) + 1 in
+    let new_right = new_left + 1 in
+    let constrs = mk_constraints mb_pipes watoms (Just x) in
+    let nk = AtomixState watoms constrs (AtomixBranch x new_left new_right) in
+    fromCfg left new_left =<< fromCfg right new_right (insertNk nid nk nmap)
+
+
+
+
+-- queue dependency environment
+type QDependencyEnv = Map Chan (Int,Queue Int) -- last read/queue of active writes (of cardinality one) from/to channel
+-- variable dependency environment
+type VDependencyEnv = Map Chan (Maybe Int, Maybe Int) -- last read/write
+type PipeBalances = Map Chan Int
+
+type Acc = (PipeBalances, QDependencyEnv, VDependencyEnv, [(Int,Int,Dependency)])
+
+mk_constraints :: forall e. Maybe (Map Chan Int) -> [WiredAtom e] -> Maybe Chan -> Map (Int,Int) [Dependency]
+mk_constraints Nothing [] _ = Map.empty
+mk_constraints (Just pipes) watoms@(_:_) mb_decision 
+  = trans_reduction $ go_decision mb_decision $ foldl go_watom (pipes, qenv0, venv0, []) (zip watoms [0..]) where
+
+    -- queue and variable dependency environments
+    qenv0 :: QDependencyEnv
+    qenv0 = Map.map (\n -> (-1, replicate n (-1))) pipes
+    venv0 :: VDependencyEnv
+    venv0 = Map.empty
+
+    go_watom :: Acc -> (WiredAtom e, Int) -> Acc
+    go_watom acc (wa, idx) =
+      let acc' = foldl (go_inwires idx) acc (wires_in wa) in
+      foldl (go_outwires idx) acc' (wires_out wa)
+    
+
+    go_inwires :: Int -> Acc -> (Int, Chan) -> Acc
+
+    -- reading from queue that still contains data from last state
+    go_inwires idx (balances, qenv, venv, constrs) (n,ch) | Map.findWithDefault 0 ch balances >= n =
+      let balances' = Map.adjust (+(-n)) ch balances in
+      let qenv' = Map.adjust (\(last_r,last_wrs) -> (idx,last_wrs)) ch qenv in
+      (balances', qenv', venv, constrs)
+
+    -- reading from queue
+    go_inwires idx (balances, qenv, venv, constrs) (n,ch) | Map.member ch pipes =
+      let n' = n - (Map.findWithDefault 0 ch balances) in
+      let balances' = Map.insert ch 0 balances in
+      let Just (last_r,last_wrs) = Map.lookup ch qenv in
+      let Just (producers, last_wrs') = popN n' last_wrs in
+      let qenv' = Map.insert ch (idx,last_wrs') qenv in
+      let constrs' = (last_r,idx,CC) : [(wr,idx,PC) | wr <- producers] ++ constrs in
+      (balances', qenv', venv, constrs')
+
+    -- reading from variable
+    go_inwires idx (balances, qenv, venv, constrs) (1,ch) =
+      let (mb_last_r,mb_last_wr) = Map.findWithDefault (Nothing,Nothing) ch venv in
+      let venv' = Map.insert ch (Just idx, mb_last_wr) venv in
+      let constrs' = maybe constrs (\last_wr -> (last_wr, idx, WR) : constrs) mb_last_wr in
+      (balances, qenv, venv', constrs')
+
+    go_inwires _ _ _ = panicStr "mk_constraints: unexpected case"
+
+
+    go_outwires :: Int -> Acc -> (Int,Chan) -> Acc
+
+    -- writing to queue
+    go_outwires idx (balances, qenv, venv, constrs) (n,ch) | Just (last_r, last_wrs) <- Map.lookup ch qenv =
+      let mb_wr = peek last_wrs in
+      let qenv' = Map.adjust (\(last_r,last_wrs) -> (last_r, iterate (push idx) last_wrs !! n)) ch qenv in
+      let constrs' = maybe constrs (\wr -> (wr,idx,PP):constrs) mb_wr in
+      (balances, qenv', venv, constrs')
+
+    -- writing to variable
+    go_outwires idx (balances, qenv, venv, constrs) (n,ch) =
+      let (mb_last_r,mb_last_wr) = Map.findWithDefault (Nothing,Nothing) ch venv in
+      let venv' = Map.insert ch (mb_last_r, Just idx) venv in
+      let constrs' = [ (r,idx,RW) | Just r <- [mb_last_r]  ] ++
+                     [ (w,idx,WW) | Just w <- [mb_last_wr] ] ++ constrs in
+      (balances, qenv, venv', constrs')
+
+
+    go_decision :: Maybe Chan -> Acc -> Map (Int,Int) [Dependency]
+
+    go_decision mb_decision (balances, qenv, venv, constrs) =
+      let dec_constr = maybeToList $ do
+          dec <- mb_decision
+          (mb_last_r,mb_last_wr) <- Map.lookup dec venv
+          last_wr <- mb_last_wr
+          return (last_wr,length watoms,WR)
+      in Map.fromList $
+         map ( \group -> (fst $ head $ group, List.nub $ map snd $ group) ) $
+         List.groupBy ((==) `on` fst) $
+         map ( \(a,b,c) -> ((a,b),c) ) $
+         dec_constr ++ constrs
+
+mk_constraints _ _ _ = error "mk_constraints: unexpected case"
+
+
+-- Naive transitivity-reduction (i.e. removal of transitive edges)
+trans_reduction :: Map (Int,Int) a -> Map (Int,Int) a
+trans_reduction mp = foldl remove_trans mp [(a,b,c) | a <- idxs, b <- idxs, c <- idxs] where
+  idxs = List.nub $ uncurry (++) $ unzip $ Map.keys mp
+  remove_trans mp (a,b,c) | Map.member (a,b) mp, Map.member (b,c) mp =
+    Map.delete (a,c) mp
+  remove_trans mp _ = mp 
+
+
+
+
+
 {------------------------------------------------------------------------
   Automaton to DOT file translation
 ------------------------------------------------------------------------}
@@ -1100,6 +1283,26 @@ dotOfAuto dflags atomPrinter a = prefix ++ List.intercalate ";\n" (nodes ++ edge
     showPipeNames = List.intercalate " | " . map (showChan True) . Map.keys
 
 
+dotOfAxAuto :: Atom e => DynFlags -> AxAuto e Int -> [String]
+dotOfAxAuto dflags a = map dotify (Map.elems $ auto_graph a) where
+  dotify (Node nid nk) = prefix ++ List.intercalate ";\n" (label nid : mk_state nk) ++ postfix 
+  prefix = "digraph atomix_state {\n"
+  label nid = "label=\"State " ++ show nid ++ "\""
+  postfix = ";\n}"
+
+  mk_state (AtomixState atoms constrs decision) 
+    = ["node [shape = point]", "  -1 [label=\"\"]"] ++
+      ("node [shape = box]" : map mk_atom (zip atoms [0..])) ++
+      ("node [shape = circle]" : [mk_decision decision (length atoms)]) ++
+      mk_edges constrs
+
+  mk_atom (wa,idx) = "  " ++ show idx ++ "[label=\"" ++ show wa ++ "\"]"
+  
+  mk_decision dec idx = "  " ++ show idx ++ "[label=\"" ++ show dec ++ "\"]"
+
+  mk_edges constrs = map (uncurry mk_edge) (Map.toList constrs)
+  mk_edge (id1,id2) lbls = show id1 ++ " -> " ++ show id2 ++ "[label=\"" ++ show lbls ++ "\"]"
+
 
 
 
@@ -1114,6 +1317,7 @@ simplToCfg a = a { auto_graph = Map.map nodeToCfg $ auto_graph a }
         nkToCfg (SDone _ (Just _)) = panicStr "simplToCfg: missing rollback encountered!"
         nkToCfg (SAtom wa nxt pipes) = CfgAction [wa] nxt pipes
         nkToCfg (SBranch x nxt1 nxt2 l _) = CfgBranch x nxt1 nxt2 l
+
 
 
 automatonPipeline :: Atom e => DynFlags -> GS.Sym -> Ty -> Ty -> AComp () () -> IO (CfgAuto e Int)
