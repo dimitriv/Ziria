@@ -84,6 +84,8 @@ instance Atom SymAtom where
   isRollbackAtom (SARollback q n) = Just (n,q)
   isRollbackAtom _ = Nothing
 
+  wiredAtomId = wired_atom_id
+
   expToWiredAtom :: AExp () -> Maybe EId -> WiredAtom SymAtom
   expToWiredAtom e mb_out = 
     let loc = expLoc body 
@@ -103,3 +105,21 @@ instance Atom SymAtom where
                             , aexp_ovs = retvar : aexp_ovs e 
                             , aexp_ret = TUnit }
       }
+
+
+
+-- | The unique identifier of an atom
+wired_atom_id :: WiredAtom SymAtom -> String
+wired_atom_id (WiredAtom win _wout the_atom) = case the_atom of 
+  SACast s _ _      -> "cast" ++ "$" ++ s
+  SADiscard s _     -> "disc" ++ "$" ++ s
+  SAExp ae          -> "aexp" ++ "$" ++ aexp_lbl ae
+  SARollback qvar n -> "rbck" ++ "$" ++ show_uniq qvar ++ "$" ++ show n
+  SAClear qsns      ->
+     let qsns_list = Map.toList qsns
+         u = concat $ 
+             map (\(q,n) -> show_uniq q ++ "$" ++ show n ++ ":") qsns_list
+     in "_clr" ++ "$" ++ u
+  SAAssert b   -> let u = render (ppNameUniq (snd (head win)))
+                  in "asrt" ++ "$" ++ u ++ "$" ++ show b
+  where show_uniq = render . ppNameUniq

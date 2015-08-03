@@ -84,6 +84,7 @@ class (Show a, Eq a) => Atom a where
   -- Getting (wired) atoms from expressions
   expToWiredAtom :: AExp () -> Maybe Chan -> WiredAtom a
 
+  wiredAtomId :: WiredAtom a -> String
 
   -- Default implementations based on this abstract interface
   idAtom     :: AId -> Ty -> a
@@ -1123,21 +1124,21 @@ cfgToAtomix a = a { auto_graph = state_graph, auto_start = 0 } where
 
 
 -- queue dependency environment
-type QDependencyEnv = Map Chan (Int,Queue Int) -- last read/queue of active writes (of cardinality one) from/to channel
+type QDependencyEnv = Map Chan (Int,Queue Int, Int ) -- last read/queue of active writes (of cardinality one) from/to channel plus last writer to this queue
 -- variable dependency environment
 type VDependencyEnv = Map Chan (Maybe Int, Maybe Int) -- last read/write
 type PipeBalances = Map Chan Int
 
-type Acc = (PipeBalances, QDependencyEnv, VDependencyEnv, [(Int,Int,Dependency)])
+type Acc = (QDependencyEnv, VDependencyEnv, [(Int,Int,Dependency)])
 
 mk_constraints :: forall e. Maybe (Map Chan Int) -> [WiredAtom e] -> Maybe Chan -> Map (Int,Int) [Dependency]
 mk_constraints Nothing [] _ = Map.empty
 mk_constraints (Just pipes) watoms@(_:_) mb_decision 
-  = trans_reduction $ go_decision mb_decision $ foldl go_watom (pipes, qenv0, venv0, []) (zip watoms [0..]) where
+  = trans_reduction $ go_decision mb_decision $ foldl go_watom (qenv0, venv0, []) (zip watoms [0..]) where
 
     -- queue and variable dependency environments
     qenv0 :: QDependencyEnv
-    qenv0 = Map.map (\n -> (-1, replicate n (-1))) pipes
+    qenv0 = Map.map (\n -> (-1, replicate n (-1), -1)) pipes
     venv0 :: VDependencyEnv
     venv0 = Map.empty
 
@@ -1150,28 +1151,25 @@ mk_constraints (Just pipes) watoms@(_:_) mb_decision
     go_inwires :: Int -> Acc -> (Int, Chan) -> Acc
 
     -- reading from queue that still contains data from last state
-    go_inwires idx (balances, qenv, venv, constrs) (n,ch) | Map.findWithDefault 0 ch balances >= n =
-      let balances' = Map.adjust (+(-n)) ch balances in
-      let qenv' = Map.adjust (\(last_r,last_wrs) -> (idx,last_wrs)) ch qenv in
-      (balances', qenv', venv, constrs)
+    -- go_inwires idx (qenv, venv, constrs) (n,ch) | Map.findWithDefault 0 ch balances >= n =
+    --   let balances' = Map.adjust (+(-n)) ch balances in
+    --   let qenv' = Map.adjust (\(last_r,last_wrs) -> (idx,last_wrs)) ch qenv in
+    --   (balances', qenv', venv, constrs)
 
     -- reading from queue
-    go_inwires idx (balances, qenv, venv, constrs) (n,ch) | Map.member ch pipes =
-      let n' = n - (Map.findWithDefault 0 ch balances) in
-      let balances' = Map.insert ch 0 balances in
-      let Just (last_r,last_wrs) = Map.lookup ch qenv in
-      let Just (producers, last_wrs') = popN n' last_wrs in
-      let qenv' = Map.insert ch (idx,last_wrs') qenv in
+    go_inwires idx (qenv, venv, constrs) (n,ch) | Just (last_r,last_wrs, last_w) <- Map.lookup ch qenv =
+      let Just (producers, last_wrs') = popN n last_wrs in
+      let qenv' = Map.insert ch (idx,last_wrs',last_w) qenv in
       let constrs' = (if last_r >= 0 then ((last_r,idx,CC):) else id) $
                      [(wr,idx,PC) | wr <- producers] ++ constrs in
-      (balances', qenv', venv, constrs')
+      (qenv', venv, constrs')
 
     -- reading from variable
-    go_inwires idx (balances, qenv, venv, constrs) (1,ch) =
+    go_inwires idx (qenv, venv, constrs) (1,ch) =
       let (mb_last_r,mb_last_wr) = Map.findWithDefault (Nothing,Nothing) ch venv in
       let venv' = Map.insert ch (Just idx, mb_last_wr) venv in
       let constrs' = maybe constrs (\last_wr -> (last_wr, idx, WR) : constrs) mb_last_wr in
-      (balances, qenv, venv', constrs')
+      (qenv, venv', constrs')
 
     go_inwires _ _ _ = panicStr "mk_constraints: unexpected case"
 
@@ -1179,24 +1177,27 @@ mk_constraints (Just pipes) watoms@(_:_) mb_decision
     go_outwires :: Int -> Acc -> (Int,Chan) -> Acc
 
     -- writing to queue
-    go_outwires idx (balances, qenv, venv, constrs) (n,ch) | Just (last_r, last_wrs) <- Map.lookup ch qenv =
-      let mb_wr = peek last_wrs in
-      let qenv' = Map.adjust (\(last_r,last_wrs) -> (last_r, iterate (push idx) last_wrs !! n)) ch qenv in
-      let constrs' = maybe constrs (\wr -> (wr,idx,PP):constrs) mb_wr in
-      (balances, qenv', venv, constrs')
+    go_outwires idx (qenv, venv, constrs) (n,ch) | Just (last_r, last_wrs, last_w) <- Map.lookup ch qenv =
+      let wr = maybe last_w id (peek last_wrs) in
+             -- It is possible to have nothing in the queue (so peek last_wrs may be Nothing) but at some point
+             -- in the past we already wrote to this queue (last_w) (and someone consumed the data before we reach here).
+
+      let qenv' = Map.adjust (\(last_r,last_wrs,_last_w) -> (last_r, iterate (push idx) last_wrs !! n,idx)) ch qenv in
+      let constrs' = (wr,idx,PP):constrs in
+      (qenv', venv, constrs')
 
     -- writing to variable
-    go_outwires idx (balances, qenv, venv, constrs) (n,ch) =
+    go_outwires idx (qenv, venv, constrs) (n,ch) =
       let (mb_last_r,mb_last_wr) = Map.findWithDefault (Nothing,Nothing) ch venv in
       let venv' = Map.insert ch (mb_last_r, Just idx) venv in
       let constrs' = [ (r,idx,RW) | Just r <- [mb_last_r]  ] ++
                      [ (w,idx,WW) | Just w <- [mb_last_wr] ] ++ constrs in
-      (balances, qenv, venv', constrs')
+      (qenv, venv', constrs')
 
 
     go_decision :: Maybe Chan -> Acc -> Map (Int,Int) [Dependency]
 
-    go_decision mb_decision (balances, qenv, venv, constrs) =
+    go_decision mb_decision (qenv, venv, constrs) =
       let dec_constr = maybeToList $ do
           dec <- mb_decision
           (mb_last_r,mb_last_wr) <- Map.lookup dec venv
@@ -1213,6 +1214,9 @@ mk_constraints _ _ _ = error "mk_constraints: unexpected case"
 
 -- Naive transitivity-reduction (i.e. removal of transitive edges)
 trans_reduction :: Map (Int,Int) a -> Map (Int,Int) a
+{- DV: temporarily ...  
+trans_reduction = id 
+-}
 trans_reduction mp = foldl (flip Map.delete) mp redundant
   where
     redundant = [ (i,i) | i <- idxs ] ++
@@ -1236,6 +1240,7 @@ trans_reduction mp = foldl (flip Map.delete) mp redundant
     add_trans :: Map Int (Set Int) -> Map Int (Set Int)
     add_trans g = Map.foldlWithKey (\g' i js -> Map.adjust (Set.union $ trans g js) i g') g g
     trans g js = Set.unions $ map (\j -> Map.findWithDefault Set.empty j g) $ Set.toList js
+
 
 
 
@@ -1317,11 +1322,15 @@ dotOfAxAuto dflags a = map (\(nid,state) -> (nid, dotify state)) $ Map.toList $ 
       ("node [shape = cds]" : [mk_decision decision (length watoms)]) ++
       mk_edges constrs
 
-  mk_watom (WiredAtom inw outw atom,idx) = "  " ++ show idx ++ "[label=\"" ++ mk_atom inw outw atom ++ "\"]"
-  mk_atom inw outw atom = List.intercalate "\\l" $ 
-                          show atom :
-                          map (("IN: " ++) . show . snd) inw ++
-                          map (("OUT: " ++) . show . snd) outw ++ [""]
+  mk_watom (w@(WiredAtom inw outw atom),idx)
+   | isDynFlagSet dflags CLikeNames
+   = "  " ++ show idx ++ "[label=\"" ++ mk_atom (wiredAtomId w) inw outw atom ++ "\"]"
+   | otherwise
+   = "  " ++ show idx ++ "[label=\"" ++ mk_atom (show atom) inw outw atom ++ "\"]"
+  mk_atom aid inw outw atom = List.intercalate "\\l" $ 
+                               aid :
+                               map ((" IN: " ++) . showChan True . snd) inw ++
+                               map (("OUT: " ++) . showChan True . snd) outw ++ [""]
   
   mk_decision dec idx = "  " ++ show idx ++ "[label=\"" ++ show dec ++ "\"]"
 

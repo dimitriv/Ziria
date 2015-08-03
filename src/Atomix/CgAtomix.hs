@@ -229,22 +229,6 @@ cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
    cg_def_atoms' [] m = m
    cg_def_atoms' (a:as) m = cgDefAtom dfs queues a (cg_def_atoms' as m)
 
--- | The unique identifier of an atom
-wiredAtomId :: WiredAtom SymAtom -> String
-wiredAtomId (WiredAtom win _wout the_atom) = case the_atom of 
-  SACast s _ _      -> "cast" ++ "$" ++ s
-  SADiscard s _     -> "disc" ++ "$" ++ s
-  SAExp ae          -> "aexp" ++ "$" ++ aexp_lbl ae
-  SARollback qvar n -> "rbck" ++ "$" ++ show_uniq qvar ++ "$" ++ show n
-  SAClear qsns      ->
-     let qsns_list = Map.toList qsns
-         u = concat $ 
-             map (\(q,n) -> show_uniq q ++ "$" ++ show n ++ ":") qsns_list
-     in "_clr" ++ "$" ++ u
-  SAAssert b   -> let u = render (ppNameUniq (snd (head win)))
-                  in "asrt" ++ "$" ++ u ++ "$" ++ show b
-  where show_uniq = render . ppNameUniq
-
 {---------------------- Defining and calling an atom -------------------------}
 
 cgDefAtom :: DynFlags
