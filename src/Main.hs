@@ -256,8 +256,8 @@ main = do
                   else lc
           
 
-        when (isDynFlagSet dflags DumpAutomaton ||
-              isDynFlagSet dflags DumpDependencyGraphs &&
+        when ((isDynFlagSet dflags DumpAutomaton ||
+              isDynFlagSet dflags DumpDependencyGraphs) &&
               not (isDynFlagSet dflags AtomixCodeGen)) $ do
           (ac,_rnst) <- zirToAtomZir dflags sym lc
           (automaton :: CfgAuto SymAtom Int) 
