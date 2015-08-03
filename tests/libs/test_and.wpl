@@ -1,14 +1,20 @@
 #include <externals.blk>
+#define SIZE 288
 
-fun test_and(a : arr bit, b : arr bit) {
-{-
-  var c : arr [length(a)] bit;
-  for i in [0, length(a)] {
-    c[i] := a[i] & b[i];
-  } 
-  return c;
--}
-  return v_and(a, b);
+
+fun comp test_and() {
+	
+
+	var y: arr[SIZE] bit;
+	do{
+		for n in [0,SIZE]
+		y[n] := '1;	
+	};
+
+	repeat{
+		x <- takes SIZE; 
+		emits v_and(x,y)
+	}
 }
 
-let comp main = read[bit] >>> repeat{ x <- takes 64; emits test_and(x,x)} >>> write[bit]
+let comp main = read[bit] >>> test_and() >>> write[bit]

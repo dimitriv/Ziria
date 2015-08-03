@@ -20,7 +20,6 @@
 #pragma once 
 
 #include <externals.blk>
-#include <v_conj_mul.blk>
 #include <conj.blk>
 #include <sum.blk>
 #include <abs.blk>

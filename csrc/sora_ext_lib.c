@@ -31,6 +31,9 @@
 #include "demapper11a.hpp"
 #include <demapper.h>
 
+#include <xmmintrin.h>
+#include <emmintrin.h>
+
 #include "const.h"
 #include "stdbrick.hpp"
 #include "ieee80211facade.hpp"
@@ -57,26 +60,6 @@
 
 // Functions here are not explicitly inline but
 // aggressive optimization will make them all inline
-
-
-/*
-complex16 __ext_vcs_element(vcs * vcomp, int num)
-{
-    complex16 rVal;
-	rVal.re = ((*vcomp)[num]).re;
-	rVal.im = ((*vcomp)[num]).im;
-	return rVal;
-};
-
-void __ext_comp_element(vcs * vcomp, int num, complex16 toWrite)
-{
-    complex16 rVal;
-	((*vcomp)[num]).re = toWrite.re;
-	((*vcomp)[num]).im = toWrite.im;	
-};
-*/
-
-
 
 
 // c = a + b
@@ -252,35 +235,9 @@ int __ext_v_sub_int32(int32* c, int len, int32* a,
 }
 
 
-
-/*
-//FINL 
-int __ext_set_zerow(struct complex16* x, int __unused_6)
-{
-    //assert (__unused_6 == 4);
-
-	vcs *xi = (vcs *)x;
-	set_zero(*xi);
-	return 0;
-}
-*/
-
-
-/*
-//FINL 
-int __ext_set_zero_intw(int* x, int __unused_28)
-{
-    //assert (__unused_28 == 4);
-
-	vi *xi = (vi *)x;
-	set_zero(*xi);
-	
-	return 0;
-}
-*/
-
-
-
+//equivalent to sora hadd :
+//Sum all components of vector x and stores it in all components of z
+// z(i) = sum(x) for all i
 //FINL 
 int __ext_v_hadd_complex16(struct complex16* z, int __unused_2, struct complex16* x,
           int __unused_1)
@@ -485,10 +442,16 @@ int __ext_v_shift_right_complex16(struct complex16* z, int __unused_3, struct co
 	const int wlen = sizeof(vcs) / sizeof(complex16);
 	for (int i = 0; i < len / wlen; i++)
 	{
-		vcs *xi = (vcs *)(x + wlen*i);
+		//vcs *xi = (vcs *)(x + wlen*i);
 
-		vcs output = (shift_right(*xi, shift));
-		memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vcs));
+		//vcs output = (shift_right(*xi, shift));
+		//memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vcs));
+
+
+
+		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
+		_mm_storeu_si128((__m128i *) (z + wlen*i), _mm_srai_epi16(mx,shift));
+
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
 	{
@@ -596,28 +559,145 @@ int __ext_v_shift_left_int16(int16* z, int __unused_3, int16* x, int len, int sh
 }
 
 
+
+
 //
-// mul - perform multiple of two complex vectors and return
-// the resulting complex vector, all being complex16
+// This was v_mul_complex16_shift but I changed the name for consistency with v_conj_mul
+// and the fact that the old v_mul_complex16 was never called
 //
 int __ext_v_mul_complex16(struct complex16* out, int lenout,
-						  struct complex16* x, int len1,
-						  struct complex16* y, int len2)
+								struct complex16* x, int len1,
+								struct complex16* y, int len2, int shift)
 {
+	
 	const int wlen = sizeof(vcs) / sizeof(complex16);
-	for (int i = 0; i < len1 / wlen; i++)
-	{
+	
+		const __m128i conj = _mm_set_epi16(-1, 1, -1, 1, -1, 1, -1, 1);
+		const __m128i xmm6 = _mm_set1_epi32(0x0000FFFF);		//0x0000FFFF0000FFFF0000FFFF0000FFFF
+		for (int i = 0; i < len1 / wlen; i++){
+
+			/*
+			vcs *vx = (vcs *)(x + wlen*i);
+			vcs *vy = (vcs *)(y + wlen*i);
+			vcs *vout = (vcs *)(out + wlen*i);
+
+			vcs vs1 = conj0(*vy);
+
+			vcs vs2 = (vcs)permutate_low<1, 0, 3, 2>(*vy);
+			vs2 = permutate_high<1, 0, 3, 2>(vs2);
+
+			vi re32 = muladd(*vx, vs1);
+			vi im32 = muladd(*vx, vs2);
+
+			re32 = shift_right(re32, shift);
+			im32 = shift_right(im32, shift);
+
+			*vout = (vcs)pack(re32, im32);
+			//*/
+			//*
+			__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
+			__m128i my = _mm_loadu_si128((__m128i *)(y + wlen*i));
+			
+
+			__m128i ms1 = _mm_sign_epi16(mx, conj);
+
+			__m128i ms2 = _mm_shufflehi_epi16(mx, _MM_SHUFFLE(2, 3, 0, 1));
+			ms2 = _mm_shufflelo_epi16(ms2, _MM_SHUFFLE(2, 3, 0, 1));
+
+			__m128i mre = _mm_srai_epi32(_mm_madd_epi16(ms1, my), shift);
+			__m128i mim = _mm_srai_epi32(_mm_madd_epi16(ms2, my), shift);
+
+			mre = _mm_and_si128(mre,xmm6);
+			mim = _mm_and_si128(mim,xmm6);
+
+			mim = _mm_slli_epi32(mim,0x10);
+
+
+			__m128i mout = _mm_or_si128(mre, mim);
+
+			_mm_storeu_si128((__m128i *) (out + wlen*i), mout);
+			//*/
+		}
+
+		for (int i = (len1 / wlen) * wlen; i < len1; i++){
+			out[i].re = x[i].re * y[i].re - x[i].im * y[i].im >> shift;
+			out[i].im = x[i].re * y[i].im + x[i].im * y[i].re >> shift;
+		};
+	
+	return 0;
+
+}
+
+//
+// multiplies two complex vectors and returns the real and imaginary parts 
+// as two 32 bit integers.
+//
+int __ext_v_conj_mul_complex16_int32(int32* re, int lenout1, int32* im, int lenout2, 
+				struct complex16* x, int len1, struct complex16* y, int len2 )
+{
+
+	const int wlen = sizeof(vcs) / sizeof(complex16);
+
+	for (int i = 0; i < len1 / wlen; i++){
+
+		vcs *vx = (vcs *)(x + wlen*i);
+		vcs *vy = (vcs *)(y + wlen*i);
+		vi *reout = (vi *)(re + wlen*i);
+		vi *imout = (vi *)(im + wlen*i);
+
+		vcs vs2 = conj0(*vy);
+
+	    vs2 = permutate_low<1, 0, 3, 2>(vs2);
+		vs2 = permutate_high<1, 0, 3, 2>(vs2);
+
+		*reout = (vcs)muladd(*vx, *vy);
+		*imout = (vcs)muladd(*vx, vs2);
+
+
+	}
+
+	for (int i = (len1 / wlen) * wlen; i < len1; i++){
+		re[i] = x[i].re * y[i].re + x[i].im * y[i].im ;
+		im[i] = x[i].im * y[i].re - x[i].re * y[i].im ;
+	};
+
+	return 0;
+
+}
+// Multiply the first source vector by the conjugate of the second source vector
+// ie. re + j * im = a * conj(b)
+//Return by reference for performance
+int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
+								struct complex16* x, int len1,
+								struct complex16* y, int len2, int shift){
+			
+	const int wlen = sizeof(vcs) / sizeof(complex16);
+
+	for (int i = 0; i < len1 / wlen; i++){
+
 		vcs *vx = (vcs *)(x + wlen*i);
 		vcs *vy = (vcs *)(y + wlen*i);
 		vcs *vout = (vcs *)(out + wlen*i);
 
-		*vout = (vcs)mul(*vx, *vy);
+		
+		vcs vs2 = conj0(*vy);
+
+		vs2 = permutate_low<1, 0, 3, 2>(vs2);
+		vs2 = permutate_high<1, 0, 3, 2>(vs2);
+
+		vi re32 = muladd(*vx, *vy);
+		vi im32 = muladd(*vx, vs2);
+		
+		re32 = shift_right(re32, shift);
+		im32 = shift_right(im32, shift);
+
+		*vout = (vcs)pack(re32, im32);
 	}
-	for (int i = (len1 / wlen) * wlen; i < len1; i++)
-	{
-		out[i].re = x[i].re * y[i].re - x[i].im * y[i].im;
-		out[i].im = x[i].re * y[i].im + x[i].im * y[i].re;
-	}
+
+	for (int i = (len1 / wlen) * wlen; i < len1; i++){
+		out[i].re = x[i].re * y[i].re + x[i].im * y[i].im >> shift;
+		out[i].im = x[i].im * y[i].re - x[i].re * y[i].im >> shift;
+	};
 
 	return 0;
 }
@@ -625,22 +705,7 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 
 
 
-
-void __ext_v_downsample_complex16(struct complex16* out, int lenout, struct complex16* in, int len)  
-{ 
-	vcs *pi = (vcs *)in; 
-	vcs *o = (vcs*)out; 
-	for (int i = 0; i < len/8; i++) 
-	{ 
-		vcs t1 = permutate<0, 2, 0, 2>(pi[0]); 
-		vcs t2 = permutate<0, 2, 0, 2>(pi[1]); 
-		*o = (vcs)(interleave_low((vcui&)t1, (vcui&)t2)); 
-		pi += 2; 
-		o++; 
-	} 
-} 
-
-
+// This function is called in code/WiFi/receiver/downSample.blk
 //FINL 
 int __ext_permutatew1313 (struct complex16* x,
                int __unused_2,  struct complex16* y, int __unused_1)
@@ -659,6 +724,7 @@ int __ext_permutatew1313 (struct complex16* x,
 	*po = t1;
 	return 0;
 }
+// This function is called in code/WiFi/receiver/downSample.blk
 //FINL 
 int __ext_interleave_loww( struct complex16* x, int __unused_5,
                      struct complex16* y, int __unused_4,
@@ -690,108 +756,6 @@ int __ext_pairwise_muladdw(struct complex16* x, int __unused_15, struct complex1
 
 	return 0;
 }
-
-//FINL 
-//Return by reference for performance
-//void __ext_muladdw(int* __retf_muladdw, int len1, struct complex16* a, int len2, struct complex16* b, int len3)
-int __ext_muladdw(int* __retf_muladdw, int len1, struct complex16* a, int len2, struct complex16* b, int len3)
-{
-	vcs *ap = (vcs *)a;
-	vcs *bp = (vcs *)b;
-	vi output = muladd(*ap,*bp);
-		
-	memcpy((void *)__retf_muladdw,(void *)(&output),sizeof(vi));
-	return 0;
-}
-
-int __ext_convertinttocomplex(int* integerinput, int __unused_54,
-                        struct complex16* compoutput, int __unused_53)
-{
-	compoutput = (struct complex16 *)integerinput;
-	return 0;
-}
-
-//FINL
-int __ext_conjrew(struct complex16* x, int __unused_17, struct complex16* y,
-           int __unused_16)
-{
-	vcs *xi = (vcs *)x;
-	vcs output = conjre(*xi);
-
-	memcpy((void *)y,(void *)(&output),sizeof(vcs));
-
-	return 0;
-}
-
-//FINL 
-//Return by reference for performance
-//void __ext_conj0w(struct complex16* __retf_conj0, int __unused_21, struct complex16* x, int __unused_20)
-int __ext_conj0w(struct complex16* __retf_conj0, int __unused_21, struct complex16* x, int __unused_20)
-{
-	vcs *xp = (vcs *)x;
-	vcs output = conj0(*xp);
-	memcpy((void *)__retf_conj0,(void *)(&output),sizeof(vcs));
-	return 0;
-}
-
-
-
-
-//FINL 
-// Multiply the first source vector by the conjugate of the second source vector
-// ie. re + j * im = a * conj(b)
-//Return by reference for performance
-//void __ext_conj_mulw(struct complex16* __retf_conj0, int __unused_21, struct complex16* x,
-//           int __unused_20, struct complex16* y, int __unused_22)
-int __ext_conj_mulw(struct complex16* __retf_conj0, int __unused_21, struct complex16* x,
-		   int __unused_20, struct complex16* y, int __unused_22)
-{
-	vi re, im;
-	vcs *pre, *pim;
-	vcs *vx = (vcs *) x;
-	vcs *vy = (vcs *) y;
-	vcs vs1, vs2, sign;
-
-    vs1 = conj0(*vx);
-    vs1 = permutate_low<1, 0, 3, 2>(vs1);
-    vs1 = permutate_high<1, 0, 3, 2>(vs1);
-    re = pairwise_muladd(*((vs*)vx), *((vs*)vy));
-    im = pairwise_muladd((vs)vs1, *((vs*)vy));
-	pre = (vcs*) (&re);
-	pim = (vcs*) (&im);
-
-	vs1 = _mm_packs_epi32 (re, im);
-	vs1 = _mm_shuffle_epi32(vs1, _MM_SHUFFLE(3, 1, 2, 0));
-    vs1 = permutate_low<0, 2, 1, 3>(vs1);
-    vs1 = permutate_high<0, 2, 1, 3>(vs1);
-
-/*
-	// Convert a vci of 4 reals into vcs of 4 complex and store the reals in the imaginary parts
-	__m128i mask;
-	mask.m128i_u64[0] = 0x0504808001008080ll;
-	mask.m128i_u64[1] = 0x0d0c808009088080ll;
-	vs1 = _mm_shuffle_epi8 (im, mask);
-	// Fix the sign of im
-	mask.m128i_u64[0] = 0x0706808003028080ll;
-	mask.m128i_u64[1] = 0x0f0e80800B0A8080ll;
-	sign = _mm_shuffle_epi8 (im, mask);
-	sign = _mm_and_si128(sign, _mm_set1_epi16(32768));
-	vs1 = _mm_or_si128(vs1, sign);
-
-	mask.m128i_u64[0] = 0x0706808003028080ll;
-	mask.m128i_u64[1] = 0x0f0e80800B0A8080ll;
-	sign = _mm_shuffle_epi8 (re, mask);
-	sign = _mm_and_si128(sign, _mm_set1_epi16(32768));
-	vs2 = _mm_or_si128(*pre, sign);
-
-	// Add real and imag to construc a single vector
-	vs1 = add(vs2,vs1);
-*/
-
-	memcpy((void *)__retf_conj0,(void *)(&vs1),sizeof(vcs));
-	return 0;
-}
-
 
 
 //FINL 
@@ -830,105 +794,6 @@ void __ext_v_pack_complex16_complex8(struct complex8* output, int lenout, comple
 		output[j].im = input[j].im;
 	}
 }
-
-
-
-void __ext_v_sign_int8(int8 *output, int outlen, int8 *input1, int inlen1, int8 *input2, int inlen2)
-{
-	int cnt = 0;
-	vcs *pi1 = (vcs *)input1;
-	vcs *pi2 = (vcs *)input2;
-	vcs *po = (vcs *)output;
-
-	while (cnt + 16 <= inlen1)
-	{
-		*po = (vcs)_mm_sign_epi8(*pi1, *pi2);
-		pi1++;
-		pi2++;
-		po++;
-		cnt += 16;
-	}
-
-	while (cnt < inlen1)
-	{
-		output[cnt] = (input2[cnt] < 0) ? (-input1[cnt]) : input1[cnt];
-		cnt++;
-	}
-	outlen = inlen1;
-}
-
-
-
-
-//FINL 
-void __ext_v_negate_complex8(struct complex8* output, int lenout, complex8* input, int lenin)
-{
-	const int wlen = sizeof(vcb) / sizeof(complex8);
-	const static unsigned char __0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF[16] =
-	{
-		0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF
-	};
-
-	int i;
-	vcb *pinput = (vcb *)input;
-	vcb *poutput = (vcb *)output;
-	for (i = 0; i < lenin / wlen; i++)
-	{
-		//*poutput = (vcb)xor(*pinput, *((vcb*) __0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF));
-		*poutput = (vcb)_mm_sign_epi8(*pinput, *((vcb*)__0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF));
-		poutput++;
-		pinput ++;
-	}
-	for (int j = i * wlen; j < lenin; j++)
-	{
-		output[j].re = -input[j].re;
-		output[j].im = -input[j].im;
-	}
-}
-
-
-
-
-//FINL 
-int __ext_v_cast_complex8_int8(int8* output, int lenout, complex8* input, int lenin)
-{
-	memcpy(output, input, lenin * sizeof(complex8));
-	return 0;
-}
-
-
-//FINL 
-int __ext_permutate_high1032w(struct complex16* x, int len1,
-                        struct complex16* y, int len2)
-{
-	vcs *xp = (vcs *)x;
-	vcs output = permutate_high<1, 0, 3, 2>(*xp);
-
-    memcpy((void *)y,(void *)(&output),sizeof(vcs));
-
-	return 0;
-}
-
-//FINL 
-int __ext_permutate_low1032w(struct complex16* x, int len1,
-                       struct complex16* y, int len2)
-{
-	vcs *xp = (vcs *)x;
-	vcs output = permutate_low<1, 0, 3, 2>(*xp);
-
-    memcpy((void *)y,(void *)(&output),sizeof(vcs));
-
-	return 0;
-}
-
-
-
-
-
-
 
 
 
@@ -1038,92 +903,7 @@ int16 __ext_sumi16(int16* x, int __unused_21)
 
 ///// SSE bit operations
 
-/*
-FORCE_INLINE
-void __ext_v_or(uchar *output, int outlen, uchar *input1, int inlen1, uchar *input2, int inlen2)
-{
 
-
-	ASSERT(inlen1 <= 128);
-
-	vcs *pi1 = (vcs*)input1;
-	vcs *pi2 = (vcs *)input2;
-	int bytelen1 = inlen1 / 8 + ((inlen1 % 8) > 0);  // 96/8 = 12
-
-
-	vcs res = (vcs)_mm_or_si128(*pi1, *pi2);
-
-	memcpy(output, & res, bytelen1);
-}
-*/
-
-/*
-FORCE_INLINE
-void __ext_v_or(uchar *output, int outlen, uchar *input1, int inlen1, uchar *input2, int inlen2)
-{
-
-	int cnt = 0;
-	int bytelen1 = inlen1 / 8 + ((inlen1 % 8) > 0);  // 96/8 = 12
-	vcs *pi1 = (vcs *)input1;
-	vcs *pi2 = (vcs *)input2;
-	vcs *po = (vcs *)output;
-
-	while (cnt + 16 <= bytelen1)
-	{
-		*po = (vcs)_mm_or_si128(*pi1, *pi2);
-		pi1++;
-		pi2++;
-		po++;
-		cnt += 16;
-		exit(-3);
-	}
-
-	while (cnt <= bytelen1)
-	{
-		output[cnt] = input1[cnt] | input2[cnt];
-		cnt++;
-	}
-	outlen = inlen1;
-}
-
-*/
-
-/*
-FORCE_INLINE
-void __ext_v_or(uchar *output, int outlen, uchar *input1, int inlen1, uchar *input2, int inlen2)
-{
-	int cnt64, cnt32, cnt8;
-	int bytelen = inlen1 / 8 + ((inlen1 % 8) > 0);
-
-	for (cnt64 = 0; (cnt64 + 8) <= bytelen; cnt64 += 8) {
-		unsigned __int64 i1 = *(unsigned __int64 *)input1;
-		unsigned __int64 i2 = *(unsigned __int64 *)input2;
-		*(unsigned __int64 *)output = i1 | i2;
-		input1 += 8;
-		input2 += 8;
-		output += 8;
-	}
-
-	for (cnt32 = 0; cnt32 + 4 <= bytelen - cnt64; cnt32 += 4) {
-		unsigned __int32 i1 = *(unsigned __int32 *)input1;
-		unsigned __int32 i2 = *(unsigned __int32 *)input2;
-		*(unsigned __int32 *)output = i1 | i2;
-		input1 += 4;
-		input2 += 4;
-		output += 4;
-	}
-
-	for (cnt8 = 0; cnt8 < bytelen - cnt32; cnt8++) {
-		unsigned char i1 = *(unsigned char *)input1;
-		unsigned char i2 = *(unsigned char *)input2;
-		*(unsigned char *)output = i1 | i2;
-		input1 += 1;
-		input2 += 1;
-		output += 1;
-	}
-
-}
-*/
 
 FORCE_INLINE
 void __ext_v_or_48(uchar *output, uchar *input1, uchar *input2)
@@ -1375,20 +1155,101 @@ void __ext_sora_fft(struct complex16* output, int nFFTSize, struct complex16 * i
 	case 24:
 		FFTSafe<24>(in, out);
 		break;
+	case 36:
+		FFTSafe<36>(in, out);
+		break;
 	case 48:
 		FFTSafe<48>(in, out);
+		break;
+	case 60:
+		FFTSafe<60>(in, out);
+		break;
+	case 72:
+		FFTSafe<72>(in, out);
 		break;
 	case 96:
 		FFTSafe<96>(in, out);
 		break;
+	case 108:
+		FFTSafe<108>(in, out);
+		break;
+	case 120:
+		FFTSafe<120>(in, out);
+		break;
+	case 144:
+		FFTSafe<144>(in, out);
+		break;
+	case 180:
+		FFTSafe<180>(in, out);
+		break;
 	case 192:
 		FFTSafe<192>(in, out);
+		break;
+	case 216:
+		FFTSafe<216>(in, out);
+		break;
+	case 240:
+		FFTSafe<240>(in, out);
+		break;
+	case 288:
+		FFTSafe<288>(in, out);
+		break;
+	case 300:
+		FFTSafe<300>(in, out);
+		break;
+	case 324:
+		FFTSafe<324>(in, out);
+		break;
+	case 360:
+		FFTSafe<360>(in, out);
 		break;
 	case 384:
 		FFTSafe<384>(in, out);
 		break;
+	case 432:
+		FFTSafe<432>(in, out);
+		break;
+	case 480:
+		FFTSafe<480>(in, out);
+		break;
+	case 540:
+		FFTSafe<540>(in, out);
+		break;
+	case 576:
+		FFTSafe<576>(in, out);
+		break;
+	case 600:
+		FFTSafe<600>(in, out);
+		break;
+	case 648:
+		FFTSafe<648>(in, out);
+		break;
+	case 720:
+		FFTSafe<720>(in, out);
+		break;
 	case 768:
 		FFTSafe<768>(in, out);
+		break;
+	case 864:
+		FFTSafe<864>(in, out);
+		break;
+	case 900:
+		FFTSafe<900>(in, out);
+		break;
+	case 960:
+		FFTSafe<960>(in, out);
+		break;
+	case 972:
+		FFTSafe<972>(in, out);
+		break;
+	case 1080:
+		FFTSafe<1080>(in, out);
+		break;
+	case 1152:
+		FFTSafe<1152>(in, out);
+		break;
+	case 1200:
+		FFTSafe<1200>(in, out);
 		break;
 	default:
 		printf("__ext_sora_fft error: fft size %d not supported!\n", nFFTSize);
@@ -1441,26 +1302,108 @@ void __ext_sora_ifft(struct complex16* output, int nFFTSize, struct complex16 * 
 		IFFTSafe<2048>(in, out);
 		break;
 	// LTE compatibility
+		// LTE compatibility
 	case 12:
 		IFFTSafe<12>(in, out);
 		break;
 	case 24:
 		IFFTSafe<24>(in, out);
 		break;
+	case 36:
+		IFFTSafe<36>(in, out);
+		break;
 	case 48:
 		IFFTSafe<48>(in, out);
+		break;
+	case 60:
+		IFFTSafe<60>(in, out);
+		break;
+	case 72:
+		IFFTSafe<72>(in, out);
 		break;
 	case 96:
 		IFFTSafe<96>(in, out);
 		break;
+	case 108:
+		IFFTSafe<108>(in, out);
+		break;
+	case 120:
+		IFFTSafe<120>(in, out);
+		break;
+	case 144:
+		IFFTSafe<144>(in, out);
+		break;
+	case 180:
+		IFFTSafe<180>(in, out);
+		break;
 	case 192:
 		IFFTSafe<192>(in, out);
+		break;
+	case 216:
+		IFFTSafe<216>(in, out);
+		break;
+	case 240:
+		IFFTSafe<240>(in, out);
+		break;
+	case 288:
+		IFFTSafe<288>(in, out);
+		break;
+	case 300:
+		IFFTSafe<300>(in, out);
+		break;
+	case 324:
+		IFFTSafe<324>(in, out);
+		break;
+	case 360:
+		IFFTSafe<360>(in, out);
 		break;
 	case 384:
 		IFFTSafe<384>(in, out);
 		break;
+	case 432:
+		IFFTSafe<432>(in, out);
+		break;
+	case 480:
+		IFFTSafe<480>(in, out);
+		break;
+	case 540:
+		IFFTSafe<540>(in, out);
+		break;
+	case 576:
+		IFFTSafe<576>(in, out);
+		break;
+	case 600:
+		IFFTSafe<600>(in, out);
+		break;
+	case 648:
+		IFFTSafe<648>(in, out);
+		break;
+	case 720:
+		IFFTSafe<720>(in, out);
+		break;
 	case 768:
 		IFFTSafe<768>(in, out);
+		break;
+	case 864:
+		IFFTSafe<864>(in, out);
+		break;
+	case 900:
+		IFFTSafe<900>(in, out);
+		break;
+	case 960:
+		IFFTSafe<960>(in, out);
+		break;
+	case 972:
+		IFFTSafe<972>(in, out);
+		break;
+	case 1080:
+		IFFTSafe<1080>(in, out);
+		break;
+	case 1152:
+		IFFTSafe<1152>(in, out);
+		break;
+	case 1200:
+		IFFTSafe<1200>(in, out);
 		break;
 	default:
 		printf("__ext_sora_ifft error: fft size %d not supported!\n", nFFTSize);

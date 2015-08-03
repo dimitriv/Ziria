@@ -1,8 +1,24 @@
-fun comp flip() {
-  repeat {
-    x <- take;
-    emit (x ^ '1);
-  }
+#include <externals.blk>
+# define SIZE 1024
+fun comp mul_test() {
+
+
+
+    (x:arr[SIZE] int) <- takes SIZE;
+	var z:arr[SIZE] int;
+	
+	do{
+		z:=x;
+		z[0]:=x[0]+1;
+		v_shift_right_int32(z,z,2);
+	  }
+
+	emits z;
+
+
+
 }
 
-let comp main = read >>> flip() >>> write
+
+let comp main = read >>> repeat mul_test() >>> write
+
