@@ -1106,16 +1106,18 @@ cfgToAtomix a = a { auto_graph = state_graph, auto_start = 0 } where
     return $ insertNk nid nk nmap
 
   fromCfg' nid mb_pipes watoms (CfgLoop next) nmap =
-    let new_next_id = fst (Map.findMax nmap) + 1 in
+    let new_next_id = nextNid nmap in
     let nk = AtomixState watoms (mk_constraints mb_pipes watoms Nothing) (AtomixLoop new_next_id) in
     fromCfg next new_next_id $ insertNk nid nk nmap
 
   fromCfg' nid mb_pipes watoms (CfgBranch x left right is_while) nmap =
-    let new_left = fst (Map.findMax nmap) + 1 in
+    let new_left = nextNid nmap in
     let new_right = new_left + 1 in
     let constrs = mk_constraints mb_pipes watoms (Just x) in
     let nk = AtomixState watoms constrs (AtomixBranch x new_left new_right) in
     fromCfg left new_left =<< fromCfg right new_right (insertNk nid nk nmap)
+
+  nextNid nmap = if Map.null nmap then 0 else (fst (Map.findMax nmap) + 1)
 
 
 
@@ -1160,7 +1162,8 @@ mk_constraints (Just pipes) watoms@(_:_) mb_decision
       let Just (last_r,last_wrs) = Map.lookup ch qenv in
       let Just (producers, last_wrs') = popN n' last_wrs in
       let qenv' = Map.insert ch (idx,last_wrs') qenv in
-      let constrs' = (last_r,idx,CC) : [(wr,idx,PC) | wr <- producers] ++ constrs in
+      let constrs' = (if last_r >= 0 then ((last_r,idx,CC):) else id) $
+                     [(wr,idx,PC) | wr <- producers] ++ constrs in
       (balances', qenv', venv, constrs')
 
     -- reading from variable
@@ -1210,11 +1213,31 @@ mk_constraints _ _ _ = error "mk_constraints: unexpected case"
 
 -- Naive transitivity-reduction (i.e. removal of transitive edges)
 trans_reduction :: Map (Int,Int) a -> Map (Int,Int) a
-trans_reduction mp = foldl remove_trans mp [(a,b,c) | a <- idxs, b <- idxs, c <- idxs] where
-  idxs = List.nub $ uncurry (++) $ unzip $ Map.keys mp
-  remove_trans mp (a,b,c) | Map.member (a,b) mp, Map.member (b,c) mp =
-    Map.delete (a,c) mp
-  remove_trans mp _ = mp 
+trans_reduction mp = foldl reduce mp [(i,j,k) | i<-idxs, j<-idxs, k<-idxs]
+  where
+    reduce mp (i,j,z) 
+      | j `Set.member` Map.findWithDefault Set.empty i closure
+      && z `Set.member` Map.findWithDefault Set.empty j closure
+      || i==z
+      = Map.delete (i,z) mp
+    reduce mp _ = mp
+
+    idxs = List.nub $ uncurry (++) $ unzip $ Map.keys mp
+
+    fix f x = let x' = f x in if x==x' then x else fix f x'
+
+    closure :: Map Int (Set Int)
+    closure = rem_refl $ fix add_trans $
+              Map.fromListWith Set.union $
+              map ( \(i,j) -> (i, Set.singleton j) ) $
+              Map.keys mp
+
+    rem_refl :: Map Int (Set Int) -> Map Int (Set Int)
+    rem_refl = Map.mapWithKey Set.delete
+
+    add_trans :: Map Int (Set Int) -> Map Int (Set Int)
+    add_trans g = Map.foldlWithKey (\g' i js -> Map.adjust (Set.union $ trans g js) i g') g g
+    trans g js = Set.unions $ map (\j -> Map.findWithDefault Set.empty j g) $ Set.toList js
 
 
 
@@ -1283,20 +1306,25 @@ dotOfAuto dflags atomPrinter a = prefix ++ List.intercalate ";\n" (nodes ++ edge
     showPipeNames = List.intercalate " | " . map (showChan True) . Map.keys
 
 
-dotOfAxAuto :: Atom e => DynFlags -> AxAuto e Int -> [String]
-dotOfAxAuto dflags a = map dotify (Map.elems $ auto_graph a) where
+dotOfAxAuto :: Atom e => DynFlags -> AxAuto e Int -> [(Int, String)]
+dotOfAxAuto dflags a = map (\(nid,state) -> (nid, dotify state)) $ Map.toList $ auto_graph a where
   dotify (Node nid nk) = prefix ++ List.intercalate ";\n" (label nid : mk_state nk) ++ postfix 
   prefix = "digraph atomix_state {\n"
   label nid = "label=\"State " ++ show nid ++ "\""
   postfix = ";\n}"
 
-  mk_state (AtomixState atoms constrs decision) 
+  mk_state (AtomixState watoms constrs decision) 
     = ["node [shape = point]", "  -1 [label=\"\"]"] ++
-      ("node [shape = box]" : map mk_atom (zip atoms [0..])) ++
-      ("node [shape = circle]" : [mk_decision decision (length atoms)]) ++
+      ("node [shape = box]" : map mk_watom (zip watoms [0..])) ++
+      ("node [shape = cds]" : [mk_decision decision (length watoms)]) ++
       mk_edges constrs
 
-  mk_atom (wa,idx) = "  " ++ show idx ++ "[label=\"" ++ show wa ++ "\"]"
+  mk_watom (WiredAtom inw outw atom,idx) = "  " ++ show idx ++ "[label=\"" ++ mk_atom inw outw atom ++ "\"]"
+  mk_atom inw outw atom = List.intercalate "\\l" $ 
+                          show atom :
+                          map (("IN: " ++) . show . snd) inw ++
+                          map (("OUT: " ++) . show . snd) outw ++
+                          ["\\l"]
   
   mk_decision dec idx = "  " ++ show idx ++ "[label=\"" ++ show dec ++ "\"]"
 

@@ -254,13 +254,19 @@ main = do
                         not (isDynFlagSet dflags AtomixCodeGen)
                   then atomixCompToComp cc_lc st
                   else lc
+          
 
-        when (isDynFlagSet dflags DumpAutomaton && not (isDynFlagSet dflags AtomixCodeGen)) $ do
+        when (isDynFlagSet dflags DumpAutomaton ||
+              isDynFlagSet dflags DumpDependencyGraphs &&
+              not (isDynFlagSet dflags AtomixCodeGen)) $ do
           (ac,_rnst) <- zirToAtomZir dflags sym lc
           (automaton :: CfgAuto SymAtom Int) 
             <- automatonPipeline dflags sym undefined undefined ac
-          dump dflags DumpAutomaton (".automaton.dump")
+          dump dflags DumpAutomaton ".automaton.dump"
                                    (text $ dotOfAuto dflags Nothing automaton)
+          let file idx = ".state" ++ show idx ++ ".dump"
+          let dumpState (idx,outp) = dump dflags DumpDependencyGraphs (file idx) (text outp)
+          mapM_ dumpState $ dotOfAxAuto dflags $ cfgToAtomix automaton
 
 
         when (isDynFlagSet dflags ClosureConvert) $ 

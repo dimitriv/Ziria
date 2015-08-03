@@ -128,6 +128,9 @@ codeGenThread dflags tid c
                                   else Nothing
              dump dflags DumpAutomaton (".automaton.dump")
                                        (text $ dotOfAuto dflags atomPrinter automaton)
+             let file idx = ".state" ++ show idx ++ ".dump"
+             let dumpState (idx,outp) = dump dflags DumpDependencyGraphs (file idx) (text outp)
+             mapM_ dumpState $ dotOfAxAuto dflags $ cfgToAtomix automaton
 
              cgAutomaton dflags rnst automaton
   

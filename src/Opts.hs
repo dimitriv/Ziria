@@ -67,6 +67,7 @@ data DynFlag =
 
   -- Atomix paramters
   | DumpAutomaton
+  | DumpDependencyGraphs
   | PrintPipeNames
   | PrintAtoms
   | PruneIncompleteStates
@@ -180,6 +181,7 @@ options =
      , Option []    ["ddump-ast"]        (NoArg DumpAst)       "dump the parsed AST"
 
      , Option []    ["ddump-automaton"]  (NoArg DumpAutomaton) "dump automaton for Atomix"
+     , Option []    ["ddump-dependency-graphs"] (NoArg DumpDependencyGraphs) "dump atomix dependency graphs"
      , Option []    ["atomix-codegen"]   (NoArg AtomixCodeGen) "generate code a la Atomix"
 
      , Option []    ["print-pipe-names"]  (NoArg PrintPipeNames) "show names of pipes in Automaton"
