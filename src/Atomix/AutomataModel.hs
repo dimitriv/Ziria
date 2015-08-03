@@ -1323,8 +1323,7 @@ dotOfAxAuto dflags a = map (\(nid,state) -> (nid, dotify state)) $ Map.toList $ 
   mk_atom inw outw atom = List.intercalate "\\l" $ 
                           show atom :
                           map (("IN: " ++) . show . snd) inw ++
-                          map (("OUT: " ++) . show . snd) outw ++
-                          ["\\l"]
+                          map (("OUT: " ++) . show . snd) outw ++ [""]
   
   mk_decision dec idx = "  " ++ show idx ++ "[label=\"" ++ show dec ++ "\"]"
 
