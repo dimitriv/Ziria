@@ -1120,7 +1120,7 @@ cfgToAtomix a = a { auto_graph = state_graph} where
 
 
 -- queue dependency environment
-type QDependencyEnv = Map Chan (Int,Queue Int, Int ) -- last read/queue of active writes (of cardinality one) from/to channel plus last writer to this queue
+type QDependencyEnv = Map Chan (Int,Queue Int, Int) -- last read/queue of active writes (of cardinality one) from/to channel plus last writer to this queue
 -- variable dependency environment
 type VDependencyEnv = Map Chan (Maybe Int, Maybe Int) -- last read/write
 type PipeBalances = Map Chan Int
@@ -1145,12 +1145,6 @@ mk_constraints pipes watoms mb_decision
     
 
     go_inwires :: Int -> Acc -> (Int, Chan) -> Acc
-
-    -- reading from queue that still contains data from last state
-    -- go_inwires idx (qenv, venv, constrs) (n,ch) | Map.findWithDefault 0 ch balances >= n =
-    --   let balances' = Map.adjust (+(-n)) ch balances in
-    --   let qenv' = Map.adjust (\(last_r,last_wrs) -> (idx,last_wrs)) ch qenv in
-    --   (balances', qenv', venv, constrs)
 
     -- reading from queue
     go_inwires idx (qenv, venv, constrs) (n,ch) | Just (last_r,last_wrs, last_w) <- Map.lookup ch qenv =
@@ -1183,12 +1177,14 @@ mk_constraints pipes watoms mb_decision
       (qenv', venv, constrs')
 
     -- writing to variable
-    go_outwires idx (qenv, venv, constrs) (n,ch) =
+    go_outwires idx (qenv, venv, constrs) (1,ch) =
       let (mb_last_r,mb_last_wr) = Map.findWithDefault (Nothing,Nothing) ch venv in
       let venv' = Map.insert ch (mb_last_r, Just idx) venv in
       let constrs' = [ (r,idx,RW) | Just r <- [mb_last_r]  ] ++
                      [ (w,idx,WW) | Just w <- [mb_last_wr] ] ++ constrs in
       (qenv, venv', constrs')
+
+    go_outwires _ _ _ = panicStr "mk_constraints: unexpected case"
 
 
     go_decision :: Maybe Chan -> Acc -> Map (Int,Int) [Dependency]
@@ -1196,7 +1192,7 @@ mk_constraints pipes watoms mb_decision
     go_decision mb_decision (qenv, venv, constrs) =
       let dec_constr = maybeToList $ do
           dec <- mb_decision
-          (mb_last_r,mb_last_wr) <- Map.lookup dec venv
+          (_mb_last_r,mb_last_wr) <- Map.lookup dec venv
           last_wr <- mb_last_wr
           return (last_wr,length watoms,WR)
       in Map.fromList $
