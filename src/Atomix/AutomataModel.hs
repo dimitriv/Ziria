@@ -1213,16 +1213,14 @@ mk_constraints _ _ _ = error "mk_constraints: unexpected case"
 
 -- Naive transitivity-reduction (i.e. removal of transitive edges)
 trans_reduction :: Map (Int,Int) a -> Map (Int,Int) a
-trans_reduction mp = foldl reduce mp [(i,j,k) | i<-idxs, j<-idxs, k<-idxs]
+trans_reduction mp = foldl (flip Map.delete) mp redundant
   where
-    reduce mp (i,j,z) 
-      | j `Set.member` Map.findWithDefault Set.empty i closure
-      && z `Set.member` Map.findWithDefault Set.empty j closure
-      || i==z
-      = Map.delete (i,z) mp
-    reduce mp _ = mp
+    redundant = [ (i,i) | i <- idxs ] ++
+                [ (i,k) | i <- idxs
+                        , j <- maybe [] Set.toList $ Map.lookup i closure
+                        , k <- maybe [] Set.toList $ Map.lookup j closure ]
 
-    idxs = List.nub $ uncurry (++) $ unzip $ Map.keys mp
+    idxs = List.nub $ map fst $ Map.keys mp
 
     fix f x = let x' = f x in if x==x' then x else fix f x'
 
