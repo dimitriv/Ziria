@@ -24,15 +24,30 @@
 
 // Init the queue
 int ts_init(int nc, size_t *sizes);
+int ts_init_var(int no, size_t *sizes, int *queue_sizes);
 
 // Called by the uplink thread
+// Blocking
 void ts_put(int nc, char *input);
+
+// Blocking
+void ts_putMany(int nc, int n, char *input);
+// unpack bits into one byte each, and put them into the queue 
+void ts_putManyBits(int nc, int n, char *input);
 
 // Called by the downlink thread
 bool ts_isFinished(int nc);
 
  // Called by the downlink thread
 bool ts_get(int nc, char *output);
+
+int ts_getMany(int nc, int n, char *output);
+
+int ts_getManyBlocking(int nc, int n, char *output);
+
+// get n bits (stored in 1 byte each), and pack them into (n+7)/8 bytes
+int ts_getManyBitsBlocking(int nc, int n, char *output);
+
 
 // Issued from upstream to downstream
 void ts_reset(int nc);
@@ -44,6 +59,7 @@ void ts_flush(int nc);
 void ts_finish(int nc);
 
 bool ts_isEmpty(int nc);
+
 bool ts_isFull(int nc);
 
 // Free memory allocated for queues
@@ -67,6 +83,8 @@ struct ts_context
 	MEM_ALIGN(ST_CACHE_LINE) volatile bool evFinish;
 	MEM_ALIGN(ST_CACHE_LINE) volatile bool evFlush;
 	MEM_ALIGN(ST_CACHE_LINE) volatile bool evProcessDone;
+
+	MEM_ALIGN(ST_CACHE_LINE) int queue_size;
 };
 
 
@@ -76,9 +94,13 @@ struct ts_context
 // TODO: rewrite the compiler to use explicit queues, 
 // and get rid of the functions above.
 
+ts_context *s_ts_init_var(int no, size_t *sizes, int *queue_sizes);
 ts_context *s_ts_init(int no, size_t *sizes);
 void s_ts_put(ts_context *locCont, int nc, char *input);
 bool s_ts_get(ts_context *locCont, int nc, char *output);
+void s_ts_putMany(ts_context *locCont, int nc, int n, char *input);
+int s_ts_getMany(ts_context *locCont, int nc, int n, char *output);
+int s_ts_getManyBlocking(ts_context *locCont, int nc, int n, char *output);
 bool s_ts_isFinished(ts_context *locCont, int nc);
 bool s_ts_isFull(ts_context *locCont, int nc);
 bool s_ts_isEmpty(ts_context *locCont, int nc);
@@ -87,4 +109,6 @@ void ts_reset(int nc);
 void s_ts_flush(ts_context *locCont, int nc);
 void s_ts_finish(ts_context *locCont, int nc);
 void s_ts_free(ts_context *locCont, int no);
+
+
 

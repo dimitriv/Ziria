@@ -20,7 +20,7 @@ build-type: Simple
 Executable wplc
   hs-source-dirs:   src src/BasicTypes src/Codegen src/Optimize
                     src/Pipeline src/Typecheck src/Utils src/Vectorize
-                    src/Analysis src/ComputeType
+                    src/Analysis src/ComputeType src/Atomix
   main-is:          Main.hs
   -- TODO: We should use a proper module hierarchy and only have 'src' 
   -- as the include dir.
@@ -36,6 +36,7 @@ Executable wplc
   build-depends:
     array                  >= 0.2   && < 0.6,
     base                   >= 4     && < 5,
+    boxes                  >= 0.1.4,
     bytestring             >= 0.10  && < 0.11,
     containers             >= 0.4   && < 0.6,
     dlist                  >= 0.6   && < 0.7,
@@ -73,6 +74,7 @@ Executable wplc
 
   ghc-options: -fwarn-incomplete-patterns -Werror 
                -- For profiling
+               --O0
                -threaded -fprof-auto 
                -rtsopts
                -- "-with-rtsopts=-N -p -s -hy -i0.1"

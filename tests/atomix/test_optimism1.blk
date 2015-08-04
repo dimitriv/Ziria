@@ -1,0 +1,12 @@
+{-
+
+Test to investigate the behavior of optimistic zipping.
+
+-}
+
+let comp main = 
+  	  read[int]
+  >>> repeat emit 1
+  >>> 					-- this pipeline should be filled up with (n+1) elements (for optimism=n)
+  	  repeat take
+  >>> write[int]

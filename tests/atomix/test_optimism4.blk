@@ -1,0 +1,18 @@
+{-
+
+Test that demonstrates limits of the current optimism-algorithm.
+
+-}
+
+
+fun id (x:int) {
+	return x;
+}
+
+let comp main =
+  read[int] >>>
+  seq { var x : bool;
+        while(x) { map id >>> { y <- take; emit y; } >>> map id };
+        map id
+  }
+  >>> write[int]

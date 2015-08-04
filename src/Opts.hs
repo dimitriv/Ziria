@@ -33,7 +33,6 @@ import System.Console.GetOpt
 import System.Environment
 import System.Exit (exitFailure)
 import System.IO
-
 import System.IO.Unsafe ( unsafePerformIO )
 
 cMAX_STACK_ALLOC :: Int
@@ -57,12 +56,25 @@ data DynFlag =
   | NativeMitigators
   | NoLUTHashing
 
+  | ClosureConvert
+
   | Opt
   | Verbose
   | DumpVect
   | DumpTypes
   | DumpAst
   | DumpAstPretty
+
+  -- Atomix paramters
+  | DumpAutomaton
+  | DumpDependencyGraphs
+  | PrintPipeNames
+  | PrintAtoms
+  | PruneIncompleteStates
+  | Optimism Int
+  | FuseAggressively
+  | CLikeNames
+
   | Vectorize
   | AutoLUT
   | MaxLUTSize Integer -- ^ Max size of LUT, in bytes
@@ -87,6 +99,8 @@ data DynFlag =
   | Timeout Integer -- In seconds
 
   | MockLUT -- just for debugging LUT
+
+  | AtomixCodeGen
 
   deriving (Eq,Show)
 
@@ -165,10 +179,26 @@ options =
      , Option []    ["ddump-types"]      (NoArg DumpTypes)     "dump a typechecked version of program"
      , Option []    ["ddump-vect-types"] (NoArg DumpVectTypes) "dump typechecked vectorized program"
      , Option []    ["ddump-ast"]        (NoArg DumpAst)       "dump the parsed AST"
+
+     , Option []    ["ddump-automaton"]  (NoArg DumpAutomaton) "dump automaton for Atomix"
+     , Option []    ["ddump-dependency-graphs"] (NoArg DumpDependencyGraphs) "dump atomix dependency graphs"
+     , Option []    ["atomix-codegen"]   (NoArg AtomixCodeGen) "generate code a la Atomix"
+
+     , Option []    ["print-pipe-names"]  (NoArg PrintPipeNames) "show names of pipes in Automaton"
+     , Option []    ["print-atoms"]  (NoArg PrintAtoms)        "print atoms in automaton-dump"
+     , Option []    ["prune-incomplete-states"]  (NoArg PruneIncompleteStates) "prune automaton states that terminate with data still in the pipeline"
+     , Option []    ["optimism"]         (OptArg parseOptimism "INTEGER") "pipeline optimism"
+     , Option []    ["fuse-aggressively"] (NoArg FuseAggressively) "fuse atoms at the cost of duplicating code"
+     , Option []    ["c-like-names"]     (NoArg CLikeNames) "use same atom names as code generator"
+
+
      , Option []    ["ddump-ast-pretty"] (NoArg DumpAstPretty) "dump the parsed AST (pretty-printed)"
      , Option []    ["vectorize"]        (NoArg Vectorize)     "vectorize program"
      , Option []    ["autolut"]          (NoArg AutoLUT)       "automatically convert function to use LUTs"
      , Option []    ["pipeline"]         (NoArg Pipeline)      "pipeline standalone computations"
+
+     , Option []    ["closure-convert"]  (NoArg ClosureConvert) "generate code via closure conversion"
+
 
      , Option []    ["no-lut-hashing"]   (NoArg NoLUTHashing)  "do not hash lut generation"
 
@@ -201,6 +231,13 @@ options =
 
 usage :: String
 usage = "Usage: wpl [OPTION...] files..."
+
+parseOptimism :: Maybe String -> DynFlag
+parseOptimism Nothing = Optimism defaultOptimism
+parseOptimism (Just i) = Optimism (read i)
+
+defaultOptimism :: Int
+defaultOptimism = 0
 
 parseAffinityMask :: Maybe String -> DynFlag
 parseAffinityMask Nothing  = AffinityMask defaultAffinityMask
@@ -268,3 +305,10 @@ getName opts =
     [] -> ""
     (Name name : _) -> name
     (_ : opts') -> getName opts'
+
+getOptimism :: DynFlags -> Int
+getOptimism dfs =
+  case dfs of
+    [] -> defaultOptimism
+    (Optimism optimism : _) -> optimism
+    (_ : dfs) -> getOptimism dfs

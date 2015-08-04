@@ -200,7 +200,7 @@ void bitArrWrite(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPt
 	}
 }
 
-
+// Unpack bit into byte: tgt := src[vpos]
 void bitRead(BitArrPtr src,unsigned int vpos, Bit *tgt)
 {
 	*tgt = (src[vpos/8] >> (vpos % 8)) & 1;
@@ -208,6 +208,7 @@ void bitRead(BitArrPtr src,unsigned int vpos, Bit *tgt)
 	// but its a bit indirect and slightly more expensive.
 }
 
+// Pack bit into byte: tgt[vpos]:= val;
 void bitWrite(BitArrPtr tgt,unsigned int vpos, Bit val)
 {
 	Bit hval = val & 1;

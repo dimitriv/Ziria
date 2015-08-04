@@ -462,13 +462,14 @@ select_scalefactors vctx (sfuds,sfdus,sfdds)
 
 
 logCands :: DynFlags -> Bool -> String -> DVRCands -> VecM DVRCands
-logCands dfs full_blown origin cands = do
+logCands _dfs _full_blown _origin cands = return cands
+{- do
   verbose dfs $ text origin <>
     parens (text (show (Map.size cands)) <+> text "candidates")
   when full_blown $
     verbose dfs (vcat (map (text . show . dvr_vres) (Map.elems cands)))
   return cands
-
+-}
 
 -- | NB: Not including 'self'
 vectRepeat :: DynFlags
@@ -579,37 +580,60 @@ ty_upto _t j                      = j > 0
 mitigateFlexi :: VectAnn -> CtxForVect -> ScaleFactors -> DVRCands -> DVRCands
 mitigateFlexi (Rigid False _) vctx _sfss cands = cands
 mitigateFlexi (UpTo False _)  vctx _sfss cands = cands
-mitigateFlexi vann vctx sfss cands = 
-  let is_rigid = case vann of { Rigid {} -> True; _ -> False }
-      mitigated r = 
-       let ain  = tyArity (vect_in_ty  $ dvr_vres r)
-           aout = tyArity (vect_out_ty $ dvr_vres r)
-           dummy_card = (CAStatic ain, CAStatic aout)
-           sfuds0 = compSFUD_aux dummy_card
-           sfdus0 = compSFDU_aux dummy_card
-           -- If Rigid, the programmer explicitly asked for this
-           -- internal vectorization, so it's ok to arbitrarily
-           -- down-vectorize, if not then conservatively we do not
-           -- down-vectorize.
-           sfdds0 = if is_rigid 
-                    then compSFDD_aux dummy_card
-                    else []
-           (sfuds,sfdus,sfdds) = select_scalefactors vctx (sfuds0,sfdus0,sfdds0)
-{- Alternatively, it's entirely valid to do the following, 
-   but I am keeping the arguably less efficient current 
-   version as the approximation we do with the dummy_card
-   seems to give slightly less 'mitigated' final code.
+mitigateFlexi vann vctx sfss cands 
+  = let is_rigid = case vann of { Rigid {} -> True; _ -> False }
+        mitigated r = 
+         let ain  = tyArity (vect_in_ty  $ dvr_vres r)
+             aout = tyArity (vect_out_ty $ dvr_vres r)
+             dummy_card = (CAStatic ain, CAStatic aout)
+{-   
+             sfuds0 = compSFUD_aux dummy_card
+             sfdus0 = compSFDU_aux dummy_card
+             -- If Rigid, the programmer explicitly asked for this
+             -- internal vectorization, so it's ok to arbitrarily
+             -- down-vectorize, if not then conservatively we do not
+             -- down-vectorize.
+             sfdds0 = if is_rigid 
+                      then compSFDD_aux dummy_card
+                      else []
+             (sfuds,sfdus,sfdds) = select_scalefactors vctx (sfuds0,sfdus0,sfdds0)
+-}
+{-   Alternatively, it's entirely valid to do the following, 
+     but I am keeping the arguably less efficient current 
+     version as the approximation we do with the dummy_card
+     seems to give slightly less 'mitigated' final code.
+-}
+             (sfuds,sfdus,sfdds) = sfss
 
-       let (sfuds,sfdus,sfdds) = sfss
- -}
-           arities1 = map sfud_arity sfuds
-           arities2 = map sfdu_arity sfdus
-           arities3 = map sfdd_arity sfdds
-           arities  = arities1 ++ arities2 ++ arities3 
+             arities1 = map sfud_arity sfuds
+             arities2 = map sfdu_arity sfdus
+             arities3 = map sfdd_arity sfdds
+             arities  = filter (rate_preserving vctx ain aout) $
+                        arities1 ++ arities2 ++ arities3 
 
-       in catMaybes $ map (\ar -> mit_one_mb "MF" ar r) arities
+         in catMaybes $ map (\ar -> mit_one_mb "MF" ar r) arities
 
-  in fromListDVRCands (concatMap mitigated (Map.elems cands))
+    in fromListDVRCands (concatMap mitigated (Map.elems cands))
+  where
+   rate_preserving vctx vin vout (cin,cout)
+     = ar_geq_in cin vin || ar_leq_out vout cout
+
+--       not (ar_lt_in cin vin && ar_gt_out cout vout)
+
+-- case vctx of
+--          CtxExCompLeft  -> ar_geq_in cin vin 
+--                            -- && ar_geq_out vout cout
+--          CtxExCompRight -> -- ar_leq_in cin vin
+--                            ar_leq_out vout cout
+
+--          CtxExCompLeftAndRight -> 
+--               ar_geq_in cin vin && ar_geq_out vout cout && 
+--               ar_leq_in cin vin && ar_leq_out vout cout
+--          CtxUnrestricted -> True
+
+
+
+
 
 
 {- The following /must not/ happen, but it used to happen due to a bug 

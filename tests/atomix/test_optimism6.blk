@@ -1,0 +1,20 @@
+{-
+
+Test to demonstrate rollback.
+
+-}
+
+
+fun id (x:int) {
+	return x;
+}
+
+let comp main =
+  read[int] >>>
+  map id 
+  >>> -- THIS CHANNEL SHOULD BE ROLLED-BACK UPON TERMINATION OF THE WHILE LOOP
+  seq { var x : bool;
+  		map id >>> while(x) { x <- take; emit x; };
+  		map id;
+  }
+  >>> write[int]

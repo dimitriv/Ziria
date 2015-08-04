@@ -20,8 +20,9 @@
 #include <sora.h>
 #include "sora_threads.h"
 #include "sora_thread_queues.h"
+#include "bit.h"
 
-#define ST_BUF_SIZE	64
+#define ST_QUEUE_SIZE	64
 
 
 // Assuming char is 1B
@@ -68,9 +69,9 @@ LONG empty[MAX_TS];
 
 
 
-// Init <no> queues
+// Init <no> queues, each with a different size
 
-ts_context *s_ts_init(int no, size_t *sizes)
+ts_context *s_ts_init_var(int no, size_t *sizes, int *queue_sizes)
 {
 	ts_context *locCont;
 
@@ -93,13 +94,16 @@ ts_context *s_ts_init(int no, size_t *sizes)
 
 	for (int j=0; j<no; j++)
 	{
+		// All queues have default size
+		locCont[j].queue_size = queue_sizes[j];
+
 		// Buffer size should be a multiple of ST_CACHE_LINE
 		locCont[j].size = sizes[j];
 		locCont[j].alg_size = ST_CACHE_LINE * (sizes[j] / ST_CACHE_LINE);
 		if (sizes[j] % ST_CACHE_LINE > 0) locCont[j].alg_size += ST_CACHE_LINE;
 
 		// Allocate one cache line for valid field and the rest for the data
-		locCont[j].buf = (char *) _aligned_malloc((ST_CACHE_LINE+locCont[j].alg_size)*ST_BUF_SIZE, ST_CACHE_LINE);
+		locCont[j].buf = (char *)_aligned_malloc((ST_CACHE_LINE + locCont[j].alg_size)*locCont[j].queue_size, ST_CACHE_LINE);
 		if (locCont[j].buf == NULL)
 		{
 			printf("Cannot allocate thread separator buffer! Exiting... \n");
@@ -107,7 +111,7 @@ ts_context *s_ts_init(int no, size_t *sizes)
 		}
 
 		size_t i;
-		for (i = 0; i < ST_BUF_SIZE; i++)
+		for (i = 0; i < locCont[j].queue_size; i++)
 		{
 			* valid(locCont[j].buf, locCont[j].alg_size, i) = false;
 		}
@@ -119,6 +123,27 @@ ts_context *s_ts_init(int no, size_t *sizes)
 	return locCont;
 }
 
+
+
+// Init <no> queues
+// Legacy API, assumes all queues have the same size of ST_QUEUE_SIZE
+ts_context *s_ts_init(int no, size_t *sizes)
+{
+	int *queue_sizes = (int *) malloc(no*sizeof(int));
+	if (queue_sizes == NULL) return NULL;
+	for (int i = 0; i < no; i++) queue_sizes[i] = ST_QUEUE_SIZE;
+	return s_ts_init_var(no, sizes, queue_sizes);
+}
+
+
+
+// Init <no> queues, each with a different size
+int ts_init_var(int no, size_t *sizes, int *queue_sizes)
+{
+	contexts = s_ts_init_var(no, sizes, queue_sizes);
+	no_contexts = no;
+	return no;
+}
 
 
 // Init <no> queues
@@ -177,16 +202,16 @@ void s_ts_put(ts_context *locCont, int nc, char *input)
 	InterlockedIncrement(queueSize + (nc*16));
 	queueCum[nc] += queueSize[nc*16];
 	queueSam[nc]++;
-	if (queueSize[nc*16] > (ST_BUF_SIZE * 0.9)) almostFull[nc]++;
+	if (queueSize[nc * 16] > (locCont[nc].queue_size * 0.9)) almostFull[nc]++;
 #endif
 
 
 	// advance the write pointer
     //(locCont[nc].wptr)++;
-    //if ((locCont[nc].wptr) == (locCont[nc].buf) + ST_BUF_SIZE)
+    //if ((locCont[nc].wptr) == (locCont[nc].buf) + locCont[nc].queue_size)
     //    (locCont[nc].wptr) = (locCont[nc].buf);
     locCont[nc].wptr += (ST_CACHE_LINE+locCont[nc].alg_size);
-    if ((locCont[nc].wptr) == (locCont[nc].buf) + ST_BUF_SIZE*(ST_CACHE_LINE+locCont[nc].alg_size))
+	if ((locCont[nc].wptr) == (locCont[nc].buf) + locCont[nc].queue_size*(ST_CACHE_LINE + locCont[nc].alg_size))
         (locCont[nc].wptr) = (locCont[nc].buf);
 }
 
@@ -205,6 +230,64 @@ void ts_put(int nc, char *input)
 	}
 
 	s_ts_put(contexts, nc, input);
+}
+
+
+
+
+
+// Called by the uplink thread
+// Blocking
+void s_ts_putMany(ts_context *locCont, int nc, int n, char *input)
+{
+	int write = n;
+	char *ptr = input;
+	while (write > 0)
+	{
+		// Blocking:
+		s_ts_put(locCont, nc, ptr);
+		ptr += locCont[nc].size;
+		write--;
+	}
+}
+
+
+
+// Blocking
+void ts_putMany(int nc, int n, char *input)
+{
+	if (nc >= no_contexts)
+	{
+		printf("There are only %d queues! %d\n", no_contexts, nc);
+		return;
+	}
+
+	s_ts_putMany(contexts, nc, n, input);
+}
+
+
+// Blocking
+// unpack bits into one byte each, and put them into the queue 
+void s_ts_putManyBits(ts_context *locCont, int nc, int n, char *input)
+{
+	unsigned char unpacked_bit[1];
+	for (int i = 0; i < n; i++)
+	{
+		bitRead((BitArrPtr)input, i, unpacked_bit);
+		s_ts_putMany(locCont, nc, 1, (char *)unpacked_bit);
+	}
+}
+
+// Blocking
+void ts_putManyBits(int nc, int n, char *input)
+{
+	if (nc >= no_contexts)
+	{
+		printf("There are only %d queues! %d\n", no_contexts, nc);
+		return;
+	}
+
+	s_ts_putManyBits(contexts, nc, n, input);
 }
 
 
@@ -249,7 +332,7 @@ bool s_ts_get(ts_context *locCont, int nc, char *output)
 
         //(locCont[nc].rptr)->valid = false;
 	    //(locCont[nc].rptr)++;
-        //if ((locCont[nc].rptr) == (locCont[nc].buf) + ST_BUF_SIZE)
+        //if ((locCont[nc].rptr) == (locCont[nc].buf) + locCont[nc].queue_size)
 
 
 #ifdef TS_DEBUG
@@ -258,7 +341,7 @@ bool s_ts_get(ts_context *locCont, int nc, char *output)
 
         * valid(locCont[nc].rptr, locCont[nc].alg_size, 0) = false;
 		locCont[nc].rptr += (ST_CACHE_LINE+locCont[nc].alg_size);
-		if ((locCont[nc].rptr) == (locCont[nc].buf) + ST_BUF_SIZE*(ST_CACHE_LINE+locCont[nc].alg_size))
+		if ((locCont[nc].rptr) == (locCont[nc].buf) + locCont[nc].queue_size*(ST_CACHE_LINE+locCont[nc].alg_size))
         {
             (locCont[nc].rptr) = (locCont[nc].buf);
 #ifdef USE_SORA_YIELD
@@ -273,6 +356,7 @@ bool s_ts_get(ts_context *locCont, int nc, char *output)
 	}
     return false;
 }
+
 
 
 bool ts_get(int nc, char *output)
@@ -290,6 +374,113 @@ bool ts_get(int nc, char *output)
 
 
 
+
+
+
+// Reads as many chunks as available but at most n, and returns the number of chunks read
+int s_ts_getMany(ts_context *locCont, int nc, int n, char *output)
+{
+	int read = 0;
+	char *ptr = output;
+	while (read < n && s_ts_get(locCont, nc, ptr))
+	{
+		ptr += locCont[nc].size;
+		read++;
+	}
+
+	return read;
+}
+
+
+
+int ts_getMany(int nc, int n, char *output)
+{
+	if (nc >= no_contexts)
+	{
+		printf("There are only %d queues! %d\n", no_contexts, nc);
+		return false;
+	}
+
+	return s_ts_getMany(contexts, nc, n, output);
+}
+
+
+
+
+
+// Reads n chunks and blocks if not available. Return number of chunks read (which could be less than n if finished)
+int s_ts_getManyBlocking(ts_context *locCont, int nc, int n, char *output)
+{
+	int read = 0;
+	char *ptr = output;
+	while (read < n)
+	{
+		bool last = s_ts_get(locCont, nc, ptr);
+		if (last)
+		{
+			ptr += locCont[nc].size;
+			read++;
+		}
+		if (s_ts_isFinished(locCont, nc))
+		{
+			break;
+		}
+	}
+
+	return read;
+}
+
+
+int ts_getManyBlocking(int nc, int n, char *output)
+{
+	if (nc >= no_contexts)
+	{
+		printf("There are only %d queues! %d\n", no_contexts, nc);
+		return false;
+	}
+
+	return s_ts_getManyBlocking(contexts, nc, n, output);
+}
+
+
+void packBitsIntoByte(BitArrPtr bits, unsigned char *byte)
+{
+	for (int i = 0; i < 8; i++)
+	{
+		bitWrite(byte, i, bits[i]);
+	}
+}
+
+
+
+// Get n bits (stored in 1 byte each), and pack them into (n+7)/8 bytes
+// Return number of bits read (which could be less than n if finished)
+int s_ts_getManyBitsBlocking(ts_context *locCont, int nc, int n, char *output)
+{
+	char tmp_output[1];
+	int read = 0;
+
+	for (int i = 0; i<n; i++)
+	{
+		read += s_ts_getManyBlocking(locCont, nc, 1, tmp_output);
+		bitWrite((BitArrPtr) output, i, tmp_output[0]);
+	}
+
+	return read;
+}
+
+
+
+int ts_getManyBitsBlocking(int nc, int n, char *output)
+{
+	if (nc >= no_contexts)
+	{
+		printf("There are only %d queues! %d\n", no_contexts, nc);
+		return false;
+	}
+
+	return s_ts_getManyBitsBlocking(contexts, nc, n, output);
+}
 
 
 

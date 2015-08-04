@@ -378,8 +378,8 @@ computeCard _dflags = go
     -- as approximation of actual cardinality of argument
     cargs_extend [] m = m
     cargs_extend (pm:pms) m
-      | MkName nm uid (CAComp cty) loc _mk <- pm
-      , let pm' = MkName nm uid cty loc _mk
+      | MkName nm uid (CAComp cty) loc _mk d <- pm
+      , let pm' = MkName nm uid cty loc _mk d
       = extendCVarEnv pm' ocard $ cargs_extend pms m
       | otherwise
       = cargs_extend pms m

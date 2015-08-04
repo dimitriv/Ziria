@@ -221,6 +221,7 @@ data GComp0 tc t a b where
   -- > -------------------------------------------------------------------
   -- >          times <unroll-info> e elen nm c :: ST (C u) a b
   --
+  -- for (nm = e; nm < e + elen; nm++) c
   -- TODO: Replace with
   --
   -- > For :: GName ty -> GExp t b -> GExp t b -> GComp tc t a b -> GComp tc t 0 a a
@@ -348,6 +349,7 @@ mkHOCompSubst fprms fargs = go fprms fargs ([],[],[])
                     callArg (error "mkHOCompSubst") id (nameTyp nm)
 
 
+
 checkCAArgMut :: -- Function argument types (expected)
                  [CallArg ArgTy CTy]
                  -- Actual arguments
@@ -374,13 +376,13 @@ data PlInfo where
                     -> PlInfo
   NeverPipeline  :: PlInfo
   MaybePipeline  :: PlInfo
-  deriving (Generic, Typeable, Data)
+  deriving (Generic, Typeable, Data, Show)
 
 data ParInfo
   = ParInfo { plInfo     :: PlInfo
             , inBurstSz  :: Maybe Int
             , outBurstSz :: Maybe Int }
-  deriving (Generic, Typeable, Data)
+  deriving (Generic, Typeable, Data, Show)
 
 -- See Note [Standalone Reads]
 data ReadType

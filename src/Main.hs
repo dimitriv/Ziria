@@ -60,10 +60,13 @@ import qualified PassPipeline as PP
 
 import qualified Language.Ziria.Parser as P
 
-import TcRename () 
+import AtomixCompTransform
+import AutomataModel
+import AtomInstantiation
 
 data CompiledProgram
   = CompiledProgram Comp [C.Definition] FilePath
+
 
 pprProgInfo :: Comp -> Doc
 pprProgInfo prog =
@@ -243,12 +246,39 @@ main = do
         lc <- timedPhase dflags "runAutoLUTPhase" $ 
               runAutoLUTPhase dflags sym fc
 
+
+        (cc_lc,st) <- timedPhase dflags "atomixCompTransform" $ 
+                      atomixCompTransform sym lc
+
+        let lc' = if isDynFlagSet dflags ClosureConvert &&
+                        not (isDynFlagSet dflags AtomixCodeGen)
+                  then atomixCompToComp cc_lc st
+                  else lc
+          
+
+        when ((isDynFlagSet dflags DumpAutomaton ||
+              isDynFlagSet dflags DumpDependencyGraphs) &&
+              not (isDynFlagSet dflags AtomixCodeGen)) $ do
+          (ac,_rnst) <- zirToAtomZir dflags sym lc
+          (automaton :: CfgAuto SymAtom Int) 
+            <- automatonPipeline dflags sym undefined undefined ac
+          dump dflags DumpAutomaton ".automaton.dump"
+                                   (text $ dotOfAuto dflags Nothing automaton)
+          let file idx = ".state" ++ show idx ++ ".dump"
+          let dumpState (idx,outp) = dump dflags DumpDependencyGraphs (file idx) (text outp)
+          mapM_ dumpState $ dotOfAxAuto dflags $ cfgToAtomix automaton
+
+
+        when (isDynFlagSet dflags ClosureConvert) $ 
+          dump dflags DumpFold (".cc-phase.dump")
+                               ((text . show . Outputable.ppr) lc')
+
         PP.MkPipelineRetPkg { PP.context = comp_ctxt
                             , PP.threads = comp_threads
                             , PP.buf_tys = tys }
           <- timedPhase dflags "runPipelinePhase" $ 
-             runPipelinePhase dflags sym lc
-        return (lc, comp_ctxt, comp_threads,tys,fn)
+             runPipelinePhase dflags sym lc'
+        return (lc', comp_ctxt, comp_threads,tys,fn)
 
 
 failOnError :: Show a => IO (Either a b) -> IO b

@@ -3,6 +3,7 @@
 *~
 *.hi-boot
 *.o-boot
+*.dump
 .cabal-sandbox/
 cabal.sandbox.config
 tmp
@@ -347,3 +348,7 @@ code/WiFi/perf_results
 
 # Disabled unit tests
 *.disabled
+
+# Automaton pictures
+code/WiFi/tests/*.png
+code/WiFi/tests/*.svg

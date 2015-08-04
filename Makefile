@@ -36,10 +36,10 @@ create-sandbox:
 	cabal install --dependencies-only
 
 # A profiling sandbox 
-# create-sandbox-prof:
-# 	cabal sandbox init
-#         cabal configure --enable-executable-profiling --enable-library-profiling
-# 	cabal install --dependencies-only
+create-sandbox-prof:
+	cabal sandbox init
+	cabal install --dependencies-only --enable-executable-profiling --enable-library-profiling
+	cabal configure --enable-executable-profiling --enable-library-profiling
 
 
 clean:
@@ -47,6 +47,7 @@ clean:
 	-rm -rf wplc.exe
 	-rm -rf tools/BlinkDiff
 	-rm -rf tools/BlinkDiff.exe
+	cabal clean
 
 clean-sandbox:
 	-rm -rf .cabal-sandbox

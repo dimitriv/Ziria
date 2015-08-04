@@ -1,0 +1,27 @@
+{-
+
+Test that demonstrates blowup caused by optimistic zipping.
+
+-}
+
+
+fun id (x:int) {
+	return x;
+}
+
+let comp main = 
+  var x : bool in
+
+  	  read[int]
+  >>>
+  	  map id
+  >>>
+  	  map id
+  >>>
+  	  while(x) { y <- take; emit y; }
+  >>>
+  	  map id
+  >>>
+  	  map id
+  >>> 
+  	  write[int]

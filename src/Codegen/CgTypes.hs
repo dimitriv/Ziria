@@ -30,7 +30,7 @@ module CgTypes ( bwBitWidth
                , codeGenDeclGroup
                , appendCodeGenDeclGroup
                , codeGenDeclVolGroup
-               , codeGenFieldDeclGroup
+               , codeGenFieldDeclGroup, cgStructDef
                , codeGenDeclDef
                , DeclPkg ( .. )
 
@@ -119,7 +119,8 @@ tySizeOfApprox :: Ty -> Int
 tySizeOfApprox ty = tySizeOf True ty
 
 tySizeOf_C :: Ty -> C.Exp
-tySizeOf_C (TArray (NVar n) TBit)  = [cexp| (($id:n + 7) >> 3) |]
+tySizeOf_C (TArray (NVar n) TBit)    = [cexp| (($id:n  + 7) >> 3) |]
+tySizeOf_C (TArray (Literal n) TBit) = [cexp| (($int:n + 7) >> 3) |]
 tySizeOf_C (TArray (NVar n) ty)    = [cexp| $id:n * $exp:(tySizeOf_C ty)|]
 tySizeOf_C (TArray (Literal n) ty) = [cexp| $int:n * $exp:(tySizeOf_C ty)|]
 tySizeOf_C (TStruct sn _) = [cexp| sizeof($id:sn)|]
@@ -383,6 +384,17 @@ codeGenFieldDeclGroup v ty =
     _t -> panicStr "Code generator supports nested arrays of nesting level <= 4"
   where idx_stack = arrIdxCStack ty
         base_ty   = arrBaseCType Nothing ty
+
+cgStructDef :: StructDef -> Cg a -> Cg a
+cgStructDef sdef action = do 
+  let struct_defn = [cdecl| typedef struct { $sdecls:cfields }
+                                             $id:(struct_name sdef); |]
+      cfields = map decl_field (struct_flds sdef)
+      decl_field (fnm,fty) = codeGenFieldDeclGroup fnm fty
+
+  appendStructDef (struct_name sdef) struct_defn
+  extendTyDefEnv (struct_name sdef) sdef action
+
 
 codeGenDeclGroup_qual :: Quals 
                       -> CVar -> Ty -> HowToInit -> Cg (DeclPkg C.InitGroup)

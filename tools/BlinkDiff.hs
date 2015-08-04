@@ -208,7 +208,7 @@ do_compare prefix_on verbose_on fmtr hin hgnd
           ; hgnd_eof <- hIsEOF hgnd
           ; if hin_eof then
                if prefix_on then 
-                  if cnt > 0 then
+                  if cnt > 0 || (cnt == 0 && hgnd_eof) then
                      do { let msg = if hgnd_eof then "Matching! (EOF)"
                                   else "Matching! (Prefix of " ++ 
                                             show cnt ++ " entries)"
@@ -217,6 +217,7 @@ do_compare prefix_on verbose_on fmtr hin hgnd
                              ; r <- readIORef aref 
                              ; putStrLn (" (Accuracy " ++ show (to_pc r) ++"%)") }
                         ; exitWith ExitSuccess }
+                       -- cnt = 0 && (not hgnd_eof)
                   else mismatchWithMsg verbose_on $
                          "Empty outfile!"
                else if hgnd_eof then 

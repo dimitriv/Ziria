@@ -31,6 +31,8 @@ module VecSF (
   , sfud_arity
   , sfdu_arity
   , sfdd_arity
+  , ar_leq_in, ar_geq_in, ar_leq_out, ar_geq_out
+
   , isSteady_sfdu
   , isSteady_sfud
 
@@ -362,4 +364,16 @@ sfdd_arity (SFDD3 (DivsOf _ (NDiv i0) _)
                   (DivsOf _ (NDiv j0) _)) = (Just i0, Just j0)
 
 
+
+ar_leq_in,ar_geq_in :: Maybe Int -> Int -> Bool 
+ar_leq_in Nothing _  = True
+ar_leq_in (Just i) j = (i <= j) && (j `mod` i == 0)
+ar_geq_in Nothing _  = True
+ar_geq_in (Just j) i = (i <= j) && (j `mod` i == 0)
+
+ar_leq_out, ar_geq_out :: Int -> Maybe Int -> Bool
+ar_leq_out _ Nothing  = True
+ar_leq_out i (Just j) = (i <= j) && (j `mod` i == 0)
+ar_geq_out _ Nothing  = True
+ar_geq_out j (Just i) = (i <= j) && (j `mod` i == 0)
 
