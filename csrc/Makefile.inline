@@ -19,31 +19,32 @@
 #
 
 CC = gcc
-CFLAGS = -std=c99 -msse3 
-LIBS = -lm
+CFLAGS = -std=c99 -msse3 -m64 -mcmodel=large -I . -I /cygdrive/c/SoraSDK2.0/inc/ -Wno-attributes #-DSORA_PLATFORM=1 -DUSER_MODE=1
+LIBS = -lm 
 OBJDIR = .
-
-OBJ_INT = bit.o numerics.o params.o test.o driver.o wpl_alloc.o utils.o
-OBJ_IO  = buf_bit.o buf_chunk.o buf_numerics8.o buf_numerics32.o buf_numerics16.o
-OBJ_LIB = 
-OBJ_EXT = ext_math.o ext_arr.o 
-
-# lut test.c only contains a main function but has to be linked with everything
-OBJ_LUT_ONLY = bit.o numerics.o test.o wpl_alloc.o utils.o
 
 EXECUTABLE = driver
 LUT_EXECUTABLE = lutexec
 
 all : driver
 
-driver : $(OBJ_INT) $(OBJ_IO) $(OBJ_LIB) $(OBJ_EXT)
+driver : WrapperGCC.o
 	$(CC) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
 
-lutexec: $(OBJ_LUT_ONLY) $(OBJ_LIB) $(OBJ_EXT)
+lutexec: WrapperGCC.o buf_numerics8.o buf_numerics16.o buf_numerics32.o
 	$(CC) $(EXTRACOPTS) -o $(LUT_EXECUTABLE) $+ $(LIBS)
 
-%.o: %.c
+WrapperGCC.o: WrapperGCC.c
 	$(CC) $(CFLAGS) -c $< -o $@
+
+#buf_numerics8.o: buf_numerics8.c
+#	$(CC) $(CFLAGS) -c $< -o $@
+#
+#buf_numerics16.o: buf_numerics16.c
+#	$(CC) $(CFLAGS) -c $< -o $@
+#
+#buf_numerics32.o: buf_numerics32.c
+#	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
 	-rm -f *.o ./*/*.o
