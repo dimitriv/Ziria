@@ -64,12 +64,11 @@ void popNBits(void* elems, size_t n, queue* q);
   legacy api in order to use as drop in replacement for sora_thread_queues
 ***************************************************************************/
 
+void stq_init(int no, size_t *sizes, int *queue_sizes);
 
-void aq_init(int no, size_t *sizes, int *queue_sizes);
-
-FORCE_INLINE void aq_put(int nc, char *input);
-FORCE_INLINE void aq_putMany(int nc, int n, char *input);
-FORCE_INLINE void aq_putManyBits(int nc, int n, char *input);
-FORCE_INLINE void aq_get(int nc, char *output);
-FORCE_INLINE void aq_getMany(int nc, int n, char *output);
-FORCE_INLINE void aq_getManyBits(int nc, int n, char *output);
+FORCE_INLINE void stq_put(int nc, char *input);
+FORCE_INLINE void stq_putMany(int nc, int n, char *input);
+FORCE_INLINE void stq_putManyBits(int nc, int n, char *input);
+FORCE_INLINE void stq_get(int nc, char *output);
+FORCE_INLINE void stq_getMany(int nc, int n, char *output);
+FORCE_INLINE void stq_getManyBits(int nc, int n, char *output);

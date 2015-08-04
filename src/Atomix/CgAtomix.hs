@@ -130,7 +130,7 @@ cgDeclQueues dfs qs action
           let my_sizes_decl = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
               my_slots_decl = [cdecl|int my_slots[$int:(numqs)];|]
               ts_init_stmts 
-                = [cstm| aq_init($int:(numqs),my_sizes,my_slots); |]
+                = [cstm| stq_init($int:(numqs),my_sizes,my_slots); |]
              
               my_sizes_inits 
                 = concat $
@@ -431,11 +431,11 @@ cgAExpBody dfs qs wins wouts aexp
 
 ts_read_n :: QId -> Int -> C.Exp -> C.Stm
 ts_read_n (QId qid) n ptr 
-  = [cstm| aq_getMany($int:qid,$int:n,$ptr); |]
+  = [cstm| stq_getMany($int:qid,$int:n,$ptr); |]
 
 ts_read_n_bits :: QId -> Int -> C.Exp -> C.Stm
 ts_read_n_bits (QId qid) n ptr 
-  = [cstm| aq_getManyBits($int:qid,$int:n,$ptr); |]
+  = [cstm| stq_getManyBits($int:qid,$int:n,$ptr); |]
 
 
 readFromTs :: DynFlags 
@@ -527,10 +527,10 @@ squashedQueueType n t = TArray (Literal n) t
 {--------------- Writing to TS queues -----------------------------------------}
 
 ts_write_n :: QId -> Int -> C.Exp -> C.Stm
-ts_write_n (QId qid) n ptr = [cstm| aq_putMany($int:qid,$int:n,$ptr); |]
+ts_write_n (QId qid) n ptr = [cstm| stq_putMany($int:qid,$int:n,$ptr); |]
 
 ts_write_n_bits :: QId -> Int -> C.Exp -> C.Stm
-ts_write_n_bits (QId qid) n ptr = [cstm| aq_putManyBits($int:qid,$int:n,$ptr); |]
+ts_write_n_bits (QId qid) n ptr = [cstm| stq_putManyBits($int:qid,$int:n,$ptr); |]
 
 
 writeToTs :: DynFlags 
