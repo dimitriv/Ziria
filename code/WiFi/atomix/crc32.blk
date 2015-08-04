@@ -1,0 +1,13 @@
+#include <externals.blk>
+
+let WIFI_CRC32_POLYNOMIAL = 0x04C11DB7
+
+fun comp crc32 {
+	var wifi_table:arr[256] int32;
+	var crc_res:arr[1] int32;
+	do {
+		(bytes:arr[32] int8) <- take 32;
+		ORILIB_CRC32_crcCodecTableGenC64(WIFI_CRC32_POLYNOMIAL,wifi_table);
+		ORILIB_CRC32_update(bytes,wifi_table,crc_res)
+	}
+}
