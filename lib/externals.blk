@@ -234,6 +234,9 @@ fun external dbgplot_spectrum(item:arr complex16) : ()
 fun external dbgplot_dots(data:arr complex16) : ()
 fun external dbgplot_dot(data:complex16) : ()
 
+-- Atomix external atoms
+ORILIB_CRC32_update(data:arr int8, crc_table:arr int32. var crc_val:arr[1] int32)
+ORILIB_CRC32_crcCodecTableGenC64(crc_poly: int32, var crc_table:arr int32)
 
 -- Time-related
 fun external print_time() : ()

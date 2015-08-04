@@ -19,6 +19,8 @@
 #include "types.h"
 #include "string.h"
 #include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #ifndef DSP
 #include <sora.h>
@@ -1143,8 +1145,8 @@ int __ext_v_cast_complex8_int8(int8* output, int lenout, complex8* input,
 		int lenin) {
 #ifndef DSP
 	memcpy(output, input, lenin * sizeof(complex8));
-	return 0;
 #else
+	return 0;
 #endif
 }
 
@@ -1710,27 +1712,34 @@ void __ext_sora_ifft(struct complex16* output, int nFFTSize,
 #endif
 	//return 0;
 }
-#ifndef DSP
+
 void __ext_sora_ifft_dynamic(struct complex16* output, int unused2,
 		int16 nFFTSize, struct complex16 * input, int unused1) {
 	__ext_sora_ifft(output, nFFTSize, input, unused1);
 }
-
+#ifndef DSP
 // Currently we only support one Viterbi running at a time
 ViterbiContext ctx;
 
+
 int __ext_viterbi_brick_init(int frame_len, int16 code_rate) {
+
 	initViterbi(&ctx, frame_len, (ushort) code_rate);
+
 	return 0;
 }
 
 int __ext_viterbiSig11a_brick_init(int frame_len, int16 code_rate) {
+
 	initViterbiSig11a(&ctx, frame_len, (ushort) code_rate);
+
 	return 0;
 }
 
 int16 __ext_viterbi_brick_decode(char* intInput, int len1, uchar* bit, int len2) {
+
 	return processViterbi(&ctx, intInput, bit);
+
 }
 
 // Time-related
