@@ -3,7 +3,11 @@
    Runtime checks can be disabled via macro below.
 */
 #pragma once
+
 #define QUEUE_CHECKS_ENABLED true // comment this out to disable run-time checks.
+
+#include "numerics.h"
+
 
 struct queue {
 	// capacity of queue
@@ -59,44 +63,13 @@ void popNBits(void* elems, size_t n, queue* q);
 /***************************************************************************
   legacy api in order to use as drop in replacement for sora_thread_queues
 ***************************************************************************/
-typedef queue ts_context;
-ts_context *queues;
 
-int ts_init_var(int no, size_t *sizes, int *queue_sizes) {
-	queues = (ts_context *)(malloc(no * sizeof(ts_context)));
-	if (queues == NULL) {
-		return 0;
-	}
-	
-	for (size_t i = 0; i < no; i++)
-	{
-		queue_init(&queues[i], queue_sizes[i], sizes[i]);
-	}
-}
 
-__forceinline void ts_put(int nc, char *input) {
-	push(input, &queues[nc]);
-}
+void aq_init(int no, size_t *sizes, int *queue_sizes);
 
-__forceinline void ts_putMany(int nc, int n, char *input) {
-	pushN(input, n, &queues[nc]);
-}
-
-__forceinline void ts_putManyBits(int nc, int n, char *input) {
-	pushNBits(input, n, &queues[nc]);
-}
-
-__forceinline bool ts_get(int nc, char *output) {
-	pop(output, &queues[nc]);
-	return true;
-}
-
-__forceinline int ts_getManyBlocking(int nc, int n, char *output) {
-	popN(output, n, &queues[nc]);
-	return n;
-}
-
-__forceinline int ts_getManyBitsBlocking(int nc, int n, char *output) {
-	popNBits(output, n, &queues[nc]);
-	return n;
-}
+FORCE_INLINE void aq_put(int nc, char *input);
+FORCE_INLINE void aq_putMany(int nc, int n, char *input);
+FORCE_INLINE void aq_putManyBits(int nc, int n, char *input);
+FORCE_INLINE void aq_get(int nc, char *output);
+FORCE_INLINE void aq_getMany(int nc, int n, char *output);
+FORCE_INLINE void aq_getManyBits(int nc, int n, char *output);

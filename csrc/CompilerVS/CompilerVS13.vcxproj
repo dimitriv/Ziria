@@ -178,6 +178,7 @@
     <ClCompile Include="..\ext_math.c" />
     <ClCompile Include="..\numerics.c" />
     <ClCompile Include="..\params.c" />
+    <ClCompile Include="..\single_thread_queues.c" />
     <ClCompile Include="..\sora_ext_lib.c" />
     <ClCompile Include="..\sora_ext_visual.c" />
     <ClCompile Include="..\sora_ext_viterbi.c" />
@@ -197,6 +198,7 @@
     <ClInclude Include="..\ext_math.h" />
     <ClInclude Include="..\numerics.h" />
     <ClInclude Include="..\params.h" />
+    <ClInclude Include="..\single_thread_queues.h" />
     <ClInclude Include="..\sora_ext_bricks.h" />
     <ClInclude Include="..\sora_ext_lib_fft.h" />
     <ClInclude Include="..\sora_ext_lib_fft_coeffs.h" />

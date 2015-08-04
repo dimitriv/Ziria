@@ -40,6 +40,7 @@
 //#include "sora_ext_visual.c"
 #include "sora_radio.c"
 #include "bladerf_radio.c"
+#include "single_thread_queues.c"
 #include "utils.c"
 #include "driver.c"
 #include "test.c"

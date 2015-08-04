@@ -1,12 +1,26 @@
 #include <stdlib.h>
 #include <memory.h>
-#include "Queue.h"
+#include "single_thread_queues.h"
 #include "bit.h"
+
+queue *queues;
+
+void aq_init(int no, size_t *sizes, int *queue_sizes) {
+	queues = (queue *)(malloc(no * sizeof(queue)));
+	if (queues == NULL) {
+		exit(EXIT_FAILURE);
+	}
+
+	for (size_t i = 0; i < no; i++)
+	{
+		queue_init(&queues[i], queue_sizes[i], sizes[i]);
+	}
+}
 
 
 /* low-level Interface **********************************************/
 
-__inline void advance_ptr(void** ptr_ptr, size_t n, queue* q) {
+FORCE_INLINE void advance_ptr(void** ptr_ptr, size_t n, queue* q) {
 	char* ptr = (char *) *ptr_ptr;
 	ptr += n * q->elem_size;
 	if (ptr >= q->buffer_end) {
@@ -14,15 +28,15 @@ __inline void advance_ptr(void** ptr_ptr, size_t n, queue* q) {
 	}
 }
 
-__forceinline bool is_empty(queue* q) {
+FORCE_INLINE bool is_empty(queue* q) {
 	return q->size == 0;
 }
 
-__forceinline bool is_full(queue* q) {
+FORCE_INLINE bool is_full(queue* q) {
 	return q->size == q->capacity;
 }
 
-__forceinline size_t free_slots(queue* q) {
+FORCE_INLINE size_t free_slots(queue* q) {
 	return q->capacity - q->size;
 }
 
@@ -148,4 +162,32 @@ void popNBits(void* elems, size_t n, queue* q) {
 		pop(&unpacked_bit, q);
 		bitWrite((BitArrPtr) elems, i, unpacked_bit);
 	}
+}
+
+
+
+/**************************/
+
+FORCE_INLINE void aq_put(int nc, char *input) {
+	push(input, &queues[nc]);
+}
+
+FORCE_INLINE void aq_putMany(int nc, int n, char *input) {
+	pushN(input, n, &queues[nc]);
+}
+
+FORCE_INLINE void aq_putManyBits(int nc, int n, char *input) {
+	pushNBits(input, n, &queues[nc]);
+}
+
+FORCE_INLINE void aq_get(int nc, char *output) {
+	pop(output, &queues[nc]);
+}
+
+FORCE_INLINE void aq_getMany(int nc, int n, char *output) {
+	popN(output, n, &queues[nc]);
+}
+
+FORCE_INLINE void aq_getManyBits(int nc, int n, char *output) {
+	popNBits(output, n, &queues[nc]);
 }

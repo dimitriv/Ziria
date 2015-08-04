@@ -81,6 +81,9 @@
     <ClCompile Include="..\bladerf_radio.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\single_thread_queues.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\bit.h">
@@ -135,6 +138,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\bladerf_radio.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\single_thread_queues.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
