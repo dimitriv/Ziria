@@ -471,7 +471,8 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
       return $ assert (auto_closed a1) $ assert (auto_closed a2) $ assert (auto_closed a) a
 
     go (ARepeatN n c) = do
-      a <- applyN n (mkAutomaton dfs sym chans c) k
+      a <- trace (">>>>>>> WARNING >>>>>: Unfolding static looop " ++ show n ++ " times!") <$>
+           applyN n (mkAutomaton dfs sym chans c) k
       return $ assert (auto_closed a) a
       where applyN 0 _ x = return x
             applyN n f x = do

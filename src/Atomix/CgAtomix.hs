@@ -330,11 +330,15 @@ cgARollbackBody :: DynFlags
                 -> EId
                 -> Int
                 -> Cg C.Exp
-cgARollbackBody _dfs _qs x n =
-   panic $ vcat [ text "SARollback not implemented yet"
-                , nest 2 $ text "queue = " <+> ppr x
-                , nest 2 $ text "n     = " <+> ppr n 
-                ]
+cgARollbackBody _dfs qs q n
+  | Just (QMid (QId qid)) <- qiQueueId q qs = do
+      appendStmt [cstm| stq_rollback($int:qid, $int:n); |]
+      return [cexp|UNIT|]
+  | otherwise 
+  = panic $ vcat [ text "SARollback only implemented for middle queues"
+                 , nest 2 $ text "queue = " <+> ppr q
+                 , nest 2 $ text "n     = " <+> ppr n 
+                 ]
 
 {------------------------------- Cast atom implementation ---------------------}
 
