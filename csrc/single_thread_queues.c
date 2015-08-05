@@ -11,6 +11,7 @@ FORCE_INLINE void advance_ptr(void** ptr_ptr, size_t n, queue* q) {
 	if (ptr >= q->buffer_end) {
 		ptr -= q->capacity * q->elem_size;
 	}
+	*ptr_ptr = ptr;
 }
 
 FORCE_INLINE bool is_empty(queue* q) {
@@ -155,7 +156,7 @@ void popNBits(void* elems, size_t n, queue* q) {
 
 queue *queues;
 
-void stq_init(int no, size_t *sizes, int *queue_sizes) {
+void stq_init(int no, size_t *sizes, int *queue_capacities) {
 	queues = (queue *) malloc(no * sizeof(queue));
 	if (queues == NULL) {
 		exit(EXIT_FAILURE);
@@ -163,7 +164,7 @@ void stq_init(int no, size_t *sizes, int *queue_sizes) {
 
 	for (size_t i = 0; i < no; i++)
 	{
-		queue_init(&queues[i], queue_sizes[i], sizes[i]);
+		queue_init(&queues[i], queue_capacities[i], sizes[i]);
 	}
 }
 

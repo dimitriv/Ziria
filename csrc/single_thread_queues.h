@@ -4,9 +4,9 @@
 */
 #pragma once
 
-#define QUEUE_CHECKS_ENABLED true // comment this out to disable run-time checks.
+#define QUEUE_CHECKS_ENABLED 1 // comment this out to disable run-time checks.
 
-#include "numerics.h"
+#include "numerics.h" // include for the FORCE_INLINE macro
 
 
 struct queue {
