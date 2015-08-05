@@ -129,7 +129,7 @@ cgDeclQueues dfs qs action
         else do 
           let my_sizes_decl = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
               my_slots_decl = [cdecl|int my_slots[$int:(numqs)];|]
-              ts_init_stmts 
+              q_init_stmts 
                 = [cstm| stq_init($int:(numqs),my_sizes,my_slots); |]
              
               my_sizes_inits 
@@ -149,7 +149,7 @@ cgDeclQueues dfs qs action
           appendTopDecl my_slots_decl
 
              -- Add code to initialize queues in wpl global init
-          _ <- mapM addGlobalWplAllocated (my_sizes_inits ++ [ts_init_stmts])
+          _ <- mapM addGlobalWplAllocated (my_sizes_inits ++ [q_init_stmts])
 
           bind_queue_vars action $ 
               (qi_inch qs : qi_outch qs : Map.keys (qi_interm qs))
@@ -429,12 +429,12 @@ cgAExpBody dfs qs wins wouts aexp
 
 {--------------- Reading from TS queues ---------------------------------------}
 
-ts_read_n :: QId -> Int -> C.Exp -> C.Stm
-ts_read_n (QId qid) n ptr 
+q_read_n :: QId -> Int -> C.Exp -> C.Stm
+q_read_n (QId qid) n ptr
   = [cstm| stq_getMany($int:qid,$int:n,$ptr); |]
 
-ts_read_n_bits :: QId -> Int -> C.Exp -> C.Stm
-ts_read_n_bits (QId qid) n ptr 
+q_read_n_bits :: QId -> Int -> C.Exp -> C.Stm
+q_read_n_bits (QId qid) n ptr
   = [cstm| stq_getManyBits($int:qid,$int:n,$ptr); |]
 
 
@@ -443,26 +443,26 @@ readFromTs :: DynFlags
            -> QId       -- Queue id
            -> C.Exp     -- Target variable to store to
            -> Cg ()
-readFromTs _ n TBit q ptr = appendStmt $ ts_read_n_bits q n ptr
+readFromTs _ n TBit q ptr = appendStmt $ q_read_n_bits q n ptr
 
 readFromTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
-  | m `mod` 8 == 0 = appendStmt $ ts_read_n q n ptr
-  | n == 1         = appendStmt $ ts_read_n q 1 ptr
+  | m `mod` 8 == 0 = appendStmt $ q_read_n q n ptr
+  | n == 1         = appendStmt $ q_read_n q 1 ptr
   | otherwise -- Not byte-aligned byte array, a bit sad and slow
-  = do x <- CgMonad.freshName "ts_rdx" (TArray (Literal m) TBit) Mut
-       i <- CgMonad.freshName "ts_idx" tint Mut
+  = do x <- CgMonad.freshName "q_rdx" (TArray (Literal m) TBit) Mut
+       i <- CgMonad.freshName "q_idx" tint Mut
        cgMutBind dfs noLoc i Nothing $ do 
        cgMutBind dfs noLoc x Nothing $ do
          cx <- lookupVarEnv x
          ci <- lookupVarEnv i
          appendStmt $ [cstm| for ($ci = 0; $ci < $int:n; $ci++) {
-                                if (!ts_get($int:qid,(char *) $cx)) exit(3);
+                                stq_get($int:qid,(char *) $cx);
                                 bitArrWrite((typename BitArrPtr) $cx,
                                               $ci*$int:m,
                                               $int:m,
                                             (typename BitArrPtr) $ptr);
                              } |]
-readFromTs _ n _ q ptr = appendStmt $ ts_read_n q n ptr
+readFromTs _ n _ q ptr = appendStmt $ q_read_n q n ptr
 
 
           
@@ -526,11 +526,11 @@ squashedQueueType n t = TArray (Literal n) t
 
 {--------------- Writing to TS queues -----------------------------------------}
 
-ts_write_n :: QId -> Int -> C.Exp -> C.Stm
-ts_write_n (QId qid) n ptr = [cstm| stq_putMany($int:qid,$int:n,$ptr); |]
+q_write_n :: QId -> Int -> C.Exp -> C.Stm
+q_write_n (QId qid) n ptr = [cstm| stq_putMany($int:qid,$int:n,$ptr); |]
 
-ts_write_n_bits :: QId -> Int -> C.Exp -> C.Stm
-ts_write_n_bits (QId qid) n ptr = [cstm| stq_putManyBits($int:qid,$int:n,$ptr); |]
+q_write_n_bits :: QId -> Int -> C.Exp -> C.Stm
+q_write_n_bits (QId qid) n ptr = [cstm| stq_putManyBits($int:qid,$int:n,$ptr); |]
 
 
 writeToTs :: DynFlags 
@@ -538,13 +538,13 @@ writeToTs :: DynFlags
            -> QId       -- Queue id
            -> C.Exp     -- Source variable to read from
            -> Cg ()
-writeToTs _ n TBit q ptr = appendStmt $ ts_write_n_bits q n ptr
+writeToTs _ n TBit q ptr = appendStmt $ q_write_n_bits q n ptr
 writeToTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
-  | m `mod` 8 == 0 = appendStmt $ ts_write_n q n ptr
-  | n == 1 = appendStmt $ ts_write_n q 1 ptr
+  | m `mod` 8 == 0 = appendStmt $ q_write_n q n ptr
+  | n == 1 = appendStmt $ q_write_n q 1 ptr
   | otherwise -- Not byte-aligned byte array, a bit sad and slow
-  = do x <- CgMonad.freshName "ts_rdx" (TArray (Literal m) TBit) Mut 
-       i <- CgMonad.freshName "ts_idx" tint Mut
+  = do x <- CgMonad.freshName "q_rdx" (TArray (Literal m) TBit) Mut 
+       i <- CgMonad.freshName "q_idx" tint Mut
        cgMutBind dfs noLoc i Nothing $ do 
        cgMutBind dfs noLoc x Nothing $ do
          cx <- lookupVarEnv x
@@ -554,10 +554,10 @@ writeToTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
                                             $ci*$int:m,
                                             $int:m,
                                            (typename BitArrPtr) $cx);
-                                ts_put($int:qid,(char *) $cx);
+                                stq_put($int:qid,(char *) $cx);
                              }|]
 
-writeToTs _ n _ q ptr = appendStmt $ ts_write_n q n ptr
+writeToTs _ n _ q ptr = appendStmt $ q_write_n q n ptr
 
 
 cgOutWiring :: DynFlags 
