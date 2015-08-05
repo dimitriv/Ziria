@@ -66,9 +66,11 @@ void popNBits(void* elems, size_t n, queue* q);
 
 void stq_init(int no, size_t *sizes, int *queue_sizes);
 
-FORCE_INLINE void stq_put(int nc, char *input);
-FORCE_INLINE void stq_putMany(int nc, int n, char *input);
-FORCE_INLINE void stq_putManyBits(int nc, int n, char *input);
-FORCE_INLINE void stq_get(int nc, char *output);
-void stq_getMany(int nc, int n, char *output);
-FORCE_INLINE void stq_getManyBits(int nc, int n, char *output);
+FORCE_INLINE void stq_put(int qn, char *input);
+FORCE_INLINE void stq_putMany(int qn, int n, char *input);
+FORCE_INLINE void stq_putManyBits(int qn, int n, char *input);
+FORCE_INLINE void stq_get(int qn, char *output);
+FORCE_INLINE void stq_getMany(int qn, int n, char *output);
+FORCE_INLINE void stq_getManyBits(int qn, int n, char *output);
+FORCE_INLINE void stq_clear(int qn);
+FORCE_INLINE void stq_rollback(int qn, int n);

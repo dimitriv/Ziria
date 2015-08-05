@@ -174,26 +174,34 @@ void stq_init(int no, size_t *sizes, int *queue_capacities) {
 	}
 }
 
-FORCE_INLINE void stq_put(int nc, char *input) {
-	push(input, &queues[nc]);
+FORCE_INLINE void stq_put(int qn, char *input) {
+	push(input, &queues[qn]);
 }
 
-FORCE_INLINE void stq_putMany(int nc, int n, char *input) {
-	pushN(input, n, &queues[nc]);
+FORCE_INLINE void stq_putMany(int qn, int n, char *input) {
+	pushN(input, n, &queues[qn]);
 }
 
-FORCE_INLINE void stq_putManyBits(int nc, int n, char *input) {
-	pushNBits(input, n, &queues[nc]);
+FORCE_INLINE void stq_putManyBits(int qn, int n, char *input) {
+	pushNBits(input, n, &queues[qn]);
 }
 
-FORCE_INLINE void stq_get(int nc, char *output) {
-	pop(output, &queues[nc]);
+FORCE_INLINE void stq_get(int qn, char *output) {
+	pop(output, &queues[qn]);
 }
 
-void stq_getMany(int nc, int n, char *output) {
-	popN(output, n, &queues[nc]);
+FORCE_INLINE void stq_getMany(int qn, int n, char *output) {
+	popN(output, n, &queues[qn]);
 }
 
-FORCE_INLINE void stq_getManyBits(int nc, int n, char *output) {
-	popNBits(output, n, &queues[nc]);
+FORCE_INLINE void stq_getManyBits(int qn, int n, char *output) {
+	popNBits(output, n, &queues[qn]);
+}
+
+FORCE_INLINE void stq_clear(int qn) {
+	clear(&queues[qn]);
+}
+
+FORCE_INLINE void stq_rollback(int qn, int n) {
+	rollback(n, &queues[qn]);
 }

@@ -385,10 +385,13 @@ cgAClearBody :: DynFlags
              -> QueueInfo
              -> Map EId Int
              -> Cg C.Exp
-cgAClearBody dfs qs qmap = do 
+cgAClearBody _dfs qs qmap = do 
   -- For now implement clear via discard
-  mapM_ (\(q,n) -> cgADiscBody dfs qs (n,q) (n,nameTyp q)) (Map.toList qmap)
+  mapM_ mk_clear $ map (flip qiQueueId qs . fst) $ Map.toList qmap
   return [cexp|UNIT|]
+  where
+    mk_clear (Just (QMid (QId qid))) = appendStmt [cstm| stq_clear($int:qid); |]
+    mk_clear _ = panicStr "cgAClearBody: can only clear middle queues"
 
 {--------------------------- AExp atom implementation -------------------------}
 
