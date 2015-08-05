@@ -4,14 +4,20 @@
 #include "bit.h"
 
 /* low-level Interface **********************************************/
-
-FORCE_INLINE void advance_ptr(void** ptr_ptr, size_t n, queue* q) {
-	char* ptr = (char *) *ptr_ptr;
+FORCE_INLINE char* advance_qptr(char* ptr, size_t n, queue* q) {
 	ptr += n * q->elem_size;
 	if (ptr >= q->buffer_end) {
 		ptr -= q->capacity * q->elem_size;
 	}
-	*ptr_ptr = ptr;
+	return ptr;
+}
+
+FORCE_INLINE void advance_read_ptr(size_t n, queue* q) {
+	q->next_read = advance_qptr((char *) q->next_read, n, q);
+}
+
+FORCE_INLINE void advance_write_ptr(size_t n, queue* q) {
+	q->next_write = advance_qptr((char *) q->next_write, n, q);
 }
 
 FORCE_INLINE bool is_empty(queue* q) {
@@ -59,7 +65,7 @@ void rollback(size_t n, queue* q) {
 	}
 #endif
 
-	advance_ptr(&q->next_read, q->capacity - n, q);
+	advance_read_ptr(q->capacity - n, q);
 }
 
 
@@ -71,7 +77,7 @@ void push(void* elem, queue* q) {
 #endif
 
 	memcpy(q->next_write, elem, q->elem_size);
-	advance_ptr(&q->next_write, 1, q);
+	advance_write_ptr(1, q);
 	q->size++;
 }
 
@@ -88,11 +94,11 @@ void pushN(void* elems, size_t n, queue* q) {
 	}
 	else {
 		memcpy(q->next_write, elems, can_write * q->elem_size);
-		advance_ptr(&elems, can_write, q);
+		elems = (char*) elems + can_write * q->elem_size;
 		memcpy(q->buffer_start, elems, (n - can_write) * q->elem_size);
 	}
 
-	advance_ptr(&q->next_write, n, q);
+	advance_write_ptr(n, q);
 	q->size += n;
 }
 
@@ -115,7 +121,7 @@ void pop(void* elem, queue* q) {
 
 	memcpy(elem, q->next_read, q->elem_size);
 	q->size--;
-	advance_ptr(&q->next_read, 1, q);
+	advance_read_ptr(1, q);
 }
 
 void popN(void* elems, size_t n, queue* q) {
@@ -131,11 +137,11 @@ void popN(void* elems, size_t n, queue* q) {
 	}
 	else {
 		memcpy(elems, q->next_read, can_read * q->elem_size);
-		advance_ptr(&elems, can_read, q);
+		elems = (char*)elems + can_read * q->elem_size;
 		memcpy(elems, q->buffer_start, (n - can_read) * q->elem_size);
 	}
 
-	advance_ptr(&q->next_read, n, q);
+	advance_read_ptr(n, q);
 	q->size -= n;
 }
 
@@ -184,7 +190,7 @@ FORCE_INLINE void stq_get(int nc, char *output) {
 	pop(output, &queues[nc]);
 }
 
-FORCE_INLINE void stq_getMany(int nc, int n, char *output) {
+void stq_getMany(int nc, int n, char *output) {
 	popN(output, n, &queues[nc]);
 }
 

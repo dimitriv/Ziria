@@ -70,5 +70,5 @@ FORCE_INLINE void stq_put(int nc, char *input);
 FORCE_INLINE void stq_putMany(int nc, int n, char *input);
 FORCE_INLINE void stq_putManyBits(int nc, int n, char *input);
 FORCE_INLINE void stq_get(int nc, char *output);
-FORCE_INLINE void stq_getMany(int nc, int n, char *output);
+void stq_getMany(int nc, int n, char *output);
 FORCE_INLINE void stq_getManyBits(int nc, int n, char *output);
