@@ -741,7 +741,7 @@ zipAutomata dfs pinfo a1' a2' k = concat_auto prod_a k
              assert (auto_closed a1) $
              assert (auto_closed a2) $
              (if prune then pruneUnfinished else clearUnfinished) $
-             (if lazy then id else insertRollbacks lazy a1) $
+             (if lazy then id else insertRollbacks a1) $
              normalize_auto_ids 0 $
              Automaton prod_nmap (auto_inchan a1) (auto_outchan a2) start_prod_nid
     start_prod_nid = mkProdNid empty_pipe_state (auto_start a1) (auto_start a2)
@@ -968,25 +968,30 @@ clearUnfinished a = fixup $  Map.foldl clear (nmap, []) nmap
             map_nid nid | nid `elem` done_ids = done_nid
                         | otherwise           = nid
 
-insertRollbacks :: forall e. Atom e => Bool -> SAuto e Int -> SAuto e Int -> SAuto e Int
-insertRollbacks lazy rollback_a a = a { auto_graph = Map.foldl go nmap nmap } where
+
+insertRollbacks :: forall e. Atom e
+                => SAuto e Int -- the automaton that was executed optimistically and needs to be rewinded,
+                               -- i.e. the left automaton of the current par "a1 >>> a2".
+                -> SAuto e Int -- the par-automaton into which we need to insert the rollbacks.
+                -> SAuto e Int
+insertRollbacks rollback_a a = a { auto_graph = Map.foldl go nmap nmap } where
   nmap = auto_graph a
+  clear_ch = auto_outchan rollback_a
+  rollback_ch = auto_inchan rollback_a
 
   go :: SNodeMap e Int -> SNode e Int -> SNodeMap e Int
   go nmap (Node nid (SDone pipes rollback))
     | Nothing <- rollback = nmap
     | Just 0 <- rollback = insertNk nid (SDone pipes Nothing) nmap
-    | Just n <- rollback, n>0, not lazy =
-      let rollback_ch = auto_inchan rollback_a
-          rollback_nk = SAtom (rollbackWAtom rollback_ch n) clear_nid pipes
-          clear_ch = auto_outchan rollback_a
-          clear_nid = fst (Map.findMax nmap) + 1
-          clear_nk = SAtom (clearWAtom $ Map.filterWithKey (\ch _ -> ch == clear_ch) pipes) final_nid $
-                     Map.insert clear_ch 0 pipes
-          final_nid = fst (Map.findMax nmap) + 2
-          -- the pipe balances need not be adjusted, since the rollback channel
+    | Just n <- rollback, n>0 =
+      -- the pipe balances need not be adjusted, since the rollback channel
           -- is not in scope (because it is the input channel!)
-          final_nk = SDone pipes Nothing
+      let rollback_nk = SAtom (rollbackWAtom rollback_ch n) clear_nid pipes
+          clear_nk = SAtom (clearWAtom $ Map.filterWithKey (\ch _ -> ch == clear_ch) pipes) final_nid pipes'
+          final_nk = SDone pipes' Nothing
+          pipes' = Map.insert clear_ch 0 pipes
+          clear_nid = fst (Map.findMax nmap) + 1
+          final_nid = fst (Map.findMax nmap) + 2
       in insertNk nid rollback_nk $ insertNk clear_nid clear_nk $ insertNk final_nid final_nk $ nmap
     | otherwise = panicStr "insertRollbacks: impossible case!"
   go nmap _ = nmap
