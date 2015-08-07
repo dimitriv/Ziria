@@ -67,15 +67,17 @@ fun external sumi16 (x:arr[4] int16): int16
 fun external sumi32 (x:arr[4] int): int
 -- Sums all components of a vector x of arbitrary length
 -- complex32 & int 16 not supported by Sora (yet?)
-fun external v_sum_complex16(x:arr complex16 ) : complex16
 fun external v_sum_int32(x:arr int32 ) : int32
+fun external v_sum_int16(x:arr int16 ) : int16
+fun external v_sum_complex16(x:arr complex16 ) : complex16
+fun external v_sum_complex32(x:arr complex32 ) : complex32
 
 
 -- equivalent to sora hadd:
 -- Sum all components of vector x and stores it in all components of z
 -- z(i) = sum(x) for all i
-fun external v_hadd_complex16(var z:arr[4] complex16, x:arr[4] complex16) : ()
 fun external v_hadd_int32(var z:arr[4] int, x:arr[4] int ) : ()
+fun external v_hadd_complex16(var z:arr[4] complex16, x:arr[4] complex16) : ()
 
 
 
@@ -209,4 +211,4 @@ fun external record_time_start() : ()
 fun external record_time_stop()  : ()
 
 -- Populate a bit array with random stuff
---fun external populate_rand_array(var a : arr bit) : ()
+fun external populate_rand_array(var a : arr bit) : ()
