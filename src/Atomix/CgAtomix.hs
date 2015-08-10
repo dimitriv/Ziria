@@ -213,7 +213,7 @@ cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
      appendStmt 
         [cstm| if ($cc) goto $id:(lblOfNid l); else goto $id:(lblOfNid r); |]
    cg_nkind frameVar (CfgAction atoms next _pipes) = do 
-     inAllocFrame' frameVar noLoc $ pushAllocFrame $ mapM_ (cgCallAtom dfs) atoms
+     inAllocFrame' frameVar noLoc $ pushAllocFrame $ mapM_ (cgCallAtom dfs queues) atoms
      appendStmt [cstm| goto $id:(lblOfNid next);|]
 
 
@@ -290,14 +290,21 @@ cg_def_atom _dfs aid mbody mkont
 
 
 cgCallAtom :: DynFlags
+           -> QueueInfo
            -> WiredAtom SymAtom 
            -> Cg ()
-cgCallAtom dfs w = codeGenExp dfs call >>= \_ -> return ()
-     -- Can safely always discard call result 
-     -- because it is going to be UNIT, see CgCall.hs 
+cgCallAtom _dfs queues w 
+  | rd_input
+  = appendStmt $ [cstm| if ($id:(name fun_name)() == -7) return(0);|]
+  | otherwise
+  = appendStmt $ [cstm| $id:(name fun_name)();|]
+ --  ccall <- codeGenExp dfs call
+ -- codeGenExp dfs call >>= \_ -> return ()
+ --     -- Can safely always discard call result 
+ --     -- because it is going to be UNIT, see CgCall.hs 
   where
     fun_name = wiredAtomNameOfLbl aid noLoc (TArrow [] TUnit)
-    call     = eCall noLoc fun_name []
+    rd_input = rdFromInput queues (wires_in w)
     aid      = wiredAtomId w
 
 
@@ -472,6 +479,14 @@ readFromTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
 readFromTs _ n _ q ptr = appendStmt $ q_read_n q n ptr
 
 
+-- | Do we read from /the/ input
+rdFromInput :: QueueInfo -> [(Int,EId)] -> Bool
+rdFromInput qs qvars = any rd_in qvars
+  where rd_in (_,qvar) | Just QIn <- qiQueueId qvar qs 
+                       = True
+                       | otherwise                  
+                       = False
+
           
 cgInWiring :: DynFlags 
            -> QueueInfo 
@@ -517,10 +532,10 @@ cgInWire dfs qs (n,qvar) v =
       if isArrayTy qtype 
         then appendStmt [cstm| if ($id:(bufGetF)($id:global_params,
                                    $id:buf_context,
-                                   $ptr, $(getLen)) == GS_EOF) exit(0); |]
+                                   $ptr, $(getLen)) == GS_EOF) return -7; |]
         else appendStmt [cstm| if ($id:(bufGetF)($id:global_params,
                                    $id:buf_context,
-                                   $ptr) == GS_EOF) exit(0); |]
+                                   $ptr) == GS_EOF) return -7; |]
 
 
 squashedQueueType :: Int -> Ty -> Ty
