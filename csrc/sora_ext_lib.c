@@ -1094,14 +1094,83 @@ int16 __ext_sumi16(int16* x, int __unused_21)
 	return ret;
 }
 
-
-
 ///// SSE bit operations
 
+void __ext_v_and(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
+{
+	int cnt = 0;
+	int bytelen1 = inlen1 / 8 + ((inlen1 % 8) > 0);
+	
+	while (cnt + 16 <= bytelen1)
+	{
 
+		__m128i mi1 = _mm_loadu_si128((__m128i *) (input1 + cnt));
+		__m128i mi2 = _mm_loadu_si128((__m128i *) (input2 + cnt));
+
+		_mm_storeu_si128((__m128i *) (output + cnt), _mm_and_si128(mi1, mi2));
+		cnt += 16;
+	}
+
+	while (cnt < bytelen1)
+	{
+		output[cnt] = input1[cnt] & input2[cnt];
+		cnt++;
+	}
+	outlen = inlen1;
+}
+
+
+void __ext_v_andnot(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
+{
+	int cnt = 0;
+	int bytelen1 = inlen1 / 8 + ((inlen1 % 8) > 0);
+
+	while (cnt + 16 <= bytelen1)
+	{
+		__m128i mi1 = _mm_loadu_si128((__m128i *) (input1 + cnt));
+		__m128i mi2 = _mm_loadu_si128((__m128i *) (input2 + cnt));
+
+		_mm_storeu_si128((__m128i *) (output + cnt), _mm_andnot_si128(mi1, mi2));
+
+		cnt += 16;
+	}
+
+	while (cnt < bytelen1)
+	{
+		output[cnt] = (~input1[cnt]) & input2[cnt];
+		cnt++;
+	}
+	outlen = inlen1;
+}
+
+void __ext_v_xor(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
+{
+	int cnt = 0;
+	int bytelen1 = inlen1 / 8 + ((inlen1 % 8) > 0);
+
+	while (cnt + 16 <= bytelen1)
+	{
+
+		__m128i mi1 = _mm_loadu_si128((__m128i *) (input1 + cnt));
+		__m128i mi2 = _mm_loadu_si128((__m128i *) (input2 + cnt));
+
+		_mm_storeu_si128((__m128i *) (output + cnt), _mm_xor_si128(mi1, mi2));
+
+		cnt += 16;
+	}
+
+	while (cnt < bytelen1)
+	{
+		output[cnt] = input1[cnt] ^ input2[cnt];
+		cnt++;
+	}
+	outlen = inlen1;
+}
+
+// to account for different integer types in vs/gcc
 #ifdef SORA_PLATFORM
 FORCE_INLINE
-void __ext_v_or_48(uchar *output, uchar *input1, uchar *input2)
+void __ext_v_or_48(unsigned char *output, unsigned char *input1, unsigned char *input2)
 {
 	unsigned __int32 i1, i2;
 	unsigned __int16 j1, j2;
@@ -1116,7 +1185,7 @@ void __ext_v_or_48(uchar *output, uchar *input1, uchar *input2)
 }
 
 FORCE_INLINE
-void __ext_v_or_96(uchar *output, uchar *input1, uchar *input2)
+void __ext_v_or_96(unsigned char *output, unsigned char *input1, unsigned char *input2)
 {
 	unsigned __int64 i1, i2;
 	unsigned __int32 j1, j2;
@@ -1131,7 +1200,7 @@ void __ext_v_or_96(uchar *output, uchar *input1, uchar *input2)
 }
 
 FORCE_INLINE
-void __ext_v_or_192(uchar *output, uchar *input1, uchar *input2)
+void __ext_v_or_192(unsigned char *output, unsigned char *input1, unsigned char *input2)
 {
 
 	unsigned __int64 i1, i2;
@@ -1157,17 +1226,75 @@ void __ext_v_or_192(uchar *output, uchar *input1, uchar *input2)
 
 }
 
+#else
 FORCE_INLINE
-void __ext_v_or_288(uchar *output, uchar *input1, uchar *input2)
+void __ext_v_or_48(unsigned char *output, unsigned char *input1, unsigned char *input2)
+{
+	uint32_t i1, i2;
+	uint16_t j1, j2;
+
+	i1 = *(uint32_t *)input1;
+	i2 = *(uint32_t *)input2;
+	*(uint32_t *)output = i1 | i2;
+
+	j1 = *(uint16_t *)(input1 + 4);
+	j2 = *(uint16_t *)(input2 + 4);
+	*(uint16_t *)(output + 4) = j1 | j2;
+}
+
+FORCE_INLINE
+void __ext_v_or_96(unsigned char *output, unsigned char *input1, unsigned char *input2)
+{
+	uint64_t i1, i2;
+	uint32_t j1, j2;
+
+	i1 = *(uint64_t *)input1;
+	i2 = *(uint64_t *)input2;
+	*(uint64_t *)output = i1 | i2;
+
+	j1 = *(uint32_t *)(input1 + 8);
+	j2 = *(uint32_t *)(input2 + 8);
+	*(uint32_t *)(output + 8) = j1 | j2;
+}
+
+FORCE_INLINE
+void __ext_v_or_192(unsigned char *output, unsigned char *input1, unsigned char *input2)
+{
+
+	uint64_t i1, i2;
+
+	// Strangely crashes ... 
+	// vcs *pi1 = (vcs *)input1; 
+	// vcs *pi2 = (vcs *)input2; 
+	// vcs *po = (vcs *)output; 
+	// *po = (vcs)_mm_and_si128(*pi1, *pi2); 
+
+	i1 = *(uint64_t *)(input1);
+	i2 = *(uint64_t *)(input2);
+	*(uint64_t *)(output) = i1 | i2;
+
+	i1 = *(uint64_t *)(input1 + 8);
+	i2 = *(uint64_t *)(input2 + 8);
+	*(uint64_t *)(output + 8) = i1 | i2;
+
+	i1 = *(uint64_t *)(input1 + 16);
+	i2 = *(uint64_t *)(input2 + 16);
+	*(uint64_t *)(output + 16) = i1 | i2;
+
+
+}
+#endif
+
+FORCE_INLINE
+void __ext_v_or_288(unsigned char *output, unsigned char *input1, unsigned char *input2)
 {
 	__ext_v_or_192(output, input1, input2);
 	__ext_v_or_96(output + 24, input1 + 24, input2 + 24);
 
 }
 
-
 FORCE_INLINE
-void __ext_v_or(uchar *output, int outlen, uchar *input1, int inlen1, uchar *input2, int inlen2) 
+void __ext_v_or(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2) 
 {
 	int cnt;
 	switch (inlen1) {
@@ -1198,89 +1325,7 @@ void __ext_v_or(uchar *output, int outlen, uchar *input1, int inlen1, uchar *inp
 
 
 
-void __ext_v_and(uchar *output, int outlen, uchar *input1, int inlen1, uchar *input2, int inlen2)
-{
-	int cnt = 0;
-	int bytelen1 = inlen1 / 8 + ((inlen1 % 8) > 0);
-	vcs *pi1 = (vcs *)input1;
-	vcs *pi2 = (vcs *)input2;
-	vcs *po = (vcs *)output;
-
-	while (cnt + 16 <= bytelen1)
-	{
-		*po = (vcs)_mm_and_si128(*pi1, *pi2);
-		pi1++;
-		pi2++;
-		po++;
-		cnt += 16;
-	}
-
-	while (cnt < bytelen1)
-	{
-		output[cnt] = input1[cnt] & input2[cnt];
-		cnt++;
-	}
-	outlen = inlen1;
-}
-
-
-void __ext_v_andnot(uchar *output, int outlen, uchar *input1, int inlen1, uchar *input2, int inlen2)
-{
-	int cnt = 0;
-	int bytelen1 = inlen1 / 8 + ((inlen1 % 8) > 0);
-	vcs *pi1 = (vcs *)input1;
-	vcs *pi2 = (vcs *)input2;
-	vcs *po = (vcs *)output;
-
-	while (cnt + 16 <= bytelen1)
-	{
-		*po = (vcs)_mm_andnot_si128(*pi1, *pi2);
-		pi1++;
-		pi2++;
-		po++;
-		cnt += 16;
-	}
-
-	while (cnt < bytelen1)
-	{
-		output[cnt] = (~input1[cnt]) & input2[cnt];
-		cnt++;
-	}
-	outlen = inlen1;
-}
-
-
-void __ext_v_xor(uchar *output, int outlen, uchar *input1, int inlen1, uchar *input2, int inlen2)
-{
-	int cnt = 0;
-	int bytelen1 = inlen1 / 8 + ((inlen1 % 8) > 0);
-	vcs *pi1 = (vcs *)input1;
-	vcs *pi2 = (vcs *)input2;
-	vcs *po = (vcs *)output;
-
-	while (cnt + 16 <= bytelen1)
-	{
-		*po = (vcs)_mm_xor_si128(*pi1, *pi2);
-		pi1++;
-		pi2++;
-		po++;
-		cnt += 16;
-	}
-
-	while (cnt < bytelen1)
-	{
-		output[cnt] = input1[cnt] ^ input2[cnt];
-		cnt++;
-	}
-	outlen = inlen1;
-}
-
-
-
-
-
-
-
+#ifdef SORA_PLATFORM
 
 ///// Interface to Sora integer trigonometry
 
@@ -1668,12 +1713,12 @@ int __ext_record_time_stop() {
 
 
 
-// compiling v_xor (or any other logical) provides issues with uchar
-// even if there are no occurences of uchar in here, they still occur in test.c
-//
+ //compiling v_xor (or any other logical) provides issues with uint64
+// even if there are no occurences of uint64 in here, they still occur in test.c
+
 //#else
 //
-//void __ext_v_xor(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
+//void __ext_v_and(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
 //{
 //	//int cnt = 0;
 //	//int bytelen1 = inlen1 / 8 + ((inlen1 % 8) > 0);
@@ -1682,14 +1727,16 @@ int __ext_record_time_stop() {
 //	//vcs *pi2 = (vcs *)input2;
 //	//vcs *po = (vcs *)output;
 //	const int wlen = 128;// sizeof(vcs) / sizeof(complex16);
-//	//printf("rem = %d\n", (inlen1/wlen)*wlen);
+//	printf("rem = %d\n", inlen1-(inlen1/wlen)*wlen);
+//
+//	
 //
 //	for (int i = 0; i < inlen1 / wlen; i++)
 //	{
 //		__m128i mi1 = _mm_loadu_si128((__m128i *) (input1+wlen*i));
 //		__m128i mi2 = _mm_loadu_si128((__m128i *) (input2+wlen*i));
 //
-//		_mm_storeu_si128((__m128i *) (output + wlen*i), _mm_xor_si128(mi1, mi2));
+//		_mm_storeu_si128((__m128i *) (output + wlen*i), _mm_and_si128(mi1, mi2));
 //
 //	}
 //
@@ -1698,7 +1745,7 @@ int __ext_record_time_stop() {
 //
 //
 //	for (int i = (inlen1 / wlen) * wlen; i < inlen1; i++){
-//		output[i] = input1[i] ^ input2[i];
+//		output[i] = input1[i] & input2[i];
 //	};
 //
 //
