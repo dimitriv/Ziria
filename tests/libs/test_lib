@@ -26,7 +26,8 @@ do #
 	if [ "$element" != "test_logical" ]; then #
 		cp test_fft.infile $element.infile #
 	fi #
-	COMPILER=gcc make -B $element.outfile #
+	# Chance COMPILER=vs to COMPILER=gcc or COMPILER=winddk to change the default compiler
+	COMPILER=vs make -B $element.outfile #
 done #
 #
 error="There were no errors!" #
