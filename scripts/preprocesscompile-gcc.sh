@@ -44,16 +44,18 @@ cp $1.c $TOP/csrc/test.c
 rm -f $TOP/csrc/driver $TOP/csrc/test.o
 
 echo "Compiling C code (GCC) "
-pushd . && cd $TOP/csrc && make
+pushd . 
+cd $TOP/csrc
+make && rc=$?
 
-
-if [[ $# -ge 2 ]] 
+if [[ $rc -eq 0 ]] 
 then
     popd
     # cp -f is sometimes not sufficient on cygwin
-    rm -f $2
-    cp -f $TOP/csrc/driver $2
+    rm -f $2 && rc=$?
+    cp -f $TOP/csrc/driver $2 && rc=$?
 else
     popd
+    rm -f $2 && rc=$?
 fi
 
