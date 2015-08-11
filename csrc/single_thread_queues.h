@@ -6,10 +6,11 @@
 
 #define QUEUE_CHECKS_ENABLED 1 // comment this out to disable run-time checks.
 
+#include "types.h"
 #include "numerics.h" // include for the FORCE_INLINE macro
 
 
-struct queue {
+typedef struct {
 	// capacity of queue
 	size_t capacity;
 
@@ -30,7 +31,7 @@ struct queue {
 
 	// where to read from next
 	void* next_read;
-};
+} queue;
 
 
 /* api **********************************************************/

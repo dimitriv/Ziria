@@ -27,9 +27,10 @@
 #
 # COMPILER?=winddk
 #
-COMPILER?=vs
+COMPILER?=gcc
 
-PP   = ../../scripts/preprocesscompile-$(COMPILER)-inline.sh
+#PP   = ../../scripts/preprocesscompile-$(COMPILER)-inline.sh
+PP   = ../../scripts/preprocesscompile-$(COMPILER).sh
 DIFF = ../../tools/BlinkDiff
 
 # Do not delete outfiles to allow quick recheck of failed tests
