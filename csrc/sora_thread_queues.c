@@ -455,6 +455,40 @@ void packBitsIntoByte(BitArrPtr bits, unsigned char *byte)
 
 // Get n bits (stored in 1 byte each), and pack them into (n+7)/8 bytes
 // Return number of bits read (which could be less than n if finished)
+int s_ts_getManyBits(ts_context *locCont, int nc, int n, char *output)
+{
+	char tmp_output[1];
+	int read = 0;
+
+	for (int i = 0; i<n; i++)
+	{
+		read += s_ts_getMany(locCont, nc, 1, tmp_output);
+		bitWrite((BitArrPtr)output, i, tmp_output[0]);
+	}
+
+	return read;
+}
+
+
+
+int ts_getManyBits(int nc, int n, char *output)
+{
+	if (nc >= no_contexts)
+	{
+		printf("There are only %d queues! %d\n", no_contexts, nc);
+		return false;
+	}
+
+	return s_ts_getManyBits(contexts, nc, n, output);
+}
+
+
+
+
+
+
+// Get n bits (stored in 1 byte each), and pack them into (n+7)/8 bytes
+// Return number of bits read (which could be less than n if finished)
 int s_ts_getManyBitsBlocking(ts_context *locCont, int nc, int n, char *output)
 {
 	char tmp_output[1];
@@ -633,6 +667,72 @@ void ts_finish(int nc)
 
 
 
+
+
+// WARNING: Unlike the rest of the code, this is not thread-safe 
+// and might require a lock, depending on the use
+void s_ts_clear(ts_context *locCont, int nc)
+{
+	size_t i;
+	for (i = 0; i < locCont[nc].queue_size; i++)
+	{
+		*valid(locCont[nc].buf, locCont[nc].alg_size, i) = false;
+	}
+	// This is not thread-safe because consumer might move the rptr while we reset
+	// creating an inconsitent state. Check with Steffen whether this needs to be handled
+	locCont[nc].wptr = locCont[nc].rptr;
+}
+
+void ts_clear(int nc)
+{
+	return s_ts_clear(contexts, nc);
+}
+
+
+
+
+
+
+
+
+// WARNING: Unlike the rest of the code, this is not thread-safe 
+// and might require a lock, depending on the use
+void s_ts_rollback(ts_context *locCont, int nc, int n)
+{
+	int i = n;
+
+	// Stop when enough rolled back or we hit the top of the queue
+	while (i > 0 && locCont[nc].rptr != locCont[nc].wptr)
+	{
+		// rptr points at the new location so we first need to decrease
+
+		// This is not thread-safe because consumer might move the rptr while we reset
+		// creating an inconsitent state. Check with Steffen whether this needs to be handled
+		locCont[nc].rptr -= (ST_CACHE_LINE + locCont[nc].alg_size);
+		if (locCont[nc].rptr < locCont[nc].buf)
+		{
+			locCont[nc].rptr = (locCont[nc].buf) + (locCont[nc].queue_size - 1)*(ST_CACHE_LINE + locCont[nc].alg_size);
+		}
+
+		if (*valid(locCont[nc].rptr, locCont[nc].alg_size, 0))
+		{
+			*valid(locCont[nc].rptr, locCont[nc].alg_size, 0) = false;
+		}
+		else
+		{
+			// This should really not happen because 
+			// we should hit the top of the queue before seeing false
+			break;
+		}
+
+		i--;
+	}
+}
+
+void ts_rollback(int nc, int n)
+{
+	return s_ts_rollback(contexts, nc, n);
+}
 
 
 

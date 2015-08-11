@@ -46,6 +46,7 @@ int ts_getMany(int nc, int n, char *output);
 int ts_getManyBlocking(int nc, int n, char *output);
 
 // get n bits (stored in 1 byte each), and pack them into (n+7)/8 bytes
+int ts_getManyBits(int nc, int n, char *output);
 int ts_getManyBitsBlocking(int nc, int n, char *output);
 
 
@@ -61,6 +62,18 @@ void ts_finish(int nc);
 bool ts_isEmpty(int nc);
 
 bool ts_isFull(int nc);
+
+
+// Clear the entire queue
+// WARNING: Unlike the rest of the code, this is not thread-safe 
+// and might require a lock, depending on the use
+void ts_clear(int nc);
+
+// Roll back up to n elements from the queue, as many as available
+// WARNING: Unlike the rest of the code, this is not thread-safe 
+// and might require a lock, depending on the use
+void ts_rollback(int nc, int n);
+
 
 // Free memory allocated for queues
 void ts_free();
@@ -109,6 +122,8 @@ void ts_reset(int nc);
 void s_ts_flush(ts_context *locCont, int nc);
 void s_ts_finish(ts_context *locCont, int nc);
 void s_ts_free(ts_context *locCont, int no);
+void s_ts_clear(ts_context *locCont, int nc);
+void s_ts_rollback(ts_context *locCont, int nc, int n);
 
 
 

@@ -130,7 +130,7 @@ cgDeclQueues dfs qs action
           let my_sizes_decl = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
               my_slots_decl = [cdecl|int my_slots[$int:(numqs)];|]
               q_init_stmts 
-                = [cstm| stq_init($int:(numqs),my_sizes,my_slots); |]
+                = [cstm| ts_init_var($int:(numqs),my_sizes,my_slots); |]
              
               my_sizes_inits 
                 = concat $
@@ -336,7 +336,7 @@ cgARollbackBody :: DynFlags
                 -> Cg C.Exp
 cgARollbackBody _dfs qs q n
   | Just (QMid (QId qid)) <- qiQueueId q qs = do
-      appendStmt [cstm| stq_rollback($int:qid, $int:n); |]
+      appendStmt [cstm| ts_rollback($int:qid, $int:n); |]
       return [cexp|UNIT|]
   | otherwise 
   = panic $ vcat [ text "SARollback only implemented for middle queues"
@@ -398,7 +398,7 @@ cgAClearBody _dfs qs qmap = do
   mapM_ mk_clear $ map (flip qiQueueId qs . fst) $ Map.toList qmap
   return [cexp|UNIT|]
   where
-    mk_clear (Just (QMid (QId qid))) = appendStmt [cstm| stq_clear($int:qid); |]
+    mk_clear (Just (QMid (QId qid))) = appendStmt [cstm| ts_clear($int:qid); |]
     mk_clear _ = panicStr "cgAClearBody: can only clear middle queues"
 
 {--------------------------- AExp atom implementation -------------------------}
@@ -442,11 +442,11 @@ cgAExpBody dfs qs wins wouts aexp
 
 q_read_n :: QId -> Int -> C.Exp -> C.Stm
 q_read_n (QId qid) n ptr
-  = [cstm| stq_getMany($int:qid,$int:n,$ptr); |]
+  = [cstm| ts_getMany($int:qid,$int:n,$ptr); |]
 
 q_read_n_bits :: QId -> Int -> C.Exp -> C.Stm
 q_read_n_bits (QId qid) n ptr
-  = [cstm| stq_getManyBits($int:qid,$int:n,$ptr); |]
+  = [cstm| ts_getManyBits($int:qid,$int:n,$ptr); |]
 
 
 readFromTs :: DynFlags 
@@ -467,7 +467,7 @@ readFromTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
          cx <- lookupVarEnv x
          ci <- lookupVarEnv i
          appendStmt $ [cstm| for ($ci = 0; $ci < $int:n; $ci++) {
-                                stq_get($int:qid,(char *) $cx);
+                                ts_get($int:qid,(char *) $cx);
                                 bitArrWrite((typename BitArrPtr) $cx,
                                               $ci*$int:m,
                                               $int:m,
@@ -546,10 +546,10 @@ squashedQueueType n t = TArray (Literal n) t
 {--------------- Writing to TS queues -----------------------------------------}
 
 q_write_n :: QId -> Int -> C.Exp -> C.Stm
-q_write_n (QId qid) n ptr = [cstm| stq_putMany($int:qid,$int:n,$ptr); |]
+q_write_n (QId qid) n ptr = [cstm| ts_putMany($int:qid,$int:n,$ptr); |]
 
 q_write_n_bits :: QId -> Int -> C.Exp -> C.Stm
-q_write_n_bits (QId qid) n ptr = [cstm| stq_putManyBits($int:qid,$int:n,$ptr); |]
+q_write_n_bits (QId qid) n ptr = [cstm| ts_putManyBits($int:qid,$int:n,$ptr); |]
 
 
 writeToTs :: DynFlags 
@@ -573,7 +573,7 @@ writeToTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
                                             $ci*$int:m,
                                             $int:m,
                                            (typename BitArrPtr) $cx);
-                                stq_put($int:qid,(char *) $cx);
+                                ts_put($int:qid,(char *) $cx);
                              }|]
 
 writeToTs _ n _ q ptr = appendStmt $ q_write_n q n ptr
