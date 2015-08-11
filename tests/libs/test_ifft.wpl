@@ -1,0 +1,134 @@
+--
+--Copyright (c) Microsoft Corporation
+--All rights reserved.
+--
+--Licensed under the Apache License, Version 2.0 (the ""License""); you
+--may not use this file except in compliance with the License. You may
+--obtain a copy of the License at
+--
+--http://www.apache.org/licenses/LICENSE-2.0
+--
+--THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+--CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+--LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+--A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+--See the Apache Version 2.0 License for specific language governing
+--permissions and limitations under the License.
+--
+--
+
+#include <externals.blk>
+
+
+fun comp ifft_test() {
+	--the full LTE range:
+	--[12, 24, 36, 48, 60, 72, 96, 108, 120, 144, 180, 192, 216, 240, 288, 300, 324, 360, 384, 432, 480, 540, 576, 600, 648, 720, 768, 864, 900, 960, 972, 1080, 1152, 1200];
+
+	(x:arr[12] complex16) <- takes 12;
+	emits sora_ifft(x);
+
+	(x:arr[24] complex16) <- takes 24;
+	emits sora_ifft(x);
+
+	(x:arr[36] complex16) <- takes 36;
+	emits sora_ifft(x);
+
+	(x:arr[48] complex16) <- takes 48;
+	emits sora_ifft(x);
+
+	(x:arr[60] complex16) <- takes 60;
+	emits sora_ifft(x);
+	
+	(x:arr[72] complex16) <- takes 72;
+	emits sora_ifft(x);
+
+	(x:arr[96] complex16) <- takes 96;
+	emits sora_ifft(x);
+
+	(x:arr[108] complex16) <- takes 108;
+	emits sora_ifft(x);
+
+	(x:arr[120] complex16) <- takes 120;
+	emits sora_ifft(x);
+
+	(x:arr[144] complex16) <- takes 144;
+	emits sora_ifft(x);
+
+	(x:arr[180] complex16) <- takes 180;
+	emits sora_ifft(x);
+
+	(x:arr[192] complex16) <- takes 192;
+	emits sora_ifft(x);
+
+	(x:arr[216] complex16) <- takes 216;
+	emits sora_ifft(x);
+
+	(x:arr[240] complex16) <- takes 240;
+	emits sora_ifft(x);
+	
+	(x:arr[288] complex16) <- takes 288;
+	emits sora_ifft(x);
+	
+	(x:arr[300] complex16) <- takes 300;
+	emits sora_ifft(x);
+	
+	(x:arr[324] complex16) <- takes 324;
+	emits sora_ifft(x);
+	
+	(x:arr[360] complex16) <- takes 360;
+	emits sora_ifft(x);
+
+	(x:arr[384] complex16) <- takes 384;
+	emits sora_ifft(x);
+	
+	(x:arr[432] complex16) <- takes 432;
+	emits sora_ifft(x);
+
+	(x:arr[480] complex16) <- takes 480;
+	emits sora_ifft(x);
+
+	(x:arr[540] complex16) <- takes 540;
+	emits sora_ifft(x);
+	                                                                                                                                                                                                                                             
+	(x:arr[576] complex16) <- takes 576;
+	emits sora_ifft(x);
+	
+	(x:arr[600] complex16) <- takes 600;
+	emits sora_ifft(x);
+	
+	(x:arr[648] complex16) <- takes 648;
+	emits sora_ifft(x);
+
+	(x:arr[720] complex16) <- takes 720;
+	emits sora_ifft(x);
+
+	(x:arr[768] complex16) <- takes 768;
+	emits sora_ifft(x);
+
+	(x:arr[864] complex16) <- takes 864;
+	emits sora_ifft(x);
+	
+	(x:arr[900] complex16) <- takes 900;
+	emits sora_ifft(x);
+	
+	(x:arr[960] complex16) <- takes 960;
+	emits sora_ifft(x);
+
+	(x:arr[972] complex16) <- takes 972;
+	emits sora_ifft(x);
+
+	(x:arr[1080] complex16) <- takes 1080;
+	emits sora_ifft(x);
+
+	(x:arr[1152] complex16) <- takes 1152;
+	emits sora_ifft(x);
+	
+	(x:arr[1200] complex16) <- takes 1200;
+	emits sora_ifft(x);
+	
+
+}
+
+
+let comp main = read >>> ifft_test() >>> write
