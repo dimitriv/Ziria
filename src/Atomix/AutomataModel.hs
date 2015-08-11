@@ -18,6 +18,7 @@ import Control.Monad.State
 import AtomComp
 import AstExpr
 import AstComp ( ParInfo (..), plInfo, PlInfo (..) )
+import AstName ( alphaNumStr )
 import Opts
 import AtomixCompTransform ( freshName, freshNameDoc )
 import qualified GenSym as GS
@@ -27,7 +28,7 @@ import Control.Applicative ( (<$>) )
 
 import Outputable
 import qualified Text.PrettyPrint.HughesPJ as PPR
-import Text.PrettyPrint.Boxes
+import qualified Text.PrettyPrint.Boxes as PPB
 import Debug.Trace
 
 
@@ -147,26 +148,28 @@ instance NodeKind SimplNk where
 data CfgNk atom nid
   = CfgAction { action_atoms :: [WiredAtom atom]
               , action_next  :: nid
-              , action_pipeline_balance :: Map Chan Int -- initial balance of pipeline queues
+              , cfg_pipe_balances :: Map Chan Int -- initial balance of pipeline queues
               }
   | CfgBranch { branch_ch   :: Chan -- If we read True we go to branch_true, otherwise to branch_false
               , branch_true  :: nid
               , branch_false :: nid
               , is_while     :: Bool -- Is this a while loop?
+              , cfg_pipe_balances :: Map Chan Int
               }
-  | CfgLoop { loop_body :: nid } -- Infinite loop. Only transformers may (and must!) contain one of these.
-  | CfgDone
+  | CfgLoop { loop_body :: nid -- Infinite loop. Only transformers may (and must!) contain one of these.
+            , cfg_pipe_balances :: Map Chan Int }
+  | CfgDone { cfg_pipe_balances :: Map Chan Int }
 
 instance NodeKind CfgNk where
-  sucsOfNk CfgDone = []
-  sucsOfNk (CfgLoop nxt)  = [nxt]
+  sucsOfNk (CfgDone _) = []
+  sucsOfNk (CfgLoop nxt _)  = [nxt]
   sucsOfNk (CfgAction _ nxt _) = [nxt]
-  sucsOfNk (CfgBranch _ nxt1 nxt2 _) = [nxt1,nxt2]
+  sucsOfNk (CfgBranch _ nxt1 nxt2 _ _) = [nxt1,nxt2]
 
-  mapNkIds _ CfgDone = CfgDone
-  mapNkIds f (CfgLoop nxt)  = CfgLoop (f nxt)
+  mapNkIds _ (CfgDone pipes) = CfgDone pipes
+  mapNkIds f (CfgLoop nxt pipes)  = CfgLoop (f nxt) pipes
   mapNkIds f (CfgAction watoms nxt pipes) = CfgAction watoms (f nxt) pipes
-  mapNkIds f (CfgBranch x nxt1 nxt2 l) = CfgBranch x (f nxt1) (f nxt2) l
+  mapNkIds f (CfgBranch x nxt1 nxt2 l pipes) = CfgBranch x (f nxt1) (f nxt2) l pipes
 
 
 
@@ -174,6 +177,7 @@ data AtomixNk atom nid
   = AtomixState { state_atoms :: [WiredAtom atom]
                 , constraints :: Map (Int,Int) [Dependency]
                 , state_decision :: Decision nid
+                , ax_pipe_balances :: Map Chan Int
                 }
 
 data Dependency
@@ -205,15 +209,15 @@ instance (Atom atom, Show nid) => Show (CfgNk atom nid) where
 
   show (CfgAction was next _) = "Action" ++ show was ++ "->" ++ (show next) ++ ""
 
-  show (CfgBranch x n1 n2 True)
+  show (CfgBranch x n1 n2 True _)
     = "While[" ++ show x ++ "]->(" ++ (show n1) ++ "," ++ (show n2) ++ ")"
 
-  show (CfgBranch x n1 n2 False)
+  show (CfgBranch x n1 n2 False _)
     = "If[" ++ show x ++ "]->(" ++ (show n1) ++ "," ++ (show n2) ++ ")"
 
-  show (CfgLoop next) = "Loop->" ++ (show next)
+  show (CfgLoop next _) = "Loop->" ++ (show next)
 
-  show CfgDone = "Done"
+  show (CfgDone _) = "Done"
 
 
 instance Atom a => Show (WiredAtom a) where
@@ -241,9 +245,9 @@ type CfgAuto atom nid = Automaton atom nid CfgNk
 type CfgNode atom nid = Node atom nid CfgNk
 type CfgNodeMap atom nid = NodeMap atom nid CfgNk
 
-type AxAuto atom nid = Automaton atom nid AtomixNk
-type AxNode atom nid = Node atom nid AtomixNk
-type AxNodeMap atom nid = NodeMap atom nid AtomixNk
+type AxAuto atom = Automaton atom Int AtomixNk
+type AxNode atom = Node atom Int AtomixNk
+type AxNodeMap atom = NodeMap atom Int AtomixNk
 
 
 
@@ -896,10 +900,10 @@ deleteDeadNodes auto = auto { auto_graph = insertRecursively Map.empty (auto_sta
 markSelfLoops :: CfgAuto e Int -> CfgAuto e Int
 markSelfLoops a = a { auto_graph = go (auto_graph a)}
   where go nmap = Map.foldr markNode nmap nmap
-        markNode (Node nid nk@(CfgAction _ next _)) nmap
+        markNode (Node nid nk@(CfgAction _ next pipes)) nmap
           = if nid /= next then nmap else
               let nid' = nextNid a
-              in Map.insert nid (Node nid (CfgLoop nid')) $ Map.insert nid' (Node nid' nk) $ nmap
+              in Map.insert nid (Node nid (CfgLoop nid' pipes)) $ Map.insert nid' (Node nid' nk) $ nmap
         markNode _ nmap = nmap
 
 
@@ -1056,9 +1060,9 @@ fuseActions dfs auto = auto { auto_graph = fused_graph }
 
     -- precondition: input node is marked active
     fuse :: CfgNode atom nid -> CfgNodeMap atom nid -> MarkingM nid ([nid], CfgNodeMap atom nid)
-    fuse (Node _ CfgDone) nmap = return ([],nmap)
-    fuse (Node _ (CfgLoop b)) nmap = return ([b],nmap)
-    fuse (Node _ (CfgBranch _ b1 b2 _)) nmap = return ([b1,b2],nmap)
+    fuse (Node _ (CfgDone _)) nmap = return ([],nmap)
+    fuse (Node _ (CfgLoop b _)) nmap = return ([b],nmap)
+    fuse (Node _ (CfgBranch _ b1 b2 _ _)) nmap = return ([b1,b2],nmap)
 
     fuse (Node nid (CfgAction atoms next pipes)) nmap = do
       active <- isActive next
@@ -1090,11 +1094,11 @@ fuseActions dfs auto = auto { auto_graph = fused_graph }
   Building constraint graph from Control flow graph
 ------------------------------------------------------------------------}
 
-cfgToAtomix :: forall e.CfgAuto e Int -> AxAuto e Int
+cfgToAtomix :: forall e. CfgAuto e Int -> AxAuto e
 cfgToAtomix a = a { auto_graph = state_graph} where
   state_graph = fst $ runState (fromCfg (auto_start a) Map.empty) Set.empty
 
-  fromCfg :: Int -> AxNodeMap e Int -> State (Set Int) (AxNodeMap e Int)
+  fromCfg :: Int -> AxNodeMap e -> State (Set Int) (AxNodeMap e)
   fromCfg nid nmap = do
     done <- gets (Set.member nid)
     modify (Set.insert nid)
@@ -1103,23 +1107,26 @@ cfgToAtomix a = a { auto_graph = state_graph} where
       else fromCfg' nid Map.empty [] (nodeKindOfId a nid) nmap
 
   fromCfg' :: Int -> Map Chan Int -> [WiredAtom e] -> CfgNk e Int -> 
-              AxNodeMap e Int -> State (Set Int) (AxNodeMap e Int)
+              AxNodeMap e -> State (Set Int) (AxNodeMap e)
 
   fromCfg' nid pipes watoms (CfgAction was nxt pipes') nmap =
     -- left-biased union!
     fromCfg' nid (Map.union pipes pipes') (watoms++was) (nodeKindOfId a nxt) nmap
 
-  fromCfg' nid pipes watoms CfgDone nmap =
-    let nk = AtomixState watoms (mk_constraints pipes watoms Nothing) AtomixDone in
+  fromCfg' nid pipes watoms (CfgDone pipes') nmap =
+    let pipes'' = Map.unionWith const pipes pipes' in -- left-biased union
+    let nk = AtomixState watoms (mk_constraints pipes'' watoms Nothing) AtomixDone pipes'' in
     return $ insertNk nid nk nmap
 
-  fromCfg' nid pipes watoms (CfgLoop next) nmap =
-    let nk = AtomixState watoms (mk_constraints pipes watoms Nothing) (AtomixLoop next) in
+  fromCfg' nid pipes watoms (CfgLoop next pipes') nmap =
+    let pipes'' = Map.unionWith const pipes pipes' in -- left-biased union
+    let nk = AtomixState watoms (mk_constraints pipes'' watoms Nothing) (AtomixLoop next) pipes'' in
     fromCfg next $ insertNk nid nk nmap
 
-  fromCfg' nid pipes watoms (CfgBranch x left right is_while) nmap =
-    let constrs = mk_constraints pipes watoms (Just x) in
-    let nk = AtomixState watoms constrs (AtomixBranch x left right) in
+  fromCfg' nid pipes watoms (CfgBranch x left right is_while pipes') nmap =
+    let pipes'' = Map.unionWith const pipes pipes' in -- left-biased union
+    let constrs = mk_constraints pipes'' watoms (Just x) in
+    let nk = AtomixState watoms constrs (AtomixBranch x left right) pipes'' in
     fromCfg left =<< fromCfg right (insertNk nid nk nmap)
 
 
@@ -1243,8 +1250,8 @@ trans_reduction mp = foldl (flip Map.delete) mp redundant
   Automaton to DOT file translation
 ------------------------------------------------------------------------}
 
-dotOfAuto :: (Atom e, Show nid) => DynFlags -> Maybe (WiredAtom e -> String) -> CfgAuto e nid -> String
-dotOfAuto dflags atomPrinter a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfix
+dotOfAuto :: (Atom e, Show nid) => DynFlags -> CfgAuto e nid -> String
+dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfix
   where
     printAtoms = isDynFlagSet dflags PrintAtoms
     printPipeNames = isDynFlagSet dflags PrintPipeNames
@@ -1255,7 +1262,7 @@ dotOfAuto dflags atomPrinter a = prefix ++ List.intercalate ";\n" (nodes ++ edge
             ("node [shape = box]":decision) ++
             ("node [shape = box, fontname=monospace, fontsize=11, style=filled, fillcolor=\"white\"]":action)
     start = ["start [label=\"\"]"]
-    (finalN,normalN) = List.partition (\(Node _ nk) -> case nk of { CfgDone -> True; _ -> False }) $ Map.elems (auto_graph a)
+    (finalN,normalN) = List.partition (\(Node _ nk) -> case nk of { CfgDone {} -> True; _ -> False }) $ Map.elems (auto_graph a)
     (actionN,decisionN) = List.partition (\(Node _ nk) -> case nk of { CfgAction {} -> True; _ -> False }) normalN
     final = List.map (\(Node nid _) -> show nid ++ "[label=\"\"]") finalN
     action = List.map showNode actionN
@@ -1269,31 +1276,31 @@ dotOfAuto dflags atomPrinter a = prefix ++ List.intercalate ";\n" (nodes ++ edge
     showNk (CfgAction watoms _ pipes)
       | printAtoms = List.intercalate "\\n" (showPipes watoms pipes : showWatoms watoms)
       | otherwise = showPipes watoms pipes
-    showNk (CfgBranch x _ _ True) = "WHILE<" ++ show x ++ ">"
-    showNk (CfgBranch x _ _ False) = "IF<" ++ show x ++ ">"
-    showNk CfgDone = "DONE"
-    showNk (CfgLoop _) = "LOOP"
+    showNk (CfgBranch x _ _ True _) = "WHILE<" ++ show x ++ ">"
+    showNk (CfgBranch x _ _ False _) = "IF<" ++ show x ++ ">"
+    showNk (CfgDone {}) = "DONE"
+    showNk (CfgLoop {}) = "LOOP"
 
     showWatoms = map showWatomGroup . List.group
     showWatomGroup wa = case length wa of 1 -> showWatom (head wa)
                                           n -> show n ++ " TIMES DO " ++ showWatom (head wa)
-    
-    showWatom wa@(WiredAtom inw outw _) | Just showAtom <- atomPrinter 
-      = showWires inw ++ showAtom wa ++ showWires outw where
+
+    showWatom wa@(WiredAtom inw outw _) | isDynFlagSet dflags CLikeNames
+      = showWires inw ++ show (alphaNumStr $ wiredAtomId wa) ++ showWires outw where
           showWires ws = "{" ++ (List.intercalate "," $ map showWire ws) ++ "}"
           showWire (n,ch)
             | n==1      = showChan True ch
             | otherwise = showChan True ch ++ "^" ++ show n
-    showWatom wa | otherwise = show wa
+    showWatom wa = show wa
       
 
     showPipes watoms pipes
-      | printPipeNames = render $ punctuateH top (text " | ") $ boxedPipes
+      | printPipeNames = PPB.render $ PPB.punctuateH PPB.top (PPB.text " | ") $ boxedPipes
       | otherwise     = List.intercalate "\\n" $ map printPipes [pipes, nextPipes watoms pipes]
         where
           boxedPipes = map boxPipe $ Map.toAscList $
                        Map.intersectionWith (,) pipes (nextPipes watoms pipes)
-          boxPipe (pipe, state) = vcat center1 $ map text [show pipe, show state]
+          boxPipe (pipe, state) = PPB.vcat PPB.center1 $ map PPB.text [show pipe, show state]
           printPipes = List.intercalate "|" . map printPipe . Map.toAscList
           printPipe (_pipe_ch, val) = show val
 
@@ -1302,14 +1309,14 @@ dotOfAuto dflags atomPrinter a = prefix ++ List.intercalate ";\n" (nodes ++ edge
     showPipeNames = List.intercalate " | " . map (showChan True) . Map.keys
 
 
-dotOfAxAuto :: Atom e => DynFlags -> AxAuto e Int -> [(Int, String)]
+dotOfAxAuto :: Atom e => DynFlags -> AxAuto e -> [(Int, String)]
 dotOfAxAuto dflags a = map (\(nid,state) -> (nid, dotify state)) $ Map.toList $ auto_graph a where
   dotify (Node nid nk) = prefix ++ List.intercalate ";\n" (label nid : mk_state nk) ++ postfix 
   prefix = "digraph atomix_state {\n"
   label nid = "label=\"State " ++ show nid ++ "\""
   postfix = ";\n}"
 
-  mk_state (AtomixState watoms constrs decision) 
+  mk_state (AtomixState watoms constrs decision _pipes) 
     = ["node [shape = point]", "  -1 [label=\"\"]"] ++
       ("node [shape = box]" : map mk_watom (zip watoms [0..])) ++
       ("node [shape = cds]" : [mk_decision decision (length watoms)]) ++
@@ -1340,14 +1347,14 @@ dotOfAxAuto dflags a = map (\(nid,state) -> (nid, dotify state)) $ Map.toList $ 
 simplToCfg :: SAuto e nid -> CfgAuto e nid
 simplToCfg a = a { auto_graph = Map.map nodeToCfg $ auto_graph a }
   where nodeToCfg (Node nid nkind) = Node nid (nkToCfg nkind)
-        nkToCfg (SDone _ Nothing) = CfgDone
+        nkToCfg (SDone pipes Nothing) = CfgDone pipes
         nkToCfg (SDone _ (Just _)) = panicStr "simplToCfg: missing rollback encountered!"
         nkToCfg (SAtom wa nxt pipes) = CfgAction [wa] nxt pipes
-        nkToCfg (SBranch x nxt1 nxt2 l _) = CfgBranch x nxt1 nxt2 l
+        nkToCfg (SBranch x nxt1 nxt2 l pipes) = CfgBranch x nxt1 nxt2 l pipes
 
 
 
-automatonPipeline :: Atom e => DynFlags -> GS.Sym -> Ty -> Ty -> AComp () () -> IO (CfgAuto e Int)
+automatonPipeline :: Atom e => DynFlags -> GS.Sym -> Ty -> Ty -> AComp () () -> IO (AxAuto e)
 automatonPipeline dfs sym inty outty acomp = do
   inch  <- freshName sym "src"  (acomp_loc acomp) inty Imm
   outch <- freshName sym "snk" (acomp_loc acomp) outty Mut
@@ -1356,28 +1363,37 @@ automatonPipeline dfs sym inty outty acomp = do
 
   putStrLn "\n>>>>>>>>>> mkAutomaton"
   a <- simplToCfg <$> mkAutomaton dfs sym channels acomp k
-  --putStrLn (dotOfAuto True a)
   putStrLn $ "<<<<<<<<<<< mkAutomaton (" ++ show (size a) ++ " states)"
 
   putStrLn ">>>>>>>>>>> fuseActions"
   let a_f = fuseActions dfs a
-  --putStrLn (dotOfAuto True a_f)
   putStrLn $ "<<<<<<<<<<< fuseActions (" ++ show (size a_f) ++ " states)"
 
   putStrLn ">>>>>>>>>>> deleteDeadNodes"
   let a_d = deleteDeadNodes a_f
-  --putStrLn (dotOfAuto True a_d)
   putStrLn $ "<<<<<<<<<<< deleteDeadNodes (" ++ show (size a_d) ++ " states)"
 
   putStrLn ">>>>>>>>>>> markSelfLoops"
   let a_l = markSelfLoops a_d
-  --putStrLn (dotOfAuto True a_l)
   putStrLn $ "<<<<<<<<<<< markSelfLoops (" ++ show (size a_l) ++ " states)"
 
   putStrLn ">>>>>>>>>>> normalize_auto_ids"
   let a_n = normalize_auto_ids 0 a_l
-  --putStrLn (dotOfAuto True a_n)
   putStrLn $ "<<<<<<<<<<< normalize_auto_ids (" ++ show (size a_n) ++ " states)"
+
+  putStrLn ">>>>>>>>>>> cfgToAtomix"
+  let a_a = cfgToAtomix a_n
+  putStrLn $ "<<<<<<<<<<< cfgToAtomix (" ++ show (size a_a) ++ " states)"
+
   putStrLn "<<<<<<<<<<< COMPLETED AUTOMATON CONSTRUCTION\n"
 
-  return a_n
+
+  -- dump dot files 
+  dump dfs DumpAutomaton (".automaton.dump") (PPR.text $ dotOfAuto dfs a_n)
+  mapM_ dumpState $ dotOfAxAuto dfs a_a 
+    
+  return a_a
+
+  where dumpState (idx,outp) = dump dfs DumpDependencyGraphs (file idx) (PPR.text outp)
+        file idx = ".state" ++ show idx ++ ".dump"         
+             

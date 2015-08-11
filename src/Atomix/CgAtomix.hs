@@ -162,7 +162,7 @@ cgDeclQueues dfs qs action
 
 -- | Extract all introduced queues, and for each calculate the maximum
 -- ^ size we should allocate it with.
-extractQueues :: CfgAuto SymAtom Int -> QueueInfo
+extractQueues :: AxAuto SymAtom -> QueueInfo
 extractQueues auto 
   = QI { qi_inch   = auto_inchan auto
        , qi_outch  = auto_outchan auto
@@ -176,8 +176,7 @@ extractQueues auto
     unions_with f = foldl (Map.unionWith f) Map.empty
 
     pre = map (extract_queue . node_kind) (Map.elems (auto_graph auto))
-    extract_queue (CfgAction atoms _ init_pipes) = update_pipes atoms init_pipes
-    extract_queue _ = Map.empty
+    extract_queue (AtomixState atoms _ _ init_pipes) = update_pipes atoms init_pipes
 
     update_pipes :: [WiredAtom SymAtom] -> Map Chan Int -> Map Chan Int
     update_pipes watoms pipes 
@@ -191,7 +190,7 @@ extractQueues auto
 -- | Main driver for code generation
 cgAutomaton :: DynFlags 
             -> RnSt                 -- ^ Records all variables (but no queues)
-            -> CfgAuto SymAtom Int  -- ^ The automaton
+            -> AxAuto SymAtom       -- ^ The automaton
             -> Cg CLabel            -- ^ Label of starting state we jump to
 cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
                                    , auto_start   = start })
@@ -206,25 +205,23 @@ cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
       mapM_ (cg_node frameVar) (Map.elems graph)
 
    cg_node frameVar (Node nid nk) = appendLabeledBlockNoScope (lblOfNid nid) (cg_nkind frameVar nk)
-   cg_nkind _ CfgDone        = appendStmt [cstm| exit(0); |]
-   cg_nkind _ (CfgLoop next) = appendStmt [cstm| goto $id:(lblOfNid next);|]
-   cg_nkind _ (CfgBranch c l r _) = do
-     cc <- lookupVarEnv c
-     appendStmt 
-        [cstm| if ($cc) goto $id:(lblOfNid l); else goto $id:(lblOfNid r); |]
-   cg_nkind frameVar (CfgAction atoms next _pipes) = do 
+
+   cg_nkind frameVar (AtomixState atoms _ decision _) = do
      inAllocFrame' frameVar noLoc $ pushAllocFrame $ mapM_ (cgCallAtom dfs queues) atoms
-     appendStmt [cstm| goto $id:(lblOfNid next);|]
+     cg_decision decision
+
+   cg_decision AtomixDone        = appendStmt [cstm| exit(0); |]
+   cg_decision (AtomixLoop next) = appendStmt [cstm| goto $id:(lblOfNid next);|]
+   cg_decision (AtomixBranch c l r) = do
+     cc <- lookupVarEnv c
+     appendStmt [cstm| if ($cc) goto $id:(lblOfNid l); else goto $id:(lblOfNid r); |]
 
 
    cg_define_atoms       = cg_def_atoms (Map.elems graph)
    cg_def_atoms [] m     = m
    cg_def_atoms (n:ns) m = cg_def_node n (cg_def_atoms ns m)
    cg_def_node (Node _nid nk)    = cg_def_nkind nk
-   cg_def_nkind CfgDone m        = m
-   cg_def_nkind (CfgLoop _n) m   = m
-   cg_def_nkind (CfgBranch {}) m = m
-   cg_def_nkind (CfgAction atoms _ _) m = cg_def_atoms' atoms m 
+   cg_def_nkind (AtomixState atoms _ _ _) m = cg_def_atoms' atoms m 
 
    cg_def_atoms' [] m = m
    cg_def_atoms' (a:as) m = cgDefAtom dfs queues a (cg_def_atoms' as m)

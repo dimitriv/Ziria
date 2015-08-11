@@ -47,9 +47,6 @@ import qualified Language.C.Syntax as C
 import Language.C.Quote.C
 import Data.Maybe
 
-import Text.PrettyPrint.HughesPJ
-
-
 import CgAtomix
 import AtomixCompTransform
 import AutomataModel
@@ -121,16 +118,8 @@ codeGenThread dflags tid c
           mkAtomixRuntime (Just ((getName dflags) ++ tid)) $ do
              sym <- getSymEnv
              (ac,rnst) <- cgIO $ zirToAtomZir dflags sym c
-             (automaton :: CfgAuto SymAtom Int) 
-                <- cgIO $ automatonPipeline dflags sym (bufty_ty bta) (bufty_ty btb) ac 
-             let atomPrinter = if isDynFlagSet dflags CLikeNames 
-                                  then (Just $ alphaNumStr . wiredAtomId)
-                                  else Nothing
-             dump dflags DumpAutomaton (".automaton.dump")
-                                       (text $ dotOfAuto dflags atomPrinter automaton)
-             let file idx = ".state" ++ show idx ++ ".dump"
-             let dumpState (idx,outp) = dump dflags DumpDependencyGraphs (file idx) (text outp)
-             mapM_ dumpState $ dotOfAxAuto dflags $ cfgToAtomix automaton
+             (automaton :: AxAuto SymAtom) 
+                <- cgIO $ automatonPipeline dflags sym (bufty_ty bta) (bufty_ty btb) ac
 
              cgAutomaton dflags rnst automaton
   
