@@ -6,7 +6,7 @@
 /* low-level Interface **********************************************/
 FORCE_INLINE char* advance_qptr(char* ptr, size_t n, queue* q) {
 	ptr += n * q->elem_size;
-	if (ptr >= q->buffer_end) {
+	if ((void *)ptr >= q->buffer_end) {
 		ptr -= q->capacity * q->elem_size;
 	}
 	return ptr;
@@ -88,7 +88,7 @@ void pushN(void* elems, size_t n, queue* q) {
 	}
 #endif
 
-	size_t can_write = ((char *) q->buffer_end - q->next_write) / q->elem_size;
+	size_t can_write = ((char *) q->buffer_end - (char *)q->next_write) / q->elem_size;
 	if (can_write >= n) {
 		memcpy(q->next_write, elems, n * q->elem_size);
 	}
@@ -131,7 +131,7 @@ void popN(void* elems, size_t n, queue* q) {
 	}
 #endif
 
-	size_t can_read = ((char *)q->buffer_end - q->next_read) / q->elem_size;
+	size_t can_read = ((char *)q->buffer_end - (char *)q->next_read) / q->elem_size;
 	if (can_read >= n) {
 		memcpy(elems, q->next_read, n * q->elem_size);
 	}
