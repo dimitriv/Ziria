@@ -1111,43 +1111,46 @@ cfgToAtomix a = a { auto_graph = state_graph} where
 
   fromCfg' nid pipes watoms (CfgAction was nxt pipes') nmap =
     -- left-biased union!
-    fromCfg' nid (Map.union pipes pipes') (watoms++was) (nodeKindOfId a nxt) nmap
+    fromCfg' nid (Map.unionWith const pipes pipes') (watoms++was) (nodeKindOfId a nxt) nmap
 
   fromCfg' nid pipes watoms (CfgDone pipes') nmap =
     let pipes'' = Map.unionWith const pipes pipes' in -- left-biased union
-    let nk = AtomixState watoms (mk_constraints pipes'' watoms Nothing) AtomixDone pipes'' in
+    let nk = AtomixState watoms (mk_constrs pipes'' watoms Nothing) AtomixDone pipes'' in
     return $ insertNk nid nk nmap
 
   fromCfg' nid pipes watoms (CfgLoop next pipes') nmap =
     let pipes'' = Map.unionWith const pipes pipes' in -- left-biased union
-    let nk = AtomixState watoms (mk_constraints pipes'' watoms Nothing) (AtomixLoop next) pipes'' in
+    let nk = AtomixState watoms (mk_constrs pipes'' watoms Nothing) (AtomixLoop next) pipes'' in
     fromCfg next $ insertNk nid nk nmap
 
   fromCfg' nid pipes watoms (CfgBranch x left right is_while pipes') nmap =
     let pipes'' = Map.unionWith const pipes pipes' in -- left-biased union
-    let constrs = mk_constraints pipes'' watoms (Just x) in
+    let constrs = mk_constrs pipes'' watoms (Just x) in
     let nk = AtomixState watoms constrs (AtomixBranch x left right) pipes'' in
     fromCfg left =<< fromCfg right (insertNk nid nk nmap)
 
+  mk_constrs = mk_constraints (auto_inchan a) (auto_outchan a)
 
 
 
 -- queue dependency environment
 type QDependencyEnv = Map Chan (Int,Queue Int, Int) -- last read/queue of active writes (of cardinality one) from/to channel plus last writer to this queue
 -- variable dependency environment
-type VDependencyEnv = Map Chan (Maybe Int, Maybe Int) -- last read/write
+type VDependencyEnv = Map Chan (Int, Int) -- last read/write
 type PipeBalances = Map Chan Int
 
 type Acc = (QDependencyEnv, VDependencyEnv, [(Int,Int,Dependency)])
 
-mk_constraints :: forall e. Map Chan Int -> [WiredAtom e] -> Maybe Chan -> Map (Int,Int) [Dependency]
-mk_constraints _ [] _ = Map.empty
-mk_constraints pipes watoms mb_decision 
+mk_constraints :: forall e. Chan -> Chan -> Map Chan Int -> [WiredAtom e] -> Maybe Chan -> Map (Int,Int) [Dependency]
+mk_constraints _ _ _ [] _ = Map.empty
+mk_constraints in_ch out_ch pipes watoms mb_decision 
   = trans_reduction $ go_decision mb_decision $ foldl go_watom (qenv0, venv0, []) (zip watoms [0..]) where
 
     -- queue and variable dependency environments
     qenv0 :: QDependencyEnv
-    qenv0 = Map.map (\n -> (-1, replicate n (-1), -1)) pipes
+    qenv0 = Map.insert in_ch (-1, undefined, undefined) $
+            Map.insert out_ch (undefined, undefined, -1) $
+            Map.map (\n -> (-1, replicate n (-1), -1)) pipes
     venv0 :: VDependencyEnv
     venv0 = Map.empty
 
@@ -1159,19 +1162,24 @@ mk_constraints pipes watoms mb_decision
 
     go_inwires :: Int -> Acc -> (Int, Chan) -> Acc
 
+    -- reading from global src buffer
+    go_inwires idx (qenv, venv, constrs) (n,ch) | ch == in_ch, Just (last_r,_,_) <- Map.lookup ch qenv =
+      let qenv' = Map.insert ch (idx,undefined,undefined) qenv in
+      let constrs' = (last_r,idx,CC) : constrs in
+      (qenv', venv, constrs')
+
     -- reading from queue
     go_inwires idx (qenv, venv, constrs) (n,ch) | Just (last_r,last_wrs, last_w) <- Map.lookup ch qenv =
       let Just (producers, last_wrs') = popN n last_wrs in
       let qenv' = Map.insert ch (idx,last_wrs',last_w) qenv in
-      let constrs' = (if last_r >= 0 then ((last_r,idx,CC):) else id) $
-                     [(wr,idx,PC) | wr <- producers] ++ constrs in
+      let constrs' = (last_r,idx,CC) : [(wr,idx,PC) | wr <- producers] ++ constrs in
       (qenv', venv, constrs')
 
     -- reading from variable
     go_inwires idx (qenv, venv, constrs) (1,ch) =
-      let (mb_last_r,mb_last_wr) = Map.findWithDefault (Nothing,Nothing) ch venv in
-      let venv' = Map.insert ch (Just idx, mb_last_wr) venv in
-      let constrs' = maybe constrs (\last_wr -> (last_wr, idx, WR) : constrs) mb_last_wr in
+      let (_, last_wr) = Map.findWithDefault (-1,-1) ch venv in
+      let venv' = Map.insert ch (idx, last_wr) venv in
+      let constrs' = (last_wr, idx, WR) : constrs in
       (qenv, venv', constrs')
 
     go_inwires _ _ _ = panicStr "mk_constraints: unexpected case"
@@ -1179,22 +1187,24 @@ mk_constraints pipes watoms mb_decision
 
     go_outwires :: Int -> Acc -> (Int,Chan) -> Acc
 
+
+    -- writing to global dst buffer
+    go_outwires idx (qenv, venv, constrs) (n,ch) | ch == out_ch, Just (_,_,last_w) <- Map.lookup ch qenv =
+      let qenv' = Map.insert ch (undefined,undefined,idx) qenv in
+      let constrs' = (last_w,idx,PP):constrs in
+      (qenv', venv, constrs')
+
     -- writing to queue
     go_outwires idx (qenv, venv, constrs) (n,ch) | Just (last_r, last_wrs, last_w) <- Map.lookup ch qenv =
-      let wr = maybe last_w id (peek last_wrs) in
-             -- It is possible to have nothing in the queue (so peek last_wrs may be Nothing) but at some point
-             -- in the past we already wrote to this queue (last_w) (and someone consumed the data before we reach here).
-
-      let qenv' = Map.adjust (\(last_r,last_wrs,_last_w) -> (last_r, iterate (push idx) last_wrs !! n,idx)) ch qenv in
-      let constrs' = (wr,idx,PP):constrs in
+      let qenv' = Map.insert ch (last_r, iterate (push idx) last_wrs !! n,idx) qenv in
+      let constrs' = (last_w,idx,PP):constrs in
       (qenv', venv, constrs')
 
     -- writing to variable
     go_outwires idx (qenv, venv, constrs) (1,ch) =
-      let (mb_last_r,mb_last_wr) = Map.findWithDefault (Nothing,Nothing) ch venv in
-      let venv' = Map.insert ch (mb_last_r, Just idx) venv in
-      let constrs' = [ (r,idx,RW) | Just r <- [mb_last_r]  ] ++
-                     [ (w,idx,WW) | Just w <- [mb_last_wr] ] ++ constrs in
+      let (last_r,last_w) = Map.findWithDefault (-1,-1) ch venv in
+      let venv' = Map.insert ch (last_r, idx) venv in
+      let constrs' = (last_w,idx,WW) : (last_r,idx,RW) : constrs in
       (qenv, venv', constrs')
 
     go_outwires _ _ _ = panicStr "mk_constraints: unexpected case"
@@ -1202,17 +1212,14 @@ mk_constraints pipes watoms mb_decision
 
     go_decision :: Maybe Chan -> Acc -> Map (Int,Int) [Dependency]
 
-    go_decision mb_decision (qenv, venv, constrs) =
-      let dec_constr = maybeToList $ do
-          dec <- mb_decision
-          (_mb_last_r,mb_last_wr) <- Map.lookup dec venv
-          last_wr <- mb_last_wr
-          return (last_wr,length watoms,WR)
+    go_decision mb_decision acc =
+      let (_qenv, _venv, constrs) = maybe acc (\dec -> go_inwires (length watoms) acc (1,dec)) mb_decision
       in Map.fromList $
          map ( \group -> (fst $ head $ group, List.nub $ map snd $ group) ) $
          List.groupBy ((==) `on` fst) $
+         List.sortBy (compare `on` fst) $
          map ( \(a,b,c) -> ((a,b),c) ) $
-         dec_constr ++ constrs
+         constrs
 
 
 -- Naive transitivity-reduction (i.e. removal of transitive edges)
