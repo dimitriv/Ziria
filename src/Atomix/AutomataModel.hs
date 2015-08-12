@@ -1273,8 +1273,9 @@ stateWiseScheduler :: forall e. Atom e => (AtomixNk e Int -> AtomixNk e Int) -> 
 stateWiseScheduler scheduler a = a { auto_graph = Map.map schedule $ auto_graph a }
   where schedule (Node nid nk) = Node nid (scheduler nk)
 
-componentScheduler :: forall e. Atom e => Int -> AxAuto e -> AxAuto e
-componentScheduler maxCores = stateWiseScheduler (compSched maxCores)
+componentScheduler :: forall e. Atom e => DynFlags -> AxAuto e -> AxAuto e
+componentScheduler dfs = stateWiseScheduler (compSched maxCores)
+  where maxCores = getNoAtomThreads dfs
 
 compSched maxCores (AtomixState watoms cstrs d pipes) = AtomixState watoms' cstrs d pipes where
   -- initially, one equivalence class per atom + decision
@@ -1473,7 +1474,7 @@ automatonPipeline dfs sym inty outty acomp = do
   putStrLn $ "<<<<<<<<<<< cfgToAtomix (" ++ show (size a_a) ++ " states)"
 
   putStrLn ">>>>>>>>>>> componentScheduler"
-  let a_s = componentScheduler 4 a_a
+  let a_s = componentScheduler dfs a_a
   putStrLn $ "<<<<<<<<<<< componentScheduler (" ++ show (size a_s) ++ " states)"
 
   putStrLn "<<<<<<<<<<< COMPLETED AUTOMATON CONSTRUCTION\n"
