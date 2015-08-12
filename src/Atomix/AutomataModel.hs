@@ -24,7 +24,7 @@ import AtomixCompTransform ( freshName, freshNameDoc )
 import qualified GenSym as GS
 
 import Utils(panicStr)
-import Control.Applicative ( (<$>) )
+import Control.Applicative ( (<$>), liftA2 )
 
 import Outputable
 import qualified Text.PrettyPrint.HughesPJ as PPR
@@ -76,6 +76,7 @@ class (Show a, Eq a) => Atom a where
 
   -- label atoms with core ids
   setCore :: Int -> a -> a
+  getCore :: a -> Maybe Int
 
   -- Constructors of atoms
   discardAtom  :: AId -> (Int,Ty) -> a
@@ -1093,6 +1094,8 @@ fuseActions dfs auto = auto { auto_graph = fused_graph }
 
 
 
+
+
 {------------------------------------------------------------------------
   Building constraint graph from Control flow graph
 ------------------------------------------------------------------------}
@@ -1256,6 +1259,66 @@ trans_reduction mp = foldl (flip Map.delete) mp redundant
 
 
 
+
+
+
+
+
+{------------------------------------------------------------------------
+  Automaton Scheduling
+------------------------------------------------------------------------}
+
+
+stateWiseScheduler :: forall e. Atom e => (AtomixNk e Int -> AtomixNk e Int) -> AxAuto e -> AxAuto e
+stateWiseScheduler scheduler a = a { auto_graph = Map.map schedule $ auto_graph a }
+  where schedule (Node nid nk) = Node nid (scheduler nk)
+
+componentScheduler :: forall e. Atom e => AxAuto e -> AxAuto e
+componentScheduler = stateWiseScheduler compSched
+
+compSched (AtomixState watoms cstrs d pipes) = AtomixState watoms' cstrs d pipes where
+  -- initially, one equivalence class per atom + decision
+  init_partition :: Partition Int
+  init_partition = map Set.singleton [0..(length watoms)]
+
+  -- connected components: join partitions of x and y iff there is an edge x->y
+  components :: Partition Int
+  components = foldl (flip $ uncurry $ union) init_partition $
+               filter ((/= -1) . fst) $ Map.keys cstrs
+
+  watoms' = map (lblWAtom $ zip components [1..]) (zip watoms [0..])
+
+  lblWAtom comps (wa,aid) =
+    case List.find (Set.member aid . fst) comps of
+      Just (_,cid) -> wa { the_atom = setCore cid $ the_atom wa }
+      Nothing -> panicStr "componentScheduler: bug in implementation!"
+
+
+-- extremely naive union-find, but probably fast enough
+type Partition a = [EqClass a]
+type EqClass a = Set a
+
+union :: (Ord a, Show a) => a -> a -> Partition a -> Partition a
+union x y partition =
+  let (p1', eqc_x:p2') = break (Set.member x) partition in
+  let (p1,p2) = liftA2 (++) (break (Set.member y) p1') (break (Set.member y) p2') in
+  case p2 of
+    -- x and y are already in the same equivalence class
+    [] -> assert (Set.member y eqc_x) $ eqc_x : p1
+    -- merge x and y's equivalence classes
+    eqc_y:p2 -> (Set.union eqc_x eqc_y) : p1 ++ p2
+
+
+
+
+
+
+
+
+
+
+
+
 {------------------------------------------------------------------------
   Automaton to DOT file translation
 ------------------------------------------------------------------------}
@@ -1340,7 +1403,9 @@ dotOfAxAuto dflags a = map (\(nid,state) -> (nid, dotify state)) $ Map.toList $ 
   mk_atom aid inw outw atom = List.intercalate "\\l" $ 
                                aid :
                                map ((" IN: " ++) . showChan True . snd) inw ++
-                               map (("OUT: " ++) . showChan True . snd) outw ++ [""]
+                               map (("OUT: " ++) . showChan True . snd) outw ++ 
+                               ["CORE: " ++ (show $ getCore atom)] ++ 
+                               [""] -- necessary for proper printing
   
   mk_decision dec idx = "  " ++ show idx ++ "[label=\"" ++ show dec ++ "\"]"
 
@@ -1395,14 +1460,18 @@ automatonPipeline dfs sym inty outty acomp = do
   let a_a = cfgToAtomix a_n
   putStrLn $ "<<<<<<<<<<< cfgToAtomix (" ++ show (size a_a) ++ " states)"
 
+  putStrLn ">>>>>>>>>>> componentScheduler"
+  let a_s = componentScheduler a_a
+  putStrLn $ "<<<<<<<<<<< componentScheduler (" ++ show (size a_s) ++ " states)"
+
   putStrLn "<<<<<<<<<<< COMPLETED AUTOMATON CONSTRUCTION\n"
 
 
   -- dump dot files 
   dump dfs DumpAutomaton (".automaton.dump") (PPR.text $ dotOfAuto dfs a_n)
-  mapM_ dumpState $ dotOfAxAuto dfs a_a 
+  mapM_ dumpState $ dotOfAxAuto dfs a_s
     
-  return a_a
+  return a_s
 
   where dumpState (idx,outp) = dump dfs DumpDependencyGraphs (file idx) (PPR.text outp)
         file idx = ".state" ++ show idx ++ ".dump"         

@@ -84,6 +84,7 @@ instance Atom SymAtom where
     SAClear _        -> []
 
   setCore coreId sa = SymAtom (Just coreId) (atom_kind sa)
+  getCore = atom_core
 
   castAtom eid in_t out_t = SymAtom Nothing $ SACast eid in_t out_t
   discardAtom eid ty = SymAtom Nothing $ SADiscard eid ty
@@ -104,15 +105,15 @@ instance Atom SymAtom where
         wires_in  = map (1,) (aexp_ivs e)
       , wires_out = map (1,) (maybeToList mb_out ++ aexp_ovs e)
       , the_atom  = SymAtom Nothing $
-          case (unExp body,mb_out) of 
-            (EVar x, Just retvar) 
+          case (unExp body,mb_out) of
+            (EVar x, Just retvar)
                -> SACast (aexp_lbl e) (1,nameTyp x) (1,nameTyp x)
-            (_, Nothing) 
+            (_, Nothing)
                -> SAExp e { aexp_exp = eSeq loc body (eVal loc TUnit VUnit)
                           , aexp_ret = TUnit }
             (_, Just retvar)
                -> SAExp e { aexp_exp = eAssign loc (eVar loc retvar) body
-                          , aexp_ovs = retvar : aexp_ovs e 
+                          , aexp_ovs = retvar : aexp_ovs e
                           , aexp_ret = TUnit }
       }
 
@@ -120,7 +121,7 @@ instance Atom SymAtom where
 
 -- | The unique identifier of an atom
 wired_atom_id :: WiredAtom SymAtom -> String
-wired_atom_id (WiredAtom win _wout the_atom) = case atom_kind the_atom of 
+wired_atom_id (WiredAtom win _wout the_atom) = case atom_kind the_atom of
   SACast s _ _      -> "cast" ++ "$" ++ s
   SADiscard s _     -> "disc" ++ "$" ++ s
   SAExp ae          -> "aexp" ++ "$" ++ aexp_lbl ae
