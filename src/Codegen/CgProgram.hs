@@ -129,45 +129,19 @@ codeGenThread dflags tid c
 
 
 codeGenThreadAtomix :: DynFlags
-                    -> String  -- thread id
-                    -> Int     -- atomix thread id (used only in atomix) -- TODO: change thread id to Int and unify
-                    -> Comp    -- computation (split) to be compiled
-                               -- already including the right read/write buffers
-                    -> Cg ()
-codeGenThreadAtomix dflags tid atid c
+                    -> QueueInfo -- Queues
+                    -> Int       -- atomix thread id (used only in atomix) -- TODO: change thread id to Int and unify
+                    -> AxAuto SymAtom
+                    -> Cg CLabel
+codeGenThreadAtomix dflags queues atid automaton
   | isDynFlagSet dflags Pipeline
   = fail "AtomixCodeGen cannot be used simultaneously with Pipeline!"
   | otherwise -- Atomix case
-  = do (_maybe_tv, ta, tb) <- checkCompType (ctComp c)
-       (bta, btb) <- checkInOutFiles ta tb
-       cgIO $ putStrLn ""
+  = do cgIO $ putStrLn ""
        cgIO $ putStrLn (" **** Creating thread " ++ show atid)
        cgIO $ putStrLn ""
-       withThreadId tid $ do
-          mkAtomixRuntime (Just ((getName dflags) ++ tid)) $ do
-             sym <- getSymEnv
-             (ac,rnst) <- cgIO $ zirToAtomZir dflags sym c
-             (automaton :: AxAuto SymAtom) 
-                <- cgIO $ automatonPipeline dflags sym (bufty_ty bta) (bufty_ty btb) ac
-
-             let queues = extractQueues automaton
-             cgAutomatonDeclareAllGlobals dflags rnst queues automaton  $ cgAutomaton dflags queues automaton
+       cgAutomaton dflags queues automaton
   
-  where
-    checkInOutFiles :: Ty -> Ty -> Cg (BufTy, BufTy)
-    checkInOutFiles (TBuff bta) (TBuff btb) = return (bta, btb)
-    checkInOutFiles _tin _tout =
-        fail $ "Missing read/write? Can't determine input or output type(s)."
-
-    checkCompType :: CTy -> Cg (Maybe Ty, Ty, Ty)
-    checkCompType (CTComp tv ta tb) = return (Just tv, ta, tb)
-    checkCompType (CTTrans ta tb)   = return (Nothing, ta, tb)
-    checkCompType _ = do
-        fail $ "CodeGen error, the type of:\n"
-                ++ show c ++ "\n" ++
-                "is: " ++ show (compInfo c) ++ "\n" ++
-                "but should be a fully applied computation type.\n" ++
-                "At location: " ++ (displayLoc . locOf . compLoc) c
 
 
 
@@ -218,11 +192,22 @@ codeGenProgram dflags shared_ctxt
   | [(_, c)] <- tid_cs
   = withModuleName module_name $
     do { codeGenContexts >>= appendTopDecls
+       ; (_maybe_tv, ta, tb) <- checkCompType (ctComp c)
+       ; (bta, btb) <- checkInOutFiles ta tb
        ; (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
-           if no_threads > 1 then 
-             -- Multi-threaded case
-             do { forM_ (interval (no_threads - 1)) $ \atid -> codeGenThreadAtomix dflags ("thread" ++ show atid) atid c
-                ; do { -- Just to make the SORA code happy we need
+         withThreadId "" $ do
+           sym <- getSymEnv
+           (ac,rnst) <- cgIO $ zirToAtomZir dflags sym c
+           (automaton :: AxAuto SymAtom) 
+                 <- cgIO $ automatonPipeline dflags sym (bufty_ty bta) (bufty_ty btb) ac
+           let queues = (extractQueues automaton)
+           cgAutomatonDeclareAllGlobals dflags rnst queues automaton  $ 
+             if no_threads > 1 then 
+               -- Multi-threaded case
+               do { forM_ (interval (no_threads - 1)) $ \atid -> 
+                      mkAtomixRuntime (Just ((getName dflags) ++ "thread" ++ show atid)) $
+                      codeGenThreadAtomix dflags queues atid automaton
+                  ; do { -- Just to make the SORA code happy we need
                        -- to implement a dummy wpl_go
                        -- In reality the set_up_threads() function uses
                        -- thread0,thread1,...
@@ -233,16 +218,18 @@ codeGenProgram dflags shared_ctxt
                        -- Emit the appropriate wpl_set_up_threads()
                        -- definition for SORA code to work
                      ; appendTopDefs $
-                       ST.thread_setup affinity_mask module_name bufTys tids
+                       -- ST.thread_setup affinity_mask module_name bufTys tids
+                       ST.thread_setup_atomix affinity_mask module_name no_threads
                      }
-                }
-           else
-             -- Single-threaded case
-             do { codeGenThreadAtomix dflags ("") 0 c
+                  }
+             else
+               -- Single-threaded case
+               do { mkAtomixRuntime (Just ((getName dflags))) $
+                    codeGenThreadAtomix dflags queues 0 automaton
                    -- In this case we know that wpl_go /is/ going to be
                    -- the main function
-                ;  appendTopDefs $ ST.thread_setup_shim module_name
-                }
+                  ;  appendTopDefs $ ST.thread_setup_shim module_name
+                  }
           -- Emit buf init and fins (once all C types are defined)
        ; cgExtBufInitsAndFins (in_ty,yld_ty) (getName dflags)
           -- Finally emit wpl_global_init()
@@ -264,3 +251,19 @@ codeGenProgram dflags shared_ctxt
     interval  0     = [0]
     interval  e     = (interval (e-1)) ++ [e]
 
+    checkInOutFiles :: Ty -> Ty -> Cg (BufTy, BufTy)
+    checkInOutFiles (TBuff bta) (TBuff btb) = return (bta, btb)
+    checkInOutFiles _tin _tout =
+        fail $ "Missing read/write? Can't determine input or output type(s)."
+
+    checkCompType :: CTy -> Cg (Maybe Ty, Ty, Ty)
+    checkCompType (CTComp tv ta tb) = return (Just tv, ta, tb)
+    checkCompType (CTTrans ta tb)   = return (Nothing, ta, tb)
+    checkCompType _ = do
+          fail $ "CodeGen error, the type should be TBuff"
+-- TBD: Fix the scope of c and reenable the error message
+--        fail $ "CodeGen error, the type of:\n"
+--                ++ show c ++ "\n" ++
+--                "is: " ++ show (compInfo c) ++ "\n" ++
+--                "but should be a fully applied computation type.\n" ++
+--                "At location: " ++ (displayLoc . locOf . compLoc) c

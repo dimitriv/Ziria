@@ -18,7 +18,7 @@
 -}
 {-# LANGUAGE  QuasiQuotes #-}
 
-module CgSetupThreads ( thread_setup, thread_setup_shim ) where
+module CgSetupThreads ( thread_setup, thread_setup_atomix, thread_setup_shim ) where
 
 import AstExpr
 import AstComp
@@ -119,6 +119,51 @@ thread_setup affinity_mask name buf_tys tids
                    } 
           |] : []
         h _ _ = error "Error: CgSetupThreads: internal code generation error!"
+
+
+
+thread_setup_atomix :: Int      -- affinity mask
+                    -> String   -- name of the Ziria module
+                    -> Int      -- number of threads
+                    -> [C.Definition]                
+thread_setup_atomix affinity_mask name nthr
+  = defsPkg
+  where thread_name = "wpl_set_up_threads" ++ name
+        defsPkg  = thread_wrappers
+                   ++ [[cedecl| int $id:(thread_name) (typename PSORA_UTHREAD_PROC * User_Routines) {
+                                 typename HANDLE procHdl = GetCurrentProcess();
+                                 typename DWORD_PTR affinityMask = $int:affinity_mask;
+                                 SetProcessAffinityMask(procHdl, affinityMask);
+                                 $stms:(user_routines (nthr-1))
+                                 return ($int:nthr);
+                               } 
+                      |]]
+
+
+
+
+        -- initialize User_Routines buffer
+        user_routines :: Int -> [C.Stm]
+        user_routines (-1) = []
+        user_routines ii = [[cstm|User_Routines[$id:(show ii)] = $id:("__gothread" ++ show ii);|]] ++ 
+                          (user_routines (ii - 1))
+
+
+        thread_wrappers = h (nthr - 1)
+        h :: Int -> [C.Definition]
+        h (-1) = []
+        h i = 
+          [[cedecl| typename BOOLEAN ($id:("__gothread" ++ show i))(void * pParam) {
+	             thread_info *ti; 
+                     ti = (typename thread_info *)pParam; 
+
+	             printf("Standalone thread (%s) ID: %u\n", $string:(show i), GetCurrentThreadId());
+
+                     ($id:("wpl_gothread" ++ show i))();
+ 	             (ti->fRunning) = 0;
+	             return 0;
+                   } 
+          |]] ++ (h (i-1))
 
 
 

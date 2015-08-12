@@ -192,8 +192,8 @@ cgAutomatonDeclareAllGlobals :: DynFlags
             -> RnSt                 -- ^ Records all variables (but no queues)
             -> QueueInfo            -- ^ Queues
             -> AxAuto SymAtom       -- ^ The automaton
-            -> Cg CLabel
-            -> Cg CLabel
+            -> Cg ()
+            -> Cg ()
 cgAutomatonDeclareAllGlobals dfs 
                              st 
                              queues
