@@ -1273,18 +1273,30 @@ stateWiseScheduler :: forall e. Atom e => (AtomixNk e Int -> AtomixNk e Int) -> 
 stateWiseScheduler scheduler a = a { auto_graph = Map.map schedule $ auto_graph a }
   where schedule (Node nid nk) = Node nid (scheduler nk)
 
-componentScheduler :: forall e. Atom e => AxAuto e -> AxAuto e
-componentScheduler = stateWiseScheduler compSched
+componentScheduler :: forall e. Atom e => Int -> AxAuto e -> AxAuto e
+componentScheduler maxCores = stateWiseScheduler (compSched maxCores)
 
-compSched (AtomixState watoms cstrs d pipes) = AtomixState watoms' cstrs d pipes where
+compSched maxCores (AtomixState watoms cstrs d pipes) = AtomixState watoms' cstrs d pipes where
   -- initially, one equivalence class per atom + decision
   init_partition :: Partition Int
   init_partition = map Set.singleton [0..(length watoms)]
 
   -- connected components: join partitions of x and y iff there is an edge x->y
   components :: Partition Int
-  components = foldl (flip $ uncurry $ union) init_partition $
+  components = merge $
+               foldl (flip $ uncurry $ union) init_partition $
                filter ((/= -1) . fst) $ Map.keys cstrs
+
+  -- if the number of components is greate than maxCores, iteratively
+  -- merge the smallest two components (length components - maxCores) times
+  merge :: Partition Int -> Partition Int
+  merge comps 
+    | let n = length comps - maxCores, n > 0
+    = iterate merge' (List.sortBy (compare `on` Set.size) comps) !! n
+    | otherwise = comps
+    where merge' (a:b:cs) = List.sortBy (compare `on` Set.size) $ 
+                            (Set.union a b) : cs
+          merge' _ = panicStr "componentScheduler: bug in implementation!"
 
   watoms' = map (lblWAtom $ zip components [1..]) (zip watoms [0..])
 
@@ -1461,7 +1473,7 @@ automatonPipeline dfs sym inty outty acomp = do
   putStrLn $ "<<<<<<<<<<< cfgToAtomix (" ++ show (size a_a) ++ " states)"
 
   putStrLn ">>>>>>>>>>> componentScheduler"
-  let a_s = componentScheduler a_a
+  let a_s = componentScheduler 4 a_a
   putStrLn $ "<<<<<<<<<<< componentScheduler (" ++ show (size a_s) ++ " states)"
 
   putStrLn "<<<<<<<<<<< COMPLETED AUTOMATON CONSTRUCTION\n"
