@@ -74,6 +74,9 @@ class (Show a, Eq a) => Atom a where
   atomInTy  :: a -> [(Int,Ty)]
   atomOutTy :: a -> [(Int,Ty)]
 
+  -- label atoms with core ids
+  setCore :: Int -> a -> a
+
   -- Constructors of atoms
   discardAtom  :: AId -> (Int,Ty) -> a
   castAtom     :: AId -> (Int,Ty) -> (Int,Ty) -> a
