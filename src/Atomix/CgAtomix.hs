@@ -187,6 +187,37 @@ extractQueues auto
                        m'   = max m cur'
                    in (cur',m')) ps
 
+
+cgAutomatonDeclareAllGlobals :: DynFlags 
+            -> RnSt                 -- ^ Records all variables (but no queues)
+            -> QueueInfo            -- ^ Queues
+            -> AxAuto SymAtom       -- ^ The automaton
+            -> Cg whatever
+            -> Cg whatever
+cgAutomatonDeclareAllGlobals dfs 
+                             st 
+                             queues
+                             (Automaton { auto_graph   = graph
+                                        , auto_start   = _ }) 
+                             automaton
+  = cgRnSt dfs st $ 
+    cgDeclQueues dfs queues $ 
+    cg_define_atoms automaton
+
+  where 
+
+   cg_define_atoms       = cg_def_atoms (Map.elems graph)
+   cg_def_atoms [] m     = m
+   cg_def_atoms (n:ns) m = cg_def_node n (cg_def_atoms ns m)
+   cg_def_node (Node _nid nk)    = cg_def_nkind nk
+   cg_def_nkind (AtomixState atoms _ _ _) m = cg_def_atoms' atoms m 
+
+   cg_def_atoms' [] m = m
+   cg_def_atoms' (a:as) m = cgDefAtom dfs queues a (cg_def_atoms' as m)
+
+
+
+
 -- | Main driver for code generation
 cgAutomaton :: DynFlags 
             -> RnSt                 -- ^ Records all variables (but no queues)
@@ -194,8 +225,9 @@ cgAutomaton :: DynFlags
             -> Cg CLabel            -- ^ Label of starting state we jump to
 cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
                                    , auto_start   = start })
-  = do { cgRnSt dfs st $ cgDeclQueues dfs queues (cg_define_atoms cg_automaton)
+  = do { cgAutomatonDeclareAllGlobals dfs st queues auto cg_automaton
        ; return (lblOfNid start) }
+
   where 
    queues = extractQueues auto
 
@@ -217,14 +249,6 @@ cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
      appendStmt [cstm| if ($cc) goto $id:(lblOfNid l); else goto $id:(lblOfNid r); |]
 
 
-   cg_define_atoms       = cg_def_atoms (Map.elems graph)
-   cg_def_atoms [] m     = m
-   cg_def_atoms (n:ns) m = cg_def_node n (cg_def_atoms ns m)
-   cg_def_node (Node _nid nk)    = cg_def_nkind nk
-   cg_def_nkind (AtomixState atoms _ _ _) m = cg_def_atoms' atoms m 
-
-   cg_def_atoms' [] m = m
-   cg_def_atoms' (a:as) m = cgDefAtom dfs queues a (cg_def_atoms' as m)
 
 {---------------------- Defining and calling an atom -------------------------}
 

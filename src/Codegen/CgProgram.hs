@@ -94,10 +94,11 @@ codeGenCompilerGlobals tid _tickHdl _procHdl mtv _ta _tb = do
 
 codeGenThread :: DynFlags
               -> String  -- thread id
+              -> Int     -- atomix thread id (used only in atomix) -- TODO: change thread id to Int and unify
               -> Comp    -- computation (split) to be compiled
                          -- already including the right read/write buffers
               -> Cg ()
-codeGenThread dflags tid c
+codeGenThread dflags tid atid c
   | not (isDynFlagSet dflags AtomixCodeGen)
   = do (maybe_tv, ta, tb) <- checkCompType (ctComp c)
        (_bta, _btb) <- checkInOutFiles ta tb
@@ -114,6 +115,9 @@ codeGenThread dflags tid c
   | otherwise -- Atomix case
   = do (_maybe_tv, ta, tb) <- checkCompType (ctComp c)
        (bta, btb) <- checkInOutFiles ta tb
+       cgIO $ putStrLn ""
+       cgIO $ putStrLn (" **** Creating thread " ++ show atid)
+       cgIO $ putStrLn ""
        withThreadId tid $ do
           mkAtomixRuntime (Just ((getName dflags) ++ tid)) $ do
              sym <- getSymEnv
@@ -148,10 +152,11 @@ codeGenProgram :: DynFlags                -- Flags
                -> Cg ()
 codeGenProgram dflags shared_ctxt
                tid_cs bufTys (in_ty,yld_ty)
+  | not (isDynFlagSet dflags AtomixCodeGen)
   = withModuleName module_name $
     do { codeGenContexts >>= appendTopDecls
        ; (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
-           do { forM_ tid_cs $ \(tid,c) -> codeGenThread dflags tid c
+           do { forM_ tid_cs $ \(tid,c) -> codeGenThread dflags tid 0 c
               ; if pipeline_flag then
                   do { -- Just to make the SORA code happy we need
                        -- to implement a dummy wpl_go
@@ -181,9 +186,56 @@ codeGenProgram dflags shared_ctxt
        ; codeGenWPLGlobalInit (allocation_stmts ++ lut_init_stms ++ moreinitstms) module_name
        }
 
+  | [(_, c)] <- tid_cs
+  = withModuleName module_name $
+    do { codeGenContexts >>= appendTopDecls
+       ; (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
+           if no_threads > 1 then 
+             do { forM_ (interval (no_threads - 1)) $ \atid -> codeGenThread dflags ("thread" ++ show atid) atid c
+                ; if pipeline_flag then
+                  do { -- Just to make the SORA code happy we need
+                       -- to implement a dummy wpl_go
+                       -- In reality the set_up_threads() function uses
+                       -- thread0,thread1,...
+                     ; let wpl_go_dummy_def
+                              = [cedecl| int wpl_go() { exit (-1); } |]
+                     ; appendTopDefs [wpl_go_dummy_def]
+
+                       -- Emit the appropriate wpl_set_up_threads()
+                       -- definition for SORA code to work
+                     ; appendTopDefs $
+                       ST.thread_setup affinity_mask module_name bufTys tids
+                     }
+                  else
+                     -- In this case we know that wpl_go /is/ going to be
+                     -- the main function
+                     appendTopDefs $ ST.thread_setup_shim module_name
+                }
+           else
+             -- Single-threaded case
+             do { codeGenThread dflags ("") 0 c
+                   -- In this case we know that wpl_go /is/ going to be
+                   -- the main function
+                ;  appendTopDefs $ ST.thread_setup_shim module_name
+                }
+          -- Emit buf init and fins (once all C types are defined)
+       ; cgExtBufInitsAndFins (in_ty,yld_ty) (getName dflags)
+          -- Finally emit wpl_global_init()
+       ; lut_init_stms <- getLUTHashes >>=
+                              (return . map (lgi_lut_gen . snd))
+
+       ; allocation_stmts <- getGlobalWplAllocated
+       ; codeGenWPLGlobalInit (allocation_stmts ++ lut_init_stms ++ moreinitstms) module_name
+       }
+  | otherwise
+  = fail "Atomix case with multiple pregenerated threads - should not happen"
+
   where
+    no_threads      = getNoAtomThreads dflags
     tids            = map fst tid_cs
     pipeline_flag   = isDynFlagSet dflags Pipeline
     affinity_mask   = getAffinityMask dflags
     module_name     = getName dflags
+    interval  0     = [0]
+    interval  e     = (interval (e-1)) ++ [e]
 

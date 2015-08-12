@@ -74,6 +74,7 @@ data DynFlag =
   | Optimism Int
   | FuseAggressively
   | CLikeNames
+  | NoAtomThreads Int
 
   | Vectorize
   | AutoLUT
@@ -187,10 +188,10 @@ options =
      , Option []    ["print-pipe-names"]  (NoArg PrintPipeNames) "show names of pipes in Automaton"
      , Option []    ["print-atoms"]  (NoArg PrintAtoms)        "print atoms in automaton-dump"
      , Option []    ["prune-incomplete-states"]  (NoArg PruneIncompleteStates) "prune automaton states that terminate with data still in the pipeline"
-     , Option []    ["optimism"]         (OptArg parseOptimism "INTEGER") "pipeline optimism"
-     , Option []    ["fuse-aggressively"] (NoArg FuseAggressively) "fuse atoms at the cost of duplicating code"
-     , Option []    ["c-like-names"]     (NoArg CLikeNames) "use same atom names as code generator"
-
+     , Option []    ["optimism"]         (OptArg parseOptimism "INTEGER")      "pipeline optimism"
+     , Option []    ["fuse-aggressively"] (NoArg FuseAggressively)             "fuse atoms at the cost of duplicating code"
+     , Option []    ["c-like-names"]     (NoArg CLikeNames)                    "use same atom names as code generator"
+     , Option []    ["no-atom-threads"]  (ReqArg parseNoAtomThreads "NO_THREADS")  "number of threads to be used for atom scheduling"
 
      , Option []    ["ddump-ast-pretty"] (NoArg DumpAstPretty) "dump the parsed AST (pretty-printed)"
      , Option []    ["vectorize"]        (NoArg Vectorize)     "vectorize program"
@@ -255,6 +256,9 @@ defaultMaxStkThreshold = cMAX_STACK_ALLOC
 defaultAffinityMask :: Int
 defaultAffinityMask = 255
 
+parseNoAtomThreads :: String -> DynFlag
+parseNoAtomThreads s = NoAtomThreads (read s)
+
 parseMaxLUTOpt :: String -> DynFlag
 parseMaxLUTOpt s =
     case reads s of
@@ -312,3 +316,10 @@ getOptimism dfs =
     [] -> defaultOptimism
     (Optimism optimism : _) -> optimism
     (_ : dfs) -> getOptimism dfs
+
+getNoAtomThreads :: DynFlags -> Int
+getNoAtomThreads opts = 
+  case opts of
+    [] -> 1
+    (NoAtomThreads x : _) -> x
+    (_ : opts') -> getNoAtomThreads opts'
