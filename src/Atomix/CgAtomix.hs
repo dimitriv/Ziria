@@ -258,7 +258,7 @@ cgDefAtom :: DynFlags
           -> Cg a
           -> Cg a
 cgDefAtom dfs qs w@(WiredAtom win wout the_atom)
-  = case the_atom of
+  = case atom_kind the_atom of
       SACast _ inty outty ->
         let inwire  = head win
             outwire = head wout

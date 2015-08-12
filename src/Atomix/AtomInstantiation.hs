@@ -18,21 +18,28 @@ import Text.PrettyPrint.HughesPJ
 
 import AstUnlabelled
 
-data SymAtom = SAExp (AExp ())
-             | SACast String (Int,Ty) (Int,Ty) 
-             | SADiscard String (Int,Ty)
-             | SAAssert Bool -- ^ assert true and assert false
-             | SARollback EId Int
-             | SAClear (Map EId Int)
+data SymAtom = SymAtom { atom_core :: Maybe Int
+                       , atom_kind :: SymAtomKind
+                       }
+  deriving Eq
+
+data SymAtomKind = SAExp (AExp ())
+                 | SACast String (Int,Ty) (Int,Ty)
+                 | SADiscard String (Int,Ty)
+                 | SAAssert Bool -- ^ assert true and assert false
+                 | SARollback EId Int
+                 | SAClear (Map EId Int)
   deriving Eq
 
 instance Outputable SymAtom where
+  ppr = ppr . atom_kind
+
+instance Outputable SymAtomKind where
   ppr (SAExp e) = ppr e
 
   ppr (SACast _ (n1,t1) (n2,t2)) 
     | t1 == t2  = assert (n1 == n2) (text "ID")
-    | otherwise 
-    = parens (pprTy n1 t1) <> text "-CAST-" <> parens (pprTy n2 t2)
+    | otherwise = parens (pprTy n1 t1) <> text "-CAST-" <> parens (pprTy n2 t2)
     where pprTy 1 t = ppr t
           pprTy n t = ppr n <> text "*" <> ppr t
 
@@ -48,7 +55,7 @@ instance Show SymAtom where
   show sa = render (pprShort sa)
 
 pprShort :: SymAtom -> Doc
-pprShort (SAExp e) =  pprFileLoc (aexp_lbl e)
+pprShort (SymAtom _ (SAExp e)) =  pprFileLoc (aexp_lbl e)
 pprShort sa = ppr sa
 
 pprFileLoc =
@@ -59,29 +66,33 @@ pprFileLoc =
 
 {--------------- Instantiation of Atom class -------------}
 
-
 instance Atom SymAtom where
-  atomInTy (SAExp e) = map ((1,) . nameTyp) (aexp_ivs e)
-  atomInTy (SACast _ inty _)  = [inty]
-  atomInTy (SADiscard _ inty) = [inty]
-  atomInTy (SAAssert _) = [(1,TBool)]
-  atomInTy (SARollback _ _) = []
-  atomInTy (SAClear pipes) = map (\(ch,n) -> (n, nameTyp ch)) $ Map.toList pipes
+  atomInTy sa = case atom_kind sa of
+    SAExp e          -> map ((1,) . nameTyp) (aexp_ivs e)
+    SACast _ inty _  -> [inty]
+    SADiscard _ inty -> [inty]
+    SAAssert _       -> [(1,TBool)]
+    SARollback _ _   -> []
+    SAClear pipes    -> map (\(ch,n) -> (n, nameTyp ch)) $ Map.toList pipes
 
-  atomOutTy (SAExp e) = map ((1,) . nameTyp) (aexp_ovs e)
-  atomOutTy (SACast _ _ outty) = [outty]
-  atomOutTy (SADiscard _ _)    = []
-  atomOutTy (SAAssert _) = []
-  atomOutTy (SARollback q n) = [(n,nameTyp q)]
-  atomOutTy (SAClear _) = []
+  atomOutTy sa = case atom_kind sa of
+    SAExp e          -> map ((1,) . nameTyp) (aexp_ovs e)
+    SACast _ _ outty -> [outty]
+    SADiscard _ _    -> []
+    SAAssert _       -> []
+    SARollback q n   -> [(n,nameTyp q)]
+    SAClear _        -> []
 
-  castAtom    = SACast
-  discardAtom = SADiscard
-  assertAtom = SAAssert
-  rollbackAtom = SARollback
-  clearAtom = SAClear
+  setCore coreId sa = SymAtom (Just coreId) (atom_kind sa)
+  getCore = atom_core
 
-  isRollbackAtom (SARollback q n) = Just (n,q)
+  castAtom eid in_t out_t = SymAtom Nothing $ SACast eid in_t out_t
+  discardAtom eid ty = SymAtom Nothing $ SADiscard eid ty
+  assertAtom = SymAtom Nothing . SAAssert
+  rollbackAtom ch n = SymAtom Nothing $ SARollback ch n
+  clearAtom = SymAtom Nothing . SAClear
+
+  isRollbackAtom (SymAtom _ (SARollback q n)) = Just (n,q)
   isRollbackAtom _ = Nothing
 
   wiredAtomId = wired_atom_id
@@ -93,24 +104,24 @@ instance Atom SymAtom where
     in WiredAtom { 
         wires_in  = map (1,) (aexp_ivs e)
       , wires_out = map (1,) (maybeToList mb_out ++ aexp_ovs e)
-      , the_atom  = 
-            case (unExp body,mb_out) of 
-              (EVar x, Just retvar) 
-                 -> SACast (aexp_lbl e) (1,nameTyp x) (1,nameTyp x)
-              (_, Nothing) 
-                 -> SAExp e { aexp_exp = eSeq loc body (eVal loc TUnit VUnit)
-                            , aexp_ret = TUnit }
-              (_, Just retvar)
-                 -> SAExp e { aexp_exp = eAssign loc (eVar loc retvar) body
-                            , aexp_ovs = retvar : aexp_ovs e 
-                            , aexp_ret = TUnit }
+      , the_atom  = SymAtom Nothing $
+          case (unExp body,mb_out) of
+            (EVar x, Just retvar)
+               -> SACast (aexp_lbl e) (1,nameTyp x) (1,nameTyp x)
+            (_, Nothing)
+               -> SAExp e { aexp_exp = eSeq loc body (eVal loc TUnit VUnit)
+                          , aexp_ret = TUnit }
+            (_, Just retvar)
+               -> SAExp e { aexp_exp = eAssign loc (eVar loc retvar) body
+                          , aexp_ovs = retvar : aexp_ovs e
+                          , aexp_ret = TUnit }
       }
 
 
 
 -- | The unique identifier of an atom
 wired_atom_id :: WiredAtom SymAtom -> String
-wired_atom_id (WiredAtom win _wout the_atom) = case the_atom of 
+wired_atom_id (WiredAtom win _wout the_atom) = case atom_kind the_atom of
   SACast s _ _      -> "cast" ++ "$" ++ s
   SADiscard s _     -> "disc" ++ "$" ++ s
   SAExp ae          -> "aexp" ++ "$" ++ aexp_lbl ae
