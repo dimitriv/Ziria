@@ -1,0 +1,18 @@
+fun comp t1() {
+  repeat {
+    x<-take;
+    if (x % 2 == 0) then 
+      emit x+1;
+  }
+}
+
+
+fun comp t2() {
+  repeat {
+    x<-take;
+    emit x+1;
+  }
+}
+
+let comp main = read[int] >>> t1() >>> t2() >>> write[int]
+
