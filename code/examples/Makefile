@@ -27,7 +27,7 @@
 #
 # COMPILER?=winddk
 #
-COMPILER?=gcc
+COMPILER?=vs
 
 #PP   = ../../scripts/preprocesscompile-$(COMPILER)-inline.sh
 PP   = ../../scripts/preprocesscompile-$(COMPILER).sh

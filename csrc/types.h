@@ -72,6 +72,11 @@ typedef unsigned long long int uint64;
 //typedef intptr_t memsize_int;
 typedef unsigned long long int memsize_int;
 
+
+// This should create aligned static allocation
+// TODO: Figure out how to do this in gcc. For now empty
+#define MEM_ALIGN(n) 
+
 #endif
 
 

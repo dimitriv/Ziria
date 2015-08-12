@@ -194,6 +194,7 @@
     <ClInclude Include="..\bit.h" />
     <ClInclude Include="..\bladerf_radio.h" />
     <ClInclude Include="..\buf.h" />
+    <ClInclude Include="..\common.h" />
     <ClInclude Include="..\ext_arr.h" />
     <ClInclude Include="..\ext_math.h" />
     <ClInclude Include="..\numerics.h" />

@@ -18,7 +18,7 @@
 */
 #pragma once 
 
-#include<sora.h>
+//#include<sora.h>
 
 
 
@@ -82,7 +82,7 @@ void ts_free();
 
 #define ST_CACHE_LINE	64
 
-struct ts_context
+typedef struct 
 {
 	// All pointers are char to facilitate pointer arithmetics
 	MEM_ALIGN(ST_CACHE_LINE) char *buf;
@@ -98,7 +98,7 @@ struct ts_context
 	MEM_ALIGN(ST_CACHE_LINE) volatile bool evProcessDone;
 
 	MEM_ALIGN(ST_CACHE_LINE) int queue_size;
-};
+} ts_context;
 
 
 

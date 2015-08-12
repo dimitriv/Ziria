@@ -17,8 +17,10 @@
    permissions and limitations under the License.
 */
 #include <const.h>
-#include <sora.h>
-#include "sora_threads.h"
+#include <stdlib.h>
+#include <stdio.h>
+//#include <sora.h>
+//#include "sora_threads.h"
 #include "sora_thread_queues.h"
 #include "bit.h"
 
