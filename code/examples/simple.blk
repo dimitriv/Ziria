@@ -14,5 +14,5 @@ fun comp t2() {
   }
 }
 
-let comp main = read[int] >>> t1() >>> t2() >>> write[int]
+let comp main = read[int] >>> t1() |>>>| t2() >>> write[int]
 
