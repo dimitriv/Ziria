@@ -150,7 +150,8 @@ codeGenThreadAtomix dflags tid atid c
              (automaton :: AxAuto SymAtom) 
                 <- cgIO $ automatonPipeline dflags sym (bufty_ty bta) (bufty_ty btb) ac
 
-             cgAutomaton dflags rnst automaton
+             let queues = extractQueues automaton
+             cgAutomatonDeclareAllGlobals dflags rnst queues automaton  $ cgAutomaton dflags queues automaton
   
   where
     checkInOutFiles :: Ty -> Ty -> Cg (BufTy, BufTy)

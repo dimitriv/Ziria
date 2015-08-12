@@ -192,8 +192,8 @@ cgAutomatonDeclareAllGlobals :: DynFlags
             -> RnSt                 -- ^ Records all variables (but no queues)
             -> QueueInfo            -- ^ Queues
             -> AxAuto SymAtom       -- ^ The automaton
-            -> Cg whatever
-            -> Cg whatever
+            -> Cg CLabel
+            -> Cg CLabel
 cgAutomatonDeclareAllGlobals dfs 
                              st 
                              queues
@@ -220,17 +220,18 @@ cgAutomatonDeclareAllGlobals dfs
 
 -- | Main driver for code generation
 cgAutomaton :: DynFlags 
-            -> RnSt                 -- ^ Records all variables (but no queues)
+            -> QueueInfo            -- ^ Queues
             -> AxAuto SymAtom       -- ^ The automaton
             -> Cg CLabel            -- ^ Label of starting state we jump to
-cgAutomaton dfs st auto@(Automaton { auto_graph   = graph
-                                   , auto_start   = start })
-  = do { cgAutomatonDeclareAllGlobals dfs st queues auto cg_automaton
+cgAutomaton dfs queues Automaton { auto_graph   = graph
+                                 , auto_start   = start }
+
+  = do { cg_automaton
        ; return (lblOfNid start) }
 
-  where 
-   queues = extractQueues auto
 
+  where 
+   cg_automaton :: Cg ()
    cg_automaton = do 
       frameVar <- freshVar "mem_idx"
       appendDecl [cdecl| unsigned int $id:frameVar; |]
