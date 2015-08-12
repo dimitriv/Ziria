@@ -94,12 +94,10 @@ codeGenCompilerGlobals tid _tickHdl _procHdl mtv _ta _tb = do
 
 codeGenThread :: DynFlags
               -> String  -- thread id
-              -> Int     -- atomix thread id (used only in atomix) -- TODO: change thread id to Int and unify
               -> Comp    -- computation (split) to be compiled
                          -- already including the right read/write buffers
               -> Cg ()
-codeGenThread dflags tid atid c
-  | not (isDynFlagSet dflags AtomixCodeGen)
+codeGenThread dflags tid c
   = do (maybe_tv, ta, tb) <- checkCompType (ctComp c)
        (_bta, _btb) <- checkInOutFiles ta tb
        withThreadId tid $ do
@@ -109,7 +107,34 @@ codeGenThread dflags tid atid c
             codeGenCompilerGlobals tid (tickHdl cinfo)
                                        (procHdl cinfo) maybe_tv ta tb
             return cinfo
+  where
+    checkInOutFiles :: Ty -> Ty -> Cg (BufTy, BufTy)
+    checkInOutFiles (TBuff bta) (TBuff btb) = return (bta, btb)
+    checkInOutFiles _tin _tout =
+        fail $ "Missing read/write? Can't determine input or output type(s)."
 
+    checkCompType :: CTy -> Cg (Maybe Ty, Ty, Ty)
+    checkCompType (CTComp tv ta tb) = return (Just tv, ta, tb)
+    checkCompType (CTTrans ta tb)   = return (Nothing, ta, tb)
+    checkCompType _ = do
+        fail $ "CodeGen error, the type of:\n"
+                ++ show c ++ "\n" ++
+                "is: " ++ show (compInfo c) ++ "\n" ++
+                "but should be a fully applied computation type.\n" ++
+                "At location: " ++ (displayLoc . locOf . compLoc) c
+
+
+
+
+
+
+codeGenThreadAtomix :: DynFlags
+                    -> String  -- thread id
+                    -> Int     -- atomix thread id (used only in atomix) -- TODO: change thread id to Int and unify
+                    -> Comp    -- computation (split) to be compiled
+                               -- already including the right read/write buffers
+                    -> Cg ()
+codeGenThreadAtomix dflags tid atid c
   | isDynFlagSet dflags Pipeline
   = fail "AtomixCodeGen cannot be used simultaneously with Pipeline!"
   | otherwise -- Atomix case
@@ -144,6 +169,9 @@ codeGenThread dflags tid atid c
                 "At location: " ++ (displayLoc . locOf . compLoc) c
 
 
+
+
+
 codeGenProgram :: DynFlags                -- Flags
                -> CompCtxt                -- Context
                -> [(PP.ThreadId, Comp)]   -- Threads
@@ -156,7 +184,7 @@ codeGenProgram dflags shared_ctxt
   = withModuleName module_name $
     do { codeGenContexts >>= appendTopDecls
        ; (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
-           do { forM_ tid_cs $ \(tid,c) -> codeGenThread dflags tid 0 c
+           do { forM_ tid_cs $ \(tid,c) -> codeGenThread dflags tid c
               ; if pipeline_flag then
                   do { -- Just to make the SORA code happy we need
                        -- to implement a dummy wpl_go
@@ -191,9 +219,9 @@ codeGenProgram dflags shared_ctxt
     do { codeGenContexts >>= appendTopDecls
        ; (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
            if no_threads > 1 then 
-             do { forM_ (interval (no_threads - 1)) $ \atid -> codeGenThread dflags ("thread" ++ show atid) atid c
-                ; if pipeline_flag then
-                  do { -- Just to make the SORA code happy we need
+             -- Multi-threaded case
+             do { forM_ (interval (no_threads - 1)) $ \atid -> codeGenThreadAtomix dflags ("thread" ++ show atid) atid c
+                ; do { -- Just to make the SORA code happy we need
                        -- to implement a dummy wpl_go
                        -- In reality the set_up_threads() function uses
                        -- thread0,thread1,...
@@ -206,14 +234,10 @@ codeGenProgram dflags shared_ctxt
                      ; appendTopDefs $
                        ST.thread_setup affinity_mask module_name bufTys tids
                      }
-                  else
-                     -- In this case we know that wpl_go /is/ going to be
-                     -- the main function
-                     appendTopDefs $ ST.thread_setup_shim module_name
                 }
            else
              -- Single-threaded case
-             do { codeGenThread dflags ("") 0 c
+             do { codeGenThreadAtomix dflags ("") 0 c
                    -- In this case we know that wpl_go /is/ going to be
                    -- the main function
                 ;  appendTopDefs $ ST.thread_setup_shim module_name
