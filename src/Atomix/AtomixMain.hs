@@ -24,7 +24,6 @@ module Main where
 import AtomComp ()
 import AtomInstantiation ()
 import AtomixCompTransform ()
-import AtomixModel ()
 import AutomataModel ()
 
 import CgAtomix ()

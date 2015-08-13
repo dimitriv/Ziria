@@ -220,20 +220,22 @@ cgAutomatonDeclareAllGlobals dfs
 
 -- | Main driver for code generation
 cgAutomaton :: DynFlags 
+            -> Int                  -- ^ ThreadID
             -> QueueInfo            -- ^ Queues
             -> AxAuto SymAtom       -- ^ The automaton
             -> Cg CLabel            -- ^ Label of starting state we jump to
-cgAutomaton dfs queues Automaton { auto_graph   = graph
-                                 , auto_start   = start }
-
-  = do { cg_automaton
+cgAutomaton dfs atid queues Automaton { auto_graph   = graph
+                                      , auto_start   = start }
+  = do { cg_automaton atid
        ; return (lblOfNid start) }
 
 
   where 
-   cg_automaton :: Cg ()
-   cg_automaton = do 
+   cg_automaton :: Int -> Cg ()
+   cg_automaton a = do 
       frameVar <- freshVar "mem_idx"
+      -- BOZIDAR: Placeholder until we implement logic using a (otherwise warning fails)
+      if a == a then return () else return ()
       appendDecl [cdecl| unsigned int $id:frameVar; |]
       mapM_ (cg_node frameVar) (Map.elems graph)
 
@@ -473,11 +475,11 @@ cgAExpBody dfs qs wins wouts aexp
 
 q_read_n :: QId -> Int -> C.Exp -> C.Stm
 q_read_n (QId qid) n ptr
-  = [cstm| ts_getMany($int:qid,$int:n,$ptr); |]
+  = [cstm| ts_getManyBlocking($int:qid,$int:n,$ptr); |]
 
 q_read_n_bits :: QId -> Int -> C.Exp -> C.Stm
 q_read_n_bits (QId qid) n ptr
-  = [cstm| ts_getManyBits($int:qid,$int:n,$ptr); |]
+  = [cstm| ts_getManyBitsBlocking($int:qid,$int:n,$ptr); |]
 
 
 readFromTs :: DynFlags 
@@ -498,7 +500,7 @@ readFromTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
          cx <- lookupVarEnv x
          ci <- lookupVarEnv i
          appendStmt $ [cstm| for ($ci = 0; $ci < $int:n; $ci++) {
-                                ts_get($int:qid,(char *) $cx);
+                                ts_getManyBlocking($int:qid,(char *) $cx, 1);
                                 bitArrWrite((typename BitArrPtr) $cx,
                                               $ci*$int:m,
                                               $int:m,
@@ -576,9 +578,11 @@ squashedQueueType n t = TArray (Literal n) t
 
 {--------------- Writing to TS queues -----------------------------------------}
 
+-- ts_put and variants are blocking
 q_write_n :: QId -> Int -> C.Exp -> C.Stm
 q_write_n (QId qid) n ptr = [cstm| ts_putMany($int:qid,$int:n,$ptr); |]
 
+-- ts_put and variants are blocking
 q_write_n_bits :: QId -> Int -> C.Exp -> C.Stm
 q_write_n_bits (QId qid) n ptr = [cstm| ts_putManyBits($int:qid,$int:n,$ptr); |]
 
@@ -599,6 +603,7 @@ writeToTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
        cgMutBind dfs noLoc x Nothing $ do
          cx <- lookupVarEnv x
          ci <- lookupVarEnv i
+         -- ts_put and variants are blocking
          appendStmt $ [cstm| for ($ci = 0; $ci < $int:n; $ci++) {
                                 bitArrRead((typename BitArrPtr) $ptr,
                                             $ci*$int:m,

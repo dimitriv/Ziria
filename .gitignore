@@ -4,6 +4,7 @@
 *.hi-boot
 *.o-boot
 *.dump
+*.dump.svg
 .cabal-sandbox/
 cabal.sandbox.config
 tmp
