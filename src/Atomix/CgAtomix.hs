@@ -467,11 +467,11 @@ cgAExpBody dfs qs wins wouts aexp
 
 q_read_n :: QId -> Int -> C.Exp -> C.Stm
 q_read_n (QId qid) n ptr
-  = [cstm| ts_getMany($int:qid,$int:n,$ptr); |]
+  = [cstm| ts_getManyBlocking($int:qid,$int:n,$ptr); |]
 
 q_read_n_bits :: QId -> Int -> C.Exp -> C.Stm
 q_read_n_bits (QId qid) n ptr
-  = [cstm| ts_getManyBits($int:qid,$int:n,$ptr); |]
+  = [cstm| ts_getManyBitsBlocking($int:qid,$int:n,$ptr); |]
 
 
 readFromTs :: DynFlags 
@@ -492,7 +492,7 @@ readFromTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
          cx <- lookupVarEnv x
          ci <- lookupVarEnv i
          appendStmt $ [cstm| for ($ci = 0; $ci < $int:n; $ci++) {
-                                ts_get($int:qid,(char *) $cx);
+                                ts_getBlocking($int:qid,(char *) $cx);
                                 bitArrWrite((typename BitArrPtr) $cx,
                                               $ci*$int:m,
                                               $int:m,

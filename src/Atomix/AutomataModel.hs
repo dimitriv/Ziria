@@ -1476,12 +1476,13 @@ automatonPipeline dfs sym inty outty acomp = do
   let a_s = componentScheduler dfs a_a
   putStrLn $ "<<<<<<<<<<< componentScheduler (" ++ show (size a_s) ++ " states)"
 
-  putStrLn "<<<<<<<<<<< COMPLETED AUTOMATON CONSTRUCTION\n"
-
-
   -- dump dot files 
+  putStrLn ">>>>>>>>>>> dumping automaton dot files..."
   dump dfs DumpAutomaton (".automaton.dump") (PPR.text $ dotOfAuto dfs a_n)
   mapM_ dumpState $ dotOfAxAuto dfs a_s
+  putStrLn $ "<<<<<<<<<<< dumping automaton dot files"
+
+  putStrLn "<<<<<<<<<<< COMPLETED AUTOMATON CONSTRUCTION\n"
     
   return a_s
 
