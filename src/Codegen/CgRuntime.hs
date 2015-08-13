@@ -20,6 +20,7 @@
 
 module CgRuntime where
 
+import Opts
 import AstExpr
 import AstComp
 import PpComp
@@ -168,14 +169,19 @@ go_name mfreshId =
 
 
 
-mkAtomixRuntime :: Maybe String   -- | Optional unique suffix for name generation
+mkAtomixRuntime :: DynFlags       -- | Flags
+                -> Maybe String   -- | Optional unique suffix for name generation
                 -> Cg CLabel      -- | Computation that generates code for a computation
                 -> Cg ()
-mkAtomixRuntime mfreshId m = do
+mkAtomixRuntime dfs mfreshId m = do
     (local_decls, local_stmts, clabel) <- inNewBlock m
+    appendTopDef $ [cedecl| extern $ty:(namedCType "bool") atomix; |]
     appendTopDef $ [cedecl|
       int $id:(go_name mfreshId)() {
           
+          // Ask driver.c to look for atomix threads
+          atomix = 1;
+
           $decls:local_decls
            
           goto $id:clabel;
@@ -185,3 +191,7 @@ mkAtomixRuntime mfreshId m = do
           exit(2);
       }
     |]
+  where 
+    barr_name label = "__barr_" ++ label
+    no_threads      = getNoAtomThreads dfs
+

@@ -32,6 +32,10 @@ HANDLE threads[MAX_THREADS];
 thread_info t_info[MAX_THREADS];
 
 
+// Global variable set by init if we are running atomix version
+extern bool atomix;
+
+
 // Ideally, we might want to rewrite the threading support to use user mode threads in Win7+
 // http://msdn.microsoft.com/en-us/library/windows/desktop/dd627187(v=vs.85).aspx
 
@@ -79,26 +83,52 @@ int StartThreads(ULONGLONG * ttstart,
 	
 	if (!init_error)
 	{
-		bool not_finished = true;
-		while (not_finished) 
-		{
-			// Threads will exit when stop_program = true
-			// So no need to close them explicitly
 
-			not_finished = false;
-			for (int i=0; i<no_threads; i++)
+		if (atomix)
+		{
+			// In atomix, all threads are in sync.
+			// Only one thread will finish (the one that reads EOF)
+			// So if we see on thread finished, we stop
+			bool finished = false;
+			while (!finished)
 			{
-				not_finished = not_finished || t_info[i].fRunning;
+				// Threads will exit when stop_program = true
+				// So no need to close them explicitly
+
+				finished = false;
+				for (int i = 0; i < no_threads; i++)
+				{
+					finished = finished || (!t_info[i].fRunning);
+				}
+				Sleep(1); // NB: not Sleep(100) (!!)
+				// Flush stdout to get any printout that could be out there
+				fflush(stdout);
 			}
-			Sleep (1); // NB: not Sleep(100) (!!)
-			// Flush stdout to get any printout that could be out there
-			fflush(stdout);
-			/* Removed as it fails to compile with WinDDK
-			if (kbhit())
+		}
+		else
+		{
+			// In the conventional execution model, we need to wait for all threads
+			bool not_finished = true;
+			while (not_finished)
 			{
+				// Threads will exit when stop_program = true
+				// So no need to close them explicitly
+
+				not_finished = false;
+				for (int i = 0; i < no_threads; i++)
+				{
+					not_finished = not_finished || t_info[i].fRunning;
+				}
+				Sleep(1); // NB: not Sleep(100) (!!)
+				// Flush stdout to get any printout that could be out there
+				fflush(stdout);
+				/* Removed as it fails to compile with WinDDK
+				if (kbhit())
+				{
 				stop_program = 1;
+				}
+				*/
 			}
-			*/
 		}
 	}
 	else

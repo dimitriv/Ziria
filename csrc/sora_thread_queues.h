@@ -20,8 +20,6 @@
 
 //#include<sora.h>
 
-
-
 // Init the queue
 int ts_init(int nc, size_t *sizes);
 int ts_init_var(int no, size_t *sizes, int *queue_sizes);
@@ -127,3 +125,73 @@ void s_ts_rollback(ts_context *locCont, int nc, int n);
 
 
 
+
+
+
+// For barriers
+#include <windows.h>
+#include<synchapi.h>
+
+
+extern LONG volatile * barr_hist1;
+extern LONG volatile * barr_hist2;
+
+// Simple barrier
+inline void _barrier(LONG volatile *barrier, LONG volatile *to_reset, int no_threads, int thr)
+{
+	// Reset old barrier
+	if (thr == 0 && to_reset != NULL)
+	{
+		*to_reset = 0;
+	}
+
+	// Check new one
+	InterlockedIncrement(barrier);
+	MemoryBarrier();
+	while (*barrier < no_threads)
+	{
+		MemoryBarrier();
+	}
+}
+
+
+// When we come to a goto, we wait at the <state> barrier related to the current state
+inline void barrier(LONG volatile *state, int no_threads, int thr)
+{
+	_barrier(state, barr_hist1, no_threads, thr);
+	_barrier(state + 1, barr_hist2, no_threads, thr);
+	_barrier(state + 2, state, no_threads, thr);
+	if (thr == 0)
+	{
+		barr_hist1 = state + 1;
+		barr_hist2 = state + 2;
+	}
+}
+
+
+
+/*
+// When we come to a goto, we wait at the <state> barrier related to the current state, remove <state> 
+inline void barrier_wait(LPSYNCHRONIZATION_BARRIER state, int no_threads)
+{
+	if (no_threads > 1)
+	{
+		EnterSynchronizationBarrier(state, SYNCHRONIZATION_BARRIER_FLAGS_SPIN_ONLY);
+		DeleteSynchronizationBarrier(state);
+	}
+}
+
+
+// set the new barrier <state> for the next state
+inline void barrier_init(LPSYNCHRONIZATION_BARRIER state, int no_threads)
+{
+	if (no_threads > 1)
+	{
+		if (!InitializeSynchronizationBarrier(state, no_threads, -1))
+		{
+			printf("Barrier problem!\n");
+			exit(1);
+		}
+	}
+}
+*/

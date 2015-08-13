@@ -158,6 +158,7 @@ codeGenProgram dflags shared_ctxt
   | not (isDynFlagSet dflags AtomixCodeGen)
   = withModuleName module_name $
     do { codeGenContexts >>= appendTopDecls
+       ; appendTopDecl [cdecl| $ty:(namedCType "bool") atomix = 0; |]
        ; (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
            do { forM_ tid_cs $ \(tid,c) -> codeGenThread dflags tid c
               ; if pipeline_flag then
@@ -201,11 +202,14 @@ codeGenProgram dflags shared_ctxt
            (automaton :: AxAuto SymAtom) 
                  <- cgIO $ automatonPipeline dflags sym (bufty_ty bta) (bufty_ty btb) ac
            let queues = (extractQueues automaton)
+           appendTopDecl [cdecl| $ty:(namedCType "LONG volatile") *barr_hist1 = NULL; |]
+           appendTopDecl [cdecl| $ty:(namedCType "LONG volatile") *barr_hist2 = NULL; |]
+           appendTopDecl [cdecl| $ty:(namedCType "bool") atomix = 1; |]
            cgAutomatonDeclareAllGlobals dflags rnst queues automaton  $ 
              if no_threads > 1 then 
                -- Multi-threaded case
                do { forM_ (interval (no_threads - 1)) $ \atid -> 
-                      mkAtomixRuntime (Just ((getName dflags) ++ "thread" ++ show atid)) $
+                      mkAtomixRuntime dflags (Just ((getName dflags) ++ "thread" ++ show atid)) $
                       codeGenThreadAtomix dflags queues atid automaton
                   ; do { -- Just to make the SORA code happy we need
                        -- to implement a dummy wpl_go
@@ -224,7 +228,7 @@ codeGenProgram dflags shared_ctxt
                   }
              else
                -- Single-threaded case
-               do { mkAtomixRuntime (Just ((getName dflags))) $
+               do { mkAtomixRuntime dflags (Just ((getName dflags))) $
                     codeGenThreadAtomix dflags queues 0 automaton
                    -- In this case we know that wpl_go /is/ going to be
                    -- the main function

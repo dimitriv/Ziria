@@ -232,22 +232,63 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
 
   where 
    cg_automaton :: Int -> Cg ()
-   cg_automaton c = do 
-      frameVar <- freshVar "mem_idx"
-      appendDecl [cdecl| unsigned int $id:frameVar; |]
-      mapM_ (cg_node c frameVar) (Map.elems graph)
+   cg_automaton c 
+     = do { frameVar <- freshVar "mem_idx"
+          ; appendDecl [cdecl| unsigned int $id:frameVar; |]
+          ; mapM_ (cg_node c frameVar) (Map.elems graph)
+          }
 
-   cg_node c frameVar (Node nid nk) = appendLabeledBlockNoScope (lblOfNid nid) (cg_nkind c frameVar nk)
+   cg_node c frameVar (Node nid nk) = 
+     do { if c == 0 then cg_declare_barr nid else return()
+        ; appendLabeledBlockNoScope (lblOfNid nid) (cg_nkind c nid frameVar nk)
+        }
 
-   cg_nkind c frameVar (AtomixState atoms _ decision _) = do
+   cg_nkind c nid frameVar (AtomixState atoms _ decision _) = do
      inAllocFrame' frameVar noLoc $ pushAllocFrame $ mapM_ (cgCallAtom dfs c queues) atoms
-     cg_decision decision
+     cg_decision c nid decision
 
-   cg_decision AtomixDone        = appendStmt [cstm| exit(0); |]
-   cg_decision (AtomixLoop next) = appendStmt [cstm| goto $id:(lblOfNid next);|]
-   cg_decision (AtomixBranch c l r) = do
-     cc <- lookupVarEnv c
-     appendStmt [cstm| if ($cc) goto $id:(lblOfNid l); else goto $id:(lblOfNid r); |]
+   cg_decision c nid AtomixDone
+     = if no_threads == 1 then
+           appendStmt [cstm| exit(0); |]
+         else
+           appendStmts [cstms| barrier($id:(barr_name nid), $int:no_threads, $int:c);
+                               exit(0); |]
+
+   cg_decision c nid (AtomixLoop next)
+     = if no_threads == 1 then
+           appendStmt [cstm| goto $id:(lblOfNid next); |]
+         else
+           appendStmts [cstms| printf("Thread %d in state %d, going to %d\n", $int:c, $int:nid, $int:next);
+                               barrier($id:(barr_name nid), $int:no_threads, $int:c); 
+                               goto $id:(lblOfNid next); |]
+
+   cg_decision c nid (AtomixBranch c' l r) = do
+     cc <- lookupVarEnv c'
+     if no_threads == 1 then
+         appendStmt [cstm| if ($cc) {
+                             goto $id:(lblOfNid l); 
+                           } else {
+                             goto $id:(lblOfNid r); 
+                           }
+                         |]
+       else
+         appendStmts [cstms| printf("Thread %d in state %d, goind to %d\n", $int:c, $int:nid, $cc);
+                             barrier($id:(barr_name nid), $int:no_threads, $int:c);
+                             if ($cc) {
+                                  //printf("Thread %d in state %d, goind to %d\n", $int:c, $int:nid, $l);
+                                  goto $id:(lblOfNid l); 
+                             } else {
+                                  //printf("Thread %d in state %d, goind to %d\n", $int:c, $int:nid, $r);
+                                  goto $id:(lblOfNid r); 
+                             }
+                           |]
+
+   cg_declare_barr label = appendTopDecl [cdecl| $ty:(namedCType "LONG volatile") $id:(barr_name label)[3] = {0, 0, 0};|];
+
+   barr_name label = "__barr_" ++ lblOfNid label
+   
+   no_threads      = getNoAtomThreads dfs
+
 
 
 
