@@ -1006,12 +1006,14 @@ insertRollbacks rollback_a a = a { auto_graph = Map.foldl go nmap nmap } where
 
 
 
-
+{------------------------------------------------------------------------
+  Fusion of consecutive atom-nodes into one single node
+------------------------------------------------------------------------}
 
 
 -- We maintain two sets: active, and done
--- Inchiant: every node starts as inactive and not done,
--- is eventially marked active, and finally marked done.
+-- Invariant: every node starts as not active and not done,
+-- is eventually marked active, and finally marked done.
 -- `active` and `done` are disjoint at all times
 type MarkingM nid = State (Set nid,Set nid)
 
@@ -1026,14 +1028,10 @@ inNewFrame m = do
   m
 
 isActive :: Ord nid => nid -> MarkingM nid Bool
-isActive nid = do
-  (active,_) <- get
-  return $ Set.member nid active
+isActive nid = gets (Set.member nid . fst)
 
 isDone :: Ord nid => nid -> MarkingM nid Bool
-isDone nid = do
-  (_,done) <- get
-  return $ Set.member nid done
+isDone nid = gets (Set.member nid . snd)
 
 
 -- Fuses actions sequences in automata. This brings automata into a from that
@@ -1081,7 +1079,7 @@ fuseActions dfs auto = auto { auto_graph = fused_graph }
           -- as it can lead to better performance under parallel execution (since state
           -- transitions require synchronization and are hence expensive).
           Node _ (CfgAction atoms' next' pipes') | Set.size (preds next) <= 1 || isDynFlagSet dfs FuseAggressively ->
-            let pipes'' = Map.unionWith (curry fst) pipes pipes' in
+            let pipes'' = Map.unionWith const pipes pipes' in -- left-biased union
             let node = Node nid (CfgAction (atoms++atoms') next' pipes'') in
             (wl, Map.insert nid node nmap)
           Node _ _ -> (wl,nmap)
@@ -1228,12 +1226,12 @@ mk_constraints in_ch out_ch pipes watoms mb_decision
          constrs
 
 
--- Naive transitivity-reduction (i.e. removal of transitive edges)
+-- Naive transitivity-reduction (i.e. removal of transitive and reflecive edges); not efficient
 trans_reduction :: Map (Int,Int) a -> Map (Int,Int) a
 trans_reduction mp = foldl (flip Map.delete) mp redundant
   where
-    redundant = [ (i,i) | i <- idxs ] ++
-                [ (i,k) | i <- idxs
+    redundant = [ (i,i) | i <- idxs ] ++ -- reflexive edges
+                [ (i,k) | i <- idxs      -- transitive edges
                         , j <- maybe [] Set.toList $ Map.lookup i closure
                         , k <- maybe [] Set.toList $ Map.lookup j closure ]
 
@@ -1278,15 +1276,16 @@ componentScheduler dfs = stateWiseScheduler (compSched maxCores)
   where maxCores = getNoAtomThreads dfs
 
 compSched maxCores (AtomixState watoms cstrs d pipes) = AtomixState watoms' cstrs d pipes where
-  -- initially, one equivalence class per atom + decision
+  -- initially, one equivalence class per atom & the decision
   init_partition :: Partition Int
   init_partition = map Set.singleton [0..(length watoms)]
 
   -- connected components: join partitions of x and y iff there is an edge x->y
   components :: Partition Int
   components = merge $
-               foldl (flip $ uncurry $ union) init_partition $
-               filter ((/= -1) . fst) $ Map.keys cstrs
+               foldl (flip (uncurry union)) init_partition $
+               filter ((/= -1) . fst) $             -- ignore dependencies on previous states
+               Map.keys $ Map.filter (/= []) cstrs  -- treatt all dependencies equally  
 
   -- if the number of components is greate than maxCores, iteratively
   -- merge the smallest two components (length components - maxCores) times
@@ -1477,12 +1476,13 @@ automatonPipeline dfs sym inty outty acomp = do
   let a_s = componentScheduler dfs a_a
   putStrLn $ "<<<<<<<<<<< componentScheduler (" ++ show (size a_s) ++ " states)"
 
-  putStrLn "<<<<<<<<<<< COMPLETED AUTOMATON CONSTRUCTION\n"
-
-
   -- dump dot files 
+  putStrLn ">>>>>>>>>>> dumping automaton dot files..."
   dump dfs DumpAutomaton (".automaton.dump") (PPR.text $ dotOfAuto dfs a_n)
   mapM_ dumpState $ dotOfAxAuto dfs a_s
+  putStrLn $ "<<<<<<<<<<< dumping automaton dot files"
+
+  putStrLn "<<<<<<<<<<< COMPLETED AUTOMATON CONSTRUCTION\n"
     
   return a_s
 
