@@ -140,7 +140,7 @@ codeGenThreadAtomix dflags queues atid automaton
   = do cgIO $ putStrLn ""
        cgIO $ putStrLn (" **** Creating thread " ++ show atid)
        cgIO $ putStrLn ""
-       cgAutomaton dflags queues automaton
+       cgAutomaton dflags atid queues automaton
   
 
 
