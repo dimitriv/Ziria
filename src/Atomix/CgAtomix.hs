@@ -312,22 +312,28 @@ cg_def_atom _dfs aid mbody mkont
 
 
 cgCallAtom :: DynFlags
+           -> Int
            -> QueueInfo
            -> WiredAtom SymAtom 
            -> Cg ()
-cgCallAtom _dfs queues w 
+cgCallAtom _dfs current_core queues wa 
   | rd_input
-  = appendStmt $ [cstm| if ($id:(name fun_name)() == -7) return(0);|]
+  = if core == current_core then
+      appendStmt $ [cstm| if ($id:(name fun_name)() == -7) return(0);|]
   | otherwise
-  = appendStmt $ [cstm| $id:(name fun_name)();|]
+  = if core == current_core then
+      appendStmt $ [cstm| $id:(name fun_name)();|]
  --  ccall <- codeGenExp dfs call
  -- codeGenExp dfs call >>= \_ -> return ()
  --     -- Can safely always discard call result 
  --     -- because it is going to be UNIT, see CgCall.hs 
   where
     fun_name = wiredAtomNameOfLbl aid noLoc (TArrow [] TUnit)
-    rd_input = rdFromInput queues (wires_in w)
-    aid      = wiredAtomId w
+    rd_input = rdFromInput queues (wires_in wa)
+    aid      = wiredAtomId wa
+    core     = get_core $ atom_core $ the_atom wa
+    get_core (Just c) = c
+    get_core Nothing  = 0
 
 
 

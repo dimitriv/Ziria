@@ -1299,7 +1299,7 @@ compSched maxCores (AtomixState watoms cstrs d pipes) = AtomixState watoms' cstr
                             (Set.union a b) : cs
           merge' _ = panicStr "componentScheduler: bug in implementation!"
 
-  watoms' = map (lblWAtom $ zip components [1..]) (zip watoms [0..])
+  watoms' = map (lblWAtom $ zip components [0..]) (zip watoms [0..])
 
   lblWAtom comps (wa,aid) =
     case List.find (Set.member aid . fst) comps of
