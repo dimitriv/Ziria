@@ -232,17 +232,15 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
 
   where 
    cg_automaton :: Int -> Cg ()
-   cg_automaton a = do 
+   cg_automaton c = do 
       frameVar <- freshVar "mem_idx"
-      -- BOZIDAR: Placeholder until we implement logic using a (otherwise warning fails)
-      if a == a then return () else return ()
       appendDecl [cdecl| unsigned int $id:frameVar; |]
-      mapM_ (cg_node frameVar) (Map.elems graph)
+      mapM_ (cg_node c frameVar) (Map.elems graph)
 
-   cg_node frameVar (Node nid nk) = appendLabeledBlockNoScope (lblOfNid nid) (cg_nkind frameVar nk)
+   cg_node c frameVar (Node nid nk) = appendLabeledBlockNoScope (lblOfNid nid) (cg_nkind c frameVar nk)
 
-   cg_nkind frameVar (AtomixState atoms _ decision _) = do
-     inAllocFrame' frameVar noLoc $ pushAllocFrame $ mapM_ (cgCallAtom dfs queues) atoms
+   cg_nkind c frameVar (AtomixState atoms _ decision _) = do
+     inAllocFrame' frameVar noLoc $ pushAllocFrame $ mapM_ (cgCallAtom dfs c queues) atoms
      cg_decision decision
 
    cg_decision AtomixDone        = appendStmt [cstm| exit(0); |]
@@ -320,11 +318,15 @@ cgCallAtom :: DynFlags
            -> Cg ()
 cgCallAtom _dfs current_core queues wa 
   | rd_input
-  = if core == current_core then
-      appendStmt $ [cstm| if ($id:(name fun_name)() == -7) return(0);|]
+  , core == current_core
+  = appendStmt $ [cstm| if ($id:(name fun_name)() == -7) return(0);|]
+
+  | core == current_core 
+  = appendStmt $ [cstm| $id:(name fun_name)();|]
+
   | otherwise
-  = if core == current_core then
-      appendStmt $ [cstm| $id:(name fun_name)();|]
+  = appendStmt $ [cstm| UNIT;|]
+
  --  ccall <- codeGenExp dfs call
  -- codeGenExp dfs call >>= \_ -> return ()
  --     -- Can safely always discard call result 
