@@ -213,13 +213,9 @@ cgAutomatonDeclareAllGlobals dfs
                              auto@(Automaton { auto_graph   = graph
                                              , auto_start   = _ }) 
                              mo
- = do { cgIO $ putStrLn "AAA"
-      ; cgIO $ putStrLn $ show $ ppr st
-      ; cgIO $ putStrLn "BBB"
-      ; cgRnSt dfs auto st $ 
-        cgDeclQueues dfs queues $ 
-        cg_define_atoms mo
-      }
+ = cgRnSt dfs auto st $ 
+   cgDeclQueues dfs queues $ 
+   cg_define_atoms mo
 
   where 
 
@@ -256,7 +252,10 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
           }
 
    cg_node c frameVar (Node nid nk) = 
-     do { if c == 0 then cg_declare_barr nid else return()
+     do { if c == 0 then do { cg_declare_barr nid 
+                            ; cg_declare_barr2 nid 
+                            }
+                    else return()
         ; appendLabeledBlockNoScope (lblOfNid nid) (cg_nkind c nid frameVar nk)
         }
 
@@ -292,17 +291,26 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
          appendStmts [cstms| printf("Thread %d in state %d, goind to %d\n", $int:c, $int:nid, $cc);
                              barrier($id:(barr_name nid), $int:no_threads, $int:c);
                              if ($cc) {
+                                  barrier($id:(barr_name2 nid), $int:no_threads, $int:c);
                                   //printf("Thread %d in state %d, goind to %d\n", $int:c, $int:nid, $l);
                                   goto $id:(lblOfNid l); 
                              } else {
+                                  barrier($id:(barr_name2 nid), $int:no_threads, $int:c);
                                   //printf("Thread %d in state %d, goind to %d\n", $int:c, $int:nid, $r);
                                   goto $id:(lblOfNid r); 
                              }
                            |]
 
-   cg_declare_barr label = appendTopDecl [cdecl| $ty:(namedCType "LONG volatile") $id:(barr_name label)[3] = {0, 0, 0};|];
+   -- One barrier is before branching decision and the other after
+   -- It can happen (and has happened) that one thread moves forward and changes the branching
+   -- decision before the other thread reads the old value
+   cg_declare_barr  label 
+      = appendTopDecl [cdecl| $ty:(namedCType "LONG volatile") $id:(barr_name label)[3] = {0, 0, 0};|];
+   cg_declare_barr2 label 
+      = appendTopDecl [cdecl| $ty:(namedCType "LONG volatile") $id:(barr_name2 label)[3] = {0, 0, 0};|];
 
    barr_name label = "__barr_" ++ lblOfNid label
+   barr_name2 label = "__barr2_" ++ lblOfNid label
    
    no_threads      = getNoAtomThreads dfs
 
