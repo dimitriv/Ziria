@@ -47,10 +47,10 @@ import NameEnv
 
 -- | LUT statistics
 data LUTStats = LUTStats { 
-     lutInBitWidth      :: Integer   -- ^ Index bitwidth
-   , lutOutBitWidth     :: Integer   -- ^ Total output bitwidth (contains result!)
-   , lutResultBitWidth  :: Integer   -- ^ Result bitwidth
-   , lutTableSize       :: Integer   -- ^ Size needed (in bytes)
+     lutInBitWidth      :: Integer -- ^ Index bitwidth
+   , lutOutBitWidth     :: Integer -- ^ Total output bitwidth (contains result!)
+   , lutResultBitWidth  :: Integer -- ^ Result bitwidth
+   , lutTableSize       :: Integer -- ^ Size needed (in bytes)
    , lutVarUsePkg       :: VarUsePkg -- ^ Var use info
 
      -- | If @lutResultInOutVars = Just v@ then 

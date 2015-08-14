@@ -1,0 +1,18 @@
+#include <ORILIB_externals.blk>
+#include <ORILIB_types.blk>
+
+fun comp eth_init() {
+					do {
+						ORILIB_EthInterfaceInit(0)
+					   }
+				  } 
+
+fun comp IO_MemWriter_init() {
+								var outStateBuf : struct IO_t_MemWriter_State;
+								do {
+									IO_MemWriter_Init(outStateBuf)
+								}
+								emit outStateBuf
+							 }				  
+
+let comp main = read [int] >>> eth_init() >>> IO_MemWriter_init()  >>> write[int]

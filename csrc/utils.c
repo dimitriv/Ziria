@@ -102,7 +102,7 @@ void try_read_filebuffer(HeapContextBlock *hblk, char *filename, BlinkFileMode m
 	char *filebuffer;
 	memsize_int sz;
 
-	FILE *f = try_open(filename, "r");
+	FILE *f = try_open(filename, "rb");
 	fseek(f, 0L, SEEK_END);
 	sz = ftell(f);
 	fseek(f, 0L, SEEK_SET);
