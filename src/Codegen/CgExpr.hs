@@ -19,7 +19,7 @@
 {-# LANGUAGE  QuasiQuotes, GADTs, ScopedTypeVariables, RecordWildCards #-}
 {-# OPTIONS_GHC -fwarn-unused-binds #-}
 
-module CgExpr ( codeGenExp, cgMutBind, cgGlobMutBind ) where
+module CgExpr ( codeGenExp, cgMutBind, cgGlobMutBind, cgGlobMutBindVol ) where
 
 import Opts
 import AstExpr
@@ -90,6 +90,13 @@ cgGlobMutBind :: DynFlags -> SrcLoc -> EId -> Cg a -> Cg a
 cgGlobMutBind dfs loc x m = do 
   x_name <- genSym $ name x ++ getLnNumInStr loc
   codeGenDeclGroup x_name (nameTyp x) ZeroOut >>= appendTopDeclPkg
+  let x_binding = [cexp| $id:x_name|]
+  extendVarEnv [(x,x_binding)] m
+
+cgGlobMutBindVol :: DynFlags -> SrcLoc -> EId -> Cg a -> Cg a
+cgGlobMutBindVol dfs loc x m = do 
+  x_name <- genSym $ name x ++ getLnNumInStr loc
+  codeGenDeclVolGroup x_name (nameTyp x) ZeroOut >>= appendTopDeclPkg
   let x_binding = [cexp| $id:x_name|]
   extendVarEnv [(x,x_binding)] m
 

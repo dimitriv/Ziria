@@ -411,7 +411,7 @@ codeGenDeclGroup_qual quals v ty mb_init
 codeGenDeclGroup, codeGenDeclVolGroup :: CVar -> Ty -> HowToInit 
                                       -> Cg (DeclPkg C.InitGroup)
 codeGenDeclGroup    = codeGenDeclGroup_qual "calign"
-codeGenDeclVolGroup = codeGenDeclGroup_qual "volatile"
+codeGenDeclVolGroup = codeGenDeclGroup_qual "volatile calign"
 
 -- | Init group to definitions
 codeGenDeclDef :: CVar -> Ty -> HowToInit -> Cg (DeclPkg C.Definition)

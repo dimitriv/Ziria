@@ -43,6 +43,7 @@ import Language.C.Quote.C
 -- import Control.Monad.Identity
 import Control.Monad ( unless, void, when )
 import Data.Loc
+import Data.Maybe
 import Text.PrettyPrint.HughesPJ
 -- import qualified GenSym as GS
 -- import Data.List ( nub )
@@ -64,8 +65,8 @@ import AutomataModel
 import AtomInstantiation
 
 
-cgRnSt :: DynFlags -> RnSt -> Cg a -> Cg a
-cgRnSt dfs (RnSt { st_bound_vars = bound
+cgRnSt :: DynFlags -> AxAuto SymAtom -> RnSt -> Cg a -> Cg a
+cgRnSt dfs auto (RnSt { st_bound_vars = bound
                  , st_fundefs    = fdefs
                  , st_structs    = sdefs }) action
   = cg_sdefs sdefs $
@@ -83,10 +84,22 @@ cgRnSt dfs (RnSt { st_bound_vars = bound
       = cg_fdefs fds (cgFunDefined_clos dfs (funLoc fun) fun clos m)
     cg_bound [] m = m
     cg_bound (x:xs) m
+      | x `elem` volatile
+      = cg_bound xs (cgGlobMutBindVol dfs noLoc x m)
+      | otherwise
       = cg_bound xs (cgGlobMutBind dfs noLoc x m)
 
     is_external (MkFun (MkFunExternal {}) _ _) = True
     is_external _ = False
+
+    volatile = catMaybes $ 
+               map (decision_var . state_decision . node_kind) $
+               Map.elems $ 
+               auto_graph auto
+
+    decision_var :: Decision Int -> Maybe EId
+    decision_var (AtomixBranch v _ _) = Just v
+    decision_var _ = Nothing
 
 
 lblOfNid :: Int -> CLabel
@@ -197,12 +210,16 @@ cgAutomatonDeclareAllGlobals :: DynFlags
 cgAutomatonDeclareAllGlobals dfs 
                              st 
                              queues
-                             (Automaton { auto_graph   = graph
-                                        , auto_start   = _ }) 
-                             automaton
-  = cgRnSt dfs st $ 
-    cgDeclQueues dfs queues $ 
-    cg_define_atoms automaton
+                             auto@(Automaton { auto_graph   = graph
+                                             , auto_start   = _ }) 
+                             mo
+ = do { cgIO $ putStrLn "AAA"
+      ; cgIO $ putStrLn $ show $ ppr st
+      ; cgIO $ putStrLn "BBB"
+      ; cgRnSt dfs auto st $ 
+        cgDeclQueues dfs queues $ 
+        cg_define_atoms mo
+      }
 
   where 
 

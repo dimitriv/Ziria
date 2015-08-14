@@ -129,7 +129,14 @@ data RnSt = RnSt { st_bound_vars  :: [EId]
                  }
 
 instance Outputable RnSt where
-  ppr (RnSt _ fundefs _) = vcat $ map (pprFun . unFun . fst . snd) fundefs
+  ppr (RnSt vars fundefs structs) 
+      = vcat $
+        [text "Variables:"] ++
+        [text (show vars)] ++
+        [text "Functions:"] ++
+        map (pprFun . unFun . fst . snd) fundefs ++
+        [text "Structs"] ++
+        [text (show structs)]
     where
       pprFun (MkFunDefined f args body) 
          = ppr f <> (parens $ hsep $ punctuate comma $ map ppr args) <+> 
