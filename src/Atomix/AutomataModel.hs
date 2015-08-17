@@ -40,18 +40,18 @@ import Debug.Trace
 type Chan = EId
 
 data Automaton atom nid nkind
-  = Automaton { auto_graph   :: NodeMap atom nid nkind
-              , auto_inchan  :: Chan
-              , auto_outchan :: Chan
-              , auto_start   :: nid
+  = Automaton { auto_graph   :: !(NodeMap atom nid nkind)
+              , auto_inchan  :: !Chan
+              , auto_outchan :: !Chan
+              , auto_start   :: !nid
               }
   deriving Show
 
 type NodeMap atom nid nkind = Map nid (Node atom nid nkind)
 
 data Node atom nid nkind
-  = Node { node_id   :: nid
-         , node_kind :: nkind atom nid
+  = Node { node_id   :: !nid
+         , node_kind :: !(nkind atom nid)
          }
 
 class NodeKind nkind where
@@ -178,10 +178,10 @@ instance NodeKind CfgNk where
 
 
 data AtomixNk atom nid
-  = AtomixState { state_atoms :: [WiredAtom atom]
-                , constraints :: Map (Int,Int) [Dependency]
-                , state_decision :: Decision nid
-                , ax_pipe_balances :: Map Chan Int
+  = AtomixState { state_atoms :: ![WiredAtom atom]
+                , constraints :: !(Map (Int,Int) [Dependency])
+                , state_decision :: !(Decision nid)
+                , ax_pipe_balances :: !(Map Chan Int)
                 }
 
 data Dependency

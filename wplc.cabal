@@ -74,7 +74,7 @@ Executable wplc
 
   ghc-options: -fwarn-incomplete-patterns -Werror 
                -- For profiling
-               --O0
+               -- -O0
                -threaded -fprof-auto 
                -rtsopts
                -- "-with-rtsopts=-N -p -s -hy -i0.1"
