@@ -1119,17 +1119,20 @@ cfgToAtomix a = a { auto_graph = state_graph} where
 
   fromCfg' nid pipes watoms (CfgDone pipes') nmap =
     let pipes'' = Map.unionWith const pipes pipes' in -- left-biased union
-    let nk = AtomixState watoms (mk_constrs pipes'' watoms Nothing) AtomixDone pipes'' in
+    let nk = trace ("calculate constraints for " ++ show nid) $
+             AtomixState watoms (mk_constrs pipes'' watoms Nothing) AtomixDone pipes'' in
     return $ insertNk nid nk nmap
 
   fromCfg' nid pipes watoms (CfgLoop next pipes') nmap =
     let pipes'' = Map.unionWith const pipes pipes' in -- left-biased union
-    let nk = AtomixState watoms (mk_constrs pipes'' watoms Nothing) (AtomixLoop next) pipes'' in
+    let nk =  trace ("calculate constraints for " ++ show nid) $
+              AtomixState watoms (mk_constrs pipes'' watoms Nothing) (AtomixLoop next) pipes'' in
     fromCfg next $ insertNk nid nk nmap
 
   fromCfg' nid pipes watoms (CfgBranch x left right is_while pipes') nmap =
     let pipes'' = Map.unionWith const pipes pipes' in -- left-biased union
-    let constrs = mk_constrs pipes'' watoms (Just x) in
+    let constrs =  trace ("calculate constraints for " ++ show nid) $
+                   mk_constrs pipes'' watoms (Just x) in
     let nk = AtomixState watoms constrs (AtomixBranch x left right) pipes'' in
     fromCfg left =<< fromCfg right (insertNk nid nk nmap)
 
@@ -1148,7 +1151,8 @@ type Acc = (QDependencyEnv, VDependencyEnv, [(Int,Int,Dependency)])
 mk_constraints :: forall e. Chan -> Chan -> Map Chan Int -> [WiredAtom e] -> Maybe Chan -> Map (Int,Int) [Dependency]
 mk_constraints _ _ _ [] _ = Map.empty
 mk_constraints in_ch out_ch pipes watoms mb_decision 
-  = trans_reduction $ go_decision mb_decision $ foldl go_watom (qenv0, venv0, []) (zip watoms [0..]) where
+  = trace "<<<< trans_reduction DONE!" $! trans_reduction $! trace ">>>> trans_reduction" $!
+    go_decision mb_decision $ foldl go_watom (qenv0, venv0, []) (zip watoms [0..]) where
 
     -- queue and variable dependency environments
     qenv0 :: QDependencyEnv
@@ -1226,32 +1230,27 @@ mk_constraints in_ch out_ch pipes watoms mb_decision
          constrs
 
 
--- Naive transitivity-reduction (i.e. removal of transitive and reflecive edges); not efficient
+-- Somehwat efficient transitive reduction algorithm.
+-- May need to tune performance.
+-- Precondition: -1,0,1,2,... is a topological ordering, i.e. (i,j) \in E ==> i < j
 trans_reduction :: Map (Int,Int) a -> Map (Int,Int) a
-trans_reduction mp = foldl (flip Map.delete) mp redundant
+trans_reduction mp = Map.filterWithKey not_trans_refl mp
   where
-    redundant = [ (i,i) | i <- idxs ] ++ -- reflexive edges
-                [ (i,k) | i <- idxs      -- transitive edges
-                        , j <- maybe [] Set.toList $ Map.lookup i closure
-                        , k <- maybe [] Set.toList $ Map.lookup j closure ]
+    not_trans_refl (i,j) _ | i==j = False
+    not_trans_refl (i,j) _ 
+      = not $ elem j $ 
+        Set.foldr (\e -> (++) $ maybe [] Set.elems $ Map.lookup e closure) [] $
+        Map.findWithDefault Set.empty i closure
 
-    idxs = List.nub $ map fst $ Map.keys mp
+    -- list of edges in reverse-topological order, without reflexive edges
+    edges = List.sortBy ((flip compare) `on` fst) $ filter (uncurry (/=)) $ Map.keys mp
 
-    fix f x = let x' = f x in if x==x' then x else fix f x'
-
+    -- efficient computation of transitive (non-reflexive) closure
     closure :: Map Int (Set Int)
-    closure = rem_refl $ fix add_trans $
-              Map.fromListWith Set.union $
-              map ( \(i,j) -> (i, Set.singleton j) ) $
-              Map.keys mp
+    closure = foldl add_edge Map.empty edges
 
-    rem_refl :: Map Int (Set Int) -> Map Int (Set Int)
-    rem_refl = Map.mapWithKey Set.delete
-
-    add_trans :: Map Int (Set Int) -> Map Int (Set Int)
-    add_trans g = Map.foldlWithKey (\g' i js -> Map.adjust (Set.union $ trans g js) i g') g g
-    trans g js = Set.unions $ map (\j -> Map.findWithDefault Set.empty j g) $ Set.toList js
-
+    add_edge mp (i,j) = Map.insertWith Set.union i trans_closure mp 
+      where trans_closure = Set.insert j $ Map.findWithDefault Set.empty j mp
 
 
 
