@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, TupleSections, FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables, TupleSections, FlexibleContexts, BangPatterns #-}
 {-# OPTIONS #-}
 module AutomataModel where
 
@@ -1119,20 +1119,17 @@ cfgToAtomix a = a { auto_graph = state_graph} where
 
   fromCfg' nid pipes watoms (CfgDone pipes') nmap =
     let pipes'' = Map.unionWith const pipes pipes' in -- left-biased union
-    let nk = trace ("calculate constraints for " ++ show nid) $
-             AtomixState watoms (mk_constrs pipes'' watoms Nothing) AtomixDone pipes'' in
+    let nk = AtomixState watoms (mk_constrs pipes'' watoms Nothing) AtomixDone pipes'' in
     return $ insertNk nid nk nmap
 
   fromCfg' nid pipes watoms (CfgLoop next pipes') nmap =
     let pipes'' = Map.unionWith const pipes pipes' in -- left-biased union
-    let nk =  trace ("calculate constraints for " ++ show nid) $
-              AtomixState watoms (mk_constrs pipes'' watoms Nothing) (AtomixLoop next) pipes'' in
+    let nk = AtomixState watoms (mk_constrs pipes'' watoms Nothing) (AtomixLoop next) pipes'' in
     fromCfg next $ insertNk nid nk nmap
 
   fromCfg' nid pipes watoms (CfgBranch x left right is_while pipes') nmap =
     let pipes'' = Map.unionWith const pipes pipes' in -- left-biased union
-    let constrs =  trace ("calculate constraints for " ++ show nid) $
-                   mk_constrs pipes'' watoms (Just x) in
+    let constrs = mk_constrs pipes'' watoms (Just x) in
     let nk = AtomixState watoms constrs (AtomixBranch x left right) pipes'' in
     fromCfg left =<< fromCfg right (insertNk nid nk nmap)
 
@@ -1151,8 +1148,8 @@ type Acc = (QDependencyEnv, VDependencyEnv, [(Int,Int,Dependency)])
 mk_constraints :: forall e. Chan -> Chan -> Map Chan Int -> [WiredAtom e] -> Maybe Chan -> Map (Int,Int) [Dependency]
 mk_constraints _ _ _ [] _ = Map.empty
 mk_constraints in_ch out_ch pipes watoms mb_decision 
-  = trace "<<<< trans_reduction DONE!" $! trans_reduction $! trace ">>>> trans_reduction" $!
-    go_decision mb_decision $ foldl go_watom (qenv0, venv0, []) (zip watoms [0..]) where
+  = trans_reduction $ go_decision mb_decision $ foldl go_watom (qenv0, venv0, []) (zip watoms [0..])
+  where
 
     -- queue and variable dependency environments
     qenv0 :: QDependencyEnv
@@ -1239,7 +1236,7 @@ trans_reduction mp = Map.filterWithKey not_trans_refl mp
     not_trans_refl (i,j) _ | i==j = False
     not_trans_refl (i,j) _ 
       = not $ elem j $ 
-        Set.foldr (\e -> (++) $ maybe [] Set.elems $ Map.lookup e closure) [] $
+        Set.foldr (\e acc -> (maybe [] Set.elems $ Map.lookup e closure) ++ acc) [] $
         Map.findWithDefault Set.empty i closure
 
     -- list of edges in reverse-topological order, without reflexive edges
@@ -1448,31 +1445,31 @@ automatonPipeline dfs sym inty outty acomp = do
   let k = mkDoneAutomaton inch outch
 
   putStrLn "\n>>>>>>>>>> mkAutomaton"
-  a <- simplToCfg <$> mkAutomaton dfs sym channels acomp k
+  !a <- simplToCfg <$> mkAutomaton dfs sym channels acomp k
   putStrLn $ "<<<<<<<<<<< mkAutomaton (" ++ show (size a) ++ " states)"
 
   putStrLn ">>>>>>>>>>> fuseActions"
-  let a_f = fuseActions dfs a
+  let !a_f = fuseActions dfs a
   putStrLn $ "<<<<<<<<<<< fuseActions (" ++ show (size a_f) ++ " states)"
 
   putStrLn ">>>>>>>>>>> deleteDeadNodes"
-  let a_d = deleteDeadNodes a_f
+  let !a_d = deleteDeadNodes a_f
   putStrLn $ "<<<<<<<<<<< deleteDeadNodes (" ++ show (size a_d) ++ " states)"
 
   putStrLn ">>>>>>>>>>> markSelfLoops"
-  let a_l = markSelfLoops a_d
+  let !a_l = markSelfLoops a_d
   putStrLn $ "<<<<<<<<<<< markSelfLoops (" ++ show (size a_l) ++ " states)"
 
   putStrLn ">>>>>>>>>>> normalize_auto_ids"
-  let a_n = normalize_auto_ids 0 a_l
+  let !a_n = normalize_auto_ids 0 a_l
   putStrLn $ "<<<<<<<<<<< normalize_auto_ids (" ++ show (size a_n) ++ " states)"
 
-  putStrLn ">>>>>>>>>>> cfgToAtomix"
-  let a_a = cfgToAtomix a_n
+  putStrLn ">>>>>>>>>>> cfgToAtomix -- this may take a while ..."
+  let !a_a = cfgToAtomix a_n
   putStrLn $ "<<<<<<<<<<< cfgToAtomix (" ++ show (size a_a) ++ " states)"
 
   putStrLn ">>>>>>>>>>> componentScheduler"
-  let a_s = componentScheduler dfs a_a
+  let !a_s = componentScheduler dfs a_a
   putStrLn $ "<<<<<<<<<<< componentScheduler (" ++ show (size a_s) ++ " states)"
 
   -- dump dot files 
