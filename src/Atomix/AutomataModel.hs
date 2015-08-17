@@ -1140,7 +1140,7 @@ cfgToAtomix a = a { auto_graph = state_graph} where
 -- queue dependency environment
 type QDependencyEnv = Map Chan (Int,Queue Int, Int) -- last read/queue of active writes (of cardinality one) from/to channel plus last writer to this queue
 -- variable dependency environment
-type VDependencyEnv = Map Chan (Int, Int) -- last read/write
+type VDependencyEnv = Map Chan (Set Int, Int) -- last reads / last write
 type PipeBalances = Map Chan Int
 
 type Acc = (QDependencyEnv, VDependencyEnv, [(Int,Int,Dependency)])
@@ -1181,8 +1181,8 @@ mk_constraints in_ch out_ch pipes watoms mb_decision
 
     -- reading from variable
     go_inwires idx (qenv, venv, constrs) (1,ch) =
-      let (_, last_wr) = Map.findWithDefault (-1,-1) ch venv in
-      let venv' = Map.insert ch (idx, last_wr) venv in
+      let (last_rs, last_wr) = Map.findWithDefault (Set.singleton (-1), -1) ch venv in
+      let venv' = Map.insert ch (Set.insert idx last_rs, last_wr) venv in
       let constrs' = (last_wr, idx, WR) : constrs in
       (qenv, venv', constrs')
 
@@ -1206,9 +1206,9 @@ mk_constraints in_ch out_ch pipes watoms mb_decision
 
     -- writing to variable
     go_outwires idx (qenv, venv, constrs) (1,ch) =
-      let (last_r,last_w) = Map.findWithDefault (-1,-1) ch venv in
-      let venv' = Map.insert ch (last_r, idx) venv in
-      let constrs' = (last_w,idx,WW) : (last_r,idx,RW) : constrs in
+      let (last_rs,last_w) = Map.findWithDefault (Set.singleton (-1), -1) ch venv in
+      let venv' = Map.insert ch (last_rs, idx) venv in
+      let constrs' = (last_w,idx,WW) : [(last_r,idx,RW) | last_r <- Set.elems last_rs ] ++ constrs in
       (qenv, venv', constrs')
 
     go_outwires _ _ _ = panicStr "mk_constraints: unexpected case"
