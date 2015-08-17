@@ -1371,7 +1371,7 @@ dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfi
                                           n -> show n ++ " TIMES DO " ++ showWatom (head wa)
 
     showWatom wa@(WiredAtom inw outw _) | isDynFlagSet dflags CLikeNames
-      = showWires inw ++ show (alphaNumStr $ wiredAtomId wa) ++ showWires outw where
+      = showWires inw ++ alphaNumStr (wiredAtomId wa) ++ showWires outw where
           showWires ws = "{" ++ (List.intercalate "," $ map showWire ws) ++ "}"
           showWire (n,ch)
             | n==1      = showChan True ch
@@ -1409,7 +1409,7 @@ dotOfAxAuto dflags a = map (\(nid,state) -> (nid, dotify state)) $ Map.toList $ 
 
   mk_watom (w@(WiredAtom inw outw atom),idx)
    | isDynFlagSet dflags CLikeNames
-   = "  " ++ show idx ++ "[label=\"" ++ mk_atom (wiredAtomId w) inw outw atom ++ "\"]"
+   = "  " ++ show idx ++ "[label=\"" ++ mk_atom (alphaNumStr $ wiredAtomId w) inw outw atom ++ "\"]"
    | otherwise
    = "  " ++ show idx ++ "[label=\"" ++ mk_atom (show atom) inw outw atom ++ "\"]"
   mk_atom aid inw outw atom = List.intercalate "\\l" $ 
