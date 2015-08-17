@@ -274,7 +274,7 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
      = if no_threads == 1 then
            appendStmt [cstm| goto $id:(lblOfNid next); |]
          else
-           appendStmts [cstms| printf("Thread %d in state %d, going to %d\n", $int:c, $int:nid, $int:next);
+           appendStmts [cstms| //printf("Thread %d in state %d, going to %d\n", $int:c, $int:nid, $int:next);
                                barrier($id:(barr_name nid), $int:no_threads, $int:c); 
                                goto $id:(lblOfNid next); |]
 
@@ -288,7 +288,7 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
                            }
                          |]
        else
-         appendStmts [cstms| printf("Thread %d in state %d, goind to %d\n", $int:c, $int:nid, $cc);
+         appendStmts [cstms| //printf("Thread %d in state %d, goind to %d\n", $int:c, $int:nid, $cc);
                              barrier($id:(barr_name nid), $int:no_threads, $int:c);
                              if ($cc) {
                                   barrier($id:(barr_name2 nid), $int:no_threads, $int:c);
@@ -568,7 +568,7 @@ readFromTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
          cx <- lookupVarEnv x
          ci <- lookupVarEnv i
          appendStmt $ [cstm| for ($ci = 0; $ci < $int:n; $ci++) {
-                                ts_getManyBlocking($int:qid,(char *) $cx, 1);
+                                ts_getManyBlocking($int:qid, 1, (char *) $cx);
                                 bitArrWrite((typename BitArrPtr) $cx,
                                               $ci*$int:m,
                                               $int:m,
