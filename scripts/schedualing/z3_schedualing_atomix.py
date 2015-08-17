@@ -20,6 +20,15 @@ from z3 import *
 import time
 import matplotlib.pyplot as plt
 
+# Variable descriptions:
+# d - the max delay allowed
+# n - the number of atoms -- we optimize this
+# Tmax - the maximum period time allowed when scheduling loops -- we optimize this
+# G - G[i][j] = -n if j is dependent on i n iteration in the past. G[i][j] = 0 if j is normaly dependent on i. G[i][j] = 1 if no dependency
+# D - inf
+# m - number of cores
+# p - p[i][k] = the time to run atom i on core k
+# q - q[k][t] = communication time between cores k and t 
 def main(input_file,timestamp_solver = True):
     init("libz3.dll")
     n = 4
@@ -102,6 +111,7 @@ def main(input_file,timestamp_solver = True):
         print(t)
     plotSchedual(m,n,p,q,G,d,model)
 
+# simple binary search algorithm to find best d
 def schedStateSimple(state,q,m):
     G = state.dependecies
     p = state.runningtimes
@@ -132,6 +142,7 @@ def schedStateSimple(state,q,m):
     genSingleSchedSolver(n,m,p,d,D,G,q)
     return parseResults(n,p,s.model())
 
+#the smt problem for a simple state schedule
 def genSingleSchedSolver(n,m,p,d,D,G,q): 
     #s = SolverFor('QF_LIA')
     s = Solver()
@@ -242,6 +253,7 @@ def plotSchedual(m,n,p,q,G,d,model):
     ax.set_xlabel('Time')
     plt.show()
 
+# smt problem for loop scheduling
 def genLoopSchedSolver(n,m,p,d,D,G,q,Tmax): 
     #s = SolverFor('QF_LIA')
     s = Solver()
@@ -291,6 +303,7 @@ def genUnrollLoop(n,p,G,count):
                     Gnew[t][s] = 0 
     return {'G': Gnew, 'p': p * count, 'n': Nnew}
 
+# scheduling one state based on the schedule of a previous state !!!not complete!!!
 def combineSched(core_alloc, start_times, end_times, dec_eval_time, n,m,p,d,D,G,q):
     #s = SolverFor('QF_LIA')
     s = Solver()
@@ -344,6 +357,7 @@ def combineSched(core_alloc, start_times, end_times, dec_eval_time, n,m,p,d,D,G,
                s.add(Implies(y[i][k],x[i] + p[i][k] <= d))
     return s
 
+# smt problem with more complex dependencies like Read read or write write, !!!deprecated!!!
 def genSingleSchedSolver_complex_dependencies(n,m,p,d,D,G,Grr,Gww,q): 
     #s = SolverFor('QF_LIA')
     s = Solver()
@@ -393,49 +407,6 @@ def genSingleSchedSolver_complex_dependencies(n,m,p,d,D,G,Grr,Gww,q):
                           # this constraint makes sure that no core is over booked
                           s.add(Implies(And(y[i][k],y[j][k]),Or(x[j] - x[i] >= p[i][k], x[i] - x[j] >= p[j][k])))
                 
-               else:
-                   for k in range(m):
-                       if (y[i][k] != False) and (y[j][k] != False):
-                           # this constraint makes sure that no core is over booked
-                           s.add(Implies(And(y[i][k],y[j][k]),Or(x[j] - x[i] >= p[i][k], x[i] - x[j] >= p[j][k])))
-       if not flag:
-           # if the Atom is not dependent on any other atom just need to make sure
-           # it is not schedualed in the past
-           s.add(x[i] >= 0) # x_i >= 0
-       for k in range(m):
-           if y[i][k] != False:
-               s.add(Implies(y[i][k],x[i] + p[i][k] <= d))
-    return s
-
-def genSingleSchedSolver_with_queue(n,m,p,d,D,G,q,fifo_alloc,atom_wires): 
-    #s = SolverFor('QF_LIA')
-    s = Solver()
-    x = RealVector('x',n) # consider making bit vector
-    
-    y = []; # define y_i_j
-    for i in range(n):
-        y.append([])
-        for j in range(m):
-            if p[i][j] < D:
-                y[i].append(Bool('y__%s__%s' % (i,j)))
-            else:
-                y[i].append(False)
-    for i in range(n):  
-       # add a costraint that each atom is alocated to at least one core,
-       # no need to add a constraint that each atom is allocated to only 
-       # one core because in the optimal solution this will never happen anyway
-       s.add(Or(y[i]))
-       flag = False  
-       for j in range(n):
-           if i != j:
-               flag = flag or (G[j][i] == 0)
-               if G[i][j] == 0: # if i and j are dependent C[i] < x[j]
-                   for k in range(m):
-                       for t in range(m):
-                           if (y[i][k] != False) and (y[j][t] != False):
-                               # this constraint makes sure ordering between dependent atoms is kept
-                               # and takes care of communication costs between the atoms
-                               s.add(Implies(And(y[i][k],y[j][t]), x[j] - x[i] >= p[i][k] + q[k][t])) 
                else:
                    for k in range(m):
                        if (y[i][k] != False) and (y[j][k] != False):
