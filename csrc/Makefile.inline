@@ -18,8 +18,8 @@
 #
 #
 
-CC = gcc
-CFLAGS = -std=c99 -msse3 -m64 -mcmodel=large -I . -I /cygdrive/c/SoraSDK2.0/inc/ -Wno-attributes #-DSORA_PLATFORM=1 -DUSER_MODE=1
+CC = g++
+CFLAGS = -std=c++11 -msse3 -Wno-attributes -Wno-write-strings
 LIBS = -lm 
 OBJDIR = .
 

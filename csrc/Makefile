@@ -18,8 +18,8 @@
 #
 #
 
-CC = gcc
-CFLAGS = -std=c99 -msse3 
+CC = g++
+CFLAGS = -std=c++11 -msse3 -Wno-attributes -Wno-write-strings
 LIBS = -lm
 OBJDIR = .
 

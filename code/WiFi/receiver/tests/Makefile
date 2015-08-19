@@ -28,7 +28,7 @@
 # COMPILER?=gcc
 # COMPILER?=winddk
 #
-COMPILER?=vs
+COMPILER?=gcc
 
 PP   = ../../../../scripts/preprocesscompile-$(COMPILER)-debug.sh
 DIFF = ../../../../tools/BlinkDiff
@@ -58,7 +58,7 @@ all: $(TGTS)
 # and -p treats that as correct
 # We add -p in vectorized tests through DIFFOPTS=-p
 %.test: %.outfile
-	$(DIFF) $(DIFFOPTS) -f $< -g $<.ground -d -v -n 0.9
+	$(DIFF) $(DIFFOPTS) -f $< -g $<.ground -d -v -n 0.9 -t 220
 
 %.accept : %.outfile
 	cp $< $<.ground

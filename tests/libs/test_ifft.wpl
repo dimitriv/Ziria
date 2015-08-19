@@ -22,22 +22,32 @@
 
 
 fun comp ifft_test() {
-	--the full LTE range:
-	--[12, 24, 36, 48, 60, 72, 96, 108, 120, 144, 180, 192, 216, 240, 288, 300, 324, 360, 384, 432, 480, 540, 576, 600, 648, 720, 768, 864, 900, 960, 972, 1080, 1152, 1200];
-
+	--the full range:
+	--[12, 16, 24, 32, 36, 48, 60, 64, 72, 96, 108, 120, 128, 144, 180, 192, 216, 240, 256, 288, 300, 324, 360, 384, 432, 480, 512, 540, 576, 600, 648, 720, 768, 864, 900, 960, 972, 1024, 1080, 1152, 1200, 2048];
+	
+	
 	(x:arr[12] complex16) <- takes 12;
 	emits sora_ifft(x);
-
+	
+	(x:arr[16] complex16) <- takes 16;
+	emits sora_ifft(x);
+	
 	(x:arr[24] complex16) <- takes 24;
+	emits sora_ifft(x);
+
+	(x:arr[32] complex16) <- takes 32;
 	emits sora_ifft(x);
 
 	(x:arr[36] complex16) <- takes 36;
 	emits sora_ifft(x);
-
+	
 	(x:arr[48] complex16) <- takes 48;
 	emits sora_ifft(x);
-
+	
 	(x:arr[60] complex16) <- takes 60;
+	emits sora_ifft(x);
+	
+	(x:arr[64] complex16) <- takes 64;
 	emits sora_ifft(x);
 	
 	(x:arr[72] complex16) <- takes 72;
@@ -50,6 +60,9 @@ fun comp ifft_test() {
 	emits sora_ifft(x);
 
 	(x:arr[120] complex16) <- takes 120;
+	emits sora_ifft(x);
+
+	(x:arr[128] complex16) <- takes 128;
 	emits sora_ifft(x);
 
 	(x:arr[144] complex16) <- takes 144;
@@ -67,6 +80,9 @@ fun comp ifft_test() {
 	(x:arr[240] complex16) <- takes 240;
 	emits sora_ifft(x);
 	
+	(x:arr[256] complex16) <- takes 256;
+	emits sora_ifft(x);
+
 	(x:arr[288] complex16) <- takes 288;
 	emits sora_ifft(x);
 	
@@ -86,6 +102,9 @@ fun comp ifft_test() {
 	emits sora_ifft(x);
 
 	(x:arr[480] complex16) <- takes 480;
+	emits sora_ifft(x);
+
+	(x:arr[512] complex16) <- takes 512;
 	emits sora_ifft(x);
 
 	(x:arr[540] complex16) <- takes 540;
@@ -118,6 +137,9 @@ fun comp ifft_test() {
 	(x:arr[972] complex16) <- takes 972;
 	emits sora_ifft(x);
 
+	(x:arr[1024] complex16) <- takes 1024;
+	emits sora_ifft(x);
+
 	(x:arr[1080] complex16) <- takes 1080;
 	emits sora_ifft(x);
 
@@ -127,7 +149,9 @@ fun comp ifft_test() {
 	(x:arr[1200] complex16) <- takes 1200;
 	emits sora_ifft(x);
 	
-
+	(x:arr[2048] complex16) <- takes 2048;
+	emits sora_ifft(x);
+	
 }
 
 

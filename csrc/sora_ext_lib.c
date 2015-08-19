@@ -23,11 +23,12 @@
 #include <xmmintrin.h>
 #include <emmintrin.h>
 
+
 #ifdef SORA_PLATFORM
 
 #include <sora.h>
 #include <vector128.h>
-#include <fft.h>
+
 #include "viterbicore.h"
 #include "tpltrick.h"
 #include "ieee80211a_cmn.h"
@@ -50,10 +51,9 @@
 #include "samples.hpp"
 #include "sampling.hpp"
 #include "sora_ext_bricks.h"
-#include "sora_ext_lib_fft.h"
-
 #endif
 
+#include "sora_ext_lib_fft.h"
 
 #include "utils.h"
 
@@ -1354,15 +1354,17 @@ int32 __ext_atan2_int32 ( int32 y, int32 x ) {
 
 // *** FFT
 
-
+#endif
 //FINL 
 // int __ext_sora_fft(short nFFTSize, struct complex16 * input, int unused1, struct complex16* output, int unused2)
 void __ext_sora_fft(struct complex16* output, int nFFTSize, struct complex16 * input, int unused1)
 {
-	vcs *in = (vcs*)input;
-	vcs *out = (vcs*)output;
 
-	// We use the safe version to respect Blink's semantic
+	struct complex16 *in = (struct complex16*)input;
+	struct complex16 *out = (struct complex16*)output;
+
+
+	//// We use the safe version to respect Blink's semantic
 	switch (nFFTSize) {
 	case 16:
 		FFTSafe<16>(in, out);
@@ -1511,8 +1513,10 @@ void __ext_sora_fft_dynamic(struct complex16* output, int unused2, int16 nFFTSiz
 //int __ext_sora_ifft(short nFFTSize, struct complex16 * input, int unused1, struct complex16* output, int unused2)
 void __ext_sora_ifft(struct complex16* output, int nFFTSize, struct complex16 * input, int unused1)
 {
-	vcs *in = (vcs*)input;
-	vcs *out = (vcs*)output;
+
+	struct complex16 *in = (struct complex16*)input;
+	struct complex16 *out = (struct complex16*)output;
+
 
 	// We use the safe version to respect Blink's semantic
 	//	IFFT<128> (temp, pcOutput );
@@ -1542,7 +1546,6 @@ void __ext_sora_ifft(struct complex16* output, int nFFTSize, struct complex16 * 
 		IFFTSafe<2048>(in, out);
 		break;
 	// LTE compatibility
-		// LTE compatibility
 	case 12:
 		IFFTSafe<12>(in, out);
 		break;
@@ -1661,7 +1664,7 @@ void __ext_sora_ifft_dynamic(struct complex16* output, int unused2, int16 nFFTSi
 
 
 
-
+#ifdef SORA_PLATFORM
 
 
 // Currently we only support one Viterbi running at a time
@@ -1710,46 +1713,6 @@ int __ext_record_time_stop() {
 	return 0;
 }
 
-
-
-
- //compiling v_xor (or any other logical) provides issues with uint64
-// even if there are no occurences of uint64 in here, they still occur in test.c
-
-//#else
-//
-//void __ext_v_and(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
-//{
-//	//int cnt = 0;
-//	//int bytelen1 = inlen1 / 8 + ((inlen1 % 8) > 0);
-//	
-//	//vcs *pi1 = (vcs *)input1;
-//	//vcs *pi2 = (vcs *)input2;
-//	//vcs *po = (vcs *)output;
-//	const int wlen = 128;// sizeof(vcs) / sizeof(complex16);
-//	printf("rem = %d\n", inlen1-(inlen1/wlen)*wlen);
-//
-//	
-//
-//	for (int i = 0; i < inlen1 / wlen; i++)
-//	{
-//		__m128i mi1 = _mm_loadu_si128((__m128i *) (input1+wlen*i));
-//		__m128i mi2 = _mm_loadu_si128((__m128i *) (input2+wlen*i));
-//
-//		_mm_storeu_si128((__m128i *) (output + wlen*i), _mm_and_si128(mi1, mi2));
-//
-//	}
-//
-//	
-//	outlen = inlen1;
-//
-//
-//	for (int i = (inlen1 / wlen) * wlen; i < inlen1; i++){
-//		output[i] = input1[i] & input2[i];
-//	};
-//
-//
-//}
 
 #endif
 
