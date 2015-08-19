@@ -31,13 +31,16 @@ import Text.PrettyPrint.HughesPJ
 
 import qualified GenSym as GS
 
+import Control.Applicative ( (<$>) )
+
 import AstComp
 import AstExpr
 import AstUnlabelled
 import TcMonad
 import Utils
-
 import Orphans ()
+
+import NameEnv
 
 {-------------------------------------------------------------------------------
   The heart of renaming: renaming variables
@@ -318,7 +321,8 @@ renExp (MkExp exp0 eloc ()) = case exp0 of
         return $ eError eloc a str
       ELUT r e1 -> do
         e1' <- renExp e1
-        return $ eLUT eloc r e1'
+        r'  <- renLUTStats r
+        return $ eLUT eloc r' e1'
       EStruct t tfs -> do
         tfs' <- mapM (\(f,e') -> renExp e' >>= \e'' -> return (f,e'')) tfs
         return $ eStruct eloc t tfs'
@@ -346,8 +350,27 @@ renBind (x, c) = do
     c' <- recName x' $ renComp c
     return (x', c')
 
+{-------------------------------------------------------------------------------
+  Renaming LUT statistics
+-------------------------------------------------------------------------------}
+renLUTStats :: LUTStats -> TcM LUTStats
+renLUTStats (LUTStats iw ow rw siz vupkg rvar should) 
+  = do vupkg' <- renVarUsePkg vupkg
+       rvar'  <- ren_maybe rvar
+       return $ LUTStats iw ow rw siz vupkg' rvar' should
+  where ren_maybe Nothing  = return Nothing
+        ren_maybe (Just x) = Just <$> renFree x
 
-{------------------- Top-level --------------------}
+renVarUsePkg :: VarUsePkg -> TcM VarUsePkg
+renVarUsePkg (VarUsePkg ivs ovs avs rng)
+  = do ivs' <- mapM renFree ivs
+       ovs' <- mapM renFree ovs
+       avs' <- mapM renFree avs
+       rng' <- neFromList <$>
+               mapM (\(x,r)-> renFree x >>= \x'-> return (x',r)) (neToList rng)
+       return $ VarUsePkg ivs' ovs' avs' rng'
+
+{------------------------------ Top-level -------------------------------------}
 
 tcRenComp :: GS.Sym -> Comp -> IO (GS.Sym, Comp)
 tcRenComp sym comp = do 
