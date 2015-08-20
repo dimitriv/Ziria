@@ -204,7 +204,7 @@ int __cdecl main(int argc, char **argv) {
   diff = clock() - start;
   usec = diff * 1000000 / CLOCKS_PER_SEC;
 #endif
-  printf("Time taken %d\n", usec);
+  printf("Time Elapsed: %d\n", usec);
 #endif
 
   printf("Bytes copied: %ld\n", bytes_copied);

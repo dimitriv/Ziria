@@ -54,7 +54,7 @@
 #endif
 
 #include "sora_ext_lib_fft.h"
-
+#include "intalgx.h"
 #include "utils.h"
 
 
@@ -1325,27 +1325,26 @@ void __ext_v_or(unsigned char *output, int outlen, unsigned char *input1, int in
 
 
 
-#ifdef SORA_PLATFORM
 
 ///// Interface to Sora integer trigonometry
 
 
 int16 __ext_cos_int16 ( int16 y ) {
-  return (int16) ucos(y);
+  return (int16) cosx(y);
 }
 
 
 int16 __ext_sin_int16 ( int16 y ) {
-  return (int16) usin(y);
+  return (int16) sinx(y);
 }
 
 
 int16 __ext_atan2_int16 ( int16 y, int16 x ) {
-  return (int16) uatan2((int)y, (int)x);
+  return (int16) atan2x((int)y, (int)x);
 }
 
 int32 __ext_atan2_int32 ( int32 y, int32 x ) {
-  return uatan2((int)y, (int)x);
+  return atan2x((int)y, (int)x);
 }
 
 
@@ -1354,7 +1353,7 @@ int32 __ext_atan2_int32 ( int32 y, int32 x ) {
 
 // *** FFT
 
-#endif
+
 //FINL 
 // int __ext_sora_fft(short nFFTSize, struct complex16 * input, int unused1, struct complex16* output, int unused2)
 void __ext_sora_fft(struct complex16* output, int nFFTSize, struct complex16 * input, int unused1)

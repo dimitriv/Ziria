@@ -21,9 +21,7 @@
 
 -- Trigonometry
 
-fun external arctan2(y:int16, x: int16, var th:arr[1] int16) : ()
-fun external ucosw(y:int16, var out:arr[1] int16) : ()
-fun external usinw(y:int16, var out:arr[1] int16) : ()
+
 fun external sin_int16(x:int16) : int16
 fun external cos_int16(x:int16) : int16
 fun external atan2_int16(y:int16, x:int16) : int16
