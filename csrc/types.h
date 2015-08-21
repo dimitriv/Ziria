@@ -59,7 +59,8 @@ typedef unsigned __int64 memsize_int;
 
 #define PSORA_UTHREAD_PROC void
 
-typedef int bool;
+// No need for this with c++
+//typedef int bool;
 
 typedef unsigned char  uint8;
 typedef unsigned short uint16;
