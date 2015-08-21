@@ -25,6 +25,9 @@ permissions and limitations under the License.
 //
 typedef short FP_RAD;  // fixed point radians
 
+// FP_FRAC fixed point fraction - [-1,1)
+//
+typedef short FP_FRAC; // fixed point fraction
 
 
 

@@ -51,10 +51,12 @@
 #include "samples.hpp"
 #include "sampling.hpp"
 #include "sora_ext_bricks.h"
+#include "intalg.h"
+#else
+#include "intalgx.h"
 #endif
 
 #include "sora_ext_lib_fft.h"
-#include "intalgx.h"
 #include "utils.h"
 
 
@@ -1328,7 +1330,23 @@ void __ext_v_or(unsigned char *output, int outlen, unsigned char *input1, int in
 
 ///// Interface to Sora integer trigonometry
 
+#ifdef SORA_PLATFORM
+int16 __ext_cos_int16 ( int16 y ) {
+	return (int16)ucos(y);
+}
 
+int16 __ext_sin_int16 ( int16 y ) {
+	return (int16)usin(y);
+}
+
+int16 __ext_atan2_int16 ( int16 y, int16 x ) {
+	return (int16)uatan2((int)y, (int)x);
+}
+
+int32 __ext_atan2_int32 ( int32 y, int32 x ) {
+	return uatan2((int)y, (int)x);
+}
+#else
 int16 __ext_cos_int16 ( int16 y ) {
   return (int16) cosx(y);
 }
@@ -1346,8 +1364,7 @@ int16 __ext_atan2_int16 ( int16 y, int16 x ) {
 int32 __ext_atan2_int32 ( int32 y, int32 x ) {
   return atan2x((int)y, (int)x);
 }
-
-
+#endif
 
 
 
