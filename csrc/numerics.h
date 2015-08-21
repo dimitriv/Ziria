@@ -21,10 +21,18 @@
 #ifdef SORA_PLATFORM
 /////////////////////////////////////////////////
 
+#ifdef __GNUC__
+#include <stdint.h>
+typedef int8_t num8;
+typedef int16_t num16;
+typedef int32_t num32;
+typedef int64_t num64;
+#else
 typedef __int8  num8;
 typedef __int16 num16;
 typedef __int32 num32;
 typedef __int64 num64;
+#endif
 
 #define calign __declspec(align(16))
 #define cthread __declspec(thread)
@@ -47,8 +55,13 @@ typedef long long int num64;
 #define cthread
 
 #ifdef INLINE_COMPILATION
+#ifdef __GNUC__
+#define FORCE_INLINE __attribute__((always_inline))
+#define FINL __attribute__((always_inline))
+#else
 #define FORCE_INLINE __inline
 #define FINL __inline
+#endif
 #else 
 #define FORCE_INLINE 
 #define FINL 

@@ -155,29 +155,32 @@ test-WiFi-perf-all-clean: test-WiFi-perf-clean test-WiFi-TX-perf-clean test-WiFi
 
 test-WiFi-perf:
 	@echo ">>>>>>>>>>>> WiFi performance tests" 
-	make -C code/WiFi/perf > perf.txt
+	make -C code/WiFi/perf >> perf.txt
 	cat perf.txt
 	@echo "<<<<<<<<<<<< WiFi performance tests" 
 
 test-WiFi-perf-clean:
+	rm -f perf.txt
 	make -C code/WiFi/perf clean
 
 test-WiFi-RX-perf:
 	@echo ">>>>>>>>>>>> WiFi RX performance tests" 
-	make -C code/WiFi/receiver/perf > rx-perf.txt
+	make -C code/WiFi/receiver/perf >> rx-perf.txt
 	cat rx-perf.txt
 	@echo "<<<<<<<<<<<< WiFi RX performance tests" 
 
 test-WiFi-RX-perf-clean: 
+	rm -f rx-perf.txt
 	make -C code/WiFi/receiver/perf clean
 
 test-WiFi-TX-perf:
 	@echo ">>>>>>>>>>>> WiFi TX performance tests" 
-	make -C code/WiFi/transmitter/perf > tx-perf.txt
+	make -C code/WiFi/transmitter/perf >> tx-perf.txt
 	cat tx-perf.txt
 	@echo "<<<<<<<<<<<< WiFi TX performance tests" 
 
 test-WiFi-TX-perf-clean: 
+	rm -f tx-perf.txt
 	make -C code/WiFi/transmitter/perf clean
 
 # vi:set noexpandtab:

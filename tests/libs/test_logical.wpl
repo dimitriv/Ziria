@@ -1,0 +1,41 @@
+--
+--Copyright (c) Microsoft Corporation
+--All rights reserved.
+--
+--Licensed under the Apache License, Version 2.0 (the ""License""); you
+--may not use this file except in compliance with the License. You may
+--obtain a copy of the License at
+--
+--http://www.apache.org/licenses/LICENSE-2.0
+--
+--THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+--CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+--LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+--A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+--See the Apache Version 2.0 License for specific language governing
+--permissions and limitations under the License.
+--
+--
+#include <externals.blk>
+
+
+fun comp test() {
+	
+(x:arr[600] bit) <- takes 600
+
+	
+var y: arr[1200] bit;
+	
+		do{
+		    y[  0,300]:=v_or(x[0,300],x[300,300]);
+		    y[300,300]:=v_and(x[0,300],x[300,300]);
+		    y[600,300]:=v_xor(x[0,300],x[300,300]);
+		    y[900,300]:=v_andnot(x[0,300],x[300,300]);
+		  }
+		
+		emits y;
+}
+
+
+let comp main = read[bit] >>> repeat test() >>> write[bit]

@@ -74,7 +74,7 @@ test_encdec%.outfile: test_encdec.out test_encdec%.infile
 # and -p treats that as correct
 # We add -p in vectorized tests through DIFFOPTS=-p
 %.test: %.outfile
-	$(DIFF) $(DIFFOPTS) -f $< -g $<.ground -d -v -n 0.88
+	$(DIFF) $(DIFFOPTS) -f $< -g $<.ground -d -v -n 0.81 -t 105
 
 
 %.accept : %.outfile

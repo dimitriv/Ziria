@@ -20,7 +20,6 @@
 
 #include "const.blk"
 #include <externals.blk>
-#include <v_conj_mul.blk>
 #include <abs.blk>
 #include <v_correlate.blk>
 

@@ -20,7 +20,6 @@
 #pragma once 
 
 #include "../../const.blk"
-#include <v_mul.blk>
 
 fun comp FreqCompensation(params : struct LTECoeffs) {
    var symbol:arr[64] complex16;
@@ -30,7 +29,7 @@ fun comp FreqCompensation(params : struct LTECoeffs) {
 
       do {
          symbol := symbol_in;
-         v_mul_complex16_shift(symbol,symbol,params.freqCoeffs,16);
+         v_mul_complex16(symbol,symbol,params.freqCoeffs,16);
       };
       emits symbol
    }

@@ -21,9 +21,7 @@
 
 -- Trigonometry
 
-fun external arctan2(y:int16, x: int16, var th:arr[1] int16) : ()
-fun external ucosw(y:int16, var out:arr[1] int16) : ()
-fun external usinw(y:int16, var out:arr[1] int16) : ()
+
 fun external sin_int16(x:int16) : int16
 fun external cos_int16(x:int16) : int16
 fun external atan2_int16(y:int16, x:int16) : int16
@@ -58,38 +56,26 @@ fun external sqrt_int32(d:int32) : int32
 
 
 -- SIMD
--- Downsample input by 2
-fun external v_downsample_complex16(input:arr complex16) : arr[length(input)] complex16;
-
-fun external permutate_low1032w (x:arr[4] complex16, var y:arr[4] complex16): ()
-fun external permutate_high1032w (x:arr[4] complex16, var y:arr[4] complex16): ()
-fun external pairwise_muladdw (x:arr[4] complex16, y:arr[4] complex16, var z:arr[4] int): ()
-fun external conjrew (x:arr[4] complex16, var y:arr[4] complex16): ()
-fun external sum_conj_mulw32 (x:arr[4] complex16, y:arr[4] complex16): complex
-
--- Return by reference for performance
---fun external conj0w (x:arr[4] complex16): arr[4] complex16
---fun external muladdw (a:arr[4] complex16, b:arr[4] complex16): arr[4] int
---fun external conj_mulw (x:arr[4] complex16, y:arr[4] complex16): arr[4] complex16
-fun external conj0w (var ret:arr[4] complex16, x:arr[4] complex16): ()
-fun external muladdw (var ret:arr[4] int, a:arr[4] complex16, b:arr[4] complex16): ()
-fun external conj_mulw (var ret:arr[4] complex16, x:arr[4] complex16, y:arr[4] complex16): ()
-
 
 -- CHECK, unify, and make inputs polymorphic
+-- Sums all components of a vector x of length 4
 fun external sumc16 (x:arr[4] complex16): complex16
 fun external sumc32 (x:arr[4] complex): complex
 fun external sumi16 (x:arr[4] int16): int16
 fun external sumi32 (x:arr[4] int): int
-fun external v_sum_complex16(x:arr complex16 ) : complex16
+-- Sums all components of a vector x of arbitrary length
+-- complex32 & int 16 not supported by Sora (yet?)
 fun external v_sum_int32(x:arr int32 ) : int32
+fun external v_sum_int16(x:arr int16 ) : int16
+fun external v_sum_complex16(x:arr complex16 ) : complex16
+fun external v_sum_complex32(x:arr complex32 ) : complex32
 
 
 -- equivalent to sora hadd:
 -- Sum all components of vector x and stores it in all components of z
 -- z(i) = sum(x) for all i
-fun external v_hadd_complex16(var z:arr[4] complex16, x:arr[4] complex16) : ()
 fun external v_hadd_int32(var z:arr[4] int, x:arr[4] int ) : ()
+fun external v_hadd_complex16(var z:arr[4] complex16, x:arr[4] complex16) : ()
 
 
 
@@ -107,7 +93,15 @@ fun external v_sub_int16(var c:arr int16, a:arr[length(c)] int16, b:arr[length(c
 fun external v_sub_int32(var c:arr int32, a:arr[length(c)] int32, b:arr[length(c)] int32 ) : ()
 
 -- c := a * b, NB: c is also complex16
-fun external v_mul_complex16(var c:arr complex16, a:arr[length(c)] complex16, b:arr[length(c)] complex16 ) : ()
+--fun external v_mul_complex16(var c:arr complex16, a:arr[length(c)] complex16, b:arr[length(c)] complex16 ) : ()
+fun external v_mul_complex16(var c:arr complex16, a:arr[length(c)] complex16, b:arr[length(c)] complex16, shift:int ) : ()
+fun external v_mul_complex16_int32(var re:arr int32, var im:arr[length(re)] int32, a:arr[length(re)] complex16, b:arr[length(re)] complex16) : ()
+
+-- c := a * conj(b), NB: c is also complex16
+fun external v_conj_mul_complex16(var c:arr complex16, a:arr[length(c)] complex16, b:arr[length(c)] complex16, shift:int ) : ()
+fun external v_conj_mul_complex16_int32(var re:arr int32, var im:arr[length(re)] int32, a:arr[length(re)] complex16, b:arr[length(re)] complex16) : ()
+
+
 
 
 
@@ -162,18 +156,6 @@ fun external v_pack_int32_complex16(var z:arr complex16, x:arr[length(z)] int32,
 fun external v_pack_complex16_complex8(input:arr complex16) : arr[length(input)] complex8
 
 
--- Negate
-fun external v_negate_complex8(input:arr complex8) : arr[length(input)] complex8
-
-
-
--- Sign operations (essentially applies _mm_sign_epi8)
-fun external v_sign_int8(input1 : arr int8, input2 : arr[length(input1)] int8)    : arr[length(input1)] int8
-
-
-
--- Cast 
-fun external v_cast_complex8_int8(var output:arr int8, input:arr complex8) : ()
 
 
 -- Bit manipulation
@@ -201,24 +183,7 @@ fun external sora_fft_dynamic(nFFTSize : int16, inp : arr complex16) : arr [leng
 
 -- Do we still need this?
 -- Viterbi
--- setting max frame size for now
---fun external viterbi_init(frame_length:int): ()
--- const1 and const2 are used to distinguish between PLCP and data
---fun external viterbi_decode(svalue:arr[48] int16, code_rate:int, 
---             bitValue:arr[96000] bit, const1:int16, const2:int16): int16
---fun external viterbi_decode_old(intInput:arr[48] int16, code_rate:int16, var out:arr[12000] int16) : int16
---fun external viterbi_decode_sig11a(svalue:arr[48] int, code_rate:int, bitValue:arr[12000] int): int
 
--- softBits could be dynamic based nBPSC
-fun external qpsk_demap(input_sample:complex16, var softBits:arr[6] int16) : ()
-fun external bpsk_demap(input_sample:complex16) : int16
-fun external qam16_demap(input_sample:complex16, var softBits:arr[6] int16) : ()
-fun external qam64_demap(input_sample:complex16, var softBits:arr[6] int16) : ()
-
--- Brick interface
---fun external viterbi_brick_init(frame_length:int, code_rate:int16): ()
---fun external viterbiSig11a_brick_init(frame_length:int, code_rate:int16): ()
---fun external viterbi_brick_decode(var svalue:arr[48] int8, bitValue:arr[96000] bit): int16
 
 -- Fast version which use MSR-LA license
 fun external viterbi_brick_init_fast(frame_length:int, code_rate:int16, depth:int16): ()

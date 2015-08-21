@@ -1,0 +1,54 @@
+# 
+# Copyright (c) Microsoft Corporation
+# All rights reserved. 
+#
+# Licensed under the Apache License, Version 2.0 (the ""License""); you
+# may not use this file except in compliance with the License. You may
+# obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+# CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+# LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+# A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+#
+# See the Apache Version 2.0 License for specific language governing
+# permissions and limitations under the License.
+#
+#
+
+CC = g++
+CFLAGS = -std=c++11 -msse3 -Wno-attributes -Wno-write-strings
+LIBS = -lm 
+OBJDIR = .
+
+EXECUTABLE = driver
+LUT_EXECUTABLE = lutexec
+
+all : driver
+
+driver : WrapperGCC.o
+	$(CC) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
+
+lutexec: WrapperGCC.o buf_numerics8.o buf_numerics16.o buf_numerics32.o
+	$(CC) $(EXTRACOPTS) -o $(LUT_EXECUTABLE) $+ $(LIBS)
+
+WrapperGCC.o: WrapperGCC.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+#buf_numerics8.o: buf_numerics8.c
+#	$(CC) $(CFLAGS) -c $< -o $@
+#
+#buf_numerics16.o: buf_numerics16.c
+#	$(CC) $(CFLAGS) -c $< -o $@
+#
+#buf_numerics32.o: buf_numerics32.c
+#	$(CC) $(CFLAGS) -c $< -o $@
+
+clean:
+	-rm -f *.o ./*/*.o
+	-rm -f *~
+	-rm -f $(EXECUTABLE)
+	-rm -f *.out
+

@@ -1,0 +1,53 @@
+--
+--Copyright (c) Microsoft Corporation
+--All rights reserved.
+--
+--Licensed under the Apache License, Version 2.0 (the ""License""); you
+--may not use this file except in compliance with the License. You may
+--obtain a copy of the License at
+--
+--http://www.apache.org/licenses/LICENSE-2.0
+--
+--THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+--CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+--LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+--A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+--See the Apache Version 2.0 License for specific language governing
+--permissions and limitations under the License.
+--
+--
+
+#include <externals.blk>
+--This function is designed to test some
+--of the vector functions in the library
+
+fun comp test() { 
+
+
+var y :arr[100] int16;
+
+
+(x:arr[20] int16) <- takes 20;
+	
+	do{
+		zero_int16(y);
+		
+		v_add_int16(y[ 0,10],x[0,10],x[10,10]);
+
+		v_sub_int16(y[10,10],x[0,10],x[10,10]);
+
+		y[20] := v_sum_int16(x[0,10]);
+
+		v_shift_right_int16( y[50,10],x[0,10],3);
+
+		v_shift_left_int16(  y[60,10],x[0,10],3);
+ };
+	 
+emits y;
+	
+
+	
+}
+
+let comp main = read >>> repeat test() >>> write
