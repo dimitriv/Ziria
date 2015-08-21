@@ -265,10 +265,10 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
 
    cg_decision c nid AtomixDone
      = if no_threads == 1 then
-           appendStmt [cstm| exit(0); |]
+           appendStmt [cstm| return 0; |]
          else
            appendStmts [cstms| barrier($id:(barr_name nid), $int:no_threads, $int:c);
-                               exit(0); |]
+                               return 0; |]
 
    cg_decision c nid (AtomixLoop next)
      = if no_threads == 1 then
