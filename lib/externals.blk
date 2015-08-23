@@ -229,3 +229,14 @@ fun external record_time_stop()  : ()
 
 -- Populate a bit array with random stuff
 fun external populate_rand_array(var a : arr bit) : ()
+
+
+-- Dummy functions that can be insterted to preven Ziria compiler to overdo with inlining
+fun external do_not_inline_int8(x: int8) : int8
+fun external do_not_inline_int16(x: int16) : int16
+fun external do_not_inline_int32(x: int32) : int32
+fun external do_not_inline_int64(x: int64) : int64
+fun external do_not_inline_complex8(x: complex8) : complex8
+fun external do_not_inline_complex16(x: complex16) : complex16
+fun external do_not_inline_complex32(x: complex32) : complex32
+fun external do_not_inline_complex64(x: complex64) : complex64
