@@ -974,6 +974,8 @@ int __ext_interleave_loww( struct complex16* x, int __unused_5,
 //
 
 
+#ifdef SORA_PLATFORM
+// Currently only on Sora. To be ported to GCC/universal intrinsics					 
 //FINL 
 void __ext_v_pack_complex16_complex8(struct complex8* output, int lenout, complex16* input, int lenin)
 {
@@ -993,7 +995,7 @@ void __ext_v_pack_complex16_complex8(struct complex8* output, int lenout, comple
 		output[j].im = input[j].im;
 	}
 }
-
+#endif
 
 //
 //
@@ -1384,6 +1386,8 @@ int __ext_v_cast_complex8_int8(int8* output, int lenout, complex8* input, int le
 
 // *** Arithmetic
 
+#ifdef SORA_PLATFORM
+// Currently only on Sora. To be ported to GCC/universal intrinsics					 
 
 //FINL   
 void __ext_v_negate_complex8(struct complex8* output, int lenout, complex8* input, int lenin)  
@@ -1441,7 +1445,7 @@ void __ext_v_sign_int8(int8 *output, int outlen, int8 *input1, int inlen1, int8 
   outlen = inlen1;  
 }  
 
-
+#endif
 
 
 // *** FFT
