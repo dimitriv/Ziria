@@ -412,20 +412,12 @@ cgArrVal dfs loc arr_ty es
   | otherwise               = cgArrVal_exp dfs loc arr_ty es
 
 cgArrVal_val :: DynFlags -> SrcLoc -> Ty -> [Val] -> Cg C.Exp
-cgArrVal_val _ _ t@(TArray _ TBit) vs
-  | length vs <= 8192 
-  = do snm <- freshName "__bit_arr" t Mut
-       let csnm = [cexp| $id:(name snm)|]
-       let inits = cgBitValues vs
-       appendCodeGenDeclGroup (name snm) t (InitWith inits)
-       return csnm
-  | otherwise -- ^ very large initializer, VS can't deal with that
-  -- BR TODO: Can we not use mem_set to initialize an array, both bit and non-bit
-  = do snm <- freshName "__bit_arr" t Mut
-       let csnm = [cexp| $id:(name snm)|]
-       appendCodeGenDeclGroup (name snm) t ZeroOut
-       return csnm
-
+cgArrVal_val _ _ t@(TArray _ TBit) vs = do
+   snm <- freshName "__bit_arr" t Mut
+   let csnm = [cexp| $id:(name snm)|]
+   let inits = cgBitValues vs
+   appendCodeGenDeclGroup (name snm) t (InitWith inits)
+   return csnm
 
 cgArrVal_val _dfs loc t@(TArray _ _) ws
   | length ws <= 8192 
