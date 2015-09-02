@@ -7,7 +7,11 @@ fun configTX() {
   return params;
 };
 
-let comp main = read[bit] >>> write
+fun comp test() {
+  var cellGrid : arr[50*12*14] complex16;
+  emit cellGrid;
+}
+let comp main = read[int] >>> test() >>> write
 
-
+-- let comp main = read[bit] >>> write
 -- (let x = configTX() in emits x.pdsch) >>> write
