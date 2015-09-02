@@ -330,6 +330,12 @@ cgEval dfs e = go (unExp e) where
 
   go (EFor _ui k estart elen ebody) = do
 
+{- 
+      cgIO $ print $ vcat [ text "estart = " <+> ppr estart
+                          , text "elen   = " <+> ppr elen
+                          , text "ebody  = " <+> ppr ebody
+                          ]
+-}
       k_new <- freshName (name k) (ctExp estart) Imm
 
       (init_decls, init_stms, (ceStart, ceLen)) <- inNewBlock $ do
@@ -421,17 +427,25 @@ cgArrVal_val _ _ t@(TArray _ TBit) vs = do
 
 cgArrVal_val _dfs loc t@(TArray _ _) ws
   | length ws <= 8192 
-  = do snm <- freshName "__val_arr" t Mut
+  = do snm <- freshName "__val_a_arr" t Mut
        let csnm = [cexp| $id:(name snm)|]
        let inits = cgNonBitValues ws
+{- Modified: -}
+       DeclPkg d istms <- 
+           codeGenDeclGroup (name snm) t (InitWith inits)
+       appendTopDecl d
+       mapM_ addGlobalWplAllocated istms
+       return csnm
+{- Original:
        appendCodeGenDeclGroup (name snm) t (InitWith inits)
        return csnm
+-} 
   | otherwise -- ^ very large initializer, VS can't deal with that
   = go t ws
   where 
     go (TArray n tval) vs 
       | length vs <= 8192
-      = do snm <- freshName "__val_arr" t Mut
+      = do snm <- freshName "__val_b_arr" t Mut
            let csnm = [cexp| $id:(name snm)|]
            let inits = cgNonBitValues vs
            DeclPkg d istms <- 
@@ -446,7 +460,7 @@ cgArrVal_val _dfs loc t@(TArray _ _) ws
                (vs1,vs2) = splitAt ln1 vs
            cv1 <- go (TArray (Literal ln1) tval) vs1
            cv2 <- go (TArray (Literal ln2) tval) vs2
-           snm  <- freshName "__val_arr" t Mut
+           snm  <- freshName "__val_c_arr" t Mut
            let valsiz = tySizeOf_C tval
                csiz1  = [cexp| $int:ln1 * $valsiz|]
                csiz2  = [cexp| $int:ln2 * $valsiz|]
