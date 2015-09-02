@@ -1,0 +1,13 @@
+struct TXParams = {
+  pdsch : arr[20] bit
+};
+
+fun configTX() {
+  var params : struct TXParams;
+  return params;
+};
+
+let comp main = read[bit] >>> write
+
+
+-- (let x = configTX() in emits x.pdsch) >>> write
