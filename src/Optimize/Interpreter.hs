@@ -368,6 +368,12 @@ valueExp v = let !e0 = go (unValue v) in MkExp e0 vloc ()
 --
 -- NOTE: We return Maybe a value primarily because we might be rewriting inside
 -- a polymorphic function and hence encounter an array with unknown length.
+-- 
+-- Note [Unneeded Initializations]
+-- For extremely large arrays ( > 1024 ) we have decided to avoid
+-- giving them an initVal (we return Nothing) because this ends up
+-- creating code that statically allocates very large chunks and 
+-- brings VS compilation to its knees.
 initVal :: SrcLoc -> Ty -> Maybe Value
 initVal p ty = (\v0 -> MkValue v0 p) <$> go ty
   where
@@ -384,7 +390,11 @@ initVal p ty = (\v0 -> MkValue v0 p) <$> go ty
     go TBool       = return $ ValueBool   False
     go TString     = return $ ValueString ""
     go TUnit       = return $ ValueUnit
-    go (TArray (Literal n) ty') = ValueArray . SA.newArray n <$> initVal p ty'
+    go (TArray (Literal n) ty') 
+      | n > 2048  -- See Note [Unneded Initializations]
+      = Nothing
+      | otherwise
+      = ValueArray . SA.newArray n <$> initVal p ty'
     go (TStruct _ flds)         = ValueStruct ty <$> mapM initFld flds
     go _                        = Nothing
 
@@ -749,7 +759,11 @@ readVar x = do
   letRefBound <- L.getSt $ evalLetRefs
   case (Map.lookup (uniqId x) letBound, Map.lookup (uniqId x) letRefBound) of
     (Just v, _)                          -> return (Just v)
+-- Note [Unneeded Initializations]
+-- NB: Correct but leads to un-necessary huge initializations sadly ...
     (_, Just (LetRefKnown (Implicit v))) -> return (Just v)
+-- Instead I am setting this to Nothing:
+--    (_, Just (LetRefKnown (Implicit v))) -> return Nothing
     (_, Just (LetRefKnown (Explicit v))) -> return (Just v)
     (_, Just (LetRefUnknown _))          -> return Nothing -- Invalidated
     (Nothing, Nothing)                   -> return Nothing -- Free variable
@@ -1251,6 +1265,14 @@ interpretLetRef eloc x v1 e2 = do
     -- If at any point x was (or might have been) assigned a not
     -- statically known value, we cannot remove the binding site.
     case xState of
+      -- Note [Unneeded Initializations]
+      {- NB: must not delete binding here! 
+      LetRefKnown (Implicit {}) -> do
+        -- Value of the variable known throughout, but still implicit. Need binding!
+        -- Value is _still_ at its implicit default value
+        let !e2' = unEvald e2Evald
+        evaldPart $ eLetRef eloc x Nothing e2'
+      -}
       LetRefKnown _ ->
         -- Value of the variable known throughout. Don't need the binding.
         return e2Evald
