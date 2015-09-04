@@ -111,6 +111,10 @@ module CgMonad
   , lookupCompCode
   , lookupTyDefEnv
   , getBoundVars
+  , getClosVarsOfBoundFun
+
+  , mkExternalCFunName
+  , isExternalCFunName
 
   , newHeapAlloc
   , getMaxStackAlloc
@@ -154,6 +158,8 @@ import qualified Language.C.Pretty as P
 import qualified Data.Map as M
 import Text.PrettyPrint.HughesPJ hiding ( (<>) )
 import Data.Maybe
+
+import Data.List ( isPrefixOf )
 
 import Rebindables
 import AstExpr
@@ -814,9 +820,24 @@ lookupExpFunEnv nm  = do
                           " bound = " ++ show bound ++ " pos = " ++ (displayLoc . locOf . nameLoc) nm)
       Just x  -> return x
 
+
 lookupExpFunEnv_maybe :: GName Ty -> Cg (Maybe (GName Ty, [GName Ty],Bool))
 lookupExpFunEnv_maybe nm  =
     asks $ \rho -> neLookup nm (funEnv rho)
+
+getClosVarsOfBoundFun :: GName Ty -> Cg [GName Ty]
+getClosVarsOfBoundFun f = do
+  mb <- lookupExpFunEnv_maybe f
+  case mb of 
+    Nothing -> return []
+    Just (_freal,clos_vars,_) -> return clos_vars
+
+
+mkExternalCFunName :: String -> String
+mkExternalCFunName str = "__ext_" ++ str
+
+isExternalCFunName :: String -> Bool
+isExternalCFunName str = isPrefixOf "__ext" str
 
 
 getBoundVars :: Cg [GName Ty]
