@@ -167,7 +167,26 @@ fun external v_xor(input1 : arr bit, input2 : arr[length(input1)] bit)    : arr[
 
 
 
+
+
+
+-- Casts:
+fun external v_cast_complex8_int8(var output:arr int8, input:arr complex8) : ()  
+
+
+-- Arithmetics:
+fun external v_negate_complex8(input:arr complex8) : arr[length(input)] complex8  
+-- Sign operations (essentially applies _mm_sign_epi8)  
+fun external v_sign_int8(input1 : arr int8, input2 : arr[length(input1)] int8)    : arr[length(input1)] int8  
+
+  
+
+
+
+
 ------ SORA Code:
+
+fun external v_downsample_complex16(input:arr complex16) : arr[length(input)] complex16; 
 
 -- FFT
 --fun external sora_ifft(nFFTSize : int16, inp : arr complex16, out : arr [length(inp)] complex16) : ()
@@ -210,3 +229,14 @@ fun external record_time_stop()  : ()
 
 -- Populate a bit array with random stuff
 fun external populate_rand_array(var a : arr bit) : ()
+
+
+-- Dummy functions that can be insterted to preven Ziria compiler to overdo with inlining
+fun external do_not_inline_int8(x: int8) : int8
+fun external do_not_inline_int16(x: int16) : int16
+fun external do_not_inline_int32(x: int32) : int32
+fun external do_not_inline_int64(x: int64) : int64
+fun external do_not_inline_complex8(x: complex8) : complex8
+fun external do_not_inline_complex16(x: complex16) : complex16
+fun external do_not_inline_complex32(x: complex32) : complex32
+fun external do_not_inline_complex64(x: complex64) : complex64

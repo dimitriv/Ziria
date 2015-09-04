@@ -1,20 +1,34 @@
 ﻿/*
+Microsoft Research Software Radio
+
 Copyright (c) Microsoft Corporation
+
 All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the ""License""); you
-may not use this file except in compliance with the License. You may
-obtain a copy of the License at
+BSD License
 
-http://www.apache.org/licenses/LICENSE-2.0
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
 
-THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
-CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
-LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
-A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
 
-See the Apache Version 2.0 License for specific language governing
-permissions and limitations under the License.
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS ""AS IS""
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+This file is taken from https://github.com/Microsoft/Sora
 */
 #pragma once
 
@@ -210,7 +224,7 @@ DSP_INLINE1 void FFT(struct complex16* pInput, struct complex16* pOutput)
 template<int N>
 DSP_INLINE1 void FFTSafe(const struct complex16* pInput, struct complex16* pOutput)
 {
-    struct complex16 temp [N];
+	__declspec(align(16)) struct complex16 temp[N];
     memcpy(temp, pInput, sizeof(temp));
     FFT<N>(temp, pOutput);
 }
