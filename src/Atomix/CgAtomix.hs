@@ -46,7 +46,7 @@ import Data.Loc
 import Data.Maybe
 import Text.PrettyPrint.HughesPJ
 -- import qualified GenSym as GS
--- import Data.List ( nub )
+import Data.List ( nub )
 -- import CtExpr 
 -- import CtComp
 -- import TcRename 
@@ -116,13 +116,21 @@ mkCastTyArray n t                      = TArray (Literal n) t
 
 -- | Datatype with queue information of this automaton 
 data QueueInfo 
-  = QI { qi_inch   :: EId                   -- ^ THE Input queue 
-       , qi_outch  :: EId                   -- ^ THE Output queue
-       , qi_interm :: Map.Map EId (QId,Int) -- ^ Intermediate queues, 
-                                            -- ^ their ids and max sizes
+  = QI { qi_inch   :: EId                        -- ^ THE Input queue 
+       , qi_outch  :: EId                        -- ^ THE Output queue
+       , qi_interm :: Map.Map EId (QId,Int)
+         -- ^ Intermediate queues, 
+         -- ^ their ids and max sizes
+         -- ^ as well as a flag indicating
+         -- ^ whether it's a local 
+         -- ^ queue (i.e. can be just replaced with a variable)
+         -- ^ in which case the size must be just one. 
+       , qi_cores :: Map.Map EId [Int] -- ^ Which cores access each queue
        }
+  deriving Show
 
 newtype QId = QId { unQId :: Int }
+  deriving Show
 data QueueId = QIn | QOut | QMid QId
 
 qiQueueId :: EId -> QueueInfo -> Maybe QueueId
@@ -136,7 +144,8 @@ qiQueueId _ _ = Nothing
 -- | Declare queues 
 cgDeclQueues :: DynFlags -> QueueInfo -> Cg a -> Cg a
 cgDeclQueues dfs qs action 
-  = let numqs = Map.size (qi_interm qs)
+  = cgIO (putStrLn (show qs)) >> 
+    let numqs = Map.size (qi_interm qs)
     in if numqs == 0 then do 
            bind_queue_vars action (qi_inch qs : qi_outch qs : []) 
         else do 
@@ -180,16 +189,24 @@ extractQueues auto
   = QI { qi_inch   = auto_inchan auto
        , qi_outch  = auto_outchan auto
        , qi_interm = interms
+       , qi_cores  = cores
        }
   where
     interms = Map.fromList $ 
                zipWith (\(k,siz) n -> (k,(QId n,siz))) 
                        (Map.toList (unions_with max pre)) [0..]
 
+    cores = unions_with (\c1 c2 -> nub (c1 ++ c2)) pre_cores 
+
     unions_with f = foldl (Map.unionWith f) Map.empty
 
     pre = map (extract_queue . node_kind) (Map.elems (auto_graph auto))
-    extract_queue (AtomixState atoms _ _ init_pipes) = update_pipes atoms init_pipes
+    extract_queue (AtomixState atoms _ _ init_pipes) 
+       = update_pipes atoms init_pipes
+
+    pre_cores = map (extract_core . node_kind) (Map.elems (auto_graph auto))
+    extract_core (AtomixState atoms _ _ init_pipes)
+       = update_cores atoms (Map.map (\_ -> []) init_pipes)
 
     update_pipes :: [WiredAtom SymAtom] -> Map Chan Int -> Map Chan Int
     update_pipes watoms pipes 
@@ -200,6 +217,17 @@ extractQueues auto
                        m'   = max m cur'
                    in (cur',m')) ps
 
+    -- | Add cores that access each queue to the map
+    update_cores :: [WiredAtom SymAtom] -> Map Chan [Int] -> Map Chan [Int]
+    update_cores watoms pipes = foldl upd_cores pipes watoms
+      where upd_cores ps wa = 
+               Map.mapWithKey (\q cs -> 
+                   if (countWrites q wa > 0 || countReads q wa > 0) 
+                   then getWiredAtomCore wa : cs else cs) ps 
+
+
+
+    
 
 cgAutomatonDeclareAllGlobals :: DynFlags 
             -> RnSt                 -- ^ Records all variables (but no queues)
@@ -401,10 +429,11 @@ cgCallAtom _dfs current_core queues wa
     fun_name = wiredAtomNameOfLbl aid noLoc (TArrow [] TUnit)
     rd_input = rdFromInput queues (wires_in wa)
     aid      = wiredAtomId wa
-    core     = get_core $ atom_core $ the_atom wa
-    get_core (Just c) = c
-    get_core Nothing  = 0
+    core     = getWiredAtomCore wa 
 
+-- | Get the core of a *wired* atom
+getWiredAtomCore :: WiredAtom SymAtom -> Int
+getWiredAtomCore = fromMaybe 0 . atom_core . the_atom
 
 
 {---------------------------- Assert atom implementation ----------------------}
@@ -593,6 +622,30 @@ cgInWiring :: DynFlags
            -> Cg ()
 cgInWiring dfs qs ws vs = mapM_ (uncurry (cgInWire dfs qs)) (zip ws vs)
 
+{- Note [Single Thread Queue Optimization]
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   If a queue is accessed only by one core and it consists of only one
+   slot then we should not be using the queue at all, just directly the
+   variable we have declared for this queue.
+
+   If a queue is multi-threaded I think we have to be careful to not use
+   the same variable for the reader and the writer of the queue. I.e.
+
+   thread0: 
+              ts_put(qid=15,qvar345);
+
+   thread0:
+              ts_get(qid=15,qvar345);
+
+   
+   Although the queue synchronizes we end up with a race on the 'qvar345'!  
+   In such cases we should have declared two different copies
+   of the local variable: qvar345_reader and qvar345_writer!
+
+-} 
+
+
+
 cgInWire :: DynFlags -> QueueInfo -> (Int,EId) -> EId -> Cg ()
 cgInWire dfs qs (n,qvar) v = 
   case qiQueueId qvar qs of
@@ -605,11 +658,17 @@ cgInWire dfs qs (n,qvar) v =
                  eAssign noLoc (eVar noLoc v) (eVar noLoc qvar)
         
     -- Some intermediate SORA queue
-    Just (QMid q) -> do
-      cv <- lookupVarEnv v
-      let ptr = if isPtrType (nameTyp v) 
-                then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
-      readFromTs dfs n (nameTyp qvar) q ptr
+    Just (QMid q)
+        -- Note [Single Thread Queue Optimization]
+      | Just (_,qslots) <- Map.lookup qvar (qi_interm qs) -- interm. (assert)
+      , qslots == 1                                       -- one slot
+      , Just [_] <- Map.lookup qvar (qi_cores qs)         -- and one core
+      -> return ()                                        -- => no wiring
+      | otherwise 
+      -> do cv <- lookupVarEnv v
+            let ptr = if isPtrType (nameTyp v) 
+                      then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
+            readFromTs dfs n (nameTyp qvar) q ptr
 
     -- Unexpected output queue
     Just QOut -> panicStr "cg_in_wire: encountered output queue!"
@@ -702,11 +761,18 @@ cgOutWire dfs qs (n,qvar) v
          void $ codeGenExp dfs (eAssign noLoc (eVar noLoc qvar) (eVar noLoc v))
 
       -- Some intermediate SORA queue
-      Just (QMid q) -> do
-        cv <- lookupVarEnv v
-        let ptr = if isPtrType (nameTyp v)
-                  then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
-        writeToTs dfs n (nameTyp qvar) q ptr
+      Just (QMid q)
+           -- Note [Single Thread Queue Optimization]
+         | Just (_,qslots) <- Map.lookup qvar (qi_interm qs) -- interm. (assert)
+         , qslots == 1                                       -- one slot
+         , Just [_] <- Map.lookup qvar (qi_cores qs)         -- and one core
+         -> return ()                                        -- => no wiring
+         | otherwise 
+         -> do cv <- lookupVarEnv v
+               let ptr = if isPtrType (nameTyp v)
+                         then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
+               writeToTs dfs n (nameTyp qvar) q ptr
+ 
 
       -- Unexpected input queue
       Just QIn -> panicStr "cg_out_wire: encountered the input queue!"
