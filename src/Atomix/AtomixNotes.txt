@@ -1,0 +1,167 @@
+================================================================================
+== Flags 
+================================================================================
+
+--atomix-codegen: 
+    Use new atomix-style backend for code generation.
+
+
+
+--ddump-automaton: 
+    Dump a dot-file encoding of the automaton created during atomix-style
+    compilation. Use `dot -Tsvg [infile] -o [outfile]` to compile the dump file
+    into a svg vector graphic. Use any browser to view the svg.
+  
+  --print-pipe-names:
+      Print names of pipes/queues in automaton representation. 
+      The automaton uses one pipe for each Par c1 >>> c2 in the source code.
+      (Without this option, the names appear as tooltips when hovering a state.
+      Must use Google Chrome!)
+      Typically not desired.
+
+  --print-atoms:
+      Print atoms in automaton representation, using the format
+      {INPUTS}atom-name{OUTPUTS}.
+
+    --c-like-names:
+        Use same names as the code generator for atoms. Less readable, but 
+        useful to compare C-code against automaton.
+
+  --prune-incomplete-states:
+      Prunes automaton states in which a computation terminates with data still
+      in the pipe. This is a useful optimization that can reduce the number of
+      states significantly, but it is NOT SOUND IN GENERAL! For example, the
+      optimization is sound for the WIFI transmitter (as discussed with Bozidar
+      & Dimitrios).
+      Unsound optimizations will lead to an assertion-violation at runtime.
+
+
+
+--optimism=n:
+    How optimistic should optimistic zipping be? n must be a non-negative
+    integer. Optimism=n means that for any Par c1 |>>>| c2, at any time during
+    the sequential execution of the automaton, the pipe contains enough data for
+    c2 to execute >=n more data-consuming operations. Typical values:
+      n=0: lazy execution
+      n=1: optimistic execution
+      n=2: more optimism -> potentially more parallelism
+
+--no-atom-threads=n:
+    n is the number of threads used to execute the automatom. Default is n=1
+    (sequential execution).
+
+--fuse-aggressively:
+    Fuse automaton states even at the cost of duplicating code. May lead to 
+    better performance by reducing the number of state transitions. Worth trying.
+
+
+
+--ddump-dependency-graphs:
+    Dump dot-file encodings of the (transitively-reduced) dependency graphs, one
+    for each automaton state. Use `dot -Tsvg *state*.dump -O` to compile all
+    dot-files to svg vector graphics. Use a browser to inspect the graphics. 
+
+  --c-like-names:
+    Use same names as the code generator for atoms. Less readable, but 
+    useful to compare C-code against automaton.
+
+
+
+
+================================================================================
+== Tests
+================================================================================
+
+Single-threaded execution:
+Atomix-style code generation successfully passed all backend and WIFI tests, 
+with and without vectorization. I think we may have reintroduced a bug when we
+moved from my single-threded queues back to Zora queues. Check the multitake
+tests without vectorization: I think there may be a bug in the way bit arrays
+are handled.
+
+Multi-threaded execution:
+As far as I can recall, we managed to get all (or almost all) tests running with
+multi-threaded execution before I left.
+
+Rollbacks:
+As we discussed briefly before you left, the WIFI transmitter happens
+to never need rollbacks (even with optimism!). The reason is that the computer
+is the very first element in the pipeline. As a result, we never tested
+rollbacks on a "real-world" example. I did create some synthetic tests to cover
+rollbacks though, see below.
+
+Synthetic tests:
+The tests/atomix/ directory contains various synthetic, hand-crafted tests to
+analyze and test the behavior of the new atomix-style compiler. The tests
+contain some comments that documment their purpose.
+The tests and the Makefile are currently not set up for automatic testing; 
+rather, I would run the tests by hand, look at the results, and confirm that 
+they make sense. It might make sense to automate this in the future.
+
+
+
+================================================================================
+== Scalability
+================================================================================
+
+The number of states & the amount of code generated for the WIFI transmitter 
+seems reasonable (and is close to what we had prior to atomix-style compilation).
+I think it could be further improved with some tuning.
+
+However, the automaton construction seemed to scale less well for the WIFI 
+receiver, both in terms of automaton states (~2000?) and final LOC. I am not
+sure what the reason for this is.
+
+
+
+================================================================================
+== Performance
+================================================================================
+
+On a single core, the atomix-style code performed slighlty worse than the old 
+code. I think the main two reasons for this are:
+  (1) memory allocation (for variables etc.)
+  (2) overhead introduced by queues
+
+Regarding (2): We noticed that we introduce WAY TOO MANY queues with 
+vectorization enabled. There are some weird phenomenon like casting back and 
+forth.
+We already discussed that we need some form of "function composition" to get
+rid of trivial Pars. Here is an idea how to implement this:
+  * extend the atom class with function composition
+  * implement a second zipping algorithm that lifts function composition on 
+    atoms to function composition on computers/transformers
+Regarding (1) and (2), I'm wondering if we should be using atomix-style queues,
+were producers and consumers directly read/write to queue buffers.
+
+Multi-threaded execution: Performance was worse thant single-threaded execution
+when I left. I'm not sure what the main reasons for this are.
+
+
+
+================================================================================
+== Atomix Interpreter (aka Dynamic Scheduling)
+================================================================================
+
+Maybe an idea for the future:
+Given that our system does not currently work with precise timings for atoms and
+does not actually compute (near-) optimal schedules statically, we may achieve
+significantly better performance using dynamic scheduling. Dynamic scheduling
+would incur some runtime overheard, but may achieve significantly better CPU
+utilization.
+
+We would still use the same automaton-like intermediate representation, but
+"interpret" the automaton at runtime by dispatching atoms to cores.
+
+Here is the idea, roughly (DSP-version):
+  * Dedicate one core to an "intepreter" or "scheduler" that dynamically
+    dispatches atoms to (the other) cores
+  * the scheduler maintains a dependency graph at runtime
+  * dispatching == selecting vertex without ingoing edges
+  * some dependencies are removed upon starting atom execution, others
+    are removed when the atom terminates
+    (e.g., produce-consume is removed upton termination, but produce-produce
+     can be removed right away if we let atoms work directly on queue-buffers)
+  * we might not even need real queues any more; the dispatcher can directly
+    match up producers with their respective consumers
+

@@ -353,6 +353,9 @@ zirToAtomZir dfs sym comp = do
   (comp0,rnst) <- atomixCompTransform sym comp 
   -- Transform lifted
   (acomp,xs) <- runStateT (transLifted dfs sym comp0) []
+  print $ vcat [ text "AComp structure:"
+               , nest 2 $ ppr acomp
+               ]
   return (acomp,rnst { st_bound_vars = st_bound_vars rnst ++ xs } )
 
 

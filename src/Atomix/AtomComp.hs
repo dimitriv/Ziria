@@ -121,29 +121,34 @@ ppAComp ac = ppAComp0 (acomp_comp ac)
 ppAComp0 :: AComp0 a b -> Doc
 ppAComp0 (ATake1 _s t)      = text "take" <> brackets (ppr t)
 ppAComp0 (ATakeN _s _t n)   = text "takes" <+> int n
-ppAComp0 (AEmit1 e)         = text "emit" <+> braces (ppr e)
+ppAComp0 (AEmit1 e)         = text "emit" <+> braces (text "<exp>")
 ppAComp0 (AEmitN _ _t _n x) = text "emits" <+> ppr x
 ppAComp0 (ACast s (n1,t1) (n2,t2))
-  = brackets (int n1 <> (text "*") <> parens (ppr t1)) <> 
+  = brackets (int n1 <> (text "*") <> parens (ppr t1)) <>
     (text "-cast") <> parens (text s) <> (text "-") <> 
     brackets (int n2 <> (text "*") <> parens (ppr t2))
 
-ppAComp0 (ATakeEmit x e)   = text "take-emit" <+> ppr x <+> braces (ppr e)
-ppAComp0 (ATakeReturn x e) = text "take-retn" <+> ppr x <+> braces (ppr e)
+ppAComp0 (ATakeEmit x e)
+  = text "take-emit" <+> ppr x <+> braces (text "<exp>")
+ppAComp0 (ATakeReturn x e)
+  = text "take-retn" <+> ppr x <+> braces (text "<exp>")
 
-ppAComp0 (ABind mx c1 c2) = vcat [ ppr mx <+> text "<-" <+> ppr c1 
-                                 , ppr c2 ]
-ppAComp0 (AReturn e) = text "ret" <+> braces (ppr e) 
-ppAComp0 (APar _p c1 _ c2) = ppr c1 <+> text ">>>" <+> ppr c2
-ppAComp0 (ABranch x c1 c2) 
+ppAComp0 (ABind mx c1 c2) = text "{" <+> 
+                               ppr mx <+> text "<-" <+> ppr c1 $$
+                            text ";" <+> ppr c2 <+> text "}"
+
+ppAComp0 (AReturn e) = text "ret" <+> braces (text "<exp>")
+ppAComp0 (APar _p c1 _ c2) = ppr c1 <+> text ">>>" $$
+                             ppr c2
+ppAComp0 (ABranch x c1 c2)
   = text "if" <+> ppr x $$
          text "then" <+> ppr c1 $$
          text "else" <+> ppr c2
-ppAComp0 (ARepeatN n c) 
+ppAComp0 (ARepeatN n c)
   = text "repeat" <> brackets (text "n =" <> (int n)) <> braces (ppr c)
-ppAComp0 (ARepeat c)    = text "repeat" <> braces (ppr c)
-ppAComp0 (AWhile x c)   = text "while" <> parens (ppr x) <> braces (ppr c)
-ppAComp0 (AUntil x c)   = text "do-unitl" <> parens (ppr x) <> braces (ppr c)
+ppAComp0 (ARepeat c)  = text "repeat" <> braces (ppr c)
+ppAComp0 (AWhile x c) = text "while" <> parens (ppr x) <> braces (ppr c)
+ppAComp0 (AUntil x c) = text "do-unitl" <> parens (ppr x) <> braces (ppr c)
 
 
 instance Outputable (AComp a b) where

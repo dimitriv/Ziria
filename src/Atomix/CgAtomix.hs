@@ -127,7 +127,21 @@ data QueueInfo
          -- ^ in which case the size must be just one. 
        , qi_cores :: Map.Map EId [Int] -- ^ Which cores access each queue
        }
-  deriving Show
+
+
+instance Outputable QueueInfo where
+  ppr (QI qinch qoutch qinterm qicores)
+    = vcat [ text "qi_inch   =" <+> text (show qinch)
+           , text "qi_outch  =" <+> text (show qoutch)
+           , text "qi_interm =" <+> vcat (map ppr_qs (Map.toList qinterm))
+           , text "qi_cores  =" <+> vcat (map ppr_cs (Map.toList qicores))
+           ]
+    where
+      ppr_cs (qv,qcores) = ppr qv <+> text "used by cores:" <+> ppr qcores
+      ppr_qs (qv,(qid,qsz))
+         = ppr qv <+> text ":" <+>
+           text "qid=" <+> text (show qid) <> text "," <+> text "slots=" <+> ppr qsz
+
 
 newtype QId = QId { unQId :: Int }
   deriving Show
@@ -144,7 +158,7 @@ qiQueueId _ _ = Nothing
 -- | Declare queues 
 cgDeclQueues :: DynFlags -> QueueInfo -> Cg a -> Cg a
 cgDeclQueues dfs qs action 
-  = cgIO (putStrLn (show qs)) >> 
+  = cgIO (print (ppr qs)) >> 
     let numqs = Map.size (qi_interm qs)
     in if numqs == 0 then do 
            bind_queue_vars action (qi_inch qs : qi_outch qs : []) 
