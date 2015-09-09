@@ -1138,14 +1138,17 @@ cfgToAtomix a = a { auto_graph = state_graph} where
 
 
 -- queue dependency environment
-type QDependencyEnv = Map Chan (Int,Queue Int, Int) -- last read/queue of active writes (of cardinality one) from/to channel plus last writer to this queue
+type QDependencyEnv = Map Chan (Int,Queue Int, Int) 
+   -- last read/queue of active writes (of cardinality one) from/to channel plus last writer to this queue
+
 -- variable dependency environment
 type VDependencyEnv = Map Chan (Set Int, Int) -- last reads / last write
 type PipeBalances = Map Chan Int
 
 type Acc = (QDependencyEnv, VDependencyEnv, [(Int,Int,Dependency)])
 
-mk_constraints :: forall e. Chan -> Chan -> Map Chan Int -> [WiredAtom e] -> Maybe Chan -> Map (Int,Int) [Dependency]
+mk_constraints :: forall e. Chan -> Chan -> Map Chan Int -> [WiredAtom e] -> Maybe Chan 
+               -> Map (Int,Int) [Dependency]
 mk_constraints _ _ _ [] _ = Map.empty
 mk_constraints in_ch out_ch pipes watoms mb_decision 
   = trans_reduction $ go_decision mb_decision $ foldl go_watom (qenv0, venv0, []) (zip watoms [0..])

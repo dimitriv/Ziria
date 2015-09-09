@@ -659,12 +659,14 @@ cgInWire dfs qs (n,qvar) v =
         
     -- Some intermediate SORA queue
     Just (QMid q)
+{- 
         -- Note [Single Thread Queue Optimization]
       | Just (_,qslots) <- Map.lookup qvar (qi_interm qs) -- interm. (assert)
       , qslots == 1                                       -- one slot
       , Just [_] <- Map.lookup qvar (qi_cores qs)         -- and one core
-      -> return ()                                        -- => no wiring
+      -> appendStmt [cstm| ORIGIN("Eliminated single-core single-slot queue!");|] -- => no wiring
       | otherwise 
+-}
       -> do cv <- lookupVarEnv v
             let ptr = if isPtrType (nameTyp v) 
                       then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
@@ -762,11 +764,13 @@ cgOutWire dfs qs (n,qvar) v
 
       -- Some intermediate SORA queue
       Just (QMid q)
+{- 
            -- Note [Single Thread Queue Optimization]
          | Just (_,qslots) <- Map.lookup qvar (qi_interm qs) -- interm. (assert)
          , qslots == 1                                       -- one slot
          , Just [_] <- Map.lookup qvar (qi_cores qs)         -- and one core
-         -> return ()                                        -- => no wiring
+         -> appendStmt [cstm| ORIGIN("Eliminated single-core single-slot queue!");|] -- => no wiring
+-}
          | otherwise 
          -> do cv <- lookupVarEnv v
                let ptr = if isPtrType (nameTyp v)
