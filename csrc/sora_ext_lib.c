@@ -1174,6 +1174,46 @@ void __ext_v_xor(unsigned char *output, int outlen, unsigned char *input1, int i
 	outlen = inlen1;
 }
 
+
+
+
+
+// Specialized fast versions for one byte arrays
+
+void __ext_v_and8(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
+{
+	output[0] = input1[0] & input2[0];
+	// No need to write output as it is guaranteed by typechecking
+	// outlen = 8;
+}
+
+
+void __ext_v_xor8(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
+{
+	output[0] = input1[0] ^ input2[0];
+	// No need to write output as it is guaranteed by typechecking
+	// outlen = 8;
+}
+
+void __ext_v_andnot8(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
+{
+	output[0] = (~input1[0]) & input2[0];
+	// No need to write output as it is guaranteed by typechecking
+	// outlen = 8;
+}
+
+void __ext_v_or8(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
+{
+	output[0] = input1[0] | input2[0];
+	// No need to write output as it is guaranteed by typechecking
+	// outlen = 8;
+}
+
+
+
+
+
+
 // to account for different integer types in vs/gcc
 #ifdef SORA_PLATFORM
 FORCE_INLINE
