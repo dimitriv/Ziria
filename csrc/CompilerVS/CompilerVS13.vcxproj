@@ -195,6 +195,10 @@
     <ClInclude Include="..\buf.h" />
     <ClInclude Include="..\ext_arr.h" />
     <ClInclude Include="..\ext_math.h" />
+    <ClInclude Include="..\fft_r4difx.h" />
+    <ClInclude Include="..\ifft_r4difx.h" />
+    <ClInclude Include="..\intalglutx.h" />
+    <ClInclude Include="..\intalgx.h" />
     <ClInclude Include="..\numerics.h" />
     <ClInclude Include="..\params.h" />
     <ClInclude Include="..\sora_ext_bricks.h" />
