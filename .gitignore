@@ -396,3 +396,5 @@ tests/mac/*outp
 
 code/WiFi/mac/CompilerVS/CompilerVS13-mac-inline
 code/WiFi/mac/CompilerVS/CompilerVS13-mac
+
+csrc/CompilerVS/UnitTests
