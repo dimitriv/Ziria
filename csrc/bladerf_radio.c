@@ -35,9 +35,11 @@ permissions and limitations under the License.
 extern int stop_program; 
 
 
-int BladeRF_RadioStart(BlinkParams *params)
+int BladeRF_RadioStart(BlinkParams *params, bool rx)
 {
 	int status;
+	bladerf_module module = BLADERF_MODULE_TX;
+	if (rx) module = BLADERF_MODULE_RX;
 
 	printf("Opening and initializing device...\n\n");
 
@@ -48,7 +50,7 @@ int BladeRF_RadioStart(BlinkParams *params)
 		goto out;
 	}
 
-	status = bladerf_set_frequency((params->radioParams.dev), BLADERF_MODULE_RX, params->radioParams.CentralFrequency);
+	status = bladerf_set_frequency((params->radioParams.dev), module, params->radioParams.CentralFrequency);
 	if (status != 0) {
 		fprintf(stderr, "Failed to set RX frequency: %s\n",
 			bladerf_strerror(status));
@@ -58,7 +60,7 @@ int BladeRF_RadioStart(BlinkParams *params)
 		printf("RX frequency: %u Hz\n", params->radioParams.CentralFrequency);
 	}
 
-	status = bladerf_set_sample_rate((params->radioParams.dev), BLADERF_MODULE_RX, params->radioParams.SampleRate, NULL);
+	status = bladerf_set_sample_rate((params->radioParams.dev), module, params->radioParams.SampleRate, NULL);
 	if (status != 0) {
 		fprintf(stderr, "Failed to set RX sample rate: %s\n",
 			bladerf_strerror(status));
@@ -68,7 +70,7 @@ int BladeRF_RadioStart(BlinkParams *params)
 		printf("RX samplerate: %u sps\n", params->radioParams.SampleRate);
 	}
 
-	status = bladerf_set_bandwidth((params->radioParams.dev), BLADERF_MODULE_RX,
+	status = bladerf_set_bandwidth((params->radioParams.dev), module,
 		params->radioParams.Bandwidth, NULL);
 	if (status != 0) {
 		fprintf(stderr, "Failed to set RX bandwidth: %s\n",
@@ -79,49 +81,62 @@ int BladeRF_RadioStart(BlinkParams *params)
 		printf("RX bandwidth: %u Hz\n", params->radioParams.Bandwidth);
 	}
 
-	status = bladerf_set_lna_gain((params->radioParams.dev), BLADE_RF_RX_LNA);
-	if (status != 0) {
-		fprintf(stderr, "Failed to set RX LNA gain: %s\n",
-			bladerf_strerror(status));
-		goto out;
+	if (module == BLADERF_MODULE_TX) {
+
+		status = bladerf_set_txvga1((params->radioParams.dev), params->radioParams.TXgain);
+		if (status != 0) {
+			fprintf(stderr, "Failed to set TX VGA1 gain: %s\n",
+				bladerf_strerror(status));
+			goto out;
+		}
+		else {
+			printf("TX VGA1 gain: %d\n", params->radioParams.TXgain);
+		}
+		// TX buffer
+		params->TXBuffer = malloc(params->radioParams.TXBufferSize);
+		if (params->TXBuffer == NULL) {
+			perror("malloc");
+			exit(1);
+		}
 	}
 	else {
-		printf("RX LNA Gain: Max\n");
-	}
 
-	status = bladerf_set_rxvga1((params->radioParams.dev), params->radioParams.RXgain);
-	if (status != 0) {
-		fprintf(stderr, "Failed to set RX VGA1 gain: %s\n",
-			bladerf_strerror(status));
-		goto out;
-	}
-	else {
-		printf("RX VGA1 gain: %d\n", params->radioParams.RXgain);
-	}
+		status = bladerf_set_lna_gain((params->radioParams.dev), BLADE_RF_RX_LNA);
+		if (status != 0) {
+			fprintf(stderr, "Failed to set RX LNA gain: %s\n",
+				bladerf_strerror(status));
+			goto out;
+		}
+		else {
+			printf("RX LNA Gain: Max\n");
+		}
 
-	status = bladerf_set_rxvga2(params->radioParams.dev, BLADE_RF_RX_VGA2);
-	if (status != 0) {
-		fprintf(stderr, "Failed to set RX VGA2 gain: %s\n",
-			bladerf_strerror(status));
-		goto out;
-	}
-	else {
-		printf("RX VGA2 gain: %d\n\n", BLADE_RF_RX_VGA2);
-	}
+		status = bladerf_set_rxvga1((params->radioParams.dev), params->radioParams.RXgain);
+		if (status != 0) {
+			fprintf(stderr, "Failed to set RX VGA1 gain: %s\n",
+				bladerf_strerror(status));
+			goto out;
+		}
+		else {
+			printf("RX VGA1 gain: %d\n", params->radioParams.RXgain);
+		}
 
+		status = bladerf_set_rxvga2(params->radioParams.dev, BLADE_RF_RX_VGA2);
+		if (status != 0) {
+			fprintf(stderr, "Failed to set RX VGA2 gain: %s\n",
+				bladerf_strerror(status));
+			goto out;
+		}
+		else {
+			printf("RX VGA2 gain: %d\n\n", BLADE_RF_RX_VGA2);
+		}
 
-	// TX buffer
-	params->TXBuffer = malloc(params->radioParams.TXBufferSize);
-	if (params->TXBuffer == NULL) {
-		perror("malloc");
-		exit(1);
-	}
-
-	// RX buffer
-	params->pRxBuf = malloc(BLADE_RF_RX_BUFF_L);
-	if (params->pRxBuf == NULL) {
-		perror("malloc");
-		exit(1);
+		// RX buffer
+		params->pRxBuf = malloc(BLADE_RF_RX_BUFF_L);
+		if (params->pRxBuf == NULL) {
+			perror("malloc");
+			exit(1);
+		}
 	}
 
 out:
@@ -142,7 +157,7 @@ out:
 	// Configure both the device's RX and TX modules for use with the synchronous
 	// interface. SC16 Q11 samples *without* metadata are used. 
 	status = bladerf_sync_config(params->radioParams.dev,
-		BLADERF_MODULE_RX,
+		module,
 		BLADERF_FORMAT_SC16_Q11,
 		num_buffers,
 		buffer_size,
@@ -157,7 +172,7 @@ out:
 
 	// We must always enable the modules *after* calling bladerf_sync_config(),
 	// and *before* attempting to RX or TX samples. 
-	status = bladerf_enable_module(params->radioParams.dev, BLADERF_MODULE_RX, true);
+	status = bladerf_enable_module(params->radioParams.dev, module, true);
 	if (status != 0) {
 		fprintf(stderr, "Failed to enable RX module: %s\n",
 			bladerf_strerror(status));
@@ -166,7 +181,7 @@ out:
 
 out1:
 	if (status != 0) {
-		status = bladerf_enable_module(params->radioParams.dev, BLADERF_MODULE_RX, false);
+		status = bladerf_enable_module(params->radioParams.dev, module, false);
 		bladerf_close(params->radioParams.dev);
 		stop_program = true;
 		return -1;
@@ -182,7 +197,7 @@ void BladeRF_RadioStop(BlinkParams *params)
 	int status;
 
 	// Disable RX module, shutting down our underlying RX stream 
-	status = bladerf_enable_module(params->radioParams.dev, BLADERF_MODULE_RX, false);
+	status = bladerf_enable_module(params->radioParams.dev, module, false);
 	if (status != 0) {
 		fprintf(stderr, "Failed to disable RX module: %s\n",
 			bladerf_strerror(status));
@@ -218,6 +233,20 @@ void readBladeRF(BlinkParams *params, complex16 *ptr, int size)
 
 void writeBladeRF(BlinkParams *params, complex16 *ptr, ULONG size)
 {
-	// Dummy
+	int status = bladerf_sync_tx(params->radioParams.dev, (void*)ptr, (unsigned int)size, NULL, 5000);
+
+	if (status != 0) {
+		fprintf(stderr, "Failed to TX samples: %s\n",
+			bladerf_strerror(status));
+
+		/* Disable TX module, shutting down our underlying TX stream */
+		status = bladerf_enable_module(params->radioParams.dev, BLADERF_MODULE_TX, false);
+		if (status != 0) {
+			fprintf(stderr, "Failed to disable TX module: %s\n",
+				bladerf_strerror(status));
+		}
+		exit(1);
+
+	}
 }
 #endif
