@@ -19,7 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{E6970FC9-C671-448E-9CB8-3C7C376E06DF}</ProjectGuid>
+    <ProjectGuid>{D0665107-B705-47C8-92E5-D32852B1E3CF}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -167,26 +167,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\bit.c" />
-    <ClCompile Include="..\bladerf_radio.c" />
-    <ClCompile Include="..\buf_bit.c" />
-    <ClCompile Include="..\buf_chunk.c" />
-    <ClCompile Include="..\buf_numerics16.c" />
-    <ClCompile Include="..\buf_numerics32.c" />
-    <ClCompile Include="..\buf_numerics8.c" />
-    <ClCompile Include="..\driver.c" />
-    <ClCompile Include="..\ext_arr.c" />
-    <ClCompile Include="..\ext_math.c" />
-    <ClCompile Include="..\numerics.c" />
-    <ClCompile Include="..\params.c" />
-    <ClCompile Include="..\single_thread_queues.c" />
-    <ClCompile Include="..\sora_ext_lib.c" />
-    <ClCompile Include="..\sora_ext_visual.c" />
-    <ClCompile Include="..\sora_ext_viterbi.c" />
-    <ClCompile Include="..\sora_ip.c" />
-    <ClCompile Include="..\sora_radio.c" />
-    <ClCompile Include="..\sora_threads.c" />
     <ClCompile Include="..\sora_thread_queues.c" />
-    <ClCompile Include="..\test.c" />
+    <ClCompile Include="..\UnitTests.c" />
     <ClCompile Include="..\utils.c" />
     <ClCompile Include="..\wpl_alloc.c" />
   </ItemGroup>
@@ -194,22 +176,7 @@
     <ClInclude Include="..\bit.h" />
     <ClInclude Include="..\bladerf_radio.h" />
     <ClInclude Include="..\buf.h" />
-    <ClInclude Include="..\ext_arr.h" />
-    <ClInclude Include="..\ext_math.h" />
-    <ClInclude Include="..\fft_r4difx.h" />
-    <ClInclude Include="..\ifft_r4difx.h" />
-    <ClInclude Include="..\intalglutx.h" />
-    <ClInclude Include="..\intalgx.h" />
-    <ClInclude Include="..\numerics.h" />
-    <ClInclude Include="..\params.h" />
-    <ClInclude Include="..\single_thread_queues.h" />
-    <ClInclude Include="..\sora_ext_bricks.h" />
-    <ClInclude Include="..\sora_ext_lib_fft.h" />
-    <ClInclude Include="..\sora_ext_lib_fft_coeffs.h" />
-    <ClInclude Include="..\sora_ext_visual.h" />
-    <ClInclude Include="..\sora_ip.h" />
-    <ClInclude Include="..\sora_radio.h" />
-    <ClInclude Include="..\sora_threads.h" />
+    <ClInclude Include="..\common.h" />
     <ClInclude Include="..\sora_thread_queues.h" />
     <ClInclude Include="..\types.h" />
     <ClInclude Include="..\utils.h" />

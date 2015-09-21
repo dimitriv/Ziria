@@ -81,9 +81,6 @@
     <ClCompile Include="..\bladerf_radio.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\single_thread_queues.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\bit.h">
@@ -143,7 +140,16 @@
     <ClInclude Include="..\single_thread_queues.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\common.h">
+    <ClInclude Include="..\fft_r4difx.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\ifft_r4difx.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\intalglutx.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\intalgx.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

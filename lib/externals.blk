@@ -166,6 +166,13 @@ fun external v_andnot(input1 : arr bit, input2 : arr[length(input1)] bit) : arr[
 fun external v_xor(input1 : arr bit, input2 : arr[length(input1)] bit)    : arr[length(input1)] bit
 
 
+-- Specialized fast versions for 1 byte (8 bits)
+fun external v_or8(input1 : arr[8] bit, input2 : arr[8] bit)     : arr[8] bit
+fun external v_and8(input1 : arr[8] bit, input2 : arr[8] bit)    : arr[8] bit
+fun external v_andnot8(input1 : arr[8] bit, input2 : arr[8] bit) : arr[8] bit
+fun external v_xor8(input1 : arr[8] bit, input2 : arr[8] bit)    : arr[8] bit
+
+
 
 
 

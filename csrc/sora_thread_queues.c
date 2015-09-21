@@ -23,6 +23,7 @@
 //#include "sora_threads.h"
 #include "sora_thread_queues.h"
 #include "bit.h"
+#include "numerics.h"
 
 #define ST_QUEUE_SIZE	64
 
@@ -59,7 +60,7 @@ int no_contexts = 0;
 
 #ifdef TS_DEBUG
 #define MAX_TS	10
-__declspec(align(16)) LONG queueSize[MAX_TS*16];
+calign LONG queueSize[MAX_TS*16];
 LONG queueCum[MAX_TS];
 LONG queueSam[MAX_TS];
 LONG almostFull[MAX_TS];
