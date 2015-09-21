@@ -22,7 +22,9 @@ permissions and limitations under the License.
 
 #ifdef __GNUC__
 // This is also defined in numerics.h but not sure why it doesn't work if not redefined
-#define cselectany  __attribute__ ((weak))
+// NOTE: __attribute__ ((weak)) is NOT the same as __declspec(selectany) and causes tests to fail!
+//#define cselectany  __attribute__ ((weak))
+#define cselectany  
 #endif
 
 

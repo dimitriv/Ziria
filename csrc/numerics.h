@@ -29,7 +29,9 @@ typedef int32_t num32;
 typedef int64_t num64;
 #define calign __atribute__(aligned(16))
 #define cthread __thread
-#define cselectany  __attribute__ ((weak))
+// NOTE: __attribute__ ((weak)) is NOT the same as __declspec(selectany) and causes tests to fail!
+//#define cselectany  __attribute__ ((weak))
+#define cselectany 
 #else
 typedef __int8  num8;
 typedef __int16 num16;
