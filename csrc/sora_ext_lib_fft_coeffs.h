@@ -17,12 +17,19 @@ See the Apache Version 2.0 License for specific language governing
 permissions and limitations under the License.
 */
 #pragma once
+#include "numerics.h"
+
+
+#ifdef __GNUC__
+// This is also defined in numerics.h but not sure why it doesn't work if not redefined
+#define cselectany  __attribute__ ((weak))
+#endif
 
 
 // Computer-generated tables for calculating FFT/IFFT on 12x2^n
 
 template<int N, int M>
-const num16* FFT_GetTwiddleConstx() { return reinterpret_cast<num16*>(0); } __declspec(align(16)) const
+const num16* FFT_GetTwiddleConstx() { return reinterpret_cast<num16*>(0); } calign const
 num16 twFFTLUT12_1[] =
 {
 	 32767, 0 ,
@@ -31,7 +38,7 @@ num16 twFFTLUT12_1[] =
 	 0, -32767 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<12, 1>() { return (num16*)twFFTLUT12_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT12_2[] =
 {
 	 32767, 0 ,
@@ -40,7 +47,7 @@ num16 twFFTLUT12_2[] =
 	 -32767, 0 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<12, 2>() { return (num16*)twFFTLUT12_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT16_1[] =
 {
 	 32767, 0 ,
@@ -49,7 +56,7 @@ num16 twFFTLUT16_1[] =
 	 12540, -30274 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<16, 1>() { return (num16*)twFFTLUT16_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT16_2[] =
 {
 	 32767, 0 ,
@@ -58,7 +65,7 @@ num16 twFFTLUT16_2[] =
 	 -23170, -23170 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<16, 2>() { return (num16*)twFFTLUT16_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT16_3[] =
 {
 	 32767, 0 ,
@@ -67,7 +74,7 @@ num16 twFFTLUT16_3[] =
 	 -30274, 12540 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<16, 3>() { return (num16*)twFFTLUT16_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT24_1[] =
 {
 	 32767, 0 ,
@@ -80,7 +87,7 @@ num16 twFFTLUT24_1[] =
 	 -8481, -31651 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<24, 1>() { return (num16*)twFFTLUT24_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT24_2[] =
 {
 	 32767, 0 ,
@@ -93,7 +100,7 @@ num16 twFFTLUT24_2[] =
 	 -28378, 16384 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<24, 2>() { return (num16*)twFFTLUT24_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT32_1[] =
 {
 	 32767, 0 ,
@@ -106,7 +113,7 @@ num16 twFFTLUT32_1[] =
 	 6393, -32138 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<32, 1>() { return (num16*)twFFTLUT32_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT32_2[] =
 {
 	 32767, 0 ,
@@ -119,7 +126,7 @@ num16 twFFTLUT32_2[] =
 	 -30274, -12540 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<32, 2>() { return (num16*)twFFTLUT32_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT32_3[] =
 {
 	 32767, 0 ,
@@ -132,7 +139,7 @@ num16 twFFTLUT32_3[] =
 	 -18205, 27246 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<32, 3>() { return (num16*)twFFTLUT32_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT36_1[] =
 {
 	 32767, 0 ,
@@ -149,7 +156,7 @@ num16 twFFTLUT36_1[] =
 	 -11207, -30792 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<36, 1>() { return (num16*)twFFTLUT36_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT36_2[] =
 {
 	 32767, 0 ,
@@ -166,7 +173,7 @@ num16 twFFTLUT36_2[] =
 	 -25102, 21063 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<36, 2>() { return (num16*)twFFTLUT36_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT48_1[] =
 {
 	 32767, 0 ,
@@ -183,7 +190,7 @@ num16 twFFTLUT48_1[] =
 	 4277, -32488 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<48, 1>() { return (num16*)twFFTLUT48_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT48_2[] =
 {
 	 32767, 0 ,
@@ -200,7 +207,7 @@ num16 twFFTLUT48_2[] =
 	 -31651, -8481 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<48, 2>() { return (num16*)twFFTLUT48_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT48_3[] =
 {
 	 32767, 0 ,
@@ -217,7 +224,7 @@ num16 twFFTLUT48_3[] =
 	 -12540, 30274 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<48, 3>() { return (num16*)twFFTLUT48_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT60_1[] =
 {
 	 32767, 0 ,
@@ -234,7 +241,7 @@ num16 twFFTLUT60_1[] =
 	 13328, -29935 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<60, 1>() { return (num16*)twFFTLUT60_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT60_2[] =
 {
 	 32767, 0 ,
@@ -251,7 +258,7 @@ num16 twFFTLUT60_2[] =
 	 -21926, -24351 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<60, 2>() { return (num16*)twFFTLUT60_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT60_3[] =
 {
 	 32767, 0 ,
@@ -268,7 +275,7 @@ num16 twFFTLUT60_3[] =
 	 -31164, 10126 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<60, 3>() { return (num16*)twFFTLUT60_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT60_4[] =
 {
 	 32767, 0 ,
@@ -285,7 +292,7 @@ num16 twFFTLUT60_4[] =
 	 -3425, 32588 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<60, 4>() { return (num16*)twFFTLUT60_4; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT64_1[] =
 {
 	 32767, 0 ,
@@ -306,7 +313,7 @@ num16 twFFTLUT64_1[] =
 	 3212, -32610 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<64, 1>() { return (num16*)twFFTLUT64_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT64_2[] =
 {
 	 32767, 0 ,
@@ -327,7 +334,7 @@ num16 twFFTLUT64_2[] =
 	 -32138, -6393 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<64, 2>() { return (num16*)twFFTLUT64_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT64_3[] =
 {
 	 32767, 0 ,
@@ -348,7 +355,7 @@ num16 twFFTLUT64_3[] =
 	 -9512, 31357 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<64, 3>() { return (num16*)twFFTLUT64_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT72_1[] =
 {
 	 32767, 0 ,
@@ -377,7 +384,7 @@ num16 twFFTLUT72_1[] =
 	 -13848, -29698 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<72, 1>() { return (num16*)twFFTLUT72_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT72_2[] =
 {
 	 32767, 0 ,
@@ -406,7 +413,7 @@ num16 twFFTLUT72_2[] =
 	 -21063, 25102 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<72, 2>() { return (num16*)twFFTLUT72_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT96_1[] =
 {
 	 32767, 0 ,
@@ -435,7 +442,7 @@ num16 twFFTLUT96_1[] =
 	 2143, -32698 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<96, 1>() { return (num16*)twFFTLUT96_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT96_2[] =
 {
 	 32767, 0 ,
@@ -464,7 +471,7 @@ num16 twFFTLUT96_2[] =
 	 -32488, -4277 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<96, 2>() { return (num16*)twFFTLUT96_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT96_3[] =
 {
 	 32767, 0 ,
@@ -493,7 +500,7 @@ num16 twFFTLUT96_3[] =
 	 -6393, 32138 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<96, 3>() { return (num16*)twFFTLUT96_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT108_1[] =
 {
 	 32767, 0 ,
@@ -534,7 +541,7 @@ num16 twFFTLUT108_1[] =
 	 -14706, -29283 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<108, 1>() { return (num16*)twFFTLUT108_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT108_2[] =
 {
 	 32767, 0 ,
@@ -575,7 +582,7 @@ num16 twFFTLUT108_2[] =
 	 -19568, 26284 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<108, 2>() { return (num16*)twFFTLUT108_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT120_1[] =
 {
 	 32767, 0 ,
@@ -604,7 +611,7 @@ num16 twFFTLUT120_1[] =
 	 11743, -30592 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<120, 1>() { return (num16*)twFFTLUT120_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT120_2[] =
 {
 	 32767, 0 ,
@@ -633,7 +640,7 @@ num16 twFFTLUT120_2[] =
 	 -24351, -21926 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<120, 2>() { return (num16*)twFFTLUT120_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT120_3[] =
 {
 	 32767, 0 ,
@@ -662,7 +669,7 @@ num16 twFFTLUT120_3[] =
 	 -29197, 14876 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<120, 3>() { return (num16*)twFFTLUT120_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT120_4[] =
 {
 	 32767, 0 ,
@@ -691,7 +698,7 @@ num16 twFFTLUT120_4[] =
 	 3425, 32588 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<120, 4>() { return (num16*)twFFTLUT120_4; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT128_1[] =
 {
 	 32767, 0 ,
@@ -728,7 +735,7 @@ num16 twFFTLUT128_1[] =
 	 1608, -32729 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<128, 1>() { return (num16*)twFFTLUT128_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT128_2[] =
 {
 	 32767, 0 ,
@@ -765,7 +772,7 @@ num16 twFFTLUT128_2[] =
 	 -32610, -3212 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<128, 2>() { return (num16*)twFFTLUT128_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT128_3[] =
 {
 	 32767, 0 ,
@@ -802,7 +809,7 @@ num16 twFFTLUT128_3[] =
 	 -4808, 32413 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<128, 3>() { return (num16*)twFFTLUT128_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT144_1[] =
 {
 	 32767, 0 ,
@@ -843,7 +850,7 @@ num16 twFFTLUT144_1[] =
 	 1429, -32737 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<144, 1>() { return (num16*)twFFTLUT144_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT144_2[] =
 {
 	 32767, 0 ,
@@ -884,7 +891,7 @@ num16 twFFTLUT144_2[] =
 	 -32643, -2856 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<144, 2>() { return (num16*)twFFTLUT144_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT144_3[] =
 {
 	 32767, 0 ,
@@ -925,7 +932,7 @@ num16 twFFTLUT144_3[] =
 	 -4277, 32488 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<144, 3>() { return (num16*)twFFTLUT144_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT180_1[] =
 {
 	 32767, 0 ,
@@ -966,7 +973,7 @@ num16 twFFTLUT180_1[] =
 	 11207, -30792 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<180, 1>() { return (num16*)twFFTLUT180_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT180_2[] =
 {
 	 32767, 0 ,
@@ -1007,7 +1014,7 @@ num16 twFFTLUT180_2[] =
 	 -25102, -21063 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<180, 2>() { return (num16*)twFFTLUT180_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT180_3[] =
 {
 	 32767, 0 ,
@@ -1048,7 +1055,7 @@ num16 twFFTLUT180_3[] =
 	 -28378, 16384 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<180, 3>() { return (num16*)twFFTLUT180_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT180_4[] =
 {
 	 32767, 0 ,
@@ -1089,7 +1096,7 @@ num16 twFFTLUT180_4[] =
 	 5690, 32270 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<180, 4>() { return (num16*)twFFTLUT180_4; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT192_1[] =
 {
 	 32767, 0 ,
@@ -1142,7 +1149,7 @@ num16 twFFTLUT192_1[] =
 	 1072, -32750 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<192, 1>() { return (num16*)twFFTLUT192_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT192_2[] =
 {
 	 32767, 0 ,
@@ -1195,7 +1202,7 @@ num16 twFFTLUT192_2[] =
 	 -32698, -2143 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<192, 2>() { return (num16*)twFFTLUT192_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT192_3[] =
 {
 	 32767, 0 ,
@@ -1248,7 +1255,7 @@ num16 twFFTLUT192_3[] =
 	 -3212, 32610 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<192, 3>() { return (num16*)twFFTLUT192_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT216_1[] =
 {
 	 32767, 0 ,
@@ -1325,7 +1332,7 @@ num16 twFFTLUT216_1[] =
 	 -15552, -28842 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<216, 1>() { return (num16*)twFFTLUT216_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT216_2[] =
 {
 	 32767, 0 ,
@@ -1402,7 +1409,7 @@ num16 twFFTLUT216_2[] =
 	 -18006, 27377 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<216, 2>() { return (num16*)twFFTLUT216_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT240_1[] =
 {
 	 32767, 0 ,
@@ -1467,7 +1474,7 @@ num16 twFFTLUT240_1[] =
 	 858, -32757 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<240, 1>() { return (num16*)twFFTLUT240_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT240_2[] =
 {
 	 32767, 0 ,
@@ -1532,7 +1539,7 @@ num16 twFFTLUT240_2[] =
 	 -32723, -1715 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<240, 2>() { return (num16*)twFFTLUT240_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT240_3[] =
 {
 	 32767, 0 ,
@@ -1597,7 +1604,7 @@ num16 twFFTLUT240_3[] =
 	 -2571, 32667 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<240, 3>() { return (num16*)twFFTLUT240_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT256_1[] =
 {
 	 32767, 0 ,
@@ -1666,7 +1673,7 @@ num16 twFFTLUT256_1[] =
 	 804, -32758 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<256, 1>() { return (num16*)twFFTLUT256_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT256_2[] =
 {
 	 32767, 0 ,
@@ -1735,7 +1742,7 @@ num16 twFFTLUT256_2[] =
 	 -32729, -1608 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<256, 2>() { return (num16*)twFFTLUT256_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT256_3[] =
 {
 	 32767, 0 ,
@@ -1804,7 +1811,7 @@ num16 twFFTLUT256_3[] =
 	 -2411, 32679 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<256, 3>() { return (num16*)twFFTLUT256_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT288_1[] =
 {
 	 32767, 0 ,
@@ -1881,7 +1888,7 @@ num16 twFFTLUT288_1[] =
 	 715, -32760 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<288, 1>() { return (num16*)twFFTLUT288_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT288_2[] =
 {
 	 32767, 0 ,
@@ -1958,7 +1965,7 @@ num16 twFFTLUT288_2[] =
 	 -32737, -1429 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<288, 2>() { return (num16*)twFFTLUT288_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT288_3[] =
 {
 	 32767, 0 ,
@@ -2035,7 +2042,7 @@ num16 twFFTLUT288_3[] =
 	 -2143, 32698 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<288, 3>() { return (num16*)twFFTLUT288_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT300_1[] =
 {
 	 32767, 0 ,
@@ -2100,7 +2107,7 @@ num16 twFFTLUT300_1[] =
 	 10776, -30945 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<300, 1>() { return (num16*)twFFTLUT300_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT300_2[] =
 {
 	 32767, 0 ,
@@ -2165,7 +2172,7 @@ num16 twFFTLUT300_2[] =
 	 -25680, -20354 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<300, 2>() { return (num16*)twFFTLUT300_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT300_3[] =
 {
 	 32767, 0 ,
@@ -2230,7 +2237,7 @@ num16 twFFTLUT300_3[] =
 	 -27667, 17558 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<300, 3>() { return (num16*)twFFTLUT300_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT300_4[] =
 {
 	 32767, 0 ,
@@ -2295,7 +2302,7 @@ num16 twFFTLUT300_4[] =
 	 7483, 31902 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<300, 4>() { return (num16*)twFFTLUT300_4; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT324_1[] =
 {
 	 32767, 0 ,
@@ -2408,7 +2415,7 @@ num16 twFFTLUT324_1[] =
 	 -15831, -28690 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<324, 1>() { return (num16*)twFFTLUT324_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT324_2[] =
 {
 	 32767, 0 ,
@@ -2521,7 +2528,7 @@ num16 twFFTLUT324_2[] =
 	 -17472, 27721 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<324, 2>() { return (num16*)twFFTLUT324_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT360_1[] =
 {
 	 32767, 0 ,
@@ -2598,7 +2605,7 @@ num16 twFFTLUT360_1[] =
 	 10668, -30983 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<360, 1>() { return (num16*)twFFTLUT360_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT360_2[] =
 {
 	 32767, 0 ,
@@ -2675,7 +2682,7 @@ num16 twFFTLUT360_2[] =
 	 -25822, -20174 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<360, 2>() { return (num16*)twFFTLUT360_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT360_3[] =
 {
 	 32767, 0 ,
@@ -2752,7 +2759,7 @@ num16 twFFTLUT360_3[] =
 	 -27482, 17847 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<360, 3>() { return (num16*)twFFTLUT360_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT360_4[] =
 {
 	 32767, 0 ,
@@ -2829,7 +2836,7 @@ num16 twFFTLUT360_4[] =
 	 7927, 31795 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<360, 4>() { return (num16*)twFFTLUT360_4; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT384_1[] =
 {
 	 32767, 0 ,
@@ -2930,7 +2937,7 @@ num16 twFFTLUT384_1[] =
 	 536, -32764 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<384, 1>() { return (num16*)twFFTLUT384_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT384_2[] =
 {
 	 32767, 0 ,
@@ -3031,7 +3038,7 @@ num16 twFFTLUT384_2[] =
 	 -32750, -1072 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<384, 2>() { return (num16*)twFFTLUT384_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT384_3[] =
 {
 	 32767, 0 ,
@@ -3132,7 +3139,7 @@ num16 twFFTLUT384_3[] =
 	 -1608, 32729 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<384, 3>() { return (num16*)twFFTLUT384_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT432_1[] =
 {
 	 32767, 0 ,
@@ -3245,7 +3252,7 @@ num16 twFFTLUT432_1[] =
 	 477, -32765 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<432, 1>() { return (num16*)twFFTLUT432_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT432_2[] =
 {
 	 32767, 0 ,
@@ -3358,7 +3365,7 @@ num16 twFFTLUT432_2[] =
 	 -32754, -953 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<432, 2>() { return (num16*)twFFTLUT432_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT432_3[] =
 {
 	 32767, 0 ,
@@ -3471,7 +3478,7 @@ num16 twFFTLUT432_3[] =
 	 -1429, 32737 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<432, 3>() { return (num16*)twFFTLUT432_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT480_1[] =
 {
 	 32767, 0 ,
@@ -3596,7 +3603,7 @@ num16 twFFTLUT480_1[] =
 	 429, -32765 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<480, 1>() { return (num16*)twFFTLUT480_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT480_2[] =
 {
 	 32767, 0 ,
@@ -3721,7 +3728,7 @@ num16 twFFTLUT480_2[] =
 	 -32757, -858 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<480, 2>() { return (num16*)twFFTLUT480_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT480_3[] =
 {
 	 32767, 0 ,
@@ -3846,7 +3853,7 @@ num16 twFFTLUT480_3[] =
 	 -1286, 32743 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<480, 3>() { return (num16*)twFFTLUT480_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT512_1[] =
 {
 	 32767, 0 ,
@@ -3979,7 +3986,7 @@ num16 twFFTLUT512_1[] =
 	 402, -32766 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<512, 1>() { return (num16*)twFFTLUT512_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT512_2[] =
 {
 	 32767, 0 ,
@@ -4112,7 +4119,7 @@ num16 twFFTLUT512_2[] =
 	 -32758, -804 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<512, 2>() { return (num16*)twFFTLUT512_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT512_3[] =
 {
 	 32767, 0 ,
@@ -4245,7 +4252,7 @@ num16 twFFTLUT512_3[] =
 	 -1206, 32746 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<512, 3>() { return (num16*)twFFTLUT512_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT540_1[] =
 {
 	 32767, 0 ,
@@ -4358,7 +4365,7 @@ num16 twFFTLUT540_1[] =
 	 10488, -31044 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<540, 1>() { return (num16*)twFFTLUT540_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT540_2[] =
 {
 	 32767, 0 ,
@@ -4471,7 +4478,7 @@ num16 twFFTLUT540_2[] =
 	 -26055, -19872 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<540, 2>() { return (num16*)twFFTLUT540_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT540_3[] =
 {
 	 32767, 0 ,
@@ -4584,7 +4591,7 @@ num16 twFFTLUT540_3[] =
 	 -27166, 18324 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<540, 3>() { return (num16*)twFFTLUT540_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT540_4[] =
 {
 	 32767, 0 ,
@@ -4697,7 +4704,7 @@ num16 twFFTLUT540_4[] =
 	 8665, 31602 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<540, 4>() { return (num16*)twFFTLUT540_4; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT576_1[] =
 {
 	 32767, 0 ,
@@ -4846,7 +4853,7 @@ num16 twFFTLUT576_1[] =
 	 357, -32766 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<576, 1>() { return (num16*)twFFTLUT576_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT576_2[] =
 {
 	 32767, 0 ,
@@ -4995,7 +5002,7 @@ num16 twFFTLUT576_2[] =
 	 -32760, -715 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<576, 2>() { return (num16*)twFFTLUT576_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT576_3[] =
 {
 	 32767, 0 ,
@@ -5144,7 +5151,7 @@ num16 twFFTLUT576_3[] =
 	 -1072, 32750 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<576, 3>() { return (num16*)twFFTLUT576_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT600_1[] =
 {
 	 32767, 0 ,
@@ -5269,7 +5276,7 @@ num16 twFFTLUT600_1[] =
 	 10452, -31056 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<600, 1>() { return (num16*)twFFTLUT600_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT600_2[] =
 {
 	 32767, 0 ,
@@ -5394,7 +5401,7 @@ num16 twFFTLUT600_2[] =
 	 -26101, -19812 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<600, 2>() { return (num16*)twFFTLUT600_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT600_3[] =
 {
 	 32767, 0 ,
@@ -5519,7 +5526,7 @@ num16 twFFTLUT600_3[] =
 	 -27102, 18418 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<600, 3>() { return (num16*)twFFTLUT600_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT600_4[] =
 {
 	 32767, 0 ,
@@ -5644,7 +5651,7 @@ num16 twFFTLUT600_4[] =
 	 8812, 31561 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<600, 4>() { return (num16*)twFFTLUT600_4; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT648_1[] =
 {
 	 32767, 0 ,
@@ -5865,7 +5872,7 @@ num16 twFFTLUT648_1[] =
 	 -16108, -28535 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<648, 1>() { return (num16*)twFFTLUT648_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT648_2[] =
 {
 	 32767, 0 ,
@@ -6086,7 +6093,7 @@ num16 twFFTLUT648_2[] =
 	 -16931, 28055 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<648, 2>() { return (num16*)twFFTLUT648_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT720_1[] =
 {
 	 32767, 0 ,
@@ -6271,7 +6278,7 @@ num16 twFFTLUT720_1[] =
 	 286, -32767 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<720, 1>() { return (num16*)twFFTLUT720_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT720_2[] =
 {
 	 32767, 0 ,
@@ -6456,7 +6463,7 @@ num16 twFFTLUT720_2[] =
 	 -32763, -572 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<720, 2>() { return (num16*)twFFTLUT720_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT720_3[] =
 {
 	 32767, 0 ,
@@ -6641,7 +6648,7 @@ num16 twFFTLUT720_3[] =
 	 -858, 32757 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<720, 3>() { return (num16*)twFFTLUT720_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT768_1[] =
 {
 	 32767, 0 ,
@@ -6838,7 +6845,7 @@ num16 twFFTLUT768_1[] =
 	 268, -32767 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<768, 1>() { return (num16*)twFFTLUT768_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT768_2[] =
 {
 	 32767, 0 ,
@@ -7035,7 +7042,7 @@ num16 twFFTLUT768_2[] =
 	 -32764, -536 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<768, 2>() { return (num16*)twFFTLUT768_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT768_3[] =
 {
 	 32767, 0 ,
@@ -7232,7 +7239,7 @@ num16 twFFTLUT768_3[] =
 	 -804, 32758 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<768, 3>() { return (num16*)twFFTLUT768_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT864_1[] =
 {
 	 32767, 0 ,
@@ -7453,7 +7460,7 @@ num16 twFFTLUT864_1[] =
 	 238, -32767 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<864, 1>() { return (num16*)twFFTLUT864_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT864_2[] =
 {
 	 32767, 0 ,
@@ -7674,7 +7681,7 @@ num16 twFFTLUT864_2[] =
 	 -32765, -477 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<864, 2>() { return (num16*)twFFTLUT864_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT864_3[] =
 {
 	 32767, 0 ,
@@ -7895,7 +7902,7 @@ num16 twFFTLUT864_3[] =
 	 -715, 32760 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<864, 3>() { return (num16*)twFFTLUT864_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT900_1[] =
 {
 	 32767, 0 ,
@@ -8080,7 +8087,7 @@ num16 twFFTLUT900_1[] =
 	 10343, -31093 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<900, 1>() { return (num16*)twFFTLUT900_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT900_2[] =
 {
 	 32767, 0 ,
@@ -8265,7 +8272,7 @@ num16 twFFTLUT900_2[] =
 	 -26238, -19629 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<900, 2>() { return (num16*)twFFTLUT900_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT900_3[] =
 {
 	 32767, 0 ,
@@ -8450,7 +8457,7 @@ num16 twFFTLUT900_3[] =
 	 -26907, 18701 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<900, 3>() { return (num16*)twFFTLUT900_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT900_4[] =
 {
 	 32767, 0 ,
@@ -8635,7 +8642,7 @@ num16 twFFTLUT900_4[] =
 	 9252, 31435 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<900, 4>() { return (num16*)twFFTLUT900_4; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT960_1[] =
 {
 	 32767, 0 ,
@@ -8880,7 +8887,7 @@ num16 twFFTLUT960_1[] =
 	 214, -32767 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<960, 1>() { return (num16*)twFFTLUT960_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT960_2[] =
 {
 	 32767, 0 ,
@@ -9125,7 +9132,7 @@ num16 twFFTLUT960_2[] =
 	 -32765, -429 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<960, 2>() { return (num16*)twFFTLUT960_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT960_3[] =
 {
 	 32767, 0 ,
@@ -9370,7 +9377,7 @@ num16 twFFTLUT960_3[] =
 	 -643, 32762 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<960, 3>() { return (num16*)twFFTLUT960_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT972_1[] =
 {
 	 32767, 0 ,
@@ -9699,7 +9706,7 @@ num16 twFFTLUT972_1[] =
 	 -16200, -28483 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<972, 1>() { return (num16*)twFFTLUT972_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT972_2[] =
 {
 	 32767, 0 ,
@@ -10028,7 +10035,7 @@ num16 twFFTLUT972_2[] =
 	 -16750, 28164 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<972, 2>() { return (num16*)twFFTLUT972_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT1024_1[] =
 {
 	 32767, 0 ,
@@ -10289,7 +10296,7 @@ num16 twFFTLUT1024_1[] =
 	 201, -32767 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<1024, 1>() { return (num16*)twFFTLUT1024_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT1024_2[] =
 {
 	 32767, 0 ,
@@ -10550,7 +10557,7 @@ num16 twFFTLUT1024_2[] =
 	 -32766, -402 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<1024, 2>() { return (num16*)twFFTLUT1024_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT1024_3[] =
 {
 	 32767, 0 ,
@@ -10811,7 +10818,7 @@ num16 twFFTLUT1024_3[] =
 	 -603, 32762 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<1024, 3>() { return (num16*)twFFTLUT1024_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT1080_1[] =
 {
 	 32767, 0 ,
@@ -11032,7 +11039,7 @@ num16 twFFTLUT1080_1[] =
 	 10307, -31105 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<1080, 1>() { return (num16*)twFFTLUT1080_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT1080_2[] =
 {
 	 32767, 0 ,
@@ -11253,7 +11260,7 @@ num16 twFFTLUT1080_2[] =
 	 -26284, -19568 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<1080, 2>() { return (num16*)twFFTLUT1080_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT1080_3[] =
 {
 	 32767, 0 ,
@@ -11474,7 +11481,7 @@ num16 twFFTLUT1080_3[] =
 	 -26842, 18795 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<1080, 3>() { return (num16*)twFFTLUT1080_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT1080_4[] =
 {
 	 32767, 0 ,
@@ -11695,7 +11702,7 @@ num16 twFFTLUT1080_4[] =
 	 9398, 31391 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<1080, 4>() { return (num16*)twFFTLUT1080_4; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT1152_1[] =
 {
 	 32767, 0 ,
@@ -11988,7 +11995,7 @@ num16 twFFTLUT1152_1[] =
 	 179, -32767 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<1152, 1>() { return (num16*)twFFTLUT1152_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT1152_2[] =
 {
 	 32767, 0 ,
@@ -12281,7 +12288,7 @@ num16 twFFTLUT1152_2[] =
 	 -32766, -357 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<1152, 2>() { return (num16*)twFFTLUT1152_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT1152_3[] =
 {
 	 32767, 0 ,
@@ -12574,7 +12581,7 @@ num16 twFFTLUT1152_3[] =
 	 -536, 32764 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<1152, 3>() { return (num16*)twFFTLUT1152_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT1200_1[] =
 {
 	 32767, 0 ,
@@ -12879,7 +12886,7 @@ num16 twFFTLUT1200_1[] =
 	 172, -32767 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<1200, 1>() { return (num16*)twFFTLUT1200_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT1200_2[] =
 {
 	 32767, 0 ,
@@ -13184,7 +13191,7 @@ num16 twFFTLUT1200_2[] =
 	 -32766, -343 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<1200, 2>() { return (num16*)twFFTLUT1200_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT1200_3[] =
 {
 	 32767, 0 ,
@@ -13489,7 +13496,7 @@ num16 twFFTLUT1200_3[] =
 	 -515, 32764 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<1200, 3>() { return (num16*)twFFTLUT1200_3; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT2048_1[] =
 {
 	 32767, 0 ,
@@ -14006,7 +14013,7 @@ num16 twFFTLUT2048_1[] =
 	 101, -32767 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<2048, 1>() { return (num16*)twFFTLUT2048_1; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT2048_2[] =
 {
 	 32767, 0 ,
@@ -14523,7 +14530,7 @@ num16 twFFTLUT2048_2[] =
 	 -32767, -201 ,
 };
 template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<2048, 2>() { return (num16*)twFFTLUT2048_2; }
- __declspec(align(16)) const
+ calign const
 num16 twFFTLUT2048_3[] =
 {
 	 32767, 0 ,
@@ -15043,212 +15050,212 @@ template<> DSP_INLINE const num16* FFT_GetTwiddleConstx<2048, 3>() { return (num
 
 template<int N> short FFTLUTButterflyTable(int i);
 
-__declspec(selectany) extern const short bFFT12LUTMap[] =
+cselectany extern const short bFFT12LUTMap[] =
 {
 0, 4, 8, 2, 6, 10, 1, 5, 9, 3, 7, 11, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<12>(int i) { return bFFT12LUTMap[i]; }
-__declspec(selectany) extern const short bFFT16LUTMap[] =
+cselectany extern const short bFFT16LUTMap[] =
 {
 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<16>(int i) { return bFFT16LUTMap[i]; }
-__declspec(selectany) extern const short bFFT24LUTMap[] =
+cselectany extern const short bFFT24LUTMap[] =
 {
 0, 8, 16, 4, 12, 20, 2, 10, 18, 6, 14, 22, 1, 9, 17, 5, 13, 21, 3, 11, 19, 7, 15, 23, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<24>(int i) { return bFFT24LUTMap[i]; }
-__declspec(selectany) extern const short bFFT32LUTMap[] =
+cselectany extern const short bFFT32LUTMap[] =
 {
 0, 16, 8, 24, 4, 20, 12, 28, 2, 18, 10, 26, 6, 22, 14, 30, 1, 17, 9, 25, 5, 21, 13, 29, 3, 19, 11, 27, 7, 23, 15, 31, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<32>(int i) { return bFFT32LUTMap[i]; }
-__declspec(selectany) extern const short bFFT36LUTMap[] =
+cselectany extern const short bFFT36LUTMap[] =
 {
 0, 12, 24, 4, 16, 28, 8, 20, 32, 2, 14, 26, 6, 18, 30, 10, 22, 34, 1, 13, 25, 5, 17, 29, 9, 21, 33, 3, 15, 27, 7, 19, 31, 11, 23, 35, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<36>(int i) { return bFFT36LUTMap[i]; }
-__declspec(selectany) extern const short bFFT48LUTMap[] =
+cselectany extern const short bFFT48LUTMap[] =
 {
 0, 24, 12, 36, 4, 28, 16, 40, 8, 32, 20, 44, 2, 26, 14, 38, 6, 30, 18, 42, 10, 34, 22, 46, 1, 25, 13, 37, 5, 29, 17, 41, 9, 33, 21, 45, 3, 27, 15, 39, 7, 31, 19, 43, 11, 35, 23, 47, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<48>(int i) { return bFFT48LUTMap[i]; }
-__declspec(selectany) extern const short bFFT60LUTMap[] =
+cselectany extern const short bFFT60LUTMap[] =
 {
 0, 12, 24, 36, 48, 4, 16, 28, 40, 52, 8, 20, 32, 44, 56, 2, 14, 26, 38, 50, 6, 18, 30, 42, 54, 10, 22, 34, 46, 58, 1, 13, 25, 37, 49, 5, 17, 29, 41, 53, 9, 21, 33, 45, 57, 3, 15, 27, 39, 51, 7, 19, 31, 43, 55, 11, 23, 35, 47, 59, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<60>(int i) { return bFFT60LUTMap[i]; }
-__declspec(selectany) extern const short bFFT64LUTMap[] =
+cselectany extern const short bFFT64LUTMap[] =
 {
 0, 32, 16, 48, 8, 40, 24, 56, 4, 36, 20, 52, 12, 44, 28, 60, 2, 34, 18, 50, 10, 42, 26, 58, 6, 38, 22, 54, 14, 46, 30, 62, 1, 33, 17, 49, 9, 41, 25, 57, 5, 37, 21, 53, 13, 45, 29, 61, 3, 35, 19, 51, 11, 43, 27, 59, 7, 39, 23, 55, 15, 47, 31, 63, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<64>(int i) { return bFFT64LUTMap[i]; }
-__declspec(selectany) extern const short bFFT72LUTMap[] =
+cselectany extern const short bFFT72LUTMap[] =
 {
 0, 24, 48, 8, 32, 56, 16, 40, 64, 4, 28, 52, 12, 36, 60, 20, 44, 68, 2, 26, 50, 10, 34, 58, 18, 42, 66, 6, 30, 54, 14, 38, 62, 22, 46, 70, 1, 25, 49, 9, 33, 57, 17, 41, 65, 5, 29, 53, 13, 37, 61, 21, 45, 69, 3, 27, 51, 11, 35, 59, 19, 43, 67, 7, 31, 55, 15, 39, 63, 23, 47, 71, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<72>(int i) { return bFFT72LUTMap[i]; }
-__declspec(selectany) extern const short bFFT96LUTMap[] =
+cselectany extern const short bFFT96LUTMap[] =
 {
 0, 48, 24, 72, 8, 56, 32, 80, 16, 64, 40, 88, 4, 52, 28, 76, 12, 60, 36, 84, 20, 68, 44, 92, 2, 50, 26, 74, 10, 58, 34, 82, 18, 66, 42, 90, 6, 54, 30, 78, 14, 62, 38, 86, 22, 70, 46, 94, 1, 49, 25, 73, 9, 57, 33, 81, 17, 65, 41, 89, 5, 53, 29, 77, 13, 61, 37, 85, 21, 69, 45, 93, 3, 51, 27, 75, 11, 59, 35, 83, 19, 67, 43, 91, 7, 55, 31, 79, 15, 63, 39, 87, 23, 71, 47, 95, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<96>(int i) { return bFFT96LUTMap[i]; }
-__declspec(selectany) extern const short bFFT108LUTMap[] =
+cselectany extern const short bFFT108LUTMap[] =
 {
 0, 36, 72, 12, 48, 84, 24, 60, 96, 4, 40, 76, 16, 52, 88, 28, 64, 100, 8, 44, 80, 20, 56, 92, 32, 68, 104, 2, 38, 74, 14, 50, 86, 26, 62, 98, 6, 42, 78, 18, 54, 90, 30, 66, 102, 10, 46, 82, 22, 58, 94, 34, 70, 106, 1, 37, 73, 13, 49, 85, 25, 61, 97, 5, 41, 77, 17, 53, 89, 29, 65, 101, 9, 45, 81, 21, 57, 93, 33, 69, 105, 3, 39, 75, 15, 51, 87, 27, 63, 99, 7, 43, 79, 19, 55, 91, 31, 67, 103, 11, 47, 83, 23, 59, 95, 35, 71, 107, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<108>(int i) { return bFFT108LUTMap[i]; }
-__declspec(selectany) extern const short bFFT120LUTMap[] =
+cselectany extern const short bFFT120LUTMap[] =
 {
 0, 24, 48, 72, 96, 8, 32, 56, 80, 104, 16, 40, 64, 88, 112, 4, 28, 52, 76, 100, 12, 36, 60, 84, 108, 20, 44, 68, 92, 116, 2, 26, 50, 74, 98, 10, 34, 58, 82, 106, 18, 42, 66, 90, 114, 6, 30, 54, 78, 102, 14, 38, 62, 86, 110, 22, 46, 70, 94, 118, 1, 25, 49, 73, 97, 9, 33, 57, 81, 105, 17, 41, 65, 89, 113, 5, 29, 53, 77, 101, 13, 37, 61, 85, 109, 21, 45, 69, 93, 117, 3, 27, 51, 75, 99, 11, 35, 59, 83, 107, 19, 43, 67, 91, 115, 7, 31, 55, 79, 103, 15, 39, 63, 87, 111, 23, 47, 71, 95, 119, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<120>(int i) { return bFFT120LUTMap[i]; }
-__declspec(selectany) extern const short bFFT128LUTMap[] =
+cselectany extern const short bFFT128LUTMap[] =
 {
 0, 64, 32, 96, 16, 80, 48, 112, 8, 72, 40, 104, 24, 88, 56, 120, 4, 68, 36, 100, 20, 84, 52, 116, 12, 76, 44, 108, 28, 92, 60, 124, 2, 66, 34, 98, 18, 82, 50, 114, 10, 74, 42, 106, 26, 90, 58, 122, 6, 70, 38, 102, 22, 86, 54, 118, 14, 78, 46, 110, 30, 94, 62, 126, 1, 65, 33, 97, 17, 81, 49, 113, 9, 73, 41, 105, 25, 89, 57, 121, 5, 69, 37, 101, 21, 85, 53, 117, 13, 77, 45, 109, 29, 93, 61, 125, 3, 67, 35, 99, 19, 83, 51, 115, 11, 75, 43, 107, 27, 91, 59, 123, 7, 71, 39, 103, 23, 87, 55, 119, 15, 79, 47, 111, 31, 95, 63, 127, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<128>(int i) { return bFFT128LUTMap[i]; }
-__declspec(selectany) extern const short bFFT144LUTMap[] =
+cselectany extern const short bFFT144LUTMap[] =
 {
 0, 72, 36, 108, 12, 84, 48, 120, 24, 96, 60, 132, 4, 76, 40, 112, 16, 88, 52, 124, 28, 100, 64, 136, 8, 80, 44, 116, 20, 92, 56, 128, 32, 104, 68, 140, 2, 74, 38, 110, 14, 86, 50, 122, 26, 98, 62, 134, 6, 78, 42, 114, 18, 90, 54, 126, 30, 102, 66, 138, 10, 82, 46, 118, 22, 94, 58, 130, 34, 106, 70, 142, 1, 73, 37, 109, 13, 85, 49, 121, 25, 97, 61, 133, 5, 77, 41, 113, 17, 89, 53, 125, 29, 101, 65, 137, 9, 81, 45, 117, 21, 93, 57, 129, 33, 105, 69, 141, 3, 75, 39, 111, 15, 87, 51, 123, 27, 99, 63, 135, 7, 79, 43, 115, 19, 91, 55, 127, 31, 103, 67, 139, 11, 83, 47, 119, 23, 95, 59, 131, 35, 107, 71, 143, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<144>(int i) { return bFFT144LUTMap[i]; }
-__declspec(selectany) extern const short bFFT180LUTMap[] =
+cselectany extern const short bFFT180LUTMap[] =
 {
 0, 36, 72, 108, 144, 12, 48, 84, 120, 156, 24, 60, 96, 132, 168, 4, 40, 76, 112, 148, 16, 52, 88, 124, 160, 28, 64, 100, 136, 172, 8, 44, 80, 116, 152, 20, 56, 92, 128, 164, 32, 68, 104, 140, 176, 2, 38, 74, 110, 146, 14, 50, 86, 122, 158, 26, 62, 98, 134, 170, 6, 42, 78, 114, 150, 18, 54, 90, 126, 162, 30, 66, 102, 138, 174, 10, 46, 82, 118, 154, 22, 58, 94, 130, 166, 34, 70, 106, 142, 178, 1, 37, 73, 109, 145, 13, 49, 85, 121, 157, 25, 61, 97, 133, 169, 5, 41, 77, 113, 149, 17, 53, 89, 125, 161, 29, 65, 101, 137, 173, 9, 45, 81, 117, 153, 21, 57, 93, 129, 165, 33, 69, 105, 141, 177, 3, 39, 75, 111, 147, 15, 51, 87, 123, 159, 27, 63, 99, 135, 171, 7, 43, 79, 115, 151, 19, 55, 91, 127, 163, 31, 67, 103, 139, 175, 11, 47, 83, 119, 155, 23, 59, 95, 131, 167, 35, 71, 107, 143, 179, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<180>(int i) { return bFFT180LUTMap[i]; }
-__declspec(selectany) extern const short bFFT192LUTMap[] =
+cselectany extern const short bFFT192LUTMap[] =
 {
 0, 96, 48, 144, 24, 120, 72, 168, 12, 108, 60, 156, 36, 132, 84, 180, 4, 100, 52, 148, 28, 124, 76, 172, 16, 112, 64, 160, 40, 136, 88, 184, 8, 104, 56, 152, 32, 128, 80, 176, 20, 116, 68, 164, 44, 140, 92, 188, 2, 98, 50, 146, 26, 122, 74, 170, 14, 110, 62, 158, 38, 134, 86, 182, 6, 102, 54, 150, 30, 126, 78, 174, 18, 114, 66, 162, 42, 138, 90, 186, 10, 106, 58, 154, 34, 130, 82, 178, 22, 118, 70, 166, 46, 142, 94, 190, 1, 97, 49, 145, 25, 121, 73, 169, 13, 109, 61, 157, 37, 133, 85, 181, 5, 101, 53, 149, 29, 125, 77, 173, 17, 113, 65, 161, 41, 137, 89, 185, 9, 105, 57, 153, 33, 129, 81, 177, 21, 117, 69, 165, 45, 141, 93, 189, 3, 99, 51, 147, 27, 123, 75, 171, 15, 111, 63, 159, 39, 135, 87, 183, 7, 103, 55, 151, 31, 127, 79, 175, 19, 115, 67, 163, 43, 139, 91, 187, 11, 107, 59, 155, 35, 131, 83, 179, 23, 119, 71, 167, 47, 143, 95, 191, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<192>(int i) { return bFFT192LUTMap[i]; }
-__declspec(selectany) extern const short bFFT216LUTMap[] =
+cselectany extern const short bFFT216LUTMap[] =
 {
 0, 72, 144, 24, 96, 168, 48, 120, 192, 8, 80, 152, 32, 104, 176, 56, 128, 200, 16, 88, 160, 40, 112, 184, 64, 136, 208, 4, 76, 148, 28, 100, 172, 52, 124, 196, 12, 84, 156, 36, 108, 180, 60, 132, 204, 20, 92, 164, 44, 116, 188, 68, 140, 212, 2, 74, 146, 26, 98, 170, 50, 122, 194, 10, 82, 154, 34, 106, 178, 58, 130, 202, 18, 90, 162, 42, 114, 186, 66, 138, 210, 6, 78, 150, 30, 102, 174, 54, 126, 198, 14, 86, 158, 38, 110, 182, 62, 134, 206, 22, 94, 166, 46, 118, 190, 70, 142, 214, 1, 73, 145, 25, 97, 169, 49, 121, 193, 9, 81, 153, 33, 105, 177, 57, 129, 201, 17, 89, 161, 41, 113, 185, 65, 137, 209, 5, 77, 149, 29, 101, 173, 53, 125, 197, 13, 85, 157, 37, 109, 181, 61, 133, 205, 21, 93, 165, 45, 117, 189, 69, 141, 213, 3, 75, 147, 27, 99, 171, 51, 123, 195, 11, 83, 155, 35, 107, 179, 59, 131, 203, 19, 91, 163, 43, 115, 187, 67, 139, 211, 7, 79, 151, 31, 103, 175, 55, 127, 199, 15, 87, 159, 39, 111, 183, 63, 135, 207, 23, 95, 167, 47, 119, 191, 71, 143, 215, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<216>(int i) { return bFFT216LUTMap[i]; }
-__declspec(selectany) extern const short bFFT240LUTMap[] =
+cselectany extern const short bFFT240LUTMap[] =
 {
 0, 120, 60, 180, 12, 132, 72, 192, 24, 144, 84, 204, 36, 156, 96, 216, 48, 168, 108, 228, 4, 124, 64, 184, 16, 136, 76, 196, 28, 148, 88, 208, 40, 160, 100, 220, 52, 172, 112, 232, 8, 128, 68, 188, 20, 140, 80, 200, 32, 152, 92, 212, 44, 164, 104, 224, 56, 176, 116, 236, 2, 122, 62, 182, 14, 134, 74, 194, 26, 146, 86, 206, 38, 158, 98, 218, 50, 170, 110, 230, 6, 126, 66, 186, 18, 138, 78, 198, 30, 150, 90, 210, 42, 162, 102, 222, 54, 174, 114, 234, 10, 130, 70, 190, 22, 142, 82, 202, 34, 154, 94, 214, 46, 166, 106, 226, 58, 178, 118, 238, 1, 121, 61, 181, 13, 133, 73, 193, 25, 145, 85, 205, 37, 157, 97, 217, 49, 169, 109, 229, 5, 125, 65, 185, 17, 137, 77, 197, 29, 149, 89, 209, 41, 161, 101, 221, 53, 173, 113, 233, 9, 129, 69, 189, 21, 141, 81, 201, 33, 153, 93, 213, 45, 165, 105, 225, 57, 177, 117, 237, 3, 123, 63, 183, 15, 135, 75, 195, 27, 147, 87, 207, 39, 159, 99, 219, 51, 171, 111, 231, 7, 127, 67, 187, 19, 139, 79, 199, 31, 151, 91, 211, 43, 163, 103, 223, 55, 175, 115, 235, 11, 131, 71, 191, 23, 143, 83, 203, 35, 155, 95, 215, 47, 167, 107, 227, 59, 179, 119, 239, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<240>(int i) { return bFFT240LUTMap[i]; }
-__declspec(selectany) extern const short bFFT256LUTMap[] =
+cselectany extern const short bFFT256LUTMap[] =
 {
 0, 128, 64, 192, 32, 160, 96, 224, 16, 144, 80, 208, 48, 176, 112, 240, 8, 136, 72, 200, 40, 168, 104, 232, 24, 152, 88, 216, 56, 184, 120, 248, 4, 132, 68, 196, 36, 164, 100, 228, 20, 148, 84, 212, 52, 180, 116, 244, 12, 140, 76, 204, 44, 172, 108, 236, 28, 156, 92, 220, 60, 188, 124, 252, 2, 130, 66, 194, 34, 162, 98, 226, 18, 146, 82, 210, 50, 178, 114, 242, 10, 138, 74, 202, 42, 170, 106, 234, 26, 154, 90, 218, 58, 186, 122, 250, 6, 134, 70, 198, 38, 166, 102, 230, 22, 150, 86, 214, 54, 182, 118, 246, 14, 142, 78, 206, 46, 174, 110, 238, 30, 158, 94, 222, 62, 190, 126, 254, 1, 129, 65, 193, 33, 161, 97, 225, 17, 145, 81, 209, 49, 177, 113, 241, 9, 137, 73, 201, 41, 169, 105, 233, 25, 153, 89, 217, 57, 185, 121, 249, 5, 133, 69, 197, 37, 165, 101, 229, 21, 149, 85, 213, 53, 181, 117, 245, 13, 141, 77, 205, 45, 173, 109, 237, 29, 157, 93, 221, 61, 189, 125, 253, 3, 131, 67, 195, 35, 163, 99, 227, 19, 147, 83, 211, 51, 179, 115, 243, 11, 139, 75, 203, 43, 171, 107, 235, 27, 155, 91, 219, 59, 187, 123, 251, 7, 135, 71, 199, 39, 167, 103, 231, 23, 151, 87, 215, 55, 183, 119, 247, 15, 143, 79, 207, 47, 175, 111, 239, 31, 159, 95, 223, 63, 191, 127, 255, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<256>(int i) { return bFFT256LUTMap[i]; }
-__declspec(selectany) extern const short bFFT288LUTMap[] =
+cselectany extern const short bFFT288LUTMap[] =
 {
 0, 144, 72, 216, 24, 168, 96, 240, 48, 192, 120, 264, 8, 152, 80, 224, 32, 176, 104, 248, 56, 200, 128, 272, 16, 160, 88, 232, 40, 184, 112, 256, 64, 208, 136, 280, 4, 148, 76, 220, 28, 172, 100, 244, 52, 196, 124, 268, 12, 156, 84, 228, 36, 180, 108, 252, 60, 204, 132, 276, 20, 164, 92, 236, 44, 188, 116, 260, 68, 212, 140, 284, 2, 146, 74, 218, 26, 170, 98, 242, 50, 194, 122, 266, 10, 154, 82, 226, 34, 178, 106, 250, 58, 202, 130, 274, 18, 162, 90, 234, 42, 186, 114, 258, 66, 210, 138, 282, 6, 150, 78, 222, 30, 174, 102, 246, 54, 198, 126, 270, 14, 158, 86, 230, 38, 182, 110, 254, 62, 206, 134, 278, 22, 166, 94, 238, 46, 190, 118, 262, 70, 214, 142, 286, 1, 145, 73, 217, 25, 169, 97, 241, 49, 193, 121, 265, 9, 153, 81, 225, 33, 177, 105, 249, 57, 201, 129, 273, 17, 161, 89, 233, 41, 185, 113, 257, 65, 209, 137, 281, 5, 149, 77, 221, 29, 173, 101, 245, 53, 197, 125, 269, 13, 157, 85, 229, 37, 181, 109, 253, 61, 205, 133, 277, 21, 165, 93, 237, 45, 189, 117, 261, 69, 213, 141, 285, 3, 147, 75, 219, 27, 171, 99, 243, 51, 195, 123, 267, 11, 155, 83, 227, 35, 179, 107, 251, 59, 203, 131, 275, 19, 163, 91, 235, 43, 187, 115, 259, 67, 211, 139, 283, 7, 151, 79, 223, 31, 175, 103, 247, 55, 199, 127, 271, 15, 159, 87, 231, 39, 183, 111, 255, 63, 207, 135, 279, 23, 167, 95, 239, 47, 191, 119, 263, 71, 215, 143, 287, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<288>(int i) { return bFFT288LUTMap[i]; }
-__declspec(selectany) extern const short bFFT300LUTMap[] =
+cselectany extern const short bFFT300LUTMap[] =
 {
 0, 60, 120, 180, 240, 12, 72, 132, 192, 252, 24, 84, 144, 204, 264, 36, 96, 156, 216, 276, 48, 108, 168, 228, 288, 4, 64, 124, 184, 244, 16, 76, 136, 196, 256, 28, 88, 148, 208, 268, 40, 100, 160, 220, 280, 52, 112, 172, 232, 292, 8, 68, 128, 188, 248, 20, 80, 140, 200, 260, 32, 92, 152, 212, 272, 44, 104, 164, 224, 284, 56, 116, 176, 236, 296, 2, 62, 122, 182, 242, 14, 74, 134, 194, 254, 26, 86, 146, 206, 266, 38, 98, 158, 218, 278, 50, 110, 170, 230, 290, 6, 66, 126, 186, 246, 18, 78, 138, 198, 258, 30, 90, 150, 210, 270, 42, 102, 162, 222, 282, 54, 114, 174, 234, 294, 10, 70, 130, 190, 250, 22, 82, 142, 202, 262, 34, 94, 154, 214, 274, 46, 106, 166, 226, 286, 58, 118, 178, 238, 298, 1, 61, 121, 181, 241, 13, 73, 133, 193, 253, 25, 85, 145, 205, 265, 37, 97, 157, 217, 277, 49, 109, 169, 229, 289, 5, 65, 125, 185, 245, 17, 77, 137, 197, 257, 29, 89, 149, 209, 269, 41, 101, 161, 221, 281, 53, 113, 173, 233, 293, 9, 69, 129, 189, 249, 21, 81, 141, 201, 261, 33, 93, 153, 213, 273, 45, 105, 165, 225, 285, 57, 117, 177, 237, 297, 3, 63, 123, 183, 243, 15, 75, 135, 195, 255, 27, 87, 147, 207, 267, 39, 99, 159, 219, 279, 51, 111, 171, 231, 291, 7, 67, 127, 187, 247, 19, 79, 139, 199, 259, 31, 91, 151, 211, 271, 43, 103, 163, 223, 283, 55, 115, 175, 235, 295, 11, 71, 131, 191, 251, 23, 83, 143, 203, 263, 35, 95, 155, 215, 275, 47, 107, 167, 227, 287, 59, 119, 179, 239, 299, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<300>(int i) { return bFFT300LUTMap[i]; }
-__declspec(selectany) extern const short bFFT324LUTMap[] =
+cselectany extern const short bFFT324LUTMap[] =
 {
 0, 108, 216, 36, 144, 252, 72, 180, 288, 12, 120, 228, 48, 156, 264, 84, 192, 300, 24, 132, 240, 60, 168, 276, 96, 204, 312, 4, 112, 220, 40, 148, 256, 76, 184, 292, 16, 124, 232, 52, 160, 268, 88, 196, 304, 28, 136, 244, 64, 172, 280, 100, 208, 316, 8, 116, 224, 44, 152, 260, 80, 188, 296, 20, 128, 236, 56, 164, 272, 92, 200, 308, 32, 140, 248, 68, 176, 284, 104, 212, 320, 2, 110, 218, 38, 146, 254, 74, 182, 290, 14, 122, 230, 50, 158, 266, 86, 194, 302, 26, 134, 242, 62, 170, 278, 98, 206, 314, 6, 114, 222, 42, 150, 258, 78, 186, 294, 18, 126, 234, 54, 162, 270, 90, 198, 306, 30, 138, 246, 66, 174, 282, 102, 210, 318, 10, 118, 226, 46, 154, 262, 82, 190, 298, 22, 130, 238, 58, 166, 274, 94, 202, 310, 34, 142, 250, 70, 178, 286, 106, 214, 322, 1, 109, 217, 37, 145, 253, 73, 181, 289, 13, 121, 229, 49, 157, 265, 85, 193, 301, 25, 133, 241, 61, 169, 277, 97, 205, 313, 5, 113, 221, 41, 149, 257, 77, 185, 293, 17, 125, 233, 53, 161, 269, 89, 197, 305, 29, 137, 245, 65, 173, 281, 101, 209, 317, 9, 117, 225, 45, 153, 261, 81, 189, 297, 21, 129, 237, 57, 165, 273, 93, 201, 309, 33, 141, 249, 69, 177, 285, 105, 213, 321, 3, 111, 219, 39, 147, 255, 75, 183, 291, 15, 123, 231, 51, 159, 267, 87, 195, 303, 27, 135, 243, 63, 171, 279, 99, 207, 315, 7, 115, 223, 43, 151, 259, 79, 187, 295, 19, 127, 235, 55, 163, 271, 91, 199, 307, 31, 139, 247, 67, 175, 283, 103, 211, 319, 11, 119, 227, 47, 155, 263, 83, 191, 299, 23, 131, 239, 59, 167, 275, 95, 203, 311, 35, 143, 251, 71, 179, 287, 107, 215, 323, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<324>(int i) { return bFFT324LUTMap[i]; }
-__declspec(selectany) extern const short bFFT360LUTMap[] =
+cselectany extern const short bFFT360LUTMap[] =
 {
 0, 72, 144, 216, 288, 24, 96, 168, 240, 312, 48, 120, 192, 264, 336, 8, 80, 152, 224, 296, 32, 104, 176, 248, 320, 56, 128, 200, 272, 344, 16, 88, 160, 232, 304, 40, 112, 184, 256, 328, 64, 136, 208, 280, 352, 4, 76, 148, 220, 292, 28, 100, 172, 244, 316, 52, 124, 196, 268, 340, 12, 84, 156, 228, 300, 36, 108, 180, 252, 324, 60, 132, 204, 276, 348, 20, 92, 164, 236, 308, 44, 116, 188, 260, 332, 68, 140, 212, 284, 356, 2, 74, 146, 218, 290, 26, 98, 170, 242, 314, 50, 122, 194, 266, 338, 10, 82, 154, 226, 298, 34, 106, 178, 250, 322, 58, 130, 202, 274, 346, 18, 90, 162, 234, 306, 42, 114, 186, 258, 330, 66, 138, 210, 282, 354, 6, 78, 150, 222, 294, 30, 102, 174, 246, 318, 54, 126, 198, 270, 342, 14, 86, 158, 230, 302, 38, 110, 182, 254, 326, 62, 134, 206, 278, 350, 22, 94, 166, 238, 310, 46, 118, 190, 262, 334, 70, 142, 214, 286, 358, 1, 73, 145, 217, 289, 25, 97, 169, 241, 313, 49, 121, 193, 265, 337, 9, 81, 153, 225, 297, 33, 105, 177, 249, 321, 57, 129, 201, 273, 345, 17, 89, 161, 233, 305, 41, 113, 185, 257, 329, 65, 137, 209, 281, 353, 5, 77, 149, 221, 293, 29, 101, 173, 245, 317, 53, 125, 197, 269, 341, 13, 85, 157, 229, 301, 37, 109, 181, 253, 325, 61, 133, 205, 277, 349, 21, 93, 165, 237, 309, 45, 117, 189, 261, 333, 69, 141, 213, 285, 357, 3, 75, 147, 219, 291, 27, 99, 171, 243, 315, 51, 123, 195, 267, 339, 11, 83, 155, 227, 299, 35, 107, 179, 251, 323, 59, 131, 203, 275, 347, 19, 91, 163, 235, 307, 43, 115, 187, 259, 331, 67, 139, 211, 283, 355, 7, 79, 151, 223, 295, 31, 103, 175, 247, 319, 55, 127, 199, 271, 343, 15, 87, 159, 231, 303, 39, 111, 183, 255, 327, 63, 135, 207, 279, 351, 23, 95, 167, 239, 311, 47, 119, 191, 263, 335, 71, 143, 215, 287, 359, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<360>(int i) { return bFFT360LUTMap[i]; }
-__declspec(selectany) extern const short bFFT384LUTMap[] =
+cselectany extern const short bFFT384LUTMap[] =
 {
 0, 192, 96, 288, 48, 240, 144, 336, 24, 216, 120, 312, 72, 264, 168, 360, 8, 200, 104, 296, 56, 248, 152, 344, 32, 224, 128, 320, 80, 272, 176, 368, 16, 208, 112, 304, 64, 256, 160, 352, 40, 232, 136, 328, 88, 280, 184, 376, 4, 196, 100, 292, 52, 244, 148, 340, 28, 220, 124, 316, 76, 268, 172, 364, 12, 204, 108, 300, 60, 252, 156, 348, 36, 228, 132, 324, 84, 276, 180, 372, 20, 212, 116, 308, 68, 260, 164, 356, 44, 236, 140, 332, 92, 284, 188, 380, 2, 194, 98, 290, 50, 242, 146, 338, 26, 218, 122, 314, 74, 266, 170, 362, 10, 202, 106, 298, 58, 250, 154, 346, 34, 226, 130, 322, 82, 274, 178, 370, 18, 210, 114, 306, 66, 258, 162, 354, 42, 234, 138, 330, 90, 282, 186, 378, 6, 198, 102, 294, 54, 246, 150, 342, 30, 222, 126, 318, 78, 270, 174, 366, 14, 206, 110, 302, 62, 254, 158, 350, 38, 230, 134, 326, 86, 278, 182, 374, 22, 214, 118, 310, 70, 262, 166, 358, 46, 238, 142, 334, 94, 286, 190, 382, 1, 193, 97, 289, 49, 241, 145, 337, 25, 217, 121, 313, 73, 265, 169, 361, 9, 201, 105, 297, 57, 249, 153, 345, 33, 225, 129, 321, 81, 273, 177, 369, 17, 209, 113, 305, 65, 257, 161, 353, 41, 233, 137, 329, 89, 281, 185, 377, 5, 197, 101, 293, 53, 245, 149, 341, 29, 221, 125, 317, 77, 269, 173, 365, 13, 205, 109, 301, 61, 253, 157, 349, 37, 229, 133, 325, 85, 277, 181, 373, 21, 213, 117, 309, 69, 261, 165, 357, 45, 237, 141, 333, 93, 285, 189, 381, 3, 195, 99, 291, 51, 243, 147, 339, 27, 219, 123, 315, 75, 267, 171, 363, 11, 203, 107, 299, 59, 251, 155, 347, 35, 227, 131, 323, 83, 275, 179, 371, 19, 211, 115, 307, 67, 259, 163, 355, 43, 235, 139, 331, 91, 283, 187, 379, 7, 199, 103, 295, 55, 247, 151, 343, 31, 223, 127, 319, 79, 271, 175, 367, 15, 207, 111, 303, 63, 255, 159, 351, 39, 231, 135, 327, 87, 279, 183, 375, 23, 215, 119, 311, 71, 263, 167, 359, 47, 239, 143, 335, 95, 287, 191, 383, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<384>(int i) { return bFFT384LUTMap[i]; }
-__declspec(selectany) extern const short bFFT432LUTMap[] =
+cselectany extern const short bFFT432LUTMap[] =
 {
 0, 216, 108, 324, 36, 252, 144, 360, 72, 288, 180, 396, 12, 228, 120, 336, 48, 264, 156, 372, 84, 300, 192, 408, 24, 240, 132, 348, 60, 276, 168, 384, 96, 312, 204, 420, 4, 220, 112, 328, 40, 256, 148, 364, 76, 292, 184, 400, 16, 232, 124, 340, 52, 268, 160, 376, 88, 304, 196, 412, 28, 244, 136, 352, 64, 280, 172, 388, 100, 316, 208, 424, 8, 224, 116, 332, 44, 260, 152, 368, 80, 296, 188, 404, 20, 236, 128, 344, 56, 272, 164, 380, 92, 308, 200, 416, 32, 248, 140, 356, 68, 284, 176, 392, 104, 320, 212, 428, 2, 218, 110, 326, 38, 254, 146, 362, 74, 290, 182, 398, 14, 230, 122, 338, 50, 266, 158, 374, 86, 302, 194, 410, 26, 242, 134, 350, 62, 278, 170, 386, 98, 314, 206, 422, 6, 222, 114, 330, 42, 258, 150, 366, 78, 294, 186, 402, 18, 234, 126, 342, 54, 270, 162, 378, 90, 306, 198, 414, 30, 246, 138, 354, 66, 282, 174, 390, 102, 318, 210, 426, 10, 226, 118, 334, 46, 262, 154, 370, 82, 298, 190, 406, 22, 238, 130, 346, 58, 274, 166, 382, 94, 310, 202, 418, 34, 250, 142, 358, 70, 286, 178, 394, 106, 322, 214, 430, 1, 217, 109, 325, 37, 253, 145, 361, 73, 289, 181, 397, 13, 229, 121, 337, 49, 265, 157, 373, 85, 301, 193, 409, 25, 241, 133, 349, 61, 277, 169, 385, 97, 313, 205, 421, 5, 221, 113, 329, 41, 257, 149, 365, 77, 293, 185, 401, 17, 233, 125, 341, 53, 269, 161, 377, 89, 305, 197, 413, 29, 245, 137, 353, 65, 281, 173, 389, 101, 317, 209, 425, 9, 225, 117, 333, 45, 261, 153, 369, 81, 297, 189, 405, 21, 237, 129, 345, 57, 273, 165, 381, 93, 309, 201, 417, 33, 249, 141, 357, 69, 285, 177, 393, 105, 321, 213, 429, 3, 219, 111, 327, 39, 255, 147, 363, 75, 291, 183, 399, 15, 231, 123, 339, 51, 267, 159, 375, 87, 303, 195, 411, 27, 243, 135, 351, 63, 279, 171, 387, 99, 315, 207, 423, 7, 223, 115, 331, 43, 259, 151, 367, 79, 295, 187, 403, 19, 235, 127, 343, 55, 271, 163, 379, 91, 307, 199, 415, 31, 247, 139, 355, 67, 283, 175, 391, 103, 319, 211, 427, 11, 227, 119, 335, 47, 263, 155, 371, 83, 299, 191, 407, 23, 239, 131, 347, 59, 275, 167, 383, 95, 311, 203, 419, 35, 251, 143, 359, 71, 287, 179, 395, 107, 323, 215, 431, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<432>(int i) { return bFFT432LUTMap[i]; }
-__declspec(selectany) extern const short bFFT480LUTMap[] =
+cselectany extern const short bFFT480LUTMap[] =
 {
 0, 240, 120, 360, 24, 264, 144, 384, 48, 288, 168, 408, 72, 312, 192, 432, 96, 336, 216, 456, 8, 248, 128, 368, 32, 272, 152, 392, 56, 296, 176, 416, 80, 320, 200, 440, 104, 344, 224, 464, 16, 256, 136, 376, 40, 280, 160, 400, 64, 304, 184, 424, 88, 328, 208, 448, 112, 352, 232, 472, 4, 244, 124, 364, 28, 268, 148, 388, 52, 292, 172, 412, 76, 316, 196, 436, 100, 340, 220, 460, 12, 252, 132, 372, 36, 276, 156, 396, 60, 300, 180, 420, 84, 324, 204, 444, 108, 348, 228, 468, 20, 260, 140, 380, 44, 284, 164, 404, 68, 308, 188, 428, 92, 332, 212, 452, 116, 356, 236, 476, 2, 242, 122, 362, 26, 266, 146, 386, 50, 290, 170, 410, 74, 314, 194, 434, 98, 338, 218, 458, 10, 250, 130, 370, 34, 274, 154, 394, 58, 298, 178, 418, 82, 322, 202, 442, 106, 346, 226, 466, 18, 258, 138, 378, 42, 282, 162, 402, 66, 306, 186, 426, 90, 330, 210, 450, 114, 354, 234, 474, 6, 246, 126, 366, 30, 270, 150, 390, 54, 294, 174, 414, 78, 318, 198, 438, 102, 342, 222, 462, 14, 254, 134, 374, 38, 278, 158, 398, 62, 302, 182, 422, 86, 326, 206, 446, 110, 350, 230, 470, 22, 262, 142, 382, 46, 286, 166, 406, 70, 310, 190, 430, 94, 334, 214, 454, 118, 358, 238, 478, 1, 241, 121, 361, 25, 265, 145, 385, 49, 289, 169, 409, 73, 313, 193, 433, 97, 337, 217, 457, 9, 249, 129, 369, 33, 273, 153, 393, 57, 297, 177, 417, 81, 321, 201, 441, 105, 345, 225, 465, 17, 257, 137, 377, 41, 281, 161, 401, 65, 305, 185, 425, 89, 329, 209, 449, 113, 353, 233, 473, 5, 245, 125, 365, 29, 269, 149, 389, 53, 293, 173, 413, 77, 317, 197, 437, 101, 341, 221, 461, 13, 253, 133, 373, 37, 277, 157, 397, 61, 301, 181, 421, 85, 325, 205, 445, 109, 349, 229, 469, 21, 261, 141, 381, 45, 285, 165, 405, 69, 309, 189, 429, 93, 333, 213, 453, 117, 357, 237, 477, 3, 243, 123, 363, 27, 267, 147, 387, 51, 291, 171, 411, 75, 315, 195, 435, 99, 339, 219, 459, 11, 251, 131, 371, 35, 275, 155, 395, 59, 299, 179, 419, 83, 323, 203, 443, 107, 347, 227, 467, 19, 259, 139, 379, 43, 283, 163, 403, 67, 307, 187, 427, 91, 331, 211, 451, 115, 355, 235, 475, 7, 247, 127, 367, 31, 271, 151, 391, 55, 295, 175, 415, 79, 319, 199, 439, 103, 343, 223, 463, 15, 255, 135, 375, 39, 279, 159, 399, 63, 303, 183, 423, 87, 327, 207, 447, 111, 351, 231, 471, 23, 263, 143, 383, 47, 287, 167, 407, 71, 311, 191, 431, 95, 335, 215, 455, 119, 359, 239, 479, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<480>(int i) { return bFFT480LUTMap[i]; }
-__declspec(selectany) extern const short bFFT512LUTMap[] =
+cselectany extern const short bFFT512LUTMap[] =
 {
 0, 256, 128, 384, 64, 320, 192, 448, 32, 288, 160, 416, 96, 352, 224, 480, 16, 272, 144, 400, 80, 336, 208, 464, 48, 304, 176, 432, 112, 368, 240, 496, 8, 264, 136, 392, 72, 328, 200, 456, 40, 296, 168, 424, 104, 360, 232, 488, 24, 280, 152, 408, 88, 344, 216, 472, 56, 312, 184, 440, 120, 376, 248, 504, 4, 260, 132, 388, 68, 324, 196, 452, 36, 292, 164, 420, 100, 356, 228, 484, 20, 276, 148, 404, 84, 340, 212, 468, 52, 308, 180, 436, 116, 372, 244, 500, 12, 268, 140, 396, 76, 332, 204, 460, 44, 300, 172, 428, 108, 364, 236, 492, 28, 284, 156, 412, 92, 348, 220, 476, 60, 316, 188, 444, 124, 380, 252, 508, 2, 258, 130, 386, 66, 322, 194, 450, 34, 290, 162, 418, 98, 354, 226, 482, 18, 274, 146, 402, 82, 338, 210, 466, 50, 306, 178, 434, 114, 370, 242, 498, 10, 266, 138, 394, 74, 330, 202, 458, 42, 298, 170, 426, 106, 362, 234, 490, 26, 282, 154, 410, 90, 346, 218, 474, 58, 314, 186, 442, 122, 378, 250, 506, 6, 262, 134, 390, 70, 326, 198, 454, 38, 294, 166, 422, 102, 358, 230, 486, 22, 278, 150, 406, 86, 342, 214, 470, 54, 310, 182, 438, 118, 374, 246, 502, 14, 270, 142, 398, 78, 334, 206, 462, 46, 302, 174, 430, 110, 366, 238, 494, 30, 286, 158, 414, 94, 350, 222, 478, 62, 318, 190, 446, 126, 382, 254, 510, 1, 257, 129, 385, 65, 321, 193, 449, 33, 289, 161, 417, 97, 353, 225, 481, 17, 273, 145, 401, 81, 337, 209, 465, 49, 305, 177, 433, 113, 369, 241, 497, 9, 265, 137, 393, 73, 329, 201, 457, 41, 297, 169, 425, 105, 361, 233, 489, 25, 281, 153, 409, 89, 345, 217, 473, 57, 313, 185, 441, 121, 377, 249, 505, 5, 261, 133, 389, 69, 325, 197, 453, 37, 293, 165, 421, 101, 357, 229, 485, 21, 277, 149, 405, 85, 341, 213, 469, 53, 309, 181, 437, 117, 373, 245, 501, 13, 269, 141, 397, 77, 333, 205, 461, 45, 301, 173, 429, 109, 365, 237, 493, 29, 285, 157, 413, 93, 349, 221, 477, 61, 317, 189, 445, 125, 381, 253, 509, 3, 259, 131, 387, 67, 323, 195, 451, 35, 291, 163, 419, 99, 355, 227, 483, 19, 275, 147, 403, 83, 339, 211, 467, 51, 307, 179, 435, 115, 371, 243, 499, 11, 267, 139, 395, 75, 331, 203, 459, 43, 299, 171, 427, 107, 363, 235, 491, 27, 283, 155, 411, 91, 347, 219, 475, 59, 315, 187, 443, 123, 379, 251, 507, 7, 263, 135, 391, 71, 327, 199, 455, 39, 295, 167, 423, 103, 359, 231, 487, 23, 279, 151, 407, 87, 343, 215, 471, 55, 311, 183, 439, 119, 375, 247, 503, 15, 271, 143, 399, 79, 335, 207, 463, 47, 303, 175, 431, 111, 367, 239, 495, 31, 287, 159, 415, 95, 351, 223, 479, 63, 319, 191, 447, 127, 383, 255, 511, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<512>(int i) { return bFFT512LUTMap[i]; }
-__declspec(selectany) extern const short bFFT540LUTMap[] =
+cselectany extern const short bFFT540LUTMap[] =
 {
 0, 108, 216, 324, 432, 36, 144, 252, 360, 468, 72, 180, 288, 396, 504, 12, 120, 228, 336, 444, 48, 156, 264, 372, 480, 84, 192, 300, 408, 516, 24, 132, 240, 348, 456, 60, 168, 276, 384, 492, 96, 204, 312, 420, 528, 4, 112, 220, 328, 436, 40, 148, 256, 364, 472, 76, 184, 292, 400, 508, 16, 124, 232, 340, 448, 52, 160, 268, 376, 484, 88, 196, 304, 412, 520, 28, 136, 244, 352, 460, 64, 172, 280, 388, 496, 100, 208, 316, 424, 532, 8, 116, 224, 332, 440, 44, 152, 260, 368, 476, 80, 188, 296, 404, 512, 20, 128, 236, 344, 452, 56, 164, 272, 380, 488, 92, 200, 308, 416, 524, 32, 140, 248, 356, 464, 68, 176, 284, 392, 500, 104, 212, 320, 428, 536, 2, 110, 218, 326, 434, 38, 146, 254, 362, 470, 74, 182, 290, 398, 506, 14, 122, 230, 338, 446, 50, 158, 266, 374, 482, 86, 194, 302, 410, 518, 26, 134, 242, 350, 458, 62, 170, 278, 386, 494, 98, 206, 314, 422, 530, 6, 114, 222, 330, 438, 42, 150, 258, 366, 474, 78, 186, 294, 402, 510, 18, 126, 234, 342, 450, 54, 162, 270, 378, 486, 90, 198, 306, 414, 522, 30, 138, 246, 354, 462, 66, 174, 282, 390, 498, 102, 210, 318, 426, 534, 10, 118, 226, 334, 442, 46, 154, 262, 370, 478, 82, 190, 298, 406, 514, 22, 130, 238, 346, 454, 58, 166, 274, 382, 490, 94, 202, 310, 418, 526, 34, 142, 250, 358, 466, 70, 178, 286, 394, 502, 106, 214, 322, 430, 538, 1, 109, 217, 325, 433, 37, 145, 253, 361, 469, 73, 181, 289, 397, 505, 13, 121, 229, 337, 445, 49, 157, 265, 373, 481, 85, 193, 301, 409, 517, 25, 133, 241, 349, 457, 61, 169, 277, 385, 493, 97, 205, 313, 421, 529, 5, 113, 221, 329, 437, 41, 149, 257, 365, 473, 77, 185, 293, 401, 509, 17, 125, 233, 341, 449, 53, 161, 269, 377, 485, 89, 197, 305, 413, 521, 29, 137, 245, 353, 461, 65, 173, 281, 389, 497, 101, 209, 317, 425, 533, 9, 117, 225, 333, 441, 45, 153, 261, 369, 477, 81, 189, 297, 405, 513, 21, 129, 237, 345, 453, 57, 165, 273, 381, 489, 93, 201, 309, 417, 525, 33, 141, 249, 357, 465, 69, 177, 285, 393, 501, 105, 213, 321, 429, 537, 3, 111, 219, 327, 435, 39, 147, 255, 363, 471, 75, 183, 291, 399, 507, 15, 123, 231, 339, 447, 51, 159, 267, 375, 483, 87, 195, 303, 411, 519, 27, 135, 243, 351, 459, 63, 171, 279, 387, 495, 99, 207, 315, 423, 531, 7, 115, 223, 331, 439, 43, 151, 259, 367, 475, 79, 187, 295, 403, 511, 19, 127, 235, 343, 451, 55, 163, 271, 379, 487, 91, 199, 307, 415, 523, 31, 139, 247, 355, 463, 67, 175, 283, 391, 499, 103, 211, 319, 427, 535, 11, 119, 227, 335, 443, 47, 155, 263, 371, 479, 83, 191, 299, 407, 515, 23, 131, 239, 347, 455, 59, 167, 275, 383, 491, 95, 203, 311, 419, 527, 35, 143, 251, 359, 467, 71, 179, 287, 395, 503, 107, 215, 323, 431, 539, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<540>(int i) { return bFFT540LUTMap[i]; }
-__declspec(selectany) extern const short bFFT576LUTMap[] =
+cselectany extern const short bFFT576LUTMap[] =
 {
 0, 288, 144, 432, 72, 360, 216, 504, 36, 324, 180, 468, 108, 396, 252, 540, 12, 300, 156, 444, 84, 372, 228, 516, 48, 336, 192, 480, 120, 408, 264, 552, 24, 312, 168, 456, 96, 384, 240, 528, 60, 348, 204, 492, 132, 420, 276, 564, 4, 292, 148, 436, 76, 364, 220, 508, 40, 328, 184, 472, 112, 400, 256, 544, 16, 304, 160, 448, 88, 376, 232, 520, 52, 340, 196, 484, 124, 412, 268, 556, 28, 316, 172, 460, 100, 388, 244, 532, 64, 352, 208, 496, 136, 424, 280, 568, 8, 296, 152, 440, 80, 368, 224, 512, 44, 332, 188, 476, 116, 404, 260, 548, 20, 308, 164, 452, 92, 380, 236, 524, 56, 344, 200, 488, 128, 416, 272, 560, 32, 320, 176, 464, 104, 392, 248, 536, 68, 356, 212, 500, 140, 428, 284, 572, 2, 290, 146, 434, 74, 362, 218, 506, 38, 326, 182, 470, 110, 398, 254, 542, 14, 302, 158, 446, 86, 374, 230, 518, 50, 338, 194, 482, 122, 410, 266, 554, 26, 314, 170, 458, 98, 386, 242, 530, 62, 350, 206, 494, 134, 422, 278, 566, 6, 294, 150, 438, 78, 366, 222, 510, 42, 330, 186, 474, 114, 402, 258, 546, 18, 306, 162, 450, 90, 378, 234, 522, 54, 342, 198, 486, 126, 414, 270, 558, 30, 318, 174, 462, 102, 390, 246, 534, 66, 354, 210, 498, 138, 426, 282, 570, 10, 298, 154, 442, 82, 370, 226, 514, 46, 334, 190, 478, 118, 406, 262, 550, 22, 310, 166, 454, 94, 382, 238, 526, 58, 346, 202, 490, 130, 418, 274, 562, 34, 322, 178, 466, 106, 394, 250, 538, 70, 358, 214, 502, 142, 430, 286, 574, 1, 289, 145, 433, 73, 361, 217, 505, 37, 325, 181, 469, 109, 397, 253, 541, 13, 301, 157, 445, 85, 373, 229, 517, 49, 337, 193, 481, 121, 409, 265, 553, 25, 313, 169, 457, 97, 385, 241, 529, 61, 349, 205, 493, 133, 421, 277, 565, 5, 293, 149, 437, 77, 365, 221, 509, 41, 329, 185, 473, 113, 401, 257, 545, 17, 305, 161, 449, 89, 377, 233, 521, 53, 341, 197, 485, 125, 413, 269, 557, 29, 317, 173, 461, 101, 389, 245, 533, 65, 353, 209, 497, 137, 425, 281, 569, 9, 297, 153, 441, 81, 369, 225, 513, 45, 333, 189, 477, 117, 405, 261, 549, 21, 309, 165, 453, 93, 381, 237, 525, 57, 345, 201, 489, 129, 417, 273, 561, 33, 321, 177, 465, 105, 393, 249, 537, 69, 357, 213, 501, 141, 429, 285, 573, 3, 291, 147, 435, 75, 363, 219, 507, 39, 327, 183, 471, 111, 399, 255, 543, 15, 303, 159, 447, 87, 375, 231, 519, 51, 339, 195, 483, 123, 411, 267, 555, 27, 315, 171, 459, 99, 387, 243, 531, 63, 351, 207, 495, 135, 423, 279, 567, 7, 295, 151, 439, 79, 367, 223, 511, 43, 331, 187, 475, 115, 403, 259, 547, 19, 307, 163, 451, 91, 379, 235, 523, 55, 343, 199, 487, 127, 415, 271, 559, 31, 319, 175, 463, 103, 391, 247, 535, 67, 355, 211, 499, 139, 427, 283, 571, 11, 299, 155, 443, 83, 371, 227, 515, 47, 335, 191, 479, 119, 407, 263, 551, 23, 311, 167, 455, 95, 383, 239, 527, 59, 347, 203, 491, 131, 419, 275, 563, 35, 323, 179, 467, 107, 395, 251, 539, 71, 359, 215, 503, 143, 431, 287, 575, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<576>(int i) { return bFFT576LUTMap[i]; }
-__declspec(selectany) extern const short bFFT600LUTMap[] =
+cselectany extern const short bFFT600LUTMap[] =
 {
 0, 120, 240, 360, 480, 24, 144, 264, 384, 504, 48, 168, 288, 408, 528, 72, 192, 312, 432, 552, 96, 216, 336, 456, 576, 8, 128, 248, 368, 488, 32, 152, 272, 392, 512, 56, 176, 296, 416, 536, 80, 200, 320, 440, 560, 104, 224, 344, 464, 584, 16, 136, 256, 376, 496, 40, 160, 280, 400, 520, 64, 184, 304, 424, 544, 88, 208, 328, 448, 568, 112, 232, 352, 472, 592, 4, 124, 244, 364, 484, 28, 148, 268, 388, 508, 52, 172, 292, 412, 532, 76, 196, 316, 436, 556, 100, 220, 340, 460, 580, 12, 132, 252, 372, 492, 36, 156, 276, 396, 516, 60, 180, 300, 420, 540, 84, 204, 324, 444, 564, 108, 228, 348, 468, 588, 20, 140, 260, 380, 500, 44, 164, 284, 404, 524, 68, 188, 308, 428, 548, 92, 212, 332, 452, 572, 116, 236, 356, 476, 596, 2, 122, 242, 362, 482, 26, 146, 266, 386, 506, 50, 170, 290, 410, 530, 74, 194, 314, 434, 554, 98, 218, 338, 458, 578, 10, 130, 250, 370, 490, 34, 154, 274, 394, 514, 58, 178, 298, 418, 538, 82, 202, 322, 442, 562, 106, 226, 346, 466, 586, 18, 138, 258, 378, 498, 42, 162, 282, 402, 522, 66, 186, 306, 426, 546, 90, 210, 330, 450, 570, 114, 234, 354, 474, 594, 6, 126, 246, 366, 486, 30, 150, 270, 390, 510, 54, 174, 294, 414, 534, 78, 198, 318, 438, 558, 102, 222, 342, 462, 582, 14, 134, 254, 374, 494, 38, 158, 278, 398, 518, 62, 182, 302, 422, 542, 86, 206, 326, 446, 566, 110, 230, 350, 470, 590, 22, 142, 262, 382, 502, 46, 166, 286, 406, 526, 70, 190, 310, 430, 550, 94, 214, 334, 454, 574, 118, 238, 358, 478, 598, 1, 121, 241, 361, 481, 25, 145, 265, 385, 505, 49, 169, 289, 409, 529, 73, 193, 313, 433, 553, 97, 217, 337, 457, 577, 9, 129, 249, 369, 489, 33, 153, 273, 393, 513, 57, 177, 297, 417, 537, 81, 201, 321, 441, 561, 105, 225, 345, 465, 585, 17, 137, 257, 377, 497, 41, 161, 281, 401, 521, 65, 185, 305, 425, 545, 89, 209, 329, 449, 569, 113, 233, 353, 473, 593, 5, 125, 245, 365, 485, 29, 149, 269, 389, 509, 53, 173, 293, 413, 533, 77, 197, 317, 437, 557, 101, 221, 341, 461, 581, 13, 133, 253, 373, 493, 37, 157, 277, 397, 517, 61, 181, 301, 421, 541, 85, 205, 325, 445, 565, 109, 229, 349, 469, 589, 21, 141, 261, 381, 501, 45, 165, 285, 405, 525, 69, 189, 309, 429, 549, 93, 213, 333, 453, 573, 117, 237, 357, 477, 597, 3, 123, 243, 363, 483, 27, 147, 267, 387, 507, 51, 171, 291, 411, 531, 75, 195, 315, 435, 555, 99, 219, 339, 459, 579, 11, 131, 251, 371, 491, 35, 155, 275, 395, 515, 59, 179, 299, 419, 539, 83, 203, 323, 443, 563, 107, 227, 347, 467, 587, 19, 139, 259, 379, 499, 43, 163, 283, 403, 523, 67, 187, 307, 427, 547, 91, 211, 331, 451, 571, 115, 235, 355, 475, 595, 7, 127, 247, 367, 487, 31, 151, 271, 391, 511, 55, 175, 295, 415, 535, 79, 199, 319, 439, 559, 103, 223, 343, 463, 583, 15, 135, 255, 375, 495, 39, 159, 279, 399, 519, 63, 183, 303, 423, 543, 87, 207, 327, 447, 567, 111, 231, 351, 471, 591, 23, 143, 263, 383, 503, 47, 167, 287, 407, 527, 71, 191, 311, 431, 551, 95, 215, 335, 455, 575, 119, 239, 359, 479, 599, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<600>(int i) { return bFFT600LUTMap[i]; }
-__declspec(selectany) extern const short bFFT648LUTMap[] =
+cselectany extern const short bFFT648LUTMap[] =
 {
 0, 216, 432, 72, 288, 504, 144, 360, 576, 24, 240, 456, 96, 312, 528, 168, 384, 600, 48, 264, 480, 120, 336, 552, 192, 408, 624, 8, 224, 440, 80, 296, 512, 152, 368, 584, 32, 248, 464, 104, 320, 536, 176, 392, 608, 56, 272, 488, 128, 344, 560, 200, 416, 632, 16, 232, 448, 88, 304, 520, 160, 376, 592, 40, 256, 472, 112, 328, 544, 184, 400, 616, 64, 280, 496, 136, 352, 568, 208, 424, 640, 4, 220, 436, 76, 292, 508, 148, 364, 580, 28, 244, 460, 100, 316, 532, 172, 388, 604, 52, 268, 484, 124, 340, 556, 196, 412, 628, 12, 228, 444, 84, 300, 516, 156, 372, 588, 36, 252, 468, 108, 324, 540, 180, 396, 612, 60, 276, 492, 132, 348, 564, 204, 420, 636, 20, 236, 452, 92, 308, 524, 164, 380, 596, 44, 260, 476, 116, 332, 548, 188, 404, 620, 68, 284, 500, 140, 356, 572, 212, 428, 644, 2, 218, 434, 74, 290, 506, 146, 362, 578, 26, 242, 458, 98, 314, 530, 170, 386, 602, 50, 266, 482, 122, 338, 554, 194, 410, 626, 10, 226, 442, 82, 298, 514, 154, 370, 586, 34, 250, 466, 106, 322, 538, 178, 394, 610, 58, 274, 490, 130, 346, 562, 202, 418, 634, 18, 234, 450, 90, 306, 522, 162, 378, 594, 42, 258, 474, 114, 330, 546, 186, 402, 618, 66, 282, 498, 138, 354, 570, 210, 426, 642, 6, 222, 438, 78, 294, 510, 150, 366, 582, 30, 246, 462, 102, 318, 534, 174, 390, 606, 54, 270, 486, 126, 342, 558, 198, 414, 630, 14, 230, 446, 86, 302, 518, 158, 374, 590, 38, 254, 470, 110, 326, 542, 182, 398, 614, 62, 278, 494, 134, 350, 566, 206, 422, 638, 22, 238, 454, 94, 310, 526, 166, 382, 598, 46, 262, 478, 118, 334, 550, 190, 406, 622, 70, 286, 502, 142, 358, 574, 214, 430, 646, 1, 217, 433, 73, 289, 505, 145, 361, 577, 25, 241, 457, 97, 313, 529, 169, 385, 601, 49, 265, 481, 121, 337, 553, 193, 409, 625, 9, 225, 441, 81, 297, 513, 153, 369, 585, 33, 249, 465, 105, 321, 537, 177, 393, 609, 57, 273, 489, 129, 345, 561, 201, 417, 633, 17, 233, 449, 89, 305, 521, 161, 377, 593, 41, 257, 473, 113, 329, 545, 185, 401, 617, 65, 281, 497, 137, 353, 569, 209, 425, 641, 5, 221, 437, 77, 293, 509, 149, 365, 581, 29, 245, 461, 101, 317, 533, 173, 389, 605, 53, 269, 485, 125, 341, 557, 197, 413, 629, 13, 229, 445, 85, 301, 517, 157, 373, 589, 37, 253, 469, 109, 325, 541, 181, 397, 613, 61, 277, 493, 133, 349, 565, 205, 421, 637, 21, 237, 453, 93, 309, 525, 165, 381, 597, 45, 261, 477, 117, 333, 549, 189, 405, 621, 69, 285, 501, 141, 357, 573, 213, 429, 645, 3, 219, 435, 75, 291, 507, 147, 363, 579, 27, 243, 459, 99, 315, 531, 171, 387, 603, 51, 267, 483, 123, 339, 555, 195, 411, 627, 11, 227, 443, 83, 299, 515, 155, 371, 587, 35, 251, 467, 107, 323, 539, 179, 395, 611, 59, 275, 491, 131, 347, 563, 203, 419, 635, 19, 235, 451, 91, 307, 523, 163, 379, 595, 43, 259, 475, 115, 331, 547, 187, 403, 619, 67, 283, 499, 139, 355, 571, 211, 427, 643, 7, 223, 439, 79, 295, 511, 151, 367, 583, 31, 247, 463, 103, 319, 535, 175, 391, 607, 55, 271, 487, 127, 343, 559, 199, 415, 631, 15, 231, 447, 87, 303, 519, 159, 375, 591, 39, 255, 471, 111, 327, 543, 183, 399, 615, 63, 279, 495, 135, 351, 567, 207, 423, 639, 23, 239, 455, 95, 311, 527, 167, 383, 599, 47, 263, 479, 119, 335, 551, 191, 407, 623, 71, 287, 503, 143, 359, 575, 215, 431, 647, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<648>(int i) { return bFFT648LUTMap[i]; }
-__declspec(selectany) extern const short bFFT720LUTMap[] =
+cselectany extern const short bFFT720LUTMap[] =
 {
 0, 360, 180, 540, 36, 396, 216, 576, 72, 432, 252, 612, 108, 468, 288, 648, 144, 504, 324, 684, 12, 372, 192, 552, 48, 408, 228, 588, 84, 444, 264, 624, 120, 480, 300, 660, 156, 516, 336, 696, 24, 384, 204, 564, 60, 420, 240, 600, 96, 456, 276, 636, 132, 492, 312, 672, 168, 528, 348, 708, 4, 364, 184, 544, 40, 400, 220, 580, 76, 436, 256, 616, 112, 472, 292, 652, 148, 508, 328, 688, 16, 376, 196, 556, 52, 412, 232, 592, 88, 448, 268, 628, 124, 484, 304, 664, 160, 520, 340, 700, 28, 388, 208, 568, 64, 424, 244, 604, 100, 460, 280, 640, 136, 496, 316, 676, 172, 532, 352, 712, 8, 368, 188, 548, 44, 404, 224, 584, 80, 440, 260, 620, 116, 476, 296, 656, 152, 512, 332, 692, 20, 380, 200, 560, 56, 416, 236, 596, 92, 452, 272, 632, 128, 488, 308, 668, 164, 524, 344, 704, 32, 392, 212, 572, 68, 428, 248, 608, 104, 464, 284, 644, 140, 500, 320, 680, 176, 536, 356, 716, 2, 362, 182, 542, 38, 398, 218, 578, 74, 434, 254, 614, 110, 470, 290, 650, 146, 506, 326, 686, 14, 374, 194, 554, 50, 410, 230, 590, 86, 446, 266, 626, 122, 482, 302, 662, 158, 518, 338, 698, 26, 386, 206, 566, 62, 422, 242, 602, 98, 458, 278, 638, 134, 494, 314, 674, 170, 530, 350, 710, 6, 366, 186, 546, 42, 402, 222, 582, 78, 438, 258, 618, 114, 474, 294, 654, 150, 510, 330, 690, 18, 378, 198, 558, 54, 414, 234, 594, 90, 450, 270, 630, 126, 486, 306, 666, 162, 522, 342, 702, 30, 390, 210, 570, 66, 426, 246, 606, 102, 462, 282, 642, 138, 498, 318, 678, 174, 534, 354, 714, 10, 370, 190, 550, 46, 406, 226, 586, 82, 442, 262, 622, 118, 478, 298, 658, 154, 514, 334, 694, 22, 382, 202, 562, 58, 418, 238, 598, 94, 454, 274, 634, 130, 490, 310, 670, 166, 526, 346, 706, 34, 394, 214, 574, 70, 430, 250, 610, 106, 466, 286, 646, 142, 502, 322, 682, 178, 538, 358, 718, 1, 361, 181, 541, 37, 397, 217, 577, 73, 433, 253, 613, 109, 469, 289, 649, 145, 505, 325, 685, 13, 373, 193, 553, 49, 409, 229, 589, 85, 445, 265, 625, 121, 481, 301, 661, 157, 517, 337, 697, 25, 385, 205, 565, 61, 421, 241, 601, 97, 457, 277, 637, 133, 493, 313, 673, 169, 529, 349, 709, 5, 365, 185, 545, 41, 401, 221, 581, 77, 437, 257, 617, 113, 473, 293, 653, 149, 509, 329, 689, 17, 377, 197, 557, 53, 413, 233, 593, 89, 449, 269, 629, 125, 485, 305, 665, 161, 521, 341, 701, 29, 389, 209, 569, 65, 425, 245, 605, 101, 461, 281, 641, 137, 497, 317, 677, 173, 533, 353, 713, 9, 369, 189, 549, 45, 405, 225, 585, 81, 441, 261, 621, 117, 477, 297, 657, 153, 513, 333, 693, 21, 381, 201, 561, 57, 417, 237, 597, 93, 453, 273, 633, 129, 489, 309, 669, 165, 525, 345, 705, 33, 393, 213, 573, 69, 429, 249, 609, 105, 465, 285, 645, 141, 501, 321, 681, 177, 537, 357, 717, 3, 363, 183, 543, 39, 399, 219, 579, 75, 435, 255, 615, 111, 471, 291, 651, 147, 507, 327, 687, 15, 375, 195, 555, 51, 411, 231, 591, 87, 447, 267, 627, 123, 483, 303, 663, 159, 519, 339, 699, 27, 387, 207, 567, 63, 423, 243, 603, 99, 459, 279, 639, 135, 495, 315, 675, 171, 531, 351, 711, 7, 367, 187, 547, 43, 403, 223, 583, 79, 439, 259, 619, 115, 475, 295, 655, 151, 511, 331, 691, 19, 379, 199, 559, 55, 415, 235, 595, 91, 451, 271, 631, 127, 487, 307, 667, 163, 523, 343, 703, 31, 391, 211, 571, 67, 427, 247, 607, 103, 463, 283, 643, 139, 499, 319, 679, 175, 535, 355, 715, 11, 371, 191, 551, 47, 407, 227, 587, 83, 443, 263, 623, 119, 479, 299, 659, 155, 515, 335, 695, 23, 383, 203, 563, 59, 419, 239, 599, 95, 455, 275, 635, 131, 491, 311, 671, 167, 527, 347, 707, 35, 395, 215, 575, 71, 431, 251, 611, 107, 467, 287, 647, 143, 503, 323, 683, 179, 539, 359, 719, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<720>(int i) { return bFFT720LUTMap[i]; }
-__declspec(selectany) extern const short bFFT768LUTMap[] =
+cselectany extern const short bFFT768LUTMap[] =
 {
 0, 384, 192, 576, 96, 480, 288, 672, 48, 432, 240, 624, 144, 528, 336, 720, 24, 408, 216, 600, 120, 504, 312, 696, 72, 456, 264, 648, 168, 552, 360, 744, 12, 396, 204, 588, 108, 492, 300, 684, 60, 444, 252, 636, 156, 540, 348, 732, 36, 420, 228, 612, 132, 516, 324, 708, 84, 468, 276, 660, 180, 564, 372, 756, 4, 388, 196, 580, 100, 484, 292, 676, 52, 436, 244, 628, 148, 532, 340, 724, 28, 412, 220, 604, 124, 508, 316, 700, 76, 460, 268, 652, 172, 556, 364, 748, 16, 400, 208, 592, 112, 496, 304, 688, 64, 448, 256, 640, 160, 544, 352, 736, 40, 424, 232, 616, 136, 520, 328, 712, 88, 472, 280, 664, 184, 568, 376, 760, 8, 392, 200, 584, 104, 488, 296, 680, 56, 440, 248, 632, 152, 536, 344, 728, 32, 416, 224, 608, 128, 512, 320, 704, 80, 464, 272, 656, 176, 560, 368, 752, 20, 404, 212, 596, 116, 500, 308, 692, 68, 452, 260, 644, 164, 548, 356, 740, 44, 428, 236, 620, 140, 524, 332, 716, 92, 476, 284, 668, 188, 572, 380, 764, 2, 386, 194, 578, 98, 482, 290, 674, 50, 434, 242, 626, 146, 530, 338, 722, 26, 410, 218, 602, 122, 506, 314, 698, 74, 458, 266, 650, 170, 554, 362, 746, 14, 398, 206, 590, 110, 494, 302, 686, 62, 446, 254, 638, 158, 542, 350, 734, 38, 422, 230, 614, 134, 518, 326, 710, 86, 470, 278, 662, 182, 566, 374, 758, 6, 390, 198, 582, 102, 486, 294, 678, 54, 438, 246, 630, 150, 534, 342, 726, 30, 414, 222, 606, 126, 510, 318, 702, 78, 462, 270, 654, 174, 558, 366, 750, 18, 402, 210, 594, 114, 498, 306, 690, 66, 450, 258, 642, 162, 546, 354, 738, 42, 426, 234, 618, 138, 522, 330, 714, 90, 474, 282, 666, 186, 570, 378, 762, 10, 394, 202, 586, 106, 490, 298, 682, 58, 442, 250, 634, 154, 538, 346, 730, 34, 418, 226, 610, 130, 514, 322, 706, 82, 466, 274, 658, 178, 562, 370, 754, 22, 406, 214, 598, 118, 502, 310, 694, 70, 454, 262, 646, 166, 550, 358, 742, 46, 430, 238, 622, 142, 526, 334, 718, 94, 478, 286, 670, 190, 574, 382, 766, 1, 385, 193, 577, 97, 481, 289, 673, 49, 433, 241, 625, 145, 529, 337, 721, 25, 409, 217, 601, 121, 505, 313, 697, 73, 457, 265, 649, 169, 553, 361, 745, 13, 397, 205, 589, 109, 493, 301, 685, 61, 445, 253, 637, 157, 541, 349, 733, 37, 421, 229, 613, 133, 517, 325, 709, 85, 469, 277, 661, 181, 565, 373, 757, 5, 389, 197, 581, 101, 485, 293, 677, 53, 437, 245, 629, 149, 533, 341, 725, 29, 413, 221, 605, 125, 509, 317, 701, 77, 461, 269, 653, 173, 557, 365, 749, 17, 401, 209, 593, 113, 497, 305, 689, 65, 449, 257, 641, 161, 545, 353, 737, 41, 425, 233, 617, 137, 521, 329, 713, 89, 473, 281, 665, 185, 569, 377, 761, 9, 393, 201, 585, 105, 489, 297, 681, 57, 441, 249, 633, 153, 537, 345, 729, 33, 417, 225, 609, 129, 513, 321, 705, 81, 465, 273, 657, 177, 561, 369, 753, 21, 405, 213, 597, 117, 501, 309, 693, 69, 453, 261, 645, 165, 549, 357, 741, 45, 429, 237, 621, 141, 525, 333, 717, 93, 477, 285, 669, 189, 573, 381, 765, 3, 387, 195, 579, 99, 483, 291, 675, 51, 435, 243, 627, 147, 531, 339, 723, 27, 411, 219, 603, 123, 507, 315, 699, 75, 459, 267, 651, 171, 555, 363, 747, 15, 399, 207, 591, 111, 495, 303, 687, 63, 447, 255, 639, 159, 543, 351, 735, 39, 423, 231, 615, 135, 519, 327, 711, 87, 471, 279, 663, 183, 567, 375, 759, 7, 391, 199, 583, 103, 487, 295, 679, 55, 439, 247, 631, 151, 535, 343, 727, 31, 415, 223, 607, 127, 511, 319, 703, 79, 463, 271, 655, 175, 559, 367, 751, 19, 403, 211, 595, 115, 499, 307, 691, 67, 451, 259, 643, 163, 547, 355, 739, 43, 427, 235, 619, 139, 523, 331, 715, 91, 475, 283, 667, 187, 571, 379, 763, 11, 395, 203, 587, 107, 491, 299, 683, 59, 443, 251, 635, 155, 539, 347, 731, 35, 419, 227, 611, 131, 515, 323, 707, 83, 467, 275, 659, 179, 563, 371, 755, 23, 407, 215, 599, 119, 503, 311, 695, 71, 455, 263, 647, 167, 551, 359, 743, 47, 431, 239, 623, 143, 527, 335, 719, 95, 479, 287, 671, 191, 575, 383, 767, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<768>(int i) { return bFFT768LUTMap[i]; }
-__declspec(selectany) extern const short bFFT864LUTMap[] =
+cselectany extern const short bFFT864LUTMap[] =
 {
 0, 432, 216, 648, 72, 504, 288, 720, 144, 576, 360, 792, 24, 456, 240, 672, 96, 528, 312, 744, 168, 600, 384, 816, 48, 480, 264, 696, 120, 552, 336, 768, 192, 624, 408, 840, 8, 440, 224, 656, 80, 512, 296, 728, 152, 584, 368, 800, 32, 464, 248, 680, 104, 536, 320, 752, 176, 608, 392, 824, 56, 488, 272, 704, 128, 560, 344, 776, 200, 632, 416, 848, 16, 448, 232, 664, 88, 520, 304, 736, 160, 592, 376, 808, 40, 472, 256, 688, 112, 544, 328, 760, 184, 616, 400, 832, 64, 496, 280, 712, 136, 568, 352, 784, 208, 640, 424, 856, 4, 436, 220, 652, 76, 508, 292, 724, 148, 580, 364, 796, 28, 460, 244, 676, 100, 532, 316, 748, 172, 604, 388, 820, 52, 484, 268, 700, 124, 556, 340, 772, 196, 628, 412, 844, 12, 444, 228, 660, 84, 516, 300, 732, 156, 588, 372, 804, 36, 468, 252, 684, 108, 540, 324, 756, 180, 612, 396, 828, 60, 492, 276, 708, 132, 564, 348, 780, 204, 636, 420, 852, 20, 452, 236, 668, 92, 524, 308, 740, 164, 596, 380, 812, 44, 476, 260, 692, 116, 548, 332, 764, 188, 620, 404, 836, 68, 500, 284, 716, 140, 572, 356, 788, 212, 644, 428, 860, 2, 434, 218, 650, 74, 506, 290, 722, 146, 578, 362, 794, 26, 458, 242, 674, 98, 530, 314, 746, 170, 602, 386, 818, 50, 482, 266, 698, 122, 554, 338, 770, 194, 626, 410, 842, 10, 442, 226, 658, 82, 514, 298, 730, 154, 586, 370, 802, 34, 466, 250, 682, 106, 538, 322, 754, 178, 610, 394, 826, 58, 490, 274, 706, 130, 562, 346, 778, 202, 634, 418, 850, 18, 450, 234, 666, 90, 522, 306, 738, 162, 594, 378, 810, 42, 474, 258, 690, 114, 546, 330, 762, 186, 618, 402, 834, 66, 498, 282, 714, 138, 570, 354, 786, 210, 642, 426, 858, 6, 438, 222, 654, 78, 510, 294, 726, 150, 582, 366, 798, 30, 462, 246, 678, 102, 534, 318, 750, 174, 606, 390, 822, 54, 486, 270, 702, 126, 558, 342, 774, 198, 630, 414, 846, 14, 446, 230, 662, 86, 518, 302, 734, 158, 590, 374, 806, 38, 470, 254, 686, 110, 542, 326, 758, 182, 614, 398, 830, 62, 494, 278, 710, 134, 566, 350, 782, 206, 638, 422, 854, 22, 454, 238, 670, 94, 526, 310, 742, 166, 598, 382, 814, 46, 478, 262, 694, 118, 550, 334, 766, 190, 622, 406, 838, 70, 502, 286, 718, 142, 574, 358, 790, 214, 646, 430, 862, 1, 433, 217, 649, 73, 505, 289, 721, 145, 577, 361, 793, 25, 457, 241, 673, 97, 529, 313, 745, 169, 601, 385, 817, 49, 481, 265, 697, 121, 553, 337, 769, 193, 625, 409, 841, 9, 441, 225, 657, 81, 513, 297, 729, 153, 585, 369, 801, 33, 465, 249, 681, 105, 537, 321, 753, 177, 609, 393, 825, 57, 489, 273, 705, 129, 561, 345, 777, 201, 633, 417, 849, 17, 449, 233, 665, 89, 521, 305, 737, 161, 593, 377, 809, 41, 473, 257, 689, 113, 545, 329, 761, 185, 617, 401, 833, 65, 497, 281, 713, 137, 569, 353, 785, 209, 641, 425, 857, 5, 437, 221, 653, 77, 509, 293, 725, 149, 581, 365, 797, 29, 461, 245, 677, 101, 533, 317, 749, 173, 605, 389, 821, 53, 485, 269, 701, 125, 557, 341, 773, 197, 629, 413, 845, 13, 445, 229, 661, 85, 517, 301, 733, 157, 589, 373, 805, 37, 469, 253, 685, 109, 541, 325, 757, 181, 613, 397, 829, 61, 493, 277, 709, 133, 565, 349, 781, 205, 637, 421, 853, 21, 453, 237, 669, 93, 525, 309, 741, 165, 597, 381, 813, 45, 477, 261, 693, 117, 549, 333, 765, 189, 621, 405, 837, 69, 501, 285, 717, 141, 573, 357, 789, 213, 645, 429, 861, 3, 435, 219, 651, 75, 507, 291, 723, 147, 579, 363, 795, 27, 459, 243, 675, 99, 531, 315, 747, 171, 603, 387, 819, 51, 483, 267, 699, 123, 555, 339, 771, 195, 627, 411, 843, 11, 443, 227, 659, 83, 515, 299, 731, 155, 587, 371, 803, 35, 467, 251, 683, 107, 539, 323, 755, 179, 611, 395, 827, 59, 491, 275, 707, 131, 563, 347, 779, 203, 635, 419, 851, 19, 451, 235, 667, 91, 523, 307, 739, 163, 595, 379, 811, 43, 475, 259, 691, 115, 547, 331, 763, 187, 619, 403, 835, 67, 499, 283, 715, 139, 571, 355, 787, 211, 643, 427, 859, 7, 439, 223, 655, 79, 511, 295, 727, 151, 583, 367, 799, 31, 463, 247, 679, 103, 535, 319, 751, 175, 607, 391, 823, 55, 487, 271, 703, 127, 559, 343, 775, 199, 631, 415, 847, 15, 447, 231, 663, 87, 519, 303, 735, 159, 591, 375, 807, 39, 471, 255, 687, 111, 543, 327, 759, 183, 615, 399, 831, 63, 495, 279, 711, 135, 567, 351, 783, 207, 639, 423, 855, 23, 455, 239, 671, 95, 527, 311, 743, 167, 599, 383, 815, 47, 479, 263, 695, 119, 551, 335, 767, 191, 623, 407, 839, 71, 503, 287, 719, 143, 575, 359, 791, 215, 647, 431, 863, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<864>(int i) { return bFFT864LUTMap[i]; }
-__declspec(selectany) extern const short bFFT900LUTMap[] =
+cselectany extern const short bFFT900LUTMap[] =
 {
 0, 180, 360, 540, 720, 36, 216, 396, 576, 756, 72, 252, 432, 612, 792, 108, 288, 468, 648, 828, 144, 324, 504, 684, 864, 12, 192, 372, 552, 732, 48, 228, 408, 588, 768, 84, 264, 444, 624, 804, 120, 300, 480, 660, 840, 156, 336, 516, 696, 876, 24, 204, 384, 564, 744, 60, 240, 420, 600, 780, 96, 276, 456, 636, 816, 132, 312, 492, 672, 852, 168, 348, 528, 708, 888, 4, 184, 364, 544, 724, 40, 220, 400, 580, 760, 76, 256, 436, 616, 796, 112, 292, 472, 652, 832, 148, 328, 508, 688, 868, 16, 196, 376, 556, 736, 52, 232, 412, 592, 772, 88, 268, 448, 628, 808, 124, 304, 484, 664, 844, 160, 340, 520, 700, 880, 28, 208, 388, 568, 748, 64, 244, 424, 604, 784, 100, 280, 460, 640, 820, 136, 316, 496, 676, 856, 172, 352, 532, 712, 892, 8, 188, 368, 548, 728, 44, 224, 404, 584, 764, 80, 260, 440, 620, 800, 116, 296, 476, 656, 836, 152, 332, 512, 692, 872, 20, 200, 380, 560, 740, 56, 236, 416, 596, 776, 92, 272, 452, 632, 812, 128, 308, 488, 668, 848, 164, 344, 524, 704, 884, 32, 212, 392, 572, 752, 68, 248, 428, 608, 788, 104, 284, 464, 644, 824, 140, 320, 500, 680, 860, 176, 356, 536, 716, 896, 2, 182, 362, 542, 722, 38, 218, 398, 578, 758, 74, 254, 434, 614, 794, 110, 290, 470, 650, 830, 146, 326, 506, 686, 866, 14, 194, 374, 554, 734, 50, 230, 410, 590, 770, 86, 266, 446, 626, 806, 122, 302, 482, 662, 842, 158, 338, 518, 698, 878, 26, 206, 386, 566, 746, 62, 242, 422, 602, 782, 98, 278, 458, 638, 818, 134, 314, 494, 674, 854, 170, 350, 530, 710, 890, 6, 186, 366, 546, 726, 42, 222, 402, 582, 762, 78, 258, 438, 618, 798, 114, 294, 474, 654, 834, 150, 330, 510, 690, 870, 18, 198, 378, 558, 738, 54, 234, 414, 594, 774, 90, 270, 450, 630, 810, 126, 306, 486, 666, 846, 162, 342, 522, 702, 882, 30, 210, 390, 570, 750, 66, 246, 426, 606, 786, 102, 282, 462, 642, 822, 138, 318, 498, 678, 858, 174, 354, 534, 714, 894, 10, 190, 370, 550, 730, 46, 226, 406, 586, 766, 82, 262, 442, 622, 802, 118, 298, 478, 658, 838, 154, 334, 514, 694, 874, 22, 202, 382, 562, 742, 58, 238, 418, 598, 778, 94, 274, 454, 634, 814, 130, 310, 490, 670, 850, 166, 346, 526, 706, 886, 34, 214, 394, 574, 754, 70, 250, 430, 610, 790, 106, 286, 466, 646, 826, 142, 322, 502, 682, 862, 178, 358, 538, 718, 898, 1, 181, 361, 541, 721, 37, 217, 397, 577, 757, 73, 253, 433, 613, 793, 109, 289, 469, 649, 829, 145, 325, 505, 685, 865, 13, 193, 373, 553, 733, 49, 229, 409, 589, 769, 85, 265, 445, 625, 805, 121, 301, 481, 661, 841, 157, 337, 517, 697, 877, 25, 205, 385, 565, 745, 61, 241, 421, 601, 781, 97, 277, 457, 637, 817, 133, 313, 493, 673, 853, 169, 349, 529, 709, 889, 5, 185, 365, 545, 725, 41, 221, 401, 581, 761, 77, 257, 437, 617, 797, 113, 293, 473, 653, 833, 149, 329, 509, 689, 869, 17, 197, 377, 557, 737, 53, 233, 413, 593, 773, 89, 269, 449, 629, 809, 125, 305, 485, 665, 845, 161, 341, 521, 701, 881, 29, 209, 389, 569, 749, 65, 245, 425, 605, 785, 101, 281, 461, 641, 821, 137, 317, 497, 677, 857, 173, 353, 533, 713, 893, 9, 189, 369, 549, 729, 45, 225, 405, 585, 765, 81, 261, 441, 621, 801, 117, 297, 477, 657, 837, 153, 333, 513, 693, 873, 21, 201, 381, 561, 741, 57, 237, 417, 597, 777, 93, 273, 453, 633, 813, 129, 309, 489, 669, 849, 165, 345, 525, 705, 885, 33, 213, 393, 573, 753, 69, 249, 429, 609, 789, 105, 285, 465, 645, 825, 141, 321, 501, 681, 861, 177, 357, 537, 717, 897, 3, 183, 363, 543, 723, 39, 219, 399, 579, 759, 75, 255, 435, 615, 795, 111, 291, 471, 651, 831, 147, 327, 507, 687, 867, 15, 195, 375, 555, 735, 51, 231, 411, 591, 771, 87, 267, 447, 627, 807, 123, 303, 483, 663, 843, 159, 339, 519, 699, 879, 27, 207, 387, 567, 747, 63, 243, 423, 603, 783, 99, 279, 459, 639, 819, 135, 315, 495, 675, 855, 171, 351, 531, 711, 891, 7, 187, 367, 547, 727, 43, 223, 403, 583, 763, 79, 259, 439, 619, 799, 115, 295, 475, 655, 835, 151, 331, 511, 691, 871, 19, 199, 379, 559, 739, 55, 235, 415, 595, 775, 91, 271, 451, 631, 811, 127, 307, 487, 667, 847, 163, 343, 523, 703, 883, 31, 211, 391, 571, 751, 67, 247, 427, 607, 787, 103, 283, 463, 643, 823, 139, 319, 499, 679, 859, 175, 355, 535, 715, 895, 11, 191, 371, 551, 731, 47, 227, 407, 587, 767, 83, 263, 443, 623, 803, 119, 299, 479, 659, 839, 155, 335, 515, 695, 875, 23, 203, 383, 563, 743, 59, 239, 419, 599, 779, 95, 275, 455, 635, 815, 131, 311, 491, 671, 851, 167, 347, 527, 707, 887, 35, 215, 395, 575, 755, 71, 251, 431, 611, 791, 107, 287, 467, 647, 827, 143, 323, 503, 683, 863, 179, 359, 539, 719, 899, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<900>(int i) { return bFFT900LUTMap[i]; }
-__declspec(selectany) extern const short bFFT960LUTMap[] =
+cselectany extern const short bFFT960LUTMap[] =
 {
 0, 480, 240, 720, 120, 600, 360, 840, 60, 540, 300, 780, 180, 660, 420, 900, 12, 492, 252, 732, 132, 612, 372, 852, 72, 552, 312, 792, 192, 672, 432, 912, 24, 504, 264, 744, 144, 624, 384, 864, 84, 564, 324, 804, 204, 684, 444, 924, 36, 516, 276, 756, 156, 636, 396, 876, 96, 576, 336, 816, 216, 696, 456, 936, 48, 528, 288, 768, 168, 648, 408, 888, 108, 588, 348, 828, 228, 708, 468, 948, 4, 484, 244, 724, 124, 604, 364, 844, 64, 544, 304, 784, 184, 664, 424, 904, 16, 496, 256, 736, 136, 616, 376, 856, 76, 556, 316, 796, 196, 676, 436, 916, 28, 508, 268, 748, 148, 628, 388, 868, 88, 568, 328, 808, 208, 688, 448, 928, 40, 520, 280, 760, 160, 640, 400, 880, 100, 580, 340, 820, 220, 700, 460, 940, 52, 532, 292, 772, 172, 652, 412, 892, 112, 592, 352, 832, 232, 712, 472, 952, 8, 488, 248, 728, 128, 608, 368, 848, 68, 548, 308, 788, 188, 668, 428, 908, 20, 500, 260, 740, 140, 620, 380, 860, 80, 560, 320, 800, 200, 680, 440, 920, 32, 512, 272, 752, 152, 632, 392, 872, 92, 572, 332, 812, 212, 692, 452, 932, 44, 524, 284, 764, 164, 644, 404, 884, 104, 584, 344, 824, 224, 704, 464, 944, 56, 536, 296, 776, 176, 656, 416, 896, 116, 596, 356, 836, 236, 716, 476, 956, 2, 482, 242, 722, 122, 602, 362, 842, 62, 542, 302, 782, 182, 662, 422, 902, 14, 494, 254, 734, 134, 614, 374, 854, 74, 554, 314, 794, 194, 674, 434, 914, 26, 506, 266, 746, 146, 626, 386, 866, 86, 566, 326, 806, 206, 686, 446, 926, 38, 518, 278, 758, 158, 638, 398, 878, 98, 578, 338, 818, 218, 698, 458, 938, 50, 530, 290, 770, 170, 650, 410, 890, 110, 590, 350, 830, 230, 710, 470, 950, 6, 486, 246, 726, 126, 606, 366, 846, 66, 546, 306, 786, 186, 666, 426, 906, 18, 498, 258, 738, 138, 618, 378, 858, 78, 558, 318, 798, 198, 678, 438, 918, 30, 510, 270, 750, 150, 630, 390, 870, 90, 570, 330, 810, 210, 690, 450, 930, 42, 522, 282, 762, 162, 642, 402, 882, 102, 582, 342, 822, 222, 702, 462, 942, 54, 534, 294, 774, 174, 654, 414, 894, 114, 594, 354, 834, 234, 714, 474, 954, 10, 490, 250, 730, 130, 610, 370, 850, 70, 550, 310, 790, 190, 670, 430, 910, 22, 502, 262, 742, 142, 622, 382, 862, 82, 562, 322, 802, 202, 682, 442, 922, 34, 514, 274, 754, 154, 634, 394, 874, 94, 574, 334, 814, 214, 694, 454, 934, 46, 526, 286, 766, 166, 646, 406, 886, 106, 586, 346, 826, 226, 706, 466, 946, 58, 538, 298, 778, 178, 658, 418, 898, 118, 598, 358, 838, 238, 718, 478, 958, 1, 481, 241, 721, 121, 601, 361, 841, 61, 541, 301, 781, 181, 661, 421, 901, 13, 493, 253, 733, 133, 613, 373, 853, 73, 553, 313, 793, 193, 673, 433, 913, 25, 505, 265, 745, 145, 625, 385, 865, 85, 565, 325, 805, 205, 685, 445, 925, 37, 517, 277, 757, 157, 637, 397, 877, 97, 577, 337, 817, 217, 697, 457, 937, 49, 529, 289, 769, 169, 649, 409, 889, 109, 589, 349, 829, 229, 709, 469, 949, 5, 485, 245, 725, 125, 605, 365, 845, 65, 545, 305, 785, 185, 665, 425, 905, 17, 497, 257, 737, 137, 617, 377, 857, 77, 557, 317, 797, 197, 677, 437, 917, 29, 509, 269, 749, 149, 629, 389, 869, 89, 569, 329, 809, 209, 689, 449, 929, 41, 521, 281, 761, 161, 641, 401, 881, 101, 581, 341, 821, 221, 701, 461, 941, 53, 533, 293, 773, 173, 653, 413, 893, 113, 593, 353, 833, 233, 713, 473, 953, 9, 489, 249, 729, 129, 609, 369, 849, 69, 549, 309, 789, 189, 669, 429, 909, 21, 501, 261, 741, 141, 621, 381, 861, 81, 561, 321, 801, 201, 681, 441, 921, 33, 513, 273, 753, 153, 633, 393, 873, 93, 573, 333, 813, 213, 693, 453, 933, 45, 525, 285, 765, 165, 645, 405, 885, 105, 585, 345, 825, 225, 705, 465, 945, 57, 537, 297, 777, 177, 657, 417, 897, 117, 597, 357, 837, 237, 717, 477, 957, 3, 483, 243, 723, 123, 603, 363, 843, 63, 543, 303, 783, 183, 663, 423, 903, 15, 495, 255, 735, 135, 615, 375, 855, 75, 555, 315, 795, 195, 675, 435, 915, 27, 507, 267, 747, 147, 627, 387, 867, 87, 567, 327, 807, 207, 687, 447, 927, 39, 519, 279, 759, 159, 639, 399, 879, 99, 579, 339, 819, 219, 699, 459, 939, 51, 531, 291, 771, 171, 651, 411, 891, 111, 591, 351, 831, 231, 711, 471, 951, 7, 487, 247, 727, 127, 607, 367, 847, 67, 547, 307, 787, 187, 667, 427, 907, 19, 499, 259, 739, 139, 619, 379, 859, 79, 559, 319, 799, 199, 679, 439, 919, 31, 511, 271, 751, 151, 631, 391, 871, 91, 571, 331, 811, 211, 691, 451, 931, 43, 523, 283, 763, 163, 643, 403, 883, 103, 583, 343, 823, 223, 703, 463, 943, 55, 535, 295, 775, 175, 655, 415, 895, 115, 595, 355, 835, 235, 715, 475, 955, 11, 491, 251, 731, 131, 611, 371, 851, 71, 551, 311, 791, 191, 671, 431, 911, 23, 503, 263, 743, 143, 623, 383, 863, 83, 563, 323, 803, 203, 683, 443, 923, 35, 515, 275, 755, 155, 635, 395, 875, 95, 575, 335, 815, 215, 695, 455, 935, 47, 527, 287, 767, 167, 647, 407, 887, 107, 587, 347, 827, 227, 707, 467, 947, 59, 539, 299, 779, 179, 659, 419, 899, 119, 599, 359, 839, 239, 719, 479, 959, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<960>(int i) { return bFFT960LUTMap[i]; }
-__declspec(selectany) extern const short bFFT972LUTMap[] =
+cselectany extern const short bFFT972LUTMap[] =
 {
 0, 324, 648, 108, 432, 756, 216, 540, 864, 36, 360, 684, 144, 468, 792, 252, 576, 900, 72, 396, 720, 180, 504, 828, 288, 612, 936, 12, 336, 660, 120, 444, 768, 228, 552, 876, 48, 372, 696, 156, 480, 804, 264, 588, 912, 84, 408, 732, 192, 516, 840, 300, 624, 948, 24, 348, 672, 132, 456, 780, 240, 564, 888, 60, 384, 708, 168, 492, 816, 276, 600, 924, 96, 420, 744, 204, 528, 852, 312, 636, 960, 4, 328, 652, 112, 436, 760, 220, 544, 868, 40, 364, 688, 148, 472, 796, 256, 580, 904, 76, 400, 724, 184, 508, 832, 292, 616, 940, 16, 340, 664, 124, 448, 772, 232, 556, 880, 52, 376, 700, 160, 484, 808, 268, 592, 916, 88, 412, 736, 196, 520, 844, 304, 628, 952, 28, 352, 676, 136, 460, 784, 244, 568, 892, 64, 388, 712, 172, 496, 820, 280, 604, 928, 100, 424, 748, 208, 532, 856, 316, 640, 964, 8, 332, 656, 116, 440, 764, 224, 548, 872, 44, 368, 692, 152, 476, 800, 260, 584, 908, 80, 404, 728, 188, 512, 836, 296, 620, 944, 20, 344, 668, 128, 452, 776, 236, 560, 884, 56, 380, 704, 164, 488, 812, 272, 596, 920, 92, 416, 740, 200, 524, 848, 308, 632, 956, 32, 356, 680, 140, 464, 788, 248, 572, 896, 68, 392, 716, 176, 500, 824, 284, 608, 932, 104, 428, 752, 212, 536, 860, 320, 644, 968, 2, 326, 650, 110, 434, 758, 218, 542, 866, 38, 362, 686, 146, 470, 794, 254, 578, 902, 74, 398, 722, 182, 506, 830, 290, 614, 938, 14, 338, 662, 122, 446, 770, 230, 554, 878, 50, 374, 698, 158, 482, 806, 266, 590, 914, 86, 410, 734, 194, 518, 842, 302, 626, 950, 26, 350, 674, 134, 458, 782, 242, 566, 890, 62, 386, 710, 170, 494, 818, 278, 602, 926, 98, 422, 746, 206, 530, 854, 314, 638, 962, 6, 330, 654, 114, 438, 762, 222, 546, 870, 42, 366, 690, 150, 474, 798, 258, 582, 906, 78, 402, 726, 186, 510, 834, 294, 618, 942, 18, 342, 666, 126, 450, 774, 234, 558, 882, 54, 378, 702, 162, 486, 810, 270, 594, 918, 90, 414, 738, 198, 522, 846, 306, 630, 954, 30, 354, 678, 138, 462, 786, 246, 570, 894, 66, 390, 714, 174, 498, 822, 282, 606, 930, 102, 426, 750, 210, 534, 858, 318, 642, 966, 10, 334, 658, 118, 442, 766, 226, 550, 874, 46, 370, 694, 154, 478, 802, 262, 586, 910, 82, 406, 730, 190, 514, 838, 298, 622, 946, 22, 346, 670, 130, 454, 778, 238, 562, 886, 58, 382, 706, 166, 490, 814, 274, 598, 922, 94, 418, 742, 202, 526, 850, 310, 634, 958, 34, 358, 682, 142, 466, 790, 250, 574, 898, 70, 394, 718, 178, 502, 826, 286, 610, 934, 106, 430, 754, 214, 538, 862, 322, 646, 970, 1, 325, 649, 109, 433, 757, 217, 541, 865, 37, 361, 685, 145, 469, 793, 253, 577, 901, 73, 397, 721, 181, 505, 829, 289, 613, 937, 13, 337, 661, 121, 445, 769, 229, 553, 877, 49, 373, 697, 157, 481, 805, 265, 589, 913, 85, 409, 733, 193, 517, 841, 301, 625, 949, 25, 349, 673, 133, 457, 781, 241, 565, 889, 61, 385, 709, 169, 493, 817, 277, 601, 925, 97, 421, 745, 205, 529, 853, 313, 637, 961, 5, 329, 653, 113, 437, 761, 221, 545, 869, 41, 365, 689, 149, 473, 797, 257, 581, 905, 77, 401, 725, 185, 509, 833, 293, 617, 941, 17, 341, 665, 125, 449, 773, 233, 557, 881, 53, 377, 701, 161, 485, 809, 269, 593, 917, 89, 413, 737, 197, 521, 845, 305, 629, 953, 29, 353, 677, 137, 461, 785, 245, 569, 893, 65, 389, 713, 173, 497, 821, 281, 605, 929, 101, 425, 749, 209, 533, 857, 317, 641, 965, 9, 333, 657, 117, 441, 765, 225, 549, 873, 45, 369, 693, 153, 477, 801, 261, 585, 909, 81, 405, 729, 189, 513, 837, 297, 621, 945, 21, 345, 669, 129, 453, 777, 237, 561, 885, 57, 381, 705, 165, 489, 813, 273, 597, 921, 93, 417, 741, 201, 525, 849, 309, 633, 957, 33, 357, 681, 141, 465, 789, 249, 573, 897, 69, 393, 717, 177, 501, 825, 285, 609, 933, 105, 429, 753, 213, 537, 861, 321, 645, 969, 3, 327, 651, 111, 435, 759, 219, 543, 867, 39, 363, 687, 147, 471, 795, 255, 579, 903, 75, 399, 723, 183, 507, 831, 291, 615, 939, 15, 339, 663, 123, 447, 771, 231, 555, 879, 51, 375, 699, 159, 483, 807, 267, 591, 915, 87, 411, 735, 195, 519, 843, 303, 627, 951, 27, 351, 675, 135, 459, 783, 243, 567, 891, 63, 387, 711, 171, 495, 819, 279, 603, 927, 99, 423, 747, 207, 531, 855, 315, 639, 963, 7, 331, 655, 115, 439, 763, 223, 547, 871, 43, 367, 691, 151, 475, 799, 259, 583, 907, 79, 403, 727, 187, 511, 835, 295, 619, 943, 19, 343, 667, 127, 451, 775, 235, 559, 883, 55, 379, 703, 163, 487, 811, 271, 595, 919, 91, 415, 739, 199, 523, 847, 307, 631, 955, 31, 355, 679, 139, 463, 787, 247, 571, 895, 67, 391, 715, 175, 499, 823, 283, 607, 931, 103, 427, 751, 211, 535, 859, 319, 643, 967, 11, 335, 659, 119, 443, 767, 227, 551, 875, 47, 371, 695, 155, 479, 803, 263, 587, 911, 83, 407, 731, 191, 515, 839, 299, 623, 947, 23, 347, 671, 131, 455, 779, 239, 563, 887, 59, 383, 707, 167, 491, 815, 275, 599, 923, 95, 419, 743, 203, 527, 851, 311, 635, 959, 35, 359, 683, 143, 467, 791, 251, 575, 899, 71, 395, 719, 179, 503, 827, 287, 611, 935, 107, 431, 755, 215, 539, 863, 323, 647, 971, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<972>(int i) { return bFFT972LUTMap[i]; }
-__declspec(selectany) extern const short bFFT1024LUTMap[] =
+cselectany extern const short bFFT1024LUTMap[] =
 {
 0, 512, 256, 768, 128, 640, 384, 896, 64, 576, 320, 832, 192, 704, 448, 960, 32, 544, 288, 800, 160, 672, 416, 928, 96, 608, 352, 864, 224, 736, 480, 992, 16, 528, 272, 784, 144, 656, 400, 912, 80, 592, 336, 848, 208, 720, 464, 976, 48, 560, 304, 816, 176, 688, 432, 944, 112, 624, 368, 880, 240, 752, 496, 1008, 8, 520, 264, 776, 136, 648, 392, 904, 72, 584, 328, 840, 200, 712, 456, 968, 40, 552, 296, 808, 168, 680, 424, 936, 104, 616, 360, 872, 232, 744, 488, 1000, 24, 536, 280, 792, 152, 664, 408, 920, 88, 600, 344, 856, 216, 728, 472, 984, 56, 568, 312, 824, 184, 696, 440, 952, 120, 632, 376, 888, 248, 760, 504, 1016, 4, 516, 260, 772, 132, 644, 388, 900, 68, 580, 324, 836, 196, 708, 452, 964, 36, 548, 292, 804, 164, 676, 420, 932, 100, 612, 356, 868, 228, 740, 484, 996, 20, 532, 276, 788, 148, 660, 404, 916, 84, 596, 340, 852, 212, 724, 468, 980, 52, 564, 308, 820, 180, 692, 436, 948, 116, 628, 372, 884, 244, 756, 500, 1012, 12, 524, 268, 780, 140, 652, 396, 908, 76, 588, 332, 844, 204, 716, 460, 972, 44, 556, 300, 812, 172, 684, 428, 940, 108, 620, 364, 876, 236, 748, 492, 1004, 28, 540, 284, 796, 156, 668, 412, 924, 92, 604, 348, 860, 220, 732, 476, 988, 60, 572, 316, 828, 188, 700, 444, 956, 124, 636, 380, 892, 252, 764, 508, 1020, 2, 514, 258, 770, 130, 642, 386, 898, 66, 578, 322, 834, 194, 706, 450, 962, 34, 546, 290, 802, 162, 674, 418, 930, 98, 610, 354, 866, 226, 738, 482, 994, 18, 530, 274, 786, 146, 658, 402, 914, 82, 594, 338, 850, 210, 722, 466, 978, 50, 562, 306, 818, 178, 690, 434, 946, 114, 626, 370, 882, 242, 754, 498, 1010, 10, 522, 266, 778, 138, 650, 394, 906, 74, 586, 330, 842, 202, 714, 458, 970, 42, 554, 298, 810, 170, 682, 426, 938, 106, 618, 362, 874, 234, 746, 490, 1002, 26, 538, 282, 794, 154, 666, 410, 922, 90, 602, 346, 858, 218, 730, 474, 986, 58, 570, 314, 826, 186, 698, 442, 954, 122, 634, 378, 890, 250, 762, 506, 1018, 6, 518, 262, 774, 134, 646, 390, 902, 70, 582, 326, 838, 198, 710, 454, 966, 38, 550, 294, 806, 166, 678, 422, 934, 102, 614, 358, 870, 230, 742, 486, 998, 22, 534, 278, 790, 150, 662, 406, 918, 86, 598, 342, 854, 214, 726, 470, 982, 54, 566, 310, 822, 182, 694, 438, 950, 118, 630, 374, 886, 246, 758, 502, 1014, 14, 526, 270, 782, 142, 654, 398, 910, 78, 590, 334, 846, 206, 718, 462, 974, 46, 558, 302, 814, 174, 686, 430, 942, 110, 622, 366, 878, 238, 750, 494, 1006, 30, 542, 286, 798, 158, 670, 414, 926, 94, 606, 350, 862, 222, 734, 478, 990, 62, 574, 318, 830, 190, 702, 446, 958, 126, 638, 382, 894, 254, 766, 510, 1022, 1, 513, 257, 769, 129, 641, 385, 897, 65, 577, 321, 833, 193, 705, 449, 961, 33, 545, 289, 801, 161, 673, 417, 929, 97, 609, 353, 865, 225, 737, 481, 993, 17, 529, 273, 785, 145, 657, 401, 913, 81, 593, 337, 849, 209, 721, 465, 977, 49, 561, 305, 817, 177, 689, 433, 945, 113, 625, 369, 881, 241, 753, 497, 1009, 9, 521, 265, 777, 137, 649, 393, 905, 73, 585, 329, 841, 201, 713, 457, 969, 41, 553, 297, 809, 169, 681, 425, 937, 105, 617, 361, 873, 233, 745, 489, 1001, 25, 537, 281, 793, 153, 665, 409, 921, 89, 601, 345, 857, 217, 729, 473, 985, 57, 569, 313, 825, 185, 697, 441, 953, 121, 633, 377, 889, 249, 761, 505, 1017, 5, 517, 261, 773, 133, 645, 389, 901, 69, 581, 325, 837, 197, 709, 453, 965, 37, 549, 293, 805, 165, 677, 421, 933, 101, 613, 357, 869, 229, 741, 485, 997, 21, 533, 277, 789, 149, 661, 405, 917, 85, 597, 341, 853, 213, 725, 469, 981, 53, 565, 309, 821, 181, 693, 437, 949, 117, 629, 373, 885, 245, 757, 501, 1013, 13, 525, 269, 781, 141, 653, 397, 909, 77, 589, 333, 845, 205, 717, 461, 973, 45, 557, 301, 813, 173, 685, 429, 941, 109, 621, 365, 877, 237, 749, 493, 1005, 29, 541, 285, 797, 157, 669, 413, 925, 93, 605, 349, 861, 221, 733, 477, 989, 61, 573, 317, 829, 189, 701, 445, 957, 125, 637, 381, 893, 253, 765, 509, 1021, 3, 515, 259, 771, 131, 643, 387, 899, 67, 579, 323, 835, 195, 707, 451, 963, 35, 547, 291, 803, 163, 675, 419, 931, 99, 611, 355, 867, 227, 739, 483, 995, 19, 531, 275, 787, 147, 659, 403, 915, 83, 595, 339, 851, 211, 723, 467, 979, 51, 563, 307, 819, 179, 691, 435, 947, 115, 627, 371, 883, 243, 755, 499, 1011, 11, 523, 267, 779, 139, 651, 395, 907, 75, 587, 331, 843, 203, 715, 459, 971, 43, 555, 299, 811, 171, 683, 427, 939, 107, 619, 363, 875, 235, 747, 491, 1003, 27, 539, 283, 795, 155, 667, 411, 923, 91, 603, 347, 859, 219, 731, 475, 987, 59, 571, 315, 827, 187, 699, 443, 955, 123, 635, 379, 891, 251, 763, 507, 1019, 7, 519, 263, 775, 135, 647, 391, 903, 71, 583, 327, 839, 199, 711, 455, 967, 39, 551, 295, 807, 167, 679, 423, 935, 103, 615, 359, 871, 231, 743, 487, 999, 23, 535, 279, 791, 151, 663, 407, 919, 87, 599, 343, 855, 215, 727, 471, 983, 55, 567, 311, 823, 183, 695, 439, 951, 119, 631, 375, 887, 247, 759, 503, 1015, 15, 527, 271, 783, 143, 655, 399, 911, 79, 591, 335, 847, 207, 719, 463, 975, 47, 559, 303, 815, 175, 687, 431, 943, 111, 623, 367, 879, 239, 751, 495, 1007, 31, 543, 287, 799, 159, 671, 415, 927, 95, 607, 351, 863, 223, 735, 479, 991, 63, 575, 319, 831, 191, 703, 447, 959, 127, 639, 383, 895, 255, 767, 511, 1023, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<1024>(int i) { return bFFT1024LUTMap[i]; }
-__declspec(selectany) extern const short bFFT1080LUTMap[] =
+cselectany extern const short bFFT1080LUTMap[] =
 {
 0, 216, 432, 648, 864, 72, 288, 504, 720, 936, 144, 360, 576, 792, 1008, 24, 240, 456, 672, 888, 96, 312, 528, 744, 960, 168, 384, 600, 816, 1032, 48, 264, 480, 696, 912, 120, 336, 552, 768, 984, 192, 408, 624, 840, 1056, 8, 224, 440, 656, 872, 80, 296, 512, 728, 944, 152, 368, 584, 800, 1016, 32, 248, 464, 680, 896, 104, 320, 536, 752, 968, 176, 392, 608, 824, 1040, 56, 272, 488, 704, 920, 128, 344, 560, 776, 992, 200, 416, 632, 848, 1064, 16, 232, 448, 664, 880, 88, 304, 520, 736, 952, 160, 376, 592, 808, 1024, 40, 256, 472, 688, 904, 112, 328, 544, 760, 976, 184, 400, 616, 832, 1048, 64, 280, 496, 712, 928, 136, 352, 568, 784, 1000, 208, 424, 640, 856, 1072, 4, 220, 436, 652, 868, 76, 292, 508, 724, 940, 148, 364, 580, 796, 1012, 28, 244, 460, 676, 892, 100, 316, 532, 748, 964, 172, 388, 604, 820, 1036, 52, 268, 484, 700, 916, 124, 340, 556, 772, 988, 196, 412, 628, 844, 1060, 12, 228, 444, 660, 876, 84, 300, 516, 732, 948, 156, 372, 588, 804, 1020, 36, 252, 468, 684, 900, 108, 324, 540, 756, 972, 180, 396, 612, 828, 1044, 60, 276, 492, 708, 924, 132, 348, 564, 780, 996, 204, 420, 636, 852, 1068, 20, 236, 452, 668, 884, 92, 308, 524, 740, 956, 164, 380, 596, 812, 1028, 44, 260, 476, 692, 908, 116, 332, 548, 764, 980, 188, 404, 620, 836, 1052, 68, 284, 500, 716, 932, 140, 356, 572, 788, 1004, 212, 428, 644, 860, 1076, 2, 218, 434, 650, 866, 74, 290, 506, 722, 938, 146, 362, 578, 794, 1010, 26, 242, 458, 674, 890, 98, 314, 530, 746, 962, 170, 386, 602, 818, 1034, 50, 266, 482, 698, 914, 122, 338, 554, 770, 986, 194, 410, 626, 842, 1058, 10, 226, 442, 658, 874, 82, 298, 514, 730, 946, 154, 370, 586, 802, 1018, 34, 250, 466, 682, 898, 106, 322, 538, 754, 970, 178, 394, 610, 826, 1042, 58, 274, 490, 706, 922, 130, 346, 562, 778, 994, 202, 418, 634, 850, 1066, 18, 234, 450, 666, 882, 90, 306, 522, 738, 954, 162, 378, 594, 810, 1026, 42, 258, 474, 690, 906, 114, 330, 546, 762, 978, 186, 402, 618, 834, 1050, 66, 282, 498, 714, 930, 138, 354, 570, 786, 1002, 210, 426, 642, 858, 1074, 6, 222, 438, 654, 870, 78, 294, 510, 726, 942, 150, 366, 582, 798, 1014, 30, 246, 462, 678, 894, 102, 318, 534, 750, 966, 174, 390, 606, 822, 1038, 54, 270, 486, 702, 918, 126, 342, 558, 774, 990, 198, 414, 630, 846, 1062, 14, 230, 446, 662, 878, 86, 302, 518, 734, 950, 158, 374, 590, 806, 1022, 38, 254, 470, 686, 902, 110, 326, 542, 758, 974, 182, 398, 614, 830, 1046, 62, 278, 494, 710, 926, 134, 350, 566, 782, 998, 206, 422, 638, 854, 1070, 22, 238, 454, 670, 886, 94, 310, 526, 742, 958, 166, 382, 598, 814, 1030, 46, 262, 478, 694, 910, 118, 334, 550, 766, 982, 190, 406, 622, 838, 1054, 70, 286, 502, 718, 934, 142, 358, 574, 790, 1006, 214, 430, 646, 862, 1078, 1, 217, 433, 649, 865, 73, 289, 505, 721, 937, 145, 361, 577, 793, 1009, 25, 241, 457, 673, 889, 97, 313, 529, 745, 961, 169, 385, 601, 817, 1033, 49, 265, 481, 697, 913, 121, 337, 553, 769, 985, 193, 409, 625, 841, 1057, 9, 225, 441, 657, 873, 81, 297, 513, 729, 945, 153, 369, 585, 801, 1017, 33, 249, 465, 681, 897, 105, 321, 537, 753, 969, 177, 393, 609, 825, 1041, 57, 273, 489, 705, 921, 129, 345, 561, 777, 993, 201, 417, 633, 849, 1065, 17, 233, 449, 665, 881, 89, 305, 521, 737, 953, 161, 377, 593, 809, 1025, 41, 257, 473, 689, 905, 113, 329, 545, 761, 977, 185, 401, 617, 833, 1049, 65, 281, 497, 713, 929, 137, 353, 569, 785, 1001, 209, 425, 641, 857, 1073, 5, 221, 437, 653, 869, 77, 293, 509, 725, 941, 149, 365, 581, 797, 1013, 29, 245, 461, 677, 893, 101, 317, 533, 749, 965, 173, 389, 605, 821, 1037, 53, 269, 485, 701, 917, 125, 341, 557, 773, 989, 197, 413, 629, 845, 1061, 13, 229, 445, 661, 877, 85, 301, 517, 733, 949, 157, 373, 589, 805, 1021, 37, 253, 469, 685, 901, 109, 325, 541, 757, 973, 181, 397, 613, 829, 1045, 61, 277, 493, 709, 925, 133, 349, 565, 781, 997, 205, 421, 637, 853, 1069, 21, 237, 453, 669, 885, 93, 309, 525, 741, 957, 165, 381, 597, 813, 1029, 45, 261, 477, 693, 909, 117, 333, 549, 765, 981, 189, 405, 621, 837, 1053, 69, 285, 501, 717, 933, 141, 357, 573, 789, 1005, 213, 429, 645, 861, 1077, 3, 219, 435, 651, 867, 75, 291, 507, 723, 939, 147, 363, 579, 795, 1011, 27, 243, 459, 675, 891, 99, 315, 531, 747, 963, 171, 387, 603, 819, 1035, 51, 267, 483, 699, 915, 123, 339, 555, 771, 987, 195, 411, 627, 843, 1059, 11, 227, 443, 659, 875, 83, 299, 515, 731, 947, 155, 371, 587, 803, 1019, 35, 251, 467, 683, 899, 107, 323, 539, 755, 971, 179, 395, 611, 827, 1043, 59, 275, 491, 707, 923, 131, 347, 563, 779, 995, 203, 419, 635, 851, 1067, 19, 235, 451, 667, 883, 91, 307, 523, 739, 955, 163, 379, 595, 811, 1027, 43, 259, 475, 691, 907, 115, 331, 547, 763, 979, 187, 403, 619, 835, 1051, 67, 283, 499, 715, 931, 139, 355, 571, 787, 1003, 211, 427, 643, 859, 1075, 7, 223, 439, 655, 871, 79, 295, 511, 727, 943, 151, 367, 583, 799, 1015, 31, 247, 463, 679, 895, 103, 319, 535, 751, 967, 175, 391, 607, 823, 1039, 55, 271, 487, 703, 919, 127, 343, 559, 775, 991, 199, 415, 631, 847, 1063, 15, 231, 447, 663, 879, 87, 303, 519, 735, 951, 159, 375, 591, 807, 1023, 39, 255, 471, 687, 903, 111, 327, 543, 759, 975, 183, 399, 615, 831, 1047, 63, 279, 495, 711, 927, 135, 351, 567, 783, 999, 207, 423, 639, 855, 1071, 23, 239, 455, 671, 887, 95, 311, 527, 743, 959, 167, 383, 599, 815, 1031, 47, 263, 479, 695, 911, 119, 335, 551, 767, 983, 191, 407, 623, 839, 1055, 71, 287, 503, 719, 935, 143, 359, 575, 791, 1007, 215, 431, 647, 863, 1079, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<1080>(int i) { return bFFT1080LUTMap[i]; }
-__declspec(selectany) extern const short bFFT1152LUTMap[] =
+cselectany extern const short bFFT1152LUTMap[] =
 {
 0, 576, 288, 864, 144, 720, 432, 1008, 72, 648, 360, 936, 216, 792, 504, 1080, 24, 600, 312, 888, 168, 744, 456, 1032, 96, 672, 384, 960, 240, 816, 528, 1104, 48, 624, 336, 912, 192, 768, 480, 1056, 120, 696, 408, 984, 264, 840, 552, 1128, 8, 584, 296, 872, 152, 728, 440, 1016, 80, 656, 368, 944, 224, 800, 512, 1088, 32, 608, 320, 896, 176, 752, 464, 1040, 104, 680, 392, 968, 248, 824, 536, 1112, 56, 632, 344, 920, 200, 776, 488, 1064, 128, 704, 416, 992, 272, 848, 560, 1136, 16, 592, 304, 880, 160, 736, 448, 1024, 88, 664, 376, 952, 232, 808, 520, 1096, 40, 616, 328, 904, 184, 760, 472, 1048, 112, 688, 400, 976, 256, 832, 544, 1120, 64, 640, 352, 928, 208, 784, 496, 1072, 136, 712, 424, 1000, 280, 856, 568, 1144, 4, 580, 292, 868, 148, 724, 436, 1012, 76, 652, 364, 940, 220, 796, 508, 1084, 28, 604, 316, 892, 172, 748, 460, 1036, 100, 676, 388, 964, 244, 820, 532, 1108, 52, 628, 340, 916, 196, 772, 484, 1060, 124, 700, 412, 988, 268, 844, 556, 1132, 12, 588, 300, 876, 156, 732, 444, 1020, 84, 660, 372, 948, 228, 804, 516, 1092, 36, 612, 324, 900, 180, 756, 468, 1044, 108, 684, 396, 972, 252, 828, 540, 1116, 60, 636, 348, 924, 204, 780, 492, 1068, 132, 708, 420, 996, 276, 852, 564, 1140, 20, 596, 308, 884, 164, 740, 452, 1028, 92, 668, 380, 956, 236, 812, 524, 1100, 44, 620, 332, 908, 188, 764, 476, 1052, 116, 692, 404, 980, 260, 836, 548, 1124, 68, 644, 356, 932, 212, 788, 500, 1076, 140, 716, 428, 1004, 284, 860, 572, 1148, 2, 578, 290, 866, 146, 722, 434, 1010, 74, 650, 362, 938, 218, 794, 506, 1082, 26, 602, 314, 890, 170, 746, 458, 1034, 98, 674, 386, 962, 242, 818, 530, 1106, 50, 626, 338, 914, 194, 770, 482, 1058, 122, 698, 410, 986, 266, 842, 554, 1130, 10, 586, 298, 874, 154, 730, 442, 1018, 82, 658, 370, 946, 226, 802, 514, 1090, 34, 610, 322, 898, 178, 754, 466, 1042, 106, 682, 394, 970, 250, 826, 538, 1114, 58, 634, 346, 922, 202, 778, 490, 1066, 130, 706, 418, 994, 274, 850, 562, 1138, 18, 594, 306, 882, 162, 738, 450, 1026, 90, 666, 378, 954, 234, 810, 522, 1098, 42, 618, 330, 906, 186, 762, 474, 1050, 114, 690, 402, 978, 258, 834, 546, 1122, 66, 642, 354, 930, 210, 786, 498, 1074, 138, 714, 426, 1002, 282, 858, 570, 1146, 6, 582, 294, 870, 150, 726, 438, 1014, 78, 654, 366, 942, 222, 798, 510, 1086, 30, 606, 318, 894, 174, 750, 462, 1038, 102, 678, 390, 966, 246, 822, 534, 1110, 54, 630, 342, 918, 198, 774, 486, 1062, 126, 702, 414, 990, 270, 846, 558, 1134, 14, 590, 302, 878, 158, 734, 446, 1022, 86, 662, 374, 950, 230, 806, 518, 1094, 38, 614, 326, 902, 182, 758, 470, 1046, 110, 686, 398, 974, 254, 830, 542, 1118, 62, 638, 350, 926, 206, 782, 494, 1070, 134, 710, 422, 998, 278, 854, 566, 1142, 22, 598, 310, 886, 166, 742, 454, 1030, 94, 670, 382, 958, 238, 814, 526, 1102, 46, 622, 334, 910, 190, 766, 478, 1054, 118, 694, 406, 982, 262, 838, 550, 1126, 70, 646, 358, 934, 214, 790, 502, 1078, 142, 718, 430, 1006, 286, 862, 574, 1150, 1, 577, 289, 865, 145, 721, 433, 1009, 73, 649, 361, 937, 217, 793, 505, 1081, 25, 601, 313, 889, 169, 745, 457, 1033, 97, 673, 385, 961, 241, 817, 529, 1105, 49, 625, 337, 913, 193, 769, 481, 1057, 121, 697, 409, 985, 265, 841, 553, 1129, 9, 585, 297, 873, 153, 729, 441, 1017, 81, 657, 369, 945, 225, 801, 513, 1089, 33, 609, 321, 897, 177, 753, 465, 1041, 105, 681, 393, 969, 249, 825, 537, 1113, 57, 633, 345, 921, 201, 777, 489, 1065, 129, 705, 417, 993, 273, 849, 561, 1137, 17, 593, 305, 881, 161, 737, 449, 1025, 89, 665, 377, 953, 233, 809, 521, 1097, 41, 617, 329, 905, 185, 761, 473, 1049, 113, 689, 401, 977, 257, 833, 545, 1121, 65, 641, 353, 929, 209, 785, 497, 1073, 137, 713, 425, 1001, 281, 857, 569, 1145, 5, 581, 293, 869, 149, 725, 437, 1013, 77, 653, 365, 941, 221, 797, 509, 1085, 29, 605, 317, 893, 173, 749, 461, 1037, 101, 677, 389, 965, 245, 821, 533, 1109, 53, 629, 341, 917, 197, 773, 485, 1061, 125, 701, 413, 989, 269, 845, 557, 1133, 13, 589, 301, 877, 157, 733, 445, 1021, 85, 661, 373, 949, 229, 805, 517, 1093, 37, 613, 325, 901, 181, 757, 469, 1045, 109, 685, 397, 973, 253, 829, 541, 1117, 61, 637, 349, 925, 205, 781, 493, 1069, 133, 709, 421, 997, 277, 853, 565, 1141, 21, 597, 309, 885, 165, 741, 453, 1029, 93, 669, 381, 957, 237, 813, 525, 1101, 45, 621, 333, 909, 189, 765, 477, 1053, 117, 693, 405, 981, 261, 837, 549, 1125, 69, 645, 357, 933, 213, 789, 501, 1077, 141, 717, 429, 1005, 285, 861, 573, 1149, 3, 579, 291, 867, 147, 723, 435, 1011, 75, 651, 363, 939, 219, 795, 507, 1083, 27, 603, 315, 891, 171, 747, 459, 1035, 99, 675, 387, 963, 243, 819, 531, 1107, 51, 627, 339, 915, 195, 771, 483, 1059, 123, 699, 411, 987, 267, 843, 555, 1131, 11, 587, 299, 875, 155, 731, 443, 1019, 83, 659, 371, 947, 227, 803, 515, 1091, 35, 611, 323, 899, 179, 755, 467, 1043, 107, 683, 395, 971, 251, 827, 539, 1115, 59, 635, 347, 923, 203, 779, 491, 1067, 131, 707, 419, 995, 275, 851, 563, 1139, 19, 595, 307, 883, 163, 739, 451, 1027, 91, 667, 379, 955, 235, 811, 523, 1099, 43, 619, 331, 907, 187, 763, 475, 1051, 115, 691, 403, 979, 259, 835, 547, 1123, 67, 643, 355, 931, 211, 787, 499, 1075, 139, 715, 427, 1003, 283, 859, 571, 1147, 7, 583, 295, 871, 151, 727, 439, 1015, 79, 655, 367, 943, 223, 799, 511, 1087, 31, 607, 319, 895, 175, 751, 463, 1039, 103, 679, 391, 967, 247, 823, 535, 1111, 55, 631, 343, 919, 199, 775, 487, 1063, 127, 703, 415, 991, 271, 847, 559, 1135, 15, 591, 303, 879, 159, 735, 447, 1023, 87, 663, 375, 951, 231, 807, 519, 1095, 39, 615, 327, 903, 183, 759, 471, 1047, 111, 687, 399, 975, 255, 831, 543, 1119, 63, 639, 351, 927, 207, 783, 495, 1071, 135, 711, 423, 999, 279, 855, 567, 1143, 23, 599, 311, 887, 167, 743, 455, 1031, 95, 671, 383, 959, 239, 815, 527, 1103, 47, 623, 335, 911, 191, 767, 479, 1055, 119, 695, 407, 983, 263, 839, 551, 1127, 71, 647, 359, 935, 215, 791, 503, 1079, 143, 719, 431, 1007, 287, 863, 575, 1151, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<1152>(int i) { return bFFT1152LUTMap[i]; }
-__declspec(selectany) extern const short bFFT1200LUTMap[] =
+cselectany extern const short bFFT1200LUTMap[] =
 {
 0, 600, 300, 900, 60, 660, 360, 960, 120, 720, 420, 1020, 180, 780, 480, 1080, 240, 840, 540, 1140, 12, 612, 312, 912, 72, 672, 372, 972, 132, 732, 432, 1032, 192, 792, 492, 1092, 252, 852, 552, 1152, 24, 624, 324, 924, 84, 684, 384, 984, 144, 744, 444, 1044, 204, 804, 504, 1104, 264, 864, 564, 1164, 36, 636, 336, 936, 96, 696, 396, 996, 156, 756, 456, 1056, 216, 816, 516, 1116, 276, 876, 576, 1176, 48, 648, 348, 948, 108, 708, 408, 1008, 168, 768, 468, 1068, 228, 828, 528, 1128, 288, 888, 588, 1188, 4, 604, 304, 904, 64, 664, 364, 964, 124, 724, 424, 1024, 184, 784, 484, 1084, 244, 844, 544, 1144, 16, 616, 316, 916, 76, 676, 376, 976, 136, 736, 436, 1036, 196, 796, 496, 1096, 256, 856, 556, 1156, 28, 628, 328, 928, 88, 688, 388, 988, 148, 748, 448, 1048, 208, 808, 508, 1108, 268, 868, 568, 1168, 40, 640, 340, 940, 100, 700, 400, 1000, 160, 760, 460, 1060, 220, 820, 520, 1120, 280, 880, 580, 1180, 52, 652, 352, 952, 112, 712, 412, 1012, 172, 772, 472, 1072, 232, 832, 532, 1132, 292, 892, 592, 1192, 8, 608, 308, 908, 68, 668, 368, 968, 128, 728, 428, 1028, 188, 788, 488, 1088, 248, 848, 548, 1148, 20, 620, 320, 920, 80, 680, 380, 980, 140, 740, 440, 1040, 200, 800, 500, 1100, 260, 860, 560, 1160, 32, 632, 332, 932, 92, 692, 392, 992, 152, 752, 452, 1052, 212, 812, 512, 1112, 272, 872, 572, 1172, 44, 644, 344, 944, 104, 704, 404, 1004, 164, 764, 464, 1064, 224, 824, 524, 1124, 284, 884, 584, 1184, 56, 656, 356, 956, 116, 716, 416, 1016, 176, 776, 476, 1076, 236, 836, 536, 1136, 296, 896, 596, 1196, 2, 602, 302, 902, 62, 662, 362, 962, 122, 722, 422, 1022, 182, 782, 482, 1082, 242, 842, 542, 1142, 14, 614, 314, 914, 74, 674, 374, 974, 134, 734, 434, 1034, 194, 794, 494, 1094, 254, 854, 554, 1154, 26, 626, 326, 926, 86, 686, 386, 986, 146, 746, 446, 1046, 206, 806, 506, 1106, 266, 866, 566, 1166, 38, 638, 338, 938, 98, 698, 398, 998, 158, 758, 458, 1058, 218, 818, 518, 1118, 278, 878, 578, 1178, 50, 650, 350, 950, 110, 710, 410, 1010, 170, 770, 470, 1070, 230, 830, 530, 1130, 290, 890, 590, 1190, 6, 606, 306, 906, 66, 666, 366, 966, 126, 726, 426, 1026, 186, 786, 486, 1086, 246, 846, 546, 1146, 18, 618, 318, 918, 78, 678, 378, 978, 138, 738, 438, 1038, 198, 798, 498, 1098, 258, 858, 558, 1158, 30, 630, 330, 930, 90, 690, 390, 990, 150, 750, 450, 1050, 210, 810, 510, 1110, 270, 870, 570, 1170, 42, 642, 342, 942, 102, 702, 402, 1002, 162, 762, 462, 1062, 222, 822, 522, 1122, 282, 882, 582, 1182, 54, 654, 354, 954, 114, 714, 414, 1014, 174, 774, 474, 1074, 234, 834, 534, 1134, 294, 894, 594, 1194, 10, 610, 310, 910, 70, 670, 370, 970, 130, 730, 430, 1030, 190, 790, 490, 1090, 250, 850, 550, 1150, 22, 622, 322, 922, 82, 682, 382, 982, 142, 742, 442, 1042, 202, 802, 502, 1102, 262, 862, 562, 1162, 34, 634, 334, 934, 94, 694, 394, 994, 154, 754, 454, 1054, 214, 814, 514, 1114, 274, 874, 574, 1174, 46, 646, 346, 946, 106, 706, 406, 1006, 166, 766, 466, 1066, 226, 826, 526, 1126, 286, 886, 586, 1186, 58, 658, 358, 958, 118, 718, 418, 1018, 178, 778, 478, 1078, 238, 838, 538, 1138, 298, 898, 598, 1198, 1, 601, 301, 901, 61, 661, 361, 961, 121, 721, 421, 1021, 181, 781, 481, 1081, 241, 841, 541, 1141, 13, 613, 313, 913, 73, 673, 373, 973, 133, 733, 433, 1033, 193, 793, 493, 1093, 253, 853, 553, 1153, 25, 625, 325, 925, 85, 685, 385, 985, 145, 745, 445, 1045, 205, 805, 505, 1105, 265, 865, 565, 1165, 37, 637, 337, 937, 97, 697, 397, 997, 157, 757, 457, 1057, 217, 817, 517, 1117, 277, 877, 577, 1177, 49, 649, 349, 949, 109, 709, 409, 1009, 169, 769, 469, 1069, 229, 829, 529, 1129, 289, 889, 589, 1189, 5, 605, 305, 905, 65, 665, 365, 965, 125, 725, 425, 1025, 185, 785, 485, 1085, 245, 845, 545, 1145, 17, 617, 317, 917, 77, 677, 377, 977, 137, 737, 437, 1037, 197, 797, 497, 1097, 257, 857, 557, 1157, 29, 629, 329, 929, 89, 689, 389, 989, 149, 749, 449, 1049, 209, 809, 509, 1109, 269, 869, 569, 1169, 41, 641, 341, 941, 101, 701, 401, 1001, 161, 761, 461, 1061, 221, 821, 521, 1121, 281, 881, 581, 1181, 53, 653, 353, 953, 113, 713, 413, 1013, 173, 773, 473, 1073, 233, 833, 533, 1133, 293, 893, 593, 1193, 9, 609, 309, 909, 69, 669, 369, 969, 129, 729, 429, 1029, 189, 789, 489, 1089, 249, 849, 549, 1149, 21, 621, 321, 921, 81, 681, 381, 981, 141, 741, 441, 1041, 201, 801, 501, 1101, 261, 861, 561, 1161, 33, 633, 333, 933, 93, 693, 393, 993, 153, 753, 453, 1053, 213, 813, 513, 1113, 273, 873, 573, 1173, 45, 645, 345, 945, 105, 705, 405, 1005, 165, 765, 465, 1065, 225, 825, 525, 1125, 285, 885, 585, 1185, 57, 657, 357, 957, 117, 717, 417, 1017, 177, 777, 477, 1077, 237, 837, 537, 1137, 297, 897, 597, 1197, 3, 603, 303, 903, 63, 663, 363, 963, 123, 723, 423, 1023, 183, 783, 483, 1083, 243, 843, 543, 1143, 15, 615, 315, 915, 75, 675, 375, 975, 135, 735, 435, 1035, 195, 795, 495, 1095, 255, 855, 555, 1155, 27, 627, 327, 927, 87, 687, 387, 987, 147, 747, 447, 1047, 207, 807, 507, 1107, 267, 867, 567, 1167, 39, 639, 339, 939, 99, 699, 399, 999, 159, 759, 459, 1059, 219, 819, 519, 1119, 279, 879, 579, 1179, 51, 651, 351, 951, 111, 711, 411, 1011, 171, 771, 471, 1071, 231, 831, 531, 1131, 291, 891, 591, 1191, 7, 607, 307, 907, 67, 667, 367, 967, 127, 727, 427, 1027, 187, 787, 487, 1087, 247, 847, 547, 1147, 19, 619, 319, 919, 79, 679, 379, 979, 139, 739, 439, 1039, 199, 799, 499, 1099, 259, 859, 559, 1159, 31, 631, 331, 931, 91, 691, 391, 991, 151, 751, 451, 1051, 211, 811, 511, 1111, 271, 871, 571, 1171, 43, 643, 343, 943, 103, 703, 403, 1003, 163, 763, 463, 1063, 223, 823, 523, 1123, 283, 883, 583, 1183, 55, 655, 355, 955, 115, 715, 415, 1015, 175, 775, 475, 1075, 235, 835, 535, 1135, 295, 895, 595, 1195, 11, 611, 311, 911, 71, 671, 371, 971, 131, 731, 431, 1031, 191, 791, 491, 1091, 251, 851, 551, 1151, 23, 623, 323, 923, 83, 683, 383, 983, 143, 743, 443, 1043, 203, 803, 503, 1103, 263, 863, 563, 1163, 35, 635, 335, 935, 95, 695, 395, 995, 155, 755, 455, 1055, 215, 815, 515, 1115, 275, 875, 575, 1175, 47, 647, 347, 947, 107, 707, 407, 1007, 167, 767, 467, 1067, 227, 827, 527, 1127, 287, 887, 587, 1187, 59, 659, 359, 959, 119, 719, 419, 1019, 179, 779, 479, 1079, 239, 839, 539, 1139, 299, 899, 599, 1199, 
 };
 template<> DSP_INLINE short FFTLUTButterflyTable<1200>(int i) { return bFFT1200LUTMap[i]; }
-__declspec(selectany) extern const short bFFT2048LUTMap[] =
+cselectany extern const short bFFT2048LUTMap[] =
 {
 0, 1024, 512, 1536, 256, 1280, 768, 1792, 128, 1152, 640, 1664, 384, 1408, 896, 1920, 64, 1088, 576, 1600, 320, 1344, 832, 1856, 192, 1216, 704, 1728, 448, 1472, 960, 1984, 32, 1056, 544, 1568, 288, 1312, 800, 1824, 160, 1184, 672, 1696, 416, 1440, 928, 1952, 96, 1120, 608, 1632, 352, 1376, 864, 1888, 224, 1248, 736, 1760, 480, 1504, 992, 2016, 16, 1040, 528, 1552, 272, 1296, 784, 1808, 144, 1168, 656, 1680, 400, 1424, 912, 1936, 80, 1104, 592, 1616, 336, 1360, 848, 1872, 208, 1232, 720, 1744, 464, 1488, 976, 2000, 48, 1072, 560, 1584, 304, 1328, 816, 1840, 176, 1200, 688, 1712, 432, 1456, 944, 1968, 112, 1136, 624, 1648, 368, 1392, 880, 1904, 240, 1264, 752, 1776, 496, 1520, 1008, 2032, 8, 1032, 520, 1544, 264, 1288, 776, 1800, 136, 1160, 648, 1672, 392, 1416, 904, 1928, 72, 1096, 584, 1608, 328, 1352, 840, 1864, 200, 1224, 712, 1736, 456, 1480, 968, 1992, 40, 1064, 552, 1576, 296, 1320, 808, 1832, 168, 1192, 680, 1704, 424, 1448, 936, 1960, 104, 1128, 616, 1640, 360, 1384, 872, 1896, 232, 1256, 744, 1768, 488, 1512, 1000, 2024, 24, 1048, 536, 1560, 280, 1304, 792, 1816, 152, 1176, 664, 1688, 408, 1432, 920, 1944, 88, 1112, 600, 1624, 344, 1368, 856, 1880, 216, 1240, 728, 1752, 472, 1496, 984, 2008, 56, 1080, 568, 1592, 312, 1336, 824, 1848, 184, 1208, 696, 1720, 440, 1464, 952, 1976, 120, 1144, 632, 1656, 376, 1400, 888, 1912, 248, 1272, 760, 1784, 504, 1528, 1016, 2040, 4, 1028, 516, 1540, 260, 1284, 772, 1796, 132, 1156, 644, 1668, 388, 1412, 900, 1924, 68, 1092, 580, 1604, 324, 1348, 836, 1860, 196, 1220, 708, 1732, 452, 1476, 964, 1988, 36, 1060, 548, 1572, 292, 1316, 804, 1828, 164, 1188, 676, 1700, 420, 1444, 932, 1956, 100, 1124, 612, 1636, 356, 1380, 868, 1892, 228, 1252, 740, 1764, 484, 1508, 996, 2020, 20, 1044, 532, 1556, 276, 1300, 788, 1812, 148, 1172, 660, 1684, 404, 1428, 916, 1940, 84, 1108, 596, 1620, 340, 1364, 852, 1876, 212, 1236, 724, 1748, 468, 1492, 980, 2004, 52, 1076, 564, 1588, 308, 1332, 820, 1844, 180, 1204, 692, 1716, 436, 1460, 948, 1972, 116, 1140, 628, 1652, 372, 1396, 884, 1908, 244, 1268, 756, 1780, 500, 1524, 1012, 2036, 12, 1036, 524, 1548, 268, 1292, 780, 1804, 140, 1164, 652, 1676, 396, 1420, 908, 1932, 76, 1100, 588, 1612, 332, 1356, 844, 1868, 204, 1228, 716, 1740, 460, 1484, 972, 1996, 44, 1068, 556, 1580, 300, 1324, 812, 1836, 172, 1196, 684, 1708, 428, 1452, 940, 1964, 108, 1132, 620, 1644, 364, 1388, 876, 1900, 236, 1260, 748, 1772, 492, 1516, 1004, 2028, 28, 1052, 540, 1564, 284, 1308, 796, 1820, 156, 1180, 668, 1692, 412, 1436, 924, 1948, 92, 1116, 604, 1628, 348, 1372, 860, 1884, 220, 1244, 732, 1756, 476, 1500, 988, 2012, 60, 1084, 572, 1596, 316, 1340, 828, 1852, 188, 1212, 700, 1724, 444, 1468, 956, 1980, 124, 1148, 636, 1660, 380, 1404, 892, 1916, 252, 1276, 764, 1788, 508, 1532, 1020, 2044, 2, 1026, 514, 1538, 258, 1282, 770, 1794, 130, 1154, 642, 1666, 386, 1410, 898, 1922, 66, 1090, 578, 1602, 322, 1346, 834, 1858, 194, 1218, 706, 1730, 450, 1474, 962, 1986, 34, 1058, 546, 1570, 290, 1314, 802, 1826, 162, 1186, 674, 1698, 418, 1442, 930, 1954, 98, 1122, 610, 1634, 354, 1378, 866, 1890, 226, 1250, 738, 1762, 482, 1506, 994, 2018, 18, 1042, 530, 1554, 274, 1298, 786, 1810, 146, 1170, 658, 1682, 402, 1426, 914, 1938, 82, 1106, 594, 1618, 338, 1362, 850, 1874, 210, 1234, 722, 1746, 466, 1490, 978, 2002, 50, 1074, 562, 1586, 306, 1330, 818, 1842, 178, 1202, 690, 1714, 434, 1458, 946, 1970, 114, 1138, 626, 1650, 370, 1394, 882, 1906, 242, 1266, 754, 1778, 498, 1522, 1010, 2034, 10, 1034, 522, 1546, 266, 1290, 778, 1802, 138, 1162, 650, 1674, 394, 1418, 906, 1930, 74, 1098, 586, 1610, 330, 1354, 842, 1866, 202, 1226, 714, 1738, 458, 1482, 970, 1994, 42, 1066, 554, 1578, 298, 1322, 810, 1834, 170, 1194, 682, 1706, 426, 1450, 938, 1962, 106, 1130, 618, 1642, 362, 1386, 874, 1898, 234, 1258, 746, 1770, 490, 1514, 1002, 2026, 26, 1050, 538, 1562, 282, 1306, 794, 1818, 154, 1178, 666, 1690, 410, 1434, 922, 1946, 90, 1114, 602, 1626, 346, 1370, 858, 1882, 218, 1242, 730, 1754, 474, 1498, 986, 2010, 58, 1082, 570, 1594, 314, 1338, 826, 1850, 186, 1210, 698, 1722, 442, 1466, 954, 1978, 122, 1146, 634, 1658, 378, 1402, 890, 1914, 250, 1274, 762, 1786, 506, 1530, 1018, 2042, 6, 1030, 518, 1542, 262, 1286, 774, 1798, 134, 1158, 646, 1670, 390, 1414, 902, 1926, 70, 1094, 582, 1606, 326, 1350, 838, 1862, 198, 1222, 710, 1734, 454, 1478, 966, 1990, 38, 1062, 550, 1574, 294, 1318, 806, 1830, 166, 1190, 678, 1702, 422, 1446, 934, 1958, 102, 1126, 614, 1638, 358, 1382, 870, 1894, 230, 1254, 742, 1766, 486, 1510, 998, 2022, 22, 1046, 534, 1558, 278, 1302, 790, 1814, 150, 1174, 662, 1686, 406, 1430, 918, 1942, 86, 1110, 598, 1622, 342, 1366, 854, 1878, 214, 1238, 726, 1750, 470, 1494, 982, 2006, 54, 1078, 566, 1590, 310, 1334, 822, 1846, 182, 1206, 694, 1718, 438, 1462, 950, 1974, 118, 1142, 630, 1654, 374, 1398, 886, 1910, 246, 1270, 758, 1782, 502, 1526, 1014, 2038, 14, 1038, 526, 1550, 270, 1294, 782, 1806, 142, 1166, 654, 1678, 398, 1422, 910, 1934, 78, 1102, 590, 1614, 334, 1358, 846, 1870, 206, 1230, 718, 1742, 462, 1486, 974, 1998, 46, 1070, 558, 1582, 302, 1326, 814, 1838, 174, 1198, 686, 1710, 430, 1454, 942, 1966, 110, 1134, 622, 1646, 366, 1390, 878, 1902, 238, 1262, 750, 1774, 494, 1518, 1006, 2030, 30, 1054, 542, 1566, 286, 1310, 798, 1822, 158, 1182, 670, 1694, 414, 1438, 926, 1950, 94, 1118, 606, 1630, 350, 1374, 862, 1886, 222, 1246, 734, 1758, 478, 1502, 990, 2014, 62, 1086, 574, 1598, 318, 1342, 830, 1854, 190, 1214, 702, 1726, 446, 1470, 958, 1982, 126, 1150, 638, 1662, 382, 1406, 894, 1918, 254, 1278, 766, 1790, 510, 1534, 1022, 2046, 1, 1025, 513, 1537, 257, 1281, 769, 1793, 129, 1153, 641, 1665, 385, 1409, 897, 1921, 65, 1089, 577, 1601, 321, 1345, 833, 1857, 193, 1217, 705, 1729, 449, 1473, 961, 1985, 33, 1057, 545, 1569, 289, 1313, 801, 1825, 161, 1185, 673, 1697, 417, 1441, 929, 1953, 97, 1121, 609, 1633, 353, 1377, 865, 1889, 225, 1249, 737, 1761, 481, 1505, 993, 2017, 17, 1041, 529, 1553, 273, 1297, 785, 1809, 145, 1169, 657, 1681, 401, 1425, 913, 1937, 81, 1105, 593, 1617, 337, 1361, 849, 1873, 209, 1233, 721, 1745, 465, 1489, 977, 2001, 49, 1073, 561, 1585, 305, 1329, 817, 1841, 177, 1201, 689, 1713, 433, 1457, 945, 1969, 113, 1137, 625, 1649, 369, 1393, 881, 1905, 241, 1265, 753, 1777, 497, 1521, 1009, 2033, 9, 1033, 521, 1545, 265, 1289, 777, 1801, 137, 1161, 649, 1673, 393, 1417, 905, 1929, 73, 1097, 585, 1609, 329, 1353, 841, 1865, 201, 1225, 713, 1737, 457, 1481, 969, 1993, 41, 1065, 553, 1577, 297, 1321, 809, 1833, 169, 1193, 681, 1705, 425, 1449, 937, 1961, 105, 1129, 617, 1641, 361, 1385, 873, 1897, 233, 1257, 745, 1769, 489, 1513, 1001, 2025, 25, 1049, 537, 1561, 281, 1305, 793, 1817, 153, 1177, 665, 1689, 409, 1433, 921, 1945, 89, 1113, 601, 1625, 345, 1369, 857, 1881, 217, 1241, 729, 1753, 473, 1497, 985, 2009, 57, 1081, 569, 1593, 313, 1337, 825, 1849, 185, 1209, 697, 1721, 441, 1465, 953, 1977, 121, 1145, 633, 1657, 377, 1401, 889, 1913, 249, 1273, 761, 1785, 505, 1529, 1017, 2041, 5, 1029, 517, 1541, 261, 1285, 773, 1797, 133, 1157, 645, 1669, 389, 1413, 901, 1925, 69, 1093, 581, 1605, 325, 1349, 837, 1861, 197, 1221, 709, 1733, 453, 1477, 965, 1989, 37, 1061, 549, 1573, 293, 1317, 805, 1829, 165, 1189, 677, 1701, 421, 1445, 933, 1957, 101, 1125, 613, 1637, 357, 1381, 869, 1893, 229, 1253, 741, 1765, 485, 1509, 997, 2021, 21, 1045, 533, 1557, 277, 1301, 789, 1813, 149, 1173, 661, 1685, 405, 1429, 917, 1941, 85, 1109, 597, 1621, 341, 1365, 853, 1877, 213, 1237, 725, 1749, 469, 1493, 981, 2005, 53, 1077, 565, 1589, 309, 1333, 821, 1845, 181, 1205, 693, 1717, 437, 1461, 949, 1973, 117, 1141, 629, 1653, 373, 1397, 885, 1909, 245, 1269, 757, 1781, 501, 1525, 1013, 2037, 13, 1037, 525, 1549, 269, 1293, 781, 1805, 141, 1165, 653, 1677, 397, 1421, 909, 1933, 77, 1101, 589, 1613, 333, 1357, 845, 1869, 205, 1229, 717, 1741, 461, 1485, 973, 1997, 45, 1069, 557, 1581, 301, 1325, 813, 1837, 173, 1197, 685, 1709, 429, 1453, 941, 1965, 109, 1133, 621, 1645, 365, 1389, 877, 1901, 237, 1261, 749, 1773, 493, 1517, 1005, 2029, 29, 1053, 541, 1565, 285, 1309, 797, 1821, 157, 1181, 669, 1693, 413, 1437, 925, 1949, 93, 1117, 605, 1629, 349, 1373, 861, 1885, 221, 1245, 733, 1757, 477, 1501, 989, 2013, 61, 1085, 573, 1597, 317, 1341, 829, 1853, 189, 1213, 701, 1725, 445, 1469, 957, 1981, 125, 1149, 637, 1661, 381, 1405, 893, 1917, 253, 1277, 765, 1789, 509, 1533, 1021, 2045, 3, 1027, 515, 1539, 259, 1283, 771, 1795, 131, 1155, 643, 1667, 387, 1411, 899, 1923, 67, 1091, 579, 1603, 323, 1347, 835, 1859, 195, 1219, 707, 1731, 451, 1475, 963, 1987, 35, 1059, 547, 1571, 291, 1315, 803, 1827, 163, 1187, 675, 1699, 419, 1443, 931, 1955, 99, 1123, 611, 1635, 355, 1379, 867, 1891, 227, 1251, 739, 1763, 483, 1507, 995, 2019, 19, 1043, 531, 1555, 275, 1299, 787, 1811, 147, 1171, 659, 1683, 403, 1427, 915, 1939, 83, 1107, 595, 1619, 339, 1363, 851, 1875, 211, 1235, 723, 1747, 467, 1491, 979, 2003, 51, 1075, 563, 1587, 307, 1331, 819, 1843, 179, 1203, 691, 1715, 435, 1459, 947, 1971, 115, 1139, 627, 1651, 371, 1395, 883, 1907, 243, 1267, 755, 1779, 499, 1523, 1011, 2035, 11, 1035, 523, 1547, 267, 1291, 779, 1803, 139, 1163, 651, 1675, 395, 1419, 907, 1931, 75, 1099, 587, 1611, 331, 1355, 843, 1867, 203, 1227, 715, 1739, 459, 1483, 971, 1995, 43, 1067, 555, 1579, 299, 1323, 811, 1835, 171, 1195, 683, 1707, 427, 1451, 939, 1963, 107, 1131, 619, 1643, 363, 1387, 875, 1899, 235, 1259, 747, 1771, 491, 1515, 1003, 2027, 27, 1051, 539, 1563, 283, 1307, 795, 1819, 155, 1179, 667, 1691, 411, 1435, 923, 1947, 91, 1115, 603, 1627, 347, 1371, 859, 1883, 219, 1243, 731, 1755, 475, 1499, 987, 2011, 59, 1083, 571, 1595, 315, 1339, 827, 1851, 187, 1211, 699, 1723, 443, 1467, 955, 1979, 123, 1147, 635, 1659, 379, 1403, 891, 1915, 251, 1275, 763, 1787, 507, 1531, 1019, 2043, 7, 1031, 519, 1543, 263, 1287, 775, 1799, 135, 1159, 647, 1671, 391, 1415, 903, 1927, 71, 1095, 583, 1607, 327, 1351, 839, 1863, 199, 1223, 711, 1735, 455, 1479, 967, 1991, 39, 1063, 551, 1575, 295, 1319, 807, 1831, 167, 1191, 679, 1703, 423, 1447, 935, 1959, 103, 1127, 615, 1639, 359, 1383, 871, 1895, 231, 1255, 743, 1767, 487, 1511, 999, 2023, 23, 1047, 535, 1559, 279, 1303, 791, 1815, 151, 1175, 663, 1687, 407, 1431, 919, 1943, 87, 1111, 599, 1623, 343, 1367, 855, 1879, 215, 1239, 727, 1751, 471, 1495, 983, 2007, 55, 1079, 567, 1591, 311, 1335, 823, 1847, 183, 1207, 695, 1719, 439, 1463, 951, 1975, 119, 1143, 631, 1655, 375, 1399, 887, 1911, 247, 1271, 759, 1783, 503, 1527, 1015, 2039, 15, 1039, 527, 1551, 271, 1295, 783, 1807, 143, 1167, 655, 1679, 399, 1423, 911, 1935, 79, 1103, 591, 1615, 335, 1359, 847, 1871, 207, 1231, 719, 1743, 463, 1487, 975, 1999, 47, 1071, 559, 1583, 303, 1327, 815, 1839, 175, 1199, 687, 1711, 431, 1455, 943, 1967, 111, 1135, 623, 1647, 367, 1391, 879, 1903, 239, 1263, 751, 1775, 495, 1519, 1007, 2031, 31, 1055, 543, 1567, 287, 1311, 799, 1823, 159, 1183, 671, 1695, 415, 1439, 927, 1951, 95, 1119, 607, 1631, 351, 1375, 863, 1887, 223, 1247, 735, 1759, 479, 1503, 991, 2015, 63, 1087, 575, 1599, 319, 1343, 831, 1855, 191, 1215, 703, 1727, 447, 1471, 959, 1983, 127, 1151, 639, 1663, 383, 1407, 895, 1919, 255, 1279, 767, 1791, 511, 1535, 1023, 2047, 
 };

@@ -27,15 +27,19 @@ typedef int8_t num8;
 typedef int16_t num16;
 typedef int32_t num32;
 typedef int64_t num64;
+#define calign __atribute__(aligned(16))
+#define cthread __thread
+#define cselectany  __attribute__ ((weak))
 #else
 typedef __int8  num8;
 typedef __int16 num16;
 typedef __int32 num32;
 typedef __int64 num64;
-#endif
-
 #define calign __declspec(align(16))
 #define cthread __declspec(thread)
+#define cselectany __declspec(selectany)
+#endif
+
 
 // INLINE_COMPILATION only defined in Wrapper.cpp
 #ifdef INLINE_COMPILATION 
