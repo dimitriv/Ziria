@@ -73,7 +73,7 @@ cgCall :: DynFlags
        -> Cg C.Exp
 cgCall dfs loc retTy argtys fName eargs mb_ret = do
   (real_f_name, closure_params,lut_returning) <- lookupExpFunEnv fName
-  let is_external = isPrefixOf "__ext" (name real_f_name)
+  let is_external = isExternalCFunName (name real_f_name)
 
   let cef = [cexp|$id:(name real_f_name)|]
   

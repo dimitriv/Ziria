@@ -19,7 +19,6 @@
 --
 #pragma once 
 
-#include <v_conj_mul.blk>
 
 -- c = sum(a1 * conj(a2))
 -- All vectors have to be 16-bit aligned

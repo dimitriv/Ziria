@@ -199,20 +199,31 @@ cgEval dfs e = go (unExp e) where
     | is_lval_aligned clhs (ctExp erhs)    -- if lval is aligned
     , ECall nef eargs <- unExp erhs        -- and rval is function call
 
-    -- Fast, but unsafe in case of aliasing ... 
-    -- = do clhs_c <- cgDeref dfs loc clhs
-    --      _ <- cgCall_aux dfs loc (ctExp erhs) nef eargs (Just clhs_c)
-    --      return [cexp|UNIT|]
-
-    -- Somewhat unsatisfactory compromise: for external functions make it 
-    -- the programmer's responsibility to control aliasing effects. 
-    -- See note [Safe Return Aliasing] in AstExpr.hs
-
-    = do (fn,clos,_) <- lookupExpFunEnv nef -- Get closure arguments
-         let is_external = isPrefixOf "__ext" (name fn)
-         if is_external then do clhs_c <- cgDeref dfs loc clhs
-                                _ <- cgCall_aux dfs loc (ctExp erhs) nef eargs (Just clhs_c)
-                                return [cexp|UNIT|]
+    -- Note [Fast AssignCall path]
+    -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    -- When it is safe to compile x := f(e1...en) without 
+    -- temporary storage for the result? That is,  
+    --    ret := f(e1...en); x := ret
+    -- vs directly:
+    --    x := f(e1,..,en)
+    -- In the case where 'x' aliases in the RHS it is unsafe 
+    -- and we have to go through the slow path. 
+    --
+    -- 
+    -- For performance reasons we make a small exception: for external
+    -- function calls we go directly to the fast path and assume it's
+    -- the external function writer's responsibility to be able to
+    -- gracefully deal with aliasing.
+    
+    = do (real_fn,clos_vars,_) <- lookupExpFunEnv nef -- Get closure vars and name
+         let is_external  = isExternalCFunName (name real_fn)
+             rhs_vars     = S.unions $ S.fromList clos_vars : map exprFVsClos eargs
+             lhs_disjoint = S.notMember (derefBase clhs) rhs_vars
+         if lhs_disjoint || is_external then do 
+            -- Fast path
+            clhs_c <- cgDeref dfs loc clhs
+            _ <- cgCall_aux dfs loc (ctExp erhs) nef eargs (Just clhs_c)
+            return [cexp|UNIT|]
          else asgn_slow dfs loc clhs erhs
 
     | otherwise = asgn_slow dfs loc clhs erhs 
@@ -338,6 +349,12 @@ cgEval dfs e = go (unExp e) where
 
   go (EFor _ui k estart elen ebody) = do
 
+{- 
+      cgIO $ print $ vcat [ text "estart = " <+> ppr estart
+                          , text "elen   = " <+> ppr elen
+                          , text "ebody  = " <+> ppr ebody
+                          ]
+-}
       k_new <- freshName (name k) (ctExp estart) Imm
 
       (init_decls, init_stms, (ceStart, ceLen)) <- inNewBlock $ do
@@ -429,17 +446,25 @@ cgArrVal_val _ _ t@(TArray _ TBit) vs = do
 
 cgArrVal_val _dfs loc t@(TArray _ _) ws
   | length ws <= 8192 
-  = do snm <- freshName "__val_arr" t Mut
+  = do snm <- freshName "__val_a_arr" t Mut
        let csnm = [cexp| $id:(name snm)|]
        let inits = cgNonBitValues ws
+{- Modified: -}
+       DeclPkg d istms <- 
+           codeGenDeclGroup (name snm) t (InitWith inits)
+       appendTopDecl d
+       mapM_ addGlobalWplAllocated istms
+       return csnm
+{- Original:
        appendCodeGenDeclGroup (name snm) t (InitWith inits)
        return csnm
+-} 
   | otherwise -- ^ very large initializer, VS can't deal with that
   = go t ws
   where 
     go (TArray n tval) vs 
       | length vs <= 8192
-      = do snm <- freshName "__val_arr" t Mut
+      = do snm <- freshName "__val_b_arr" t Mut
            let csnm = [cexp| $id:(name snm)|]
            let inits = cgNonBitValues vs
            DeclPkg d istms <- 
@@ -454,7 +479,7 @@ cgArrVal_val _dfs loc t@(TArray _ _) ws
                (vs1,vs2) = splitAt ln1 vs
            cv1 <- go (TArray (Literal ln1) tval) vs1
            cv2 <- go (TArray (Literal ln2) tval) vs2
-           snm  <- freshName "__val_arr" t Mut
+           snm  <- freshName "__val_c_arr" t Mut
            let valsiz = tySizeOf_C tval
                csiz1  = [cexp| $int:ln1 * $valsiz|]
                csiz2  = [cexp| $int:ln2 * $valsiz|]

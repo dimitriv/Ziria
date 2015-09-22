@@ -75,7 +75,7 @@ bin_%.outfile: bin_%.out bin_%.infile
 
 %.perf: %.outp %.infile
 	./$< --input=dummy \
-	     --dummy-samples=10000000000 \
+	     --dummy-samples=500000000 \
              --output=dummy $(EXTRARUNOPTS)
 
 

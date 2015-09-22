@@ -306,7 +306,7 @@ cgFunExternal :: DynFlags
 cgFunExternal _dflags loc
               (MkFun (MkFunExternal nm ps retTy) _ _) action = go retTy where
   ret_str  = "__retf_" ++ name nm
-  ext_str  = "__ext_"  ++ name nm
+  ext_str  = mkExternalCFunName (name nm)
   fun_ty   = nameTyp nm
   ext_nm   = toName ext_str loc fun_ty Imm
   ret_name = toName ret_str loc retTy Mut

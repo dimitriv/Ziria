@@ -1,0 +1,53 @@
+--
+--Copyright (c) Microsoft Corporation
+--All rights reserved.
+--
+--Licensed under the Apache License, Version 2.0 (the ""License""); you
+--may not use this file except in compliance with the License. You may
+--obtain a copy of the License at
+--
+--http://www.apache.org/licenses/LICENSE-2.0
+--
+--THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+--CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+--LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+--A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+--See the Apache Version 2.0 License for specific language governing
+--permissions and limitations under the License.
+--
+--
+#include <externals.blk>
+--This function is designed to test some of the vector functions in the library
+--9 is used as the size to ensure that there is a remainder when dividing by 2
+
+fun comp test() { 
+
+
+var y :arr[100] complex32;
+
+
+(x:arr[20] complex32) <- takes 20;
+	
+	do{
+		zero_complex32(y);
+		
+		v_add_complex32(y[ 0,9],x[0,9],x[10,9]);
+
+		v_sub_complex32(y[10,9],x[0,9],x[10,9]);
+
+		y[20] := v_sum_complex32(x[0,9]);
+
+
+		v_shift_right_complex32( y[50,9],x[0,9],3);
+
+		v_shift_left_complex32(  y[60,9],x[0,9],3);
+ };
+	 
+emits y;
+	
+
+	
+}
+
+let comp main = read >>> repeat test() >>> write

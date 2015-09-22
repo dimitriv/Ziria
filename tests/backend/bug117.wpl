@@ -1,0 +1,10 @@
+fun comp test_addRARToSubframe() {
+var cellGrid : arr[1] complex16;
+  let aFrame = {0};
+  for f in [0, length(aFrame)]{
+    emits cellGrid;
+  }
+};
+let comp main = read[int] >>> test_addRARToSubframe() >>> write
+
+-- Run this with --no-static-eval

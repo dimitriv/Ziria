@@ -57,3 +57,15 @@ void blink_copy(void *dst, void *src, memsize_int siz);
 
 char* delete_trailing_comma(char *s);
 void restore_trailing_comma(char* trailing_comma);
+
+
+// Dummy functions that can be insterted to preven Ziria compiler to overdo with inlining
+// 
+inline int8 __ext_do_not_inline_int8(int8 x) { return x; };
+inline int16 __ext_do_not_inline_int16(int16 x) { return x; };
+inline int32 __ext_do_not_inline_int32(int32 x) { return x; };
+inline int64 __ext_do_not_inline_int64(int64 x) { return x; };
+inline complex8 __ext_do_not_inline_complex8(complex8 x) { return x; };
+inline complex16 __ext_do_not_inline_complex16(complex16 x) { return x; };
+inline complex32 __ext_do_not_inline_complex32(complex32 x) { return x; };
+inline complex64 __ext_do_not_inline_complex64(complex64 x) { return x; };

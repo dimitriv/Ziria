@@ -20,7 +20,6 @@
 #pragma once 
 
 #include <externals.blk>
-#include <v_mul.blk>
 
 
 #define PILOT_AVG       8
@@ -209,8 +208,8 @@ fun comp PilotTrack() {
        
        -- Compensate pilots
        zero_complex16(symbol_out);
-       v_mul_complex16_shift(symbol_out[0,28], symbol[0,28], rotate_coeffs[0,28],15);
-       v_mul_complex16_shift(symbol_out[36,28],symbol[36,28],rotate_coeffs[36,28],15);
+       v_mul_complex16(symbol_out[0,28], symbol[0,28], rotate_coeffs[0,28],15);
+       v_mul_complex16(symbol_out[36,28],symbol[36,28],rotate_coeffs[36,28],15);
 
 
        sCFO_tracker := sCFO_tracker + avgTheta >> 2;

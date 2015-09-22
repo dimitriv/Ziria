@@ -11,7 +11,12 @@
 #define STRUCT_IO_T_MEMWRITER_STATE
 #endif
 
+
 #include "types.h"
 #include "wpl_alloc.h"
 #include "utils.h"
 #include "buf.h"
+
+#ifdef __GNUC__
+#include "sora_ext_lib.c"
+#endif

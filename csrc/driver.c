@@ -157,6 +157,7 @@ int __cdecl main(int argc, char **argv) {
   wpl_global_init(Globals.heapSize);
   wpl_input_initialize();
 
+
 #ifdef SORA_PLATFORM
   /////////////////////////////////////////////////////////////////////////////  
   // DV: Pass the User_Routines here
@@ -198,8 +199,22 @@ int __cdecl main(int argc, char **argv) {
   // Free thread separators
   // NB: these are typically allocated in blink_set_up_threads
   ts_free();
+
 #else
+  int usec;
+#ifdef __GNUC__
+  struct timespec start, end;
+  clock_gettime(CLOCK_MONOTONIC, &start);
   wpl_go();
+  clock_gettime(CLOCK_MONOTONIC, &end);
+  usec = (end.tv_sec - start.tv_sec) * 1000000 + (end.tv_nsec - start.tv_nsec) / 1000;
+#else
+  clock_t start = clock(), diff;
+  wpl_go();
+  diff = clock() - start;
+  usec = diff * 1000000 / CLOCKS_PER_SEC;
+#endif
+  printf("Time Elapsed: %d\n", usec);
 #endif
 
   printf("Bytes copied: %ld\n", bytes_copied);
@@ -269,7 +284,7 @@ int SetUpThreads(PSORA_UTHREAD_PROC * User_Routines)
 // Define an empty SetUpThreads() function.
 // This is here as a shim for compiling single threaded code with GCC.
 // See note in Codegen/CgSetupThreads.hs for more information.
-int SetUpThreads()
+int SetUpThreads(void *unused)
 {
   return 1;
 }
