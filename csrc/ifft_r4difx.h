@@ -31,7 +31,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 This file is taken from https://github.com/Microsoft/Sora
 */
 #pragma once
-
+#include "numerics.h"
 #include "sora_ext_lib_fft_coeffs.h"
 
 //////////////////////////////////////////////////
@@ -234,7 +234,7 @@ DSP_INLINE1 void IFFT(struct complex16* pInput, struct complex16* pOutput)
 template<int N>
 DSP_INLINE1 void IFFTSafe(const struct complex16* pInput, struct complex16* pOutput)
 {
-	__declspec(align(16)) struct complex16 temp[N];
+	calign struct complex16 temp[N];
 	memcpy(temp, pInput, sizeof(temp));
 	IFFT<N>(temp, pOutput);
 }

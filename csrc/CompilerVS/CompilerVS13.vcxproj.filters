@@ -137,5 +137,17 @@
     <ClInclude Include="..\bladerf_radio.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\fft_r4difx.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\ifft_r4difx.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\intalglutx.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\intalgx.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

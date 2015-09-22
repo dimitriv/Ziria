@@ -17,9 +17,10 @@ See the Apache Version 2.0 License for specific language governing
 permissions and limitations under the License.
 */
 #pragma once
+#include "numerics.h"
 
 // lut for fixed point sin 
-__declspec(align(16)) const int sinx_lut[] = {
+calign const int sinx_lut[] = {
 		0,	  3,	6,	  9,   13,	 16,   19,	 22,   25,	 28,   31,	 35,   38,	 41,   44,	 47,   50,	 53,
 	   57,	 60,   63,	 66,   69,	 72,   75,	 79,   82,	 85,   88,	 91,   94,	 97,  101,	104,  107,	110,
 	  113,	116,  119,	123,  126,	129,  132,	135,  138,	141,  145,	148,  151,	154,  157,	160,  163,	166,
@@ -3663,7 +3664,7 @@ __declspec(align(16)) const int sinx_lut[] = {
 	  -50,	-47,  -44,	-41,  -38,	-35,  -31,	-28,  -25,	-22,  -19,	-16,  -13,	 -9,   -6,	 -3 };
 
 // lut for cos
-__declspec(align(16)) const int cosx_lut[] = {
+calign const int cosx_lut[] = {
 32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,
 32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,
 32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,
@@ -7307,7 +7308,7 @@ __declspec(align(16)) const int cosx_lut[] = {
 32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767,32767 };
 
 // bit set test lut
-__declspec(align(16)) static const char bit_set_lutx[256] =
+calign static const char bit_set_lutx[256] =
 {
 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,
@@ -7327,7 +7328,7 @@ __declspec(align(16)) static const char bit_set_lutx[256] =
 4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8,
 };
 
-__declspec(align(16)) static const unsigned char bit_high_pos_lutx[256] =
+calign static const unsigned char bit_high_pos_lutx[256] =
 {
 0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 
 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 	
@@ -7347,7 +7348,7 @@ __declspec(align(16)) static const unsigned char bit_high_pos_lutx[256] =
 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
 };
 
-__declspec(align(16)) static const int atan2x_lut[256][256] =
+calign static const int atan2x_lut[256][256] =
 { 
   {
 		 0, 	 0, 	 0, 	 0, 	 0, 	 0, 	 0, 	 0, 	 0, 	 0, 	 0, 	 0, 	 0, 	 0, 	 0, 	 0, 
