@@ -13,9 +13,10 @@
  LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
  A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
 
- See the Apache Version 2.0 License for specific language governing
- permissions and limitations under the License.
- */
+   See the Apache Version 2.0 License for specific language governing
+   permissions and limitations under the License.
+*/
+#include <stdint.h>
 #include "types.h"
 #include "string.h"
 #include <assert.h>
