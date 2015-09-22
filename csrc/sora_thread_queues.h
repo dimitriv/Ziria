@@ -127,7 +127,7 @@ void s_ts_rollback(ts_context *locCont, int nc, int n);
 
 
 
-
+#ifndef __linux__
 // For barriers
 #include <windows.h>
 #include<synchapi.h>
@@ -167,31 +167,6 @@ inline void barrier(LONG volatile *state, int no_threads, int thr)
 		barr_hist2 = state + 2;
 	}
 }
+#endif
 
 
-
-/*
-// When we come to a goto, we wait at the <state> barrier related to the current state, remove <state> 
-inline void barrier_wait(LPSYNCHRONIZATION_BARRIER state, int no_threads)
-{
-	if (no_threads > 1)
-	{
-		EnterSynchronizationBarrier(state, SYNCHRONIZATION_BARRIER_FLAGS_SPIN_ONLY);
-		DeleteSynchronizationBarrier(state);
-	}
-}
-
-
-// set the new barrier <state> for the next state
-inline void barrier_init(LPSYNCHRONIZATION_BARRIER state, int no_threads)
-{
-	if (no_threads > 1)
-	{
-		if (!InitializeSynchronizationBarrier(state, no_threads, -1))
-		{
-			printf("Barrier problem!\n");
-			exit(1);
-		}
-	}
-}
-*/
