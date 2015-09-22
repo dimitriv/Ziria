@@ -19,6 +19,8 @@ typedef struct {
 
 	// current number of elements in the queue
 	size_t size;
+	size_t acquired;
+	size_t reserved;
 
 	// queue buffer of size (capacity * elem_size) bytes
 	void* buffer_start;
@@ -34,44 +36,11 @@ typedef struct {
 } queue;
 
 
-/* api **********************************************************/
+void stq_init(int no, size_t *sizes, int *queue_capacities);
+void* stq_acquire(int no, queue *q, size_t slots);
+void stq_release(int no);
+void* stq_reserve(int no, size_t slots);
+void stq_push(int no);
+void stq_clear(int no);
+void stq_rollback(int no, size_t n, queue* q);
 
-void queue_init(queue* q, size_t capacity, size_t elem_size);
-
-bool is_empty(queue* q);
-bool is_full(queue* q);
-size_t free_slots(queue* q);
-
-void clear(queue* q);
-void rollback(size_t n, queue* q);
-
-void push(void* elem, queue* q);
-void pushN(void* elems, size_t n, queue* q);
-
-// unpack n bits into one byte each, and put them into the queue.
-void pushNBits(void* elems, size_t n, queue* q);
-
-void pop(void* elem, queue* q);
-void popN(void* elems, size_t n, queue* q);
-
-// get n bits (stored in 1 byte each), and pack them into (n+7)/8 bytes.
-void popNBits(void* elems, size_t n, queue* q);
-
-
-
-
-
-/***************************************************************************
-  legacy api in order to use as drop in replacement for sora_thread_queues
-***************************************************************************/
-
-void stq_init(int no, size_t *sizes, int *queue_sizes);
-
-FORCE_INLINE void stq_put(int qn, char *input);
-FORCE_INLINE void stq_putMany(int qn, int n, char *input);
-FORCE_INLINE void stq_putManyBits(int qn, int n, char *input);
-FORCE_INLINE void stq_get(int qn, char *output);
-FORCE_INLINE void stq_getMany(int qn, int n, char *output);
-FORCE_INLINE void stq_getManyBits(int qn, int n, char *output);
-FORCE_INLINE void stq_clear(int qn);
-FORCE_INLINE void stq_rollback(int qn, int n);

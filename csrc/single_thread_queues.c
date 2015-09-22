@@ -3,37 +3,7 @@
 #include "single_thread_queues.h"
 #include "bit.h"
 
-/* low-level Interface **********************************************/
-FORCE_INLINE char* advance_qptr(char* ptr, size_t n, queue* q) {
-	ptr += n * q->elem_size;
-	if ((void *)ptr >= q->buffer_end) {
-		ptr -= q->capacity * q->elem_size;
-	}
-	return ptr;
-}
-
-FORCE_INLINE void advance_read_ptr(size_t n, queue* q) {
-	q->next_read = advance_qptr((char *) q->next_read, n, q);
-}
-
-FORCE_INLINE void advance_write_ptr(size_t n, queue* q) {
-	q->next_write = advance_qptr((char *) q->next_write, n, q);
-}
-
-FORCE_INLINE bool is_empty(queue* q) {
-	return q->size == 0;
-}
-
-FORCE_INLINE bool is_full(queue* q) {
-	return q->size == q->capacity;
-}
-
-FORCE_INLINE size_t free_slots(queue* q) {
-	return q->capacity - q->size;
-}
-
-
-void queue_init(queue* q, size_t capacity, size_t elem_size) {
+void _stq_init(queue* q, size_t capacity, size_t elem_size) {
 	q->capacity = capacity;
 	q->elem_size = elem_size;
 	q->size = 0;
@@ -42,166 +12,136 @@ void queue_init(queue* q, size_t capacity, size_t elem_size) {
 		exit(EXIT_FAILURE);
 	}
 	// buffer_end points at the first memory location beyond the buffer
-	q->buffer_end = (char*) q->buffer_start + capacity * elem_size;
+	q->buffer_end = (char*)q->buffer_start + capacity * elem_size;
 	q->next_write = q->buffer_start;
-	q->next_read = q->buffer_start;
+	q->next_read = NULL;
+	q->acquired = 0;
+	q->reserved = 0;
+}
+
+/* Queue reader API 
+ ***************************************************************************/
+
+// Peek n slots into the queue (if aligned, throw error otherwise, or perhaps emit slow path -- todo)
+FORCE_INLINE void* _stq_acquire(queue *q, size_t slots)
+{
+	// acquire n slots
+	q->acquired += slots;
+
+#ifdef QUEUE_CHECKS_ENABLED
+	if ((uint)q->next_read + q->acquired*q->elem_size > (uint)q->buffer_end)
+	{
+		printf("Unaligned queue read!");
+		exit(EXIT_FAILURE);
+	}
+#endif
+	return q->next_read;
+}
+
+// Release the acquired slots 
+FORCE_INLINE void _stq_release(queue *q)
+{
+	void *ptr = q->next_read;
+	ptr = (void*)((uint)ptr + q->acquired*q->elem_size);
+	if (ptr == q->buffer_end) ptr = q->buffer_start;
+	q->acquired = 0;
+	q->next_read = ptr;
+}
+
+/* Queue write API
+***************************************************************************/
+
+FORCE_INLINE void* _stq_reserve(queue *q, size_t slots)
+{
+	// reserve n slots
+	q->reserved += slots;
+
+#ifdef QUEUE_CHECKS_ENABLED
+	if ((uint)q->next_write + q->reserved*q->elem_size > (uint)q->buffer_end)
+	{
+		printf("Unaligned queue write!");
+		exit(EXIT_FAILURE);
+	}
+#endif
+	return q->next_write;
+}
+
+FORCE_INLINE void _stq_push(queue *q)
+{
+	void *ptr = q->next_write;
+	ptr = (void*)((uint)ptr + q->reserved*q->elem_size);
+	if (ptr == q->buffer_end) ptr = q->buffer_start;
+	q->reserved = 0;
+	q->next_write = ptr;
 }
 
 
-
-
-/* api **********************************************************/
-
-void clear(queue* q) {
+FORCE_INLINE void _stq_clear(queue *q)
+{
+	q->acquired = 0;
+	q->reserved = 0;
+	q->next_read = NULL;
+	q->next_write = q->buffer_start;
 	q->size = 0;
-	q->next_write = q->buffer_start;
-	q->next_read = q->buffer_start;
 }
 
-void rollback(size_t n, queue* q) {
+FORCE_INLINE void _stq_rollback(size_t n, queue* q) {
+	void *ptr = (void *)((uint)q->next_read - (q->elem_size*n));
 #ifdef QUEUE_CHECKS_ENABLED
-	if (free_slots(q) < n) {
-		exit(EXIT_FAILURE);
-	}
-#endif
-
-	advance_read_ptr(q->capacity - n, q);
-}
-
-
-void push(void* elem, queue* q) {
-#ifdef QUEUE_CHECKS_ENABLED
-	if (is_full(q)) {
-		exit(EXIT_FAILURE);
-	}
-#endif
-
-	memcpy(q->next_write, elem, q->elem_size);
-	advance_write_ptr(1, q);
-	q->size++;
-}
-
-void pushN(void* elems, size_t n, queue* q) {
-#ifdef QUEUE_CHECKS_ENABLED
-	if (free_slots(q) < n) {
-		exit(EXIT_FAILURE);
-	}
-#endif
-
-	size_t can_write = ((char *) q->buffer_end - (char *)q->next_write) / q->elem_size;
-	if (can_write >= n) {
-		memcpy(q->next_write, elems, n * q->elem_size);
-	}
-	else {
-		memcpy(q->next_write, elems, can_write * q->elem_size);
-		elems = (char*) elems + can_write * q->elem_size;
-		memcpy(q->buffer_start, elems, (n - can_write) * q->elem_size);
-	}
-
-	advance_write_ptr(n, q);
-	q->size += n;
-}
-
-void pushNBits(void* elems, size_t n, queue* q) {
-	unsigned char unpacked_bit[1];
-	for (int i = 0; i < n; i++)
+	ASSERT(q->acquired == 0 && q->reserved == 0);
+	if (ptr < q->buffer_start)
 	{
-		bitRead((BitArrPtr) elems, i, unpacked_bit);
-		push(unpacked_bit, q);
-	}
-}
-
-
-void pop(void* elem, queue* q) {
-#ifdef QUEUE_CHECKS_ENABLED
-	if (is_empty(q)) {
+		printf("Unaligned queue rollback!");
 		exit(EXIT_FAILURE);
 	}
 #endif
+	q->next_read = ptr;
 
-	memcpy(elem, q->next_read, q->elem_size);
-	q->size--;
-	advance_read_ptr(1, q);
 }
 
-void popN(void* elems, size_t n, queue* q) {
-#ifdef QUEUE_CHECKS_ENABLED
-	if (q->size < n) {
-		exit(EXIT_FAILURE);
-	}
-#endif
+/* Top-level API 
+ *********************************************************************/
 
-	size_t can_read = ((char *)q->buffer_end - (char *)q->next_read) / q->elem_size;
-	if (can_read >= n) {
-		memcpy(elems, q->next_read, n * q->elem_size);
-	}
-	else {
-		memcpy(elems, q->next_read, can_read * q->elem_size);
-		elems = (char*)elems + can_read * q->elem_size;
-		memcpy(elems, q->buffer_start, (n - can_read) * q->elem_size);
-	}
-
-	advance_read_ptr(n, q);
-	q->size -= n;
-}
-
-void popNBits(void* elems, size_t n, queue* q) {
-	
-	Bit unpacked_bit;
-
-	for (int i = 0; i<n; i++)
-	{
-		pop(&unpacked_bit, q);
-		bitWrite((BitArrPtr) elems, i, unpacked_bit);
-	}
-}
-
-
-
-/* legacy api ********************************************/
-
-queue *queues;
+static queue *queues;
 
 void stq_init(int no, size_t *sizes, int *queue_capacities) {
 	queues = (queue *) malloc(no * sizeof(queue));
-	if (queues == NULL) {
-		exit(EXIT_FAILURE);
-	}
+
+	if (queues == NULL) exit(EXIT_FAILURE);
 
 	for (size_t i = 0; i < no; i++)
 	{
-		queue_init(&queues[i], queue_capacities[i], sizes[i]);
+		_stq_init(&queues[i], queue_capacities[i], sizes[i]);
 	}
 }
 
-FORCE_INLINE void stq_put(int qn, char *input) {
-	push(input, &queues[qn]);
+FORCE_INLINE void* stq_acquire(int no, queue *q, size_t slots)
+{
+	return _stq_acquire(&queues[no], slots);
 }
 
-FORCE_INLINE void stq_putMany(int qn, int n, char *input) {
-	pushN(input, n, &queues[qn]);
+// Release the acquired slots 
+FORCE_INLINE void stq_release(int no)
+{
+	_stq_release(&queues[no]);
 }
 
-FORCE_INLINE void stq_putManyBits(int qn, int n, char *input) {
-	pushNBits(input, n, &queues[qn]);
+FORCE_INLINE void* stq_reserve(int no, size_t slots)
+{
+	return _stq_reserve(&queues[no], slots);
 }
 
-FORCE_INLINE void stq_get(int qn, char *output) {
-	pop(output, &queues[qn]);
+FORCE_INLINE void stq_push(int no)
+{
+	_stq_push(&queues[no]);
 }
 
-FORCE_INLINE void stq_getMany(int qn, int n, char *output) {
-	popN(output, n, &queues[qn]);
+
+FORCE_INLINE void stq_clear(int no)
+{
+	_stq_clear(&queues[no]);
 }
 
-FORCE_INLINE void stq_getManyBits(int qn, int n, char *output) {
-	popNBits(output, n, &queues[qn]);
-}
-
-FORCE_INLINE void stq_clear(int qn) {
-	clear(&queues[qn]);
-}
-
-FORCE_INLINE void stq_rollback(int qn, int n) {
-	rollback(n, &queues[qn]);
+FORCE_INLINE void stq_rollback(int no, size_t n, queue* q) {
+	_stq_rollback(n, &queues[no]);
 }
