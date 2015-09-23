@@ -38,7 +38,7 @@ typedef struct {
 
 void stq_init(int no, size_t *sizes, int *queue_capacities);
 
-unsigned char * stq_acquire(int no, queue *q, size_t slots);
+unsigned char * stq_acquire(int no, size_t slots);
 void stq_release(int no);
 
 
@@ -46,5 +46,5 @@ unsigned char* stq_reserve(int no, size_t slots);
 void stq_push(int no);
 
 void stq_clear(int no);
-void stq_rollback(int no, size_t n, queue* q);
+void stq_rollback(int no, size_t n);
 

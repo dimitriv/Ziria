@@ -21,7 +21,9 @@
 module CgTypes ( bwBitWidth
                , namedCType, namedCType_
                , codeGenTyOcc, codeGenTyOcc_
+               , codeGenSmallTyPtr
                , tySizeOfApprox, tySizeOf_C
+               , tySizeOf_Maybe
 
                , isStructPtrType
                , isPtrType
@@ -126,6 +128,24 @@ tySizeOf_C (TArray (Literal n) ty) = [cexp| $int:n * $exp:(tySizeOf_C ty)|]
 tySizeOf_C (TStruct sn _) = [cexp| sizeof($id:sn)|]
 tySizeOf_C ty             = [cexp| $int:(tySizeOf False ty)|]
 
+tySizeOf_Maybe :: Ty -> Maybe Int
+tySizeOf_Maybe = go 
+  where
+     go TUnit       = return 1
+     go TBit        = return 1
+     go TBool       = return 1
+     go (TInt bw _) = return $ ((bwBitWidth bw) + 7) `div` 8
+     go TDouble     = return $ (64 `div` 8)
+     go (TArray (Literal n) TBit) = return $ bitArrByteLen n
+     go (TArray (Literal n) ty)   = go ty >>= \m -> return (n*m)
+     go (TStruct sn flds)
+       | sn == complexTyName   = return 8   -- NB: platform-dependent
+       | sn == complex8TyName  = return 2   -- but ok with GCC and VS in
+       | sn == complex16TyName = return 4   -- Cygwin and in VS
+       | sn == complex32TyName = return 8
+       | sn == complex64TyName = return 16
+       | otherwise = Nothing
+     go _ = Nothing
 
 {------------------------------------------------------------------------
   Language-c-quote infrastructure and fixed types
@@ -199,6 +219,10 @@ codeGenTyOcc_ q ty =
 
     _ -> panic $
          ppr ty <+> text " type not supported in code generation."
+
+codeGenSmallTyPtr :: Ty -> C.Type
+codeGenSmallTyPtr t@(TArray {}) = codeGenArrTyPtrOcc t
+codeGenSmallTyPtr t             = [cty| $ty:(codeGenTyOcc_ Nothing t) *|]
 
 codeGenArrTyPtrOcc_ :: Maybe Quals -> Ty -> C.Type 
 codeGenArrTyPtrOcc_ q ty

@@ -41,7 +41,7 @@ import qualified Language.C.Syntax as C
 import Language.C.Quote.C
 
 -- import Control.Monad.Identity
-import Control.Monad ( unless, void, when )
+import Control.Monad ( when )
 import Data.Loc
 import Data.Maybe
 import Text.PrettyPrint.HughesPJ
@@ -166,7 +166,7 @@ cgDeclQueues dfs qs action
           let my_sizes_decl = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
               my_slots_decl = [cdecl|int my_slots[$int:(numqs)];|]
               q_init_stmts 
-                = [cstm| ts_init_var($int:(numqs),my_sizes,my_slots); |]
+                = [cstm| stq_init($int:(numqs),my_sizes,my_slots); |]
              
               my_sizes_inits 
                 = concat $
@@ -188,8 +188,7 @@ cgDeclQueues dfs qs action
           _ <- mapM addGlobalWplAllocated (my_sizes_inits ++ [q_init_stmts])
 
           bind_queue_vars action $ 
-              (qi_inch qs : qi_outch qs : Map.keys (qi_interm qs))
-
+              (qi_inch qs : qi_outch qs : []) -- /Not/ declaring temporaries for queues!
   where
     bind_queue_vars m [] = m
     bind_queue_vars m (q1:qss)
@@ -239,9 +238,6 @@ extractQueues auto
                    if (countWrites q wa > 0 || countReads q wa > 0) 
                    then getWiredAtomCore wa : cs else cs) ps 
 
-
-
-    
 
 cgAutomatonDeclareAllGlobals :: DynFlags 
             -> RnSt                 -- ^ Records all variables (but no queues)
@@ -435,10 +431,6 @@ cgCallAtom _dfs current_core queues wa
   | otherwise
   = appendStmt $ [cstm| UNIT;|]
 
- --  ccall <- codeGenExp dfs call
- -- codeGenExp dfs call >>= \_ -> return ()
- --     -- Can safely always discard call result 
- --     -- because it is going to be UNIT, see CgCall.hs 
   where
     fun_name = wiredAtomNameOfLbl aid noLoc (TArrow [] TUnit)
     rd_input = rdFromInput queues (wires_in wa)
@@ -452,6 +444,7 @@ getWiredAtomCore = fromMaybe 0 . atom_core . the_atom
 
 {---------------------------- Assert atom implementation ----------------------}
 
+
 -- NB: In the future we can define this one too. 
 cgAAssertBody :: DynFlags
               -> QueueInfo
@@ -459,17 +452,14 @@ cgAAssertBody :: DynFlags
               -> Bool
               -> Cg C.Exp
 cgAAssertBody dfs qs (_,inwire) b = do 
-      let loc = nameLoc inwire
-      storage <- CgMonad.freshName "assert_storage" TBool Mut
-      cgMutBind dfs noLoc storage Nothing $ do
-         cgInWiring dfs qs [(1,inwire)] [storage]
-         let err   = eError loc TUnit "Atomix dead code assertion violation!"
-             vunit = eVal loc TUnit VUnit
-         _ <- codeGenExp dfs $ 
-              if b then eIf loc (eUnOp loc Not (eVar loc storage)) err vunit
-                   else eIf loc (eVar loc storage) err vunit
-         return [cexp|UNIT|]
-
+  let loc = nameLoc inwire
+  cgInWiring dfs qs [(1,inwire)] [inwire] $ do 
+     let err   = eError loc TUnit "Atomix dead code assertion violation!"
+         vunit = eVal loc TUnit VUnit
+     _ <- codeGenExp dfs $ 
+          if b then eIf loc (eUnOp loc Not (eVar loc inwire)) err vunit
+               else eIf loc (eVar loc inwire) err vunit
+     return [cexp|UNIT|]
 
 {---------------------------- Rollback atom implementation --------------------}
 
@@ -480,41 +470,13 @@ cgARollbackBody :: DynFlags
                 -> Cg C.Exp
 cgARollbackBody _dfs qs q n
   | Just (QMid (QId qid)) <- qiQueueId q qs = do
-      appendStmt [cstm| ts_rollback($int:qid, $int:n); |]
+      appendStmt [cstm| stq_rollback($int:qid, $int:n); |]
       return [cexp|UNIT|]
   | otherwise 
   = panic $ vcat [ text "SARollback only implemented for middle queues"
                  , nest 2 $ text "queue = " <+> ppr q
                  , nest 2 $ text "n     = " <+> ppr n 
                  ]
-
-{------------------------------- Cast atom implementation ---------------------}
-
-cgACastBody :: DynFlags 
-            -> QueueInfo
-            -> (Int,EId) -- ^ inwire
-            -> (Int,EId) -- ^ outwire
-            -> (Int,Ty)  -- ^ inty
-            -> (Int,Ty)  -- ^ outty
-            -> Cg C.Exp
-cgACastBody dfs qs (n,inwire) 
-                      (m,outwire) 
-                      (n',inty) 
-                      (m',_outty) 
-  = assert "cgCastAtom" (n == n' && m == m') $ do
-    case (qiQueueId inwire qs, qiQueueId outwire qs) of 
-      (Nothing, _) -> assert "cgCastAtom" (n == 1) $ do 
-                      cgOutWiring dfs qs [(m,outwire)] [inwire]
-                      return [cexp|UNIT|]
-      (_,Nothing)  -> assert "cgCastAtom" (m == 1) $ do 
-                      cgInWiring dfs qs [(n,inwire)] [outwire]
-                      return [cexp|UNIT|]
-      _ -> let storage_in_ty  = mkCastTyArray n inty 
-           in do storage <- CgMonad.freshName "cast_storage" storage_in_ty Mut
-                 cgMutBind dfs noLoc storage Nothing $ do 
-                    cgInWiring dfs qs [(n,inwire) ] [storage]
-                    cgOutWiring dfs qs [(m,outwire)] [storage]
-                    return [cexp|UNIT|]
 
 {---------------------- Discard/Clear atom implementation ---------------------}
 
@@ -523,15 +485,9 @@ cgADiscBody :: DynFlags
             -> (Int,EId) -- ^ inwire
             -> (Int,Ty)  -- ^ inty
             -> Cg C.Exp
-cgADiscBody dfs qs (n,inwire) (n',inty) 
-  = assert "cgDiscAtom" (n == n') $ do
- 
-      let storage_in_ty = mkCastTyArray n inty
-      storage <- CgMonad.freshName "disc_storage" storage_in_ty Mut
-
-      cgMutBind dfs noLoc storage Nothing $ do 
-         cgInWiring dfs qs [(n,inwire)] [storage]
-         return [cexp|UNIT|]
+cgADiscBody dfs qs (n,inwire) (n',_inty)
+  = assert "cgDiscAtom" (n == n') $ 
+    cgInWiring dfs qs [(n,inwire)] [inwire] $ return [cexp|UNIT|]
 
 cgAClearBody :: DynFlags 
              -> QueueInfo
@@ -542,7 +498,7 @@ cgAClearBody _dfs qs qmap = do
   mapM_ mk_clear $ map (flip qiQueueId qs . fst) $ Map.toList qmap
   return [cexp|UNIT|]
   where
-    mk_clear (Just (QMid (QId qid))) = appendStmt [cstm| ts_clear($int:qid); |]
+    mk_clear (Just (QMid (QId qid))) = appendStmt [cstm| stq_clear($int:qid); |]
     mk_clear _ = panicStr "cgAClearBody: can only clear middle queues"
 
 {--------------------------- AExp atom implementation -------------------------}
@@ -554,12 +510,10 @@ cgAExpBody :: DynFlags
            -> AExp ()
            -> Cg C.Exp
 cgAExpBody dfs qs wins wouts aexp
-  = when (isDynFlagSet dfs Verbose) dbg_m >> 
-    do { cgInWiring dfs qs wins wires_in       -- wiring 
-       ; b <- codeGenExp dfs fun_body          -- body
-       ; cgOutWiring dfs qs wouts  wires_out   -- wiring
-       ; return b 
-       }
+  = do { when (isDynFlagSet dfs Verbose) dbg_m 
+       ; cgInWiring dfs qs wins wires_in $ 
+         cgOutWiring dfs qs wouts wires_out $
+         codeGenExp dfs fun_body }
   where 
     dbg_m = cgIO $ print $ vcat [ text "cgAExpAtom:" <+> ppr fun_name
                                 , text "ivs       :" <+> ppr wires_in
@@ -576,48 +530,94 @@ cgAExpBody dfs qs wins wouts aexp
     fun_body  = aexp_exp aexp   
 
 
-{- Wiring and infrastructure
-   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-}
+{------------------------------- Cast atom implementation ---------------------}
 
+cgACastBody :: DynFlags 
+            -> QueueInfo
+            -> (Int,EId) -- ^ inwire
+            -> (Int,EId) -- ^ outwire
+            -> (Int,Ty)  -- ^ inty
+            -> (Int,Ty)  -- ^ outty
+            -> Cg C.Exp
+cgACastBody dfs qs (n,inwire) 
+                      (m,outwire) 
+                      (n',_inty) 
+                      (m',_outty) 
+  = assert "cgCastAtom" (n == n' && m == m') $ do
+    case (qiQueueId inwire qs, qiQueueId outwire qs) of 
+
+      -- Naked take and emit cases
+
+      (Nothing, _)
+        -> assert "cgCastAtom" (n == 1) $
+           cgOutWiring dfs qs [(m,outwire)] [outwire] $
+           codeGenExp dfs $ eAssign noLoc inwire_exp outwire_exp
+      (_,Nothing)  
+        -> assert "cgCastAtom" (m == 1) $
+           cgInWiring dfs qs [(n,inwire)] [inwire] $
+           codeGenExp dfs $ eAssign noLoc inwire_exp outwire_exp
+
+      -- Mitigator case (inefficient for now but oh well ...)
+
+      _ -> cgInWiring dfs qs [(n,inwire) ] [inwire]   $
+           cgOutWiring dfs qs [(m,outwire)] [outwire] $ do
+              _inptr <- lookupVarEnv inwire
+              _outptr <- lookupVarEnv outwire
+              appendStmt [cstm| ORIGIN("NOT CORRECT AT ALL!");|]
+              appendStmt [cstm| memcpy(& $_outptr, & $_inptr, $int:m * $exp:_tsiz);|]
+              return [cexp|UNIT|]
+
+  where inwire_exp  = eVar noLoc inwire
+        outwire_exp = eVar noLoc outwire
+        _tsiz       = tySizeOf_C (nameTyp outwire)
+
+
+-- let storage_in_ty  = mkCastTyArray n inty 
+--            in do storage <- CgMonad.freshName "cast_storage" storage_in_ty Mut
+--                  cgMutBind dfs noLoc storage Nothing $ do 
+
+{- Wiring and infrastructure
+ - ~~~~~~~~~~~~~~~~~~~~~~~~~
+ -
+ - ----------------------------------------------------------------------------}
 
 
 {--------------- Reading from TS queues ---------------------------------------}
 
-q_read_n :: QId -> Int -> C.Exp -> C.Stm
-q_read_n (QId qid) n ptr
-  = [cstm| ts_getManyBlocking($int:qid,$int:n,$ptr); |]
+-- q_read_n :: QId -> Int -> C.Exp -> C.Stm
+-- q_read_n (QId qid) n ptr
+--   = [cstm| ts_getManyBlocking($int:qid,$int:n,$ptr); |]
 
-q_read_n_bits :: QId -> Int -> C.Exp -> C.Stm
-q_read_n_bits (QId qid) n ptr
-  = [cstm| ts_getManyBitsBlocking($int:qid,$int:n,$ptr); |]
+-- q_read_n_bits :: QId -> Int -> C.Exp -> C.Stm
+-- q_read_n_bits (QId qid) n ptr
+--   = [cstm| ts_getManyBitsBlocking($int:qid,$int:n,$ptr); |]
 
 
-readFromTs :: DynFlags 
-           -> Int -> Ty -- # number of reads, and type of each read
-           -> QId       -- Queue id
-           -> C.Exp     -- Target variable to store to
-           -> Cg ()
-readFromTs _ n TBit q ptr = appendStmt $ q_read_n_bits q n ptr
+-- readFromTs :: DynFlags 
+--            -> Int -> Ty -- # number of reads, and type of each read
+--            -> QId       -- Queue id
+--            -> C.Exp     -- Target variable to store to
+--            -> Cg ()
+-- readFromTs _ n TBit q ptr = appendStmt $ q_read_n_bits q n ptr
 
-readFromTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
-  | m `mod` 8 == 0 = appendStmt $ q_read_n q n ptr
-  | n == 1         = appendStmt $ q_read_n q 1 ptr
-  | otherwise -- Not byte-aligned byte array, a bit sad and slow
-  = do x <- CgMonad.freshName "q_rdx" (TArray (Literal m) TBit) Mut
-       i <- CgMonad.freshName "q_idx" tint Mut
-       cgMutBind dfs noLoc i Nothing $ do 
-       cgMutBind dfs noLoc x Nothing $ do
-         cx <- lookupVarEnv x
-         ci <- lookupVarEnv i
-         appendStmt $ [cstm| for ($ci = 0; $ci < $int:n; $ci++) {
-                                ts_getManyBlocking($int:qid, 1, (char *) $cx);
-                                bitArrWrite((typename BitArrPtr) $cx,
-                                              $ci*$int:m,
-                                              $int:m,
-                                            (typename BitArrPtr) $ptr);
-                             } |]
-readFromTs _ n _ q ptr = appendStmt $ q_read_n q n ptr
+-- readFromTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
+--   | m `mod` 8 == 0 = appendStmt $ q_read_n q n ptr
+--   | n == 1         = appendStmt $ q_read_n q 1 ptr
+--   | otherwise -- Not byte-aligned byte array, a bit sad and slow
+--   = do x <- CgMonad.freshName "q_rdx" (TArray (Literal m) TBit) Mut
+--        i <- CgMonad.freshName "q_idx" tint Mut
+--        cgMutBind dfs noLoc i Nothing $ do 
+--        cgMutBind dfs noLoc x Nothing $ do
+--          cx <- lookupVarEnv x
+--          ci <- lookupVarEnv i
+--          appendStmt $ [cstm| for ($ci = 0; $ci < $int:n; $ci++) {
+--                                 ts_getManyBlocking($int:qid, 1, (char *) $cx);
+--                                 bitArrWrite((typename BitArrPtr) $cx,
+--                                               $ci*$int:m,
+--                                               $int:m,
+--                                             (typename BitArrPtr) $ptr);
+--                              } |]
+-- readFromTs _ n _ q ptr = appendStmt $ q_read_n q n ptr
 
 
 -- | Do we read from /the/ input
@@ -633,46 +633,49 @@ cgInWiring :: DynFlags
            -> QueueInfo 
            -> [(Int,EId)] -- Input wires
            -> [EId]       -- Where to store things
-           -> Cg ()
-cgInWiring dfs qs ws vs = mapM_ (uncurry (cgInWire dfs qs)) (zip ws vs)
+           -> Cg a 
+           -> Cg a
+cgInWiring dfs qs ws vs action = go ws vs
+  where 
+    go [] [] = action
+    go (wir:wirs) (tgt:tgts) = cgInWire dfs qs wir tgt (go wirs tgts)
+    go _ _ = error "cgInWiring!"
 
-{- Note [Single Thread Queue Optimization]
-   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   If a queue is accessed only by one core and it consists of only one
-   slot then we should not be using the queue at all, just directly the
-   variable we have declared for this queue.
+cgDeclQPtr :: EId                       -- | Queue variable (and type of each element)
+           -> (C.Exp -> C.Type -> Cg a) -- ^ Action having passed in pointer variable and type
+           -> Cg a
+cgDeclQPtr q action
+  = do q_c <- CgMonad.freshName "_ptr" qty Mut
+       let ctype = codeGenSmallTyPtr qty
+           cptr  = [cexp|$id:(name q_c)|]
+           cval | TArray {} <- qty = cptr
+                | otherwise        = [cexp| * $cptr|]
+       appendDecl [cdecl| $ty:ctype $id:(name q_c);|]
+       extendVarEnv [(q,cval)] $ action cptr ctype
+  where qty = nameTyp q
 
-   If a queue is multi-threaded I think we have to be careful to not use
-   the same variable for the reader and the writer of the queue. I.e.
-
-   thread0: 
-              ts_put(qid=15,qvar345);
-
-   thread0:
-              ts_get(qid=15,qvar345);
-
-   
-   Although the queue synchronizes we end up with a race on the 'qvar345'!  
-   In such cases we should have declared two different copies
-   of the local variable: qvar345_reader and qvar345_writer!
-
--} 
-
-
-
-cgInWire :: DynFlags -> QueueInfo -> (Int,EId) -> EId -> Cg ()
-cgInWire dfs qs (n,qvar) v = 
+cgInWire :: DynFlags 
+         -> QueueInfo  
+         -> (Int,EId) -- ^ Queue 
+         -> EId       -- ^ Storage 
+         -> Cg a      -- ^ Continuation
+         -> Cg a     
+cgInWire _dfs qs (n,qvar) v action =
   case qiQueueId qvar qs of
 
     -- Not a queue
     Nothing 
        -> assert "cgInWire/non-queue" (n == 1) $
-          unless (qvar == v) $
-          void $ codeGenExp dfs $
-                 eAssign noLoc (eVar noLoc v) (eVar noLoc qvar)
-        
-    -- Some intermediate SORA queue
-    Just (QMid q)
+          assert "cgInWire/not-same-var" (qvar == v) $ action
+
+    Just (QMid (QId qid))
+       -> cgDeclQPtr v $ \ptr ptr_ty -> do
+              appendStmt [cstm| $ptr = ($ty:ptr_ty) stq_acquire($int:qid,$int:n);|]
+              a <- action
+              appendStmt [cstm| stq_release($int:qid);|]
+              return a
+
+
 {- 
         -- Note [Single Thread Queue Optimization]
       | Just (_,qslots) <- Map.lookup qvar (qi_interm qs) -- interm. (assert)
@@ -681,14 +684,14 @@ cgInWire dfs qs (n,qvar) v =
       -> appendStmt [cstm| ORIGIN("Eliminated single-core single-slot queue!");|] -- => no wiring
       | otherwise 
 -}
-      -> do cv <- lookupVarEnv v
-            let ptr = if isPtrType (nameTyp v) 
-                      then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
-            readFromTs dfs n (nameTyp qvar) q ptr
+      -- -> do cv <- lookupVarEnv v
+      --       let ptr = if isPtrType (nameTyp v) 
+      --                 then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
+      --       readFromTs dfs n (nameTyp qvar) q ptr
+
 
     -- Unexpected output queue
     Just QOut -> panicStr "cg_in_wire: encountered output queue!"
-
 
     -- TODO: the main input queue
     Just QIn -> do
@@ -709,6 +712,7 @@ cgInWire dfs qs (n,qvar) v =
         else appendStmt [cstm| if ($id:(bufGetF)($id:global_params,
                                    $id:buf_context,
                                    $ptr) == GS_EOF) return -7; |]
+      action
 
 
 squashedQueueType :: Int -> Ty -> Ty
@@ -722,62 +726,74 @@ squashedQueueType n t = TArray (Literal n) t
 {--------------- Writing to TS queues -----------------------------------------}
 
 -- ts_put and variants are blocking
-q_write_n :: QId -> Int -> C.Exp -> C.Stm
-q_write_n (QId qid) n ptr = [cstm| ts_putMany($int:qid,$int:n,$ptr); |]
+-- q_write_n :: QId -> Int -> C.Exp -> C.Stm
+-- q_write_n (QId qid) n ptr = [cstm| ts_putMany($int:qid,$int:n,$ptr); |]
 
--- ts_put and variants are blocking
-q_write_n_bits :: QId -> Int -> C.Exp -> C.Stm
-q_write_n_bits (QId qid) n ptr = [cstm| ts_putManyBits($int:qid,$int:n,$ptr); |]
+-- -- ts_put and variants are blocking
+-- q_write_n_bits :: QId -> Int -> C.Exp -> C.Stm
+-- q_write_n_bits (QId qid) n ptr = [cstm| ts_putManyBits($int:qid,$int:n,$ptr); |]
 
 
-writeToTs :: DynFlags 
-           -> Int -> Ty -- # number of writes, and type of each write
-           -> QId       -- Queue id
-           -> C.Exp     -- Source variable to read from
-           -> Cg ()
-writeToTs _ n TBit q ptr = appendStmt $ q_write_n_bits q n ptr
-writeToTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
-  | m `mod` 8 == 0 = appendStmt $ q_write_n q n ptr
-  | n == 1 = appendStmt $ q_write_n q 1 ptr
-  | otherwise -- Not byte-aligned byte array, a bit sad and slow
-  = do x <- CgMonad.freshName "q_rdx" (TArray (Literal m) TBit) Mut 
-       i <- CgMonad.freshName "q_idx" tint Mut
-       cgMutBind dfs noLoc i Nothing $ do 
-       cgMutBind dfs noLoc x Nothing $ do
-         cx <- lookupVarEnv x
-         ci <- lookupVarEnv i
-         -- ts_put and variants are blocking
-         appendStmt $ [cstm| for ($ci = 0; $ci < $int:n; $ci++) {
-                                bitArrRead((typename BitArrPtr) $ptr,
-                                            $ci*$int:m,
-                                            $int:m,
-                                           (typename BitArrPtr) $cx);
-                                ts_put($int:qid,(char *) $cx);
-                             }|]
+-- writeToTs :: DynFlags 
+--            -> Int -> Ty -- # number of writes, and type of each write
+--            -> QId       -- Queue id
+--            -> C.Exp     -- Source variable to read from
+--            -> Cg ()
+-- writeToTs _ n TBit q ptr = appendStmt $ q_write_n_bits q n ptr
+-- writeToTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
+--   | m `mod` 8 == 0 = appendStmt $ q_write_n q n ptr
+--   | n == 1 = appendStmt $ q_write_n q 1 ptr
+--   | otherwise -- Not byte-aligned byte array, a bit sad and slow
+--   = do x <- CgMonad.freshName "q_rdx" (TArray (Literal m) TBit) Mut 
+--        i <- CgMonad.freshName "q_idx" tint Mut
+--        cgMutBind dfs noLoc i Nothing $ do 
+--        cgMutBind dfs noLoc x Nothing $ do
+--          cx <- lookupVarEnv x
+--          ci <- lookupVarEnv i
+--          -- ts_put and variants are blocking
+--          appendStmt $ [cstm| for ($ci = 0; $ci < $int:n; $ci++) {
+--                                 bitArrRead((typename BitArrPtr) $ptr,
+--                                             $ci*$int:m,
+--                                             $int:m,
+--                                            (typename BitArrPtr) $cx);
+--                                 ts_put($int:qid,(char *) $cx);
+--                              }|]
 
-writeToTs _ n _ q ptr = appendStmt $ q_write_n q n ptr
+-- writeToTs _ n _ q ptr = appendStmt $ q_write_n q n ptr
 
 
 cgOutWiring :: DynFlags 
             -> QueueInfo
             -> [(Int,EId)] -- Output wires
             -> [EId]       -- Where to read from
-            -> Cg ()
-cgOutWiring dfs qs ws vs = mapM_ (uncurry (cgOutWire dfs qs)) (zip ws vs)
+            -> Cg a
+            -> Cg a
+cgOutWiring dfs qs ws vs action = go ws vs
+  where 
+    go [] [] = action 
+    go (wir:wirs) (src:srcs) = cgOutWire dfs qs wir src (go wirs srcs)
+    go _ _ = error "cgOutWiring!"
 
-
-cgOutWire :: DynFlags -> QueueInfo -> (Int,EId) -> EId -> Cg ()
-cgOutWire dfs qs (n,qvar) v
+cgOutWire :: DynFlags -> QueueInfo -> (Int,EId) -> EId -> Cg a -> Cg a
+cgOutWire _dfs qs (n,qvar) v action
   = case qiQueueId qvar qs of
 
       -- Not a queue
       Nothing ->
          assert "cgOutWire/non-queue" (n == 1) $
-         unless (qvar == v) $
-         void $ codeGenExp dfs (eAssign noLoc (eVar noLoc qvar) (eVar noLoc v))
+         assert "cgOutWire/not-same-var" (qvar == v) $ action
+
+         -- unless (qvar == v) $
+         -- void $ codeGenExp dfs (eAssign noLoc (eVar noLoc qvar) (eVar noLoc v))
 
       -- Some intermediate SORA queue
-      Just (QMid q)
+      Just (QMid (QId qid))
+        -> cgDeclQPtr v $ \ptr ptr_ty -> do
+             appendStmt [cstm| $ptr = ($ty:ptr_ty) stq_reserve($int:qid,$int:n);|]
+             a <- action
+             appendStmt [cstm| stq_push($int:qid);|]
+             return a
+
 {- 
            -- Note [Single Thread Queue Optimization]
          | Just (_,qslots) <- Map.lookup qvar (qi_interm qs) -- interm. (assert)
@@ -785,11 +801,11 @@ cgOutWire dfs qs (n,qvar) v
          , Just [_] <- Map.lookup qvar (qi_cores qs)         -- and one core
          -> appendStmt [cstm| ORIGIN("Eliminated single-core single-slot queue!");|] -- => no wiring
 -}
-         | otherwise 
-         -> do cv <- lookupVarEnv v
-               let ptr = if isPtrType (nameTyp v)
-                         then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
-               writeToTs dfs n (nameTyp qvar) q ptr
+         -- | otherwise 
+         -- -> do cv <- lookupVarEnv v
+         --       let ptr = if isPtrType (nameTyp v)
+         --                 then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
+         --       writeToTs dfs n (nameTyp qvar) q ptr
  
 
       -- Unexpected input queue
@@ -797,6 +813,8 @@ cgOutWire dfs qs (n,qvar) v
 
       -- The actual output queue
       Just QOut -> do
+
+        a <- action
 
         let qtype = squashedQueueType n (nameTyp qvar)
 
@@ -825,4 +843,5 @@ cgOutWire dfs qs (n,qvar) v
             appendStmt [cstm| $id:(bufPutF)($id:global_params,
                                             $id:buf_context,
                                             *$ptr); |]
+        return a
         

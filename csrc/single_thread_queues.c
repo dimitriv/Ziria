@@ -16,7 +16,7 @@ void _stq_init(queue* q, size_t capacity, size_t elem_size) {
 	// buffer_end points at the first memory location beyond the buffer
 	q->buffer_end = q->buffer_start + capacity * elem_size;
 	q->next_write = q->buffer_start;
-	q->next_read = NULL;
+	q->next_read  = q->buffer_start;
 	q->acquired = 0;
 	q->reserved = 0;
 }
@@ -82,7 +82,7 @@ FORCE_INLINE void _stq_clear(queue *q)
 {
 	q->acquired = 0;
 	q->reserved = 0;
-	q->next_read = NULL;
+	q->next_read = q->buffer_start;
 	q->next_write = q->buffer_start;
 	q->size = 0;
 }
@@ -117,7 +117,7 @@ void stq_init(int no, size_t *sizes, int *queue_capacities) {
 	}
 }
 
-FORCE_INLINE unsigned char* stq_acquire(int no, queue *q, size_t slots)
+FORCE_INLINE unsigned char* stq_acquire(int no, size_t slots)
 {
 	return _stq_acquire(&queues[no], slots);
 }
@@ -144,6 +144,6 @@ FORCE_INLINE void stq_clear(int no)
 	_stq_clear(&queues[no]);
 }
 
-FORCE_INLINE void stq_rollback(int no, size_t n, queue* q) {
+FORCE_INLINE void stq_rollback(int no, size_t n) {
 	_stq_rollback(n, &queues[no]);
 }
