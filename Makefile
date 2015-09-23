@@ -182,4 +182,10 @@ test-WiFi-TX-perf-clean:
 	rm -f tx-perf.txt
 	make -C code/WiFi/transmitter/perf clean
 
+test-WiFi-perf-chart:
+	make -C performance
+
+test-WiFi-perf-chart-clean:
+	make -C performance clean
+
 # vi:set noexpandtab:
