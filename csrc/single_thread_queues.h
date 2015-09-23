@@ -23,24 +23,28 @@ typedef struct {
 	size_t reserved;
 
 	// queue buffer of size (capacity * elem_size) bytes
-	void* buffer_start;
+	unsigned char * buffer_start;
 
 	// pointer to first memory location beyond buffer
-	void* buffer_end;
+	unsigned char* buffer_end;
 
 	// where to write next
-	void* next_write;
+	unsigned char* next_write;
 
 	// where to read from next
-	void* next_read;
+	unsigned char* next_read;
 } queue;
 
 
 void stq_init(int no, size_t *sizes, int *queue_capacities);
-void* stq_acquire(int no, queue *q, size_t slots);
+
+unsigned char * stq_acquire(int no, queue *q, size_t slots);
 void stq_release(int no);
-void* stq_reserve(int no, size_t slots);
+
+
+unsigned char* stq_reserve(int no, size_t slots);
 void stq_push(int no);
+
 void stq_clear(int no);
 void stq_rollback(int no, size_t n, queue* q);
 
