@@ -55,9 +55,10 @@ instance NFData SrcLoc      where rnf = genericRnf
 instance Error HughesPJ.Doc where
   noMsg  = HughesPJ.empty
   strMsg = HughesPJ.text
-
+{-- commented out by Lei
 instance Eq HughesPJ.Doc where 
   d1 == d2 = show d1 == show d2
+--}
 
 instance Ord HughesPJ.Doc where 
   d1 <= d2 = show d1 <= show d2

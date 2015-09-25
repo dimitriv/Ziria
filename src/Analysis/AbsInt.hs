@@ -43,7 +43,7 @@ import AstExpr
 import AstUnlabelled
 import PpExpr ()
 import Control.Monad.State.Class
-import Control.Applicative
+import Control.Applicative()
 import Data.Loc
 import Data.Set ( Set )
 import qualified Data.Set as Set

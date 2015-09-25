@@ -17,7 +17,7 @@
    permissions and limitations under the License.
 -}
 {-# LANGUAGE GeneralizedNewtypeDeriving, StandaloneDeriving, DeriveDataTypeable,
-    TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses #-}
+    TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts #-}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 
 

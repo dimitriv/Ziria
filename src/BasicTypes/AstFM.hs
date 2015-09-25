@@ -46,6 +46,12 @@ import qualified GenSym as GS
 import Rebindables
 
 
+{--by Lei 
+ -reference: https://wiki.haskell.org/Functor-Applicative-Monad_Proposal
+ - --}
+import Control.Applicative (Alternative(..))
+import Control.Monad (liftM, ap)
+
 {------------------------------------------------------------------------------
   Expressions
 -------------------------------------------------------------------------------}
@@ -185,6 +191,16 @@ instance Monad FStmt where
   (FEAssign fe1 fe2 ss) >>= f         = FEAssign fe1 fe2 (ss >>= f)
   (FEReturn v) >>= f                  = f v
 
+{--by Lei --}
+
+instance Functor FStmt where
+  fmap = liftM
+instance Applicative FStmt where
+  pure = return
+  (<*>) = ap
+
+{--  --}
+
 interpS_FExpy :: FExpy e => SrcLoc -> FStmt e -> Exp
 interpS_FExpy p = interpS_aux p (interpE p . toFExp)
 
@@ -316,6 +332,19 @@ instance Monad Zr where
 
   (>>=) (FBranch e c1 c2) f     = FBind (FBranch e c1 c2) f
   (>>=) (FEmbed io_c) f         = FBind (FEmbed io_c) f
+
+
+{--by Lei --}
+
+instance Functor Zr where
+  fmap = liftM
+instance Applicative Zr where
+  pure = return
+  (<*>) = ap
+
+{--  --}
+
+
 
 interpC :: Bindable v => String -> -- Prefix (for debugging)
            GS.Sym -> SrcLoc -> Zr v -> IO Comp

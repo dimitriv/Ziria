@@ -36,7 +36,7 @@ import CgTypes
 import CgExpr
 
 import Control.Monad.State
-import Control.Applicative
+import Control.Applicative()
 
 import Data.Loc
 import qualified Language.C.Syntax as C

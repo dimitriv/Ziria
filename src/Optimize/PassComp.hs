@@ -46,7 +46,7 @@ import qualified Data.Set as S
 -- import Outputable
 
 import Data.Loc
-import Data.Monoid
+import Data.Monoid()
 
 import Data.Maybe ( fromJust )
 

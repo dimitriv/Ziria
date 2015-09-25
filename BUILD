@@ -60,8 +60,12 @@ Go to Ziria/tests/backend and run 'make', this should compile with no errors.
 
     COMPILER={gcc,winddk,vs} make
 
-  Note that when setting the environment variable ZIRIA_VS, the double quotes
-  are necessary.
+  Note that when setting the environment variable ZIRIA_VS and ZIRIA_ROOT, 
+  the double quotes (for the path) are necessary. 
+  Make sure to reboot Cygwin64 or related programs after set/reset system
+  environment variables. Use $export in Cygwin command line to check if the 
+  environment variables are successfully setted. 
+
 
 * Running the WiFi tests:
 
@@ -73,12 +77,16 @@ Go to Ziria/tests/backend and run 'make', this should compile with no errors.
   use either WinDDK or Visual Studio environments. 
   More documentation and instructions about how to download and install
   Sora and WinDDK can be found in /doc.
+  setting Sora Path: SORA_ROOT = C:\SoraSDK2.0
 
 * Linking with Blade-RF
-
+  Make sure BladeRF board is connected with PC throught USB3.0
+  Also make sure the BladeRF is installed with libusb driver instead of
+  CyUSB driver or any driver else 
   Add path to blade-RF:
     BLADE_RF=C:\Program Files\bladeRF
-
+    Or
+    BLADERF_PATH=C:\Program Files\bladeRF
 
 
 * Ziria mode in Emacs
