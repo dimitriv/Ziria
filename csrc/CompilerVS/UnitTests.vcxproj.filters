@@ -27,7 +27,10 @@
     <ClCompile Include="..\wpl_alloc.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\UnitTests.c">
+    <ClCompile Include="..\UnitTests\test_int32.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UnitTests\UnitTests.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -54,6 +57,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\common.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\UnitTests\UnitTests.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -22,15 +22,7 @@ permissions and limitations under the License.
 #include <time.h>
 #include <string.h>
 
-#include <const.h>
-
-
-#include "sora_thread_queues.h"
-
-#include "wpl_alloc.h"
-#include "buf.h"
-#include "utils.h"
-
+#include "UnitTests.h"
 
 
 #ifdef __GNUC__
@@ -48,49 +40,17 @@ bool atomix = 1;
 
 int __cdecl main(int argc, char **argv) 
 {
-	ts_context *queues;
-	size_t sizes[1] = { sizeof(int16) };
-	int queue_sizes[1] = { QUEUE_LEN };
+	bool error = 0;
 
-	queues = s_ts_init_var(1, sizes, queue_sizes);
 
-	int32 val1 = 0, val2 = 0;
-	int32 valA[3 * QUEUE_LEN];
-	char *pVal1 = (char *)&val1;
-	char *pVal2 = (char *)&val2;
-	char *pValA = (char *)valA;
-	int indA = 0;
-	for (int i = 0; i < QUEUE_LEN; i++)
+	error = test_int32() | error;
+	error = test_int32_many() | error;
+
+	if (error)
 	{
-		s_ts_put(queues, 0, pVal1);
-		val1++;
+		printf("TESTS FAILED!!!\n");
+		return 1;
 	}
 
-	for (int i = 0; i < QUEUE_LEN/2; i++)
-	{
-		s_ts_get(queues, 0, (char *) (valA + indA));
-		indA++;
-	}
-
-	for (int i = 0; i < QUEUE_LEN/2; i++)
-	{
-		s_ts_put(queues, 0, pVal1);
-		val1++;
-	}
-
-	for (int i = 0; i < QUEUE_LEN; i++)
-	{
-		s_ts_get(queues, 0, (char *)(valA + indA));
-		indA++;
-	}
-
-	for (int i = 0; i < indA; i++)
-	{
-		if (valA[i] != i)
-		{
-			printf("Error!\n");
-		}
-	}
-
-
+	return 0;
 }
