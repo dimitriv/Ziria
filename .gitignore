@@ -410,3 +410,5 @@ performance/winddk.txt
 performance/output.svg
 performance/perf/*
 
+csrc/driver
+

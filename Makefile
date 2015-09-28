@@ -18,8 +18,11 @@
 #
 #
 
+CABAL ?= cabal
+GHC ?= ghc
+
 all: create-sandbox
-	cabal install
+	$(CABAL) install --with-compiler=$(GHC)
 	cp .cabal-sandbox/bin/wplc* .
 	cp .cabal-sandbox/bin/BlinkDiff* tools/
 
@@ -27,13 +30,13 @@ all: create-sandbox
 # `make quick`. Need to make sure to initialize the sandbox first and run
 # `cabal configure`.
 quick:
-	cabal build
+	$(CABAL) build
 	cp dist/build/wplc/wplc .
 	cp dist/build/BlinkDiff/BlinkDiff tools/
 
 create-sandbox:
-	cabal sandbox init
-	cabal install --dependencies-only
+	$(CABAL) sandbox init
+	$(CABAL) install --dependencies-only --with-compiler=$(GHC)
 
 # A profiling sandbox 
 # create-sandbox-prof:
