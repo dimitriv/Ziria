@@ -208,6 +208,33 @@ bool __cdecl test_2step_int32_many()
 		error = 1;
 	}
 
+
+	// DEBUG: test alignment error
+	/*
+	int32 *bbuf = (int32*)s_ts_reserve(queues, 0, 2);
+	bbuf[0] = val1;
+	val1++;
+	bbuf[1] = val1;
+	val1++;
+	s_ts_push(queues, 0, 2);
+
+	bbuf = (int32*)s_ts_reserve(queues, 0, 1);
+	bbuf[0] = val1;
+	val1++;
+	s_ts_push(queues, 0, 1);
+	// This should return NULL
+	bbuf = (int32*)s_ts_reserve(queues, 0, 2);
+
+	bbuf = (int32*)s_ts_acquire(queues, 0, 1);
+	valA[indA] = bbuf[0];
+	indA++;
+	s_ts_release(queues, 0, 1);
+	// This should return NULL
+	bbuf = (int32*)s_ts_acquire(queues, 0, 2);
+	*/
+
+
+
 	for (int i = 0; i < indA; i++)
 	{
 		if (valA[i] != i)

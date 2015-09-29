@@ -203,6 +203,12 @@ char *s_ts_reserve(ts_context *locCont, int nc, int num)
 		return NULL;
 	}
 
+	if (locCont[nc].wind + num > locCont[nc].batch_size)
+	{
+		printf("Error: s_ts_reserve buffer not aligned!\n");
+		return NULL;
+	}
+
 	buf = data(locCont[nc].wptr, locCont[nc].alg_size, 0) + locCont[nc].size*locCont[nc].wind;
 
 
@@ -277,6 +283,12 @@ char *s_ts_acquire(ts_context *locCont, int nc, int num)
 	}
 	else
 	{
+		if (locCont[nc].rind + num > locCont[nc].batch_size)
+		{
+			printf("Error: s_ts_acquire buffer not aligned!\n");
+			return NULL;
+		}
+
 		// Otherwise, there are data. Pump the data to the output pin
 		buf = data(locCont[nc].rptr, locCont[nc].alg_size, 0) + locCont[nc].size*locCont[nc].rind;
 
