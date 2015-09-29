@@ -109,10 +109,15 @@ void ts_free();
 //   s_ts_release(queues, nc);
 // to release it. This is dual to the calls above. 
 //
-// NOTE: There is one implied invariant:
+// NOTE: There is an implied invariant:
 //   wind + num <= batch_size
 // or in other word Ziria compiler should make sure that a call to s_ts_reserve or s_ts_acquite 
 // will not return a buffer that does not have <num> elements available.
+// We DON'T check this invariant in runtime so it may cause seg fault
+//
+// NOTE: A batch is pushed for reading only once all items in it are released. 
+// It cannot be read until it is completely filled. This is to avoid cache misses. 
+// 
 //
 // Legacy interface was does not support batching and sets <batch_size> = 1
 // TBD: remove legacy interface (ts_pu, ts_get) and rely only on the new one (ts_acquire, ts_release, ts_reserve, ts_push)
@@ -174,17 +179,18 @@ void s_ts_clear(ts_context *locCont, int nc);
 void s_ts_rollback(ts_context *locCont, int nc, int n);
 
 
+// The following functions are non-blocking and the caller should spin-wait if required
 // Producer
 char *s_ts_reserve(ts_context *locCont, int nc, int num);
-void s_ts_push(ts_context *locCont, int nc, int num);
+bool s_ts_push(ts_context *locCont, int nc, int num);
 // Consumer
 char *s_ts_acquire(ts_context *locCont, int nc, int num);
-void s_ts_release(ts_context *locCont, int nc, int num);
+bool s_ts_release(ts_context *locCont, int nc, int num);
 
 char *ts_reserve(int nc, int num);
-void ts_push(int nc, int num);
+bool ts_push(int nc, int num);
 char *ts_acquire(int nc, int num);
-void ts_release(int nc, int num);
+bool ts_release(int nc, int num);
 
 
 

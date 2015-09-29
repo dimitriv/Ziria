@@ -203,19 +203,21 @@ char *s_ts_reserve(ts_context *locCont, int nc, int num)
 		return NULL;
 	}
 
-	// copy a burst of input data into the synchronized buffer
-	//memcpy ((locCont[nc].wptr)->data, input, sizeof(char)*BURST);
-	// Copy only the actual amount of data (size) and not the entire buffer (alg_size)
-	buf = data(locCont[nc].wptr, locCont[nc].alg_size, 0);
+	buf = data(locCont[nc].wptr, locCont[nc].alg_size, 0) + locCont[nc].size*locCont[nc].wind;
 
 
-	// We set it to be valid on final push
-	*valid(locCont[nc].wptr, locCont[nc].alg_size, 0) = false;
-	locCont[nc].evProcessDone = false;
+	if (locCont[nc].wind + num >= locCont[nc].batch_size)
+	{
+		// We set it to be valid on final push
+		*valid(locCont[nc].wptr, locCont[nc].alg_size, 0) = false;
+		locCont[nc].evProcessDone = false;
 
-	locCont[nc].wptr += (ST_CACHE_LINE + locCont[nc].alg_size);
-	if ((locCont[nc].wptr) == (locCont[nc].buf) + locCont[nc].queue_size*(ST_CACHE_LINE + locCont[nc].alg_size))
-		(locCont[nc].wptr) = (locCont[nc].buf);
+		locCont[nc].wptr += (ST_CACHE_LINE + locCont[nc].alg_size);
+		if ((locCont[nc].wptr) == (locCont[nc].buf) + locCont[nc].queue_size*(ST_CACHE_LINE + locCont[nc].alg_size))
+			(locCont[nc].wptr) = (locCont[nc].buf);
+	}
+	locCont[nc].wind = (locCont[nc].wind + num) % locCont[nc].batch_size;
+
 
 	return buf;
 }
@@ -223,18 +225,25 @@ char *s_ts_reserve(ts_context *locCont, int nc, int num)
 
 
 
-void s_ts_push(ts_context *locCont, int nc, int num)
+bool s_ts_push(ts_context *locCont, int nc, int num)
 {
-	while (locCont[nc].wdptr == locCont[nc].wptr){
+	if (locCont[nc].wdptr == locCont[nc].wptr && locCont[nc].wdind == locCont[nc].wind){
+		return false;
 	}
 
-	*valid(locCont[nc].wdptr, locCont[nc].alg_size, 0) = true;
-	locCont[nc].evProcessDone = false;
+	if (locCont[nc].wdind + num >= locCont[nc].batch_size)
+	{
+		*valid(locCont[nc].wdptr, locCont[nc].alg_size, 0) = true;
+		locCont[nc].evProcessDone = false;
 
+		locCont[nc].wdptr += (ST_CACHE_LINE + locCont[nc].alg_size);
+		if ((locCont[nc].wdptr) == (locCont[nc].buf) + locCont[nc].queue_size*(ST_CACHE_LINE + locCont[nc].alg_size))
+			(locCont[nc].wdptr) = (locCont[nc].buf);
+	}
+	locCont[nc].wdind = (locCont[nc].wdind + num) % locCont[nc].batch_size;
 
-	locCont[nc].wdptr += (ST_CACHE_LINE + locCont[nc].alg_size);
-	if ((locCont[nc].wdptr) == (locCont[nc].buf) + locCont[nc].queue_size*(ST_CACHE_LINE + locCont[nc].alg_size))
-		(locCont[nc].wdptr) = (locCont[nc].buf);
+	
+	return true;
 }
 
 
@@ -269,15 +278,18 @@ char *s_ts_acquire(ts_context *locCont, int nc, int num)
 	else
 	{
 		// Otherwise, there are data. Pump the data to the output pin
-		buf = data(locCont[nc].rptr, locCont[nc].alg_size, 0);
+		buf = data(locCont[nc].rptr, locCont[nc].alg_size, 0) + locCont[nc].size*locCont[nc].rind;
 
-
-		* valid(locCont[nc].rptr, locCont[nc].alg_size, 0) = true;
-		locCont[nc].rptr += (ST_CACHE_LINE + locCont[nc].alg_size);
-		if ((locCont[nc].rptr) == (locCont[nc].buf) + locCont[nc].queue_size*(ST_CACHE_LINE + locCont[nc].alg_size))
+		if (locCont[nc].rind + num >= locCont[nc].batch_size)
 		{
-			(locCont[nc].rptr) = (locCont[nc].buf);
+			*valid(locCont[nc].rptr, locCont[nc].alg_size, 0) = true;
+			locCont[nc].rptr += (ST_CACHE_LINE + locCont[nc].alg_size);
+			if ((locCont[nc].rptr) == (locCont[nc].buf) + locCont[nc].queue_size*(ST_CACHE_LINE + locCont[nc].alg_size))
+			{
+				(locCont[nc].rptr) = (locCont[nc].buf);
+			}
 		}
+		locCont[nc].rind = (locCont[nc].rind + num) % locCont[nc].batch_size;
 
 		return buf;
 	}
@@ -287,11 +299,14 @@ char *s_ts_acquire(ts_context *locCont, int nc, int num)
 
 
 // Called by the downlink thread
-void s_ts_release(ts_context *locCont, int nc, int num)
+bool s_ts_release(ts_context *locCont, int nc, int num)
 {
-	char * buf = NULL;
+	if (locCont[nc].rptr == locCont[nc].rdptr && locCont[nc].rind == locCont[nc].rdind)
+	{
+		return false;
+	}
 
-	if (locCont[nc].rptr != locCont[nc].rdptr)
+	if (locCont[nc].rdind + num >= locCont[nc].batch_size)
 	{
 		*valid(locCont[nc].rdptr, locCont[nc].alg_size, 0) = false;
 		locCont[nc].rdptr += (ST_CACHE_LINE + locCont[nc].alg_size);
@@ -300,6 +315,10 @@ void s_ts_release(ts_context *locCont, int nc, int num)
 			(locCont[nc].rdptr) = (locCont[nc].buf);
 		}
 	}
+	locCont[nc].rdind = (locCont[nc].rdind + num) % locCont[nc].batch_size;
+
+
+	return true;
 }
 
 
@@ -309,9 +328,9 @@ char *ts_reserve(int nc, int num)
 	return s_ts_reserve(contexts, nc, num);
 }
 
-void ts_push(int nc, int num)
+bool ts_push(int nc, int num)
 {
-	s_ts_push(contexts, nc, num);
+	return s_ts_push(contexts, nc, num);
 }
 
 char *ts_acquire(int nc, int num)
@@ -319,9 +338,9 @@ char *ts_acquire(int nc, int num)
 	return s_ts_acquire(contexts, nc, num);
 }
 
-void ts_release(int nc, int num)
+bool ts_release(int nc, int num)
 {
-	s_ts_release(contexts, nc, num);
+	return s_ts_release(contexts, nc, num);
 }
 
 

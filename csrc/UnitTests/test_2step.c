@@ -124,3 +124,98 @@ bool __cdecl test_2step_int32()
 
 	return error;
 }
+
+
+
+
+bool __cdecl test_2step_int32_many()
+{
+	ts_context *queues;
+	size_t sizes[1] = { sizeof(int32) };
+	int queue_sizes[1] = { QUEUE_LEN/2 };
+	int batch_sizes[1] = { 2 };
+	bool error = 0;
+
+	queues = s_ts_init_batch(1, sizes, queue_sizes, batch_sizes);
+
+	int32 val1 = 0;
+	int32 valA[3 * QUEUE_LEN];
+	char *pVal1 = (char *)&val1;
+	char *pValA = (char *)valA;
+	int indA = 0;
+
+	if (!s_ts_isEmpty(queues, 0))
+	{
+		printf("Error in test_int32: s_ts_isEmpty\n");
+		error = 1;
+	}
+
+	for (int i = 0; i < QUEUE_LEN/2; i++)
+	{
+		int32 *buf = (int32*)s_ts_reserve(queues, 0, 2);
+		buf[0] = val1;
+		val1++;
+		buf[1] = val1;
+		val1++;
+		s_ts_push(queues, 0, 2);
+	}
+
+	if (!s_ts_isFull(queues, 0))
+	{
+		printf("Error in test_int32: s_ts_isFull\n");
+		error = 1;
+	}
+
+
+
+	for (int i = 0; i < QUEUE_LEN / 2; i++)
+	{
+		int32 *buf = (int32*)s_ts_acquire(queues, 0, 1);
+		valA[indA] = buf[0];
+		s_ts_release(queues, 0, 1);
+		indA++;
+	}
+
+	for (int i = 0; i < QUEUE_LEN / 2; i++)
+	{
+		int32 *buf = (int32*)s_ts_reserve(queues, 0, 1);
+		buf[0] = val1;
+		s_ts_push(queues, 0, 1);
+		val1++;
+	}
+
+	if (!s_ts_isFull(queues, 0))
+	{
+		printf("Error in test_int32: s_ts_isFull\n");
+		error = 1;
+	}
+
+
+
+	for (int i = 0; i < QUEUE_LEN / 2; i++)
+	{
+		int32 *buf = (int32*)s_ts_acquire(queues, 0, 2);
+		valA[indA] = buf[0];
+		indA++;
+		valA[indA] = buf[1];
+		indA++;
+		s_ts_release(queues, 0, 2);
+	}
+
+	if (!s_ts_isEmpty(queues, 0))
+	{
+		printf("Error in test_int32: s_ts_isEmpty\n");
+		error = 1;
+	}
+
+	for (int i = 0; i < indA; i++)
+	{
+		if (valA[i] != i)
+		{
+			printf("Error in test_int32: data!\n");
+			error = 1;
+		}
+	}
+
+	return error;
+}
