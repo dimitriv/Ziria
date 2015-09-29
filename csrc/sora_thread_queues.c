@@ -74,7 +74,7 @@ LONG empty[MAX_TS];
 
 // Init <no> queues, each with a different size
 
-ts_context *s_ts_init_var(int no, size_t *sizes, int *queue_sizes)
+ts_context *s_ts_init_batch(int no, size_t *sizes, int *queue_sizes, int *batch_sizes)
 {
 	ts_context *locCont;
 
@@ -98,12 +98,27 @@ ts_context *s_ts_init_var(int no, size_t *sizes, int *queue_sizes)
 	for (int j=0; j<no; j++)
 	{
 		// All queues have default size
-		locCont[j].queue_size = queue_sizes[j];
+		if (queue_sizes == NULL)
+		{
+			locCont[j].queue_size = ST_QUEUE_SIZE;
+		}
+		else
+		{
+			locCont[j].queue_size = queue_sizes[j];
+		}
 
 		// Buffer size should be a multiple of ST_CACHE_LINE
 		locCont[j].size = sizes[j];
-		locCont[j].alg_size = ST_CACHE_LINE * (sizes[j] / ST_CACHE_LINE);
-		if (sizes[j] % ST_CACHE_LINE > 0) locCont[j].alg_size += ST_CACHE_LINE;
+		if (batch_sizes == NULL)
+		{
+			locCont[j].batch_size = 1;
+		}
+		else
+		{
+			locCont[j].batch_size = batch_sizes[j];
+		}
+		locCont[j].alg_size = ST_CACHE_LINE * ((locCont[j].size * locCont[j].batch_size) / ST_CACHE_LINE);
+		if ((locCont[j].size * locCont[j].batch_size) % ST_CACHE_LINE > 0) locCont[j].alg_size += ST_CACHE_LINE;
 
 		// Allocate one cache line for valid field and the rest for the data
 		locCont[j].buf = (char *)_aligned_malloc((ST_CACHE_LINE + locCont[j].alg_size)*locCont[j].queue_size, ST_CACHE_LINE);
@@ -118,7 +133,9 @@ ts_context *s_ts_init_var(int no, size_t *sizes, int *queue_sizes)
 		{
 			* valid(locCont[j].buf, locCont[j].alg_size, i) = false;
 		}
-		locCont[j].wptr = locCont[j].rptr = locCont[j].buf;
+		locCont[j].wptr = locCont[j].wdptr = locCont[j].rptr = locCont[j].rdptr = locCont[j].buf;
+		locCont[j].wind = locCont[j].wdind = locCont[j].rind = locCont[j].rdind = 0;
+
 		locCont[j].evReset = locCont[j].evFlush = locCont[j].evFinish = false;
 		locCont[j].evProcessDone = true;
 	}
@@ -129,15 +146,30 @@ ts_context *s_ts_init_var(int no, size_t *sizes, int *queue_sizes)
 
 
 // Init <no> queues
-// Legacy API, assumes all queues have the same size of ST_QUEUE_SIZE
-ts_context *s_ts_init(int no, size_t *sizes)
+// Legacy API, assumes all queues have the same <batch_size> = 1
+ts_context *s_ts_init_var(int no, size_t *sizes, int *queue_sizes)
 {
-	int *queue_sizes = (int *) malloc(no*sizeof(int));
-	if (queue_sizes == NULL) return NULL;
-	for (int i = 0; i < no; i++) queue_sizes[i] = ST_QUEUE_SIZE;
-	return s_ts_init_var(no, sizes, queue_sizes);
+	return s_ts_init_batch(no, sizes, queue_sizes, NULL);
 }
 
+// Init <no> queues
+// Legacy API, assumes all queues have the same size of ST_QUEUE_SIZE and <batch_size> = 1
+ts_context *s_ts_init(int no, size_t *sizes)
+{
+	return s_ts_init_batch(no, sizes, NULL, NULL);
+}
+
+
+
+
+
+// Init <no> queues, each with a different size
+int ts_init_batch(int no, size_t *sizes, int *queue_sizes, int *batch_sizes)
+{
+	contexts = s_ts_init_batch(no, sizes, queue_sizes, batch_sizes);
+	no_contexts = no;
+	return no;
+}
 
 
 // Init <no> queues, each with a different size
@@ -158,6 +190,152 @@ int ts_init(int no, size_t *sizes)
 }
 
 
+
+
+
+
+
+char *s_ts_reserve(ts_context *locCont, int nc, int num)
+{
+	char *buf;
+
+	if (*valid(locCont[nc].wptr, locCont[nc].alg_size, 0)) {
+		return NULL;
+	}
+
+	// copy a burst of input data into the synchronized buffer
+	//memcpy ((locCont[nc].wptr)->data, input, sizeof(char)*BURST);
+	// Copy only the actual amount of data (size) and not the entire buffer (alg_size)
+	buf = data(locCont[nc].wptr, locCont[nc].alg_size, 0);
+
+
+	// We set it to be valid on final push
+	*valid(locCont[nc].wptr, locCont[nc].alg_size, 0) = false;
+	locCont[nc].evProcessDone = false;
+
+	locCont[nc].wptr += (ST_CACHE_LINE + locCont[nc].alg_size);
+	if ((locCont[nc].wptr) == (locCont[nc].buf) + locCont[nc].queue_size*(ST_CACHE_LINE + locCont[nc].alg_size))
+		(locCont[nc].wptr) = (locCont[nc].buf);
+
+	return buf;
+}
+
+
+
+
+void s_ts_push(ts_context *locCont, int nc, int num)
+{
+	while (locCont[nc].wdptr == locCont[nc].wptr){
+	}
+
+	*valid(locCont[nc].wdptr, locCont[nc].alg_size, 0) = true;
+	locCont[nc].evProcessDone = false;
+
+
+	locCont[nc].wdptr += (ST_CACHE_LINE + locCont[nc].alg_size);
+	if ((locCont[nc].wdptr) == (locCont[nc].buf) + locCont[nc].queue_size*(ST_CACHE_LINE + locCont[nc].alg_size))
+		(locCont[nc].wdptr) = (locCont[nc].buf);
+}
+
+
+
+
+
+
+// Called by the downlink thread
+char *s_ts_acquire(ts_context *locCont, int nc, int num)
+{
+	char * buf = NULL;
+
+	// if the synchronized buffer has no data, 
+	// check whether there is reset/flush request
+	//if (!(locCont[nc].rptr)->valid)
+	if (!(*valid(locCont[nc].rptr, locCont[nc].alg_size, 0)))
+	{
+		if (locCont[nc].evReset)
+		{
+			//Next()->Reset();
+			(locCont[nc].evReset) = false;
+		}
+		if (locCont[nc].evFlush)
+		{
+			//Next()->Flush();
+			locCont[nc].evFlush = false;
+		}
+		locCont[nc].evProcessDone = true;
+		// no data to process  
+		return NULL;
+	}
+	else
+	{
+		// Otherwise, there are data. Pump the data to the output pin
+		buf = data(locCont[nc].rptr, locCont[nc].alg_size, 0);
+
+
+		* valid(locCont[nc].rptr, locCont[nc].alg_size, 0) = true;
+		locCont[nc].rptr += (ST_CACHE_LINE + locCont[nc].alg_size);
+		if ((locCont[nc].rptr) == (locCont[nc].buf) + locCont[nc].queue_size*(ST_CACHE_LINE + locCont[nc].alg_size))
+		{
+			(locCont[nc].rptr) = (locCont[nc].buf);
+		}
+
+		return buf;
+	}
+	return NULL;
+}
+
+
+
+// Called by the downlink thread
+void s_ts_release(ts_context *locCont, int nc, int num)
+{
+	char * buf = NULL;
+
+	if (locCont[nc].rptr != locCont[nc].rdptr)
+	{
+		*valid(locCont[nc].rdptr, locCont[nc].alg_size, 0) = false;
+		locCont[nc].rdptr += (ST_CACHE_LINE + locCont[nc].alg_size);
+		if ((locCont[nc].rdptr) == (locCont[nc].buf) + locCont[nc].queue_size*(ST_CACHE_LINE + locCont[nc].alg_size))
+		{
+			(locCont[nc].rdptr) = (locCont[nc].buf);
+		}
+	}
+}
+
+
+
+char *ts_reserve(int nc, int num)
+{
+	return s_ts_reserve(contexts, nc, num);
+}
+
+void ts_push(int nc, int num)
+{
+	s_ts_push(contexts, nc, num);
+}
+
+char *ts_acquire(int nc, int num)
+{
+	return s_ts_acquire(contexts, nc, num);
+}
+
+void ts_release(int nc, int num)
+{
+	s_ts_release(contexts, nc, num);
+}
+
+
+
+
+
+
+
+
+
+
+// s_ts_put* and s_ts_get* are obsolete and should not be used
+// Will be removed soon
+// Instead, use s_ts_reserve, s_ts_push, s_ts_acquire, s_ts_release
 
 
 

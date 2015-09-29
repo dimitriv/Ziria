@@ -168,6 +168,7 @@
   <ItemGroup>
     <ClCompile Include="..\bit.c" />
     <ClCompile Include="..\sora_thread_queues.c" />
+    <ClCompile Include="..\UnitTests\test_2step.c" />
     <ClCompile Include="..\UnitTests\test_int32.c" />
     <ClCompile Include="..\UnitTests\UnitTests.c" />
     <ClCompile Include="..\utils.c" />

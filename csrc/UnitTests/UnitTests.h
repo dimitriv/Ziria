@@ -33,4 +33,5 @@ extern bool atomix;
 
 bool __cdecl test_int32();
 bool __cdecl test_int32_many();
+bool __cdecl test_2step_int32();
 

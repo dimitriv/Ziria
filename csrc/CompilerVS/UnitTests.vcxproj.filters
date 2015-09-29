@@ -33,6 +33,9 @@
     <ClCompile Include="..\UnitTests\UnitTests.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\UnitTests\test_2step.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\bit.h">
