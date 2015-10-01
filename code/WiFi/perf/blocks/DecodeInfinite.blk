@@ -29,7 +29,7 @@
 #include "../../receiver/decoding/DeinterleaveQPSK.blk"
 #include "../../receiver/decoding/DeinterleaveQAM16.blk"
 #include "../../receiver/decoding/DeinterleaveQAM64.blk"
-#include "viterbiInfinite.blk"
+#include "ViterbiInfinite.blk"
 
 -- Viterbi decoder works with finite buffer sizes (i.e. 96000 bits)
 -- But we want to test it with very large data inputs
