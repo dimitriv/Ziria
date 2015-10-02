@@ -21,7 +21,7 @@ import Control.Applicative                       ((<*), (<$>), (*>))
 import Control.Arrow                             ((&&&))
 import Control.Lens                              ((.~))
 import Data.Default.Class                        (def)
-import Data.List                                 (sort, nub, transpose)
+import Data.List                                 (sort, nub, transpose, isPrefixOf)
 import Graphics.Rendering.Chart
 import Graphics.Rendering.Chart.Backend.Diagrams (renderableToFile)
 import System.Directory                          (getDirectoryContents)
@@ -78,7 +78,7 @@ parseTestResult = do
   -- many space
   -- string "Time Elapsed: "
   te <- many1 digit
-  units <- optional (try $ space *> string "us")
+  units <- optional $ try $ space *> string "us"
   many space
   string "Bytes copied: "
   sign <- optional $ char '-'
@@ -102,14 +102,13 @@ parseFile file = do
   stringReadFromFile <- readFile file
   case parse parseManyTests "" stringReadFromFile of
     Left err -> error $ "Parse error in file: " ++ file
-    Right xs -> return $ (nub . sort) xs
+    Right xs -> return $ (nub . reverse . sort) xs
 
 -- | Grab performance numbers, where performance is determined
 -- by (bytesCopied / timeElapsed). Higher is better.
-getPerformance :: [[TestResult]] -> [[Double]]
-getPerformance = transpose
-               . map (map ((\(t,b) -> b / t)
-	       . (timeElapsed &&& bytesCopied)))
+getPerformance :: [[TestResult]] -> [[(Double, String)]]
+getPerformance = map (map ((\(t,b,m,r) -> ((b / t), (show m ++ show r)))
+	       . (\x -> (timeElapsed x, bytesCopied x, mode x, bitrate x))))
 
 -- END PARSER
 -------------------------------------------------------------------------------
@@ -125,7 +124,7 @@ main = do
   -- perpend folder root
   let pfs = fmap (\x -> perfDir ++ "/" ++ x) fs
   -- parse the files and extract throughput
-  nss <- getPerformance <$> mapM parseFile pfs
+  nss <- getPerformance . transpose <$> mapM parseFile pfs
   -- output the result
   _ <- renderableToFile def "output.svg" (renderableContext nss fs)
   -- and we are done
@@ -133,27 +132,6 @@ main = do
 
 -------------------------------------------------------------------------------
 -- BEGIN CHART
-
--- | X axis labels
-lbs :: [String]
-lbs = [ "TX6Mbps"
-      , "TX9Mbps"
-      , "TX12Mbps"
-      , "TX18Mbps"
-      , "TX24Mbps"
-      , "TX36Mbps"
-      , "TX48Mbps"
-      , "TX54Mbps"
-      , "RX6Mbps"
-      , "RX9Mbps"
-      , "RX12Mbps"
-      , "RX18Mbps"
-      , "RX24Mbps"
-      , "RX36Mbps"
-      , "RX48Mbps"
-      , "RX54Mbps"
-      , "RXCCA"
-      ]
 
 -- | Helper function to create plot
 createPlot values fs = plot_bars_titles .~ fs
@@ -172,16 +150,24 @@ layout title pb labels =
   $ def
 
 -- | First plot
-plot1 nss fs = createPlot (take 8 nss) fs
+plot1 nss fs = createPlot nss fs
 
 -- | First layout
-layout1 nss fs = layout "TX Performance comparison" (plot1 nss fs) (take 8 lbs)
+layout1 nss fs = layout "RX Performance comparison" (plot1 dss fs) lns
+  where dss = take nElems . map (map fst) $ nss
+        ls = map (head . (map snd)) nss
+	nElems = length . takeWhile (isPrefixOf "RX") $ ls
+        lns = take nElems ls
 
 -- | Second plot
-plot2 nss fs = createPlot (drop 8 nss) fs
+plot2 nss fs = createPlot nss fs
 
 -- | Second layout
-layout2 nss fs = layout "RX Performance comparison" (plot2 nss fs) (drop 8 lbs)
+layout2 nss fs = layout "TX Performance comparison" (plot2 dss fs) lns
+  where dss = drop nElems . map (map fst) $ nss
+        ls = map (head . (map snd)) nss
+	nElems = length . takeWhile (isPrefixOf "RX") $ ls
+	lns = drop nElems ls
 
 -- | Helper function to stack layouts
 mkStack ls = renderStackedLayouts
@@ -190,7 +176,7 @@ mkStack ls = renderStackedLayouts
            $ def
 
 -- | Helper function to create renderable context
-renderableContext :: [[Double]] -> [FilePath] -> Renderable ()
+renderableContext :: [[(Double, String)]] -> [FilePath] -> Renderable ()
 renderableContext nss fs = mkStack [ StackedLayout (layout1 nss fs)
                                    , StackedLayout (layout2 nss fs)
 				   ]
