@@ -18,8 +18,14 @@
 */
 #pragma once
 
+#include "types.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #ifdef SORA_PLATFORM
 #include <basetsd.h>
+#include <sora.h>
 
 // Most of this could be generic for different platforms but we need generic time types, 
 // so we implement only for Sora at the moment
@@ -52,8 +58,11 @@ void initMeasurementInfo(TimeMeasurements *measurementInfo, ulong size) {
 
 #endif
 
+
 void bounds_check(memsize_int siz, memsize_int len, char *msg);
-void blink_copy(void *dst, void *src, memsize_int siz);
+
+void blink_copy(void *dst, const void *src, memsize_int siz);
+
 
 char* delete_trailing_comma(char *s);
 void restore_trailing_comma(char* trailing_comma);
@@ -69,3 +78,5 @@ inline complex8 __ext_do_not_inline_complex8(complex8 x) { return x; };
 inline complex16 __ext_do_not_inline_complex16(complex16 x) { return x; };
 inline complex32 __ext_do_not_inline_complex32(complex32 x) { return x; };
 inline complex64 __ext_do_not_inline_complex64(complex64 x) { return x; };
+
+
