@@ -39,12 +39,12 @@ unsigned long long bytes_copied = 0;
 FORCE_INLINE
 void blink_copy(void *dst, const void *src, memsize_int siz)
 {
-    bytes_copied += (unsigned long long) siz;
     const unsigned long long margin = 1;
     if (ULLONG_MAX - siz - margin <= bytes_copied) {
 	printf("The max size for bytes copied ( %llu ) is exceeded. \n", ULLONG_MAX);
 	exit(-1);
     }
+    bytes_copied += (unsigned long long) siz;
     memcpy(dst, src, siz);
 }
 
