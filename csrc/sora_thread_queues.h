@@ -181,6 +181,7 @@ void s_ts_rollback(ts_context *locCont, int nc, int n);
 
 // The following functions are non-blocking and the caller should spin-wait if required
 // Producer
+int ts_init_batch(int no, size_t *sizes, int *queue_sizes, int *batch_sizes);
 char *s_ts_reserve(ts_context *locCont, int nc, int num);
 bool s_ts_push(ts_context *locCont, int nc, int num);
 // Consumer

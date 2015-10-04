@@ -163,26 +163,39 @@ cgDeclQueues dfs qs action
     in if numqs == 0 then do 
            bind_queue_vars action (qi_inch qs : qi_outch qs : []) 
         else do 
-          let my_sizes_decl = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
-              my_slots_decl = [cdecl|int my_slots[$int:(numqs)];|]
+          let my_sizes_decl   = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
+              my_slots_decl   = [cdecl|int my_slots[$int:(numqs)];|]
+              my_batches_decl = [cdecl|int my_batches[$int:(numqs)];|] 
               q_init_stmts 
-                = [cstm| stq_init($int:(numqs),my_sizes,my_slots); |]
-             
+-- Single thread 
+--                = [cstm| stq_init($int:(numqs),my_sizes,my_slots); |]
+-- Sora threads
+                  = [cstm| ts_init_batch($int:(numqs),my_sizes, my_slots, my_batches);|]
+
               my_sizes_inits 
                 = concat $
                   Map.elems $ 
                   Map.mapWithKey (\qvar (QId i,siz) -- ignore slots
                          -> let orig = "qvar type = " ++ show (nameTyp qvar)
                             in [ [cstm| ORIGIN($string:orig);|]
+{- Single thread
                                , [cstm|
                                   my_sizes[$int:i] = 
                                         $(tySizeOf_C (nameTyp qvar));|]
                                , [cstm| my_slots[$int:i] = $int:siz;|]
+-}
+                               , [cstm|
+                                  my_sizes[$int:i] = 
+                                        $(tySizeOf_C (nameTyp qvar));|]
+                               , [cstm| my_slots[$int:i] = 2;|] 
+                               , [cstm| my_batches[$int:i] = $int:siz;|]
+
                                ]) (qi_interm qs)
 
              -- Append top declarations  
           appendTopDecl my_sizes_decl
           appendTopDecl my_slots_decl
+          appendTopDecl my_batches_decl
 
              -- Add code to initialize queues in wpl global init
           _ <- mapM addGlobalWplAllocated (my_sizes_inits ++ [q_init_stmts])
@@ -670,9 +683,11 @@ cgInWire _dfs qs (n,qvar) v action =
 
     Just (QMid (QId qid))
        -> cgDeclQPtr v $ \ptr ptr_ty -> do
-              appendStmt [cstm| $ptr = ($ty:ptr_ty) stq_acquire($int:qid,$int:n);|]
+--              appendStmt [cstm| $ptr = ($ty:ptr_ty) stq_acquire($int:qid,$int:n);|]
+              appendStmt [cstm| $ptr = ($ty:ptr_ty) ts_acquire($int:qid,$int:n);|]
               a <- action
-              appendStmt [cstm| stq_release($int:qid);|]
+--              appendStmt [cstm| stq_release($int:qid);|]
+              appendStmt [cstm| ts_release($int:qid,$int:n);|]
               return a
 
 
@@ -789,24 +804,16 @@ cgOutWire _dfs qs (n,qvar) v action
       -- Some intermediate SORA queue
       Just (QMid (QId qid))
         -> cgDeclQPtr v $ \ptr ptr_ty -> do
-             appendStmt [cstm| $ptr = ($ty:ptr_ty) stq_reserve($int:qid,$int:n);|]
+---             appendStmt [cstm| $ptr = ($ty:ptr_ty) stq_reserve($int:qid,$int:n);|]
+             appendStmt [cstm| $ptr = ($ty:ptr_ty) ts_reserve($int:qid,$int:n);|]
+
              a <- action
-             appendStmt [cstm| stq_push($int:qid);|]
+-- Single thread
+--             appendStmt [cstm| stq_push($int:qid);|]
+-- Sora thread queues:
+             appendStmt [cstm| ts_push($int:qid, $int:n);|]
              return a
 
-{- 
-           -- Note [Single Thread Queue Optimization]
-         | Just (_,qslots) <- Map.lookup qvar (qi_interm qs) -- interm. (assert)
-         , qslots == 1                                       -- one slot
-         , Just [_] <- Map.lookup qvar (qi_cores qs)         -- and one core
-         -> appendStmt [cstm| ORIGIN("Eliminated single-core single-slot queue!");|] -- => no wiring
--}
-         -- | otherwise 
-         -- -> do cv <- lookupVarEnv v
-         --       let ptr = if isPtrType (nameTyp v)
-         --                 then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
-         --       writeToTs dfs n (nameTyp qvar) q ptr
- 
 
       -- Unexpected input queue
       Just QIn -> panicStr "cg_out_wire: encountered the input queue!"
