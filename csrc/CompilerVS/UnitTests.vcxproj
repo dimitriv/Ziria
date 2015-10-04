@@ -168,7 +168,9 @@
   <ItemGroup>
     <ClCompile Include="..\bit.c" />
     <ClCompile Include="..\sora_thread_queues.c" />
-    <ClCompile Include="..\UnitTests.c" />
+    <ClCompile Include="..\UnitTests\test_2step.c" />
+    <ClCompile Include="..\UnitTests\test_int32.c" />
+    <ClCompile Include="..\UnitTests\UnitTests.c" />
     <ClCompile Include="..\utils.c" />
     <ClCompile Include="..\wpl_alloc.c" />
   </ItemGroup>
@@ -179,6 +181,7 @@
     <ClInclude Include="..\common.h" />
     <ClInclude Include="..\sora_thread_queues.h" />
     <ClInclude Include="..\types.h" />
+    <ClInclude Include="..\UnitTests\UnitTests.h" />
     <ClInclude Include="..\utils.h" />
     <ClInclude Include="..\wpl_alloc.h" />
   </ItemGroup>
