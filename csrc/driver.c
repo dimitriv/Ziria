@@ -106,7 +106,7 @@ int __cdecl main(int argc, char **argv) {
   if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
   {
 #ifdef BLADE_RF
-	  if (BladeRF_RadioStart(params) < 0)
+	  if (BladeRF_RadioStart(params, (Globals.inType == TY_SDR)) < 0)
 	  {
 		  exit(1);
 	  }
@@ -207,7 +207,7 @@ int __cdecl main(int argc, char **argv) {
   printf("Time Elapsed: %d\n", usec);
 #endif
 
-  printf("Bytes copied: %ld\n", bytes_copied);
+  printf("Bytes copied: %llu \n", bytes_copied);
 
   wpl_output_finalize();
 

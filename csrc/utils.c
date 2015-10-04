@@ -22,6 +22,7 @@
 #include <string.h>
 #include "wpl_alloc.h"
 #include "params.h"
+#include <limits.h>
 
 void bounds_check(memsize_int siz, memsize_int len, char *msg)
 {
@@ -36,10 +37,15 @@ void bounds_check(memsize_int siz, memsize_int len, char *msg)
 unsigned long long bytes_copied = 0;
 
 FORCE_INLINE
-void blink_copy(void *dst, void *src, memsize_int siz)
+void blink_copy(void *dst, const void *src, memsize_int siz)
 {
-	bytes_copied += siz;
-	memcpy(dst, src, siz);
+    const unsigned long long margin = 1;
+    if (ULLONG_MAX - siz - margin <= bytes_copied) {
+	printf("The max size for bytes copied ( %llu ) is exceeded. \n", ULLONG_MAX);
+	exit(-1);
+    }
+    bytes_copied += (unsigned long long) siz;
+    memcpy(dst, src, siz);
 }
 
 /**
