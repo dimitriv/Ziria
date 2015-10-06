@@ -37,13 +37,15 @@ permissions and limitations under the License.
 
 
 
-bool __cdecl test_2step_int32()
+bool __cdecl test_2step_int32(int queue_len)
 {
 	ts_context *queues;
 	size_t sizes[1] = { sizeof(int32) };
-	int queue_sizes[1] = { QUEUE_LEN };
+	int queue_sizes[1];
 	int batch_sizes[1] = { 1 };
 	bool error = 0;
+
+	queue_sizes[0] = queue_len;
 
 	queues = s_ts_init_batch(1, sizes, queue_sizes, batch_sizes);
 
@@ -59,7 +61,7 @@ bool __cdecl test_2step_int32()
 		error = 1;
 	}
 
-	for (int i = 0; i < QUEUE_LEN; i++)
+	for (int i = 0; i < queue_len; i++)
 	{
 		int32 *buf = (int32*)s_ts_reserve(queues, 0, 1);
 		buf[0] = val1;
@@ -75,7 +77,7 @@ bool __cdecl test_2step_int32()
 
 
 
-	for (int i = 0; i < QUEUE_LEN / 2; i++)
+	for (int i = 0; i < queue_len / 2; i++)
 	{
 		int32 *buf = (int32*)s_ts_acquire(queues, 0, 1);
 		valA[indA] = buf[0];
@@ -83,7 +85,7 @@ bool __cdecl test_2step_int32()
 		indA++;
 	}
 
-	for (int i = 0; i < QUEUE_LEN / 2; i++)
+	for (int i = 0; i < queue_len / 2; i++)
 	{
 		int32 *buf = (int32*)s_ts_reserve(queues, 0, 1);
 		buf[0] = val1;
@@ -99,7 +101,7 @@ bool __cdecl test_2step_int32()
 
 
 
-	for (int i = 0; i < QUEUE_LEN; i++)
+	for (int i = 0; i < queue_len; i++)
 	{
 		int32 *buf = (int32*)s_ts_acquire(queues, 0, 1);
 		valA[indA] = buf[0];
@@ -128,13 +130,16 @@ bool __cdecl test_2step_int32()
 
 
 
-bool __cdecl test_2step_int32_many()
+bool __cdecl test_2step_int32_many(int queue_len)
 {
 	ts_context *queues;
 	size_t sizes[1] = { sizeof(int32) };
-	int queue_sizes[1] = { QUEUE_LEN/2 };
+	int queue_sizes[1];
 	int batch_sizes[1] = { 2 };
 	bool error = 0;
+
+
+	queue_sizes[0] = queue_len / 2;
 
 	queues = s_ts_init_batch(1, sizes, queue_sizes, batch_sizes);
 
@@ -150,7 +155,7 @@ bool __cdecl test_2step_int32_many()
 		error = 1;
 	}
 
-	for (int i = 0; i < QUEUE_LEN/2; i++)
+	for (int i = 0; i < queue_len/2; i++)
 	{
 		int32 *buf = (int32*)s_ts_reserve(queues, 0, 2);
 		buf[0] = val1;
@@ -168,7 +173,7 @@ bool __cdecl test_2step_int32_many()
 
 
 
-	for (int i = 0; i < QUEUE_LEN / 2; i++)
+	for (int i = 0; i < queue_len / 2; i++)
 	{
 		int32 *buf = (int32*)s_ts_acquire(queues, 0, 1);
 		valA[indA] = buf[0];
@@ -176,7 +181,7 @@ bool __cdecl test_2step_int32_many()
 		indA++;
 	}
 
-	for (int i = 0; i < QUEUE_LEN / 2; i++)
+	for (int i = 0; i < queue_len / 2; i++)
 	{
 		int32 *buf = (int32*)s_ts_reserve(queues, 0, 1);
 		buf[0] = val1;
@@ -192,7 +197,7 @@ bool __cdecl test_2step_int32_many()
 
 
 
-	for (int i = 0; i < QUEUE_LEN / 2; i++)
+	for (int i = 0; i < queue_len / 2; i++)
 	{
 		int32 *buf = (int32*)s_ts_acquire(queues, 0, 2);
 		valA[indA] = buf[0];
@@ -246,3 +251,4 @@ bool __cdecl test_2step_int32_many()
 
 	return error;
 }
+
