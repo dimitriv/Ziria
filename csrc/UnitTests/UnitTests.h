@@ -33,6 +33,6 @@ extern bool atomix;
 
 bool __cdecl test_int32();
 bool __cdecl test_int32_many();
-bool __cdecl test_2step_int32();
-bool __cdecl test_2step_int32_many();
+bool __cdecl test_2step_int32(int queue_len);
+bool __cdecl test_2step_int32_many(int queue_len);
 
