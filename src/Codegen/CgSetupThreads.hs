@@ -54,7 +54,7 @@ thread_setup affinity_mask name buf_tys tids
                         else []
         thread_name = "wpl_set_up_threads" ++ name
         defsPkg  = thread_wrappers
-                   ++ [[cedecl| int $id:(thread_name) (typename PSORA_UTHREAD_PROC * User_Routines) {
+                   ++ [[cedecl| int $id:(thread_name) (typename PWIN_UTHREAD_PROC * User_Routines) {
                                  typename HANDLE procHdl = GetCurrentProcess();
                                  typename DWORD_PTR affinityMask = $int:affinity_mask;
                                  SetProcessAffinityMask(procHdl, affinityMask);
@@ -90,7 +90,7 @@ thread_setup affinity_mask name buf_tys tids
         h :: [String] -> [(Int,Ty)] -> [C.Definition]
         h [] [] = []
         h (tid : tids') ((o,oty) : buf_tys') =
-          [cedecl| typename BOOLEAN ($id:("__go" ++ tid))(void * pParam) {
+          [cedecl| typename DWORD ($id:("__go" ++ tid))(void * pParam) {
 	             thread_info *ti; 
                      ti = (typename thread_info *)pParam; 
 
@@ -107,7 +107,7 @@ thread_setup affinity_mask name buf_tys tids
                    } 
           |] : h tids' buf_tys'
         h (tid : tids') [] =
-          [cedecl| typename BOOLEAN ($id:("__go" ++ tid))(void * pParam) {
+          [cedecl| typename DWORD ($id:("__go" ++ tid))(void * pParam) {
 	             thread_info *ti; 
                      ti = (typename thread_info *)pParam; 
 
@@ -130,10 +130,10 @@ thread_setup_atomix affinity_mask name nthr
   = defsPkg
   where thread_name = "wpl_set_up_threads" ++ name
         defsPkg  = thread_wrappers
-                   ++ [[cedecl| int $id:(thread_name) (typename PSORA_UTHREAD_PROC * User_Routines) {
-                                 typename HANDLE procHdl = GetCurrentProcess();
-                                 typename DWORD_PTR affinityMask = $int:affinity_mask;
-                                 SetProcessAffinityMask(procHdl, affinityMask);
+                   ++ [[cedecl| int $id:(thread_name) (typename PWIN_UTHREAD_PROC * User_Routines) {
+                                 // typename HANDLE procHdl = GetCurrentProcess();
+                                 // typename DWORD_PTR affinityMask = $int:affinity_mask;
+                                 // SetProcessAffinityMask(procHdl, affinityMask);
                                  $stms:(user_routines (nthr-1))
                                  return ($int:nthr);
                                } 
@@ -153,7 +153,7 @@ thread_setup_atomix affinity_mask name nthr
         h :: Int -> [C.Definition]
         h (-1) = []
         h i = 
-          [[cedecl| typename BOOLEAN ($id:("__gothread" ++ show i))(void * pParam) {
+          [[cedecl| typename DWORD ($id:("__gothread" ++ show i))(void * pParam) {
 	             thread_info *ti; 
                      ti = (typename thread_info *)pParam; 
 
@@ -169,10 +169,10 @@ thread_setup_atomix affinity_mask name nthr
 
 thread_setup_shim :: String -> [C.Definition]
 thread_setup_shim name
-   = [ [cedecl|extern int SetUpThreads(typename PSORA_UTHREAD_PROC * User_Routines); 
+   = [ [cedecl|extern int SetUpThreads(typename PWIN_UTHREAD_PROC * User_Routines); 
        |]
 
-     , [cedecl|int $id:("wpl_set_up_threads" ++ name)(typename PSORA_UTHREAD_PROC * User_Routines) 
+     , [cedecl|int $id:("wpl_set_up_threads" ++ name)(typename PWIN_UTHREAD_PROC * User_Routines) 
                { return (SetUpThreads(User_Routines)); }
        |]
      ]
