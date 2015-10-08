@@ -46,7 +46,7 @@ import Data.Loc
 import Data.Maybe
 import Text.PrettyPrint.HughesPJ
 -- import qualified GenSym as GS
-import Data.List ( nub )
+-- import Data.List ( nub )
 -- import CtExpr 
 -- import CtComp
 -- import TcRename 
@@ -63,6 +63,22 @@ import CgExpr
 import AtomixCompTransform 
 import AutomataModel
 import AtomInstantiation
+
+
+{- Note [Single Thread Queues]
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~
+   Which queues are single threaded? This is CPU-dependent. Since queues
+   are implemented in shared memory, we only need to make sure that these
+   queues cannot have a producer and a consumer operating on them at the
+   same time. This implies that a queue is single-threaded iff it is 
+   single threaded in /every/ state. Note that core allocation of the 
+   corresponding components might be different though. But because states
+   synchronize, what matters is the single-threaded-ness within a state. 
+
+   The qi_cores field keeps a map from queue id to a list of
+   state-specific readers and writers. If every list in the co-domain is 
+   a singleton list then the queue is "single threaded".
+--------------------------------------------------------------------------}
 
 
 cgRnSt :: DynFlags -> AxAuto SymAtom -> RnSt -> Cg a -> Cg a
@@ -125,9 +141,17 @@ data QueueInfo
          -- ^ whether it's a local 
          -- ^ queue (i.e. can be just replaced with a variable)
          -- ^ in which case the size must be just one. 
-       , qi_cores :: Map.Map EId [Int] -- ^ Which cores access each queue
+       , qi_cores :: Map.Map EId [[Int]] 
+          -- ^ Which cores access each queue, grouped by state, 
+          --   See Note [Single Thread Queues]
        }
 
+-- | Is this intermediate queue single-threaded? See Note [Single Thread Queues]
+isSingleThreadIntermQueue :: QueueInfo -> Chan -> Bool
+isSingleThreadIntermQueue qs x = 
+  case Map.lookup x (qi_cores qs) of 
+    Nothing -> panic $ ppr x <+> text "is not an intermediate queue!"
+    Just cs -> all (\state_accessors -> length state_accessors <= 1) cs
 
 instance Outputable QueueInfo where
   ppr (QI qinch qoutch qinterm qicores)
@@ -233,7 +257,11 @@ extractQueues auto
                zipWith (\(k,siz) n -> (k,(QId n,siz))) 
                        (Map.toList (unions_with max pre)) [0..]
 
-    cores = unions_with (\c1 c2 -> nub (c1 ++ c2)) pre_cores 
+    -- Sigh .. horribly inefficient
+    cores :: Map Chan [[Int]]
+    cores = foldl (\x m -> 
+                      Map.unionWith (++) x (Map.map (\w -> [w]) m)) 
+                  Map.empty pre_cores
 
     unions_with f = foldl (Map.unionWith f) Map.empty
 
@@ -241,6 +269,7 @@ extractQueues auto
     extract_queue (AtomixState atoms _ _ init_pipes) 
        = update_pipes atoms init_pipes
 
+    pre_cores :: [Map.Map Chan [Int]]
     pre_cores = map (extract_core . node_kind) (Map.elems (auto_graph auto))
     extract_core (AtomixState atoms _ _ init_pipes)
        = update_cores atoms (Map.map (\_ -> []) init_pipes)
