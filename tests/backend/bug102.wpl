@@ -1,0 +1,14 @@
+fun f(x : int) { 
+  var bar : arr[8] bit;
+
+  bar[0] := bit(x);
+  bar[1,3] := {'0,'0,'0}
+
+  for i in [4:7] {
+     bar[i] := '1
+  };
+
+  return bar;
+
+}
+let comp main = read >>> map f >>> write
