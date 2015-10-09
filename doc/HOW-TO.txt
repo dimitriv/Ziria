@@ -37,6 +37,14 @@ A: To install WinDDK, get an ISO from:
    - In C:\SoraSDK2.0\lib\fre_win7_amd64\amd64 you should see usora.lib
    - In C:\SoraSDK2.0\target\fre_win7_amd64\amd64 you should see:
         dot11bbbu.lib, dot11bbau.lib, libbba_lutstu.lib, libbba_modu.lib, sora_utility.lib
+   Repeat the process for "Windows Win7 x64 Checked Build Environment".
+   If you are not on an amd64 architecture, you can build using the appropriate environments:
+   * IA64
+     - Windows Win7 IA-64 Free Build Environment
+     - Windows Win7 IA-64 Checked Build Environment
+   * x86
+     - Windows XP x86 Free Build Environment
+     - Windows XP x86 Checked Build Environment
    To test that everything is set up correctly, run (in ~/Ziria) "make test-wifi-rx"
     (if this passes, WinDDK + Sora are correctly set up, it may take a bit of time to compile).
 

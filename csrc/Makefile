@@ -19,7 +19,7 @@
 #
 
 CC = g++
-CFLAGS = -std=c++11 -msse3 -Wno-attributes -Wno-write-strings
+CFLAGS = -std=c++11 -msse3 -Wno-attributes -Wno-write-strings -O2 -pipe -fno-aggressive-loop-optimizations
 LIBS = -lm
 OBJDIR = .
 
@@ -37,7 +37,7 @@ LUT_EXECUTABLE = lutexec
 all : driver
 
 driver : $(OBJ_INT) $(OBJ_IO) $(OBJ_LIB) $(OBJ_EXT)
-	$(CC) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
+	$(CC) $(CFLAGS) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
 
 lutexec: $(OBJ_LUT_ONLY) $(OBJ_LIB) $(OBJ_EXT)
 	$(CC) $(EXTRACOPTS) -o $(LUT_EXECUTABLE) $+ $(LIBS)
@@ -50,4 +50,3 @@ clean:
 	-rm -f *~
 	-rm -f $(EXECUTABLE)
 	-rm -f *.out
-
