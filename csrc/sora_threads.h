@@ -30,7 +30,14 @@ struct thread_info {
 };
 
 
+typedef DWORD(WINAPI *PWIN_UTHREAD_PROC)(PVOID Context);
+bool StartWinUThread(int no_threads, PWIN_UTHREAD_PROC *function,
+	ULONGLONG * ttstart, ULONGLONG * ttend, TIMESTAMPINFO *tsinfo);
+
+
+/*
 int StartThreads(ULONGLONG * ttstart, 
                  ULONGLONG * ttend, 
 		 TIMESTAMPINFO *tsinfo, 
                  int no_threads, PSORA_UTHREAD_PROC* User_Routines);
+				 */

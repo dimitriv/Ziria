@@ -52,12 +52,13 @@
 
 	TimeMeasurements measurementInfo;
 
-	PSORA_UTHREAD_PROC User_Routines[MAX_THREADS];
-    // size_t sizes[MAX_THREADS];
+	//PSORA_UTHREAD_PROC User_Routines[MAX_THREADS];
+	PWIN_UTHREAD_PROC User_Routines[MAX_THREADS];
+	// size_t sizes[MAX_THREADS];
 
     // set_up_threads is defined in the compiler-generated code
     // and returns the number of threads we set up 
-	extern int wpl_set_up_threads(PSORA_UTHREAD_PROC *User_Routines);
+	extern int wpl_set_up_threads(PWIN_UTHREAD_PROC *User_Routines);
 
 #endif
 
@@ -159,7 +160,10 @@ int __cdecl main(int argc, char **argv) {
   ULONGLONG ttstart, ttend;
 
   printf("Starting %d threads...\n", no_threads);
-  StartThreads(&ttstart, &ttend, &Globals.measurementInfo.tsinfo, no_threads, User_Routines);
+  //StartThreads(&ttstart, &ttend, &Globals.measurementInfo.tsinfo, no_threads, User_Routines);
+
+  StartWinUThread(no_threads, User_Routines,
+	  &ttstart, &ttend, &Globals.measurementInfo.tsinfo);
 
   printf("Total input items (including EOF): %d (%d B), output items: %d (%d B)\n",
 	  buf_ctx.total_in, buf_ctx.total_in*buf_ctx.size_in,
@@ -263,9 +267,9 @@ BOOLEAN __stdcall go_thread(void * pParam)
 // and store them in User_Routines array
 // These get started from the main 
 // Returns the numer of threads 
-int SetUpThreads(PSORA_UTHREAD_PROC * User_Routines)
+int SetUpThreads(PWIN_UTHREAD_PROC * User_Routines)
 {
-	User_Routines[0] = (PSORA_UTHREAD_PROC) go_thread;
+	User_Routines[0] = (PWIN_UTHREAD_PROC)go_thread;
 	return 1;
 }
 
