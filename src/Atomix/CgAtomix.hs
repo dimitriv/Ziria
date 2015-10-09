@@ -46,7 +46,7 @@ import Data.Loc
 import Data.Maybe
 import Text.PrettyPrint.HughesPJ
 -- import qualified GenSym as GS
--- import Data.List ( nub )
+import Data.List ( nub, partition )
 -- import CtExpr 
 -- import CtComp
 -- import TcRename 
@@ -144,27 +144,38 @@ data QueueInfo
        , qi_cores :: Map.Map EId [[Int]] 
           -- ^ Which cores access each queue, grouped by state, 
           --   See Note [Single Thread Queues]
+       , qi_sora_queues :: [(EId,(QId,Int))]  -- SORA concurrent queues
+       , qi_sing_queues :: [(EId,(QId,Int))]  -- Ordinary (single-thread) queues
        }
 
 -- | Is this intermediate queue single-threaded? See Note [Single Thread Queues]
 isSingleThreadIntermQueue :: QueueInfo -> Chan -> Bool
-isSingleThreadIntermQueue qs x = 
-  case Map.lookup x (qi_cores qs) of 
+isSingleThreadIntermQueue qs x = isSingleThreadIntermQueue_aux (qi_cores qs) x
+
+isSingleThreadIntermQueue_aux :: Map.Map EId [[Int]] -> Chan -> Bool
+isSingleThreadIntermQueue_aux cores x = 
+  case Map.lookup x cores of
     Nothing -> panic $ ppr x <+> text "is not an intermediate queue!"
     Just cs -> all (\state_accessors -> length state_accessors <= 1) cs
 
+
 instance Outputable QueueInfo where
-  ppr (QI qinch qoutch qinterm qicores)
+  ppr (QI qinch qoutch qinterm qcs qsora qsing)
     = vcat [ text "qi_inch   =" <+> text (show qinch)
            , text "qi_outch  =" <+> text (show qoutch)
-           , text "qi_interm =" <+> vcat (map ppr_qs (Map.toList qinterm))
-           , text "qi_cores  =" <+> vcat (map ppr_cs (Map.toList qicores))
+           , text "qi_interm =" $$ vcat (map ppr_qs (Map.toList qinterm))
+           , text "qi_cores  =" $$ vcat (map ppr_cs (Map.toList qcs))
+           , text "qi_sora_queues =" $$ vcat (map (text . show) qsora)
+           , text "qi_sing_queues =" $$ vcat (map (text . show) qsing)
            ]
     where
-      ppr_cs (qv,qcores) = ppr qv <+> text "used by cores:" <+> ppr qcores
+-- Obsolete, now qi_sora_queues, and qi_sing_queues have this info
+      ppr_cs (qv,qcores) = ppr qv <+> text "used by cores:" <+> 
+                                      text (show qcores)
       ppr_qs (qv,(qid,qsz))
          = ppr qv <+> text ":" <+>
-           text "qid=" <+> text (show qid) <> text "," <+> text "slots=" <+> ppr qsz
+           text "qid=" <+> text (show qid) <> text "," <+> 
+                                              text "slots=" <+> ppr qsz
 
 
 newtype QId = QId { unQId :: Int }
@@ -180,67 +191,146 @@ qiQueueId _ _ = Nothing
 
 
 cQPtr :: Int -> String
-cQPtr n = "stq_" ++ show n
+cQPtr n = "q_" ++ show n
 
 -- | Declare queues 
 cgDeclQueues :: DynFlags -> QueueInfo -> Cg a -> Cg a
 cgDeclQueues dfs qs action 
-  = cgIO (print (ppr qs)) >> 
-    let numqs = Map.size (qi_interm qs)
-    in if numqs == 0 then do 
-         cgGlobMutBind dfs noLoc (qi_inch qs) $ 
-           cgGlobMutBind dfs noLoc (qi_outch qs) $ action 
-        else do 
-          let my_sizes_decl   = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
-              my_slots_decl   = [cdecl|int my_slots[$int:(numqs)];|]
-              my_batches_decl = [cdecl|int my_batches[$int:(numqs)];|] 
-              q_init_stmts 
--- Single thread 
-                  = [cstm| queue_arr = stq_init($int:(numqs),my_sizes,my_slots); |]
--- Sora threads
---                = [cstm| ts_init_batch($int:(numqs),my_sizes, my_slots, my_batches);|]
-
-              my_sizes_inits 
-                = concat $
-                  Map.elems $ 
-                  Map.mapWithKey (\qvar (QId i,siz) -- ignore slots
-                         -> let orig = "qvar type = " ++ show (nameTyp qvar)
-                            in [ [cstm| ORIGIN($string:orig);|]
-                               , [cstm|
-                                  my_sizes[$int:i] = 
-                                        $(tySizeOf_C (nameTyp qvar));|]
-                               , [cstm| my_slots[$int:i] = $int:siz;|]
-{- SORA
-                               , [cstm|
-                                  my_sizes[$int:i] = 
-                                        $(tySizeOf_C (nameTyp qvar));|]
-                               , [cstm| my_slots[$int:i] = 16;|] 
-                               , [cstm| my_batches[$int:i] = $int:siz;|]
--}
-                               ]) (qi_interm qs)
-
-             -- Append top declarations  
-          appendTopDecl [cdecl| $ty:(namedCType "queue")* queue_arr;|]
-          appendTopDecl my_sizes_decl
-          appendTopDecl my_slots_decl
-          appendTopDecl my_batches_decl
-
-             -- Add code to initialize queues in wpl global init
-          _ <- mapM addGlobalWplAllocated (my_sizes_inits ++ [q_init_stmts])
-
-          cgGlobMutBind dfs noLoc (qi_inch qs) $ 
-           cgGlobMutBind dfs noLoc (qi_outch qs) $ 
-             bind_queue_vars action
-                (Map.toList $ qi_interm qs) [0..] -- /Not/ declaring temporaries for queues!
+  = do cgIO $ print (ppr qs)
+       cgGlobMutBind dfs noLoc (qi_inch qs) $
+        cgGlobMutBind dfs noLoc (qi_outch qs) $ decl_rest
   where
-    bind_queue_vars m [] _ = m
-    bind_queue_vars m (_q1:qss) (n:ns)
-      = do -- cgIO $ putStrLn ("Declaring temp variable for queue: " ++ show q1)
-           let qid = cQPtr n
-           appendTopDecl [cdecl| static $ty:(namedCType "queue")* $id:qid;|]
-           addGlobalWplAllocated [cstm| $id:qid = & queue_arr[$int:n];|]
-           bind_queue_vars m qss ns
-    bind_queue_vars _ _ _ = error "Can't happen!"
+    -- numqs = Map.size (qi_interm qs)
+    num_sora_qs = length $ qi_sora_queues qs
+    num_sing_qs = length $ qi_sing_queues qs
+
+    bind_queue_vars qtype qarr queues idxs m = go queues idxs
+       where 
+         go [] _ = m 
+         go (_q1:qss) (n:ns) = 
+           do let qid = cQPtr n
+              appendTopDecl [cdecl| static $ty:qtype * $id:qid;|]
+              addGlobalWplAllocated [cstm| $id:qid = & $id:qarr[$int:n];|]
+              go qss ns
+         go _ _ = error "Can't happen!"
+
+    bind_sora_queue_vars 
+      = bind_queue_vars (namedCType "ts_context") "sora_queue_arr"
+    bind_sing_queue_vars 
+      = bind_queue_vars (namedCType "queue") "sing_queue_arr"
+
+    -- Declare SORA stuff
+    my_sizes_decl_sora   = [cdecl|typename size_t my_sizes_sora[$int:(num_sora_qs)];|]
+    my_slots_decl_sora   = [cdecl|int my_slots_sora[$int:(num_sora_qs)];|]
+    my_batches_decl_sora = [cdecl|int my_batches_sora[$int:(num_sora_qs)];|] 
+
+    -- Declare STQ stuff
+    my_sizes_decl_sing   = [cdecl|typename size_t my_sizes_sing[$int:(num_sing_qs)];|]
+    my_slots_decl_sing   = [cdecl|int my_slots_sing[$int:(num_sing_qs)];|]
+
+    -- Initialize queue statements
+    q_init_stmts_sora 
+     = [cstm| sora_queue_arr = s_ts_init_batch($int:(num_sora_qs),
+                                                my_sizes_sora,
+                                                my_slots_sora,
+                                                my_batches_sora); |]
+    q_init_stmts_sing    
+     = [cstm| sing_queue_arr = stq_init($int:(num_sing_qs),
+                                                my_sizes_sing,
+                                                my_slots_sing);|]
+
+    my_sizes_inits_sora = concat $ map sizes_inits_sora (qi_sora_queues qs)
+    sizes_inits_sora (qvar,(QId i,siz)) = 
+         [ [cstm|
+            my_sizes_sora[$int:i] = 
+                  $(tySizeOf_C (nameTyp qvar));|]
+         , [cstm| my_slots_sora[$int:i] = $int:siz;|] 
+         , [cstm| my_batches_sora[$int:i] = 1;|]
+         ]
+
+    my_sizes_inits_sing = concat $ map sizes_inits_sing (qi_sing_queues qs)
+    sizes_inits_sing (qvar,(QId i,siz)) =
+         [ [cstm|
+            my_sizes_sing[$int:i] =
+                  $(tySizeOf_C (nameTyp qvar));|]
+         , [cstm| my_slots_sing[$int:i] = $int:siz;|]
+         ]
+
+    decl_rest = do 
+      -- Declare single thread queues stuff
+      when (num_sing_qs > 0) $ do 
+         appendTopDecl [cdecl| $ty:(namedCType "queue")* sing_queue_arr;|]
+         appendTopDecl my_sizes_decl_sing
+         appendTopDecl my_slots_decl_sing
+         mapM_ addGlobalWplAllocated (my_sizes_inits_sing ++ [q_init_stmts_sing])
+         return ()
+ 
+      -- Declare sora queues stuff
+      when (num_sora_qs > 0) $ do
+         appendTopDecl [cdecl| $ty:(namedCType "ts_context")* sora_queue_arr;|]
+         appendTopDecl my_sizes_decl_sora
+         appendTopDecl my_slots_decl_sora
+         appendTopDecl my_batches_decl_sora
+         mapM_ addGlobalWplAllocated (my_sizes_inits_sora ++ [q_init_stmts_sora])
+
+      bind_sora_queue_vars (qi_sora_queues qs) [0..] $
+        bind_sing_queue_vars (qi_sing_queues qs) [0..] action
+
+
+--     in if numqs == 0 then do 
+--          cgGlobMutBind dfs noLoc (qi_inch qs) $ 
+--            cgGlobMutBind dfs noLoc (qi_outch qs) $ action 
+--         else do 
+--           let my_sizes_decl   = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
+--               my_slots_decl   = [cdecl|int my_slots[$int:(numqs)];|]
+--               my_batches_decl = [cdecl|int my_batches[$int:(numqs)];|] 
+--               q_init_stmts 
+-- -- Single thread 
+--                   = [cstm| queue_arr = stq_init($int:(numqs),my_sizes,my_slots); |]
+-- -- Sora threads
+-- --                = [cstm| ts_init_batch($int:(numqs),my_sizes, my_slots, my_batches);|]
+
+--               my_sizes_inits 
+--                 = concat $
+--                   Map.elems $ 
+--                   Map.mapWithKey (\qvar (QId i,siz) -- ignore slots
+--                          -> let orig = "qvar type = " ++ show (nameTyp qvar)
+--                             in [ [cstm| ORIGIN($string:orig);|]
+--                                , [cstm|
+--                                   my_sizes[$int:i] = 
+--                                         $(tySizeOf_C (nameTyp qvar));|]
+--                                , [cstm| my_slots[$int:i] = $int:siz;|]
+-- {- SORA
+--                                , [cstm|
+--                                   my_sizes[$int:i] = 
+--                                         $(tySizeOf_C (nameTyp qvar));|]
+--                                , [cstm| my_slots[$int:i] = 16;|] 
+--                                , [cstm| my_batches[$int:i] = $int:siz;|]
+-- -}
+--                                ]) (qi_interm qs)
+
+--              -- Append top declarations  
+--           appendTopDecl [cdecl| $ty:(namedCType "queue")* queue_arr;|]
+--           appendTopDecl my_sizes_decl
+--           appendTopDecl my_slots_decl
+--           appendTopDecl my_batches_decl
+
+--              -- Add code to initialize queues in wpl global init
+--           _ <- mapM addGlobalWplAllocated (my_sizes_inits ++ [q_init_stmts])
+
+--           cgGlobMutBind dfs noLoc (qi_inch qs) $ 
+--            cgGlobMutBind dfs noLoc (qi_outch qs) $ 
+--              bind_queue_vars action
+--                 (Map.toList $ qi_interm qs) [0..] -- /Not/ declaring temporaries for queues!
+--   where
+--     bind_queue_vars m [] _ = m
+--     bind_queue_vars m (_q1:qss) (n:ns)
+--       = do -- cgIO $ putStrLn ("Declaring temp variable for queue: " ++ show q1)
+--            let qid = cQPtr n
+--            appendTopDecl [cdecl| static $ty:(namedCType "queue")* $id:qid;|]
+--            addGlobalWplAllocated [cstm| $id:qid = & queue_arr[$int:n];|]
+--            bind_queue_vars m qss ns
+--     bind_queue_vars _ _ _ = error "Can't happen!"
 
 
 -- | Extract all introduced queues, and for each calculate the maximum
@@ -251,8 +341,17 @@ extractQueues auto
        , qi_outch  = auto_outchan auto
        , qi_interm = interms
        , qi_cores  = cores
+       , qi_sora_queues = sora_queues
+       , qi_sing_queues = sing_queues
        }
   where
+
+    -- All intermediate queues 
+    all_interm_queues = Map.toList interms
+ 
+    (sing_queues, sora_queues) 
+      = partition (isSingleThreadIntermQueue_aux cores . fst) all_interm_queues
+
     interms = Map.fromList $ 
                zipWith (\(k,siz) n -> (k,(QId n,siz))) 
                        (Map.toList (unions_with max pre)) [0..]
@@ -289,7 +388,7 @@ extractQueues auto
       where upd_cores ps wa = 
                Map.mapWithKey (\q cs -> 
                    if (countWrites q wa > 0 || countReads q wa > 0) 
-                   then getWiredAtomCore wa : cs else cs) ps 
+                   then nub (getWiredAtomCore wa : cs) else cs) ps 
 
 
 cgAutomatonDeclareAllGlobals :: DynFlags 
