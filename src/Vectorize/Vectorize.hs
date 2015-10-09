@@ -189,9 +189,9 @@ comp_vect0 dfs (VectPack {..}) (Par p c1 c2)
   | otherwise 
   = let is_c1 = isComputer (ctComp c1)
         is_c2 = isComputer (ctComp c2)
-        ctx1  = if is_c2 then CtxExCompRight -- `join_ctx` vp_vctx 
+        ctx1  = if is_c2 then join_ctx vp_vctx CtxExCompRight -- `join_ctx` vp_vctx 
                 else vp_vctx
-        ctx2  = if is_c1 then CtxExCompLeft  -- `join_ctx` vp_vctx 
+        ctx2  = if is_c1 then join_ctx vp_vctx CtxExCompLeft  -- `join_ctx` vp_vctx 
                 else vp_vctx
     in
     do verbose dfs $ text (show vp_vctx ++ " => " ++ show ctx1)
@@ -219,18 +219,19 @@ comp_vect0 dfs (VectPack {..}) (Par p c1 c2)
 
        return res
   where 
-     join_ctx x CtxUnrestricted = x
-     join_ctx CtxUnrestricted x = x
-     join_ctx CtxExCompLeftAndRight w = w -- CtxExCompLeftAndRight
-     join_ctx w CtxExCompLeftAndRight = w -- CtxExCompLeftAndRight
-     join_ctx CtxExCompRight CtxExCompRight = CtxExCompRight
-     -- DV, old code: 
---     join_ctx CtxExCompRight CtxExCompLeft  = CtxExCompLeftAndRight
---     join_ctx CtxExCompLeft  CtxExCompRight = CtxExCompLeftAndRight
-     join_ctx CtxExCompRight CtxExCompLeft  = error "Vect context BUG!" -- CtxExCompLeftAndRight
-     join_ctx CtxExCompLeft  CtxExCompRight = error "Vect context BUG!" -- CtxExCompLeftAndRight
-
-     join_ctx CtxExCompLeft  CtxExCompLeft  = CtxExCompLeft 
+     -- If the context is unrestricted then just choose whatever we are (y)
+     join_ctx CtxUnrestricted y = y 
+     -- If the context says there's a computer to the left then it does not matter what
+     -- we say. Here is the example:
+     --    c1 >>> repeat { t >>> c } 
+     -- The context says there's a computer to the left (c1). 
+     -- But we (t) are to the left of (c). This does not matter however, since
+     -- the program is really equivalent (for vectorization purposes) to:
+     --    c1 >>> t >>> repeat c
+     -- There is a symmetric case with a computer to the right.
+     join_ctx CtxExCompLeft  _y = CtxExCompLeft
+     join_ctx CtxExCompRight _y = CtxExCompRight
+     join_ctx _              _  = error "Vect context bug!"
 
 
 {------------------------------------------------------------------------------}
@@ -396,7 +397,8 @@ comp_vect0 dfs (VectPack {..}) _other = do
 vectIterComp :: DynFlags -> (Comp -> Comp) -> Ty -> Ty -> LComp -> VecM DVRCands
 vectIterComp dfs builder tin tout cbody = do
   let body_card = compInfo cbody
-  body_cands <- comp_vect dfs CtxExCompLeftAndRight cbody
+  -- body_cands <- comp_vect dfs CtxExCompLeftAndRight cbody
+  body_cands <- comp_vect dfs CtxUnrestricted cbody
   -- body_cands <- vect_comp_dd dfs cbody $ compSFDD body_card tin tout
   return (mapDVRCands (updDVRComp $ builder) body_cands)
 
