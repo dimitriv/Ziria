@@ -50,4 +50,3 @@ clean:
 	-rm -f *~
 	-rm -f $(EXECUTABLE)
 	-rm -f *.out
-
