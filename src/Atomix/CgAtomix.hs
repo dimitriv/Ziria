@@ -241,8 +241,8 @@ cgDeclQueues dfs qs action
                                                 my_sizes_sing,
                                                 my_slots_sing);|]
 
-    my_sizes_inits_sora = concat $ map sizes_inits_sora (qi_sora_queues qs)
-    sizes_inits_sora (qvar,(QId i,siz)) = 
+    my_sizes_inits_sora = concat $ zipWith sizes_inits_sora (qi_sora_queues qs) [0..]
+    sizes_inits_sora (qvar,(_,siz)) (i::Int) =
          [ [cstm|
             my_sizes_sora[$int:i] = 
                   $(tySizeOf_C (nameTyp qvar));|]
@@ -250,8 +250,8 @@ cgDeclQueues dfs qs action
          , [cstm| my_batches_sora[$int:i] = 1;|]
          ]
 
-    my_sizes_inits_sing = concat $ map sizes_inits_sing (qi_sing_queues qs)
-    sizes_inits_sing (qvar,(QId i,siz)) =
+    my_sizes_inits_sing = concat $ zipWith sizes_inits_sing (qi_sing_queues qs) [0..]
+    sizes_inits_sing (qvar,(_,siz)) (i::Int) =
          [ [cstm|
             my_sizes_sing[$int:i] =
                   $(tySizeOf_C (nameTyp qvar));|]
