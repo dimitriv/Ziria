@@ -182,17 +182,24 @@ void s_ts_rollback(ts_context *locCont, int nc, int n);
 // The following functions are non-blocking and the caller should spin-wait if required
 // Producer
 int ts_init_batch(int no, size_t *sizes, int *queue_sizes, int *batch_sizes);
-char *s_ts_reserve(ts_context *locCont, int nc, int num);
-bool s_ts_push(ts_context *locCont, int nc, int num);
+char *s_ts_reserve(ts_context *locCont, int num);
+bool s_ts_push(ts_context *locCont, int num);
 // Consumer
-char *s_ts_acquire(ts_context *locCont, int nc, int num);
-bool s_ts_release(ts_context *locCont, int nc, int num);
+char *s_ts_acquire(ts_context *locCont, int num);
+bool s_ts_release(ts_context *locCont, int num);
 
 char *ts_reserve(int nc, int num);
 bool ts_push(int nc, int num);
 char *ts_acquire(int nc, int num);
 bool ts_release(int nc, int num);
 
+
+
+char *_s_ts_reserve(ts_context *locCont, int num);
+bool _s_ts_push(ts_context *locCont, int num);
+// Consumer
+char *_s_ts_acquire(ts_context *locCont, int num);
+bool _s_ts_release(ts_context *locCont, int num);
 
 
 #ifndef __linux__

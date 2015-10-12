@@ -19,6 +19,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS -Wall -Werror #-}
 module CgAtomix where
@@ -194,7 +195,7 @@ cQPtr :: Int -> String
 cQPtr n = "q_" ++ show n
 
 -- | Declare queues 
-cgDeclQueues :: DynFlags -> QueueInfo -> Cg a -> Cg a
+cgDeclQueues :: forall a. DynFlags -> QueueInfo -> Cg a -> Cg a
 cgDeclQueues dfs qs action 
   = do cgIO $ print (ppr qs)
        cgGlobMutBind dfs noLoc (qi_inch qs) $
@@ -206,9 +207,10 @@ cgDeclQueues dfs qs action
 
     bind_queue_vars qtype qarr queues idxs m = go queues idxs
        where 
+         go :: [(EId,(QId,Int))] -> [Int] -> Cg a 
          go [] _ = m 
-         go (_q1:qss) (n:ns) = 
-           do let qid = cQPtr n
+         go ((_,(QId x,_)):qss) (n:ns) = 
+           do let qid = cQPtr x
               appendTopDecl [cdecl| static $ty:qtype * $id:qid;|]
               addGlobalWplAllocated [cstm| $id:qid = & $id:qarr[$int:n];|]
               go qss ns
@@ -821,28 +823,18 @@ cgInWire _dfs qs (n,qvar) v action =
           assert "cgInWire/not-same-var" (qvar == v) $ action
 
     Just (QMid (QId qid))
-       -> cgDeclQPtr v $ \ptr ptr_ty -> do
-              appendStmt [cstm| $ptr = ($ty:ptr_ty) _stq_acquire($id:(cQPtr qid),$int:n);|]
---              appendStmt [cstm| $ptr = ($ty:ptr_ty) ts_acquire($int:qid,$int:n);|]
-              a <- action
-              appendStmt [cstm| _stq_release($id:(cQPtr qid),$int:n);|]
---              appendStmt [cstm| ts_release($int:qid,$int:n);|]
-              return a
-
-
-{- 
-        -- Note [Single Thread Queue Optimization]
-      | Just (_,qslots) <- Map.lookup qvar (qi_interm qs) -- interm. (assert)
-      , qslots == 1                                       -- one slot
-      , Just [_] <- Map.lookup qvar (qi_cores qs)         -- and one core
-      -> appendStmt [cstm| ORIGIN("Eliminated single-core single-slot queue!");|] -- => no wiring
-      | otherwise 
--}
-      -- -> do cv <- lookupVarEnv v
-      --       let ptr = if isPtrType (nameTyp v) 
-      --                 then [cexp| (char *) $cv|] else [cexp| (char *) & $cv|]
-      --       readFromTs dfs n (nameTyp qvar) q ptr
-
+       | isSingleThreadIntermQueue qs qvar
+       -> cgDeclQPtr v $ \ptr ptr_ty             
+            -> do appendStmt [cstm| $ptr = ($ty:ptr_ty) _stq_acquire($id:(cQPtr qid),$int:n);|]
+                  a <- action
+                  appendStmt [cstm| _stq_release($id:(cQPtr qid),$int:n);|]
+                  return a
+       | otherwise
+       -> cgDeclQPtr v $ \ptr ptr_ty 
+            -> do appendStmt [cstm| $ptr = ($ty:ptr_ty) s_ts_acquire($id:(cQPtr qid),$int:n);|]
+                  a <- action
+                  appendStmt [cstm| s_ts_release($id:(cQPtr qid),$int:n);|]
+                  return a
 
     -- Unexpected output queue
     Just QOut -> panicStr "cg_in_wire: encountered output queue!"
@@ -942,17 +934,18 @@ cgOutWire _dfs qs (n,qvar) v action
 
       -- Some intermediate SORA queue
       Just (QMid (QId qid))
+        | isSingleThreadIntermQueue qs qvar
         -> cgDeclQPtr v $ \ptr ptr_ty -> do
              appendStmt [cstm| $ptr = ($ty:ptr_ty) _stq_reserve($id:(cQPtr qid),$int:n);|]
---             appendStmt [cstm| $ptr = ($ty:ptr_ty) ts_reserve($int:qid,$int:n);|]
-
              a <- action
--- Single thread
              appendStmt [cstm| _stq_push($id:(cQPtr qid),$int:n);|]
--- Sora thread queues:
---             appendStmt [cstm| ts_push($int:qid, $int:n);|]
              return a
-
+        | otherwise 
+        -> cgDeclQPtr v $ \ptr ptr_ty -> do
+             appendStmt [cstm| $ptr = ($ty:ptr_ty) s_ts_reserve($id:(cQPtr qid),$int:n);|]
+             a <- action
+             appendStmt [cstm| s_ts_push($id:(cQPtr qid), $int:n);|]
+             return a
 
       -- Unexpected input queue
       Just QIn -> panicStr "cg_out_wire: encountered the input queue!"

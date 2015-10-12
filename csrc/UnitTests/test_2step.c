@@ -63,9 +63,9 @@ bool __cdecl test_2step_int32(int queue_len)
 
 	for (int i = 0; i < queue_len; i++)
 	{
-		int32 *buf = (int32*)s_ts_reserve(queues, 0, 1);
+		int32 *buf = (int32*)s_ts_reserve(&queues[0], 1);
 		buf[0] = val1;
-		s_ts_push(queues, 0, 1);
+		s_ts_push(&queues[0], 1);
 		val1++;
 	}
 
@@ -79,17 +79,17 @@ bool __cdecl test_2step_int32(int queue_len)
 
 	for (int i = 0; i < queue_len / 2; i++)
 	{
-		int32 *buf = (int32*)s_ts_acquire(queues, 0, 1);
+		int32 *buf = (int32*)s_ts_acquire(&queues[0], 1);
 		valA[indA] = buf[0];
-		s_ts_release(queues, 0, 1);
+		s_ts_release(&queues[0], 1);
 		indA++;
 	}
 
 	for (int i = 0; i < queue_len / 2; i++)
 	{
-		int32 *buf = (int32*)s_ts_reserve(queues, 0, 1);
+		int32 *buf = (int32*)s_ts_reserve(&queues[0], 1);
 		buf[0] = val1;
-		s_ts_push(queues, 0, 1);
+		s_ts_push(&queues[0], 1);
 		val1++;
 	}
 
@@ -103,9 +103,9 @@ bool __cdecl test_2step_int32(int queue_len)
 
 	for (int i = 0; i < queue_len; i++)
 	{
-		int32 *buf = (int32*)s_ts_acquire(queues, 0, 1);
+		int32 *buf = (int32*)s_ts_acquire(&queues[0], 1);
 		valA[indA] = buf[0];
-		s_ts_release(queues, 0, 1);
+		s_ts_release(&queues[0], 1);
 		indA++;
 	}
 
@@ -157,12 +157,12 @@ bool __cdecl test_2step_int32_many(int queue_len)
 
 	for (int i = 0; i < queue_len/2; i++)
 	{
-		int32 *buf = (int32*)s_ts_reserve(queues, 0, 2);
+		int32 *buf = (int32*)s_ts_reserve(&queues[0], 2);
 		buf[0] = val1;
 		val1++;
 		buf[1] = val1;
 		val1++;
-		s_ts_push(queues, 0, 2);
+		s_ts_push(&queues[0], 2);
 	}
 
 	if (!s_ts_isFull(queues, 0))
@@ -175,17 +175,17 @@ bool __cdecl test_2step_int32_many(int queue_len)
 
 	for (int i = 0; i < queue_len / 2; i++)
 	{
-		int32 *buf = (int32*)s_ts_acquire(queues, 0, 1);
+		int32 *buf = (int32*)s_ts_acquire(&queues[0], 1);
 		valA[indA] = buf[0];
-		s_ts_release(queues, 0, 1);
+		s_ts_release(&queues[0], 1);
 		indA++;
 	}
 
 	for (int i = 0; i < queue_len / 2; i++)
 	{
-		int32 *buf = (int32*)s_ts_reserve(queues, 0, 1);
+		int32 *buf = (int32*)s_ts_reserve(&queues[0], 1);
 		buf[0] = val1;
-		s_ts_push(queues, 0, 1);
+		s_ts_push(&queues[0], 1);
 		val1++;
 	}
 
@@ -199,12 +199,12 @@ bool __cdecl test_2step_int32_many(int queue_len)
 
 	for (int i = 0; i < queue_len / 2; i++)
 	{
-		int32 *buf = (int32*)s_ts_acquire(queues, 0, 2);
+		int32 *buf = (int32*)s_ts_acquire(&queues[0], 2);
 		valA[indA] = buf[0];
 		indA++;
 		valA[indA] = buf[1];
 		indA++;
-		s_ts_release(queues, 0, 2);
+		s_ts_release(&queues[0], 2);
 	}
 
 	if (!s_ts_isEmpty(queues, 0))
@@ -216,26 +216,26 @@ bool __cdecl test_2step_int32_many(int queue_len)
 
 	// DEBUG: test alignment error
 	/*
-	int32 *bbuf = (int32*)s_ts_reserve(queues, 0, 2);
+	int32 *bbuf = (int32*)s_ts_reserve(&queues[0], 2);
 	bbuf[0] = val1;
 	val1++;
 	bbuf[1] = val1;
 	val1++;
-	s_ts_push(queues, 0, 2);
+	s_ts_push(&queues[0], 2);
 
-	bbuf = (int32*)s_ts_reserve(queues, 0, 1);
+	bbuf = (int32*)s_ts_reserve(&queues[0], 1);
 	bbuf[0] = val1;
 	val1++;
-	s_ts_push(queues, 0, 1);
+	s_ts_push(&queues[0], 1);
 	// This should return NULL
-	bbuf = (int32*)s_ts_reserve(queues, 0, 2);
+	bbuf = (int32*)s_ts_reserve(&queues[0], 2);
 
-	bbuf = (int32*)s_ts_acquire(queues, 0, 1);
+	bbuf = (int32*)s_ts_acquire(&queues[0], 1);
 	valA[indA] = bbuf[0];
 	indA++;
-	s_ts_release(queues, 0, 1);
+	s_ts_release(&queues[0], 1);
 	// This should return NULL
-	bbuf = (int32*)s_ts_acquire(queues, 0, 2);
+	bbuf = (int32*)s_ts_acquire(&queues[0], 2);
 	*/
 
 
