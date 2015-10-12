@@ -1,4 +1,6 @@
-To build the Ziria (wplc) compiler (under Linux or Windows/Cygwin) you will
+For Linux instructions, please refer to doc/Linux.md
+
+To build the Ziria (wplc) compiler (under Windows/Cygwin) you will
 need:
 
 * GHC 7.8.3 or greater

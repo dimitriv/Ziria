@@ -178,7 +178,7 @@ BOOLEAN __stdcall go_thread_main(void * pParam)
 		buf_ctx_rx.total_in, buf_ctx_rx.total_in*buf_ctx_rx.size_in,
 		buf_ctx_rx.total_out, buf_ctx_rx.total_out*buf_ctx_rx.size_out);
 
-	printf("Bytes copied: %ld\n", bytes_copied);
+	printf("Bytes copied: %llu\n", bytes_copied);
 
 	wpl_output_finalize_rx();
 

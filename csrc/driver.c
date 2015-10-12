@@ -207,7 +207,7 @@ int __cdecl main(int argc, char **argv) {
   printf("Time Elapsed: %d\n", usec);
 #endif
 
-  printf("Bytes copied: %ld\n", bytes_copied);
+  printf("Bytes copied: %llu \n", bytes_copied);
 
   wpl_output_finalize();
 

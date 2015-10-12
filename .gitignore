@@ -398,3 +398,17 @@ code/WiFi/mac/CompilerVS/CompilerVS13-mac-inline
 code/WiFi/mac/CompilerVS/CompilerVS13-mac
 
 csrc/CompilerVS/UnitTests
+csrc/CompilerVS/.vs
+csrc/.vs
+csrc/CompilerVS/UpgradeLog.htm
+csrc/UpgradeLog.htm
+
+# Ignore performance files
+performance/gcc.txt
+performance/vs.txt
+performance/winddk.txt
+performance/output.svg
+performance/perf/*
+
+csrc/driver
+

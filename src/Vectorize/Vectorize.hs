@@ -189,8 +189,10 @@ comp_vect0 dfs (VectPack {..}) (Par p c1 c2)
   | otherwise 
   = let is_c1 = isComputer (ctComp c1)
         is_c2 = isComputer (ctComp c2)
-        ctx1  = if is_c2 then CtxExCompRight `join_ctx` vp_vctx else vp_vctx
-        ctx2  = if is_c1 then CtxExCompLeft  `join_ctx` vp_vctx else vp_vctx
+        ctx1  = if is_c2 then join_ctx vp_vctx CtxExCompRight -- `join_ctx` vp_vctx 
+                else vp_vctx
+        ctx2  = if is_c1 then join_ctx vp_vctx CtxExCompLeft  -- `join_ctx` vp_vctx 
+                else vp_vctx
     in
     do verbose dfs $ text (show vp_vctx ++ " => " ++ show ctx1)
        verbose dfs $ text (show vp_vctx ++ " => " ++ show ctx2) 
@@ -217,14 +219,19 @@ comp_vect0 dfs (VectPack {..}) (Par p c1 c2)
 
        return res
   where 
-     join_ctx x CtxUnrestricted = x
-     join_ctx CtxUnrestricted x = x
-     join_ctx CtxExCompLeftAndRight _ = CtxExCompLeftAndRight
-     join_ctx _ CtxExCompLeftAndRight = CtxExCompLeftAndRight
-     join_ctx CtxExCompRight CtxExCompRight = CtxExCompRight
-     join_ctx CtxExCompRight CtxExCompLeft  = CtxExCompLeftAndRight
-     join_ctx CtxExCompLeft  CtxExCompRight = CtxExCompLeftAndRight
-     join_ctx CtxExCompLeft  CtxExCompLeft  = CtxExCompLeft 
+     -- If the context is unrestricted then just choose whatever we are (y)
+     join_ctx CtxUnrestricted y = y 
+     -- If the context says there's a computer to the left then it does not matter what
+     -- we say. Here is the example:
+     --    c1 >>> repeat { t >>> c } 
+     -- The context says there's a computer to the left (c1). 
+     -- But we (t) are to the left of (c). This does not matter however, since
+     -- the program is really equivalent (for vectorization purposes) to:
+     --    c1 >>> t >>> repeat c
+     -- There is a symmetric case with a computer to the right.
+     join_ctx CtxExCompLeft  _y = CtxExCompLeft
+     join_ctx CtxExCompRight _y = CtxExCompRight
+     join_ctx _              _  = error "Vect context bug!"
 
 
 {------------------------------------------------------------------------------}
@@ -298,9 +305,10 @@ comp_vect0 dfs (VectPack {..}) (Return {}) =
 
 {-------------------------------------------------------------------------------}
 
-comp_vect0 dfs (VectPack {..}) (Branch e c1 c2) = do 
+comp_vect0 dfs (VectPack {..}) w@(Branch e c1 c2) = do 
   let sfs = compSFDD vp_card vp_tyin vp_tyout
       is_computer = isComputer vp_cty
+
 
   direct_vss <- vect_comp_dd dfs vp_comp sfs
 
@@ -310,6 +318,22 @@ comp_vect0 dfs (VectPack {..}) (Branch e c1 c2) = do
   let recursive_vss = combineBranch vp_loc is_computer e vcs1 vcs2
   warnIfEmpty dfs vp_comp recursive_vss "Branch"
 
+
+  let dbg_doc = vcat $ 
+          [ text "Branch computation, context:" <+> text (show vp_vctx)
+          , text "Left branch candidates: " <+> ppr (compLoc c1)
+          , nest 2 $ pprDVRess vcs1
+          , nest 4 $ ppr c1
+          , text "Right branch candidates: " <+> ppr (compLoc c2)
+          , nest 2 $ pprDVRess vcs2
+          , nest 4 $ ppr c2
+          , text "Recursive VSSs:"
+          , nest 2 $ pprDVRess recursive_vss
+          , text "Direct VSSs:"
+          , nest 2 $ pprDVRess direct_vss
+          ]
+
+  verbose dfs dbg_doc
 
   let ret = direct_vss `unionDVRCands` recursive_vss
   ret `seq` return ret
@@ -373,8 +397,9 @@ comp_vect0 dfs (VectPack {..}) _other = do
 vectIterComp :: DynFlags -> (Comp -> Comp) -> Ty -> Ty -> LComp -> VecM DVRCands
 vectIterComp dfs builder tin tout cbody = do
   let body_card = compInfo cbody
-  body_cands <- comp_vect dfs CtxExCompLeftAndRight cbody
-  --body_cands <- vect_comp_dd dfs cbody $ compSFDD body_card tin tout
+  -- body_cands <- comp_vect dfs CtxExCompLeftAndRight cbody
+  body_cands <- comp_vect dfs CtxUnrestricted cbody
+  -- body_cands <- vect_comp_dd dfs cbody $ compSFDD body_card tin tout
   return (mapDVRCands (updDVRComp $ builder) body_cands)
 
 
