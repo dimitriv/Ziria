@@ -136,37 +136,104 @@ void ts_free();
 extern LONG volatile * barr_hist1;
 extern LONG volatile * barr_hist2;
 
+/* Old implementation of barrier()
 // Simple barrier
 inline void _barrier(LONG volatile *barrier, LONG volatile *to_reset, int no_threads, int thr)
 {
-	// Reset old barrier
-	if (thr == 0 && to_reset != NULL)
-	{
-		*to_reset = 0;
-	}
-
-	// Check new one
-	InterlockedIncrement(barrier);
-	MemoryBarrier();
-	while (*barrier < no_threads)
-	{
-		MemoryBarrier();
-	}
+// Reset old barrier
+if (thr == 0 && to_reset != NULL)
+{
+*to_reset = 0;
 }
 
+// Check new one
+InterlockedIncrement(barrier);
+MemoryBarrier();
+while (*barrier < no_threads)
+{
+MemoryBarrier();
+}
+}
 
-// When we come to a goto, we wait at the <state> barrier related to the current state
 inline void barrier(LONG volatile *state, int no_threads, int thr)
 {
-	_barrier(state, barr_hist1, no_threads, thr);
-	_barrier(state + 1, barr_hist2, no_threads, thr);
-	_barrier(state + 2, state, no_threads, thr);
-	if (thr == 0)
-	{
-		barr_hist1 = state + 1;
-		barr_hist2 = state + 2;
-	}
+_barrier(state, barr_hist1, no_threads, thr);
+_barrier(state + 1, barr_hist2, no_threads, thr);
+_barrier(state + 2, state, no_threads, thr);
+if (thr == 0)
+{
+barr_hist1 = state + 1;
+barr_hist2 = state + 2;
 }
+}
+*/
+
+
+#ifdef _VISUALIZE
+#include "cvmarkers.h"
+#include "cvmarkersobj.h"
+using namespace Concurrency::diagnostic;
+marker_series series;
+#endif 
+
+
+#define MAXPOSSIBLETHREADS 16
+static volatile long thr_cnt = 0;
+
+#ifdef _DEBUG 
+static volatile bool ok[MAXPOSSIBLETHREADS] = { true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true };
+#else
+static volatile bool ok[MAXPOSSIBLETHREADS] = { 0 };
 #endif
 
 
+inline void barrier(LONG volatile *___state, int no_threads, int thr)
+{   // we are not really using the ___state any more
+
+#ifdef _VISUALIZE
+	span *fooSpan = new span(series, 1, "spinwait");
+	// series.write_flag("Spin wait time:");
+#endif
+
+	if (thr == 0)
+	{
+		// If we are the master controller then we spin-wait for every thread 
+		// to increment their counter
+
+		while (thr_cnt < no_threads - 1);
+
+		// At this point thr_cnt = no_threads-1, so all other threads must be 
+		// spinning. Hence, safe to zero-out thr_cnt as no-one is looking at it.
+		thr_cnt = 0;
+		// NB: Here we are missing a MemoryBarrier() for ARM (but we're OK for x64)
+		// One by one, unleash other threads
+		for (int i = 1; i < no_threads; i++)
+		{
+#ifdef _DEBUG
+			// Assertion: all threads must be spinning here.
+			if (ok[i]) __debugbreak();
+#endif
+			ok[i] = true;
+		}
+	}
+	else
+	{
+		// All other threads reach here, set their flag to false and busy-wait
+#ifdef _DEBUG
+		// Assert that if you ever reach here is because 
+		// someone woke you up previously
+		if (!ok[thr]) __debugbreak();
+#endif
+		ok[thr] = false;
+		// Atomically increment thr_cnt (NB: generates a barrier)
+		InterlockedIncrement(&thr_cnt);
+
+		while (!ok[thr]);
+	}
+#ifdef _VISUALIZE
+	delete fooSpan;
+#endif
+
+}
+
+#endif
