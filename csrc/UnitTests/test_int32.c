@@ -44,7 +44,7 @@ bool __cdecl test_int32()
 	int queue_sizes[1] = { QUEUE_LEN };
 	bool error = 0;
 
-	queues = s_ts_init_var(1, sizes, queue_sizes);
+	queues = ts_init(1, sizes, queue_sizes);
 
 	int32 val1 = 0;
 	int32 valA[3 * QUEUE_LEN];
@@ -52,7 +52,7 @@ bool __cdecl test_int32()
 	char *pValA = (char *)valA;
 	int indA = 0;
 	
-	if (!s_ts_isEmpty(queues, 0))
+	if (!ts_isEmpty(queues))
 	{
 		printf("Error in test_int32: s_ts_isEmpty\n");
 		error = 1;
@@ -60,11 +60,11 @@ bool __cdecl test_int32()
 	
 	for (int i = 0; i < QUEUE_LEN; i++)
 	{
-		s_ts_put(queues, 0, pVal1);
+		ts_put(queues, pVal1);
 		val1++;
 	}
 
-	if (!s_ts_isFull(queues, 0))
+	if (!ts_isFull(queues))
 	{
 		printf("Error in test_int32: s_ts_isFull\n");
 		error = 1;
@@ -74,17 +74,17 @@ bool __cdecl test_int32()
 
 	for (int i = 0; i < QUEUE_LEN / 2; i++)
 	{
-		s_ts_get(queues, 0, (char *)(valA + indA));
+		ts_get(queues, (char *)(valA + indA));
 		indA++;
 	}
 
 	for (int i = 0; i < QUEUE_LEN / 2; i++)
 	{
-		s_ts_put(queues, 0, pVal1);
+		ts_put(queues, pVal1);
 		val1++;
 	}
 
-	if (!s_ts_isFull(queues, 0))
+	if (!ts_isFull(queues))
 	{
 		printf("Error in test_int32: s_ts_isFull\n");
 		error = 1;
@@ -94,11 +94,11 @@ bool __cdecl test_int32()
 
 	for (int i = 0; i < QUEUE_LEN; i++)
 	{
-		s_ts_get(queues, 0, (char *)(valA + indA));
+		ts_get(queues, (char *)(valA + indA));
 		indA++;
 	}
 
-	if (!s_ts_isEmpty(queues, 0))
+	if (!ts_isEmpty(queues))
 	{
 		printf("Error in test_int32: s_ts_isEmpty\n");
 		error = 1;
@@ -127,7 +127,7 @@ bool __cdecl test_int32_many()
 	int queue_sizes[1] = { QUEUE_LEN };
 	bool error = 0;
 
-	queues = s_ts_init_var(1, sizes, queue_sizes);
+	queues = ts_init(1, sizes, queue_sizes);
 
 	int32 val1[4] = { 0, 1, 2, 3 };
 	int32 valA[3 * QUEUE_LEN];
@@ -135,7 +135,7 @@ bool __cdecl test_int32_many()
 	char *pValA = (char *)valA;
 	int indA = 0;
 
-	if (!s_ts_isEmpty(queues, 0))
+	if (!ts_isEmpty(queues))
 	{
 		printf("Error in test_int32_many: s_ts_isEmpty\n");
 		error = 1;
@@ -143,14 +143,14 @@ bool __cdecl test_int32_many()
 
 	for (int i = 0; i < QUEUE_LEN/4; i++)
 	{
-		s_ts_putMany(queues, 0, 4, pVal1);
+		ts_putMany(queues, 4, pVal1);
 		for (int j = 0; j < 4; j++)
 		{
 			val1[j] = val1[j] + 4;
 		}
 	}
 
-	if (!s_ts_isFull(queues, 0))
+	if (!ts_isFull(queues))
 	{
 		printf("Error in test_int32_many: s_ts_isFull\n");
 		error = 1;
@@ -158,11 +158,11 @@ bool __cdecl test_int32_many()
 
 
 
-	s_ts_getMany(queues, 0, QUEUE_LEN / 2, (char *)valA);
+	ts_getMany(queues, QUEUE_LEN / 2, (char *)valA);
 
 	for (int i = 0; i < QUEUE_LEN/8; i++)
 	{
-		s_ts_putMany(queues, 0, 4, pVal1);
+		ts_putMany(queues, 4, pVal1);
 		for (int j = 0; j < 4; j++)
 		{
 			val1[j] = val1[j] + 4;
@@ -170,7 +170,7 @@ bool __cdecl test_int32_many()
 	}
 
 
-	if (!s_ts_isFull(queues, 0))
+	if (!ts_isFull(queues))
 	{
 		printf("Error in test_int32_many: s_ts_isFull\n");
 		error = 1;
@@ -178,9 +178,9 @@ bool __cdecl test_int32_many()
 
 
 
-	s_ts_getMany(queues, 0, QUEUE_LEN, (char *)(valA + QUEUE_LEN / 2));
+	ts_getMany(queues, QUEUE_LEN, (char *)(valA + QUEUE_LEN / 2));
 
-	if (!s_ts_isEmpty(queues, 0))
+	if (!ts_isEmpty(queues))
 	{
 		printf("Error in test_int32_many: s_ts_isEmpty\n");
 		error = 1;

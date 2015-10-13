@@ -46,9 +46,7 @@ int __cdecl main(int argc, char **argv)
 	error = test_int32() | error;
 	error = test_int32_many() | error;	
 	error = test_2step_int32(4) | error;
-	error = test_2step_int32_many(4) | error;
 	error = test_2step_int32(QUEUE_LEN) | error;
-	error = test_2step_int32_many(QUEUE_LEN) | error;
 
 	if (error)
 	{

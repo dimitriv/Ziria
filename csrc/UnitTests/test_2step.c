@@ -42,12 +42,11 @@ bool __cdecl test_2step_int32(int queue_len)
 	ts_context *queues;
 	size_t sizes[1] = { sizeof(int32) };
 	int queue_sizes[1];
-	int batch_sizes[1] = { 1 };
 	bool error = 0;
 
 	queue_sizes[0] = queue_len;
 
-	queues = s_ts_init_batch(1, sizes, queue_sizes, batch_sizes);
+	queues = ts_init(1, sizes, queue_sizes);
 
 	int32 val1 = 0;
 	int32 valA[3 * QUEUE_LEN];
@@ -55,7 +54,7 @@ bool __cdecl test_2step_int32(int queue_len)
 	char *pValA = (char *)valA;
 	int indA = 0;
 
-	if (!s_ts_isEmpty(queues, 0))
+	if (!ts_isEmpty(queues))
 	{
 		printf("Error in test_int32: s_ts_isEmpty\n");
 		error = 1;
@@ -63,13 +62,13 @@ bool __cdecl test_2step_int32(int queue_len)
 
 	for (int i = 0; i < queue_len; i++)
 	{
-		int32 *buf = (int32*)s_ts_reserve(&queues[0], 1);
+		int32 *buf = (int32*)ts_reserve(&queues[0], 1);
 		buf[0] = val1;
-		s_ts_push(&queues[0], 1);
+		ts_push(&queues[0], 1);
 		val1++;
 	}
 
-	if (!s_ts_isFull(queues, 0))
+	if (!ts_isFull(queues))
 	{
 		printf("Error in test_int32: s_ts_isFull\n");
 		error = 1;
@@ -79,21 +78,21 @@ bool __cdecl test_2step_int32(int queue_len)
 
 	for (int i = 0; i < queue_len / 2; i++)
 	{
-		int32 *buf = (int32*)s_ts_acquire(&queues[0], 1);
+		int32 *buf = (int32*)ts_acquire(&queues[0], 1);
 		valA[indA] = buf[0];
-		s_ts_release(&queues[0], 1);
+		ts_release(&queues[0], 1);
 		indA++;
 	}
 
 	for (int i = 0; i < queue_len / 2; i++)
 	{
-		int32 *buf = (int32*)s_ts_reserve(&queues[0], 1);
+		int32 *buf = (int32*)ts_reserve(&queues[0], 1);
 		buf[0] = val1;
-		s_ts_push(&queues[0], 1);
+		ts_push(&queues[0], 1);
 		val1++;
 	}
 
-	if (!s_ts_isFull(queues, 0))
+	if (!ts_isFull(queues))
 	{
 		printf("Error in test_int32: s_ts_isFull\n");
 		error = 1;
@@ -103,13 +102,13 @@ bool __cdecl test_2step_int32(int queue_len)
 
 	for (int i = 0; i < queue_len; i++)
 	{
-		int32 *buf = (int32*)s_ts_acquire(&queues[0], 1);
+		int32 *buf = (int32*)ts_acquire(&queues[0], 1);
 		valA[indA] = buf[0];
-		s_ts_release(&queues[0], 1);
+		ts_release(&queues[0], 1);
 		indA++;
 	}
 
-	if (!s_ts_isEmpty(queues, 0))
+	if (!ts_isEmpty(queues))
 	{
 		printf("Error in test_int32: s_ts_isEmpty\n");
 		error = 1;
@@ -129,126 +128,4 @@ bool __cdecl test_2step_int32(int queue_len)
 
 
 
-
-bool __cdecl test_2step_int32_many(int queue_len)
-{
-	ts_context *queues;
-	size_t sizes[1] = { sizeof(int32) };
-	int queue_sizes[1];
-	int batch_sizes[1] = { 2 };
-	bool error = 0;
-
-
-	queue_sizes[0] = queue_len / 2;
-
-	queues = s_ts_init_batch(1, sizes, queue_sizes, batch_sizes);
-
-	int32 val1 = 0;
-	int32 valA[3 * QUEUE_LEN];
-	char *pVal1 = (char *)&val1;
-	char *pValA = (char *)valA;
-	int indA = 0;
-
-	if (!s_ts_isEmpty(queues, 0))
-	{
-		printf("Error in test_int32: s_ts_isEmpty\n");
-		error = 1;
-	}
-
-	for (int i = 0; i < queue_len/2; i++)
-	{
-		int32 *buf = (int32*)s_ts_reserve(&queues[0], 2);
-		buf[0] = val1;
-		val1++;
-		buf[1] = val1;
-		val1++;
-		s_ts_push(&queues[0], 2);
-	}
-
-	if (!s_ts_isFull(queues, 0))
-	{
-		printf("Error in test_int32: s_ts_isFull\n");
-		error = 1;
-	}
-
-
-
-	for (int i = 0; i < queue_len / 2; i++)
-	{
-		int32 *buf = (int32*)s_ts_acquire(&queues[0], 1);
-		valA[indA] = buf[0];
-		s_ts_release(&queues[0], 1);
-		indA++;
-	}
-
-	for (int i = 0; i < queue_len / 2; i++)
-	{
-		int32 *buf = (int32*)s_ts_reserve(&queues[0], 1);
-		buf[0] = val1;
-		s_ts_push(&queues[0], 1);
-		val1++;
-	}
-
-	if (!s_ts_isFull(queues, 0))
-	{
-		printf("Error in test_int32: s_ts_isFull\n");
-		error = 1;
-	}
-
-
-
-	for (int i = 0; i < queue_len / 2; i++)
-	{
-		int32 *buf = (int32*)s_ts_acquire(&queues[0], 2);
-		valA[indA] = buf[0];
-		indA++;
-		valA[indA] = buf[1];
-		indA++;
-		s_ts_release(&queues[0], 2);
-	}
-
-	if (!s_ts_isEmpty(queues, 0))
-	{
-		printf("Error in test_int32: s_ts_isEmpty\n");
-		error = 1;
-	}
-
-
-	// DEBUG: test alignment error
-	/*
-	int32 *bbuf = (int32*)s_ts_reserve(&queues[0], 2);
-	bbuf[0] = val1;
-	val1++;
-	bbuf[1] = val1;
-	val1++;
-	s_ts_push(&queues[0], 2);
-
-	bbuf = (int32*)s_ts_reserve(&queues[0], 1);
-	bbuf[0] = val1;
-	val1++;
-	s_ts_push(&queues[0], 1);
-	// This should return NULL
-	bbuf = (int32*)s_ts_reserve(&queues[0], 2);
-
-	bbuf = (int32*)s_ts_acquire(&queues[0], 1);
-	valA[indA] = bbuf[0];
-	indA++;
-	s_ts_release(&queues[0], 1);
-	// This should return NULL
-	bbuf = (int32*)s_ts_acquire(&queues[0], 2);
-	*/
-
-
-
-	for (int i = 0; i < indA; i++)
-	{
-		if (valA[i] != i)
-		{
-			printf("Error in test_int32: data!\n");
-			error = 1;
-		}
-	}
-
-	return error;
-}
 

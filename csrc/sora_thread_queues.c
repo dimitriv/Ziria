@@ -43,38 +43,9 @@ char *data(char *buf, int size, int i) {
 
 
 
-ts_context *contexts;
-int no_contexts = 0;
-
-
-// Sora needed to yield in WinXP because of the scheduler issues
-// In Win7 this does not seem necessary. 
-// However, after thorough measurements we concluded that 
-// SoraThreadYield doesn't affect the performance on many cores
-// and help performance on a few cores, so we decided to keep it
-//#define USE_SORA_YIELD
-
-
-//Uncomment to display statistics about ts_queues
-//#define TS_DEBUG
-
-#ifdef TS_DEBUG
-#define MAX_TS	10
-calign LONG queueSize[MAX_TS*16];
-LONG queueCum[MAX_TS];
-LONG queueSam[MAX_TS];
-LONG almostFull[MAX_TS];
-LONG full[MAX_TS];
-LONG fstalled[MAX_TS];
-LONG esamples[MAX_TS];
-LONG empty[MAX_TS];
-#endif
-
-
-
 // Init <no> queues, each with a different size
 
-ts_context *s_ts_init_batch(int no, size_t *sizes, int *queue_sizes, int *batch_sizes)
+ts_context *ts_init(int no, size_t *sizes, int *queue_sizes)
 {
 	ts_context *locCont;
 
@@ -109,16 +80,8 @@ ts_context *s_ts_init_batch(int no, size_t *sizes, int *queue_sizes, int *batch_
 
 		// Buffer size should be a multiple of ST_CACHE_LINE
 		locCont[j].size = sizes[j];
-		if (batch_sizes == NULL)
-		{
-			locCont[j].batch_size = 1;
-		}
-		else
-		{
-			locCont[j].batch_size = batch_sizes[j];
-		}
-		locCont[j].alg_size = ST_CACHE_LINE * ((locCont[j].size * locCont[j].batch_size) / ST_CACHE_LINE);
-		if ((locCont[j].size * locCont[j].batch_size) % ST_CACHE_LINE > 0) locCont[j].alg_size += ST_CACHE_LINE;
+		locCont[j].alg_size = ST_CACHE_LINE * (locCont[j].size/ ST_CACHE_LINE);
+		if (locCont[j].size % ST_CACHE_LINE > 0) locCont[j].alg_size += ST_CACHE_LINE;
 
 		// Allocate one cache line for valid field and the rest for the data
 		locCont[j].buf = (char *)_aligned_malloc((ST_CACHE_LINE + locCont[j].alg_size)*locCont[j].queue_size, ST_CACHE_LINE);
@@ -134,7 +97,6 @@ ts_context *s_ts_init_batch(int no, size_t *sizes, int *queue_sizes, int *batch_
 			* valid(locCont[j].buf, locCont[j].alg_size, i) = false;
 		}
 		locCont[j].wptr = locCont[j].wdptr = locCont[j].rptr = locCont[j].rdptr = locCont[j].buf;
-		locCont[j].wind = locCont[j].wdind = locCont[j].rind = locCont[j].rdind = 0;
 
 		locCont[j].evReset = locCont[j].evFlush = locCont[j].evFinish = false;
 		locCont[j].evProcessDone = true;
@@ -145,53 +107,12 @@ ts_context *s_ts_init_batch(int no, size_t *sizes, int *queue_sizes, int *batch_
 
 
 
-// Init <no> queues
-// Legacy API, assumes all queues have the same <batch_size> = 1
-ts_context *s_ts_init_var(int no, size_t *sizes, int *queue_sizes)
-{
-	return s_ts_init_batch(no, sizes, queue_sizes, NULL);
-}
-
-// Init <no> queues
-// Legacy API, assumes all queues have the same size of ST_QUEUE_SIZE and <batch_size> = 1
-ts_context *s_ts_init(int no, size_t *sizes)
-{
-	return s_ts_init_batch(no, sizes, NULL, NULL);
-}
 
 
 
 
 
-// Init <no> queues, each with a different size
-int ts_init_batch(int no, size_t *sizes, int *queue_sizes, int *batch_sizes)
-{
-	contexts = s_ts_init_batch(no, sizes, queue_sizes, batch_sizes);
-	no_contexts = no;
-	return no;
-}
-
-
-// Init <no> queues, each with a different size
-int ts_init_var(int no, size_t *sizes, int *queue_sizes)
-{
-	contexts = s_ts_init_var(no, sizes, queue_sizes);
-	no_contexts = no;
-	return no;
-}
-
-
-// Init <no> queues
-int ts_init(int no, size_t *sizes)
-{
-	contexts = s_ts_init(no, sizes);
-	no_contexts = no;
-	return no;
-}
-
-
-
-char *s_ts_reserve(ts_context *locCont, int num)
+char *ts_reserve(ts_context *locCont, int num)
 {
 	char *buf;
 
@@ -199,47 +120,35 @@ char *s_ts_reserve(ts_context *locCont, int num)
 		return NULL;
 	}
 
-	if (locCont->wind + num > locCont->batch_size)
-	{
-		printf("Error: s_ts_reserve buffer not aligned!\n");
-		return NULL;
-	}
-
-	buf = data(locCont->wptr, locCont->alg_size, 0) + locCont->size*locCont->wind;
+	buf = data(locCont->wptr, locCont->alg_size, 0);
 
 
-	if (locCont->wind + num >= locCont->batch_size)
-	{
-		// We set it to be valid on final push
-		*valid(locCont->wptr, locCont->alg_size, 0) = false;
-		locCont->evProcessDone = false;
+	// We set it to be valid on final push
+	*valid(locCont->wptr, locCont->alg_size, 0) = false;
+	locCont->evProcessDone = false;
 
-		locCont->wptr += (ST_CACHE_LINE + locCont->alg_size);
-		if ((locCont->wptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + locCont->alg_size))
-			(locCont->wptr) = (locCont->buf);
-	}
-	locCont->wind = (locCont->wind + num) % locCont->batch_size;
+	locCont->wptr += (ST_CACHE_LINE + locCont->alg_size);
+	if ((locCont->wptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + locCont->alg_size))
+		(locCont->wptr) = (locCont->buf);
 
 
 	return buf;
 }
 
-bool s_ts_push(ts_context *locCont, int num)
+
+
+bool ts_push(ts_context *locCont, int num)
 {
-	if (locCont->wdptr == locCont->wptr && locCont->wdind == locCont->wind){
+	if (locCont->wdptr == locCont->wptr){
 		return false;
 	}
 
-	if (locCont->wdind + num >= locCont->batch_size)
-	{
-		*valid(locCont->wdptr, locCont->alg_size, 0) = true;
-		locCont->evProcessDone = false;
+	*valid(locCont->wdptr, locCont->alg_size, 0) = true;
+	locCont->evProcessDone = false;
 
-		locCont->wdptr += (ST_CACHE_LINE + locCont->alg_size);
-		if ((locCont->wdptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + locCont->alg_size))
-			(locCont->wdptr) = (locCont->buf);
-	}
-	locCont->wdind = (locCont->wdind + num) % locCont->batch_size;
+	locCont->wdptr += (ST_CACHE_LINE + locCont->alg_size);
+	if ((locCont->wdptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + locCont->alg_size))
+		(locCont->wdptr) = (locCont->buf);
 
 
 	return true;
@@ -248,7 +157,7 @@ bool s_ts_push(ts_context *locCont, int num)
 
 
 // Called by the downlink thread
-char *s_ts_acquire(ts_context *locCont, int num)
+char *ts_acquire(ts_context *locCont, int num)
 {
 	char * buf = NULL;
 
@@ -273,25 +182,15 @@ char *s_ts_acquire(ts_context *locCont, int num)
 	}
 	else
 	{
-		if (locCont->rind + num > locCont->batch_size)
-		{
-			printf("Error: s_ts_acquire buffer not aligned!\n");
-			return NULL;
-		}
-
 		// Otherwise, there are data. Pump the data to the output pin
-		buf = data(locCont->rptr, locCont->alg_size, 0) + locCont->size*locCont->rind;
+		buf = data(locCont->rptr, locCont->alg_size, 0);
 
-		if (locCont->rind + num >= locCont->batch_size)
+		*valid(locCont->rptr, locCont->alg_size, 0) = true;
+		locCont->rptr += (ST_CACHE_LINE + locCont->alg_size);
+		if ((locCont->rptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + locCont->alg_size))
 		{
-			*valid(locCont->rptr, locCont->alg_size, 0) = true;
-			locCont->rptr += (ST_CACHE_LINE + locCont->alg_size);
-			if ((locCont->rptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + locCont->alg_size))
-			{
-				(locCont->rptr) = (locCont->buf);
-			}
+			(locCont->rptr) = (locCont->buf);
 		}
-		locCont->rind = (locCont->rind + num) % locCont->batch_size;
 
 		return buf;
 	}
@@ -300,24 +199,19 @@ char *s_ts_acquire(ts_context *locCont, int num)
 // Called by the downlink thread
 
 
-bool s_ts_release(ts_context *locCont, int num)
+bool ts_release(ts_context *locCont, int num)
 {
-	if (locCont->rptr == locCont->rdptr && locCont->rind == locCont->rdind)
+	if (locCont->rptr == locCont->rdptr)
 	{
 		return false;
 	}
 
-	if (locCont->rdind + num >= locCont->batch_size)
+	*valid(locCont->rdptr, locCont->alg_size, 0) = false;
+	locCont->rdptr += (ST_CACHE_LINE + locCont->alg_size);
+	if ((locCont->rdptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + locCont->alg_size))
 	{
-		*valid(locCont->rdptr, locCont->alg_size, 0) = false;
-		locCont->rdptr += (ST_CACHE_LINE + locCont->alg_size);
-		if ((locCont->rdptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + locCont->alg_size))
-		{
-			(locCont->rdptr) = (locCont->buf);
-		}
+		(locCont->rdptr) = (locCont->buf);
 	}
-	locCont->rdind = (locCont->rdind + num) % locCont->batch_size;
-
 
 	return true;
 }
@@ -325,130 +219,44 @@ bool s_ts_release(ts_context *locCont, int num)
 
 
 
-char *ts_reserve(int nc, int num)
-{
-	return s_ts_reserve(&contexts[nc], num);
-}
 
-bool ts_push(int nc, int num)
-{
-	return s_ts_push(&contexts[nc], num);
-}
-
-char *ts_acquire(int nc, int num)
-{
-	return s_ts_acquire(&contexts[nc], num);
-}
-
-bool ts_release(int nc, int num)
-{
-	return s_ts_release(&contexts[nc], num);
-}
-
-
-
-
-
-
-
-
-
-
-// s_ts_put* and s_ts_get* are obsolete and should not be used
-// Will be removed soon
-// Instead, use s_ts_reserve, s_ts_push, s_ts_acquire, s_ts_release
 
 
 
 
 // Called by the uplink thread
 //        BOOL_FUNC_PROCESS(ipin)
-void s_ts_put(ts_context *locCont, int nc, char *input)
+void ts_put(ts_context *locCont, char *input)
 {
-
-	/*
-	// DEBUG
-	printf("%u, nc: %d, wptr: %x, rptr: %x, buf: %x, wptr valid=%d\n", GetCurrentThreadId(), 
-		nc, locCont[nc].wptr, locCont[nc].rptr, locCont[nc].buf,
-		*valid(locCont[nc].wptr, locCont[nc].alg_size, 0));
-	*/
-
-#ifdef TS_DEBUG
-	if (*valid(locCont[nc].wptr, locCont[nc].alg_size, 0)) {
-		full[nc]++;
-	}
-#endif
-
     // spin wait if the synchronized buffer is full
-    //while ((locCont[nc].wptr)->valid) { SoraThreadYield(TRUE); }
-    while (*valid(locCont[nc].wptr, locCont[nc].alg_size, 0)) { 
-#ifdef TS_DEBUG
-		fstalled[nc]++;
-#endif
-#ifdef USE_SORA_YIELD
-		SoraThreadYield(TRUE); 
-#endif
-	}
+	while (*valid(locCont->wptr, locCont->alg_size, 0));
 
 
-	// copy a burst of input data into the synchronized buffer
-	//memcpy ((locCont[nc].wptr)->data, input, sizeof(char)*BURST);
 	// Copy only the actual amount of data (size) and not the entire buffer (alg_size)
-	memcpy (data(locCont[nc].wptr, locCont[nc].alg_size, 0), input, sizeof(char)*locCont[nc].size);
+	memcpy (data(locCont->wptr, locCont->alg_size, 0), input, sizeof(char)*locCont->size);
 
-    * valid(locCont[nc].wptr, locCont[nc].alg_size, 0) = true;
-    locCont[nc].evProcessDone = false;
+    * valid(locCont->wptr, locCont->alg_size, 0) = true;
+    locCont->evProcessDone = false;
 
-
-#ifdef TS_DEBUG
-	InterlockedIncrement(queueSize + (nc*16));
-	queueCum[nc] += queueSize[nc*16];
-	queueSam[nc]++;
-	if (queueSize[nc * 16] > (locCont[nc].queue_size * 0.9)) almostFull[nc]++;
-#endif
-
-
-	// advance the write pointer
-    //(locCont[nc].wptr)++;
-    //if ((locCont[nc].wptr) == (locCont[nc].buf) + locCont[nc].queue_size)
-    //    (locCont[nc].wptr) = (locCont[nc].buf);
-    locCont[nc].wptr += (ST_CACHE_LINE+locCont[nc].alg_size);
-	if ((locCont[nc].wptr) == (locCont[nc].buf) + locCont[nc].queue_size*(ST_CACHE_LINE + locCont[nc].alg_size))
-        (locCont[nc].wptr) = (locCont[nc].buf);
+    locCont->wptr += (ST_CACHE_LINE+locCont->alg_size);
+	if ((locCont->wptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + locCont->alg_size))
+        (locCont->wptr) = (locCont->buf);
 }
-
-
-
-
-
-// Called by the uplink thread
-//        BOOL_FUNC_PROCESS(ipin)
-void ts_put(int nc, char *input)
-{
-	if (nc >= no_contexts)
-	{
-		printf("There are only %d queues!, %d\n", no_contexts, nc);
-		return;
-	}
-
-	s_ts_put(contexts, nc, input);
-}
-
 
 
 
 
 // Called by the uplink thread
 // Blocking
-void s_ts_putMany(ts_context *locCont, int nc, int n, char *input)
+void ts_putMany(ts_context *locCont, int n, char *input)
 {
 	int write = n;
 	char *ptr = input;
 	while (write > 0)
 	{
 		// Blocking:
-		s_ts_put(locCont, nc, ptr);
-		ptr += locCont[nc].size;
+		ts_put(locCont, ptr);
+		ptr += locCont->size;
 		write--;
 	}
 }
@@ -456,40 +264,15 @@ void s_ts_putMany(ts_context *locCont, int nc, int n, char *input)
 
 
 // Blocking
-void ts_putMany(int nc, int n, char *input)
-{
-	if (nc >= no_contexts)
-	{
-		printf("There are only %d queues! %d\n", no_contexts, nc);
-		return;
-	}
-
-	s_ts_putMany(contexts, nc, n, input);
-}
-
-
-// Blocking
 // unpack bits into one byte each, and put them into the queue 
-void s_ts_putManyBits(ts_context *locCont, int nc, int n, char *input)
+void ts_putManyBits(ts_context *locCont, int n, char *input)
 {
 	unsigned char unpacked_bit[1];
 	for (int i = 0; i < n; i++)
 	{
 		bitRead((BitArrPtr)input, i, unpacked_bit);
-		s_ts_putMany(locCont, nc, 1, (char *)unpacked_bit);
+		ts_putMany(locCont, 1, (char *)unpacked_bit);
 	}
-}
-
-// Blocking
-void ts_putManyBits(int nc, int n, char *input)
-{
-	if (nc >= no_contexts)
-	{
-		printf("There are only %d queues! %d\n", no_contexts, nc);
-		return;
-	}
-
-	s_ts_putManyBits(contexts, nc, n, input);
 }
 
 
@@ -497,63 +280,43 @@ void ts_putManyBits(int nc, int n, char *input)
 
 
 // Called by the downlink thread
-bool s_ts_get(ts_context *locCont, int nc, char *output)
+bool ts_get(ts_context *locCont, char *output)
 {
-#ifdef TS_DEBUG
-	esamples[nc]++;
-#endif
 
 	// if the synchronized buffer has no data, 
     // check whether there is reset/flush request
-    //if (!(locCont[nc].rptr)->valid)
-    if (!(*valid(locCont[nc].rptr, locCont[nc].alg_size, 0)))
+    //if (!(locCont->rptr)->valid)
+    if (!(*valid(locCont->rptr, locCont->alg_size, 0)))
     {		
-#ifdef TS_DEBUG
-		empty[nc]++;
-#endif
-		if (locCont[nc].evReset)
+		if (locCont->evReset)
         {
             //Next()->Reset();
-            (locCont[nc].evReset) = false;
+            (locCont->evReset) = false;
         }
-        if (locCont[nc].evFlush)
+        if (locCont->evFlush)
         {
             //Next()->Flush();
-            locCont[nc].evFlush = false;
+            locCont->evFlush = false;
         }
-        locCont[nc].evProcessDone = true;
+        locCont->evProcessDone = true;
 		// no data to process  
         return false;
     }
 	else
 	{
 		// Otherwise, there are data. Pump the data to the output pin
-		//memcpy ( output, (locCont[nc].rptr)->data, sizeof(char)*BURST);
+		//memcpy ( output, (locCont->rptr)->data, sizeof(char)*BURST);
 		// Copy only the actual amount of data (size) and not the entire buffer (alg_size)
-		memcpy ( output, data(locCont[nc].rptr, locCont[nc].alg_size, 0), sizeof(char)*locCont[nc].size);
-
-        //(locCont[nc].rptr)->valid = false;
-	    //(locCont[nc].rptr)++;
-        //if ((locCont[nc].rptr) == (locCont[nc].buf) + locCont[nc].queue_size)
+		memcpy ( output, data(locCont->rptr, locCont->alg_size, 0), sizeof(char)*locCont->size);
 
 
-#ifdef TS_DEBUG
-		InterlockedDecrement(queueSize + (nc*16));
-#endif
-
-        * valid(locCont[nc].rptr, locCont[nc].alg_size, 0) = false;
-		locCont[nc].rptr += (ST_CACHE_LINE+locCont[nc].alg_size);
-		if ((locCont[nc].rptr) == (locCont[nc].buf) + locCont[nc].queue_size*(ST_CACHE_LINE+locCont[nc].alg_size))
+        * valid(locCont->rptr, locCont->alg_size, 0) = false;
+		locCont->rptr += (ST_CACHE_LINE+locCont->alg_size);
+		if ((locCont->rptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE+locCont->alg_size))
         {
-            (locCont[nc].rptr) = (locCont[nc].buf);
-#ifdef USE_SORA_YIELD
-            // Periodically yielding in busy processing to prevent OS hanging
-            SoraThreadYield(TRUE);
-#endif
+            (locCont->rptr) = (locCont->buf);
 		}
 
-        //bool rc = Next()->Process(opin0());
-        //if (!rc) return rc;
 		return true;
 	}
     return false;
@@ -561,32 +324,16 @@ bool s_ts_get(ts_context *locCont, int nc, char *output)
 
 
 
-bool ts_get(int nc, char *output)
-//FINL bool Process() // ISource::Process
-{
-	if (nc >= no_contexts)
-	{
-		printf("There are only %d queues! %d\n", no_contexts, nc);
-		return false;
-	}
-
-	return s_ts_get(contexts, nc, output);
-}
-
-
-
-
-
 
 
 // Reads as many chunks as available but at most n, and returns the number of chunks read
-int s_ts_getMany(ts_context *locCont, int nc, int n, char *output)
+int ts_getMany(ts_context *locCont, int n, char *output)
 {
 	int read = 0;
 	char *ptr = output;
-	while (read < n && s_ts_get(locCont, nc, ptr))
+	while (read < n && ts_get(locCont, ptr))
 	{
-		ptr += locCont[nc].size;
+		ptr += locCont->size;
 		read++;
 	}
 
@@ -595,35 +342,23 @@ int s_ts_getMany(ts_context *locCont, int nc, int n, char *output)
 
 
 
-int ts_getMany(int nc, int n, char *output)
-{
-	if (nc >= no_contexts)
-	{
-		printf("There are only %d queues! %d\n", no_contexts, nc);
-		return false;
-	}
-
-	return s_ts_getMany(contexts, nc, n, output);
-}
-
-
 
 
 
 // Reads n chunks and blocks if not available. Return number of chunks read (which could be less than n if finished)
-int s_ts_getManyBlocking(ts_context *locCont, int nc, int n, char *output)
+int ts_getManyBlocking(ts_context *locCont, int n, char *output)
 {
 	int read = 0;
 	char *ptr = output;
 	while (read < n)
 	{
-		bool last = s_ts_get(locCont, nc, ptr);
+		bool last = ts_get(locCont, ptr);
 		if (last)
 		{
-			ptr += locCont[nc].size;
+			ptr += locCont->size;
 			read++;
 		}
-		if (s_ts_isFinished(locCont, nc))
+		if (ts_isFinished(locCont))
 		{
 			break;
 		}
@@ -632,17 +367,6 @@ int s_ts_getManyBlocking(ts_context *locCont, int nc, int n, char *output)
 	return read;
 }
 
-
-int ts_getManyBlocking(int nc, int n, char *output)
-{
-	if (nc >= no_contexts)
-	{
-		printf("There are only %d queues! %d\n", no_contexts, nc);
-		return false;
-	}
-
-	return s_ts_getManyBlocking(contexts, nc, n, output);
-}
 
 
 void packBitsIntoByte(BitArrPtr bits, unsigned char *byte)
@@ -657,14 +381,14 @@ void packBitsIntoByte(BitArrPtr bits, unsigned char *byte)
 
 // Get n bits (stored in 1 byte each), and pack them into (n+7)/8 bytes
 // Return number of bits read (which could be less than n if finished)
-int s_ts_getManyBits(ts_context *locCont, int nc, int n, char *output)
+int ts_getManyBits(ts_context *locCont, int n, char *output)
 {
 	char tmp_output[1];
 	int read = 0;
 
 	for (int i = 0; i<n; i++)
 	{
-		read += s_ts_getMany(locCont, nc, 1, tmp_output);
+		read += ts_getMany(locCont, 1, tmp_output);
 		bitWrite((BitArrPtr)output, i, tmp_output[0]);
 	}
 
@@ -673,32 +397,20 @@ int s_ts_getManyBits(ts_context *locCont, int nc, int n, char *output)
 
 
 
-int ts_getManyBits(int nc, int n, char *output)
-{
-	if (nc >= no_contexts)
-	{
-		printf("There are only %d queues! %d\n", no_contexts, nc);
-		return false;
-	}
-
-	return s_ts_getManyBits(contexts, nc, n, output);
-}
-
-
 
 
 
 
 // Get n bits (stored in 1 byte each), and pack them into (n+7)/8 bytes
 // Return number of bits read (which could be less than n if finished)
-int s_ts_getManyBitsBlocking(ts_context *locCont, int nc, int n, char *output)
+int ts_getManyBitsBlocking(ts_context *locCont, int n, char *output)
 {
 	char tmp_output[1];
 	int read = 0;
 
 	for (int i = 0; i<n; i++)
 	{
-		read += s_ts_getManyBlocking(locCont, nc, 1, tmp_output);
+		read += ts_getManyBlocking(locCont, 1, tmp_output);
 		bitWrite((BitArrPtr) output, i, tmp_output[0]);
 	}
 
@@ -707,70 +419,33 @@ int s_ts_getManyBitsBlocking(ts_context *locCont, int nc, int n, char *output)
 
 
 
-int ts_getManyBitsBlocking(int nc, int n, char *output)
-{
-	if (nc >= no_contexts)
-	{
-		printf("There are only %d queues! %d\n", no_contexts, nc);
-		return false;
-	}
-
-	return s_ts_getManyBitsBlocking(contexts, nc, n, output);
-}
 
 
-
-bool s_ts_isFinished(ts_context *locCont, int nc)
+bool ts_isFinished(ts_context *locCont)
 {
 	// Return true to signal the end
-	if (locCont[nc].evFinish)
+	if (locCont->evFinish)
 	{
-	  //previously: locCont[nc].evFinish = false;
-	  locCont[nc].evProcessDone = true;
+	  locCont->evProcessDone = true;
 	  return true;
 	}
 	return false;
 }
 
-// Called by the downlink thread
-bool ts_isFinished(int nc)
-{
-	if (nc >= no_contexts)
-	{
-		printf("There are only %d queues!\n", no_contexts);
-		return false;
-	}
 
-	return s_ts_isFinished(contexts, nc);
+
+
+bool ts_isFull(ts_context *locCont)
+{
+	return (*valid(locCont->wptr, locCont->alg_size, 0));
 }
 
 
-
-
-
-
-bool s_ts_isFull(ts_context *locCont, int nc)
+bool ts_isEmpty(ts_context *locCont)
 {
-	return (*valid(locCont[nc].wptr, locCont[nc].alg_size, 0));
+  return (!(*valid(locCont->rptr, locCont->alg_size, 0)));
 }
 
-bool ts_isFull(int nc)
-{
-	return s_ts_isFull(contexts, nc);
-}
-
-
-
-
-bool s_ts_isEmpty(ts_context *locCont, int nc)
-{
-  return (!(*valid(locCont[nc].rptr, locCont[nc].alg_size, 0)));
-}
-
-bool ts_isEmpty(int nc)
-{
-	return s_ts_isEmpty(contexts, nc);
-}
 
 
 
@@ -778,27 +453,12 @@ bool ts_isEmpty(int nc)
 
 
 // Issued from upstream to downstream
-void s_ts_reset(ts_context *locCont, int nc)
+void ts_reset(ts_context *locCont)
 {
     // Set the reset event, spin-waiting for 
     // the downstream to process the event
-    locCont[nc].evReset = true;
-    while (locCont[nc].evReset) { 
-#ifdef USE_SORA_YIELD
-		SoraThreadYield(TRUE); 
-#endif
-	}
-}
-
-// Issued from upstream to downstream
-void ts_reset(int nc)
-{
-	if (nc >= no_contexts)
-	{
-		printf("There are only %d queues!\n", no_contexts);
-		return;
-	}
-	s_ts_reset(contexts, nc);
+    locCont->evReset = true;
+	while (locCont->evReset);
 }
 
 
@@ -806,119 +466,72 @@ void ts_reset(int nc)
 
 
 
+
+
 // Issued from upstream to downstream
-void s_ts_flush(ts_context *locCont, int nc)
+void ts_flush(ts_context *locCont)
 {
 	// Wait for all data in buf processed by downstreaming bricks
-    while (!locCont[nc].evProcessDone) { 
-#ifdef USE_SORA_YIELD
-		SoraThreadYield(TRUE); 
-#endif
-	}
+	while (!locCont->evProcessDone);
 
     // Set the flush event, spin-waiting for
     // the downstream to process the event
-    locCont[nc].evFlush = true;
-	while (locCont[nc].evFlush) { 
-#ifdef USE_SORA_YIELD
-		SoraThreadYield(TRUE); 
-#endif
-	}
-}
-
-
-// Issued from upstream to downstream
-void ts_flush(int nc)
-{
-	if (nc >= no_contexts)
-	{
-		printf("There are only %d queues!\n", no_contexts);
-		return;
-	}
-
-	s_ts_flush(contexts, nc);
+    locCont->evFlush = true;
+	while (locCont->evFlush);
 }
 
 
 
-
-
-
-
-
-
 // Issued from upstream to downstream
-void s_ts_finish(ts_context *locCont, int nc)
+void ts_finish(ts_context *locCont)
 {
 	// Set the reset event, spin-waiting for 
     // the downstream to process the event
-    locCont[nc].evFinish = true;
-    //previously: while (locCont[nc].evFinish) { SoraThreadYield(TRUE); }
+    locCont->evFinish = true;
 }
-
-// Issued from upstream to downstream
-void ts_finish(int nc)
-{
-	if (nc >= no_contexts)
-	{
-		printf("There are only %d queues!\n", no_contexts);
-		return;
-	}
-	s_ts_finish(contexts, nc);
-}
-
 
 
 
 
 // WARNING: Unlike the rest of the code, this is not thread-safe 
 // and might require a lock, depending on the use
-void s_ts_clear(ts_context *locCont, int nc)
+void ts_clear(ts_context *locCont)
 {
 	size_t i;
-	for (i = 0; i < locCont[nc].queue_size; i++)
+	for (i = 0; i < locCont->queue_size; i++)
 	{
-		*valid(locCont[nc].buf, locCont[nc].alg_size, i) = false;
+		*valid(locCont->buf, locCont->alg_size, i) = false;
 	}
 	// This is not thread-safe because consumer might move the rptr while we reset
 	// creating an inconsitent state. Check with Steffen whether this needs to be handled
-	locCont[nc].wptr = locCont[nc].rptr;
+	locCont->wptr = locCont->rptr;
 }
-
-void ts_clear(int nc)
-{
-	return s_ts_clear(contexts, nc);
-}
-
-
-
-
 
 
 
 
 // WARNING: Unlike the rest of the code, this is not thread-safe 
 // and might require a lock, depending on the use
-void s_ts_rollback(ts_context *locCont, int nc, int n)
+void ts_rollback(ts_context *locCont, int n)
 {
 	int i = n;
 
 	// Stop when enough rolled back or we hit the top of the queue
-	while (i > 0 && locCont[nc].rptr != locCont[nc].wptr)
+	while (i > 0 && locCont->rptr != locCont->wptr)
 	{
 		// rptr points at the new location so we first need to decrease
 
 		// This is not thread-safe because consumer might move the rptr while we reset
 		// creating an inconsitent state. Check with Steffen whether this needs to be handled
-		locCont[nc].rptr -= (ST_CACHE_LINE + locCont[nc].alg_size);
-		if (locCont[nc].rptr < locCont[nc].buf)
+		locCont->rptr -= (ST_CACHE_LINE + locCont->alg_size);
+		if (locCont->rptr < locCont->buf)
 		{
-			locCont[nc].rptr = (locCont[nc].buf) + (locCont[nc].queue_size - 1)*(ST_CACHE_LINE + locCont[nc].alg_size);
+			locCont->rptr = (locCont->buf) + (locCont->queue_size - 1)*(ST_CACHE_LINE + locCont->alg_size);
 		}
 
-		if (*valid(locCont[nc].rptr, locCont[nc].alg_size, 0))
+		if (*valid(locCont->rptr, locCont->alg_size, 0))
 		{
-			*valid(locCont[nc].rptr, locCont[nc].alg_size, 0) = false;
+			*valid(locCont->rptr, locCont->alg_size, 0) = false;
 		}
 		else
 		{
@@ -931,35 +544,17 @@ void s_ts_rollback(ts_context *locCont, int nc, int n)
 	}
 }
 
-void ts_rollback(int nc, int n)
-{
-	return s_ts_rollback(contexts, nc, n);
-}
 
 
 
-
-void s_ts_free(ts_context *locCont, int no)
+void ts_free(ts_context *locCont, int no)
 {
 	for (int nc=0; nc < no; nc++)
 	{
-#ifdef TS_DEBUG
-	printf("queue=%u, avg queue=%.3f, avg alm.full=%.3f, full=%.3f (%u), fstalled=%u, avg_stall=%.3f, empty=%.3f(%u), total samples=%u\n", 
-		(long) queueSize[nc*16], (double) queueCum[nc] / (double) queueSam[nc], 
-		(double) almostFull[nc] / (double) queueSam[nc], 
-		(double) full[nc] / (double) queueSam[nc], full[nc], fstalled[nc], 
-		(double) fstalled[nc] / (double) full[nc], 
-		(double) empty[nc] / (double) esamples[nc], empty[nc], 
-		queueSam[nc]);
-#endif
 		_aligned_free(locCont[nc].buf);
 	}
 }
 
-void ts_free()
-{
-	s_ts_free(contexts, no_contexts);
-}
 
 
 
