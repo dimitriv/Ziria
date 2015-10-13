@@ -66,11 +66,6 @@ typedef struct
 	MEM_ALIGN(ST_CACHE_LINE) int size;
 	MEM_ALIGN(ST_CACHE_LINE) int alg_size;
 
-	MEM_ALIGN(ST_CACHE_LINE) volatile bool evReset;
-	MEM_ALIGN(ST_CACHE_LINE) volatile bool evFinish;
-	MEM_ALIGN(ST_CACHE_LINE) volatile bool evFlush;
-	MEM_ALIGN(ST_CACHE_LINE) volatile bool evProcessDone;
-
 	MEM_ALIGN(ST_CACHE_LINE) int queue_size;
 } ts_context;
 
@@ -83,16 +78,22 @@ typedef struct
 // Init the queue
 ts_context *ts_init(int no, size_t *sizes, int *queue_sizes);
 
+// ** The prefered, 2-step API that avoids extra memcpy
+// The following functions are non-blocking and the caller should spin-wait if required
+// Producer
+char *ts_reserve(ts_context *locCont, int num);
+bool ts_push(ts_context *locCont, int num);
+// Consumer
+char *ts_acquire(ts_context *locCont, int num);
+bool ts_release(ts_context *locCont, int num);
 
+
+// ** The old, 1-step API that introduces extra memcpy
 // Producer
 void ts_put(ts_context *locCont, char *input);						// Blocking
 void ts_putMany(ts_context *locCont, int n, char *input);			// Blocking
 void ts_putManyBits(ts_context *locCont, int n, char *input);		// unpack bits into one byte each, and put them into the queue 
-
-
-
 // Consumer
-bool ts_isFinished(ts_context *locCont);
 bool ts_get(ts_context *locCont, char *output);
 int ts_getMany(ts_context *locCont, int n, char *output);
 int ts_getManyBlocking(ts_context *locCont, int n, char *output);
@@ -100,12 +101,6 @@ int ts_getManyBits(ts_context *locCont, int n, char *output);		// get n bits (st
 int ts_getManyBitsBlocking(ts_context *locCont, int n, char *output);
 
 
-// Issued from upstream to downstream
-void ts_reset(ts_context *locCont);
-// Issued from upstream to downstream
-void ts_flush(ts_context *locCont);
-// Issued from upstream to downstream
-void ts_finish(ts_context *locCont);
 bool ts_isEmpty(ts_context *locCont);
 bool ts_isFull(ts_context *locCont);
 
@@ -127,14 +122,6 @@ void ts_free();
 
 
 
-
-// The following functions are non-blocking and the caller should spin-wait if required
-// Producer
-char *ts_reserve(ts_context *locCont, int num);
-bool ts_push(ts_context *locCont, int num);
-// Consumer
-char *ts_acquire(ts_context *locCont, int num);
-bool ts_release(ts_context *locCont, int num);
 
 
 

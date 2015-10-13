@@ -55,17 +55,6 @@ ts_context *ts_init(int no, size_t *sizes, int *queue_sizes)
 		return 0;
 	}
 
-#ifdef TS_DEBUG
-		memset(queueSize, 0, MAX_TS*16 * sizeof(LONG));
-		memset(queueCum, 0, MAX_TS * sizeof(LONG));
-		memset(queueSam, 0, MAX_TS * sizeof(LONG));
-		memset(almostFull, 0, MAX_TS * sizeof(LONG));
-		memset(full, 0, MAX_TS * sizeof(LONG));
-		memset(fstalled, 0, MAX_TS * sizeof(LONG));
-		memset(esamples, 0, MAX_TS * sizeof(LONG));
-		memset(empty, 0, MAX_TS * sizeof(LONG));
-#endif
-
 	for (int j=0; j<no; j++)
 	{
 		// All queues have default size
@@ -97,9 +86,6 @@ ts_context *ts_init(int no, size_t *sizes, int *queue_sizes)
 			* valid(locCont[j].buf, locCont[j].alg_size, i) = false;
 		}
 		locCont[j].wptr = locCont[j].wdptr = locCont[j].rptr = locCont[j].rdptr = locCont[j].buf;
-
-		locCont[j].evReset = locCont[j].evFlush = locCont[j].evFinish = false;
-		locCont[j].evProcessDone = true;
 	}
 
 	return locCont;
@@ -125,7 +111,6 @@ char *ts_reserve(ts_context *locCont, int num)
 
 	// We set it to be valid on final push
 	*valid(locCont->wptr, locCont->alg_size, 0) = false;
-	locCont->evProcessDone = false;
 
 	locCont->wptr += (ST_CACHE_LINE + locCont->alg_size);
 	if ((locCont->wptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + locCont->alg_size))
@@ -144,7 +129,6 @@ bool ts_push(ts_context *locCont, int num)
 	}
 
 	*valid(locCont->wdptr, locCont->alg_size, 0) = true;
-	locCont->evProcessDone = false;
 
 	locCont->wdptr += (ST_CACHE_LINE + locCont->alg_size);
 	if ((locCont->wdptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + locCont->alg_size))
@@ -166,17 +150,6 @@ char *ts_acquire(ts_context *locCont, int num)
 	//if (!(locCont->rptr)->valid)
 	if (!(*valid(locCont->rptr, locCont->alg_size, 0)))
 	{
-		if (locCont->evReset)
-		{
-			//Next()->Reset();
-			(locCont->evReset) = false;
-		}
-		if (locCont->evFlush)
-		{
-			//Next()->Flush();
-			locCont->evFlush = false;
-		}
-		locCont->evProcessDone = true;
 		// no data to process  
 		return NULL;
 	}
@@ -222,10 +195,6 @@ bool ts_release(ts_context *locCont, int num)
 
 
 
-
-
-// Called by the uplink thread
-//        BOOL_FUNC_PROCESS(ipin)
 void ts_put(ts_context *locCont, char *input)
 {
     // spin wait if the synchronized buffer is full
@@ -236,7 +205,6 @@ void ts_put(ts_context *locCont, char *input)
 	memcpy (data(locCont->wptr, locCont->alg_size, 0), input, sizeof(char)*locCont->size);
 
     * valid(locCont->wptr, locCont->alg_size, 0) = true;
-    locCont->evProcessDone = false;
 
     locCont->wptr += (ST_CACHE_LINE+locCont->alg_size);
 	if ((locCont->wptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + locCont->alg_size))
@@ -288,17 +256,6 @@ bool ts_get(ts_context *locCont, char *output)
     //if (!(locCont->rptr)->valid)
     if (!(*valid(locCont->rptr, locCont->alg_size, 0)))
     {		
-		if (locCont->evReset)
-        {
-            //Next()->Reset();
-            (locCont->evReset) = false;
-        }
-        if (locCont->evFlush)
-        {
-            //Next()->Flush();
-            locCont->evFlush = false;
-        }
-        locCont->evProcessDone = true;
 		// no data to process  
         return false;
     }
@@ -357,10 +314,6 @@ int ts_getManyBlocking(ts_context *locCont, int n, char *output)
 		{
 			ptr += locCont->size;
 			read++;
-		}
-		if (ts_isFinished(locCont))
-		{
-			break;
 		}
 	}
 
@@ -421,18 +374,6 @@ int ts_getManyBitsBlocking(ts_context *locCont, int n, char *output)
 
 
 
-bool ts_isFinished(ts_context *locCont)
-{
-	// Return true to signal the end
-	if (locCont->evFinish)
-	{
-	  locCont->evProcessDone = true;
-	  return true;
-	}
-	return false;
-}
-
-
 
 
 bool ts_isFull(ts_context *locCont)
@@ -452,43 +393,8 @@ bool ts_isEmpty(ts_context *locCont)
 
 
 
-// Issued from upstream to downstream
-void ts_reset(ts_context *locCont)
-{
-    // Set the reset event, spin-waiting for 
-    // the downstream to process the event
-    locCont->evReset = true;
-	while (locCont->evReset);
-}
 
 
-
-
-
-
-
-
-// Issued from upstream to downstream
-void ts_flush(ts_context *locCont)
-{
-	// Wait for all data in buf processed by downstreaming bricks
-	while (!locCont->evProcessDone);
-
-    // Set the flush event, spin-waiting for
-    // the downstream to process the event
-    locCont->evFlush = true;
-	while (locCont->evFlush);
-}
-
-
-
-// Issued from upstream to downstream
-void ts_finish(ts_context *locCont)
-{
-	// Set the reset event, spin-waiting for 
-    // the downstream to process the event
-    locCont->evFinish = true;
-}
 
 
 
