@@ -26,7 +26,7 @@ OBJDIR = .
 OBJ_INT = bit.o numerics.o params.o test.o driver.o wpl_alloc.o utils.o
 OBJ_IO  = buf_bit.o buf_chunk.o buf_numerics8.o buf_numerics32.o buf_numerics16.o
 OBJ_LIB = 
-OBJ_EXT = ext_math.o ext_arr.o 
+OBJ_EXT = ext_math.o ext_arr.o sora_ext_viterbi.o
 
 # lut test.c only contains a main function but has to be linked with everything
 OBJ_LUT_ONLY = bit.o numerics.o test.o wpl_alloc.o utils.o
