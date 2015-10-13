@@ -54,6 +54,24 @@ bool __cdecl test_2step_int32(int queue_len)
 	char *pValA = (char *)valA;
 	int indA = 0;
 
+
+	// NOOP
+	if (!ts_isEmpty(queues))
+	{
+		printf("Error in test_int32: s_ts_isEmpty\n");
+		error = 1;
+	}
+	for (int i = 0; i < queue_len; i++)
+	{
+		int32 *buf = (int32*)ts_reserve(&queues[0], 1);
+		buf[0] = val1;
+		ts_push(&queues[0], 1);
+	}
+	ts_clear(queues);
+
+
+
+
 	if (!ts_isEmpty(queues))
 	{
 		printf("Error in test_int32: s_ts_isEmpty\n");
@@ -75,9 +93,22 @@ bool __cdecl test_2step_int32(int queue_len)
 	}
 
 
+	// NOOP
+	ts_acquire(&queues[0], 1);
+	ts_release(&queues[0], 1);
+	ts_acquire(&queues[0], 1);
+	ts_release(&queues[0], 1);
+	ts_rollback(queues, 2);
+
+
 
 	for (int i = 0; i < queue_len / 2; i++)
 	{
+		// NOOP
+		ts_acquire(&queues[0], 1);
+		ts_release(&queues[0], 1);
+		ts_rollback(queues, 1);
+
 		int32 *buf = (int32*)ts_acquire(&queues[0], 1);
 		valA[indA] = buf[0];
 		ts_release(&queues[0], 1);
@@ -102,6 +133,11 @@ bool __cdecl test_2step_int32(int queue_len)
 
 	for (int i = 0; i < queue_len; i++)
 	{
+		// NOOP
+		ts_acquire(&queues[0], 1);
+		ts_release(&queues[0], 1);
+		ts_rollback(queues, 1);
+
 		int32 *buf = (int32*)ts_acquire(&queues[0], 1);
 		valA[indA] = buf[0];
 		ts_release(&queues[0], 1);

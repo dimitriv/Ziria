@@ -410,7 +410,8 @@ void ts_clear(ts_context *locCont)
 	}
 	// This is not thread-safe because consumer might move the rptr while we reset
 	// creating an inconsitent state. Check with Steffen whether this needs to be handled
-	locCont->wptr = locCont->rptr;
+	locCont->wptr = locCont->wdptr = locCont->rptr = locCont->rdptr = locCont->buf;
+
 }
 
 
@@ -418,6 +419,7 @@ void ts_clear(ts_context *locCont)
 
 // WARNING: Unlike the rest of the code, this is not thread-safe 
 // and might require a lock, depending on the use
+// NOTE: rollback also resets any acquire/release that might be in process
 void ts_rollback(ts_context *locCont, int n)
 {
 	int i = n;
@@ -435,14 +437,17 @@ void ts_rollback(ts_context *locCont, int n)
 			locCont->rptr = (locCont->buf) + (locCont->queue_size - 1)*(ST_CACHE_LINE + locCont->alg_size);
 		}
 
-		if (*valid(locCont->rptr, locCont->alg_size, 0))
+		locCont->rdptr = locCont->rptr;
+
+		if (!(*valid(locCont->rptr, locCont->alg_size, 0)))
 		{
-			*valid(locCont->rptr, locCont->alg_size, 0) = false;
+			*valid(locCont->rptr, locCont->alg_size, 0) = true;
 		}
 		else
 		{
 			// This should really not happen because 
 			// we should hit the top of the queue before seeing false
+			printf("Rollback error!\n");
 			break;
 		}
 

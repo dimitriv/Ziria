@@ -37,12 +37,14 @@ permissions and limitations under the License.
 
 
 
-bool __cdecl test_int32()
+bool __cdecl test_int32(int queue_len)
 {
 	ts_context *queues;
 	size_t sizes[1] = { sizeof(int32) };
-	int queue_sizes[1] = { QUEUE_LEN };
+	int queue_sizes[1];
 	bool error = 0;
+
+	queue_sizes[0] = queue_len;
 
 	queues = ts_init(1, sizes, queue_sizes);
 
@@ -51,14 +53,29 @@ bool __cdecl test_int32()
 	char *pVal1 = (char *)&val1;
 	char *pValA = (char *)valA;
 	int indA = 0;
-	
+
+	// NOOP
+	if (!ts_isEmpty(queues))
+	{
+		printf("Error in test_int32: s_ts_isEmpty\n");
+		error = 1;
+	}	
+	for (int i = 0; i < queue_len; i++)
+	{
+		ts_put(queues, pVal1);
+	}
+	ts_clear(queues);
+
+
+
 	if (!ts_isEmpty(queues))
 	{
 		printf("Error in test_int32: s_ts_isEmpty\n");
 		error = 1;
 	}
-	
-	for (int i = 0; i < QUEUE_LEN; i++)
+
+
+	for (int i = 0; i < queue_len; i++)
 	{
 		ts_put(queues, pVal1);
 		val1++;
@@ -72,13 +89,23 @@ bool __cdecl test_int32()
 
 
 
-	for (int i = 0; i < QUEUE_LEN / 2; i++)
+	// NOOP
+	ts_get(queues, (char *)(valA + indA));
+	ts_get(queues, (char *)(valA + indA));
+	ts_rollback(queues, 2);
+
+
+	for (int i = 0; i < queue_len / 2; i++)
 	{
+		// NOOP
+		ts_get(queues, (char *)(valA + indA));
+		ts_rollback(queues, 1);
+
 		ts_get(queues, (char *)(valA + indA));
 		indA++;
 	}
 
-	for (int i = 0; i < QUEUE_LEN / 2; i++)
+	for (int i = 0; i < queue_len / 2; i++)
 	{
 		ts_put(queues, pVal1);
 		val1++;
@@ -92,8 +119,12 @@ bool __cdecl test_int32()
 
 
 
-	for (int i = 0; i < QUEUE_LEN; i++)
+	for (int i = 0; i < queue_len; i++)
 	{
+		// NOOP
+		ts_get(queues, (char *)(valA + indA));
+		ts_rollback(queues, 1);
+
 		ts_get(queues, (char *)(valA + indA));
 		indA++;
 	}
