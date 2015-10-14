@@ -424,8 +424,9 @@ void ts_rollback(ts_context *locCont, int n)
 {
 	int i = n;
 
-	// Stop when enough rolled back or we hit the top of the queue
-	while (i > 0 && locCont->rptr != locCont->wptr)
+	// For performance we don't check whether we roll beyond the end of the queue
+	// Ziria compiler should do that
+	while (i > 0)
 	{
 		// rptr points at the new location so we first need to decrease
 
