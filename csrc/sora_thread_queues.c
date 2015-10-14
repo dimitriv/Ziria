@@ -108,10 +108,6 @@ char *ts_reserve(ts_context *locCont, int num)
 
 	buf = data(locCont->wptr, locCont->alg_size, 0);
 
-
-	// We set it to be valid on final push
-	*valid(locCont->wptr, locCont->alg_size, 0) = false;
-
 	locCont->wptr += (ST_CACHE_LINE + locCont->alg_size);
 	if ((locCont->wptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + locCont->alg_size))
 		(locCont->wptr) = (locCont->buf);
@@ -121,12 +117,15 @@ char *ts_reserve(ts_context *locCont, int num)
 }
 
 
-
+// NB: To make it fast, release does not check whether there are enough slots to be released
+// Ziria should do that
 bool ts_push(ts_context *locCont, int num)
 {
+	/*
 	if (locCont->wdptr == locCont->wptr){
 		return false;
 	}
+	*/
 
 	*valid(locCont->wdptr, locCont->alg_size, 0) = true;
 
@@ -140,7 +139,6 @@ bool ts_push(ts_context *locCont, int num)
 
 
 
-// Called by the downlink thread
 char *ts_acquire(ts_context *locCont, int num)
 {
 	char * buf = NULL;
@@ -169,15 +167,18 @@ char *ts_acquire(ts_context *locCont, int num)
 	}
 	return NULL;
 }
-// Called by the downlink thread
 
 
+// NB: To make it fast, release does not check whether there are enough slots to be released
+// Ziria should do that
 bool ts_release(ts_context *locCont, int num)
 {
+	/*
 	if (locCont->rptr == locCont->rdptr)
 	{
 		return false;
 	}
+	*/
 
 	*valid(locCont->rdptr, locCont->alg_size, 0) = false;
 	locCont->rdptr += (ST_CACHE_LINE + locCont->alg_size);
