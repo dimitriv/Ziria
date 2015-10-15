@@ -57,8 +57,11 @@ all: $(TGTS)
 # For example, if no packet is detected, there is no output, 
 # and -p treats that as correct
 # We add -p in vectorized tests through DIFFOPTS=-p
-%.test: %.outfile
+test_c_%.test: test_c_%.outfile
 	$(DIFF) $(DIFFOPTS) -f $< -g $<.ground -d -v -n 0.9 -t 220
+
+%.test: %.outfile
+	$(DIFF) $(DIFFOPTS) -f $< -g $<.ground -d -v -n 0.9
 
 %.accept : %.outfile
 	cp $< $<.ground
