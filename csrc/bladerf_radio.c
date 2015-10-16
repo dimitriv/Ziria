@@ -324,6 +324,7 @@ out1:
 		stop_program = true;
 		return -1;
 	}
+	return 0;
 }
 
 
