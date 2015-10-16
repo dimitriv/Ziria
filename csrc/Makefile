@@ -19,7 +19,7 @@
 #
 
 CC = g++
-CFLAGS = -std=c++11 -msse3 -Wno-attributes -Wno-write-strings -O2 -pipe -fno-aggressive-loop-optimizations
+CFLAGS = -std=c++11 -msse3 -Wno-attributes -Wno-write-strings -Og # -O2 -pipe -fno-aggressive-loop-optimizations
 LIBS = -lm
 OBJDIR = .
 
