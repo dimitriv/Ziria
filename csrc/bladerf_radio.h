@@ -22,7 +22,7 @@ permissions and limitations under the License.
 #include "numerics.h"
 #include <libbladeRF.h>
 
-int  BladeRF_RadioStart(BlinkParams *params, bool tx, bool rx);
+int  BladeRF_RadioStart(BlinkParams *params_tx, BlinkParams *params_rx);
 int  BladeRF_ConfigureTX(BlinkParams *params);
 int  BladeRF_ConfigureRX(BlinkParams *params);
 
