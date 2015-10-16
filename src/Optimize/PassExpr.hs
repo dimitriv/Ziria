@@ -27,6 +27,7 @@ module PassExpr (
  , passAsgnLetRef
  , passExpLetPush 
  , passEval
+ , hoistStructAsgns
 ) where
 
 import Prelude hiding (exp)
@@ -41,6 +42,7 @@ import PassFoldDebug
 import PpComp ()
 import PpExpr ()
 
+import Data.Maybe ( isNothing )
 import PassFoldM
 
 {-------------------------------------------------------------------------------
@@ -78,6 +80,31 @@ passElimUnused = TypedExpBottomUp $ \eloc e -> do
       -> rewrite (eSeq eloc e1 e2)
      | otherwise
       -> return e 
+
+-- | Hoist side-effects out of struct assignments
+hoistStructAsgns :: TypedExpPass
+hoistStructAsgns 
+  = TypedExpBottomUp $ \elc e -> do
+        case unExp e of 
+          EStruct t flds_es -> do
+            bnds <- mapM (go_one elc) flds_es
+            if all isNothing (map snd bnds)
+             then return e
+             else let flds_es' = map fst bnds
+                  in rewrite $ build_binds elc (map snd bnds) $
+                               eStruct elc t flds_es'
+          _ -> return e
+
+  where go_one loc (f,erhs)
+          | is_simpl_expr erhs = return ((f,erhs), Nothing)
+          | otherwise      
+          = do nm <- newPassFoldGName "hoist" (ctExp erhs) loc Imm
+               return ((f,eVar loc nm), Just (nm,erhs))
+        build_binds _loc [] x = x
+        build_binds loc (Nothing:rs) x = build_binds loc rs x
+        build_binds loc (Just (nm,edef):rs) x = 
+          eLet loc nm AutoInline edef $ build_binds loc rs x
+
 
 -- | Inline let bindings
 passExpInlining :: TypedExpPass
