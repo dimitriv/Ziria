@@ -35,25 +35,36 @@ permissions and limitations under the License.
 extern int stop_program; 
 
 
-int BladeRF_RadioStart(BlinkParams *params, bool tx, bool rx)
+// Set params_tx == NULL or params_rx = NULL if unused
+int BladeRF_RadioStart(BlinkParams *params_tx, BlinkParams *params_rx)
 {
 	int status;
+	bladerf *dev;
 	
-	if(false==tx && false==rx) {
+	if (params_tx == NULL && params_rx == NULL) {
 		printf("Both TX and RX are false, exiting...\n\n");
 		return -1;
 	}
 	printf("Opening and initializing device...\n\n");
 
-	status = bladerf_open(&(params->radioParams.dev), "");
+	if (params_tx != NULL)
+	{
+		dev = params_tx->radioParams.dev;
+	}
+	else
+	{
+		dev = params_rx->radioParams.dev;
+	}
+
+	status = bladerf_open(&dev, "");
 	if (status != 0) {
 		fprintf(stderr, "Failed to open device: %s\n",
 			bladerf_strerror(status));
 		goto out;
 	}
 
-	if(true==tx) {
-		status = BladeRF_ConfigureTX(params);
+	if (params_tx != NULL) {
+		status = BladeRF_ConfigureTX(params_tx);
 		if (status != 0) {
 			fprintf(stderr, "Failed to configure TX: %s\n",
 				bladerf_strerror(status));
@@ -64,8 +75,8 @@ int BladeRF_RadioStart(BlinkParams *params, bool tx, bool rx)
 		}
 	}
 	
-	if(true==rx) {
-		status = BladeRF_ConfigureRX(params);
+	if (params_rx == NULL) {
+		status = BladeRF_ConfigureRX(params_rx);
 		if (status != 0) {
 			fprintf(stderr, "Failed to configure RX: %s\n",
 				bladerf_strerror(status));
@@ -78,7 +89,7 @@ int BladeRF_RadioStart(BlinkParams *params, bool tx, bool rx)
 	
 out:
 	if (status != 0) {
-		bladerf_close(params->radioParams.dev);
+		bladerf_close(dev);
 		stop_program = true;
 		return -1;
 	}
@@ -330,34 +341,44 @@ out1:
 
 
 
-void BladeRF_RadioStop(BlinkParams *params) 
+void BladeRF_RadioStop(BlinkParams *params_tx, BlinkParams *params_rx)
 {
 	int rxstatus, txstatus;
+	bladerf *dev;
 
-	// Disable RX module, shutting down our underlying RX stream 
-	rxstatus = bladerf_enable_module(params->radioParams.dev, BLADERF_MODULE_RX, false);
-	if (rxstatus != 0) {
-		fprintf(stderr, "Failed to disable RX module: %s\n",
-			bladerf_strerror(rxstatus));
-		stop_program = true;
-	}
-
-	txstatus = bladerf_enable_module(params->radioParams.dev, BLADERF_MODULE_TX, false);
-	if (txstatus != 0) {
-		fprintf(stderr, "Failed to disable TX module: %s\n",
-			bladerf_strerror(txstatus));
-	}
-
-	bladerf_close(params->radioParams.dev);
-
-	if (params->TXBuffer != NULL)
+	if (params_rx != NULL)
 	{
-		free(params->TXBuffer);
+		// Disable RX module, shutting down our underlying RX stream 
+		rxstatus = bladerf_enable_module(params_rx->radioParams.dev, BLADERF_MODULE_RX, false);
+		if (rxstatus != 0) {
+			fprintf(stderr, "Failed to disable RX module: %s\n",
+				bladerf_strerror(rxstatus));
+			stop_program = true;
+		}
+		dev = params_rx->radioParams.dev;
 	}
 
-	if (params->pRxBuf != NULL)
+	if (params_tx != NULL)
 	{
-		free(params->pRxBuf);
+		txstatus = bladerf_enable_module(params_tx->radioParams.dev, BLADERF_MODULE_TX, false);
+		if (txstatus != 0) {
+			fprintf(stderr, "Failed to disable TX module: %s\n",
+				bladerf_strerror(txstatus));
+			stop_program = true;
+		}
+		dev = params_tx->radioParams.dev;
+	}
+
+	bladerf_close(dev);
+
+	if (params_tx->TXBuffer != NULL)
+	{
+		free(params_tx->TXBuffer);
+	}
+
+	if (params_rx->pRxBuf != NULL)
+	{
+		free(params_rx->pRxBuf);
 	}
 
 }

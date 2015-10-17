@@ -105,7 +105,8 @@ int __cdecl main(int argc, char **argv) {
   if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
   {
 #ifdef BLADE_RF
-	  if (BladeRF_RadioStart(params, (Globals.outType == TY_SDR), (Globals.inType == TY_SDR)) < 0)
+
+	  if (BladeRF_RadioStart( (Globals.outType == TY_SDR)?params:NULL, (Globals.inType == TY_SDR)?params:NULL ) < 0)
 	  {
 		  exit(1);
 	  }
