@@ -100,7 +100,6 @@ int __cdecl main(int argc, char **argv) {
   params = &Globals;
   try_parse_args(params, argc, argv);
 
-
 #ifdef SORA_PLATFORM
   // Start Sora HW
   if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
