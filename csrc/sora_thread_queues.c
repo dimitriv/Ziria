@@ -49,6 +49,7 @@ static int ts_num_queues = 0;
 ts_context *ts_init(int no, size_t *sizes, int *queue_sizes)
 {
 //	ts_context *locCont;
+	ts_num_queues = no;
 
 	locCont = (ts_context *) (malloc(no * sizeof(ts_context)));
 	if (locCont == NULL)
