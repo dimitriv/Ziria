@@ -141,18 +141,26 @@ foldCompPasses flags
 foldExpPasses :: DynFlags -> [(String,TypedExpPass)]
 foldExpPasses flags
   | isDynFlagSet flags NoFold || isDynFlagSet flags NoExpFold
-  = []
+  = mandExpPasses flags
   | otherwise
-  = [ ("for-unroll"         , passForUnroll  )
-    , ("elim-unused"        , passElimUnused )
-    , ("exp-inlining"       , passExpInlining)
-    , ("asgn-letref"        , passAsgnLetRef )
-    , ("exp-let-push"       , passExpLetPush )
-    , ("elim-trivial-assign", passElimTrivialAssign)
+  = mandExpPasses flags ++ 
+     [ ("for-unroll"         , passForUnroll  )
+     , ("elim-unused"        , passElimUnused )
+     , ("exp-inlining"       , passExpInlining)
+     , ("asgn-letref"        , passAsgnLetRef )
+     , ("exp-let-push"       , passExpLetPush )
+     , ("elim-trivial-assign", passElimTrivialAssign)
 
-    ] ++ 
-    [ ("eval"         , passEval       ) 
-    | not (isDynFlagSet flags NoStaticEval)
-    ]
+     ] ++ 
+     [ ("eval"         , passEval       ) 
+     | not (isDynFlagSet flags NoStaticEval)
+     ]
 
+
+-- These are things that we must do before any further transformations
+-- in the compiler, most notably hoist out side-effects
+-- cf. example tests/backend/passfold-eval-5.hs
+mandExpPasses :: DynFlags -> [(String, TypedExpPass)]
+mandExpPasses _dfs 
+  = [("hoist-struct-asgns",  hoistStructAsgns)]
 

@@ -45,7 +45,11 @@ void blink_copy(void *dst, const void *src, memsize_int siz)
 	exit(-1);
     }
     bytes_copied += (unsigned long long) siz;
+#ifdef __linux__
+    memmove(dst, src, siz);
+#else
     memcpy(dst, src, siz);
+#endif
 }
 
 /**

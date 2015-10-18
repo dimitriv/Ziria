@@ -27,6 +27,10 @@ typedef int8_t num8;
 typedef int16_t num16;
 typedef int32_t num32;
 typedef int64_t num64;
+typedef uint8_t unum8;
+typedef uint16_t unum16;
+typedef uint32_t unum32;
+typedef uint64_t unum64;
 #define calign __atribute__(aligned(16))
 #define cthread __thread
 // NOTE: __attribute__ ((weak)) is NOT the same as __declspec(selectany) and causes tests to fail!
@@ -37,6 +41,10 @@ typedef __int8  num8;
 typedef __int16 num16;
 typedef __int32 num32;
 typedef __int64 num64;
+typedef unsigned __int8 unum8;
+typedef unsigned __int16 unum16;
+typedef unsigned __int32 unum32;
+typedef unsigned __int64 unum64;
 #define calign __declspec(align(16))
 #define cthread __declspec(thread)
 #define cselectany __declspec(selectany)
@@ -56,6 +64,11 @@ typedef char          num8;
 typedef short         num16;
 typedef int           num32;
 typedef long long int num64; 
+
+typedef unsigned char          unum8;
+typedef unsigned short         unum16;
+typedef unsigned int           unum32;
+typedef unsigned long long int unum64; 
 
 #define calign
 #define cthread

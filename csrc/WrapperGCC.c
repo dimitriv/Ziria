@@ -22,7 +22,7 @@
 
 //#include "sora_ip.c"
 //#include "sora_ext_lib.c"
-//#include "sora_ext_viterbi.c"
+#include "sora_ext_viterbi.c"
 #include "params.c"
 #include "bit.c"
 #include "wpl_alloc.c"
