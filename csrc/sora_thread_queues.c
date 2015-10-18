@@ -41,13 +41,14 @@ char *data(char *buf, int size, int i) {
 
 
 
-
+static ts_context *locCont;
+static int ts_num_queues;
 
 // Init <no> queues, each with a different size
 
 ts_context *ts_init(int no, size_t *sizes, int *queue_sizes)
 {
-	ts_context *locCont;
+//	ts_context *locCont;
 
 	locCont = (ts_context *) (malloc(no * sizeof(ts_context)));
 	if (locCont == NULL)
@@ -460,9 +461,9 @@ void ts_rollback(ts_context *locCont, int n)
 
 
 
-void ts_free(ts_context *locCont, int no)
+void ts_free()
 {
-	for (int nc=0; nc < no; nc++)
+	for (int nc = 0; nc < ts_num_queues; nc++)
 	{
 		_aligned_free(locCont[nc].buf);
 	}
