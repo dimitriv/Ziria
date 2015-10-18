@@ -1,0 +1,49 @@
+language: c
+
+# sudo: false
+
+sudo: required
+dist: trusty
+
+matrix:
+  fast_finish: true
+  include:
+    - env: CABALVER=1.22 GHCVER=7.8.4 ALEXVER=3.1.4 HAPPYVER=1.19.5
+      addons: {apt: {packages: [alex-3.1.4,happy-1.19.5,cabal-install-1.22,ghc-7.8.4], sources: [hvr-ghc]}}
+  exclude:
+    - env: CABALVER=1.22 GHCVER=7.10.2 ALEXVER=3.1.4 HAPPYVER=1.19.5
+      addons: {apt: {packages: [alex-3.1.4,happy-1.19.5,cabal-install-1.22,ghc-7.10.2], sources: [hvr-ghc]}}
+    - env: CABALVER=head GHCVER=head ALEXVER=3.1.4 HAPPYVER=1.19.5
+      addons: {apt: {packages: [alex-3.1.4,happy-1.19.5,cabal-install-head,ghc-head], sources: [hvr-ghc]}}
+
+  allow_failures:
+    - env: CABALVER=1.22 GHCVER=7.10.2
+    - env: CABALVER=head GHCVER=head
+
+before_install:
+  - export PATH=/opt/ghc/$GHCVER/bin:/opt/cabal/$CABALVER/bin:/opt/happy/$HAPPYVER/bin:/opt/alex/$ALEXVER/bin:$PATH
+
+install:
+  - cabal update
+  - cabal install haskell-src-exts
+  - make
+
+# The script only prints stderr since the build log is too big for Travis CI
+script:
+  - echo " --- STARTING TESTS. Please wait, this can take a while. --- "
+  - COMPILER=$CC make test > /dev/null
+  - echo " --- SUCCESSFULLY RAN MAKE TEST. PEDANTIC TESTS IN PROGRESS. --- "
+  - COMPILER=$CC make test-WiFi-pedantic > /dev/null
+  - echo " --- SUCCESSFULLY RAN PEDANTIC TESTS. THE BUILD SUCCEEDED! --- "
+
+notifications:
+  email:
+    recipients:
+      - siddhanathan@gmail.com
+    on_success: change
+    on_failure: always
+
+branches:
+  only:
+    - master
+
