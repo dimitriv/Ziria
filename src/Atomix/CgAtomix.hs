@@ -704,6 +704,7 @@ cgACastBody dfs qs (n,inwire)
 
         cg_emit_many eidx rng = 
            do (ccdecls,ccstmts,_) <- inNewBlock $ 
+                  extendVarEnv [(toName "__j" noLoc tint Mut,[cexp|__j|])] $
                   cgOutWiring dfs qs [(1,outwire)] [outwire] $ 
                   codeGenExp dfs $ 
                   eAssign noLoc outwire_exp 
@@ -716,6 +717,7 @@ cgACastBody dfs qs (n,inwire)
 
         cg_take_many eidx rng = 
            do (ccdecls,ccstmts,_) <- inNewBlock $ 
+                  extendVarEnv [(toName "__j" noLoc tint Mut,[cexp|__j|])] $
                   cgInWiring dfs qs [(1,inwire)] [inwire] $ 
                   codeGenExp dfs $ 
                   eArrWrite noLoc outwire_exp eidx rng inwire_exp
@@ -896,9 +898,9 @@ cgOutWire _dfs qs (n,qvar) v action
       Just (QMid (QId qid))
         | isSingleThreadIntermQueue qs qvar
         -> cgDeclQPtr v $ \ptr ptr_ty -> do
-             appendStmt [cstm|$ptr= ($ty:ptr_ty) stq_reserve($id:(cQPtr qid));|]
+             appendStmt [cstm|$ptr=($ty:ptr_ty) stq_reserve($id:(cQPtr qid));|]
              a <- action
-             appendStmt [cstm|stq_push($id:(cQPtr qid));|]
+             appendStmt [cstm| stq_push($id:(cQPtr qid));|]
              return a
         | otherwise 
         -> cgDeclQPtr v $ \ptr ptr_ty -> do

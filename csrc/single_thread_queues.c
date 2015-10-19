@@ -24,7 +24,7 @@ void _stq_init(queue* q, size_t capacity, size_t elem_size) {
  ***************************************************************************/
 
 // Peek n slots into the queue (if aligned, throw error otherwise, or perhaps emit slow path -- todo)
-FORCE_INLINE unsigned char* _stq_acquire(queue *q, size_t slots)
+FORCE_INLINE unsigned char* stq_acquire(queue *q)
 {
 
 #ifdef QUEUE_CHECKS_ENABLED
@@ -38,10 +38,10 @@ FORCE_INLINE unsigned char* _stq_acquire(queue *q, size_t slots)
 }
 
 // Release the acquired slots 
-FORCE_INLINE void _stq_release(queue *q, size_t slots)
+FORCE_INLINE void stq_release(queue *q)
 {
 	unsigned char *ptr = q->next_read;
-	ptr = ptr + slots*q->elem_size;
+	ptr = ptr + q->elem_size;
 	if (ptr == q->buffer_end) ptr = q->buffer_start;
 	q->next_read = ptr;
 }
@@ -49,7 +49,7 @@ FORCE_INLINE void _stq_release(queue *q, size_t slots)
 /* Queue write API
 ***************************************************************************/
 
-FORCE_INLINE unsigned char* _stq_reserve(queue *q, size_t slots)
+FORCE_INLINE unsigned char* stq_reserve(queue *q)
 {
 	// reserve n slots
 //	q->reserved += slots;
@@ -64,17 +64,17 @@ FORCE_INLINE unsigned char* _stq_reserve(queue *q, size_t slots)
 	return q->next_write;
 }
 
-FORCE_INLINE void _stq_push(queue *q, size_t slots)
+FORCE_INLINE void stq_push(queue *q)
 {
 	unsigned char*ptr = q->next_write;
-	ptr = ptr + slots*q->elem_size;
+	ptr = ptr + q->elem_size;
 	if (ptr == q->buffer_end) ptr = q->buffer_start;
 //	q->reserved = 0;
 	q->next_write = ptr;
 }
 
 
-FORCE_INLINE void _stq_clear(queue *q)
+FORCE_INLINE void stq_clear(queue *q)
 {
 //	q->acquired = 0;
 //	q->reserved = 0;
@@ -83,7 +83,7 @@ FORCE_INLINE void _stq_clear(queue *q)
 	q->size = 0;
 }
 
-FORCE_INLINE void _stq_rollback(size_t n, queue* q) {
+FORCE_INLINE void stq_rollback(queue* q, size_t n) {
 	unsigned char* ptr = q->next_read - (q->elem_size*n);
 #ifdef QUEUE_CHECKS_ENABLED
 	// ASSERT(q->acquired == 0 && q->reserved == 0);
@@ -112,35 +112,4 @@ queue * stq_init(int no, size_t *sizes, int *queue_capacities) {
 		_stq_init(&queues[i], queue_capacities[i], sizes[i]);
 	}
 	return queues;
-}
-
-FORCE_INLINE unsigned char* stq_acquire(int no, size_t slots)
-{
-	return _stq_acquire(&queues[no], slots);
-}
-
-// Release the acquired slots 
-FORCE_INLINE void stq_release(int no, size_t slots)
-{
-	_stq_release(&queues[no],slots);
-}
-
-FORCE_INLINE unsigned char* stq_reserve(int no, size_t slots)
-{
-	return _stq_reserve(&queues[no], slots);
-}
-
-FORCE_INLINE void stq_push(int no, size_t slots)
-{
-	_stq_push(&queues[no],slots);
-}
-
-
-FORCE_INLINE void stq_clear(int no)
-{
-	_stq_clear(&queues[no]);
-}
-
-FORCE_INLINE void stq_rollback(int no, size_t n) {
-	_stq_rollback(n, &queues[no]);
 }
