@@ -42,7 +42,7 @@ import qualified Language.C.Syntax as C
 import Language.C.Quote.C
 
 -- import Control.Monad.Identity
-import Control.Monad ( when )
+import Control.Monad ( when, replicateM_ )
 import Data.Loc
 import Data.Maybe
 import Text.PrettyPrint.HughesPJ
@@ -80,6 +80,56 @@ import AtomInstantiation
    state-specific readers and writers. If every list in the co-domain is 
    a singleton list then the queue is "single threaded".
 --------------------------------------------------------------------------}
+
+{- Code generation strategy for cast atoms:
+castAtom (n,inwire) var
+ ~~> 
+    for (i=0; i < n; ..) 
+      iptr = acquire(inqueue)
+      cgExp (outwire[i,x] := iptr)
+      release(inqueue)
+
+castAtom (n,inwire) outwire
+ ~~>  
+    ptr = reserve 1 outqueue;
+    for (i=0; i < n; ..) {
+      iptr = acquire(inqueue)
+      cgExp (outwire[i,x] := iptr)
+      release(inqueue)
+    }
+    push outqueue
+
+castAtom inwire (n,outwire)
+ ~~>
+   iptr = ackquire 1 inqueue
+   for (i=0; i < n; ..) {
+      optr = reserve(outqueue)
+      optr = iptr[i,...]
+      push(outqueue)g
+   }
+   release(inqueue)
+
+castAtom var (n,outwire)
+ ~~> x
+   for (i=0; i < n; ..) {
+      optr = reserve(outqueue)
+      optr = iptr[i,...]
+      push(outqueue)
+   }
+-}
+
+figureOutSlice :: (Int,Ty) -> LengthInfo
+figureOutSlice (_n,ity)
+  | TArray (Literal ilen) _tybase <- ity
+  = LILength ilen
+  | otherwise = LISingleton
+
+figureOutIdx :: LengthInfo -> String -> Exp
+figureOutIdx LISingleton x  = eVar noLoc (toName x noLoc tint Mut) 
+figureOutIdx (LILength n) x 
+  = eBinOp noLoc Mult (eVal noLoc tint (VInt (fromIntegral n) Signed)) $
+    eVar noLoc (toName x noLoc tint Mut)
+figureOutIdx _ _ = error "figureOutIdx: can't happen!"
 
 
 cgRnSt :: DynFlags -> AxAuto SymAtom -> RnSt -> Cg a -> Cg a
@@ -145,8 +195,8 @@ data QueueInfo
        , qi_cores :: Map.Map EId [[Int]] 
           -- ^ Which cores access each queue, grouped by state, 
           --   See Note [Single Thread Queues]
-       , qi_sora_queues :: [(EId,(QId,Int))]  -- SORA concurrent queues
-       , qi_sing_queues :: [(EId,(QId,Int))]  -- Ordinary (single-thread) queues
+       , qi_sora_queues :: [(EId,(QId,Int))] -- SORA concurrent queues
+       , qi_sing_queues :: [(EId,(QId,Int))] -- Ordinary (single-thread) queues
        }
 
 -- | Is this intermediate queue single-threaded? See Note [Single Thread Queues]
@@ -170,7 +220,6 @@ instance Outputable QueueInfo where
            , text "qi_sing_queues =" $$ vcat (map (text . show) qsing)
            ]
     where
--- Obsolete, now qi_sora_queues, and qi_sing_queues have this info
       ppr_cs (qv,qcores) = ppr qv <+> text "used by cores:" <+> 
                                       text (show qcores)
       ppr_qs (qv,(qid,qsz))
@@ -222,41 +271,40 @@ cgDeclQueues dfs qs action
       = bind_queue_vars (namedCType "queue") "sing_queue_arr"
 
     -- Declare SORA stuff
-    my_sizes_decl_sora   = [cdecl|typename size_t my_sizes_sora[$int:(num_sora_qs)];|]
-    my_slots_decl_sora   = [cdecl|int my_slots_sora[$int:(num_sora_qs)];|]
-    my_batches_decl_sora = [cdecl|int my_batches_sora[$int:(num_sora_qs)];|] 
+    my_sizes_decl_sora   
+      = [cdecl|typename size_t my_sizes_sora[$int:(num_sora_qs)];|]
+    my_slots_decl_sora   
+      = [cdecl|int my_slots_sora[$int:(num_sora_qs)];|]
 
     -- Declare STQ stuff
-    my_sizes_decl_sing   = [cdecl|typename size_t my_sizes_sing[$int:(num_sing_qs)];|]
-    my_slots_decl_sing   = [cdecl|int my_slots_sing[$int:(num_sing_qs)];|]
+    my_sizes_decl_sing   
+      = [cdecl|typename size_t my_sizes_sing[$int:(num_sing_qs)];|]
+    my_slots_decl_sing   
+      = [cdecl|int my_slots_sing[$int:(num_sing_qs)];|]
 
     -- Initialize queue statements
-    q_init_stmts_sora 
-     = [cstm| sora_queue_arr = s_ts_init_batch($int:(num_sora_qs),
-                                                my_sizes_sora,
-                                                my_slots_sora,
-                                                my_batches_sora); |]
-    q_init_stmts_sing    
-     = [cstm| sing_queue_arr = stq_init($int:(num_sing_qs),
-                                                my_sizes_sing,
-                                                my_slots_sing);|]
+    q_init_stmts_sora
+     = [cstm| sora_queue_arr 
+                = ts_init($int:(num_sora_qs), my_sizes_sora, my_slots_sora);|]
+    q_init_stmts_sing
+     = [cstm| sing_queue_arr 
+                = stq_init($int:(num_sing_qs), my_sizes_sing, my_slots_sing);|]
 
-    my_sizes_inits_sora = concat $ zipWith sizes_inits_sora (qi_sora_queues qs) [0..]
+    my_sizes_inits_sora 
+      = concat $ zipWith sizes_inits_sora (qi_sora_queues qs) [0..]
     sizes_inits_sora (qvar,(_,siz)) (i::Int) =
-         [ [cstm|
-            my_sizes_sora[$int:i] = 
-                  $(tySizeOf_C (nameTyp qvar));|]
-         , [cstm| my_slots_sora[$int:i] = $int:siz;|] 
-         , [cstm| my_batches_sora[$int:i] = 1;|]
-         ]
+         [cstms|
+            my_sizes_sora[$int:i] = $(tySizeOf_C (nameTyp qvar));
+            my_slots_sora[$int:i] = $int:siz;
+         |]
 
-    my_sizes_inits_sing = concat $ zipWith sizes_inits_sing (qi_sing_queues qs) [0..]
+    my_sizes_inits_sing 
+      = concat $ zipWith sizes_inits_sing (qi_sing_queues qs) [0..]
     sizes_inits_sing (qvar,(_,siz)) (i::Int) =
-         [ [cstm|
-            my_sizes_sing[$int:i] =
-                  $(tySizeOf_C (nameTyp qvar));|]
-         , [cstm| my_slots_sing[$int:i] = $int:siz;|]
-         ]
+         [cstms|
+            my_sizes_sing[$int:i] = $(tySizeOf_C (nameTyp qvar));
+            my_slots_sing[$int:i] = $int:siz;
+         |]
 
     decl_rest = do 
       -- Declare single thread queues stuff
@@ -264,7 +312,8 @@ cgDeclQueues dfs qs action
          appendTopDecl [cdecl| $ty:(namedCType "queue")* sing_queue_arr;|]
          appendTopDecl my_sizes_decl_sing
          appendTopDecl my_slots_decl_sing
-         mapM_ addGlobalWplAllocated (my_sizes_inits_sing ++ [q_init_stmts_sing])
+         let all_inits = my_sizes_inits_sing ++ [q_init_stmts_sing]
+         mapM_ addGlobalWplAllocated all_inits
          return ()
  
       -- Declare sora queues stuff
@@ -272,67 +321,11 @@ cgDeclQueues dfs qs action
          appendTopDecl [cdecl| $ty:(namedCType "ts_context")* sora_queue_arr;|]
          appendTopDecl my_sizes_decl_sora
          appendTopDecl my_slots_decl_sora
-         appendTopDecl my_batches_decl_sora
-         mapM_ addGlobalWplAllocated (my_sizes_inits_sora ++ [q_init_stmts_sora])
+         let all_inits = my_sizes_inits_sora ++ [q_init_stmts_sora]
+         mapM_ addGlobalWplAllocated all_inits
 
       bind_sora_queue_vars (qi_sora_queues qs) [0..] $
         bind_sing_queue_vars (qi_sing_queues qs) [0..] action
-
-
---     in if numqs == 0 then do 
---          cgGlobMutBind dfs noLoc (qi_inch qs) $ 
---            cgGlobMutBind dfs noLoc (qi_outch qs) $ action 
---         else do 
---           let my_sizes_decl   = [cdecl|typename size_t my_sizes[$int:(numqs)];|]
---               my_slots_decl   = [cdecl|int my_slots[$int:(numqs)];|]
---               my_batches_decl = [cdecl|int my_batches[$int:(numqs)];|] 
---               q_init_stmts 
--- -- Single thread 
---                   = [cstm| queue_arr = stq_init($int:(numqs),my_sizes,my_slots); |]
--- -- Sora threads
--- --                = [cstm| ts_init_batch($int:(numqs),my_sizes, my_slots, my_batches);|]
-
---               my_sizes_inits 
---                 = concat $
---                   Map.elems $ 
---                   Map.mapWithKey (\qvar (QId i,siz) -- ignore slots
---                          -> let orig = "qvar type = " ++ show (nameTyp qvar)
---                             in [ [cstm| ORIGIN($string:orig);|]
---                                , [cstm|
---                                   my_sizes[$int:i] = 
---                                         $(tySizeOf_C (nameTyp qvar));|]
---                                , [cstm| my_slots[$int:i] = $int:siz;|]
--- {- SORA
---                                , [cstm|
---                                   my_sizes[$int:i] = 
---                                         $(tySizeOf_C (nameTyp qvar));|]
---                                , [cstm| my_slots[$int:i] = 16;|] 
---                                , [cstm| my_batches[$int:i] = $int:siz;|]
--- -}
---                                ]) (qi_interm qs)
-
---              -- Append top declarations  
---           appendTopDecl [cdecl| $ty:(namedCType "queue")* queue_arr;|]
---           appendTopDecl my_sizes_decl
---           appendTopDecl my_slots_decl
---           appendTopDecl my_batches_decl
-
---              -- Add code to initialize queues in wpl global init
---           _ <- mapM addGlobalWplAllocated (my_sizes_inits ++ [q_init_stmts])
-
---           cgGlobMutBind dfs noLoc (qi_inch qs) $ 
---            cgGlobMutBind dfs noLoc (qi_outch qs) $ 
---              bind_queue_vars action
---                 (Map.toList $ qi_interm qs) [0..] -- /Not/ declaring temporaries for queues!
---   where
---     bind_queue_vars m [] _ = m
---     bind_queue_vars m (_q1:qss) (n:ns)
---       = do -- cgIO $ putStrLn ("Declaring temp variable for queue: " ++ show q1)
---            let qid = cQPtr n
---            appendTopDecl [cdecl| static $ty:(namedCType "queue")* $id:qid;|]
---            addGlobalWplAllocated [cstm| $id:qid = & queue_arr[$int:n];|]
---            bind_queue_vars m qss ns
---     bind_queue_vars _ _ _ = error "Can't happen!"
 
 
 -- | Extract all introduced queues, and for each calculate the maximum
@@ -452,54 +445,62 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
         }
 
    cg_nkind c nid frameVar (AtomixState atoms _ decision _) = do
-     inAllocFrame' frameVar noLoc $ pushAllocFrame $ mapM_ (cgCallAtom dfs c queues) atoms
+     inAllocFrame' frameVar noLoc $ 
+        pushAllocFrame $ mapM_ (cgCallAtom dfs c queues) atoms
      cg_decision c nid decision
 
    cg_decision c nid AtomixDone
      = if no_threads == 1 then
            appendStmt [cstm| return 0; |]
          else
-           appendStmts [cstms| barrier($id:(barr_name nid), $int:no_threads, $int:c);
-                               return 0; |]
+           appendStmts [cstms| 
+             barrier($id:(barr_name nid), $int:no_threads, $int:c);
+             return 0; |]
 
    cg_decision c nid (AtomixLoop next)
      = if no_threads == 1 then
            appendStmt [cstm| goto $id:(lblOfNid next); |]
          else
-           appendStmts [cstms| //printf("Thread %d in state %d, going to %d\n", $int:c, $int:nid, $int:next);
-                               barrier($id:(barr_name nid), $int:no_threads, $int:c); 
-                               goto $id:(lblOfNid next); |]
+           appendStmts [cstms| 
+             //printf("Tid %d, state %d -> %d\n", $int:c, $int:nid, $int:next);
+             barrier($id:(barr_name nid), $int:no_threads, $int:c); 
+             goto $id:(lblOfNid next); |]
 
-   cg_decision c nid (AtomixBranch c' l r) = do
+   cg_decision _c _nid (AtomixBranch c' l r) = do
      cc <- lookupVarEnv c'
      if no_threads == 1 then
-         appendStmt [cstm| if ($cc) {
-                             goto $id:(lblOfNid l); 
-                           } else {
-                             goto $id:(lblOfNid r); 
-                           }
-                         |]
+         appendStmt [cstm| 
+            if ($cc) {
+                goto $id:(lblOfNid l); 
+            } else {
+                goto $id:(lblOfNid r); 
+            }|]
        else
-         appendStmts [cstms| //printf("Thread %d in state %d, goind to %d\n", $int:c, $int:nid, $cc);
-                             barrier($id:(barr_name nid), $int:no_threads, $int:c);
-                             if ($cc) {
-                                  barrier($id:(barr_name2 nid), $int:no_threads, $int:c);
-                                  //printf("Thread %d in state %d, goind to %d\n", $int:c, $int:nid, $l);
-                                  goto $id:(lblOfNid l); 
-                             } else {
-                                  barrier($id:(barr_name2 nid), $int:no_threads, $int:c);
-                                  //printf("Thread %d in state %d, goind to %d\n", $int:c, $int:nid, $r);
-                                  goto $id:(lblOfNid r); 
-                             }
-                           |]
+         appendStmts [cstms|
+           //printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $cc);
+           // barrier($id:(barr_name nid), $int:no_threads, $int:c);
+           if ($cc) {
+             // barrier($id:(barr_name2 nid), $int:no_threads, $int:c);
+             // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $l);
+             goto $id:(lblOfNid l); 
+           } else {
+             // barrier($id:(barr_name2 nid), $int:no_threads, $int:c);
+             //printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $r);
+                goto $id:(lblOfNid r); 
+           }|]
 
-   -- One barrier is before branching decision and the other after
-   -- It can happen (and has happened) that one thread moves forward and changes the branching
-   -- decision before the other thread reads the old value
+   -- DV: I believe this is obsolete and only had to do with the old 
+   -- barrier implementation: 
+   --   One barrier is before branching decision and the other after
+   --   It can happen (and has happened) that one thread moves forward 
+   --   and changes the branching
+   --   decision before the other thread reads the old value
    cg_declare_barr  label 
-      = appendTopDecl [cdecl| $ty:(namedCType "LONG volatile") $id:(barr_name label)[3] = {0, 0, 0};|];
+      = appendTopDecl [cdecl| $ty:(namedCType "LONG volatile") 
+                                     $id:(barr_name label)[3] = {0, 0, 0};|];
    cg_declare_barr2 label 
-      = appendTopDecl [cdecl| $ty:(namedCType "LONG volatile") $id:(barr_name2 label)[3] = {0, 0, 0};|];
+      = appendTopDecl [cdecl| $ty:(namedCType "LONG volatile") 
+                                      $id:(barr_name2 label)[3] = {0, 0, 0};|];
 
    barr_name label = "__barr_" ++ lblOfNid label
    barr_name2 label = "__barr2_" ++ lblOfNid label
@@ -554,7 +555,8 @@ cg_def_atom _dfs aid mbody mkont
       (cdecls,cstmts,cbody) <- inNewBlock (pushAllocFrame mbody)
 
       -- Prototype
-      appendTopDecl [cdecl| $ty:(codeGenTyOcc_ (Just "FINL") TUnit) $id:(name fun_name)();|]
+      appendTopDecl $
+        [cdecl| $ty:(codeGenTyOcc_ (Just "FINL") TUnit) $id:(name fun_name)();|]
 
       -- Implementation 
       appendTopDef $
@@ -615,46 +617,6 @@ cgAAssertBody dfs qs (_,inwire) b = do
                else eIf loc (eVar loc inwire) err vunit
      return [cexp|UNIT|]
 
-{---------------------------- Rollback atom implementation --------------------}
-
-cgARollbackBody :: DynFlags
-                -> QueueInfo
-                -> EId
-                -> Int
-                -> Cg C.Exp
-cgARollbackBody _dfs qs q n
-  | Just (QMid (QId qid)) <- qiQueueId q qs = do
-      appendStmt [cstm| _stq_rollback($int:n,$id:(cQPtr qid)); |]
-      return [cexp|UNIT|]
-  | otherwise 
-  = panic $ vcat [ text "SARollback only implemented for middle queues"
-                 , nest 2 $ text "queue = " <+> ppr q
-                 , nest 2 $ text "n     = " <+> ppr n 
-                 ]
-
-{---------------------- Discard/Clear atom implementation ---------------------}
-
-cgADiscBody :: DynFlags
-            -> QueueInfo
-            -> (Int,EId) -- ^ inwire
-            -> (Int,Ty)  -- ^ inty
-            -> Cg C.Exp
-cgADiscBody dfs qs (n,inwire) (n',_inty)
-  = assert "cgDiscAtom" (n == n') $ 
-    cgInWiring dfs qs [(n,inwire)] [inwire] $ return [cexp|UNIT|]
-
-cgAClearBody :: DynFlags 
-             -> QueueInfo
-             -> Map EId Int
-             -> Cg C.Exp
-cgAClearBody _dfs qs qmap = do 
-  -- For now implement clear via discard
-  mapM_ mk_clear $ map (flip qiQueueId qs . fst) $ Map.toList qmap
-  return [cexp|UNIT|]
-  where
-    mk_clear (Just (QMid (QId qid))) = appendStmt [cstm| _stq_clear($id:(cQPtr qid)); |]
-    mk_clear _ = panicStr "cgAClearBody: can only clear middle queues"
-
 {--------------------------- AExp atom implementation -------------------------}
 
 cgAExpBody :: DynFlags 
@@ -695,83 +657,121 @@ cgACastBody :: DynFlags
             -> Cg C.Exp
 cgACastBody dfs qs (n,inwire) 
                       (m,outwire) 
-                      (n',_inty) 
-                      (m',_outty) 
+                      (n',inty) 
+                      (m',outty) 
   = assert "cgCastAtom" (n == n' && m == m') $ do
     case (qiQueueId inwire qs, qiQueueId outwire qs) of 
 
       -- Naked take and emit cases
-
+       
       (Nothing, _)
-        -> assert "cgCastAtom" (n == 1) $
-           cgOutWiring dfs qs [(m,outwire)] [outwire] $
-           codeGenExp dfs $ eAssign noLoc inwire_exp outwire_exp
+        | m == 1  -- EmitOne
+        -> cgOutWiring dfs qs [(m,outwire)] [outwire] $
+           codeGenExp dfs $ eAssign noLoc outwire_exp inwire_exp
+                  -- EmitMany
+        | let rng = figureOutSlice (m,outty)
+              eidx = figureOutIdx rng "__j"
+        -> cg_emit_many eidx rng
+
       (_,Nothing)  
-        -> assert "cgCastAtom" (m == 1) $
-           cgInWiring dfs qs [(n,inwire)] [inwire] $
-           codeGenExp dfs $ eAssign noLoc inwire_exp outwire_exp
+        | n == 1  -- TakeOne 
+        -> cgInWiring dfs qs [(n,inwire)] [inwire] $
+           codeGenExp dfs $ eAssign noLoc outwire_exp inwire_exp
 
-      -- Mitigator case (inefficient for now but oh well ...)
+                  -- TakeMany
+        | let rng = figureOutSlice (n,inty)
+              eidx = figureOutIdx rng "__j"
+        -> cg_take_many eidx rng
 
-      _ -> cgInWiring dfs qs [(n,inwire) ] [inwire]   $
-           cgOutWiring dfs qs [(m,outwire)] [outwire] $ do
-              _inptr <- lookupVarEnv inwire
-              _outptr <- lookupVarEnv outwire
-              appendStmt [cstm| ORIGIN("NOT CORRECT AT ALL!");|]
-              appendStmt [cstm| memcpy(& $_outptr, & $_inptr, $int:m * $exp:_tsiz);|]
-              return [cexp|UNIT|]
+      _ | n > 1
+        , let rng = figureOutSlice (n,inty)
+              eidx = figureOutIdx rng "__j"
+        -> cgOutWiring dfs qs [(1,outwire)] [outwire] $
+           cg_take_many eidx rng
+
+        | m > 1
+        , let rng = figureOutSlice (m,outty)
+              eidx = figureOutIdx rng "__j"
+        -> cgInWiring dfs qs [(1,inwire)] [inwire] $
+           cg_emit_many eidx rng
+
+        | otherwise
+        -> error "cgCast: can't happen!"
 
   where inwire_exp  = eVar noLoc inwire
         outwire_exp = eVar noLoc outwire
         _tsiz       = tySizeOf_C (nameTyp outwire)
 
+        cg_emit_many eidx rng = 
+           do (ccdecls,ccstmts,_) <- inNewBlock $ 
+                  cgOutWiring dfs qs [(1,outwire)] [outwire] $ 
+                  codeGenExp dfs $ 
+                  eAssign noLoc outwire_exp 
+                      (eArrRead noLoc inwire_exp eidx rng)
+              appendStmt $ [cstm| for (int __j = 0; __j < $int:m ; __j++) {
+                                 $decls:ccdecls;
+                                 $stms:ccstmts;
+                              } |]
+              return [cexp|UNIT|]
 
--- let storage_in_ty  = mkCastTyArray n inty 
---            in do storage <- CgMonad.freshName "cast_storage" storage_in_ty Mut
---                  cgMutBind dfs noLoc storage Nothing $ do 
+        cg_take_many eidx rng = 
+           do (ccdecls,ccstmts,_) <- inNewBlock $ 
+                  cgInWiring dfs qs [(1,inwire)] [inwire] $ 
+                  codeGenExp dfs $ 
+                  eArrWrite noLoc outwire_exp eidx rng inwire_exp
+              appendStmt $ [cstm| for (int __j = 0; __j < $int:n; __j++) {
+                                 $decls:ccdecls;
+                                 $stms:ccstmts;
+                              } |]
+              return [cexp|UNIT|]
+
+
+{---------------------------- Rollback atom implementation --------------------}
+
+cgARollbackBody :: DynFlags
+                -> QueueInfo
+                -> EId
+                -> Int
+                -> Cg C.Exp
+cgARollbackBody _dfs qs q n
+  | Just (QMid (QId qid)) <- qiQueueId q qs = do
+      appendStmt [cstm| ts_rollback($id:(cQPtr qid),$int:n); |]
+      return [cexp|UNIT|]
+  | otherwise 
+  = panic $ vcat [ text "SARollback only implemented for middle queues"
+                 , nest 2 $ text "queue = " <+> ppr q
+                 , nest 2 $ text "n     = " <+> ppr n 
+                 ]
+
+{---------------------- Discard/Clear atom implementation ---------------------}
+
+-- | By construction we will only be calling these two on SORA queues
+cgADiscBody :: DynFlags
+            -> QueueInfo
+            -> (Int,EId) -- ^ inwire
+            -> (Int,Ty)  -- ^ inty
+            -> Cg C.Exp
+cgADiscBody dfs qs (n,inwire) (n',_inty)
+  = assert "cgDiscAtom" (n == n') $ 
+    do replicateM_ n $ cgInWiring dfs qs [(1,inwire)] [inwire] (return ())
+       return [cexp|UNIT|]
+
+cgAClearBody :: DynFlags 
+             -> QueueInfo
+             -> Map EId Int
+             -> Cg C.Exp
+cgAClearBody _dfs qs qmap = do 
+  -- For now implement clear via discard
+  mapM_ mk_clear $ map (flip qiQueueId qs . fst) $ Map.toList qmap
+  return [cexp|UNIT|]
+  where
+    mk_clear (Just (QMid (QId qid))) 
+      = appendStmt [cstm| ts_clear($id:(cQPtr qid)); |]
+    mk_clear _ 
+      = panicStr "cgAClearBody: can only clear middle queues"
 
 {- Wiring and infrastructure
- - ~~~~~~~~~~~~~~~~~~~~~~~~~
- -
  - ----------------------------------------------------------------------------}
-
-
-{--------------- Reading from TS queues ---------------------------------------}
-
--- q_read_n :: QId -> Int -> C.Exp -> C.Stm
--- q_read_n (QId qid) n ptr
---   = [cstm| ts_getManyBlocking($int:qid,$int:n,$ptr); |]
-
--- q_read_n_bits :: QId -> Int -> C.Exp -> C.Stm
--- q_read_n_bits (QId qid) n ptr
---   = [cstm| ts_getManyBitsBlocking($int:qid,$int:n,$ptr); |]
-
-
--- readFromTs :: DynFlags 
---            -> Int -> Ty -- # number of reads, and type of each read
---            -> QId       -- Queue id
---            -> C.Exp     -- Target variable to store to
---            -> Cg ()
--- readFromTs _ n TBit q ptr = appendStmt $ q_read_n_bits q n ptr
-
--- readFromTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
---   | m `mod` 8 == 0 = appendStmt $ q_read_n q n ptr
---   | n == 1         = appendStmt $ q_read_n q 1 ptr
---   | otherwise -- Not byte-aligned byte array, a bit sad and slow
---   = do x <- CgMonad.freshName "q_rdx" (TArray (Literal m) TBit) Mut
---        i <- CgMonad.freshName "q_idx" tint Mut
---        cgMutBind dfs noLoc i Nothing $ do 
---        cgMutBind dfs noLoc x Nothing $ do
---          cx <- lookupVarEnv x
---          ci <- lookupVarEnv i
---          appendStmt $ [cstm| for ($ci = 0; $ci < $int:n; $ci++) {
---                                 ts_getManyBlocking($int:qid, 1, (char *) $cx);
---                                 bitArrWrite((typename BitArrPtr) $cx,
---                                               $ci*$int:m,
---                                               $int:m,
---                                             (typename BitArrPtr) $ptr);
---                              } |]
--- readFromTs _ n _ q ptr = appendStmt $ q_read_n q n ptr
 
 
 -- | Do we read from /the/ input
@@ -795,8 +795,8 @@ cgInWiring dfs qs ws vs action = go ws vs
     go (wir:wirs) (tgt:tgts) = cgInWire dfs qs wir tgt (go wirs tgts)
     go _ _ = error "cgInWiring!"
 
-cgDeclQPtr :: EId                       -- | Queue variable (and type of each element)
-           -> (C.Exp -> C.Type -> Cg a) -- ^ Action having passed in pointer variable and type
+cgDeclQPtr :: EId  -- | Queue variable (and type of each element)
+           -> (C.Exp -> C.Type -> Cg a) -- ^ Action w. pointer variable and type
            -> Cg a
 cgDeclQPtr q action
   = do q_c <- CgMonad.freshName "_ptr" qty Mut
@@ -814,7 +814,8 @@ cgInWire :: DynFlags
          -> EId       -- ^ Storage 
          -> Cg a      -- ^ Continuation
          -> Cg a     
-cgInWire _dfs qs (n,qvar) v action =
+cgInWire _dfs qs (n,qvar) v action = 
+  assert "cgInWire" (n==1) $
   case qiQueueId qvar qs of
 
     -- Not a queue
@@ -824,17 +825,18 @@ cgInWire _dfs qs (n,qvar) v action =
 
     Just (QMid (QId qid))
        | isSingleThreadIntermQueue qs qvar
-       -> cgDeclQPtr v $ \ptr ptr_ty             
-            -> do appendStmt [cstm| $ptr = ($ty:ptr_ty) _stq_acquire($id:(cQPtr qid),$int:n);|]
-                  a <- action
-                  appendStmt [cstm| _stq_release($id:(cQPtr qid),$int:n);|]
-                  return a
+       -> cgDeclQPtr v $ \ptr ptr_ty -> do              
+            appendStmt $ 
+              [cstm| $ptr = ($ty:ptr_ty) stq_acquire($id:(cQPtr qid));|]
+            a <- action
+            appendStmt [cstm| stq_release($id:(cQPtr qid));|]
+            return a
        | otherwise
-       -> cgDeclQPtr v $ \ptr ptr_ty 
-            -> do appendStmt [cstm| $ptr = ($ty:ptr_ty) s_ts_acquire($id:(cQPtr qid),$int:n);|]
-                  a <- action
-                  appendStmt [cstm| s_ts_release($id:(cQPtr qid),$int:n);|]
-                  return a
+       -> cgDeclQPtr v $ \ptr ptr_ty -> do 
+            appendStmt [cstm| $ptr = ($ty:ptr_ty) ts_acquire($id:(cQPtr qid));|]
+            a <- action
+            appendStmt [cstm| ts_release($id:(cQPtr qid));|]
+            return a
 
     -- Unexpected output queue
     Just QOut -> panicStr "cg_in_wire: encountered output queue!"
@@ -868,46 +870,6 @@ squashedQueueType n (TArray (Literal m) bt) = TArray (Literal (n*m)) bt
 squashedQueueType n t = TArray (Literal n) t
 
 
-
-{--------------- Writing to TS queues -----------------------------------------}
-
--- ts_put and variants are blocking
--- q_write_n :: QId -> Int -> C.Exp -> C.Stm
--- q_write_n (QId qid) n ptr = [cstm| ts_putMany($int:qid,$int:n,$ptr); |]
-
--- -- ts_put and variants are blocking
--- q_write_n_bits :: QId -> Int -> C.Exp -> C.Stm
--- q_write_n_bits (QId qid) n ptr = [cstm| ts_putManyBits($int:qid,$int:n,$ptr); |]
-
-
--- writeToTs :: DynFlags 
---            -> Int -> Ty -- # number of writes, and type of each write
---            -> QId       -- Queue id
---            -> C.Exp     -- Source variable to read from
---            -> Cg ()
--- writeToTs _ n TBit q ptr = appendStmt $ q_write_n_bits q n ptr
--- writeToTs dfs n (TArray (Literal m) TBit) q@(QId qid) ptr
---   | m `mod` 8 == 0 = appendStmt $ q_write_n q n ptr
---   | n == 1 = appendStmt $ q_write_n q 1 ptr
---   | otherwise -- Not byte-aligned byte array, a bit sad and slow
---   = do x <- CgMonad.freshName "q_rdx" (TArray (Literal m) TBit) Mut 
---        i <- CgMonad.freshName "q_idx" tint Mut
---        cgMutBind dfs noLoc i Nothing $ do 
---        cgMutBind dfs noLoc x Nothing $ do
---          cx <- lookupVarEnv x
---          ci <- lookupVarEnv i
---          -- ts_put and variants are blocking
---          appendStmt $ [cstm| for ($ci = 0; $ci < $int:n; $ci++) {
---                                 bitArrRead((typename BitArrPtr) $ptr,
---                                             $ci*$int:m,
---                                             $int:m,
---                                            (typename BitArrPtr) $cx);
---                                 ts_put($int:qid,(char *) $cx);
---                              }|]
-
--- writeToTs _ n _ q ptr = appendStmt $ q_write_n q n ptr
-
-
 cgOutWiring :: DynFlags 
             -> QueueInfo
             -> [(Int,EId)] -- Output wires
@@ -922,29 +884,27 @@ cgOutWiring dfs qs ws vs action = go ws vs
 
 cgOutWire :: DynFlags -> QueueInfo -> (Int,EId) -> EId -> Cg a -> Cg a
 cgOutWire _dfs qs (n,qvar) v action
-  = case qiQueueId qvar qs of
+  = assert "cgOutWire" (n == 1) $
+    case qiQueueId qvar qs of
 
       -- Not a queue
       Nothing ->
          assert "cgOutWire/non-queue" (n == 1) $
          assert "cgOutWire/not-same-var" (qvar == v) $ action
 
-         -- unless (qvar == v) $
-         -- void $ codeGenExp dfs (eAssign noLoc (eVar noLoc qvar) (eVar noLoc v))
-
       -- Some intermediate SORA queue
       Just (QMid (QId qid))
         | isSingleThreadIntermQueue qs qvar
         -> cgDeclQPtr v $ \ptr ptr_ty -> do
-             appendStmt [cstm| $ptr = ($ty:ptr_ty) _stq_reserve($id:(cQPtr qid),$int:n);|]
+             appendStmt [cstm|$ptr= ($ty:ptr_ty) stq_reserve($id:(cQPtr qid));|]
              a <- action
-             appendStmt [cstm| _stq_push($id:(cQPtr qid),$int:n);|]
+             appendStmt [cstm|stq_push($id:(cQPtr qid));|]
              return a
         | otherwise 
         -> cgDeclQPtr v $ \ptr ptr_ty -> do
-             appendStmt [cstm| $ptr = ($ty:ptr_ty) s_ts_reserve($id:(cQPtr qid),$int:n);|]
+             appendStmt [cstm| $ptr=($ty:ptr_ty) ts_reserve($id:(cQPtr qid));|]
              a <- action
-             appendStmt [cstm| s_ts_push($id:(cQPtr qid), $int:n);|]
+             appendStmt [cstm| ts_push($id:(cQPtr qid));|]
              return a
 
       -- Unexpected input queue

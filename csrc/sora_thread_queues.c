@@ -100,7 +100,7 @@ ts_context *ts_init(int no, size_t *sizes, int *queue_sizes)
 
 
 
-char *ts_reserve(ts_context *locCont, int num)
+char *ts_reserve(ts_context *locCont)
 {
 	char *buf;
 
@@ -121,7 +121,7 @@ char *ts_reserve(ts_context *locCont, int num)
 
 // NB: To make it fast, release does not check whether there are enough slots to be released
 // Ziria should do that
-bool ts_push(ts_context *locCont, int num)
+bool ts_push(ts_context *locCont)
 {
 	/*
 	if (locCont->wdptr == locCont->wptr){
@@ -141,7 +141,7 @@ bool ts_push(ts_context *locCont, int num)
 
 
 
-char *ts_acquire(ts_context *locCont, int num)
+char *ts_acquire(ts_context *locCont)
 {
 	char * buf = NULL;
 
@@ -173,7 +173,7 @@ char *ts_acquire(ts_context *locCont, int num)
 
 // NB: To make it fast, release does not check whether there are enough slots to be released
 // Ziria should do that
-bool ts_release(ts_context *locCont, int num)
+bool ts_release(ts_context *locCont)
 {
 	/*
 	if (locCont->rptr == locCont->rdptr)

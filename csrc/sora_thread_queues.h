@@ -81,11 +81,11 @@ ts_context *ts_init(int no, size_t *sizes, int *queue_sizes);
 // ** The prefered, 2-step API that avoids extra memcpy
 // The following functions are non-blocking and the caller should spin-wait if required
 // Producer
-char *ts_reserve(ts_context *locCont, int num);
-bool ts_push(ts_context *locCont, int num);
+char *ts_reserve(ts_context *locCont);
+bool ts_push(ts_context *locCont);
 // Consumer
-char *ts_acquire(ts_context *locCont, int num);
-bool ts_release(ts_context *locCont, int num);
+char *ts_acquire(ts_context *locCont);
+bool ts_release(ts_context *locCont);
 
 
 // ** The old, 1-step API that introduces extra memcpy
