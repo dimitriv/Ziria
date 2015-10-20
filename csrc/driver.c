@@ -279,7 +279,7 @@ int SetUpThreads(PWIN_UTHREAD_PROC * User_Routines)
 // Define an empty SetUpThreads() function.
 // This is here as a shim for compiling single threaded code with GCC.
 // See note in Codegen/CgSetupThreads.hs for more information.
-int SetUpThreads(void *unused)
+int SetUpThreads(void(** unused)(void*))
 {
   return 1;
 }

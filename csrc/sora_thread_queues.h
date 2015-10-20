@@ -127,7 +127,7 @@ void ts_free();
 
 
 
-#ifndef __linux__
+#if !defined(__GNUC__) && !defined(__linux__)
 // For barriers
 #include <windows.h>
 #include<synchapi.h>

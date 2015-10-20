@@ -14,6 +14,8 @@
 #include "sora_thread_queues.h"
 #include "single_thread_queues.h"
 
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__linux__)
 #include "sora_ext_lib.c"
+
+typedef void(*PWIN_UTHREAD_PROC)(void *);
 #endif

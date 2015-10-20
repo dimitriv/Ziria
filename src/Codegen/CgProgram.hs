@@ -202,8 +202,8 @@ codeGenProgram dflags shared_ctxt
            (automaton :: AxAuto SymAtom) 
                  <- cgIO $ automatonPipeline dflags sym (bufty_ty bta) (bufty_ty btb) ac
            let queues = (extractQueues automaton)
-           appendTopDecl [cdecl| $ty:(namedCType "LONG volatile") *barr_hist1 = NULL; |]
-           appendTopDecl [cdecl| $ty:(namedCType "LONG volatile") *barr_hist2 = NULL; |]
+           appendTopDecl [cdecl| $ty:(namedCType "long volatile") *barr_hist1 = NULL; |]
+           appendTopDecl [cdecl| $ty:(namedCType "long volatile") *barr_hist2 = NULL; |]
            appendTopDecl [cdecl| $ty:(namedCType "bool") atomix = 1; |]
            cgAutomatonDeclareAllGlobals dflags rnst queues automaton  $ 
              if no_threads > 1 then 

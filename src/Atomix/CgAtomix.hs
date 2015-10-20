@@ -496,10 +496,10 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
    --   and changes the branching
    --   decision before the other thread reads the old value
    cg_declare_barr  label 
-      = appendTopDecl [cdecl| $ty:(namedCType "LONG volatile") 
+      = appendTopDecl [cdecl| $ty:(namedCType "long volatile") 
                                      $id:(barr_name label)[3] = {0, 0, 0};|];
    cg_declare_barr2 label 
-      = appendTopDecl [cdecl| $ty:(namedCType "LONG volatile") 
+      = appendTopDecl [cdecl| $ty:(namedCType "long volatile") 
                                       $id:(barr_name2 label)[3] = {0, 0, 0};|];
 
    barr_name label = "__barr_" ++ lblOfNid label
