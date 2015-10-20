@@ -660,12 +660,23 @@ cgACastBody dfs qs (n,inwire)
                       (n',inty) 
                       (m',outty) 
   = assert "cgCastAtom" (n == n' && m == m') $ do
+    cgIO $ print $ 
+           vcat [ text "Cast atom generation:"
+                , nest 2 $ text "n               = " <> ppr n
+                , nest 2 $ text "inwire          = " <> ppr inwire
+                , nest 2 $ text "typeof(inwire)  = " <> ppr (nameTyp inwire)
+                , nest 2 $ text "inty            = " <> ppr inty 
+                , nest 2 $ text "m               = " <> ppr m
+                , nest 2 $ text "outwire         = " <> ppr outwire
+                , nest 2 $ text "typeof(outwire) = " <> ppr (nameTyp outwire)
+                , nest 2 $ text "outty           = " <> ppr outty
+                ]
     case (qiQueueId inwire qs, qiQueueId outwire qs) of 
 
       -- Naked take and emit cases
        
       (Nothing, _)
-        | m == 1  -- EmitOne
+        | m == 1  && (inty == outty) -- EmitOne (bug117.wpl)
         -> cgOutWiring dfs qs [(m,outwire)] [outwire] $
            codeGenExp dfs $ eAssign noLoc outwire_exp inwire_exp
                   -- EmitMany
@@ -674,7 +685,7 @@ cgACastBody dfs qs (n,inwire)
         -> cg_emit_many eidx rng
 
       (_,Nothing)  
-        | n == 1  -- TakeOne 
+        | n == 1  && (inty == outty) -- TakeOne (bug117.wpl)
         -> cgInWiring dfs qs [(n,inwire)] [inwire] $
            codeGenExp dfs $ eAssign noLoc outwire_exp inwire_exp
 
@@ -682,14 +693,22 @@ cgACastBody dfs qs (n,inwire)
         | let rng = figureOutSlice (n,inty)
               eidx = figureOutIdx rng "__j"
         -> cg_take_many eidx rng
+    
+      -- Here it could be 2 queues (Just/Just)
 
-      _ | n > 1
+      -- Case of idAtom  
+      _ | (n==1) && (m==1) && (inty == outty) -- Case of idAtom on two queues (Example: fore.wpl)
+        -> cgInWiring dfs qs [(1,inwire)] [inwire] $
+           cgOutWiring dfs qs [(1,outwire)] [outwire] $
+           codeGenExp dfs $ eAssign noLoc outwire_exp inwire_exp
+
+      _ | (n > 1 && m == 1) || (isArrayTy inty && n == 1 && m == 1)
         , let rng = figureOutSlice (n,inty)
               eidx = figureOutIdx rng "__j"
         -> cgOutWiring dfs qs [(1,outwire)] [outwire] $
            cg_take_many eidx rng
 
-        | m > 1
+        | (m > 1 && n == 1) || (isArrayTy outty && n == 1 && m == 1)
         , let rng = figureOutSlice (m,outty)
               eidx = figureOutIdx rng "__j"
         -> cgInWiring dfs qs [(1,inwire)] [inwire] $
@@ -801,7 +820,7 @@ cgDeclQPtr :: EId  -- | Queue variable (and type of each element)
            -> (C.Exp -> C.Type -> Cg a) -- ^ Action w. pointer variable and type
            -> Cg a
 cgDeclQPtr q action
-  = do q_c <- CgMonad.freshName "_ptr" qty Mut
+  = do q_c <- CgMonad.freshName "_qptr_" qty Mut
        let ctype = codeGenSmallTyPtr qty
            cptr  = [cexp|$id:(name q_c)|]
            cval | TArray {} <- qty = cptr

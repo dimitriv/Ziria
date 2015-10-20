@@ -89,7 +89,9 @@ cgLetBind dfs loc x e m = do
 cgGlobMutBind :: DynFlags -> SrcLoc -> EId -> Cg a -> Cg a
 cgGlobMutBind dfs loc x m = do 
   x_name <- genSym $ name x ++ getLnNumInStr loc
-  codeGenDeclGroup x_name (nameTyp x) ZeroOut >>= appendTopDeclPkg
+  DeclPkg ig ss <- codeGenDeclGroup x_name (nameTyp x) ZeroOut 
+  appendTopDecl ig
+  mapM addGlobalWplAllocated ss
   let x_binding = [cexp| $id:x_name|]
   extendVarEnv [(x,x_binding)] m
 
