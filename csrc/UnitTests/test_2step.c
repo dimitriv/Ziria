@@ -63,9 +63,9 @@ bool __cdecl test_2step_int32(int queue_len)
 	}
 	for (int i = 0; i < queue_len; i++)
 	{
-		int32 *buf = (int32*)ts_reserve(&queues[0], 1);
+		int32 *buf = (int32*)ts_reserve(&queues[0]);
 		buf[0] = val1;
-		ts_push(&queues[0], 1);
+		ts_push(&queues[0]);
 	}
 	ts_clear(queues);
 
@@ -80,9 +80,9 @@ bool __cdecl test_2step_int32(int queue_len)
 
 	for (int i = 0; i < queue_len; i++)
 	{
-		int32 *buf = (int32*)ts_reserve(&queues[0], 1);
+		int32 *buf = (int32*)ts_reserve(&queues[0]);
 		buf[0] = val1;
-		ts_push(&queues[0], 1);
+		ts_push(&queues[0]);
 		val1++;
 	}
 
@@ -94,10 +94,10 @@ bool __cdecl test_2step_int32(int queue_len)
 
 
 	// NOOP
-	ts_acquire(&queues[0], 1);
-	ts_release(&queues[0], 1);
-	ts_acquire(&queues[0], 1);
-	ts_release(&queues[0], 1);
+	ts_acquire(&queues[0]);
+	ts_release(&queues[0]);
+	ts_acquire(&queues[0]);
+	ts_release(&queues[0]);
 	ts_rollback(queues, 2);
 
 
@@ -105,21 +105,21 @@ bool __cdecl test_2step_int32(int queue_len)
 	for (int i = 0; i < queue_len / 2; i++)
 	{
 		// NOOP
-		ts_acquire(&queues[0], 1);
-		ts_release(&queues[0], 1);
+		ts_acquire(&queues[0]);
+		ts_release(&queues[0]);
 		ts_rollback(queues, 1);
 
-		int32 *buf = (int32*)ts_acquire(&queues[0], 1);
+		int32 *buf = (int32*)ts_acquire(&queues[0]);
 		valA[indA] = buf[0];
-		ts_release(&queues[0], 1);
+		ts_release(&queues[0]);
 		indA++;
 	}
 
 	for (int i = 0; i < queue_len / 2; i++)
 	{
-		int32 *buf = (int32*)ts_reserve(&queues[0], 1);
+		int32 *buf = (int32*)ts_reserve(&queues[0]);
 		buf[0] = val1;
-		ts_push(&queues[0], 1);
+		ts_push(&queues[0]);
 		val1++;
 	}
 
@@ -134,13 +134,13 @@ bool __cdecl test_2step_int32(int queue_len)
 	for (int i = 0; i < queue_len; i++)
 	{
 		// NOOP
-		ts_acquire(&queues[0], 1);
-		ts_release(&queues[0], 1);
+		ts_acquire(&queues[0]);
+		ts_release(&queues[0]);
 		ts_rollback(queues, 1);
 
-		int32 *buf = (int32*)ts_acquire(&queues[0], 1);
+		int32 *buf = (int32*)ts_acquire(&queues[0]);
 		valA[indA] = buf[0];
-		ts_release(&queues[0], 1);
+		ts_release(&queues[0]);
 		indA++;
 	}
 
