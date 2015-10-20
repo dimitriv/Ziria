@@ -104,9 +104,8 @@ char *ts_reserve(ts_context *locCont)
 {
 	char *buf;
 
-	if (*valid(locCont->wptr, locCont->alg_size, 0)) {
-		return NULL;
-	}
+	// Blocking! 
+	while ((*valid(locCont->wptr, locCont->alg_size, 0))); 
 
 	buf = data(locCont->wptr, locCont->alg_size, 0);
 
@@ -148,26 +147,18 @@ char *ts_acquire(ts_context *locCont)
 	// if the synchronized buffer has no data, 
 	// check whether there is reset/flush request
 	//if (!(locCont->rptr)->valid)
-	if (!(*valid(locCont->rptr, locCont->alg_size, 0)))
-	{
-		// no data to process  
-		return NULL;
-	}
-	else
-	{
-		// Otherwise, there are data. Pump the data to the output pin
-		buf = data(locCont->rptr, locCont->alg_size, 0);
+	while (!(*valid(locCont->rptr, locCont->alg_size, 0)));
 
-		*valid(locCont->rptr, locCont->alg_size, 0) = true;
-		locCont->rptr += (ST_CACHE_LINE + locCont->alg_size);
-		if ((locCont->rptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + locCont->alg_size))
-		{
-			(locCont->rptr) = (locCont->buf);
-		}
+	// Otherwise, there are data. Pump the data to the output pin
+	buf = data(locCont->rptr, locCont->alg_size, 0);
 
-		return buf;
+	*valid(locCont->rptr, locCont->alg_size, 0) = true;
+	locCont->rptr += (ST_CACHE_LINE + locCont->alg_size);
+	if ((locCont->rptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + locCont->alg_size))
+	{
+		(locCont->rptr) = (locCont->buf);
 	}
-	return NULL;
+	return buf;
 }
 
 

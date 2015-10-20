@@ -20,6 +20,9 @@
 
 
 
+// valid(q,slot) iff there data available for reading in slot
+
+
 // The main goal of this queue is to keep evey item in a different cache line
 // to minimize the amount of cache invaliations. 
 // <buf> is a buffer that stores data. Each data item is of size <size>,
@@ -29,7 +32,7 @@
 // Here is an example of <size> = 4 (bytes), and ST_CACHE_LINE = 16
 // | V1 PP PP PP PP PP PP PP PP PP PP PP PP PP PP PP |        (true if the next item is valid to be read)
 // | D1 D1 D1 D1 PP PP PP PP PP PP PP PP PP PP PP PP | 
-// | V3 PP PP PP PP PP PP PP PP PP PP PP PP PP PP PP |
+// | V2 PP PP PP PP PP PP PP PP PP PP PP PP PP PP PP |
 // | D2 D2 D2 D2 PP PP PP PP PP PP PP PP PP PP PP PP |
 //
 // wptr is a pointer to the last reserved entry
