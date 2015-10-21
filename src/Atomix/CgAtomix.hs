@@ -472,7 +472,7 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
              barrier($id:(barr_name nid), $int:no_threads, $int:c); 
              goto $id:(lblOfNid next); |]
 
-   cg_decision _c _nid (AtomixBranch c' l r) = do
+   cg_decision c nid (AtomixBranch c' l r) = do
      cc <- lookupVarEnv c'
      if no_threads == 1 then
          appendStmt [cstm| 
@@ -484,7 +484,7 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
        else
          appendStmts [cstms|
            //printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $cc);
-           // barrier($id:(barr_name nid), $int:no_threads, $int:c);
+           barrier($id:(barr_name nid), $int:no_threads, $int:c);
            if ($cc) {
              // barrier($id:(barr_name2 nid), $int:no_threads, $int:c);
              // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $l);
