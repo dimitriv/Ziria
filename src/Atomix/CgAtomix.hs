@@ -483,16 +483,21 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
             }|]
        else
          appendStmts [cstms|
-           //printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $cc);
+           // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $cc);
+           // fflush(stdout);
            barrier($id:(barr_name nid), $int:no_threads, $int:c);
            if ($cc) {
-             // barrier($id:(barr_name2 nid), $int:no_threads, $int:c);
+             // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $cc);
+             // fflush(stdout);
+             barrier($id:(barr_name2 nid), $int:no_threads, $int:c);
              // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $l);
              goto $id:(lblOfNid l); 
            } else {
-             // barrier($id:(barr_name2 nid), $int:no_threads, $int:c);
+             // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $cc);
+             // fflush(stdout);
+             barrier($id:(barr_name2 nid), $int:no_threads, $int:c);
              //printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $r);
-                goto $id:(lblOfNid r); 
+             goto $id:(lblOfNid r); 
            }|]
 
    -- DV: I believe this is obsolete and only had to do with the old 
