@@ -47,7 +47,7 @@ import Data.Loc
 import Data.Maybe
 import Text.PrettyPrint.HughesPJ
 -- import qualified GenSym as GS
-import Data.List ( nub, partition )
+import Data.List ( nub, partition, groupBy )
 -- import CtExpr 
 -- import CtComp
 -- import TcRename 
@@ -414,7 +414,13 @@ cgAutomatonDeclareAllGlobals dfs
    cg_def_atoms' (a:as) m = cgDefAtom dfs queues a (cg_def_atoms' as m)
 
 
-
+-- | Group atoms in-order so that each group has identical atoms and
+-- ^ on the same core
+groupAtoms :: [WiredAtom SymAtom] -> [[WiredAtom SymAtom]]
+groupAtoms = groupBy wa_equal
+  where wa_equal wa1 wa2 
+          = wiredAtomId wa1 == wiredAtomId wa2 &&
+            getWiredAtomCore wa1 == getWiredAtomCore wa2
 
 -- | Main driver for code generation
 cgAutomaton :: DynFlags 
@@ -446,7 +452,7 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
 
    cg_nkind c nid frameVar (AtomixState atoms _ decision _) = do
      inAllocFrame' frameVar noLoc $ 
-        pushAllocFrame $ mapM_ (cgCallAtom dfs c queues) atoms
+        pushAllocFrame $ mapM_ (cgCallAtomGroup dfs c queues) (groupAtoms atoms)
      cg_decision c nid decision
 
    cg_decision c nid AtomixDone
@@ -571,12 +577,36 @@ cg_def_atom _dfs aid mbody mkont
       extendExpFunEnv fun_name (fun_name, [], False) mkont
 
 
+
+cgCallAtomGroup :: DynFlags
+                -> Int
+                -> QueueInfo
+                -> [WiredAtom SymAtom]
+                -> Cg ()
+cgCallAtomGroup dfs current_core queues wa_group
+  | [wa] <- wa_group
+  = cgCallAtom dfs current_core queues wa
+  | otherwise
+  , let wa   = head wa_group
+        core = getWiredAtomCore wa
+        len  = length wa_group
+  = if core == current_core then 
+        do (ds,ss,_) <- inNewBlock $ 
+                        cgCallAtom dfs current_core queues wa
+           appendStmt $ 
+             [cstm| for (int __acnt=0; __acnt < $int:(len); __acnt++) {
+                      $decls:ds
+                      $stms:ss
+                    }
+             |]
+    else return ()
+
 cgCallAtom :: DynFlags
            -> Int
            -> QueueInfo
-           -> WiredAtom SymAtom 
+           -> WiredAtom SymAtom
            -> Cg ()
-cgCallAtom _dfs current_core queues wa 
+cgCallAtom _dfs current_core queues wa
   | rd_input
   , core == current_core
   = appendStmt $ [cstm| if ($id:(name fun_name)() == -7) return(0);|]
@@ -729,8 +759,8 @@ cgACastBody dfs qs (n,inwire)
                   eAssign noLoc outwire_exp 
                       (eArrRead noLoc inwire_exp eidx rng)
               appendStmt $ [cstm| for (int __j = 0; __j < $int:m ; __j++) {
-                                 $decls:ccdecls;
-                                 $stms:ccstmts;
+                                 $decls:ccdecls
+                                 $stms:ccstmts
                               } |]
               return [cexp|UNIT|]
 
