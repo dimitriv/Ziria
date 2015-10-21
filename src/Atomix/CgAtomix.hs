@@ -766,7 +766,7 @@ cgARollbackBody _dfs qs q n
 
 {---------------------- Discard/Clear atom implementation ---------------------}
 
--- | By construction we will only be calling these two on SORA queues
+-- | By construction we will only be calling Discard on SORA queues
 cgADiscBody :: DynFlags
             -> QueueInfo
             -> (Int,EId) -- ^ inwire
@@ -782,11 +782,13 @@ cgAClearBody :: DynFlags
              -> Map EId Int
              -> Cg C.Exp
 cgAClearBody _dfs qs qmap = do 
-  -- For now implement clear via discard
-  mapM_ mk_clear $ map (flip qiQueueId qs . fst) $ Map.toList qmap
+  mapM_ mk_clear $ map (\x -> (fst x, flip qiQueueId qs $ fst x)) $ Map.toList qmap
   return [cexp|UNIT|]
   where
-    mk_clear (Just (QMid (QId qid))) 
+    mk_clear (qvar,(Just (QMid (QId qid))))
+      | isSingleThreadIntermQueue qs qvar
+      = appendStmt [cstm| stq_clear($id:(cQPtr qid));|]
+      | otherwise
       = appendStmt [cstm| ts_clear($id:(cQPtr qid)); |]
     mk_clear _ 
       = panicStr "cgAClearBody: can only clear middle queues"
