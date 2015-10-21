@@ -71,6 +71,9 @@ bin_%.outfile: bin_%.out bin_%.infile
 %.accept : %.outfile
 	cp $< $<.ground
 
+%.skip : %.outfile
+	cp $<.ground $<
+
 
 clean:
 	rm -f ./*expanded
