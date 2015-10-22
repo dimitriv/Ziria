@@ -181,6 +181,14 @@ mkCastTyArray 1 t = t
 mkCastTyArray n (TArray (Literal m) t) = TArray (Literal (m*n)) t
 mkCastTyArray n t                      = TArray (Literal n) t
 
+data MitiQueueInfo 
+    -- | mq^(how_many) ~> out_queue
+  = MitiNToOne { mqi_how_many  :: Int 
+               , mqi_out_queue :: EId } 
+    -- | in_queue ~> mq^(how_many)
+  | MitiOneToN { mqi_how_many :: Int
+               , mqi_in_queue :: EId  }
+
 -- | Datatype with queue information of this automaton 
 data QueueInfo 
   = QI { qi_inch   :: EId                        -- ^ THE Input queue 
@@ -197,6 +205,7 @@ data QueueInfo
           --   See Note [Single Thread Queues]
        , qi_sora_queues :: [(EId,(QId,Int))] -- SORA concurrent queues
        , qi_sing_queues :: [(EId,(QId,Int))] -- Ordinary (single-thread) queues
+       , qi_miti_queues :: [(EId, MitiQueueInfo)] 
        }
 
 -- | Is this intermediate queue single-threaded? See Note [Single Thread Queues]
@@ -211,13 +220,14 @@ isSingleThreadIntermQueue_aux cores x =
 
 
 instance Outputable QueueInfo where
-  ppr (QI qinch qoutch qinterm qcs qsora qsing)
+  ppr (QI qinch qoutch qinterm qcs qsora qsing qmiti)
     = vcat [ text "qi_inch   =" <+> text (show qinch)
            , text "qi_outch  =" <+> text (show qoutch)
            , text "qi_interm =" $$ vcat (map ppr_qs (Map.toList qinterm))
            , text "qi_cores  =" $$ vcat (map ppr_cs (Map.toList qcs))
-           , text "qi_sora_queues =" $$ vcat (map (text . show) qsora)
-           , text "qi_sing_queues =" $$ vcat (map (text . show) qsing)
+           , text "qi_sora_queues =" $$ vcat (map (text.show) qsora)
+           , text "qi_sing_queues =" $$ vcat (map (text.show) qsing)
+           , text "qi_miti_queues =" $$ vcat (map (text.show.fst) qmiti)
            ]
     where
       ppr_cs (qv,qcores) = ppr qv <+> text "used by cores:" <+> 
@@ -338,6 +348,7 @@ extractQueues auto
        , qi_cores  = cores
        , qi_sora_queues = sora_queues
        , qi_sing_queues = sing_queues
+       , qi_miti_queues = Map.toList mit_queues
        }
   where
 
@@ -359,6 +370,13 @@ extractQueues auto
 
     unions_with f = foldl (Map.unionWith f) Map.empty
 
+    mit_queues :: Map.Map EId MitiQueueInfo
+    mit_queues = Map.unions mit_pre
+    mit_pre = map (extract_mit_queue . node_kind) (Map.elems (auto_graph auto))
+    extract_mit_queue (AtomixState atoms _ _ _)
+       = update_mit_pipes atoms Map.empty
+
+
     pre = map (extract_queue . node_kind) (Map.elems (auto_graph auto))
     extract_queue (AtomixState atoms _ _ init_pipes) 
        = update_pipes atoms init_pipes
@@ -367,6 +385,18 @@ extractQueues auto
     pre_cores = map (extract_core . node_kind) (Map.elems (auto_graph auto))
     extract_core (AtomixState atoms _ _ init_pipes)
        = update_cores atoms (Map.map (\_ -> []) init_pipes)
+
+    update_mit_pipes :: [WiredAtom SymAtom] 
+                      -> Map EId MitiQueueInfo
+                      -> Map EId MitiQueueInfo
+    update_mit_pipes watoms pipes
+      = foldl upd pipes watoms
+      where upd ps (WiredAtom [(n,inq)] [(m,outq)] 
+                      (SymAtom _ (SACast _s MitigateOrigin _ _)))
+              = if n == 1 
+                then Map.insert outq (MitiOneToN m  inq) ps -- 1 x N
+                else Map.insert inq  (MitiNToOne n outq) ps -- N x 1
+            upd ps _other = ps
 
     update_pipes :: [WiredAtom SymAtom] -> Map Chan Int -> Map Chan Int
     update_pipes watoms pipes 
