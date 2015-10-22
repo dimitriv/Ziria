@@ -463,13 +463,13 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
              barrier($id:(barr_name nid), $int:no_threads, $int:c);
              return 0; |]
 
-   cg_decision c nid (AtomixLoop next)
+   cg_decision _c _nid (AtomixLoop next)
      = if no_threads == 1 then
            appendStmt [cstm| goto $id:(lblOfNid next); |]
          else
            appendStmts [cstms| 
              //printf("Tid %d, state %d -> %d\n", $int:c, $int:nid, $int:next);
-             barrier($id:(barr_name nid), $int:no_threads, $int:c); 
+             // barrier($id:(barr_name nid), $int:no_threads, $int:c); 
              goto $id:(lblOfNid next); |]
 
    cg_decision c nid (AtomixBranch c' l r) = do
@@ -482,23 +482,26 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
                 goto $id:(lblOfNid r); 
             }|]
        else
-         appendStmts [cstms|
-           // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $cc);
-           // fflush(stdout);
-           barrier($id:(barr_name nid), $int:no_threads, $int:c);
-           if ($cc) {
-             // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $cc);
-             // fflush(stdout);
-             barrier($id:(barr_name2 nid), $int:no_threads, $int:c);
-             // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $l);
-             goto $id:(lblOfNid l); 
-           } else {
-             // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $cc);
-             // fflush(stdout);
-             barrier($id:(barr_name2 nid), $int:no_threads, $int:c);
-             //printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $r);
-             goto $id:(lblOfNid r); 
-           }|]
+         let barrstmt kn  
+               = if kn == nid then [cstm|UNIT;|]
+                 else [cstm|barrier($id:(barr_name2 nid), $int:no_threads, $int:c);|] 
+         in appendStmts [cstms|
+              // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $cc);
+              // fflush(stdout);
+              barrier($id:(barr_name nid), $int:no_threads, $int:c);
+              if ($cc) {
+                // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $cc);
+                // fflush(stdout);
+                $stm:(barrstmt l);
+                // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $l);
+                goto $id:(lblOfNid l); 
+              } else {
+                // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $cc);
+                // fflush(stdout);
+                $stm:(barrstmt r);
+                //printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $r);
+                goto $id:(lblOfNid r); 
+              }|]
 
    -- DV: I believe this is obsolete and only had to do with the old 
    -- barrier implementation: 
@@ -530,10 +533,10 @@ cgDefAtom :: DynFlags
           -> Cg a
 cgDefAtom dfs qs w@(WiredAtom win wout the_atom)
   = case atom_kind the_atom of
-      SACast _ inty outty ->
+      SACast _ orig inty outty ->
         let inwire  = head win
             outwire = head wout
-        in cg_def_atom dfs wid $ cgACastBody dfs qs inwire outwire inty outty
+        in cg_def_atom dfs wid $ cgACastBody dfs qs orig inwire outwire inty outty
 
       SADiscard _ inty 
         -> cg_def_atom dfs wid $ cgADiscBody dfs qs (head win) inty
@@ -685,15 +688,16 @@ cgAExpBody dfs qs wins wouts aexp
 
 cgACastBody :: DynFlags 
             -> QueueInfo
+            -> CastAtomOrigin
             -> (Int,EId) -- ^ inwire
             -> (Int,EId) -- ^ outwire
             -> (Int,Ty)  -- ^ inty
             -> (Int,Ty)  -- ^ outty
             -> Cg C.Exp
-cgACastBody dfs qs (n,inwire) 
-                      (m,outwire) 
-                      (n',inty) 
-                      (m',outty) 
+cgACastBody dfs qs _orig (n,inwire) 
+                         (m,outwire) 
+                         (n',inty) 
+                         (m',outty) 
   = assert "cgCastAtom" (n == n' && m == m') $ do
     cgIO $ print $ 
            vcat [ text "Cast atom generation:"

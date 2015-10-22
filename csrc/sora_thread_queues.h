@@ -72,6 +72,14 @@ typedef struct
 	MEM_ALIGN(ST_CACHE_LINE) int queue_size;
 } ts_context;
 
+/* A mitigator queue is really an alias for a real ts_context
+   along with some extra information about progress and current
+   index for the corresponding Ziria mitigation loop. */
+typedef struct {
+	ts_context *mit_ts_context;
+	uint mit_in_progress;
+	int mit_ziria_idx;
+} mit_ts_context;
 
 
 // ************
@@ -181,12 +189,12 @@ marker_series series;
 
 
 #define MAXPOSSIBLETHREADS 16
-static volatile long thr_cnt = 0;
+MEM_ALIGN(ST_CACHE_LINE) static volatile long thr_cnt = 0;
 
 #ifdef _DEBUG 
-static volatile bool ok[MAXPOSSIBLETHREADS] = { true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true };
+static volatile SHORT ok[MAXPOSSIBLETHREADS] = { true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true };
 #else
-static volatile bool ok[MAXPOSSIBLETHREADS] = { 0 };
+MEM_ALIGN(ST_CACHE_LINE) static volatile SHORT ok[MAXPOSSIBLETHREADS] = { 0 };
 #endif
 
 
