@@ -67,6 +67,12 @@ data DynFlag =
                       -- the relative error will be arbitrary and we'll get false positives
                       -- To avoid this, set the threshold, and any mismatched values
                       -- that are below the threshold will be ignored
+  | Offset Double
+                      -- Allow a certain offset (deviation) from the required value.
+                      -- This ensures that floating point rounding errors caused
+                      -- by imprecisions in IEEE 754 will not affect the match.
+                      -- Usually only an offset of 1.0 is required, which allows
+                      -- the result to be +/- 1.0 of the required value.
   | AsComplex
   deriving Eq
 
@@ -88,6 +94,7 @@ options
     , Option ['h']     ["help"]       (NoArg Help)                    "Print help message"
     , Option ['n']     ["npc"]        (ReqArg parse_npc "precision")  "Precision 0.0-1.0, only valid when debug is on and entries are numerical"
     , Option ['t']     ["thr"]        (ReqArg parse_thr "threshold")  "Ignore numbers that are in absolute under threshold (i.e. too close to 0)"
+    , Option ['o']     ["off"]        (ReqArg parse_off "offset")     "Ignore a certain offset (deviation) from the required value"
     , Option ['c']     ["as-complex"] (NoArg AsComplex)               "When precision is on and debug is on, the precision test is done for complex numbers (i.e. pairs of entries at a time)"
     ]
   where parse_npc :: String -> DynFlag
@@ -95,6 +102,9 @@ options
 
         parse_thr :: String -> DynFlag
         parse_thr s = Threshold (read s)
+
+        parse_off :: String -> DynFlag
+        parse_off s = Offset (read s)
 
 
 usage :: String
@@ -152,6 +162,15 @@ getThrFlag (Threshold n : _)
 getThrFlag (_ : opts') = getThrFlag opts'
 
 
+-- | Get the offset from the arguments
+getOffFlag :: DynFlags -> IO (Maybe Double)
+getOffFlag []          = return Nothing
+getOffFlag (Offset n : _)
+  | 0.0 <= n           = return $ Just n
+  | otherwise          = failWithUsageMsg "Offset must be positive"
+getOffFlag (_ : opts') = getOffFlag opts'
+
+
 compilerOpts :: [String] -> IO (DynFlags, [String])
 compilerOpts argv =
   case getOpt Permute options argv of
@@ -178,10 +197,11 @@ main = do { hSetBuffering stdout NoBuffering
                ; gndFile <- getGndFile flags
                ; npc <- getNpcFlag flags
                ; thr <- getThrFlag flags
-               ; when ((isJust npc || isJust thr) && not (isDynFlagSet flags Debug)) $
+               ; off <- getOffFlag flags
+               ; when ((isJust npc || isJust thr || isJust off) && not (isDynFlagSet flags Debug)) $
                  failWithUsageMsg $
-                   "Ninety-percent and threshold can only be used in debug mode"
-               ; doCompare flags npc thr inFile gndFile
+                   "Ninety-percent, threshold, and offset can only be used in debug mode"
+               ; doCompare flags npc thr off inFile gndFile
                }
 
 
@@ -194,14 +214,15 @@ errHandler msg (e :: IOError)
        exitWith (ExitFailure 2)
 
 
-doCompare :: DynFlags -> Maybe Double -> Maybe Double -> String -> String -> IO ()
-doCompare dflags npc thr infile gndfile
+doCompare
+  :: DynFlags -> Maybe Double -> Maybe Double -> Maybe Double -> String -> String -> IO ()
+doCompare dflags npc thr off infile gndfile
   = withFiles infile gndfile $
     if debug_on then
         if complex_on then
-            do_compare prefix_on verbose_on $ textPairFmtReader npc thr
+            do_compare prefix_on verbose_on $ textPairFmtReader npc thr off
         else
-            do_compare prefix_on verbose_on $ textFmtReader npc thr
+            do_compare prefix_on verbose_on $ textFmtReader npc thr off
     else
         do_compare prefix_on verbose_on $ binFmtReader
   where
@@ -345,11 +366,11 @@ bin_read_entry fptr h
 -- error but no effect on the correctness. We ignore these corner cases through THR
 
 
-textFmtReader :: Maybe Double -> Maybe Double -> FmtReader () String
-textFmtReader npc thr
+textFmtReader :: Maybe Double -> Maybe Double -> Maybe Double -> FmtReader () String
+textFmtReader npc thr off
   = MkFmtReader { init_state = return ()
                 , read_entry = txt_read_entry
-                , eq_entry   = txt_cmp_entry npc thr
+                , eq_entry   = txt_cmp_entry npc thr off
     }
 
 
@@ -387,16 +408,18 @@ txt_read_entry _unit h = go []
     compute_special_char _    = Nothing
 
 
-txt_cmp_entry :: Maybe Double -> Maybe Double -> String -> String -> CmpRes
+txt_cmp_entry :: Maybe Double -> Maybe Double -> Maybe Double -> String -> String -> CmpRes
 -- txt_cmp_entry :: NinetyPercent -> Threshold -> Offset -> X -> Y -> CmpRes
-txt_cmp_entry Nothing _ rawx rawy = compareAbsolute rawx rawy
-txt_cmp_entry mpc mthr rawx rawy
+txt_cmp_entry Nothing _ _ rawx rawy = compareAbsolute rawx rawy
+txt_cmp_entry mpc mthr moff rawx rawy
   | pc  <- fromJust mpc
   , thr <- fromMaybe 0 mthr
+  , off <- fromMaybe 0 moff
   , (Just x, Just y) :: (Maybe Double, Maybe Double)
         <- (readMaybe rawx, readMaybe rawy)
   = let delta = abs (x - y)
     in if | abs x < thr && abs y < thr  -> CmpWithin 1.0 -- return 100% accuracy if threshold allows it
+          | delta <= off                -> CmpWithin 1.0 -- return 100% accuracy if offset allows it
           | delta <= abs y * (1.0 - pc) -> CmpWithin (1.0 - delta/y)
           | otherwise                   -> CmpDiff
   -- We could just fail here and complain that we could not parse the file
@@ -405,11 +428,11 @@ txt_cmp_entry mpc mthr rawx rawy
 
 -- Pair Format Reader
 textPairFmtReader
-  :: Maybe Double -> Maybe Double -> FmtReader () (Integer,Integer)
-textPairFmtReader npc thr
+  :: Maybe Double -> Maybe Double -> Maybe Double -> FmtReader () (Integer,Integer)
+textPairFmtReader npc thr off
   = MkFmtReader { init_state = return ()
                 , read_entry = txtpair_read_entry
-                , eq_entry   = txtpair_cmp_entry npc thr
+                , eq_entry   = txtpair_cmp_entry npc thr off
     }
 
 
@@ -425,12 +448,13 @@ txtpair_read_entry _unit h
 
 
 txtpair_cmp_entry :: Integral a
-                  => Maybe Double -> Maybe Double -> (a,a) -> (a,a) -> CmpRes
+                  => Maybe Double -> Maybe Double -> Maybe Double -> (a,a) -> (a,a) -> CmpRes
 -- txtpair_cmp_entry :: NinetyPercent -> Threshold -> Offset -> Xix -> Yiy -> CmpRes
-txtpair_cmp_entry Nothing _ rawx rawy = compareAbsolute rawx rawy
-txtpair_cmp_entry mpc mthr rawx rawy
+txtpair_cmp_entry Nothing _ moff rawx rawy = compareAbsolute rawx rawy
+txtpair_cmp_entry mpc mthr moff rawx rawy
   | pc  <- fromJust mpc
   , thr <- fromMaybe 0 mthr
+  , off <- fromMaybe 0 moff
   , (x1, x2) <- (fromIntegral *** fromIntegral) rawx
   , (y1, y2) <- (fromIntegral *** fromIntegral) rawy
   = let absx  = sqrt $ x1^2 + x2^2
@@ -438,6 +462,7 @@ txtpair_cmp_entry mpc mthr rawx rawy
         delta = sqrt $ (x1-y1)^2 + (x2-y2)^2
         ymes  = sqrt $ y1^2 + y2^2
     in if | absx < thr && absy < thr   -> CmpWithin 1.0 -- return 100% accuracy if threshold allows it
+          | delta <= off               -> CmpWithin 1.0 -- return 100% accuracy if offset allows it
           | delta <= ymes * (1.0 - pc) -> CmpWithin (1.0 - delta/ymes)
           | otherwise                  -> CmpDiff
   | otherwise = error "Unparsable complex file. Traceback txtpair_cmp_entry"
