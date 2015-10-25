@@ -40,7 +40,6 @@ char *data(char *buf, int size, int i) {
 }
 
 
-
 static ts_context *locCont;
 static int ts_num_queues = 0;
 

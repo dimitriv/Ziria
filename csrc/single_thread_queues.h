@@ -33,11 +33,6 @@ typedef struct {
 
 } queue;
 
-typedef struct {
-	queue *mit_queue;
-	uint mit_in_progress;
-	int mit_ziria_idx;
-} mit_queue;
 
 
 queue *stq_init(int no, size_t *sizes, int *queue_capacities);

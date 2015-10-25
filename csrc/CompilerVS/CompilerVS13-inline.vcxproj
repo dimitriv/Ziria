@@ -98,6 +98,7 @@
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
       <CallingConvention>StdCall</CallingConvention>
       <MultiProcessorCompilation>false</MultiProcessorCompilation>
+      <AdditionalIncludeDirectories>C:\Program Files (x86)\Microsoft Visual Studio 12.0\Common7\IDE\Extensions\qc0dqzr1.b2f\SDK\Native\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <TargetMachine>MachineX86</TargetMachine>
@@ -119,6 +120,7 @@
       <CallingConvention>StdCall</CallingConvention>
       <MultiProcessorCompilation>false</MultiProcessorCompilation>
       <UndefinePreprocessorDefinitions>WIN32</UndefinePreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Program Files (x86)\Microsoft Visual Studio 12.0\Common7\IDE\Extensions\qc0dqzr1.b2f\SDK\Native\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -137,6 +139,7 @@
       <CallingConvention>StdCall</CallingConvention>
       <CompileAs>CompileAsCpp</CompileAs>
       <MinimalRebuild>true</MinimalRebuild>
+      <AdditionalIncludeDirectories>C:\Program Files (x86)\Microsoft Visual Studio 12.0\Common7\IDE\Extensions\qc0dqzr1.b2f\SDK\Native\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <TargetMachine>MachineX86</TargetMachine>
@@ -156,6 +159,7 @@
       <CallingConvention>StdCall</CallingConvention>
       <CompileAs>CompileAsCpp</CompileAs>
       <UndefinePreprocessorDefinitions>WIN32</UndefinePreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Program Files (x86)\Microsoft Visual Studio 12.0\Common7\IDE\Extensions\qc0dqzr1.b2f\SDK\Native\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>

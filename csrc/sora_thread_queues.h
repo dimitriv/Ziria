@@ -72,15 +72,6 @@ typedef struct
 	MEM_ALIGN(ST_CACHE_LINE) int queue_size;
 } ts_context;
 
-/* A mitigator queue is really an alias for a real ts_context
-   along with some extra information about progress and current
-   index for the corresponding Ziria mitigation loop. */
-typedef struct {
-	ts_context *mit_ts_context;
-	uint mit_in_progress;
-	int mit_ziria_idx;
-} mit_ts_context;
-
 
 // ************
 // Queue API:

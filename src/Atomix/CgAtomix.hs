@@ -42,7 +42,7 @@ import qualified Language.C.Syntax as C
 import Language.C.Quote.C
 
 -- import Control.Monad.Identity
-import Control.Monad ( when, replicateM_ )
+import Control.Monad ( when, replicateM_, forM_ )
 import Data.Loc
 import Data.Maybe
 import Text.PrettyPrint.HughesPJ
@@ -124,6 +124,17 @@ figureOutSlice (_n,ity)
   = LILength ilen
   | otherwise = LISingleton
 
+-- | Return Just if the slice is some _exact_ number of bytes
+figureOutSliceBytes :: (Int,Ty) -> Maybe C.Exp
+figureOutSliceBytes (_n,ity)
+  | TArray (Literal ilen) TBit <- ity
+  = if ilen `mod` 8 == 0 then Just [cexp| $int:(ilen `div` 8)|] else Nothing
+  | TArray (Literal ilen) tbase <- ity
+  = Just [cexp| $int:ilen * $(tySizeOf_C tbase)|]
+  | otherwise
+  = Just (tySizeOf_C ity)
+
+
 figureOutIdx :: LengthInfo -> String -> Exp
 figureOutIdx LISingleton x  = eVar noLoc (toName x noLoc tint Mut) 
 figureOutIdx (LILength n) x 
@@ -183,11 +194,13 @@ mkCastTyArray n t                      = TArray (Literal n) t
 
 data MitiQueueInfo 
     -- | mq^(how_many) ~> out_queue
-  = MitiNToOne { mqi_how_many  :: Int 
-               , mqi_out_queue :: EId } 
+  = MitiNToOne { mqi_how_many    :: Int 
+               , mqi_slice_bytes :: C.Exp
+               , mqi_real_queue  :: EId } 
     -- | in_queue ~> mq^(how_many)
-  | MitiOneToN { mqi_how_many :: Int
-               , mqi_in_queue :: EId  }
+  | MitiOneToN { mqi_how_many    :: Int
+               , mqi_slice_bytes :: C.Exp 
+               , mqi_real_queue  :: EId  }
 
 -- | Datatype with queue information of this automaton 
 data QueueInfo 
@@ -203,14 +216,31 @@ data QueueInfo
        , qi_cores :: Map.Map EId [[Int]] 
           -- ^ Which cores access each queue, grouped by state, 
           --   See Note [Single Thread Queues]
-       , qi_sora_queues :: [(EId,(QId,Int))] -- SORA concurrent queues
-       , qi_sing_queues :: [(EId,(QId,Int))] -- Ordinary (single-thread) queues
-       , qi_miti_queues :: [(EId, MitiQueueInfo)] 
+
+         -- ^ SORA concurrent queues
+       , qi_sora_queues :: [(EId,(QId,Int))] 
+         -- ^ Ordinary (single-thread) queues that /ARE NOT/ mitigators
+       , qi_sing_queues :: [(EId,(QId,Int))] 
+         -- ^ The rest of the single-thread queues that /ARE/ mitigators
+       , qi_miti_queues :: [(EId, (QId, MitiQueueInfo))] 
+ 
+         -- Invariants: 
+         --   a) all = qi_sora_queues ++ qi_sing_queues ++ qi_miti_queues
+         --   b) qi_sora_queues # (qi_sing_queues ++ qi_miti_queues)
+         --   c) qi_miti_queues # qi_sing_queues
        }
 
 -- | Is this intermediate queue single-threaded? See Note [Single Thread Queues]
 isSingleThreadIntermQueue :: QueueInfo -> Chan -> Bool
-isSingleThreadIntermQueue qs x = isSingleThreadIntermQueue_aux (qi_cores qs) x
+isSingleThreadIntermQueue qs x 
+  = isJust (lookup x (qi_sing_queues qs))
+
+-- | Is this a single-threaded and mitigator queue? 
+-- ^ NB: I think that it's impossible to have a multi-threaded mitigator queue
+-- ^ but the implementation is a bit more defensive here.
+isSingleThreadMitiQueue_Maybe :: QueueInfo -> Chan -> Maybe (QId,MitiQueueInfo)
+isSingleThreadMitiQueue_Maybe qs x
+  = lookup x (qi_miti_queues qs)
 
 isSingleThreadIntermQueue_aux :: Map.Map EId [[Int]] -> Chan -> Bool
 isSingleThreadIntermQueue_aux cores x = 
@@ -251,7 +281,10 @@ qiQueueId _ _ = Nothing
 
 
 cQPtr :: Int -> String
-cQPtr n = "q_" ++ show n
+cQPtr n = "ptr_q_" ++ show n
+
+cQDef :: Int -> String
+cQDef n = "def_q_" ++ show n
 
 -- | Declare queues 
 cgDeclQueues :: forall a. DynFlags -> QueueInfo -> Cg a -> Cg a
@@ -279,6 +312,18 @@ cgDeclQueues dfs qs action
       = bind_queue_vars (namedCType "ts_context") "sora_queue_arr"
     bind_sing_queue_vars 
       = bind_queue_vars (namedCType "queue") "sing_queue_arr"
+
+    bind_miti_queue_vars [] thing = thing
+    bind_miti_queue_vars ((_mq,(QId mqn,_mitinfo)):mqs) thing
+      = do appendTopDecl [cdecl| static $ty:mit_queue $id:qdef;|]
+           appendTopDecl [cdecl| static $ty:mit_queue * $id:qptr;|]
+           mapM_ addGlobalWplAllocated [cstms| 
+               $id:qptr = & $id:qdef;
+               MIT_QUEUE_RESET($id:qptr);|]
+           bind_miti_queue_vars mqs thing
+      where qdef      = cQDef mqn
+            qptr      = cQPtr mqn
+            mit_queue = namedCType "mit_queue"
 
     -- Declare SORA stuff
     my_sizes_decl_sora   
@@ -334,9 +379,10 @@ cgDeclQueues dfs qs action
          let all_inits = my_sizes_inits_sora ++ [q_init_stmts_sora]
          mapM_ addGlobalWplAllocated all_inits
 
-      bind_sora_queue_vars (qi_sora_queues qs) [0..] $
-        bind_sing_queue_vars (qi_sing_queues qs) [0..] action
-
+      bind_sora_queue_vars (qi_sora_queues qs) [0..]   $
+        bind_sing_queue_vars (qi_sing_queues qs) [0..] $
+          bind_miti_queue_vars (qi_miti_queues qs)     $
+            action
 
 -- | Extract all introduced queues, and for each calculate the maximum
 -- ^ size we should allocate it with.
@@ -346,17 +392,29 @@ extractQueues auto
        , qi_outch  = auto_outchan auto
        , qi_interm = interms
        , qi_cores  = cores
-       , qi_sora_queues = sora_queues
-       , qi_sing_queues = sing_queues
-       , qi_miti_queues = Map.toList mit_queues
+       , qi_sora_queues = sora_queues       -- all multithreaded queues
+       , qi_sing_queues = sing_queues       -- all non-mitigator queues
+       , qi_miti_queues = final_mit_queues  -- all mitigator queues 
        }
   where
 
     -- All intermediate queues 
     all_interm_queues = Map.toList interms
  
-    (sing_queues, sora_queues) 
+    (sing_queues_with_mitis, sora_queues) 
       = partition (isSingleThreadIntermQueue_aux cores . fst) all_interm_queues
+
+    -- True sing_queues are those that are not mitigators!
+    sing_queues = filter (\x -> isNothing (Map.lookup (fst x) mit_queues)) $
+                  sing_queues_with_mitis
+
+    -- Stick the QId as well 
+    final_mit_queues =
+      let non_sora_mit_queues =
+            filter (\x -> isNothing (lookup (fst x) sora_queues)) $
+            Map.toList mit_queues
+      in map (\(x,qi) -> (x,(fst $ fromJust $ lookup x all_interm_queues,qi)))$
+      non_sora_mit_queues
 
     interms = Map.fromList $ 
                zipWith (\(k,siz) n -> (k,(QId n,siz))) 
@@ -386,6 +444,10 @@ extractQueues auto
     extract_core (AtomixState atoms _ _ init_pipes)
        = update_cores atoms (Map.map (\_ -> []) init_pipes)
 
+    -- What /is/ a mitigator queue? Well one that comes from a
+    -- mitigator origin but (for simplicity of implementation) is not
+    -- connected directly the distnguished input or output of the
+    -- whole automaton.
     update_mit_pipes :: [WiredAtom SymAtom] 
                       -> Map EId MitiQueueInfo
                       -> Map EId MitiQueueInfo
@@ -393,9 +455,14 @@ extractQueues auto
       = foldl upd pipes watoms
       where upd ps (WiredAtom [(n,inq)] [(m,outq)] 
                       (SymAtom _ (SACast _s MitigateOrigin _ _)))
-              = if n == 1 
-                then Map.insert outq (MitiOneToN m  inq) ps -- 1 x N
-                else Map.insert inq  (MitiNToOne n outq) ps -- N x 1
+              | n == 1 && inq /= auto_inchan auto
+              , Just cslic <- figureOutSliceBytes (m,nameTyp outq)
+              = Map.insert outq (MitiOneToN m cslic inq) ps
+              | m == 1 && outq /= auto_outchan auto
+              , Just cslic <- figureOutSliceBytes (n,nameTyp inq)
+              = Map.insert inq (MitiNToOne n cslic outq) ps
+              | otherwise 
+              = ps 
             upd ps _other = ps
 
     update_pipes :: [WiredAtom SymAtom] -> Map Chan Int -> Map Chan Int
@@ -727,7 +794,32 @@ cgACastBody :: DynFlags
 cgACastBody dfs qs _orig (n,inwire) 
                          (m,outwire) 
                          (n',inty) 
-                         (m',outty) 
+                         (m',outty)
+  | Just (QId qid, MitiNToOne k _slice real_q) 
+      <- isSingleThreadMitiQueue_Maybe qs inwire
+  , Just (QMid (QId real_qid)) <- qiQueueId real_q qs
+  , let mqptr = [cexp|$id:(cQPtr qid)|]
+        rqptr = [cexp|$id:(cQPtr real_qid)|]
+        pushptr = if isSingleThreadIntermQueue qs real_q 
+                              then [cexp|stq_push|] 
+                              else [cexp|ts_push |]
+  = assert "cgCastAtom" (k == n && real_q == outwire) $ do 
+    appendStmt [cstm| MIT_QUEUE_MITIGATOR_PUSH($mqptr,$pushptr,$rqptr);|]
+    return [cexp|UNIT|]
+
+  | Just (QId qid, MitiOneToN k _slice real_q) 
+      <- isSingleThreadMitiQueue_Maybe qs outwire
+  , Just (QMid (QId real_qid)) <- qiQueueId real_q qs
+  , let mqptr = [cexp|$id:(cQPtr qid)|]
+        rqptr = [cexp|$id:(cQPtr real_qid)|]
+        acquireptr = if isSingleThreadIntermQueue qs real_q 
+                              then [cexp|stq_acquire|] 
+                              else [cexp|ts_acquire |]
+  = assert "cgCastAtom" (k == m && real_q == inwire) $ do
+    appendStmt [cstm| MIT_QUEUE_MITIGATOR_ACQUIRE($mqptr,$acquireptr,$rqptr);|]
+    return [cexp|UNIT|]
+
+  | otherwise
   = assert "cgCastAtom" (n == n' && m == m') $ do
     cgIO $ print $ 
            vcat [ text "Cast atom generation:"
@@ -790,18 +882,43 @@ cgACastBody dfs qs _orig (n,inwire)
         outwire_exp = eVar noLoc outwire
         _tsiz       = tySizeOf_C (nameTyp outwire)
 
-        cg_emit_many eidx rng = 
-           do (ccdecls,ccstmts,_) <- inNewBlock $ 
+        cg_emit_many _eidx rng = do
+           forM_ [0..(m-1)] $ \j -> 
+                  let j' = fromIntegral j
+                      eidx_ = eVal noLoc tint (VInt (j'*(lenOfRng rng)) Signed)
+                      lenOfRng (LILength rn) = fromIntegral rn
+                      lenOfRng _            = 1
+                  in cgOutWiring dfs qs [(1,outwire)] [outwire] $
+                     opt_asgn_slice outwire_exp inwire_exp eidx_ rng
+{-
+           do (ccdecls,ccstmts,_non_alg) <- inNewBlock $ 
                   extendVarEnv [(toName "__j" noLoc tint Mut,[cexp|__j|])] $
                   cgOutWiring dfs qs [(1,outwire)] [outwire] $ 
-                  codeGenExp dfs $ 
-                  eAssign noLoc outwire_exp 
-                      (eArrRead noLoc inwire_exp eidx rng)
+                  opt_asgn_slice outwire_exp inwire_exp eidx rng 
+                  -- eAssign noLoc outwire_exp 
+                  --     (eArrRead noLoc inwire_exp eidx rng)
               appendStmt $ [cstm| for (int __j = 0; __j < $int:m ; __j++) {
                                  $decls:ccdecls
                                  $stms:ccstmts
                               } |]
-              return [cexp|UNIT|]
+-}
+           return [cexp|UNIT|]
+
+        -- Optimizing out an assignment for non-aligned bitreads ... 
+        opt_asgn_slice ow iw idx sl -- | ow := iw[idx,sl]
+          | TArray (Literal ll) TBit <- nameTyp outwire
+          , ll `mod` 8 /= 0
+          , LILength _ll' <- sl
+          = do { cow <- codeGenExp dfs ow
+               ; ciw <- codeGenExp dfs iw
+               ; cix <- codeGenExp dfs idx
+               ; appendStmt [cstm|bitArrRead($ciw,$cix,$int:ll,$cow);|]
+               ; return True -- optimized for non-aligned
+               }
+          | otherwise 
+          = do _ <- codeGenExp dfs $ 
+                    eAssign noLoc ow (eArrRead noLoc iw idx sl)
+               return False -- non-optimized
 
         cg_take_many eidx rng = 
            do (ccdecls,ccstmts,_) <- inNewBlock $ 
@@ -810,8 +927,8 @@ cgACastBody dfs qs _orig (n,inwire)
                   codeGenExp dfs $ 
                   eArrWrite noLoc outwire_exp eidx rng inwire_exp
               appendStmt $ [cstm| for (int __j = 0; __j < $int:n; __j++) {
-                                 $decls:ccdecls;
-                                 $stms:ccstmts;
+                                 $decls:ccdecls
+                                 $stms:ccstmts
                               } |]
               return [cexp|UNIT|]
 
@@ -923,6 +1040,26 @@ cgInWire _dfs qs (n,qvar) v action =
             a <- action
             appendStmt [cstm| stq_release($id:(cQPtr qid));|]
             return a
+
+       -- Mitigator!
+       | Just (_,MitiOneToN _n slice real_q) <- 
+                      isSingleThreadMitiQueue_Maybe qs qvar
+       , Just (QMid (QId real_qid)) <- qiQueueId real_q qs
+       -> cgDeclQPtr v $ \ptr ptr_ty -> do
+             let mqptr = [cexp|$id:(cQPtr qid)|]
+                 rqptr = [cexp|$id:(cQPtr real_qid)|]
+                 releaseptr = if isSingleThreadIntermQueue qs real_q 
+                              then [cexp|stq_release|] 
+                              else [cexp|ts_release |]
+             appendStmt [cstm|$ptr=($ty:ptr_ty) MIT_QUEUE_SLOT($mqptr,$slice);|]
+             a <- action
+             appendStmt [cstm|MIT_QUEUE_RELEASE_POST($mqptr,
+                                                     $int:_n,
+                                                     $releaseptr,
+                                                     $rqptr);
+                        |]
+             return a
+
        | otherwise
        -> cgDeclQPtr v $ \ptr ptr_ty -> do 
             appendStmt [cstm| $ptr = ($ty:ptr_ty) ts_acquire($id:(cQPtr qid));|]
@@ -984,14 +1121,36 @@ cgOutWire _dfs qs (n,qvar) v action
          assert "cgOutWire/non-queue" (n == 1) $
          assert "cgOutWire/not-same-var" (qvar == v) $ action
 
-      -- Some intermediate SORA queue
+      -- Some intermediate queue
       Just (QMid (QId qid))
+        -- Single threaded 
         | isSingleThreadIntermQueue qs qvar
         -> cgDeclQPtr v $ \ptr ptr_ty -> do
              appendStmt [cstm|$ptr=($ty:ptr_ty) stq_reserve($id:(cQPtr qid));|]
              a <- action
              appendStmt [cstm| stq_push($id:(cQPtr qid));|]
              return a
+        -- Mitigator!
+        | Just (_,MitiNToOne _n slice real_q) <- 
+                      isSingleThreadMitiQueue_Maybe qs qvar
+        , Just (QMid (QId real_qid)) <- qiQueueId real_q qs
+        -> cgDeclQPtr v $ \ptr ptr_ty -> do
+             let mqptr = [cexp|$id:(cQPtr qid)|]
+                 rqptr = [cexp|$id:(cQPtr real_qid)|]
+                 reserveptr = if isSingleThreadIntermQueue qs real_q 
+                              then [cexp|stq_reserve|] 
+                              else [cexp|ts_reserve|]
+             appendStmts [cstms|
+                           MIT_QUEUE_RESERVE_PRE($mqptr, 
+                                                 $reserveptr, 
+                                                 $rqptr);
+                           $ptr = ($ty:ptr_ty) MIT_QUEUE_SLOT($mqptr,$slice);
+                        |]
+             a <- action
+             appendStmt [cstm|MIT_QUEUE_PUSH($mqptr);|]
+             return a
+
+        -- Must be a SORA queue ... 
         | otherwise 
         -> cgDeclQPtr v $ \ptr ptr_ty -> do
              appendStmt [cstm| $ptr=($ty:ptr_ty) ts_reserve($id:(cQPtr qid));|]

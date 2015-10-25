@@ -176,6 +176,7 @@
     <ClCompile Include="..\driver.c" />
     <ClCompile Include="..\ext_arr.c" />
     <ClCompile Include="..\ext_math.c" />
+    <ClCompile Include="..\mitigator_queues.c" />
     <ClCompile Include="..\numerics.c" />
     <ClCompile Include="..\params.c" />
     <ClCompile Include="..\single_thread_queues.c" />
@@ -201,6 +202,7 @@
     <ClInclude Include="..\ifft_r4difx.h" />
     <ClInclude Include="..\intalglutx.h" />
     <ClInclude Include="..\intalgx.h" />
+    <ClInclude Include="..\mitigator_queues.h" />
     <ClInclude Include="..\numerics.h" />
     <ClInclude Include="..\params.h" />
     <ClInclude Include="..\single_thread_queues.h" />

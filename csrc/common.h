@@ -13,6 +13,7 @@
 
 #include "sora_thread_queues.h"
 #include "single_thread_queues.h"
+#include "mitigator_queues.h"
 
 #if defined(__GNUC__) || defined(__linux__)
 #include "sora_ext_lib.c"
