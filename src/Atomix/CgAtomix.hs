@@ -579,9 +579,10 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
                 goto $id:(lblOfNid r); 
             }|]
        else
-         let barrstmt kn  
-               = if kn == nid then [cstm|UNIT;|]
-                 else [cstm|barrier($id:(barr_name2 nid), $int:no_threads, $int:c);|] 
+         let barrstmt _kn  
+               = -- if kn == nid then [cstm|UNIT;|]
+                 --else 
+                 [cstm|barrier($id:(barr_name2 nid), $int:no_threads, $int:c);|] 
          in appendStmts [cstms|
               // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $cc);
               // fflush(stdout);
