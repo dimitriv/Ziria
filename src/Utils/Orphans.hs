@@ -28,9 +28,6 @@ deriving instance Generic SrcLoc
   PrettyVal orphans
 -------------------------------------------------------------------------------}
 
-instance PrettyVal a => PrettyVal (Maybe a)
-instance (PrettyVal a, PrettyVal b) => PrettyVal (Either a b)
-instance PrettyVal Bool
 instance PrettyVal ()
 
 instance PrettyVal Pos
