@@ -839,8 +839,8 @@ comp_let_decl :
 
 command_comp :: { SrcComp }
 command_comp :
-    'standalone' command_comp %prec STANDALONE
-      { cStandalone ($1 `srcspan` $2) $2 }
+    'standalone' '[' INT ']' command_comp %prec STANDALONE
+      { cStandalone ($1 `srcspan` $5) (fromIntegral $ snd (getINT $3)) $5 }
   | 'repeat' vect_ann command_comp %prec STANDALONE
       { cRepeat ($1 `srcspan` $3) $2 $3 }
   | 'until' exp command_comp %prec STANDALONE

@@ -272,11 +272,11 @@ clos_conv comp = go $ unComp comp
       c1' <- clos_conv c1
       c2' <- clos_conv c2
       return $ cBranch loc e c1' c2'
-    go (Standalone c) = cStandalone loc <$> clos_conv c
-    go (VectComp v c) = cVectComp loc v <$> clos_conv c
-    go (Repeat v c)   = cRepeat loc v   <$> clos_conv c
-    go (Until e c)    = cUntil loc e    <$> clos_conv c
-    go (While e c)    = cWhile loc e    <$> clos_conv c
+    go (Standalone l c) = cStandalone loc l <$> clos_conv c
+    go (VectComp v c)   = cVectComp loc v   <$> clos_conv c
+    go (Repeat v c)     = cRepeat loc v     <$> clos_conv c
+    go (Until e c)      = cUntil loc e      <$> clos_conv c
+    go (While e c)      = cWhile loc e      <$> clos_conv c
     go (Times u es elen nm c) = cTimes loc u es elen nm <$> clos_conv c 
 
     go (Call fn cargs) = cCall loc fn <$> mapM go_arg cargs
@@ -347,7 +347,7 @@ atomixCompToComp comp (RnSt { st_bound_vars  = letrefs
 
 
 
-zirToAtomZir :: DynFlags -> GS.Sym -> Comp -> IO (AComp () (), RnSt)
+zirToAtomZir :: DynFlags -> GS.Sym -> Comp -> IO (AComp MbLocConstr (), RnSt)
 zirToAtomZir dfs sym comp = do
   -- Closure convert and lift
   (comp0,rnst) <- atomixCompTransform sym comp 
@@ -378,13 +378,13 @@ transLiftedExp dfs sym e = do
                   , aexp_ret = ctExp e 
                   }
 
-transLifted :: DynFlags -> GS.Sym -> Comp -> StateT [EId] IO (AComp () ())
-transLifted dfs sym = go_comp 
+transLifted :: DynFlags -> GS.Sym -> Comp -> StateT [EId] IO (AComp MbLocConstr ())
+transLifted dfs sym = go_comp Nothing
   where 
-    go_comp comp = go (unComp comp)
+    go_comp lconstr comp = go lconstr (unComp comp)
       where 
         loc = compLoc comp
-        go (Return _ e) = aReturn loc () <$> (liftIO $ transLiftedExp dfs sym e)
+        go lc (Return _ e) = aReturn loc lc <$> (liftIO $ transLiftedExp dfs sym e)
 
         -- go (Times _ estrt (MkExp (EVal _ (VInt i _)) _ _) cnt c) = do
         --   let cnt_expr    = eVar loc cnt
@@ -403,76 +403,78 @@ transLifted dfs sym = go_comp
         --   return (aBind loc () Nothing a1 a2)
 
 
-        go (BindMany c1 []) = go_comp c1
-        go (BindMany c1 ((x,c2):xscs)) 
+        go lc (BindMany c1 []) = go_comp lc c1
+        go lc (BindMany c1 ((x,c2):xscs)) 
            | x `S.notMember` (fst $ compFVs c2) -- not in c2 and not in xscs
            , x `S.notMember` (S.unions (map (fst. compFVs. snd) xscs)) 
-           = liftM2 (aBind loc () Nothing) (go_comp c1) (go (BindMany c2 xscs))
+           = liftM2 (aBind loc lc Nothing) (go_comp lc c1) (go lc (BindMany c2 xscs))
            | otherwise
-           = liftM2 (aBind loc () (Just x)) (go_comp c1) (go (BindMany c2 xscs))
+           = liftM2 (aBind loc lc (Just x)) (go_comp lc c1) (go lc (BindMany c2 xscs))
 
-        go (Seq c1 c2)
-           = liftM2 (aBind loc () Nothing) (go_comp c1) (go_comp c2)
+        go lc (Seq c1 c2)
+           = liftM2 (aBind loc lc Nothing) (go_comp lc c1) (go_comp lc c2)
 
 
-        go (Par p c1 c2)
-          | ReadSrc {} <- unComp c1 = go_comp c2
-          | WriteSnk {} <- unComp c2 = go_comp c1
+        go lc (Par p c1 c2)
+          | ReadSrc {} <- unComp c1 = go_comp lc c2
+          | WriteSnk {} <- unComp c2 = go_comp lc c1
           | otherwise
-          = liftM3 (aPar loc () p) (go_comp c1) (return t) (go_comp c2)
+          = liftM3 (aPar loc lc p) (go_comp lc c1) (return t) (go_comp lc c2)
             where t = yldTyOfCTy (ctComp c1)
 
-        go (Emit e)                     = aEmit1 loc () <$> (liftIO $ transLiftedExp dfs sym e)
-        go (Emits (MkExp (EVar x) _ _)) = do s <- liftIO $ newBlockId sym loc "tk1"
-                                             return $ aEmitN loc () s t n x
+        go lc (Emit e)                     = aEmit1 loc lc <$> (liftIO $ transLiftedExp dfs sym e)
+        go lc (Emits (MkExp (EVar x) _ _)) = do s <- liftIO $ newBlockId sym loc "tk1"
+                                                return $ aEmitN loc lc s t n x
           where TArray (Literal n) t = nameTyp x
 
-        go (Take1 t)  = do s <- liftIO $ newBlockId sym loc "tk1"
-                           return $ aTake1 loc () s t
-        go (Take t n) = do s <- liftIO $ newBlockId sym loc "tkN"
-                           return $ aTakeN loc () s t n
+        go lc (Take1 t)  = do s <- liftIO $ newBlockId sym loc "tk1"
+                              return $ aTake1 loc lc s t
+        go lc (Take t n) = do s <- liftIO $ newBlockId sym loc "tkN"
+                              return $ aTakeN loc lc s t n
 
-        go (Until (MkExp (EVar x) _ _) c) = aUntil loc () x <$> go_comp c
-        go (While (MkExp (EVar x) _ _) c) = aWhile loc () x <$> go_comp c 
+        go lc (Until (MkExp (EVar x) _ _) c) = aUntil loc lc x <$> go_comp lc c
+        go lc (While (MkExp (EVar x) _ _) c) = aWhile loc lc x <$> go_comp lc c 
 
-        go (Repeat _ c) = aRepeat loc () <$> go_comp c
-        go (VectComp _ c) = go_comp c
+        go lc (Repeat _ c) = aRepeat loc lc <$> go_comp lc c
+        go lc (VectComp _ c) = go_comp lc c
 
-        go (Mitigate s t 1 1)
+        go lc (Mitigate s t 1 1)
           = do b <- liftIO $ newBlockId sym loc s
-               return $ aRepeat loc () $ aCast loc () b (1,t) (1,t)
-        go (Mitigate s t n1 1) 
+               return $ aRepeat loc lc $ aCast loc lc b (1,t) (1,t)
+        go lc (Mitigate s t n1 1) 
           = do b <- liftIO $ newBlockId sym loc s
-               return $ aRepeat loc () $ 
-                 aCast loc () b (1, TArray (Literal n1) t) (n1,t)
-        go (Mitigate s t 1 n2) 
+               return $ aRepeat loc lc $ 
+                 aCast loc lc b (1, TArray (Literal n1) t) (n1,t)
+        go lc (Mitigate s t 1 n2) 
           = do b <- liftIO $ newBlockId sym loc s 
-               return $ aRepeat loc () $
-                 aCast loc () b (n2,t) (1,TArray (Literal n2) t)
-        go (Mitigate s t n1 n2)
+               return $ aRepeat loc lc $
+                 aCast loc lc b (n2,t) (1,TArray (Literal n2) t)
+        go lc (Mitigate s t n1 n2)
           | n1 `mod` n2 == 0 -- n1 = k*n2
           , let k = n1 `div` n2
           = do b <- liftIO $ newBlockId sym loc s 
-               return $ aRepeat loc () $ 
-                 aCast loc () b (1,TArray (Literal n1) t) (k,TArray (Literal n2) t)
+               return $ aRepeat loc lc $ 
+                 aCast loc lc b (1,TArray (Literal n1) t) (k,TArray (Literal n2) t)
 
           | n2 `mod` n1 == 0
           , let k = n2 `div` n1
           = do b <- liftIO $ newBlockId sym loc s 
-               return $ aRepeat loc () $ 
-                 aCast loc () b (k,TArray (Literal n1) t) (1,TArray (Literal n2) t)
+               return $ aRepeat loc lc $ 
+                 aCast loc lc b (k,TArray (Literal n1) t) (1,TArray (Literal n2) t)
    
           | otherwise
           = panicStr "Ill typed mitigate node during Atomix translation!"
                    
-        go (Standalone c) = go_comp c
-        go (Branch (MkExp (EVar x) _ _) c1 c2) 
-          = liftM2 (aBranch loc () x) (go_comp c1) (go_comp c2)
+        -- NB: Change from lc to lc'!
+        go _lc (Standalone lc' c) = go_comp (Just lc') c
 
-        go (ReadSrc _t)  = panicStr "Standalone ReadSrc!?"  
-        go (WriteSnk _t) = panicStr "Standalone WriteSnk!?"
+        go lc (Branch (MkExp (EVar x) _ _) c1 c2)
+          = liftM2 (aBranch loc lc x) (go_comp lc c1) (go_comp lc c2)
 
-        go _other = panic $ 
+        go _lc (ReadSrc _t)  = panicStr "Standalone ReadSrc!?"  
+        go _lc (WriteSnk _t) = panicStr "Standalone WriteSnk!?"
+
+        go _lc _other = panic $ 
                     vcat [ text "Unexpected comp in transLifted!"
                          , nest 2 $ ppr comp
                          ] 

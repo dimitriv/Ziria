@@ -359,9 +359,9 @@ computeCard _dflags = go
       WriteSnk mty -> return $ cWriteSnk loc ocard mty
       ReadInternal a s tp -> return $ cReadInternal loc ocard a s tp
       WriteInternal a s -> return $ cWriteInternal loc ocard a s
-      Standalone c1 -> do
+      Standalone l c1 -> do
         c1' <- go c1
-        return $ cStandalone loc (compInfo c1') c1'
+        return $ cStandalone loc (compInfo c1') l c1'
       Mitigate s t n1 n2  -> return $ cMitigate loc ocard s t n1 n2
 
     go_callarg :: CallArg Exp Comp -> CardM (CallArg Exp LComp)

@@ -77,7 +77,7 @@ ctComp0 (ReadSrc a)          = CTTrans (TBuff (ExtBuf a)) a
 ctComp0 (WriteSnk a)         = CTTrans a (TBuff (ExtBuf a))
 ctComp0 (ReadInternal a _ _) = CTTrans (TBuff (IntBuf a)) a
 ctComp0 (WriteInternal a _)  = CTTrans a (TBuff (IntBuf a))
-ctComp0 (Standalone c)       = ctComp c
+ctComp0 (Standalone _ c)     = ctComp c
 ctComp0 (Mitigate _ a n1 n2) = ctMitigate a n1 n2
 
 ctCallArg :: CallArg (GExp Ty b) (GComp CTy Ty a b) -> CallArg Ty CTy

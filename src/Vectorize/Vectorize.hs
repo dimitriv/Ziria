@@ -340,8 +340,8 @@ comp_vect0 dfs (VectPack {..}) w@(Branch e c1 c2) = do
 
 {------------------------------------------------------------------------------}
 
-comp_vect0 dfs (VectPack {..}) (Standalone c) = 
-  mapDVRCands (updDVRComp $ cStandalone vp_loc) <$> comp_vect dfs vp_vctx c
+comp_vect0 dfs (VectPack {..}) (Standalone l c) = 
+  mapDVRCands (updDVRComp $ cStandalone vp_loc l) <$> comp_vect dfs vp_vctx c
 
 comp_vect0 dfs (VectPack {..}) (Mitigate {}) =
   vecMFail vp_loc $ text "Unexpected mitigate node in vectorization."

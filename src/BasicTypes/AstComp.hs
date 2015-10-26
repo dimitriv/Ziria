@@ -59,6 +59,12 @@ data GCTy ty where
   CTArrow :: [CallArg (GArgTy ty) (GCTy ty)] -> GCTy ty -> GCTy ty
   deriving (Generic, Typeable, Data)
 
+-- | For Standalone computations we give a location constraint, in the
+-- form of an integer: we colocate items with the same constraint, and
+-- try (if semantically correct) to place on different cores items
+-- with different LocConstrs.
+type LocConstr = Int
+
 {-------------------------------------------------------------------------------
   AST parameterized by type (see "AstExpr")
 -------------------------------------------------------------------------------}
@@ -294,7 +300,7 @@ data GComp0 tc t a b where
   -- >      c :: ST T a b
   -- > ------------------------
   -- > standalone c :: ST T a b
-  Standalone :: GComp tc t a b -> GComp0 tc t a b
+  Standalone :: LocConstr -> GComp tc t a b -> GComp0 tc t a b
 
   -- | Downgrade or upgrade the rate of components.
   --
@@ -622,9 +628,9 @@ mapCompM_env onCTyp onETyp onCAnn onEAnn onExp f extE extC = goComp
     goComp0 (WriteInternal a bid) = do
       a' <- onETyp a
       return $ WriteInternal a' bid
-    goComp0 (Standalone c1) = do
+    goComp0 (Standalone l c1) = do
       c1' <- goComp c1
-      return $ Standalone c1'
+      return $ Standalone l c1'
     goComp0 (Mitigate s t n1 n2) = do
       t' <- onETyp t
       return $ Mitigate s t' n1 n2
@@ -726,7 +732,7 @@ compFVs = goComp
     goComp0 (Take {})           = mempty
     goComp0 (Repeat _ c)        = goComp c
     goComp0 (VectComp _ c)      = goComp c
-    goComp0 (Standalone c)      = goComp c
+    goComp0 (Standalone _ c)    = goComp c
 
     goComp0 (Map _v nm)         = (S.singleton nm, mempty)
     goComp0 (Filter nm)         = (S.singleton nm, mempty)
@@ -1193,7 +1199,7 @@ compSize c = case unComp c of
   WriteSnk {}               -> 1
   ReadInternal  {}          -> 1
   WriteInternal {}          -> 1
-  Standalone c1             -> compSize c1
+  Standalone _ c1           -> compSize c1
   Mitigate {}               -> 1
 
 callArgSize :: CallArg (GExp t b) (GComp tc t a b) -> Int

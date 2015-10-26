@@ -33,6 +33,9 @@ instance Outputable (AExp b) where
 instance Show (AExp b) where
   show e = render (ppr e)
 
+-- | Optional location constraint
+type MbLocConstr = Maybe LocConstr
+
 data AComp a b
   = MkAComp { acomp_loc  :: !(CompLoc)
             , acomp_nfo  :: a 

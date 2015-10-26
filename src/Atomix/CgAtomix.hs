@@ -908,12 +908,16 @@ cgACastBody dfs qs _orig (n,inwire)
         -- Optimizing out an assignment for non-aligned bitreads ... 
         opt_asgn_slice ow iw idx sl -- | ow := iw[idx,sl]
           | TArray (Literal ll) TBit <- nameTyp outwire
-          , ll `mod` 8 /= 0
+          , TArray (Literal bl) TBit <- nameTyp inwire
+          , ll < 8 
+          , bl <= 64
           , LILength _ll' <- sl
           = do { cow <- codeGenExp dfs ow
                ; ciw <- codeGenExp dfs iw
                ; cix <- codeGenExp dfs idx
-               ; appendStmt [cstm|bitArrRead($ciw,$cix,$int:ll,$cow);|]
+               ; let ciw2 = [cexp| ($ty:(namedCType "uint64") *) $ciw|]
+               ; appendStmt [cstm| * $cow = (unsigned char) (*$ciw2 >> $cix); |]
+                 -- appendStmt [cstm|bitArrRead($ciw,$cix,$int:ll,$cow);|]
                ; return True -- optimized for non-aligned
                }
           | otherwise 
@@ -921,17 +925,16 @@ cgACastBody dfs qs _orig (n,inwire)
                     eAssign noLoc ow (eArrRead noLoc iw idx sl)
                return False -- non-optimized
 
-        cg_take_many eidx rng = 
-           do (ccdecls,ccstmts,_) <- inNewBlock $ 
-                  extendVarEnv [(toName "__j" noLoc tint Mut,[cexp|__j|])] $
-                  cgInWiring dfs qs [(1,inwire)] [inwire] $ 
-                  codeGenExp dfs $ 
-                  eArrWrite noLoc outwire_exp eidx rng inwire_exp
-              appendStmt $ [cstm| for (int __j = 0; __j < $int:n; __j++) {
-                                 $decls:ccdecls
-                                 $stms:ccstmts
-                              } |]
-              return [cexp|UNIT|]
+        cg_take_many _eidx rng = do 
+           forM_ [0..(n-1)] $ \j -> 
+              let j' = fromIntegral j
+                  eidx_ = eVal noLoc tint (VInt (j'*(lenOfRng rng)) Signed)
+                  lenOfRng (LILength rn) = fromIntegral rn
+                  lenOfRng _            = 1
+              in cgInWiring dfs qs [(1,inwire)] [inwire] $ 
+                   codeGenExp dfs $ 
+                     eArrWrite noLoc outwire_exp eidx_ rng inwire_exp
+           return [cexp|UNIT|]
 
 
 {---------------------------- Rollback atom implementation --------------------}

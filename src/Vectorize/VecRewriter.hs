@@ -216,8 +216,8 @@ rwTakeEmit lx = assert (isJust $ isSimplCard_mb (compInfo lx)) (go lx)
         LetStruct sdef c1      -> cLetStruct loc sdef <$> go c1
         LetFunC f params c1 c2 -> extCFun f params c1 $ go c2
 
-        Standalone c1 -> cStandalone loc <$> go c1
-        Return fi e   -> return $ cReturn loc fi e 
+        Standalone lc c1 -> cStandalone loc lc <$> go c1
+        Return fi e      -> return $ cReturn loc fi e 
         Seq c1 c2 -> do
           c1' <- go c1
           c2' <- go c2

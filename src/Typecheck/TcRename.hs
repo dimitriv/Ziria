@@ -253,9 +253,9 @@ renComp (MkComp comp0 cloc ()) = case comp0 of
         return $ cReadInternal cloc a s typ
       WriteInternal a s -> do
         return $ cWriteInternal cloc a s
-      Standalone c' -> do
+      Standalone l c' -> do
         c'' <- renComp c'
-        return $ cStandalone cloc c''
+        return $ cStandalone cloc l c''
       Mitigate s ty n1 n2 -> do
         return $ cMitigate cloc s ty n1 n2
 

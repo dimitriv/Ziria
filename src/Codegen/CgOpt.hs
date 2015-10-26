@@ -1130,7 +1130,7 @@ codeGenComp dflags comp k =
 
         codeGenCompTop dflags while_comp k
 
-    go c@(MkComp (Standalone c1) csp ()) = do
+    go c@(MkComp (Standalone _ c1) csp ()) = do
        codeGenCompTop dflags c1 k
 
 {-

@@ -325,9 +325,9 @@ renComp (MkComp comp0 cloc ()) = case comp0 of
       WriteInternal a s -> do
         a' <- renTyAnn cloc a
         return $ cWriteInternal cloc a' s
-      Standalone c' -> do
+      Standalone l c' -> do
         c'' <- renComp c'
-        return $ cStandalone cloc c''
+        return $ cStandalone cloc l c''
       Mitigate s ty n1 n2 -> do
         ty' <- renTyAnn cloc ty
         return $ cMitigate cloc s ty' n1 n2

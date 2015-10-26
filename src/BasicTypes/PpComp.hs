@@ -224,8 +224,8 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
     WriteInternal _ bid ->
       text "write_internal[sq]" <> parens (text bid)
 
-    Standalone c1 ->
-      text "standalone" <> braces (ppComp c1)
+    Standalone l c1 ->
+      text "standalone" <> brackets (ppr l) <> braces (ppComp c1)
 
     Mitigate s t n1 n2 ->
       int n1 <> text "-mitigate" <> parens (text s) <>

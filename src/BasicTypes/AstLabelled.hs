@@ -217,8 +217,8 @@ cReadInternal  loc a t bid rt = MkComp (ReadInternal t bid rt) loc a
 cWriteInternal :: SrcLoc -> a -> t -> BufId -> GComp tc t a b
 cWriteInternal loc a t bid = MkComp (WriteInternal t bid) loc a
 
-cStandalone :: SrcLoc -> a -> GComp tc t a b -> GComp tc t a b
-cStandalone loc a c = MkComp (Standalone c) loc a
+cStandalone :: SrcLoc -> a -> LocConstr -> GComp tc t a b -> GComp tc t a b
+cStandalone loc a l c = MkComp (Standalone l c) loc a
 
 cMitigate :: SrcLoc -> a -> String -> t -> Int -> Int -> GComp tc t a b
 cMitigate loc a s t n1 n2 = MkComp (Mitigate s t n1 n2) loc a

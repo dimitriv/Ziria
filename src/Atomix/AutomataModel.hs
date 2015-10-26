@@ -1444,7 +1444,7 @@ simplToCfg a = a { auto_graph = Map.map nodeToCfg $ auto_graph a }
 
 
 
-automatonPipeline :: Atom e => DynFlags -> GS.Sym -> Ty -> Ty -> AComp () () -> IO (AxAuto e)
+automatonPipeline :: Atom e => DynFlags -> GS.Sym -> Ty -> Ty -> AComp MbLocConstr () -> IO (AxAuto e)
 automatonPipeline dfs sym inty outty acomp = do
   inch  <- freshName sym "src"  (acomp_loc acomp) inty Imm
   outch <- freshName sym "snk" (acomp_loc acomp) outty Mut
