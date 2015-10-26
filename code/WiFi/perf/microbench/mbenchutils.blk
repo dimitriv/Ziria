@@ -1,0 +1,63 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#include "../../const.blk"
+#include <externals.blk>
+
+
+-- An CPU-bound (FFT) computer (n iterations)
+fun comp fftcomp(n : int) {
+  times n seq {
+    x <- takes 64;
+    emits sora_fft(x);
+  }
+}
+
+-- An CPU-bound (FFT) transformer
+fun comp ffttrans() {
+  repeat {
+    x <- takes 64
+    emits sora_fft(x);
+  }
+}
+
+-- A memory bound computer
+fun comp copycomp(n : int) {
+   var y : arr[64] complex;
+   times n seq { 
+     x <- takes 64;
+     do { y[0,32]  := x[32,32]; 
+          y[32,32] := x[0,32]; 
+        };
+     emits y
+   }
+}
+
+-- A memory bound transformer
+fun comp copytrans(n : int) {
+   var y : arr[64] complex;
+   repeat { 
+     x <- takes 64
+     do { 
+       y[0,32]  := x[32,32];
+       y[32,32] := x[0,32];
+     };
+     emits y
+   }
+}
