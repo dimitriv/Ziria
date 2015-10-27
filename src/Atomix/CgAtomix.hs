@@ -560,14 +560,19 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
              barrier($id:(barr_name nid), $int:no_threads, $int:c);
              return 0; |]
 
-   cg_decision _c _nid (AtomixLoop next)
+   cg_decision c nid (AtomixLoop next)
      = if no_threads == 1 then
            appendStmt [cstm| goto $id:(lblOfNid next); |]
          else
-           appendStmts [cstms| 
-             //printf("Tid %d, state %d -> %d\n", $int:c, $int:nid, $int:next);
-             // barrier($id:(barr_name nid), $int:no_threads, $int:c); 
-             goto $id:(lblOfNid next); |]
+           let barrstmt = 
+                if nid == next then 
+                  [cstm|ORIGIN("Omitting barrier, loopy state");|]
+                else
+                  [cstm|barrier($id:(barr_name nid), $int:no_threads, $int:c);|]
+           in appendStmts [cstms| 
+                //printf("Tid %d, %d -> %d\n", $int:c, $int:nid, $int:next);
+                 $stm:barrstmt
+                 goto $id:(lblOfNid next); |]
 
    cg_decision c nid (AtomixBranch c' l r) = do
      cc <- lookupVarEnv c'
@@ -584,20 +589,12 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
                  --else 
                  [cstm|barrier($id:(barr_name2 nid), $int:no_threads, $int:c);|] 
          in appendStmts [cstms|
-              // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $cc);
-              // fflush(stdout);
               barrier($id:(barr_name nid), $int:no_threads, $int:c);
               if ($cc) {
-                // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $cc);
-                // fflush(stdout);
                 $stm:(barrstmt l);
-                // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $l);
                 goto $id:(lblOfNid l); 
               } else {
-                // printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $cc);
-                // fflush(stdout);
                 $stm:(barrstmt r);
-                //printf("Tid %d, state %d, going to %d\n", $int:c, $int:nid, $r);
                 goto $id:(lblOfNid r); 
               }|]
 
