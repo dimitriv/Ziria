@@ -1279,15 +1279,16 @@ componentScheduler dfs = stateWiseScheduler (compSched maxCores)
   where maxCores = getNoAtomThreads dfs
 
 compSched maxCores (AtomixState watoms cstrs d pipes) = AtomixState watoms' cstrs d pipes where
-  -- initially, one equivalence class per atom & the decision
+  -- initially, one equivalence class per atom; the decision will be executed on all cores
   init_partition :: Partition Int
-  init_partition = map Set.singleton [0..(length watoms)]
+  init_partition = map Set.singleton [0..(length watoms - 1)]
 
   -- connected components: join partitions of x and y iff there is an edge x->y
   components :: Partition Int
-  components = merge $
-               foldl (flip (uncurry union)) init_partition $
-               filter ((/= -1) . fst) $             -- ignore dependencies on previous states
+  components = traceShowId $! merge $! traceShowId $!
+               foldl (flip (uncurry union)) init_partition $! traceShowId $!
+               trace ("init_partition = " ++ show init_partition) $!
+               filter ((/= -1) . fst) $!             -- ignore dependencies on previous states
                Map.keys $ Map.filter (/= []) cstrs  -- treatt all dependencies equally  
 
   -- if the number of components is greate than maxCores, iteratively

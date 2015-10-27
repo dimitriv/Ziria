@@ -55,7 +55,10 @@ instance Show SymAtom where
   show sa = render (pprShort sa)
 
 pprShort :: SymAtom -> Doc
-pprShort (SymAtom _ (SAExp e)) =  pprFileLoc (aexp_lbl e)
+pprShort (SymAtom _ (SAExp e)) = 
+  let lbl = aexp_lbl e in
+  let name = pprFileLoc lbl in
+  if render name == "" then text lbl else name
 pprShort sa = ppr sa
 
 pprFileLoc =
