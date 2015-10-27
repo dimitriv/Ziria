@@ -10,7 +10,7 @@ void _stq_init(queue* q, size_t capacity, size_t elem_size) {
 	q->capacity = capacity;
 	q->elem_size = elem_size;
 	q->size = 0;
-	q->buffer_start = (unsigned char *) malloc(capacity * elem_size);
+	q->buffer_start = (char *) malloc(capacity * elem_size);
 	if (q->buffer_start == NULL) {
 		exit(EXIT_FAILURE);
 	}
@@ -24,7 +24,7 @@ void _stq_init(queue* q, size_t capacity, size_t elem_size) {
  ***************************************************************************/
 
 // Peek n slots into the queue (if aligned, throw error otherwise, or perhaps emit slow path -- todo)
-FORCE_INLINE unsigned char* stq_acquire(queue *q)
+FORCE_INLINE char* stq_acquire(queue *q)
 {
 
 #ifdef QUEUE_CHECKS_ENABLED
@@ -40,7 +40,7 @@ FORCE_INLINE unsigned char* stq_acquire(queue *q)
 // Release the acquired slots 
 FORCE_INLINE void stq_release(queue *q)
 {
-	unsigned char *ptr = q->next_read;
+	char *ptr = q->next_read;
 	ptr = ptr + q->elem_size;
 	if (ptr == q->buffer_end) ptr = q->buffer_start;
 	q->next_read = ptr;
@@ -49,7 +49,7 @@ FORCE_INLINE void stq_release(queue *q)
 /* Queue write API
 ***************************************************************************/
 
-FORCE_INLINE unsigned char* stq_reserve(queue *q)
+FORCE_INLINE char* stq_reserve(queue *q)
 {
 	// reserve n slots
 //	q->reserved += slots;
@@ -66,7 +66,7 @@ FORCE_INLINE unsigned char* stq_reserve(queue *q)
 
 FORCE_INLINE void stq_push(queue *q)
 {
-	unsigned char*ptr = q->next_write;
+	char*ptr = q->next_write;
 	ptr = ptr + q->elem_size;
 	if (ptr == q->buffer_end) ptr = q->buffer_start;
 //	q->reserved = 0;
@@ -84,7 +84,7 @@ FORCE_INLINE void stq_clear(queue *q)
 }
 
 FORCE_INLINE void stq_rollback(queue* q, size_t n) {
-	unsigned char* ptr = q->next_read - (q->elem_size*n);
+	char* ptr = q->next_read - (q->elem_size*n);
 #ifdef QUEUE_CHECKS_ENABLED
 	// ASSERT(q->acquired == 0 && q->reserved == 0);
 	if (ptr < q->buffer_start)

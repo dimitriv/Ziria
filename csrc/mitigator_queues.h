@@ -9,7 +9,7 @@
 #include "sora_thread_queues.h"
 
 typedef struct {
-	unsigned char * mit_slot;
+	char * mit_slot;
 	// NULL means no mitigation is in progress, 
 	// Not null means we are either reading or writing from 
 	// somewhere inside this slot. Where from? It's this index:
