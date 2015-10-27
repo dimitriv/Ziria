@@ -12,10 +12,10 @@
 
 typedef struct {
 	// where to write next
-	unsigned char* next_write;
+	char* next_write;
 
 	// where to read from next
-	unsigned char* next_read;
+	char* next_read;
 
 	// capacity of queue
 	size_t capacity;
@@ -26,10 +26,10 @@ typedef struct {
 	size_t size;
 
 	// queue buffer of size (capacity * elem_size) bytes
-	unsigned char * buffer_start;
+	char * buffer_start;
 
 	// pointer to first memory location beyond buffer
-	unsigned char* buffer_end;
+	char* buffer_end;
 
 } queue;
 
@@ -37,10 +37,10 @@ typedef struct {
 
 queue *stq_init(int no, size_t *sizes, int *queue_capacities);
 
-unsigned char * stq_acquire(queue *q);
+char * stq_acquire(queue *q);
 void stq_release(queue *q);
 
-unsigned char* stq_reserve(queue *q);
+char* stq_reserve(queue *q);
 void stq_push(queue *q);
 
 void stq_clear(queue *q);
