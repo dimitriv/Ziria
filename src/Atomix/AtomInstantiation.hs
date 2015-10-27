@@ -55,16 +55,16 @@ instance Show SymAtom where
   show sa = render (pprShort sa)
 
 pprShort :: SymAtom -> Doc
-pprShort (SymAtom _ (SAExp e)) = 
-  let lbl = aexp_lbl e in
-  let name = pprFileLoc lbl in
-  if render name == "" then text lbl else name
+pprShort (SymAtom _ (SAExp e)) = text $ cleanFileLoc $ aexp_lbl e
 pprShort sa = ppr sa
 
-pprFileLoc =
-  text . takeWhile (/= '$') .
-  reverse . takeWhile (/= '\\') . takeWhile (/= '/') . reverse .
-  render . ppr
+cleanFileLoc :: String -> String
+cleanFileLoc =
+  takeWhile (/= '$') . dropWhile (== '$') .
+  reverse .
+  takeWhile (/= '\\') . dropWhile (== '\\') .
+  takeWhile (/= '/') . dropWhile (== '/') .
+  reverse
 
 
 {--------------- Instantiation of Atom class -------------}

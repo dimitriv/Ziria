@@ -1285,9 +1285,8 @@ compSched maxCores (AtomixState watoms cstrs d pipes) = AtomixState watoms' cstr
 
   -- connected components: join partitions of x and y iff there is an edge x->y
   components :: Partition Int
-  components = traceShowId $! merge $! traceShowId $!
-               foldl (flip (uncurry union)) init_partition $! traceShowId $!
-               trace ("init_partition = " ++ show init_partition) $!
+  components = merge $
+               foldl (flip (uncurry union)) init_partition $
                filter ((/= -1) . fst) $!             -- ignore dependencies on previous states
                Map.keys $ Map.filter (/= []) cstrs  -- treatt all dependencies equally  
 
