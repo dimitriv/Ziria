@@ -454,7 +454,7 @@ extractQueues auto
     update_mit_pipes watoms pipes
       = foldl upd pipes watoms
       where upd ps (WiredAtom [(n,inq)] [(m,outq)] 
-                      (SymAtom _ (SACast _s MitigateOrigin _ _)))
+                      (SymAtom _ (SACast _s _c MitigateOrigin _ _)))
               | n == 1 && inq /= auto_inchan auto
               , Just cslic <- figureOutSliceBytes (m,nameTyp outq)
               = Map.insert outq (MitiOneToN m cslic inq) ps
@@ -628,15 +628,15 @@ cgDefAtom :: DynFlags
           -> Cg a
 cgDefAtom dfs qs w@(WiredAtom win wout the_atom)
   = case atom_kind the_atom of
-      SACast _ orig inty outty ->
+      SACast _ _ orig inty outty ->
         let inwire  = head win
             outwire = head wout
         in cg_def_atom dfs wid $ cgACastBody dfs qs orig inwire outwire inty outty
 
-      SADiscard _ inty 
+      SADiscard _ _ inty 
         -> cg_def_atom dfs wid $ cgADiscBody dfs qs (head win) inty
 
-      SAExp aexp 
+      SAExp _ aexp 
         -> cg_def_atom dfs wid $ cgAExpBody dfs qs win wout aexp
 
       SARollback qvar n 
