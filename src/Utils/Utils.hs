@@ -15,6 +15,7 @@ module Utils (
   , (<|)
   , cross_prod
   , cross_comb
+  , choose
   , gcd_many
   , none
   ) where
@@ -167,6 +168,17 @@ cross_prod = go [] []
     go _acc _k ([]:_)         = panicStr "cross_prod: empty candidate list!"
     go acc k ([c1]:crest)     = go (c1:acc) k crest
     go acc k ((c1:c1s):crest) = go (c1:acc) (go acc k (c1s:crest)) crest
+
+-- | xs `choose` k: create all length-k subsets of xs.
+-- Precondition: xs contains no duplicates.
+-- Implemented on lists (rather than sets) for simplicity and efficiency.
+-- Duplicates in xs will produce duplicates in the result, e.g.,
+-- [1,1] `choose` 2 == [[1,1]], even though {1,1} has size 1, not 2, and
+-- [1,1] `choose` 1 == [[1],[1]].
+choose :: [a] -> Int -> [[a]]
+choose _xs 0 = [[]]
+choose [] _k = [] -- for k/=0, xs=[] has no size-k subsets!
+choose (x:xs) k = map (x:) (xs `choose` (k-1)) ++ (xs `choose` k)
 
 cross_comb :: (a -> b -> Maybe c) -> [a] -> [b] -> [c]
 cross_comb f xs ys

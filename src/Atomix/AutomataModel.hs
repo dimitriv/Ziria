@@ -23,7 +23,7 @@ import Opts
 import AtomixCompTransform ( freshName, freshNameDoc )
 import qualified GenSym as GS
 
-import Utils(panicStr)
+import Utils(panicStr, choose)
 import Control.Applicative ( (<$>), liftA2 )
 
 import Outputable
@@ -1292,19 +1292,31 @@ compSched maxCores (AtomixState watoms cstrs d pipes) = AtomixState watoms' cstr
   components :: Partition Int
   components = merge $
                foldl (flip (uncurry union)) init_partition $
-               filter ((/= -1) . fst) $!             -- ignore dependencies on previous states
-               Map.keys $ Map.filter (/= []) cstrs  -- treatt all dependencies equally  
+               filter ((/= -1) . fst) $!            -- ignore dependencies on previous states
+               Map.keys $ Map.filter (/= []) cstrs  -- treat all dependencies equally
 
-  -- if the number of components is greate than maxCores, iteratively
-  -- merge the smallest two components (length components - maxCores) times
+  -- If the number of components is greate than maxCores, repeatedly
+  -- merge the cheapest pair of components (length components - maxCores) times.
+  -- We try to assign different cores to components with different labels,
+  -- and we try to collocate components with labels in common.
   merge :: Partition Int -> Partition Int
-  merge comps 
-    | let n = length comps - maxCores, n > 0
-    = iterate merge' (List.sortBy (compare `on` Set.size) comps) !! n
-    | otherwise = comps
-    where merge' (a:b:cs) = List.sortBy (compare `on` Set.size) $ 
-                            (Set.union a b) : cs
-          merge' _ = panicStr "componentScheduler: bug in implementation!"
+  merge comps =
+    if length comps <= maxCores then comps
+    else merge $ (Set.union c1 c2) : (filter (\c -> c/=c1 && c/=c2) comps)
+    where
+      [c1,c2] = List.minimumBy (compare `on` cost) $ comps `choose` 2
+      cost :: [Set Int] -> (Int, Int, Int)
+      -- collocations are positive, so we must invert the sign
+      cost [c1, c2] = (conflicts, -collocations, Set.size c1 + Set.size c2) where
+        conflicts = foldr(+) 0 $ [ n1*n2 | (t1,n1) <- tags1, (t2,n2) <- tags2, t1 /= t2 ]
+        collocations = Map.foldr (+) 0 $ Map.intersectionWith (*) (Map.fromAscList tags1) (Map.fromAscList tags2)
+        tags1 = tags c1
+        tags2 = tags c2
+        tags = map (\(t:ts) -> (t, length ts+1)) .
+               List.group . List.sort .
+               mapMaybe (\i -> locConstrs $ the_atom $ watoms!!i) .
+               Set.toList
+      cost _ = panicStr "componentScheduler: bug in implementation!"
 
   watoms' = map (lblWAtom $ zip components [0..]) (zip watoms [0..])
 
