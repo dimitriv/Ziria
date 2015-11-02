@@ -54,7 +54,7 @@ int BladeRF_RadioStart(BlinkParams *params_tx, BlinkParams *params_rx)
 			bladerf_strerror(status));
 		goto out;
 	}
-
+	assert(dev!=NULL);
 	if (params_tx != NULL) {
 		params_tx->radioParams.dev = dev;
 		status = BladeRF_ConfigureTX(params_tx);
