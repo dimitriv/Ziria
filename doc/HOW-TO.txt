@@ -26,7 +26,7 @@ A: To install WinDDK, get an ISO from:
    http://www.microsoft.com/en-us/download/details.aspx?id=11800
    It will be installed in C:\WinDDK. The version should be 7600.16385.1. 
    Next, install Sora v2.0 (it might work with newer versions but it is not tested).
-   Make sure the environment variable SORA_ROOT (with capital letters) is set to the Sora root (e.g. SORA_ROOT="C:\SoraSDK2.0")
+   Make sure the environment variable SORA_ROOT (with capital letters) is set to the Sora root (e.g. SORA_ROOT=C:\SoraSDK2.0 - be sure not to quote the path in ``"``)
    Once Sora is installed, run "Windows Win7 x64 Free Build Environment" (a CMD-type icon in your start menu). 
      IMPORTANT: Do not try to compile Sora from regular cmd.exe shell or cygwin -- it will fail!
      		If you cannot find it in the start menu, look for it in:

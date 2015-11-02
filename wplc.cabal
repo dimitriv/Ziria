@@ -50,7 +50,7 @@ Executable wplc
     transformers           >= 0.3   && < 0.4,
     hashable               >= 1.2   && < 1.3,
     time                   >= 1.4   && < 1.5,
-    pretty-show            >= 1.6   && < 1.7,
+    pretty-show            >= 1.6.9,
     syb                    >= 0.4   && < 0.5,
     deepseq                >= 1.3   && < 1.5,
 

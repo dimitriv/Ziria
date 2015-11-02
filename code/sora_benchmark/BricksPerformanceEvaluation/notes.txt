@@ -1,0 +1,218 @@
+******** T3600 (Xeon CPU E5-1620 0 @3.6GHz, 32GB mem)
+
+Time to process one input pin full of data (standard run in VS, x86, checked):
+
+Time TDCRemoveEx                             : 0.061 us
+Time TCCA11a                                 : 0.446 us
+Time TDCEstimator                            : 0.122 us
+Time T11aLTS                                 : 20.069 us
+Time T11aDataSymbol                          : 0.184 us
+Time TFreqCompensation                       : 3.320 us
+Time TFFT64                                  : 10.070 us
+Time TChannelEqualization                    : 2.513 us
+Time TPhaseCompensate                        : 2.987 us
+Time TPilotTrack                             : 3.502 us
+Time T11aDemapBPSK                           : 1.294 us
+Time T11aDeinterleaveBPSK                    : 0.079 us
+Time T11aViterbiSig                          : 16.102 us
+Time T11aPLCPParser                          : 0.033 us
+Time T11aViterbi6M                           : 14.527 us
+Time T11aDesc                                : 0.055 us
+Time T11aDemapQAM64                          : 1.859 us
+Time T11aDeinterleaveQAM64                   : 0.228 us
+
+
+
+Approximate calculation:
+100B packet @6Mbps, 36 symbols (2 PLCP + 34 data symbols)
+
+
+Detection and estimation ~ LTS ~ 20us
+
+Tracking (= TPilotTrack + TPhaseCompensate + TChannelEqualization + 
+	        TFFT64 + TFreqCompensation + T11aDataSymbol) ~ 22.5760 per OFDM symbol
+		~ 790 us for 34 symbols + 1 PLCP (data-encoded) symbol
+
+
+PLCP header processing (= T11aDemapBPSK + T11aDeinterleaveBPSK + T11aViterbiSig + T11aPLCPParser)
+		~ 17.5 us for 1 PLCP OFDM symbol
+
+
+Data processing (= T11aDemapBPSK + T11aDeinterleaveBPSK + T11aViterbi6M + T11aDesc)
+	    ~ 16us per OFDM symbol
+		~ 558 us
+
+
+Total: 1386 us
+
+
+
+
+Time to process one input pin full of data (x64, checked):
+
+Time TDCRemoveEx                             : 0.071 us
+Time TCCA11a                                 : 0.334 us
+Time TDCEstimator                            : 0.107 us
+Time T11aLTS                                 : 14.193 us
+Time T11aDataSymbol                          : 0.164 us
+Time TFreqCompensation                       : 2.305 us
+Time TFFT64                                  : 6.883 us
+Time TChannelEqualization                    : 1.747 us
+Time TPhaseCompensate                        : 2.056 us
+Time TPilotTrack                             : 2.523 us
+Time T11aDemapBPSK                           : 1.025 us
+Time T11aDeinterleaveBPSK                    : 0.092 us
+Time T11aViterbiSig                          : 10.895 us
+Time T11aPLCPParser                          : 0.026 us
+Time T11aViterbi6M                           : 9.968 us
+Time T11aDesc                                : 0.032 us
+Time T11aDemapQAM64                          : 1.445 us
+Time T11aDeinterleaveQAM64                   : 0.239 us
+
+
+Time to process one input pin full of data (x64, free):
+
+Time TDCRemoveEx                             : 0.007 us
+Time TCCA11a                                 : 0.021 us
+Time TDCEstimator                            : 0.009 us
+Time T11aLTS                                 : 0.705 us
+Time T11aDataSymbol                          : 0.016 us
+Time TFreqCompensation                       : 0.040 us
+Time TFFT64                                  : 0.144 us
+Time TChannelEqualization                    : 0.040 us
+Time TPhaseCompensate                        : 0.036 us
+Time TPilotTrack                             : 0.186 us
+Time T11aDemapBPSK                           : 0.069 us
+Time T11aDeinterleaveBPSK                    : 0.016 us
+Time T11aViterbiSig                          : 0.301 us
+Time T11aPLCPParser                          : 0.005 us
+Time T11aViterbi6M                           : 0.289 us
+Time T11aDesc                                : 0.004 us
+Time T11aDemapQAM64                          : 0.119 us
+Time T11aDeinterleaveQAM64                   : 0.087 us
+
+
+
+
+
+
+***** LAPTOP: (i7-3667U @2GHz, 8GB mem)
+
+
+Time to process one input pin full of data (x86, free, Laptop):
+
+Time TDCRemoveEx                             : 0.009 us
+Time TCCA11a                                 : 0.029 us
+Time TDCEstimator                            : 0.012 us
+Time T11aLTS                                 : 0.833 us
+Time T11aDataSymbol                          : 0.032 us
+Time TFreqCompensation                       : 0.066 us
+Time TFFT64                                  : 0.199 us
+Time TChannelEqualization                    : 0.064 us
+Time TPhaseCompensate                        : 0.064 us
+Time TPilotTrack                             : 0.279 us
+Time T11aDemapBPSK                           : 0.093 us
+Time T11aDeinterleaveBPSK                    : 0.023 us
+Time T11aViterbiSig                          : 0.328 us
+Time T11aPLCPParser                          : 0.006 us
+Time T11aViterbi6M                           : 0.332 us
+Time T11aDesc                                : 0.005 us
+Time T11aDemapQAM64                          : 0.241 us
+Time T11aDeinterleaveQAM64                   : 0.119 us
+
+
+Time to process one input pin full of data (x64, free, Laptop, target\amd64\BricksPerformanceEvaluation.exe):
+
+Time TDCRemoveEx                             : 0.007 us
+Time TCCA11a                                 : 0.026 us
+Time TDCEstimator                            : 0.011 us
+Time T11aLTS                                 : 0.646 us
+Time T11aDataSymbol                          : 0.020 us
+Time TFreqCompensation                       : 0.046 us
+Time TFFT64                                  : 0.146 us
+Time TChannelEqualization                    : 0.047 us
+Time TPhaseCompensate                        : 0.042 us
+Time TPilotTrack                             : 0.216 us
+Time T11aDemapBPSK                           : 0.090 us
+Time T11aDeinterleaveBPSK                    : 0.021 us
+Time T11aViterbiSig                          : 0.361 us
+Time T11aPLCPParser                          : 0.012 us
+Time T11aViterbi6M                           : 0.338 us
+Time T11aDesc                                : 0.005 us
+Time T11aDemapQAM64                          : 0.144 us
+Time T11aDeinterleaveQAM64                   : 0.110 us
+
+
+
+Approximate calculation:
+100B packet @6Mbps, 36 symbols (2 PLCP + 34 data symbols)
+
+
+Detection and estimation ~ LTS ~ 0.646us
+
+Tracking (= TPilotTrack + TPhaseCompensate + TChannelEqualization + 
+	        TFFT64 + TFreqCompensation + T11aDataSymbol) ~ 0.52us per OFDM symbol
+		~ 18.1 us for 34 symbols + 1 PLCP (data-encoded) symbol
+
+
+PLCP header processing (= T11aDemapBPSK + T11aDeinterleaveBPSK + T11aViterbiSig + T11aPLCPParser)
+		~ 0.484 us for 1 PLCP OFDM symbol
+
+
+Data processing (= T11aDemapBPSK + T11aDeinterleaveBPSK + T11aViterbi6M + T11aDesc)
+	    ~ 0.45 us per OFDM symbol
+		~ 15.4 us
+
+
+Total: 34.63 us
+
+
+
+
+
+***** T3500: (Xeon E5520 @2.27GHz, 4GB mem)
+
+
+Time to process one input pin full of data (x86, checked, T3500):
+
+Time TDCRemoveEx                             : 0.098 us
+Time TCCA11a                                 : 0.772 us
+Time TDCEstimator                            : 0.202 us
+Time T11aLTS                                 : 33.170 us
+Time T11aDataSymbol                          : 0.249 us
+Time TFreqCompensation                       : 5.497 us
+Time TFFT64                                  : 16.235 us
+Time TChannelEqualization                    : 4.122 us
+Time TPhaseCompensate                        : 4.971 us
+Time TPilotTrack                             : 5.691 us
+Time T11aDemapBPSK                           : 2.161 us
+Time T11aDeinterleaveBPSK                    : 0.123 us
+Time T11aViterbiSig                          : 27.019 us
+Time T11aPLCPParser                          : 0.052 us
+Time T11aViterbi6M                           : 22.754 us
+Time T11aDesc                                : 0.090 us
+Time T11aDemapQAM64                          : 3.071 us
+Time T11aDeinterleaveQAM64                   : 0.445 us
+
+
+
+Time to process one input pin full of data (x64, free, T3500):
+
+Time TDCRemoveEx                             : 0.010 us
+Time TCCA11a                                 : 0.034 us
+Time TDCEstimator                            : 0.013 us
+Time T11aLTS                                 : 0.947 us
+Time T11aDataSymbol                          : 0.031 us
+Time TFreqCompensation                       : 0.065 us
+Time TFFT64                                  : 0.219 us
+Time TChannelEqualization                    : 0.063 us
+Time TPhaseCompensate                        : 0.056 us
+Time TPilotTrack                             : 0.350 us
+Time T11aDemapBPSK                           : 0.121 us
+Time T11aDeinterleaveBPSK                    : 0.030 us
+Time T11aViterbiSig                          : 0.471 us
+Time T11aPLCPParser                          : 0.009 us
+Time T11aViterbi6M                           : 0.523 us
+Time T11aDesc                                : 0.007 us
+Time T11aDemapQAM64                          : 0.216 us
+Time T11aDeinterleaveQAM64                   : 0.134 us

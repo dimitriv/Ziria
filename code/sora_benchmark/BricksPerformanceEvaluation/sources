@@ -1,0 +1,60 @@
+!include "$(SORA_ROOT)\build\sources_ke.inc"
+
+TARGETNAME  = BricksPerformanceEvaluation
+TARGETTYPE  = PROGRAM
+UMTYPE      = console
+
+TARGETPATH=Target
+    
+USE_MSVCRT  = 1
+
+INCLUDES        = $(INCLUDES) \
+                  ..\..\bb\dot11a; \
+                  ..\..\bb\dot11a\inc; \
+                  ..\..\bb\brick11\src; \
+                  ..\..\util\src;	\
+				  ..\..\inc; \
+                  ..\..\inc\brick; \
+
+                  
+TARGETLIBS      = $(TARGETLIBS) \
+				  ..\..\..\target_SORA1.8\$(BUILD_ALT_DIR)\*\dot11bbau.lib \
+				  ..\..\..\target_SORA1.8\$(BUILD_ALT_DIR)\*\libbba_lutstu.lib \
+				  ..\..\..\target_SORA1.8\$(BUILD_ALT_DIR)\*\libbba_modu.lib \
+                  ..\..\..\target_SORA1.8\$(BUILD_ALT_DIR)\*\sora_utility.lib	\
+                  ..\..\..\lib_SORA1.8\lib\$(BUILD_ALT_DIR)\*\usora.lib \
+!if "$(_BUILDARCH)" == "x86"
+                  ..\..\..\lib_SORA1.8\lib\$(BUILD_ALT_DIR)\*\DebugPlotU.lib 
+!endif
+                  
+!if "$(_BUILDARCH)" == "x86"
+C_DEFINES       = $(C_DEFINES) \
+                  -DUSER_MODE
+!else
+C_DEFINES       = $(C_DEFINES) \
+                  -DUSER_MODE -DBUILDARCHX64
+!endif
+
+
+
+USER_C_FLAGS = $(USER_C_FLAGS) /TP /FAs
+
+## To generate post-processed code with expanded header files, add options /C /P
+## Note that this will prevent generation of obj files, so compilation will fail
+
+
+## Set code optimization option "MSC_OPTIMIZATION" to /O2 (maximize speed)
+## in the sources file, which is necessary for DSP related inline functions.
+## Otherwise inline functions will not inline expanded. The default value
+## is /Oxs (minimize size) in free build, and /Od /Oi in check build.
+## ref: http://msdn.microsoft.com/en-us/library/ff549305%28VS.85%29.aspx
+!if "$(DDKBUILDENV)" == "fre"
+MSC_OPTIMIZATION=/O2
+!endif
+
+SOURCES     = \
+	      BricksTest.cpp \
+              main.cpp 
+
+
+USE_STL=1
