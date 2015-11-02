@@ -47,14 +47,6 @@ int BladeRF_RadioStart(BlinkParams *params_tx, BlinkParams *params_rx)
 	}
 	printf("Opening and initializing device...\n\n");
 
-	if (params_tx != NULL)
-	{
-		dev = params_tx->radioParams.dev;
-	}
-	else
-	{
-		dev = params_rx->radioParams.dev;
-	}
 
 	status = bladerf_open(&dev, "");
 	if (status != 0) {
@@ -64,6 +56,7 @@ int BladeRF_RadioStart(BlinkParams *params_tx, BlinkParams *params_rx)
 	}
 
 	if (params_tx != NULL) {
+		params_tx->radioParams.dev = dev;
 		status = BladeRF_ConfigureTX(params_tx);
 		if (status != 0) {
 			fprintf(stderr, "Failed to configure TX: %s\n",
@@ -75,7 +68,8 @@ int BladeRF_RadioStart(BlinkParams *params_tx, BlinkParams *params_rx)
 		}
 	}
 	
-	if (params_rx == NULL) {
+	if (params_rx != NULL) {
+		params_rx->radioParams.dev = dev;
 		status = BladeRF_ConfigureRX(params_rx);
 		if (status != 0) {
 			fprintf(stderr, "Failed to configure RX: %s\n",
@@ -102,6 +96,7 @@ int  BladeRF_ConfigureTX(BlinkParams *params)
 {
 	int status;
 	bladerf_module module = BLADERF_MODULE_TX;
+	fprintf(stdout, "%s %d\n", params->radioParams.dev, params->radioParams.CentralFrequency);
 	status = bladerf_set_frequency((params->radioParams.dev), module, params->radioParams.CentralFrequency);
 	if (status != 0) {
 		fprintf(stderr, "Failed to set TX frequency: %s\n",
