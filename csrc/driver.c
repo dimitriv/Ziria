@@ -216,7 +216,7 @@ int __cdecl main(int argc, char **argv) {
 	if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
 	{
 #ifdef BLADE_RF
-		BladeRF_RadioStop(params);
+		BladeRF_RadioStop(params, params);
 #endif
 #ifdef SORA_RF
 		RadioStop(&Globals);
