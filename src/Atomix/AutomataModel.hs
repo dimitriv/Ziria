@@ -130,18 +130,18 @@ class (Show a, Eq a) => Atom a where
 
 
 data SimplNk atom nid
-  = SAtom { wired_atom :: WiredAtom atom
-          , atom_next  :: nid
-          , pipe_balances :: Map Chan Int -- balance of pipeline queues
+  = SAtom { wired_atom :: !(WiredAtom atom)
+          , atom_next  :: !nid
+          , pipe_balances :: !(Map Chan Int) -- balance of pipeline queues
           }
-  | SBranch { zbranch_ch   :: Chan -- If we read True we go to branch_true, otherwise to branch_false
-            , zbranch_true  :: nid
-            , zbranch_false :: nid
-            , zbranch_while :: Bool -- Is this a while loop?
-            , pipe_balances :: Map Chan Int -- balance of pipeline queues
+  | SBranch { zbranch_ch   :: !Chan -- If we read True we go to branch_true, otherwise to branch_false
+            , zbranch_true  :: !nid
+            , zbranch_false :: !nid
+            , zbranch_while :: !Bool -- Is this a while loop?
+            , pipe_balances :: !(Map Chan Int) -- balance of pipeline queues
             }
-  | SDone { pipe_balances :: Map Chan Int -- balance of pipeline queues
-          , must_insert_rollback :: Maybe Int -- temporary info for zipping algorithm: record how far the
+  | SDone { pipe_balances :: !(Map Chan Int) -- balance of pipeline queues
+          , must_insert_rollback :: !(Maybe Int) -- temporary info for zipping algorithm: record how far the
           }                                   -- input queue of the left automaton has to be rolled back.
   deriving Show
 
@@ -158,19 +158,19 @@ instance NodeKind SimplNk where
 
 
 data CfgNk atom nid
-  = CfgAction { action_atoms :: [WiredAtom atom]
-              , action_next  :: nid
-              , cfg_pipe_balances :: Map Chan Int -- initial balance of pipeline queues
+  = CfgAction { action_atoms :: ![WiredAtom atom]
+              , action_next  :: !nid
+              , cfg_pipe_balances :: !(Map Chan Int) -- initial balance of pipeline queues
               }
-  | CfgBranch { branch_ch   :: Chan -- If we read True we go to branch_true, otherwise to branch_false
-              , branch_true  :: nid
-              , branch_false :: nid
-              , is_while     :: Bool -- Is this a while loop?
-              , cfg_pipe_balances :: Map Chan Int
+  | CfgBranch { branch_ch   :: !Chan -- If we read True we go to branch_true, otherwise to branch_false
+              , branch_true  :: !nid
+              , branch_false :: !nid
+              , is_while     :: !Bool -- Is this a while loop?
+              , cfg_pipe_balances :: !(Map Chan Int)
               }
-  | CfgLoop { loop_body :: nid -- Infinite loop. Only transformers may (and must!) contain one of these.
-            , cfg_pipe_balances :: Map Chan Int }
-  | CfgDone { cfg_pipe_balances :: Map Chan Int }
+  | CfgLoop { loop_body :: !nid -- Infinite loop. Only transformers may (and must!) contain one of these.
+            , cfg_pipe_balances :: !(Map Chan Int) }
+  | CfgDone { cfg_pipe_balances :: !(Map Chan Int) }
 
 instance NodeKind CfgNk where
   sucsOfNk (CfgDone _) = []
@@ -203,10 +203,10 @@ data Dependency
 
 data Decision nid
   = AtomixDone
-  | AtomixLoop { atomix_loop_body :: nid}
-  | AtomixBranch { atomix_branch_ch :: Chan
-                 , atomix_branch_true :: nid
-                 , atomix_branch_false :: nid
+  | AtomixLoop { atomix_loop_body :: !nid}
+  | AtomixBranch { atomix_branch_ch :: !Chan
+                 , atomix_branch_true :: !nid
+                 , atomix_branch_false :: !nid
                  }
   deriving Show
 
@@ -1142,7 +1142,7 @@ cfgToAtomix a = a { auto_graph = state_graph} where
     let nk = AtomixState watoms constrs (AtomixBranch x left right) pipes'' in
     fromCfg left =<< fromCfg right (insertNk nid nk nmap)
 
-  mk_constrs = mk_constraints (auto_inchan a) (auto_outchan a)
+  mk_constrs _ _ _ = Map.empty {- mk_constraints (auto_inchan a) (auto_outchan a) -}
 
 
 
@@ -1318,7 +1318,7 @@ compSched maxCores (AtomixState watoms cstrs d pipes) = AtomixState watoms' cstr
                Set.toList
       cost _ = panicStr "componentScheduler: bug in implementation!"
 
-  watoms' = map (lblWAtom $ zip components [0..]) (zip watoms [0..])
+  !watoms' = map (lblWAtom $ zip components [0..]) (zip watoms [0..])
 
   lblWAtom comps (wa,aid) =
     case List.find (Set.member aid . fst) comps of

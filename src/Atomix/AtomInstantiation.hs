@@ -18,17 +18,17 @@ import Text.PrettyPrint.HughesPJ
 
 import AstUnlabelled
 
-data SymAtom = SymAtom { atom_core :: Maybe Int
-                       , atom_kind :: SymAtomKind
+data SymAtom = SymAtom { atom_core :: !(Maybe Int)
+                       , atom_kind :: !SymAtomKind
                        }
   deriving Eq
 
-data SymAtomKind = SAExp MbLocConstr (AExp ())
-                 | SACast String MbLocConstr CastAtomOrigin (Int,Ty) (Int,Ty)
-                 | SADiscard String MbLocConstr (Int,Ty)
-                 | SAAssert Bool -- ^ assert true and assert false
-                 | SARollback EId Int
-                 | SAClear (Map EId Int)
+data SymAtomKind = SAExp !MbLocConstr !(AExp ())
+                 | SACast !String !MbLocConstr !CastAtomOrigin !(Int,Ty) !(Int,Ty)
+                 | SADiscard !String !MbLocConstr !(Int,Ty)
+                 | SAAssert !Bool -- ^ assert true and assert false
+                 | SARollback !EId !Int
+                 | SAClear !(Map EId Int)
   deriving Eq
 
 instance Outputable SymAtom where
