@@ -29,6 +29,7 @@
 # COMPILER?=winddk
 #
 COMPILER?=vs
+EXTRAOPTS += '--atomix-codegen' # always use atomix-style compilation
 
 PP   = ../../scripts/preprocesscompile-$(COMPILER)-debug.sh
 DIFF = ../../tools/BlinkDiff

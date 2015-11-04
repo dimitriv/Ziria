@@ -1,0 +1,19 @@
+{- Test to reveal poor performance of atomix compilation pipeline
+   for certain classes of programs.
+
+   The compilation time of this programs scales very poorly with
+   increasing values of LARGE_CONST.
+
+   IMPORTANT: Compile without vectorization.
+
+   Inspired by tests/backend/multitake.wpl
+-}
+
+# define LARGE_CONST 500
+
+let comp main = 
+	read[int] >>> {
+		x <- takes LARGE_CONST; emits x;
+	} >>> repeat {
+		x <- take; emit x;
+	} >>> write[int]
