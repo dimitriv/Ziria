@@ -1,0 +1,11 @@
+{- Reveals bug in code generation for mitigators as of
+   commit 4949b5b14df78580f5fe9770a884f194f4414613.
+   
+   Compile with vectorization enabled to provoke bug.
+-}
+
+let comp main = 
+	read[int] >>> {
+		x <- takes 2; emits x;
+		x <- takes 4; emits x;
+	} >>> write[int]
