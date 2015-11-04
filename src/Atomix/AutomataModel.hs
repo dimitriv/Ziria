@@ -1142,7 +1142,7 @@ cfgToAtomix a = a { auto_graph = state_graph} where
     let nk = AtomixState watoms constrs (AtomixBranch x left right) pipes'' in
     fromCfg left =<< fromCfg right (insertNk nid nk nmap)
 
-  mk_constrs _ _ _ = Map.empty {- mk_constraints (auto_inchan a) (auto_outchan a) -}
+  mk_constrs = mk_constraints (auto_inchan a) (auto_outchan a)
 
 
 
