@@ -350,7 +350,7 @@ cgDeclQueues dfs qs action
     sizes_inits_sora (qvar,(_,siz)) (i::Int) =
          [cstms|
             my_sizes_sora[$int:i] = $(tySizeOf_C (nameTyp qvar));
-            my_slots_sora[$int:i] = $int:siz;
+            my_slots_sora[$int:i] = ($int:siz) * 3;
          |]
 
     my_sizes_inits_sing 
