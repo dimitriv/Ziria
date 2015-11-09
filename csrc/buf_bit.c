@@ -161,7 +161,7 @@ unsigned int parse_dbg_bit(char *dbg_buf, BitArrPtr target)
 
 	bitWrite(target, c++, val);
   
-	while (s = strtok(NULL, ",")) 
+	while ((s = strtok(NULL, ",")))
 	{
 		x = strtol(s,NULL,10);
 
@@ -248,8 +248,9 @@ void init_getbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 
 GetStatus buf_getbit(BlinkParams *params, BufContextBlock* blk, Bit *x)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in++;
 
 	if (params->inType == TY_IP)
@@ -291,8 +292,9 @@ GetStatus buf_getbit(BlinkParams *params, BufContextBlock* blk, Bit *x)
 FORCE_INLINE
 GetStatus buf_getarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in += vlen;
 
 	if (params->inType == TY_IP)
@@ -388,8 +390,9 @@ void init_putbit(BlinkParams *params, BufContextBlock* blk, HeapContextBlock *hb
 }
 void buf_putbit(BlinkParams *params, BufContextBlock* blk, Bit x)
 {
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_out++;
 
 	if (params->outType == TY_IP)
@@ -428,8 +431,9 @@ FORCE_INLINE
 void buf_putarrbit(BlinkParams *params, BufContextBlock* blk, BitArrPtr x, unsigned int vlen)
 {
 	blk->total_out+= vlen;
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 
 	if (params->outType == TY_IP)
 	{

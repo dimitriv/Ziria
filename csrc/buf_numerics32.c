@@ -53,7 +53,7 @@ unsigned int parse_dbg_int32(char *dbg_buf, num32 *target)
 
   target[i++] = val; 
 
-  while (s = strtok(NULL, ",")) 
+  while ((s = strtok(NULL, ",")))
   {
 	  val = strtol(s,NULL,10);
 	  if (errno == EINVAL) 
@@ -176,8 +176,9 @@ GetStatus _buf_getint32(BlinkParams *params, BufContextBlock *blk, int32 *x)
 
 GetStatus buf_getint32(BlinkParams *params, BufContextBlock *blk, int32 *x)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in++;
 	return _buf_getint32(params, blk, x);
 }
@@ -226,8 +227,9 @@ GetStatus _buf_getarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, 
 
 GetStatus buf_getarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsigned int vlen)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in += vlen;
 	return _buf_getarrint32(params, blk, x, vlen);
 }
@@ -258,8 +260,9 @@ void init_getcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlo
 
 GetStatus buf_getcomplex32(BlinkParams *params, BufContextBlock *blk, complex32 *x)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in++;
 	GetStatus gs1 = _buf_getint32(params, blk, &(x->re));
 	if (gs1 == GS_EOF) 
@@ -273,8 +276,9 @@ GetStatus buf_getcomplex32(BlinkParams *params, BufContextBlock *blk, complex32 
 }
 GetStatus buf_getarrcomplex32(BlinkParams *params, BufContextBlock *blk, complex32 *x, unsigned int vlen)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in += vlen;
 	return (_buf_getarrint32(params, blk, (int32*)x, vlen * 2));
 }
@@ -385,8 +389,9 @@ void _buf_putint32(BlinkParams *params, BufContextBlock *blk, int32 x)
 void buf_putint32(BlinkParams *params, BufContextBlock *blk, int32 x)
 {
 	blk->total_out++;
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	_buf_putint32(params, blk, x);
 }
 
@@ -447,8 +452,9 @@ void _buf_putarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsig
 void buf_putarrint32(BlinkParams *params, BufContextBlock *blk, int32 *x, unsigned int vlen)
 {
 	blk->total_out += vlen;
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	_buf_putarrint32(params, blk, x, vlen);
 }
 
@@ -525,8 +531,9 @@ void init_putcomplex32(BlinkParams *params, BufContextBlock *blk, HeapContextBlo
 void buf_putcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex32 x)
 {
 	blk->total_out++;
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 
 	if (params->outType == TY_DUMMY) return;
 
@@ -545,8 +552,9 @@ void buf_putcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex3
 void buf_putarrcomplex32(BlinkParams *params, BufContextBlock *blk, struct complex32 *x, unsigned int vlen)
 {
 	blk->total_out += vlen;
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 
 	if (params->outType == TY_DUMMY || params->outType == TY_FILE || params->outType == TY_MEM)
 	{
@@ -603,7 +611,7 @@ unsigned int parse_dbg_uint32(char *dbg_buf, uint32 *target)
 
   target[i++] = (uint32)val; 
 
-  while (s = strtok(NULL, ",")) 
+  while ((s = strtok(NULL, ",")))
   {
 	  val = strtoul(s,NULL,10);
 	  if (errno == EINVAL) 
@@ -726,8 +734,9 @@ GetStatus _buf_getuint32(BlinkParams *params, BufContextBlock *blk, uint32 *x)
 
 GetStatus buf_getuint32(BlinkParams *params, BufContextBlock *blk, uint32 *x)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in++;
 	return _buf_getuint32(params, blk, x);
 }
@@ -776,8 +785,9 @@ GetStatus _buf_getarruint32(BlinkParams *params, BufContextBlock *blk, uint32 *x
 
 GetStatus buf_getarruint32(BlinkParams *params, BufContextBlock *blk, uint32 *x, unsigned int vlen)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in += vlen;
 	return _buf_getarruint32(params, blk, x, vlen);
 }
@@ -888,8 +898,9 @@ void _buf_putuint32(BlinkParams *params, BufContextBlock *blk, uint32 x)
 void buf_putuint32(BlinkParams *params, BufContextBlock *blk, uint32 x)
 {
 	blk->total_out++;
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	_buf_putuint32(params, blk, x);
 }
 
@@ -950,8 +961,9 @@ void _buf_putarruint32(BlinkParams *params, BufContextBlock *blk, uint32 *x, uns
 void buf_putarruint32(BlinkParams *params, BufContextBlock *blk, uint32 *x, unsigned int vlen)
 {
 	blk->total_out += vlen;
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	_buf_putarruint32(params, blk, x, vlen);
 }
 

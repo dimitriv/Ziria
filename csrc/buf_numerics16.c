@@ -60,7 +60,7 @@ unsigned int parse_dbg_int16(char *dbg_buf, int16 *target)
 
   target[i++] = (num16) val; 
 
-  while (s = strtok(NULL, ",")) 
+  while ((s = strtok(NULL, ",")))
   {
 	  val = strtol(s,NULL,10);
 	  if (errno == EINVAL) 
@@ -189,8 +189,9 @@ GetStatus _buf_getint16(BlinkParams *params, BufContextBlock *blk, int16 *x)
 
 GetStatus buf_getint16(BlinkParams *params, BufContextBlock *blk, int16 *x)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in++;
 	return _buf_getint16(params, blk, x);
 }
@@ -239,8 +240,9 @@ GetStatus _buf_getarrint16(BlinkParams *params, BufContextBlock *blk, int16 *x, 
 FORCE_INLINE
 GetStatus buf_getarrint16(BlinkParams *params, BufContextBlock *blk, int16 *x, unsigned int vlen)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in += vlen;
 	return _buf_getarrint16(params, blk, x, vlen);
 }
@@ -260,8 +262,9 @@ void init_getcomplex16(BlinkParams *params, BufContextBlock *blk, HeapContextBlo
 
 GetStatus buf_getcomplex16(BlinkParams *params, BufContextBlock *blk, complex16 *x)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in++;
 	if (params->inType == TY_DUMMY || params->inType == TY_FILE || params->inType == TY_MEM)
 	{
@@ -299,8 +302,9 @@ GetStatus buf_getcomplex16(BlinkParams *params, BufContextBlock *blk, complex16 
 FORCE_INLINE
 GetStatus buf_getarrcomplex16(BlinkParams *params, BufContextBlock *blk, complex16 *x, unsigned int vlen)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in += vlen;
 	if (params->inType == TY_DUMMY || params->inType == TY_FILE || params->inType == TY_MEM)
 	{
@@ -437,8 +441,9 @@ void _buf_putint16(BlinkParams *params, BufContextBlock *blk, int16 x)
 
 void buf_putint16(BlinkParams *params, BufContextBlock *blk, int16 x)
 {
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_out++;
 	_buf_putint16(params, blk, x);
 }
@@ -503,8 +508,9 @@ FORCE_INLINE
 void buf_putarrint16(BlinkParams *params, BufContextBlock *blk, int16 *x, unsigned int vlen)
 {
 	blk->total_out += vlen;
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	_buf_putarrint16(params, blk, x, vlen);
 }
 
@@ -538,8 +544,9 @@ void reset_putint16(BlinkParams *params, BufContextBlock *blk)
 
 void init_putcomplex16(BlinkParams *params, BufContextBlock *blk, HeapContextBlock *hblk, size_t unit_size)
 {
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->size_out = 32;
 	blk->total_out = 0;
 
@@ -590,8 +597,9 @@ void init_putcomplex16(BlinkParams *params, BufContextBlock *blk, HeapContextBlo
 void buf_putcomplex16(BlinkParams *params, BufContextBlock *blk, struct complex16 x)
 {
 	blk->total_out++;
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 
 	if (params->outType == TY_DUMMY) return;
 
@@ -621,8 +629,9 @@ FORCE_INLINE
 void buf_putarrcomplex16(BlinkParams *params, BufContextBlock *blk, struct complex16 *x, unsigned int vlen)
 {
 	blk->total_out += vlen;
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 
 	if (params->outType == TY_DUMMY)
 	{
@@ -693,7 +702,7 @@ unsigned int parse_dbg_uint16(char *dbg_buf, uint16 *target)
 
   target[i++] = (uint16) val; 
 
-  while (s = strtok(NULL, ",")) 
+  while ((s = strtok(NULL, ",")))
   {
 	  val = strtoul(s,NULL,10);
 	  if (errno == EINVAL) 
@@ -821,8 +830,9 @@ GetStatus _buf_getuint16(BlinkParams *params, BufContextBlock *blk, uint16 *x)
 
 GetStatus buf_getuint16(BlinkParams *params, BufContextBlock *blk, uint16 *x)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in++;
 	return _buf_getuint16(params, blk, x);
 }
@@ -871,8 +881,9 @@ GetStatus _buf_getarruint16(BlinkParams *params, BufContextBlock *blk, uint16 *x
 FORCE_INLINE
 GetStatus buf_getarruint16(BlinkParams *params, BufContextBlock *blk, uint16 *x, unsigned int vlen)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in += vlen;
 	return _buf_getarruint16(params, blk, x, vlen);
 }
@@ -988,8 +999,9 @@ void _buf_putuint16(BlinkParams *params, BufContextBlock *blk, uint16 x)
 
 void buf_putuint16(BlinkParams *params, BufContextBlock *blk, uint16 x)
 {
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_out++;
 	_buf_putuint16(params, blk, x);
 }
@@ -1054,8 +1066,9 @@ FORCE_INLINE
 void buf_putarruint16(BlinkParams *params, BufContextBlock *blk, uint16 *x, unsigned int vlen)
 {
 	blk->total_out += vlen;
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	_buf_putarruint16(params, blk, x, vlen);
 }
 

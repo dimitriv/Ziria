@@ -39,7 +39,7 @@ char * try_alloc_bytes(HeapContextBlock *hblk, memsize_int siz)
   char *buf = (char *) malloc(siz);
   if (buf == NULL) 
   {
-	fprintf(stderr, "Error: could not allocate buffer of size %ul\n", siz);
+	fprintf(stderr, "Error: could not allocate buffer of size %llu\n", siz);
 	exit(1); 
   }
 

@@ -759,8 +759,8 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 		}
 
 		for (int i = (len1 / wlen) * wlen; i < len1; i++){
-			out[i].re = x[i].re * y[i].re - x[i].im * y[i].im >> shift;
-			out[i].im = x[i].re * y[i].im + x[i].im * y[i].re >> shift;
+			out[i].re = (x[i].re * y[i].re - x[i].im * y[i].im) >> shift;
+			out[i].im = (x[i].re * y[i].im + x[i].im * y[i].re) >> shift;
 		};
 	
 	return 0;
@@ -883,8 +883,8 @@ int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
 	}
 
 	for (int i = (len1 / wlen) * wlen; i < len1; i++){
-		out[i].re = x[i].re * y[i].re + x[i].im * y[i].im >> shift;
-		out[i].im = x[i].im * y[i].re - x[i].re * y[i].im >> shift;
+		out[i].re = (x[i].re * y[i].re + x[i].im * y[i].im) >> shift;
+		out[i].im = (x[i].im * y[i].re - x[i].re * y[i].im) >> shift;
 	};
 
 	return 0;
