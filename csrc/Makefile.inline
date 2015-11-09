@@ -18,8 +18,16 @@
 #
 #
 
-CC = g++
-CFLAGS = -std=c++11 -msse3 -w -Og -pipe -fwhole-program
+COMPILER ?= gcc
+
+ifeq ($(COMPILER), clang)
+CXX = clang++
+else
+CXX = g++
+endif
+
+# Ignore all warnings in inlined version
+CXXFLAGS = -std=c++11 -msse3 -w -O3 -pipe -fwhole-program
 LIBS = -lm 
 OBJDIR = .
 
@@ -29,7 +37,7 @@ LUT_EXECUTABLE = lutexec
 all : driver
 
 driver : Wrapper.cpp
-	$(CC) $(CFLAGS) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
+	$(CXX) $(CXXFLAGS) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
 
 #lutexec: WrapperGCC.o buf_numerics8.o buf_numerics16.o buf_numerics32.o
 #	$(CC) $(EXTRACOPTS) -o $(LUT_EXECUTABLE) $+ $(LIBS)
