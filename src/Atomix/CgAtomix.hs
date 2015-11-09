@@ -455,10 +455,10 @@ extractQueues auto
       = foldl upd pipes watoms
       where upd ps (WiredAtom [(n,inq)] [(m,outq)] 
                       (SymAtom _ (SACast _s _c MitigateOrigin _ _)))
-              | n == 1 && inq /= auto_inchan auto
+              | n == 1 && inq /= auto_inchan auto && outq /= auto_outchan auto
               , Just cslic <- figureOutSliceBytes (m,nameTyp outq)
               = Map.insert outq (MitiOneToN m cslic inq) ps
-              | m == 1 && outq /= auto_outchan auto
+              | m == 1 && outq /= auto_outchan auto && inq /= auto_inchan auto
               , Just cslic <- figureOutSliceBytes (n,nameTyp inq)
               = Map.insert inq (MitiNToOne n cslic outq) ps
               | otherwise 
@@ -801,9 +801,19 @@ cgACastBody dfs qs _orig (n,inwire)
         pushptr = if isSingleThreadIntermQueue qs real_q 
                               then [cexp|stq_push|] 
                               else [cexp|ts_push |]
-  = assert "cgCastAtom" (k == n && real_q == outwire) $ do 
-    appendStmt [cstm| MIT_QUEUE_MITIGATOR_PUSH($mqptr,$pushptr,$rqptr);|]
-    return [cexp|UNIT|]
+  = do { cgIO $ print $ vcat [ text "k =" <+> ppr k
+                             , text "n =" <+> ppr n
+                             , text "m =" <+> ppr m
+                             , text "inwire=" <+> ppr inwire
+                             , text "real_q =" <+> ppr real_q
+                             , text "outwire=" <+> ppr outwire
+                             , text "inty   =" <+> ppr inty
+                             , text "outty  =" <+> ppr outty
+                             ]
+        ; assert "cgCastAtom (A)" (k == n && real_q == outwire) $ do 
+           appendStmt [cstm| MIT_QUEUE_MITIGATOR_PUSH($mqptr,$pushptr,$rqptr);|]
+           return [cexp|UNIT|]
+        }
 
   | Just (QId qid, MitiOneToN k _slice real_q) 
       <- isSingleThreadMitiQueue_Maybe qs outwire
@@ -813,12 +823,12 @@ cgACastBody dfs qs _orig (n,inwire)
         acquireptr = if isSingleThreadIntermQueue qs real_q 
                               then [cexp|stq_acquire|] 
                               else [cexp|ts_acquire |]
-  = assert "cgCastAtom" (k == m && real_q == inwire) $ do
+  = assert "cgCastAtom (B)" (k == m && real_q == inwire) $ do
     appendStmt [cstm| MIT_QUEUE_MITIGATOR_ACQUIRE($mqptr,$acquireptr,$rqptr);|]
     return [cexp|UNIT|]
 
   | otherwise
-  = assert "cgCastAtom" (n == n' && m == m') $ do
+  = assert "cgCastAtom (C)" (n == n' && m == m') $ do
     cgIO $ print $ 
            vcat [ text "Cast atom generation:"
                 , nest 2 $ text "n               = " <> ppr n
