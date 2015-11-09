@@ -32,7 +32,7 @@ This file is taken from https://github.com/Microsoft/Sora
 */
 #pragma once
 #include "numerics.h"
-#include "sora_ext_lib_fft_coeffs.h"
+#include "sora_ext_lib_fft_coeffs.hpp"
 
 //////////////////////////////////////////////////
 // First stage of FFT Radix-4 decimation-in-frequency algorithm 

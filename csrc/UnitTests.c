@@ -40,7 +40,7 @@ permissions and limitations under the License.
 #endif
 
 
-// This is otherwise defined in test.c
+// This is otherwise defined in test.cpp
 bool atomix = 1;
 
 

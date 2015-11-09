@@ -27,7 +27,7 @@ Library files:
   
 
 Driver files:
-- driver.c: File with main(). Parses parameters, initialized the environment
+- driver.cpp: File with main(). Parses parameters, initialized the environment
   and run Ziria code in a single, real-time thread. 
   Note: this is a default driver. For more complex MAC, this file should
   be replaced with a custom MAC (for examples see csrc/mac or code/Wifi/testbed).

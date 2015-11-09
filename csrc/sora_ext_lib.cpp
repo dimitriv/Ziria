@@ -61,7 +61,7 @@
 #include "intalgx.h"
 #endif
 
-#include "sora_ext_lib_fft.h"
+#include "sora_ext_lib_fft.hpp"
 #include "utils.h"
 
 

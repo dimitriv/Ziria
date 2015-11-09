@@ -30,7 +30,7 @@
     <ClCompile Include="..\buf_numerics32.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\driver.c">
+    <ClCompile Include="..\driver.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\ext_arr.c">
@@ -45,7 +45,7 @@
     <ClCompile Include="..\params.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\test.c">
+    <ClCompile Include="..\test.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\wpl_alloc.c">
@@ -69,13 +69,13 @@
     <ClCompile Include="..\sora_radio.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\sora_ext_lib.c">
+    <ClCompile Include="..\sora_ext_lib.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\buf_numerics8.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\sora_ext_viterbi.c">
+    <ClCompile Include="..\sora_ext_viterbi.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\buf_chunk.c">

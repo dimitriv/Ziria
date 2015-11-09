@@ -21,7 +21,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\driver.c">
+    <ClCompile Include="..\driver.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\bit.c">
@@ -51,13 +51,13 @@
     <ClCompile Include="..\rx.c">
       <Filter>Ziria Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\sora_ext_lib.c">
+    <ClCompile Include="..\..\sora_ext_lib.cpp">
       <Filter>Ziria Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\sora_ext_visual.c">
       <Filter>Ziria Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\sora_ext_viterbi.c">
+    <ClCompile Include="..\..\sora_ext_viterbi.cpp">
       <Filter>Ziria Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\sora_ip.c">

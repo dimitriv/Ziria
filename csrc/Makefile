@@ -18,8 +18,11 @@
 #
 #
 
-CC = g++
-CFLAGS = -std=c++11 -msse3 -Wno-attributes -Wno-write-strings -Og # -O2 -pipe -fno-aggressive-loop-optimizations
+CFLAGS = -std=c99 -w
+
+CXX = g++
+CXXFLAGS = -std=c++11 -w
+
 LIBS = -lm
 OBJDIR = .
 
@@ -28,7 +31,7 @@ OBJ_IO  = buf_bit.o buf_chunk.o buf_numerics8.o buf_numerics32.o buf_numerics16.
 OBJ_LIB = 
 OBJ_EXT = ext_math.o ext_arr.o sora_ext_viterbi.o
 
-# lut test.c only contains a main function but has to be linked with everything
+# lut test.cpp only contains a main function but has to be linked with everything
 OBJ_LUT_ONLY = bit.o numerics.o test.o wpl_alloc.o utils.o
 
 EXECUTABLE = driver
@@ -36,14 +39,22 @@ LUT_EXECUTABLE = lutexec
 
 all : driver
 
+
 driver : $(OBJ_INT) $(OBJ_IO) $(OBJ_LIB) $(OBJ_EXT)
-	$(CC) $(CFLAGS) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
+	$(CXX) -o $(EXECUTABLE) $+
+
+#
+#driver : $(OBJ_INT) $(OBJ_IO) $(OBJ_LIB) $(OBJ_EXT)
+#	$(CXX) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
 
 lutexec: $(OBJ_LUT_ONLY) $(OBJ_LIB) $(OBJ_EXT)
 	$(CC) $(EXTRACOPTS) -o $(LUT_EXECUTABLE) $+ $(LIBS)
 
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 %.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CXX) $(CFLAGS) -c $< -o $@
 
 clean:
 	-rm -f *.o ./*/*.o
