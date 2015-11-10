@@ -42,6 +42,8 @@ module CgMonad
   , inAllocFrame, inAllocFrame', isInsideAllocFrame, pushAllocFrame
   , getGlobalWplAllocated
   , addGlobalWplAllocated
+  , getFinalizerStmts
+  , addFinalizerStmt
 
   , getFunDefs
   , getSymEnv
@@ -375,10 +377,12 @@ data CgState = CgState {
 
     , globalWplAllocated :: [C.Stm]
 
+    , finalizerStmts :: [C.Stm]
+
     }
   deriving Show
 
-emptyState = CgState [] 0 Opts.cMAX_STACK_ALLOC [] [] [] []
+emptyState = CgState [] 0 Opts.cMAX_STACK_ALLOC [] [] [] [] []
 
 
 data Code = Code
@@ -620,6 +624,13 @@ getGlobalWplAllocated = reverse <$> gets globalWplAllocated
 addGlobalWplAllocated :: C.Stm -> Cg ()
 addGlobalWplAllocated stm
   = modify $ \s -> s { globalWplAllocated = stm : (globalWplAllocated s) }
+
+getFinalizerStmts :: Cg [C.Stm]
+getFinalizerStmts = reverse <$> gets finalizerStmts
+
+addFinalizerStmt :: C.Stm -> Cg ()
+addFinalizerStmt stm
+  = modify $ \s -> s { finalizerStmts = stm : (finalizerStmts s) }
 
 
 newHeapAlloc :: Cg ()

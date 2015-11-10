@@ -519,6 +519,9 @@ groupAtoms = groupBy wa_equal
           = wiredAtomId wa1 == wiredAtomId wa2 &&
             getWiredAtomCore wa1 == getWiredAtomCore wa2
 
+perfCntId :: String -> Int -> Int -> String
+perfCntId str nid tid = "__pcnt_" ++ str ++ "_BLOCK" ++ show nid ++ "_thread" ++ show tid
+
 -- | Main driver for code generation
 cgAutomaton :: DynFlags 
             -> Int                  -- ^ ThreadID
@@ -548,8 +551,19 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
         }
 
    cg_nkind c nid frameVar (AtomixState atoms _ decision _) = do
+     let perfid_start = perfCntId "start" nid atid
+     let perfid_end   = perfCntId "end"   nid atid
+     let perfid_elaps = perfCntId "elaps" nid atid 
+     appendTopDecl [cdecl| $ty:(namedCType "LARGE_INTEGER") $id:perfid_start;|]
+     appendTopDecl [cdecl| $ty:(namedCType "LARGE_INTEGER") $id:perfid_end;|]
+     appendTopDecl [cdecl| $ty:(namedCType "LARGE_INTEGER") $id:perfid_elaps;|]
+     addFinalizerStmt [cstm|printf("%s = %lld\n", $string:perfid_elaps, $id:perfid_elaps.QuadPart);|]
      inAllocFrame' frameVar noLoc $ 
-        pushAllocFrame $ mapM_ (cgCallAtomGroup dfs c queues) (groupAtoms atoms)
+        pushAllocFrame $ do 
+          appendStmt[cstm| QueryPerformanceCounter(&$id:perfid_start);|]
+          mapM_ (cgCallAtomGroup dfs c queues) (groupAtoms atoms)
+          appendStmt[cstm| QueryPerformanceCounter(&$id:perfid_end);  |]
+          appendStmt[cstm| $id:perfid_elaps.QuadPart += $id:perfid_end.QuadPart - $id:perfid_start.QuadPart;|]
      cg_decision c nid decision
 
    cg_decision c nid AtomixDone
@@ -585,8 +599,8 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
             }|]
        else
          let barrstmt _kn  
-               = -- if kn == nid then [cstm|UNIT;|]
-                 --else 
+               = -- if _kn == nid then [cstm|UNIT;|]
+                 -- else 
                  [cstm|barrier($id:(barr_name2 nid), $int:no_threads, $int:c);|] 
          in appendStmts [cstms|
               barrier($id:(barr_name nid), $int:no_threads, $int:c);

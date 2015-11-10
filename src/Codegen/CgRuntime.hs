@@ -60,6 +60,7 @@ cgExtBufInitsAndFins (TBuff in_bty,TBuff out_bty) mfreshId
   = do buf_context  <- getBufContext
        heap_context <- getHeapContext
        global_params <- getGlobalParams
+       fin_stms <- getFinalizerStmts
        appendTopDef [cedecl|void $id:(ini_name mfreshId)() {
                         $stm:(callInBufInitializer global_params 
                                                    buf_context 
@@ -69,6 +70,7 @@ cgExtBufInitsAndFins (TBuff in_bty,TBuff out_bty) mfreshId
                                                     heap_context out_bty)
                         } |]
        appendTopDef [cedecl|void $id:(fin_name mfreshId)() {
+                        $stms:fin_stms
                         $stm:(callOutBufFinalizer global_params 
                                                   buf_context out_bty)
                         } |]
@@ -169,9 +171,9 @@ go_name mfreshId =
 
 
 
-mkAtomixRuntime :: DynFlags       -- | Flags
-                -> Maybe String   -- | Optional unique suffix for name generation
-                -> Cg CLabel      -- | Computation that generates code for a computation
+mkAtomixRuntime :: DynFlags     -- | Flags
+                -> Maybe String -- | Optional unique suffix for name generation
+                -> Cg CLabel    -- | Computation that generates code
                 -> Cg ()
 mkAtomixRuntime dfs mfreshId m = do
     (local_decls, local_stmts, clabel) <- inNewBlock m
