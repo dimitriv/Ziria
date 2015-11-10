@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections, ScopedTypeVariables, InstanceSigs #-}
+{-# LANGUAGE TupleSections, ScopedTypeVariables, InstanceSigs, DeriveGeneric #-}
 module AtomInstantiation where
 
 import AtomComp -- simplified Ziria model
@@ -13,6 +13,9 @@ import qualified Data.List as List
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
+import GHC.Generics (Generic)
+import Control.DeepSeq
+
 import Outputable 
 import Text.PrettyPrint.HughesPJ
 
@@ -21,7 +24,8 @@ import AstUnlabelled
 data SymAtom = SymAtom { atom_core :: !(Maybe Int)
                        , atom_kind :: !SymAtomKind
                        }
-  deriving Eq
+  deriving (Eq, Generic)
+instance NFData SymAtom
 
 data SymAtomKind = SAExp !MbLocConstr !(AExp ())
                  | SACast !String !MbLocConstr !CastAtomOrigin !(Int,Ty) !(Int,Ty)

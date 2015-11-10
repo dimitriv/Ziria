@@ -1,4 +1,5 @@
-{-# LANGUAGE ScopedTypeVariables, TupleSections, FlexibleContexts, BangPatterns #-}
+{-# LANGUAGE ScopedTypeVariables, TupleSections, FlexibleContexts
+           , BangPatterns, DeriveGeneric #-}
 {-# OPTIONS #-}
 module AutomataModel where
 
@@ -15,6 +16,9 @@ import Data.Function
 import Control.Exception
 import Control.Monad.State
 
+import GHC.Generics (Generic)
+import Control.DeepSeq
+
 import AtomComp
 import AstExpr
 import AstComp ( ParInfo (..), plInfo, PlInfo (..) )
@@ -29,7 +33,10 @@ import Control.Applicative ( (<$>), liftA2 )
 import Outputable
 import qualified Text.PrettyPrint.HughesPJ as PPR
 import qualified Text.PrettyPrint.Boxes as PPB
+--import qualified Data.ByteString as B
+
 import Debug.Trace
+
 
 
 {------------------------------------------------------------------------
@@ -45,7 +52,9 @@ data Automaton atom nid nkind
               , auto_outchan :: !Chan
               , auto_start   :: !nid
               }
-  deriving Show
+  deriving (Show, Generic)
+
+instance (NFData atom, NFData nid, NFData (nkind atom nid)) => NFData (Automaton atom nid nkind)
 
 type NodeMap atom nid nkind = Map nid (Node atom nid nkind)
 
@@ -53,6 +62,8 @@ data Node atom nid nkind
   = Node { node_id   :: !nid
          , node_kind :: !(nkind atom nid)
          }
+
+instance (NFData atom, NFData nid, NFData (nkind atom nid)) => NFData (Node atom nid nkind)
 
 class NodeKind nkind where
   sucsOfNk :: nkind atom nid -> [nid]
@@ -63,7 +74,9 @@ data WiredAtom atom
               , wires_out :: ![(Int,EId)]      -- [(Int,Wire)]
               , the_atom  :: !atom
               }
-  deriving Eq
+  deriving (Eq, Generic)
+
+instance NFData atom => NFData (WiredAtom atom)
 
 
 type AId = String
@@ -73,7 +86,7 @@ data CastAtomOrigin = TakeOrEmitOrigin | MitigateOrigin
   deriving Eq
 
 {-- Generic Atom Interfae --------------------------------------------}
-class (Show a, Eq a) => Atom a where
+class (Show a, Eq a, NFData a) => Atom a where
 
   atomInTy  :: a -> [(Int,Ty)]
   atomOutTy :: a -> [(Int,Ty)]
@@ -143,7 +156,9 @@ data SimplNk atom nid
   | SDone { pipe_balances :: !(Map Chan Int) -- balance of pipeline queues
           , must_insert_rollback :: !(Maybe Int) -- temporary info for zipping algorithm: record how far the
           }                                   -- input queue of the left automaton has to be rolled back.
-  deriving Show
+  deriving (Show, Generic)
+
+instance (NFData atom, NFData nid) => NFData (SimplNk atom nid)
 
 instance NodeKind SimplNk where
   sucsOfNk (SDone {}) = []
@@ -171,6 +186,9 @@ data CfgNk atom nid
   | CfgLoop { loop_body :: !nid -- Infinite loop. Only transformers may (and must!) contain one of these.
             , cfg_pipe_balances :: !(Map Chan Int) }
   | CfgDone { cfg_pipe_balances :: !(Map Chan Int) }
+  deriving Generic
+
+instance (NFData atom, NFData nid) => NFData (CfgNk atom nid)
 
 instance NodeKind CfgNk where
   sucsOfNk (CfgDone _) = []
@@ -191,6 +209,9 @@ data AtomixNk atom nid
                 , state_decision :: !(Decision nid)
                 , ax_pipe_balances :: !(Map Chan Int)
                 }
+  deriving Generic
+
+instance (NFData atom, NFData nid) => NFData (AtomixNk atom nid)
 
 data Dependency
   = RW
@@ -1142,7 +1163,7 @@ cfgToAtomix a = a { auto_graph = state_graph} where
     let nk = AtomixState watoms constrs (AtomixBranch x left right) pipes'' in
     fromCfg left =<< fromCfg right (insertNk nid nk nmap)
 
-  mk_constrs = mk_constraints (auto_inchan a) (auto_outchan a)
+  mk_constrs _ _ _ = Map.empty {- mk_constraints (auto_inchan a) (auto_outchan a) -}
 
 
 
@@ -1292,7 +1313,7 @@ compSched maxCores (AtomixState watoms cstrs d pipes) = AtomixState watoms' cstr
   components :: Partition Int
   components = merge $
                foldl (flip (uncurry union)) init_partition $
-               filter ((/= -1) . fst) $!            -- ignore dependencies on previous states
+               filter ((/= -1) . fst) $            -- ignore dependencies on previous states
                Map.keys $ Map.filter (/= []) cstrs  -- treat all dependencies equally
 
   -- If the number of components is greate than maxCores, repeatedly
@@ -1470,31 +1491,31 @@ automatonPipeline dfs sym inty outty acomp = do
 
   putStrLn "\n>>>>>>>>>> mkAutomaton"
   !a <- simplToCfg <$> mkAutomaton dfs sym channels acomp k
-  putStrLn $ "<<<<<<<<<<< mkAutomaton (" ++ show (size a) ++ " states)"
+  a `deepseq` putStrLn $ "<<<<<<<<<<< mkAutomaton (" ++ show (size a) ++ " states)"
 
   putStrLn ">>>>>>>>>>> fuseActions"
   let !a_f = fuseActions dfs a
-  putStrLn $ "<<<<<<<<<<< fuseActions (" ++ show (size a_f) ++ " states)"
+  a_f `deepseq` putStrLn $ "<<<<<<<<<<< fuseActions (" ++ show (size a_f) ++ " states)"
 
   putStrLn ">>>>>>>>>>> deleteDeadNodes"
   let !a_d = deleteDeadNodes a_f
-  putStrLn $ "<<<<<<<<<<< deleteDeadNodes (" ++ show (size a_d) ++ " states)"
+  a_d `deepseq` putStrLn $ "<<<<<<<<<<< deleteDeadNodes (" ++ show (size a_d) ++ " states)"
 
   putStrLn ">>>>>>>>>>> markSelfLoops"
   let !a_l = markSelfLoops a_d
-  putStrLn $ "<<<<<<<<<<< markSelfLoops (" ++ show (size a_l) ++ " states)"
+  a_l `deepseq` putStrLn $ "<<<<<<<<<<< markSelfLoops (" ++ show (size a_l) ++ " states)"
 
   putStrLn ">>>>>>>>>>> normalize_auto_ids"
   let !a_n = normalize_auto_ids 0 a_l
-  putStrLn $ "<<<<<<<<<<< normalize_auto_ids (" ++ show (size a_n) ++ " states)"
+  a_n `deepseq` putStrLn $ "<<<<<<<<<<< normalize_auto_ids (" ++ show (size a_n) ++ " states)"
 
   putStrLn ">>>>>>>>>>> cfgToAtomix -- this may take a while ..."
   let !a_a = cfgToAtomix a_n
-  putStrLn $ "<<<<<<<<<<< cfgToAtomix (" ++ show (size a_a) ++ " states)"
+  a_a `deepseq` putStrLn $ "<<<<<<<<<<< cfgToAtomix (" ++ show (size a_a) ++ " states)"
 
   putStrLn ">>>>>>>>>>> componentScheduler"
   let !a_s = componentScheduler dfs a_a
-  putStrLn $ "<<<<<<<<<<< componentScheduler (" ++ show (size a_s) ++ " states)"
+  a_s `deepseq` putStrLn $ "<<<<<<<<<<< componentScheduler (" ++ show (size a_s) ++ " states)"
 
   -- dump dot files 
   putStrLn ">>>>>>>>>>> dumping automaton dot files..."
