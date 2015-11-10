@@ -36,11 +36,8 @@ install:
 
 # The script only prints stderr since the build log is too big for Travis CI
 script:
-  - echo " --- STARTING TESTS. Please wait, this can take a while. --- "
-  - COMPILER=$CC make test > /dev/null
-  - echo " --- SUCCESSFULLY RAN MAKE TEST. PEDANTIC TESTS IN PROGRESS. --- "
-  - COMPILER=$CC make test-WiFi-pedantic > /dev/null
-  - echo " --- SUCCESSFULLY RAN PEDANTIC TESTS. THE BUILD SUCCEEDED! --- "
+  - COMPILER=$CC make test > /dev/null 2> /dev/null
+  - COMPILER=$CC make test-WiFi-pedantic > /dev/null 2> /dev/null
 
 notifications:
   email:

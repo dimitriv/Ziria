@@ -19,5 +19,5 @@
 #
 #
 
-ZIRIA_MK_COMMAND="make -B" sh $(dirname $0)/preprocesscompile-makefile.sh $1 $2
+ZIRIA_MK_COMMAND="make -B" bash $(dirname $0)/preprocesscompile-makefile.sh $1 $2
 

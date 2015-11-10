@@ -22,6 +22,7 @@
 set -e
 
 export TOP=$(cd $(dirname $0)/.. && pwd -P)
+
 source $TOP/scripts/common.sh
 
 echo $1
@@ -41,7 +42,7 @@ cp $1.c $TOP/csrc/test.cpp
 # and the object file (if they exist).
 rm -f $TOP/csrc/driver $TOP/csrc/test.o
 
-echo "Compiling C code $(CXX)"
+echo "Compiling C code ($CXX)"
 pushd . && cd $TOP/csrc && eval $ZIRIA_MK_COMMAND
 
 if [[ $# -ge 2 ]] 

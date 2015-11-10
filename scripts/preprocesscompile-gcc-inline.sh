@@ -19,5 +19,5 @@
 #
 #
 
-ZIRIA_MK_COMMAND="make -B -f Makefile.inline" sh $(dirname $0)/preprocesscompile-makefile.sh $1 $2
+ZIRIA_MK_COMMAND="make -B -f Makefile.inline" bash $(dirname $0)/preprocesscompile-makefile.sh $1 $2
 

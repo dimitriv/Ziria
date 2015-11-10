@@ -32,8 +32,9 @@ fi
 
 export WPLCFLAGS="-x --csrc-native=${CSRC_NATIVE} --csrc-posix=${CSRC_POSIX}"
 
-export CC="gcc"
-export CFLAGS="-std=c99 -msse3"
+# I believe this is not required, since it's taken care of in individual Makefiles
+# export CC="gcc"
+# export CFLAGS="-std=c99 -msse3"
 
 if [ "$UNAME" = "Linux" ]
 then
