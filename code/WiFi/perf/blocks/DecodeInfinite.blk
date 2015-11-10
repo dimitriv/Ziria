@@ -37,7 +37,7 @@
 fun comp DecodeInfinite(h : struct HeaderInfo) {
   -- +8 is for CRC (4 bits but byte aligned)
   DemapLimit(0) 
-  >>> {if (h.modulation == M_BPSK) then 
+  >>> standalone[0]{{if (h.modulation == M_BPSK) then 
           DemapBPSK() >>> DeinterleaveBPSK() 
        else 
           if (h.modulation == M_QPSK) then 
@@ -47,6 +47,6 @@ fun comp DecodeInfinite(h : struct HeaderInfo) {
                 DemapQAM16() >>> DeinterleaveQAM16() 
              else 
                 DemapQAM64() >>> DeinterleaveQAM64() 
-      }
-  |>>>| ViterbiInfinite(h.coding,h.modulation) >>> scrambler(default_scrmbl_st)
+      }}
+  |>>>| standalone[1](ViterbiInfinite(h.coding,h.modulation)) >>> standalone[1](scrambler(default_scrmbl_st))
 };
