@@ -69,8 +69,8 @@ void bitArrRead(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPtr
 	}
 
 
-	if (off == 0 && vlen & 7 == 0) {
-		for (int i = 0; i < vlen / 8; i++)
+	if (off == 0 && (vlen & 7) == 0) {
+		for (unsigned int i = 0; i < vlen / 8; i++)
 			tgt[i] = src[sidx + i];
 		return;
 	}
@@ -108,8 +108,8 @@ void bitArrWrite(BitArrPtr src, unsigned int vstart, unsigned int vlen, BitArrPt
   	unsigned char off = vstart & 7;  // Offset (width of carry)
 
 	// Fast copy for aligned pointers
-	if (off == 0 && vlen & 7 == 0) {
-		for (int i = 0; i < vlen / 8; i++)
+	if (off == 0 && (vlen & 7) == 0) {
+		for (unsigned int i = 0; i < vlen / 8; i++)
 			tgt[sidx + i] = src[i];
 		return;
 	}

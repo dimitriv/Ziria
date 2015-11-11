@@ -34,7 +34,7 @@ gcc $DEFINES -I $TOP/lib -w -x c -E $1 >$1.expanded
 
 echo "Running WPL compiler..."
 $WPLC $WPLCFLAGS $EXTRAOPTS -i $1.expanded -o $1.c
-cp $1.c $TOP/csrc/test.c
+cp $1.c $TOP/csrc/test.cpp
 
 
 #echo "Compiling C code (WinDDK) ..."

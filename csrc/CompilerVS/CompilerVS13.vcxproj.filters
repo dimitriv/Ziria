@@ -27,7 +27,7 @@
     <ClCompile Include="..\buf_numerics32.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\driver.c">
+    <ClCompile Include="..\driver.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\ext_arr.c">
@@ -42,13 +42,13 @@
     <ClCompile Include="..\params.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\sora_ext_lib.c">
+    <ClCompile Include="..\sora_ext_lib.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\sora_ext_visual.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\sora_ext_viterbi.c">
+    <ClCompile Include="..\sora_ext_viterbi.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\sora_radio.c">
@@ -60,7 +60,7 @@
     <ClCompile Include="..\sora_threads.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\test.c">
+    <ClCompile Include="..\test.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\utils.c">
@@ -128,19 +128,19 @@
     <ClInclude Include="..\wpl_alloc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\sora_ext_lib_fft.h">
+    <ClInclude Include="..\sora_ext_lib_fft.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\sora_ext_lib_fft_coeffs.h">
+    <ClInclude Include="..\sora_ext_lib_fft_coeffs.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\bladerf_radio.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\fft_r4difx.h">
+    <ClInclude Include="..\fft_r4difx.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\ifft_r4difx.h">
+    <ClInclude Include="..\ifft_r4difx.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\intalglutx.h">

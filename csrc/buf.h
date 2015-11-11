@@ -102,7 +102,7 @@ typedef struct _BufContextBlock {
 	int32 *num_input_buffer;
 	unsigned int num_input_entries;
 	unsigned int num_input_idx;
-	int num_input_repeats;
+	unsigned int num_input_repeats;
 
 	unsigned int num_input_dummy_samples;
 	unsigned int num_max_dummy_samples;

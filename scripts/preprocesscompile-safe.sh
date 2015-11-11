@@ -1,3 +1,4 @@
+#!/bin/bash
 # 
 # Copyright (c) Microsoft Corporation
 # All rights reserved. 
@@ -18,36 +19,5 @@
 #
 #
 
-#!/bin/bash
-
-set -e
-
-export TOP=$(cd $(dirname $0)/.. && pwd -P)
-source $TOP/scripts/common.sh
-
-echo $1
-#echo "Preprocessing..."
-#gcc -x c -P -E $1 >$1.expanded
-gcc $DEFINES -I $TOP/lib -w -x c -E $1 >$1.expanded
-
-
-#echo "Running WPL compiler..."
-$WPLC $WPLCFLAGS $EXTRAOPTS -i $1.expanded -o $1.c
-cp $1.c $TOP/csrc/test.cpp
-
-
-#echo "Compiling C code (WinDDK) ..."
-pushd . && cd $TOP/csrc/CompilerDDK && ./bczcompile-debug.bat
-
-
-if [[ $# -ge 2 ]]
-then
-    popd
-    # cp -f is sometimes not sufficient on cygwin
-    rm -f $2
-    cp -f $DDKDIR/target/amd64/compilerddk.exe $2
-else
-    popd
-fi
-
+ZIRIA_MK_COMMAND="make -B -f Makefile.safe" bash $(dirname $0)/preprocesscompile-makefile.sh $1 $2
 

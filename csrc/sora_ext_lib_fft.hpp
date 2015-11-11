@@ -27,9 +27,9 @@ permissions and limitations under the License.
 	
 #endif
 
-#include "fft_r4difx.h"
-#include "ifft_r4difx.h"
-#include "sora_ext_lib_fft_coeffs.h"
+#include "fft_r4difx.hpp"
+#include "ifft_r4difx.hpp"
+#include "sora_ext_lib_fft_coeffs.hpp"
 
 DSP_INLINE __m128i mul_shiftx(const __m128i &a, const __m128i &b, int nbits_right)
 {

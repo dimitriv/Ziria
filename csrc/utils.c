@@ -28,8 +28,8 @@ void bounds_check(memsize_int siz, memsize_int len, char *msg)
 {
   if (siz <= len) {
     printf("Bounds check violation: %s\n", msg);
-    printf("Size   = %d\n", siz);
-    printf("Access = %d\n", len); 
+    printf("Size   = %llu\n", siz);
+    printf("Access = %llu\n", len); 
     exit(-1);
   }
 }
@@ -40,16 +40,25 @@ FORCE_INLINE
 void blink_copy(void *dst, const void *src, memsize_int siz)
 {
     const unsigned long long margin = 1;
+
+#ifdef __linux__
+    // Allow a performance penalty on Linux
+    // This condition should never be true
     if (ULLONG_MAX - siz - margin <= bytes_copied) {
-	printf("The max size for bytes copied ( %llu ) is exceeded. \n", ULLONG_MAX);
-	exit(-1);
+      printf("The max size for bytes copied ( %llu ) is exceeded. \n", ULLONG_MAX);
+      exit(-1);
     }
+#endif
+
     bytes_copied += (unsigned long long) siz;
+
+// RXCCA definitely has overlapping memories
 #ifdef __linux__
     memmove(dst, src, siz);
 #else
     memcpy(dst, src, siz);
 #endif
+
 }
 
 /**

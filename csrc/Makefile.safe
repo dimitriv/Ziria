@@ -18,45 +18,20 @@
 #
 #
 
-COMPILER ?= gcc
-
-ifeq ($(COMPILER), clang)
 CXX = clang++
-else
-CXX = g++
-endif
 
-CFLAGS = -Wall -Wno-write-strings -Wno-comment
-
-CXXFLAGS = -std=c++11 -Wall -Wno-unused-label -Wno-unused-variable -Wno-attributes -Wno-comment
-
+# Ignore all warnings in inlined version
+CXXFLAGS = -std=c++11 -msse3 -w -pipe -fwhole-program -fsanitize=integer,undefined,alignment,bool,bounds,enum,function,null,object-size,return,shift,signed-integer-overflow,unreachable,float-cast-overflow,float-divide-by-zero,integer-divide-by-zero,nonnull-attribute,null,returns-nonnull-attribute,vla-bound,vptr
 LIBS = -lm
 OBJDIR = .
-
-OBJ_INT = bit.o numerics.o params.o test.o driver.o wpl_alloc.o utils.o
-OBJ_IO  = buf_bit.o buf_chunk.o buf_numerics8.o buf_numerics32.o buf_numerics16.o
-OBJ_LIB = 
-OBJ_EXT = ext_math.o ext_arr.o sora_ext_viterbi.o
-
-# lut test.cpp only contains a main function but has to be linked with everything
-OBJ_LUT_ONLY = bit.o numerics.o test.o wpl_alloc.o utils.o
 
 EXECUTABLE = driver
 LUT_EXECUTABLE = lutexec
 
 all : driver
 
-driver : $(OBJ_INT) $(OBJ_IO) $(OBJ_LIB) $(OBJ_EXT)
-	$(CXX) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
-
-lutexec: $(OBJ_LUT_ONLY) $(OBJ_LIB) $(OBJ_EXT)
-	$(CXX) $(EXTRACOPTS) -o $(LUT_EXECUTABLE) $+ $(LIBS)
-
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-%.o: %.c
-	$(CXX) $(CFLAGS) -c $< -o $@
+driver : Wrapper.cpp
+	$(CXX) $(CXXFLAGS) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
 
 clean:
 	-rm -f *.o ./*/*.o

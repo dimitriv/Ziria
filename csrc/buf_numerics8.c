@@ -57,7 +57,7 @@ unsigned int parse_dbg_int8(char *dbg_buf, int8 *target)
 
 	target[i++] = (num8)val;
 
-	while (s = strtok(NULL, ","))
+	while ((s = strtok(NULL, ",")))
 	{
 		val = strtol(s, NULL, 10);
 		if (errno == EINVAL)
@@ -184,8 +184,9 @@ GetStatus _buf_getint8(BlinkParams *params, BufContextBlock *blk, int8 *x)
 
 GetStatus buf_getint8(BlinkParams *params, BufContextBlock *blk, int8 *x)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in++;
 	return _buf_getint8(params, blk, x);
 }
@@ -233,8 +234,9 @@ GetStatus _buf_getarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, un
 
 GetStatus buf_getarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigned int vlen)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in += vlen;
 	return _buf_getarrint8(params, blk, x, vlen);
 }
@@ -251,8 +253,9 @@ void init_getcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBloc
 
 GetStatus buf_getcomplex8(BlinkParams *params, BufContextBlock *blk, complex8 *x)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in++;
 	if (params->inType == TY_DUMMY || params->inType == TY_FILE || params->inType == TY_MEM)
 	{
@@ -278,8 +281,9 @@ GetStatus buf_getcomplex8(BlinkParams *params, BufContextBlock *blk, complex8 *x
 
 GetStatus buf_getarrcomplex8(BlinkParams *params, BufContextBlock *blk, complex8 *x, unsigned int vlen)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in += vlen;
 	if (params->inType == TY_DUMMY || params->inType == TY_FILE || params->inType == TY_MEM)
 	{
@@ -408,8 +412,9 @@ void _buf_putint8(BlinkParams *params, BufContextBlock *blk, int8 x)
 void buf_putint8(BlinkParams *params, BufContextBlock *blk, int8 x)
 {
 	blk->total_out ++;
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	_buf_putint8(params, blk, x);
 }
 
@@ -473,8 +478,9 @@ void _buf_putarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigne
 void buf_putarrint8(BlinkParams *params, BufContextBlock *blk, int8 *x, unsigned int vlen)
 {
 	blk->total_out += vlen;
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	_buf_putarrint8(params, blk, x, vlen);
 }
 
@@ -559,8 +565,9 @@ void init_putcomplex8(BlinkParams *params, BufContextBlock *blk, HeapContextBloc
 void buf_putcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 x)
 {
 	blk->total_out ++;
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 
 	if (params->outType == TY_DUMMY) return;
 
@@ -581,8 +588,9 @@ void buf_putcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 
 void buf_putarrcomplex8(BlinkParams *params, BufContextBlock *blk, struct complex8 *x, unsigned int vlen)
 {
 	blk->total_out += vlen;
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 
 	if (params->outType == TY_DUMMY || params->outType == TY_FILE || params->outType == TY_MEM)
 	{
@@ -637,7 +645,7 @@ unsigned int parse_dbg_uint8(char *dbg_buf, uint8 *target)
 
 	target[i++] = (uint8)val;
 
-	while (s = strtok(NULL, ","))
+	while ((s = strtok(NULL, ",")))
 	{
 		val = strtoul(s, NULL, 10);
 		if (errno == EINVAL)
@@ -764,8 +772,9 @@ GetStatus _buf_getuint8(BlinkParams *params, BufContextBlock *blk, uint8 *x)
 
 GetStatus buf_getuint8(BlinkParams *params, BufContextBlock *blk, uint8 *x)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in++;
 	return _buf_getuint8(params, blk, x);
 }
@@ -813,8 +822,9 @@ GetStatus _buf_getarruint8(BlinkParams *params, BufContextBlock *blk, uint8 *x, 
 
 GetStatus buf_getarruint8(BlinkParams *params, BufContextBlock *blk, uint8 *x, unsigned int vlen)
 {
-	if (params->timeStampAtRead)
+	if (params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	blk->total_in += vlen;
 	return _buf_getarruint8(params, blk, x, vlen);
 }
@@ -933,8 +943,9 @@ void _buf_putuint8(BlinkParams *params, BufContextBlock *blk, uint8 x)
 void buf_putuint8(BlinkParams *params, BufContextBlock *blk, uint8 x)
 {
 	blk->total_out ++;
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	_buf_putuint8(params, blk, x);
 }
 
@@ -998,8 +1009,9 @@ void _buf_putarruint8(BlinkParams *params, BufContextBlock *blk, uint8 *x, unsig
 void buf_putarruint8(BlinkParams *params, BufContextBlock *blk, uint8 *x, unsigned int vlen)
 {
 	blk->total_out += vlen;
-	if (!params->timeStampAtRead)
+	if (!params->timeStampAtRead) {
 		write_time_stamp(params);
+  }
 	_buf_putarruint8(params, blk, x, vlen);
 }
 

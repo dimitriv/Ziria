@@ -81,10 +81,10 @@ MSC_OPTIMIZATION=/O2
 ## Build cannot build source files from multiple directories!
 ## This is a fast build script with no inlining
 SOURCES     = \
-	     ..\sora_ext_lib.c \
-	     ..\sora_ext_viterbi.c \
+	     ..\sora_ext_lib.cpp \
+	     ..\sora_ext_viterbi.cpp \
              ..\params.c \
-	     ..\driver.c \
+	     ..\driver.cpp \
 	     ..\bit.c \
              ..\wpl_alloc.c \
              ..\utils.c \
@@ -101,4 +101,4 @@ SOURCES     = \
 	     ..\sora_ext_visual.c \
 	     ..\sora_radio.c \
 	     ..\sora_ip.c \
-	     ..\test.c
+	     ..\test.cpp

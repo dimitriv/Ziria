@@ -7,7 +7,7 @@
 cabal.sandbox.config
 tmp
 playground
-csrc/test.c
+csrc/test.cpp
 csrc/Threads/backup
 Code/802.11a/receiver/*.c
 Code/802.11a/receiver/*.exe
@@ -189,7 +189,7 @@ doc/*/*.pdf
 /_tests/*/compout
 /_tests/*/perfout
 /_tests/*/*outfile
-/csrc/test.c
+/csrc/test.cpp
 /tools/BlinkDiff*
 code/WiFi/receiver/*.c
 code/WiFi/receiver/*.exe

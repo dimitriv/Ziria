@@ -18,8 +18,8 @@
 */
 
 #include "../sora_ip.c"
-#include "../sora_ext_lib.c"
-#include "../sora_ext_viterbi.c"
+#include "../sora_ext_lib.cpp"
+#include "../sora_ext_viterbi.cpp"
 #include "../params.c"
 #include "../bit.c"
 #include "../wpl_alloc.c"
@@ -38,7 +38,7 @@
 #include "../utils.c"
 #include "mac_1thread.c"
 #include "mac_2threads.c"
-#include "driver.c"
+#include "driver.cpp"
 #include "tx.c"
 #include "rx.c"
 

@@ -295,20 +295,18 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
 
 
 void print_blink_usage() {
-  int i = 0;
   fprintf(stdout,"Usage: <cmd> OPTS...\n");
   fprintf(stdout,"OPTS\n");
-  while (i < sizeof(paramTable)/sizeof(BlinkParamInfo)) {
+  for (unsigned int i = 0; i < sizeof(paramTable)/sizeof(BlinkParamInfo); i++) {
     fprintf(stdout,"%s\n", paramTable[i].param_use);
     fprintf(stdout,"\t%s\n", paramTable[i].param_descr);
     fprintf(stdout,"\tDefault: %s\n", paramTable[i].param_dflt);
-    i++; 
   }
 }
 
 
 void try_parse_args(BlinkParams *params, int argc, char ** argv) {
-  int pi; 
+  unsigned int pi; 
   if (argc <= 1) {
     print_blink_usage();
     exit(1); 

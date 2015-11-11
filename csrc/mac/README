@@ -3,7 +3,7 @@ This is avery simple example whose purpose is to illustrate how mutliple
 Ziria PHY pipelines can be stages within a custom C code. 
 
 *** NOTE: We use all library functions from csrc. The files in this
-directory only replace the driver files (driver.c and params.c).
+directory only replace the driver files (driver.cpp and params.c).
 
 This MAC runs two Ziria pipelines: rx.zir and tx.zir (the Ziria source
 code for these files is in tests/mac, and the whole code should be

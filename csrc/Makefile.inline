@@ -18,8 +18,16 @@
 #
 #
 
-CC = g++
-CFLAGS = -std=c++11 -msse3 -Wno-attributes -Wno-write-strings -Og # -O2 -pipe -fno-aggressive-loop-optimizations
+COMPILER ?= gcc
+
+ifeq ($(COMPILER), clang)
+CXX = clang++
+else
+CXX = g++
+endif
+
+# Ignore all warnings in inlined version
+CXXFLAGS = -std=c++11 -msse3 -w -O3 -pipe -fwhole-program
 LIBS = -lm 
 OBJDIR = .
 
@@ -28,15 +36,12 @@ LUT_EXECUTABLE = lutexec
 
 all : driver
 
-driver : WrapperGCC.o
-	$(CC) $(CFLAGS) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
+driver : Wrapper.cpp
+	$(CXX) $(CXXFLAGS) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
 
-lutexec: WrapperGCC.o buf_numerics8.o buf_numerics16.o buf_numerics32.o
-	$(CC) $(EXTRACOPTS) -o $(LUT_EXECUTABLE) $+ $(LIBS)
-
-WrapperGCC.o: WrapperGCC.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
+#lutexec: WrapperGCC.o buf_numerics8.o buf_numerics16.o buf_numerics32.o
+#	$(CC) $(EXTRACOPTS) -o $(LUT_EXECUTABLE) $+ $(LIBS)
+#
 #buf_numerics8.o: buf_numerics8.c
 #	$(CC) $(CFLAGS) -c $< -o $@
 #

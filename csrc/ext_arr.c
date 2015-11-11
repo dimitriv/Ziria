@@ -124,7 +124,7 @@ int32 __ext_bits_to_int8(int8* arrout, int lengthout, BitArrPtr arrin, int lengt
 
 int32 __ext_int8_to_bits(BitArrPtr arrout, int lengthout, int8* arrin, int lengthin)
 {
-	lengthout = lengthin * 8;
+	lengthout = lengthin * 8; // Should this value be assigned at all? It's not being used.
 	memcpy((void *)arrout, (void*)arrin, lengthin*sizeof(int8));
 	return 0;
 }

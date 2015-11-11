@@ -258,8 +258,8 @@ BOOLEAN __stdcall go_thread(void * pParam)
 	return false;
 }
 
-// Default method. This gets called from test.c when there is only one thread.
-// Otherwise, test.c created its own thread functions 
+// Default method. This gets called from test.cpp when there is only one thread.
+// Otherwise, test.cpp created its own thread functions 
 // and store them in User_Routines array
 // These get started from the main 
 // Returns the numer of threads 

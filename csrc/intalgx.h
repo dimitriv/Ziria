@@ -55,7 +55,7 @@ unsigned char bit_scope_ub (unsigned char x) {
 FINL
 unsigned char bit_scope_us (unsigned short x) {
 	unsigned char tt;
-	if ( tt = (x >> 8) ) {
+	if ((tt = (x >> 8))) {
 		return bit_scope_ub (tt) + 8;
 	} else {
 		return bit_scope_ub ((unsigned char)(x));
@@ -65,7 +65,7 @@ unsigned char bit_scope_us (unsigned short x) {
 FINL
 unsigned char bit_scope_ui (unsigned int x) {
 	unsigned short tt;
-	if ( tt = (x >> 16) ) {
+	if ((tt = (x >> 16))) {
 		return bit_scope_us (tt) + 16;
 	} else {
 		return bit_scope_us ((unsigned short)(x));

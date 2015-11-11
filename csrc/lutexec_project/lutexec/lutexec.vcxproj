@@ -79,7 +79,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\bit.c" />
     <ClCompile Include="..\..\numerics.c" />
-    <ClCompile Include="..\..\test.c" />
+    <ClCompile Include="..\..\test.cpp" />
     <ClCompile Include="..\..\utils.c" />
   </ItemGroup>
   <ItemGroup>
