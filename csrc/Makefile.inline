@@ -22,11 +22,11 @@ COMPILER ?= gcc
 
 ifeq ($(COMPILER), clang)
 CXX = clang++
-CXXFLAGS = -std=c++11 -msse3 -w -pipe
 else
 CXX = g++
-CXXFLAGS = -std=c++11 -msse3 -w -pipe -O3 -fwhole-program
 endif
+
+CXXFLAGS = -std=c++11 -msse3 -w -pipe -O3 -fwhole-program
 
 LIBS = -lm 
 

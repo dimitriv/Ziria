@@ -80,7 +80,7 @@ cgLetBind dfs loc x e m = do
     _          -> do 
       x_name <- genSym $ name x ++ getLnNumInStr loc
       let ty = ctExp e
-      appendCodeGenDeclGroup x_name ty ZeroOut   
+      appendCodeGenDeclGroupEscape x_name ty ZeroOut   
       let cx = [cexp| $id:x_name|]
       assignByVal ty cx ce
       extendVarEnv [(x,cx)] m
@@ -433,7 +433,7 @@ cgArrVal_val _ _ t@(TArray _ TBit) vs = do
    snm <- freshName "__bit_arr" t Mut
    let csnm = [cexp| $id:(name snm)|]
    let inits = cgBitValues vs
-   appendCodeGenDeclGroup (name snm) t (InitWith inits)
+   appendCodeGenDeclGroupEscape (name snm) t (InitWith inits)
    return csnm
 
 cgArrVal_val _dfs loc t@(TArray _ _) ws
@@ -497,7 +497,7 @@ cgArrVal_exp :: DynFlags -> SrcLoc -> Ty -> [Exp] -> Cg C.Exp
 cgArrVal_exp dfs loc t@(TArray _ _tbase) es = do
    snm <- freshName "__exp_arr" t Mut
    let csnm = [cexp| $id:(name snm)|]
-   appendCodeGenDeclGroup (name snm) t ZeroOut
+   appendCodeGenDeclGroupEscape (name snm) t ZeroOut
    extendVarEnv [(snm,csnm)] $ do 
      _ <- zipWithM (\e i -> codeGenExp dfs (eAssign loc (lhs snm i) e)) es [0..]
      return csnm
