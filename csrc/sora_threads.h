@@ -27,6 +27,13 @@
 struct thread_info {
 	int threadID;
 	bool fRunning;
+
+	int numberOfUsers;
+	ULONGLONG ttLastUpdate;
+
+	int onCycle;
+	int offCycle;
+	int algorithm;
 };
 
 

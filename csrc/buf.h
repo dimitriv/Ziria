@@ -129,6 +129,11 @@ typedef struct _BufContextBlock {
 	// General statistics
 	unsigned long total_in, total_out;		// Total number of data inputs read/written
 	size_t size_in, size_out;				// Size of input and output data type (in bits)
+
+	int oncyle;
+	int offcyle;
+	int algorithm;
+	int counter = 0;
 } BufContextBlock;
 
 
