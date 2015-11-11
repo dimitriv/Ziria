@@ -36,7 +36,8 @@ import Text.ParserCombinators.Parsec.Char        (digit, space, string, anyChar)
 data RadioMode = TX | RX deriving (Read, Show, Eq, Ord)
 
 -- | Data type holding the test results
-data TestResult = TestResult { timeElapsed :: Double
+data TestResult = TestResult { dummySamples :: Double
+                             , timeElapsed :: Double
                              , bytesCopied :: Double
 			     , mode :: RadioMode
 			     , bitrate :: Double
@@ -70,7 +71,7 @@ parseTestResult = do
   string ".out --input=dummy \\\n"
   many space
   string "--dummy-samples="
-  many1 digit
+  ds <- many1 digit
   string " \\\n"
   many space
   string "--output=dummy"
@@ -84,7 +85,8 @@ parseTestResult = do
   sign <- optional $ char '-'
   bc <- many1 digit
   -- char '\n'
-  return $ TestResult (read te :: Double)
+  return $ TestResult (read ds :: Double)
+                      (read te :: Double)
                       (read bc :: Double)
 		      (read mode :: RadioMode)
 		      (read bitrate :: Double)
@@ -107,8 +109,8 @@ parseFile file = do
 -- | Grab performance numbers, where performance is determined
 -- by (bytesCopied / timeElapsed). Higher is better.
 getPerformance :: [[TestResult]] -> [[(Double, String)]]
-getPerformance = map (map ((\(t,b,m,r) -> ((b / t), (show m ++ show r)))
-	       . (\x -> (timeElapsed x, bytesCopied x, mode x, bitrate x))))
+getPerformance = map (map ((\(d,t,m,r) -> ((d / t), (show m ++ show r)))
+	       . (\x -> (dummySamples x, timeElapsed x, mode x, bitrate x))))
 
 -- END PARSER
 -------------------------------------------------------------------------------
@@ -146,7 +148,7 @@ layout title pb labels =
   $ layout_x_axis . laxis_generate .~ autoIndexAxis labels
   $ layout_y_axis . laxis_override .~ axisGridHide
   $ layout_left_axis_visibility . axis_show_ticks .~ False
-  $ layout_y_axis . laxis_title .~ "Throughput -- higher is better"
+  $ layout_y_axis . laxis_title .~ "Throughput in Mbps"
   $ def
 
 -- | First plot

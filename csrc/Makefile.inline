@@ -22,34 +22,20 @@ COMPILER ?= gcc
 
 ifeq ($(COMPILER), clang)
 CXX = clang++
+CXXFLAGS = -std=c++11 -msse3 -w -pipe
 else
 CXX = g++
+CXXFLAGS = -std=c++11 -msse3 -w -pipe -O3 -fwhole-program
 endif
 
-# Ignore all warnings in inlined version
-CXXFLAGS = -std=c++11 -msse3 -w -O3 -pipe -fwhole-program
 LIBS = -lm 
-OBJDIR = .
 
 EXECUTABLE = driver
-LUT_EXECUTABLE = lutexec
 
 all : driver
 
 driver : Wrapper.cpp
 	$(CXX) $(CXXFLAGS) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
-
-#lutexec: WrapperGCC.o buf_numerics8.o buf_numerics16.o buf_numerics32.o
-#	$(CC) $(EXTRACOPTS) -o $(LUT_EXECUTABLE) $+ $(LIBS)
-#
-#buf_numerics8.o: buf_numerics8.c
-#	$(CC) $(CFLAGS) -c $< -o $@
-#
-#buf_numerics16.o: buf_numerics16.c
-#	$(CC) $(CFLAGS) -c $< -o $@
-#
-#buf_numerics32.o: buf_numerics32.c
-#	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
 	-rm -f *.o ./*/*.o
