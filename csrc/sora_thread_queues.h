@@ -170,12 +170,14 @@ barr_hist2 = state + 2;
 }
 */
 
-
 #ifdef _VISUALIZE
 #include "cvmarkers.h"
 #include "cvmarkersobj.h"
 using namespace Concurrency::diagnostic;
 marker_series series;
+
+#define NEWSPAN(x,y) \
+	new span(series,x,y)
 #endif 
 
 
@@ -193,7 +195,7 @@ inline void barrier(LONG volatile *___state, int no_threads, int thr)
 {   // we are not really using the ___state any more
 
 #ifdef _VISUALIZE
-	span *fooSpan = new span(series, 1, "spinwait");
+	// span *fooSpan = new span(series, 1, "spinwait");
 	// series.write_flag("Spin wait time:");
 #endif
 
@@ -233,9 +235,63 @@ inline void barrier(LONG volatile *___state, int no_threads, int thr)
 		while (!ok[thr]);
 	}
 #ifdef _VISUALIZE
-	delete fooSpan;
+	// delete fooSpan;
 #endif
 
+}
+
+
+MEM_ALIGN(ST_CACHE_LINE) static volatile SHORT condok[MAXPOSSIBLETHREADS] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+inline int barriercond(volatile unsigned char *cond, LONG volatile *___state, int no_threads, int thr)
+{   // we are not really using the ___state any more
+
+#ifdef _VISUALIZE
+	// span *fooSpan = new span(series, 5, "s");
+	// series.write_flag("Spin wait time:");
+#endif
+
+	if (thr == 0)
+	{
+		// If we are the master controller then we spin-wait for every thread 
+		// to increment their counter
+
+		while (thr_cnt < no_threads - 1);
+
+		// At this point thr_cnt = no_threads-1, so all other threads must be 
+		// spinning. Hence, safe to zero-out thr_cnt as no-one is looking at it.
+		thr_cnt = 0;
+		SHORT mycond = *cond;
+		// NB: Here we are missing a MemoryBarrier() for ARM (but we're OK for x64)
+		// One by one, unleash other threads
+		for (int i = 1; i < no_threads; i++)
+		{
+#ifdef _DEBUG
+			// Assertion: all threads must be spinning here.
+			if (condok[i] >= 0) __debugbreak();
+#endif
+			condok[i] = *cond;
+		}
+		return mycond;
+	}
+	else
+	{
+		// All other threads reach here, set their flag to false and busy-wait
+#ifdef _DEBUG
+		// Assert that if you ever reach here is because 
+		// someone woke you up previously ... sigh or it's the first time 
+//		if (condok[thr] == -1) __debugbreak();
+#endif
+		condok[thr] = -1;
+		// Atomically increment thr_cnt (NB: generates a barrier)
+		InterlockedIncrement(&thr_cnt);
+
+		while (condok[thr] < 0);
+		return condok[thr];
+	}
+#ifdef _VISUALIZE
+	// delete fooSpan;
+#endif
 }
 
 #endif

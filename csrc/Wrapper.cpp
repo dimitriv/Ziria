@@ -21,7 +21,7 @@
 #define INLINE_COMPILATION 1
 
 
-/* #define _VISUALIZE 1  */
+#define _VISUALIZE 1
 
 #ifdef _VISUALIZE
 #include "tchar.h"

@@ -554,16 +554,50 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
      let perfid_start = perfCntId "start" nid atid
      let perfid_end   = perfCntId "end"   nid atid
      let perfid_elaps = perfCntId "elaps" nid atid 
-     appendTopDecl [cdecl| $ty:(namedCType "LARGE_INTEGER") $id:perfid_start;|]
-     appendTopDecl [cdecl| $ty:(namedCType "LARGE_INTEGER") $id:perfid_end;|]
-     appendTopDecl [cdecl| $ty:(namedCType "LARGE_INTEGER") $id:perfid_elaps;|]
+     let state_count  = perfCntId "count" nid atid
+     -- let perfid_maxelaps = perfCntId "max_elaps" nid atid 
+     -- let perfid_minelaps = perfCntId "min_elaps" nid atid 
+     let perfid_diff     = perfCntId "diff" nid atid
+
+     let ilarge = namedCType "LARGE_INTEGER"
+
+     appendTopDecl [cdecl| $ty:ilarge $id:perfid_start;|]
+     appendTopDecl [cdecl| $ty:ilarge $id:perfid_end;|]
+     appendTopDecl [cdecl| $ty:ilarge $id:perfid_elaps;|]
+     appendTopDecl [cdecl| $ty:ilarge $id:state_count;|]
+
+     -- appendTopDecl [cdecl| $ty:ilarge $id:perfid_minelaps = { _I64_MAX };|]
+     -- appendTopDecl [cdecl| $ty:ilarge $id:perfid_maxelaps = { 0 };|]
+     appendTopDecl [cdecl| $ty:ilarge $id:perfid_diff;|]
+
+     addFinalizerStmt [cstm|printf("Thread %d, State %d, entered = %lld times\n",
+                               $int:atid,$int:nid,$id:state_count.QuadPart);|]
      addFinalizerStmt [cstm|printf("%s = %lld\n", $string:perfid_elaps, $id:perfid_elaps.QuadPart);|]
+     -- addFinalizerStmt [cstm|printf("%s = %lld\n", $string:perfid_maxelaps, $id:perfid_maxelaps.QuadPart);|]
+     -- addFinalizerStmt [cstm|printf("%s = %lld\n", $string:perfid_minelaps, $id:perfid_minelaps.QuadPart);|]
+
      inAllocFrame' frameVar noLoc $ 
         pushAllocFrame $ do 
-          appendStmt[cstm| QueryPerformanceCounter(&$id:perfid_start);|]
+          -- sp <- freshVar "sp"
+          -- appendDecl [cdecl| $ty:(namedCType "span")* $id:sp;|]
+          -- appendStmt [cstm| $id:sp = NEWSPAN($int:nid,"Work");|]
+          appendStmt [cstm| $id:state_count.QuadPart++;|]
+          appendStmt [cstm| QueryPerformanceCounter(&$id:perfid_start);|]
           mapM_ (cgCallAtomGroup dfs c queues) (groupAtoms atoms)
-          appendStmt[cstm| QueryPerformanceCounter(&$id:perfid_end);  |]
-          appendStmt[cstm| $id:perfid_elaps.QuadPart += $id:perfid_end.QuadPart - $id:perfid_start.QuadPart;|]
+          appendStmt [cstm| QueryPerformanceCounter(&$id:perfid_end);  |]
+          appendStmts [cstms| 
+              $id:perfid_diff.QuadPart = $id:perfid_end.QuadPart - $id:perfid_start.QuadPart;
+              $id:perfid_elaps.QuadPart += $id:perfid_diff.QuadPart;|]
+          -- appendStmts [cstms|
+          --     if ($id:perfid_minelaps.QuadPart > $id:perfid_diff.QuadPart) 
+          --     { 
+          --        $id:perfid_minelaps.QuadPart = $id:perfid_diff.QuadPart;
+          --     }
+          --     if ($id:perfid_maxelaps.QuadPart < $id:perfid_diff.QuadPart)
+          --     { 
+          --        $id:perfid_maxelaps.QuadPart = $id:perfid_diff.QuadPart;
+          --     }|]
+          -- appendStmt[cstm| delete($id:sp);|]
      cg_decision c nid decision
 
    cg_decision c nid AtomixDone
@@ -597,20 +631,37 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
             } else {
                 goto $id:(lblOfNid r); 
             }|]
-       else
-         let barrstmt _kn  
-               = -- if _kn == nid then [cstm|UNIT;|]
-                 -- else 
-                 [cstm|barrier($id:(barr_name2 nid), $int:no_threads, $int:c);|] 
-         in appendStmts [cstms|
-              barrier($id:(barr_name nid), $int:no_threads, $int:c);
-              if ($cc) {
-                $stm:(barrstmt l);
-                goto $id:(lblOfNid l); 
-              } else {
-                $stm:(barrstmt r);
-                goto $id:(lblOfNid r); 
-              }|]
+       else do { localcc <- freshVar "cond"
+               ; appendDecl [cdecl| $ty:(namedCType "SHORT") $id:localcc;|]
+
+               ; let ilarge = namedCType "LARGE_INTEGER"
+
+               ; let perfid_start = perfCntId "barrier_start" nid atid
+               ; let perfid_end   = perfCntId "barrier_end"   nid atid
+               ; let perfid_elaps = perfCntId "barrier_elaps" nid atid 
+               ; appendTopDecl [cdecl| $ty:ilarge $id:perfid_start;|]
+               ; appendTopDecl [cdecl| $ty:ilarge $id:perfid_end;|]
+               ; appendTopDecl [cdecl| $ty:ilarge $id:perfid_elaps;|]
+               ; addFinalizerStmt [cstm|printf("%s = %lld\n", $string:perfid_elaps, $id:perfid_elaps.QuadPart);|]
+               ; appendStmt[cstm| QueryPerformanceCounter(&$id:perfid_start);|]
+
+               ; appendStmt [cstm|
+                      $id:localcc = barriercond(
+                                     &($cc),
+                                     $id:(barr_name2 nid), 
+                                     $int:no_threads, $int:c); |]
+
+               ; appendStmt[cstm| QueryPerformanceCounter(&$id:perfid_end);  |]
+               ; appendStmt[cstm| 
+                   $id:perfid_elaps.QuadPart += $id:perfid_end.QuadPart - $id:perfid_start.QuadPart;|]
+
+
+               ; appendStmt [cstm| if ($id:localcc) {
+                              goto $id:(lblOfNid l); 
+                                   } else {
+                              goto $id:(lblOfNid r); 
+                              } |]
+               }
 
    -- DV: I believe this is obsolete and only had to do with the old 
    -- barrier implementation: 

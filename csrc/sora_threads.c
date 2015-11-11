@@ -263,8 +263,8 @@ bool StartWinUThread(int no_threads, PWIN_UTHREAD_PROC *function,
 			}
 
 			// The one below requires Admin priviledges and it is dangerous for threads that don't yield
-			//if (SetPriorityClass(GetCurrentProcess(), REALTIME_PRIORITY_CLASS) == 0)
-			if (SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS) == 0)
+			if (SetPriorityClass(GetCurrentProcess(), REALTIME_PRIORITY_CLASS) == 0)
+			// if (SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS) == 0)
 			{
 				printf("Not able to set priority class: 0x%x\nTry running as Administrator\n", GetLastError());
 			}
@@ -272,6 +272,7 @@ bool StartWinUThread(int no_threads, PWIN_UTHREAD_PROC *function,
 			DWORD dwPriClass = GetPriorityClass(GetCurrentProcess());
 			printf("Current priority class is 0x%x\n", dwPriClass);
 
+			
 			if (SetThreadPriority(hThread, THREAD_PRIORITY_TIME_CRITICAL) == 0)
 			{
 				printf("Failed to set priority: 0x%x\n", GetLastError());
@@ -291,7 +292,10 @@ bool StartWinUThread(int no_threads, PWIN_UTHREAD_PROC *function,
 		init_ok = init_ok && (hThread != NULL);
 	}
 
+	LARGE_INTEGER cstart;
+	LARGE_INTEGER cend;
 
+	QueryPerformanceCounter(&cstart);
 	// Start measuring time
 	*ttstart = SoraGetCPUTimestamp(tsinfo);
 
@@ -344,9 +348,13 @@ bool StartWinUThread(int no_threads, PWIN_UTHREAD_PROC *function,
 		printf("Initialization error: couldn't start a thread!\n");
 	}
 
+	QueryPerformanceCounter(&cend);
 
 	// Stop measuring time
 	*ttend = SoraGetCPUTimestamp(tsinfo);
+
+	printf("QueryPerformanceCounter = %lld\n", cend.QuadPart - cstart.QuadPart);
+
 
 	for (int thr = 0; thr < no_threads; thr++)
 	{

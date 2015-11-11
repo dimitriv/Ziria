@@ -52,8 +52,8 @@ fun comp ReceiverInfinite(hinfo : struct HeaderInfo) {
   let params = computeParams();
 
   (downSample() 
-       >>> DataSymbol(0) >>> standalone[0](FFT()) >>> standalone[1](ChannelEqualization(params))
-       >>> standalone[1](PilotTrack())
-       >>> standalone[1](GetData())
+       >>> DataSymbol(0) >>> standalone[0](FFT()) >>> standalone[0](ChannelEqualization(params))
+       >>> standalone[0](PilotTrack())
+       >>> standalone[0](GetData())
        >>> receiveBits(hinfo))
 };
