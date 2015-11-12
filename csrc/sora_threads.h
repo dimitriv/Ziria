@@ -28,12 +28,14 @@ struct thread_info {
 	int threadID;
 	bool fRunning;
 
-	int numberOfUsers;
 	ULONGLONG ttLastUpdate;
 
 	int onCycle;
 	int offCycle;
+	int interval;
 	int algorithm;
+	bool updated;
+	CRITICAL_SECTION critSec;
 };
 
 
