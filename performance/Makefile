@@ -36,6 +36,12 @@ gcc:
 vs:
 	sh $(SS) vs
 
+clang:
+	sh $(SS) clang
+
+safe:
+	sh $(SS) safe
+
 winddk:
 	sh $(SS) winddk
 

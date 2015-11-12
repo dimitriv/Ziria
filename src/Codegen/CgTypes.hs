@@ -29,6 +29,8 @@ module CgTypes ( bwBitWidth
                , HowToInit ( .. ), isInitWith 
                , codeGenDeclGroup
                , appendCodeGenDeclGroup
+	       , codeGenDeclGroupEscape
+	       , appendCodeGenDeclGroupEscape
                , codeGenDeclVolGroup
                , codeGenFieldDeclGroup
                , codeGenDeclDef
@@ -397,10 +399,11 @@ codeGenDeclGroup_qual quals v ty mb_init
   = return $ DeclPkg (cgDeclStatic quals v ty mb_init) []
 
 -- | codeGenDeclGroup wrappers
-codeGenDeclGroup, codeGenDeclVolGroup :: CVar -> Ty -> HowToInit 
-                                      -> Cg (DeclPkg C.InitGroup)
-codeGenDeclGroup    = codeGenDeclGroup_qual "calign"
-codeGenDeclVolGroup = codeGenDeclGroup_qual "volatile"
+codeGenDeclGroup, codeGenDeclGroupEscape, codeGenDeclVolGroup
+  :: CVar -> Ty -> HowToInit -> Cg (DeclPkg C.InitGroup)
+codeGenDeclGroup       = codeGenDeclGroup_qual "calign"
+codeGenDeclGroupEscape = codeGenDeclGroup_qual "calign static"
+codeGenDeclVolGroup    = codeGenDeclGroup_qual "volatile"
 
 -- | Init group to definitions
 codeGenDeclDef :: CVar -> Ty -> HowToInit -> Cg (DeclPkg C.Definition)
@@ -409,10 +412,17 @@ codeGenDeclDef v ty minit = do
   return $ DeclPkg (initGroupDef ig) stms
 
 
-appendCodeGenDeclGroup :: CVar -> Ty -> HowToInit -> Cg ()
 -- | Append declaration and initialization in the current block
+appendCodeGenDeclGroup :: CVar -> Ty -> HowToInit -> Cg ()
 appendCodeGenDeclGroup x ty minit = do
   (DeclPkg ig stms) <- codeGenDeclGroup x ty minit
+  appendDecl ig
+  appendStmts stms
+
+-- | Append declaration and initialization statically in the current block
+appendCodeGenDeclGroupEscape :: CVar -> Ty -> HowToInit -> Cg ()
+appendCodeGenDeclGroupEscape x ty minit = do
+  (DeclPkg ig stms) <- codeGenDeclGroupEscape x ty minit
   appendDecl ig
   appendStmts stms
 

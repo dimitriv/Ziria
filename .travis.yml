@@ -8,10 +8,16 @@ dist: trusty
 matrix:
   fast_finish: true
   include:
-    - env: CABALVER=1.22 GHCVER=7.8.4 ALEXVER=3.1.4 HAPPYVER=1.19.5 COMPILER=gcc
+    - env: CABALVER=1.22 GHCVER=7.8.4 ALEXVER=3.1.4 HAPPYVER=1.19.5 COMPILER=gcc TRAVIS_TEST=normal
       compiler: gcc
       addons: {apt: {packages: [alex-3.1.4,happy-1.19.5,cabal-install-1.22,ghc-7.8.4], sources: [hvr-ghc]}}
-    - env: CABALVER=1.22 GHCVER=7.8.4 ALEXVER=3.1.4 HAPPYVER=1.19.5 COMPILER=clang
+    - env: CABALVER=1.22 GHCVER=7.8.4 ALEXVER=3.1.4 HAPPYVER=1.19.5 COMPILER=gcc TRAVIS_TEST=pedantic
+      compiler: gcc
+      addons: {apt: {packages: [alex-3.1.4,happy-1.19.5,cabal-install-1.22,ghc-7.8.4], sources: [hvr-ghc]}}
+    - env: CABALVER=1.22 GHCVER=7.8.4 ALEXVER=3.1.4 HAPPYVER=1.19.5 COMPILER=clang TRAVIS_TEST=normal
+      compiler: clang
+      addons: {apt: {packages: [alex-3.1.4,happy-1.19.5,cabal-install-1.22,ghc-7.8.4], sources: [hvr-ghc]}}
+    - env: CABALVER=1.22 GHCVER=7.8.4 ALEXVER=3.1.4 HAPPYVER=1.19.5 COMPILER=clang TRAVIS_TEST=pedantic
       compiler: clang
       addons: {apt: {packages: [alex-3.1.4,happy-1.19.5,cabal-install-1.22,ghc-7.8.4], sources: [hvr-ghc]}}
   exclude:
@@ -23,7 +29,6 @@ matrix:
       addons: {apt: {packages: [alex-3.1.4,happy-1.19.5,cabal-install-head,ghc-head], sources: [hvr-ghc]}}
 
   allow_failures:
-    - env: CABALVER=1.22 GHCVER=7.8.4 COMPILER=clang
     - env: CABALVER=1.22 GHCVER=7.10.2 COMPILER=gcc
     - env: CABALVER=head GHCVER=head COMPILER=gcc
 
@@ -34,10 +39,8 @@ install:
   - cabal update
   - make
 
-# The script only prints stderr since the build log is too big for Travis CI
 script:
-  - COMPILER=$CC make test > /dev/null 2> /dev/null
-  - COMPILER=$CC make test-WiFi-pedantic > /dev/null 2> /dev/null
+  - bash travis.bash
 
 notifications:
   email:

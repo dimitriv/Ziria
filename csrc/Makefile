@@ -27,8 +27,7 @@ CXX = g++
 endif
 
 CFLAGS = -Wall -Wno-write-strings -Wno-comment
-
-CXXFLAGS = -std=c++11 -Wall -Wno-unused-label -Wno-unused-variable -Wno-attributes -Wno-comment
+CXXFLAGS = -std=c++11 -Wall -Wno-unused-label -Wno-unused-variable -Wno-attributes -Wno-comment -O3
 
 LIBS = -lm
 OBJDIR = .
