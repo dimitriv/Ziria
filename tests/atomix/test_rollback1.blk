@@ -1,6 +1,6 @@
 {-
 
-Test to demonstrate rollback.
+Test to demonstrate rollback. Compile with optimism.
 
 -}
 
@@ -14,7 +14,7 @@ let comp main =
   map id 
   >>> -- THIS CHANNEL SHOULD BE ROLLED-BACK UPON TERMINATION OF THE WHILE LOOP
   seq { var x : bool;
-  		map id >>> while(x) { x <- take; emit x; };
+  		map id |>>>| while(x) { x <- take; emit x; };
   		map id;
   }
   >>> write[int]
