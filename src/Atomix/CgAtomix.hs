@@ -153,7 +153,7 @@ cgRnSt dfs auto (RnSt { st_bound_vars = bound
   where
     cg_sdefs [] m = m
     cg_sdefs ((_,sd):sds) m
-      = cg_sdefs sds (cgStructDef sd m)
+      = cgStructDef sd (cg_sdefs sds m)
     cg_fdefs [] m = m
     cg_fdefs ((_,(fun,clos)):fds) m
       | is_external fun
