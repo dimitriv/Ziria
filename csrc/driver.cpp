@@ -37,10 +37,10 @@
 #include "sora_threads.h"
 #include "sora_thread_queues.h"
 #include "sora_ip.h"
+#endif
 
 #ifdef BLADE_RF
 #include "bladerf_radio.h"
-#endif
 #endif
 
 #include "wpl_alloc.h"
@@ -100,7 +100,6 @@ int __cdecl main(int argc, char **argv) {
   params = &Globals;
   try_parse_args(params, argc, argv);
 
-#ifdef SORA_PLATFORM
   // Start Sora HW
   if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
   {
@@ -127,6 +126,7 @@ int __cdecl main(int argc, char **argv) {
   }
 
 
+#ifdef SORA_PLATFORM
   // Start NDIS
   if (Globals.inType == TY_IP || Globals.outType == TY_IP)
   {
@@ -211,7 +211,6 @@ int __cdecl main(int argc, char **argv) {
 
   wpl_output_finalize();
 
-#ifdef SORA_PLATFORM
 	// Stop Sora HW
 	if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
 	{
@@ -223,6 +222,7 @@ int __cdecl main(int argc, char **argv) {
 #endif
 	}
 
+#ifdef SORA_PLATFORM
 	// Stop NDIS
 	if (Globals.inType == TY_IP || Globals.outType == TY_IP)
 	{

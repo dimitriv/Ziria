@@ -19,8 +19,9 @@ permissions and limitations under the License.
 #ifdef BLADE_RF
 
 #include <stdio.h>
-#include "bladerf_radio.h"
+#include <assert.h>
 
+#include "bladerf_radio.h"
 #include "params.h"
 #include "numerics.h"
 
@@ -391,7 +392,7 @@ void readBladeRF(BlinkParams *params, complex16 *ptr, int size)
 	}
 }
 
-void writeBladeRF(BlinkParams *params, complex16 *ptr, ULONG size)
+void writeBladeRF(BlinkParams *params, complex16 *ptr, unsigned long size)
 {
 	int status = bladerf_sync_tx(params->radioParams.dev, (void*)ptr, (unsigned int)size, NULL, 5000);
 
