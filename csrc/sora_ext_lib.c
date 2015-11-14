@@ -1872,6 +1872,9 @@ int __ext_record_time_stop() {
 }
 
 
+#include <windows.h>
+int16 __ext_sleep_int16(int16 x, int32 time) { Sleep(time);  return x; };
+
 #endif
 
 
@@ -1886,3 +1889,6 @@ int __ext_populate_rand_array(BitArrPtr arr, int siz) {
 	}
 	return 0;
 }
+
+
+

@@ -78,6 +78,12 @@ test_encdec%.outfile: test_encdec.out test_encdec%.infile
 	$(DIFF) $(DIFFOPTS) -f $< -g $<.ground -d -v -n 0.88
 
 
+%.perf: %.out 
+	./$< --input=dummy \
+	     --dummy-samples=50 \
+             --output=dummy $(EXTRARUNOPTS)
+
+
 %.accept : %.outfile
 	cp $< $<.ground
 

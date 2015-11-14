@@ -247,3 +247,6 @@ fun external do_not_inline_complex8(x: complex8) : complex8
 fun external do_not_inline_complex16(x: complex16) : complex16
 fun external do_not_inline_complex32(x: complex32) : complex32
 fun external do_not_inline_complex64(x: complex64) : complex64
+
+-- Dummy function that sleeps for <time>, used to test latencies
+fun external sleep_int16(x: int16, time:int32) : int16;
