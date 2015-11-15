@@ -28,6 +28,14 @@ if (mq->mit_slot == NULL)                    \
 	mq->mit_ziria_idx = 0;                   \
 }
 
+#define MIT_QUEUE_RESERVE_PRE_PROF(mq,reserve,rq,qid,stateid) \
+if (mq->mit_slot == NULL)                         \
+{                                                 \
+	mq->mit_slot = reserve_prof(rq,qid,stateid);  \
+	mq->mit_ziria_idx = 0;                        \
+}
+
+
 #define MIT_QUEUE_PUSH(mq)                   \
 	mq->mit_ziria_idx++;
 
@@ -50,6 +58,12 @@ else mq->mit_ziria_idx++;
 #define MIT_QUEUE_MITIGATOR_ACQUIRE(mq,acquire,rq) \
 	mq->mit_slot = acquire(rq);              \
 	mq->mit_ziria_idx = 0;                   
+
+
+#define MIT_QUEUE_MITIGATOR_ACQUIRE_PROF(mq,acquire,rq,qid,stateid) \
+	mq->mit_slot = acquire_prof(rq,qid,stateid);                    \
+	mq->mit_ziria_idx = 0;
+
 
 //Real signatures:
 //void mit_queue_reset(mit_queue *mq);

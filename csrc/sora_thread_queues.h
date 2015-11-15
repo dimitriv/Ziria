@@ -18,7 +18,7 @@
 */
 #pragma once 
 
-
+#include <Windows.h>
 
 // valid(q,slot) iff there data available for reading in slot
 
@@ -73,6 +73,24 @@ typedef struct
 } ts_context;
 
 
+
+typedef struct {
+	LONGLONG total_acq; // total acquire counters
+	LONGLONG total_res; // total reserve counters
+	LARGE_INTEGER tmp_acq_start;
+	LARGE_INTEGER tmp_acq_end;
+	LARGE_INTEGER tmp_res_start;
+	LARGE_INTEGER tmp_res_end;
+} QProf;
+
+void ts_instrument_init(int states, int noqueues);
+void ts_instrument_start_acq(int qid, int stateid);
+void ts_instrument_end_acq(int qid, int stateid);
+void ts_instrument_start_res(int qid, int stateid);
+void ts_instrument_end_res(int qid, int stateid);
+void ts_print_instrumentation(int stateid);
+
+
 // ************
 // Queue API:
 
@@ -88,6 +106,10 @@ bool ts_push(ts_context *locCont);
 // Consumer
 char *ts_acquire(ts_context *locCont);
 bool ts_release(ts_context *locCont);
+char *ts_acquire_prof(ts_context *locCont, int qid, int stateid);
+char *ts_reserve_prof(ts_context *locCont, int qid, int stateid);
+
+
 
 
 // ** The old, 1-step API that introduces extra memcpy
@@ -293,5 +315,6 @@ inline int barriercond(volatile unsigned char *cond, LONG volatile *___state, in
 	// delete fooSpan;
 #endif
 }
+
 
 #endif

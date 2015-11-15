@@ -118,6 +118,16 @@ castAtom var (n,outwire)
    }
 -}
 
+{-- Queue Instrumentation Notes
+
+ We need a struct: 
+     CQProf { longlong push
+            , longlong acqs
+            }
+We need a 2-d array:
+    QNfo[#SORAQUEUES][#STATES]
+--}
+
 figureOutSlice :: (Int,Ty) -> LengthInfo
 figureOutSlice (_n,ity)
   | TArray (Literal ilen) _tybase <- ity
@@ -287,8 +297,8 @@ cQDef :: Int -> String
 cQDef n = "def_q_" ++ show n
 
 -- | Declare queues 
-cgDeclQueues :: forall a. DynFlags -> QueueInfo -> Cg a -> Cg a
-cgDeclQueues dfs qs action 
+cgDeclQueues :: forall a. DynFlags -> Int -> QueueInfo -> Cg a -> Cg a
+cgDeclQueues dfs maxstate qs action 
   = do cgIO $ print (ppr qs)
        cgGlobMutBind dfs noLoc (qi_inch qs) $
         cgGlobMutBind dfs noLoc (qi_outch qs) $ decl_rest
@@ -296,6 +306,7 @@ cgDeclQueues dfs qs action
     -- numqs = Map.size (qi_interm qs)
     num_sora_qs = length $ qi_sora_queues qs
     num_sing_qs = length $ qi_sing_queues qs
+    max_sora_qs = maximum $ map (unQId . fst . snd) $ qi_sora_queues qs
 
     bind_queue_vars qtype qarr queues idxs m = go queues idxs
        where 
@@ -339,8 +350,10 @@ cgDeclQueues dfs qs action
 
     -- Initialize queue statements
     q_init_stmts_sora
-     = [cstm| sora_queue_arr 
-                = ts_init($int:(num_sora_qs), my_sizes_sora, my_slots_sora);|]
+     = [cstms| sora_queue_arr 
+                = ts_init($int:(num_sora_qs), my_sizes_sora, my_slots_sora);
+               ts_instrument_init($int:(maxstate+1),$int:(max_sora_qs+1));
+       |]
     q_init_stmts_sing
      = [cstm| sing_queue_arr 
                 = stq_init($int:(num_sing_qs), my_sizes_sing, my_slots_sing);|]
@@ -376,7 +389,7 @@ cgDeclQueues dfs qs action
          appendTopDecl [cdecl| $ty:(namedCType "ts_context")* sora_queue_arr;|]
          appendTopDecl my_sizes_decl_sora
          appendTopDecl my_slots_decl_sora
-         let all_inits = my_sizes_inits_sora ++ [q_init_stmts_sora]
+         let all_inits = my_sizes_inits_sora ++ q_init_stmts_sora
          mapM_ addGlobalWplAllocated all_inits
 
       bind_sora_queue_vars (qi_sora_queues qs) [0..]   $
@@ -496,11 +509,13 @@ cgAutomatonDeclareAllGlobals dfs
                                              , auto_start   = _ }) 
                              mo
  = cgRnSt dfs auto st $ 
-   cgDeclQueues dfs queues $ 
+   cgDeclQueues dfs maxstate queues $ 
    cg_define_atoms mo
 
   where 
-
+   maxstate = maximum (Map.keys graph) 
+   -- NB: maximum because we will use them to index an array in C.
+   -- we only need this for profiling 
    cg_define_atoms       = cg_def_atoms (Map.elems graph)
    cg_def_atoms [] m     = m
    cg_def_atoms (n:ns) m = cg_def_node n (cg_def_atoms ns m)
@@ -535,6 +550,7 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
 
 
   where 
+   
    cg_automaton :: Int -> Cg ()
    cg_automaton c 
      = do { frameVar <- freshVar "mem_idx"
@@ -555,49 +571,39 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
      let perfid_end   = perfCntId "end"   nid atid
      let perfid_elaps = perfCntId "elaps" nid atid 
      let state_count  = perfCntId "count" nid atid
-     -- let perfid_maxelaps = perfCntId "max_elaps" nid atid 
-     -- let perfid_minelaps = perfCntId "min_elaps" nid atid 
      let perfid_diff     = perfCntId "diff" nid atid
 
      let ilarge = namedCType "LARGE_INTEGER"
 
-     appendTopDecl [cdecl| $ty:ilarge $id:perfid_start;|]
-     appendTopDecl [cdecl| $ty:ilarge $id:perfid_end;|]
-     appendTopDecl [cdecl| $ty:ilarge $id:perfid_elaps;|]
-     appendTopDecl [cdecl| $ty:ilarge $id:state_count;|]
-
-     -- appendTopDecl [cdecl| $ty:ilarge $id:perfid_minelaps = { _I64_MAX };|]
-     -- appendTopDecl [cdecl| $ty:ilarge $id:perfid_maxelaps = { 0 };|]
-     appendTopDecl [cdecl| $ty:ilarge $id:perfid_diff;|]
-
-     addFinalizerStmt [cstm|printf("Thread %d, State %d, entered = %lld times\n",
-                               $int:atid,$int:nid,$id:state_count.QuadPart);|]
-     addFinalizerStmt [cstm|printf("%s = %lld\n", $string:perfid_elaps, $id:perfid_elaps.QuadPart);|]
-     -- addFinalizerStmt [cstm|printf("%s = %lld\n", $string:perfid_maxelaps, $id:perfid_maxelaps.QuadPart);|]
-     -- addFinalizerStmt [cstm|printf("%s = %lld\n", $string:perfid_minelaps, $id:perfid_minelaps.QuadPart);|]
+     when (isDynFlagSet dfs AtomStateProfiling) $ 
+       do { appendTopDecl [cdecl| $ty:ilarge $id:perfid_start;|]
+          ; appendTopDecl [cdecl| $ty:ilarge $id:perfid_end;|]
+          ; appendTopDecl [cdecl| $ty:ilarge $id:perfid_elaps;|]
+          ; appendTopDecl [cdecl| $ty:ilarge $id:state_count;|]
+          ; appendTopDecl [cdecl| $ty:ilarge $id:perfid_diff;|]
+          ; when (c==0) $ addFinalizerStmt [cstm|ts_print_instrumentation($int:nid);|]
+          ; addFinalizerStmt [cstm|printf("Thread %d, State %d, entered = %lld times\n",
+                                      $int:atid,$int:nid,$id:state_count.QuadPart);|]
+          ; addFinalizerStmt [cstm|printf("%s = %lld\n", $string:perfid_elaps, $id:perfid_elaps.QuadPart);|]
+          }
 
      inAllocFrame' frameVar noLoc $ 
         pushAllocFrame $ do 
           -- sp <- freshVar "sp"
           -- appendDecl [cdecl| $ty:(namedCType "span")* $id:sp;|]
           -- appendStmt [cstm| $id:sp = NEWSPAN($int:nid,"Work");|]
-          appendStmt [cstm| $id:state_count.QuadPart++;|]
-          appendStmt [cstm| QueryPerformanceCounter(&$id:perfid_start);|]
-          mapM_ (cgCallAtomGroup dfs c queues) (groupAtoms atoms)
-          appendStmt [cstm| QueryPerformanceCounter(&$id:perfid_end);  |]
-          appendStmts [cstms| 
-              $id:perfid_diff.QuadPart = $id:perfid_end.QuadPart - $id:perfid_start.QuadPart;
-              $id:perfid_elaps.QuadPart += $id:perfid_diff.QuadPart;|]
-          -- appendStmts [cstms|
-          --     if ($id:perfid_minelaps.QuadPart > $id:perfid_diff.QuadPart) 
-          --     { 
-          --        $id:perfid_minelaps.QuadPart = $id:perfid_diff.QuadPart;
-          --     }
-          --     if ($id:perfid_maxelaps.QuadPart < $id:perfid_diff.QuadPart)
-          --     { 
-          --        $id:perfid_maxelaps.QuadPart = $id:perfid_diff.QuadPart;
-          --     }|]
-          -- appendStmt[cstm| delete($id:sp);|]
+          when (isDynFlagSet dfs AtomStateProfiling) $ 
+            do { appendStmt [cstm| $id:state_count.QuadPart++;|]
+               ; appendStmt [cstm| QueryPerformanceCounter(&$id:perfid_start);|]
+               }
+          mapM_ (cgCallAtomGroup dfs nid c queues) (groupAtoms atoms)
+          when (isDynFlagSet dfs AtomStateProfiling) $ 
+            do { appendStmt [cstm| QueryPerformanceCounter(&$id:perfid_end);  |]
+               ; appendStmts [cstms| 
+                   $id:perfid_diff.QuadPart = $id:perfid_end.QuadPart - $id:perfid_start.QuadPart;
+                   $id:perfid_elaps.QuadPart += $id:perfid_diff.QuadPart;|]
+               }
+              -- appendStmt[cstm| delete($id:sp);|]
      cg_decision c nid decision
 
    cg_decision c nid AtomixDone
@@ -639,23 +645,24 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
                ; let perfid_start = perfCntId "barrier_start" nid atid
                ; let perfid_end   = perfCntId "barrier_end"   nid atid
                ; let perfid_elaps = perfCntId "barrier_elaps" nid atid 
-               ; appendTopDecl [cdecl| $ty:ilarge $id:perfid_start;|]
-               ; appendTopDecl [cdecl| $ty:ilarge $id:perfid_end;|]
-               ; appendTopDecl [cdecl| $ty:ilarge $id:perfid_elaps;|]
-               ; addFinalizerStmt [cstm|printf("%s = %lld\n", $string:perfid_elaps, $id:perfid_elaps.QuadPart);|]
-               ; appendStmt[cstm| QueryPerformanceCounter(&$id:perfid_start);|]
-
+               ; when (isDynFlagSet dfs AtomStateProfiling) $ 
+                    do { appendTopDecl [cdecl| $ty:ilarge $id:perfid_start;|]
+                       ; appendTopDecl [cdecl| $ty:ilarge $id:perfid_end;|]
+                       ; appendTopDecl [cdecl| $ty:ilarge $id:perfid_elaps;|]
+                       ; addFinalizerStmt [cstm|printf("%s = %lld\n", $string:perfid_elaps, $id:perfid_elaps.QuadPart);|]
+                       ; appendStmt[cstm| QueryPerformanceCounter(&$id:perfid_start);|]
+                       }
                ; appendStmt [cstm|
                       $id:localcc = barriercond(
                                      &($cc),
                                      $id:(barr_name2 nid), 
                                      $int:no_threads, $int:c); |]
 
-               ; appendStmt[cstm| QueryPerformanceCounter(&$id:perfid_end);  |]
-               ; appendStmt[cstm| 
-                   $id:perfid_elaps.QuadPart += $id:perfid_end.QuadPart - $id:perfid_start.QuadPart;|]
-
-
+               ; when (isDynFlagSet dfs AtomStateProfiling) $
+                     do { appendStmt[cstm| QueryPerformanceCounter(&$id:perfid_end);  |]
+                        ; appendStmt[cstm| 
+                            $id:perfid_elaps.QuadPart += $id:perfid_end.QuadPart - $id:perfid_start.QuadPart;|]
+                        }
                ; appendStmt [cstm| if ($id:localcc) {
                               goto $id:(lblOfNid l); 
                                    } else {
@@ -724,18 +731,18 @@ cg_def_atom _dfs aid mbody mkont
   = do mb <- lookupExpFunEnv_maybe fun_name
        case mb of { Just {} -> mkont; Nothing -> cg_define_atom }
   where
-    fun_name = wiredAtomNameOfLbl aid noLoc (TArrow [] TUnit)
+    fun_name = wiredAtomNameOfLbl aid noLoc (TArrow [GArgTy tint Imm] TUnit)
     cg_define_atom = do 
       (cdecls,cstmts,cbody) <- inNewBlock (pushAllocFrame mbody)
 
       -- Prototype
       appendTopDecl $
-        [cdecl| $ty:(codeGenTyOcc_ (Just "FINL") TUnit) $id:(name fun_name)();|]
+        [cdecl| $ty:(codeGenTyOcc_ (Just "FINL") TUnit) $id:(name fun_name)(int __stateid);|]
 
       -- Implementation 
       appendTopDef $
         [cedecl| $ty:(codeGenTyOcc_ (Just "FINL") TUnit)
-              $id:(name fun_name)() {
+              $id:(name fun_name)(int __stateid) {
                       $decls:cdecls    // Define things needed for body
                       $stms:cstmts     // Emit rest of body
                       return $(cbody);                          
@@ -747,20 +754,21 @@ cg_def_atom _dfs aid mbody mkont
 
 
 cgCallAtomGroup :: DynFlags
-                -> Int
+                -> Int         -- state id
+                -> Int         -- core
                 -> QueueInfo
                 -> [WiredAtom SymAtom]
                 -> Cg ()
-cgCallAtomGroup dfs current_core queues wa_group
+cgCallAtomGroup dfs stateid current_core queues wa_group
   | [wa] <- wa_group
-  = cgCallAtom dfs current_core queues wa
+  = cgCallAtom dfs stateid current_core queues wa
   | otherwise
   , let wa   = head wa_group
         core = getWiredAtomCore wa
         len  = length wa_group
   = if core == current_core then 
         do (ds,ss,_) <- inNewBlock $ 
-                        cgCallAtom dfs current_core queues wa
+                        cgCallAtom dfs stateid current_core queues wa
            appendStmt $ 
              [cstm| for (int __acnt=0; __acnt < $int:(len); __acnt++) {
                       $decls:ds
@@ -770,23 +778,24 @@ cgCallAtomGroup dfs current_core queues wa_group
     else return ()
 
 cgCallAtom :: DynFlags
+           -> Int 
            -> Int
            -> QueueInfo
            -> WiredAtom SymAtom
            -> Cg ()
-cgCallAtom _dfs current_core queues wa
+cgCallAtom _dfs stateid current_core queues wa
   | rd_input
   , core == current_core
-  = appendStmt $ [cstm| if ($id:(name fun_name)() == -7) return(0);|]
+  = appendStmt $ [cstm| if ($id:(name fun_name)($int:stateid) == -7) return(0);|]
 
   | core == current_core 
-  = appendStmt $ [cstm| $id:(name fun_name)();|]
+  = appendStmt $ [cstm| $id:(name fun_name)($int:stateid);|]
 
   | otherwise
   = appendStmt $ [cstm| UNIT;|]
 
   where
-    fun_name = wiredAtomNameOfLbl aid noLoc (TArrow [] TUnit)
+    fun_name = wiredAtomNameOfLbl aid noLoc (TArrow [GArgTy tint Imm] TUnit)
     rd_input = rdFromInput queues (wires_in wa)
     aid      = wiredAtomId wa
     core     = getWiredAtomCore wa 
@@ -889,7 +898,9 @@ cgACastBody dfs qs _orig (n,inwire)
                               then [cexp|stq_acquire|] 
                               else [cexp|ts_acquire |]
   = assert "cgCastAtom (B)" (k == m && real_q == inwire) $ do
-    appendStmt [cstm| MIT_QUEUE_MITIGATOR_ACQUIRE($mqptr,$acquireptr,$rqptr);|]
+    if isSingleThreadIntermQueue qs real_q 
+     then appendStmt [cstm| MIT_QUEUE_MITIGATOR_ACQUIRE($mqptr,$acquireptr,$rqptr);|]
+     else appendStmt [cstm| MIT_QUEUE_MITIGATOR_ACQUIRE_PROF($mqptr,$acquireptr,$rqptr,$int:real_qid,__stateid);|]
     return [cexp|UNIT|]
 
   | otherwise
@@ -1138,7 +1149,7 @@ cgInWire _dfs qs (n,qvar) v action =
 
        | otherwise
        -> cgDeclQPtr v $ \ptr ptr_ty -> do 
-            appendStmt [cstm| $ptr = ($ty:ptr_ty) ts_acquire($id:(cQPtr qid));|]
+            appendStmt [cstm| $ptr = ($ty:ptr_ty) ts_acquire_prof($id:(cQPtr qid),$int:qid,__stateid);|]
             a <- action
             appendStmt [cstm| ts_release($id:(cQPtr qid));|]
             return a
@@ -1216,12 +1227,22 @@ cgOutWire _dfs qs (n,qvar) v action
                  reserveptr = if isSingleThreadIntermQueue qs real_q 
                               then [cexp|stq_reserve|] 
                               else [cexp|ts_reserve|]
-             appendStmts [cstms|
-                           MIT_QUEUE_RESERVE_PRE($mqptr, 
-                                                 $reserveptr, 
-                                                 $rqptr);
-                           $ptr = ($ty:ptr_ty) MIT_QUEUE_SLOT($mqptr,$slice);
-                        |]
+
+             if isSingleThreadIntermQueue qs real_q
+               then 
+                  appendStmts [cstms|
+                                MIT_QUEUE_RESERVE_PRE($mqptr, 
+                                                      $reserveptr, 
+                                                      $rqptr);
+                                $ptr = ($ty:ptr_ty) MIT_QUEUE_SLOT($mqptr,$slice);
+                             |]
+               else 
+                  appendStmts [cstms|
+                                MIT_QUEUE_RESERVE_PRE_PROF($mqptr, 
+                                                      $reserveptr, 
+                                                      $rqptr,$int:real_qid,__stateid);
+                                $ptr = ($ty:ptr_ty) MIT_QUEUE_SLOT($mqptr,$slice);
+                             |]
              a <- action
              appendStmt [cstm|MIT_QUEUE_PUSH($mqptr);|]
              return a
@@ -1229,7 +1250,7 @@ cgOutWire _dfs qs (n,qvar) v action
         -- Must be a SORA queue ... 
         | otherwise 
         -> cgDeclQPtr v $ \ptr ptr_ty -> do
-             appendStmt [cstm| $ptr=($ty:ptr_ty) ts_reserve($id:(cQPtr qid));|]
+             appendStmt [cstm| $ptr=($ty:ptr_ty) ts_reserve_prof($id:(cQPtr qid), $int:qid, __stateid);|]
              a <- action
              appendStmt [cstm| ts_push($id:(cQPtr qid));|]
              return a

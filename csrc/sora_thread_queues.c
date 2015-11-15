@@ -39,7 +39,6 @@ char *data(char *buf, int size, int i) {
 	return ((buf) + (ST_CACHE_LINE+(size))*(i) + ST_CACHE_LINE);
 }
 
-
 static ts_context *locCont;
 static int ts_num_queues = 0;
 
@@ -99,19 +98,21 @@ ts_context *ts_init(int no, size_t *sizes, int *queue_sizes)
 
 
 
-char *ts_reserve(ts_context *locCont)
+FORCE_INLINE char *ts_reserve(ts_context *locCont)
 {
 	char *buf;
 
+	int algsize = locCont->alg_size;
+	char *wptr = locCont->wptr;
+
 	// Blocking! 
-	while ((*valid(locCont->wptr, locCont->alg_size, 0))); 
+	while ((*valid(wptr, algsize, 0))); 
 
-	buf = data(locCont->wptr, locCont->alg_size, 0);
+	buf = data(wptr, algsize, 0);
 
-	locCont->wptr += (ST_CACHE_LINE + locCont->alg_size);
-	if ((locCont->wptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + locCont->alg_size))
+	locCont->wptr += (ST_CACHE_LINE + algsize);
+	if ((locCont->wptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + algsize))
 		(locCont->wptr) = (locCont->buf);
-
 
 	return buf;
 }
@@ -139,21 +140,23 @@ bool ts_push(ts_context *locCont)
 
 
 
-char *ts_acquire(ts_context *locCont)
+FORCE_INLINE char *ts_acquire(ts_context *locCont)
 {
 	char * buf = NULL;
+	char *rptr = locCont->rptr;
+	int algsize = locCont->alg_size;
 
 	// if the synchronized buffer has no data, 
 	// check whether there is reset/flush request
 	//if (!(locCont->rptr)->valid)
-	while (!(*valid(locCont->rptr, locCont->alg_size, 0)));
+	while (!(*valid(rptr, algsize, 0)));
 
 	// Otherwise, there are data. Pump the data to the output pin
-	buf = data(locCont->rptr, locCont->alg_size, 0);
+	buf = data(rptr, algsize, 0);
 
-	*valid(locCont->rptr, locCont->alg_size, 0) = true;
-	locCont->rptr += (ST_CACHE_LINE + locCont->alg_size);
-	if ((locCont->rptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + locCont->alg_size))
+	*valid(locCont->rptr, algsize, 0) = true;
+	locCont->rptr += (ST_CACHE_LINE + algsize);
+	if ((locCont->rptr) == (locCont->buf) + locCont->queue_size*(ST_CACHE_LINE + algsize))
 	{
 		(locCont->rptr) = (locCont->buf);
 	}
@@ -183,8 +186,87 @@ bool ts_release(ts_context *locCont)
 }
 
 
+// Sora queue instrumentation stuff
 
+#define TS_PROFILE 1
 
+static QProf** qprofdata;
+static int qprofnoqueues;
+
+void ts_instrument_init(int states, int noqueues)
+{
+	qprofdata = (QProf **) malloc(sizeof(QProf*)* noqueues);
+	for (int i = 0; i < noqueues; i++)
+	{
+		qprofdata[i] = (QProf*) malloc(sizeof(QProf)* states);
+		memset(qprofdata[i], 0, sizeof(QProf)* states);
+	}
+	qprofnoqueues = noqueues;
+}
+void ts_instrument_start_acq(int qid, int stateid)
+{
+	QueryPerformanceCounter(&qprofdata[qid][stateid].tmp_acq_start);
+}
+void ts_instrument_end_acq(int qid, int stateid)
+{
+	QueryPerformanceCounter(&qprofdata[qid][stateid].tmp_acq_end);
+	qprofdata[qid][stateid].total_acq += 
+		qprofdata[qid][stateid].tmp_acq_end.QuadPart - qprofdata[qid][stateid].tmp_acq_start.QuadPart;
+}
+void ts_instrument_start_res(int qid, int stateid)
+{
+	QueryPerformanceCounter(&qprofdata[qid][stateid].tmp_res_start);
+}
+void ts_instrument_end_res(int qid, int stateid)
+{
+	QueryPerformanceCounter(&qprofdata[qid][stateid].tmp_res_end);
+	qprofdata[qid][stateid].total_res += 
+		qprofdata[qid][stateid].tmp_res_end.QuadPart - qprofdata[qid][stateid].tmp_res_start.QuadPart;
+}
+void ts_print_instrumentation(int stateid)
+{
+
+#ifdef TS_PROFILE
+	printf("SORA Queue stats for state: %d\n", stateid);
+	int i = 0; 
+	for (i = 0; i < qprofnoqueues; i++)
+	{
+		// There will be empty slots as I am using queue ids to directly index here, 
+		// so ignore those when you print ... 
+		if (qprofdata[i][stateid].total_acq == 0 &&
+			qprofdata[i][stateid].total_res == 0) continue;
+
+		printf("Queue Id = %d\n",i);
+		printf("\tTotal ACQUIRE time: %lld\n", qprofdata[i][stateid].total_acq);
+		printf("\tTotal RESERVE time: %lld\n", qprofdata[i][stateid].total_res);
+	}
+#endif
+
+}
+
+char *ts_acquire_prof(ts_context *locCont, int qid, int stateid)
+{
+#ifdef TS_PROFILE
+	ts_instrument_start_acq(qid, stateid);
+#endif
+	char *ret = ts_acquire(locCont);
+#ifdef TS_PROFILE
+	ts_instrument_end_acq(qid, stateid);
+#endif
+	return ret;
+}
+
+char *ts_reserve_prof(ts_context *locCont, int qid, int stateid)
+{
+#ifdef TS_PROFILE
+	ts_instrument_start_res(qid, stateid);
+#endif
+	char *ret = ts_reserve(locCont);
+#ifdef TS_PROFILE
+	ts_instrument_end_res(qid, stateid);
+#endif
+	return ret;
+}
 
 
 

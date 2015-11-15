@@ -75,6 +75,7 @@ data DynFlag =
   | FuseAggressively
   | CLikeNames
   | NoAtomThreads Int
+  | AtomStateProfiling
 
   | Vectorize
   | AutoLUT
@@ -192,6 +193,7 @@ options =
      , Option []    ["fuse-aggressively"] (NoArg FuseAggressively)             "fuse atoms at the cost of duplicating code"
      , Option []    ["c-like-names"]     (NoArg CLikeNames)                    "use same atom names as code generator"
      , Option []    ["no-atom-threads"]  (ReqArg parseNoAtomThreads "NO_THREADS")  "number of threads to be used for atom scheduling"
+     , Option []    ["atom-state-profiling"] (NoArg AtomStateProfiling) "Profile Atomix States"
 
      , Option []    ["ddump-ast-pretty"] (NoArg DumpAstPretty) "dump the parsed AST (pretty-printed)"
      , Option []    ["vectorize"]        (NoArg Vectorize)     "vectorize program"
