@@ -223,6 +223,13 @@ cWriteInternal loc t bid = MkComp (WriteInternal t bid) loc ()
 cStandalone :: SrcLoc -> LocConstr -> GComp tc t () () -> GComp tc t () ()
 cStandalone loc l c = MkComp (Standalone l c) loc ()
 
+cAsync :: SrcLoc -> LocConstr -> GExp t () -> GComp tc t () ()
+cAsync loc lc e = MkComp (Async lc e) loc ()
+
+cAwait :: SrcLoc -> GName t -> GComp tc t () ()
+cAwait loc x = MkComp (Await x) loc ()
+
+
 cMitigate :: SrcLoc -> String -> t -> Int -> Int -> GComp tc t () ()
 cMitigate loc s t n1 n2 = MkComp (Mitigate s t n1 n2) loc ()
 

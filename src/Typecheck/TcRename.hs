@@ -203,6 +203,14 @@ renComp (MkComp comp0 cloc ()) = case comp0 of
       Return fi e -> do
         e' <- renExp e
         return $ cReturn cloc fi e'
+
+      Async lc e -> do 
+        e' <- renExp e
+        return $ cAsync cloc lc e'
+      Await x -> do
+        x' <- renFree x
+        return $ cAwait cloc x'
+
       Emits e -> do
         e' <- renExp e
         return $ cEmits cloc e'

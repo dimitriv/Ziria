@@ -328,6 +328,14 @@ renComp (MkComp comp0 cloc ()) = case comp0 of
       Standalone l c' -> do
         c'' <- renComp c'
         return $ cStandalone cloc l c''
+      Async lc e -> do 
+        e' <- renExp e
+        return $ cAsync cloc lc e'
+      Await x -> do
+        x' <- renFree x
+        return $ cAwait cloc x'
+
+
       Mitigate s ty n1 n2 -> do
         ty' <- renTyAnn cloc ty
         return $ cMitigate cloc s ty' n1 n2

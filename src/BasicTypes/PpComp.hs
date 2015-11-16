@@ -227,6 +227,11 @@ ppComp0 ppComp _printtypes ignorelet ignoreexp c =
     Standalone l c1 ->
       text "standalone" <> brackets (ppr l) <> braces (ppComp c1)
 
+    Async l e -> 
+      text "async" <> brackets (ppr l) <> parens (ppr e)
+    Await x -> 
+      text "await" <> parens (ppr x) 
+
     Mitigate s t n1 n2 ->
       int n1 <> text "-mitigate" <> parens (text s) <>
                                       brackets (ppr t) <> text "-" <> int n2

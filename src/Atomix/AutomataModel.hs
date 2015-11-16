@@ -431,6 +431,7 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
     loc = acomp_loc comp
     cstrt = acomp_nfo comp
     go :: AComp0 MbLocConstr () -> IO (SAuto e Int)
+
     go (ATake1 aid t) =
       let inp = [(1,in_chan chans)]
           outp = map (1,) $ maybeToList (ctrl_chan chans)
@@ -444,6 +445,9 @@ mkAutomaton dfs sym chans comp k = go $ assert (auto_closed k) $ acomp_comp comp
           nkind = SAtom watom (auto_start k) Map.empty
           a = insert_prepend nkind k
       in return $ assert (auto_closed a) a
+
+    go (AAsync {}) = panicStr "Async for mkAutomaton not yet implemented!" 
+    go (AAwait {}) = panicStr "Await for mkAutomaton not yet implemented!" 
 
     go (AReturn e) =
       let watom = expToWiredAtom e cstrt (ctrl_chan chans)

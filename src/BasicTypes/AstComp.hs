@@ -302,6 +302,9 @@ data GComp0 tc t a b where
   -- > standalone c :: ST T a b
   Standalone :: LocConstr -> GComp tc t a b -> GComp0 tc t a b
 
+  Async :: LocConstr -> GExp t b -> GComp0 tc t a b
+  Await :: GName t -> GComp0 tc t a b
+
   -- | Downgrade or upgrade the rate of components.
   --
   -- > n1, n2 > 1    (n2 `divides` n1 || n1 `divides` n2)
@@ -516,6 +519,14 @@ mapCompM_env onCTyp onETyp onCAnn onEAnn onExp f extE extC = goComp
     goComp0 (Var x) = do
        x' <- mapNameM onCTyp x
        return $ Var x'
+
+    goComp0 (Await x) = do
+       x' <- mapNameM onETyp x
+       return $ Await x'
+
+    goComp0 (Async lc e) = do 
+       e' <- onExp e
+       return $ Async lc e'
 
     goComp0 (BindMany c1 xs_cs) = goBind c1 xs_cs
 
@@ -734,6 +745,9 @@ compFVs = goComp
     goComp0 (VectComp _ c)      = goComp c
     goComp0 (Standalone _ c)    = goComp c
 
+    goComp0 (Async _lc e)       = goExp e
+    goComp0 (Await x)           = (S.singleton x, mempty)
+
     goComp0 (Map _v nm)         = (S.singleton nm, mempty)
     goComp0 (Filter nm)         = (S.singleton nm, mempty)
 
@@ -829,7 +843,7 @@ tyFVs (TArrow args res)   = mconcat (map tyFVs (res:(map argty_ty args)))
 tyFVs (TBuff (IntBuf ty)) = tyFVs ty
 tyFVs (TBuff (ExtBuf ty)) = tyFVs ty
 tyFVs TVoid               = mempty
-
+tyFVs (TTask t)           = tyFVs t
 
 ctyFVs :: CTy -> TyVars
 ctyFVs (CTVar x)          = mempty { tyVarsCTy = S.singleton x }
@@ -1119,6 +1133,9 @@ compShortName = go . unComp
     go (WriteInternal   {}) = "WriteInternal"
     go (Standalone      {}) = "Standalone"
     go (Mitigate        {}) = "Mitigate"
+    go (Await           {}) = "Await"
+    go (Async           {}) = "Async"
+ 
 
 -- | Type of the input stream
 --
@@ -1201,6 +1218,8 @@ compSize c = case unComp c of
   WriteInternal {}          -> 1
   Standalone _ c1           -> compSize c1
   Mitigate {}               -> 1
+  Async {}                  -> 1
+  Await {}                  -> 1
 
 callArgSize :: CallArg (GExp t b) (GComp tc t a b) -> Int
 callArgSize (CAExp _)  = 0

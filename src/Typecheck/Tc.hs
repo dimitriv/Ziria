@@ -446,6 +446,16 @@ tcComp comp@(MkComp comp0 loc _) =
       return $ CTTrans a (TBuff (IntBuf a))
     go (Standalone _ c) =
       tcComp c
+
+    go (Async _lc e) = do 
+      u <- tcExp e
+      return $ CTComp (TTask u) TVoid TVoid
+
+    go (Await x) = do
+      a <- freshTy "a"
+      unify loc (TTask a) (nameTyp x)
+      return $ CTComp a TVoid TVoid
+
     go (Mitigate _ a n1 n2) =
       tcMitigator loc a n1 n2
 

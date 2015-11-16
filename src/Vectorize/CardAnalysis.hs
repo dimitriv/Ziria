@@ -309,6 +309,10 @@ computeCard _dflags = go
       Emit e      -> return $ cEmit   loc (scard 0 1) e
       Emits e     -> return $ cEmits  loc (emits_card $ ctExp e) e
       Return fi e -> return $ cReturn loc (scard 0 0) fi e
+
+      Async lc e  -> return $ cAsync loc (scard 0 0) lc e
+      Await x     -> return $ cAwait loc (scard 0 0) x
+
       Take1 a     -> return $ cTake1  loc (scard 1 0) a
       Take a n    -> return $ cTake   loc (scard n 0) a n
 

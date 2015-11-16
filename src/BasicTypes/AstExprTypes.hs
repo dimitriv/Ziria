@@ -134,6 +134,8 @@ data Ty where
 
   TVoid  :: Ty
 
+  TTask   :: Ty -> Ty
+
   deriving (Generic, Typeable, Data, Eq, Ord)
 
 -- An argument type (we record the mutability)
@@ -231,7 +233,7 @@ instance Outputable Ty where
     TBuff (ExtBuf bt)      -> parens $ text "EXTBUF" <> brackets (text "base=" <> ppr bt)
     TStruct tyname _       -> text tyname 
     -- NOTE: If we change this to be the full type the instance for EStruct breaks
-
+    TTask t                 -> text "task" <> parens (ppr t)
     TVoid                  -> text "void"
 
 instance Outputable SrcTy where

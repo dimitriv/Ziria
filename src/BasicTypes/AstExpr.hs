@@ -488,6 +488,9 @@ mapTyM f = go
                                 f $ TBuff (ExtBuf bt')
 
     go TVoid               = f $ TVoid
+    go (TTask t)           = do { t' <- go t
+                                ; f $ TTask t'
+                                }
 
     go_arg (GArgTy t m) = do { t' <- go t ; return (GArgTy t' m) }
 
@@ -917,6 +920,7 @@ isScalarTy t =
     TArrow {}    -> False
     TBuff {}     -> False
     TVoid {}     -> False
+    TTask {}     -> False
 
 
 -- Does this type support arithmetic operations?

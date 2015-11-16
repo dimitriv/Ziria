@@ -139,6 +139,8 @@ instance Unify Ty where
       go (TBuff (IntBuf ta)) (TBuff (IntBuf tb)) = go ta tb
       go (TBuff (ExtBuf ta)) (TBuff (ExtBuf tb)) = go ta tb
 
+      go (TTask t1) (TTask t2) = go t1 t2
+
       go (TInterval n1) (TInterval n2) | n1 == n2 = return ()
       go (TStruct n1 _) (TStruct n2 _) | n1 == n2 = return ()
 

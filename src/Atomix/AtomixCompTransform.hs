@@ -384,7 +384,10 @@ transLifted dfs sym = go_comp Nothing
     go_comp lconstr comp = go lconstr (unComp comp)
       where 
         loc = compLoc comp
-        go lc (Return _ e) = aReturn loc lc <$> (liftIO $ transLiftedExp dfs sym e)
+        go lc (Return _ e)  = aReturn loc lc <$> (liftIO $ transLiftedExp dfs sym e)
+
+        go _lc (Async lc' e) = aAsync loc (Just lc') <$> (liftIO $ transLiftedExp dfs sym e) 
+        go lc (Await x)      = return $ aAwait loc lc x
 
         -- go (Times _ estrt (MkExp (EVal _ (VInt i _)) _ _) cnt c) = do
         --   let cnt_expr    = eVar loc cnt

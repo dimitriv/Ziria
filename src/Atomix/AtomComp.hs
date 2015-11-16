@@ -53,6 +53,9 @@ data AComp0 a b
   | AReturn (AExp b)       -- Maybe EId -> AExp b
   | AEmit1 (AExp b)        -- EId -> AExp b
 
+  | AAsync (AExp b)
+  | AAwait EId
+
   | ATakeEmit   EId (AExp b)
   | ATakeReturn EId (AExp b)
 
@@ -84,6 +87,13 @@ aCast loc a s (n1,t1) (n2,t2) = MkAComp loc a (ACast s (n1,t1) (n2,t2))
 
 aReturn   :: SrcLoc -> a -> AExp b -> AComp a b
 aReturn loc a e = MkAComp loc a (AReturn e)
+
+aAsync :: SrcLoc -> a -> AExp b -> AComp a b
+aAsync loc a e = MkAComp loc a (AAsync e)
+
+aAwait :: SrcLoc -> a -> EId -> AComp a b
+aAwait loc a x = MkAComp loc a (AAwait x)
+
 
 aBind :: SrcLoc -> a -> Maybe EId -> AComp a b -> AComp a b -> AComp a b
 aBind loc a mx c1 c2 
@@ -141,6 +151,9 @@ ppAComp0 (ABind mx c1 c2) = text "{" <+>
                             text ";" <+> ppr c2 <+> text "}"
 
 ppAComp0 (AReturn e) = text "ret" <+> braces (text "<exp>")
+ppAComp0 (AAwait x)  = text "await" <> parens (text "<var>")
+ppAComp0 (AAsync e)  = text "async" <> parens (text "<exp>") 
+
 ppAComp0 (APar _p c1 _ c2) = ppr c1 <+> text ">>>" $$
                              ppr c2
 ppAComp0 (ABranch x c1 c2)

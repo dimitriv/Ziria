@@ -303,6 +303,12 @@ comp_vect0 dfs (VectPack {..}) (ReadInternal {}) =
 comp_vect0 dfs (VectPack {..}) (Return {}) =
   return (singleDVRCands vp_self_dvr)
 
+comp_vect0 dfs (VectPack {..}) (Async {}) =
+  return (singleDVRCands vp_self_dvr)
+
+comp_vect0 dfs (VectPack {..}) (Await {}) =
+  return (singleDVRCands vp_self_dvr)
+
 {-------------------------------------------------------------------------------}
 
 comp_vect0 dfs (VectPack {..}) w@(Branch e c1 c2) = do 

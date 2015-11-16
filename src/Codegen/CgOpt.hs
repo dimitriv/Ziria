@@ -1051,6 +1051,9 @@ codeGenComp dflags comp k =
         return (mkCompInfo prefix True)
                    { compGenInit = codeStmt [cstm|$id:stateVar = 0;|] }
 
+    go c@(MkComp (Async {}) _ _) = fail $ "CodeGen error, unimplemented: " ++ show c
+    go c@(MkComp (Await {}) _ _) = fail $ "CodeGen error, unimplemented: " ++ show c
+ 
     go (MkComp (Return _ e) csp ()) = do
         retName <-  nextName ("__ret_" ++ (getLnNumInStr csp))
         let prefix = retName
