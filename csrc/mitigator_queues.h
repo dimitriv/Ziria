@@ -29,10 +29,10 @@ if (mq->mit_slot == NULL)                    \
 }
 
 #define MIT_QUEUE_RESERVE_PRE_PROF(mq,reserve,rq,qid,stateid) \
-if (mq->mit_slot == NULL)                         \
-{                                                 \
-	mq->mit_slot = reserve_prof(rq,qid,stateid);  \
-	mq->mit_ziria_idx = 0;                        \
+if (mq->mit_slot == NULL)                             \
+{                                                     \
+	mq->mit_slot = reserve ## _prof(rq,qid,stateid);  \
+	mq->mit_ziria_idx = 0;                            \
 }
 
 
@@ -61,7 +61,7 @@ else mq->mit_ziria_idx++;
 
 
 #define MIT_QUEUE_MITIGATOR_ACQUIRE_PROF(mq,acquire,rq,qid,stateid) \
-	mq->mit_slot = acquire_prof(rq,qid,stateid);                    \
+	mq->mit_slot = acquire ## _prof(rq,qid,stateid);                \
 	mq->mit_ziria_idx = 0;
 
 
