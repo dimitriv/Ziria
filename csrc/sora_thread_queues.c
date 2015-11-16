@@ -188,7 +188,7 @@ bool ts_release(ts_context *locCont)
 
 // Sora queue instrumentation stuff
 
-#define TS_PROFILE 1
+// #define TS_PROFILE 1
 
 static QProf** qprofdata;
 static int qprofnoqueues;

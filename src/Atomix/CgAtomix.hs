@@ -465,7 +465,7 @@ extractQueues auto
                       -> Map EId MitiQueueInfo
                       -> Map EId MitiQueueInfo
     update_mit_pipes watoms pipes
-      = foldl upd pipes watoms
+      = remove_double_mits $ foldl upd pipes watoms
       where upd ps (WiredAtom [(n,inq)] [(m,outq)] 
                       (SymAtom _ (SACast _s _c MitigateOrigin _ _)))
               | n == 1 && inq /= auto_inchan auto && outq /= auto_outchan auto
@@ -477,6 +477,11 @@ extractQueues auto
               | otherwise 
               = ps 
             upd ps _other = ps
+
+            remove_double_mits ps =
+              let reals = map mqi_real_queue (Map.elems ps)
+              in Map.filterWithKey (\mq _ -> not (mq `elem` reals)) ps
+
 
     update_pipes :: [WiredAtom SymAtom] -> Map Chan Int -> Map Chan Int
     update_pipes watoms pipes 
