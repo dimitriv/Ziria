@@ -20,7 +20,7 @@
 
 -- Run the same code as Sora's implementation
 #define SORA_COMPAT
-#include "blocks/ReceiverInfinite.blk"
+#include "blocks/ReceiverInfinite2.blk"
 
 let comp main = read >>> ReceiverInfinite(HeaderInfo{coding = CR_12; modulation = M_BPSK; len = 0; err = false}) >>> write;
 
