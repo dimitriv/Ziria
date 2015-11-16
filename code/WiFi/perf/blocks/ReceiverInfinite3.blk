@@ -29,7 +29,7 @@
 #include "../../receiver/OFDM/ChannelEqualization.blk"
 #include "../../receiver/OFDM/PilotTrack.blk"
 #include "../../receiver/OFDM/GetData.blk"
-#include "DecodeInfinite2.blk"
+#include "DecodeInfinite3.blk"
 #include "../../transmitter/crc.blk"
 
 
