@@ -212,6 +212,10 @@ data MitiQueueInfo
                , mqi_slice_bytes :: C.Exp 
                , mqi_real_queue  :: EId  }
 
+instance Show MitiQueueInfo where
+  show (MitiNToOne n _ _ ) = "MitiNToOne, n =" ++ show n
+  show (MitiOneToN n _ _ ) = "MitiOneToN, n =" ++ show n
+
 -- | Datatype with queue information of this automaton 
 data QueueInfo 
   = QI { qi_inch   :: EId                        -- ^ THE Input queue 
@@ -260,16 +264,24 @@ isSingleThreadIntermQueue_aux cores x =
 
 
 instance Outputable QueueInfo where
-  ppr (QI qinch qoutch qinterm qcs qsora qsing qmiti)
+  ppr qs@(QI qinch qoutch qinterm qcs qsora qsing qmiti)
     = vcat [ text "qi_inch   =" <+> text (show qinch)
            , text "qi_outch  =" <+> text (show qoutch)
            , text "qi_interm =" $$ vcat (map ppr_qs (Map.toList qinterm))
            , text "qi_cores  =" $$ vcat (map ppr_cs (Map.toList qcs))
            , text "qi_sora_queues =" $$ vcat (map (text.show) qsora)
            , text "qi_sing_queues =" $$ vcat (map (text.show) qsing)
-           , text "qi_miti_queues =" $$ vcat (map (text.show.fst) qmiti)
+           , text "qi_miti_queues =" $$ vcat (map ppr_miti qmiti)
            ]
     where
+      ppr_miti (q,(_qid,mqnfo)) = ppr q <+> text ":" <+> ppr (nameTyp q) 
+                                        <+> text (", " ++ show _qid)
+                                        <+> text (", " ++ show mqnfo)
+                                        <+> text ", real_queue =" <+> ppr (mqi_real_queue mqnfo)
+                                        <+> text ":" <+> ppr (nameTyp (mqi_real_queue mqnfo))
+                                        <+> text "," 
+                                        <+> text (show $ qiQueueId (mqi_real_queue mqnfo) qs)
+
       ppr_cs (qv,qcores) = ppr qv <+> text "used by cores:" <+> 
                                       text (show qcores)
       ppr_qs (qv,(qid,qsz))
@@ -281,6 +293,7 @@ instance Outputable QueueInfo where
 newtype QId = QId { unQId :: Int }
   deriving Show
 data QueueId = QIn | QOut | QMid QId
+  deriving Show
 
 qiQueueId :: EId -> QueueInfo -> Maybe QueueId
 -- | Return Just the QueueId, if this variable is a queue; Nothing otherwise.
@@ -442,10 +455,39 @@ extractQueues auto
     unions_with f = foldl (Map.unionWith f) Map.empty
 
     mit_queues :: Map.Map EId MitiQueueInfo
-    mit_queues = Map.unions mit_pre
+    mit_queues = remove_bad_mits $
+                 remove_double_mits $
+                 remove_mult_ctrl_mits $ 
+                 unions_with (++) mit_mss 
+    proj_rs (x,_,_) = x
+    proj_ws (_,x,_) = x
+    proj_ms (_,_,x) = x
+
+    remove_bad_mits = Map.filterWithKey filt
+    -- MitOneToN cannot be output!
+    filt mq (MitiOneToN {}) | mq `elem` mit_wrs = False
+    -- MitNToOne cannot be input!
+    filt mq (MitiNToOne {}) | mq `elem` mit_rds = False
+    filt _mq _ = True
+
+    mit_rds = concat $ map proj_rs mit_pre
+    mit_wrs = concat $ map proj_ws mit_pre
+    mit_mss = map proj_ms mit_pre  
+
     mit_pre = map (extract_mit_queue . node_kind) (Map.elems (auto_graph auto))
     extract_mit_queue (AtomixState atoms _ _ _)
-       = update_mit_pipes atoms Map.empty
+      = update_mit_pipes atoms ([],[],Map.empty)
+
+    remove_mult_ctrl_mits =
+      Map.mapMaybe (\x -> if length x == 1 then Just (head x) else Nothing) 
+
+    remove_double_mits ps =
+      let reals = map mqi_real_queue (Map.elems ps)
+      in Map.filterWithKey (\mq _ -> not (mq `elem` reals)) ps
+
+    alt_work x Nothing   = Just [x]
+    alt_work x (Just xs) = Just (x:xs)
+
 
 
     pre = map (extract_queue . node_kind) (Map.elems (auto_graph auto))
@@ -462,26 +504,25 @@ extractQueues auto
     -- connected directly the distnguished input or output of the
     -- whole automaton.
     update_mit_pipes :: [WiredAtom SymAtom] 
-                      -> Map EId MitiQueueInfo
-                      -> Map EId MitiQueueInfo
+                      -> ([EId],[EId], Map EId [MitiQueueInfo])
+                      -> ([EId],[EId], Map EId [MitiQueueInfo])
     update_mit_pipes watoms pipes
-      = remove_double_mits $ foldl upd pipes watoms
-      where upd ps (WiredAtom [(n,inq)] [(m,outq)] 
+      = foldl upd pipes watoms
+      where upd (rs,ws,ps) (WiredAtom [(n,inq)] [(m,outq)] 
                       (SymAtom _ (SACast _s _c MitigateOrigin _ _)))
               | n == 1 && inq /= auto_inchan auto && outq /= auto_outchan auto
               , Just cslic <- figureOutSliceBytes (m,nameTyp outq)
-              = Map.insert outq (MitiOneToN m cslic inq) ps
+              = (rs,ws,Map.alter (alt_work $ MitiOneToN m cslic inq) outq ps)
               | m == 1 && outq /= auto_outchan auto && inq /= auto_inchan auto
               , Just cslic <- figureOutSliceBytes (n,nameTyp inq)
-              = Map.insert inq (MitiNToOne n cslic outq) ps
+              = (rs,ws,Map.alter (alt_work $ MitiNToOne n cslic outq) inq ps)
               | otherwise 
-              = ps 
+              = (rs,ws,ps) 
+            upd (rs,ws,ps) (WiredAtom inqs outqs (SymAtom _ (SAExp {}))) 
+              = (map snd inqs ++ rs, map snd outqs ++ ws, ps)
             upd ps _other = ps
-
-            remove_double_mits ps =
-              let reals = map mqi_real_queue (Map.elems ps)
-              in Map.filterWithKey (\mq _ -> not (mq `elem` reals)) ps
-
+  
+ 
 
     update_pipes :: [WiredAtom SymAtom] -> Map Chan Int -> Map Chan Int
     update_pipes watoms pipes 
@@ -838,7 +879,7 @@ cgAExpBody :: DynFlags
            -> AExp ()
            -> Cg C.Exp
 cgAExpBody dfs qs wins wouts aexp
-  = do { when (isDynFlagSet dfs Verbose) dbg_m 
+  = do { dbg_m 
        ; cgInWiring dfs qs wins wires_in $ 
          cgOutWiring dfs qs wouts wires_out $
          codeGenExp dfs fun_body }
@@ -880,7 +921,8 @@ cgACastBody dfs qs _orig (n,inwire)
         pushptr = if isSingleThreadIntermQueue qs real_q 
                               then [cexp|stq_push|] 
                               else [cexp|ts_push |]
-  = do { cgIO $ print $ vcat [ text "k =" <+> ppr k
+  = do { cgIO $ print $ vcat [ text "MitiNToOne:" 
+                             , text "k =" <+> ppr k
                              , text "n =" <+> ppr n
                              , text "m =" <+> ppr m
                              , text "inwire=" <+> ppr inwire
@@ -902,11 +944,22 @@ cgACastBody dfs qs _orig (n,inwire)
         acquireptr = if isSingleThreadIntermQueue qs real_q 
                               then [cexp|stq_acquire|] 
                               else [cexp|ts_acquire |]
-  = assert "cgCastAtom (B)" (k == m && real_q == inwire) $ do
-    if isSingleThreadIntermQueue qs real_q 
-     then appendStmt [cstm| MIT_QUEUE_MITIGATOR_ACQUIRE($mqptr,$acquireptr,$rqptr);|]
-     else appendStmt [cstm| MIT_QUEUE_MITIGATOR_ACQUIRE_PROF($mqptr,$acquireptr,$rqptr,$int:real_qid,__stateid);|]
-    return [cexp|UNIT|]
+  = do { cgIO $ print $ vcat [ text "MitiOneToN:" 
+                             , text "k =" <+> ppr k
+                             , text "n =" <+> ppr n
+                             , text "m =" <+> ppr m
+                             , text "inwire=" <+> ppr inwire
+                             , text "real_q =" <+> ppr real_q
+                             , text "outwire=" <+> ppr outwire
+                             , text "inty   =" <+> ppr inty
+                             , text "outty  =" <+> ppr outty
+                             ]
+       ; assert "cgCastAtom (B)" (k == m && real_q == inwire) $ do
+           if isSingleThreadIntermQueue qs real_q 
+             then appendStmt [cstm| MIT_QUEUE_MITIGATOR_ACQUIRE($mqptr,$acquireptr,$rqptr);|]
+             else appendStmt [cstm| MIT_QUEUE_MITIGATOR_ACQUIRE_PROF($mqptr,$acquireptr,$rqptr,$int:real_qid,__stateid);|]
+           return [cexp|UNIT|]
+       }
 
   | otherwise
   = assert "cgCastAtom (C)" (n == n' && m == m') $ do
@@ -1204,8 +1257,11 @@ cgOutWiring dfs qs ws vs action = go ws vs
     go _ _ = error "cgOutWiring!"
 
 cgOutWire :: DynFlags -> QueueInfo -> (Int,EId) -> EId -> Cg a -> Cg a
-cgOutWire _dfs qs (n,qvar) v action
-  = assert "cgOutWire" (n == 1) $
+cgOutWire _dfs qs (n,qvar) v action = do 
+    cgIO $ print $ vcat [ text "cgOutWire"
+                        , text "qvar = " <+> ppr qvar
+                        ]
+--    assert "cgOutWire" (n == 1) $
     case qiQueueId qvar qs of
 
       -- Not a queue

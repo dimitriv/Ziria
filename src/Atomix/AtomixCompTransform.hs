@@ -455,13 +455,25 @@ transLifted dfs sym = go_comp Nothing
         go lc (Mitigate s t n1 n2)
           | n1 `mod` n2 == 0 -- n1 = k*n2
           , let k = n1 `div` n2
-          = do b <- liftIO $ newBlockId sym loc s 
+          = do liftIO $ print $ vcat [ text "Mitigate (trace)"
+                                     , text "k = " <+> ppr k 
+                                     , text "n1 =" <+> ppr n1
+                                     , text "n2 =" <+> ppr n2
+                                     , text "t  =" <+> ppr t
+                                     ]
+               b <- liftIO $ newBlockId sym loc s 
                return $ aRepeat loc lc $ 
                  aCast loc lc b (1,TArray (Literal n1) t) (k,TArray (Literal n2) t)
 
           | n2 `mod` n1 == 0
           , let k = n2 `div` n1
-          = do b <- liftIO $ newBlockId sym loc s 
+          = do liftIO $ print $ vcat [ text "Mitigate (trace)"
+                      , text "k = " <+> ppr k 
+                      , text "n1 =" <+> ppr n1
+                      , text "n2 =" <+> ppr n2
+                      , text "t  =" <+> ppr t
+                      ]
+               b <- liftIO $ newBlockId sym loc s 
                return $ aRepeat loc lc $ 
                  aCast loc lc b (k,TArray (Literal n1) t) (1,TArray (Literal n2) t)
    
