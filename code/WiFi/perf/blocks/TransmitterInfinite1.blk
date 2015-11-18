@@ -50,22 +50,22 @@
 fun comp tx_driver(h : struct HeaderInfo) {
  --  6 Mbps
  if h.coding == CR_12 && h.modulation == M_BPSK then 
-   (standalone[0] {scrambler(default_scrmbl_st)} >>> standalone[0] {encode12()} >>> standalone[0] {interleaver_bpsk()} |>>>| standalone[1] {modulate_bpsk()})
+   (standalone[0] {scrambler(default_scrmbl_st)} >>> standalone[0] {encode12()} >>> standalone[0] {interleaver_bpsk()} >>> standalone[0] {modulate_bpsk()})
  --  9 Mbps
  else if h.coding == CR_34 && h.modulation == M_BPSK then 
-   (standalone[0] {scrambler(default_scrmbl_st)} >>> standalone[0] {encode34()} >>> standalone[0] {interleaver_bpsk()} |>>>| standalone[1] {modulate_bpsk()})
+   (standalone[0] {scrambler(default_scrmbl_st)} >>> standalone[0] {encode34()} >>> standalone[0] {interleaver_bpsk()} >>> standalone[0] {modulate_bpsk()})
  -- 12 Mbps
  else if h.coding == CR_12 && h.modulation == M_QPSK then 
-   (standalone[0] {scrambler(default_scrmbl_st)} >>> standalone[0] {encode12()} >>> standalone[0] {interleaver_qpsk()} |>>>| standalone[1] {modulate_qpsk()})
+   (standalone[0] {scrambler(default_scrmbl_st)} >>> standalone[0] {encode12()} >>> standalone[0] {interleaver_qpsk()} >>> standalone[0] {modulate_qpsk()})
  -- 18 Mbps
  else if h.coding == CR_34 && h.modulation == M_QPSK then 
-   (standalone[0] {scrambler(default_scrmbl_st)} >>> standalone[0] {encode34()} >>> standalone[0] {interleaver_qpsk()} |>>>| standalone[1] {modulate_qpsk()})
+   (standalone[0] {scrambler(default_scrmbl_st)} >>> standalone[0] {encode34()} >>> standalone[0] {interleaver_qpsk()} >>> standalone[0] {modulate_qpsk()})
  -- 24 Mbps
  else if h.coding == CR_12 && h.modulation == M_16QAM then 
-   (standalone[0] {scrambler(default_scrmbl_st)} >>> standalone[0] {encode12()} >>> standalone[0] {interleaver_m16qam()} |>>>| standalone[1] {modulate_16qam()})
+   (standalone[0] {scrambler(default_scrmbl_st)} >>> standalone[0] {encode12()} >>> standalone[0] {interleaver_m16qam()} >>> standalone[0] {modulate_16qam()})
  -- 36 Mbps
  else if h.coding == CR_34 && h.modulation == M_16QAM then 
-   (standalone[0] {scrambler(default_scrmbl_st)} >>> standalone[0] {encode34()} >>> standalone[0] {interleaver_m16qam()} |>>>| standalone[1] {modulate_16qam()})
+   (standalone[0] {scrambler(default_scrmbl_st)} >>> standalone[0] {encode34()} >>> standalone[0] {interleaver_m16qam()} >>> standalone[0] {modulate_16qam()})
  -- 48 Mbps
  else if h.coding == CR_23 && h.modulation == M_64QAM then 
    (standalone[0] {scrambler(default_scrmbl_st)} >>> standalone[0] {encode23()} >>> standalone[0] {interleaver_m64qam()} |>>>| standalone[1] {modulate_64qam()})
@@ -87,7 +87,7 @@ seq{ emits createSTSinTime()
    ; (tx_driver(hInfo) >>> map_ofdm() >>> ifft())
    }
 -}
-   (tx_driver(hInfo) >>> standalone[1] (map_ofdm()) >>> standalone[1](ifft()))
+   (tx_driver(hInfo) >>> standalone[0] (map_ofdm()) |>>>| standalone[1](ifft()))
 };
 
 

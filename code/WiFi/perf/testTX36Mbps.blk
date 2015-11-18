@@ -18,6 +18,6 @@
 --
 --
 #include "../const.blk"
-#include "blocks/TransmitterInfinite.blk"
+#include "blocks/TransmitterInfinite1.blk"
 
 let comp main = read >>> TransmitterInfinite(HeaderInfo{coding=CR_34;modulation=M_16QAM;len=0;err=false}) >>> write;
