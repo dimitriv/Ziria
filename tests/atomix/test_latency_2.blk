@@ -1,0 +1,21 @@
+#include <externals.blk> 
+
+fun comp slow() {
+var a : arr[10] int16;
+  for i in [0, 1000] {
+    x <- takes 10;
+    do{a[0] := sleep_int16(x[0], 100)};
+    emits a;
+  }
+}
+
+
+fun comp fast() {
+  repeat{
+    x <- take;
+    emit sleep_int16(x, 10);
+  }
+}
+
+
+let comp main = read >>> standalone[0]{slow()} >>> standalone[1]{fast()} >>> write;
