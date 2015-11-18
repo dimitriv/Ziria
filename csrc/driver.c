@@ -91,6 +91,7 @@ extern void initBufCtxBlock(BufContextBlock *blk);
 ***************************************************************************/
 BlinkParams Globals;
 BlinkParams *params;
+bool atomix = 0;
 
 // tracks bytes copied 
 extern unsigned long long bytes_copied; 

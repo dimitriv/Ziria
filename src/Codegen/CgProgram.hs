@@ -158,7 +158,6 @@ codeGenProgram dflags shared_ctxt
   | not (isDynFlagSet dflags AtomixCodeGen)
   = withModuleName module_name $
     do { codeGenContexts >>= appendTopDecls
-       ; appendTopDecl [cdecl| $ty:(namedCType "bool") atomix = 0; |]
        ; (_,moreinitstms) <- codeGenSharedCtxt dflags True shared_ctxt $
            do { forM_ tid_cs $ \(tid,c) -> codeGenThread dflags tid c
               ; if pipeline_flag then
@@ -204,7 +203,6 @@ codeGenProgram dflags shared_ctxt
            let queues = (extractQueues automaton)
            appendTopDecl [cdecl| $ty:(namedCType "long volatile") *barr_hist1 = NULL; |]
            appendTopDecl [cdecl| $ty:(namedCType "long volatile") *barr_hist2 = NULL; |]
-           appendTopDecl [cdecl| $ty:(namedCType "bool") atomix = 1; |]
            cgAutomatonDeclareAllGlobals dflags rnst queues automaton  $ 
              if no_threads > 1 then 
                -- Multi-threaded case
