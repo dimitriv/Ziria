@@ -1,9 +1,9 @@
 #include <externals.blk> 
 
 fun comp slow() {
-var a : arr[10] int16;
+var a : arr[1000] int16;
   for i in [0, 1000] {
-    x <- takes 10;
+    x <- takes 1000;
     do{a[0] := sleep_int16(x[0], 100)};
     emits a;
   }
@@ -11,11 +11,14 @@ var a : arr[10] int16;
 
 
 fun comp fast() {
+var a : arr[1000] int16;
   repeat{
-    x <- take;
-    emit sleep_int16(x, 10);
+    x <- takes 100;
+    do{a[0] := sleep_int16(x[0], 10)};
+    emits a; 
   }
 }
 
 
-let comp main = read >>> standalone[0]{slow()} >>> standalone[1]{fast()} >>> write;
+let comp main = read >>> standalone[0]{slow()} |>>>| standalone[1]{fast()} >>> write;
+
