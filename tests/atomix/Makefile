@@ -80,7 +80,7 @@ test_encdec%.outfile: test_encdec.out test_encdec%.infile
 
 %.perf: %.out 
 	./$< --input=dummy \
-	     --dummy-samples=50 \
+	     --dummy-samples=5000 \
              --output=dummy $(EXTRARUNOPTS)
 
 
