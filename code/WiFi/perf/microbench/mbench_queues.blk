@@ -19,8 +19,8 @@
 --
 
 #include "mbenchutils.blk"
-#define N
-#define M
+#define N EXEC_TIME_A
+#define M EXEC_TIME_B
 
 fun comp A(n : int) {
 	var cnt : int;
