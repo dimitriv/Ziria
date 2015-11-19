@@ -19,6 +19,39 @@
 --
 
 #include "mbenchutils.blk"
-let n = 1
-let comp main = read >>> ffttrans() >>> ffttrans() |>>>| ffttrans() >>> ffttrans() >>> write
+#define N
+#define M
+
+fun comp A(n : int) {
+	var cnt : int;
+	repeat {
+		x <- takes 64;
+		do {cnt := 1;}
+		do {
+			while (cnt < n) {
+				sora_fft(x);
+				cnt := cnt + 1;
+			}
+		}
+		emits sora_fft(x);
+	}
+}
+
+fun comp B(m : int) {
+	var cnt : int;
+	repeat {
+		x <- takes 64;
+		do {
+			while (cnt < m) {
+				sora_fft(x);
+				cnt := cnt + 1;
+			}
+		}
+		emits sora_fft(x);
+	}
+}
+
+
+
+let comp main = read >>> A(N) |>>>| B(M) >>> write
 
