@@ -18,7 +18,12 @@
 --
 --
 
-#include "mbenchutils.blk"
-let n = 1
-let comp main = read >>> ffttrans() >>> ffttrans() |>>>| ffttrans() >>> ffttrans() >>> write
+-- Run the same code as Sora's implementation
+#define SORA_COMPAT
+#include "blocks/ReceiverInfinite_3_t.blk"
+
+let comp main = read >>> ReceiverInfinite(HeaderInfo{coding = CR_12; modulation = M_BPSK; len = 0; err = false}) >>> write;
+
+
+
 

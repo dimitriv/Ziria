@@ -199,6 +199,13 @@ int getCoreInfo(int noCore, int * coreMask)
 		processorL1CacheCount,
 		processorL2CacheCount,
 		processorL3CacheCount);
+	printf("Physical cores mask: ");
+	for (int i = 0; i < coreMaskInd; i++)
+	{
+		printf("%d ", coreMask[i]);
+	}
+	printf("\n");
+
 
 	free(buffer);
 
@@ -249,6 +256,8 @@ bool StartWinUThread(int no_threads, PWIN_UTHREAD_PROC *function,
 		t_info[thr].fRunning = true;
 
 		HANDLE hThread = CreateThread(NULL, 0, function[thr], (void *)(t_info + thr), 0, &dwThreadId);
+
+		Sleep(100);
 
 		if (hThread != NULL)
 		{
