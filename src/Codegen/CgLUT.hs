@@ -563,7 +563,7 @@ genLocalMaskInits _dfs mask_vars action = do
   let new_bind (_x,Nothing) = return Nothing
       new_bind (_x,Just mx) = do
          mcx <- freshVar (name mx)
-         appendCodeGenDeclGroup mcx (nameTyp mx) ZeroOut
+         appendCodeGenDeclGroupEscape mcx (nameTyp mx) ZeroOut
          return $ Just (mx,[cexp|$id:mcx|])
   var_env <- catMaybes <$> mapM new_bind mask_vars
   extendVarEnv var_env action
@@ -574,7 +574,7 @@ genLocalVarInits :: DynFlags -> [EId] -> Cg a -> Cg a
 genLocalVarInits _dflags variables action = do 
   let new_bind v = do 
          cv <- freshVar (name v); 
-         appendCodeGenDeclGroup cv (nameTyp v) ZeroOut
+         appendCodeGenDeclGroupEscape cv (nameTyp v) ZeroOut
          return (v,[cexp|$id:cv|])
   var_env <- mapM new_bind variables
   extendVarEnv var_env action
