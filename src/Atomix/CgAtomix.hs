@@ -592,8 +592,8 @@ cgAutomaton :: DynFlags
 cgAutomaton dfs atid queues Automaton { auto_graph   = graph
                                       , auto_start   = start }
   = do { cg_automaton atid
-       ; return (lblOfNid start) }
-
+       ; return (lblOfNid start) 
+       }
 
   where 
    
@@ -652,12 +652,12 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
               -- appendStmt[cstm| delete($id:sp);|]
      cg_decision c nid decision
 
-   cg_decision c nid AtomixDone
+   cg_decision c _nid AtomixDone
      = if no_threads == 1 then
            appendStmt [cstm| return 0; |]
          else
            appendStmts [cstms| 
-             barrier($id:(barr_name nid), $int:no_threads, $int:c);
+             barrier($int:no_threads, $int:c);
              return 0; |]
 
    cg_decision c nid (AtomixLoop next)
@@ -668,7 +668,7 @@ cgAutomaton dfs atid queues Automaton { auto_graph   = graph
                 if nid == next then 
                   [cstm|ORIGIN("Omitting barrier, loopy state");|]
                 else
-                  [cstm|barrier($id:(barr_name nid), $int:no_threads, $int:c);|]
+                  [cstm|barrier($int:no_threads, $int:c);|]
            in appendStmts [cstms| 
                 //printf("Tid %d, %d -> %d\n", $int:c, $int:nid, $int:next);
                  $stm:barrstmt

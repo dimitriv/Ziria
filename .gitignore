@@ -400,6 +400,19 @@ tests/mac/*dump
 tests/mac/*outp
 
 
+
+tests/atomix/*.c
+tests/atomix/*.exe
+tests/atomix/*.expanded
+tests/atomix/*.outfile
+tests/atomix/*.out
+tests/atomix/*~
+tests/atomix/compout
+tests/atomix/perfout
+tests/atomix/*dump
+tests/atomix/*outp
+
+
 code/WiFi/mac/CompilerVS/CompilerVS13-mac-inline
 code/WiFi/mac/CompilerVS/CompilerVS13-mac
 
