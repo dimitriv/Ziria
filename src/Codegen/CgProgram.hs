@@ -207,8 +207,9 @@ codeGenProgram dflags shared_ctxt
              if no_threads > 1 then 
                -- Multi-threaded case
                do { forM_ (interval (no_threads - 1)) $ \atid -> 
-                      mkAtomixRuntime dflags (Just ((getName dflags) ++ "thread" ++ show atid)) $
-                      codeGenThreadAtomix dflags queues atid automaton
+                      mkAtomixRuntime dflags no_threads atid (Just ((getName dflags) ++ "thread" ++ show atid)) $
+                      do { codeGenThreadAtomix dflags queues atid automaton
+                         }
                   ; do { -- Just to make the SORA code happy we need
                        -- to implement a dummy wpl_go
                        -- In reality the set_up_threads() function uses
@@ -226,7 +227,7 @@ codeGenProgram dflags shared_ctxt
                   }
              else
                -- Single-threaded case
-               do { mkAtomixRuntime dflags (Just ((getName dflags))) $
+               do { mkAtomixRuntime dflags 1 0 (Just ((getName dflags))) $
                     codeGenThreadAtomix dflags queues 0 automaton
                    -- In this case we know that wpl_go /is/ going to be
                    -- the main function

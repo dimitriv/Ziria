@@ -213,7 +213,7 @@ MEM_ALIGN(ST_CACHE_LINE) static volatile SHORT ok[MAXPOSSIBLETHREADS] = { 0 };
 #endif
 
 
-inline void barrier(LONG volatile *___state, int no_threads, int thr)
+inline void barrier(int no_threads, int thr)
 {   // we are not really using the ___state any more
 
 #ifdef _VISUALIZE
