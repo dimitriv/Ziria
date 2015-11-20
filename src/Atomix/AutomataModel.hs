@@ -213,6 +213,15 @@ data AtomixNk atom nid
 
 instance (NFData atom, NFData nid) => NFData (AtomixNk atom nid)
 
+
+
+sucsOfAtomixNk :: Node atom nid AtomixNk -> [nid]
+sucsOfAtomixNk (Node _ (AtomixState _ _ dec _)) = sucs_of_dec dec
+  where sucs_of_dec AtomixDone = []
+        sucs_of_dec (AtomixLoop bd) = [bd]
+        sucs_of_dec (AtomixBranch _ n1 n2) = [n1,n2]
+
+
 data Dependency
   = RW
   | WR
@@ -1368,12 +1377,16 @@ union x y partition =
 
 
 
-
-
-
-
-
-
+atomColorByCore :: Atom e => e -> String
+atomColorByCore atom
+  = colorlist !! ((fromMaybe 0 $ getCore atom) `mod` colorlistlen)
+  where colorlist = ["color=white"
+                     ,"color=gray"
+                     ,"color=azure"
+                     ,"color=aquamarine"
+                     ,"color=gold"
+                     ]
+        colorlistlen = length colorlist
 
 
 {------------------------------------------------------------------------
@@ -1388,7 +1401,7 @@ dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfi
     prefix = "digraph ziria_automaton {\n"
     postfix = ";\n}"
     nodes = ("node [shape = point]":start) ++
-            ("node [shape = doublecircle]":final) ++
+            ("node [shape = box, peripheries=2]":final) ++
             ("node [shape = box]":decision) ++
             ("node [shape = box, fontname=monospace, fontsize=11, style=filled, fillcolor=\"white\"]":action)
     start = ["start [label=\"\"]"]
@@ -1437,6 +1450,45 @@ dotOfAuto dflags a = prefix ++ List.intercalate ";\n" (nodes ++ edges) ++ postfi
     maybeToolTip (CfgAction _ _ pipes) = " tooltip=\"" ++ showPipeNames pipes ++ "\""
     maybeToolTip _ = ""
     showPipeNames = List.intercalate " | " . map (showChan True) . Map.keys
+
+
+dotOfAxAutoFull :: Atom e => DynFlags -> AxAuto e -> String
+dotOfAxAutoFull dflags a = prePost (List.intercalate ";\n" (nodes ++ edges))
+  where
+    auto_nodes = Map.elems (auto_graph a)
+    prePost s = "digraph ziria_automaton {\n" ++ s ++ ";\n}"
+    nodes = ("node [shape = point]":start) ++
+            ("node [shape = box, fontname=monospace, fontsize=11, style=filled, fillcolor=\"white\"]":final) ++
+            ("node [shape = box, fontname=monospace, fontsize=11, style=filled, fillcolor=\"white\"]":other)
+    start = ["start [label=\"\"]"]
+
+    (final_nodes,other_nodes) = List.partition is_final auto_nodes
+       where is_final node 
+                | Node _ nk <- node
+                , AtomixDone <- state_decision nk = True
+                | otherwise = False
+
+    final = List.map showNode final_nodes
+    other = List.map showNode other_nodes
+
+    showNode (Node nid nk) 
+       = "  " ++ show nid ++ "[label=\"" ++ showNk nk ++ "\"" ++ "]"
+
+    showNk (AtomixState watoms _ _ _) = List.intercalate "\\n" $ showWatoms watoms
+
+    showWatoms = map showWatomGroup . List.group
+    showWatomGroup wa = case length wa of 
+       1 -> showWatom (head wa)
+       n -> show n ++ " TIMES DO " ++ showWatom (head wa)
+
+    showWatom wa@(WiredAtom inw outw atom)
+      = (show $ fromMaybe 0 $ getCore atom) ++ ":" ++ alphaNumStr (wiredAtomId wa)
+
+    edges = ("start -> " ++ show (auto_start a)) : (List.map edges_of_node other_nodes)
+
+    edges_of_node node = List.intercalate "; " [edge (node_id node) suc | suc <- sucsOfAtomixNk node]
+    edge nid1 nid2 = show nid1 ++ " -> " ++ show nid2
+
 
 
 dotOfAxAuto :: Atom e => DynFlags -> AxAuto e -> [(Int, String)]
@@ -1523,7 +1575,7 @@ automatonPipeline dfs sym inty outty acomp = do
 
   -- dump dot files 
   putStrLn ">>>>>>>>>>> dumping automaton dot files..."
-  dump dfs DumpAutomaton (".automaton.dump") (PPR.text $ dotOfAuto dfs a_n)
+  dump dfs DumpAutomaton (".automaton.dump") (PPR.text $ dotOfAxAutoFull dfs a_s)
   mapM_ dumpState $ dotOfAxAuto dfs a_s
   putStrLn $ "<<<<<<<<<<< dumping automaton dot files"
 
