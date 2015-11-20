@@ -172,10 +172,12 @@ go_name mfreshId =
 
 
 mkAtomixRuntime :: DynFlags     -- | Flags
+                -> Int          -- | number of threads
+                -> Int          -- | this thread id
                 -> Maybe String -- | Optional unique suffix for name generation
                 -> Cg CLabel    -- | Computation that generates code
                 -> Cg ()
-mkAtomixRuntime dfs mfreshId m = do
+mkAtomixRuntime dfs no_threads atid mfreshId m = do
     (local_decls, local_stmts, clabel) <- inNewBlock m
     appendTopDef $ [cedecl| extern $ty:(namedCType "bool") atomix; |]
     appendTopDef $ [cedecl|
@@ -185,7 +187,8 @@ mkAtomixRuntime dfs mfreshId m = do
           atomix = 1;
 
           $decls:local_decls
-           
+          
+          $stms:init_barr
           goto $id:clabel;
 
           $stms:local_stmts
@@ -197,3 +200,6 @@ mkAtomixRuntime dfs mfreshId m = do
     barr_name label = "__barr_" ++ label
     no_threads      = getNoAtomThreads dfs
 
+    init_barr = if (no_threads > 1)  
+                   then [[cstm| barrier($int:no_threads, $int:atid);|]]
+                   else [] 

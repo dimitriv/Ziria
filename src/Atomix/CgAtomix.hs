@@ -591,10 +591,7 @@ cgAutomaton :: DynFlags
             -> Cg CLabel            -- ^ Label of starting state we jump to
 cgAutomaton dfs atid queues Automaton { auto_graph   = graph
                                       , auto_start   = start }
-  = do { if (no_threads > 1)  
-           then appendStmt [cstm| barrier($int:no_threads, $int:atid);|]
-           else return ()
-       ; cg_automaton atid
+  = do { cg_automaton atid
        ; return (lblOfNid start) 
        }
 
