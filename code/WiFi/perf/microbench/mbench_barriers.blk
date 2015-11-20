@@ -67,9 +67,9 @@ fun comp run () {
 	var cnt : int := 0;
 	repeat {
 		if (cnt % 2 == 0) then
-			(A(N) |>>>| D(M))
+			(standalone[0](A(N)) |>>>| standalone[1](D(M)))
 		else
-			(B(N) |>>>| D(M))
+			(standalone[0](B(N)) |>>>| standalone[1](D(M)))
 		do {cnt := cnt + 1;}
 	}
 }

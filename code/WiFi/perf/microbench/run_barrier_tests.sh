@@ -20,43 +20,20 @@
 echo "make sure TS_PROFILE is undefined"
 echo "starting barrier testing..."
 
-for I in {1..100}
+
 
 echo "Execution time increase test" >> output_b.text
 echo "" >> output_b.text
 
+for I in {1..20}
 do
 	sed s/EXEC_TIME_A/$I/g mbench_barriers.blk > temp_b.blk
 	sed -i s/EXEC_TIME_B/$I/g temp_b.blk
 	echo "N="$I >> output_b.text
 	echo "" >> output_b.text
-	EXTRAOPTS="--no-atom-threads=2 --optimism=1 --atomix-codegen --atom-state-profiling" make temp_b.perf -B | sed -n -e '/SORA Queue/,/RESERVE/p' >> output_b.text
+	EXTRAOPTS="--no-atom-threads=2 --optimism=1 --atomix-codegen --atom-state-profiling" make temp_b.perf -B | sed -n -e '/Thread 0/,/__pcnt_barrier_elaps_BLOCK3_thread1/p' >> output_b.text
 	echo "" >> output_b.text
+	echo "I="$I
 done
-
-echo "Balancing test">> output_b.text
-echo "" >> output_b.text
-
-for I in {1..100}
-do
-	sed s/EXEC_TIME_A/1/g mbench_barriers.blk > temp_b.blk
-	sed -i s/EXEC_TIME_B/$I/g temp_b.blk
-	EXEC=$(python -c "print 1.0 / "$I)
-	echo "A/D="$EXEC >> output_b.text
-	echo "" >> output_b.text
-	EXTRAOPTS="--no-atom-threads=2 --optimism=1 --atomix-codegen --atom-state-profiling" make temp_b.perf -B | sed -n -e '/SORA Queue/,/RESERVE/p' >> output_b.text
-	echo "" >> output_b.text
-done
-
-for I in {1..100}
-do
-	sed s/EXEC_TIME_A/$I/g mbench_barriers.blk > temp_b.blk
-	sed -i s/EXEC_TIME_B/1/g temp_b.blk
-	echo "A/D="$I >> output_b.text
-	echo "" >> output_b.text
-	EXTRAOPTS="--no-atom-threads=2 --optimism=1 --atomix-codegen --atom-state-profiling" make temp_b.perf -B | sed -n -e '/SORA Queue/,/RESERVE/p' >> output_b.text
-	echo "" >> output_b.text
-done
-
 rm temp_b.blk
 echo "done! see output_b.txt"
