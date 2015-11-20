@@ -31,7 +31,7 @@ typedef uint8_t unum8;
 typedef uint16_t unum16;
 typedef uint32_t unum32;
 typedef uint64_t unum64;
-#define calign __atribute__(aligned(16))
+#define calign __attribute__(aligned(16))
 #define cthread __thread
 // NOTE: __attribute__ ((weak)) is NOT the same as __declspec(selectany) and causes tests to fail!
 //#define cselectany  __attribute__ ((weak))
