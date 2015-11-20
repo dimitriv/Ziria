@@ -17,13 +17,10 @@
    permissions and limitations under the License.
 */
 
-#ifdef __linux__
-#include <stdint.h>
-#endif
-
 #include "types.h"
 #include "string.h"
 #include <assert.h>
+#include "numerics.h"
 
 #include <xmmintrin.h>
 #include <emmintrin.h>
@@ -414,11 +411,7 @@ int16 __ext_v_sum_int16(int16* x, int len)
 {
 	__m128i msum = _mm_setzero_si128();
 
-#ifdef SORA_PLATFORM
-	__int16 ret;
-#else
-	int16_t ret;
-#endif
+num16 ret;
 
 	const int wlen = 8;
 
@@ -1219,43 +1212,41 @@ void __ext_v_or8(unsigned char *output, int outlen, unsigned char *input1, int i
 
 
 
-// to account for different integer types in vs/gcc
-#ifdef SORA_PLATFORM
 FORCE_INLINE
 void __ext_v_or_48(unsigned char *output, unsigned char *input1, unsigned char *input2)
 {
-	unsigned __int32 i1, i2;
-	unsigned __int16 j1, j2;
+	unum32 i1, i2;
+	unum16 j1, j2;
 
-	i1 = *(unsigned __int32 *)input1;
-	i2 = *(unsigned __int32 *)input2;
-	*(unsigned __int32 *)output = i1 | i2;
+	i1 = *(unum32 *)input1;
+	i2 = *(unum32 *)input2;
+	*(unum32 *)output = i1 | i2;
 
-	j1 = *(unsigned __int16 *)(input1 + 4);
-	j2 = *(unsigned __int16 *)(input2 + 4);
-	*(unsigned __int16 *)(output + 4) = j1 | j2;
+	j1 = *(unum16 *)(input1 + 4);
+	j2 = *(unum16 *)(input2 + 4);
+	*(unum16 *)(output + 4) = j1 | j2;
 }
 
 FORCE_INLINE
 void __ext_v_or_96(unsigned char *output, unsigned char *input1, unsigned char *input2)
 {
-	unsigned __int64 i1, i2;
-	unsigned __int32 j1, j2;
+	unum64 i1, i2;
+	unum32 j1, j2;
 
-	i1 = *(unsigned __int64 *)input1;
-	i2 = *(unsigned __int64 *)input2;
-	*(unsigned __int64 *)output = i1 | i2;
+	i1 = *(unum64 *)input1;
+	i2 = *(unum64 *)input2;
+	*(unum64 *)output = i1 | i2;
 
-	j1 = *(unsigned __int32 *)(input1 + 8);
-	j2 = *(unsigned __int32 *)(input2 + 8);
-	*(unsigned __int32 *)(output + 8) = j1 | j2;
+	j1 = *(unum32 *)(input1 + 8);
+	j2 = *(unum32 *)(input2 + 8);
+	*(unum32 *)(output + 8) = j1 | j2;
 }
 
 FORCE_INLINE
 void __ext_v_or_192(unsigned char *output, unsigned char *input1, unsigned char *input2)
 {
 
-	unsigned __int64 i1, i2;
+	unum64 i1, i2;
 
     // Strangely crashes ... 
 	// vcs *pi1 = (vcs *)input1; 
@@ -1263,79 +1254,21 @@ void __ext_v_or_192(unsigned char *output, unsigned char *input1, unsigned char 
 	// vcs *po = (vcs *)output; 
 	// *po = (vcs)_mm_and_si128(*pi1, *pi2); 
 
-	i1 = *(unsigned __int64 *)(input1);
-	i2 = *(unsigned __int64 *)(input2);
-	*(unsigned __int64 *)(output) = i1 | i2;
+	i1 = *(unum64 *)(input1);
+	i2 = *(unum64 *)(input2);
+	*(unum64 *)(output) = i1 | i2;
 
-	i1 = *(unsigned __int64 *)(input1+8);
-	i2 = *(unsigned __int64 *)(input2+8);
-	*(unsigned __int64 *)(output+8) = i1 | i2;
+	i1 = *(unum64 *)(input1+8);
+	i2 = *(unum64 *)(input2+8);
+	*(unum64 *)(output+8) = i1 | i2;
 
-	i1 = *(unsigned __int64 *)(input1+16);
-	i2 = *(unsigned __int64 *)(input2+16);
-	*(unsigned __int64 *)(output+16) = i1 | i2;
-
-
-}
-
-#else
-FORCE_INLINE
-void __ext_v_or_48(unsigned char *output, unsigned char *input1, unsigned char *input2)
-{
-	uint32_t i1, i2;
-	uint16_t j1, j2;
-
-	i1 = *(uint32_t *)input1;
-	i2 = *(uint32_t *)input2;
-	*(uint32_t *)output = i1 | i2;
-
-	j1 = *(uint16_t *)(input1 + 4);
-	j2 = *(uint16_t *)(input2 + 4);
-	*(uint16_t *)(output + 4) = j1 | j2;
-}
-
-FORCE_INLINE
-void __ext_v_or_96(unsigned char *output, unsigned char *input1, unsigned char *input2)
-{
-	uint64_t i1, i2;
-	uint32_t j1, j2;
-
-	i1 = *(uint64_t *)input1;
-	i2 = *(uint64_t *)input2;
-	*(uint64_t *)output = i1 | i2;
-
-	j1 = *(uint32_t *)(input1 + 8);
-	j2 = *(uint32_t *)(input2 + 8);
-	*(uint32_t *)(output + 8) = j1 | j2;
-}
-
-FORCE_INLINE
-void __ext_v_or_192(unsigned char *output, unsigned char *input1, unsigned char *input2)
-{
-
-	uint64_t i1, i2;
-
-	// Strangely crashes ... 
-	// vcs *pi1 = (vcs *)input1; 
-	// vcs *pi2 = (vcs *)input2; 
-	// vcs *po = (vcs *)output; 
-	// *po = (vcs)_mm_and_si128(*pi1, *pi2); 
-
-	i1 = *(uint64_t *)(input1);
-	i2 = *(uint64_t *)(input2);
-	*(uint64_t *)(output) = i1 | i2;
-
-	i1 = *(uint64_t *)(input1 + 8);
-	i2 = *(uint64_t *)(input2 + 8);
-	*(uint64_t *)(output + 8) = i1 | i2;
-
-	i1 = *(uint64_t *)(input1 + 16);
-	i2 = *(uint64_t *)(input2 + 16);
-	*(uint64_t *)(output + 16) = i1 | i2;
+	i1 = *(unum64 *)(input1+16);
+	i2 = *(unum64 *)(input2+16);
+	*(unum64 *)(output+16) = i1 | i2;
 
 
 }
-#endif
+
 
 FORCE_INLINE
 void __ext_v_or_288(unsigned char *output, unsigned char *input1, unsigned char *input2)
