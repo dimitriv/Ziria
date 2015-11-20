@@ -1,0 +1,606 @@
+Execution time increase test
+
+N=1
+
+Execution time increase test
+
+N=1
+
+Thread 0, id=2864 started on core 0.
+Standalone thread (1) ID: 3476
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=3476 started on core 1.
+QueryPerformanceCounter = 3654214
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 1041925 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 0
+__pcnt_barrier_elaps_BLOCK0_thread0 = 0
+Thread 0, State 2, entered = 781251 times
+__pcnt_elaps_BLOCK2_thread0 = 1826621
+__pcnt_barrier_elaps_BLOCK2_thread0 = 21096
+Thread 0, State 3, entered = 781250 times
+__pcnt_elaps_BLOCK3_thread0 = 1793797
+__pcnt_barrier_elaps_BLOCK3_thread0 = 21696
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 0
+__pcnt_barrier_elaps_BLOCK0_thread1 = 1
+Thread 1, State 2, entered = 781251 times
+__pcnt_elaps_BLOCK2_thread1 = 629438
+__pcnt_barrier_elaps_BLOCK2_thread1 = 1338386
+Thread 1, State 3, entered = 781250 times
+__pcnt_elaps_BLOCK3_thread1 = 633325
+__pcnt_barrier_elaps_BLOCK3_thread1 = 1308782
+
+N=2
+
+Thread 0, id=12736 started on core 0.
+Standalone thread (1) ID: 10208
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=10208 started on core 1.
+QueryPerformanceCounter = 4615260
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 1315947 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 0
+__pcnt_barrier_elaps_BLOCK0_thread0 = 0
+Thread 0, State 2, entered = 781249 times
+__pcnt_elaps_BLOCK2_thread0 = 2123035
+__pcnt_barrier_elaps_BLOCK2_thread0 = 21179
+Thread 0, State 3, entered = 781252 times
+__pcnt_elaps_BLOCK3_thread0 = 2428187
+__pcnt_barrier_elaps_BLOCK3_thread0 = 21850
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 0
+__pcnt_barrier_elaps_BLOCK0_thread1 = 1
+Thread 1, State 2, entered = 781249 times
+__pcnt_elaps_BLOCK2_thread1 = 575162
+__pcnt_barrier_elaps_BLOCK2_thread1 = 1711953
+Thread 1, State 3, entered = 781252 times
+__pcnt_elaps_BLOCK3_thread1 = 923998
+__pcnt_barrier_elaps_BLOCK3_thread1 = 1663829
+
+N=3
+
+Thread 0, id=11904 started on core 0.
+Standalone thread (1) ID: 11004
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=11004 started on core 1.
+QueryPerformanceCounter = 5716536
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 1629954 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 0
+__pcnt_barrier_elaps_BLOCK0_thread0 = 1
+Thread 0, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread0 = 2495024
+__pcnt_barrier_elaps_BLOCK2_thread0 = 21084
+Thread 0, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread0 = 3170795
+__pcnt_barrier_elaps_BLOCK3_thread0 = 22814
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 0
+__pcnt_barrier_elaps_BLOCK0_thread1 = 1
+Thread 1, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread1 = 623676
+__pcnt_barrier_elaps_BLOCK2_thread1 = 2022248
+Thread 1, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread1 = 1277890
+__pcnt_barrier_elaps_BLOCK3_thread1 = 2047870
+
+N=4
+
+Thread 0, id=11428 started on core 0.
+Standalone thread (1) ID: 200
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=200 started on core 1.
+QueryPerformanceCounter = 6880856
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 1961936 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 0
+__pcnt_barrier_elaps_BLOCK0_thread0 = 0
+Thread 0, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread0 = 2929021
+__pcnt_barrier_elaps_BLOCK2_thread0 = 20974
+Thread 0, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread0 = 3853907
+__pcnt_barrier_elaps_BLOCK3_thread0 = 21711
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 0
+__pcnt_barrier_elaps_BLOCK0_thread1 = 2
+Thread 1, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread1 = 627248
+__pcnt_barrier_elaps_BLOCK2_thread1 = 2474343
+Thread 1, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread1 = 1624694
+__pcnt_barrier_elaps_BLOCK3_thread1 = 2411874
+
+N=5
+
+Thread 0, id=12776 started on core 0.
+Standalone thread (1) ID: 10872
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=10872 started on core 1.
+QueryPerformanceCounter = 7855757
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 2239909 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 1
+__pcnt_barrier_elaps_BLOCK0_thread0 = 0
+Thread 0, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread0 = 3176504
+__pcnt_barrier_elaps_BLOCK2_thread0 = 21065
+Thread 0, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread0 = 4562065
+__pcnt_barrier_elaps_BLOCK3_thread0 = 21142
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 0
+__pcnt_barrier_elaps_BLOCK0_thread1 = 1
+Thread 1, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread1 = 608558
+__pcnt_barrier_elaps_BLOCK2_thread1 = 2769586
+Thread 1, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread1 = 1979512
+__pcnt_barrier_elaps_BLOCK3_thread1 = 2754046
+
+N=6
+
+Thread 0, id=2616 started on core 0.
+Standalone thread (1) ID: 12992
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=12992 started on core 1.
+QueryPerformanceCounter = 9075237
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 2587619 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 0
+__pcnt_barrier_elaps_BLOCK0_thread0 = 1
+Thread 0, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread0 = 3632831
+__pcnt_barrier_elaps_BLOCK2_thread0 = 21520
+Thread 0, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread0 = 5352836
+__pcnt_barrier_elaps_BLOCK3_thread0 = 21411
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 0
+__pcnt_barrier_elaps_BLOCK0_thread1 = 1
+Thread 1, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread1 = 636218
+__pcnt_barrier_elaps_BLOCK2_thread1 = 3165394
+Thread 1, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread1 = 2422927
+__pcnt_barrier_elaps_BLOCK3_thread1 = 3111505
+
+N=7
+
+Thread 0, id=11620 started on core 0.
+Standalone thread (1) ID: 14160
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=14160 started on core 1.
+QueryPerformanceCounter = 9995073
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 2849892 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 0
+__pcnt_barrier_elaps_BLOCK0_thread0 = 1
+Thread 0, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread0 = 3950173
+__pcnt_barrier_elaps_BLOCK2_thread0 = 21255
+Thread 0, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread0 = 5971451
+__pcnt_barrier_elaps_BLOCK3_thread0 = 21780
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 0
+__pcnt_barrier_elaps_BLOCK0_thread1 = 1
+Thread 1, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread1 = 625885
+__pcnt_barrier_elaps_BLOCK2_thread1 = 3490100
+Thread 1, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread1 = 2694917
+__pcnt_barrier_elaps_BLOCK3_thread1 = 3441555
+
+N=8
+
+Thread 0, id=10536 started on core 0.
+Standalone thread (1) ID: 10320
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=10320 started on core 1.
+QueryPerformanceCounter = 11026136
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 3143879 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 1
+__pcnt_barrier_elaps_BLOCK0_thread0 = 0
+Thread 0, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread0 = 4257524
+__pcnt_barrier_elaps_BLOCK2_thread0 = 20939
+Thread 0, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread0 = 6668916
+__pcnt_barrier_elaps_BLOCK3_thread0 = 21788
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 0
+__pcnt_barrier_elaps_BLOCK0_thread1 = 1
+Thread 1, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread1 = 625188
+__pcnt_barrier_elaps_BLOCK2_thread1 = 3808816
+Thread 1, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread1 = 3068325
+__pcnt_barrier_elaps_BLOCK3_thread1 = 3779116
+
+N=9
+
+Thread 0, id=372 started on core 0.
+Standalone thread (1) ID: 10816
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=10816 started on core 1.
+QueryPerformanceCounter = 12001355
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 3421942 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 0
+__pcnt_barrier_elaps_BLOCK0_thread0 = 1
+Thread 0, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread0 = 4526979
+__pcnt_barrier_elaps_BLOCK2_thread0 = 21349
+Thread 0, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread0 = 7358614
+__pcnt_barrier_elaps_BLOCK3_thread0 = 21260
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 0
+__pcnt_barrier_elaps_BLOCK0_thread1 = 0
+Thread 1, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread1 = 609719
+__pcnt_barrier_elaps_BLOCK2_thread1 = 4092033
+Thread 1, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread1 = 3453826
+__pcnt_barrier_elaps_BLOCK3_thread1 = 4099524
+
+N=10
+
+Thread 0, id=8912 started on core 0.
+Standalone thread (1) ID: 9236
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=9236 started on core 1.
+QueryPerformanceCounter = 12899173
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 3677937 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 0
+__pcnt_barrier_elaps_BLOCK0_thread0 = 0
+Thread 0, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread0 = 4875164
+__pcnt_barrier_elaps_BLOCK2_thread0 = 21618
+Thread 0, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread0 = 7943057
+__pcnt_barrier_elaps_BLOCK3_thread0 = 20986
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 1
+__pcnt_barrier_elaps_BLOCK0_thread1 = 1
+Thread 1, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread1 = 593103
+__pcnt_barrier_elaps_BLOCK2_thread1 = 4441462
+Thread 1, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread1 = 3681677
+__pcnt_barrier_elaps_BLOCK3_thread1 = 4440938
+
+N=11
+
+Thread 0, id=11432 started on core 0.
+Standalone thread (1) ID: 12392
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=12392 started on core 1.
+QueryPerformanceCounter = 14147733
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 4033940 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 0
+__pcnt_barrier_elaps_BLOCK0_thread0 = 0
+Thread 0, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread0 = 5212293
+__pcnt_barrier_elaps_BLOCK2_thread0 = 21550
+Thread 0, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread0 = 8836179
+__pcnt_barrier_elaps_BLOCK3_thread0 = 20967
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 0
+__pcnt_barrier_elaps_BLOCK0_thread1 = 2
+Thread 1, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread1 = 634239
+__pcnt_barrier_elaps_BLOCK2_thread1 = 4763973
+Thread 1, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread1 = 4206164
+__pcnt_barrier_elaps_BLOCK3_thread1 = 4804604
+
+N=12
+
+Thread 0, id=12820 started on core 0.
+Standalone thread (1) ID: 9696
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=9696 started on core 1.
+QueryPerformanceCounter = 15017598
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 4281964 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 1
+__pcnt_barrier_elaps_BLOCK0_thread0 = 0
+Thread 0, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread0 = 5632131
+__pcnt_barrier_elaps_BLOCK2_thread0 = 21049
+Thread 0, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread0 = 9316126
+__pcnt_barrier_elaps_BLOCK3_thread0 = 20762
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 0
+__pcnt_barrier_elaps_BLOCK0_thread1 = 1
+Thread 1, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread1 = 611682
+__pcnt_barrier_elaps_BLOCK2_thread1 = 5185067
+Thread 1, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread1 = 4342988
+__pcnt_barrier_elaps_BLOCK3_thread1 = 5140358
+
+N=13
+
+Thread 0, id=10424 started on core 0.
+Standalone thread (1) ID: 11428
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=11428 started on core 1.
+QueryPerformanceCounter = 16136274
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 4600932 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 0
+__pcnt_barrier_elaps_BLOCK0_thread0 = 0
+Thread 0, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread0 = 5923492
+__pcnt_barrier_elaps_BLOCK2_thread0 = 22396
+Thread 0, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread0 = 10110362
+__pcnt_barrier_elaps_BLOCK3_thread0 = 21652
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 1
+__pcnt_barrier_elaps_BLOCK0_thread1 = 1
+Thread 1, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread1 = 625188
+__pcnt_barrier_elaps_BLOCK2_thread1 = 5471131
+Thread 1, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread1 = 4829854
+__pcnt_barrier_elaps_BLOCK3_thread1 = 5470345
+
+N=14
+
+Thread 0, id=10460 started on core 0.
+Standalone thread (1) ID: 1260
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=1260 started on core 1.
+QueryPerformanceCounter = 17290108
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 4929923 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 0
+__pcnt_barrier_elaps_BLOCK0_thread0 = 0
+Thread 0, State 2, entered = 781251 times
+__pcnt_elaps_BLOCK2_thread0 = 6365658
+__pcnt_barrier_elaps_BLOCK2_thread0 = 21266
+Thread 0, State 3, entered = 781250 times
+__pcnt_elaps_BLOCK3_thread0 = 10821172
+__pcnt_barrier_elaps_BLOCK3_thread0 = 20929
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 0
+__pcnt_barrier_elaps_BLOCK0_thread1 = 1
+Thread 1, State 2, entered = 781251 times
+__pcnt_elaps_BLOCK2_thread1 = 656845
+__pcnt_barrier_elaps_BLOCK2_thread1 = 5890868
+Thread 1, State 3, entered = 781250 times
+__pcnt_elaps_BLOCK3_thread1 = 5166964
+__pcnt_barrier_elaps_BLOCK3_thread1 = 5834475
+
+N=15
+
+Thread 0, id=12044 started on core 0.
+Standalone thread (1) ID: 10800
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=10800 started on core 1.
+QueryPerformanceCounter = 18156505
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 5176959 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 0
+__pcnt_barrier_elaps_BLOCK0_thread0 = 0
+Thread 0, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread0 = 6567152
+__pcnt_barrier_elaps_BLOCK2_thread0 = 21026
+Thread 0, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread0 = 11483814
+__pcnt_barrier_elaps_BLOCK3_thread0 = 21106
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 1
+__pcnt_barrier_elaps_BLOCK0_thread1 = 1
+Thread 1, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread1 = 590511
+__pcnt_barrier_elaps_BLOCK2_thread1 = 6158671
+Thread 1, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread1 = 5502315
+__pcnt_barrier_elaps_BLOCK3_thread1 = 6159248
+
+N=16
+
+Thread 0, id=4744 started on core 0.
+Standalone thread (1) ID: 11408
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=11408 started on core 1.
+QueryPerformanceCounter = 19240470
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 5486030 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 0
+__pcnt_barrier_elaps_BLOCK0_thread0 = 0
+Thread 0, State 2, entered = 781251 times
+__pcnt_elaps_BLOCK2_thread0 = 6921476
+__pcnt_barrier_elaps_BLOCK2_thread0 = 21173
+Thread 0, State 3, entered = 781250 times
+__pcnt_elaps_BLOCK3_thread0 = 12290674
+__pcnt_barrier_elaps_BLOCK3_thread0 = 21440
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 0
+__pcnt_barrier_elaps_BLOCK0_thread1 = 1
+Thread 1, State 2, entered = 781251 times
+__pcnt_elaps_BLOCK2_thread1 = 598374
+__pcnt_barrier_elaps_BLOCK2_thread1 = 6466144
+Thread 1, State 3, entered = 781250 times
+__pcnt_elaps_BLOCK3_thread1 = 5972829
+__pcnt_barrier_elaps_BLOCK3_thread1 = 6461510
+
+N=17
+
+Thread 0, id=6828 started on core 0.
+Standalone thread (1) ID: 13276
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=13276 started on core 1.
+QueryPerformanceCounter = 20341340
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 5799920 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 0
+__pcnt_barrier_elaps_BLOCK0_thread0 = 0
+Thread 0, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread0 = 7419070
+__pcnt_barrier_elaps_BLOCK2_thread0 = 21549
+Thread 0, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread0 = 12819404
+__pcnt_barrier_elaps_BLOCK3_thread0 = 21146
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 0
+__pcnt_barrier_elaps_BLOCK0_thread1 = 1
+Thread 1, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread1 = 620187
+__pcnt_barrier_elaps_BLOCK2_thread1 = 6998311
+Thread 1, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread1 = 6000018
+__pcnt_barrier_elaps_BLOCK3_thread1 = 6977248
+
+N=18
+
+Thread 0, id=10424 started on core 0.
+Standalone thread (1) ID: 7452
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=7452 started on core 1.
+QueryPerformanceCounter = 20832440
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 5939947 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 1
+__pcnt_barrier_elaps_BLOCK0_thread0 = 0
+Thread 0, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread0 = 7483371
+__pcnt_barrier_elaps_BLOCK2_thread0 = 20717
+Thread 0, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread0 = 13244609
+__pcnt_barrier_elaps_BLOCK3_thread0 = 20847
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 0
+__pcnt_barrier_elaps_BLOCK0_thread1 = 1
+Thread 1, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread1 = 599341
+__pcnt_barrier_elaps_BLOCK2_thread1 = 7056170
+Thread 1, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread1 = 6338929
+__pcnt_barrier_elaps_BLOCK3_thread1 = 7093067
+
+N=19
+
+Thread 0, id=3696 started on core 0.
+Standalone thread (1) ID: 13072
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=13072 started on core 1.
+QueryPerformanceCounter = 22095226
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 6300007 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 0
+__pcnt_barrier_elaps_BLOCK0_thread0 = 0
+Thread 0, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread0 = 7941785
+__pcnt_barrier_elaps_BLOCK2_thread0 = 21368
+Thread 0, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread0 = 14076837
+__pcnt_barrier_elaps_BLOCK3_thread0 = 20908
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 0
+__pcnt_barrier_elaps_BLOCK0_thread1 = 1
+Thread 1, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread1 = 611444
+__pcnt_barrier_elaps_BLOCK2_thread1 = 7501694
+Thread 1, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread1 = 6768266
+__pcnt_barrier_elaps_BLOCK3_thread1 = 7477427
+
+N=20
+
+Thread 0, id=6692 started on core 0.
+Standalone thread (1) ID: 9596
+Current priority class is 0x80
+Current thead priority class is 0xf
+Thread 1, id=9596 started on core 1.
+QueryPerformanceCounter = 22971870
+Total input items (including EOF): 100000064 (-1094965248 B), output items: 100000000 (-1094967296 B)
+Time Elapsed: 6549962 us 
+Bytes copied: 400000000 
+Thread 0, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread0 = 0
+__pcnt_barrier_elaps_BLOCK0_thread0 = 0
+Thread 0, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread0 = 8211099
+__pcnt_barrier_elaps_BLOCK2_thread0 = 20943
+Thread 0, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread0 = 14687730
+__pcnt_barrier_elaps_BLOCK3_thread0 = 20851
+Thread 1, State 0, entered = 1 times
+__pcnt_elaps_BLOCK0_thread1 = 0
+__pcnt_barrier_elaps_BLOCK0_thread1 = 1
+Thread 1, State 2, entered = 781250 times
+__pcnt_elaps_BLOCK2_thread1 = 607620
+__pcnt_barrier_elaps_BLOCK2_thread1 = 7760987
+Thread 1, State 3, entered = 781251 times
+__pcnt_elaps_BLOCK3_thread1 = 7113167
+__pcnt_barrier_elaps_BLOCK3_thread1 = 7746808
+
