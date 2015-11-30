@@ -65,13 +65,8 @@
 #pragma once
 
 
-
-// Functions here are not explicitly inline but
-// aggressive optimization will make them all inline
-
-
 // c = a + b
-//FINL 
+FORCE_INLINE
 int __ext_v_add_complex16(struct complex16* c, int len, struct complex16* a,
           int __unused_2, struct complex16* b, int __unused_1)
 {
@@ -92,6 +87,7 @@ int __ext_v_add_complex16(struct complex16* c, int len, struct complex16* a,
 	return 0;
 }
 
+FORCE_INLINE
 int __ext_v_add_complex32(struct complex32* c, int len, struct complex32* a,
 	int __unused_2, struct complex32* b, int __unused_1)
 {
@@ -111,6 +107,7 @@ int __ext_v_add_complex32(struct complex32* c, int len, struct complex32* a,
 	return 0;
 }
 
+FORCE_INLINE
 int __ext_v_add_int16(int16* c, int len, int16* a,
 	int __unused_2, int16* b, int __unused_1)
 {
@@ -130,6 +127,7 @@ int __ext_v_add_int16(int16* c, int len, int16* a,
 	return 0;
 }
 
+FORCE_INLINE
 int __ext_v_add_int32(int32* c, int len, int32* a,
 	int __unused_2, int32* b, int __unused_1)
 {
@@ -153,7 +151,7 @@ int __ext_v_add_int32(int32* c, int len, int32* a,
 
 
 // c = a - b
-//FINL 
+FORCE_INLINE
 int __ext_v_sub_complex16(struct complex16* c, int len, struct complex16* a,
           int __unused_2, struct complex16* b, int __unused_1)
  {
@@ -174,6 +172,7 @@ int __ext_v_sub_complex16(struct complex16* c, int len, struct complex16* a,
 	return 0;	
  }
 
+FORCE_INLINE
 int __ext_v_sub_complex32(struct complex32* c, int len, struct complex32* a,
 	int __unused_2, struct complex32* b, int __unused_1)
 {
@@ -193,6 +192,7 @@ int __ext_v_sub_complex32(struct complex32* c, int len, struct complex32* a,
 	return 0;
 }
 
+FORCE_INLINE
 int __ext_v_sub_int16(int16* c, int len, int16* a,
 	int __unused_2, int16* b, int __unused_1)
 {
@@ -212,6 +212,7 @@ int __ext_v_sub_int16(int16* c, int len, int16* a,
 	return 0;
 }
 
+FORCE_INLINE
 int __ext_v_sub_int32(int32* c, int len, int32* a,
 	int __unused_2, int32* b, int __unused_1)
 {
@@ -235,7 +236,7 @@ int __ext_v_sub_int32(int32* c, int len, int32* a,
 //equivalent to sora hadd :
 //Sum all components of vector x and stores it in all components of z
 // z(i) = sum(x) for all i
-//FINL 
+FORCE_INLINE
 int __ext_v_hadd_complex16(struct complex16* z, int __unused_2, struct complex16* x,
           int __unused_1)
 {
@@ -273,7 +274,7 @@ int __ext_v_hadd_complex16(struct complex16* z, int __unused_2, struct complex16
 	
 }
 
-//FINL 
+FORCE_INLINE
 int __ext_v_hadd_int32(int* z, int __unused_21, int* x, int __unused_20)
 {
 
@@ -297,7 +298,7 @@ int __ext_v_hadd_int32(int* z, int __unused_21, int* x, int __unused_20)
 
 
 
-//FINL 
+FORCE_INLINE
 struct complex16 __ext_v_sum_complex16(struct complex16* x, int len)
 {
 	// N.B SORA implementation appears to be much faster. Don't know why, If appears to call hadd 
@@ -372,7 +373,7 @@ struct complex16 __ext_v_sum_complex16(struct complex16* x, int len)
 
 }
 
-//FINL 
+FORCE_INLINE
 struct complex32 __ext_v_sum_complex32(struct complex32* x, int len)
 {
 
@@ -406,7 +407,7 @@ struct complex32 __ext_v_sum_complex32(struct complex32* x, int len)
 }
 
 
-//FINL 
+FORCE_INLINE
 int16 __ext_v_sum_int16(int16* x, int len)
 {
 	__m128i msum = _mm_setzero_si128();
@@ -449,7 +450,7 @@ num16 ret;
 }
 
 
-//FINL 
+FORCE_INLINE
 int32 __ext_v_sum_int32(int32* x, int len)
 {
 	__m128i msum = _mm_setzero_si128();
@@ -491,7 +492,7 @@ int32 __ext_v_sum_int32(int32* x, int len)
 
 
 
-//FINL 
+FORCE_INLINE
 int __ext_v_shift_right_complex32(struct complex32* z, int __unused_3, struct complex32* x, int len, int shift)
 {
 	const int wlen = 2;// sizeof(vci) / sizeof(complex32);
@@ -514,7 +515,7 @@ int __ext_v_shift_right_complex32(struct complex32* z, int __unused_3, struct co
 	return 0;
 }
 
-//FINL 
+FORCE_INLINE
 int __ext_v_shift_left_complex32(struct complex32* z, int __unused_3, struct complex32* x, int len, int shift)
 {
 	const int wlen = 2;// sizeof(vci) / sizeof(complex32);
@@ -540,7 +541,7 @@ int __ext_v_shift_left_complex32(struct complex32* z, int __unused_3, struct com
 
 
 
-//FINL 
+FORCE_INLINE
 int __ext_v_shift_right_complex16(struct complex16* z, int __unused_3, struct complex16* x, int len, int shift)
 {
 	const int wlen = 4;// sizeof(vcs) / sizeof(complex16);
@@ -565,7 +566,7 @@ int __ext_v_shift_right_complex16(struct complex16* z, int __unused_3, struct co
 	return 0;
 }
 
-//FINL 
+FORCE_INLINE
 int __ext_v_shift_left_complex16(struct complex16* z, int __unused_3, struct complex16* x, int len, int shift)
 {
 	const int wlen = 4;// sizeof(vcs) / sizeof(complex16);
@@ -590,7 +591,7 @@ int __ext_v_shift_left_complex16(struct complex16* z, int __unused_3, struct com
 
 
 
-//FINL 
+FORCE_INLINE
 int __ext_v_shift_right_int32(int32* z, int __unused_3, int32* x, int len, int shift)
 {
 	const int wlen = 4;// sizeof(vi) / sizeof(int32);
@@ -613,7 +614,7 @@ int __ext_v_shift_right_int32(int32* z, int __unused_3, int32* x, int len, int s
 }
 
 
-//FINL 
+FORCE_INLINE
 int __ext_v_shift_left_int32(int32* z, int __unused_3, int32* x, int len, int shift)
 {
 	const int wlen = 4;// sizeof(vi) / sizeof(int32);
@@ -638,7 +639,7 @@ int __ext_v_shift_left_int32(int32* z, int __unused_3, int32* x, int len, int sh
 
 
 
-//FINL 
+FORCE_INLINE
 int __ext_v_shift_right_int16(int16* z, int __unused_3, int16* x, int len, int shift)
 {
 	const int wlen = 8;// sizeof(vs) / sizeof(int16);
@@ -663,7 +664,7 @@ int __ext_v_shift_right_int16(int16* z, int __unused_3, int16* x, int len, int s
 }
 
 
-//FINL 
+FORCE_INLINE
 int __ext_v_shift_left_int16(int16* z, int __unused_3, int16* x, int len, int shift)
 {
 	const int wlen = 8;// sizeof(vs) / sizeof(int16);
@@ -693,6 +694,7 @@ int __ext_v_shift_left_int16(int16* z, int __unused_3, int16* x, int len, int sh
 // This was v_mul_complex16_shift but I changed the name for consistency with v_conj_mul
 // and the fact that the old v_mul_complex16 was never called
 //
+FORCE_INLINE
 int __ext_v_mul_complex16(struct complex16* out, int lenout,
 								struct complex16* x, int len1,
 								struct complex16* y, int len2, int shift)
@@ -764,6 +766,7 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 // multiplies two complex vectors and returns the real and imaginary parts 
 // as two 32 bit integers.
 //
+FORCE_INLINE
 int __ext_v_conj_mul_complex16_int32(int32* re, int lenout1, int32* im, int lenout2, 
 				struct complex16* x, int len1, struct complex16* y, int len2 )
 {
@@ -821,6 +824,7 @@ int __ext_v_conj_mul_complex16_int32(int32* re, int lenout1, int32* im, int leno
 // Multiply the first source vector by the conjugate of the second source vector
 // ie. re + j * im = a * conj(b)
 //Return by reference for performance
+FORCE_INLINE
 int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
 								struct complex16* x, int len1,
 								struct complex16* y, int len2, int shift){
@@ -887,7 +891,7 @@ int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
 
 
 // This function is called in code/WiFi/receiver/downSample.blk
-//FINL 
+FORCE_INLINE
 int __ext_permutatew1313 (struct complex16* x,
                int __unused_2,  struct complex16* y, int __unused_1)
 {
@@ -914,7 +918,7 @@ int __ext_permutatew1313 (struct complex16* x,
 	return 0;
 }
 // This function is called in code/WiFi/receiver/downSample.blk
-//FINL 
+FORCE_INLINE
 int __ext_interleave_loww( struct complex16* x, int __unused_5,
                      struct complex16* y, int __unused_4,
                      struct complex16* z, int __unused_3)
@@ -1021,6 +1025,7 @@ void __ext_v_pack_complex16_complex8(struct complex8* output, int lenout, comple
 
 
 // Sum 4 complex32 numbers
+FORCE_INLINE
 struct complex32 __ext_sumc32(struct complex32* x, int __unused_20) {
 	struct complex32 ret;
 	/*
@@ -1038,6 +1043,7 @@ struct complex32 __ext_sumc32(struct complex32* x, int __unused_20) {
 }
 
 // Sum 4 complex16 numbers
+FORCE_INLINE
 struct complex16 __ext_sumc16(struct complex16* x, int __unused_20) {
 	struct complex16 ret;
 	/*
@@ -1055,7 +1061,7 @@ struct complex16 __ext_sumc16(struct complex16* x, int __unused_20) {
 }
 
 
-//FINL 
+FORCE_INLINE
 int32 __ext_sumi32(int32* x, int __unused_21)
 {
 	/*assert (__unused_21 == 4);
@@ -1080,7 +1086,7 @@ int32 __ext_sumi32(int32* x, int __unused_21)
 
 
 // For some reason this particular FINL confuses the compiler/linker
-//FINL
+FORCE_INLINE
 int16 __ext_sumi16(int16* x, int __unused_21)
 {
 	int16 ret = 0;
@@ -1101,6 +1107,7 @@ int16 __ext_sumi16(int16* x, int __unused_21)
 
 ///// SSE bit operations
 
+FORCE_INLINE
 void __ext_v_and(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
 {
 	int cnt = 0;
@@ -1125,6 +1132,7 @@ void __ext_v_and(unsigned char *output, int outlen, unsigned char *input1, int i
 }
 
 
+FORCE_INLINE
 void __ext_v_andnot(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
 {
 	int cnt = 0;
@@ -1148,6 +1156,7 @@ void __ext_v_andnot(unsigned char *output, int outlen, unsigned char *input1, in
 	outlen = inlen1;
 }
 
+FORCE_INLINE
 void __ext_v_xor(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
 {
 	int cnt = 0;
@@ -1178,6 +1187,7 @@ void __ext_v_xor(unsigned char *output, int outlen, unsigned char *input1, int i
 
 // Specialized fast versions for one byte arrays
 
+FORCE_INLINE
 void __ext_v_and8(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
 {
 	output[0] = input1[0] & input2[0];
@@ -1186,6 +1196,7 @@ void __ext_v_and8(unsigned char *output, int outlen, unsigned char *input1, int 
 }
 
 
+FORCE_INLINE
 void __ext_v_xor8(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
 {
 	output[0] = input1[0] ^ input2[0];
@@ -1193,6 +1204,7 @@ void __ext_v_xor8(unsigned char *output, int outlen, unsigned char *input1, int 
 	// outlen = 8;
 }
 
+FORCE_INLINE
 void __ext_v_andnot8(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
 {
 	output[0] = (~input1[0]) & input2[0];
@@ -1200,6 +1212,7 @@ void __ext_v_andnot8(unsigned char *output, int outlen, unsigned char *input1, i
 	// outlen = 8;
 }
 
+FORCE_INLINE
 void __ext_v_or8(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
 {
 	output[0] = input1[0] | input2[0];
@@ -1330,20 +1343,24 @@ int32 __ext_atan2_int32 ( int32 y, int32 x ) {
 	return uatan2((int)y, (int)x);
 }
 #else
+FORCE_INLINE
 int16 __ext_cos_int16 ( int16 y ) {
   return (int16) cosx(y);
 }
 
 
+FORCE_INLINE
 int16 __ext_sin_int16 ( int16 y ) {
   return (int16) sinx(y);
 }
 
 
+FORCE_INLINE
 int16 __ext_atan2_int16 ( int16 y, int16 x ) {
   return (int16) atan2x((int)y, (int)x);
 }
 
+FORCE_INLINE
 int32 __ext_atan2_int32 ( int32 y, int32 x ) {
   return atan2x((int)y, (int)x);
 }
@@ -1353,7 +1370,7 @@ int32 __ext_atan2_int32 ( int32 y, int32 x ) {
 
 // *** Casts
 
-//FINL   
+FORCE_INLINE
 int __ext_v_cast_complex8_int8(int8* output, int lenout, complex8* input, int lenin)  
 {  
   memcpy(output, input, lenin * sizeof(complex8));  
@@ -1431,6 +1448,7 @@ void __ext_v_sign_int8(int8 *output, int outlen, int8 *input1, int inlen1, int8 
 
 //FINL 
 // int __ext_sora_fft(short nFFTSize, struct complex16 * input, int unused1, struct complex16* output, int unused2)
+FORCE_INLINE
 void __ext_sora_fft(struct complex16* output, int nFFTSize, struct complex16 * input, int unused1)
 {
 
@@ -1576,6 +1594,7 @@ void __ext_sora_fft(struct complex16* output, int nFFTSize, struct complex16 * i
 	//return 0;
 }
 
+FORCE_INLINE
 void __ext_sora_fft_dynamic(struct complex16* output, int unused2, int16 nFFTSize, struct complex16 * input, int unused1)
 {
 	__ext_sora_fft(output, nFFTSize, input, unused1);
@@ -1585,6 +1604,7 @@ void __ext_sora_fft_dynamic(struct complex16* output, int unused2, int16 nFFTSiz
 
 
 //int __ext_sora_ifft(short nFFTSize, struct complex16 * input, int unused1, struct complex16* output, int unused2)
+FORCE_INLINE
 void __ext_sora_ifft(struct complex16* output, int nFFTSize, struct complex16 * input, int unused1)
 {
 
@@ -1730,6 +1750,7 @@ void __ext_sora_ifft(struct complex16* output, int nFFTSize, struct complex16 * 
 	//return 0;
 }
 
+FORCE_INLINE
 void __ext_sora_ifft_dynamic(struct complex16* output, int unused2, int16 nFFTSize, struct complex16 * input, int unused1)
 {
 	__ext_sora_ifft(output, nFFTSize, input, unused1);
@@ -1810,6 +1831,7 @@ int __ext_record_time_stop() {
 
 #include <time.h>
 
+FORCE_INLINE
 int __ext_populate_rand_array(BitArrPtr arr, int siz) {
 
 	srand(time(NULL));
