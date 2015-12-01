@@ -71,12 +71,12 @@ int __ext_v_add_complex16(struct complex16* c, int len, struct complex16* a,
           int __unused_2, struct complex16* b, int __unused_1)
 {
 	const int wlen = 4;// sizeof(vcs) / sizeof(complex16);
+	__m128i* As = (__m128i*) a;
+	__m128i* Bs = (__m128i*) b;
+	__m128i* Cs = (__m128i*) c;
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i ma = _mm_loadu_si128((__m128i *)(a + wlen*i));
-		__m128i mb = _mm_loadu_si128((__m128i *)(b + wlen*i));
-				
-		_mm_storeu_si128((__m128i *) (c + wlen*i), _mm_add_epi16(ma, mb));
+		Cs[i] = _mm_add_epi16(As[i], Bs[i]);
 		
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -92,12 +92,12 @@ int __ext_v_add_complex32(struct complex32* c, int len, struct complex32* a,
 	int __unused_2, struct complex32* b, int __unused_1)
 {
 	const int wlen = 2;	// sizeof(vci) / sizeof(complex32);
+	__m128i* As = (__m128i*) a;
+	__m128i* Bs = (__m128i*) b;
+	__m128i* Cs = (__m128i*) c;
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i ma = _mm_loadu_si128((__m128i *)(a + wlen*i));
-		__m128i mb = _mm_loadu_si128((__m128i *)(b + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (c + wlen*i), _mm_add_epi32(ma, mb));
+		Cs[i] = _mm_add_epi32(As[i], Bs[i]);
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
 	{
@@ -112,12 +112,12 @@ int __ext_v_add_int16(int16* c, int len, int16* a,
 	int __unused_2, int16* b, int __unused_1)
 {
 	const int wlen = 8;//sizeof(vs) / sizeof(int16);
+	__m128i* As = (__m128i*) a;
+	__m128i* Bs = (__m128i*) b;
+	__m128i* Cs = (__m128i*) c;
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i ma = _mm_loadu_si128((__m128i *)(a + wlen*i));
-		__m128i mb = _mm_loadu_si128((__m128i *)(b + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (c + wlen*i), _mm_add_epi16(ma, mb));
+		Cs[i] = _mm_add_epi16(As[i], Bs[i]);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -132,12 +132,12 @@ int __ext_v_add_int32(int32* c, int len, int32* a,
 	int __unused_2, int32* b, int __unused_1)
 {
 	const int wlen = 4;//sizeof(vi) / sizeof(int32);
+	__m128i* As = (__m128i*) a;
+	__m128i* Bs = (__m128i*) b;
+	__m128i* Cs = (__m128i*) c;
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i ma = _mm_loadu_si128((__m128i *)(a + wlen*i));
-		__m128i mb = _mm_loadu_si128((__m128i *)(b + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (c + wlen*i), _mm_add_epi32(ma, mb));
+		Cs[i] = _mm_add_epi32(As[i], Bs[i]);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -156,12 +156,12 @@ int __ext_v_sub_complex16(struct complex16* c, int len, struct complex16* a,
           int __unused_2, struct complex16* b, int __unused_1)
  {
 	 const int wlen = 4;// sizeof(vcs) / sizeof(complex16);
+	__m128i* As = (__m128i*) a;
+	__m128i* Bs = (__m128i*) b;
+	__m128i* Cs = (__m128i*) c;
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i ma = _mm_loadu_si128((__m128i *)(a + wlen*i));
-		__m128i mb = _mm_loadu_si128((__m128i *)(b + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (c + wlen*i), _mm_sub_epi16(ma, mb));
+		Cs[i] = _mm_sub_epi16(As[i], Bs[i]);
 	
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -177,12 +177,12 @@ int __ext_v_sub_complex32(struct complex32* c, int len, struct complex32* a,
 	int __unused_2, struct complex32* b, int __unused_1)
 {
 	const int wlen = 2;	// sizeof(vci) / sizeof(complex32);
+	__m128i* As = (__m128i*) a;
+	__m128i* Bs = (__m128i*) b;
+	__m128i* Cs = (__m128i*) c;
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i ma = _mm_loadu_si128((__m128i *)(a + wlen*i));
-		__m128i mb = _mm_loadu_si128((__m128i *)(b + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (c + wlen*i), _mm_sub_epi32(ma, mb));
+		Cs[i] = _mm_sub_epi32(As[i], Bs[i]);
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
 	{
@@ -197,12 +197,12 @@ int __ext_v_sub_int16(int16* c, int len, int16* a,
 	int __unused_2, int16* b, int __unused_1)
 {
 	const int wlen = 8;//sizeof(vs) / sizeof(int16);
+	__m128i* As = (__m128i*) a;
+	__m128i* Bs = (__m128i*) b;
+	__m128i* Cs = (__m128i*) c;
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i ma = _mm_loadu_si128((__m128i *)(a + wlen*i));
-		__m128i mb = _mm_loadu_si128((__m128i *)(b + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (c + wlen*i), _mm_sub_epi16(ma, mb));
+		Cs[i] = _mm_sub_epi16(As[i], Bs[i]);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -217,12 +217,12 @@ int __ext_v_sub_int32(int32* c, int len, int32* a,
 	int __unused_2, int32* b, int __unused_1)
 {
 	const int wlen = 4;//sizeof(vi) / sizeof(int32);
+	__m128i* As = (__m128i*) a;
+	__m128i* Bs = (__m128i*) b;
+	__m128i* Cs = (__m128i*) c;
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i ma = _mm_loadu_si128((__m128i *)(a + wlen*i));
-		__m128i mb = _mm_loadu_si128((__m128i *)(b + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (c + wlen*i), _mm_sub_epi32(ma, mb));
+		Cs[i] = _mm_sub_epi32(As[i], Bs[i]);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -335,10 +335,11 @@ struct complex16 __ext_v_sum_complex16(struct complex16* x, int len)
 	struct complex16 ret;
 	const int wlen = 4;
 
+        __m128i* Xs = (__m128i*) x;
+
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		msum = _mm_add_epi16(msum, mx);
+		msum = _mm_add_epi16(msum, Xs[i]);
 	}
 
 	__m128i mout = msum;
@@ -381,10 +382,11 @@ struct complex32 __ext_v_sum_complex32(struct complex32* x, int len)
 	struct complex32 ret;
 	const int wlen = 2;
 
+	__m128i* Xs = (__m128i*) x;
+
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		msum = _mm_add_epi32(msum, mx);
+		msum = _mm_add_epi32(msum, Xs[i]);
 	}
 
 	__m128i mout = msum;
@@ -416,10 +418,11 @@ num16 ret;
 
 	const int wlen = 8;
 
+	__m128i* Xs = (__m128i*) x;
+
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		msum = _mm_add_epi16(msum, mx);
+		msum = _mm_add_epi16(msum, Xs[i]);
 	}
 
 	__m128i mout = msum;
@@ -457,10 +460,11 @@ int32 __ext_v_sum_int32(int32* x, int len)
 	int32 ret;
 	const int wlen = 4;
 
+	__m128i* Xs = (__m128i*) x;
+
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		msum = _mm_add_epi32(msum, mx);
+		msum = _mm_add_epi32(msum, Xs[i]);
 	}
 
 	__m128i mout = msum;
@@ -496,15 +500,15 @@ FORCE_INLINE
 int __ext_v_shift_right_complex32(struct complex32* z, int __unused_3, struct complex32* x, int len, int shift)
 {
 	const int wlen = 2;// sizeof(vci) / sizeof(complex32);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Zs = (__m128i*) z;
 	for (int i = 0; i < len / wlen; i++)
 	{/*
 		vci *xi = (vci *)(x + wlen*i);
 		vci output = (shift_right(*xi, shift));
 		memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vci));*/
 
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (z + wlen*i), _mm_srai_epi32(mx, shift));
+		Zs[i] = _mm_srai_epi32(Xs[i], shift);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -519,6 +523,8 @@ FORCE_INLINE
 int __ext_v_shift_left_complex32(struct complex32* z, int __unused_3, struct complex32* x, int len, int shift)
 {
 	const int wlen = 2;// sizeof(vci) / sizeof(complex32);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Zs = (__m128i*) z;
 	for (int i = 0; i < len / wlen; i++)
 	{/*
 		vci *xi = (vci *)(x + wlen*i);
@@ -526,9 +532,7 @@ int __ext_v_shift_left_complex32(struct complex32* z, int __unused_3, struct com
 		vci output = (shift_left(*xi, shift));
 		memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vci));*/
 
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (z + wlen*i), _mm_slli_epi32(mx, shift));
+		Zs[i] = _mm_slli_epi32(Xs[i], shift);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -545,6 +549,8 @@ FORCE_INLINE
 int __ext_v_shift_right_complex16(struct complex16* z, int __unused_3, struct complex16* x, int len, int shift)
 {
 	const int wlen = 4;// sizeof(vcs) / sizeof(complex16);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Zs = (__m128i*) z;
 	for (int i = 0; i < len / wlen; i++)
 	{
 		//vcs *xi = (vcs *)(x + wlen*i);
@@ -553,9 +559,7 @@ int __ext_v_shift_right_complex16(struct complex16* z, int __unused_3, struct co
 		//memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vcs));
 
 
-
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		_mm_storeu_si128((__m128i *) (z + wlen*i), _mm_srai_epi16(mx,shift));
+		Zs[i] = _mm_srai_epi16(Xs[i],shift);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -570,6 +574,8 @@ FORCE_INLINE
 int __ext_v_shift_left_complex16(struct complex16* z, int __unused_3, struct complex16* x, int len, int shift)
 {
 	const int wlen = 4;// sizeof(vcs) / sizeof(complex16);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Zs = (__m128i*) z;
 	for (int i = 0; i < len / wlen; i++)
 	{
 		/*vcs *xi = (vcs *)(x + wlen*i);
@@ -577,8 +583,7 @@ int __ext_v_shift_left_complex16(struct complex16* z, int __unused_3, struct com
 		vcs output = (shift_left(*xi, shift));
 		memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vcs));*/
 
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		_mm_storeu_si128((__m128i *) (z + wlen*i), _mm_slli_epi16(mx, shift));
+		Zs[i] = _mm_slli_epi16(Xs[i], shift);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -595,6 +600,8 @@ FORCE_INLINE
 int __ext_v_shift_right_int32(int32* z, int __unused_3, int32* x, int len, int shift)
 {
 	const int wlen = 4;// sizeof(vi) / sizeof(int32);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Zs = (__m128i*) z;
 	for (int i = 0; i < len / wlen; i++)
 	{
 		/*vi *xi = (vi *)(x + wlen*i);
@@ -602,8 +609,7 @@ int __ext_v_shift_right_int32(int32* z, int __unused_3, int32* x, int len, int s
 		vi output = (shift_right(*xi, shift));
 		memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vi));*/
 		
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		_mm_storeu_si128((__m128i *) (z + wlen*i), _mm_srai_epi32(mx, shift));
+		Zs[i] = _mm_srai_epi32(Xs[i], shift);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -618,6 +624,8 @@ FORCE_INLINE
 int __ext_v_shift_left_int32(int32* z, int __unused_3, int32* x, int len, int shift)
 {
 	const int wlen = 4;// sizeof(vi) / sizeof(int32);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Zs = (__m128i*) z;
 	for (int i = 0; i < len / wlen; i++)
 	{
 		/*
@@ -626,8 +634,7 @@ int __ext_v_shift_left_int32(int32* z, int __unused_3, int32* x, int len, int sh
 		vi output = (shift_left(*xi, shift));
 		memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vi));*/
 
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		_mm_storeu_si128((__m128i *) (z + wlen*i), _mm_slli_epi32(mx, shift));
+		Zs[i] = _mm_slli_epi32(Xs[i], shift);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -643,6 +650,8 @@ FORCE_INLINE
 int __ext_v_shift_right_int16(int16* z, int __unused_3, int16* x, int len, int shift)
 {
 	const int wlen = 8;// sizeof(vs) / sizeof(int16);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Zs = (__m128i*) z;
 	for (int i = 0; i < len / wlen; i++)
 	{
 		/*
@@ -651,8 +660,7 @@ int __ext_v_shift_right_int16(int16* z, int __unused_3, int16* x, int len, int s
 		vs output = (shift_right(*xi, shift));
 		memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vs));*/
 
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		_mm_storeu_si128((__m128i *) (z + wlen*i), _mm_srai_epi16(mx, shift));
+		Zs[i] = _mm_srai_epi16(Xs[i], shift);
 
 	
 	}
@@ -668,6 +676,8 @@ FORCE_INLINE
 int __ext_v_shift_left_int16(int16* z, int __unused_3, int16* x, int len, int shift)
 {
 	const int wlen = 8;// sizeof(vs) / sizeof(int16);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Zs = (__m128i*) z;
 	for (int i = 0; i < len / wlen; i++)
 	{
 		/*
@@ -676,8 +686,7 @@ int __ext_v_shift_left_int16(int16* z, int __unused_3, int16* x, int len, int sh
 		vs output = (shift_left(*xi, shift));
 		memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vs));*/
 		
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		_mm_storeu_si128((__m128i *) (z + wlen*i), _mm_slli_epi16(mx, shift));
+		Zs[i] = _mm_slli_epi16(Xs[i], shift);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -705,6 +714,9 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 		const __m128i xmm6 = _mm_set1_epi32(0x0000FFFF);		//0x0000FFFF0000FFFF0000FFFF0000FFFF
 		const __m128i xmm5 = _mm_set1_epi32(0xFFFF0000);
 		const __m128i xmm4 = _mm_set1_epi32(0x00010000);
+		__m128i* Xs = (__m128i*) x;
+		__m128i* Ys = (__m128i*) y;
+		__m128i* Outs = (__m128i*) out;
 		for (int i = 0; i < len1 / wlen; i++){
 
 			/*
@@ -726,20 +738,17 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 			*vout = (vcs)pack(re32, im32);
 			//*/
 			//*
-			__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-			__m128i my = _mm_loadu_si128((__m128i *)(y + wlen*i));
-			
 
 			//__m128i ms1 = _mm_sign_epi16(mx, conj);
-			__m128i ms1 = _mm_xor_si128(mx, xmm5);
+			__m128i ms1 = _mm_xor_si128(Xs[i], xmm5);
 			ms1 = _mm_add_epi32(ms1, xmm4);
 			
 
-			__m128i ms2 = _mm_shufflehi_epi16(mx, _MM_SHUFFLE(2, 3, 0, 1));
+			__m128i ms2 = _mm_shufflehi_epi16(Xs[i], _MM_SHUFFLE(2, 3, 0, 1));
 			ms2 = _mm_shufflelo_epi16(ms2, _MM_SHUFFLE(2, 3, 0, 1));
 
-			__m128i mre = _mm_srai_epi32(_mm_madd_epi16(ms1, my), shift);
-			__m128i mim = _mm_srai_epi32(_mm_madd_epi16(ms2, my), shift);
+			__m128i mre = _mm_srai_epi32(_mm_madd_epi16(ms1, Ys[i]), shift);
+			__m128i mim = _mm_srai_epi32(_mm_madd_epi16(ms2, Ys[i]), shift);
 
 			mre = _mm_and_si128(mre,xmm6);
 			mim = _mm_and_si128(mim,xmm6);
@@ -747,9 +756,8 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 			mim = _mm_slli_epi32(mim,0x10);
 
 
-			__m128i mout = _mm_or_si128(mre, mim);
+			Outs[i] = _mm_or_si128(mre, mim);
 
-			_mm_storeu_si128((__m128i *) (out + wlen*i), mout);
 			//*/
 		}
 
@@ -775,6 +783,10 @@ int __ext_v_conj_mul_complex16_int32(int32* re, int lenout1, int32* im, int leno
 	const __m128i xmm6 = _mm_set1_epi32(0x0000FFFF);		//0x0000FFFF0000FFFF0000FFFF0000FFFF
 	const __m128i xmm5 = _mm_set1_epi32(0xFFFF0000);
 	const __m128i xmm4 = _mm_set1_epi32(0x00010000);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Ys = (__m128i*) y;
+	__m128i* Res = (__m128i*) re;
+	__m128i* Ims = (__m128i*) im;
 	for (int i = 0; i < len1 / wlen; i++){
 
 	/*	vcs *vx = (vcs *)(x + wlen*i);
@@ -791,24 +803,16 @@ int __ext_v_conj_mul_complex16_int32(int32* re, int lenout1, int32* im, int leno
 		*imout = (vcs)muladd(*vx, vs2);*/
 
 
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		__m128i my = _mm_loadu_si128((__m128i *)(y + wlen*i));
-
-
 		//__m128i ms1 = _mm_sign_epi16(my, conj);
-		__m128i ms2 = _mm_xor_si128(my, xmm5);
+		__m128i ms2 = _mm_xor_si128(Ys[i], xmm5);
 		ms2 = _mm_add_epi32(ms2, xmm4);
 
 
 		ms2 = _mm_shufflehi_epi16(ms2, _MM_SHUFFLE(2, 3, 0, 1));
 		ms2 = _mm_shufflelo_epi16(ms2, _MM_SHUFFLE(2, 3, 0, 1));
 
-		__m128i mre = _mm_madd_epi16(my, mx);
-		__m128i mim = _mm_madd_epi16(ms2, mx);
-
-		_mm_storeu_si128((__m128i *) (re + wlen*i), mre);
-		_mm_storeu_si128((__m128i *) (im + wlen*i), mim);
-
+		Res[i] = _mm_madd_epi16(Ys[i], Xs[i]);
+		Ims[i] = _mm_madd_epi16(ms2, Xs[i]);
 
 
 	}
@@ -833,6 +837,9 @@ int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
 	const __m128i xmm6 = _mm_set1_epi32(0x0000FFFF);		//0x0000FFFF0000FFFF0000FFFF0000FFFF
 	const __m128i xmm5 = _mm_set1_epi32(0xFFFF0000);
 	const __m128i xmm4 = _mm_set1_epi32(0x00010000);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Ys = (__m128i*) y;
+	__m128i* Outs = (__m128i*) out;
 	for (int i = 0; i < len1 / wlen; i++){
 
 		/*vcs *vx = (vcs *)(x + wlen*i);
@@ -852,20 +859,17 @@ int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
 		im32 = shift_right(im32, shift);
 
 		*vout = (vcs)pack(re32, im32);*/
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		__m128i my = _mm_loadu_si128((__m128i *)(y + wlen*i));
-
 
 		//__m128i ms1 = _mm_sign_epi16(my, conj);
-		__m128i ms2 = _mm_xor_si128(my, xmm5);
+		__m128i ms2 = _mm_xor_si128(Ys[i], xmm5);
 		ms2 = _mm_add_epi32(ms2, xmm4);
 
 
 		ms2 = _mm_shufflehi_epi16(ms2, _MM_SHUFFLE(2, 3, 0, 1));
 		ms2 = _mm_shufflelo_epi16(ms2, _MM_SHUFFLE(2, 3, 0, 1));
 
-		__m128i mre = _mm_srai_epi32(_mm_madd_epi16(my, mx), shift);
-		__m128i mim = _mm_srai_epi32(_mm_madd_epi16(ms2, mx), shift);
+		__m128i mre = _mm_srai_epi32(_mm_madd_epi16(Ys[i], Xs[i]), shift);
+		__m128i mim = _mm_srai_epi32(_mm_madd_epi16(ms2, Xs[i]), shift);
 
 		mre = _mm_and_si128(mre, xmm6);
 		mim = _mm_and_si128(mim, xmm6);
@@ -873,9 +877,7 @@ int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
 		mim = _mm_slli_epi32(mim, 0x10);
 
 
-		__m128i mout = _mm_or_si128(mre, mim);
-
-		_mm_storeu_si128((__m128i *) (out + wlen*i), mout);
+		Outs[i] = _mm_or_si128(mre, mim);
 
 	}
 
@@ -911,9 +913,7 @@ int __ext_permutatew1313 (struct complex16* x,
 	//*po = t1;
 
 
-	__m128i mx = _mm_loadu_si128((__m128i *)x );
-	_mm_storeu_si128((__m128i *) y, _mm_shuffle_epi32(mx, _MM_SHUFFLE(3, 1, 3, 1)));
-
+        *(__m128i*) y = _mm_shuffle_epi32(*(__m128i*)x, _MM_SHUFFLE(3,1,3,1));
 
 	return 0;
 }
@@ -935,9 +935,7 @@ int __ext_interleave_loww( struct complex16* x, int __unused_5,
 	*po = (vcs)(interleave_low ((vcui&)t1, (vcui&)t2));*/
 
 	
-	__m128i mx = _mm_loadu_si128((__m128i *)x);
-	__m128i my = _mm_loadu_si128((__m128i *)y);
-	_mm_storeu_si128((__m128i *) z, _mm_unpacklo_epi64(mx,my));
+	*(__m128i*) z = _mm_unpacklo_epi64(*(__m128i*)x, *(__m128i*)y);
 
 
 	return 0;
