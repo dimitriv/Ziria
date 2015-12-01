@@ -38,27 +38,25 @@ Executable wplc
     base                   >= 4     && < 5,
     bytestring             >= 0.10  && < 0.11,
     containers             >= 0.4   && < 0.6,
-    dlist                  >= 0.6   && < 0.7,
+    dlist                  >= 0.6   && < 0.8,
     directory              >= 1.2   && < 1.3,
-    language-c-quote       >= 0.10.1.2 && < 0.11,
-    mainland-pretty        >= 0.2.5 && < 0.3,
+    language-c-quote       >= 0.11  && < 0.12,
+    mainland-pretty        >= 0.4   && < 0.5,
     mtl                    >= 2.0   && < 3,
-    -- parsec 3.1.6 contains a bug (https://github.com/aslatter/parsec/issues/9)
-    pretty                 >= 1.1   && < 1.2,
-    srcloc                 >= 0.5.0.2 && < 0.6,
+    pretty                 >= 1.1.2 && < 1.2,
+    srcloc                 >= 0.5.1 && < 0.6,
     symbol                 >= 0.1   && < 0.3,
-    transformers           >= 0.3   && < 0.4,
+    transformers           >= 0.3   && < 0.5,
     hashable               >= 1.2   && < 1.3,
-    time                   >= 1.4   && < 1.5,
-    pretty-show            >= 1.6.9,
-    syb                    >= 0.4   && < 0.5,
-    deepseq                >= 1.3   && < 1.5,
+    time                   >= 1.4   && < 1.6,
+    pretty-show            >= 1.6.9 && < 1.7,
+    syb                    >= 0.4   && < 0.7,
+    deepseq                >= 1.4   && < 1.5,
 
-    time, 
     -- deepseq-generics is needed for deepseq < 1.4
-    deepseq-generics       >= 0.1   && < 0.2, 
-    text                   >= 1.1   && < 1.2, 
-    exception-transformers >= 0.3   && < 0.5, 
+    -- deepseq-generics       >= 0.1   && < 0.2,
+    text                   >= 1.1   && < 1.3,
+    exception-transformers >= 0.3   && < 0.5,
     -- template-haskell is bundled with ghc; don't insist on a version
     template-haskell,
     ghc-prim
@@ -66,7 +64,7 @@ Executable wplc
   -- Process 1.1 doesn't build with GHC 7.8
   if impl(ghc >= 7.8)
     build-depends:
-      process              >= 1.2 && < 1.3
+      process              >= 1.2 && < 1.5
   else
     build-depends:
       process              >= 1.1 && < 1.2
@@ -90,6 +88,6 @@ Executable BlinkDiff
   build-depends:
     base                   >= 4     && < 5,
     containers             >= 0.4   && < 0.6,
-    parsec                 >= 3.1   && < 3.1.6
+    parsec                 >= 3.1.7 && < 3.2
 
   ghc-options: -fwarn-incomplete-patterns -Werror

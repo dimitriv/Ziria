@@ -17,6 +17,8 @@
    permissions and limitations under the License.
 -}
 {-# LANGUAGE GADTs, DeriveGeneric, DeriveDataTypeable, ScopedTypeVariables, RecordWildCards #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# OPTIONS_GHC -Wall #-}
 module AstExpr ( 
     module AstName
@@ -25,10 +27,13 @@ module AstExpr (
   , module AstExpr 
   ) where
 
-import Prelude hiding (exp, mapM)
-import Control.DeepSeq.Generics (NFData(..), genericRnf)
-import Data.Loc
+#if !MIN_VERSION_base(4,8,0)
 import Data.Monoid
+#endif
+
+import Prelude hiding (exp, mapM)
+import Control.DeepSeq (NFData(..))
+import Data.Loc
 import Data.Data (Data)
 import Data.Functor.Identity (Identity(..))
 import Data.Maybe ( isJust )
@@ -55,7 +60,7 @@ data GUnOp t =
   | BwNeg
   | Cast t   -- Cast to this target type
   | ALength
-  deriving (Generic, Typeable, Data, Eq, Ord)
+  deriving (Generic, Typeable, Data, Eq, Ord, NFData)
 
 data BinOp =
   -- arithmetic operators
@@ -80,7 +85,7 @@ data BinOp =
   | Geq
   | And
   | Or
-  deriving (Generic, Typeable, Data, Show, Eq, Ord)
+  deriving (Generic, Typeable, Data, Show, Eq, Ord, NFData)
 
 data Val where
   VBit    :: Bool    -> Val
@@ -89,19 +94,19 @@ data Val where
   VBool   :: Bool    -> Val
   VString :: String  -> Val
   VUnit   :: Val
-  deriving (Generic, Typeable, Data, Show, Eq, Ord)
+  deriving (Generic, Typeable, Data, Show, Eq, Ord, NFData)
 
 data LengthInfo
      = LISingleton
      | LILength Int  -- Invariant: > 0
      | LIMeta String -- For meta-variables in quasi-quotes only
-  deriving (Generic, Typeable, Data, Eq, Ord, Show)
+  deriving (Generic, Typeable, Data, Eq, Ord, Show, NFData)
 
 data UnrollInfo
   = Unroll        -- force unroll
   | NoUnroll      -- force no-unroll
   | AutoUnroll    -- do whatever the compiler would do (no annotation)
-  deriving (Generic, Typeable, Data, Eq, Ord)
+  deriving (Generic, Typeable, Data, Eq, Ord, NFData)
 
 -- If true, the binding should be forced to be inlined.
 -- This is used by e.g. the vectorizer to bind inlinable
@@ -110,7 +115,7 @@ data ForceInline
   = ForceInline   -- Always inline
   | NoInline      -- Never inline
   | AutoInline    -- Let the compiler decide
-  deriving (Generic, Typeable, Data, Eq, Ord)
+  deriving (Generic, Typeable, Data, Eq, Ord, NFData)
 
 
 -- | Dereference expressions, abstract over expressions inside
@@ -364,14 +369,6 @@ funName (MkFun (MkFunExternal nm _ _) _ _) = nm
 
   (Mostly for debugging)
 -------------------------------------------------------------------------------}
-
-instance NFData BinOp       where rnf = genericRnf
-instance NFData ForceInline where rnf = genericRnf
-instance NFData LengthInfo  where rnf = genericRnf
-instance NFData UnrollInfo  where rnf = genericRnf
-instance NFData Val         where rnf = genericRnf
-
-instance NFData t => NFData (GUnOp t) where rnf = genericRnf
 
 -- instance (NFData t, NFData a) => NFData (GExp0 t a) where rnf = genericRnf
 -- instance (NFData t, NFData a) => NFData (GExp  t a) where rnf = genericRnf

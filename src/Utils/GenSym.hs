@@ -17,9 +17,13 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall #-}
+{-# Language CPP #-}
 module GenSym (Sym, initGenSym, genSymStr, getSym, setSym) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
+
 import Data.IORef
 
 newtype Sym = Sym (IORef (Int, String))

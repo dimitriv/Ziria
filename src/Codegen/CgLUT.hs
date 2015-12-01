@@ -20,9 +20,15 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
 module CgLUT ( codeGenLUTExp ) where
+
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative ( (<$>) )
+import Data.Word
+#endif
 
 import Opts
 import AstExpr
@@ -30,7 +36,6 @@ import AstUnlabelled
 import CtExpr
 import CgMonad
 import CgTypes
-import Control.Applicative ( (<$>) )
 import Data.Loc
 import Data.Maybe ( isJust, catMaybes, fromJust )
 import Language.C.Quote.C
@@ -41,7 +46,6 @@ import qualified Data.Hashable as H
 import PpExpr ()
 import Outputable 
 import Data.Bits
-import Data.Word
 import Utils
 import Control.Monad.Identity ( runIdentity )
 

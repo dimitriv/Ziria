@@ -26,6 +26,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 module SparseArray (
     SparseArray -- Opaque
     -- * "Data.Array.MArray"-like features
@@ -52,7 +53,7 @@ module SparseArray (
   , nonDefaultCount
   ) where
 
-import Control.DeepSeq.Generics (NFData(..), genericRnf)
+import Control.DeepSeq (NFData(..))
 import Data.IntMap.Strict (IntMap)
 import Data.Maybe (fromMaybe)
 import GHC.Generics (Generic)
@@ -67,10 +68,7 @@ data SparseArray a = SA {
     , saSize   :: !Int
     , saDef    :: a
     }
-  deriving (Generic, Show)
-
-instance NFData a => NFData (SparseArray a) where
-  rnf = genericRnf
+  deriving (Generic, Show, NFData)
 
 instance Eq a => Eq (SparseArray a) where
   arr1 == arr2 = size arr1 == size arr2

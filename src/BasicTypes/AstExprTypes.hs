@@ -17,6 +17,7 @@
    permissions and limitations under the License.
 -}
 {-# LANGUAGE GADTs, DeriveGeneric, DeriveDataTypeable, ScopedTypeVariables, RecordWildCards #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# OPTIONS_GHC -Wall #-}
 module AstExprTypes where
 
@@ -34,7 +35,7 @@ import Outputable
 import Text.PrettyPrint.HughesPJ
 
 import Text.Show.Pretty (PrettyVal)
-import Control.DeepSeq.Generics (NFData(..), genericRnf)
+import Control.DeepSeq (NFData(..))
 
 {-------------------------------------------------------------------------------
   Various kinds of variables
@@ -134,14 +135,14 @@ data Ty where
 
   TVoid  :: Ty
 
-  deriving (Generic, Typeable, Data, Eq, Ord)
+  deriving (Generic, Typeable, Data, Eq, Ord, NFData)
 
 -- An argument type (we record the mutability)
 data GArgTy t
   = GArgTy { argty_ty  :: t
            , argty_mut :: MutKind
            }
-  deriving (Generic, Typeable, Data, Eq, Ord)
+  deriving (Generic, Typeable, Data, Eq, Ord, NFData)
 
 type ArgTy = GArgTy Ty
 
@@ -152,7 +153,7 @@ data NumExpr where
   -- | NVar: Length to be inferred from the context (or polymorphic)
   NVar :: LenVar -> NumExpr
 
-  deriving (Generic, Typeable, Data, Eq, Ord)
+  deriving (Generic, Typeable, Data, Eq, Ord, NFData)
 
 data BitWidth
   = BW8
@@ -160,12 +161,12 @@ data BitWidth
   | BW32
   | BW64
   | BWUnknown BWVar -- TODO: Why is this not a GName t instead of a BWVar?
-  deriving (Generic, Typeable, Data, Eq, Ord, Show)
+  deriving (Generic, Typeable, Data, Eq, Ord, Show, NFData)
 
 data Signedness
   = Signed
   | Unsigned
-  deriving (Generic, Typeable, Data, Eq, Ord, Show)
+  deriving (Generic, Typeable, Data, Eq, Ord, Show, NFData)
            
 data BufTy =
     -- | Internal buffer (for parallelization)
@@ -176,7 +177,7 @@ data BufTy =
     -- NOTE: We record the type that the program is reading/writing, _NOT_
     -- its base type (in previous versions we recorded the base type here).
   | ExtBuf { bufty_ty :: Ty }
-  deriving (Generic, Typeable, Data, Eq, Ord)
+  deriving (Generic, Typeable, Data, Eq, Ord, NFData)
 
 
 
@@ -258,13 +259,6 @@ instance Outputable NumExpr where
     NVar n    -> text n
     -- TODO: here and elsewhere, are the quotes around the name intentional?
 
-
-instance NFData BitWidth    where rnf = genericRnf
-instance NFData Signedness  where rnf = genericRnf                                  
-instance NFData BufTy       where rnf = genericRnf
-instance NFData Ty          where rnf = genericRnf
-instance NFData t => NFData (GArgTy t) where rnf = genericRnf
-instance NFData NumExpr     where rnf = genericRnf
 
 instance PrettyVal BitWidth
 instance PrettyVal Signedness

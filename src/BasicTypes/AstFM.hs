@@ -26,6 +26,7 @@
              FunctionalDependencies, FlexibleContexts,
              ExtendedDefaultRules, 
              EmptyDataDecls #-}
+{-# LANGUAGE CPP #-}
 
 -- | Free monads for convenient construction of AST terms
 --
@@ -33,9 +34,13 @@
 -- language extension and import `Rebindables` to get if-then-else syntax.
 module AstFM where
 
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative
+#endif
+
 import Prelude
 
-import Control.Applicative
+import Control.Monad (ap, liftM)
 import Data.Loc
 
 import AstComp
@@ -179,6 +184,13 @@ data FStmt s where
   FEAssign   :: FExp -> FExp -> FStmt s -> FStmt s
   FEReturn   :: v -> FStmt v
 
+instance Applicative FStmt where 
+  pure  = return
+  (<*>) = ap
+
+instance Functor FStmt where 
+  fmap = liftM
+
 instance Monad FStmt where 
   return s = FEReturn s
   (FEArrWrite fe1 fe2 li fe ss) >>= f = FEArrWrite fe1 fe2 li fe (ss >>= f)
@@ -290,6 +302,13 @@ data Zr v where
 
  FEmbed    :: Bindable v => IO Comp -> Zr v
  FMitigate :: Ty -> Int -> Int -> Zr Void
+
+instance Functor Zr where
+  fmap = liftM
+
+instance Applicative Zr where
+  pure  = return
+  (<*>) = ap
 
 instance Monad Zr where
   return e                      = FPure e 

@@ -18,9 +18,13 @@
 -}
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, ConstraintKinds, FlexibleContexts #-}
+{-# LANGUAGE CPP #-}
 module VecM where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
+
 import Control.Monad.Reader
 import Data.Loc
 

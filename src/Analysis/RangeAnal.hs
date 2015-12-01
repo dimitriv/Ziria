@@ -19,6 +19,7 @@
 {-# LANGUAGE DeriveGeneric, DeriveDataTypeable, MultiParamTypeClasses, 
              FunctionalDependencies, StandaloneDeriving, 
              GeneralizedNewtypeDeriving, FlexibleInstances #-}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall -fno-warn-unused-do-bind -fno-warn-orphans #-}
 
 -- | Range analysis
@@ -29,8 +30,11 @@ module Analysis.RangeAnal
      )
 where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
-import Control.Monad.Error
+#endif
+
+import Control.Monad.Except
 import Control.Monad.State
 import Text.PrettyPrint.HughesPJ
 
@@ -273,7 +277,7 @@ joinRngMap rm1 rm2
   = neJoinWith rm1 rm2 (\_ r -> rjoin ROther r) 
                        (\_ r1 r2 -> rjoin r1 r2)
 
-newtype Rng a = Rng (StateT RngMap (ErrorT Doc IO) a)
+newtype Rng a = Rng (StateT RngMap (ExceptT Doc IO) a)
   deriving ( Functor
            , Applicative
            , Monad
@@ -449,10 +453,10 @@ deriving instance MonadState RngMap (AbsT Rng)
 deriving instance Monad (AbsT Rng)
 
 
-runRng :: Rng a -> ErrorT Doc IO (a, RngMap)
+runRng :: Rng a -> ExceptT Doc IO (a, RngMap)
 runRng (Rng action) = runStateT action neEmpty
 
-varRanges :: DynFlags -> Exp -> ErrorT Doc IO (Range, RngMap)
+varRanges :: DynFlags -> Exp -> ExceptT Doc IO (Range, RngMap)
 varRanges _dfs e =
   case action of AbsT m -> runRng m
   where 

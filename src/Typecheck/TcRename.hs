@@ -20,7 +20,12 @@
 -- 
 -- 
 {-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE CPP #-}
 module TcRename ( tcRenComp ) where
+
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative ( (<$>) )
+#endif
 
 import Prelude hiding (mapM)
 import Control.Arrow ((&&&))
@@ -30,8 +35,6 @@ import Data.Traversable (mapM)
 import Text.PrettyPrint.HughesPJ
 
 import qualified GenSym as GS
-
-import Control.Applicative ( (<$>) )
 
 import AstComp
 import AstExpr

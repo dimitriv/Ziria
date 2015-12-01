@@ -17,6 +17,8 @@ import Data.Loc
 import Data.Typeable (Typeable)
 import Text.PrettyPrint.Mainland
 
+import Orphans
+
 data LexerException = LexerException Pos Doc
   deriving (Typeable)
 

@@ -28,6 +28,7 @@
 --   we should really say "cannot unify Foo with Bar or Baz"
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleInstances, ExistentialQuantification, RecordWildCards #-}
+{-# LANGUAGE CPP #-}
 module TcMonad (
     -- * TcM monad
     TcM -- opaque
@@ -108,12 +109,16 @@ module TcMonad (
   , liftIO
   ) where
 
-import Prelude hiding (exp)
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative hiding (empty)
+#endif
+
+
+import Prelude hiding (exp)
 import Control.Arrow ((***))
 import Control.Monad.State
 import Control.Monad.Reader
-import Control.Monad.Error
+import Control.Monad.Except
 import Data.Loc
 import Text.PrettyPrint.HughesPJ
 import qualified Data.Map as M
@@ -161,7 +166,7 @@ data TcMEnv = TcMEnv {
   deriving Show
 
 newtype TcM a = TcM {
-    unTcM :: ReaderT TcMEnv (StateT Unifier (ErrorT Doc IO)) a
+    unTcM :: ReaderT TcMEnv (StateT Unifier (ExceptT Doc IO)) a
   }
   deriving ( Functor
            , Applicative
@@ -181,7 +186,7 @@ runTcM :: TcM a
        -> Unifier
        -> IO (Either Doc (a, Unifier))
 runTcM act tenv env cenv sym ctx st =
-    runErrorT (runStateT (runReaderT (unTcM act) readerEnv) st)
+    runExceptT (runStateT (runReaderT (unTcM act) readerEnv) st)
   where
     readerEnv = TcMEnv {
         tcm_tydefenv = tenv

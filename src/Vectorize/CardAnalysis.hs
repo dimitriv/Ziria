@@ -18,6 +18,7 @@
 -}
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE ScopedTypeVariables, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE CPP #-}
 
 -- | Cardinality analysis to drive the vectorizer
 module CardAnalysis (
@@ -33,7 +34,10 @@ module CardAnalysis (
    , unknown_times_card
    ) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
+
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Exception.Base ( assert )

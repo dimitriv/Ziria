@@ -21,9 +21,14 @@
 {-# LANGUAGE RebindableSyntax #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall -Werror #-}
 
 module CgFun ( cgFunDefined, cgFunExternal ) where
+
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative
+#endif
 
 import Prelude
 
@@ -36,7 +41,6 @@ import CgTypes
 import CgExpr
 
 import Control.Monad.State
-import Control.Applicative
 
 import Data.Loc
 import qualified Language.C.Syntax as C

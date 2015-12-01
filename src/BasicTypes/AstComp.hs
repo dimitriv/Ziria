@@ -18,8 +18,13 @@
 -}
 {-# LANGUAGE GADTs, RankNTypes, DeriveGeneric, DeriveDataTypeable, ScopedTypeVariables, RecordWildCards, 
     TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 module AstComp where
+
+#if !MIN_VERSION_base(4,8,0)
+import Data.Monoid
+#endif
 
 import Prelude hiding (pi, mapM)
 import Control.Arrow ((***))
@@ -28,7 +33,6 @@ import Data.Data (Data)
 import Data.Either (partitionEithers)
 import Data.Functor.Identity ( Identity (..) )
 import Data.Loc
-import Data.Monoid
 import Data.Set (Set)
 import Data.Maybe ( isJust )
 import Data.Traversable (mapM)

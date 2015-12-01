@@ -18,6 +18,7 @@
 -}
 {-# LANGUAGE GeneralizedNewtypeDeriving, StandaloneDeriving, DeriveDataTypeable,
     TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 
 
@@ -28,9 +29,11 @@ module Analysis.DataFlow (
   , inOutVarsDefinite
 ) where
 
-
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
-import Control.Monad.Error
+#endif
+
+import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Set (Set)
@@ -76,7 +79,7 @@ initDFState :: DFState
 initDFState = DFState neEmpty Set.empty
 
 -- | Main analysis monad
-newtype DFM a = DFM (ReaderT DFEnv (StateT DFState (ErrorT Doc IO)) a)
+newtype DFM a = DFM (ReaderT DFEnv (StateT DFState (ExceptT Doc IO)) a)
   deriving ( Functor
            , Applicative
            , Monad
@@ -86,14 +89,14 @@ newtype DFM a = DFM (ReaderT DFEnv (StateT DFState (ErrorT Doc IO)) a)
            , MonadIO
            )
 -- | Run the monad
-runDFM :: DFM a -> ErrorT Doc IO (a, DFState)
+runDFM :: DFM a -> ExceptT Doc IO (a, DFState)
 runDFM (DFM act) 
   = runStateT (runReaderT act initDFEnv) initDFState
 
--- | Run the ErrorT as well
+-- | Run the ExceptT as well
 runDFMIO :: DFM a -> IO (a, DFState)
 runDFMIO act = do 
-  r <- runErrorT (runDFM act)
+  r <- runExceptT (runDFM act)
   case r of 
     Left doc -> panic (text "runDFMIO failure: " $$ doc)
     Right s  -> return s
@@ -190,7 +193,8 @@ instance CmdDom DFM VarSet where
     -- Hence we must treat those as read and write variables. The
     -- trick we employ here is that we first read, get an rval, and
     -- then assign it back out to the same lval. 
-    where do_arg vs (LVal lv) = do 
+    where do_arg :: VarSet -> AVal VarSet -> DFM VarSet
+          do_arg vs (LVal lv) = do 
             v <- aDerefRead lv 
             aAssign lv v
             return (Set.union v vs)
@@ -201,7 +205,6 @@ instance CmdDom DFM VarSet where
 
                -- NB: We could return (Set.unions vs)
                -- but I am not sure we really care ...
-
 
 {---------------------------------------------------------------
   Abstract intepreter domain
@@ -242,7 +245,7 @@ inOutVarsDefinite dfs e = do
       pureUsed = Set.toList $ ((Set.union varset ufset) Set.\\ impUsed_s)
       allVars  = Set.toList ufset
   -- Try now the range analysis, but suppress any errors
-  res <- runErrorT (RA.varRanges dfs e)
+  res <- runExceptT (RA.varRanges dfs e)
   let ranges = case res of 
                  Left _ -> neEmpty
                  Right rngs -> snd rngs
@@ -256,7 +259,7 @@ inOutVarsDefinite dfs e = do
         action = absEvalRVal e
 
 
-inOutVars :: DynFlags -> Exp -> ErrorT Doc IO VarUsePkg
+inOutVars :: DynFlags -> Exp -> ExceptT Doc IO VarUsePkg
 inOutVars dfs e = do
   (varset, DFState udmap ufset) <- runDFM (unAbsT action)
   let modified, impUsed, pureUsed, allVars :: [GName Ty]

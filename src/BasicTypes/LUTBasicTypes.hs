@@ -18,6 +18,7 @@
 -}
 
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances, DeriveGeneric, DeriveDataTypeable #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 {- This module defines datatypes that are used for lookup table generation,
    including range the range analysis. 
@@ -27,7 +28,7 @@ module LUTBasicTypes where
 
 import Outputable
 import Text.PrettyPrint.HughesPJ
-import Control.DeepSeq.Generics (NFData(..), genericRnf)
+import Control.DeepSeq (NFData(..))
 import GHC.Generics
 import Data.Maybe ( isJust )
 import Data.Typeable
@@ -117,19 +118,13 @@ data Range
 -- | Intervals
 data Iv = Iv Integer Integer  -- i1 <= i2
         | IvEmpty
-  deriving (Generic, Typeable, Data, Eq, Ord, Show)
-
-instance NFData Iv where
-  rnf = genericRnf
+  deriving (Generic, Typeable, Data, Eq, Ord, Show, NFData)
 
 type Interval = IVal Iv
 
-instance NFData Interval where
-  rnf = genericRnf
-
 
 data IVal v = IUnknown | IKnown v
-  deriving (Generic, Typeable, Data, Eq, Show, Ord)
+  deriving (Generic, Typeable, Data, Eq, Show, Ord, NFData)
 
 instance Monad IVal where
   return a = IKnown a

@@ -21,6 +21,7 @@
   , ScopedTypeVariables, FunctionalDependencies, FlexibleInstances
   , FlexibleContexts, UndecidableInstances
   , ConstraintKinds, KindSignatures #-}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall -fno-warn-unused-do-bind #-}
 -- | Abstract interpreter
 
@@ -38,12 +39,14 @@ module AbsInt (
  , AVal      (..)
 ) where
 
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative
+#endif
 
 import AstExpr
 import AstUnlabelled
 import PpExpr ()
 import Control.Monad.State.Class
-import Control.Applicative
 import Data.Loc
 import Data.Set ( Set )
 import qualified Data.Set as Set

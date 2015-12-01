@@ -19,9 +19,13 @@
 -- | Typecheck (and sanity check) core (rather than source)
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE CPP #-}
 module Tc ( tc ) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
+
 import Control.Monad
 import Data.Loc
 import Text.PrettyPrint.HughesPJ

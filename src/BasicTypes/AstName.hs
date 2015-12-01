@@ -17,6 +17,7 @@
    permissions and limitations under the License.
 -}
 {-# LANGUAGE GADTs, DeriveGeneric, DeriveDataTypeable, ScopedTypeVariables, RecordWildCards #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# OPTIONS_GHC -Wall #-}
 module AstName where
 
@@ -24,7 +25,8 @@ import Prelude hiding (exp, mapM)
 import Data.Loc
 import Data.Data (Data)
 import Data.Typeable (Typeable)
-import Control.DeepSeq.Generics (NFData(..), genericRnf)
+import Control.DeepSeq (NFData(..))
+-- import Control.DeepSeq.Generics (NFData(..), genericRnf)
 import GHC.Generics (Generic)
 import Text.Show.Pretty (PrettyVal)
 
@@ -40,14 +42,14 @@ import Orphans ()
 
 -- Unique identifiers
 newtype Uniq = MkUniq { unUniq :: String }
-  deriving (Generic, Typeable, Data, Eq, Ord)
+  deriving (Generic, Typeable, Data, Eq, Ord, NFData)
 
 instance Show Uniq where
   show (MkUniq s) = s
 
 -- | Mutability kind (mutable or immutable)
 data MutKind = Imm | Mut
-  deriving (Generic, Typeable, Data, Eq, Ord, Show)
+  deriving (Generic, Typeable, Data, Eq, Ord, Show, NFData)
 
 data GName t
   = MkName { name    :: String
@@ -56,7 +58,7 @@ data GName t
            , nameLoc :: SrcLoc
            , nameMut :: MutKind
            }
-  deriving (Generic, Typeable, Data)
+  deriving (Generic, Typeable, Data, NFData)
 
 instance Located (GName t) where
     locOf = locOf . nameLoc
@@ -115,11 +117,7 @@ instance Outputable MutKind where
 
 {-------------- Other instances ---------------------------------}
 
-instance NFData t => NFData (GName t) where rnf = genericRnf
 instance PrettyVal t => PrettyVal (GName t)
-
-instance NFData MutKind     where rnf = genericRnf
-instance NFData Uniq        where rnf = genericRnf
 
 instance PrettyVal Uniq
 instance PrettyVal MutKind

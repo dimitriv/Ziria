@@ -22,6 +22,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -fwarn-unused-binds #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
@@ -46,11 +47,13 @@ module LUTAnalysis (
  , RngMap 
  ) where
 
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative
+#endif
+
 import Opts
 import AstExpr
 import CgTypes
-
-import Control.Applicative
 
 import Text.PrettyPrint.HughesPJ 
 
@@ -58,9 +61,8 @@ import Outputable
 import CtExpr
 
 import Control.Monad.State.Class
-import Control.Monad.Error.Class
 import Control.Monad.State
-import Control.Monad.Error
+import Control.Monad.Except
 
 import NameEnv ( neLookup )
 import Analysis.DataFlow
@@ -103,7 +105,7 @@ tyBitWidth_ByteAlign ty = do
 
 calcLUTStats :: DynFlags
              -> Exp -> IO (Either Doc LUTStats)
-calcLUTStats dflags e = runErrorT $ do
+calcLUTStats dflags e = runExceptT $ do
   pkg <- inOutVars dflags e
   
   verbose dflags $ vcat [ text "-- calcLUTStats --"
@@ -160,12 +162,12 @@ calcLUTStats dflags e = runErrorT $ do
   Determine if we should LUT
 ----------------------------------------------------------------------}
 
-newtype LM a = LM { unLM :: ErrorT String (State LMState) a }
+newtype LM a = LM { unLM :: ExceptT String (State LMState) a }
   deriving ( Functor, Applicative, Monad, MonadState LMState
            , MonadError String )
   
 evalLM :: LM a -> LMState -> Either String a
-evalLM m s = fst $ runState (runErrorT $ unLM m) s
+evalLM m s = fst $ runState (runExceptT $ unLM m) s
 
 data LMState = LMState { lmHasLoop          :: !Bool
                        , lmHasCall          :: !Bool

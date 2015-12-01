@@ -16,7 +16,9 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE FlexibleInstances, OverlappingInstances #-}
+
+{-# LANGUAGE FlexibleInstances #-}
+
 module Outputable where
 
 import Text.PrettyPrint.HughesPJ
@@ -32,13 +34,13 @@ instance Outputable Int where
 instance Outputable Integer where
   ppr = integer . fromIntegral
 
-instance Outputable a => Outputable [a] where
+instance {-# OVERLAPPABLE #-} Outputable a => Outputable [a] where
   ppr = sep . punctuate comma . map ppr
 
 instance (Outputable a, Outputable b) => Outputable (a,b) where
   ppr (a,b) = parens (ppr a <> comma <+> ppr b)
 
-instance Outputable String where
+instance {-# OVERLAPPING #-} Outputable String where
   ppr = text 
 
 instance Outputable a => Outputable (Maybe a) where 

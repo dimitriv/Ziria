@@ -19,6 +19,7 @@
 {-# OPTIONS_GHC -Wall -Werror #-}
 {-# LANGUAGE ScopedTypeVariables, RecordWildCards, 
     GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes, DeriveGeneric #-}
+{-# LANGUAGE CPP #-}
 module PassComp (
     passFold
   , passPurify
@@ -44,9 +45,12 @@ import GHC.Generics
 import qualified Data.Set as S
 
 -- import Outputable
+--
+#if !MIN_VERSION_base(4,8,0)
+import Data.Monoid
+#endif
 
 import Data.Loc
-import Data.Monoid
 
 import Data.Maybe ( fromJust )
 

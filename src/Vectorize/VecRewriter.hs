@@ -18,6 +18,7 @@
 -}
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, ConstraintKinds, FlexibleContexts #-}
+{-# LANGUAGE CPP #-}
 module VecRewriter ( 
    rwTakeEmitIO
  , RwState ( .. )
@@ -27,7 +28,10 @@ module VecRewriter (
  , vectAssign, vectEmit
 ) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
+
 import Control.Monad.State
 import Data.Loc
 

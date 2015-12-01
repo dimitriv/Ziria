@@ -27,10 +27,14 @@
 --    b. Adding a unification constraint in the case of 'length(x)' in types
 --       (where we need the type of x to be an array)
 {-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE CPP #-}
 module Rename (renProg, renComp, renExp) where
 
-import Prelude hiding (mapM)
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
+
+import Prelude hiding (mapM)
 import Control.Arrow ((&&&))
 import Control.Monad.Reader hiding (mapM)
 import Data.Loc

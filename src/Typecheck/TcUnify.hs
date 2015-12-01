@@ -18,6 +18,7 @@
 -}
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE FlexibleInstances, DeriveFunctor, DeriveFoldable #-}
+{-# LANGUAGE CPP #-}
 module TcUnify (
     -- * Unification
     Unify
@@ -48,8 +49,13 @@ module TcUnify (
   , instantiateCall
   ) where
 
-import Control.Monad hiding (forM_)
+#if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable, forM_)
+#else
+import Data.Foldable (forM_)
+#endif
+
+import Control.Monad hiding (forM_)
 import Data.Loc
 import Text.PrettyPrint.HughesPJ
 import qualified Data.Map as M
