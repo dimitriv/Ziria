@@ -49,8 +49,6 @@ import Data.Bits
 import Utils
 import Control.Monad.Identity ( runIdentity )
 
--- import Debug.Trace
-
 {----------------------------------------------------------------------------
    Infrastructure 
 ----------------------------------------------------------------------------}
@@ -515,7 +513,7 @@ genLUT cg_expr dflags stats e = do
              -> assignByVal ety [cexp| *(($ty:c_ty *) $clut_fin)|] ce
 
    -- | make lut entry be 2-byte aligned
-   let lutEntryByteLen 
+   let lutEntryByteLen :: Int
         = ((((lutOutBw + 7) `div` 8) + 1) `div` 2) * 2
    let idxLen = (1::Word) `shiftL` lutInBw
        lutbasety = namedCType $ "calign unsigned char"

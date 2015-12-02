@@ -30,7 +30,7 @@ Executable wplc
     Language.Ziria.Parser.CamlParser
     Language.Ziria.Parser.Parser
 
-  default-extensions: DoAndIfThenElse PatternGuards
+  default-extensions: DoAndIfThenElse PatternGuards NoMonomorphismRestriction
   other-extensions: TemplateHaskell, QuasiQuotes
 
   build-depends:
