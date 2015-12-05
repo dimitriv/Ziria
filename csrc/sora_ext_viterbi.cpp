@@ -18,7 +18,7 @@
 */
 
 #ifdef __GNUC__
-#include "viterbicore.h"
+#include "viterbicore.hpp"
 #include "ieee80211const.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -74,8 +74,8 @@ int16 __ext_viterbi_brick_decode_fast(char* intInput, int len1, unsigned char* b
 
 	// vector128 constants
 #ifdef __GNUC__
-	static const __m128i * const pVITMA = (const __m128i*)VIT_MA; // Branch Metric A
-	static const __m128i * const pVITMB = (const __m128i*)VIT_MB; // Branch Metric B
+	static const __m128i * const pVITMA = VIT_MA; // Branch Metric A
+	static const __m128i * const pVITMB = VIT_MB; // Branch Metric B
 #else
 	static const vub * const pVITMA = (const vub*)VIT_MA; // Branch Metric A
 	static const vub * const pVITMB = (const vub*)VIT_MB; // Branch Metric B
@@ -185,8 +185,8 @@ int16 __ext_viterbiSig11a_brick_decode_fast(char* intInput, int len1, unsigned c
 
 	unsigned int output = 0;
 
-	Viterbi_sig11(trellis, (char *)intInput, (char *)(bit));
-	*((unsigned int *)bit) >>= 6; // remove the prefix 6 zeros
+	Viterbi_sig11(trellis, intInput, (char *)(bit));
+	*((unum32 *)bit) >>= 6; // remove the prefix 6 zeros
 
 	return 0;
 }
