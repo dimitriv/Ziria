@@ -241,17 +241,34 @@ int __ext_v_hadd_complex16(struct complex16* z, int __unused_2, struct complex16
           int __unused_1)
 {
 
-	int re = x[0].re + x[1].re + x[2].re + x[3].re;
-	int im = x[0].im + x[1].im + x[2].im + x[3].im;
+  num16* Xs = (num16*) x;
+  num16 re = 0;
+  num16 im = 0;
 
-	for (unum8 i = 0; i < 4; i++){
-		z[i].re = re;
-		z[i].im = im;
-	}
+  for (unum8 i=0; i<8; i+=2) {
+    re += Xs[i];
+    im += Xs[i+1];
+  }
 
-	 return 0;
+  // Is the above faster than the one below?
+  // Not really. It may even be slower.
+  // But, it does have a better
+  // cache hit rate, because, the data
+  // can easily fit in a very small cache.
+  // So, even though it's a bit more verbose,
+  // it's worth it since the above gives
+  // more consistent performance.
 
-	
+  // num16 re = x[0].re + x[1].re + x[2].re + x[3].re;
+  // num16 im = x[0].im + x[1].im + x[2].im + x[3].im;
+
+  for (unum8 i = 0; i < 4; i++){
+    z[i].re = re;
+    z[i].im = im;
+  }
+
+  return 0;
+
 }
 
 FORCE_INLINE
@@ -432,10 +449,11 @@ int __ext_v_shift_right_complex32(struct complex32* z, int __unused_3, struct co
 		Zs[i] = _mm_srai_epi32(Xs[i], shift);
 
 	}
-	for (int i = (len / wlen) * wlen; i < len; i++)
+  unum32* Ps = (unum32*) x;
+  unum32* Qs = (unum32*) z;
+	for (int i = (len / wlen) * wlen * 2; i < len * 2; i++)
 	{
-		z[i].re = x[i].re >> shift;
-		z[i].im = x[i].im >> shift;
+		Qs[i] = Ps[i] >> shift;
 	}
 	return 0;
 }
@@ -456,10 +474,11 @@ int __ext_v_shift_left_complex32(struct complex32* z, int __unused_3, struct com
 		Zs[i] = _mm_slli_epi32(Xs[i], shift);
 
 	}
-	for (int i = (len / wlen) * wlen; i < len; i++)
+  unum32* Ps = (unum32*) x;
+  unum32* Qs = (unum32*) z;
+	for (int i = (len / wlen) * wlen * 2; i < len * 2; i++)
 	{
-		z[i].re = x[i].re << shift;
-		z[i].im = x[i].im << shift;
+		Qs[i] = Ps[i] << shift;
 	}
 	return 0;
 }
@@ -483,10 +502,11 @@ int __ext_v_shift_right_complex16(struct complex16* z, int __unused_3, struct co
 		Zs[i] = _mm_srai_epi16(Xs[i],shift);
 
 	}
-	for (int i = (len / wlen) * wlen; i < len; i++)
+  unum16* Ps = (unum16*) x;
+  unum16* Qs = (unum16*) z;
+	for (int i = (len / wlen) * wlen * 2; i < len * 2; i++)
 	{
-		z[i].re = x[i].re >> shift;
-		z[i].im = x[i].im >> shift;
+		Qs[i] = Ps[i] >> shift;
 	}
 	return 0;
 }
@@ -507,10 +527,11 @@ int __ext_v_shift_left_complex16(struct complex16* z, int __unused_3, struct com
 		Zs[i] = _mm_slli_epi16(Xs[i], shift);
 
 	}
-	for (int i = (len / wlen) * wlen; i < len; i++)
+  unum16* Ps = (unum16*) x;
+  unum16* Qs = (unum16*) z;
+	for (int i = (len / wlen) * wlen * 2; i < len * 2; i++)
 	{
-		z[i].re = x[i].re << shift;
-		z[i].im = x[i].im << shift;
+		Qs[i] = Ps[i] << shift;
 	}
 	return 0;
 }
@@ -630,9 +651,9 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 								struct complex16* y, int len2, int shift)
 {
 	
-	const int wlen = 4;// sizeof(vcs) / sizeof(complex16);
+	const unum8 wlen = 4;// sizeof(vcs) / sizeof(complex16);
 	
-		const __m128i xmm6 = _mm_set1_epi32(0x0000FFFF);		//0x0000FFFF0000FFFF0000FFFF0000FFFF
+		const __m128i xmm6 = _mm_set1_epi32(0x0000FFFF);
 		const __m128i xmm5 = _mm_set1_epi32(0xFFFF0000);
 		const __m128i xmm4 = _mm_set1_epi32(0x00010000);
 		__m128i* Xs = (__m128i*) x;
@@ -640,27 +661,6 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 		__m128i* Outs = (__m128i*) out;
 		for (int i = 0; i < len1 / wlen; i++){
 
-			/*
-			vcs *vx = (vcs *)(x + wlen*i);
-			vcs *vy = (vcs *)(y + wlen*i);
-			vcs *vout = (vcs *)(out + wlen*i);
-
-			vcs vs1 = conj0(*vy);
-
-			vcs vs2 = (vcs)permutate_low<1, 0, 3, 2>(*vy);
-			vs2 = permutate_high<1, 0, 3, 2>(vs2);
-
-			vi re32 = muladd(*vx, vs1);
-			vi im32 = muladd(*vx, vs2);
-
-			re32 = shift_right(re32, shift);
-			im32 = shift_right(im32, shift);
-
-			*vout = (vcs)pack(re32, im32);
-			//*/
-			//*
-
-			//__m128i ms1 = _mm_sign_epi16(mx, conj);
 			__m128i ms1 = _mm_xor_si128(Xs[i], xmm5);
 			ms1 = _mm_add_epi32(ms1, xmm4);
 			
@@ -700,8 +700,7 @@ int __ext_v_conj_mul_complex16_int32(int32* re, int lenout1, int32* im, int leno
 				struct complex16* x, int len1, struct complex16* y, int len2 )
 {
 
-	const int wlen = 4;// sizeof(vcs) / sizeof(complex16);
-	const __m128i xmm6 = _mm_set1_epi32(0x0000FFFF);		//0x0000FFFF0000FFFF0000FFFF0000FFFF
+	const unum8 wlen = 4;// sizeof(vcs) / sizeof(complex16);
 	const __m128i xmm5 = _mm_set1_epi32(0xFFFF0000);
 	const __m128i xmm4 = _mm_set1_epi32(0x00010000);
 	__m128i* Xs = (__m128i*) x;
@@ -710,21 +709,6 @@ int __ext_v_conj_mul_complex16_int32(int32* re, int lenout1, int32* im, int leno
 	__m128i* Ims = (__m128i*) im;
 	for (int i = 0; i < len1 / wlen; i++){
 
-	/*	vcs *vx = (vcs *)(x + wlen*i);
-		vcs *vy = (vcs *)(y + wlen*i);
-		vi *reout = (vi *)(re + wlen*i);
-		vi *imout = (vi *)(im + wlen*i);
-
-		vcs vs2 = conj0(*vy);
-
-	    vs2 = permutate_low<1, 0, 3, 2>(vs2);
-		vs2 = permutate_high<1, 0, 3, 2>(vs2);
-
-		*reout = (vcs)muladd(*vx, *vy);
-		*imout = (vcs)muladd(*vx, vs2);*/
-
-
-		//__m128i ms1 = _mm_sign_epi16(my, conj);
 		__m128i ms2 = _mm_xor_si128(Ys[i], xmm5);
 		ms2 = _mm_add_epi32(ms2, xmm4);
 
@@ -754,8 +738,8 @@ int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
 								struct complex16* x, int len1,
 								struct complex16* y, int len2, int shift){
 			
-	const int wlen = 4;// sizeof(vcs) / sizeof(complex16);
-	const __m128i xmm6 = _mm_set1_epi32(0x0000FFFF);		//0x0000FFFF0000FFFF0000FFFF0000FFFF
+	const unum8 wlen = 4;// sizeof(vcs) / sizeof(complex16);
+	const __m128i xmm6 = _mm_set1_epi32(0x0000FFFF);
 	const __m128i xmm5 = _mm_set1_epi32(0xFFFF0000);
 	const __m128i xmm4 = _mm_set1_epi32(0x00010000);
 	__m128i* Xs = (__m128i*) x;
@@ -763,25 +747,6 @@ int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
 	__m128i* Outs = (__m128i*) out;
 	for (int i = 0; i < len1 / wlen; i++){
 
-		/*vcs *vx = (vcs *)(x + wlen*i);
-		vcs *vy = (vcs *)(y + wlen*i);
-		vcs *vout = (vcs *)(out + wlen*i);
-
-		
-		vcs vs2 = conj0(*vy);
-
-		vs2 = permutate_low<1, 0, 3, 2>(vs2);
-		vs2 = permutate_high<1, 0, 3, 2>(vs2);
-
-		vi re32 = muladd(*vx, *vy);
-		vi im32 = muladd(*vx, vs2);
-		
-		re32 = shift_right(re32, shift);
-		im32 = shift_right(im32, shift);
-
-		*vout = (vcs)pack(re32, im32);*/
-
-		//__m128i ms1 = _mm_sign_epi16(my, conj);
 		__m128i ms2 = _mm_xor_si128(Ys[i], xmm5);
 		ms2 = _mm_add_epi32(ms2, xmm4);
 
