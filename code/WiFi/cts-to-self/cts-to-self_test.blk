@@ -21,9 +21,9 @@
 
 -- Infile contains PLCP header (3B) + CTS MAC header/data (14B)
 -- Transmitted at 6 Mbps
--- LSB->MSB (IEEE):  11010011 10000000 00000000
--- MSB->LSB (Intel): 11001011 00000001 00000000
--- -53, 1, 0
+-- LSB->MSB (IEEE):  11010011 10000000 00000000 (-45, -128, 0)
+-- MSB->LSB (Intel): 11001011 00000001 00000000 (-53, 1, 0)
+-- 
 
 #include "cts-to-self.blk"
 
