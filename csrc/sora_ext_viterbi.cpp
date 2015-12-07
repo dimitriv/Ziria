@@ -21,6 +21,7 @@
 #include "viterbicore.h"
 #include "ieee80211const.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <emmintrin.h>
 #else
 #include <sora.h>
@@ -36,7 +37,7 @@
 const size_t TRELLIS_MAX = 5000 * 8;
 TViterbiCore<TRELLIS_MAX> m_viterbi;
 
-ulong ob_count;
+unsigned long ob_count;
 unum16 frame_length = 1500;
 num16 code_rate = CR_12;
 size_t TRELLIS_DEPTH = 256;

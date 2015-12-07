@@ -54,6 +54,7 @@ clean:
 clean-sandbox:
 	-rm -rf .cabal-sandbox
 	-rm -rf dist
+	-rm -rf cabal.sandbox.config
 
 test: test-parser test-backend test-lut test-WiFi-all
 test-clean: test-parser-clean test-backend-clean test-lut-clean test-WiFi-all-clean

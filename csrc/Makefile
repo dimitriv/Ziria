@@ -32,6 +32,11 @@ CXXFLAGS = -std=c++11 -Wall -Wno-unused-label -Wno-unused-variable -Wno-attribut
 LIBS = -lm
 OBJDIR = .
 
+ifeq ($(RADIO), bladeRF)
+LIBS += -lbladeRF
+EXTRACOPTS += -DBLADE_RF
+endif
+
 OBJ_INT = bit.o numerics.o params.o test.o driver.o wpl_alloc.o utils.o
 OBJ_IO  = buf_bit.o buf_chunk.o buf_numerics8.o buf_numerics32.o buf_numerics16.o
 OBJ_LIB = 

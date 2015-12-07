@@ -130,7 +130,9 @@ typedef struct _BufContextBlock {
 	unsigned long total_in, total_out;		// Total number of data inputs read/written
 	size_t size_in, size_out;				// Size of input and output data type (in bits)
 
+#ifdef SORA_PLATFORM
 	thread_info *ti;
+#endif
 } BufContextBlock;
 
 

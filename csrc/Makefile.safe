@@ -23,6 +23,11 @@ CXX = clang++
 CXXFLAGS = -std=c++11 -msse3 -w -pipe -fwhole-program -fsanitize=integer,undefined,alignment,bool,bounds,enum,function,null,object-size,return,shift,signed-integer-overflow,unreachable,float-cast-overflow,float-divide-by-zero,integer-divide-by-zero,nonnull-attribute,null,returns-nonnull-attribute,vla-bound,vptr
 LIBS = -lm
 
+ifeq ($(RADIO), bladeRF)
+LIBS += -lbladeRF
+EXTRACOPTS = -DBLADE_RF
+endif
+
 EXECUTABLE = driver
 
 all : driver

@@ -28,9 +28,10 @@
 
 #ifdef SORA_PLATFORM
 #include "sora_radio.h"
+#endif
+
 #ifdef BLADE_RF
 #include "bladerf_radio.h"
-#endif
 #endif
 
 

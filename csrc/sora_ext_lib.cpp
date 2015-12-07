@@ -17,13 +17,10 @@
    permissions and limitations under the License.
 */
 
-#ifdef __linux__
-#include <stdint.h>
-#endif
-
 #include "types.h"
 #include "string.h"
 #include <assert.h>
+#include "numerics.h"
 
 #include <xmmintrin.h>
 #include <emmintrin.h>
@@ -68,23 +65,18 @@
 #pragma once
 
 
-
-// Functions here are not explicitly inline but
-// aggressive optimization will make them all inline
-
-
 // c = a + b
-//FINL 
+FORCE_INLINE
 int __ext_v_add_complex16(struct complex16* c, int len, struct complex16* a,
           int __unused_2, struct complex16* b, int __unused_1)
 {
 	const int wlen = 4;// sizeof(vcs) / sizeof(complex16);
+	__m128i* As = (__m128i*) a;
+	__m128i* Bs = (__m128i*) b;
+	__m128i* Cs = (__m128i*) c;
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i ma = _mm_loadu_si128((__m128i *)(a + wlen*i));
-		__m128i mb = _mm_loadu_si128((__m128i *)(b + wlen*i));
-				
-		_mm_storeu_si128((__m128i *) (c + wlen*i), _mm_add_epi16(ma, mb));
+		Cs[i] = _mm_add_epi16(As[i], Bs[i]);
 		
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -95,16 +87,17 @@ int __ext_v_add_complex16(struct complex16* c, int len, struct complex16* a,
 	return 0;
 }
 
+FORCE_INLINE
 int __ext_v_add_complex32(struct complex32* c, int len, struct complex32* a,
 	int __unused_2, struct complex32* b, int __unused_1)
 {
 	const int wlen = 2;	// sizeof(vci) / sizeof(complex32);
+	__m128i* As = (__m128i*) a;
+	__m128i* Bs = (__m128i*) b;
+	__m128i* Cs = (__m128i*) c;
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i ma = _mm_loadu_si128((__m128i *)(a + wlen*i));
-		__m128i mb = _mm_loadu_si128((__m128i *)(b + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (c + wlen*i), _mm_add_epi32(ma, mb));
+		Cs[i] = _mm_add_epi32(As[i], Bs[i]);
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
 	{
@@ -114,16 +107,17 @@ int __ext_v_add_complex32(struct complex32* c, int len, struct complex32* a,
 	return 0;
 }
 
+FORCE_INLINE
 int __ext_v_add_int16(int16* c, int len, int16* a,
 	int __unused_2, int16* b, int __unused_1)
 {
 	const int wlen = 8;//sizeof(vs) / sizeof(int16);
+	__m128i* As = (__m128i*) a;
+	__m128i* Bs = (__m128i*) b;
+	__m128i* Cs = (__m128i*) c;
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i ma = _mm_loadu_si128((__m128i *)(a + wlen*i));
-		__m128i mb = _mm_loadu_si128((__m128i *)(b + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (c + wlen*i), _mm_add_epi16(ma, mb));
+		Cs[i] = _mm_add_epi16(As[i], Bs[i]);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -133,16 +127,17 @@ int __ext_v_add_int16(int16* c, int len, int16* a,
 	return 0;
 }
 
+FORCE_INLINE
 int __ext_v_add_int32(int32* c, int len, int32* a,
 	int __unused_2, int32* b, int __unused_1)
 {
 	const int wlen = 4;//sizeof(vi) / sizeof(int32);
+	__m128i* As = (__m128i*) a;
+	__m128i* Bs = (__m128i*) b;
+	__m128i* Cs = (__m128i*) c;
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i ma = _mm_loadu_si128((__m128i *)(a + wlen*i));
-		__m128i mb = _mm_loadu_si128((__m128i *)(b + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (c + wlen*i), _mm_add_epi32(ma, mb));
+		Cs[i] = _mm_add_epi32(As[i], Bs[i]);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -156,17 +151,17 @@ int __ext_v_add_int32(int32* c, int len, int32* a,
 
 
 // c = a - b
-//FINL 
+FORCE_INLINE
 int __ext_v_sub_complex16(struct complex16* c, int len, struct complex16* a,
           int __unused_2, struct complex16* b, int __unused_1)
  {
 	 const int wlen = 4;// sizeof(vcs) / sizeof(complex16);
+	__m128i* As = (__m128i*) a;
+	__m128i* Bs = (__m128i*) b;
+	__m128i* Cs = (__m128i*) c;
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i ma = _mm_loadu_si128((__m128i *)(a + wlen*i));
-		__m128i mb = _mm_loadu_si128((__m128i *)(b + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (c + wlen*i), _mm_sub_epi16(ma, mb));
+		Cs[i] = _mm_sub_epi16(As[i], Bs[i]);
 	
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -177,16 +172,17 @@ int __ext_v_sub_complex16(struct complex16* c, int len, struct complex16* a,
 	return 0;	
  }
 
+FORCE_INLINE
 int __ext_v_sub_complex32(struct complex32* c, int len, struct complex32* a,
 	int __unused_2, struct complex32* b, int __unused_1)
 {
 	const int wlen = 2;	// sizeof(vci) / sizeof(complex32);
+	__m128i* As = (__m128i*) a;
+	__m128i* Bs = (__m128i*) b;
+	__m128i* Cs = (__m128i*) c;
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i ma = _mm_loadu_si128((__m128i *)(a + wlen*i));
-		__m128i mb = _mm_loadu_si128((__m128i *)(b + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (c + wlen*i), _mm_sub_epi32(ma, mb));
+		Cs[i] = _mm_sub_epi32(As[i], Bs[i]);
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
 	{
@@ -196,16 +192,17 @@ int __ext_v_sub_complex32(struct complex32* c, int len, struct complex32* a,
 	return 0;
 }
 
+FORCE_INLINE
 int __ext_v_sub_int16(int16* c, int len, int16* a,
 	int __unused_2, int16* b, int __unused_1)
 {
 	const int wlen = 8;//sizeof(vs) / sizeof(int16);
+	__m128i* As = (__m128i*) a;
+	__m128i* Bs = (__m128i*) b;
+	__m128i* Cs = (__m128i*) c;
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i ma = _mm_loadu_si128((__m128i *)(a + wlen*i));
-		__m128i mb = _mm_loadu_si128((__m128i *)(b + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (c + wlen*i), _mm_sub_epi16(ma, mb));
+		Cs[i] = _mm_sub_epi16(As[i], Bs[i]);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -215,16 +212,17 @@ int __ext_v_sub_int16(int16* c, int len, int16* a,
 	return 0;
 }
 
+FORCE_INLINE
 int __ext_v_sub_int32(int32* c, int len, int32* a,
 	int __unused_2, int32* b, int __unused_1)
 {
 	const int wlen = 4;//sizeof(vi) / sizeof(int32);
+	__m128i* As = (__m128i*) a;
+	__m128i* Bs = (__m128i*) b;
+	__m128i* Cs = (__m128i*) c;
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i ma = _mm_loadu_si128((__m128i *)(a + wlen*i));
-		__m128i mb = _mm_loadu_si128((__m128i *)(b + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (c + wlen*i), _mm_sub_epi32(ma, mb));
+		Cs[i] = _mm_sub_epi32(As[i], Bs[i]);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -238,7 +236,7 @@ int __ext_v_sub_int32(int32* c, int len, int32* a,
 //equivalent to sora hadd :
 //Sum all components of vector x and stores it in all components of z
 // z(i) = sum(x) for all i
-//FINL 
+FORCE_INLINE
 int __ext_v_hadd_complex16(struct complex16* z, int __unused_2, struct complex16* x,
           int __unused_1)
 {
@@ -276,7 +274,7 @@ int __ext_v_hadd_complex16(struct complex16* z, int __unused_2, struct complex16
 	
 }
 
-//FINL 
+FORCE_INLINE
 int __ext_v_hadd_int32(int* z, int __unused_21, int* x, int __unused_20)
 {
 
@@ -300,7 +298,7 @@ int __ext_v_hadd_int32(int* z, int __unused_21, int* x, int __unused_20)
 
 
 
-//FINL 
+FORCE_INLINE
 struct complex16 __ext_v_sum_complex16(struct complex16* x, int len)
 {
 	// N.B SORA implementation appears to be much faster. Don't know why, If appears to call hadd 
@@ -337,10 +335,11 @@ struct complex16 __ext_v_sum_complex16(struct complex16* x, int len)
 	struct complex16 ret;
 	const int wlen = 4;
 
+        __m128i* Xs = (__m128i*) x;
+
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		msum = _mm_add_epi16(msum, mx);
+		msum = _mm_add_epi16(msum, Xs[i]);
 	}
 
 	__m128i mout = msum;
@@ -375,7 +374,7 @@ struct complex16 __ext_v_sum_complex16(struct complex16* x, int len)
 
 }
 
-//FINL 
+FORCE_INLINE
 struct complex32 __ext_v_sum_complex32(struct complex32* x, int len)
 {
 
@@ -383,10 +382,11 @@ struct complex32 __ext_v_sum_complex32(struct complex32* x, int len)
 	struct complex32 ret;
 	const int wlen = 2;
 
+	__m128i* Xs = (__m128i*) x;
+
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		msum = _mm_add_epi32(msum, mx);
+		msum = _mm_add_epi32(msum, Xs[i]);
 	}
 
 	__m128i mout = msum;
@@ -409,23 +409,20 @@ struct complex32 __ext_v_sum_complex32(struct complex32* x, int len)
 }
 
 
-//FINL 
+FORCE_INLINE
 int16 __ext_v_sum_int16(int16* x, int len)
 {
 	__m128i msum = _mm_setzero_si128();
 
-#ifdef SORA_PLATFORM
-	__int16 ret;
-#else
-	int16_t ret;
-#endif
+num16 ret;
 
 	const int wlen = 8;
 
+	__m128i* Xs = (__m128i*) x;
+
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		msum = _mm_add_epi16(msum, mx);
+		msum = _mm_add_epi16(msum, Xs[i]);
 	}
 
 	__m128i mout = msum;
@@ -456,17 +453,18 @@ int16 __ext_v_sum_int16(int16* x, int len)
 }
 
 
-//FINL 
+FORCE_INLINE
 int32 __ext_v_sum_int32(int32* x, int len)
 {
 	__m128i msum = _mm_setzero_si128();
 	int32 ret;
 	const int wlen = 4;
 
+	__m128i* Xs = (__m128i*) x;
+
 	for (int i = 0; i < len / wlen; i++)
 	{
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		msum = _mm_add_epi32(msum, mx);
+		msum = _mm_add_epi32(msum, Xs[i]);
 	}
 
 	__m128i mout = msum;
@@ -498,19 +496,19 @@ int32 __ext_v_sum_int32(int32* x, int len)
 
 
 
-//FINL 
+FORCE_INLINE
 int __ext_v_shift_right_complex32(struct complex32* z, int __unused_3, struct complex32* x, int len, int shift)
 {
 	const int wlen = 2;// sizeof(vci) / sizeof(complex32);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Zs = (__m128i*) z;
 	for (int i = 0; i < len / wlen; i++)
 	{/*
 		vci *xi = (vci *)(x + wlen*i);
 		vci output = (shift_right(*xi, shift));
 		memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vci));*/
 
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (z + wlen*i), _mm_srai_epi32(mx, shift));
+		Zs[i] = _mm_srai_epi32(Xs[i], shift);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -521,10 +519,12 @@ int __ext_v_shift_right_complex32(struct complex32* z, int __unused_3, struct co
 	return 0;
 }
 
-//FINL 
+FORCE_INLINE
 int __ext_v_shift_left_complex32(struct complex32* z, int __unused_3, struct complex32* x, int len, int shift)
 {
 	const int wlen = 2;// sizeof(vci) / sizeof(complex32);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Zs = (__m128i*) z;
 	for (int i = 0; i < len / wlen; i++)
 	{/*
 		vci *xi = (vci *)(x + wlen*i);
@@ -532,9 +532,7 @@ int __ext_v_shift_left_complex32(struct complex32* z, int __unused_3, struct com
 		vci output = (shift_left(*xi, shift));
 		memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vci));*/
 
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-
-		_mm_storeu_si128((__m128i *) (z + wlen*i), _mm_slli_epi32(mx, shift));
+		Zs[i] = _mm_slli_epi32(Xs[i], shift);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -547,10 +545,12 @@ int __ext_v_shift_left_complex32(struct complex32* z, int __unused_3, struct com
 
 
 
-//FINL 
+FORCE_INLINE
 int __ext_v_shift_right_complex16(struct complex16* z, int __unused_3, struct complex16* x, int len, int shift)
 {
 	const int wlen = 4;// sizeof(vcs) / sizeof(complex16);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Zs = (__m128i*) z;
 	for (int i = 0; i < len / wlen; i++)
 	{
 		//vcs *xi = (vcs *)(x + wlen*i);
@@ -559,9 +559,7 @@ int __ext_v_shift_right_complex16(struct complex16* z, int __unused_3, struct co
 		//memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vcs));
 
 
-
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		_mm_storeu_si128((__m128i *) (z + wlen*i), _mm_srai_epi16(mx,shift));
+		Zs[i] = _mm_srai_epi16(Xs[i],shift);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -572,10 +570,12 @@ int __ext_v_shift_right_complex16(struct complex16* z, int __unused_3, struct co
 	return 0;
 }
 
-//FINL 
+FORCE_INLINE
 int __ext_v_shift_left_complex16(struct complex16* z, int __unused_3, struct complex16* x, int len, int shift)
 {
 	const int wlen = 4;// sizeof(vcs) / sizeof(complex16);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Zs = (__m128i*) z;
 	for (int i = 0; i < len / wlen; i++)
 	{
 		/*vcs *xi = (vcs *)(x + wlen*i);
@@ -583,8 +583,7 @@ int __ext_v_shift_left_complex16(struct complex16* z, int __unused_3, struct com
 		vcs output = (shift_left(*xi, shift));
 		memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vcs));*/
 
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		_mm_storeu_si128((__m128i *) (z + wlen*i), _mm_slli_epi16(mx, shift));
+		Zs[i] = _mm_slli_epi16(Xs[i], shift);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -597,10 +596,12 @@ int __ext_v_shift_left_complex16(struct complex16* z, int __unused_3, struct com
 
 
 
-//FINL 
+FORCE_INLINE
 int __ext_v_shift_right_int32(int32* z, int __unused_3, int32* x, int len, int shift)
 {
 	const int wlen = 4;// sizeof(vi) / sizeof(int32);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Zs = (__m128i*) z;
 	for (int i = 0; i < len / wlen; i++)
 	{
 		/*vi *xi = (vi *)(x + wlen*i);
@@ -608,8 +609,7 @@ int __ext_v_shift_right_int32(int32* z, int __unused_3, int32* x, int len, int s
 		vi output = (shift_right(*xi, shift));
 		memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vi));*/
 		
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		_mm_storeu_si128((__m128i *) (z + wlen*i), _mm_srai_epi32(mx, shift));
+		Zs[i] = _mm_srai_epi32(Xs[i], shift);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -620,10 +620,12 @@ int __ext_v_shift_right_int32(int32* z, int __unused_3, int32* x, int len, int s
 }
 
 
-//FINL 
+FORCE_INLINE
 int __ext_v_shift_left_int32(int32* z, int __unused_3, int32* x, int len, int shift)
 {
 	const int wlen = 4;// sizeof(vi) / sizeof(int32);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Zs = (__m128i*) z;
 	for (int i = 0; i < len / wlen; i++)
 	{
 		/*
@@ -632,8 +634,7 @@ int __ext_v_shift_left_int32(int32* z, int __unused_3, int32* x, int len, int sh
 		vi output = (shift_left(*xi, shift));
 		memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vi));*/
 
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		_mm_storeu_si128((__m128i *) (z + wlen*i), _mm_slli_epi32(mx, shift));
+		Zs[i] = _mm_slli_epi32(Xs[i], shift);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -645,10 +646,12 @@ int __ext_v_shift_left_int32(int32* z, int __unused_3, int32* x, int len, int sh
 
 
 
-//FINL 
+FORCE_INLINE
 int __ext_v_shift_right_int16(int16* z, int __unused_3, int16* x, int len, int shift)
 {
 	const int wlen = 8;// sizeof(vs) / sizeof(int16);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Zs = (__m128i*) z;
 	for (int i = 0; i < len / wlen; i++)
 	{
 		/*
@@ -657,8 +660,7 @@ int __ext_v_shift_right_int16(int16* z, int __unused_3, int16* x, int len, int s
 		vs output = (shift_right(*xi, shift));
 		memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vs));*/
 
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		_mm_storeu_si128((__m128i *) (z + wlen*i), _mm_srai_epi16(mx, shift));
+		Zs[i] = _mm_srai_epi16(Xs[i], shift);
 
 	
 	}
@@ -670,10 +672,12 @@ int __ext_v_shift_right_int16(int16* z, int __unused_3, int16* x, int len, int s
 }
 
 
-//FINL 
+FORCE_INLINE
 int __ext_v_shift_left_int16(int16* z, int __unused_3, int16* x, int len, int shift)
 {
 	const int wlen = 8;// sizeof(vs) / sizeof(int16);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Zs = (__m128i*) z;
 	for (int i = 0; i < len / wlen; i++)
 	{
 		/*
@@ -682,8 +686,7 @@ int __ext_v_shift_left_int16(int16* z, int __unused_3, int16* x, int len, int sh
 		vs output = (shift_left(*xi, shift));
 		memcpy((void *)(z + wlen*i), (void *)(&output), sizeof(vs));*/
 		
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		_mm_storeu_si128((__m128i *) (z + wlen*i), _mm_slli_epi16(mx, shift));
+		Zs[i] = _mm_slli_epi16(Xs[i], shift);
 
 	}
 	for (int i = (len / wlen) * wlen; i < len; i++)
@@ -700,6 +703,7 @@ int __ext_v_shift_left_int16(int16* z, int __unused_3, int16* x, int len, int sh
 // This was v_mul_complex16_shift but I changed the name for consistency with v_conj_mul
 // and the fact that the old v_mul_complex16 was never called
 //
+FORCE_INLINE
 int __ext_v_mul_complex16(struct complex16* out, int lenout,
 								struct complex16* x, int len1,
 								struct complex16* y, int len2, int shift)
@@ -710,6 +714,9 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 		const __m128i xmm6 = _mm_set1_epi32(0x0000FFFF);		//0x0000FFFF0000FFFF0000FFFF0000FFFF
 		const __m128i xmm5 = _mm_set1_epi32(0xFFFF0000);
 		const __m128i xmm4 = _mm_set1_epi32(0x00010000);
+		__m128i* Xs = (__m128i*) x;
+		__m128i* Ys = (__m128i*) y;
+		__m128i* Outs = (__m128i*) out;
 		for (int i = 0; i < len1 / wlen; i++){
 
 			/*
@@ -731,20 +738,17 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 			*vout = (vcs)pack(re32, im32);
 			//*/
 			//*
-			__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-			__m128i my = _mm_loadu_si128((__m128i *)(y + wlen*i));
-			
 
 			//__m128i ms1 = _mm_sign_epi16(mx, conj);
-			__m128i ms1 = _mm_xor_si128(mx, xmm5);
+			__m128i ms1 = _mm_xor_si128(Xs[i], xmm5);
 			ms1 = _mm_add_epi32(ms1, xmm4);
 			
 
-			__m128i ms2 = _mm_shufflehi_epi16(mx, _MM_SHUFFLE(2, 3, 0, 1));
+			__m128i ms2 = _mm_shufflehi_epi16(Xs[i], _MM_SHUFFLE(2, 3, 0, 1));
 			ms2 = _mm_shufflelo_epi16(ms2, _MM_SHUFFLE(2, 3, 0, 1));
 
-			__m128i mre = _mm_srai_epi32(_mm_madd_epi16(ms1, my), shift);
-			__m128i mim = _mm_srai_epi32(_mm_madd_epi16(ms2, my), shift);
+			__m128i mre = _mm_srai_epi32(_mm_madd_epi16(ms1, Ys[i]), shift);
+			__m128i mim = _mm_srai_epi32(_mm_madd_epi16(ms2, Ys[i]), shift);
 
 			mre = _mm_and_si128(mre,xmm6);
 			mim = _mm_and_si128(mim,xmm6);
@@ -752,9 +756,8 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 			mim = _mm_slli_epi32(mim,0x10);
 
 
-			__m128i mout = _mm_or_si128(mre, mim);
+			Outs[i] = _mm_or_si128(mre, mim);
 
-			_mm_storeu_si128((__m128i *) (out + wlen*i), mout);
 			//*/
 		}
 
@@ -771,6 +774,7 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 // multiplies two complex vectors and returns the real and imaginary parts 
 // as two 32 bit integers.
 //
+FORCE_INLINE
 int __ext_v_conj_mul_complex16_int32(int32* re, int lenout1, int32* im, int lenout2, 
 				struct complex16* x, int len1, struct complex16* y, int len2 )
 {
@@ -779,6 +783,10 @@ int __ext_v_conj_mul_complex16_int32(int32* re, int lenout1, int32* im, int leno
 	const __m128i xmm6 = _mm_set1_epi32(0x0000FFFF);		//0x0000FFFF0000FFFF0000FFFF0000FFFF
 	const __m128i xmm5 = _mm_set1_epi32(0xFFFF0000);
 	const __m128i xmm4 = _mm_set1_epi32(0x00010000);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Ys = (__m128i*) y;
+	__m128i* Res = (__m128i*) re;
+	__m128i* Ims = (__m128i*) im;
 	for (int i = 0; i < len1 / wlen; i++){
 
 	/*	vcs *vx = (vcs *)(x + wlen*i);
@@ -795,24 +803,16 @@ int __ext_v_conj_mul_complex16_int32(int32* re, int lenout1, int32* im, int leno
 		*imout = (vcs)muladd(*vx, vs2);*/
 
 
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		__m128i my = _mm_loadu_si128((__m128i *)(y + wlen*i));
-
-
 		//__m128i ms1 = _mm_sign_epi16(my, conj);
-		__m128i ms2 = _mm_xor_si128(my, xmm5);
+		__m128i ms2 = _mm_xor_si128(Ys[i], xmm5);
 		ms2 = _mm_add_epi32(ms2, xmm4);
 
 
 		ms2 = _mm_shufflehi_epi16(ms2, _MM_SHUFFLE(2, 3, 0, 1));
 		ms2 = _mm_shufflelo_epi16(ms2, _MM_SHUFFLE(2, 3, 0, 1));
 
-		__m128i mre = _mm_madd_epi16(my, mx);
-		__m128i mim = _mm_madd_epi16(ms2, mx);
-
-		_mm_storeu_si128((__m128i *) (re + wlen*i), mre);
-		_mm_storeu_si128((__m128i *) (im + wlen*i), mim);
-
+		Res[i] = _mm_madd_epi16(Ys[i], Xs[i]);
+		Ims[i] = _mm_madd_epi16(ms2, Xs[i]);
 
 
 	}
@@ -828,6 +828,7 @@ int __ext_v_conj_mul_complex16_int32(int32* re, int lenout1, int32* im, int leno
 // Multiply the first source vector by the conjugate of the second source vector
 // ie. re + j * im = a * conj(b)
 //Return by reference for performance
+FORCE_INLINE
 int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
 								struct complex16* x, int len1,
 								struct complex16* y, int len2, int shift){
@@ -836,6 +837,9 @@ int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
 	const __m128i xmm6 = _mm_set1_epi32(0x0000FFFF);		//0x0000FFFF0000FFFF0000FFFF0000FFFF
 	const __m128i xmm5 = _mm_set1_epi32(0xFFFF0000);
 	const __m128i xmm4 = _mm_set1_epi32(0x00010000);
+	__m128i* Xs = (__m128i*) x;
+	__m128i* Ys = (__m128i*) y;
+	__m128i* Outs = (__m128i*) out;
 	for (int i = 0; i < len1 / wlen; i++){
 
 		/*vcs *vx = (vcs *)(x + wlen*i);
@@ -855,20 +859,17 @@ int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
 		im32 = shift_right(im32, shift);
 
 		*vout = (vcs)pack(re32, im32);*/
-		__m128i mx = _mm_loadu_si128((__m128i *)(x + wlen*i));
-		__m128i my = _mm_loadu_si128((__m128i *)(y + wlen*i));
-
 
 		//__m128i ms1 = _mm_sign_epi16(my, conj);
-		__m128i ms2 = _mm_xor_si128(my, xmm5);
+		__m128i ms2 = _mm_xor_si128(Ys[i], xmm5);
 		ms2 = _mm_add_epi32(ms2, xmm4);
 
 
 		ms2 = _mm_shufflehi_epi16(ms2, _MM_SHUFFLE(2, 3, 0, 1));
 		ms2 = _mm_shufflelo_epi16(ms2, _MM_SHUFFLE(2, 3, 0, 1));
 
-		__m128i mre = _mm_srai_epi32(_mm_madd_epi16(my, mx), shift);
-		__m128i mim = _mm_srai_epi32(_mm_madd_epi16(ms2, mx), shift);
+		__m128i mre = _mm_srai_epi32(_mm_madd_epi16(Ys[i], Xs[i]), shift);
+		__m128i mim = _mm_srai_epi32(_mm_madd_epi16(ms2, Xs[i]), shift);
 
 		mre = _mm_and_si128(mre, xmm6);
 		mim = _mm_and_si128(mim, xmm6);
@@ -876,9 +877,7 @@ int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
 		mim = _mm_slli_epi32(mim, 0x10);
 
 
-		__m128i mout = _mm_or_si128(mre, mim);
-
-		_mm_storeu_si128((__m128i *) (out + wlen*i), mout);
+		Outs[i] = _mm_or_si128(mre, mim);
 
 	}
 
@@ -894,7 +893,7 @@ int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
 
 
 // This function is called in code/WiFi/receiver/downSample.blk
-//FINL 
+FORCE_INLINE
 int __ext_permutatew1313 (struct complex16* x,
                int __unused_2,  struct complex16* y, int __unused_1)
 {
@@ -914,14 +913,12 @@ int __ext_permutatew1313 (struct complex16* x,
 	//*po = t1;
 
 
-	__m128i mx = _mm_loadu_si128((__m128i *)x );
-	_mm_storeu_si128((__m128i *) y, _mm_shuffle_epi32(mx, _MM_SHUFFLE(3, 1, 3, 1)));
-
+        *(__m128i*) y = _mm_shuffle_epi32(*(__m128i*)x, _MM_SHUFFLE(3,1,3,1));
 
 	return 0;
 }
 // This function is called in code/WiFi/receiver/downSample.blk
-//FINL 
+FORCE_INLINE
 int __ext_interleave_loww( struct complex16* x, int __unused_5,
                      struct complex16* y, int __unused_4,
                      struct complex16* z, int __unused_3)
@@ -938,9 +935,7 @@ int __ext_interleave_loww( struct complex16* x, int __unused_5,
 	*po = (vcs)(interleave_low ((vcui&)t1, (vcui&)t2));*/
 
 	
-	__m128i mx = _mm_loadu_si128((__m128i *)x);
-	__m128i my = _mm_loadu_si128((__m128i *)y);
-	_mm_storeu_si128((__m128i *) z, _mm_unpacklo_epi64(mx,my));
+	*(__m128i*) z = _mm_unpacklo_epi64(*(__m128i*)x, *(__m128i*)y);
 
 
 	return 0;
@@ -1028,6 +1023,7 @@ void __ext_v_pack_complex16_complex8(struct complex8* output, int lenout, comple
 
 
 // Sum 4 complex32 numbers
+FORCE_INLINE
 struct complex32 __ext_sumc32(struct complex32* x, int __unused_20) {
 	struct complex32 ret;
 	/*
@@ -1045,6 +1041,7 @@ struct complex32 __ext_sumc32(struct complex32* x, int __unused_20) {
 }
 
 // Sum 4 complex16 numbers
+FORCE_INLINE
 struct complex16 __ext_sumc16(struct complex16* x, int __unused_20) {
 	struct complex16 ret;
 	/*
@@ -1062,7 +1059,7 @@ struct complex16 __ext_sumc16(struct complex16* x, int __unused_20) {
 }
 
 
-//FINL 
+FORCE_INLINE
 int32 __ext_sumi32(int32* x, int __unused_21)
 {
 	/*assert (__unused_21 == 4);
@@ -1087,7 +1084,7 @@ int32 __ext_sumi32(int32* x, int __unused_21)
 
 
 // For some reason this particular FINL confuses the compiler/linker
-//FINL
+FORCE_INLINE
 int16 __ext_sumi16(int16* x, int __unused_21)
 {
 	int16 ret = 0;
@@ -1108,6 +1105,7 @@ int16 __ext_sumi16(int16* x, int __unused_21)
 
 ///// SSE bit operations
 
+FORCE_INLINE
 void __ext_v_and(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
 {
 	int cnt = 0;
@@ -1132,6 +1130,7 @@ void __ext_v_and(unsigned char *output, int outlen, unsigned char *input1, int i
 }
 
 
+FORCE_INLINE
 void __ext_v_andnot(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
 {
 	int cnt = 0;
@@ -1155,6 +1154,7 @@ void __ext_v_andnot(unsigned char *output, int outlen, unsigned char *input1, in
 	outlen = inlen1;
 }
 
+FORCE_INLINE
 void __ext_v_xor(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
 {
 	int cnt = 0;
@@ -1185,6 +1185,7 @@ void __ext_v_xor(unsigned char *output, int outlen, unsigned char *input1, int i
 
 // Specialized fast versions for one byte arrays
 
+FORCE_INLINE
 void __ext_v_and8(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
 {
 	output[0] = input1[0] & input2[0];
@@ -1193,6 +1194,7 @@ void __ext_v_and8(unsigned char *output, int outlen, unsigned char *input1, int 
 }
 
 
+FORCE_INLINE
 void __ext_v_xor8(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
 {
 	output[0] = input1[0] ^ input2[0];
@@ -1200,6 +1202,7 @@ void __ext_v_xor8(unsigned char *output, int outlen, unsigned char *input1, int 
 	// outlen = 8;
 }
 
+FORCE_INLINE
 void __ext_v_andnot8(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
 {
 	output[0] = (~input1[0]) & input2[0];
@@ -1207,6 +1210,7 @@ void __ext_v_andnot8(unsigned char *output, int outlen, unsigned char *input1, i
 	// outlen = 8;
 }
 
+FORCE_INLINE
 void __ext_v_or8(unsigned char *output, int outlen, unsigned char *input1, int inlen1, unsigned char *input2, int inlen2)
 {
 	output[0] = input1[0] | input2[0];
@@ -1219,43 +1223,41 @@ void __ext_v_or8(unsigned char *output, int outlen, unsigned char *input1, int i
 
 
 
-// to account for different integer types in vs/gcc
-#ifdef SORA_PLATFORM
 FORCE_INLINE
 void __ext_v_or_48(unsigned char *output, unsigned char *input1, unsigned char *input2)
 {
-	unsigned __int32 i1, i2;
-	unsigned __int16 j1, j2;
+	unum32 i1, i2;
+	unum16 j1, j2;
 
-	i1 = *(unsigned __int32 *)input1;
-	i2 = *(unsigned __int32 *)input2;
-	*(unsigned __int32 *)output = i1 | i2;
+	i1 = *(unum32 *)input1;
+	i2 = *(unum32 *)input2;
+	*(unum32 *)output = i1 | i2;
 
-	j1 = *(unsigned __int16 *)(input1 + 4);
-	j2 = *(unsigned __int16 *)(input2 + 4);
-	*(unsigned __int16 *)(output + 4) = j1 | j2;
+	j1 = *(unum16 *)(input1 + 4);
+	j2 = *(unum16 *)(input2 + 4);
+	*(unum16 *)(output + 4) = j1 | j2;
 }
 
 FORCE_INLINE
 void __ext_v_or_96(unsigned char *output, unsigned char *input1, unsigned char *input2)
 {
-	unsigned __int64 i1, i2;
-	unsigned __int32 j1, j2;
+	unum64 i1, i2;
+	unum32 j1, j2;
 
-	i1 = *(unsigned __int64 *)input1;
-	i2 = *(unsigned __int64 *)input2;
-	*(unsigned __int64 *)output = i1 | i2;
+	i1 = *(unum64 *)input1;
+	i2 = *(unum64 *)input2;
+	*(unum64 *)output = i1 | i2;
 
-	j1 = *(unsigned __int32 *)(input1 + 8);
-	j2 = *(unsigned __int32 *)(input2 + 8);
-	*(unsigned __int32 *)(output + 8) = j1 | j2;
+	j1 = *(unum32 *)(input1 + 8);
+	j2 = *(unum32 *)(input2 + 8);
+	*(unum32 *)(output + 8) = j1 | j2;
 }
 
 FORCE_INLINE
 void __ext_v_or_192(unsigned char *output, unsigned char *input1, unsigned char *input2)
 {
 
-	unsigned __int64 i1, i2;
+	unum64 i1, i2;
 
     // Strangely crashes ... 
 	// vcs *pi1 = (vcs *)input1; 
@@ -1263,79 +1265,21 @@ void __ext_v_or_192(unsigned char *output, unsigned char *input1, unsigned char 
 	// vcs *po = (vcs *)output; 
 	// *po = (vcs)_mm_and_si128(*pi1, *pi2); 
 
-	i1 = *(unsigned __int64 *)(input1);
-	i2 = *(unsigned __int64 *)(input2);
-	*(unsigned __int64 *)(output) = i1 | i2;
+	i1 = *(unum64 *)(input1);
+	i2 = *(unum64 *)(input2);
+	*(unum64 *)(output) = i1 | i2;
 
-	i1 = *(unsigned __int64 *)(input1+8);
-	i2 = *(unsigned __int64 *)(input2+8);
-	*(unsigned __int64 *)(output+8) = i1 | i2;
+	i1 = *(unum64 *)(input1+8);
+	i2 = *(unum64 *)(input2+8);
+	*(unum64 *)(output+8) = i1 | i2;
 
-	i1 = *(unsigned __int64 *)(input1+16);
-	i2 = *(unsigned __int64 *)(input2+16);
-	*(unsigned __int64 *)(output+16) = i1 | i2;
-
-
-}
-
-#else
-FORCE_INLINE
-void __ext_v_or_48(unsigned char *output, unsigned char *input1, unsigned char *input2)
-{
-	uint32_t i1, i2;
-	uint16_t j1, j2;
-
-	i1 = *(uint32_t *)input1;
-	i2 = *(uint32_t *)input2;
-	*(uint32_t *)output = i1 | i2;
-
-	j1 = *(uint16_t *)(input1 + 4);
-	j2 = *(uint16_t *)(input2 + 4);
-	*(uint16_t *)(output + 4) = j1 | j2;
-}
-
-FORCE_INLINE
-void __ext_v_or_96(unsigned char *output, unsigned char *input1, unsigned char *input2)
-{
-	uint64_t i1, i2;
-	uint32_t j1, j2;
-
-	i1 = *(uint64_t *)input1;
-	i2 = *(uint64_t *)input2;
-	*(uint64_t *)output = i1 | i2;
-
-	j1 = *(uint32_t *)(input1 + 8);
-	j2 = *(uint32_t *)(input2 + 8);
-	*(uint32_t *)(output + 8) = j1 | j2;
-}
-
-FORCE_INLINE
-void __ext_v_or_192(unsigned char *output, unsigned char *input1, unsigned char *input2)
-{
-
-	uint64_t i1, i2;
-
-	// Strangely crashes ... 
-	// vcs *pi1 = (vcs *)input1; 
-	// vcs *pi2 = (vcs *)input2; 
-	// vcs *po = (vcs *)output; 
-	// *po = (vcs)_mm_and_si128(*pi1, *pi2); 
-
-	i1 = *(uint64_t *)(input1);
-	i2 = *(uint64_t *)(input2);
-	*(uint64_t *)(output) = i1 | i2;
-
-	i1 = *(uint64_t *)(input1 + 8);
-	i2 = *(uint64_t *)(input2 + 8);
-	*(uint64_t *)(output + 8) = i1 | i2;
-
-	i1 = *(uint64_t *)(input1 + 16);
-	i2 = *(uint64_t *)(input2 + 16);
-	*(uint64_t *)(output + 16) = i1 | i2;
+	i1 = *(unum64 *)(input1+16);
+	i2 = *(unum64 *)(input2+16);
+	*(unum64 *)(output+16) = i1 | i2;
 
 
 }
-#endif
+
 
 FORCE_INLINE
 void __ext_v_or_288(unsigned char *output, unsigned char *input1, unsigned char *input2)
@@ -1397,20 +1341,24 @@ int32 __ext_atan2_int32 ( int32 y, int32 x ) {
 	return uatan2((int)y, (int)x);
 }
 #else
+FORCE_INLINE
 int16 __ext_cos_int16 ( int16 y ) {
   return (int16) cosx(y);
 }
 
 
+FORCE_INLINE
 int16 __ext_sin_int16 ( int16 y ) {
   return (int16) sinx(y);
 }
 
 
+FORCE_INLINE
 int16 __ext_atan2_int16 ( int16 y, int16 x ) {
   return (int16) atan2x((int)y, (int)x);
 }
 
+FORCE_INLINE
 int32 __ext_atan2_int32 ( int32 y, int32 x ) {
   return atan2x((int)y, (int)x);
 }
@@ -1420,7 +1368,7 @@ int32 __ext_atan2_int32 ( int32 y, int32 x ) {
 
 // *** Casts
 
-//FINL   
+FORCE_INLINE
 int __ext_v_cast_complex8_int8(int8* output, int lenout, complex8* input, int lenin)  
 {  
   memcpy(output, input, lenin * sizeof(complex8));  
@@ -1498,6 +1446,7 @@ void __ext_v_sign_int8(int8 *output, int outlen, int8 *input1, int inlen1, int8 
 
 //FINL 
 // int __ext_sora_fft(short nFFTSize, struct complex16 * input, int unused1, struct complex16* output, int unused2)
+FORCE_INLINE
 void __ext_sora_fft(struct complex16* output, int nFFTSize, struct complex16 * input, int unused1)
 {
 
@@ -1643,6 +1592,7 @@ void __ext_sora_fft(struct complex16* output, int nFFTSize, struct complex16 * i
 	//return 0;
 }
 
+FORCE_INLINE
 void __ext_sora_fft_dynamic(struct complex16* output, int unused2, int16 nFFTSize, struct complex16 * input, int unused1)
 {
 	__ext_sora_fft(output, nFFTSize, input, unused1);
@@ -1652,6 +1602,7 @@ void __ext_sora_fft_dynamic(struct complex16* output, int unused2, int16 nFFTSiz
 
 
 //int __ext_sora_ifft(short nFFTSize, struct complex16 * input, int unused1, struct complex16* output, int unused2)
+FORCE_INLINE
 void __ext_sora_ifft(struct complex16* output, int nFFTSize, struct complex16 * input, int unused1)
 {
 
@@ -1797,6 +1748,7 @@ void __ext_sora_ifft(struct complex16* output, int nFFTSize, struct complex16 * 
 	//return 0;
 }
 
+FORCE_INLINE
 void __ext_sora_ifft_dynamic(struct complex16* output, int unused2, int16 nFFTSize, struct complex16 * input, int unused1)
 {
 	__ext_sora_ifft(output, nFFTSize, input, unused1);
@@ -1871,12 +1823,17 @@ int __ext_record_time_stop() {
 	return 0;
 }
 
+#include <windows.h> 
+// Function that sleeps for <time> ms
+int __ext_sleep_int16(int32 time) { Sleep(time); return 0; };
 
 #endif
 
 
+
 #include <time.h>
 
+FORCE_INLINE
 int __ext_populate_rand_array(BitArrPtr arr, int siz) {
 
 	srand(time(NULL));

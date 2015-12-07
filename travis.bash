@@ -37,6 +37,8 @@ if [ $TRAVIS_TEST = "normal" ]
   then make test >> $BUILD_OUTPUT 2>&1
 elif [ $TRAVIS_TEST = "pedantic" ]
   then make test-WiFi-pedantic >> $BUILD_OUTPUT 2>&1
+elif [ $TRAVIS_TEST = "perf" ]
+  then make test-WiFi-perf-all >> $BUILD_OUTPUT 2>&1
 else
   echo "TRAVIS_TEST not set !"
   exit 1

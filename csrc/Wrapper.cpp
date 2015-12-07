@@ -20,7 +20,7 @@
 
 #define INLINE_COMPILATION 1
 
-#ifndef __GNUC__
+#ifdef SORA_PLATFORM
 #include "sora_ip.c"
 #include "sora_ext_lib.cpp"
 #endif
@@ -36,7 +36,7 @@
 #include "buf_numerics16.c"
 #include "buf_numerics32.c"
 
-#ifndef __GNUC__
+#ifdef SORA_PLATFORM
 #include "sora_threads.c"
 #include "sora_thread_queues.c"
 #endif
@@ -44,10 +44,13 @@
 #include "ext_arr.c"
 #include "ext_math.c"
 
-#ifndef __GNUC__
+#ifdef SORA_PLATFORM
 //Sora only supports debugPlot lib in WIN32 and this is the fast 64-bit version
 //#include "sora_ext_visual.c"
 #include "sora_radio.c"
+#endif
+
+#ifdef BLADE_RF
 #include "bladerf_radio.c"
 #endif
 

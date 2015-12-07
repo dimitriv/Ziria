@@ -14,10 +14,16 @@ matrix:
     - env: CABALVER=1.22 GHCVER=7.8.4 ALEXVER=3.1.4 HAPPYVER=1.19.5 COMPILER=gcc TRAVIS_TEST=pedantic
       compiler: gcc
       addons: {apt: {packages: [alex-3.1.4,happy-1.19.5,cabal-install-1.22,ghc-7.8.4], sources: [hvr-ghc]}}
+    - env: CABALVER=1.22 GHCVER=7.8.4 ALEXVER=3.1.4 HAPPYVER=1.19.5 COMPILER=gcc TRAVIS_TEST=perf
+      compiler: gcc
+      addons: {apt: {packages: [alex-3.1.4,happy-1.19.5,cabal-install-1.22,ghc-7.8.4], sources: [hvr-ghc]}}
     - env: CABALVER=1.22 GHCVER=7.8.4 ALEXVER=3.1.4 HAPPYVER=1.19.5 COMPILER=clang TRAVIS_TEST=normal
       compiler: clang
       addons: {apt: {packages: [alex-3.1.4,happy-1.19.5,cabal-install-1.22,ghc-7.8.4], sources: [hvr-ghc]}}
     - env: CABALVER=1.22 GHCVER=7.8.4 ALEXVER=3.1.4 HAPPYVER=1.19.5 COMPILER=clang TRAVIS_TEST=pedantic
+      compiler: clang
+      addons: {apt: {packages: [alex-3.1.4,happy-1.19.5,cabal-install-1.22,ghc-7.8.4], sources: [hvr-ghc]}}
+    - env: CABALVER=1.22 GHCVER=7.8.4 ALEXVER=3.1.4 HAPPYVER=1.19.5 COMPILER=clang TRAVIS_TEST=perf
       compiler: clang
       addons: {apt: {packages: [alex-3.1.4,happy-1.19.5,cabal-install-1.22,ghc-7.8.4], sources: [hvr-ghc]}}
   exclude:
@@ -29,8 +35,9 @@ matrix:
       addons: {apt: {packages: [alex-3.1.4,happy-1.19.5,cabal-install-head,ghc-head], sources: [hvr-ghc]}}
 
   allow_failures:
-    - env: CABALVER=1.22 GHCVER=7.10.2 COMPILER=gcc
-    - env: CABALVER=head GHCVER=head COMPILER=gcc
+    - env: CABALVER=1.22 GHCVER=7.8.4 ALEXVER=3.1.4 HAPPYVER=1.19.5 COMPILER=clang TRAVIS_TEST=normal
+    - env: CABALVER=1.22 GHCVER=7.8.4 ALEXVER=3.1.4 HAPPYVER=1.19.5 COMPILER=clang TRAVIS_TEST=pedantic
+    - env: CABALVER=1.22 GHCVER=7.8.4 ALEXVER=3.1.4 HAPPYVER=1.19.5 COMPILER=clang TRAVIS_TEST=perf
 
 before_install:
   - export PATH=/opt/ghc/$GHCVER/bin:/opt/cabal/$CABALVER/bin:/opt/happy/$HAPPYVER/bin:/opt/alex/$ALEXVER/bin:$PATH

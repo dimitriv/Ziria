@@ -476,6 +476,8 @@ cgBreakDown64 m ptr  = go m 0
 cgBitArrRead :: C.Exp -> Int -> Int -> C.Exp -> Cg ()
 -- ^ Pre: pos and len are multiples of 8; src, tgt are of type BitArrPtr
 cgBitArrRead src_base pos len tgt
+  | pos `mod` 8 /= 0 || len `mod` 8 /= 0
+  = error "Precondition not satisfied in cgBitArrRead!"
   | len > 288
   = appendStmt [cstm| blink_copy((void *) $tgt, (void *) $src, $int:byte_len);|]
   | otherwise

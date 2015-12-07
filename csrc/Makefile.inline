@@ -26,9 +26,15 @@ else
 CXX = g++
 endif
 
-CXXFLAGS = -std=c++11 -msse3 -w -pipe -O3 -fwhole-program
+# Note: SSE3 is required, SSSE3 is optional.
+CXXFLAGS = -std=c++11 -march=native -mtune=native -w -pipe -O3 -fwhole-program
 
-LIBS = -lm 
+LIBS = -lm
+
+ifeq ($(RADIO), bladeRF)
+LIBS += -lbladeRF
+EXTRACOPTS += -DBLADE_RF
+endif
 
 EXECUTABLE = driver
 

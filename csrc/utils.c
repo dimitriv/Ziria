@@ -39,17 +39,6 @@ unsigned long long bytes_copied = 0;
 FORCE_INLINE
 void blink_copy(void *dst, const void *src, memsize_int siz)
 {
-    const unsigned long long margin = 1;
-
-#ifdef __linux__
-    // Allow a performance penalty on Linux
-    // This condition should never be true
-    if (ULLONG_MAX - siz - margin <= bytes_copied) {
-      printf("The max size for bytes copied ( %llu ) is exceeded. \n", ULLONG_MAX);
-      exit(-1);
-    }
-#endif
-
     bytes_copied += (unsigned long long) siz;
 
 // RXCCA definitely has overlapping memories
