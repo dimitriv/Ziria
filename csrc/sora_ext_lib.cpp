@@ -1823,8 +1823,12 @@ int __ext_record_time_stop() {
 	return 0;
 }
 
+#include <windows.h> 
+// Function that sleeps for <time> ms
+int __ext_sleep_int16(int32 time) { Sleep(time); return 0; };
 
 #endif
+
 
 
 #include <time.h>

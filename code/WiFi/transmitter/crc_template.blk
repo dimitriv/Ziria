@@ -36,7 +36,7 @@ var crc_state:arr[CRC_S_WIDTH] bit :=
     emits {'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0};
   }
 
-  do{println "Len: ", len};
+  --do{println "Len: ", len};
 
   times len seq {
     (x:arr[CRC_X_WIDTH] bit) <- takes CRC_X_WIDTH;

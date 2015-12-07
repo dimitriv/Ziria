@@ -26,7 +26,7 @@ int  BladeRF_RadioStart(BlinkParams *params_tx, BlinkParams *params_rx);
 int  BladeRF_ConfigureTX(BlinkParams *params);
 int  BladeRF_ConfigureRX(BlinkParams *params);
 
-void BladeRF_RadioStop(BlinkParams *params);
+void BladeRF_RadioStop(BlinkParams *params_tx, BlinkParams *params_rx);
 void readBladeRF(BlinkParams *params, complex16 *ptr, int size);
 void writeBladeRF(BlinkParams *params, complex16 *ptr, unsigned long size);
 
