@@ -26,8 +26,8 @@ else
 CXX = g++
 endif
 
-CFLAGS = -Wall -Wno-write-strings -Wno-comment
-CXXFLAGS = -std=c++11 -Wall -Wno-unused-label -Wno-unused-variable -Wno-attributes -Wno-comment -O3
+CFLAGS = -Wall -Wno-write-strings -Wno-comment -Og -g
+CXXFLAGS = -std=c++11 -Wall -Wno-unused-label -Wno-unused-variable -Wno-attributes -Wno-comment -Og -g
 
 LIBS = -lm
 OBJDIR = .
