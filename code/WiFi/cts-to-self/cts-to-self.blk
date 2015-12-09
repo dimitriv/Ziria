@@ -1,0 +1,84 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+#define SHORT_FFT
+#include <bits.blk>
+#include "../transmitter/transmitter.blk"
+
+#ifndef TEST
+  #define FAST
+#endif
+
+
+fun comp convert_to_bits() {
+var ai : arr[1] int8;
+var ab : arr[8] bit;
+
+  repeat {
+    x<-take;
+    do{
+      ai[0] := x;
+      int8_to_bits(ab, ai);
+      ab := invert_bits(ab);
+    }
+    emits ab;
+  }
+}
+
+
+
+#define PKT_LEN         14
+
+
+fun comp cts_to_self(sleep:int32) {
+var plcp_head : arr[24] bit;
+var h:struct HeaderInfo;
+var ab : arr[8*PKT_LEN] bit;
+
+  -- Create PLCP header
+  do {
+    h.modulation := M_BPSK;
+    h.coding := CR_12;
+    h.len := PKT_LEN + 4; -- Add 4B for CRC
+    plcp_head := createPLCPHeader(h);
+  }
+
+ 
+
+  -- CTS length: 14B
+  x <- takes PKT_LEN;
+  do{ 
+    int8_to_bits(ab, x); 
+#ifdef TEST
+    println "Binary message (", length(ab), "): ", ab;
+#endif
+   };
+
+#ifdef TEST
+  times 1{
+#else
+  repeat{
+#endif
+    ( repeat{emits plcp_head; emits ab} >>> transmitter());
+    do{sleep_int16(sleep)};
+  }
+}   
+
+let comp main = read[int8] >>> cts_to_self(5) >>> write
+
