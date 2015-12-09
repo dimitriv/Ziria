@@ -27,7 +27,7 @@ CXX = g++
 endif
 
 # Note: SSE3 is required, SSSE3 is optional.
-CXXFLAGS = -std=c++11 -march=native -mtune=native -w -pipe -O3 -fwhole-program
+CXXFLAGS = -std=c++11 -march=native -mtune=native -w -pipe -Ofast -fwhole-program
 
 LIBS = -lm
 

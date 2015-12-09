@@ -158,17 +158,17 @@ plot1 nss fs = createPlot nss fs
 layout1 nss fs = layout "RX Performance comparison" (plot1 dss fs) lns
   where dss = take nElems . map (map fst) $ nss
         ls = map (head . (map snd)) nss
-	nElems = length . takeWhile (isPrefixOf "RX") $ ls
+	nElems = (length . takeWhile (isPrefixOf "RX") $ ls) - 1
         lns = take nElems ls
 
 -- | Second plot
 plot2 nss fs = createPlot nss fs
 
 -- | Second layout
-layout2 nss fs = layout "TX Performance comparison" (plot2 dss fs) lns
+layout2 nss fs = layout "RXCCA + TX Performance comparison" (plot2 dss fs) lns
   where dss = drop nElems . map (map fst) $ nss
         ls = map (head . (map snd)) nss
-	nElems = length . takeWhile (isPrefixOf "RX") $ ls
+	nElems = (length . takeWhile (isPrefixOf "RX") $ ls) - 1
 	lns = drop nElems ls
 
 -- | Helper function to stack layouts

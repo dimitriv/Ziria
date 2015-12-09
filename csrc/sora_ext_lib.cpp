@@ -240,54 +240,44 @@ FORCE_INLINE
 int __ext_v_hadd_complex16(struct complex16* z, int __unused_2, struct complex16* x,
           int __unused_1)
 {
-	 /*vcs output;
-	 vcs *xi = (vcs *)x;
 
-	 output = hadd(*xi);
+  num16* Xs = (num16*) x;
+  num16 re = 0;
+  num16 im = 0;
 
-	 memcpy((void *)z, (void *)(&output), sizeof(vcs));
+  for (unum8 i=0; i<8; i+=2) {
+    re += Xs[i];
+    im += Xs[i+1];
+  }
 
-	__m128i mx = _mm_load_si128((__m128i *)x);
+  // Is the above faster than the one below?
+  // Not really. It may even be slower.
+  // But, it does have a better
+  // cache hit rate, because, the data
+  // can easily fit in a very small cache.
+  // So, even though it's a bit more verbose,
+  // it's worth it since the above gives
+  // more consistent performance.
 
-	__m128i ms1 = _mm_shuffle_epi32(mx, _MM_SHUFFLE(0, 1, 2, 3));
-	__m128i mout = _mm_add_epi16(mx, ms1);
-	
-	ms1 = _mm_shuffle_epi32(mx, _MM_SHUFFLE(1, 3, 0, 2));
-	mout = _mm_add_epi16(mout, ms1);
+  // num16 re = x[0].re + x[1].re + x[2].re + x[3].re;
+  // num16 im = x[0].im + x[1].im + x[2].im + x[3].im;
 
-	ms1 = _mm_shuffle_epi32(mx, _MM_SHUFFLE(2, 0, 3, 1));
-	mout = _mm_add_epi16(mout, ms1);
-	
-	_mm_store_si128((__m128i *) z, mout);*/
+  for (unum8 i = 0; i < 4; i++){
+    z[i].re = re;
+    z[i].im = im;
+  }
 
-	int re = x[0].re + x[1].re + x[2].re + x[3].re;
-	int im = x[0].im + x[1].im + x[2].im + x[3].im;
-	
-	for (int i = 0; i < 4; i++){
-		z[i].re = re;
-		z[i].im = im;
-	}
-	
+  return 0;
 
-	 return 0;
-
-	
 }
 
 FORCE_INLINE
 int __ext_v_hadd_int32(int* z, int __unused_21, int* x, int __unused_20)
 {
 
-	/*vi output;
-	vi *xi = (vi *)x;
-	output = hadd (*xi);
-	 
-	memcpy((void *)z,(void *)(&output),sizeof(vi));
-	*/
-	
 	z[0] = x[0] + x[1] + x[2] + x[3];
 	
-	for (int i = 1; i < 4; i++){
+	for (unum8 i = 1; i < 4; i++){
 		z[i] = z[0];
 	}
 	return 0;
@@ -409,84 +399,32 @@ struct complex32 __ext_v_sum_complex32(struct complex32* x, int len)
 }
 
 
+// There is no point in manually vectorizing this.
 FORCE_INLINE
 int16 __ext_v_sum_int16(int16* x, int len)
 {
-	__m128i msum = _mm_setzero_si128();
+  num16 sum = 0;
 
-num16 ret;
+  for (unsigned int i = 0; i < len; i++) {
+    sum += x[i];
+  }
 
-	const int wlen = 8;
-
-	__m128i* Xs = (__m128i*) x;
-
-	for (int i = 0; i < len / wlen; i++)
-	{
-		msum = _mm_add_epi16(msum, Xs[i]);
-	}
-
-	__m128i mout = msum;
-
-
-	msum = _mm_shuffle_epi32(msum, _MM_SHUFFLE(2, 1, 0, 3));
-	mout = _mm_add_epi16(mout, msum);
-
-	msum = _mm_shuffle_epi32(msum, _MM_SHUFFLE(2, 1, 0, 3));
-	mout = _mm_add_epi16(mout, msum);
-
-	msum = _mm_shuffle_epi32(msum, _MM_SHUFFLE(2, 1, 0, 3));
-	mout = _mm_add_epi16(mout, msum);
-
-
-	unsigned int temp = _mm_cvtsi128_si32(mout);
-	ret = temp;
-	
-	ret += (temp >> 16);
-
-	for (int i = (len / wlen) * wlen; i < len; i++)
-	{
-		ret += x[i];
-	}
-
-	return ret;
+  return sum;
 
 }
 
 
+// There is no point in manually vectorizing this.
 FORCE_INLINE
 int32 __ext_v_sum_int32(int32* x, int len)
 {
-	__m128i msum = _mm_setzero_si128();
-	int32 ret;
-	const int wlen = 4;
+  num32 sum = 0;
 
-	__m128i* Xs = (__m128i*) x;
+  for (unsigned int i = 0; i < len; i++) {
+    sum += x[i];
+  }
 
-	for (int i = 0; i < len / wlen; i++)
-	{
-		msum = _mm_add_epi32(msum, Xs[i]);
-	}
-
-	__m128i mout = msum;
-	
-	msum = _mm_shuffle_epi32(msum, _MM_SHUFFLE(2, 1, 0, 3));
-	mout = _mm_add_epi32(mout, msum);
-
-	msum = _mm_shuffle_epi32(msum, _MM_SHUFFLE(2, 1, 0, 3));
-	mout = _mm_add_epi32(mout, msum);
-
-	msum = _mm_shuffle_epi32(msum, _MM_SHUFFLE(2, 1, 0, 3));
-	mout = _mm_add_epi32(mout, msum);
-
-	
-	ret = _mm_cvtsi128_si32 (mout);
-	
-	for (int i = (len / wlen) * wlen; i < len; i++)
-	{
-		ret += x[i];
-	}
-
-	return ret;
+  return sum;
 
 }
 //
@@ -511,10 +449,11 @@ int __ext_v_shift_right_complex32(struct complex32* z, int __unused_3, struct co
 		Zs[i] = _mm_srai_epi32(Xs[i], shift);
 
 	}
-	for (int i = (len / wlen) * wlen; i < len; i++)
+  unum32* Ps = (unum32*) x;
+  unum32* Qs = (unum32*) z;
+	for (int i = (len / wlen) * wlen * 2; i < len * 2; i++)
 	{
-		z[i].re = x[i].re >> shift;
-		z[i].im = x[i].im >> shift;
+		Qs[i] = Ps[i] >> shift;
 	}
 	return 0;
 }
@@ -535,10 +474,11 @@ int __ext_v_shift_left_complex32(struct complex32* z, int __unused_3, struct com
 		Zs[i] = _mm_slli_epi32(Xs[i], shift);
 
 	}
-	for (int i = (len / wlen) * wlen; i < len; i++)
+  unum32* Ps = (unum32*) x;
+  unum32* Qs = (unum32*) z;
+	for (int i = (len / wlen) * wlen * 2; i < len * 2; i++)
 	{
-		z[i].re = x[i].re << shift;
-		z[i].im = x[i].im << shift;
+		Qs[i] = Ps[i] << shift;
 	}
 	return 0;
 }
@@ -562,10 +502,11 @@ int __ext_v_shift_right_complex16(struct complex16* z, int __unused_3, struct co
 		Zs[i] = _mm_srai_epi16(Xs[i],shift);
 
 	}
-	for (int i = (len / wlen) * wlen; i < len; i++)
+  unum16* Ps = (unum16*) x;
+  unum16* Qs = (unum16*) z;
+	for (int i = (len / wlen) * wlen * 2; i < len * 2; i++)
 	{
-		z[i].re = x[i].re >> shift;
-		z[i].im = x[i].im >> shift;
+		Qs[i] = Ps[i] >> shift;
 	}
 	return 0;
 }
@@ -586,10 +527,11 @@ int __ext_v_shift_left_complex16(struct complex16* z, int __unused_3, struct com
 		Zs[i] = _mm_slli_epi16(Xs[i], shift);
 
 	}
-	for (int i = (len / wlen) * wlen; i < len; i++)
+  unum16* Ps = (unum16*) x;
+  unum16* Qs = (unum16*) z;
+	for (int i = (len / wlen) * wlen * 2; i < len * 2; i++)
 	{
-		z[i].re = x[i].re << shift;
-		z[i].im = x[i].im << shift;
+		Qs[i] = Ps[i] << shift;
 	}
 	return 0;
 }
@@ -709,9 +651,9 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 								struct complex16* y, int len2, int shift)
 {
 	
-	const int wlen = 4;// sizeof(vcs) / sizeof(complex16);
+	const unum8 wlen = 4;// sizeof(vcs) / sizeof(complex16);
 	
-		const __m128i xmm6 = _mm_set1_epi32(0x0000FFFF);		//0x0000FFFF0000FFFF0000FFFF0000FFFF
+		const __m128i xmm6 = _mm_set1_epi32(0x0000FFFF);
 		const __m128i xmm5 = _mm_set1_epi32(0xFFFF0000);
 		const __m128i xmm4 = _mm_set1_epi32(0x00010000);
 		__m128i* Xs = (__m128i*) x;
@@ -719,27 +661,6 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 		__m128i* Outs = (__m128i*) out;
 		for (int i = 0; i < len1 / wlen; i++){
 
-			/*
-			vcs *vx = (vcs *)(x + wlen*i);
-			vcs *vy = (vcs *)(y + wlen*i);
-			vcs *vout = (vcs *)(out + wlen*i);
-
-			vcs vs1 = conj0(*vy);
-
-			vcs vs2 = (vcs)permutate_low<1, 0, 3, 2>(*vy);
-			vs2 = permutate_high<1, 0, 3, 2>(vs2);
-
-			vi re32 = muladd(*vx, vs1);
-			vi im32 = muladd(*vx, vs2);
-
-			re32 = shift_right(re32, shift);
-			im32 = shift_right(im32, shift);
-
-			*vout = (vcs)pack(re32, im32);
-			//*/
-			//*
-
-			//__m128i ms1 = _mm_sign_epi16(mx, conj);
 			__m128i ms1 = _mm_xor_si128(Xs[i], xmm5);
 			ms1 = _mm_add_epi32(ms1, xmm4);
 			
@@ -779,8 +700,7 @@ int __ext_v_conj_mul_complex16_int32(int32* re, int lenout1, int32* im, int leno
 				struct complex16* x, int len1, struct complex16* y, int len2 )
 {
 
-	const int wlen = 4;// sizeof(vcs) / sizeof(complex16);
-	const __m128i xmm6 = _mm_set1_epi32(0x0000FFFF);		//0x0000FFFF0000FFFF0000FFFF0000FFFF
+	const unum8 wlen = 4;// sizeof(vcs) / sizeof(complex16);
 	const __m128i xmm5 = _mm_set1_epi32(0xFFFF0000);
 	const __m128i xmm4 = _mm_set1_epi32(0x00010000);
 	__m128i* Xs = (__m128i*) x;
@@ -789,21 +709,6 @@ int __ext_v_conj_mul_complex16_int32(int32* re, int lenout1, int32* im, int leno
 	__m128i* Ims = (__m128i*) im;
 	for (int i = 0; i < len1 / wlen; i++){
 
-	/*	vcs *vx = (vcs *)(x + wlen*i);
-		vcs *vy = (vcs *)(y + wlen*i);
-		vi *reout = (vi *)(re + wlen*i);
-		vi *imout = (vi *)(im + wlen*i);
-
-		vcs vs2 = conj0(*vy);
-
-	    vs2 = permutate_low<1, 0, 3, 2>(vs2);
-		vs2 = permutate_high<1, 0, 3, 2>(vs2);
-
-		*reout = (vcs)muladd(*vx, *vy);
-		*imout = (vcs)muladd(*vx, vs2);*/
-
-
-		//__m128i ms1 = _mm_sign_epi16(my, conj);
 		__m128i ms2 = _mm_xor_si128(Ys[i], xmm5);
 		ms2 = _mm_add_epi32(ms2, xmm4);
 
@@ -833,8 +738,8 @@ int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
 								struct complex16* x, int len1,
 								struct complex16* y, int len2, int shift){
 			
-	const int wlen = 4;// sizeof(vcs) / sizeof(complex16);
-	const __m128i xmm6 = _mm_set1_epi32(0x0000FFFF);		//0x0000FFFF0000FFFF0000FFFF0000FFFF
+	const unum8 wlen = 4;// sizeof(vcs) / sizeof(complex16);
+	const __m128i xmm6 = _mm_set1_epi32(0x0000FFFF);
 	const __m128i xmm5 = _mm_set1_epi32(0xFFFF0000);
 	const __m128i xmm4 = _mm_set1_epi32(0x00010000);
 	__m128i* Xs = (__m128i*) x;
@@ -842,25 +747,6 @@ int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
 	__m128i* Outs = (__m128i*) out;
 	for (int i = 0; i < len1 / wlen; i++){
 
-		/*vcs *vx = (vcs *)(x + wlen*i);
-		vcs *vy = (vcs *)(y + wlen*i);
-		vcs *vout = (vcs *)(out + wlen*i);
-
-		
-		vcs vs2 = conj0(*vy);
-
-		vs2 = permutate_low<1, 0, 3, 2>(vs2);
-		vs2 = permutate_high<1, 0, 3, 2>(vs2);
-
-		vi re32 = muladd(*vx, *vy);
-		vi im32 = muladd(*vx, vs2);
-		
-		re32 = shift_right(re32, shift);
-		im32 = shift_right(im32, shift);
-
-		*vout = (vcs)pack(re32, im32);*/
-
-		//__m128i ms1 = _mm_sign_epi16(my, conj);
 		__m128i ms2 = _mm_xor_si128(Ys[i], xmm5);
 		ms2 = _mm_add_epi32(ms2, xmm4);
 
