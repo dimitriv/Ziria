@@ -54,19 +54,22 @@ fun comp cts_to_self(sleep:int32) {
 
   -- Create PLCP header
   do {
-    h.modulation := M_BPSK;
+    h.modulation := M_QPSK;
     h.coding := CR_12;
     h.len := PKT_LEN + 4; -- Add 4B for CRC
     plcp_head := createPLCPHeader(h);
   }
 
   
-  -- CTS length: 14B
+  -- CTS length: 10B ( + 4B CRC)
   x <- takes PKT_LEN;
   do{ 
     int8_to_bits(ab, x); 
 #ifdef TEST
     println x;
+    print "Hex message: ";
+    hexprint_int8(x, PKT_LEN);
+    println "";
     println "Binary message (", length(ab), "): ", ab;
 #endif
    };
