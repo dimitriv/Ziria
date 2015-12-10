@@ -20,36 +20,37 @@
 #define SHORT_FFT
 #include <bits.blk>
 #include "../transmitter/transmitter.blk"
+#include "../receiver/receiver.blk"
+#include "../transmitter/parseMACHeader.blk"
+
+
+
+#define TEST 1 
+
 
 #ifndef TEST
   #define FAST
 #endif
 
 
-fun comp convert_to_bits() {
-var ai : arr[1] int8;
-var ab : arr[8] bit;
+#define PKT_LEN         10
 
+
+
+
+fun comp dump() {
   repeat {
-    x<-take;
-    do{
-      ai[0] := x;
-      int8_to_bits(ab, ai);
-      ab := invert_bits(ab);
-    }
-    emits ab;
+     x <- take;
+     do {println x;};
+     emit x;
   }
 }
 
 
-
-#define PKT_LEN         14
-
-
 fun comp cts_to_self(sleep:int32) {
-var plcp_head : arr[24] bit;
-var h:struct HeaderInfo;
-var ab : arr[8*PKT_LEN] bit;
+  var plcp_head : arr[24] bit;
+  var h : struct HeaderInfo;
+  var ab : arr[8*PKT_LEN] bit;
 
   -- Create PLCP header
   do {
@@ -59,13 +60,13 @@ var ab : arr[8*PKT_LEN] bit;
     plcp_head := createPLCPHeader(h);
   }
 
- 
-
+  
   -- CTS length: 14B
   x <- takes PKT_LEN;
   do{ 
     int8_to_bits(ab, x); 
 #ifdef TEST
+    println x;
     println "Binary message (", length(ab), "): ", ab;
 #endif
    };
@@ -75,10 +76,55 @@ var ab : arr[8*PKT_LEN] bit;
 #else
   repeat{
 #endif
-    ( repeat{emits plcp_head; emits ab} >>> transmitter());
-    do{sleep_int16(sleep)};
+    (
+     repeat{
+        emits plcp_head; 
+         emits ab;
+     } >>>transmitter());
+     times 20000 {
+       emit complex16{re=0; im=0};
+     }
+  
   }
 }   
 
-let comp main = read[int8] >>> cts_to_self(5) >>> write
+
+
+fun comp scale() {
+var out : arr[16] complex16;
+
+  repeat {
+    x <- takes 16;
+    do {
+      v_shift_right_complex16(out, x, 4);
+    }
+       
+    emits out;
+  }
+}
+
+
+
+
+fun comp test() {
+  var input: arr[16] complex16;
+  var input2: int8;
+  var out : complex16;
+  repeat { 
+    input <- takes 16;
+--    input2 <- take;
+    emit out;
+  }
+}   
+
+--let comp main = read[int8] >>> cts_to_self(5) >>> scale() >>> write
+
+
+let comp main = read[int8] >>> cts_to_self(5) >>> scale() >>> write
+
+--let comp main = read[int8] >>> cts_to_self(5) >>> scale() >>> test() 
+
+--let comp main = read[int8] >>> cts_to_self(5) >>> test() >>> receiver() >>> write
+
+--let comp main = read[int8] >>> cts_to_self(5) >>> receiver() >>> print_hdr() >>> convert_to_int8() >>> print_hex() >>> write
 
