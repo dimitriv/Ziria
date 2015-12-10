@@ -22,7 +22,7 @@
 
 #include <externals.blk>
 
-fun parseMACHeader(hdr : arr[24*8] bit) {
+fun parseMACHeader(hdr : arr[6*8] bit) {
 var a : arr[6] int8;
 
   println "*** Frame control: ";

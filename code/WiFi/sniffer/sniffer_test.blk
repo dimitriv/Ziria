@@ -52,8 +52,9 @@ fun comp append_idle() {
     emit complex16{re=0; im=0};
   }
   repeat{
-    x<-take;
-    emit x;
+    (x:complex16)<-take;
+    let xx = complex16{re=x.re*10; im=x.im*10};
+    emit xx;
   }
 }
 
@@ -69,7 +70,8 @@ let comp main = read[complex16] >>> removeDC() >>> att() >>>
 -}
 
 fun comp print_hdr() {
-x <- takes 24*8;
+--x <- takes 24*8;
+ x <- takes 6*8;
 do {parseMACHeader(x)};
 emits x;
 
@@ -91,6 +93,15 @@ var a : arr[1] int8;
     emit x;
   }
 }
+
+fun comp dump() {
+  repeat {
+    x <- take;
+    do { println x;}
+    emit x;
+  }
+}
+
 
 let comp main = read[complex16] >>> append_idle() >>> receiver() >>> print_hdr() >>> convert_to_int8() >>> print_hex() >>> write
 --let comp main = read[complex16] >>> append_idle() >>> receiver() >>> write
