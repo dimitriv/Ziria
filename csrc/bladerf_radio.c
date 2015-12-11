@@ -97,7 +97,6 @@ int  BladeRF_ConfigureTX(BlinkParams *params)
 {
 	int status;
 	bladerf_module module = BLADERF_MODULE_TX;
-	fprintf(stdout, "%s %d\n", params->radioParams.dev, params->radioParams.CentralFrequency);
 	status = bladerf_set_frequency((params->radioParams.dev), module, params->radioParams.CentralFrequency);
 	if (status != 0) {
 		fprintf(stderr, "Failed to set TX frequency: %s\n",
@@ -394,6 +393,14 @@ void readBladeRF(BlinkParams *params, complex16 *ptr, int size)
 
 void writeBladeRF(BlinkParams *params, complex16 *ptr, unsigned long size)
 {
+	/*
+	for (int i = 0; i < size; ++i) {
+		ptr[i].re = (((uint16_t)ptr[i].re) >> 4);
+		ptr[i].im = (((uint16_t)ptr[i].im) >> 4);
+	}
+	*/
+
+
 	int status = bladerf_sync_tx(params->radioParams.dev, (void*)ptr, (unsigned int)size, NULL, 5000);
 
 	if (status != 0) {

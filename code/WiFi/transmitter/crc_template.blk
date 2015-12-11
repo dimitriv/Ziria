@@ -36,13 +36,10 @@ var crc_state:arr[CRC_S_WIDTH] bit :=
     emits {'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0,'0};
   }
 
-  --do{println "Len: ", len};
-
   times len seq {
     (x:arr[CRC_X_WIDTH] bit) <- takes CRC_X_WIDTH;
     do {
-      let xi = invert_bits(x);
-      update_crc_generic(xi, base32, crc_state)
+      update_crc_generic(x, base32, crc_state)
     };
     emits x;
   }
@@ -52,10 +49,6 @@ var crc_state:arr[CRC_S_WIDTH] bit :=
       for j in [0, 8] {
         crc_state[i*8+j] := ~crc_state[i*8+j];
       }
-    }
-    -- Also invert bits to match 802.11 output requirements
-    for i in [0, 4] {
-      crc_state[i*8,8] := invert_bits(crc_state[i*8,8]);
     }
   };
  

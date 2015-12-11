@@ -33,7 +33,10 @@ var ai : arr[1] int8;
 }
 
 fun comp print_hdr() {
-  x <- takes 24*8;
+  -- Parse only the minimal header so that we can correctly parse CTS and ACK
+  -- This is a hack, a proper implementation should to it based on the packet length
+  -- x <- takes 24*8;
+  x <- takes 10*8;
   do {parseMACHeader(x)};
   emits x;
 
