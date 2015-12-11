@@ -94,6 +94,7 @@ var ret : bool;
 
     if (ax[0] == ac[0] && ax[1] == ac[1] && ax[2] == ac[2] && ax[3] == ac[3]) then {
 #ifndef FAST
+      println "";
       print "CRC passed: ";
       hexprint_int8(ac, 4);
       println "";
@@ -101,6 +102,7 @@ var ret : bool;
       ret := true;
     } else {
 #ifndef FAST
+      println "";
       println "CRC failed!";
       print "Expected: ";
       hexprint_int8(ac, 4);

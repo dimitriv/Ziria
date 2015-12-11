@@ -56,7 +56,7 @@ sniffer_example.out : sniffer_example.blk
 sniffer_test.outfile: sniffer_test.out ../matlab/pkt3.infile
 	PATH="$(PATH)":"/cygdrive/c/Program Files/bladeRF/x64" \
 	./$< --input=file \
-             --input-file-name=../matlab/pkt1.infile \
+             --input-file-name=../cts-to-self/cts-to-self_test.outfile \
              --input-file-mode=dbg \
              --output-file-name=$@ \
              --output-file-mode=dbg
