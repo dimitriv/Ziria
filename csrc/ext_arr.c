@@ -113,15 +113,22 @@ int32 __ext_copy_complex32(complex32* dst, int len, complex32* src, int lens, in
   return 0;
 }
 
-
-
+// NOTE: This is a hack and only works when arrin is well aligned!
 int32 __ext_bits_to_int8(int8* arrout, int lengthout, BitArrPtr arrin, int lengthin)
 {
 	lengthout = lengthin / 8 + ((lengthin % 8) > 0);
 	memcpy((void *)arrout, (void*)arrin, lengthout*sizeof(int8));
+
+	if ((lengthin % 8) > 0) {
+	  int8 mask = (2 << (lengthin % 8)) - 1;
+	  arrout[lengthin / 8] &= mask;
+	}
+
+
 	return 0;
 }
 
+// NOTE: This is a hack and only works when arrout is well aligned!
 int32 __ext_int8_to_bits(BitArrPtr arrout, int lengthout, int8* arrin, int lengthin)
 {
 	lengthout = lengthin * 8; // Should this value be assigned at all? It's not being used.
