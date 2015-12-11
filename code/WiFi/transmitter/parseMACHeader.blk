@@ -22,27 +22,83 @@
 
 #include <externals.blk>
 
-fun parseMACHeader(hdr : arr[6*8] bit) {
+
+fun printMACHeaderType(type : int8, subtype : int8)
+{
+  -- To be added: https://supportforums.cisco.com/document/52391/80211-frames-starter-guide-learn-wireless-sniffer-traces
+  if type == 1 && subtype == 8 then {
+    print "Block ACK Req";
+  } else { 
+    if type == 1 && subtype == 9 then {
+      print "Block ACK";
+    } else { 
+      if type == 1 && subtype == 10 then {
+        print "PS-Poll";
+      } else { 
+        if type == 1 && subtype == 11 then {
+          print "RTS";
+        } else { 
+          if type == 1 && subtype == 12 then {
+            print "CTS";
+          } else { 
+            if type == 1 && subtype == 13 then {
+              print "ACK";
+            } else { 
+              if type == 1 && subtype == 14 then {
+                print "CF-end";
+              } else { 
+                if type == 1 && subtype == 15 then {
+                  print "CF-end + ACK";
+                } else {
+                  print "To be done";
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+
+fun parseMACHeader(hdr : arr bit) {
 var a : arr[6] int8;
+var type : int8;
+var subtype : int8;
+
+  -- Extract type and subtype
+  bits_to_int8(a[0,1], hdr[2,2]);
+  type := a[0];
+  bits_to_int8(a[0,1], hdr[4,4]);
+  subtype := a[0];
+
+
+  println "===== MAC HEADER (len = ", length(hdr), " bits)";
 
   println "*** Frame control: ";
   println "  Protocol:       ", hdr[1], hdr[0];
-  print   "  Type (";
-  if hdr[3] == '0 && hdr[2] == '0 then {
+  print   "  Type:           ", hdr[2,2], "   - ";
+
+  if type == 0 then {
     print "Mgmt";
   } else {
-    if hdr[3] == '0 && hdr[2] == '1 then {
+    if type == 1 then {
       print "Ctrl";
     } else {
-      if hdr[3] == '1 && hdr[2] == '0 then {
+      if type == 2 then {
         print "Data";
       } else {
         print "Rsvd";
       }
     }
   }
-  println "):    ", hdr[2,2];
-  println "  Subtype:        ", hdr[7], hdr[6], hdr[5], hdr[4];
+  println "";
+
+  print "  Subtype:        ", hdr[7], hdr[6], hdr[5], hdr[4], " - ";
+  printMACHeaderType(type, subtype);
+  println "";
+
   println "  To DS:          ", hdr[8];
   println "  From DS:        ", hdr[9];
   println "  More fragments: ", hdr[10];
@@ -56,15 +112,29 @@ var a : arr[6] int8;
   bits_to_int8(a[0,2], hdr[16,16]);
   println "Duration: ", int16(a[0]) + 256*int16(a[1]);
 
-  bits_to_int8(a[0,6], hdr[32,6*8]);
-  println "Addr 1: ", a[0,6];
-  bits_to_int8(a[0,6], hdr[32+6*8,6*8]);
-  println "Addr 2: ", a[0,6];
-  bits_to_int8(a[0,6], hdr[32+12*8,6*8]);
-  println "Addr 3: ", a[0,6];
+  if (length(hdr) >= 32+6*8) then {
+    bits_to_int8(a[0,6], hdr[32,6*8]);
+    print "Addr 1: ", 
+    hexprint_int8(a, 6);
+    println "";
+  } 
 
-  bits_to_int8(a[0,2], hdr[32+18*8,16]);
-  println "Seq ctl: ", int16(a[0]) + 256*int16(a[1]);
+  if (length(hdr) >= 32+2*6*8) then {
+    bits_to_int8(a[0,6], hdr[32+6*8,6*8]);
+    print "Addr 2: ", 
+    hexprint_int8(a, 6);
+    println "";
+  }
+  if (length(hdr) >= 32+3*6*8) then {
+    bits_to_int8(a[0,6], hdr[32+12*8,6*8]);
+    print "Addr 3: ", 
+    hexprint_int8(a, 6);
+    println "";
+  }
+  if (length(hdr) >= 32+20*8) then {
+    bits_to_int8(a[0,2], hdr[32+18*8,16]);
+    println "Seq ctl: ", int16(a[0]) + 256*int16(a[1]);
+  } 
   println "";
 
 }

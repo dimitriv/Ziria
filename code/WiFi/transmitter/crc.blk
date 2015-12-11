@@ -94,14 +94,20 @@ var ret : bool;
 
     if (ax[0] == ac[0] && ax[1] == ac[1] && ax[2] == ac[2] && ax[3] == ac[3]) then {
 #ifndef FAST
---      println "CRC passed!";
+      print "CRC passed: ";
+      hexprint_int8(ac, 4);
+      println "";
 #endif
       ret := true;
     } else {
 #ifndef FAST
---      println "CRC failed!";
---      println "Expected: ", ac;
---      println "Received: ", ax;
+      println "CRC failed!";
+      print "Expected: ";
+      hexprint_int8(ac, 4);
+      println "";
+      print "Received: ";
+      hexprint_int8(ax, 4);
+      println "";
 #endif
       ret := false;
     }
