@@ -46,8 +46,20 @@ all: $(TGTS)
 cts-to-self_test.out : cts-to-self_test.blk
 	C_DEFINES='BLADE_RF' LIBS='bladeRF.lib' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PPDEB) $< $@
 
+test%.out : test%.blk
+	C_DEFINES='BLADE_RF' LIBS='bladeRF.lib' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PPDEB) $< $@
+
 %.out : %.blk
 	C_DEFINES='BLADE_RF' LIBS='bladeRF.lib' EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS)' $(PP) $< $@
+
+
+%.outfile: %.out %.infile
+	PATH="$(PATH)":"/cygdrive/c/Program Files/bladeRF/x64" \
+	./$< --input=file \
+             --input-file-name=$*.infile \
+             --input-file-mode=dbg \
+             --output-file-name=$@ \
+             --output-file-mode=dbg
 
 
 cts-to-self_test.outfile: cts-to-self_test.out cts-to-self_test.infile
@@ -57,6 +69,8 @@ cts-to-self_test.outfile: cts-to-self_test.out cts-to-self_test.infile
              --input-file-mode=dbg \
              --output-file-name=$@ \
              --output-file-mode=dbg
+
+
 
 %.test: %.outfile
 	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
