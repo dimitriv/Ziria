@@ -22,7 +22,7 @@
 #include "../transmitter/transmitter.blk"
 #include "../receiver/receiver.blk"
 #include "../transmitter/parseMACHeader.blk"
-
+#include "downsample.blk"
 
 
 #define TEST 1 
@@ -34,7 +34,7 @@
 
 
 #define PKT_LEN         10
-
+#define PKT_LEN_SAMP    640
 
 
 
@@ -51,6 +51,8 @@ fun comp cts_to_self(sleep:int32) {
   var plcp_head : arr[24] bit;
   var h : struct HeaderInfo;
   var ab : arr[8*PKT_LEN] bit;
+  var out  : arr[PKT_LEN_SAMP] complex16;
+  var outs : arr[PKT_LEN_SAMP] complex16;
 
   -- Create PLCP header
   do {
@@ -74,19 +76,39 @@ fun comp cts_to_self(sleep:int32) {
 #endif
    };
 
+
+   -- Prepare packet
+   repeat{emits plcp_head; emits ab;} 
+     >>> transmitter()
+     >>> repeat{x<-takes PKT_LEN_SAMP; do{copy_complex16(out, x, PKT_LEN_SAMP)}};
+
+   -- Downsample to 15.36 MHz
+   do{
+     downsample(outs, out);
+     -- let cnt = downsample(outs, out);
+     -- println cnt;
+   }
+
+
 #ifdef TEST
   times 1{
 #else
   repeat{
 #endif
-    (
-     repeat{
-        emits plcp_head; 
-         emits ab;
-     } >>>transmitter());
+
+#ifdef DNSAMPLE
+    -- We use 480 samples, which is the output of downsample function
+    -- But emits uses static arrays so we have to hardcode it here
+    emits outs[0,480];
+#else
+    emits out;
+#endif
+
+#ifndef TEST
      times 20000 {
        emit complex16{re=0; im=0};
      }
+#endif
   
   }
 }   
