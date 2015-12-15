@@ -5,13 +5,13 @@ var w1st_r16 : arr[96] int16;
 
     let (rClock:int16) = 125;
     let (rWanted:int16) = 96;
-    
-    
+
+
     for i in [0, 96] {
       let rVecF = double(rClock) * double(i+1) / double(rWanted);
-      print rVecF, ", ";
-      rVec_r16[i] := int16(rVecF);                                    
-    }    
+      -- print rVecF, ", ";
+      rVec_r16[i] := int16(rVecF);
+    }
 
     return rVec_r16;
 }
