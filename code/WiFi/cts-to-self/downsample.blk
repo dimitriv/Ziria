@@ -26,9 +26,9 @@ var outVecT : complex16;
 var rVec_r16 : arr[96] int16;
 var w2nd_r16 : arr[96] int16;
 var w1st_r16 : arr[96] int16;
-    
-    let scale_r16 = (1 << 15);        -- constant
-    let halfScale_r16 = scale_r16 / 2;    -- constant, 2^14
+
+    let scale_r16 = int32(1 << 15);        -- constant
+    let halfScale_r16 = (1 << 14);         -- constant, 2^14
     
     let (rClock:int16) = 125;
     let (rWanted:int16) = 96;
@@ -37,18 +37,31 @@ var w1st_r16 : arr[96] int16;
     
     for i in [0, 96] {
       let rVecF = double(rClock) * double(i+1) / double(rWanted);
+
+      -- NOTE: Due to inlining bug (Ziria issue #125) we need to have a print here to prevent inlining
+      -- To be removed once the bug is fixed
+      --print rVecF, ", ";
+      print "";
+
       -- constant vector for given sample rate
       rVec_r16[i] := int16(rVecF);                                    
       -- constant vector for given sample rate, note -1 to prevent overflow
       w2nd_r16[i] := int16( double(scale_r16-1) * ( rVecF - double(rVec_r16[i])) );    
       -- constant vector for given sample rate, note -1 to prevent overflow
-      w1st_r16[i] := (scale_r16-1) - w2nd_r16[i];
+      w1st_r16[i] := int16((scale_r16-1) - int32(w2nd_r16[i]));
     }    
+
+
+    -- DEBUG
+--    println rVec_r16;
+--    println w2nd_r16;
+--    println w1st_r16;
 
     
     -- processing one buffer at a time, using lookup tables, note
     -- the routine yields itself very well to pointer addressing
     for (bufCount:int16) in [0, nInBuffers] {
+    --for (bufCount:int16) in [0, 1] {
       
       -- linear interpolation, note scale present here ensures
       -- 15-bit interpolation accuracy, 32-bit accumulator is enough
@@ -56,6 +69,7 @@ var w1st_r16 : arr[96] int16;
       outVecT.re := 0;
       outVecT.im := 0;
       for j in [0, 96] {
+      --for j in [0, 10] {
         let inRange  = bufCount*rClock + int16(rVec_r16[j]) - 1;
 
         -- last sample is spot on, but extend vector for consistent
@@ -65,9 +79,12 @@ var w1st_r16 : arr[96] int16;
         let inVecS = if (inRange + 1 < int16(length(inVec))) then  inVec[inRange + 1]  else complex16{re=0; im=0}; 
 
         -- (biased rounding)
-        outVecT.re := (outVecT.re + inVec[inRange].re*w1st_r16[j] + inVecS.re*w2nd_r16[j] +halfScale_r16)/ scale_r16;
-        outVecT.im := (outVecT.im + inVec[inRange].im*w1st_r16[j] + inVecS.im*w2nd_r16[j] +halfScale_r16)/ scale_r16;
+        outVecT.re := (outVecT.re + inVec[inRange].re*w1st_r16[j] + inVecS.re*w2nd_r16[j] +halfScale_r16) >> 15; --/ scale_r16;
+        outVecT.im := (outVecT.im + inVec[inRange].im*w1st_r16[j] + inVecS.im*w2nd_r16[j] +halfScale_r16) >> 15; --/ scale_r16;
         outVec[bufCount*rWanted + j] := outVecT;
+        
+        --println inRange, ", ", outVecT.re, ", ", inVec[inRange].re*w1st_r16[j], ", ", inVecS.re*w2nd_r16[j], ", ", halfScale_r16, ", ", scale_r16, ", ", outVecT;
+
       }
     }
     
