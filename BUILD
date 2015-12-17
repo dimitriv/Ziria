@@ -3,14 +3,15 @@ For Linux instructions, please refer to doc/Linux.md
 To build the Ziria (wplc) compiler (under Windows/Cygwin) you will
 need:
 
-* GHC 7.8.3 or greater
-  On Windows it is best to install Haskell Platform for Windows (2014.2 or
-  later), which also includes cabal.
+* GHC 7.8.3 (GHC 7.10 is currently NOT supported)
+  On Windows it is best to install Haskell Platform for Windows (2014.2), 
+  which also includes cabal.
   Also, make sure you use the same bit-widths for Haskell and Cygwin.
   (64-bit Cygwin is known to have issues with 32-bit Haskell)
 
 * cabal 1.18 or greater
-  This is included with the Haskell Platform 2014.2 or later.
+  This is included with the Haskell Platform 2014.2.
+  
 
   NOTE: Order of paths may make a difference, consult this if
 		an error occurs when running 'make'.
