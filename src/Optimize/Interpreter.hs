@@ -1835,7 +1835,7 @@ zCast ty = mkUnaryOp (go ty)
     go (TInt BW8 Signed)  (ValueUInt16 a) = Just $ ValueInt8 (fromIntegral a)
     go (TInt BW8 Signed)  (ValueUInt32 a) = Just $ ValueInt8 (fromIntegral a)
     go (TInt BW8 Signed)  (ValueUInt64 a) = Just $ ValueInt8 (fromIntegral a)
-    go (TInt BW8 Signed)  (ValueDouble a) = Just $ ValueInt8 (round a)
+    go (TInt BW8 Signed)  (ValueDouble a) = Just $ ValueInt8 (truncate a)
     go (TInt BW8 Signed)  _               = Nothing
 
     go (TInt BW16 Signed) (ValueBit    a) = Just $ ValueInt16 (fromBool a)
@@ -1848,7 +1848,7 @@ zCast ty = mkUnaryOp (go ty)
     go (TInt BW16 Signed) (ValueUInt16 a) = Just $ ValueInt16 (fromIntegral a)
     go (TInt BW16 Signed) (ValueUInt32 a) = Just $ ValueInt16 (fromIntegral a)
     go (TInt BW16 Signed) (ValueUInt64 a) = Just $ ValueInt16 (fromIntegral a)
-    go (TInt BW16 Signed) (ValueDouble a) = Just $ ValueInt16 (round a)
+    go (TInt BW16 Signed) (ValueDouble a) = Just $ ValueInt16 (truncate a)
     go (TInt BW16 Signed) _               = Nothing
 
     go (TInt BW32 Signed) (ValueBit    a) = Just $ ValueInt32 (fromBool a)
@@ -1861,7 +1861,7 @@ zCast ty = mkUnaryOp (go ty)
     go (TInt BW32 Signed) (ValueUInt16 a) = Just $ ValueInt32 (fromIntegral a)
     go (TInt BW32 Signed) (ValueUInt32 a) = Just $ ValueInt32 (fromIntegral a)
     go (TInt BW32 Signed) (ValueUInt64 a) = Just $ ValueInt32 (fromIntegral a)
-    go (TInt BW32 Signed) (ValueDouble a) = Just $ ValueInt32 (round a)
+    go (TInt BW32 Signed) (ValueDouble a) = Just $ ValueInt32 (truncate a)
     go (TInt BW32 Signed) _               = Nothing
 
     go (TInt BW64 Signed) (ValueBit    a) = Just $ ValueInt64 (fromBool a)
@@ -1874,7 +1874,7 @@ zCast ty = mkUnaryOp (go ty)
     go (TInt BW64 Signed) (ValueUInt16 a) = Just $ ValueInt64 (fromIntegral a)
     go (TInt BW64 Signed) (ValueUInt32 a) = Just $ ValueInt64 (fromIntegral a)
     go (TInt BW64 Signed) (ValueUInt64 a) = Just $ ValueInt64 (fromIntegral a)
-    go (TInt BW64 Signed) (ValueDouble a) = Just $ ValueInt64 (round a)
+    go (TInt BW64 Signed) (ValueDouble a) = Just $ ValueInt64 (truncate a)
     go (TInt BW64 Signed) _               = Nothing
 
     -- cast to unsigned
@@ -1888,7 +1888,7 @@ zCast ty = mkUnaryOp (go ty)
     go (TInt BW8 Unsigned)  (ValueUInt16 a) = Just $ ValueUInt8 (fromIntegral a)
     go (TInt BW8 Unsigned)  (ValueUInt32 a) = Just $ ValueUInt8 (fromIntegral a)
     go (TInt BW8 Unsigned)  (ValueUInt64 a) = Just $ ValueUInt8 (fromIntegral a)
-    go (TInt BW8 Unsigned)  (ValueDouble a) = Just $ ValueUInt8 (round a)
+    go (TInt BW8 Unsigned)  (ValueDouble a) = Just $ ValueUInt8 (truncate a)
     go (TInt BW8 Unsigned)  _               = Nothing
 
     go (TInt BW16 Unsigned) (ValueBit    a) = Just $ ValueUInt16 (fromBool a)
@@ -1901,7 +1901,7 @@ zCast ty = mkUnaryOp (go ty)
     go (TInt BW16 Unsigned) (ValueUInt16 a) = Just $ ValueUInt16 a
     go (TInt BW16 Unsigned) (ValueUInt32 a) = Just $ ValueUInt16 (fromIntegral a)
     go (TInt BW16 Unsigned) (ValueUInt64 a) = Just $ ValueUInt16 (fromIntegral a)
-    go (TInt BW16 Unsigned) (ValueDouble a) = Just $ ValueUInt16 (round a)
+    go (TInt BW16 Unsigned) (ValueDouble a) = Just $ ValueUInt16 (truncate a)
     go (TInt BW16 Unsigned) _               = Nothing
 
     go (TInt BW32 Unsigned) (ValueBit    a) = Just $ ValueUInt32 (fromBool a)
@@ -1914,7 +1914,7 @@ zCast ty = mkUnaryOp (go ty)
     go (TInt BW32 Unsigned) (ValueUInt16 a) = Just $ ValueUInt32 (fromIntegral a)
     go (TInt BW32 Unsigned) (ValueUInt32 a) = Just $ ValueUInt32 a
     go (TInt BW32 Unsigned) (ValueUInt64 a) = Just $ ValueUInt32 (fromIntegral a)
-    go (TInt BW32 Unsigned) (ValueDouble a) = Just $ ValueUInt32 (round a)
+    go (TInt BW32 Unsigned) (ValueDouble a) = Just $ ValueUInt32 (truncate a)
     go (TInt BW32 Unsigned) _               = Nothing
 
     go (TInt BW64 Unsigned) (ValueBit    a) = Just $ ValueUInt64 (fromBool a)
@@ -1927,7 +1927,7 @@ zCast ty = mkUnaryOp (go ty)
     go (TInt BW64 Unsigned) (ValueUInt16 a) = Just $ ValueUInt64 (fromIntegral a)
     go (TInt BW64 Unsigned) (ValueUInt32 a) = Just $ ValueUInt64 (fromIntegral a)
     go (TInt BW64 Unsigned) (ValueUInt64 a) = Just $ ValueUInt64 a
-    go (TInt BW64 Unsigned) (ValueDouble a) = Just $ ValueUInt64 (round a)
+    go (TInt BW64 Unsigned) (ValueDouble a) = Just $ ValueUInt64 (truncate a)
     go (TInt BW64 Unsigned) _               = Nothing
 
     go (TStruct "complex8"  _) (ValueCpx8  a) = Just $ ValueCpx8 a
