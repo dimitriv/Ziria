@@ -25,12 +25,15 @@
 #include "downsample.blk"
 
 
-#define TEST 1 
+--#define TEST 1 
+#define DNSAMPLE 1
 
 
 #ifndef TEST
   #define FAST
 #endif
+
+
 
 
 #define PKT_LEN         10
@@ -47,7 +50,50 @@ fun comp dump() {
 }
 
 
-fun comp cts_to_self(sleep:int32) {
+
+fun comp createCTS() {
+var cts_msg : arr[PKT_LEN] int8 := {196, 0, 54, 1, 96, 227, 39, 5, 5, 5};
+var plcp_head : arr[24] bit;
+var h : struct HeaderInfo;
+var ab : arr[8*PKT_LEN] bit;
+var out  : arr[PKT_LEN_SAMP] complex16;
+var outs : arr[PKT_LEN_SAMP] complex16;
+
+
+  -- Init CTS
+  do {
+    -- Create PLCP header
+    h.modulation := M_QPSK;
+    h.coding := CR_12;
+    h.len := PKT_LEN + 4; -- Add 4B for CRC
+    plcp_head := createPLCPHeader(h);
+
+    -- Convert data to bits
+    int8_to_bits(ab, cts_msg); 
+  }
+
+
+   -- Prepare packet
+   repeat{emits plcp_head; emits ab;} 
+     >>> transmitter()
+     >>> repeat{x<-takes PKT_LEN_SAMP; do{copy_complex16(out, x, PKT_LEN_SAMP)}};
+
+   -- Downsample to 15.36 MHz
+   do{
+     downsample(outs, out);
+     -- let cnt = downsample(outs, out);
+     -- println cnt;
+   }
+
+   return outs[0, 480];
+}
+
+
+
+
+
+
+fun comp cts_to_self() {
   var plcp_head : arr[24] bit;
   var h : struct HeaderInfo;
   var ab : arr[8*PKT_LEN] bit;
@@ -64,13 +110,35 @@ fun comp cts_to_self(sleep:int32) {
 
   
   -- CTS length: 10B ( + 4B CRC)
-  x <- takes PKT_LEN;
-  do{ 
-    int8_to_bits(ab, x); 
+
+  var input: arr[2] int8; 
+  input <- takes 2;
+  var on: int8 := input[0];
+  var interval: int8 := input[1];
+
+ -- var cts : arr [PKT_LEN] int8 := {196, 0, 0, on*4, 5, 5, 5, 5, 5, 5};
+   var cts : arr [PKT_LEN] int8 := {196, 0, 0, on*4, 96, 227, 39, 5, 5, 5};
+
+
+#ifdef DNSAMPLE 
+  var gap1ms : arr[15360] complex16;
+  do { zero_complex16(gap1ms[0,15360]); } 
+  var gap100us : arr[1536] complex16;
+  do { zero_complex16(gap100us[0,1536]); } 
+#else
+  var gap1ms : arr[20000] complex16;
+  do { zero_complex16(gap1ms[0,20000]); } 
+  var gap100us : arr[2000] complex16;
+  do { zero_complex16(gap100us[0,2000]); } 
+#endif
+ 
+
+ do{ 
+    int8_to_bits(ab, cts); 
 #ifdef TEST
-    println x;
+    println x=cts;
     print "Hex message: ";
-    hexprint_int8(x, PKT_LEN);
+    hexprint_int8(cts, PKT_LEN);
     println "";
     println "Binary message (", length(ab), "): ", ab;
 #endif
@@ -96,18 +164,27 @@ fun comp cts_to_self(sleep:int32) {
   repeat{
 #endif
 
-#ifdef DNSAMPLE
-    -- We use 480 samples, which is the output of downsample function
-    -- But emits uses static arrays so we have to hardcode it here
-    emits outs[0,480];
-#else
-    emits out;
-#endif
 
+    times 10 {
+#ifdef DNSAMPLE
+      -- We use 480 samples, which is the output of downsample function
+      -- But emits uses static arrays so we have to hardcode it here
+      emits outs[0,480];
+--      cts_msg <- createCTS();
+--      emits cts_msg;
+--      do {println "this line for sure";}
+
+#else
+      emits out;
+#endif
+      emits gap100us;
+    }
 #ifndef TEST
-     times 20000 {
-       emit complex16{re=0; im=0};
-     }
+
+    times 1 {
+       for i in [0, interval]
+         emits gap1ms;
+    }
 #endif
   
   }
@@ -129,27 +206,10 @@ var out : arr[16] complex16;
 }
 
 
-
-
-fun comp test() {
-  var input: arr[16] complex16;
-  var input2: int8;
-  var out : complex16;
-  repeat { 
-    input <- takes 16;
---    input2 <- take;
-    emit out;
-  }
-}   
+   
 
 --let comp main = read[int8] >>> cts_to_self(5) >>> scale() >>> write
 
 
-let comp main = read[int8] >>> cts_to_self(5) >>> scale() >>> write
-
---let comp main = read[int8] >>> cts_to_self(5) >>> scale() >>> test() 
-
---let comp main = read[int8] >>> cts_to_self(5) >>> test() >>> receiver() >>> write
-
---let comp main = read[int8] >>> cts_to_self(5) >>> receiver() >>> print_hdr() >>> convert_to_int8() >>> print_hex() >>> write
+let comp main = read[int8] >>> cts_to_self() >>> scale() >>> write
 

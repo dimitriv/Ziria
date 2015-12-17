@@ -75,10 +75,15 @@ cts-to-self_test.outfile: cts-to-self_test.out cts-to-self_test.infile
 %.test: %.outfile
 	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
 
-cts-to-self.run: cts-to-self.out
-	PATH="$(PATH)":"/cygdrive/c/Program Files/bladeRF/x64" \
+#cts-to-self.run: cts-to-self.out
+#	PATH="$(PATH)":"/cygdrive/c/Program Files/bladeRF/x64" \
 	./$< --input=sdr --heap-size=1000000000 --sdr-central-frequency=2412000000 --sdr-rx-gain=20 --input-file-mode=bin --output=dummy
 #	./$< --input=sdr --sdr-central-frequency=2412000000 --sdr-rx-gain=20 --input-file-mode=bin --output=file --output-file-name=out.txt --output-file-mode=dbg --heap-size=1000000000 --output-buffer-size=30000000
+
+
+cts-to-self.run: cts-to-self.out
+	PATH="$(PATH)":"/cygdrive/c/Program Files/bladeRF/x64" \
+	./$< --input=file --input-file-name=cts-to-self.infile --output=sdr --heap-size=1000000000 --sdr-central-frequency=2462000000 --sdr-rx-gain=20 --input-file-mode=dbg --sdr-sample-rate=15360000 --sdr-tx-gain=25
 
 
 
