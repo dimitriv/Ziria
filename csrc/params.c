@@ -151,14 +151,16 @@ void init_RXgain(BlinkParams *params, char *i)				{ params->radioParams.RXgain =
 void init_TXgain(BlinkParams *params, char *i)				{ params->radioParams.TXgain = parse_Amp(i); }
 void init_CentralFrequency(BlinkParams *params, char *i)	{ params->radioParams.CentralFrequency = parse_CentralFrequency(i); }
 void init_FreqencyOffset(BlinkParams *params, char *i)		{ params->radioParams.FreqencyOffset = parse_FrequencyOffset(i); }
-void init_SampleRate(BlinkParams *params, char *i)			{ params->radioParams.SampleRate = parse_SampleRate(i); 
-															  params->radioParams.Bandwidth = params->radioParams.SampleRate; }
+void init_SampleRate(BlinkParams *params, char *i)			{ params->radioParams.SampleRate = parse_SampleRate(i);}
+//bandwidth is same format with samplerate pasring
+void init_Bandwidth(BlinkParams *params, char *i)			{ params->radioParams.Bandwidth = parse_SampleRate(i); }
+
 void init_TXBufferSize(BlinkParams *params, char *i)		{ params->radioParams.TXBufferSize = parse_TXBufferSize(i); }
 
 
 
 // Here is where we declare the parameters
-#define PARAM_TABLE_LENGTH		22
+#define PARAM_TABLE_LENGTH		23
 
 BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] = 
   {  { "--DEBUG=",
@@ -284,6 +286,11 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
 	   "20000000",
 #endif
        init_SampleRate }
+	   , { "--sdr-bandwidth=",
+	   "--sdr-bandwidth = ...",
+	   "SDR bandwidth",
+	   "20000000",
+	   init_Bandwidth }
      , { "--sdr-tx-buffer-size=",
        "--sdr-tx-buffer-size = ...",
        "Size of the TX buffer transmitted at once (in number of complex16)",
