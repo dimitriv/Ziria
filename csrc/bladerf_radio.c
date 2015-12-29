@@ -35,6 +35,7 @@ permissions and limitations under the License.
 
 extern int stop_program; 
 
+static struct bladerf_quick_tune fcenter, fside;
 
 // Set params_tx == NULL or params_rx = NULL if unused
 int BladeRF_RadioStart(BlinkParams *params_tx, BlinkParams *params_rx)
@@ -81,6 +82,36 @@ int BladeRF_RadioStart(BlinkParams *params_tx, BlinkParams *params_rx)
 			printf("Configure RX done!\n\n");
 		}
 	}
+
+	/*
+	status = bladerf_calibrate_dc(params_tx->radioParams.dev, BLADERF_DC_CAL_LPF_TUNING);
+	if (status != 0) {
+		fprintf(stderr, "Failed to calibrate TX module: %s\n",
+			bladerf_strerror(status));
+		goto out;
+	}
+	status = bladerf_calibrate_dc(params_tx->radioParams.dev, BLADERF_DC_CAL_TX_LPF);
+	if (status != 0) {
+		fprintf(stderr, "Failed to calibrate TX module: %s\n",
+			bladerf_strerror(status));
+		goto out;
+	}
+	status = bladerf_calibrate_dc(params_tx->radioParams.dev, BLADERF_DC_CAL_RX_LPF);
+	if (status != 0) {
+		fprintf(stderr, "Failed to calibrate TX module: %s\n",
+			bladerf_strerror(status));
+		goto out;
+	}
+	status = bladerf_calibrate_dc(params_tx->radioParams.dev, BLADERF_DC_CAL_RXVGA2);
+	if (status != 0) {
+		fprintf(stderr, "Failed to calibrate TX module: %s\n",
+			bladerf_strerror(status));
+		goto out;
+	}
+	*/
+	
+	//bladerf_set_correction(params->radioParams.dev, module, BLADERF_CORR_LMS_DCOFF_I, params->radioParams.DCBias);
+	//bladerf_set_correction(params->radioParams.dev, module, BLADERF_CORR_LMS_DCOFF_Q, params->radioParams.DCBias);
 	
 out:
 	if (status != 0) {
@@ -92,11 +123,31 @@ out:
 	return 0;
 }
 
-
+int BladeRF_SwitchTXFrequency(bladerf *dev, bool center)
+{
+	int status = 0;
+	if (true == center) {
+		status = bladerf_schedule_retune(dev, BLADERF_MODULE_TX, BLADERF_RETUNE_NOW, 0, &fcenter);
+	}
+	else {
+		status = bladerf_schedule_retune(dev, BLADERF_MODULE_TX, BLADERF_RETUNE_NOW, 0, &fside);
+	}
+	return status;
+}
 int  BladeRF_ConfigureTX(BlinkParams *params)
 {
 	int status;
 	bladerf_module module = BLADERF_MODULE_TX;
+
+	
+	status = bladerf_set_tuning_mode(params->radioParams.dev, BLADERF_TUNING_MODE_FPGA);
+	if (status != 0) {
+		fprintf(stderr, "Failed to set FGPA tunning mode: %s\n",
+			bladerf_strerror(status));
+		goto out;
+	}
+
+
 	status = bladerf_set_frequency((params->radioParams.dev), module, params->radioParams.CentralFrequency);
 	if (status != 0) {
 		fprintf(stderr, "Failed to set TX frequency: %s\n",
@@ -104,8 +155,35 @@ int  BladeRF_ConfigureTX(BlinkParams *params)
 		goto out;
 	}
 	else {
-		printf("TX Frequency: %u Hz\n", params->radioParams.CentralFrequency);
+		printf("First TX Frequency: %u Hz\n", params->radioParams.CentralFrequency);
 	}
+
+	status = bladerf_get_quick_tune((params->radioParams.dev), module, &fcenter);
+	if (status != 0) {
+		fprintf(stderr, "Failed to get quick tune: %s\n",
+			bladerf_strerror(status));
+		goto out;
+	}
+
+	status = bladerf_set_frequency((params->radioParams.dev), module, params->radioParams.CentralFrequency - 50e6);
+	if (status != 0) {
+		fprintf(stderr, "Failed to set TX frequency: %s\n",
+			bladerf_strerror(status));
+		goto out;
+	}
+	else {
+		printf("Second TX Frequency: %u Hz\n", params->radioParams.CentralFrequency);
+	}
+
+	status = bladerf_get_quick_tune((params->radioParams.dev), module, &fside);
+	if (status != 0) {
+		fprintf(stderr, "Failed to get quick tune: %s\n",
+			bladerf_strerror(status));
+		goto out;
+	}
+
+
+
 
 	status = bladerf_set_sample_rate((params->radioParams.dev), module, params->radioParams.SampleRate, NULL);
 	if (status != 0) {
@@ -195,6 +273,15 @@ out:
 			bladerf_strerror(status));
 		goto out1;
 	}
+
+
+
+	/*
+	API_EXPORT
+		int CALL_CONV bladerf_get_correction(struct bladerf *dev, bladerf_module module,
+		bladerf_correction corr, int16_t *value);
+		*/
+
 
 out1:
 	if (status != 0) {
@@ -399,22 +486,26 @@ void writeBladeRF(BlinkParams *params, complex16 *ptr, unsigned long size)
 		ptr[i].im = (((uint16_t)ptr[i].im) >> 4);
 	}
 	*/
-
-
+	/*
+	for (int i = 0; i < size; ++i) {
+		if (0 == ptr[i].re && 0 == ptr[i].im) {
+			ptr[i].re += params->radioParams.DCBias;
+			ptr[i].im += params->radioParams.DCBias;
+		}
+	}
+	*/
 	int status = bladerf_sync_tx(params->radioParams.dev, (void*)ptr, (unsigned int)size, NULL, 5000);
 
 	if (status != 0) {
 		fprintf(stderr, "Failed to TX samples: %s\n",
 			bladerf_strerror(status));
 
-		/* Disable TX module, shutting down our underlying TX stream */
 		status = bladerf_enable_module(params->radioParams.dev, BLADERF_MODULE_TX, false);
 		if (status != 0) {
 			fprintf(stderr, "Failed to disable TX module: %s\n",
 				bladerf_strerror(status));
 		}
 		exit(1);
-
 	}
 }
 #endif

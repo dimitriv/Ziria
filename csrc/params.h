@@ -77,6 +77,7 @@ typedef struct {
 	unsigned long SampleRate;
 	unsigned long TXBufferSize;
 	unsigned long Bandwidth;
+	long DCBias;
 
 #ifdef SORA_RF
 	SoraRadioParam *dev;
