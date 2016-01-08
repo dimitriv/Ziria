@@ -130,6 +130,7 @@ typedef struct _BlinkParams {
 	int onCycle;
 	int offCycle;
 	int algorithm;
+	int ctssubframes;
 #ifdef SORA_PLATFORM
 	TimeMeasurements measurementInfo;
 #endif

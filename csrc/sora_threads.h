@@ -36,6 +36,7 @@ struct thread_info {
 	int algorithm;
 	bool updated;
 	CRITICAL_SECTION critSec;
+	int ctssubframes;
 };
 
 
