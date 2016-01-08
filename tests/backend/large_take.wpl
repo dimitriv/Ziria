@@ -1,0 +1,13 @@
+fun comp test() {
+var buf : arr[30720] complex16;
+  --(x : arr[30720] complex16) <-take;
+  (x : arr[30720] complex16) <-takes 30720;
+  do {
+    buf[0, 30720] := x;
+  }
+  emits buf[0, 10];
+}
+
+let comp main = read >>> test() >>> write
+
+
