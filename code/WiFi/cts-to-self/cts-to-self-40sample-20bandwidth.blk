@@ -1,0 +1,238 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+--#define SHORT_FFT
+#include <bits.blk>
+#include "../transmitter/transmitter.blk"
+#include "../receiver/receiver.blk"
+#include "../transmitter/parseMACHeader.blk"
+#include "downsample.blk"
+
+
+--#define TEST 1 
+#define DNSAMPLE 1
+
+
+#ifndef TEST
+  #define FAST
+#endif
+
+
+
+
+#define PKT_LEN         10
+
+--#define PKT_LEN_SAMP    640
+#define PKT_LEN_SAMP    1280
+
+
+
+--M_BPSK
+--M_QPSK
+--M_16QAM
+--64QAM
+ 
+
+fun comp createCTS(duration : arr[2] int8) {
+
+var cts_msg : arr[PKT_LEN] int8 := {196, 0, duration[1], duration[0], 96, 227, 39, 5, 5, 5};
+var plcp_head : arr[24] bit;
+var h : struct HeaderInfo;
+var ab : arr[8*PKT_LEN] bit;
+var out  : arr[PKT_LEN_SAMP] complex16;
+var outs : arr[PKT_LEN_SAMP] complex16;
+
+
+  -- Init CTS
+  do {
+    -- Create PLCP header
+    h.modulation := M_QPSK;
+    h.coding := CR_12;
+    h.len := PKT_LEN + 4; -- Add 4B for CRC
+    plcp_head := createPLCPHeader(h);
+
+    -- Convert data to bits
+    int8_to_bits(ab, cts_msg); 
+  }
+
+
+   -- Prepare packet
+   repeat{emits plcp_head; emits ab;} 
+     >>> transmitter()
+     >>> repeat{x<-takes PKT_LEN_SAMP; do{copy_complex16(out, x, PKT_LEN_SAMP)}};
+{-
+   -- Downsample to 15.36 MHz
+   do{
+     downsample(outs, out);
+     -- let cnt = downsample(outs, out);
+     -- println cnt;
+   }
+   return outs[0, 480];
+-}
+   return out[0, PKT_LEN_SAMP];
+}
+
+
+
+
+
+
+fun comp cts_to_self() {
+  var plcp_head : arr[24] bit;
+  var h : struct HeaderInfo;
+  var ab : arr[8*PKT_LEN] bit;
+  var out  : arr[PKT_LEN_SAMP] complex16;
+  var outs : arr[PKT_LEN_SAMP] complex16;
+
+  -- Create PLCP header
+  do {
+    h.modulation := M_BPSK;
+    h.coding := CR_12;
+    h.len := PKT_LEN + 4; -- Add 4B for CRC
+    plcp_head := createPLCPHeader(h);
+  }
+
+  
+  -- CTS length: 10B ( + 4B CRC)
+
+  var input: arr[2] int8; 
+  input <- takes 2;
+  var on: int8 := input[0];
+  var interval: int8 := input[1];
+
+ -- var cts : arr [PKT_LEN] int8 := {196, 0, 0, on*4, 5, 5, 5, 5, 5, 5};
+   var cts : arr [PKT_LEN] int8 := {196, 0, 0, on*4, 96, 227, 39, 5, 5, 5};
+
+
+#ifdef DNSAMPLE 
+  var gap1ms : arr[15360] complex16;
+  do { zero_complex16(gap1ms[0,15360]); } 
+  var gap100us : arr[1536] complex16;
+  do { zero_complex16(gap100us[0,1536]); } 
+  var gap20us : arr[301] complex16;
+  do { zero_complex16(gap20us[0,301]); } 
+
+
+#else
+  var gap1ms : arr[20000] complex16;
+  do { zero_complex16(gap1ms[0,20000]); } 
+  var gap100us : arr[2000] complex16;
+  do { zero_complex16(gap100us[0,2000]); } 
+#endif
+
+  for i in [0, 15360] { 
+    do { gap1ms[i] := complex16{re=int16(interval);im=int16(interval)}; }
+  }
+ 
+
+ do{ 
+    int8_to_bits(ab, cts); 
+#ifdef TEST
+    println x=cts;
+    print "Hex message: ";
+    hexprint_int8(cts, PKT_LEN);
+    println "";
+    println "Binary message (", length(ab), "): ", ab;
+#endif
+   };
+
+
+   -- Prepare packet
+   repeat{emits plcp_head; emits ab;} 
+     >>> transmitter()
+     >>> repeat{x<-takes PKT_LEN_SAMP; do{copy_complex16(out, x, PKT_LEN_SAMP)}};
+
+   -- Downsample to 15.36 MHz
+   do{
+     downsample(outs, out);
+     -- let cnt = downsample(outs, out);
+     -- println cnt;
+   }
+
+
+#ifdef TEST
+  times 1{
+#else
+  repeat{
+#endif
+
+
+    times 50000 {
+#ifdef DNSAMPLE
+      -- We use 480 samples, which is the output of downsample function
+      -- But emits uses static arrays so we have to hardcode it here
+--      emits outs[0,480];
+      cts_msg <- createCTS(input);
+      emits cts_msg;
+
+#else
+      emits out;
+#endif
+      emits gap100us;
+     
+    }
+#ifndef TEST
+{-
+    times 10000 {
+         emits gap1ms;
+    }
+-}
+#endif
+  
+  }
+}   
+
+
+
+fun comp scale() {
+var out : arr[16] complex16;
+
+  repeat {
+    x <- takes 16;
+    do {
+      v_shift_right_complex16(out, x, 4);
+    }
+       
+    emits out;
+  }
+}
+
+
+ 
+
+fun comp dump() {
+ var input: arr[2] int8; 
+ repeat {
+     input <- takes 2;
+     do {println input;};
+     emits input;
+  }
+}
+
+  
+
+--let comp main = read[int8] >>> cts_to_self(5) >>> scale() >>> write
+
+
+let comp main = read[int8] >>> cts_to_self() >>> scale() >>> write
+
+--let comp main = read[int8] >>> dump() >>> write
+
+
+
