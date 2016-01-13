@@ -27,16 +27,6 @@
 struct thread_info {
 	int threadID;
 	bool fRunning;
-
-	ULONGLONG ttLastUpdate;
-
-	int onCycle;
-	int offCycle;
-	int interval;
-	int algorithm;
-	bool updated;
-	CRITICAL_SECTION critSec;
-	int ctssubframes;
 };
 
 
