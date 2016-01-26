@@ -20,8 +20,12 @@
 #include <stdlib.h>
 #include <memory.h>
 
+#ifndef __ARM_NEON__
 #include <xmmintrin.h>
 #include <emmintrin.h>
+#else
+#include "neon/sse_to_neon.h"
+#endif
 
 #include "types.h"
 #include "bit.h"
@@ -234,6 +238,7 @@ void printBitArr(BitArrPtr arr, unsigned int vlen)
 
 // LUT-specific operations
 // v = l & m | v & ~ m
+#ifndef __ARM_NEON__
 void lutmask128(BitArrPtr v, BitArrPtr m, BitArrPtr l)
 {
 		// could be unaligned ...
@@ -244,4 +249,15 @@ void lutmask128(BitArrPtr v, BitArrPtr m, BitArrPtr l)
 		mv = _mm_or_si128(_mm_and_si128(ml, mm), _mm_andnot_si128(mm, mv));
 		_mm_storeu_si128((__m128i *) v, mv);
 }
+#else
+void lutmask128(BitArrPtr v, BitArrPtr m, BitArrPtr l)
+{
+		// could be unaligned ...
+	    int8x16_t mv = _mm_loadu_si128((int8_t *) v);
+	    int8x16_t mm = _mm_loadu_si128((int8_t *) m);
+	    int8x16_t ml = _mm_loadu_si128((int8_t *) l);
 
+		mv = _mm_or_si128(_mm_and_si128(ml, mm), _mm_andnot_si128(mm, mv));
+		_mm_storeu_si128((int8_t *) v, mv);
+}
+#endif
