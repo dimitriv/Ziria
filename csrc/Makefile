@@ -18,31 +18,29 @@
 #
 #
 
-COMPILER ?= gcc
+CC = g++
+CFLAGS = -std=c++11 -mfloat-abi=softfp -mfpu=neon -flax-vector-conversions -Wno-attributes -Wno-write-strings -pipe -fno-aggressive-loop-optimizations -g #-O2 
 
-ifeq ($(COMPILER), clang)
-CXX = clang++
-else
-CXX = g++
-endif
+#COMPILER ?= gcc
 
-CFLAGS = -Wall -Wno-write-strings -Wno-comment -Og -g
-CXXFLAGS = -std=c++11 -Wall -Wno-unused-label -Wno-unused-variable -Wno-attributes -Wno-comment -Og -g
+#ifeq ($(COMPILER), clang)
+#CXX = clang++
+#else
+#CXX = g++
+#endif
+
+#CFLAGS = -Wall -Wno-write-strings -Wno-comment -Og -g
+#CXXFLAGS = -std=c++11 -mfloat-abi=softfp -mfpu=neon -flax-vector-conversions -Wno-attributes -Wno-comment -Og -g
 
 LIBS = -lm
 OBJDIR = .
 
-ifeq ($(RADIO), bladeRF)
-LIBS += -lbladeRF
-EXTRACOPTS += -DBLADE_RF
-endif
-
 OBJ_INT = bit.o numerics.o params.o test.o driver.o wpl_alloc.o utils.o
 OBJ_IO  = buf_bit.o buf_chunk.o buf_numerics8.o buf_numerics32.o buf_numerics16.o
 OBJ_LIB = 
-OBJ_EXT = ext_math.o ext_arr.o sora_ext_viterbi.o
+OBJ_EXT = ext_math.o ext_arr.o 
 
-# lut test.cpp only contains a main function but has to be linked with everything
+# lut test.c only contains a main function but has to be linked with everything
 OBJ_LUT_ONLY = bit.o numerics.o test.o wpl_alloc.o utils.o
 
 EXECUTABLE = driver
@@ -51,16 +49,13 @@ LUT_EXECUTABLE = lutexec
 all : driver
 
 driver : $(OBJ_INT) $(OBJ_IO) $(OBJ_LIB) $(OBJ_EXT)
-	$(CXX) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
+	$(CC) $(CFLAGS) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
 
 lutexec: $(OBJ_LUT_ONLY) $(OBJ_LIB) $(OBJ_EXT)
-	$(CXX) $(EXTRACOPTS) -o $(LUT_EXECUTABLE) $+ $(LIBS)
-
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CC) $(EXTRACOPTS) -o $(LUT_EXECUTABLE) $+ $(LIBS)
 
 %.o: %.c
-	$(CXX) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
 	-rm -f *.o ./*/*.o
