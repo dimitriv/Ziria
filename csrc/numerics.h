@@ -60,7 +60,7 @@ typedef unsigned __int64 unum64;
 
 #else
 ////////////////////////////////////////////////
-typedef char          num8;
+typedef signed char          num8;
 typedef short         num16;
 typedef int           num32;
 typedef long long int num64; 
@@ -70,7 +70,11 @@ typedef unsigned short         unum16;
 typedef unsigned int           unum32;
 typedef unsigned long long int unum64; 
 
+#ifndef __ARM_NEON__
 #define calign
+#else
+#define calign __attribute__ ((aligned(16)))
+#endif
 #define cthread
 
 #ifdef INLINE_COMPILATION
