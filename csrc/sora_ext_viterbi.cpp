@@ -18,11 +18,15 @@
 */
 
 #ifdef __GNUC__
-#include "viterbicore.hpp"
 #include "ieee80211const.h"
 #include <stdio.h>
 #include <stdlib.h>
+#ifndef __ARM_NEON__
 #include <emmintrin.h>
+#include "viterbicore.hpp"
+#else
+#include "viterbicore.h"
+#endif
 #else
 #include <sora.h>
 #include <viterbicore.h>
@@ -62,7 +66,7 @@ int __ext_viterbi_brick_init_fast(int32 frame_len, int16 code_r, int16 depth) {
 
 
 FORCE_INLINE
-int16 __ext_viterbi_brick_decode_fast(char* intInput, int len1, unsigned char* bit, int len2)
+int16 __ext_viterbi_brick_decode_fast(signed char* intInput, int len1, unsigned char* bit, int len2)
 {
 	static const int trellis_prefix = 6; 	 // 6 bit zero prefix
 	static const int trellis_lookahead = 24;
@@ -73,7 +77,7 @@ int16 __ext_viterbi_brick_decode_fast(char* intInput, int len1, unsigned char* b
 	unsigned int total_byte_count = 0;
 
 	// vector128 constants
-#ifdef __GNUC__
+#if defined(__GNUC__) && !defined(__ARM_NEON__)
 	static const __m128i * const pVITMA = VIT_MA; // Branch Metric A
 	static const __m128i * const pVITMB = VIT_MB; // Branch Metric B
 #else
@@ -172,12 +176,12 @@ int __ext_viterbiSig11a_brick_init_fast(int32 frame_len, int16 code_r, int16 dep
 
 
 FORCE_INLINE
-int16 __ext_viterbiSig11a_brick_decode_fast(char* intInput, int len1, unsigned char* bit, int len2)
+int16 __ext_viterbiSig11a_brick_decode_fast(signed char* intInput, int len1, unsigned char* bit, int len2)
 {
 	static const int state_size = 64;
 	static const int input_size = 48; // always 48 soft-values
 
-#ifdef __GNUC__
+#if defined(__GNUC__) && !defined(__ARM_NEON__)
 	__m128i trellis[state_size / 16 * input_size];
 #else
 	vub trellis[state_size / 16 * input_size];
