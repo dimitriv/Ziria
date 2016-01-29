@@ -56,6 +56,10 @@ typedef unsigned __int64 memsize_int;
 
 #else
 
+#ifdef __ARM_NEON__
+typedef unsigned char	uchar;
+typedef unsigned int	uint;
+#endif
 
 #define PSORA_UTHREAD_PROC void
 
