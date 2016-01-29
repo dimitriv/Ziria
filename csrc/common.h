@@ -11,6 +11,11 @@
 #include <emmintrin.h>
 #endif
 
+#ifndef __ARM_NEON__
+#include "neon/sse_to_neon.h"
+#endif
+
+
 #include "types.h"
 #include "wpl_alloc.h"
 #include "utils.h"
@@ -18,5 +23,8 @@
 
 #ifdef __GNUC__
 #include "sora_ext_lib.cpp"
+#ifdef __ARM_NEON__
+#include "sora_ext_viterbi.cpp"
+#endif
 #endif
 
