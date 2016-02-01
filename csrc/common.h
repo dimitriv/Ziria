@@ -11,7 +11,7 @@
 #include <emmintrin.h>
 #endif
 
-#ifndef __ARM_NEON__
+#ifdef __ARM_NEON__
 #include "neon/sse_to_neon.h"
 #endif
 
