@@ -36,6 +36,9 @@ ifeq ($(RADIO), bladeRF)
 LIBS += -lbladeRF
 EXTRACOPTS += -DBLADE_RF
 endif
+OBJ_RADIO = fmcomms_radio.o
+LIBS += -liio
+EXTRACOPTS += -DZYNQ_RF 
 
 OBJ_INT = bit.o numerics.o params.o test.o driver.o wpl_alloc.o utils.o
 OBJ_IO  = buf_bit.o buf_chunk.o buf_numerics8.o buf_numerics32.o buf_numerics16.o
@@ -53,17 +56,17 @@ LUT_EXECUTABLE = lutexec
 
 all : driver
 
-driver : $(OBJ_INT) $(OBJ_IO) $(OBJ_LIB) $(OBJ_EXT)
+driver : $(OBJ_INT) $(OBJ_IO) $(OBJ_LIB) $(OBJ_EXT) $(OBJ_RADIO)
 	$(CXX) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
 
 lutexec: $(OBJ_LUT_ONLY) $(OBJ_LIB) $(OBJ_EXT)
 	$(CXX) $(EXTRACOPTS) -o $(LUT_EXECUTABLE) $+ $(LIBS)
 
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(EXTRACOPTS) -c $< -o $@
 
 %.o: %.c
-	$(CXX) $(CFLAGS) -c $< -o $@
+	$(CXX) $(CFLAGS) $(EXTRACOPTS) -c $< -o $@
 
 clean:
 	-rm -f *.o ./*/*.o
