@@ -43,6 +43,10 @@
 #include "bladerf_radio.h"
 #endif
 
+#ifdef ZYNQ_RF
+#include "fmcomms_radio.h"
+#endif
+
 #include "wpl_alloc.h"
 #include "buf.h"
 #include "utils.h"
@@ -103,6 +107,21 @@ int __cdecl main(int argc, char **argv) {
   // Start Sora HW
   if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
   {
+#ifdef ZYNQ_RF
+	  int ret = Fmcomms_Init(params);
+	  if (ret < 0) exit(1);
+	  if (Globals.inType == TY_SDR)
+	  {
+		  ret = Fmcomms_RadioStartRx(params);
+		  if (ret < 0) exit(1);
+	  }
+	  if (Globals.outType == TY_SDR)
+	  {
+		  ret = Fmcomms_RadioStartTx(params);
+		  if (ret < 0) exit(1);
+	  }
+#endif
+
 #ifdef BLADE_RF
 
 	  if (BladeRF_RadioStart( (Globals.outType == TY_SDR)?params:NULL, (Globals.inType == TY_SDR)?params:NULL ) < 0)
@@ -214,6 +233,9 @@ int __cdecl main(int argc, char **argv) {
 	// Stop Sora HW
 	if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
 	{
+#ifdef ZYNQ_RF
+		Fmcomms_RadioStop(params);
+#endif
 #ifdef BLADE_RF
 		BladeRF_RadioStop(params, params);
 #endif

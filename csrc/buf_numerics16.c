@@ -34,6 +34,9 @@
 #include "bladerf_radio.h"
 #endif
 
+#ifdef ZYNQ_RF
+#include "fmcomms_radio.h"
+#endif
 
 unsigned int parse_dbg_int16(char *dbg_buf, int16 *target)
 {
@@ -282,17 +285,18 @@ GetStatus buf_getcomplex16(BlinkParams *params, BufContextBlock *blk, complex16 
 
 	if (params->inType == TY_SDR)
 	{
-#ifdef SORA_RF
+#if defined(ZYNQ_RF)
+		readFmcomms(params, x, 1);
+		return GS_SUCCESS;
+#elif defined(SORA_RF)
 		readSora(params, x, 1);
 		return GS_SUCCESS;
-#else
-  #ifdef BLADE_RF
+#elif defined(BLADE_RF)
 		readBladeRF(params, x, 1);
 		return GS_SUCCESS;
-  #else
+#else
 		fprintf(stderr, "Type SDR only supported if compiled in.\n");
 		exit(1);
-  #endif
 #endif
 
 	}
@@ -314,17 +318,18 @@ GetStatus buf_getarrcomplex16(BlinkParams *params, BufContextBlock *blk, complex
 
 	if (params->inType == TY_SDR)
 	{
-#ifdef SORA_RF
+#if defined(ZYNQ_RF)
+		readFmcomms(params, x, vlen);
+		return GS_SUCCESS;
+#elif defined(SORA_RF)
 		readSora(params, x, vlen);
 		return GS_SUCCESS;
-#else
-  #ifdef BLADE_RF
+#elif defined(BLADE_RF)
 		readBladeRF(params, x, vlen);
 		return GS_SUCCESS;
-  #else
+#else
 		fprintf(stderr, "Type SDR only supported if compiled in.\n");
 		exit(1);
-  #endif
 #endif
 	}
 
@@ -612,15 +617,15 @@ void buf_putcomplex16(BlinkParams *params, BufContextBlock *blk, struct complex1
 
 	if (params->outType == TY_SDR)
 	{
-#ifdef SORA_RF
+#if defined(ZYNQ_RF)
+		writeFmcomms(params, &x, 1);
+#elif defined(SORA_RF)
 		writeSora(params, &x, 1);
-#else
-#ifdef BLADE_RF
+#elif defined(BLADE_RF)
 		writeBladeRF(params, &x, 1);
 #else
 		fprintf(stderr, "Type SDR only supported if compiled in.\n");
 		exit(1);
-#endif
 #endif
 	}
 
@@ -646,15 +651,15 @@ void buf_putarrcomplex16(BlinkParams *params, BufContextBlock *blk, struct compl
 
 	if (params->outType == TY_SDR)
 	{
-#ifdef SORA_RF
+#if defined(ZYNQ_RF)
+		writeFmcomms(params, x, vlen);
+#elif defined(SORA_RF)
 		writeSora(params, x, vlen);
-#else
-  #ifdef BLADE_RF
+#elif defined(BLADE_RF)
 		writeBladeRF(params, x, vlen);
-  #else
+#else
 		fprintf(stderr, "Type SDR only supported if compiled in.\n");
 		exit(1);
-  #endif
 #endif
 	}
 }

@@ -60,6 +60,9 @@ typedef struct _SoraRadioParams {
 #include <libbladeRF.h>
 #endif
 
+#ifdef ZYNQ_RF
+#include <iio.h>
+#endif
 
 /**********************************************
 	Radio parameters (generic for all radios)
@@ -85,6 +88,14 @@ typedef struct {
 
 #ifdef BLADE_RF
 	struct bladerf *dev;
+#endif
+
+#ifdef ZYNQ_RF
+	struct iio_context *ctx;
+	struct iio_device *rxdev, *txdev, *phy;
+	struct iio_channel *rxch0, *txch0, *rxch1, *txch1, *phych0;
+	struct iio_buffer *Txbuf, *Rxbuf;
+	char * host;
 #endif
 
 } SDRParameters;
