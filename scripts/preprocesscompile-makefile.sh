@@ -25,13 +25,13 @@ export TOP=$(cd $(dirname $0)/.. && pwd -P)
 
 source $TOP/scripts/common.sh
 
-echo $1
+# echo $1
 # echo "Preprocessing..."
-#gcc -x c -P -E $1 >$1.expanded
-gcc $DEFINES -I $TOP/lib -w -x c -E $1 >$1.expanded
+# gcc -x c -P -E $1 >$1.expanded
+# gcc $DEFINES -I $TOP/lib -w -x c -E $1 >$1.expanded
 
-echo "Running WPL compiler..."
-$WPLC $WPLCFLAGS $EXTRAOPTS -i $1.expanded -o $1.c
+# echo "Running WPL compiler..."
+# $WPLC $WPLCFLAGS $EXTRAOPTS -i $1.expanded -o $1.c
 cp $1.c $TOP/csrc/test.cpp
 
 # when we run the unit tests it might happen that we copy the source file for
