@@ -14,8 +14,8 @@
 #include "params.h"
 #include "numerics.h"
 
-#define FMCOMMS_RXBUFF_L 0x3000
-#define FMCOMMS_TXBUFF_L 0x3000
+#define FMCOMMS_RXBUFF_L 0x300
+#define FMCOMMS_TXBUFF_L 0x300
 #define AGC_SLOW1    "SLOW"
 #define AGC_SLOW2    "FAST"
 #define AGC_SLOW3    "HYBRID"
