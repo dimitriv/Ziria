@@ -1,0 +1,9 @@
+fun comp rx() {
+  var x : arr[4096] complex16
+  repeat {
+    x <- takes 4096;
+    emits x;
+  }
+}
+
+let comp main = read[complex16] >>> rx() >>> write

@@ -1,0 +1,19 @@
+
+#include <externals.blk>
+# define MAX 1000
+fun comp sine() {
+
+  var z:arr[MAX] complex16;
+  do {
+    for i in [0, MAX] {
+      z[i] := complex16{re=cosine_double_int16(i, 1000);im=sine_double_int16(i, 1000)};
+    }
+  }
+  repeat { 
+     emits z;
+  }
+
+}
+
+let comp main = read[int8] >>> sine() >>> write
+
