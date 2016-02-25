@@ -1,0 +1,103 @@
+# 
+# Copyright (c) Microsoft Corporation
+# All rights reserved. 
+#
+# Licensed under the Apache License, Version 2.0 (the ""License""); you
+# may not use this file except in compliance with the License. You may
+# obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+# CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+# LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+# A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+#
+# See the Apache Version 2.0 License for specific language governing
+# permissions and limitations under the License.
+#
+#
+
+# Disable default rules for C files
+.SUFFIXES:
+
+# Uncomment the following if you want winddk to be the default compiler. 
+# NB: you can override this from the command line, e.g: 
+# prompt> COMPILER=gcc make
+#
+COMPILER?=gcc
+ZIRIA_ARCH?=ARM
+ZIRIA_PATH?=/home/analog/build/Ziria/code/WiFi/cts-to-self
+ZIRIA_ADDR?=129.168.10.10
+ZIRIA_USER?=analog
+PP    = ../../../scripts/preprocesscompile-$(COMPILER)-inline.sh
+PPDEB = ../../../scripts/preprocesscompile-$(COMPILER)-debug.sh
+DIFF  = ../../../tools/BlinkDiff
+
+# Do not delete outfiles to allow quick recheck of failed tests
+# use make clean to get rid of them
+.PRECIOUS: %.outfile %.out
+
+
+# Targets
+TGTS = $(patsubst %.blk, %.out, $(wildcard *.blk))
+
+all: $(TGTS)
+
+
+cts-to-self_test.out : cts-to-self_test.blk
+	C_DEFINES='ZYNQ_RF' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' ZIRIA_TARGET_ARCH=$(ZIRIA_ARCH) ZIRIA_TARGET_PATH=$(ZIRIA_PATH) ZIRIA_TARGET_ADDR=$(ZIRIA_ADDR) ZIRIA_TARGET_USER=$(ZIRIA_USER) $(PPDEB) $< $@
+
+test%.out : test%.blk
+	C_DEFINES='ZYNQ_RF' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' ZIRIA_TARGET_ARCH=$(ZIRIA_ARCH) ZIRIA_TARGET_PATH=$(ZIRIA_PATH) ZIRIA_TARGET_ADDR=$(ZIRIA_ADDR) ZIRIA_TARGET_USER=$(ZIRIA_USER) $(PPDEB) $< $@
+
+%.out : %.blk
+	C_DEFINES='ZYNQ_RF' EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS)' ZIRIA_TARGET_ARCH=$(ZIRIA_ARCH) ZIRIA_TARGET_PATH=$(ZIRIA_PATH) ZIRIA_TARGET_ADDR=$(ZIRIA_ADDR) ZIRIA_TARGET_USER=$(ZIRIA_USER) $(PP) $< $@
+
+
+%.outfile: %.out %.infile
+	./$< --input=file \
+             --input-file-name=$*.infile \
+             --input-file-mode=dbg \
+             --output-file-name=$@ \
+             --output-file-mode=dbg
+
+
+cts-to-self_test.outfile: cts-to-self_test.out cts-to-self_test.infile
+	./$< --input=file \
+             --input-file-name=cts-to-self_test.infile \
+             --input-file-mode=dbg \
+             --output-file-name=$@ \
+             --output-file-mode=dbg
+
+
+
+%.test: %.outfile
+	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
+
+
+
+#freq=2456990000
+freq=2484000000
+cts-to-self.run: cts-to-self.out
+	./$< --input=file --input-file-name=cts-to-self.infile --output=sdr --heap-size=1000000000 --sdr-central-frequency=$(freq) --sdr-rx-gain=20 --input-file-mode=dbg --sdr-tx-gain=10 \
+         --sdr-sample-rate=30720000 --sdr-bandwidth=20000000
+
+
+
+
+%.accept : %.outfile
+	cp $< $<.ground
+
+
+clean:
+	rm -f ./*expanded
+	rm -f ./*exe ./*exec ./*out
+	rm -f ./*.outfile
+	rm -f ./compout ./perfout
+	rm -f ./*.c
+
+all-clean: clean
+	rm -f ./*~
+	rm -f ./*dump
+
