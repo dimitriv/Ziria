@@ -22,17 +22,23 @@
 set -e
 
 export TOP=$(cd $(dirname $0)/.. && pwd -P)
-
+export ARCH=$(uname -p)
 source $TOP/scripts/common.sh
 
-# echo $1
+echo $1
 # echo "Preprocessing..."
-# gcc -x c -P -E $1 >$1.expanded
-# gcc $DEFINES -I $TOP/lib -w -x c -E $1 >$1.expanded
+#gcc -x c -P -E $1 >$1.expanded
+gcc $DEFINES -I $TOP/lib -w -x c -E $1 >$1.expanded
 
-# echo "Running WPL compiler..."
-# $WPLC $WPLCFLAGS $EXTRAOPTS -i $1.expanded -o $1.c
-cp $1.c $TOP/csrc/test.cpp
+if [ "$ARCH" = "x86_64" ]
+then
+    echo "Running WPL compiler..."
+    $WPLC $WPLCFLAGS $EXTRAOPTS -i $1.expanded -o $1.c
+fi
+
+if [ "$ZIRIA_TARGET_ARCH" = "" ]
+then
+    cp $1.c $TOP/csrc/test.cpp
 
 # when we run the unit tests it might happen that we copy the source file for
 # test B within the same second as we created the executable for the previous
@@ -40,18 +46,22 @@ cp $1.c $TOP/csrc/test.cpp
 # this means that make will think it won't need to rebuild the executable
 # and we will get very strange results. To avoid this we remove the executable
 # and the object file (if they exist).
-rm -f $TOP/csrc/driver $TOP/csrc/test.o
+    rm -f $TOP/csrc/driver $TOP/csrc/test.o
 
-echo "Compiling C code ($CXX)"
-pushd . && cd $TOP/csrc && eval $ZIRIA_MK_COMMAND
+    echo "Compiling C code ($CXX)"
+    pushd . && cd $TOP/csrc && eval $ZIRIA_MK_COMMAND
 
-if [[ $# -ge 2 ]] 
-then
-    popd
-    # cp -f is sometimes not sufficient on cygwin
-    rm -f $2
-    cp -f $TOP/csrc/driver $2
+    if [[ $# -ge 2 ]] 
+    then
+        popd
+        # cp -f is sometimes not sufficient on cygwin
+        rm -f $2
+        cp -f $TOP/csrc/driver $2
+    else
+        popd
+    fi
 else
-    popd
+    scp $1.c $ZIRIA_TARGET_USER@$ZIRIA_TARGET_ADDR:$ZIRIA_TARGET_PATH
 fi
+
 

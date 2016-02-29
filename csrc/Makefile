@@ -17,7 +17,7 @@
 # permissions and limitations under the License.
 #
 #
-ARCH ?= ARM
+ARCH ?= armv7l
 
 COMPILER ?= gcc
 
@@ -43,7 +43,7 @@ EXTRACOPTS += -DZYNQ_RF
 OBJ_INT = bit.o numerics.o params.o test.o driver.o wpl_alloc.o utils.o
 OBJ_IO  = buf_bit.o buf_chunk.o buf_numerics8.o buf_numerics32.o buf_numerics16.o
 OBJ_LIB = 
-ifeq ($(ARCH), ARM)
+ifeq ($(ARCH), armv7l)
 OBJ_EXT = ext_math.o ext_arr.o 
 else
 OBJ_EXT = ext_math.o ext_arr.o sora_ext_viterbi.o
