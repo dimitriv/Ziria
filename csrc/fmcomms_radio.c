@@ -14,8 +14,8 @@
 #include "params.h"
 #include "numerics.h"
 
-#define FMCOMMS_RXBUFF_L 0x300
-#define FMCOMMS_TXBUFF_L 0x300
+#define FMCOMMS_RXBUFF_L 0x600
+#define FMCOMMS_TXBUFF_L 0x600
 #define AGC_SLOW1    "SLOW"
 #define AGC_SLOW2    "FAST"
 #define AGC_SLOW3    "HYBRID"
@@ -441,9 +441,9 @@ void readFmcomms(BlinkParams *params, complex16 *ptr, int size)
 
     if (buf_size + size >= FMCOMMS_RXBUFF_L)
 	{
-		buf_frac = (FMCOMMS_TXBUFF_L - buf_size);
+		buf_frac = (FMCOMMS_RXBUFF_L - buf_size);
 		memcpy(ptr, dst_ptr + buf_size, buf_frac * sizeof(complex16));
-		buf_size = buf_size + size - FMCOMMS_TXBUFF_L;
+		buf_size = buf_size + size - FMCOMMS_RXBUFF_L;
 		buf_empty = true;
 	}
 
@@ -559,8 +559,8 @@ void writeFmcomms(BlinkParams *params, complex16 *ptr, int size)
 
 	    for (dst_ptr0 = buf_start0, dst_ptr1 = buf_start1; dst_ptr0 < buf_end && dst_ptr1 < buf_end; dst_ptr0 += buf_step, dst_ptr1 += buf_step)  // for each two sample received from I channel we write one sample (int32)
 	    {
-	    	//src_ptr->re = src_ptr->re * 128;
-	    	//src_ptr->im = src_ptr->im * 128;
+	    	tmp_src->re = tmp_src->re * 384;
+	    	tmp_src->im = tmp_src->im * 384;
 	    	iio_channel_convert_inverse(params->radioParams.txch0, (void *) dst_ptr0, (const void *) &(tmp_src->re));
 	    	iio_channel_convert_inverse(params->radioParams.txch1, (void *) dst_ptr1, (const void *) &(tmp_src->im));
 	    	tmp_src = tmp_src + 1;
