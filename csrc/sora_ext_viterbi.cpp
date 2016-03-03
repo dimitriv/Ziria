@@ -21,11 +21,9 @@
 #include "ieee80211const.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include "viterbicore.hpp"
 #ifndef __ARM_NEON__
 #include <emmintrin.h>
-#include "viterbicore.hpp"
-#else
-#include "viterbicore.h"
 #endif
 #else
 #include <sora.h>
@@ -139,7 +137,7 @@ int16 __ext_viterbi_brick_decode_fast(signed char* intInput, int len1, unsigned 
 		}
 
 		if (output_count) {
-			m_viterbi.Traceback((char*)m_outbuf, output_count, lookahead);
+			m_viterbi.Traceback((signed char*)m_outbuf, output_count, lookahead);
 			ob_count += output_count;
 
 			unsigned int last_byte_count = 0;
@@ -189,7 +187,7 @@ int16 __ext_viterbiSig11a_brick_decode_fast(signed char* intInput, int len1, uns
 
 	unsigned int output = 0;
 
-	Viterbi_sig11(trellis, intInput, (char *)(bit));
+	Viterbi_sig11(trellis, intInput, (signed char *)(bit));
 	*((unum32 *)bit) >>= 6; // remove the prefix 6 zeros
 
 	return 0;
