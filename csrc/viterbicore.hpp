@@ -480,7 +480,7 @@ FORCE_INLINE void normalize (vub* pTrellis)
 FORCE_INLINE void traceback (num8 * pbOutput, unum64 output_bits,
                              unum64 lookahead, vub* pTrellis)
 {
-    vub first8, last8;
+    vus first8, last8;
     vus min16;
 
     // Calculate the size of output
@@ -491,15 +491,15 @@ FORCE_INLINE void traceback (num8 * pbOutput, unum64 output_bits,
     // significant bits of state value, then we just find the minimal value
 
     // first initialize the 0th index
-    first8 = interleave_low (*INDEXES, *pTrellis);
-    last8  = interleave_high (*INDEXES, *pTrellis);
-    min16  = (vus)smin (first8, last8);
+    first8 = (vus)interleave_low (*INDEXES, *pTrellis);
+    last8  = (vus)interleave_high (*INDEXES, *pTrellis);
+    min16  = smin (first8, last8);
 
     // then, loop over indices 1-3
     for(unum8 i=1; i < 4; i++) {
-      first8 = interleave_low (INDEXES[i], pTrellis[i]);
-      last8  = interleave_high (INDEXES[i], pTrellis[i]);
-      min16  = smin (min16, (vus)smin (first8, last8));
+      first8 = (vus)interleave_low (INDEXES[i], pTrellis[i]);
+      last8  = (vus)interleave_high (INDEXES[i], pTrellis[i]);
+      min16  = smin (min16, smin (first8, last8));
     }
 
     // now min16 contains the minimal 8
