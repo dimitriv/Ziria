@@ -1,11 +1,17 @@
 # Ziria [![Build Status][status]](https://travis-ci.org/dimitriv/Ziria)
 
 Ziria is a programming language and compiler for low-level bitstream processing.
+Check the [project website](http://research.microsoft.com/en-us/projects/ziria/).
 
 
 ### News
 
-Ziria now features a standard compliant LTE and LTE-U implementation. Check [Open Test Platform for LTE/LTE-U](https://github.com/Microsoft/OTP4LTE-U). 
+* Ziria now features a standard compliant LTE and LTE-U implementation. Check [Open Test Platform for LTE/LTE-U](https://github.com/Microsoft/OTP4LTE-U). 
+
+* Ziria features standard compliant [802.11a/g PHY implementation](https://github.com/dimitriv/Ziria/tree/master/code/WiFi).
+
+* Ziria works with [Sora](https://github.com/Microsoft/Sora/) and [BladeRF](https://github.com/Nuand/bladeRF).
+
 
 
 ### Some useful information:
