@@ -3,6 +3,11 @@
 Ziria is a programming language and compiler for low-level bitstream processing.
 
 
+### News
+
+Ziria now features a standard compliant LTE and LTE-U implementation. Check [Open Test Platform for LTE/LTE-U](https://github.com/Microsoft/OTP4LTE-U). 
+
+
 ### Some useful information:
 
 * Top-level directory structure:
