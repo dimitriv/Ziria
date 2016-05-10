@@ -16,10 +16,13 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 module GenSym (Sym, initGenSym, genSymStr, getSym, setSym) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif /* !MIN_VERSION_base(4,8,0) */
 import Data.IORef
 
 newtype Sym = Sym (IORef (Int, String))

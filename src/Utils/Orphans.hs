@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans -fno-warn-warnings-deprecations #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE BangPatterns #-}
@@ -52,9 +52,3 @@ instance NFData SrcLoc      where rnf = genericRnf
 instance Error HughesPJ.Doc where
   noMsg  = HughesPJ.empty
   strMsg = HughesPJ.text
-
-instance Eq HughesPJ.Doc where 
-  d1 == d2 = show d1 == show d2
-
-instance Ord HughesPJ.Doc where 
-  d1 <= d2 = show d1 <= show d2

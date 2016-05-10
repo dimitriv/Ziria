@@ -17,11 +17,14 @@
    permissions and limitations under the License.
 -}
 -- | Typecheck (and sanity check) core (rather than source)
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE FlexibleInstances #-}
 module Tc ( tc ) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif /* !MIN_VERSION_base(4,8,0) */
 import Control.Monad
 import Data.Loc
 import Text.PrettyPrint.HughesPJ

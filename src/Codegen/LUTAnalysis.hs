@@ -16,6 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -24,6 +25,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# OPTIONS_GHC -fwarn-unused-binds #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
+{-# OPTIONS_GHC -fno-warn-warnings-deprecations #-}
 
 module LUTAnalysis (
 
@@ -50,7 +52,9 @@ import Opts
 import AstExpr
 import CgTypes
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif /* !MIN_VERSION_base(4,8,0) */
 
 import Text.PrettyPrint.HughesPJ 
 

@@ -16,6 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE FlexibleInstances, DeriveFunctor, DeriveFoldable #-}
 module TcUnify (
@@ -49,7 +50,10 @@ module TcUnify (
   ) where
 
 import Control.Monad hiding (forM_)
-import Data.Foldable (Foldable, forM_)
+#if !MIN_VERSION_base(4,8,0)
+import Data.Foldable (Foldable)
+#endif /* !MIN_VERSION_base(4,8,0) */
+import Data.Foldable (forM_)
 import Data.Loc
 import Text.PrettyPrint.HughesPJ
 import qualified Data.Map as M

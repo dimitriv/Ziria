@@ -16,9 +16,10 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, StandaloneDeriving, DeriveDataTypeable,
-    TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses #-}
-{-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
+    TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, FlexibleContexts #-}
+{-# OPTIONS_GHC -Wall -fno-warn-orphans -fno-warn-warnings-deprecations #-}
 
 
 module Analysis.DataFlow (
@@ -29,7 +30,9 @@ module Analysis.DataFlow (
 ) where
 
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif /* !MIN_VERSION_base(4,8,0) */
 import Control.Monad.Error
 import Control.Monad.Reader
 import Control.Monad.State

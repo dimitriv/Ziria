@@ -26,7 +26,8 @@
 --   is the error from the second computation. This might be misleading, as
 --   it might mean we might tell the user "cannot unify Foo with Baz" while
 --   we should really say "cannot unify Foo with Bar or Baz"
-{-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
+{-# OPTIONS_GHC -Wall -fno-warn-orphans -fno-warn-warnings-deprecations #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleInstances, ExistentialQuantification, RecordWildCards #-}
 module TcMonad (
     -- * TcM monad
@@ -109,7 +110,9 @@ module TcMonad (
   ) where
 
 import Prelude hiding (exp)
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative hiding (empty)
+#endif /* !MIN_VERSION_base(4,8,0) */
 import Control.Arrow ((***))
 import Control.Monad.State
 import Control.Monad.Reader

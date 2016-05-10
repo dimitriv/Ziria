@@ -16,6 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric, DeriveDataTypeable
   , GeneralizedNewtypeDeriving, MultiParamTypeClasses
   , ScopedTypeVariables, FunctionalDependencies, FlexibleInstances
@@ -43,7 +44,9 @@ import AstExpr
 import AstUnlabelled
 import PpExpr ()
 import Control.Monad.State.Class
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif /* !MIN_VERSION_base(4,8,0) */
 import Data.Loc
 import Data.Set ( Set )
 import qualified Data.Set as Set

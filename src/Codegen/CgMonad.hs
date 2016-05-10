@@ -20,6 +20,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -fno-warn-warnings-deprecations #-}
 
 module CgMonad
   ( IfThenElse(..)

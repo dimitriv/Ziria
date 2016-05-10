@@ -16,6 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RebindableSyntax #-}
@@ -36,7 +37,9 @@ import CgTypes
 import CgExpr
 
 import Control.Monad.State
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif /* !MIN_VERSION_base(4,8,0) */
 
 import Data.Loc
 import qualified Language.C.Syntax as C

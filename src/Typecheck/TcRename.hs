@@ -19,6 +19,7 @@
 -- | Renaming already type checked programs by generating fresh term and computation variables
 -- 
 -- 
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 module TcRename ( tcRenComp ) where
 
@@ -31,7 +32,9 @@ import Text.PrettyPrint.HughesPJ
 
 import qualified GenSym as GS
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative ( (<$>) )
+#endif /* !MIN_VERSION_base(4,8,0) */
 
 import AstComp
 import AstExpr
