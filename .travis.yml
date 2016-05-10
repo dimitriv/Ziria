@@ -26,10 +26,16 @@ matrix:
     - env: CABALVER=1.22 GHCVER=7.8.4 ALEXVER=3.1.4 HAPPYVER=1.19.5 COMPILER=clang TRAVIS_TEST=perf
       compiler: clang
       addons: {apt: {packages: [alex-3.1.4,happy-1.19.5,cabal-install-1.22,ghc-7.8.4], sources: [hvr-ghc]}}
-  exclude:
-    - env: CABALVER=1.22 GHCVER=7.10.2 ALEXVER=3.1.4 HAPPYVER=1.19.5 COMPILER=gcc
+    - env: CABALVER=1.22 GHCVER=7.10.3 ALEXVER=3.1.5 HAPPYVER=1.19.7 COMPILER=gcc TRAVIS_TEST=normal
       compiler: gcc
-      addons: {apt: {packages: [alex-3.1.4,happy-1.19.5,cabal-install-1.22,ghc-7.10.2], sources: [hvr-ghc]}}
+      addons: {apt: {packages: [alex-3.1.5,happy-1.19.7,cabal-install-1.22,ghc-7.10.3], sources: [hvr-ghc]}}
+    - env: CABALVER=1.22 GHCVER=7.10.3 ALEXVER=3.1.5 HAPPYVER=1.19.7 COMPILER=gcc TRAVIS_TEST=perf
+      compiler: gcc
+      addons: {apt: {packages: [alex-3.1.5,happy-1.19.7,cabal-install-1.22,ghc-7.10.3], sources: [hvr-ghc]}}
+    - env: CABALVER=1.22 GHCVER=7.10.3 ALEXVER=3.1.5 HAPPYVER=1.19.7 COMPILER=gcc TRAVIS_TEST=pedantic
+      compiler: gcc
+      addons: {apt: {packages: [alex-3.1.5,happy-1.19.7,cabal-install-1.22,ghc-7.10.3], sources: [hvr-ghc]}}
+  exclude:
     - env: CABALVER=head GHCVER=head ALEXVER=3.1.4 HAPPYVER=1.19.5 COMPILER=gcc
       compiler: gcc
       addons: {apt: {packages: [alex-3.1.4,happy-1.19.5,cabal-install-head,ghc-head], sources: [hvr-ghc]}}
