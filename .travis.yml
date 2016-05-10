@@ -49,14 +49,3 @@ install:
 script:
   - bash travis.bash
 
-notifications:
-  email:
-    recipients:
-      - siddhanathan@gmail.com
-    on_success: change
-    on_failure: always
-
-branches:
-  only:
-    - master
-
