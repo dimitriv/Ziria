@@ -42,6 +42,9 @@ matrix:
       compiler: clang
       addons: {apt: {packages: [cabal-install-1.22,ghc-7.10.3,alex-3.1.7,happy-1.19.5], sources: [hvr-ghc]}}
 
+  allow_failures:
+    - env: CABALVER=1.22 GHCVER=7.10.3 ALEXVER=3.1.7 HAPPYVER=1.19.5 COMPILER=clang TRAVIS_TEST=pedantic
+
 before_install:
  - unset CC
  - export PATH=/opt/ghc/$GHCVER/bin:/opt/cabal/$CABALVER/bin:$PATH
