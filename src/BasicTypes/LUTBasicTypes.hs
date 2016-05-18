@@ -27,7 +27,8 @@ module LUTBasicTypes where
 
 import Outputable
 import Text.PrettyPrint.HughesPJ
-import Control.DeepSeq.Generics (NFData(..), genericRnf)
+import Control.DeepSeq (NFData(..))
+import Control.DeepSeq.Generics (genericRnf)
 import GHC.Generics
 import Data.Maybe ( isJust )
 import Data.Typeable

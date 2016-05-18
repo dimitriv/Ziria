@@ -5,8 +5,8 @@
 {-# LANGUAGE StandaloneDeriving #-}
 module Orphans where
 
-import Control.DeepSeq
-import Control.DeepSeq.Generics (NFData(..), genericRnf)
+import Control.DeepSeq (NFData(..))
+import Control.DeepSeq.Generics (genericRnf)
 import Data.Loc
 import Data.Map (Map)
 import GHC.Generics (Generic)

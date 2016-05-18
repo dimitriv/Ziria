@@ -160,7 +160,7 @@ instance Outputable UnrollInfo where
 instance Outputable ty => Outputable (GExp ty a) where
   ppr = ppr . unExp
 
-instance Outputable ty => Outputable (GStructDef ty) where
+instance Outputable (GStructDef ty) where
   -- TODO: Perhaps it would make more sense to show the entire thing
   ppr (StructDef nm _) = text nm
 
@@ -211,7 +211,7 @@ ppMut Mut = text "var "
 
 instance Show (NumExpr) where show = render . ppr
 instance Show Ty        where show = render . ppr
-instance Outputable ty => Show (GStructDef ty) where show = render . ppr
+instance Show (GStructDef ty) where show = render . ppr
 
 instance Outputable ty => Show (GFun ty a)  where show = render . ppr
 instance Outputable ty => Show (GUnOp ty)   where show = render . ppr

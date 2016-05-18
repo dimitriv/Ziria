@@ -124,11 +124,11 @@ class CmdDom m v | m -> v where
 
 -- | Commands plus controls flow 
 class CmdDom m v => CmdDomRec m v | m -> v where 
-  aWhile  :: (POrd s, Monad m, MonadState s m, ValDom v)
+  aWhile  :: (POrd s, MonadState s m, ValDom v)
           => Exp -> m v -> m v
-  aFor    :: (POrd s, Monad m, MonadState s m, ValDom v)
+  aFor    :: (POrd s, MonadState s m, ValDom v)
           => EId -> Exp -> Exp -> m v -> m v
-  aBranch :: (POrd s, Monad m, MonadState s m, ValDom v) 
+  aBranch :: (POrd s, MonadState s m, ValDom v) 
           => Exp -> m v -> m v -> m v
 
 -- | Specific operations for abstract domains

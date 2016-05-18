@@ -53,7 +53,7 @@ newtype NameEnv t a = NameEnv { unNameEnv :: [(GName t, a)] }
 
 type NameMap t a = NameEnv t a 
 
-instance (Outputable t, Outputable a) => Outputable (NameEnv t a) where
+instance (Outputable a) => Outputable (NameEnv t a) where
   ppr (NameEnv lst) = 
     vcat (map (\(n,a) -> ppr n <+> text "|->" <+> ppr a) lst)
 

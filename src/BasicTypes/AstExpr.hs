@@ -27,7 +27,8 @@ module AstExpr (
   ) where
 
 import Prelude hiding (exp, mapM)
-import Control.DeepSeq.Generics (NFData(..), genericRnf)
+import Control.DeepSeq (NFData(..))
+import Control.DeepSeq.Generics (genericRnf)
 import Data.Loc
 #if !MIN_VERSION_base(4,8,0)
 import Data.Monoid
