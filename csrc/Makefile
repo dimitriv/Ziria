@@ -26,8 +26,18 @@ else
 CXX = g++
 endif
 
-CFLAGS = -Wall -Wno-write-strings -Wno-comment -Og -g
-CXXFLAGS = -std=c++11 -Wall -Wno-unused-label -Wno-unused-variable -Wno-attributes -Wno-comment -Og -g
+CFLAGS = -Wall -Wno-write-strings -Wno-comment -g
+CXXFLAGS = -std=c++11 -Wall -Wno-unused-label -Wno-unused-variable -Wno-attributes -Wno-comment -g
+
+ifeq ($(COMPILER), gcc)
+CFLAGS += -Og
+CXXFLAGS += -Og
+endif
+
+ifeq ($(COMPILER), clang)
+CFLAGS += -O
+CXXFLAGS += -O
+endif
 
 LIBS = -lm
 OBJDIR = .
