@@ -27,8 +27,10 @@ else
 CXX = g++
 endif
 
-CFLAGS = -mfpu=neon -flax-vector-conversions -Wall -Wno-write-strings -Wno-unused-label -Wno-unused-variable -Wno-comment -Og -g 
-CXXFLAGS = -std=c++11 -mfpu=neon -flax-vector-conversions -Wall -Wno-write-strings -Wno-unused-label -Wno-unused-variable -Wno-attributes -Wno-comment -Og -g 
+#CFLAGS = -mfpu=neon -flax-vector-conversions -Wall -Wno-write-strings -Wno-unused-label -Wno-unused-variable -Wno-comment -Og -g
+#CXXFLAGS = -std=c++11 -mfpu=neon -flax-vector-conversions -Wall -Wno-write-strings -Wno-unused-label -Wno-unused-variable -Wno-attributes -Wno-comment -Og -g
+CFLAGS = -march=native -mtune=native -mfpu=neon -flax-vector-conversions -w -pipe -Ofast
+CXXFLAGS = -std=c++11 -march=native -mtune=native -mfpu=neon -flax-vector-conversions -w -pipe -Ofast 
 LIBS = -lm
 OBJDIR = .
 
@@ -37,8 +39,8 @@ LIBS += -lbladeRF
 EXTRACOPTS += -DBLADE_RF
 endif
 OBJ_RADIO = fmcomms_radio.o
-LIBS += -liio
-EXTRACOPTS += -DZYNQ_RF 
+LIBS += -liio -lpthread
+EXTRACOPTS += -DADI_RF 
 
 OBJ_INT = bit.o numerics.o params.o test.o driver.o wpl_alloc.o utils.o
 OBJ_IO  = buf_bit.o buf_chunk.o buf_numerics8.o buf_numerics32.o buf_numerics16.o
@@ -57,7 +59,7 @@ LUT_EXECUTABLE = lutexec
 all : driver
 
 driver : $(OBJ_INT) $(OBJ_IO) $(OBJ_LIB) $(OBJ_EXT) $(OBJ_RADIO)
-	$(CXX) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
+	$(CXX) $(EXTRACOPTS) $(EXECUTABLE) $+ $(LIBS)
 
 lutexec: $(OBJ_LUT_ONLY) $(OBJ_LIB) $(OBJ_EXT)
 	$(CXX) $(EXTRACOPTS) -o $(LUT_EXECUTABLE) $+ $(LIBS)

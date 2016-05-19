@@ -27,14 +27,16 @@ CXX = g++
 endif
 
 # Note: SSE3 is required, SSSE3 is optional.
-CXXFLAGS = -std=c++11 -march=native -mtune=native -w -pipe -Ofast -fwhole-program
+CXXFLAGS = -std=c++11 -march=native -mtune=native -mfpu=neon -flax-vector-conversions -w -pipe -Ofast -fwhole-program
 
-LIBS = -lm
+LIBS = -lm -liio -lpthread
 
 ifeq ($(RADIO), bladeRF)
 LIBS += -lbladeRF
 EXTRACOPTS += -DBLADE_RF
 endif
+EXTRACOPTS += -DADI_RF -DUSE_FPGA
+
 
 EXECUTABLE = driver
 

@@ -17,7 +17,7 @@
    permissions and limitations under the License.
 */
 
-
+#pragma once
 #define INLINE_COMPILATION 1
 
 #ifdef SORA_PLATFORM
@@ -52,6 +52,10 @@
 
 #ifdef BLADE_RF
 #include "bladerf_radio.c"
+#endif
+
+#ifdef ADI_RF
+#include "fmcomms_radio.c"
 #endif
 
 #include "utils.c"
