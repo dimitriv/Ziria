@@ -43,8 +43,13 @@
 #include "bladerf_radio.h"
 #endif
 
-#ifdef ZYNQ_RF
+#ifdef ADI_RF
 #include "fmcomms_radio.h"
+#endif
+
+
+#ifdef USE_FPGA
+#include "fpga_modules.h"
 #endif
 
 #include "wpl_alloc.h"
@@ -104,10 +109,14 @@ int __cdecl main(int argc, char **argv) {
   params = &Globals;
   try_parse_args(params, argc, argv);
 
+#ifdef USE_FPGA
+  enable_fpga_module();
+#endif
+
   // Start Sora HW
   if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
   {
-#ifdef ZYNQ_RF
+#ifdef ADI_RF
 	  int ret = Fmcomms_Init(params);
 	  if (ret < 0) exit(1);
 	  if (Globals.inType == TY_SDR)
@@ -233,7 +242,7 @@ int __cdecl main(int argc, char **argv) {
 	// Stop Sora HW
 	if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
 	{
-#ifdef ZYNQ_RF
+#ifdef ADI_RF
 		Fmcomms_RadioStop(params);
 #endif
 #ifdef BLADE_RF
@@ -260,6 +269,10 @@ int __cdecl main(int argc, char **argv) {
 		WSACleanup();
 	}
 
+#endif
+
+#ifdef USE_FPGA
+	shutdown_fpga_module();
 #endif
 
   return 0;

@@ -1,5 +1,5 @@
 
-#ifdef ZYNQ_RF
+#ifdef ADI_RF
 #include <stdio.h>
 #include "fmcomms_radio.h"
 

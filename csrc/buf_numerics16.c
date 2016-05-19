@@ -34,7 +34,7 @@
 #include "bladerf_radio.h"
 #endif
 
-#ifdef ZYNQ_RF
+#ifdef ADI_RF
 #include "fmcomms_radio.h"
 #endif
 
@@ -285,7 +285,7 @@ GetStatus buf_getcomplex16(BlinkParams *params, BufContextBlock *blk, complex16 
 
 	if (params->inType == TY_SDR)
 	{
-#if defined(ZYNQ_RF)
+#if defined(ADI_RF)
 		readFmcomms(params, x, 1);
 		return GS_SUCCESS;
 #elif defined(SORA_RF)
@@ -318,7 +318,7 @@ GetStatus buf_getarrcomplex16(BlinkParams *params, BufContextBlock *blk, complex
 
 	if (params->inType == TY_SDR)
 	{
-#if defined(ZYNQ_RF)
+#if defined(ADI_RF)
 		readFmcomms(params, x, vlen);
 		return GS_SUCCESS;
 #elif defined(SORA_RF)
@@ -617,7 +617,7 @@ void buf_putcomplex16(BlinkParams *params, BufContextBlock *blk, struct complex1
 
 	if (params->outType == TY_SDR)
 	{
-#if defined(ZYNQ_RF)
+#if defined(ADI_RF)
 		writeFmcomms(params, &x, 1);
 #elif defined(SORA_RF)
 		writeSora(params, &x, 1);
@@ -651,7 +651,7 @@ void buf_putarrcomplex16(BlinkParams *params, BufContextBlock *blk, struct compl
 
 	if (params->outType == TY_SDR)
 	{
-#if defined(ZYNQ_RF)
+#if defined(ADI_RF)
 		writeFmcomms(params, x, vlen);
 #elif defined(SORA_RF)
 		writeSora(params, x, vlen);
