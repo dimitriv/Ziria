@@ -6,8 +6,7 @@
 #include "basic_types.h"
 
 
-#define _MM_SHUFFLE(fp3,fp2,fp1,fp0) (((fp3) << 6) | ((fp2) << 4) | \
-	((fp1) << 2) | ((fp0)))
+#define _MM_SHUFFLE(z, y, x, w) (z<<6) | (y<<4) | (x<<2) | w
 
 
 __forceinline uint8x16_t _mm_set_epi8(int8_t p1, int8_t p2, int8_t p3, int8_t p4,
@@ -63,7 +62,7 @@ __forceinline int32x4_t _mm_sub_epi32(int32x4_t a, int32x4_t b)
 
 __forceinline int64x2_t _mm_mul_epi32(int32x4_t a, int32x4_t b)
 {
-
+/*
 	int32x4_t q8 = a;
 	int32_t lane2 = vgetq_lane_s32(q8 , 2);
 	q8 = vsetq_lane_s32(lane2, q8 ,1);
@@ -71,36 +70,41 @@ __forceinline int64x2_t _mm_mul_epi32(int32x4_t a, int32x4_t b)
 	int32x4_t q0 = b;
 	lane2 = vgetq_lane_s32(q0 , 2);
 	q0 = vsetq_lane_s32(lane2, q0 ,1);
-
 	return vmull_s32(vget_low_s32(q0),vget_low_s32(q8));
+*/
+	int32x4x2_t temp;
+	temp = vuzpq_s32(a, b);
+
+	return vmull_s32(vget_low_s32(temp.val[0]),vget_high_s32(temp.val[0]));
 }
 
 #define VSHRQ_S32_U32_S32( A , N )	\
 	vreinterpretq_s32_u32( vshrq_n_u32(vreinterpretq_u32_s32( A ) , N) )
 
-__forceinline int32x4_t _mm_madd_epi16(const int16x8_t &a, const int16x8_t &b)
+__forceinline int32x4_t _mm_madd_epi16(const int32x4_t &z0, const int16x8_t &a, const int16x8_t &b)
 {
 
 	int16x8x2_t temp;
 	temp = vuzpq_s16(a, b);
+	//int32x4_t a_high = vmovl_s16 ( vget_high_s16( temp.val[0]) );
+	//int32x4_t a_low  = vmovl_s16 ( vget_low_s16( temp.val[0] ) );
+	int32x4_t result_a = vmlal_s16 (z0, vget_high_s16( temp.val[0]), vget_low_s16( temp.val[0] ));
 
-	int32x4_t a_high = vmovl_s16 ( vget_high_s16( temp.val[0]) );
-	int32x4_t a_low  = vmovl_s16 ( vget_low_s16( temp.val[0] ) );
+	//int32x4_t b_high = vmovl_s16 ( vget_high_s16( temp.val[1]) );
+	//int32x4_t b_low  = vmovl_s16 ( vget_low_s16( temp.val[1] ) );
+	int32x4_t result_b = vmlal_s16 (z0, vget_high_s16( temp.val[1]), vget_low_s16( temp.val[1] ));
 
-	int32x4_t b_high = vmovl_s16 ( vget_high_s16( temp.val[1]) );
-	int32x4_t b_low  = vmovl_s16 ( vget_low_s16( temp.val[1] ) );
-
-	int32x4_t result_a = vmulq_s32( a_high , a_low   );
-	int32x4_t result_b = vmulq_s32( b_high , b_low );
+	//int32x4_t result_a = vmulq_s32( a_high , a_low   );
+	//int32x4_t result_b = vmulq_s32( b_high , b_low );
 
 	return vaddq_s32 ( result_a,  result_b );
 
 }
 
-__forceinline int8x16_t _mm_sign_epi8(int8x16_t a, int8x16_t b)
+__forceinline int8x16_t _mm_sign_epi8(int8x16_t zerovec8, int8x16_t a, int8x16_t b)
 {
 
-	int8x16_t zerovec8 = vdupq_n_s8(0); //{ 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 };
+	//int8x16_t zerovec8 = vdupq_n_s8(0); //{ 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 };
 	int8x16_t c1 = vcgtq_s8(b, zerovec8);
 	int8x16_t ret = vandq_s8(a, c1);
 	int8x16_t c2 = vcltq_s8(b, zerovec8);
@@ -108,22 +112,37 @@ __forceinline int8x16_t _mm_sign_epi8(int8x16_t a, int8x16_t b)
 
 }
 
-__forceinline int16x8_t _mm_sign_epi16(int16x8_t a, int16x8_t b)
+__forceinline int16x8_t _mm_sign_epi16(int16x8_t zerovec16, int16x8_t a, int16x8_t b)
 {
 
-	int16x8_t zerovec16 = vdupq_n_s16(0); //{ 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 };
+	//int16x8_t zerovec16 = vdupq_n_s16(0); //{ 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 };
 	int16x8_t c1 = vcgtq_s16(b, zerovec16);
 	int16x8_t ret = vandq_s16(a, c1);
 	int16x8_t c2 = vcltq_s16(b, zerovec16);
 	return vaddq_s16(ret, vsubq_s16(zerovec16, vandq_s16(a, c2)));
-
+// asm
+/*
+	asm volatile
+		"vld1.16   {q0}, [a] 	            \n\t"
+		"vld1.16   {q1}, [b] 	            \n\t"
+		"vld1.16   {q7}, [zerovec16]        \n\t"
+		"vcgt.s16  {q2}, {q1}, #0	    \n\t"
+		"vclt.s16  {q3}, {q1}, #0           \n\t"
+		"vand      {q2}, {q2}, {q0}         \n\t"
+		"vand      {q3}, {q3}, {q0}         \n\t"
+                "vsub.i16  {q3}, {q7}, {q3}         \n\t"
+                "vadd.i16  {q2}, {q2}, {q3}         \n\t"
+		: "=r" (y)
+		: "0" (zerovec16), "1" (a), "2" (b) 
+	);
+*/
 
 }
 
-__forceinline int32x4_t _mm_sign_epi32(int32x4_t a, int32x4_t b)
+__forceinline int32x4_t _mm_sign_epi32(int32x4_t zerovec32, int32x4_t a, int32x4_t b)
 {
 
-	int32x4_t zerovec32 = vdupq_n_s32(0); //{ 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 };
+	//int32x4_t zerovec32 = vdupq_n_s32(0); //{ 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 };
 	int32x4_t c1 = vcgtq_s32(b, zerovec32);
 	int32x4_t ret = vandq_s32(a, c1);
 	int32x4_t c2 = vcltq_s32(b, zerovec32);
@@ -143,7 +162,8 @@ __forceinline int16x8_t _mm_packs_epi32(int32x4_t a, int32x4_t b)
 
 __forceinline uint8x16_t _mm_andnot_si128(uint8x16_t a, uint8x16_t b)
 {
-	return vandq_u8( vmvnq_u8 ( a ), b);
+	//return vandq_u8( vmvnq_u8 ( a ), b);
+	return vbicq_u8(b, a);
 }
 
 __forceinline int8x16_t _mm_andnot_si128(int8x16_t a, int8x16_t b)
@@ -252,6 +272,7 @@ __forceinline int32x4_t _mm_shuffle_epi_3332(int32x4_t a, int32x4_t b)
 	return vcombine_s32(vget_high_s32(a), vdup_n_s32(vgetq_lane_s32(b, 3)));
 }
 
+
 template <int i >
 __forceinline int32x4_t _mm_shuffle_epi32_default(int32x4_t a, int32x4_t b)
 {
@@ -302,9 +323,9 @@ __forceinline int32x4_t _mm_shuffle_epi32_single(int32x4_t a)
 
 #define _mm_shuffle_epi32(a,i) _mm_shuffle_epi32_single<i>(a)
 
-template <int i>
-__forceinline int16x8_t _mm_shufflehi_epi16_function(int16x8_t a)
-{
+
+template <int i >
+__forceinline int16x8_t _mm_shufflehi_epi16_default(int16x8_t a){
 	int16x8_t ret = a;
 	int16x4_t highBits = vget_high_s16(ret);
 	ret = vsetq_lane_s16(vget_lane_s16(highBits, i & 0x3), ret, 4);
@@ -314,12 +335,22 @@ __forceinline int16x8_t _mm_shufflehi_epi16_function(int16x8_t a)
 	return ret;
 }
 
+template <int i>
+__forceinline int16x8_t _mm_shufflehi_epi16_function(int16x8_t a)
+{
+	switch (i)
+	{
+		case _MM_SHUFFLE(1, 0, 3, 2):
+			return vreinterpretq_s16_s32(vcombine_s32( vget_low_s32(a), vrev64_s32(vget_high_s32(a)) )); break;
+		default:
+			return _mm_shufflehi_epi16_default<i>(a);
+	}
+}
+
 #define _mm_shufflehi_epi16(a,i) _mm_shufflehi_epi16_function<i>(a)
 
-
-template <int i>
-__forceinline int16x8_t _mm_shufflelo_epi16_function(int16x8_t a)
-{
+template <int i >
+__forceinline int16x8_t _mm_shufflelo_epi16_default(int16x8_t a){
 	int16x8_t ret = a;
 	int16x4_t lowBits = vget_low_s16(ret);
 	ret = vsetq_lane_s16(vget_lane_s16(lowBits, i & 0x3), ret, 0);
@@ -327,6 +358,18 @@ __forceinline int16x8_t _mm_shufflelo_epi16_function(int16x8_t a)
 	ret = vsetq_lane_s16(vget_lane_s16(lowBits, (i >> 4) & 0x3), ret, 2);
 	ret = vsetq_lane_s16(vget_lane_s16(lowBits, (i >> 6) & 0x3), ret, 3);
 	return ret;
+}
+
+template <int i>
+__forceinline int16x8_t _mm_shufflelo_epi16_function(int16x8_t a)
+{
+	switch (i)
+	{
+		case _MM_SHUFFLE(1, 0, 3, 2):
+			return vreinterpretq_s16_s32(vcombine_s32( vrev64_s32(vget_low_s32(a)), vget_high_s32(a) )); break;
+		default:
+			return _mm_shufflelo_epi16_default<i>(a);
+	}
 }
 
 #define _mm_shufflelo_epi16(a,i) _mm_shufflelo_epi16_function<i>(a)
@@ -471,32 +514,6 @@ __forceinline uint64x2_t _mm_unpackhi_epi64(uint64x2_t a, uint64x2_t b)
 
 #define _mm_extract_epi16( a, imm ) vgetq_lane_s16((int16x8_t)a, imm)
 
-__forceinline int _mm_movemask_epi8(uint8x16_t _a)
-{
-	uint8x16_t input = _a;
-	const int8_t __attribute__((aligned(16))) xr[8] = { -7, -6, -5, -4, -3, -2, -1, 0 };
-	uint8x8_t mask_and = vdup_n_u8(0x80);
-	int8x8_t mask_shift = vld1_s8(xr);
-
-	uint8x8_t lo = vget_low_u8(input);
-	uint8x8_t hi = vget_high_u8(input);
-
-	lo = vand_u8(lo, mask_and);
-	lo = vshl_u8(lo, mask_shift);
-
-	hi = vand_u8(hi, mask_and);
-	hi = vshl_u8(hi, mask_shift);
-
-	lo = vpadd_u8(lo, lo);
-	lo = vpadd_u8(lo, lo);
-	lo = vpadd_u8(lo, lo);
-
-	hi = vpadd_u8(hi, hi);
-	hi = vpadd_u8(hi, hi);
-	hi = vpadd_u8(hi, hi);
-
-	return ((hi[0] << 8) | (lo[0] & 0xFF));
-}
 
 __forceinline int16x8_t _mm_mullo_epi16(int16x8_t a, int16x8_t b)
 {

@@ -28,6 +28,9 @@
 #else
 #include "neon/vector128.h"
 #include "neon/types.h"
+#ifdef USE_FPGA
+#include "fpga_modules.h"
+#endif
 #endif
 
 #ifdef SORA_PLATFORM
@@ -69,7 +72,6 @@
 #pragma once
 
 #ifdef __ARM_NEON__
-
 
 
 // c = a + b
@@ -627,6 +629,8 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 
 		const int wlen = sizeof(vcs) / sizeof(complex16);
 
+		const int32x4_t xmm5 = vdupq_n_s32(0xFFFF0000);
+		const int32x4_t xmm4 = vdupq_n_s32(0x00010000);
 		for (int i = 0; i < len1 / wlen; i++){
 
 
@@ -634,10 +638,14 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 			vcs *vy = (vcs *)(y + wlen*i);
 			vcs *vout = (vcs *)(out + wlen*i);
 
-			vcs vs1 = conj0(*vy);
+			//vcs vs1 = conj0(*vy);
+			vcs vs1 = (vcs)veorq_s16(*vy, xmm5);
+			vs1 = vaddq_s32(vs1, xmm4);
 
-			vcs vs2 = (vcs)permutate_low<1, 0, 3, 2>(*vy);
-			vs2 = permutate_high<1, 0, 3, 2>(vs2);
+
+			//vcs vs2 = (vcs)permutate_low<2, 3, 0, 1>(*vy);
+			//vs2 = permutate_high<2, 3, 0, 1>(vs2);
+			vcs vs2 = (vcs)vrev32q_s16(*vy);
 
 			vi re32 = muladd(*vx, vs1);
 			vi im32 = muladd(*vx, vs2);
@@ -663,11 +671,15 @@ int __ext_v_mul_complex16(struct complex16* out, int lenout,
 // multiplies two complex vectors and returns the real and imaginary parts
 // as two 32 bit integers.
 //
+#ifndef SERIAL_TEST
 int __ext_v_conj_mul_complex16_int32(int32* re, int lenout1, int32* im, int lenout2,
 				struct complex16* x, int len1, struct complex16* y, int len2 )
 {
 
 	const int wlen = sizeof(vcs) / sizeof(complex16);
+	const int32x4_t xmm5 = vdupq_n_s32(0xFFFF0000);
+	const int32x4_t xmm4 = vdupq_n_s32(0x00010000);
+	//const int32x4_t xmm3 = vdupq_n_s32(0x00000000);
 	for (int i = 0; i < len1 / wlen; i++){
 
 		vcs *vx = (vcs *)(x + wlen*i);
@@ -675,13 +687,21 @@ int __ext_v_conj_mul_complex16_int32(int32* re, int lenout1, int32* im, int leno
 		vi *reout = (vi *)(re + wlen*i);
 		vi *imout = (vi *)(im + wlen*i);
 
-		vcs vs2 = conj0(*vy);
+		//vcs vs2 = conj0(*vy);
+		vcs vs2 = (vcs)veorq_s16(*vy, xmm5);
+		vs2 = vaddq_s32(vs2, xmm4);
 
-	    vs2 = permutate_low<1, 0, 3, 2>(vs2);
-		vs2 = permutate_high<1, 0, 3, 2>(vs2);
+	    //vs2 = permutate_low<1, 0, 3, 2>(vs2);
+		//vs2 = permutate_high<1, 0, 3, 2>(vs2);
+		vs2 = vrev32q_s16(vs2);
 
 		*reout = (vcs)muladd(*vx, *vy);
 		*imout = (vcs)muladd(*vx, vs2);
+		//int16x8x2_t temp, temp2;
+		//temp = vuzpq_s16(*vx, *vy);
+		//temp2 = vuzpq_s16(*vx, vs2);
+		//*reout = (vcs)vaddq_s32(vmlal_s16(xmm3, vget_high_s16(temp.val[0]), vget_low_s16(temp.val[0])), vmlal_s16(xmm3, vget_high_s16(temp.val[1]), vget_low_s16(temp.val[1])));
+		//*imout = (vcs)vaddq_s32(vmlal_s16(xmm3, vget_high_s16(temp2.val[0]), vget_low_s16(temp2.val[0])), vmlal_s16(xmm3, vget_high_s16(temp2.val[1]), vget_low_s16(temp2.val[1])));
 
 	}
 
@@ -693,6 +713,24 @@ int __ext_v_conj_mul_complex16_int32(int32* re, int lenout1, int32* im, int leno
 	return 0;
 
 }
+
+#else
+int __ext_v_conj_mul_complex16_int32(int32* re, int lenout1, int32* im, int lenout2,
+				struct complex16* x, int len1, struct complex16* y, int len2 )
+{
+
+
+	for (int i = 0; i < len1; i++){
+		re[i] = x[i].re * y[i].re + x[i].im * y[i].im ;
+		im[i] = x[i].im * y[i].re - x[i].re * y[i].im ;
+	};
+
+	return 0;
+}
+#endif
+
+
+
 // Multiply the first source vector by the conjugate of the second source vector
 // ie. re + j * im = a * conj(b)
 //Return by reference for performance
@@ -701,6 +739,8 @@ int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
 								struct complex16* y, int len2, int shift){
 
 	const int wlen = sizeof(vcs) / sizeof(complex16);
+	const int32x4_t xmm5 = vdupq_n_s32(0xFFFF0000);
+	const int32x4_t xmm4 = vdupq_n_s32(0x00010000);
 	for (int i = 0; i < len1 / wlen; i++){
 
 		vcs *vx = (vcs *)(x + wlen*i);
@@ -708,10 +748,13 @@ int __ext_v_conj_mul_complex16(struct complex16* out, int lenout,
 		vcs *vout = (vcs *)(out + wlen*i);
 
 
-		vcs vs2 = conj0(*vy);
+		//vcs vs2 = conj0(*vy);
+		vcs vs2 = (vcs)veorq_s16(*vy, xmm5);
+		vs2 = vaddq_s32(vs2, xmm4);
 
-		vs2 = permutate_low<1, 0, 3, 2>(vs2);
-		vs2 = permutate_high<1, 0, 3, 2>(vs2);
+		//vs2 = permutate_low<1, 0, 3, 2>(vs2);
+		//vs2 = permutate_high<1, 0, 3, 2>(vs2);
+		vs2 = vrev32q_s16(vs2);
 
 		vi re32 = muladd(*vx, *vy);
 		vi im32 = muladd(*vx, vs2);
@@ -823,7 +866,12 @@ int __ext_conjrew(struct complex16* x, int __unused_17, struct complex16* y,
            int __unused_16)
 {
 	vcs *xi = (vcs *)x;
-	vcs output = conjre(*xi);
+	//vcs output = conjre(*xi);
+	const int32x4_t xmm5 = vdupq_n_s32(0x0000FFFF);
+	const int32x4_t xmm4 = vdupq_n_s32(0x00000001);
+	vcs output = (vcs)veorq_s16(*xi, xmm5);
+	output = vaddq_s16(output, xmm4);
+
 
 	memcpy((void *)y,(void *)(&output),sizeof(vcs));
 
@@ -836,7 +884,12 @@ int __ext_conjrew(struct complex16* x, int __unused_17, struct complex16* y,
 int __ext_conj0w(struct complex16* __retf_conj0, int __unused_21, struct complex16* x, int __unused_20)
 {
 	vcs *xp = (vcs *)x;
-	vcs output = conj0(*xp);
+	//vcs output = conj0(*xp);  // Rahman: equal performance
+	const int32x4_t xmm5 = vdupq_n_s32(0xFFFF0000);
+	const int32x4_t xmm4 = vdupq_n_s32(0x00010000);
+	vcs output = (vcs)veorq_s16(*xp, xmm5);
+	output = vaddq_s32(output, xmm4);
+
 	memcpy((void *)__retf_conj0,(void *)(&output),sizeof(vcs));
 	return 0;
 }
@@ -859,9 +912,17 @@ int __ext_conj_mulw(struct complex16* __retf_conj0, int __unused_21, struct comp
 	vcs *vy = (vcs *) y;
 	vcs vs1, vs2, sign;
 
-    vs1 = conj0(*vx);
-    vs1 = permutate_low<1, 0, 3, 2>(vs1);
-    vs1 = permutate_high<1, 0, 3, 2>(vs1);
+    //vs1 = conj0(*vx);
+	const int32x4_t xmm5 = vdupq_n_s32(0xFFFF0000);
+	const int32x4_t xmm4 = vdupq_n_s32(0x00010000);
+	vs1 = (vcs)veorq_s16(*vx, xmm5);
+	vs1 = vaddq_s32(vs1, xmm4);
+
+
+    //vs1 = permutate_low<1, 0, 3, 2>(vs1);
+    //vs1 = permutate_high<1, 0, 3, 2>(vs1);
+    vs1 = vrev32q_s16(vs1);
+
     re = pairwise_muladd(*((vs*)vx), *((vs*)vy));
     im = pairwise_muladd((vs)vs1, *((vs*)vy));
 	pre = (vcs*) (&re);
@@ -946,10 +1007,10 @@ void __ext_v_sign_int8(int8 *output, int outlen, int8 *input1, int inlen1, int8 
 	vcs *pi1 = (vcs *)input1;
 	vcs *pi2 = (vcs *)input2;
 	vcs *po = (vcs *)output;
-
+	const vcb z0 = (vcb)__0x00000000000000000000000000000000();
 	while (cnt + 16 <= inlen1)
 	{
-		*po = (vcs)_mm_sign_epi8(*pi1, *pi2);
+		*po = (vcs)_mm_sign_epi8(z0, *pi1, *pi2);
 		pi1++;
 		pi2++;
 		po++;
@@ -982,10 +1043,11 @@ void __ext_v_negate_complex8(struct complex8* output, int lenout, complex8* inpu
 	int i;
 	vcb *pinput = (vcb *)input;
 	vcb *poutput = (vcb *)output;
+	//const vcb z0 = (vcb)__0x00000000000000000000000000000000();
 	for (i = 0; i < lenin / wlen; i++)
 	{
 		//*poutput = (vcb)xor(*pinput, *((vcb*) __0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF));
-		*poutput = (vcb)_mm_sign_epi8(*pinput, *((vcb*)__0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF));
+		//*poutput = (vcb)_mm_sign_epi8(z0, *pinput, *((vcb*)__0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF));
 		poutput++;
 		pinput ++;
 	}
@@ -1048,9 +1110,16 @@ struct complex32 __ext_sum_conj_mulw32(struct complex16* x, int __unused_20, str
 	vcs vs1, vs2, sign;
 
 	// xr*sr + xi*si, xi*si - xr*si
-    vs1 = conj0(*vx);
-    vs1 = permutate_low<1, 0, 3, 2>(vs1);
-    vs1 = permutate_high<1, 0, 3, 2>(vs1);
+    //vs1 = conj0(*vx);
+	const int32x4_t xmm5 = vdupq_n_s32(0xFFFF0000);
+	const int32x4_t xmm4 = vdupq_n_s32(0x00010000);
+	vs1 = (vcs)veorq_s16(*vx, xmm5);
+	vs1 = vaddq_s32(vs1, xmm4);
+
+    //vs1 = permutate_low<1, 0, 3, 2>(vs1);
+    //vs1 = permutate_high<1, 0, 3, 2>(vs1);
+	vs1 = vrev32q_s16(vs1);
+
 	// pairwise_muladd takes most of the time here
     r1 = pairwise_muladd(*((vs*)vx), *((vs*)vy));
     r2 = pairwise_muladd((vs)vs1, *((vs*)vy));
@@ -1459,7 +1528,13 @@ void __ext_sora_fft(struct complex16* output, int nFFTSize, struct complex16 * i
 		FFTSafe<32>(in, out);
 		break;
 	case 64:
+#ifndef USE_FPGA
 		FFTSafe<64>(in, out);
+#else
+		//enable_fpga_module();
+		process_fpga(output, input, 64);
+		//shutdown_fpga_module();
+#endif
 		break;
 	case 128:
 		FFTSafe<128>(in, out);
@@ -2544,7 +2619,8 @@ void __ext_v_negate_complex8(struct complex8* output, int lenout, complex8* inpu
   for (i = 0; i < lenin / wlen; i++)  
     {  
       //*poutput = (vcb)xor(*pinput, *((vcb*) __0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF));  
-      *poutput = (vcb)_mm_sign_epi8(*pinput, *((vcb*)__0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF));  
+      //*poutput = (vcb)_mm_sign_epi8(*pinput, *((vcb*)__0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF));
+	  *poutput = negate(*pinput);
       poutput++;  
       pinput ++;  
     }  
