@@ -27,10 +27,10 @@ else
 CXX = g++
 endif
 
-#CFLAGS = -mfpu=neon -flax-vector-conversions -Wall -Wno-write-strings -Wno-unused-label -Wno-unused-variable -Wno-comment -Og -g
-#CXXFLAGS = -std=c++11 -mfpu=neon -flax-vector-conversions -Wall -Wno-write-strings -Wno-unused-label -Wno-unused-variable -Wno-attributes -Wno-comment -Og -g
-CFLAGS = -march=native -mtune=native -mfpu=neon -flax-vector-conversions -w -pipe -Ofast
-CXXFLAGS = -std=c++11 -march=native -mtune=native -mfpu=neon -flax-vector-conversions -w -pipe -Ofast 
+CFLAGS = -mfpu=neon -flax-vector-conversions -Wall -Wno-write-strings -Wno-unused-label -Wno-unused-variable -Wno-comment -Og -g
+CXXFLAGS = -std=c++11 -mfpu=neon -flax-vector-conversions -Wall -Wno-write-strings -Wno-unused-label -Wno-unused-variable -Wno-attributes -Wno-comment -Og -g
+#CFLAGS = -march=native -mtune=native -mfpu=neon -flax-vector-conversions -w -pipe -Ofast
+#CXXFLAGS = -std=c++11 -march=native -mtune=native -mfpu=neon -flax-vector-conversions -w -pipe -Ofast 
 LIBS = -lm
 OBJDIR = .
 
@@ -59,7 +59,7 @@ LUT_EXECUTABLE = lutexec
 all : driver
 
 driver : $(OBJ_INT) $(OBJ_IO) $(OBJ_LIB) $(OBJ_EXT) $(OBJ_RADIO)
-	$(CXX) $(EXTRACOPTS) $(EXECUTABLE) $+ $(LIBS)
+	$(CXX) $(EXTRACOPTS) -o $(EXECUTABLE) $+ $(LIBS)
 
 lutexec: $(OBJ_LUT_ONLY) $(OBJ_LIB) $(OBJ_EXT)
 	$(CXX) $(EXTRACOPTS) -o $(LUT_EXECUTABLE) $+ $(LIBS)
