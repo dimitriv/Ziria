@@ -38,9 +38,12 @@ ifeq ($(RADIO), bladeRF)
 LIBS += -lbladeRF
 EXTRACOPTS += -DBLADE_RF
 endif
+ifdef ADI_RF 
 OBJ_RADIO = fmcomms_radio.o
 LIBS += -liio -lpthread
 EXTRACOPTS += -DADI_RF 
+endif
+
 
 OBJ_INT = bit.o numerics.o params.o test.o driver.o wpl_alloc.o utils.o
 OBJ_IO  = buf_bit.o buf_chunk.o buf_numerics8.o buf_numerics32.o buf_numerics16.o

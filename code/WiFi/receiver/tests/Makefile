@@ -28,7 +28,7 @@
 # COMPILER?=gcc
 # COMPILER?=winddk
 #
-COMPILER?=vs
+COMPILER?=gcc
 
 PP   = ../../../../scripts/preprocesscompile-$(COMPILER)-debug.sh
 DIFF = ../../../../tools/BlinkDiff
