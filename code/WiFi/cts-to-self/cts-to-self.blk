@@ -40,15 +40,15 @@
 
 
 
---#define DNSAMPLE 1
+#define DNSAMPLE 1
 
 
-#define CTS_RAW_LEN 640
+#define CTS_RAW_LEN 1280
 
 #ifdef DNSAMPLE
   #define PKT_LEN_SAMP    960
 #else
-  #define PKT_LEN_SAMP    640
+  #define PKT_LEN_SAMP    1280
 #endif
 
 
@@ -140,10 +140,10 @@ fun comp cts_to_self() {
     do { gap1ms[i] := complex16{re=int16(interval);im=int16(interval)}; }
   }
 
-  var gap100us1 : arr[2000] complex16;
-  do { zero_complex16(gap100us1[0,2000]); } 
+  var gap100us1 : arr[3072] complex16;
+  do { zero_complex16(gap100us1[0,3072]); } 
 
-  --repeat {
+  repeat {
       cts_msg <- createCTS(input);
       emits cts_msg;
 {-
@@ -153,7 +153,7 @@ fun comp cts_to_self() {
 -}
       emits gap100us1;
   
-  --}
+  }
 }   
 
 
@@ -188,7 +188,7 @@ fun comp dump() {
 --let comp main = read[int8] >>> cts_to_self(5) >>> scale() >>> write
 
 
-let comp main = read[int8] >>> cts_to_self() >>> write
+let comp main = read[int8] >>> cts_to_self() >>> scale() >>> write
 
 --let comp main = read[int8] >>> dump() >>> write
 
