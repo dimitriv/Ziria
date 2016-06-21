@@ -11,19 +11,20 @@
 #include "params.h"
 #include "numerics.h"
 
-#define FMCOMMS_RXBUFF_L 12288//49152//786432
-#define FMCOMMS_TXBUFF_L 0xC0
-#define AGC_SLOW1    "SLOW"
-#define AGC_SLOW2    "FAST"
-#define AGC_SLOW3    "HYBRID"
-#define AGC_SLOW4    "MANUAL"
+#define FMCOMMS_RXBUFF_L 12288 //49152//786432
+#define FMCOMMS_TXBUFF_L 0x200
+#define AGC_SLOW    "slow_attack"
+#define AGC_FAST    "fast_attack"
+#define AGC_HYBRID    "HYBRID"
+#define AGC_MANUAL    "MANUAL"
 #define PORT_SELECT1 "A_BALANCED"
 #define PORT_SELECT_TX "A"
 
 #define OUV_THREAD
-#define RX 0
+#define RX 1
 static complex16 *src_ptr;
-//static uint32_t* dest_ptr;
+static complex16 *dst_ptr;
+
 static int num_buf_write;
 
 #ifdef OUV_THREAD
@@ -129,53 +130,10 @@ static void quit_all(int sig)
 #endif
 
 
+
+
 /*
-void readFmcomms(BlinkParams *params, complex16 *ptr, int size)
-{
-	int ret = iio_buffer_refill(params->radioParams.Rxbuf);
-
-	uint64_t *src_ptr0 = (uint64_t *)iio_buffer_start(params->radioParams.Rxbuf);
-	//ptrdiff_t diff = iio_buffer_step(params->radioParams.Rxbuf);
-	//unsigned long items_in_buffer = (unsigned long) ret / diff;
-	//uint32_t midbuf_size = items_in_buffer < size ? size : items_in_buffer;
-	//uint64_t * buf = (uint64_t *)malloc(ret);
-
-	//dest_ptr = (uint32_t *) ptr;
-	//memcpy(dest_ptr, src_ptr0, size * sizeof(complex16));
-
-
-	uint32_t* dest_ptr = (uint32_t *)iio_buffer_start(params->radioParams.Rxbuf);//(uint32_t *)malloc(ret);
-	//memcpy(dest_ptr, src_ptr0, size * sizeof(complex16));
-	size_t vectors = ret / 32;
-	uint32_t* ptr0 = (uint32_t *)ptr;
-	while (vectors-- > 0) {
-		const uint32x4_t src0 = vld1q_u32(dest_ptr);
-	    const uint32x4_t src1 = vld1q_u32(dest_ptr + 4);
-	    const uint32x4x2_t dst = vuzpq_u32(src0, src1);
-	    vst1q_u32(ptr0, dst.val[0]);
-	    dest_ptr += 8;
-	    ptr0 += 4;
-	 }
-
-}
-*/
-void iio_to_ziria_memcpy(complex16* zbuf, void * ibuf, int iiosize)
-{
-	// assumes iio buffer has 4 channels but ziria wants 2 channels,
-	size_t vectors = iiosize / 32; // 32 bytes to fetch each time
-	uint32_t* zptr0 = (uint32_t *)zbuf;
-	uint32_t* iptr0 = (uint32_t *)ibuf;
-	while (vectors-- > 0) {
-		const uint32x4_t src0 = vld1q_u32(iptr0);
-	    const uint32x4_t src1 = vld1q_u32(iptr0 + 4);
-	    const uint32x4x2_t dst = vuzpq_u32(src0, src1);
-	    vst1q_u32(zptr0, dst.val[0]);
-	    iptr0 += 8;
-	    zptr0 += 4;
-	 }
-
-}
-
+// works with any iio_buffer size and ziria buffer size
 void readFmcomms(BlinkParams *params, complex16 *ptr, int size)
 {
 	static int iio_index = 0; // to size up iio_buffer, static helps with the case when iio_buf is used multiple times, or FMCOMMS_RXBUFF_L > size
@@ -192,14 +150,13 @@ void readFmcomms(BlinkParams *params, complex16 *ptr, int size)
     }
 
     int iio_buf_left = FMCOMMS_RXBUFF_L - iio_index;
-	void *buf_start0 = iio_buffer_first(params->radioParams.Rxbuf, params->radioParams.rxch0);
+	void *buf_start0 = iio_buffer_start(params->radioParams.Rxbuf);
 	ptrdiff_t buf_step = iio_buffer_step(params->radioParams.Rxbuf);
 
     if (iio_buf_left >= size)
     {
     	// just memcpy from existing buffer
     	memcpy(ptr, buf_start0 + buf_step * iio_index, sizeof(complex16) * size);
-    	//iio_to_ziria_memcpy(ptr, buf_start0 + buf_step * iio_index, (unsigned long)buf_step * size);
 
     	// update iio_buf_left and iio_index
     	iio_index = (iio_index + size) % FMCOMMS_RXBUFF_L;
@@ -209,7 +166,6 @@ void readFmcomms(BlinkParams *params, complex16 *ptr, int size)
     {
     	// copy whatever is left
     	memcpy(ptr, buf_start0 + buf_step * iio_index, sizeof(complex16) * iio_buf_left);
-    	//iio_to_ziria_memcpy(ptr, buf_start0 + buf_step * iio_index, (unsigned long)buf_step * iio_buf_left);
 
     	ziria_index += iio_buf_left;
     	while(ziria_index < size)
@@ -224,20 +180,18 @@ void readFmcomms(BlinkParams *params, complex16 *ptr, int size)
         	iio_buf_left = FMCOMMS_RXBUFF_L;
         	iio_index = 0;
         	// just memcpy from existing buffer
-        	void *buf_start0 = iio_buffer_first(params->radioParams.Rxbuf, params->radioParams.rxch0);
+        	void *buf_start0 = iio_buffer_start(params->radioParams.Rxbuf);
         	ptrdiff_t buf_step = iio_buffer_step(params->radioParams.Rxbuf);
 
         	int ziria_buf_left = size - ziria_index;
         	if (ziria_buf_left > iio_buf_left)
         	{
         		memcpy(ptr + ziria_index, buf_start0, sizeof(complex16) * iio_buf_left);
-        		//iio_to_ziria_memcpy(ptr + ziria_index, buf_start0, (unsigned long)buf_step * iio_buf_left);
         		ziria_index += iio_buf_left;
         	}
         	else
         	{
         		memcpy(ptr + ziria_index, buf_start0, sizeof(complex16) * ziria_buf_left);
-        		//iio_to_ziria_memcpy(ptr + ziria_index, buf_start0, (unsigned long)buf_step * ziria_buf_left);
         		iio_index = ziria_buf_left % FMCOMMS_RXBUFF_L;
         		ziria_index = size;
         	}
@@ -248,26 +202,87 @@ void readFmcomms(BlinkParams *params, complex16 *ptr, int size)
 
 
 }
+*/
+
+// use only when FMCOMMS_RXBUFF_L is bigger than ziria size
+void readFmcomms(BlinkParams *params, complex16 *ptr, int size)
+{
+	static int iio_index = 0;
+	int ziria_index = 0;
+
+
+	if (iio_index == 0)
+	{
+		// refill buffer and copy
+		int ret = iio_buffer_refill(params->radioParams.Rxbuf);
+		if (ret < 0)
+		{
+			fprintf(stderr, "Unable to fill rx buffer %d\n", errno);
+			exit(1);
+		}
+
+	}
+
+    int iio_buf_left = FMCOMMS_RXBUFF_L - iio_index;
+	void *buf_start0 = iio_buffer_first(params->radioParams.Rxbuf, params->radioParams.rxch0);
+	ptrdiff_t buf_step = iio_buffer_step(params->radioParams.Rxbuf);
+
+    if (iio_buf_left >= size)
+    {
+    	// just memcpy from existing buffer
+    	memcpy(ptr, buf_start0 + (buf_step * iio_index), buf_step * size);
+
+    	// update iio_buf_left and iio_index
+    	iio_index = (iio_index + size) % FMCOMMS_RXBUFF_L;
+    	return;
+    }
+    else
+    {
+
+    	if (iio_buf_left > 0) // =0 does not happen anyways
+    	{
+    		// copy whatever is left
+    		memcpy(ptr, buf_start0 + (buf_step * iio_index), buf_step * iio_buf_left);
+    		ziria_index += iio_buf_left;
+    	}
+		// refill buffer and copy
+		int ret = iio_buffer_refill(params->radioParams.Rxbuf);
+		if (ret < 0)
+		{
+			fprintf(stderr, "Unable to fill rx buffer %d\n", errno);
+			exit(1);
+		}
+		iio_buf_left = FMCOMMS_RXBUFF_L;
+		// just memcpy from existing buffer
+		void *buf_start0 = iio_buffer_first(params->radioParams.Rxbuf, params->radioParams.rxch0);
+		ptrdiff_t buf_step = iio_buffer_step(params->radioParams.Rxbuf);
+
+		int ziria_buf_left = size - ziria_index;
+		memcpy(ptr + ziria_index, buf_start0, buf_step * ziria_buf_left);
+		iio_index = ziria_buf_left % FMCOMMS_RXBUFF_L;
+
+    }
+}
 
 
 void writeFmcomms(BlinkParams *params, complex16 *ptr, int size)
 {
-	static int buf_size = 0;
+	static int buf_index = 0;
 	bool batch_complete = false;
-	int buf_frac = 0;
+	int buf_left = 0;
 	int ret;
 
-	if (buf_size + size >= FMCOMMS_TXBUFF_L)
+	if (buf_index + size >= FMCOMMS_TXBUFF_L)
 	{
-		buf_frac = (FMCOMMS_TXBUFF_L - buf_size);
-		memcpy(src_ptr + buf_size, ptr, buf_frac * sizeof(complex16));
-		buf_size = buf_size + size - FMCOMMS_TXBUFF_L;
+		buf_left = (FMCOMMS_TXBUFF_L - buf_index);
+		memcpy(src_ptr + buf_index, ptr, buf_left * sizeof(complex16));
+		buf_index = buf_index + size - FMCOMMS_TXBUFF_L;
 		batch_complete = true;
 	}
 	else
 	{
-	    memcpy(src_ptr + buf_size, ptr, size * sizeof(complex16));
-	    buf_size += size;
+	    memcpy(src_ptr + buf_index, ptr, size * sizeof(complex16));
+	    buf_index += size;
 	}
 
 	if (batch_complete)
@@ -282,8 +297,8 @@ void writeFmcomms(BlinkParams *params, complex16 *ptr, int size)
 
 	    for (dst_ptr0 = buf_start0, dst_ptr1 = buf_start1; dst_ptr0 < buf_end && dst_ptr1 < buf_end; dst_ptr0 += buf_step, dst_ptr1 += buf_step)  // for each two sample received from I channel we write one sample (int32)
 	    {
-	    	tmp_src->re = tmp_src->re * 384;
-	    	tmp_src->im = tmp_src->im * 384;
+	    	tmp_src->re = tmp_src->re * 8;
+	    	tmp_src->im = tmp_src->im * 8;
 	    	iio_channel_convert_inverse(params->radioParams.txch0, (void *) dst_ptr0, (const void *) &(tmp_src->re));
 	    	iio_channel_convert_inverse(params->radioParams.txch1, (void *) dst_ptr1, (const void *) &(tmp_src->im));
 	    	tmp_src = tmp_src + 1;
@@ -297,9 +312,9 @@ void writeFmcomms(BlinkParams *params, complex16 *ptr, int size)
 			exit(1);
 		}
 
-		if (buf_size)
+		if (buf_index)
 		{
-			memcpy(src_ptr, ptr + buf_frac, buf_size * sizeof(complex16));
+			memcpy(src_ptr, ptr + buf_left, buf_index * sizeof(complex16));
 			batch_complete = false;
 		}
 	}
@@ -419,7 +434,7 @@ int Fmcomms_RadioStartTx(BlinkParams *params)
     }
 */
     ret = iio_device_identify_filename(params->radioParams.phy, "out_voltage0_hardwaregain", &params->radioParams.phych0, &attr);
-    ret = iio_channel_attr_write_double(params->radioParams.phych0, attr, 0);  // this is in fact attenuation for fmcomm, leave 0 for now, mean high power
+    ret = iio_channel_attr_write_double(params->radioParams.phych0, attr, 0);  // this accepts values <= 0 which means attenuation rather than gain
     if (ret < 0)
     {
 	    fprintf(stderr, "Unable to set attenuation (%i)\n", ret);
@@ -427,14 +442,14 @@ int Fmcomms_RadioStartTx(BlinkParams *params)
     }
 /*
     ret = iio_device_identify_filename(params->radioParams.phy, "out_voltage1_hardwaregain", &params->radioParams.phych0, &attr);
-    ret = iio_channel_attr_write_double(params->radioParams.phych0, attr, 0); // this is in fact attenuation for fmcomm, leave 0 for now, mean high power
+    ret = iio_channel_attr_write_double(params->radioParams.phych0, attr, 0); // this accepts values <= 0 which means attenuation rather than gain
 	if (ret < 0)
 	{
 		fprintf(stderr, "Unable to set attenuation (%i)\n", ret);
 		return ret;
 	}
 */
-	params->radioParams.Txbuf = iio_device_create_buffer(params->radioParams.txdev, FMCOMMS_TXBUFF_L, false); //params->radioParams.TXBufferSize
+	params->radioParams.Txbuf = iio_device_create_buffer(params->radioParams.txdev, FMCOMMS_TXBUFF_L, false);
 	if (!params->radioParams.Txbuf)
 	{
 		fprintf(stderr, "Unable to create tx buffer\n");
@@ -472,7 +487,7 @@ int Fmcomms_RadioStartRx(BlinkParams *params)
 	ret = iio_channel_attr_write_longlong(params->radioParams.phych0, attr, (long long) params->radioParams.Bandwidth);
 	if (ret < 0)
 	{
-		fprintf(stderr, "Unable to set baudwidth (%i)\n", ret);
+		fprintf(stderr, "Unable to set bandwidth (%i)\n", ret);
 		return ret;
 	}
 
@@ -483,7 +498,15 @@ int Fmcomms_RadioStartRx(BlinkParams *params)
 		fprintf(stderr, "Unable to set RF port select (%i)\n", ret);
 		return ret;
 	}
-
+	/*
+	ret = iio_device_identify_filename(params->radioParams.phy, "in_voltage0_gain_control_mode", &params->radioParams.phych0, &attr);
+	ret = iio_channel_attr_write(params->radioParams.phych0, attr, AGC_SLOW);
+	if (ret < 0)
+	{
+		fprintf(stderr, "Unable to set gain (%i)\n", ret);
+		return ret;
+	}
+	*/
 	ret = iio_device_identify_filename(params->radioParams.phy, "in_voltage0_hardwaregain", &params->radioParams.phych0, &attr);
 	ret = iio_channel_attr_write_double(params->radioParams.phych0, attr, params->radioParams.RXgain);
 	if (ret < 0)
@@ -499,6 +522,7 @@ int Fmcomms_RadioStartRx(BlinkParams *params)
 		fprintf(stderr, "Unable to set gain (%i)\n", ret);
 		return ret;
 	}
+
 	ret = iio_device_identify_filename(params->radioParams.phy, "in_voltage_quadrature_tracking_en", &params->radioParams.phych0, &attr);
 	ret = iio_channel_attr_write_bool(params->radioParams.phych0, attr, true);
 	if (ret < 0)
@@ -529,6 +553,8 @@ int Fmcomms_RadioStartRx(BlinkParams *params)
 		fprintf(stderr, "Unable to create rx buffer\n");
 		return -1;
 	}
+
+	dst_ptr = (complex16*)malloc(sizeof(complex16) * FMCOMMS_RXBUFF_L);
 /*
 	ret = iio_buffer_set_blocking_mode(params->radioParams.Rxbuf, false);
 	if (ret < 0)
@@ -578,7 +604,7 @@ void Fmcomms_RadioStop(BlinkParams *params)
 		iio_context_destroy(params->radioParams.ctx);
 
 	free(src_ptr);
-
+	free(dst_ptr);
 }
 
 #endif
