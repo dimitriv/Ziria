@@ -1,11 +1,11 @@
-let comp tx() = 
+fun comp tx() {
   -- do{println "TX:"};
   repeat [8,8] {
     (x:int8) <- take;
     -- do {println x};
     emit x
   }
-in
+}
 
-read  >>> tx() >>> write
+let comp main =read  >>> tx() >>> write
 

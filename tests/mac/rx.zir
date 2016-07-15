@@ -1,10 +1,9 @@
-let comp rx() = 
+fun comp rx() {
   -- do{println "RX:"};
   repeat [8,8] {
     (x:int8) <- take;
     -- do {println x};
     emit x
   }
-in
-
-read  >>> rx() >>> write
+}
+let comp main = read  >>> rx() >>> write
