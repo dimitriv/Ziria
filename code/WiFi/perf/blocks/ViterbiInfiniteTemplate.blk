@@ -35,10 +35,21 @@ fun comp VITERBI_INFINITE_NAME(rate:int) {
 
     (svalue_many:arr[INTLOUT] int8) <- takes INTLOUT
     do { cnt := 0; } 
-    do { 
-       while (cnt < (INTLOUT / 48) && nOutput == 0) {
+       while (cnt < (INTLOUT / 48)) {
+         do { 
             nOutput := 
              viterbi_brick_decode_fast(svalue_many[cnt*48,48], outViterbi);
+         }
+
+            if (nOutput > 0) then {
+               for i in [0, nOutput/8] {
+                  emits outViterbi[i*8,8];
+               }
+            }
+
+         do {
+
+           nOutput := 0
 
             itercnt := itercnt+1;
             cnt := cnt + 1;
@@ -49,10 +60,6 @@ fun comp VITERBI_INFINITE_NAME(rate:int) {
             }
        }
     }
-    if (nOutput > 0) then emits outViterbi[0,256];
-    do { nOutput := 0; }
    }
 };
-
-
 
