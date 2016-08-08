@@ -30,7 +30,6 @@ COMPILER?=gcc
 PP    = ../../../scripts/preprocesscompile-$(COMPILER)-inline.sh
 PPDEB = ../../../scripts/preprocesscompile-$(COMPILER)-debug.sh
 DIFF  = ../../../tools/BlinkDiff
-# BLADERF_PATH_CYGW = $(shell cygpath -u '$(BLADERF_PATH)\x64')
 
 # Do not delete outfiles to allow quick recheck of failed tests
 # use make clean to get rid of them
@@ -38,55 +37,51 @@ DIFF  = ../../../tools/BlinkDiff
 
 
 # Targets
-TGTS = $(patsubst cts-to-self_test.blk, cts-to-self_test.run, $(wildcard *.blk))
+TGTS = $(patsubst sniffer_tests.blk, sniffer_tests.run, $(wildcard *.blk))
 
 all: $(TGTS)
 
-cts-to-self_test.out : cts-to-self_test.blk
+sniffer_tests.out : sniffer_tests.blk
 	RADIO='ADI_RF' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PPDEB) $< $@
 #RADIO='limeRF' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PPDEB) $< $@
 
-#cts-to-self_test.out : cts-to-self_test.blk
+#sniffer_test.out : sniffer_test.blk
 #	C_DEFINES='ZYNQ_RF' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PPDEB) $< $@
 
-#test%.out : test%.blk
+#sniffer_example.out : sniffer_example.blk
 #	C_DEFINES='ZYNQ_RF' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PPDEB) $< $@
 
 #%.out : %.blk
 #	C_DEFINES='ZYNQ_RF' EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS)' $(PP) $< $@
 
 
-cts-to-self.outfile: cts-to-self.out cts-to-self.infile
+sniffer.outfile: sniffer.out ../matlab/pkt3.infile
 	./$< --input=file \
-             --input-file-name=cts-to-self.infile \
+             --input-file-name=../cts-to-self/cts-to-self_test.outfile \
              --input-file-mode=dbg \
              --output-file-name=$@ \
              --output-file-mode=dbg
 
-
-cts-to-self_test.outfile: cts-to-self_test.out cts-to-self_test.infile
+sniffer_pl_tests.outfile: sniffer_pl_tests.out 
 	./$< --input=file \
-             --input-file-name=cts-to-self_test.infile \
+             --input-file-name=rx_zir_adi.bin \
              --input-file-mode=dbg \
              --output-file-name=$@ \
              --output-file-mode=dbg
-
-
 
 %.test: %.outfile
 	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
-
-#cts-to-self.run: cts-to-self.out
-#    ./$< --input=sdr --heap-size=1000000000 --sdr-central-frequency=2412000000 --sdr-rx-gain=20 --input-file-mode=bin --output=dummy
-	
-
-#freq=2456990000
 freq=563000000
-cts-to-self_test.run: cts-to-self_test.out
-	sudo ./$< --input=file --input-file-name=cts-to-self.infile --output=sdr --heap-size=10000000 --sdr-central-frequency=$(freq) --input-file-mode=dbg --sdr-tx-gain=0 \
-         --sdr-sample-rate=10000000 --sdr-bandwidth=2500000
+rate=2500000
+#freq=5180000000
+#rate=10000000
+#sniffer_pl_tests.run: sniffer_pl_tests.out
+sniffer_tests.run: sniffer_tests.out
+	sudo ./$< --input=sdr --sdr-central-frequency=$(freq) --sdr-rx-gain=0 --output=dummy  --heap-size=10000000 --sdr-bandwidth=30000000 --sdr-sample-rate=$(rate)
 
 
+sniffer_example.outfile: sniffer_example.out
+	./$< --input=file --input-file-name=sniffer_example.infile --input-file-mode=dbg --output=dummy
 
 
 %.accept : %.outfile
