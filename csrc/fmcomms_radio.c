@@ -20,7 +20,7 @@
 #define PORT_SELECT1 "A_BALANCED"
 #define PORT_SELECT_TX "A"
 
-#define OUV_THREAD
+//#define OUV_THREAD
 #define RX 1
 static complex16 *src_ptr;
 static complex16 *dst_ptr;
@@ -36,6 +36,11 @@ static int num_buf_write;
 static bool flow_monitor = true;
 pthread_t monitor_thread;
 
+struct device_info {
+	char * device_name;
+	char * host_ip;
+
+};
 
 static struct iio_device *get_device(const struct iio_context *ctx,
 		const char *id)
@@ -61,20 +66,26 @@ static struct iio_device *get_device(const struct iio_context *ctx,
 	return NULL;
 }
 
-static void *flow_monitor_thread(void *device_name)
+static void *flow_monitor_thread(void *dev_info)
 {
 	struct iio_context *ctx;
 	struct iio_device *dev;
 	uint32_t val;
 	int ret;
-
-	ctx = iio_create_default_context();
+	struct device_info * info = (struct device_info *)dev_info;
+	if (!(info->host_ip))
+		ctx = iio_create_default_context();
+	else
+		ctx = iio_create_network_context(info->host_ip);
 	if (!ctx) {
-		fprintf(stderr, "Unable to create IIO context\n");
+		if (info->host_ip)
+			fprintf(stderr, "Unable to create IIO context for host %s \n", info->host_ip);
+		else
+			fprintf(stderr, "Unable to create IIO context\n");
 		return (void *)-1;
 	}
 
-	dev = get_device(ctx, (char *)device_name);
+	dev = get_device(ctx, info->device_name);
 	if (!dev) {
 		fprintf(stderr, "Unable to find IIO device\n");
 		iio_context_destroy(ctx);
@@ -131,78 +142,6 @@ static void quit_all(int sig)
 
 
 
-
-/*
-// works with any iio_buffer size and ziria buffer size
-void readFmcomms(BlinkParams *params, complex16 *ptr, int size)
-{
-	static int iio_index = 0; // to size up iio_buffer, static helps with the case when iio_buf is used multiple times, or FMCOMMS_RXBUFF_L > size
-	int ziria_index = 0; // to size up "size", used when FMCOMMS_RXBUFF_L < size
-
-	// may be this is not necessary
-    if (iio_index == 0){
-    	int ret = iio_buffer_refill(params->radioParams.Rxbuf);
-		if (ret < 0)
-		{
-			fprintf(stderr, "1: Unable to fill rx buffer %d\n", errno);
-			exit(1);
-		}
-    }
-
-    int iio_buf_left = FMCOMMS_RXBUFF_L - iio_index;
-	void *buf_start0 = iio_buffer_start(params->radioParams.Rxbuf);
-	ptrdiff_t buf_step = iio_buffer_step(params->radioParams.Rxbuf);
-
-    if (iio_buf_left >= size)
-    {
-    	// just memcpy from existing buffer
-    	memcpy(ptr, buf_start0 + buf_step * iio_index, sizeof(complex16) * size);
-
-    	// update iio_buf_left and iio_index
-    	iio_index = (iio_index + size) % FMCOMMS_RXBUFF_L;
-    	return;
-    }
-    else
-    {
-    	// copy whatever is left
-    	memcpy(ptr, buf_start0 + buf_step * iio_index, sizeof(complex16) * iio_buf_left);
-
-    	ziria_index += iio_buf_left;
-    	while(ziria_index < size)
-    	{
-    		// refill buffer and copy
-        	int ret = iio_buffer_refill(params->radioParams.Rxbuf);
-    		if (ret < 0)
-    		{
-    			fprintf(stderr, "2: Unable to fill rx buffer %d\n", errno);
-    			exit(1);
-    		}
-        	iio_buf_left = FMCOMMS_RXBUFF_L;
-        	iio_index = 0;
-        	// just memcpy from existing buffer
-        	void *buf_start0 = iio_buffer_start(params->radioParams.Rxbuf);
-        	ptrdiff_t buf_step = iio_buffer_step(params->radioParams.Rxbuf);
-
-        	int ziria_buf_left = size - ziria_index;
-        	if (ziria_buf_left > iio_buf_left)
-        	{
-        		memcpy(ptr + ziria_index, buf_start0, sizeof(complex16) * iio_buf_left);
-        		ziria_index += iio_buf_left;
-        	}
-        	else
-        	{
-        		memcpy(ptr + ziria_index, buf_start0, sizeof(complex16) * ziria_buf_left);
-        		iio_index = ziria_buf_left % FMCOMMS_RXBUFF_L;
-        		ziria_index = size;
-        	}
-        	// update iio_buf_left and iio_index and ziria_index
-
-    	}
-    }
-
-
-}
-*/
 
 // use only when FMCOMMS_RXBUFF_L is bigger than ziria size
 void readFmcomms(BlinkParams *params, complex16 *ptr, int size)
@@ -338,6 +277,7 @@ int Fmcomms_Init(BlinkParams *params)
 	    	params->radioParams.ctx = iio_create_network_context(NULL);
     } else {
     	params->radioParams.ctx = iio_create_network_context(params->radioParams.host);
+    	printf("Connecting to %s ... \n", params->radioParams.host);
     }
 
     if (params->radioParams.ctx) {
@@ -376,10 +316,14 @@ int Fmcomms_Init(BlinkParams *params)
     iio_channel_enable(params->radioParams.txch0);
     iio_channel_enable(params->radioParams.txch1);
 #ifdef OUV_THREAD
+    struct device_info * info = (struct device_info *)calloc(1, sizeof(struct device_info));;
+    info[0].host_ip = params->radioParams.host;
 #ifdef RX
-    int ret = pthread_create(&monitor_thread, NULL, flow_monitor_thread, (void *)device_rx);
+    info[0].device_name = device_rx;
+    int ret = pthread_create(&monitor_thread, NULL, flow_monitor_thread, &info[0]);
 #else
-    int ret = pthread_create(&monitor_thread, NULL, flow_monitor_thread, (void *)device_tx);
+    info[0].device_name = device_tx;
+    int ret = pthread_create(&monitor_thread, NULL, flow_monitor_thread, &info[0]);
 #endif
 	if (ret) {
 		fprintf(stderr, "Failed to create monitor thread: %s\n",
