@@ -39,20 +39,25 @@ permissions and limitations under the License.
 #include "sora_ip.h"
 #endif
 
-#include "wpl_alloc.h"
-#include "buf.h"
-#include "utils.h"
-#include "params.h"
+
+#ifdef __GNUC__
+#include "threads.h"  // replaces sora_threads.h
+#endif
+
+#include "../wpl_alloc.h"
+#include "../buf.h"
+#include "../utils.h"
+#include "../params.h"
 
 
-
+#ifdef SORA_PLATFORM
 extern PSORA_UTHREAD_PROC User_Routines[MAX_THREADS];
 // size_t sizes[MAX_THREADS];
-
 // set_up_threads is defined in the compiler-generated code
 // and returns the number of threads we set up 
 extern int wpl_set_up_threads_tx(PSORA_UTHREAD_PROC *User_Routines);
 extern int wpl_set_up_threads_rx(PSORA_UTHREAD_PROC *User_Routines);
+#endif
 
 
 // tracks bytes copied 
@@ -81,18 +86,20 @@ extern HeapContextBlock *pheap_ctx_rx;
 extern BlinkParams params[2];
 extern BlinkParams *params_tx, *params_rx;
 
-
+#ifdef SORA_PLATFORM
 BOOLEAN __stdcall go_thread_main(void * pParam);
-
+#endif
 
 
 void init_mac_1thread()
 {
+
 	// Start Sora HW
-	if (params_rx->inType == TY_SORA || params_tx->outType == TY_SORA)
+	if (params_rx->inType == TY_SDR || params_tx->outType == TY_SDR)
 	{
 		// Here we assume both TX and RX use the same radio
 		// and we use parameters set in TX
+#ifdef SORA_RF
 		RadioStart(*params_tx);
 		if (params_tx->inType == TY_SORA)
 		{
@@ -102,7 +109,12 @@ void init_mac_1thread()
 		{
 			InitSoraTx(*params_tx);
 		}
+#endif
 	}
+
+
+
+#ifdef SORA_PLATFORM
 	// Start NDIS
 	if (params_tx->inType == TY_IP)
 	{
@@ -120,18 +132,19 @@ void init_mac_1thread()
 
 	// Start measuring time
 	initMeasurementInfo(&(params_tx->measurementInfo), params_rx->latencyCDFSize);
+#endif
 
 	initBufCtxBlock(&buf_ctx_tx);
 	initBufCtxBlock(&buf_ctx_rx);
-	initHeapCtxBlock(&heap_ctx_tx);
-	initHeapCtxBlock(&heap_ctx_rx);
+	initHeapCtxBlock(&heap_ctx_tx, params_tx->heapSize);
+	initHeapCtxBlock(&heap_ctx_rx, params_rx->heapSize);
 
 	wpl_global_init_tx(params_tx->heapSize);
 	wpl_global_init_rx(params_tx->heapSize);
 
 }
 
-
+#ifdef SORA_PLATFORM
 /* Returns the numer of threads */
 int SetUpThreads_1t(PSORA_UTHREAD_PROC * User_Routines)
 {
@@ -139,12 +152,11 @@ int SetUpThreads_1t(PSORA_UTHREAD_PROC * User_Routines)
 	return 1;
 }
 
-
-
 // This should run in a thread to make sure that it is running 
 // on the appropriate core and that it has real-time priority
 BOOLEAN __stdcall go_thread_main(void * pParam)
 {
+
 	ULONGLONG ttstart, ttend;
 	thread_info *ti = (thread_info *)pParam;
 
@@ -187,4 +199,50 @@ BOOLEAN __stdcall go_thread_main(void * pParam)
 	return false;
 }
 
+#endif
+
+#ifdef __GNUC__
+void * go_thread_main(void * pParam)
+{
+
+	thread_info *ti = (thread_info *)pParam;
+
+	printf("Starting TX on thread %d ...\n", (int)(ti->mThr));
+	buf_ctx_tx.mem_output_buf_size = params_tx->outMemorySize;
+	buf_ctx_tx.mem_output_buf = malloc(buf_ctx_tx.mem_output_buf_size);
+
+	wpl_input_initialize_tx();
+
+	// Run Ziria TX code
+	wpl_go_tx();
+
+	printf("Total input items (including EOF): %d (%d B), output items: %d (%d B)\n",
+		buf_ctx_tx.total_in, buf_ctx_tx.total_in*buf_ctx_tx.size_in,
+		buf_ctx_tx.total_out, buf_ctx_tx.total_out*buf_ctx_tx.size_out);
+
+	wpl_output_finalize_tx();
+
+	printf("Starting RX ...\n");
+	if (params_tx->outType == TY_MEM)
+	{
+		buf_ctx_rx.mem_input_buf_size = (buf_ctx_tx.total_out * buf_ctx_tx.size_out) / 8;
+		buf_ctx_rx.mem_input_buf = buf_ctx_tx.mem_output_buf;
+	}
+	wpl_input_initialize_rx();
+
+	// Run Ziria RX code
+	wpl_go_rx();
+
+	printf("Total input items (including EOF): %d (%d B), output items: %d (%d B)\n",
+		buf_ctx_rx.total_in, buf_ctx_rx.total_in*buf_ctx_rx.size_in,
+		buf_ctx_rx.total_out, buf_ctx_rx.total_out*buf_ctx_rx.size_out);
+
+	printf("Bytes copied: %llu\n", bytes_copied);
+
+	wpl_output_finalize_rx();
+
+	ti->fRunning = false;
+	return (void *)0;
+}
+#endif
 

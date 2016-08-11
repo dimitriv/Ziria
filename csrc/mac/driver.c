@@ -39,9 +39,22 @@
 #include "sora_ip.h"
 #endif
 
-#include "wpl_alloc.h"
-#include "buf.h"
-#include "utils.h"
+#ifdef __GNUC__
+#include "threads.h"
+#endif
+
+#include "../wpl_alloc.h"
+#include "../buf.h"
+#include "../utils.h"
+#include "mac.h"
+
+#ifdef ADI_RF
+#include "../fmcomms_radio.h"
+#endif
+
+#ifdef LIME_RF
+#include "../lime_radio.h"
+#endif
 
 
 
@@ -57,22 +70,32 @@ HeapContextBlock *pheap_ctx_rx = &heap_ctx_rx;
 BlinkParams params[2];
 BlinkParams *params_tx, *params_rx;
 
-
+#ifdef SORA_PLATFORM
 TimeMeasurements measurementInfo;
 
 PSORA_UTHREAD_PROC User_Routines[MAX_THREADS];
 
 
-// 1-thread MAC
-extern void init_mac_1thread();
-extern int SetUpThreads_1t(PSORA_UTHREAD_PROC * User_Routines);
-
 // 2-threads MAC
 extern void init_mac_2threads();
 extern int SetUpThreads_2t(PSORA_UTHREAD_PROC * User_Routines);
+#endif
 
+#ifdef __GNUC__
+#define MAX_THREADS 2
 
-int mac_type;
+extern void init_mac_2threads();
+extern void * go_thread_rx();
+extern void * go_thread_tx();
+#endif
+
+MACType mac_type;
+PHYRate phy_rate;
+
+// PC name for wired uplink
+char *txPC = NULL;
+char txPCBuf[255];
+
 
 // tracks bytes copied 
 extern unsigned long long bytes_copied;
@@ -86,9 +109,21 @@ int SetUpThreads(PSORA_UTHREAD_PROC* User_Routines)
 }
 
 
+#ifdef __GNUC__
+#ifndef __cdecl
+	#define __cdecl
+#endif
+#endif
+
 int __cdecl main(int argc, char **argv) 
 {
+#ifdef SORA_PLATFORM
 	ULONGLONG ttstart, ttend;
+#endif
+
+#ifdef __GNUC__
+	thread_info t_info[MAX_THREADS];
+#endif
 
 	params_tx = &(params[0]);
 	params_rx = &(params[1]);
@@ -99,66 +134,85 @@ int __cdecl main(int argc, char **argv)
 
 	printf("Setting up threads...\n");
 
-	if (mac_type == 0)
-	{
-		// **** Single-thread MAC
+	// **** TX/RX(2)-threaded MAC
 
-		// Initialize various parameters
-		init_mac_1thread();
+	// Initialize various parameters
+	init_mac_2threads();
+#ifdef SORA_PLATFORM
+	int no_threads = SetUpThreads_2t(User_Routines);
+	StartThreads(&ttstart, &ttend, &(params_tx->measurementInfo.tsinfo), no_threads, User_Routines);
 
+	printf("Time Elapsed: %ld us \n",
+		SoraTimeElapsed((ttend / 1000 - ttstart / 1000), &(params_tx->measurementInfo.tsinfo)));
 
-		//SINGLE MODULE CODE: int no_threads = wpl_set_up_threads_tx(User_Routines);
-		int no_threads = SetUpThreads_1t(User_Routines);
-		StartThreads(&ttstart, &ttend, &(params_tx->measurementInfo.tsinfo), no_threads, User_Routines);
-
-		printf("Time Elapsed: %ld us \n",
-			SoraTimeElapsed((ttend / 1000 - ttstart / 1000), &(params_tx->measurementInfo.tsinfo)));
-
-		if (params_tx->latencySampling > 0)
-		{
-			printf("Min write latency: %ld, max write latency: %ld\n", (ulong)params_tx->measurementInfo.minDiff, (ulong)params_tx->measurementInfo.maxDiff);
-			printf("CDF: \n   ");
-			unsigned int i = 0;
-			while (i < params_tx->measurementInfo.aDiffPtr)
-			{
-				printf("%ld ", params_tx->measurementInfo.aDiff[i]);
-				if (i % 10 == 9)
-				{
-					printf("\n   ");
-				}
-				i++;
-			}
-			printf("\n");
-		}
-	}
-	else
-	{
-		// **** TX/RX(2)-threaded MAC
-
-		// Initialize various parameters
-		init_mac_2threads();
-
-
-		//SINGLE MODULE CODE: int no_threads = wpl_set_up_threads_tx(User_Routines);
-		int no_threads = SetUpThreads_2t(User_Routines);
-		StartThreads(&ttstart, &ttend, &(params_tx->measurementInfo.tsinfo), no_threads, User_Routines);
-
-		printf("Time Elapsed: %ld us \n",
-			SoraTimeElapsed((ttend / 1000 - ttstart / 1000), &(params_tx->measurementInfo.tsinfo)));
-
-	}
 
 	// Free thread separators
 	// NB: these are typically allocated in blink_set_up_threads
 	ts_free();
+#endif
 
+#ifdef __GNUC__
 
+	int numThr;
+
+	switch (mac_type)
+	{
+	case MAC_TX_TEST:
+	case MAC_TX_ONLY:
+		numThr = 1;
+		t_info[0].fRunning = true;
+		t_info[0].mThr = StartPosixThread(go_thread_tx, (void *)t_info, 0, 0);
+		break;
+	case MAC_RX_TEST:
+	case MAC_RX_ONLY:
+		numThr = 1;
+		t_info[0].fRunning = true;
+		t_info[0].mThr = StartPosixThread(go_thread_rx, (void *)t_info, 0, 0);
+		break;
+	case MAC_TX_RX:
+		numThr = 2;
+		//t_info[0].fRunning = true;
+		//t_info[1].fRunning = true;
+		t_info[0].mThr = StartPosixThread(go_thread_tx, (void *)&t_info[0], 0, 0); // core 0
+		t_info[1].mThr = StartPosixThread(go_thread_rx, (void *)&t_info[1], 1, 0); // core 1
+		break;
+	}
+
+	int i;
+	bool isRunning = true;
+	while (isRunning) {
+		for (i = 0; i < numThr; i++)
+			isRunning = isRunning || t_info[i].fRunning;
+		//Sleep (1);
+	}
+#endif
+
+	if (params_rx->inType == TY_SDR || params_tx->outType == TY_SDR)
+	{
+#ifdef ADI_RF
+		Fmcomms_RadioStop(params_tx);
+#else
+#ifdef LIME_RF
+		LimeRF_RadioStop(params_tx);
+#endif
+#endif
+	}
 
 	// Start Sora HW
-	if (params_rx->inType == TY_SORA || params_tx->outType == TY_SORA)
+	if (params_rx->inType == TY_SDR)
 	{
-		RadioStop(*params_tx);
+#ifdef SORA_RF
+		RadioStop(params_rx);
+#endif
 	}
+	if (params_tx->outType == TY_SDR)
+	{
+#ifdef SORA_RF
+		RadioStop(params_tx);
+#endif
+	}
+
+#ifdef SORA_PLATFORM
 	// Start NDIS
 	if (params_tx->inType == TY_IP)
 	{
@@ -191,7 +245,7 @@ int __cdecl main(int argc, char **argv)
 		WSACleanup();
 		*/
 	}
-
+#endif
 
 	return 0;
 }
