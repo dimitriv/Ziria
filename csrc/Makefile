@@ -43,7 +43,11 @@ OBJ_RADIO = fmcomms_radio.o
 LIBS += -liio -lpthread
 EXTRACOPTS += -DADI_RF 
 endif
-
+ifeq ($(RADIO), limeRF)
+OBJ_RADIO=lime_radio.o
+LIBS += -lSoapySDR
+EXTRACOPTS += -DLIME_RF
+endif
 
 OBJ_INT = bit.o numerics.o params.o test.o driver.o wpl_alloc.o utils.o
 OBJ_IO  = buf_bit.o buf_chunk.o buf_numerics8.o buf_numerics32.o buf_numerics16.o

@@ -20,23 +20,17 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "wpl_alloc.h"
-#include "..\params.h"
+#include "../wpl_alloc.h"
+#include "../params.h"
 
+#include "mac.h"
 
-FILE * try_open(char *filename, char *mode) 
-{
-  FILE *h;
-  h = fopen(filename,mode);
-  if (h == NULL) {
-    fprintf (stderr, "Error: could not open file %s\n", filename);
-    exit(1);
-  }
-  return h;
-}
+#ifdef __GNUC__
+//typedef uint64 ULONG;
+#endif
 
-/* Read the file as a null-terminated string */ 
-void try_read_filebuffer(HeapContextBlock *hblk, char *filename, char **fb, unsigned int *len)
+/* Read the file as a null-terminated string */
+void try_read_filebuffer(HeapContextBlock *hblk, char *filename, char **fb, memsize_int *len)
 {
 	char *filebuffer;
 	unsigned int sz;
@@ -70,7 +64,7 @@ BlinkFileType parse_type(char *typ)
 {
 	if (strcmp(typ,"file") == 0)	return TY_FILE; 
 	if (strcmp(typ,"dummy") == 0)	return TY_DUMMY;
-	if (strcmp(typ,"sora") == 0)	return TY_SORA;
+	if (strcmp(typ,"sdr") == 0)	return TY_SDR;
 	if (strcmp(typ,"ip") == 0)		return TY_IP;
 	if (strcmp(typ, "memory") == 0) return TY_MEM;
 	fprintf(stderr, "Error: cannot parse type parameter %s\n", typ);
@@ -78,13 +72,81 @@ BlinkFileType parse_type(char *typ)
 }
 
 
-int parse_MAC(char *typ)
+MACType parse_MAC(char *typ)
 {
-	if (strcmp(typ, "1-thread") == 0)	return 0;
-	if (strcmp(typ, "2-threads") == 0)	return 1;
+	if (strcmp(typ, "TX-test") == 0)	return MAC_TX_TEST;
+	if (strcmp(typ, "RX-test") == 0)	return MAC_RX_TEST;
+	if (strcmp(typ, "TX-only") == 0)	return MAC_TX_ONLY;
+	if (strcmp(typ, "RX-only") == 0)	return MAC_RX_ONLY;
+	if (strcmp(typ, "TX-RX") == 0)	return MAC_TX_RX;
 	fprintf(stderr, "Error: cannot parse MAC parameter %s\n", typ);
 	exit(1);
 }
+
+PHYRate parse_PHYRate(char *typ)
+{
+	PHYRate r;
+	ULONG nr = (ULONG)strtol(typ, NULL, 10);
+	switch (nr)
+	{
+	case 6:
+		r.enc = PHY_ENC_CR_12;
+		r.mod = PHY_MOD_BPSK;
+		break;
+	case 9:
+		r.enc = PHY_ENC_CR_34;
+		r.mod = PHY_MOD_BPSK;
+		break;
+	case 12:
+		r.enc = PHY_ENC_CR_12;
+		r.mod = PHY_MOD_QPSK;
+		break;
+	case 18:
+		r.enc = PHY_ENC_CR_34;
+		r.mod = PHY_MOD_QPSK;
+		break;
+	case 24:
+		r.enc = PHY_ENC_CR_12;
+		r.mod = PHY_MOD_16QAM;
+		break;
+	case 36:
+		r.enc = PHY_ENC_CR_34;
+		r.mod = PHY_MOD_16QAM;
+		break;
+	case 48:
+		r.enc = PHY_ENC_CR_23;
+		r.mod = PHY_MOD_64QAM;
+		break;
+	case 54:
+		r.enc = PHY_ENC_CR_34;
+		r.mod = PHY_MOD_64QAM;
+		break;
+	default:
+		fprintf(stderr, "Error: cannot parse PHY rate parameter %s\n", typ);
+		exit(1);
+	}
+	return r;
+}
+
+
+void parse_txPC(char *typ)
+{
+	if (strcmp(typ, "") != 0)
+	{
+		strcpy(txPCBuf, typ);
+		txPC = txPCBuf;
+	}
+	else
+	{
+		txPC = NULL;
+	}
+}
+
+
+int parse_DEBUG(char *d) {
+	return (int) strtol(d, NULL, 10);
+}
+
 
 
 BlinkFileMode parse_mode(char *md) {
@@ -139,8 +201,56 @@ ULONG parse_TXBufferSize(char *rp)
 {
 	return (ULONG) strtol(rp,NULL,10);
 }
+#else
+// TODO: Add error handling
+ unsigned long parse_radioID(char *rp)
+{
+	return (unsigned long) strtoul(rp,NULL,10);
+}
+
+
+// TODO: Add error handling
+ unsigned long  parse_Amp(char *rp)
+{
+	return (unsigned long)strtoul(rp, NULL, 10);
+}
+
+
+// TODO: Add error handling
+ unsigned long  parse_CentralFrequency(char *rp)
+{
+	return (unsigned long)strtoul(rp, NULL, 10);
+}
+
+
+// TODO: Add error handling
+ long  parse_FrequencyOffset(char *rp)
+{
+	return (long)strtol(rp, NULL, 10);
+}
+
+
+// TODO: Add error handling
+unsigned long  parse_SampleRate(char *rp)
+{
+	return (unsigned long)strtoul(rp, NULL, 10);
+}
+
+
+// TODO: Add error handling
+unsigned long  parse_TXBufferSize(char *rp)
+{
+	return (unsigned long)strtoul(rp, NULL, 10);
+}
+
 #endif
 
+#ifdef LIME_RF
+unsigned long  parse_ClockRate(char *rp)
+{
+	return (unsigned long)strtoul(rp, NULL, 10);
+}
+#endif
 
 
 unsigned long parse_size (char *rp) {
@@ -149,9 +259,11 @@ unsigned long parse_size (char *rp) {
 
 
 // Global function
-extern int mac_type;
 void init_inTypeMAC(BlinkParams *params, char *typ)				{ mac_type = parse_MAC(typ); }
-
+void init_txPC(BlinkParams *params, char *typ)					{ parse_txPC(typ); }
+void init_PHYRate(BlinkParams *params, char *typ)				{ phy_rate = parse_PHYRate(typ); }
+void init_DEBUG(BlinkParams *params, char *typ)					{ params[0].debug = parse_DEBUG(typ); 
+																  params[1].debug = params[0].debug; }
 
 // TX Init functions
 void init_inTypeTX(BlinkParams *params, char *typ)				{ params[0].inType = parse_type(typ); }
@@ -168,16 +280,6 @@ void init_heapSizeTX(BlinkParams *params, char *siz)			{ params[0].heapSize = pa
 void init_inRepeatTX(BlinkParams *params, char *i)				{ params[0].inFileRepeats = parse_repeat(i); }
 void init_LatencySamplingTX(BlinkParams *params, char *siz)		{ params[0].latencySampling = parse_size(siz); }
 void init_LatencyCDFSizeTX(BlinkParams *params, char *siz)		{ params[0].latencyCDFSize = parse_size(siz); }
-
-#ifdef SORA_PLATFORM
-void init_radioIdTX(BlinkParams *params, char *i)				{ params[0].radioParams.radioId = parse_radioID(i); }
-void init_gainTX(BlinkParams *params, char *i)					{ params[0].radioParams.TXgain = parse_Amp(i); }
-void init_centralFrequencyTX(BlinkParams *params, char *i)		{ params[0].radioParams.CentralFrequency = parse_CentralFrequency(i); }
-void init_freqencyOffsetTX(BlinkParams *params, char *i)		{ params[0].radioParams.FreqencyOffset = parse_FrequencyOffset(i); }
-void init_sampleRateTX(BlinkParams *params, char *i)			{ params[0].radioParams.SampleRate = parse_SampleRate(i); }
-void init_bufferSizeTX(BlinkParams *params, char *i)			{ params[0].radioParams.TXBufferSize = parse_TXBufferSize(i); }
-#endif
-
 
 
 // RX Init functions
@@ -198,23 +300,76 @@ void init_LatencyCDFSizeRX(BlinkParams *params, char *siz)		{ params[1].latencyC
 
 
 #ifdef SORA_PLATFORM
-// Here we use one radio, so we only use radioParams in params[0]
-// For full duplex one might want to use radioParams in params[1] here instead
-void init_radioIdRX(BlinkParams *params, char *i)				{ params[0].radioParams.radioId = parse_radioID(i); }
-void init_paRX(BlinkParams* params, char *i)					{ params[0].radioParams.RXpa = parse_Amp(i); }
-void init_gainRX(BlinkParams* params, char *i)					{ params[0].radioParams.RXgain = parse_Amp(i); }
-void init_centralFrequencyRX(BlinkParams *params, char *i)		{ params[0].radioParams.CentralFrequency = parse_CentralFrequency(i); }
-void init_freqencyOffsetRX(BlinkParams *params, char *i)		{ params[0].radioParams.FreqencyOffset = parse_FrequencyOffset(i); }
-void init_sampleRateRX(BlinkParams *params, char *i)			{ params[0].radioParams.SampleRate = parse_SampleRate(i); }
+// TODO - DEBUG - WARNING
+// Here we use two radios at the moment
+// But for the full MAC we may want to use one
+void init_radioIdTX(BlinkParams *params, char *i)				{ params[0].radioParams.radioId = parse_radioID(i); }
+void init_gainTX(BlinkParams *params, char *i)					{ params[0].radioParams.TXgain = parse_Amp(i); }
+void init_centralFrequencyTX(BlinkParams *params, char *i)		{ params[0].radioParams.CentralFrequency = parse_CentralFrequency(i); }
+void init_freqencyOffsetTX(BlinkParams *params, char *i)		{ params[0].radioParams.FreqencyOffset = parse_FrequencyOffset(i); }
+void init_sampleRateTX(BlinkParams *params, char *i)			{ params[0].radioParams.SampleRate = parse_SampleRate(i); }
+void init_bufferSizeTX(BlinkParams *params, char *i)			{ params[0].radioParams.TXBufferSize = parse_TXBufferSize(i); }
+
+
+void init_radioIdRX(BlinkParams *params, char *i)				{ params[1].radioParams.radioId = parse_radioID(i); }
+void init_paRX(BlinkParams* params, char *i)					{ params[1].radioParams.RXpa = parse_Amp(i); }
+void init_gainRX(BlinkParams* params, char *i)					{ params[1].radioParams.RXgain = parse_Amp(i); }
+void init_centralFrequencyRX(BlinkParams *params, char *i)		{ params[1].radioParams.CentralFrequency = parse_CentralFrequency(i); }
+void init_freqencyOffsetRX(BlinkParams *params, char *i)		{ params[1].radioParams.FreqencyOffset = parse_FrequencyOffset(i); }
+void init_sampleRateRX(BlinkParams *params, char *i)			{ params[1].radioParams.SampleRate = parse_SampleRate(i); }
+#else
+
+void init_radioId(BlinkParams *params, char *i)				{ params[0].radioParams.radioId = parse_radioID(i);
+															  params[1].radioParams.radioId = params[0].radioParams.radioId;}
+
+void init_RXpa(BlinkParams *params, char *i)				{ params[0].radioParams.RXpa = parse_Amp(i);
+															  params[1].radioParams.RXpa = params[0].radioParams.RXpa;}
+
+void init_RXgain(BlinkParams *params, char *i)				{ params[0].radioParams.RXgain = parse_Amp(i);
+															  params[1].radioParams.RXgain = params[0].radioParams.RXgain;}
+
+void init_TXgain(BlinkParams *params, char *i)				{ params[0].radioParams.TXgain = parse_Amp(i);
+														      params[1].radioParams.TXgain = params[0].radioParams.TXgain;}
+
+void init_CentralFrequency(BlinkParams *params, char *i)	{ params[0].radioParams.CentralFrequency = parse_CentralFrequency(i);
+															  params[1].radioParams.CentralFrequency = params[0].radioParams.CentralFrequency;}
+
+void init_FreqencyOffset(BlinkParams *params, char *i)		{ params[0].radioParams.FreqencyOffset = parse_FrequencyOffset(i);
+															  params[1].radioParams.FreqencyOffset = params[0].radioParams.FreqencyOffset;}
+
+void init_SampleRate(BlinkParams *params, char *i)			{ params[0].radioParams.SampleRate = parse_SampleRate(i);
+															  params[1].radioParams.SampleRate = params[0].radioParams.SampleRate;}
+//bandwidth is same format with samplerate pasring
+void init_Bandwidth(BlinkParams *params, char *i)			{ params[0].radioParams.Bandwidth = parse_SampleRate(i);
+															  params[1].radioParams.Bandwidth = params[0].radioParams.Bandwidth;}
+
+#endif
+void init_TXBufferSize(BlinkParams *params, char *i)		{ params[0].radioParams.TXBufferSize = parse_TXBufferSize(i);
+															  params[1].radioParams.TXBufferSize = params[0].radioParams.TXBufferSize;}
+
+#ifdef LIME_RF
+void init_ClockRate(BlinkParams *params, char *i)	{ params[0].radioParams.clockRate = parse_ClockRate(i);
+													  params[1].radioParams.clockRate = params[0].radioParams.clockRate;}
 #endif
 
-
+#if defined(ADI_RF) || defined(LIME_RF)
+void init_SdrAddress(BlinkParams *params, char *i)	{
+	if (!strcmp(i, ""))
+		params[0].radioParams.host=NULL;
+	else
+		params[0].radioParams.host = i;
+	params[1].radioParams.host = params[0].radioParams.host;}
+#endif
 
 // Here is where we declare the parameters
 #ifdef SORA_PLATFORM
-#define PARAM_TABLE_LENGTH		39
+#define PARAM_TABLE_LENGTH		42
 #else
-#define PARAM_TABLE_LENGTH		26
+#ifdef ADI_RF
+#define PARAM_TABLE_LENGTH		29 + 10
+#else
+#define PARAM_TABLE_LENGTH		29 + 11
+#endif
 #endif
 
 BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] = 
@@ -225,17 +380,32 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
        "0",
 	   init_outMemorySizeTX },
 	 { "--MAC-type=",
-	   "--TX-input=1-thread|2-threads",
-	   "Which MAC to run, 1-thread or 2-threads",
-	   "1-thread",
+	   "--MAC-type=TX-test|RX-test|TX-only|RX-only|TX-RX",
+	   "Which MAC to run",
+	   "TX-test",
 	   init_inTypeMAC },
-     { "--TX-input=", 
-       "--TX-input=file|dummy|sora|ip",
+	 { "--TX-PHY-rate=",
+	   "--TX-PHY-rate=6|9|12|18|24|36|48|54",
+	   "PHY TX rate in Mbps",
+	   "18",
+	   init_PHYRate },
+     { "--DEBUG=",
+	   "--DEBUG=0|1",
+	   "Turn DEBUG display on (1) or off (0)",
+	   "0",
+	   init_DEBUG },
+	 { "--TX-PC=",
+	   "--TX-PC=string",
+	   "Name of a PC to which to connect to",
+	   "",
+	   init_txPC },
+	 { "--TX-input=",
+       "--TX-input=file|dummy|sdr|ip",
        "Input TX samples come from a file, radio, or are dummy samples",
        "file",
        init_inTypeTX },
      { "--TX-output=", 
-       "--TX-output=memory|file|dummy|sora|ip",
+       "--TX-output=memory|file|dummy|sdr|ip",
        "Output TX samples written to file, radio, or are ignored (dummy)",
        "file",
        init_outTypeTX },
@@ -291,12 +461,12 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
 	   init_LatencyCDFSizeTX },
 //RX
 	   { "--RX-input=",
-	   "--RX-input=memory|file|dummy|sora|ip",
+	   "--RX-input=memory|file|dummy|sdr|ip",
 	   "Input RX samples come from a file, radio, or are dummy samples",
 	   "file",
 	   init_inTypeRX },
 	   { "--RX-output=",
-	   "--RX-output=file|dummy|sora|ip",
+	   "--RX-output=file|dummy|sdr|ip",
 	   "Output RX samples written to file, radio, or are ignored (dummy)",
 	   "file",
 	   init_outTypeRX },
@@ -419,6 +589,80 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
 		 "Sora RX sample rate",
 		 "40",
 		 init_sampleRateRX }
+#else
+  { "--sdr-radio-id=",
+    "--sdr-radio-id = ...",
+    "SDR radio ID",
+    "0",
+    init_radioId }
+  , { "--sdr-rx-pa=",
+    "--sdr-rx-pa = ...",
+    "SDR RX power amplification",
+    "0",
+    init_RXpa }
+  , { "--sdr-rx-gain=",
+    "--sdr-rx-gain = ...",
+    "SDR RX gain",
+#ifdef SORA_RF
+	   "0",
+#else
+	   "20",
+#endif
+    init_RXgain }
+  , { "--sdr-tx-gain=",
+    "--sdr-tx-gain = ...",
+    "SDR TX gain",
+    "0",
+    init_TXgain }
+  , { "--sdr-central-frequency=",
+    "--sdr-central-frequency = ...",
+#ifdef SORA_RF
+    "SDR central frequency in MHz (default 578)",
+    "578",
+#else
+	   "SDR central frequency in Hz (default 2412 MHz)",
+	   "2412000000",
+#endif
+    init_CentralFrequency }
+  , { "--sdr-freqency-offset=",
+    "--sdr-freqency-offset = ...",
+    "SDR frequency offset",
+    "0",
+    init_FreqencyOffset }
+  , { "--sdr-sample-rate=",
+    "--sdr-sample-rate = ...",
+    "SDR sample rate",
+#ifdef SORA_RF
+	   "40",
+#else
+	   "20000000",
+#endif
+    init_SampleRate }
+	   , { "--sdr-bandwidth=",
+	   "--sdr-bandwidth = ...",
+	   "SDR bandwidth",
+	   "20000000",
+	   init_Bandwidth }
+  , { "--sdr-tx-buffer-size=",
+    "--sdr-tx-buffer-size = ...",
+    "Size of the TX buffer transmitted at once (in number of complex16)",
+    "2097152",
+    init_TXBufferSize }
+#ifdef LIME_RF
+, { "--sdr-clock-rate=",
+      "--sdr-clock-rate = ...",
+      "SDR clock rate in MHz (default 40)",
+      "40",
+      init_ClockRate }
+#endif
+
+#if defined(ADI_RF) || defined(LIME_RF)
+, { "--sdr-ip-address=",
+      "--sdr-ip-address = ...",
+      "SDR IP address (default)",
+      "",
+      init_SdrAddress }
+#endif
 #endif
 
 

@@ -17,10 +17,9 @@
    permissions and limitations under the License.
 */
 
-#include "../sora_ip.c"
+
 #include "../sora_ext_lib.cpp"
 #include "../sora_ext_viterbi.cpp"
-#include "../params.c"
 #include "../bit.c"
 #include "../wpl_alloc.c"
 #include "../numerics.c"
@@ -28,18 +27,41 @@
 #include "../buf_numerics8.c"
 #include "../buf_numerics16.c"
 #include "../buf_numerics32.c"
-#include "../sora_threads.c"
-#include "../sora_thread_queues.c"
+
 #include "../ext_arr.c"
 #include "../ext_math.c"
+
+#ifdef SORA_PLATFORM
 //Sora only supports debugPlot lib in WIN32 and this is the fast 64-bit version
-//#include "sora_ext_visual.c"
+#ifdef WIN32
+	#include "sora_ext_visual.c"
+#endif
+#include "../sora_ip.c"
+#include "../sora_threads.c"
+#include "../sora_thread_queues.c"
 #include "../sora_radio.c"
+// New Sora specific - DEBUG
+#include "sora_RegisterRW.cpp"
+
+#else
+#ifdef ADI_RF
+#include "../fmcomms_radio.c"
+#endif
+#ifdef LIME_RF
+#include "../lime_radio.cpp"
+#endif
+#include "ip_bridge.c"
+#include "threads.c"
+#endif
+
+
+
+
 #include "../utils.c"
-#include "mac_1thread.c"
-#include "mac_2threads.c"
-#include "driver.cpp"
+
+#include "params.c"
 #include "tx.c"
 #include "rx.c"
-
+#include "mac_2threads.c"
+#include "driver.c"
 

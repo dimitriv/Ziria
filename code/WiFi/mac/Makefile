@@ -1,0 +1,86 @@
+# 
+# Copyright (c) Microsoft Corporation
+# All rights reserved. 
+#
+# Licensed under the Apache License, Version 2.0 (the ""License""); you
+# may not use this file except in compliance with the License. You may
+# obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+# CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+# LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+# A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+#
+# See the Apache Version 2.0 License for specific language governing
+# permissions and limitations under the License.
+#
+#
+
+# Disable default rules for C files
+.SUFFIXES:
+
+# Uncomment the following if you want winddk to be the default compiler. 
+# NB: you can override this from the command line, e.g: 
+# prompt> COMPILER=gcc make
+#
+# COMPILER?=winddk
+#
+COMPILER?=gcc
+
+PP   = ../../../scripts/preprocesscompile-mac-$(COMPILER).sh
+CP   = ../../../scripts/ccompile-mac-$(COMPILER).sh
+DIFF = ../../../tools/BlinkDiff
+
+
+vpath %.c ../../../csrc/mac
+CSRC = $(patsubst %.zir, %.c, $(wildcard *.zir))
+
+all: mac.run
+
+%.c : %.zir
+	RADIO=LIME_RF EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
+
+mac.out: $(CSRC)
+	RADIO=LIME_RF EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS)' $(CP) 
+
+#mac.test: mac.out mac.infile
+#	./$< --TX-input=file \
+             --TX-input-file-name=mac.infile \
+             --TX-input-file-mode=dbg \
+             --TX-output=memory \
+             --RX-input=memory \
+             --RX-output=file \
+             --RX-output-file-name=$@ \
+             --RX-output-file-mode=dbg \
+             --memory-size=1000 \
+             --MAC-type=2-threads \
+             $(EXTRARUNOPT)
+
+#mac.test: mac.outfile
+#	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
+
+
+#mac.accept : mac.outfile
+#	cpp-size:q $< $<.ground
+
+#ifeq ($(RADIO), LIME_RF)
+mac.run: mac.out
+	./$< --TX-PC=tun1 --MAC-type=TX-RX --TX-PHY-rate=6 --TX-output=sdr --TX-input=ip --RX-input=sdr --RX-output=ip --TX-heap-size=1000000000 --RX-heap-size=100000000 --memory-size=1000 \
+		--sdr-central-frequency=563000000 --sdr-sample-rate=2500000 --sdr-bandwidth=20000000 --sdr-rx-gain=40 --sdr-tx-gain=0 --sdr-ip-address=driver=remote,remote=192.168.1.104 --sdr-clock-rate=40000000
+#else
+#mac.run: mac.out
+#	./$< --TX-PC=tun0 --MAC-type=TX-RX --TX-PHY-rate=6 --TX-output=sdr --TX-input=ip --RX-input=sdr --RX-output=ip --TX-heap-size=1000000000 --RX-heap-size=100000000 --memory-size=1000 \
+		--sdr-central-frequency=563000000 --sdr-sample-rate=2500000 --sdr-bandwidth=20000000 --sdr-rx-gain=40 --sdr-tx-gain=0 --sdr-ip-address=192.168.1.102
+#endif
+clean:
+	rm -f ./*expanded
+	rm -f ./*exe ./*exec
+	rm -f ./*.outfile
+	rm -f ./compout ./perfout
+	rm -f ./*.c
+
+all-clean: clean
+	rm -f ./*~
+	rm -f ./*dump
