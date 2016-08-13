@@ -64,6 +64,12 @@ typedef struct _SoraRadioParams {
 #include <iio.h>
 #endif
 
+#ifdef LIME_RF
+//#include <iris_device.hpp>
+#include <SoapySDR/Device.hpp>
+#include <SoapySDR/Formats.hpp>
+#endif
+
 /**********************************************
 	Radio parameters (generic for all radios)
 ***********************************************/ 
@@ -96,8 +102,19 @@ typedef struct {
 	struct iio_channel *rxch0, *txch0, *rxch1, *txch1, *phych0;
 	struct iio_buffer *Txbuf, *Rxbuf;
 	char * host;
+#ifdef PL_CCA
+	struct iio_channel *rxch2, *rxch3;
 #endif
 
+#endif
+
+#ifdef LIME_RF
+	SoapySDR::Device *iris;
+	SoapySDR::Stream *rxStream;
+	SoapySDR::Stream *txStream;
+	unsigned long clockRate;
+	char * host;
+#endif
 
 } SDRParameters;
 
