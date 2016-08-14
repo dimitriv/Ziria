@@ -38,6 +38,10 @@
 #include "fmcomms_radio.h"
 #endif
 
+#ifdef LIME_RF
+#include "lime_radio.h"
+#endif
+
 unsigned int parse_dbg_int16(char *dbg_buf, int16 *target)
 {
 	
@@ -288,6 +292,9 @@ GetStatus buf_getcomplex16(BlinkParams *params, BufContextBlock *blk, complex16 
 #if defined(ADI_RF)
 		readFmcomms(params, x, 1);
 		return GS_SUCCESS;
+#elif defined(LIME_RF)
+		readLimeRF(params, x, 1);
+		return GS_SUCCESS;
 #elif defined(SORA_RF)
 		readSora(params, x, 1);
 		return GS_SUCCESS;
@@ -320,6 +327,9 @@ GetStatus buf_getarrcomplex16(BlinkParams *params, BufContextBlock *blk, complex
 	{
 #if defined(ADI_RF)
 		readFmcomms(params, x, vlen);
+		return GS_SUCCESS;
+#elif defined(LIME_RF)
+		readLimeRF(params, x, vlen);
 		return GS_SUCCESS;
 #elif defined(SORA_RF)
 		readSora(params, x, vlen);
@@ -619,6 +629,8 @@ void buf_putcomplex16(BlinkParams *params, BufContextBlock *blk, struct complex1
 	{
 #if defined(ADI_RF)
 		writeFmcomms(params, &x, 1);
+#elif defined(LIME_RF)
+		writeLimeRF(params, &x, 1);
 #elif defined(SORA_RF)
 		writeSora(params, &x, 1);
 #elif defined(BLADE_RF)
@@ -653,6 +665,8 @@ void buf_putarrcomplex16(BlinkParams *params, BufContextBlock *blk, struct compl
 	{
 #if defined(ADI_RF)
 		writeFmcomms(params, x, vlen);
+#elif defined(LIME_RF)
+		writeLimeRF(params, x, vlen);
 #elif defined(SORA_RF)
 		writeSora(params, x, vlen);
 #elif defined(BLADE_RF)
