@@ -8,6 +8,6 @@ source $TOP/scripts/common.sh
 #echo "Compiling C code (VS) ..."
 pushd . && cd $TOP/csrc/mac && eval "make -B" && popd
 
-cp -f $TOP/csrc/mac/driver mac.out
+cp -f $TOP/csrc/mac/driver $1
 
 
