@@ -129,7 +129,7 @@ pthread_t StartPosixThread(void *(*function) (void *), void * arg, int core, int
 	pthread_attr_destroy(&thAttr);
 
 	//int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
-	if (core >= 0 && core <= 4)
+	if (highpri && core >= 0 && core <= 4)
 	{
 		//assigns the thread to a processor/core
 

@@ -21,7 +21,7 @@
 CXX = g++
 
 CXXFLAGS = -std=c++11 -mfpu=neon -flax-vector-conversions -w  -Ofast -fwhole-program #-fsanitize=integer,undefined,alignment,bool,bounds,enum,function,null,object-size,return,shift,signed-integer-overflow,unreachable,float-cast-overflow,float-divide-by-zero,integer-divide-by-zero,nonnull-attribute,null,returns-nonnull-attribute,vla-bound,vptr
-LIBS = -lm -lpthread
+LIBS = -lm -pthread
 
 ifeq ($(RADIO), bladeRF)
 LIBS += -lbladeRF

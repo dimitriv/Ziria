@@ -43,6 +43,7 @@ HANDLE StartWinUThread(PWIN_UTHREAD_PROC function, PVOID context, int core, int 
 #else
 struct thread_info {
 	pthread_t mThr;
+	pthread_mutex_t lock;
 	bool fRunning;
 };
 

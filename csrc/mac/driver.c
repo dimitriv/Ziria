@@ -171,10 +171,26 @@ int __cdecl main(int argc, char **argv)
 		break;
 	case MAC_TX_RX:
 		numThr = 2;
+		pthread_mutex_t lock;
 		//t_info[0].fRunning = true;
 		//t_info[1].fRunning = true;
-		t_info[0].mThr = StartPosixThread(go_thread_tx, (void *)&t_info[0], 0, 0); // core 0
-		t_info[1].mThr = StartPosixThread(go_thread_rx, (void *)&t_info[1], 1, 0); // core 1
+	    if (pthread_mutex_init(&t_info[0].lock, NULL) != 0)
+	    {
+	        printf("\n mutex init failed\n");
+	        return 1;
+	    }
+
+	    pthread_mutex_lock(&t_info[0].lock);
+		t_info[0].mThr = StartPosixThread(go_thread_rx, (void *)&t_info[0], 1, 0); // core 0
+
+		if (pthread_mutex_init(&t_info[1].lock, NULL) != 0)
+	    {
+	        printf("\n mutex init failed\n");
+	        return 1;
+	    }
+
+		pthread_mutex_lock(&t_info[1].lock);
+		t_info[1].mThr = StartPosixThread(go_thread_tx, (void *)&t_info[1], 1, 0); // core 1
 		break;
 	}
 
@@ -185,6 +201,11 @@ int __cdecl main(int argc, char **argv)
 			isRunning = isRunning || t_info[i].fRunning;
 		//Sleep (1);
 	}
+	pthread_mutex_destroy(&t_info[0].lock);
+	pthread_mutex_destroy(&t_info[1].lock);
+
+	for (i = 0; i < numThr; i++)
+		pthread_join(t_info[i].mThr, NULL);
 #endif
 
 	if (params_rx->inType == TY_SDR || params_tx->outType == TY_SDR)

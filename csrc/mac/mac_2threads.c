@@ -704,7 +704,9 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 void * go_thread_tx(void * pParam)
 {
 	thread_info *ti = (thread_info *)pParam;
-	while(!ti->fRunning);
+	//while(!ti->fRunning);
+	pthread_mutex_unlock(&ti->lock);
+
 	BlinkFileType inType = params_tx->inType;
 	BlinkFileType outType = params_tx->outType;
 	const long maxInSize = 2048;
@@ -876,7 +878,9 @@ void * go_thread_tx(void * pParam)
 void * go_thread_rx(void * pParam)
 {
 	thread_info *ti = (thread_info *)pParam;
-	while(!ti->fRunning);
+	//while(!ti->fRunning);
+	pthread_mutex_unlock(&ti->lock);
+
 	BlinkFileType inType = params_rx->inType;
 	BlinkFileType outType = params_rx->outType;
 	const long maxOutSize = 4096;
