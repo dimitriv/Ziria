@@ -1,0 +1,262 @@
+-- 
+-- Copyright (c) Microsoft Corporation
+-- All rights reserved. 
+--
+-- Licensed under the Apache License, Version 2.0 (the ""License""); you
+-- may not use this file except in compliance with the License. You may
+-- obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT
+-- LIMITATION ANY IMPLIED WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR
+-- A PARTICULAR PURPOSE, MERCHANTABLITY OR NON-INFRINGEMENT.
+--
+-- See the Apache Version 2.0 License for specific language governing
+-- permissions and limitations under the License.
+--
+--
+
+#pragma once
+--#define SORA_COMPAT 
+--#define TEST_PHASE 
+--#include "../receiver/receiver.blk"
+#include "../transmitter/parseMACHeader.blk"
+
+
+
+#include <externals.blk>
+#include "../receiver/cca/cca_tufv.blk"
+#include "../receiver/OFDM/LTS.blk"
+#include "../receiver/removeDC.blk"
+#include "../receiver/downSample.blk"
+#include "../receiver/OFDM/DataSymbol.blk"
+#include "../receiver/OFDM/FreqCompensation.blk"
+#include "../receiver/OFDM/FFT.blk"
+#include "../receiver/OFDM/ChannelEqualization.blk"
+#include "../receiver/OFDM/PilotTrack.blk"
+#include "../receiver/OFDM/GetData.blk"
+#include "../receiver/decoding/DecodePLCP.blk"
+#include "../receiver/decoding/Decode.blk"
+#include "../transmitter/crc.blk"
+#include "../const.blk"
+
+{-
+#include "../transmitter/parsePLCPHeader.blk"
+fun comp DecodePLCP() {
+  var hdata : arr[24] bit;
+  do{
+  hdata := {'0,'1,'0,'1,'0,'0,'1,'1,'1,'0,'0,'0,'0,'0,'0,'0,'0,'1,'0,'0,'0,'0,'0,'0};
+  return parsePLCPHeader(hdata)}
+}
+-}
+
+
+fun comp detectPreamble(energy_threshold : int32) { 
+  (removeDC() >>> cca(energy_threshold))
+} 
+
+fun comp receiveBits() {
+       seq { hdata <- DecodePLCP()
+           ; Decode(hdata) >>> 
+             seq { (c : arr[32] bit) <- crc(hdata.len-4, false); check_crc(c) } >>>
+             repeat{
+               x<-takes 8;
+               if (not hdata.err) then {
+                  emits x;
+               }
+             }
+       }
+}
+
+fun comp receiver() {
+  seq{ det<-detectPreamble(500)
+#ifndef FAST
+     ; do{let normMaxCorr = if (det.energy == 0) then 0 else det.maxCorr / det.energy;
+          println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
+                  ", energy: ", det.energy, ", noise: ", det.noise, 
+                  ", maxCorr: ", det.maxCorr, ", normMaxCorr: ", normMaxCorr}
+#endif
+     ; params <- (LTS(det.shift, det.maxCorr))
+     ; DataSymbol(det.shift) 
+       >>> FFT() 
+       >>> ChannelEqualization(params)
+       >>> PilotTrack() 
+       >>> GetData() 
+       >>> receiveBits()
+  }
+}
+
+fun comp convert_to_int8() {
+var ai : arr[1] int8;
+
+  repeat {
+    x<-takes 8;
+    do{
+      bits_to_int8(ai, x);
+    }
+    emits ai;
+  }
+}
+
+fun comp att() {
+var c : complex16;
+  repeat {
+    (x:complex16)<-take;
+    do{
+    c.re := x.re/1;
+    c.im := x.im/1;
+    }
+    emit c;
+  }
+}
+
+
+-- cca_tufv waits for some idle time before detecting a packet
+-- so we supply 1000 zero samples before sending the actual packet
+fun comp append_idle() {
+  times 1000 {
+    emit complex16{re=0; im=0};
+  }
+  repeat{
+    (x:complex16)<-take;
+    let xx = complex16{re=x.re*10; im=x.im*10};
+    emit xx;
+  }
+}
+
+
+fun comp copy() {
+seq {
+     (xp:arr[640] complex16) <- takes 640;
+     emits xp
+  }
+}
+
+
+fun comp print_hdr() {
+  -- Parse only the minimal header so that we can correctly parse CTS and ACK
+  -- This is a hack, a proper implementation should to it based on the packet length
+  -- x <- takes 24*8;
+  x <- takes 10*8;
+  do {parseMACHeader(x)};
+  emits x;
+
+  repeat{
+    x<-take;
+    emit x;
+  }
+}
+
+
+fun comp print_hex() {
+var a : arr[1] int8;
+  repeat {
+    x<-take;
+    do{
+      a[0] := x;
+      hexprint_int8(a, 1);
+    };
+    emit x;
+  }
+}
+
+fun comp dump() {
+  repeat {
+    x <- take;
+    do { println x;}
+    emit x;
+  }
+}
+
+
+fun comp downSample2() {
+  repeat seq {
+    (y:arr[2] complex16) <- takes 2;
+
+    emit y[0]
+  }
+}
+
+
+fun comp dump_zeros(shift:int16) {
+  (xp:arr[480] complex16) <- takes 480;
+  --emits xp[16-shift,len-16];
+  emits xp;
+
+  times 100 {
+    emit complex16{re=0; im=0};
+  }
+
+}
+-- just removeDC, to plot clean signal
+--let comp main = read[complex16] >>> removeDC() >>> write[complex16]
+
+-- to dump sampels after STS sync
+{-
+let comp main = read[complex16] >>> removeDC() >>> repeat seq{ det<-cca(1000); dump_zeros(det.shift);
+  do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
+                 ", energy: ", det.energy, ", noise: ", det.noise, ", maxCorr: ", det.maxCorr};
+
+} >>> write[complex16]
+-}
+
+-- to dump samples after LTS
+--let comp main = read[complex16] >>> removeDC() >>> repeat seq{ det<-cca(100); params <- (LTS(det.shift, det.maxCorr)); dump_zeros(det.shift)} >>> write[complex16]
+--let comp main = read[complex16] >>> removeDC() >>> repeat seq{ det<-cca(100); (LTS(det.shift, det.maxCorr))} >>> write[int]
+{-
+let comp main = read[complex16] >>> removeDC() >>>
+repeat{
+  det<-cca(100);
+  params <- (LTS(det.shift, det.maxCorr));
+  do{println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
+                 ", energy: ", det.energy, ", noise: ", det.noise, ", maxCorr: ", det.maxCorr};
+        
+} >>> write[int]
+-}
+
+-- to plot constellation, comment GetData include
+fun comp skipSF()
+{
+  -- use this when MCS is higher than 1, and you want to skip signal field 
+  (x : arr[256] complex16) <- takes 256;
+  emits x[64,192];
+}
+
+fun comp GetDataSC() {
+
+  (x : arr[64] complex16) <- takes 64;
+
+  emits x[38,5];
+  emits x[44,13];
+  emits x[58,6];
+
+  emits x[1,6];
+  emits x[8,13];
+  emits x[22,5];
+
+}
+{-
+let comp main = read[complex16] >>> repeat seq{ det<-detectPreamble(1000)
+#ifndef FAST
+     ; do{let normMaxCorr = if (det.energy == 0) then 0 else det.maxCorr / det.energy;
+          println "Detected at: ", det.noSamples, ", shift: ", det.shift, 
+                  ", energy: ", det.energy, ", noise: ", det.noise, 
+                  ", maxCorr: ", det.maxCorr, ", normMaxCorr: ", normMaxCorr}
+#endif
+     ; params <- (LTS(det.shift, det.maxCorr))
+     ; DataSymbol(det.shift) 
+       >>> FFT() 
+       >>> ChannelEqualization(params)
+       >>> PilotTrack()
+       -->>> skipSF()
+       >>> GetDataSC() 
+  }
+ >>> write[complex16]
+-}
+
+--let comp main = read[complex16] >>> append_idle() >>> receiver() >>> print_hdr() >>> convert_to_int8() >>> print_hex() >>> write
+--let comp main = read[complex16] >>> append_idle() >>> receiver() >>> print_hdr() >>> convert_to_int8() >>> print_hex() >>> write
+let comp main = read[complex16] >>> repeat { receiver() >>> print_hdr() >>> convert_to_int8() >>> print_hex()} >>> write
+--let comp main = read[complex16] >>> append_idle() >>> downSample8() >>> receiver() >>> write
