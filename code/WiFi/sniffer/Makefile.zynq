@@ -42,15 +42,15 @@ TGTS = $(patsubst sniffer_tests.blk, sniffer_tests_adi.run, $(wildcard *.blk))
 all: $(TGTS)
 
 sniffer_tests.out : sniffer_tests.blk
-	RADIO='ADI_RF' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PPDEB) $< $@
+	RADIO='ADI_RF' EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS)' $(PPDEB) $< $@
 
 freq=563000000
 rate=2500000
 sniffer_tests_adi.run: sniffer_tests.out
 	sudo ./$< --input=sdr --sdr-central-frequency=$(freq) --sdr-rx-gain=0 --output=dummy  --heap-size=10000000 --sdr-bandwidth=30000000 --sdr-sample-rate=$(rate)
 
-sniffer_tests_adi.run: sniffer_tests.out
-	sudo ./$< --input=sdr --sdr-central-frequency=$(freq) --sdr-rx-gain=0 --output=dummy  --heap-size=10000000 --sdr-bandwidth=30000000 --sdr-sample-rate=$(rate)
+sniffer_tests_lime.run: sniffer_tests.out
+	sudo ./$< --input=sdr --sdr-central-frequency=$(freq) --sdr-rx-gain=0 --output=dummy  --heap-size=10000000 --sdr-bandwidth=30000000 --sdr-sample-rate=$(rate) --sdr-clock-rate=40000000
 
 
 %.accept : %.outfile

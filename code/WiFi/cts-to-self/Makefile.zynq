@@ -43,44 +43,8 @@ TGTS = $(patsubst cts-to-self_test.blk, cts-to-self_test_adi.run, $(wildcard *.b
 all: $(TGTS)
 
 cts-to-self_test.out : cts-to-self_test.blk
-	RADIO='ADI_RF' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PPDEB) $< $@
-#RADIO='limeRF' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PPDEB) $< $@
+	RADIO='ADI_RF' EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS)' $(PPDEB) $< $@
 
-#cts-to-self_test.out : cts-to-self_test.blk
-#	C_DEFINES='ZYNQ_RF' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PPDEB) $< $@
-
-#test%.out : test%.blk
-#	C_DEFINES='ZYNQ_RF' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PPDEB) $< $@
-
-#%.out : %.blk
-#	C_DEFINES='ZYNQ_RF' EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS)' $(PP) $< $@
-
-
-cts-to-self.outfile: cts-to-self.out cts-to-self.infile
-	./$< --input=file \
-             --input-file-name=cts-to-self.infile \
-             --input-file-mode=dbg \
-             --output-file-name=$@ \
-             --output-file-mode=dbg
-
-
-cts-to-self_test.outfile: cts-to-self_test.out cts-to-self_test.infile
-	./$< --input=file \
-             --input-file-name=cts-to-self_test.infile \
-             --input-file-mode=dbg \
-             --output-file-name=$@ \
-             --output-file-mode=dbg
-
-
-
-%.test: %.outfile
-	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
-
-#cts-to-self.run: cts-to-self.out
-#    ./$< --input=sdr --heap-size=1000000000 --sdr-central-frequency=2412000000 --sdr-rx-gain=20 --input-file-mode=bin --output=dummy
-	
-
-#freq=2456990000
 freq=563000000
 cts-to-self_test_adi.run: cts-to-self_test.out
 	sudo ./$< --input=file --input-file-name=cts-to-self.infile --output=sdr --heap-size=10000000 --sdr-central-frequency=$(freq) --input-file-mode=dbg --sdr-tx-gain=0 \
