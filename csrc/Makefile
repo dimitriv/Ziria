@@ -38,12 +38,12 @@ ifeq ($(RADIO), bladeRF)
 LIBS += -lbladeRF
 EXTRACOPTS += -DBLADE_RF
 endif
-ifdef ADI_RF 
+ifeq ($(RADIO), ADI_RF) 
 OBJ_RADIO = fmcomms_radio.o
 LIBS += -liio -lpthread
 EXTRACOPTS += -DADI_RF 
 endif
-ifeq ($(RADIO), limeRF)
+ifeq ($(RADIO), LIME_RF)
 OBJ_RADIO=lime_radio.o
 LIBS += -lSoapySDR
 EXTRACOPTS += -DLIME_RF
