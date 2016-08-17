@@ -47,6 +47,9 @@
 #include "fmcomms_radio.h"
 #endif
 
+#ifdef LIME_RF
+#include "lime_radio.h"
+#endif
 
 #ifdef USE_FPGA
 #include "fpga_modules.h"
@@ -116,6 +119,20 @@ int __cdecl main(int argc, char **argv) {
   // Start Sora HW
   if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
   {
+#ifdef LIME_RF
+	  int ret = LimeRF_RadioStart(params);
+	  if (ret < 0) exit(1);
+	  if (Globals.inType == TY_SDR)
+	  {
+		  ret = LimeRF_ConfigureRX(params);
+		  if (ret < 0) exit(1);
+	  }
+	  if (Globals.outType == TY_SDR)
+	  {
+		  ret = LimeRF_ConfigureTX(params);
+		  if (ret < 0) exit(1);
+	  }
+#endif
 #ifdef ADI_RF
 	  int ret = Fmcomms_Init(params);
 	  if (ret < 0) exit(1);
@@ -242,6 +259,9 @@ int __cdecl main(int argc, char **argv) {
 	// Stop Sora HW
 	if (Globals.inType == TY_SDR || Globals.outType == TY_SDR)
 	{
+#ifdef LIME_RF
+		LimeRF_RadioStop(params);
+#endif
 #ifdef ADI_RF
 		Fmcomms_RadioStop(params);
 #endif
