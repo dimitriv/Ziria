@@ -113,7 +113,12 @@ unsigned long  parse_TXBufferSize(char *rp)
 {
 	return (unsigned long)strtoul(rp, NULL, 10);
 }
-
+#ifdef LIME_RF
+unsigned long  parse_ClockRate(char *rp)
+{
+	return (unsigned long)strtoul(rp, NULL, 10);
+}
+#endif
 
 
 unsigned long parse_size (char *rp) {
@@ -156,11 +161,16 @@ void init_SampleRate(BlinkParams *params, char *i)			{ params->radioParams.Sampl
 void init_Bandwidth(BlinkParams *params, char *i)			{ params->radioParams.Bandwidth = parse_SampleRate(i); }
 
 void init_TXBufferSize(BlinkParams *params, char *i)		{ params->radioParams.TXBufferSize = parse_TXBufferSize(i); }
+#ifdef LIME_RF
+void init_ClockRate(BlinkParams *params, char *i)	{ params->radioParams.clockRate = parse_ClockRate(i); }
+#endif
 
-
-
+#ifndef LIME_RF
 // Here is where we declare the parameters
 #define PARAM_TABLE_LENGTH		23
+#else
+#define PARAM_TABLE_LENGTH		24
+#endif
 
 BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] = 
   {  { "--DEBUG=",
@@ -296,7 +306,13 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
        "Size of the TX buffer transmitted at once (in number of complex16)",
        "2097152", 
        init_TXBufferSize }
-
+#ifdef LIME_RF
+  , { "--sdr-clock-rate=",
+         "--sdr-clock-rate = ...",
+         "SDR clock rate in MHz (default 80)",
+         "80000000",
+         init_ClockRate }
+#endif
 
 };
 
