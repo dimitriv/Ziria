@@ -37,51 +37,20 @@ DIFF  = ../../../tools/BlinkDiff
 
 
 # Targets
-TGTS = $(patsubst sniffer_tests.blk, sniffer_tests.run, $(wildcard *.blk))
+TGTS = $(patsubst sniffer_tests.blk, sniffer_tests_adi.run, $(wildcard *.blk))
 
 all: $(TGTS)
 
 sniffer_tests.out : sniffer_tests.blk
 	RADIO='ADI_RF' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PPDEB) $< $@
-#RADIO='limeRF' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PPDEB) $< $@
 
-#sniffer_test.out : sniffer_test.blk
-#	C_DEFINES='ZYNQ_RF' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PPDEB) $< $@
-
-#sniffer_example.out : sniffer_example.blk
-#	C_DEFINES='ZYNQ_RF' EXTRAOPTS='--bounds-check $(EXTRAOPTS)' $(PPDEB) $< $@
-
-#%.out : %.blk
-#	C_DEFINES='ZYNQ_RF' EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS)' $(PP) $< $@
-
-
-sniffer.outfile: sniffer.out ../matlab/pkt3.infile
-	./$< --input=file \
-             --input-file-name=../cts-to-self/cts-to-self_test.outfile \
-             --input-file-mode=dbg \
-             --output-file-name=$@ \
-             --output-file-mode=dbg
-
-sniffer_pl_tests.outfile: sniffer_pl_tests.out 
-	./$< --input=file \
-             --input-file-name=rx_zir_adi.bin \
-             --input-file-mode=dbg \
-             --output-file-name=$@ \
-             --output-file-mode=dbg
-
-%.test: %.outfile
-	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
 freq=563000000
 rate=2500000
-#freq=5180000000
-#rate=10000000
-#sniffer_pl_tests.run: sniffer_pl_tests.out
-sniffer_tests.run: sniffer_tests.out
+sniffer_tests_adi.run: sniffer_tests.out
 	sudo ./$< --input=sdr --sdr-central-frequency=$(freq) --sdr-rx-gain=0 --output=dummy  --heap-size=10000000 --sdr-bandwidth=30000000 --sdr-sample-rate=$(rate)
 
-
-sniffer_example.outfile: sniffer_example.out
-	./$< --input=file --input-file-name=sniffer_example.infile --input-file-mode=dbg --output=dummy
+sniffer_tests_adi.run: sniffer_tests.out
+	sudo ./$< --input=sdr --sdr-central-frequency=$(freq) --sdr-rx-gain=0 --output=dummy  --heap-size=10000000 --sdr-bandwidth=30000000 --sdr-sample-rate=$(rate)
 
 
 %.accept : %.outfile
