@@ -83,7 +83,7 @@ int parse_timeStampAtRead(char *md) {
 // TODO: Add error handling
  unsigned long  parse_Amp(char *rp)
 {
-	return (unsigned long)strtoul(rp, NULL, 10);
+	return (long)strtoul(rp, NULL, 10);
 }
 
 

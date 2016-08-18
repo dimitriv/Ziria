@@ -78,9 +78,9 @@ typedef struct _SoraRadioParams {
 // one radio each. Otherwise, we only use one set for common parameters.
 typedef struct {
 	unsigned long radioId;
-	unsigned long TXgain;
-	unsigned long RXpa;
-	unsigned long RXgain;
+	long TXgain;
+	long RXpa;
+	long RXgain;
 	unsigned long CentralFrequency;
 	long FreqencyOffset;
 	unsigned long SampleRate;
