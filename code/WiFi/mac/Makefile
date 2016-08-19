@@ -37,13 +37,24 @@ DIFF = ../../../tools/BlinkDiff
 vpath %.c ../../../csrc/mac
 CSRC = $(patsubst %.zir, %.c, $(wildcard *.zir))
 
-all: mac.run
+all: lime_mac.run
 
-%.c : %.zir
-	RADIO=LIME_RF EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
+#%.c : %.zir
+#	EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
 
-mac.out: $(CSRC)
-	RADIO=LIME_RF EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS)' $(CP) 
+adi_mac.out: $(CSRC)
+	RADIO=ADI_RF EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS)' $(CP) $@
+
+lime_mac.out: $(CSRC)
+	RADIO=LIME_RF EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS)' $(CP) $@
+
+lime_mac.run: lime_mac.out
+	./$< --TX-PC=tap0 --MAC-type=TX-RX --TX-PHY-rate=6 --TX-output=sdr --TX-input=ip --RX-input=sdr --RX-output=ip --TX-heap-size=1000000000 --RX-heap-size=100000000 \
+ --memory-size=1000 --sdr-central-frequency=563000000 --sdr-sample-rate=2500000 --sdr-bandwidth=30000000 --sdr-rx-gain=0 --sdr-tx-gain=0 --sdr-clock-rate=40000000
+
+adi_mac.run: adi_mac.out
+	./$< --TX-PC=tap0 --MAC-type=TX-RX --TX-PHY-rate=6 --TX-output=sdr --TX-input=ip --RX-input=sdr --RX-output=ip --TX-heap-size=1000000000 --RX-heap-size=100000000 \
+    --memory-size=1000 --sdr-central-frequency=563000000 --sdr-sample-rate=2500000 --sdr-bandwidth=30000000 --sdr-rx-gain=0 --sdr-tx-gain=0 
 
 #mac.test: mac.out mac.infile
 #	./$< --TX-input=file \
@@ -58,22 +69,6 @@ mac.out: $(CSRC)
              --MAC-type=2-threads \
              $(EXTRARUNOPT)
 
-#mac.test: mac.outfile
-#	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
-
-
-#mac.accept : mac.outfile
-#	cpp-size:q $< $<.ground
-
-#ifeq ($(RADIO), LIME_RF)
-mac.run: mac.out
-	./$< --TX-PC=tun1 --MAC-type=TX-RX --TX-PHY-rate=6 --TX-output=sdr --TX-input=ip --RX-input=sdr --RX-output=ip --TX-heap-size=1000000000 --RX-heap-size=100000000 --memory-size=1000 \
-		--sdr-central-frequency=563000000 --sdr-sample-rate=2500000 --sdr-bandwidth=20000000 --sdr-rx-gain=40 --sdr-tx-gain=0 --sdr-ip-address=driver=remote,remote=192.168.1.104 --sdr-clock-rate=40000000
-#else
-#mac.run: mac.out
-#	./$< --TX-PC=tun0 --MAC-type=TX-RX --TX-PHY-rate=6 --TX-output=sdr --TX-input=ip --RX-input=sdr --RX-output=ip --TX-heap-size=1000000000 --RX-heap-size=100000000 --memory-size=1000 \
-		--sdr-central-frequency=563000000 --sdr-sample-rate=2500000 --sdr-bandwidth=20000000 --sdr-rx-gain=40 --sdr-tx-gain=0 --sdr-ip-address=192.168.1.102
-#endif
 clean:
 	rm -f ./*expanded
 	rm -f ./*exe ./*exec
