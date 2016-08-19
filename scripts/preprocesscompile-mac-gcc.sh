@@ -28,6 +28,7 @@
 set -e
 
 export TOP=$(cd $(dirname $0)/.. && pwd -P)
+export ARCH=$(uname -p)
 source $TOP/scripts/common.sh
 
 echo $1
@@ -39,7 +40,12 @@ gcc $DEFINES -I $TOP/lib -w -x c -E $1 >$2.expanded
 
 #echo "Running WPL compiler..."
 $WPLC $WPLCFLAGS $EXTRAOPTS -i $2.expanded -o $2.c
-mv $2.c $TOP/csrc/mac/$2.c
+if [ "$ZIRIA_TARGET_ARCH" = "" ]
+then
+	mv $2.c $TOP/csrc/mac/$2.c
+else
+    scp $2.c $ZIRIA_TARGET_USER@$ZIRIA_TARGET_ADDR:$ZIRIA_TARGET_PATH
+fi
 
 
 
