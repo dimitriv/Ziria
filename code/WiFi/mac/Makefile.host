@@ -28,7 +28,10 @@
 # COMPILER?=winddk
 #
 COMPILER?=gcc
-
+ZIRIA_ARCH?=ARM
+ZIRIA_PATH?=/home/linaro/build/Ziria/code/WiFi/mac
+ZIRIA_ADDR?=192.168.1.103
+ZIRIA_USER?=linaro
 PP   = ../../../scripts/preprocesscompile-mac-$(COMPILER).sh
 CP   = ../../../scripts/ccompile-mac-$(COMPILER).sh
 DIFF = ../../../tools/BlinkDiff
@@ -37,42 +40,12 @@ DIFF = ../../../tools/BlinkDiff
 vpath %.c ../../../csrc/mac
 CSRC = $(patsubst %.zir, %.c, $(wildcard *.zir))
 
-all: lime_mac.run
+all: $(CSRC)
 
 %.c : %.zir
-	EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
-
-adi_mac.out: $(CSRC)
-	RADIO=ADI_RF EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS)' $(CP) $@
-
-lime_mac.out: $(CSRC)
-	RADIO=LIME_RF EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS)' $(CP) $@
-
-lime_mac.run: lime_mac.out
-	./$< --TX-PC=tun1 --MAC-type=TX-RX --TX-PHY-rate=6 --TX-output=sdr --TX-input=ip --RX-input=sdr --RX-output=ip --TX-heap-size=1000000000 --RX-heap-size=100000000 --memory-size=1000 --sdr-central-frequency=563000000 --sdr-sample-rate=2500000 --sdr-bandwidth=30000000 --sdr-rx-gain=0 --sdr-tx-gain=0 --sdr-ip-address=192.168.1.105 --sdr-clock-rate=40000000
-
-adi_mac.run: adi_mac.out
-	./$< --TX-PC=tun0 --MAC-type=TX-RX --TX-PHY-rate=6 --TX-output=sdr --TX-input=ip --RX-input=sdr --RX-output=ip --TX-heap-size=1000000000 --RX-heap-size=100000000 --memory-size=1000 --sdr-central-frequency=563000000 --sdr-sample-rate=2500000 --sdr-bandwidth=30000000 --sdr-rx-gain=0 --sdr-tx-gain=0 --sdr-ip-address=192.168.1.102
-
-#mac.test: mac.out mac.infile
-#	./$< --TX-input=file \
-             --TX-input-file-name=mac.infile \
-             --TX-input-file-mode=dbg \
-             --TX-output=memory \
-             --RX-input=memory \
-             --RX-output=file \
-             --RX-output-file-name=$@ \
-             --RX-output-file-mode=dbg \
-             --memory-size=1000 \
-             --MAC-type=2-threads \
-             $(EXTRARUNOPT)
-
-#mac.test: mac.outfile
-#	$(DIFF) -f $< -g $<.ground -d -v -n 0.9 -p
+	EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS) --name=_$(basename $@)' ZIRIA_TARGET_ARCH=$(ZIRIA_ARCH) ZIRIA_TARGET_PATH=$(ZIRIA_PATH) ZIRIA_TARGET_ADDR=$(ZIRIA_ADDR) ZIRIA_TARGET_USER=$(ZIRIA_USER) $(PP) $< $(basename $@)
 
 
-#mac.accept : mac.outfile
-#	cpp-size:q $< $<.ground
 
 clean:
 	rm -f ./*expanded
