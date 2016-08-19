@@ -81,7 +81,10 @@ int Ndis_init(char *str)
 
 	/* Connect to the device */
      strcpy(tun_name, str);
-     tun_fd = tun_alloc(tun_name, IFF_TAP | IFF_NO_PI);  /* tun interface */
+     if (strstr(str, "tap"))
+    	 tun_fd = tun_alloc(tun_name, IFF_TAP | IFF_NO_PI);  /* tap interface */
+     else
+    	 tun_fd = tun_alloc(tun_name, IFF_TUN | IFF_NO_PI);  /* tun interface */
 
      if(tun_fd < 0){
 	  perror("Allocating TUN IF");
