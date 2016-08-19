@@ -212,7 +212,7 @@ ULONG parse_TXBufferSize(char *rp)
 // TODO: Add error handling
  unsigned long  parse_Amp(char *rp)
 {
-	return (unsigned long)strtoul(rp, NULL, 10);
+	return (long)strtoul(rp, NULL, 10);
 }
 
 

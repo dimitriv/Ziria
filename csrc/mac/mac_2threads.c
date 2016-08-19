@@ -727,9 +727,9 @@ void * go_thread_tx(void * pParam)
 
 	if (params_tx->outType == TY_SDR)
 	{
-		//params_tx->outType = TY_MEM;
-		//buf_ctx_tx.mem_output_buf_size = maxOutSize;
-		//buf_ctx_tx.mem_output_buf = params_tx->TXBuffer;
+		params_tx->outType = TY_MEM;
+		buf_ctx_tx.mem_output_buf_size = maxOutSize;
+		buf_ctx_tx.mem_output_buf = params_tx->TXBuffer;
 	}
 
 
@@ -834,14 +834,13 @@ void * go_thread_tx(void * pParam)
 			// Run Ziria TX code to preapre the buffer
 			resetBufCtxBlock(&buf_ctx_tx);						// reset context block (counters)
 			wpl_init_heap(pheap_ctx_tx, params_tx->heapSize);	// reset memory management
-			if (buf_ctx_tx.mem_input_buf == NULL)
-				printf("buf mem null\n");
-			if (buf_ctx_tx.mem_input_buf_size == 0)
-				printf("buf mem size 0\n");
+
 			wpl_input_initialize_tx();
 			wpl_go_tx();
 			wpl_output_finalize_tx();
 
+			unsigned long interpacketGap = 5000;
+			writeLimeRF(params_tx, params_tx->TXBuffer, 4 * buf_ctx_tx.total_out + 4 * interpacketGap)
 			/*
 			unsigned long interpacketGap = 5000;
 			hr = SoraURadioTransferEx(params_tx->radioParams.radioId, params_tx->TXBuffer,

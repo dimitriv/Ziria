@@ -172,6 +172,32 @@ void writeLimeRF(BlinkParams *params, complex16 *ptr, unsigned long size)
 	}
 }
 
+void writeBurstLimeRF(BlinkParams *params, complex16 *ptr, unsigned long size)
+{
+	SoapySDR::Device *iris = params->radioParams.iris;
+    int flags = 0;
+	flags |= SOAPY_SDR_END_BURST;
+	int ret = 0;
+
+
+	int samps = size;
+	complex16 * readPtr = ptr;
+	while (samps > 0)
+	{
+		ret = iris->writeStream(params->radioParams.txStream, (void **)&readPtr, (size_t)samps, flags, time, 1000000);
+		if (ret < 0)
+		{
+			printf("Unable to write stream!\n");
+			break;
+		}
+		else
+		{
+			samps -= ret;
+			readPtr += ret;
+		}
+
+	}
+}
 
 
 #endif
