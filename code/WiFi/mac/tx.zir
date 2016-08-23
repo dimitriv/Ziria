@@ -99,13 +99,16 @@ seq{ emits createSTSinTime()
    }
 }
 
+
+
+
 fun comp scale() {
-var out : arr[16] complex16;
+var out : arr[80] complex16;
 
   repeat {
-    x <- takes 16;
+    x <- takes 80;
     do {
-      v_shift_right_complex16(out, x, 4);
+      v_shift_left_complex16(out, x, 3);
     }
        
     emits out;
