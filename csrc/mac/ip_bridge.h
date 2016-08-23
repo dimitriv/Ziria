@@ -22,13 +22,11 @@
 const int RADIO_HEADER_LENGTH = 2;
 const int ETHERNET_HEADER_LENGTH = 14; // 6 DstMAC, 6 SrcMAC, 2 EtherType/length
 const int ETHERNET_MTU = 1600;         // Ethernet frame plus our header
-const int RADIO_MTU = 440;            // max bytes in one radio frame
+const int RADIO_MTU = 1500;            // max bytes in one radio frame
 const bool USE_RADIO = true;
 
 
 int tun_fd;
-//extern pthread_t hUplinkThread;
-//extern struct sockaddr_in ConnectSocket;
 
 int Ndis_init(char *str);
 int WriteFragment(unsigned char * buf, int size);

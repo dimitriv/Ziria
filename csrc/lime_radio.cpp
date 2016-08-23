@@ -44,8 +44,20 @@ void LimeRF_RadioStop(BlinkParams *params)
 {
 	SoapySDR::Device *iris = params->radioParams.iris;
 	SoapySDR::Device::unmake(iris);
+
 	if (src_ptr) free(src_ptr);
 	if (dst_ptr) free(dst_ptr);
+
+	if (params->TXBuffer != NULL)
+	{
+		free(params->TXBuffer);
+	}
+
+	if (params->pRxBuf != NULL)
+	{
+		free(params->pRxBuf);
+	}
+
 }
 
 int  LimeRF_ConfigureTX(BlinkParams *params)
@@ -70,6 +82,14 @@ int  LimeRF_ConfigureTX(BlinkParams *params)
 	}
 	timeAdv = 1e8;
 	src_ptr = (complex16*)malloc(sizeof(complex16) * TX_BUFF_SIZE);
+
+	// TX buffer
+	params->TXBuffer = malloc(params->radioParams.TXBufferSize);
+	if (params->TXBuffer == NULL) {
+		perror("malloc");
+		exit(1);
+	}
+
 
 	return ret;
 }
@@ -97,6 +117,15 @@ int  LimeRF_ConfigureRX(BlinkParams *params)
 		exit(1);
 	}
 	dst_ptr = (complex16*)malloc(sizeof(complex16) * RX_BUFF_SIZE);
+
+	// RX buffer
+	params->pRxBuf = malloc(RX_BUFF_SIZE);
+	if (params->pRxBuf == NULL) {
+		perror("malloc");
+		exit(1);
+	}
+
+
 	return ret;
 }
 
@@ -172,18 +201,19 @@ void writeLimeRF(BlinkParams *params, complex16 *ptr, unsigned long size)
 	}
 }
 
-void writeBurstLimeRF(BlinkParams *params, complex16 *ptr, unsigned long size)
+void writeBurstLimeRF(BlinkParams *params, void *ptr, unsigned long size)
 {
 	SoapySDR::Device *iris = params->radioParams.iris;
-    int flags = 0;
-	flags |= SOAPY_SDR_END_BURST;
+    int flags = SOAPY_SDR_END_BURST | SOAPY_SDR_HAS_TIME;
 	int ret = 0;
-
+	long long time = 0;
+	time = iris->getHardwareTime("") + 1e8;
 
 	int samps = size;
-	complex16 * readPtr = ptr;
+	void * readPtr = ptr;
 	while (samps > 0)
 	{
+		flags |= SOAPY_SDR_HAS_TIME;
 		ret = iris->writeStream(params->radioParams.txStream, (void **)&readPtr, (size_t)samps, flags, time, 1000000);
 		if (ret < 0)
 		{
@@ -195,8 +225,11 @@ void writeBurstLimeRF(BlinkParams *params, complex16 *ptr, unsigned long size)
 			samps -= ret;
 			readPtr += ret;
 		}
-
 	}
+	size_t chanMask = 0;
+	time = iris->getHardwareTime("") + 1e8 + size / params->radioParams.SampleRate;
+	int sta = iris->readStreamStatus(params->radioParams.txStream, chanMask, flags, time, 0);
+	printf("\nStream Status %d\n\n", sta);
 }
 
 

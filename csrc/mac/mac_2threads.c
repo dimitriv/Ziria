@@ -217,6 +217,11 @@ void init_mac_2threads()
 	// Init
 	initBufCtxBlock(&buf_ctx_tx);
 	initBufCtxBlock(&buf_ctx_rx);
+
+	// this is for hooking mac to phy
+	pbuf_ctx_tx = &buf_ctx_tx;
+	pbuf_ctx_rx = &buf_ctx_rx;
+
 	initHeapCtxBlock(&heap_ctx_tx, params_tx->heapSize);
 	initHeapCtxBlock(&heap_ctx_rx, params_rx->heapSize);
 
@@ -287,6 +292,21 @@ void createHeader(unsigned char *header, PHYMod modulation, PHYEnc encoding, int
 	header[1] |= (length & 0xFFF8) >> 3;
 }
 
+int calcPacketSamples(PHYMod modulation, PHYEnc encoding, int length)
+{
+	int bpsym;
+	switch (modulation) {
+	case PHY_MOD_BPSK:
+		if (encoding == PHY_ENC_CR_12) bpsym = 24;
+		else bpsym = 36;
+		break;
+	case PHY_MOD_QPSK:
+		if (encoding == PHY_ENC_CR_12) bpsym = 48;
+		else bpsym = 72;
+		break;
+	}
+	return ceil((length + 4) * 8 / bpsym) + 5;
+}
 
 
 
@@ -839,29 +859,8 @@ void * go_thread_tx(void * pParam)
 			wpl_go_tx();
 			wpl_output_finalize_tx();
 
-			unsigned long interpacketGap = 5000;
-			writeLimeRF(params_tx, params_tx->TXBuffer, 4 * buf_ctx_tx.total_out + 4 * interpacketGap)
-			/*
-			unsigned long interpacketGap = 5000;
-			hr = SoraURadioTransferEx(params_tx->radioParams.radioId, params_tx->TXBuffer,
-				4 * buf_ctx_tx.total_out + 4 * interpacketGap, &TxID);
-			if (!SUCCEEDED(hr))
-			{
-				fprintf(stderr, "Error: Fail to transfer Sora Tx buffer: %lx!\n", hr);
-				exit(1);
-			}
-
-			hr = SoraURadioTx(params_tx->radioParams.radioId, TxID);
-
-			if (!SUCCEEDED(hr))
-			{
-				HRESULT hr1 = SoraURadioTxFree(params_tx->radioParams.radioId, TxID);
-				fprintf(stderr, "Error: Fail to transmit Sora Tx buffer: %lx!\n", hr);
-				exit(1);
-			}
-
-			hr = SoraURadioTxFree(params_tx->radioParams.radioId, TxID);
-			*/
+			int gap = 2 * 80; // two ofdm symbol gap
+			writeBurstLimeRF(params_tx, params_tx->TXBuffer, buf_ctx_tx.total_out + gap);
 		}
 	}
 
@@ -973,7 +972,7 @@ void * go_thread_rx(void * pParam)
 			// Avoid stale data, for debugging
 			memset((void*)payload16, 0, 16 * sizeof(uint16));
 
-			// Run Ziria TX code
+			// Run Ziria RX code
 			resetBufCtxBlock(&buf_ctx_rx);						// reset context block (counters)
 			wpl_init_heap(pheap_ctx_rx, params_rx->heapSize);	// reset memory management
 			wpl_input_initialize_rx();
