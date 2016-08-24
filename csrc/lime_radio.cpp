@@ -213,7 +213,7 @@ void writeBurstLimeRF(BlinkParams *params, void *ptr, unsigned long size)
 	void * readPtr = ptr;
 	while (samps > 0)
 	{
-		flags |= SOAPY_SDR_HAS_TIME;
+		flags |= (SOAPY_SDR_END_BURST | SOAPY_SDR_HAS_TIME);
 		ret = iris->writeStream(params->radioParams.txStream, (void **)&readPtr, (size_t)samps, flags, time, 1000000);
 		if (ret < 0)
 		{
@@ -227,9 +227,8 @@ void writeBurstLimeRF(BlinkParams *params, void *ptr, unsigned long size)
 		}
 	}
 	size_t chanMask = 0;
-	time = iris->getHardwareTime("") + 1e8 + size / params->radioParams.SampleRate;
-	int sta = iris->readStreamStatus(params->radioParams.txStream, chanMask, flags, time, 0);
-	printf("\nStream Status %d\n\n", sta);
+	int sta = iris->readStreamStatus(params->radioParams.txStream, chanMask, flags, time, 1000000);
+	printf("\nWrote %d samples, Stream Status %d\n\n", size, sta);
 }
 
 

@@ -859,7 +859,7 @@ void * go_thread_tx(void * pParam)
 			wpl_go_tx();
 			wpl_output_finalize_tx();
 
-			int gap = 2 * 80; // two ofdm symbol gap
+			int gap = 0; // two ofdm symbol gap
 			writeBurstLimeRF(params_tx, params_tx->TXBuffer, buf_ctx_tx.total_out + gap);
 		}
 	}
