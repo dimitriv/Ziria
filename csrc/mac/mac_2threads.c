@@ -731,8 +731,9 @@ void * go_thread_tx(void * pParam)
 	BlinkFileType outType = params_tx->outType;
 	const long maxInSize = 2048;
 	const long maxOutSize = 200000;
-	const int headerSizeInBytes = 3;
+	const int headerSizeInBytes = 3; // 3B signal field
 	unsigned char * headerBuf;
+	unsigned char * serviceBuf;
 	unsigned char * payloadBuf;
 	uint16 * payloadBuf16;
 	memsize_int payloadSize;
@@ -803,6 +804,8 @@ void * go_thread_tx(void * pParam)
 		memset(headerBuf, 0, 3);
 		createHeader(headerBuf, PHY_MOD_BPSK, PHY_ENC_CR_12, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
 
+		memset(serviceBuf, 0, 2);
+
 		// Run Ziria TX code to preapre the buffer
 		resetBufCtxBlock(&buf_ctx_tx);						// reset context block (counters)
 		wpl_init_heap(pheap_ctx_tx, params_tx->heapSize);	// reset memory management
@@ -843,7 +846,7 @@ void * go_thread_tx(void * pParam)
 			}
 
 			memset(headerBuf, 0, 3);
-			createHeader(headerBuf, phy_rate.mod, phy_rate.enc, payloadSizeInBytes);
+			createHeader(headerBuf, phy_rate.mod, phy_rate.enc, payloadSizeInBytes + 4); // CRC(4), service field is not considered in the length
 
 			if (params_tx->debug > 0)
 			{
