@@ -733,7 +733,6 @@ void * go_thread_tx(void * pParam)
 	const long maxOutSize = 200000;
 	const int headerSizeInBytes = 3; // 3B signal field
 	unsigned char * headerBuf;
-	unsigned char * serviceBuf;
 	unsigned char * payloadBuf;
 	uint16 * payloadBuf16;
 	memsize_int payloadSize;
@@ -801,10 +800,27 @@ void * go_thread_tx(void * pParam)
 
 	if (outType == TY_FILE)
 	{
-		memset(headerBuf, 0, 3);
-		createHeader(headerBuf, PHY_MOD_BPSK, PHY_ENC_CR_12, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
+		if (inType == TY_IP)
+		{
+			// NDIS read
+			payloadSizeInBytes = 0;
+			while (payloadSizeInBytes == 0)
+			{
+				payloadSizeInBytes = ReadFragment(payloadBuf, RADIO_MTU);
+				printf("read %d bytes from tun/tap interface \n", payloadSizeInBytes);
+			}
 
-		memset(serviceBuf, 0, 2);
+			buf_ctx_tx.mem_input_buf_size = payloadSizeInBytes + headerSizeInBytes;
+
+			memset(headerBuf, 0, 3);
+			createHeader(headerBuf, phy_rate.mod, phy_rate.enc, payloadSizeInBytes + 4); // CRC(4), service field is not considered in the length
+		}
+		else
+		{
+			memset(headerBuf, 0, 3);
+			createHeader(headerBuf, PHY_MOD_BPSK, PHY_ENC_CR_12, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
+		}
+
 
 		// Run Ziria TX code to preapre the buffer
 		resetBufCtxBlock(&buf_ctx_tx);						// reset context block (counters)
