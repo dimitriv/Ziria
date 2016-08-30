@@ -368,7 +368,11 @@ void init_SdrAddress(BlinkParams *params, char *i)	{
 #ifdef ADI_RF
 #define PARAM_TABLE_LENGTH		29 + 10
 #else
+#ifdef LIME_RF
 #define PARAM_TABLE_LENGTH		29 + 11
+#else
+#define PARAM_TABLE_LENGTH		38
+#endif
 #endif
 #endif
 
