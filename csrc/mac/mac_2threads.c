@@ -288,8 +288,29 @@ void createHeader(unsigned char *header, PHYMod modulation, PHYEnc encoding, int
 
 	header[0] &= 0x1F;
 	header[1] &= 0xE0;
+	header[2] = 0x0;
 	header[0] |= (length & 7) << 5;
 	header[1] |= (length & 0xFFF8) >> 3;
+	char lenMsb = (length & 0x0800) >> 11;
+	header[2] |= lenMsb;
+
+	char crc = 0;
+	int bit = 1;
+	int i;
+	for (i = 0; i < 8; i++)
+	{
+		crc += (header[0] & bit) >> i;
+		bit = bit * 2;
+	}
+	bit = 1;
+	for (i = 0; i < 8; i++)
+	{
+		crc += (header[1] & bit) >> i;
+		bit = bit * 2;
+	}
+	crc += lenMsb;
+	crc = crc % 2;
+	header[2] |= (crc << 1);
 }
 
 int calcPacketSamples(PHYMod modulation, PHYEnc encoding, int length)
@@ -724,7 +745,6 @@ BOOLEAN __stdcall go_thread_rx(void * pParam)
 void * go_thread_tx(void * pParam)
 {
 	thread_info *ti = (thread_info *)pParam;
-	//while(!ti->fRunning);
 	pthread_mutex_unlock(&ti->lock);
 
 	BlinkFileType inType = params_tx->inType;
@@ -803,22 +823,26 @@ void * go_thread_tx(void * pParam)
 		if (inType == TY_IP)
 		{
 			// NDIS read
-			payloadSizeInBytes = 0;
+			unsigned long payloadSizeInBytes = 0;
 			while (payloadSizeInBytes == 0)
 			{
 				payloadSizeInBytes = ReadFragment(payloadBuf, RADIO_MTU);
+				int it;
 				printf("read %d bytes from tun/tap interface \n", payloadSizeInBytes);
+				for (it = 0; it < payloadSizeInBytes; it++)
+					printf("%x ", payloadBuf[it]);
+				printf("\n");
 			}
 
 			buf_ctx_tx.mem_input_buf_size = payloadSizeInBytes + headerSizeInBytes;
 
 			memset(headerBuf, 0, 3);
-			createHeader(headerBuf, phy_rate.mod, phy_rate.enc, payloadSizeInBytes + 4); // CRC(4), service field is not considered in the length
+			createHeader(headerBuf, phy_rate.mod, phy_rate.enc, payloadSizeInBytes + 4); // CRC(4)
 		}
 		else
 		{
 			memset(headerBuf, 0, 3);
-			createHeader(headerBuf, PHY_MOD_BPSK, PHY_ENC_CR_12, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes);
+			createHeader(headerBuf, phy_rate.mod, phy_rate.enc, buf_ctx_tx.mem_input_buf_size - headerSizeInBytes + 4);
 		}
 
 
@@ -830,6 +854,7 @@ void * go_thread_tx(void * pParam)
 		wpl_input_initialize_tx();
 		wpl_go_tx();
 		wpl_output_finalize_tx();
+		printf("Wrote %d samples\n", buf_ctx_tx.total_out);
 	}
 	else
 	{
@@ -862,7 +887,7 @@ void * go_thread_tx(void * pParam)
 			}
 
 			memset(headerBuf, 0, 3);
-			createHeader(headerBuf, phy_rate.mod, phy_rate.enc, payloadSizeInBytes + 4); // CRC(4), service field is not considered in the length
+			createHeader(headerBuf, phy_rate.mod, phy_rate.enc, payloadSizeInBytes + 4); // CRC(4)
 
 			if (params_tx->debug > 0)
 			{
@@ -877,9 +902,10 @@ void * go_thread_tx(void * pParam)
 			wpl_input_initialize_tx();
 			wpl_go_tx();
 			wpl_output_finalize_tx();
-
+#ifdef LIME_RF
 			int gap = 0; // two ofdm symbol gap
 			writeBurstLimeRF(params_tx, params_tx->TXBuffer, buf_ctx_tx.total_out + gap);
+#endif
 		}
 	}
 
