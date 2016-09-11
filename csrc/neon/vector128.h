@@ -74,7 +74,7 @@ inline __attribute__((always_inline)) int16x8_t __0xFFFF000000000000000000000000
 	return vreinterpretq_s16_s32( q8 );
 };
 
-inline __attribute__((always_inline)) int32x4_t __0x00000000000000000000000000000000()
+inline __attribute__((always_inline)) int16x8_t __0x00000000000000000000000000000000()
 {
 	return vdupq_n_s16(0);
 };

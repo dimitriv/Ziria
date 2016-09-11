@@ -226,9 +226,9 @@ void writeBurstLimeRF(BlinkParams *params, void *ptr, unsigned long size)
 			readPtr += ret;
 		}
 	}
-	size_t chanMask = 0;
-	int sta = iris->readStreamStatus(params->radioParams.txStream, chanMask, flags, time, 1000000);
-	printf("\nWrote %d samples, Stream Status %d\n\n", size, sta);
+	//size_t chanMask = 0;
+	//int sta = iris->readStreamStatus(params->radioParams.txStream, chanMask, flags, time, 1000000);
+
 }
 
 
