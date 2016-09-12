@@ -60,3 +60,6 @@ clean:
 all-clean: clean
 	rm -f ./*~
 	rm -f ./*dump
+
+perf.all :
+	make | awk -f process.awk | sort > $@
