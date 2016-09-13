@@ -39,7 +39,7 @@ fun comp detectPreamble(energy_threshold : int32) {
   (removeDC() >>> cca(energy_threshold))
 } 
 
-
+{-
 fun comp receiveBits() {
        seq { hdata <- DecodePLCP()
            ; Decode(hdata) >>> 
@@ -52,7 +52,53 @@ fun comp receiveBits() {
              }
        }
 }
+-}
 
+
+fun comp processCRC(hdata : struct HeaderInfo) {
+var retCRC: arr[8] bit; 
+var retMod: arr[8] bit; 
+var retEnc: arr[8] bit; 
+var retSize: arr[16] bit; 
+var tmp: arr[2] int8;
+
+  (c : arr[32] bit) <- crc(hdata.len-4, false); 
+  crc <- check_crc(c);
+
+  -- The following sends packet data to MAC
+  do {
+     -- CRC
+     if (crc) then {
+        tmp[0] := 1;
+     } else {
+        tmp[0] := 0;
+     }
+     int8_to_bits(retCRC, tmp[0,1]);
+
+     -- Modulation
+     tmp[0] := int8(hdata.modulation);
+     int8_to_bits(retMod, tmp[0,1]);
+
+     -- Coding
+     tmp[0] := int8(hdata.coding);
+     int8_to_bits(retEnc, tmp[0,1]);
+
+     -- Size
+     tmp[0] := int8(hdata.len % 256);
+     tmp[1] := int8(hdata.len / 256);
+     int8_to_bits(retSize, tmp[0,2]);
+  } 
+  emits retCRC;
+  emits retMod;
+  emits retEnc;
+  emits retSize;
+} 
+
+fun comp receiveBits() {
+       seq { hdata <- DecodePLCP()
+           ; Decode(hdata) >>> processCRC(hdata)
+           }
+} 
 
 fun comp receiver() {
   seq{ det<-detectPreamble(1000)
