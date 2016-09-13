@@ -36,7 +36,6 @@ int  LimeRF_RadioStart(BlinkParams *params)
 
 	iris->setMasterClockRate((double)params->radioParams.clockRate);
 
-
 	return 0;
 }
 
@@ -69,6 +68,11 @@ int  LimeRF_ConfigureTX(BlinkParams *params)
 	iris->setBandwidth(SOAPY_SDR_TX, 0, (double) params->radioParams.Bandwidth);
     iris->setGain(SOAPY_SDR_TX, 0, "PAD", params->radioParams.TXgain); 
     iris->setDCOffsetMode(SOAPY_SDR_TX, 0, true);
+
+#ifdef LOOPBACK
+	iris->writeSetting(SOAPY_SDR_TX, 0, "TBB_ENABLE_LOOPBACK", "LB_LB_LADDER");
+#endif
+
 
 	const SoapySDR::Kwargs &args = SoapySDR::Kwargs();
 	std::vector<size_t> ch = {0};
@@ -105,6 +109,10 @@ int  LimeRF_ConfigureRX(BlinkParams *params)
     iris->setGain(SOAPY_SDR_RX, 0, "TIA", 5.000000);
     iris->setGain(SOAPY_SDR_RX, 0, "PGA", params->radioParams.RXpa);
     iris->setDCOffsetMode(SOAPY_SDR_RX, 0, true);
+
+#ifdef LOOPBACK
+	iris->writeSetting(SOAPY_SDR_RX, 0, "RBB_SET_PATH", "LB_BYP");
+#endif
 
     const SoapySDR::Kwargs &args = SoapySDR::Kwargs();
 	std::vector<size_t> ch = {0};
@@ -214,7 +222,7 @@ void writeBurstLimeRF(BlinkParams *params, void *ptr, unsigned long size)
 	while (samps > 0)
 	{
 		flags |= (SOAPY_SDR_END_BURST | SOAPY_SDR_HAS_TIME);
-		ret = iris->writeStream(params->radioParams.txStream, (void **)&readPtr, (size_t)samps, flags, time, 1000000);
+		ret = iris->writeStream(params->radioParams.txStream, &readPtr, (size_t)samps, flags, time, 1000000);
 		if (ret < 0)
 		{
 			printf("Unable to write stream!\n");
@@ -223,12 +231,9 @@ void writeBurstLimeRF(BlinkParams *params, void *ptr, unsigned long size)
 		else
 		{
 			samps -= ret;
-			readPtr += ret;
+			readPtr += ret * sizeof(complex16);
 		}
 	}
-	//size_t chanMask = 0;
-	//int sta = iris->readStreamStatus(params->radioParams.txStream, chanMask, flags, time, 1000000);
-
 }
 
 
