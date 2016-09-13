@@ -1030,19 +1030,24 @@ void * go_thread_rx(void * pParam)
 			lastEnc = payload[lengthInBytes + 2];
 			lastLen = payload[lengthInBytes + 3] + 256 * payload[lengthInBytes + 4];
 
+
 			if (params_tx->debug > 0)
 			{
 				printf("Received packet: crc=%d, mod=%d, enc=%d, len=%d, buf_len=%d\n",
 					lastCRC, lastMod, lastEnc, lastLen, lengthInBytes);
 				fflush(stdout);
 			}
+			int i;
+			for (i = 0; i < lengthInBytes + 5; i ++)
+				printf("%x ", payload[i]);
+			printf("\n\n");
 
 			if (outType == TY_IP)
 			{
 				// IP
 				if (lastCRC == 1)
 				{
-					int n = WriteFragment(payload, lengthInBytes + 5);
+					int n = WriteFragment(payload, lengthInBytes);
 
 					if (params_tx->debug > 0)
 					{
