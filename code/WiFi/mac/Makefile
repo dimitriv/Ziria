@@ -38,6 +38,7 @@ vpath %.c ../../../csrc/mac
 CSRC = $(patsubst %.zir, %.c, $(wildcard *.zir))
 
 all: lime_mac.run
+#all: mac.outfile
 
 #%.c : %.zir
 #	EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS) --name=_$(basename $@)' $(PP) $< $(basename $@)
@@ -48,26 +49,25 @@ adi_mac.out: $(CSRC)
 lime_mac.out: $(CSRC)
 	RADIO=LIME_RF EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS)' $(CP) $@
 
+mac.out : $(CSRC)
+	EXTRAOPTS='--autolut $(EXTRAOPTS)' $(CP) $@
+
+freq=563000000
+rate=5000000
+clock=40000000
 lime_mac.run: lime_mac.out
-	./$< --TX-PC=tap0 --MAC-type=TX-RX --TX-PHY-rate=6 --TX-output=sdr --TX-input=ip --RX-input=sdr --RX-output=ip --TX-heap-size=1000000000 --RX-heap-size=100000000 \
- --memory-size=1000 --sdr-central-frequency=563000000 --sdr-sample-rate=2500000 --sdr-bandwidth=30000000 --sdr-rx-gain=0 --sdr-tx-gain=0 --sdr-clock-rate=40000000
+	./$< --TX-PC=tun0 --MAC-type=TX-RX --TX-PHY-rate=6 --TX-output=sdr --TX-input=ip --RX-input=sdr --RX-output=ip \
+	--TX-heap-size=100000000 --RX-heap-size=100000000 --memory-size=1000 --sdr-central-frequency=$(freq) --sdr-sample-rate=$(rate) \
+	--sdr-bandwidth=30000000 --sdr-rx-gain=0 --sdr-tx-gain=0 --sdr-clock-rate=$(clock)
 
 adi_mac.run: adi_mac.out
-	./$< --TX-PC=tap0 --MAC-type=TX-RX --TX-PHY-rate=6 --TX-output=sdr --TX-input=ip --RX-input=sdr --RX-output=ip --TX-heap-size=1000000000 --RX-heap-size=100000000 \
-    --memory-size=1000 --sdr-central-frequency=563000000 --sdr-sample-rate=2500000 --sdr-bandwidth=30000000 --sdr-rx-gain=0 --sdr-tx-gain=0 
+	./$< --TX-PC=tap0 --MAC-type=TX-RX --TX-PHY-rate=6 --TX-output=sdr --TX-input=ip --RX-input=sdr --RX-output=ip \
+	--TX-heap-size=100000000 --RX-heap-size=100000000 --memory-size=1000 --sdr-central-frequency=563000000 \
+	--sdr-sample-rate=2500000 --sdr-bandwidth=30000000 --sdr-rx-gain=0 --sdr-tx-gain=0 
 
-#mac.test: mac.out mac.infile
-#	./$< --TX-input=file \
-             --TX-input-file-name=mac.infile \
-             --TX-input-file-mode=dbg \
-             --TX-output=memory \
-             --RX-input=memory \
-             --RX-output=file \
-             --RX-output-file-name=$@ \
-             --RX-output-file-mode=dbg \
-             --memory-size=1000 \
-             --MAC-type=2-threads \
-             $(EXTRARUNOPT)
+mac.outfile: mac.out
+	./$< --TX-input=file --TX-input-file-mode=bin --TX-input-file-name=mac.infile --MAC-type=TX-only --TX-PHY-rate=6 --TX-output=file --TX-output-file-name=$@ --TX-output-file-mode=bin --memory-size=1000     
+
 
 clean:
 	rm -f ./*expanded
