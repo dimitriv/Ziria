@@ -1038,7 +1038,7 @@ void * go_thread_rx(void * pParam)
 				fflush(stdout);
 			}
 			int i;
-#ifndef FAST
+#ifdef DEBUG
 			for (i = 0; i < lengthInBytes + 5; i ++)
 				printf("%x ", payload[i]);
 			printf("\n\n");
