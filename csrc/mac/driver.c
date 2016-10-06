@@ -161,13 +161,13 @@ int __cdecl main(int argc, char **argv)
 	case MAC_TX_ONLY:
 		numThr = 1;
 		t_info[0].fRunning = true;
-		t_info[0].mThr = StartPosixThread(go_thread_tx, (void *)t_info, 0, 1);
+		t_info[0].mThr = StartPosixThread(go_thread_tx, (void *)t_info, 0, 0);
 		break;
 	case MAC_RX_TEST:
 	case MAC_RX_ONLY:
 		numThr = 1;
 		t_info[0].fRunning = true;
-		t_info[0].mThr = StartPosixThread(go_thread_rx, (void *)t_info, 0, 1);
+		t_info[0].mThr = StartPosixThread(go_thread_rx, (void *)t_info, 0, 0);
 		break;
 	case MAC_TX_RX:
 		numThr = 2;
@@ -181,7 +181,7 @@ int __cdecl main(int argc, char **argv)
 	    }
 
 	    pthread_mutex_lock(&t_info[0].lock);
-		t_info[0].mThr = StartPosixThread(go_thread_rx, (void *)&t_info[0], 0, 1); // core 0
+		t_info[0].mThr = StartPosixThread(go_thread_rx, (void *)&t_info[0], 0, 0); // core 0
 
 		if (pthread_mutex_init(&t_info[1].lock, NULL) != 0)
 	    {
@@ -190,7 +190,7 @@ int __cdecl main(int argc, char **argv)
 	    }
 
 		pthread_mutex_lock(&t_info[1].lock);
-		t_info[1].mThr = StartPosixThread(go_thread_tx, (void *)&t_info[1], 1, 1); // core 1
+		t_info[1].mThr = StartPosixThread(go_thread_tx, (void *)&t_info[1], 1, 0); // core 1
 		break;
 	}
 
