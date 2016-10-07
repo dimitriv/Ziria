@@ -6,7 +6,7 @@ Check the [project website](http://research.microsoft.com/en-us/projects/ziria/)
 
 ### News
 
-* Ziria now features a standard compliant LTE and LTE-U implementation. Check [Open Test Platform for LTE/LTE-U](https://github.com/Microsoft/OTP4LTE-U). 
+* Ziria now features a standard compliant LTE and LTE-U implementation. Check [Open Test Platform for LTE/LTE-U](https://github.com/Microsoft/OTP4LTE-U).
 
 * Ziria features standard compliant [802.11a/g PHY implementation](https://github.com/dimitriv/Ziria/tree/master/code/WiFi).
 
@@ -29,7 +29,6 @@ Check the [project website](http://research.microsoft.com/en-us/projects/ziria/)
 |     doc/  | Various documentation and design notes                 |
 | scripts/  | Various scripts for building in different environments |
 
-* Building the compiler: see [BUILD](https://github.com/dimitriv/Ziria/blob/master/BUILD)
+* Installing the compiler: see [INSTALL](INSTALL.md)
 
 [status]: https://travis-ci.org/dimitriv/Ziria.svg?branch=master
-
