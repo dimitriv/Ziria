@@ -46,14 +46,16 @@ cts-to-self_test.out : cts-to-self_test.blk
 	RADIO='ADI_RF' EXTRAOPTS='--vectorize --autolut $(EXTRAOPTS)' $(PPDEB) $< $@
 
 freq=563000000
+rate=5000000
+clock=40000000
 cts-to-self_test_adi.run: cts-to-self_test.out
 	sudo ./$< --input=file --input-file-name=cts-to-self.infile --output=sdr --heap-size=10000000 --sdr-central-frequency=$(freq) --input-file-mode=dbg --sdr-tx-gain=0 \
-         --sdr-sample-rate=2500000 --sdr-bandwidth=30000000
+         --sdr-sample-rate=$(rate) --sdr-bandwidth=30000000
 
 
 cts-to-self_test_lime.run: cts-to-self_test.out
 	sudo ./$< --input=file --input-file-name=cts-to-self.infile --output=sdr --heap-size=10000000 --sdr-central-frequency=$(freq) --input-file-mode=dbg --sdr-tx-gain=0 \
-             --sdr-sample-rate=2500000 --sdr-bandwidth=30000000 --sdr-clock-rate=40000000
+             --sdr-sample-rate=$(rate) --sdr-bandwidth=30000000 --sdr-clock-rate=$(clock)
 
 %.accept : %.outfile
 	cp $< $<.ground
