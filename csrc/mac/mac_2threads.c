@@ -828,10 +828,6 @@ void * go_thread_tx(void * pParam)
 			{
 				payloadSizeInBytes = ReadFragment(payloadBuf, RADIO_MTU);
 				int it;
-				printf("read %d bytes from tun/tap interface \n", payloadSizeInBytes);
-				for (it = 0; it < payloadSizeInBytes; it++)
-					printf("%x ", payloadBuf[it]);
-				printf("\n");
 			}
 
 			buf_ctx_tx.mem_input_buf_size = payloadSizeInBytes + headerSizeInBytes;
@@ -854,7 +850,6 @@ void * go_thread_tx(void * pParam)
 		wpl_input_initialize_tx();
 		wpl_go_tx();
 		wpl_output_finalize_tx();
-		printf("Wrote %d samples\n", buf_ctx_tx.total_out);
 	}
 	else
 	{
@@ -871,7 +866,6 @@ void * go_thread_tx(void * pParam)
 				while (payloadSizeInBytes == 0)
 				{
 					payloadSizeInBytes = ReadFragment(payloadBuf, RADIO_MTU);
-					//printf("read %d bytes from IP interface \n", payloadSizeInBytes);
 				}
 
 				buf_ctx_tx.mem_input_buf_size = payloadSizeInBytes + headerSizeInBytes;
@@ -1037,12 +1031,7 @@ void * go_thread_rx(void * pParam)
 					lastCRC, lastMod, lastEnc, lastLen, lengthInBytes);
 				fflush(stdout);
 			}
-			int i;
-#ifdef DEBUG
-			for (i = 0; i < lengthInBytes + 5; i ++)
-				printf("%x ", payload[i]);
-			printf("\n\n");
-#endif
+
 			if (outType == TY_IP)
 			{
 				// IP
