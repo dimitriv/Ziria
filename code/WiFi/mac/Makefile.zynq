@@ -54,14 +54,14 @@ mac.out : $(CSRC)
 
 freq=563000000
 rate=5000000
-clock=160000000
+clock=40000000
 lime_mac.run: lime_mac.out
 	./$< --TX-PC=tun0 --MAC-type=TX-RX --TX-PHY-rate=6 --TX-output=sdr --TX-input=ip --RX-input=sdr --RX-output=ip --TX-heap-size=100000000 --RX-heap-size=100000000 \
 	  --memory-size=1000 --sdr-central-frequency=$(freq) --sdr-sample-rate=$(rate) --sdr-bandwidth=30000000 --sdr-rx-gain=0 --sdr-tx-gain=0 --sdr-clock-rate=$(clock)
 
 adi_mac.run: adi_mac.out
 	./$< --TX-PC=tap0 --MAC-type=TX-RX --TX-PHY-rate=6 --TX-output=sdr --TX-input=ip --RX-input=sdr --RX-output=ip --TX-heap-size=100000000 --RX-heap-size=100000000 \
-    --memory-size=1000 --sdr-central-frequency=563000000 --sdr-sample-rate=2500000 --sdr-bandwidth=30000000 --sdr-rx-gain=0 --sdr-tx-gain=0 
+    --memory-size=1000 --sdr-central-frequency=$(freq) --sdr-sample-rate=$(rate) --sdr-bandwidth=30000000 --sdr-rx-gain=0 --sdr-tx-gain=0 
 
 mac.outfile: mac.out
 	./$< --TX-input=file --TX-input-file-mode=bin --TX-input-file-name=mac.infile --MAC-type=TX-only --TX-PHY-rate=6 --TX-output=file --TX-output-file-name=$@ \

@@ -105,7 +105,7 @@ pthread_t StartPosixThread(void *(*function) (void *), void * arg, int core, int
 	pthread_attr_t thAttr;
 	pthread_t mac_thread;
 	struct sched_param param;
-	int policy = 0;
+	int policy(SCHED_RR);
 
 	int s = pthread_attr_init(&thAttr);
 

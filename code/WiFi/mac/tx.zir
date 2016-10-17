@@ -20,7 +20,7 @@
 #pragma once 
 
 #define SHORT_FFT
-
+#define FAST
 #include "../const.blk"
 #include <externals.blk>
 #include "../transmitter/scramble.blk"
