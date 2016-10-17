@@ -114,6 +114,10 @@ typedef struct {
 	SoapySDR::Stream *txStream;
 	unsigned long clockRate;
 	char * host;
+#ifdef PL_CS
+	char * corr_thr;
+	char * rst_countdown;
+#endif
 #endif
 
 } SDRParameters;

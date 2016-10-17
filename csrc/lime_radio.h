@@ -9,6 +9,9 @@
 #include "params.h"
 #include "numerics.h"
 
+#ifdef PL_CS
+void startCarrierSense(BlinkParams *params);
+#endif
 
 int  LimeRF_RadioStart(BlinkParams *params);
 int  LimeRF_ConfigureTX(BlinkParams *params);

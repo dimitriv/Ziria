@@ -110,6 +110,21 @@ int  LimeRF_ConfigureRX(BlinkParams *params)
     iris->setGain(SOAPY_SDR_RX, 0, "PGA", params->radioParams.RXpa);
     iris->setDCOffsetMode(SOAPY_SDR_RX, 0, true);
 
+#ifdef PL_CS
+    iris->writeSetting("RESET_CS_BLOCK", "");
+
+    iris->writeSetting("SET_CS_THRESHOLD", (std::string)params->radioParams.corr_thr);
+    printf("[INFO] Iris::writeSetting(SET_CS_THRESHOLD, %s)\n", params->radioParams.corr_thr);
+
+    iris->writeSetting("SET_PEAK_COUNT", "9");
+    printf("[INFO] Iris::writeSetting(SET_PEAK_COUNT, %s)\n", "9");
+
+    iris->writeSetting("SET_CS_SELF_RESET_COUNT", (std::string)params->radioParams.rst_countdown);
+    printf("[INFO] Iris::writeSetting(SET_CS_SELF_RESET_COUNT, %s)\n", params->radioParams.rst_countdown);
+
+    iris->writeSetting("START_CS","");
+#endif
+
 #ifdef LOOPBACK
 	iris->writeSetting(SOAPY_SDR_RX, 0, "RBB_SET_PATH", "LB_BYP");
 #endif
@@ -153,8 +168,13 @@ void readLimeRF(BlinkParams *params, complex16 *ptr, int size)
 		ret = iris->readStream(params->radioParams.rxStream, (void **)&readPtr, (size_t)samps, flags, time, 1000000);
 		if (ret < 0)
 		{
+#ifndef PL_CS
 			printf("Unable to read stream!\n");
 			break;
+#else
+			//printf("Waiting for a packet!\n");
+			continue;
+#endif
 		}
 		else
 		{
@@ -163,8 +183,15 @@ void readLimeRF(BlinkParams *params, complex16 *ptr, int size)
 		}
 
 	}
-
 }
+
+#ifdef PL_CS
+void startCarrierSense(BlinkParams *params)
+{
+	SoapySDR::Device *iris = params->radioParams.iris;
+	iris->writeSetting("START_CS","");
+}
+#endif
 
 // uses time flag to send samples at a future time
 void writeLimeRF(BlinkParams *params, complex16 *ptr, unsigned long size)

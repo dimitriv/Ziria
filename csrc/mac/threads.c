@@ -136,7 +136,7 @@ pthread_t StartPosixThread(void *(*function) (void *), void * arg, int core, int
 		CPU_ZERO(&cpuset);
 		CPU_SET(core, &cpuset);
 
-		if (pthread_setaffinity_np(mac_thread, sizeof(cpu_set_t), &cpuset) == 0)
+		if (pthread_setaffinity_np(mac_thread, sizeof(cpu_set_t), &cpuset) != 0)
 		{
 			printf("Failed to set affinity to core %d\n", core);
 			//return 0;

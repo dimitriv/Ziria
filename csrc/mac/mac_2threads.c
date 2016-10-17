@@ -1017,7 +1017,11 @@ void * go_thread_rx(void * pParam)
 			wpl_input_initialize_rx();
 			wpl_go_rx();
 			wpl_output_finalize_rx();
-
+#ifdef PL_CS
+#ifdef LIME_RF
+			startCarrierSense(params_rx); // make sure this is not started already !
+#endif
+#endif
 			unsigned int lengthInBytes = buf_ctx_rx.total_out / 8 - 5;
 			lastCRC = payload[lengthInBytes];
 			lastMod = payload[lengthInBytes + 1];

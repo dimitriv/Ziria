@@ -31,11 +31,15 @@ endif
 ifeq ($(RADIO), ADI_RF) 
 LIBS += -liio
 EXTRACOPTS += -DADI_RF
+#EXTRACOPTS += -DPL_CS
 endif
 
 ifeq ($(RADIO), LIME_RF) 
 LIBS += -lSoapySDR
 EXTRACOPTS += -DLIME_RF #-DLOOPBACK
+ifeq ($(PL), YES) 
+EXTRACOPTS += -DPL_CS
+endif
 endif
 
 EXECUTABLE = driver

@@ -350,6 +350,12 @@ void init_TXBufferSize(BlinkParams *params, char *i)		{ params[0].radioParams.TX
 #ifdef LIME_RF
 void init_ClockRate(BlinkParams *params, char *i)	{ params[0].radioParams.clockRate = parse_ClockRate(i);
 													  params[1].radioParams.clockRate = params[0].radioParams.clockRate;}
+#ifdef PL_CS
+void init_corr_thr(BlinkParams *params, char *i)	{ params[0].radioParams.corr_thr = i;
+													  params[1].radioParams.corr_thr = i;}
+void init_resetcount(BlinkParams *params, char *i)	{ params[0].radioParams.rst_countdown = i;
+													  params[1].radioParams.rst_countdown = i;}
+#endif
 #endif
 
 #if defined(ADI_RF) || defined(LIME_RF)
@@ -369,7 +375,11 @@ void init_SdrAddress(BlinkParams *params, char *i)	{
 #define PARAM_TABLE_LENGTH		29 + 10
 #else
 #ifdef LIME_RF
+#ifdef PL_CS
+#define PARAM_TABLE_LENGTH		29 + 11 + 2
+#else
 #define PARAM_TABLE_LENGTH		29 + 11
+#endif
 #else
 #define PARAM_TABLE_LENGTH		38
 #endif
@@ -658,6 +668,18 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
       "SDR clock rate in MHz (default 40)",
       "40",
       init_ClockRate }
+#ifdef PL_CS
+  , { "--corr-thr=",
+        "--corr-thr = ...",
+        "Correlation Threshold",
+        "50000000",
+        init_corr_thr }
+  , { "--self-reset-countdown=",
+        "--self-reset-countdown= ...",
+        "PL self-reset sample countdown",
+        "10000",
+        init_resetcount }
+#endif
 #endif
 
 #if defined(ADI_RF) || defined(LIME_RF)

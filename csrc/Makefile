@@ -47,6 +47,9 @@ ifeq ($(RADIO), LIME_RF)
 OBJ_RADIO=lime_radio.o
 LIBS += -lSoapySDR
 EXTRACOPTS += -DLIME_RF
+ifeq ($(PL), YES) 
+EXTRACOPTS += -DPL_CS
+endif
 endif
 
 OBJ_INT = bit.o numerics.o params.o test.o driver.o wpl_alloc.o utils.o
