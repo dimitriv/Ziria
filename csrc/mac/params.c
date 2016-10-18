@@ -250,6 +250,11 @@ unsigned long  parse_ClockRate(char *rp)
 {
 	return (unsigned long)strtoul(rp, NULL, 10);
 }
+long  parse_ShiftQ(char *rp)
+{
+	return (long)strtol(rp, NULL, 10);
+}
+
 #endif
 
 
@@ -350,6 +355,9 @@ void init_TXBufferSize(BlinkParams *params, char *i)		{ params[0].radioParams.TX
 #ifdef LIME_RF
 void init_ClockRate(BlinkParams *params, char *i)	{ params[0].radioParams.clockRate = parse_ClockRate(i);
 													  params[1].radioParams.clockRate = params[0].radioParams.clockRate;}
+void init_ShiftQ(BlinkParams *params, char *i)	{ params[0].radioParams.shiftQ = parse_ShiftQ(i);
+												  params[1].radioParams.shiftQ = parse_ShiftQ(i);}
+
 #ifdef PL_CS
 void init_corr_thr(BlinkParams *params, char *i)	{ params[0].radioParams.corr_thr = i;
 													  params[1].radioParams.corr_thr = i;}
@@ -376,9 +384,9 @@ void init_SdrAddress(BlinkParams *params, char *i)	{
 #else
 #ifdef LIME_RF
 #ifdef PL_CS
-#define PARAM_TABLE_LENGTH		29 + 11 + 2
+#define PARAM_TABLE_LENGTH		29 + 12 + 2
 #else
-#define PARAM_TABLE_LENGTH		29 + 11
+#define PARAM_TABLE_LENGTH		29 + 12
 #endif
 #else
 #define PARAM_TABLE_LENGTH		38
@@ -668,6 +676,11 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
       "SDR clock rate in MHz (default 40)",
       "40",
       init_ClockRate }
+  , { "--shift-q=",
+        "--shift-q= ...",
+        "shift Q samples in time versus I samples",
+        "0",
+        init_shiftQ }
 #ifdef PL_CS
   , { "--corr-thr=",
         "--corr-thr = ...",

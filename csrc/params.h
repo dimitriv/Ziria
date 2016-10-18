@@ -114,6 +114,7 @@ typedef struct {
 	SoapySDR::Stream *txStream;
 	unsigned long clockRate;
 	char * host;
+	long shiftQ; // this is for testing the possibility of time shift b/w I ans Q samples from Lime
 #ifdef PL_CS
 	char * corr_thr;
 	char * rst_countdown;

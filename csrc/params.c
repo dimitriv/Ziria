@@ -104,7 +104,7 @@ int parse_timeStampAtRead(char *md) {
 // TODO: Add error handling
 unsigned long  parse_SampleRate(char *rp)
 {
-	return (unsigned long)strtoul(rp, NULL, 10);
+	return (unsigned long)strtoi(rp, NULL, 10);
 }
 
 
@@ -117,6 +117,11 @@ unsigned long  parse_TXBufferSize(char *rp)
 unsigned long  parse_ClockRate(char *rp)
 {
 	return (unsigned long)strtoul(rp, NULL, 10);
+}
+
+long  parse_ShiftQ(char *rp)
+{
+	return (long)strtol(rp, NULL, 10);
 }
 #endif
 
@@ -163,6 +168,7 @@ void init_Bandwidth(BlinkParams *params, char *i)			{ params->radioParams.Bandwi
 void init_TXBufferSize(BlinkParams *params, char *i)		{ params->radioParams.TXBufferSize = parse_TXBufferSize(i); }
 #ifdef LIME_RF
 void init_ClockRate(BlinkParams *params, char *i)	{ params->radioParams.clockRate = parse_ClockRate(i); }
+void init_ShiftQ(BlinkParams *params, char *i)	{ params->radioParams.shiftQ = parse_ShiftQ(i); }
 #ifdef PL_CS
 void init_corr_thr(BlinkParams *params, char *i)	{ params->radioParams.corr_thr = i; }
 void init_resetcount(BlinkParams *params, char *i)	{ params->radioParams.rst_countdown = i; }
@@ -174,9 +180,9 @@ void init_resetcount(BlinkParams *params, char *i)	{ params->radioParams.rst_cou
 #define PARAM_TABLE_LENGTH		23
 #else
 #ifdef PL_CS
-#define PARAM_TABLE_LENGTH		24 + 2
+#define PARAM_TABLE_LENGTH		25 + 2
 #else
-#define PARAM_TABLE_LENGTH		24
+#define PARAM_TABLE_LENGTH		25
 #endif
 #endif
 
@@ -320,6 +326,11 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
          "SDR clock rate in MHz (default 80)",
          "80000000",
          init_ClockRate }
+  , { "--shift-q=",
+        "--shift-q= ...",
+        "shift Q samples in time versus I samples",
+        "0",
+        init_shiftQ }
 #ifdef PL_CS
   , { "--corr-thr=",
         "--corr-thr = ...",
