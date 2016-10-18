@@ -680,7 +680,7 @@ BlinkParamInfo paramTable[PARAM_TABLE_LENGTH] =
         "--shift-q= ...",
         "shift Q samples in time versus I samples",
         "0",
-        init_shiftQ }
+        init_ShiftQ }
 #ifdef PL_CS
   , { "--corr-thr=",
         "--corr-thr = ...",
