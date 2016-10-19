@@ -183,6 +183,9 @@ void readLimeRF(BlinkParams *params, complex16 *ptr, int size)
 		}
 
 	}
+	int i;
+	for (i = 0; i < size; i++)
+		ptr[i].im = ptr[(i+params->radioParams.shiftQ)%size].im;
 }
 
 #ifdef PL_CS
