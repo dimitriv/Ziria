@@ -1,5 +1,5 @@
 /*
-   Copyright (c) Rice University
+   Copyright (c) Rice University, RECG Lab
    All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the ""License""); you
