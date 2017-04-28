@@ -47,7 +47,6 @@ import qualified CgSetupThreads as ST
 import qualified PassPipeline as PP
 
 import Control.Monad.Writer
-import qualified Data.DList as DL
 import qualified Data.List
 import Data.Loc
 import Data.Monoid

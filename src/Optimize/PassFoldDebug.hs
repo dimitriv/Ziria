@@ -20,6 +20,7 @@
 --
 -- This is a separate module because of TH stage restrictions.
 {-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE TemplateHaskell #-}
 module PassFoldDebug (
     step
@@ -79,7 +80,11 @@ simpleInScope x = do
       Nothing   -> return Nothing
 
 isSimple :: Info -> Bool
+#if MIN_VERSION_template_haskell(2,11,0)
+isSimple (VarI _ tp _) = isSimpleType tp
+#else /* !MIN_VERSION_template_haskell(2,11,0) */
 isSimple (VarI _ tp _ _) = isSimpleType tp
+#endif /* !MIN_VERSION_template_haskell(2,11,0) */
 isSimple _ = False
 
 isSimpleType :: Type -> Bool

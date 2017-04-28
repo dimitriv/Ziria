@@ -1,12 +1,12 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans -fno-warn-warnings-deprecations #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE StandaloneDeriving #-}
 module Orphans where
 
-import Control.DeepSeq
-import Control.DeepSeq.Generics (NFData(..), genericRnf)
+import Control.DeepSeq (NFData(..))
+import Control.DeepSeq.Generics (genericRnf)
 import Data.Loc
 import Data.Map (Map)
 import GHC.Generics (Generic)
@@ -52,9 +52,3 @@ instance NFData SrcLoc      where rnf = genericRnf
 instance Error HughesPJ.Doc where
   noMsg  = HughesPJ.empty
   strMsg = HughesPJ.text
-
-instance Eq HughesPJ.Doc where 
-  d1 == d2 = show d1 == show d2
-
-instance Ord HughesPJ.Doc where 
-  d1 <= d2 = show d1 <= show d2

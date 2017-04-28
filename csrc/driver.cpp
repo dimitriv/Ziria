@@ -23,6 +23,11 @@
 #include <time.h>
 #include <string.h>
 
+#if defined(_POSIX_VERSION)
+#include <sys/resource.h>
+#include <sys/times.h>
+#endif /* defined(_POSIX_VERSION) */
+
 #ifdef SORA_PLATFORM
 #include <winsock2.h> // ws2_32.lib required
 #include <ws2tcpip.h>
@@ -106,6 +111,38 @@ BlinkParams *params;
 
 // tracks bytes copied 
 extern unsigned long long bytes_copied; 
+
+long double get_cpu_time(void)
+{
+#if defined(CLOCK_PROCESS_CPUTIME_ID)
+    struct timespec ts;
+
+    if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts) == 0)
+        return (long double) ts.tv_sec + (long double) ts.tv_nsec / 1e9;
+#else
+    clock_t cl = clock();
+
+    if (cl != (clock_t) -1)
+        return (double) cl / (double) CLOCKS_PER_SEC;
+#endif
+  return -1;
+}
+
+long double get_real_time(void)
+{
+#if defined(CLOCK_MONOTONIC_RAW)
+    struct timespec ts;
+
+    if (clock_gettime(CLOCK_MONOTONIC_RAW, &ts) == 0)
+        return (long double) ts.tv_sec + (long double) ts.tv_nsec / 1e9;
+#else
+    clock_t cl = clock();
+
+    if (cl != (clock_t) -1)
+        return (double) cl / (double) CLOCKS_PER_SEC;
+#endif
+    return -1;
+}
 
 int __cdecl main(int argc, char **argv) {
 
@@ -237,20 +274,22 @@ int __cdecl main(int argc, char **argv) {
   ts_free();
 
 #else
-  int usec;
-#ifdef __GNUC__
-  struct timespec start, end;
-  clock_gettime(CLOCK_MONOTONIC, &start);
+  long double cpu_time_start, cpu_time_end;
+  long double real_time_start, real_time_end;
+
+  cpu_time_start = get_cpu_time();
+  real_time_start = get_real_time();
+
   wpl_go();
-  clock_gettime(CLOCK_MONOTONIC, &end);
-  usec = (end.tv_sec - start.tv_sec) * 1000000 + (end.tv_nsec - start.tv_nsec) / 1000;
-#else
-  clock_t start = clock(), diff;
-  wpl_go();
-  diff = clock() - start;
-  usec = diff * 1000000 / CLOCKS_PER_SEC;
-#endif
-  printf("Time Elapsed: %d\n", usec);
+
+  cpu_time_end = get_cpu_time();
+  real_time_end = get_real_time();
+
+  printf("Time elapsed (usec): %d\n", (int) ((cpu_time_end -
+                                              cpu_time_start) *
+                                              1000000));
+  printf("Elapsed cpu time (sec): %Le\n", cpu_time_end - cpu_time_start);
+  printf("Elapsed real time (sec): %Le\n", real_time_end - real_time_start);
 #endif
 
   printf("Bytes copied: %llu \n", bytes_copied);
@@ -336,4 +375,3 @@ int SetUpThreads(void *unused)
 }
 
 #endif
-

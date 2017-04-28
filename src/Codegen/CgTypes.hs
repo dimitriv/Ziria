@@ -29,8 +29,8 @@ module CgTypes ( bwBitWidth
                , HowToInit ( .. ), isInitWith 
                , codeGenDeclGroup
                , appendCodeGenDeclGroup
-	       , codeGenDeclGroupEscape
-	       , appendCodeGenDeclGroupEscape
+               , codeGenDeclGroupEscape
+               , appendCodeGenDeclGroupEscape
                , codeGenDeclVolGroup
                , codeGenFieldDeclGroup
                , codeGenDeclDef

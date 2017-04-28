@@ -16,6 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs, DeriveGeneric, DeriveDataTypeable, ScopedTypeVariables, RecordWildCards #-}
 {-# OPTIONS_GHC -Wall #-}
 module AstExpr ( 
@@ -26,9 +27,12 @@ module AstExpr (
   ) where
 
 import Prelude hiding (exp, mapM)
-import Control.DeepSeq.Generics (NFData(..), genericRnf)
+import Control.DeepSeq (NFData(..))
+import Control.DeepSeq.Generics (genericRnf)
 import Data.Loc
+#if !MIN_VERSION_base(4,8,0)
 import Data.Monoid
+#endif /* !MIN_VERSION_base(4,8,0) */
 import Data.Data (Data)
 import Data.Functor.Identity (Identity(..))
 import Data.Maybe ( isJust )

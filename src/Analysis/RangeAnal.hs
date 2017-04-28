@@ -16,10 +16,11 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric, DeriveDataTypeable, MultiParamTypeClasses, 
              FunctionalDependencies, StandaloneDeriving, 
              GeneralizedNewtypeDeriving, FlexibleInstances #-}
-{-# OPTIONS_GHC -Wall -fno-warn-unused-do-bind -fno-warn-orphans #-}
+{-# OPTIONS_GHC -Wall -fno-warn-unused-do-bind -fno-warn-orphans -fno-warn-warnings-deprecations #-}
 
 -- | Range analysis
 module Analysis.RangeAnal 
@@ -29,7 +30,9 @@ module Analysis.RangeAnal
      )
 where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif /* !MIN_VERSION_base(4,8,0) */
 import Control.Monad.Error
 import Control.Monad.State
 import Text.PrettyPrint.HughesPJ

@@ -17,11 +17,14 @@
    permissions and limitations under the License.
 -}
 -- | Typecheck (and sanity check) core (rather than source)
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE FlexibleInstances #-}
 module Tc ( tc ) where
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif /* !MIN_VERSION_base(4,8,0) */
 import Control.Monad
 import Data.Loc
 import Text.PrettyPrint.HughesPJ
@@ -510,7 +513,7 @@ tcComp comp@(MkComp comp0 loc _) =
       unify loc ety TBool
       ctyJoin loc cty1 cty2
 
-tcCheckArgMut :: (Outputable w, Outputable t) 
+tcCheckArgMut :: (Outputable t) 
               => SrcLoc -> GName w -> ArgTy -> GExp t a -> TcM ()
 tcCheckArgMut loc fn (GArgTy _ Mut) earg = do 
   let md = isGDerefExp earg
@@ -523,12 +526,12 @@ tcCheckArgMut loc fn (GArgTy _ Mut) earg = do
 tcCheckArgMut _ _ _ _ = return ()
 
 
-tcCheckArgMuts :: (Outputable w, Outputable t) 
+tcCheckArgMuts :: (Outputable t) 
                => SrcLoc -> GName w -> [ArgTy] -> [GExp t a] -> TcM ()
 tcCheckArgMuts loc fn fun_tys args = mapM_ check_mut (zip fun_tys args)
   where check_mut (argty, earg) = tcCheckArgMut loc fn argty earg
 
-tcCheckCAArgMuts :: (Outputable w, Outputable t) => SrcLoc
+tcCheckCAArgMuts :: (Outputable t) => SrcLoc
                  -> GName w
                  -> [CallArg ArgTy CTy]
                  -> [CallArg (GExp t b) (GComp tc t a b)] -> TcM ()

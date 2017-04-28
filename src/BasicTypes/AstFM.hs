@@ -19,6 +19,7 @@
 
 {-# OPTIONS_GHC -Wall #-}
 
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE RebindableSyntax, 
              FlexibleInstances, 
              MultiParamTypeClasses, QuasiQuotes, GADTs, 
@@ -35,7 +36,10 @@ module AstFM where
 
 import Prelude
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif /* !MIN_VERSION_base(4,8,0) */
+import Control.Monad
 import Data.Loc
 
 import AstComp
@@ -179,6 +183,13 @@ data FStmt s where
   FEAssign   :: FExp -> FExp -> FStmt s -> FStmt s
   FEReturn   :: v -> FStmt v
 
+instance Functor FStmt where
+  fmap f x = x >>= return . f
+
+instance Applicative FStmt where
+  pure  = return
+  (<*>) = ap
+    
 instance Monad FStmt where 
   return s = FEReturn s
   (FEArrWrite fe1 fe2 li fe ss) >>= f = FEArrWrite fe1 fe2 li fe (ss >>= f)
@@ -290,6 +301,13 @@ data Zr v where
 
  FEmbed    :: Bindable v => IO Comp -> Zr v
  FMitigate :: Ty -> Int -> Int -> Zr Void
+
+instance Functor Zr where
+  fmap f x = x >>= return . f
+
+instance Applicative Zr where
+  pure  = return
+  (<*>) = ap
 
 instance Monad Zr where
   return e                      = FPure e 

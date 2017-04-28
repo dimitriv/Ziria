@@ -85,7 +85,7 @@ outputCompiledProgram (CompiledProgram sc cc fn) = do
     hPutStrLn outHdl $ render $ pprProgInfo sc
     hPutStrLn outHdl "*/"
     hPutStr outHdl cHeader
-    hPutStr outHdl $ show (GMPretty.ppr cc)
+    hPutStr outHdl $ GMPretty.pretty 80 (GMPretty.ppr cc)
     hClose outHdl
 
 

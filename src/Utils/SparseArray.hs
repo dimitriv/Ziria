@@ -52,7 +52,8 @@ module SparseArray (
   , nonDefaultCount
   ) where
 
-import Control.DeepSeq.Generics (NFData(..), genericRnf)
+import Control.DeepSeq (NFData(..))
+import Control.DeepSeq.Generics (genericRnf)
 import Data.IntMap.Strict (IntMap)
 import Data.Maybe (fromMaybe)
 import GHC.Generics (Generic)

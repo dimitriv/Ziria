@@ -17,7 +17,6 @@
 # permissions and limitations under the License.
 #
 #
-ARCH ?= armv7l
 
 COMPILER ?= gcc
 
@@ -27,10 +26,27 @@ else
 CXX = g++
 endif
 
+ifeq ($(COMPILER), gcc-arm)
 CFLAGS = -mfpu=neon -flax-vector-conversions -Wall -Wno-write-strings -Wno-unused-label -Wno-unused-variable -Wno-comment -Og -g
 CXXFLAGS = -std=c++11 -mfpu=neon -flax-vector-conversions -Wall -Wno-write-strings -Wno-unused-label -Wno-unused-variable -Wno-attributes -Wno-comment -Og -g
 #CFLAGS = -march=native -mtune=native -mfpu=neon -flax-vector-conversions -w -pipe -Ofast
 #CXXFLAGS = -std=c++11 -march=native -mtune=native -mfpu=neon -flax-vector-conversions -w -pipe -Ofast 
+else
+CFLAGS = -Wall -Wno-write-strings -Wno-comment -g
+CXXFLAGS = -std=c++11 -Wall -Wno-unused-label -Wno-unused-variable -Wno-attributes -Wno-comment -g
+endif
+
+ifeq ($(COMPILER), gcc)
+CFLAGS += -Og
+CXXFLAGS += -Og
+endif
+
+ifeq ($(COMPILER), clang)
+CFLAGS += -O
+CXXFLAGS += -O
+endif
+
+>>>>>>> master
 LIBS = -lm
 OBJDIR = .
 

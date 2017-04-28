@@ -16,7 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
-{-# LANGUAGE FlexibleInstances, OverlappingInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Outputable where
 
 import Text.PrettyPrint.HughesPJ
@@ -25,6 +25,12 @@ import qualified Data.Map as M
 
 class Outputable a where
   ppr :: a -> Doc
+         
+  pprList :: [a] -> Doc
+  pprList = sep . punctuate comma . map ppr
+
+instance Outputable a => Outputable [a] where
+  ppr = pprList
 
 instance Outputable Int where
   ppr = integer . fromIntegral
@@ -32,14 +38,12 @@ instance Outputable Int where
 instance Outputable Integer where
   ppr = integer . fromIntegral
 
-instance Outputable a => Outputable [a] where
-  ppr = sep . punctuate comma . map ppr
-
 instance (Outputable a, Outputable b) => Outputable (a,b) where
   ppr (a,b) = parens (ppr a <> comma <+> ppr b)
 
-instance Outputable String where
-  ppr = text 
+instance Outputable Char where
+  ppr = char 
+  pprList = text 
 
 instance Outputable a => Outputable (Maybe a) where 
   ppr Nothing  = text "N/A"

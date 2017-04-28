@@ -17,6 +17,7 @@
    permissions and limitations under the License.
 -}
 {-# OPTIONS_GHC -Wall -Werror #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables, RecordWildCards, 
     GeneralizedNewtypeDeriving, MultiWayIf, QuasiQuotes, DeriveGeneric #-}
 module PassComp (
@@ -46,7 +47,9 @@ import qualified Data.Set as S
 -- import Outputable
 
 import Data.Loc
+#if !MIN_VERSION_base(4,8,0)
 import Data.Monoid
+#endif /* !MIN_VERSION_base(4,8,0) */
 
 import Data.Maybe ( fromJust )
 

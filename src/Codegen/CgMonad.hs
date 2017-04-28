@@ -20,6 +20,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -fno-warn-warnings-deprecations #-}
 
 module CgMonad
   ( IfThenElse(..)
@@ -141,13 +142,14 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Writer
 import Data.Char (toUpper)
-import Data.DList (DList)
-import qualified Data.DList as DL
+import Data.Foldable (toList)    
 import Data.Monoid
 import Data.Maybe (catMaybes)
 import Data.Monoid
 import Data.Loc (noLoc)
 import Data.Loc
+import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 import qualified Data.Symbol
 import Control.Monad (ap)
 import Control.Monad.IO.Class (MonadIO(..))
@@ -202,9 +204,9 @@ instance IfThenElse C.Exp Code where
                            $decls:el_decls
                            $stms:el_stms
                          }|]
-        in Code (DL.fromList (th_defs ++ el_defs))
-                (DL.empty)
-                (DL.singleton s)
+        in Code (Seq.fromList (th_defs ++ el_defs))
+                (mempty)
+                (Seq.singleton s)
 
 
 ------------------------------------------------------------------------------
@@ -377,15 +379,15 @@ emptyState = CgState [] 0 Opts.cMAX_STACK_ALLOC [] [] []
 
 data Code = Code
     { -- Top-level definitions
-      defs     :: !(DList C.Definition)
+      defs     :: !(Seq C.Definition)
       -- Local declarations
-    , decls    :: !(DList C.InitGroup)
+    , decls    :: !(Seq C.InitGroup)
       -- Local statements
-    , stmts   :: !(DList C.Stm)
+    , stmts   :: !(Seq C.Stm)
     }
 
 getCode :: Code -> ([C.Definition],[C.InitGroup],[C.Stm])
-getCode (Code df dc st) = (DL.toList df, DL.toList dc, DL.toList st)
+getCode (Code df dc st) = (toList df, toList dc, toList st)
 
 
 instance Monoid Code where
@@ -412,7 +414,7 @@ evalCg sym stack_alloc_threshold m = do
                    (emptyState { maxStackAlloc = stack_alloc_threshold })
     case res of
       Left err -> return $ Left err
-      Right (_, code, _) -> return $ Right $ DL.toList (defs code)
+      Right (_, code, _) -> return $ Right $ toList (defs code)
 
 instance Monad Cg where
     return x = Cg $ \rho s -> return (Right (x, mempty, s))
@@ -504,8 +506,8 @@ inNewBlock :: Cg a -> Cg ([C.InitGroup], [C.Stm], a)
 inNewBlock m
  = do { (x, code) <- collect m
       ; tell code { decls = mempty, stmts  = mempty }
-      ; let decls' = DL.toList (decls code)
-            stmts' = DL.toList (stmts code)
+      ; let decls' = toList (decls code)
+            stmts' = toList (stmts code)
       ; return (decls',stmts',x)
       }
 
@@ -539,7 +541,7 @@ collectDefinitions :: Cg a -> Cg ([C.Definition], a)
 collectDefinitions m = do
     (x, code) <- collect m
     tell code { defs = mempty }
-    return (DL.toList (defs code), x)
+    return (toList (defs code), x)
 
 collectDefinitions_ :: Cg () -> Cg ([C.Definition])
 collectDefinitions_ m = do
@@ -550,7 +552,7 @@ collectStmts :: Cg a -> Cg ([C.Stm], a)
 collectStmts m = do
     (x, code) <- collect m
     tell code { stmts = mempty }
-    return (DL.toList (stmts code), x)
+    return (toList (stmts code), x)
 
 collectStmts_ :: Cg () -> Cg ([C.Stm])
 collectStmts_ m = do
@@ -641,11 +643,11 @@ printState = do
 
 appendTopDef :: C.Definition -> Cg ()
 appendTopDef newDef =
-  tell mempty { defs = DL.singleton newDef }
+  tell mempty { defs = Seq.singleton newDef }
 
 appendTopDefs :: [C.Definition] -> Cg ()
 appendTopDefs newDefs =
-  tell mempty { defs = DL.fromList newDefs }
+  tell mempty { defs = Seq.fromList newDefs }
 
 appendStructDef :: TyName -> C.InitGroup -> Cg ()
 -- Structs can't shadow each other in Blink, but we may end up
@@ -669,11 +671,11 @@ $esc:("#endif")
 
 appendTopDecl :: C.InitGroup -> Cg ()
 appendTopDecl newDecl =
-  tell mempty { defs = DL.singleton (C.DecDef newDecl noLoc) }
+  tell mempty { defs = Seq.singleton (C.DecDef newDecl noLoc) }
 
 appendTopDecls :: [C.InitGroup] -> Cg ()
 appendTopDecls newDecls =
-  tell mempty { defs = DL.fromList [C.DecDef decl noLoc | decl <- newDecls] }
+  tell mempty { defs = Seq.fromList [C.DecDef decl noLoc | decl <- newDecls] }
 
 appendDecl :: C.InitGroup -> Cg ()
 appendDecl newDecl = tell (codeDecl newDecl)
@@ -682,16 +684,16 @@ appendDecls :: [C.InitGroup] -> Cg ()
 appendDecls newDecls = tell (codeDecls newDecls)
 
 codeStmt :: C.Stm -> Code
-codeStmt newStmt = mempty { stmts = DL.singleton newStmt }
+codeStmt newStmt = mempty { stmts = Seq.singleton newStmt }
 
 codeStmts :: [C.Stm] -> Code
-codeStmts newStmts = mempty { stmts = DL.fromList newStmts }
+codeStmts newStmts = mempty { stmts = Seq.fromList newStmts }
 
 codeDecl :: C.InitGroup -> Code
-codeDecl newDecl = mempty { decls = DL.singleton newDecl }
+codeDecl newDecl = mempty { decls = Seq.singleton newDecl }
 
 codeDecls :: [C.InitGroup] -> Code
-codeDecls newDecls = mempty { decls = DL.fromList newDecls }
+codeDecls newDecls = mempty { decls = Seq.fromList newDecls }
 
 
 emitCode :: Code -> Cg ()

@@ -16,6 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs, RankNTypes, DeriveGeneric, DeriveDataTypeable, ScopedTypeVariables, RecordWildCards, 
     TypeSynonymInstances, FlexibleInstances #-}
 {-# OPTIONS_GHC -Wall #-}
@@ -28,7 +29,9 @@ import Data.Data (Data)
 import Data.Either (partitionEithers)
 import Data.Functor.Identity ( Identity (..) )
 import Data.Loc
+#if !MIN_VERSION_base(4,8,0)
 import Data.Monoid
+#endif /* !MIN_VERSION_base(4,8,0) */
 import Data.Set (Set)
 import Data.Maybe ( isJust )
 import Data.Traversable (mapM)

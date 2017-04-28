@@ -45,7 +45,6 @@ import CgExpr
 import CgLUT
 
 import Control.Monad.Writer
-import qualified Data.DList as DL
 import qualified Data.List
 import Data.Loc
 import Data.Monoid

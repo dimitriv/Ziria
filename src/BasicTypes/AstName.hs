@@ -24,7 +24,8 @@ import Prelude hiding (exp, mapM)
 import Data.Loc
 import Data.Data (Data)
 import Data.Typeable (Typeable)
-import Control.DeepSeq.Generics (NFData(..), genericRnf)
+import Control.DeepSeq (NFData(..))
+import Control.DeepSeq.Generics (genericRnf)
 import GHC.Generics (Generic)
 import Text.Show.Pretty (PrettyVal)
 
@@ -100,7 +101,7 @@ getNameWithUniq nm = name nm ++ "_blk" ++ unUniq (uniqId nm)
 {---------------- Printing names ---------------------------------}
 
 
-instance Outputable ty => Outputable (GName ty) where
+instance Outputable (GName ty) where
   ppr ix = ppName ix
 
 ppName :: GName ty -> Doc

@@ -1878,6 +1878,7 @@ FORCE_INLINE
 struct complex16 __ext_v_sum_complex16(struct complex16* x, int len)
 {
   struct complex16 ret;
+  ret.re = 0; ret.im = 0;
 
   for (int i = 0; i < len; i++)
   {
@@ -1892,6 +1893,7 @@ FORCE_INLINE
 struct complex32 __ext_v_sum_complex32(struct complex32* x, int len)
 {
   struct complex32 ret;
+  ret.re = 0; ret.im = 0;
 
   for (int i = 0; i < len; i++)
   {

@@ -34,7 +34,8 @@ import Outputable
 import Text.PrettyPrint.HughesPJ
 
 import Text.Show.Pretty (PrettyVal)
-import Control.DeepSeq.Generics (NFData(..), genericRnf)
+import Control.DeepSeq (NFData(..))
+import Control.DeepSeq.Generics (genericRnf)
 
 {-------------------------------------------------------------------------------
   Various kinds of variables

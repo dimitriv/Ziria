@@ -16,6 +16,7 @@
    See the Apache Version 2.0 License for specific language governing
    permissions and limitations under the License.
 -}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -30,7 +31,9 @@ import AstUnlabelled
 import CtExpr
 import CgMonad
 import CgTypes
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative ( (<$>) )
+#endif /* !MIN_VERSION_base(4,8,0) */
 import Data.Loc
 import Data.Maybe ( isJust, catMaybes, fromJust )
 import Language.C.Quote.C
@@ -41,7 +44,9 @@ import qualified Data.Hashable as H
 import PpExpr ()
 import Outputable 
 import Data.Bits
+#if !MIN_VERSION_base(4,8,0)
 import Data.Word
+#endif /* !MIN_VERSION_base(4,8,0) */
 import Utils
 import Control.Monad.Identity ( runIdentity )
 

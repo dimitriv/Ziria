@@ -27,7 +27,17 @@ CXX = g++
 endif
 
 # Note: SSE3 is required, SSSE3 is optional.
+ifeq ($(COMPILER), gcc)
+CXXFLAGS = -std=c++11 -march=native -mtune=native -w -pipe -Ofast -fwhole-program
+endif
+
+ifeq ($(COMPILER), clang)
+CXXFLAGS = -std=c++11 -march=native -mtune=native -w -pipe -Ofast
+endif
+
+ifeq ($(COMPILER), gcc-arm)
 CXXFLAGS = -std=c++11 -march=native -mtune=native -mfpu=neon -flax-vector-conversions -w -pipe -Ofast -fwhole-program
+endif
 
 LIBS = -lm -liio -lpthread
 
