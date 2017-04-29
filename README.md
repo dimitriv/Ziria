@@ -12,7 +12,7 @@ Check the [project website](http://research.microsoft.com/en-us/projects/ziria/)
 
 * Ziria works with [Sora](https://github.com/Microsoft/Sora/) and [BladeRF](https://github.com/Nuand/bladeRF).
 
-
+* Ziria works with Analog Devices [FMCOMMS](https://github.com/analogdevicesinc) series and runs on ARM.
 
 ### Some useful information:
 
