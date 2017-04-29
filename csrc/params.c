@@ -104,7 +104,7 @@ int parse_timeStampAtRead(char *md) {
 // TODO: Add error handling
 unsigned long  parse_SampleRate(char *rp)
 {
-	return (unsigned long)strtoi(rp, NULL, 10);
+	return (unsigned long)strtoul(rp, NULL, 10);
 }
 
 

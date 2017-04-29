@@ -64,7 +64,7 @@ int __ext_viterbi_brick_init_fast(int32 frame_len, int16 code_r, int16 depth) {
 
 
 FORCE_INLINE
-int16 __ext_viterbi_brick_decode_fast(signed char* intInput, int len1, unsigned char* bit, int len2)
+int16 __ext_viterbi_brick_decode_fast(num8 * intInput, int len1, unsigned char* bit, int len2)
 {
 	static const int trellis_prefix = 6; 	 // 6 bit zero prefix
 	static const int trellis_lookahead = 24;
@@ -137,7 +137,7 @@ int16 __ext_viterbi_brick_decode_fast(signed char* intInput, int len1, unsigned 
 		}
 
 		if (output_count) {
-			m_viterbi.Traceback((signed char*)m_outbuf, output_count, lookahead);
+			m_viterbi.Traceback((num8 *)m_outbuf, output_count, lookahead);
 			ob_count += output_count;
 
 			unsigned int last_byte_count = 0;
@@ -174,7 +174,7 @@ int __ext_viterbiSig11a_brick_init_fast(int32 frame_len, int16 code_r, int16 dep
 
 
 FORCE_INLINE
-int16 __ext_viterbiSig11a_brick_decode_fast(signed char* intInput, int len1, unsigned char* bit, int len2)
+int16 __ext_viterbiSig11a_brick_decode_fast(num8 * intInput, int len1, unsigned char* bit, int len2)
 {
 	static const int state_size = 64;
 	static const int input_size = 48; // always 48 soft-values
@@ -187,7 +187,7 @@ int16 __ext_viterbiSig11a_brick_decode_fast(signed char* intInput, int len1, uns
 
 	unsigned int output = 0;
 
-	Viterbi_sig11(trellis, intInput, (signed char *)(bit));
+	Viterbi_sig11(trellis, intInput, (num8 *)(bit));
 	*((unum32 *)bit) >>= 6; // remove the prefix 6 zeros
 
 	return 0;

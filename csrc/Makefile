@@ -30,7 +30,7 @@ ifeq ($(COMPILER), gcc-arm)
 CFLAGS = -mfpu=neon -flax-vector-conversions -Wall -Wno-write-strings -Wno-unused-label -Wno-unused-variable -Wno-comment -Og -g
 CXXFLAGS = -std=c++11 -mfpu=neon -flax-vector-conversions -Wall -Wno-write-strings -Wno-unused-label -Wno-unused-variable -Wno-attributes -Wno-comment -Og -g
 #CFLAGS = -march=native -mtune=native -mfpu=neon -flax-vector-conversions -w -pipe -Ofast
-#CXXFLAGS = -std=c++11 -march=native -mtune=native -mfpu=neon -flax-vector-conversions -w -pipe -Ofast 
+#CXXFLAGS = -std=c++11 -march=native -mtune=native -mfpu=neon -flax-vector-conversions -w -pipe -Ofast
 else
 CFLAGS = -Wall -Wno-write-strings -Wno-comment -g
 CXXFLAGS = -std=c++11 -Wall -Wno-unused-label -Wno-unused-variable -Wno-attributes -Wno-comment -g
@@ -46,7 +46,6 @@ CFLAGS += -O
 CXXFLAGS += -O
 endif
 
->>>>>>> master
 LIBS = -lm
 OBJDIR = .
 
@@ -71,7 +70,7 @@ endif
 OBJ_INT = bit.o numerics.o params.o test.o driver.o wpl_alloc.o utils.o
 OBJ_IO  = buf_bit.o buf_chunk.o buf_numerics8.o buf_numerics32.o buf_numerics16.o
 OBJ_LIB = 
-ifeq ($(ARCH), armv7l)
+ifeq ($(COMPILER), gcc-arm)
 OBJ_EXT = ext_math.o ext_arr.o 
 else
 OBJ_EXT = ext_math.o ext_arr.o sora_ext_viterbi.o

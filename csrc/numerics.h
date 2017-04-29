@@ -60,7 +60,11 @@ typedef unsigned __int64 unum64;
 
 #else
 ////////////////////////////////////////////////
+#ifndef __ARM_NEON__
+typedef char          num8;
+#else
 typedef signed char          num8;
+#endif
 typedef short         num16;
 typedef int           num32;
 typedef long long int num64; 
